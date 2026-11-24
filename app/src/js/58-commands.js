@@ -217,7 +217,9 @@ const Commands = (() => {
     add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, IGES, BREP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step igs iges brep stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
-    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
+    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck passung lose gleitend fest presssitz duese wandstaerke', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
+    add('orient-print', 'Für den Druck ausrichten (wenig Überhang)', 'overhang', 'druck ausrichten drehen ueberhang stuetzen orientieren 3d-druck flach legen', () => Print.orientForPrint(), { group: 'Projekt' });
+    add('nozzle-wall', 'Wandstärke gegen Düse prüfen', 'ruler', 'wandstaerke duese 3d-druck duenn warnung pruefen wand', () => Views.thin(true, { limit: round(2 * Print.nozzle(), 2) }), { group: 'Projekt' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -247,6 +249,7 @@ const Commands = (() => {
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
     add('drawingDetail', 'Detailansicht in Zeichnung anlegen', 'zoomIn', 'detail lupe vergrößern ausschnitt kreis zeichnung ze-03', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('detail'); }, { group: 'Werkzeuge' });
+    add('drawingSection', 'Schnittansicht in Zeichnung (A–A)', 'section', 'schnitt schnittansicht schraffur zeichnung a-a', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('section'); }, { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
     for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });

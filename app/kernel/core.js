@@ -834,13 +834,20 @@ export function createKernel(R, oc) {
     const topo = ensureTopoComplete(shape, createTopoMap(), '$self');
     return { shape, topo };
   }
+  const PRINT_FIT_MM = { loose: 0.4, slide: 0.2, snug: 0.1, press: 0 };
+  const hasPrintFit = (k) => !!(k && Object.prototype.hasOwnProperty.call(PRINT_FIT_MM, k));
+  const printFitDelta = (k) => (hasPrintFit(k) ? PRINT_FIT_MM[k] : 0);
   function buildPrimitive(kind, p) {
     switch (kind) {
       case 'box': {
         const w = pos(p.w, 20), d = pos(p.d, 20), h = pos(p.h, 20);
         return R.makeBox([-w / 2, -d / 2, 0], [w / 2, d / 2, h]);
       }
-      case 'cylinder': return R.makeCylinder(pos(p.d, 20) / 2, pos(p.h, 20), [0, 0, 0], [0, 0, 1]);
+      case 'cylinder': {
+        const pf = printFitDelta(p.printFit);
+        const dEff = Math.max(0.2, pos(p.d, 20) + (p.printFitSign === 1 ? pf : -pf));
+        return R.makeCylinder(dEff / 2, pos(p.h, 20), [0, 0, 0], [0, 0, 1]);
+      }
       case 'tube': {
         const D = pos(p.d, 20), h = pos(p.h, 20), wall = pos(p.wall, 2);
         const outer = R.makeCylinder(D / 2, h);
@@ -2189,7 +2196,7 @@ export function createKernel(R, oc) {
   }
   function buildStdPin(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
-    const d = pos(sp.d, pos(p.d, 6)), L = pos(p.length, 20), r = d / 2;
+    const d = Math.max(0.4, pos(sp.d, pos(p.d, 6)) - printFitDelta(p.printFit)), L = pos(p.length, 20), r = d / 2;
     const cRaw = num(sp.c, d * 0.18);
     const c = Math.min(Math.max(0.05, cRaw), L * 0.3, r * 0.8);
     const dr = Math.min(r * 0.45, c * Math.tan((15 * Math.PI) / 180));
@@ -2262,7 +2269,7 @@ export function createKernel(R, oc) {
   // Metrisches ISO-Regelgewinde (vereinfacht): Kern + Gewindegang als Sweep entlang einer Schraubenlinie
   const PITCH = { M2: 0.4, 'M2.5': 0.45, M3: 0.5, M4: 0.7, M5: 0.8, M6: 1.0, M8: 1.25, M10: 1.5, M12: 1.75, M16: 2.0, M20: 2.5, M24: 3.0 };
   function threadShape(size, L, grow, pitch) {
-    const D = (parseFloat(String(size).slice(1)) || 6) + grow;
+    const D = Math.max(0.8, (parseFloat(String(size).slice(1)) || 6) + grow);
     const defP = PITCH[size] || 1, rawP = num(pitch, 0);
     const P = rawP > 0 ? Math.min(Math.max(rawP, 0.25), D * 0.45) : defP;
     const rMaj = D / 2, depth = 0.5413 * P, rMin = Math.max(0.25, rMaj - depth);
@@ -2294,11 +2301,13 @@ export function createKernel(R, oc) {
   }
   function buildPart(p) {
     const lib = p.lib;
-    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, 0, p.pitch); }
+    const pf = printFitDelta(p.printFit);
+    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, -pf, p.pitch); }
     if (lib === 'threadHole') {
       const L = pos(p.length, 10);
       // Innengewinde zum Drucken: etwas Luft (Spiel), durchgehend nach unten
-      const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3), p.pitch).translate([0, 0, -L]);
+      const cl = hasPrintFit(p.printFit) ? pf : num(p.clear, 0.3);
+      const s = threadShape(p.size || 'M6', L + LIFT, cl, p.pitch).translate([0, 0, -L]);
       return s;
     }
     if (lib === 'stdScrew') return buildStdScrew(p);
@@ -2310,7 +2319,7 @@ export function createKernel(R, oc) {
     if (lib === 'stdBearing') return buildStdBearing(p);
     if (lib === 'stdSleeve') return buildStdSleeve(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
-    const tol = num(p.tol, 0);
+    const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
       const L = pos(p.length, 10);
       const hd = holeD(s, p.fit);
@@ -2341,7 +2350,7 @@ export function createKernel(R, oc) {
       return R.makeCylinder((si.ins + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'blindHole') {
-      const d = pos(p.d, 5), L = pos(p.depth, 10), ang = num(p.tipAngle, 118);
+      const d = pos(p.d, 5) + pf, L = pos(p.depth, 10), ang = num(p.tipAngle, 118);
       const r = d / 2;
       if (ang > 1 && ang < 179.5) {
         const tipH = r / Math.tan((ang * Math.PI) / 360);
@@ -2350,8 +2359,8 @@ export function createKernel(R, oc) {
       return R.makeCylinder(r, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'fitHole') {
-      // Passbohrung H7: genau das Nennmaß ohne zusätzliches Spiel
-      const d = pos(p.d, 6), L = pos(p.depth, 10);
+      // Passbohrung H7: genau das Nennmaß (zzgl. gewählter 3D-Druck-Passung)
+      const d = pos(p.d, 6) + pf, L = pos(p.depth, 10);
       return R.makeCylinder(d / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'centerHole') {
@@ -7181,39 +7190,289 @@ export function createKernel(R, oc) {
     out.pts = pts;
     return out;
   }
-  function project(scene, views) {
+  function polyArea2D(pts) {
+    let a = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return a * 0.5;
+  }
+  function pointInPoly2D(pt, poly) {
+    let inside = false;
+    const x = pt[0], y = pt[1];
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function interiorPoint2D(outer, holes = []) {
+    const loops = [outer, ...holes];
+    const ys = [];
+    for (const lp of loops) for (const p of lp) ys.push(p[1]);
+    ys.sort((a, b) => a - b);
+    let yTest = (ys[0] + ys[ys.length - 1]) / 2;
+    let bestGap = -1;
+    for (let i = 1; i < ys.length; i++) {
+      const gap = ys[i] - ys[i - 1];
+      if (gap > bestGap) { bestGap = gap; yTest = (ys[i - 1] + ys[i]) * 0.5; }
+    }
+    const xs = [];
+    for (const lp of loops) {
+      for (let i = 0, n = lp.length; i < n; i++) {
+        const a = lp[i], b = lp[(i + 1) % n];
+        if ((a[1] <= yTest && b[1] > yTest) || (b[1] <= yTest && a[1] > yTest)) {
+          xs.push(a[0] + ((yTest - a[1]) * (b[0] - a[0])) / (b[1] - a[1]));
+        }
+      }
+    }
+    xs.sort((a, b) => a - b);
+    if (xs.length >= 2) return [(xs[0] + xs[1]) * 0.5, yTest];
+    return outer[0];
+  }
+  function wireToPoly2D(wire, sx, sy) {
+    const segs = [];
+    const proj = (p) => [dot(p, sx), dot(p, sy)];
+    for (const e of wire.edges) {
+      const t = e.geomType;
+      if (t === 'LINE') {
+        segs.push([proj(vec(e.startPoint)), proj(vec(e.endPoint))]);
+      } else {
+        const L = e.length;
+        const N = Math.max(8, Math.min(96, Math.ceil(L / 0.8)));
+        const pts = [];
+        for (let i = 0; i <= N; i++) pts.push(proj(vec(e.pointAt(i / N))));
+        segs.push(pts);
+      }
+    }
+    if (!segs.length) return [];
+    const tol = 0.05;
+    const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+    const used = new Array(segs.length).fill(false);
+    const polys = [];
+    for (let i = 0; i < segs.length; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      const chain = segs[i].slice();
+      for (;;) {
+        const head = chain[0], tail = chain[chain.length - 1];
+        if (chain.length >= 3 && d2(head, tail) <= tol * tol) break;
+        let best = -1, rev = false, bestD = tol * tol;
+        for (let j = 0; j < segs.length; j++) {
+          if (used[j]) continue;
+          const s = segs[j], s0 = s[0], s1 = s[s.length - 1];
+          const d0 = d2(tail, s0), d1 = d2(tail, s1);
+          if (d0 <= bestD) { bestD = d0; best = j; rev = false; }
+          if (d1 <= bestD) { bestD = d1; best = j; rev = true; }
+        }
+        if (best < 0) break;
+        used[best] = true;
+        const addPts = rev ? segs[best].slice().reverse() : segs[best];
+        for (let k = 1; k < addPts.length; k++) chain.push(addPts[k]);
+      }
+      if (chain.length > 2 && d2(chain[0], chain[chain.length - 1]) <= tol * tol) chain.pop();
+      if (chain.length >= 3 && Math.abs(polyArea2D(chain)) > 1e-4) polys.push(chain);
+    }
+    return polys;
+  }
+  function faceCutPolys2D(face, sx, sy) {
+    const ow = face.clone().outerWire();
+    const iws = face.clone().innerWires();
+    let outerList = [];
+    const holes = [];
+    try {
+      outerList = wireToPoly2D(ow, sx, sy);
+      for (const iw of iws) {
+        for (const hp of wireToPoly2D(iw, sx, sy)) holes.push(hp);
+      }
+    } finally {
+      safeDelete(ow);
+      for (const iw of iws) safeDelete(iw);
+    }
+    if (!outerList.length) return null;
+    const outer = outerList[0];
+    let u0 = Infinity, v0 = Infinity, u1 = -Infinity, v1 = -Infinity;
+    for (const p of outer) {
+      if (p[0] < u0) u0 = p[0]; if (p[0] > u1) u1 = p[0];
+      if (p[1] < v0) v0 = p[1]; if (p[1] > v1) v1 = p[1];
+    }
+    return { outer, holes, bbox: [u0, v0, u1, v1] };
+  }
+  function projectSectionOnSolids(solids, sec, sceneDiag) {
+    const dir = norm(sec.dir), x = norm(sec.x), y = norm(cross(dir, x)), o = sec.o || [0, 0, 0];
+    const M = Math.max(100, (sceneDiag || 100) * 4 + 100);
+    const mat = [
+      x[0], x[1], x[2], 0,
+      y[0], y[1], y[2], 0,
+      dir[0], dir[1], dir[2], 0,
+      o[0], o[1], o[2], 1,
+    ];
+    let keepLocal = null, keepBox = null, remLocal = null, remBox = null, cutShape = null, cam = null;
+    const cutParts = [];
+    const caps = [];
+    try {
+      keepLocal = R.makeBox([-M, -M, -M], [M, M, 0]);
+      keepBox = applyMatrix(keepLocal, mat);
+      for (let partIdx = 0; partIdx < solids.length; partIdx++) {
+        const s = solids[partIdx];
+        const bb = bboxOf(s.shape);
+        let wMin = Infinity, wMax = -Infinity;
+        for (let ix = 0; ix < 2; ix++) for (let iy = 0; iy < 2; iy++) for (let iz = 0; iz < 2; iz++) {
+          const p = [ix ? bb[3] : bb[0], iy ? bb[4] : bb[1], iz ? bb[5] : bb[2]];
+          const w = dot(sub(p, o), dir);
+          if (w < wMin) wMin = w;
+          if (w > wMax) wMax = w;
+        }
+        if (wMin > 1e-4) continue; // komplett auf der weggeschnittenen Seite
+        let cs = null;
+        try { cs = s.shape.intersect(keepBox); } catch (_) { cs = null; }
+        if (!cs) continue;
+        let cbb;
+        try { cbb = bboxOf(cs); } catch (_) { cbb = null; }
+        if (!cbb || (cbb[3] - cbb[0] < 1e-5 && cbb[4] - cbb[1] < 1e-5 && cbb[5] - cbb[2] < 1e-5)) {
+          safeDelete(cs); continue;
+        }
+        cutParts.push(cs);
+        if (wMin < -1e-4 && wMax > 1e-4) {
+          // Prüfe, ob der Ausgangskörper bereits eine streifende Außenfläche genau auf der Schnittebene hat
+          let hasGrazing = false;
+          for (const f of s.shape.faces) {
+            if (f.geomType !== 'PLANE') continue;
+            try {
+              const c = f.center, n = f.normalAt();
+              if (Math.abs(dot(sub([c.x, c.y, c.z], o), dir)) < 0.02 && dot([n.x, n.y, n.z], dir) > 0.999) {
+                hasGrazing = true; break;
+              }
+            } catch (_) {}
+          }
+          let remPolys = null;
+          if (hasGrazing) {
+            if (!remBox) {
+              remLocal = R.makeBox([-M, -M, 0], [M, M, M]);
+              remBox = applyMatrix(remLocal, mat);
+            }
+            let rs = null;
+            try { rs = s.shape.intersect(remBox); } catch (_) { rs = null; }
+            if (rs) {
+              remPolys = [];
+              for (const rf of rs.faces) {
+                if (rf.geomType !== 'PLANE') continue;
+                try {
+                  const rc = rf.center, rn = rf.normalAt();
+                  if (Math.abs(dot(sub([rc.x, rc.y, rc.z], o), dir)) < 0.02 && dot([rn.x, rn.y, rn.z], dir) < -0.999) {
+                    const rp = faceCutPolys2D(rf, x, y);
+                    if (rp) remPolys.push(rp);
+                  }
+                } catch (_) {}
+              }
+              safeDelete(rs);
+            }
+          }
+          for (const f of cs.faces) {
+            if (f.geomType !== 'PLANE') continue;
+            try {
+              const c = f.center, n = f.normalAt();
+              if (Math.abs(dot(sub([c.x, c.y, c.z], o), dir)) >= 0.02 || dot([n.x, n.y, n.z], dir) <= 0.999) continue;
+              const poly = faceCutPolys2D(f, x, y);
+              if (!poly) continue;
+              if (remPolys) {
+                const pt = interiorPoint2D(poly.outer, poly.holes);
+                const inRem = remPolys.some((rp) => pointInPoly2D(pt, rp.outer) && !rp.holes.some((h) => pointInPoly2D(pt, h)));
+                if (!inRem) continue;
+              }
+              caps.push({ ...poly, partIdx });
+            } catch (_) {}
+          }
+        }
+      }
+      if (!cutParts.length) return { visible: [], hidden: [], caps: [], dir, x, y, o };
+      cutShape = cutParts[0];
+      for (let i = 1; i < cutParts.length; i++) {
+        try {
+          const fused = cutShape.fuse(cutParts[i]);
+          if (cutShape !== cutParts[0]) safeDelete(cutShape);
+          cutShape = fused;
+        } catch (_) {
+          const comp = R.makeCompound([cutShape, cutParts[i]]);
+          if (cutShape !== cutParts[0]) safeDelete(cutShape);
+          cutShape = comp;
+        }
+      }
+      cam = new R.ProjectionCamera([0, 0, 0], dir, x);
+      const { visible, hidden } = R.makeProjectedEdges(cutShape, cam);
+      return { visible: visible.map(edge2d), hidden: hidden.map(edge2d), caps, dir, x, y, o };
+    } finally {
+      if (cam) try { cam.delete(); } catch (_) {}
+      if (cutShape && !cutParts.includes(cutShape)) safeDelete(cutShape);
+      for (const p of cutParts) safeDelete(p);
+      safeDelete(keepBox);
+      safeDelete(keepLocal);
+      safeDelete(remBox);
+      safeDelete(remLocal);
+    }
+  }
+  function project(scene, views = [], sections = []) {
     ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
-    if (!solids.length) return { views: {}, axes: [], errors };
-    let shape = solids[0].shape;
-    for (let i = 1; i < solids.length; i++) { try { shape = shape.fuse(solids[i].shape); } catch (_) { shape = R.makeCompound([shape, solids[i].shape]); } }
+    if (!solids.length) return { views: {}, axes: [], sections: {}, errors };
+    let sb = bboxOf(solids[0].shape);
+    for (let i = 1; i < solids.length; i++) {
+      const b = bboxOf(solids[i].shape);
+      sb = [Math.min(sb[0], b[0]), Math.min(sb[1], b[1]), Math.min(sb[2], b[2]), Math.max(sb[3], b[3]), Math.max(sb[4], b[4]), Math.max(sb[5], b[5])];
+    }
+    const sceneDiag = Math.hypot(sb[3] - sb[0], sb[4] - sb[1], sb[5] - sb[2]) || 100;
+    const secOut = {};
+    if (Array.isArray(sections) && sections.length) {
+      for (const sec of sections) {
+        if (!sec || !sec.dir || !sec.x) continue;
+        secOut[sec.key || sec.id] = projectSectionOnSolids(solids, sec, sceneDiag);
+      }
+    }
     const out = {};
-    for (const name of views) {
-      const v = VIEWS[name]; if (!v) continue;
-      const cam = new R.ProjectionCamera([0, 0, 0], v.dir, v.x);
-      const { visible, hidden } = R.makeProjectedEdges(shape, cam);
-      out[name] = { visible: visible.map(edge2d), hidden: hidden.map(edge2d), dir: v.dir, x: v.x, y: cross(v.dir, v.x) };
-      cam.delete();
-    }
-    // Achsen von Zylinderflächen für Mittellinien
     const axes = [];
-    for (const f of shape.faces) {
-      if (f.geomType !== 'CYLINDRE') continue;
-      // nur volle Zylinder (Bohrungen, Zapfen) bekommen Mittellinien, keine Rundungen
-      try { const uv = f.UVBounds; if (Math.abs(uv.uMax - uv.uMin) < Math.PI * 1.9) continue; } catch (_) {}
-      try {
-        const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
-        const cy = ad.Cylinder(); const ax = cy.Axis(); const l = ax.Location(), d = ax.Direction();
-        const o = [l.X(), l.Y(), l.Z()], dir = [d.X(), d.Y(), d.Z()], r = cy.Radius();
-        ad.delete();
-        let tmin = Infinity, tmax = -Infinity;
-        for (const e of f.edges) for (const t of [0, 0.25, 0.5, 0.75, 1]) { const p = vec(e.pointAt(t)); const s = dot(sub(p, o), dir); tmin = Math.min(tmin, s); tmax = Math.max(tmax, s); }
-        axes.push({ o, d: dir, r, t0: tmin, t1: tmax });
-      } catch (_) {}
+    let bbox = sb;
+    if (Array.isArray(views) && views.length) {
+      let shape = solids[0].shape;
+      for (let i = 1; i < solids.length; i++) {
+        try {
+          const f = shape.fuse(solids[i].shape);
+          if (shape !== solids[0].shape) safeDelete(shape);
+          shape = f;
+        } catch (_) {
+          const c = R.makeCompound([shape, solids[i].shape]);
+          if (shape !== solids[0].shape) safeDelete(shape);
+          shape = c;
+        }
+      }
+      for (const name of views) {
+        const v = VIEWS[name]; if (!v) continue;
+        const cam = new R.ProjectionCamera([0, 0, 0], v.dir, v.x);
+        const { visible, hidden } = R.makeProjectedEdges(shape, cam);
+        out[name] = { visible: visible.map(edge2d), hidden: hidden.map(edge2d), dir: v.dir, x: v.x, y: cross(v.dir, v.x) };
+        cam.delete();
+      }
+      // Achsen von Zylinderflächen für Mittellinien
+      for (const f of shape.faces) {
+        if (f.geomType !== 'CYLINDRE') continue;
+        // nur volle Zylinder (Bohrungen, Zapfen) bekommen Mittellinien, keine Rundungen
+        try { const uv = f.UVBounds; if (Math.abs(uv.uMax - uv.uMin) < Math.PI * 1.9) continue; } catch (_) {}
+        try {
+          const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+          const cy = ad.Cylinder(); const ax = cy.Axis(); const l = ax.Location(), d = ax.Direction();
+          const o = [l.X(), l.Y(), l.Z()], dir = [d.X(), d.Y(), d.Z()], r = cy.Radius();
+          ad.delete();
+          let tmin = Infinity, tmax = -Infinity;
+          for (const e of f.edges) for (const t of [0, 0.25, 0.5, 0.75, 1]) { const p = vec(e.pointAt(t)); const s = dot(sub(p, o), dir); tmin = Math.min(tmin, s); tmax = Math.max(tmax, s); }
+          axes.push({ o, d: dir, r, t0: tmin, t1: tmax });
+        } catch (_) {}
+      }
+      bbox = bboxOf(shape);
+      if (shape && !solids.some((s) => s.shape === shape)) safeDelete(shape);
     }
-    const bbox = bboxOf(shape);
-    return { views: out, axes, bbox, errors };
+    for (const s of solids) safeDelete(s.shape);
+    return { views: out, axes, bbox, sections: secOut, errors };
   }
 
   // Kollisionen: welche Teile stecken ineinander, und welche Teile treffen die Prüfkörper (z. B. Propellerscheiben)?

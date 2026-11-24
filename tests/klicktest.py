@@ -12563,6 +12563,219 @@ def t_a062_zeichnung_blaetter(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a063_schnittansicht(p):
+    p.empty()
+    p.ev("""
+      App.change('Quader mit Bohrung', d => {
+        d.items.push(Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Block' }));
+        d.items.push(Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Bohrung', role: 'hole', t: { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } }));
+      });
+    """)
+    warte_rechnen(p)
+
+    # 1. In Zeichnung wechseln, Schnittlinie A–A durch Bohrungsmitte in der Draufsicht ziehen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    drag_pts = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.top;
+      const toScreen = (u, vv) => {
+        const pt = svg.createSVGPoint();
+        pt.x = v.ox + u * v.s;
+        pt.y = v.oy - vv * v.s;
+        const q = pt.matrixTransform(svg.getScreenCTM());
+        return [q.x, q.y];
+      };
+      return [toScreen(-24, 0), toScreen(24, 0)];
+    """)
+    p.pg.click('#t-section'); p.wait(150)
+    p.pg.mouse.move(drag_pts[0][0], drag_pts[0][1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(drag_pts[1][0], drag_pts[1][1], steps=8)
+    p.pg.mouse.up()
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const secs = Drawing.sections();
+      const sec = secs[0];
+      const v = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+      const hatches = sec ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const ux0 = (pts[0][0] - v.ox) / v.s, ux1 = (pts[1][0] - v.ox) / v.s;
+        return {
+          cap: Number(el.dataset.cap),
+          sx0: pts[0][0], sy0: pts[0][1], sx1: pts[1][0], sy1: pts[1][1],
+          uMin: Math.min(ux0, ux1), uMax: Math.max(ux0, ux1),
+        };
+      }) : [];
+      const cap0 = hatches.filter(h => h.cap === 0);
+      const cap1 = hatches.filter(h => h.cap === 1);
+      const range = (arr) => arr.length ? [Math.min(...arr.map(h => h.uMin)), Math.max(...arr.map(h => h.uMax))] : null;
+      const r0 = range(cap0), r1 = range(cap1);
+      let gap = null;
+      if (r0 && r1) {
+        const pair = r0[0] < r1[0] ? [r0, r1] : [r1, r0];
+        gap = pair[1][0] - pair[0][1];
+      }
+      const crossesHole = hatches.some(h => h.uMin < 0 && h.uMax > 0);
+      const angleOk = hatches.length >= 6 && hatches.every(h => {
+        const dx = h.sx1 - h.sx0, dy = h.sy1 - h.sy0;
+        const L = Math.hypot(dx, dy);
+        return L > 0.1 && Math.abs(Math.abs(dx) - Math.abs(dy)) / L < 0.02 && (dx * dy) < 0;
+      });
+      return {
+        n: secs.length,
+        label: sec?.label,
+        parent: sec?.parent,
+        hasView: !!v,
+        capsCount: v?.geo?.caps?.length || 0,
+        cap0Count: cap0.length,
+        cap1Count: cap1.length,
+        gap,
+        crossesHole,
+        angleOk,
+        cutlines: svg.querySelectorAll('polyline.cutline').length,
+        cutends: svg.querySelectorAll('polyline.cutend').length,
+        arrows: svg.querySelectorAll('polygon.arrow[data-sec]').length,
+        cutlabels: [...svg.querySelectorAll('text.cutlabel')].map(el => el.textContent),
+        txt: svg.textContent || '',
+      };
+    """)
+    ok1 = (
+        s1['n'] == 1 and s1['label'] == 'A' and s1['parent'] == 'top'
+        and s1['hasView'] and s1['capsCount'] == 2
+        and s1['cap0Count'] >= 2 and s1['cap1Count'] >= 2
+        and s1['gap'] is not None and abs(s1['gap'] - 10.0) < 0.35
+        and not s1['crossesHole']
+        and s1['angleOk']
+        and s1['cutlines'] == 1 and s1['cutends'] == 2 and s1['arrows'] == 2
+        and s1['cutlabels'] == ['A', 'A']
+        and 'Schnitt A–A' in s1['txt']
+    )
+
+    # 2. Schraffurabstand ändert sich nach Maßstab (2:1 vs. 1:2)
+    def measure_spacing(scale_val):
+        p.pg.click('#t-sheet'); p.wait(150)
+        p.pg.select_option('#dw-scale', str(scale_val))
+        p.pg.click('#sheet-tabs'); p.wait(250)
+        p.ev("return Drawing.waitReady()")
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[0];
+          const v = Drawing.layout.views['sec_' + sec.id];
+          const expected = Drawing.hatchStepSheet(v.s, v.geo);
+          const bs = [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"][data-cap="0"]`)].map(el => {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const mx = (pts[0][0] + pts[1][0]) * 0.5, my = (pts[0][1] + pts[1][1]) * 0.5;
+            return (mx + my) * Math.SQRT1_2;
+          }).sort((a, b) => a - b);
+          const diffs = [];
+          for (let i = 1; i < bs.length; i++) if (bs[i] - bs[i - 1] > 0.1) diffs.push(bs[i] - bs[i - 1]);
+          return { expected, measured: diffs[0] || 0, count: bs.length };
+        """)
+
+    sp_big = measure_spacing('2')
+    sp_small = measure_spacing('0.5')
+    p.pg.click('#t-sheet'); p.wait(150)
+    p.pg.select_option('#dw-scale', 'auto')
+    p.pg.click('#sheet-tabs'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+
+    ok2 = (
+        sp_big['count'] >= 2 and sp_small['count'] >= 2
+        and sp_big['expected'] > sp_small['expected']
+        and sp_big['measured'] > sp_small['measured']
+        and abs(sp_big['measured'] - sp_big['expected']) < 0.15
+        and abs(sp_small['measured'] - sp_small['expected']) < 0.15
+    )
+
+    # 3. Blickrichtung umkehren & zweiter Schnitt B–B senkrecht durch Vorderansicht
+    p.pg.locator('#right-body .sec-flip').first.click(); p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    after_flip = p.ev("const s = Drawing.sections()[0], v = Drawing.layout.views['sec_' + s.id]; return { flip: s.flip, caps: v?.geo?.caps?.length || 0 };")
+
+    front_pts = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.front;
+      const toScreen = (u, vv) => {
+        const pt = svg.createSVGPoint();
+        pt.x = v.ox + u * v.s;
+        pt.y = v.oy - vv * v.s;
+        const q = pt.matrixTransform(svg.getScreenCTM());
+        return [q.x, q.y];
+      };
+      return [toScreen(0, -2), toScreen(0, 22)];
+    """)
+    p.pg.click('#t-section'); p.wait(150)
+    p.pg.mouse.move(front_pts[0][0], front_pts[0][1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(front_pts[1][0], front_pts[1][1], steps=8)
+    p.pg.mouse.up()
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    sec2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const secs = Drawing.sections();
+      const sb = secs[1];
+      const vb = sb ? Drawing.layout.views['sec_' + sb.id] : null;
+      return {
+        n: secs.length,
+        labels: secs.map(x => x.label),
+        capsB: vb?.geo?.caps?.length || 0,
+        txt: svg.textContent || '',
+      };
+    """)
+    ok3 = (
+        after_flip['flip'] is True and after_flip['caps'] == 2
+        and sec2['n'] == 2 and sec2['labels'] == ['A', 'B']
+        and sec2['capsB'] == 2
+        and 'Schnitt B–B' in sec2['txt']
+    )
+
+    # 4. PDF-Export, Löschen/Rückgängig/Wiederholen, Speichern/Laden, Suche & Hilfetext
+    pdf_ok = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const str = new TextDecoder('latin1').decode(bytes);
+        return str.startsWith('%PDF-1.4') && str.includes('Schnitt A-A') && str.includes('Schnitt B-B');
+      });
+    """)
+    p.pg.locator('#right-body .sec-del').nth(1).click(); p.wait(200)
+    n_del = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    n_undo = p.ev("return Drawing.sections().length")
+    p.ev("App.redo()"); p.wait(250)
+    n_redo = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    after_reload = p.ev("const svg = document.querySelector('#sheet .sheet-holder svg'); return { n: Drawing.sections().length, hatches: svg.querySelectorAll('polyline.hatch').length, txt: svg.textContent || '' };")
+
+    cmd_help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const h = hj['drawingSection'];
+        const tSec = document.querySelector('#t-section');
+        const pSec = document.querySelector('#dw-add-section');
+        return !!(h && h.tip && h.hilfe && h.tipp && tSec && tSec.dataset.help === 'drawingSection' && pSec && pSec.dataset.help === 'drawingSection' && Commands.search('schnittansicht').length >= 1);
+      });
+    """)
+    ok4 = (
+        pdf_ok and n_del == 1 and n_undo == 2 and n_redo == 1
+        and after_reload['n'] == 2 and after_reload['hatches'] >= 8
+        and 'Schnitt A–A' in after_reload['txt'] and 'Schnitt B–B' in after_reload['txt']
+        and cmd_help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a073_pycache(p):
     import subprocess
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12990,6 +13203,176 @@ def t_a064_zeichnung_detailansicht(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-060] 3D-Druck: Passungen, Düsen-Wandstärken-Check, Ausrichten (DR-03, DR-04, DR-05) ----------
+def t_a060_druck_passung_wand_ausrichten(p):
+    p.empty()
+
+    # 1. DR-03: Passungs-Vorgaben (lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0) -> Bohrungs-Assistent & Bolzen
+    fits = p.ev("return Print.PRINT_FITS")
+    fit_map = {f['id']: f['mm'] for f in fits}
+    fits_ok = (
+        abs(fit_map.get('loose', -1) - 0.4) < 1e-6
+        and abs(fit_map.get('slide', -1) - 0.2) < 1e-6
+        and abs(fit_map.get('snug', -1) - 0.1) < 1e-6
+        and abs(fit_map.get('press', -1) - 0.0) < 1e-6
+    )
+
+    p.pg.select_option('#proj-print-fit', 'loose'); p.wait(250)
+    p.ev("Actions.addPrimitive('box', { p: { w: 30, d: 30, h: 12 } })")
+    warte_rechnen(p, 20)
+
+    # Bohrungs-Assistent erbt die Projekt-Passung "loose" (+0,4 mm)
+    p.ev("""const id=App.doc.items[0].id; const r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9);
+      App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,12], normal:[0,0,1]}});""")
+    p.wait(350)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(350)
+    hw_fit_init = p.pg.locator('#hw-print-fit').input_value()
+    p.pg.select_option('#hw-type', 'blind'); p.wait(200)
+    p.pg.fill('#hw-d', '6'); p.pg.press('#hw-d', 'Enter'); p.wait(150)
+    p.pg.fill('#hw-depth', '8'); p.pg.press('#hw-depth', 'Enter'); p.wait(200)
+    p.pg.click('#hw-go'); warte_rechnen(p, 25)
+    p.pg.keyboard.press('Escape'); p.wait(300)
+
+    def cyl_hole_r():
+        return p.ev("""const r = App.results.get(App.doc.items[0].id);
+          const cf = r && r.data && r.data.faces ? r.data.faces.find(f => f.t === 'CYLINDRE') : null;
+          return cf ? cf.r : 0;""")
+
+    r_loose = cyl_hole_r()
+    hole_radii = {}
+    for fid in ('slide', 'snug', 'press'):
+        p.ev(f"App.change('Fit', d => {{ const ch = d.items[0].children.find(c => c.kind === 'part'); ch.p.printFit = '{fid}'; }})")
+        warte_rechnen(p, 20)
+        hole_radii[fid] = cyl_hole_r()
+
+    # Bolzen: stdPin Ø 6×20 und threadRod M6×12 (erben Projekt-Passung & reagieren auf Umschalten)
+    p.ev("Start.newProject(true)"); p.wait(300)
+    p.pg.select_option('#proj-print-fit', 'loose'); p.wait(250)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    p.pg.locator('.flyout [data-help="stdPin"]').click(); p.wait(250)
+    warte_rechnen(p, 25)
+    pin_diams = {}
+    pin_diams['loose'] = p.ev("const b = Actions.worldBox(App.doc.items[0].id); return b ? (b.max.x - b.min.x) : 0;")
+    for fid in ('slide', 'snug', 'press'):
+        p.ev(f"App.change('PinFit', d => {{ d.items[0].p.printFit = '{fid}'; }})")
+        warte_rechnen(p, 20)
+        pin_diams[fid] = p.ev("const b = Actions.worldBox(App.doc.items[0].id); return b ? (b.max.x - b.min.x) : 0;")
+
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    p.pg.locator('.flyout [data-help="threadRod"]').click(); p.wait(250)
+    warte_rechnen(p, 40)
+    rod_loose = p.ev("const it = App.doc.items[1]; const b = Actions.worldBox(it.id); return { fit: it.p.printFit, d: b ? (b.max.x - b.min.x) : 0 };")
+    p.ev("App.change('RodPress', d => { d.items[1].p.printFit = 'press'; })")
+    warte_rechnen(p, 40)
+    rod_press = p.ev("const b = Actions.worldBox(App.doc.items[1].id); return b ? (b.max.x - b.min.x) : 0;")
+
+    ok1 = (
+        fits_ok
+        and hw_fit_init == 'loose'
+        and abs(r_loose - 3.2) < 1e-3
+        and abs(hole_radii['slide'] - 3.1) < 1e-3
+        and abs(hole_radii['snug'] - 3.05) < 1e-3
+        and abs(hole_radii['press'] - 3.0) < 1e-3
+        and abs(pin_diams['loose'] - 5.6) < 0.02
+        and abs(pin_diams['slide'] - 5.8) < 0.02
+        and abs(pin_diams['snug'] - 5.9) < 0.02
+        and abs(pin_diams['press'] - 6.0) < 0.02
+        and rod_loose['fit'] == 'loose'
+        and rod_loose['d'] < rod_press - 0.3
+        and abs(rod_press - 6.0) < 0.08
+    )
+
+    # 2. DR-04: Wandstärken-Check gegen die Düse (0,6-mm-Wand bei 0,4-Düse -> Warnung)
+    p.ev("Start.newProject(true)"); p.wait(300)
+    p.ev("App.change('Dünne Wand', d => { const b = Model.newItem('box', { w: 30, d: 0.6, h: 15 }, { name: 'Wand' }); b.mat = 'PLA'; d.items.push(b); })")
+    warte_rechnen(p, 30); p.wait(300)
+    nw1 = p.ev("return Print.nozzleWallCheck()")
+    panel_warn_cls = p.pg.locator('#proj-nozzle-wall').get_attribute('class') or ''
+    panel_warn_txt = p.pg.locator('#proj-nozzle-wall').text_content() or ''
+    amp_cls = p.pg.locator('#ampel').get_attribute('class') or ''
+    weak_ids = p.ev("return Weak.analyze().then(l => l.map(x => x.id))")
+
+    # Klick auf "Stellen zeigen" öffnet die Wandstärke-Ansicht mit #thin-nozzle-warn
+    p.pg.locator('#proj-nozzle-wall-show').click(); p.wait(500)
+    thin_inf = p.ev("return Views.thinInfo")
+    thin_nw_cls = p.pg.locator('#thin-nozzle-warn').get_attribute('class') or ''
+    p.ev("Views.thin(false)"); p.wait(200)
+
+    # Wand auf 1,0 mm vergrößern -> Warnung bei 0,4-mm-Düse verschwindet
+    p.ev("App.change('Dicker', d => { d.items[0].p.d = 1.0; })")
+    warte_rechnen(p, 25); p.wait(250)
+    nw2 = p.ev("return Print.nozzleWallCheck()")
+    panel_ok_cls = p.pg.locator('#proj-nozzle-wall').get_attribute('class') or ''
+
+    # Düse auf 0,6 mm erhöhen -> 1,0-mm-Wand (< 1,2 mm) warnt wieder
+    p.pg.fill('#proj-bed-nozzle', '0.6'); p.pg.press('#proj-bed-nozzle', 'Enter'); p.wait(400)
+    nw3 = p.ev("return Print.nozzleWallCheck()")
+
+    ok2 = (
+        nw1['warn'] is True
+        and abs(nw1['minWall'] - 0.8) < 1e-4
+        and nw1['minT'] is not None and abs(nw1['minT'] - 0.6) < 0.05
+        and 'warn' in panel_warn_cls and '0,4' in panel_warn_txt and '0,8' in panel_warn_txt
+        and 'warn' in amp_cls
+        and 'nozzle-wall' in weak_ids
+        and thin_inf is not None and thin_inf['area'] > 100
+        and 'warn' in thin_nw_cls
+        and nw2['warn'] is False and 'warn' not in panel_ok_cls
+        and nw3['warn'] is True and abs(nw3['minWall'] - 1.2) < 1e-4
+    )
+
+    # 3. DR-05: "Für den Druck ausrichten" an L-Winkel mit Überhang
+    p.ev("Start.newProject(true)"); p.wait(300)
+    p.ev("""App.change('L-Winkel', d => {
+      const a = Model.newItem('box', { w: 5, d: 20, h: 30 }, { name: 'Schenkel1' });
+      const b = Model.newItem('box', { w: 25, d: 20, h: 5 }, { name: 'Schenkel2' });
+      b.t.x = 15; b.t.z = 25;
+      const g = Model.newItem('group', {}, { name: 'L-Winkel' });
+      g.mat = 'PLA'; g.children = [a, b];
+      d.items.push(g);
+    })""")
+    warte_rechnen(p, 35); p.wait(300)
+    p.ev("Views.overhang(true)"); p.wait(500)
+    ov_before = p.ev("return Views.overhangArea")
+
+    p.pg.locator('#ov-orient').click(); p.wait(400)
+    warte_rechnen(p, 35); p.wait(400)
+    ov_after = p.ev("return Views.overhangArea")
+    min_z_after = p.ev("const b = Actions.worldBox(App.doc.items[0].id); return b ? b.min.z : 99;")
+
+    # Rückgängig stellt ursprüngliche Lage und Überhangfläche wieder her
+    p.ev("App.undo()"); warte_rechnen(p, 35); p.wait(400)
+    ov_undo = p.ev("return Views.overhangArea")
+    p.ev("Views.overhang(false)"); p.wait(200)
+
+    # Schräg gedrehter L-Winkel (ry = 135°) -> Ausrichten über Projekt-Panel-Knopf #proj-orient-print
+    p.ev("App.clearSelection(); App.change('Schräg', d => { d.items[0].t.ry = 135; d.items[0].t.z = 30; })")
+    warte_rechnen(p, 35); p.wait(300)
+    ov_tilted = p.ev("return Views.overhangOf(App.doc.items[0].id, 45).area")
+    p.pg.locator('#proj-orient-print').click(); p.wait(400)
+    warte_rechnen(p, 35); p.wait(300)
+    ov_tilted_after = p.ev("return Views.overhangOf(App.doc.items[0].id, 45).area")
+    min_z_tilted = p.ev("const b = Actions.worldBox(App.doc.items[0].id); return b ? b.min.z : 99;")
+    p.ev("App.clearSelection()"); p.wait(200)
+
+    ok3 = (
+        ov_before is not None and ov_before >= 300
+        and ov_after is not None and ov_after < 1.0 and ov_after < ov_before
+        and abs(min_z_after) < 0.05
+        and ov_undo is not None and abs(ov_undo - ov_before) < 1.0
+        and ov_tilted > 200 and ov_tilted_after < 1.0 and abs(min_z_tilted) < 0.05
+    )
+
+    # 4. Hilfetexte & DOM-Attribute prüfen
+    help_ok = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      json: ['printFit', 'nozzleWall', 'orientPrint'].every(k => d[k] && d[k].tip && d[k].hilfe && d[k].tipp),
+      dom: ['printFit', 'nozzleWall', 'orientPrint'].every(k => document.querySelectorAll(`[data-help="${k}"]`).length >= 1),
+    }))""")
+    ok4 = bool(help_ok['json'] and help_ok['dom'])
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -13151,8 +13534,10 @@ TESTS = [
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
     ('[A-057] Schrauben M10–M24 & Werkstoffe: Sechskantschraube M16×60 SW 24 / M10–M24 Normteile / Werkstoff Messing Dichte 8,4–8,7 / neue Werkstoffe mit Aussehen & Quelle / Suche & Hilfe', t_a057_schrauben_werkstoffe),
     ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
+    ('[A-060] 3D-Druck: Passungs-Vorgaben, Düsen-Wandstärken-Check & Für den Druck ausrichten', t_a060_druck_passung_wand_ausrichten),
     ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
     ('[A-062] Zeichnung: mehrere Blätter, A4 bis A0 & PDF-Export', t_a062_zeichnung_blaetter),
+    ('[A-063] Zeichnung: Schnittansicht (A–A) mit Schraffur, Pfeilen & Bohrungs-Lücke', t_a063_schnittansicht),
     ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
     ('[A-064] Zeichnung: Detailansicht (Detail Z 4:1, wahre Maße, 4× Geometrie)', t_a064_zeichnung_detailansicht),

@@ -800,11 +800,15 @@ const Views = (() => {
     for (const a of [35, 40, 45, 50, 55, 60]) sel.append(h('option', { value: a, ...(a === 45 ? { selected: true } : {}) }, a + '°'));
     sel.onchange = () => { o.angle = +sel.value; drawOverhang(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Ab'), sel, h('span', { class: 'vb-hint' }, 'Neigung gegen die Senkrechte')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'ov-area' }, '')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Rot = hängt beim Drucken in der Luft. Druckbett ist die Unterseite.')));
+    const ob = h('button', { type: 'button', class: 'btn small', id: 'ov-orient', 'data-help': 'orientPrint' });
+    ob.innerHTML = icon('rotate') + 'Für den Druck ausrichten';
+    ob.onclick = () => Print.orientForPrint(null, { angle: o.angle });
+    bar.append(h('div', { class: 'vb-row' }, ob));
     bars().append(bar); o.bar = bar;
     st.ov = o; drawOverhang(); sync();
   }
 
-  // ---------- Wandstärke (3D-Druck, PF-07): Stellen dünner als die Grenze werden rot ----------
+  // ---------- Wandstärke (3D-Druck, PF-07, DR-04): Stellen dünner als die Grenze werden rot ----------
   function drawThin() {
     const o = st.thin; if (!o) return;
     if (o.mesh) { Viewer.groups.overlay.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); o.mesh = null; }
@@ -817,20 +821,63 @@ const Views = (() => {
     }
     const t = o.bar && o.bar.querySelector('#thin-area');
     if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} dünner als ${Units.fmtLenU(o.limit, 1)} – dünnste Stelle ${Units.fmtLenU(d.minT, 2)}` : `Überall mindestens ${Units.fmtLenU(o.limit, 1)}`;
+    const nwEl = o.bar && o.bar.querySelector('#thin-nozzle-warn');
+    if (nwEl && typeof Print !== 'undefined' && Print.nozzleWallCheck) {
+      const nw = Print.nozzleWallCheck();
+      nwEl.className = nw.warn ? 'hint-box warn' : 'vb-hint';
+      nwEl.textContent = nw.summary;
+      nwEl.hidden = !nw.summary;
+    }
     Viewer.requestRender();
   }
-  function thin(on = !st.thin) {
+  function thin(on = !st.thin, opts = {}) {
     if (!on) { if (st.thin) { if (st.thin.mesh) { Viewer.groups.overlay.remove(st.thin.mesh); st.thin.mesh.geometry.dispose(); st.thin.mesh.material.dispose(); } if (st.thin.bar) st.thin.bar.remove(); st.thin = null; Viewer.requestRender(); } sync(); return; }
-    if (st.thin) return;
-    const o = { limit: 1.2, mesh: null, area: 0 };
+    const noz = typeof Print !== 'undefined' && Print.nozzle ? Print.nozzle() : 0.4;
+    const minWall = round(2 * noz, 2);
+    const lim = opts && opts.limit > 0 ? round(opts.limit, 2) : 1.2;
+    if (st.thin) {
+      if (opts && opts.limit > 0) {
+        st.thin.limit = lim;
+        const sel = st.thin.bar && st.thin.bar.querySelector('#thin-limit');
+        if (sel) {
+          if (![...sel.options].some((op) => Math.abs(+op.value - lim) < 1e-4)) {
+            sel.append(h('option', { value: lim }, Units.fmtLenFixedU(lim, 2)));
+          }
+          sel.value = String([...sel.options].find((op) => Math.abs(+op.value - lim) < 1e-4)?.value || lim);
+        }
+        drawThin();
+      }
+      return;
+    }
+    const o = { limit: lim, mesh: null, area: 0 };
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Wandstärke' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Wandstärke'));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenFixedU(a, 1)));
+    const vals = [0.4, 0.8, 1.2, 1.6, 2, 3, 5];
+    if (!vals.some((a) => Math.abs(a - minWall) < 1e-4)) vals.push(minWall);
+    if (!vals.some((a) => Math.abs(a - lim) < 1e-4)) vals.push(lim);
+    vals.sort((a, b) => a - b);
+    for (const a of vals) {
+      const isNoz = Math.abs(a - minWall) < 1e-4;
+      const lbl = Units.fmtLenFixedU(a, a % 0.1 > 1e-3 ? 2 : 1) + (isNoz ? ' (2 × Düse)' : '');
+      sel.append(h('option', { value: a, ...(Math.abs(a - lim) < 1e-4 ? { selected: true } : {}) }, lbl));
+    }
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
-    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
+    const nozBtn = h('button', { type: 'button', class: 'btn small', id: 'thin-nozzle-btn', 'data-help': 'nozzleWall' }, 'Düse 2×');
+    nozBtn.onclick = () => {
+      const curMin = round(2 * (typeof Print !== 'undefined' && Print.nozzle ? Print.nozzle() : 0.4), 2);
+      o.limit = curMin;
+      if (![...sel.options].some((op) => Math.abs(+op.value - curMin) < 1e-4)) sel.append(h('option', { value: curMin }, Units.fmtLenFixedU(curMin, 2)));
+      sel.value = String([...sel.options].find((op) => Math.abs(+op.value - curMin) < 1e-4)?.value || curMin);
+      drawThin();
+    };
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, nozBtn),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, `Düse ${fmt(noz, 2)} mm: mindestens ${Units.fmtLenU(minWall, 2)} (2 × Düse)`)),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')),
+      h('div', { class: 'vb-row' }, h('div', { id: 'thin-nozzle-warn', class: 'vb-hint', 'data-help': 'nozzleWall' }, '')));
     bars().append(bar); o.bar = bar;
     st.thin = o; drawThin(); sync();
   }
@@ -1051,6 +1098,7 @@ const Views = (() => {
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    get overhangAngle() { return st.ov ? st.ov.angle : 45; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() {

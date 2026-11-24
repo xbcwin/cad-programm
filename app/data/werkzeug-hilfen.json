@@ -1033,5 +1033,25 @@
     "tip": "Ausschnitt einer Ansicht vergrößert als Detailansicht (z. B. Detail Z, 4:1) darstellen",
     "hilfe": "Ziehe einen Kreis um einen Bereich der Vorder-, Drauf- oder Seitenansicht, wähle den Vergrößerungsmaßstab (z. B. 2:1, 4:1 oder 5:1) sowie einen Kennbuchstaben und platziere die Detailansicht frei auf dem Blatt. Beide Stellen tragen denselben Kennbuchstaben, und Maße innerhalb der Detailansicht zeigen immer die wahren Längen am Modell.",
     "tipp": "Nach dem Platzieren kannst du die Detailansicht auf dem Blatt verschieben und Maßstab, Buchstabe oder Kreisradius rechts anpassen."
+  },
+  "printFit": {
+    "tip": "Passungs-Vorgaben für 3D-Druckteile: lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0 mm",
+    "hilfe": "Gedruckte Teile brauchen etwas Spiel, damit Bolzen, Stifte und Schrauben sauber passen. Wähle eine Vorgabe: bei Bohrungen wird das Spiel auf den Durchmesser addiert, bei Bolzen und Stiften abgezogen – als Projekt-Vorgabe oder direkt am Teil.",
+    "tipp": "Für bewegliche Deckel und Gleitsitze nimm „Gleitend“ (0,2 mm), für stramme Verbindungen „Fest“ (0,1 mm)."
+  },
+  "nozzleWall": {
+    "tip": "Prüft alle Wände gegen die gewählte Düse (Warnung unter 2 × Düse)",
+    "hilfe": "Wände dünner als zwei Bahnen der Druckdüse (unter 2 × Düse, z. B. 0,8 mm bei einer 0,4-mm-Düse) druckt der Slicer nicht mehr stabil oder lässt Lücken. Tracery warnt im Projekt-Panel, an der Ampel und bei den Schwachstellen.",
+    "tipp": "Klick auf „Stellen zeigen“, um alle zu dünnen Bereiche rot am Modell hervorzuheben."
+  },
+  "orientPrint": {
+    "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
+    "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
+    "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
+  },
+  "drawingSection": {
+    "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
+    "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
+    "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
   }
 }

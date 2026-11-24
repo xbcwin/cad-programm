@@ -2868,6 +2868,26 @@ const HELP = {
   "tip": "Ausschnitt einer Ansicht vergrößert als Detailansicht (z. B. Detail Z, 4:1) darstellen",
   "hilfe": "Ziehe einen Kreis um einen Bereich der Vorder-, Drauf- oder Seitenansicht, wähle den Vergrößerungsmaßstab (z. B. 2:1, 4:1 oder 5:1) sowie einen Kennbuchstaben und platziere die Detailansicht frei auf dem Blatt. Beide Stellen tragen denselben Kennbuchstaben, und Maße innerhalb der Detailansicht zeigen immer die wahren Längen am Modell.",
   "tipp": "Nach dem Platzieren kannst du die Detailansicht auf dem Blatt verschieben und Maßstab, Buchstabe oder Kreisradius rechts anpassen."
+ },
+ "printFit": {
+  "tip": "Passungs-Vorgaben für 3D-Druckteile: lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0 mm",
+  "hilfe": "Gedruckte Teile brauchen etwas Spiel, damit Bolzen, Stifte und Schrauben sauber passen. Wähle eine Vorgabe: bei Bohrungen wird das Spiel auf den Durchmesser addiert, bei Bolzen und Stiften abgezogen – als Projekt-Vorgabe oder direkt am Teil.",
+  "tipp": "Für bewegliche Deckel und Gleitsitze nimm „Gleitend“ (0,2 mm), für stramme Verbindungen „Fest“ (0,1 mm)."
+ },
+ "nozzleWall": {
+  "tip": "Prüft alle Wände gegen die gewählte Düse (Warnung unter 2 × Düse)",
+  "hilfe": "Wände dünner als zwei Bahnen der Druckdüse (unter 2 × Düse, z. B. 0,8 mm bei einer 0,4-mm-Düse) druckt der Slicer nicht mehr stabil oder lässt Lücken. Tracery warnt im Projekt-Panel, an der Ampel und bei den Schwachstellen.",
+  "tipp": "Klick auf „Stellen zeigen“, um alle zu dünnen Bereiche rot am Modell hervorzuheben."
+ },
+ "orientPrint": {
+  "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
+  "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
+  "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
+ },
+ "drawingSection": {
+  "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
+  "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
+  "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
  }
 };
 
@@ -2884,7 +2904,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
 
 const I18n = (() => {
   let lang = 'de';
@@ -3594,7 +3614,7 @@ const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
-  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 });
+  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' });
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
@@ -3969,6 +3989,8 @@ const Model = (() => {
       }
       else {
         o.p = resolveP(it.p, ownV);
+        if (it.p && typeof it.p.printFit === 'string') o.p.printFit = it.p.printFit;
+        if (it.kind === 'cylinder' && o.p.printFit) o.p.printFitSign = it.role === 'hole' ? 1 : -1;
         if (it.kind === 'part') {
           if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
           if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
@@ -4693,6 +4715,7 @@ const Model = (() => {
       z: Number(rawBed.z) > 0 ? Number(rawBed.z) : 250,
       nozzle: Number(rawBed.nozzle) > 0 ? Number(rawBed.nozzle) : 0.4,
       holeComp: Number.isFinite(Number(rawBed.holeComp)) ? clamp(Math.round(Number(rawBed.holeComp) * 100) / 100, 0, 1) : 0,
+      printFit: ['loose', 'slide', 'snug', 'press'].includes(rawBed.printFit) ? rawBed.printFit : '',
     };
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
@@ -11336,41 +11359,70 @@ function sleeveEntry(size) {
   const s = String(size || '8x10').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x').replace(',', '.');
   return SLEEVE_BY_ID.get(s) || SLEEVE_BY_ID.get('8x10') || SLEEVE_LIST[0] || null;
 }
+// 3D-Druck-Passungs-Vorgaben (DR-03): Spiel wird bei Löchern addiert, bei Bolzen abgezogen
+const PRINT_FITS = [
+  { id: 'loose', label: 'Lose', mm: 0.4, desc: 'Viel Spiel – steckt leicht ohne Nacharbeit' },
+  { id: 'slide', label: 'Gleitend', mm: 0.2, desc: 'Bewegliche Teile, Deckel und Steckverbindungen' },
+  { id: 'snug', label: 'Fest', mm: 0.1, desc: 'Strammer Sitz, von Hand zusammendrückbar' },
+  { id: 'press', label: 'Presssitz', mm: 0, desc: 'Kein Spiel – zum Einpressen' },
+];
+const PRINT_FIT_MAP = Object.fromEntries(PRINT_FITS.map((f) => [f.id, f]));
+function printFitInfo(id) { return PRINT_FIT_MAP[String(id || '')] || null; }
+function printFitMm(id) { const f = printFitInfo(id); return f ? f.mm : 0; }
+const PRINT_FIT_PROJ_OPTIONS = [
+  ['', 'Aus (exakte Nennmaße)'],
+  ...PRINT_FITS.map((f) => [f.id, `${f.label} (${f.mm === 0 ? '0' : fmtFixed(f.mm, 1)} mm)`]),
+];
+const PRINT_FIT_HOLE_OPTIONS = [
+  ['', 'Keine (exakt)'],
+  ...PRINT_FITS.map((f) => [f.id, f.mm > 0 ? `${f.label} (+${fmtFixed(f.mm, 1)} mm)` : `${f.label} (0 mm)`]),
+];
+const PRINT_FIT_BOLT_OPTIONS = [
+  ['', 'Keine (exakt)'],
+  ...PRINT_FITS.map((f) => [f.id, f.mm > 0 ? `${f.label} (−${fmtFixed(f.mm, 1)} mm)` : `${f.label} (0 mm)`]),
+];
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['countersunk', 'Senkkopf'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']], def: 'countersunk' },
     { k: 'fit', label: 'Loch', type: 'select', options: [['medium', 'Mittel (Standard)'], ['fine', 'Eng (genau)'], ['coarse', 'Weit (mit Spiel)'], ['tap', 'Kernloch für Gewinde']], def: 'medium' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'nutTrap', label: 'Mutternfalle', role: 'hole', icon: 'hex', desc: 'Sechskant-Tasche für eine Mutter, mit Schraubenloch', params: [
     { k: 'size', label: 'Mutter', type: 'select', options: SIZES, def: 'M3' },
     { k: 'depth', label: 'Taschentiefe', type: 'num', def: null, auto: true },
     { k: 'length', label: 'Lochtiefe', type: 'num', def: 12 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'threadHole', label: 'Gewindeloch (gedruckt)', role: 'hole', icon: 'target', desc: 'Echtes Innengewinde zum Drucken, mit etwas Spiel', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
     { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
     { k: 'clear', label: 'Spiel', type: 'num', def: 0.3 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'threadRod', label: 'Gewindebolzen', role: 'solid', icon: 'target', desc: 'Außengewinde (ISO metrisch) – z. B. für gedruckte Schraubdeckel', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Länge', type: 'num', def: 12 },
     { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_BOLT_OPTIONS, def: '' },
   ] },
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'blindHole', label: 'Sackloch', role: 'hole', icon: 'holeWizard', desc: 'Bohrung mit fester Tiefe und 118°-Bohrspitze (Standard-Spiralbohrer)', params: [
     { k: 'd', label: 'Durchmesser', type: 'num', def: 5 },
     { k: 'depth', label: 'Tiefe (Zylinder)', type: 'num', def: 10 },
     { k: 'tipAngle', label: 'Bohrspitze', type: 'select', options: [['118', '118° (Spiralbohrer)'], ['140', '140° (Hartmetall)'], ['180', 'Flacher Boden']], def: 118 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'fitHole', label: 'Passbohrung H7', role: 'hole', icon: 'target', desc: 'Präzisionsbohrung auf genaues Nennmaß mit Toleranz-Hinweis nach ISO 286 H7', params: [
     { k: 'd', label: 'Nenn-Ø', type: 'num', def: 6 },
     { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
     { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
@@ -11390,6 +11442,7 @@ const LIB = [
     { k: 'size', label: 'Durchmesser', type: 'select', options: PIN_OPTIONS, def: '6' },
     { k: 'length', label: 'Länge', type: 'num', def: 20 },
     { k: 'tol', label: 'Toleranz', type: 'select', options: [['m6', 'm6 (Form A, Standard)'], ['h8', 'h8 (Form B)']], def: 'm6' },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_BOLT_OPTIONS, def: '' },
   ] },
   { lib: 'stdKey', label: 'Passfeder (DIN 6885 A)', role: 'solid', icon: 'key', mat: 'Baustahl', std: true, desc: 'Rundstirnige Passfeder nach DIN 6885 Form A', params: [
     { k: 'size', label: 'Querschnitt (b × h)', type: 'select', options: KEY_OPTIONS, def: '6x6' },
@@ -12229,6 +12282,9 @@ const Actions = (() => {
   }
   function addPart(def, params, opts = {}) {
     if (sceneEmpty() && !opts.onFace && def.role !== 'hole') App.fitAfterBuild();
+    if (def && Array.isArray(def.params) && def.params.some((q) => q.k === 'printFit') && !opts.explicitPrintFit && !(params && params.printFit) && typeof Print !== 'undefined' && Print.printFit()) {
+      params = { ...(params || {}), printFit: Print.printFit() };
+    }
     const it = Model.newItem('part', { lib: def.lib, ...params }, { name: opts.name || def.label, role: def.role });
     const hole = def.role === 'hole';
     const spot = opts.pos || (hole ? viewCenter() : freeSpot(25, 25));
@@ -19951,9 +20007,14 @@ const Panels = (() => {
     } else {
       const sheetBtn = btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
       sheetBtn.dataset.help = 'drawingFormat';
+      const secBtn = btn('t-section', 'section', T('tool.dsection'), T('tool.dsectionTip'), 'S', () => Drawing.tool('section'), Drawing.activeTool === 'section' ? 'active' : '');
+      secBtn.dataset.help = 'drawingSection';
+      secBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'section'));
       const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
       detBtn.dataset.help = 'drawingDetail';
-      btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' ? 'active' : '');
+      detBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'detail'));
+      const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' ? 'active' : '');
+      dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
@@ -20907,6 +20968,11 @@ const Panels = (() => {
     printerSel.setAttribute('data-help', 'printerSelect');
     printerSel.style.marginTop = '8px';
     bedSec.append(bedOn, printerSel);
+    const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
+      id: 'proj-bed-nozzle', label: 'Düse Ø', value: Print.nozzle(), unit: 'mm', len: false, min: 0.1, max: 2, step: 0.1, expr: false,
+      onCommit: (v) => Print.setNozzle(v),
+    }));
+    bedSec.append(nozWrap);
     if (pb.enabled) {
       const bedFields = h('div', { class: 'fields three', style: { marginTop: '8px' } });
       for (const [k, lbl] of [['x', 'Breite'], ['y', 'Tiefe'], ['z', 'Höhe']]) {
@@ -20914,7 +20980,7 @@ const Panels = (() => {
           id: 'proj-bed-' + k, label: lbl, value: pb[k], axis: k, unit: 'mm', min: 10, expr: false,
           onCommit: (v) => App.change('Druckbett geändert', (doc) => {
             doc.settings = doc.settings || {};
-            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
+            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {});
             doc.settings.printBed[k] = v;
             const pr = Print.findPrinter(doc.settings.printBed.printer);
             if (!pr || pr[k] !== v) doc.settings.printBed.printer = 'custom';
@@ -20923,14 +20989,6 @@ const Panels = (() => {
           }),
         }));
       }
-      const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
-        id: 'proj-bed-nozzle', label: 'Düse Ø', value: pb.nozzle, unit: 'mm', len: false, min: 0.1, step: 0.1, expr: false,
-        onCommit: (v) => App.change('Düse geändert', (doc) => {
-          doc.settings = doc.settings || {};
-          doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
-          doc.settings.printBed.nozzle = v;
-        }),
-      }));
       const fit = Print.fitCheck(pb, st);
       const bedStatus = h('div', { class: 'hint-box' + (!fit.fits ? ' warn' : ''), id: 'proj-bed-status', style: { marginTop: '8px' } });
       if (!fit.fits) {
@@ -20944,7 +21002,38 @@ const Panels = (() => {
         const pPrefix = fit.printer ? fit.printer.name + ' · ' : 'Druckbett ';
         bedStatus.textContent = `${pPrefix}${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()} · Düse ${fmt(pb.nozzle, 2)} mm`;
       }
-      bedSec.append(bedFields, nozWrap, bedStatus);
+      bedSec.append(bedFields, bedStatus);
+    }
+    const pfVal = Print.printFit();
+    const pfSel = UI.selectField({
+      id: 'proj-print-fit', label: 'Passungs-Vorgabe (Druckteile)', value: pfVal,
+      options: PRINT_FIT_PROJ_OPTIONS,
+      onChange: (v) => Print.setPrintFit(v),
+    });
+    pfSel.setAttribute('data-help', 'printFit');
+    pfSel.style.marginTop = '8px';
+    bedSec.append(pfSel);
+    if (pfVal) {
+      const pfi = printFitInfo(pfVal);
+      if (pfi) bedSec.append(h('small', { id: 'proj-print-fit-hint', style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, `${pfi.label}: Bohrungs-Assistent ${pfi.mm > 0 ? `+${fmtFixed(pfi.mm, 1)}` : '0'} mm · Bolzen ${pfi.mm > 0 ? `−${fmtFixed(pfi.mm, 1)}` : '0'} mm (${pfi.desc}).`));
+    }
+    if (st) {
+      const nw = Print.nozzleWallCheck();
+      if (nw.summary) {
+        const nwBox = h('div', { class: 'hint-box' + (nw.warn ? ' warn' : ''), id: 'proj-nozzle-wall', 'data-help': 'nozzleWall', style: { marginTop: '8px' } }, h('div', null, nw.summary));
+        if (nw.warn) {
+          const showBtn = h('button', { type: 'button', class: 'btn', id: 'proj-nozzle-wall-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+          showBtn.onclick = () => Views.thin(true, { limit: nw.minWall });
+          nwBox.append(showBtn);
+        }
+        bedSec.append(nwBox);
+      }
+      const orientRow = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+      const orientBtn = h('button', { type: 'button', class: 'btn', id: 'proj-orient-print', 'data-help': 'orientPrint' });
+      orientBtn.innerHTML = icon('overhang') + 'Für den Druck ausrichten';
+      orientBtn.onclick = () => Print.orientForPrint();
+      orientRow.append(orientBtn);
+      bedSec.append(orientRow);
     }
     const hcVal = Print.holeComp();
     const hcChoices = [0, 0.1, 0.2, 0.3, 0.4];
@@ -21224,23 +21313,48 @@ const Panels = (() => {
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
       for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, vars: V, onCommit: (val) => setP(q.k, val) }));
-      sec.append(fl); w.append(sec);
+      sec.append(fl);
+      if (it.kind === 'cylinder') {
+        const pfVal = it.p.printFit || '';
+        const pfSel = UI.selectField({
+          id: 'p-printFit', label: 'Druck-Passung', value: pfVal,
+          options: it.role === 'hole' ? PRINT_FIT_HOLE_OPTIONS : PRINT_FIT_BOLT_OPTIONS,
+          onChange: (v) => setP('printFit', v),
+        });
+        pfSel.setAttribute('data-help', 'printFit');
+        pfSel.style.marginTop = '8px';
+        sec.append(pfSel);
+        const pfi = printFitInfo(pfVal);
+        if (pfi) {
+          const dNom = Model.num(it.p.d, V, 20);
+          const dEff = Math.max(0.2, dNom + (it.role === 'hole' ? pfi.mm : -pfi.mm));
+          sec.append(h('div', { id: 'p-cyl-fit-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> ${it.role === 'hole' ? '+' : '−'}${fmtFixed(pfi.mm, 1)} mm → Ø <b>${Units.fmtLenU(dEff, 2)}</b>.` }));
+        }
+      }
+      w.append(sec);
     } else if (it.kind === 'part') {
       const def = LIBMAP[it.p.lib];
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
-          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) }));
-          else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
+          let fld;
+          if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
+          else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) });
+          if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
+          fl.append(fld);
         }
         sec.append(fl);
+        const pfi = printFitInfo(it.p.printFit);
+        const pf = pfi ? pfi.mm : 0;
+        const pfHoleNote = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm` : '0 mm'} Spiel.` : '';
         if (def.lib === 'blindHole') {
-          const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const dNom = Model.num(it.p.d, V, 5), d = dNom + pf, dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const dTxt = pfi && pf > 0 ? `Ø <b>${Units.fmtLenU(d, 2)}</b> (${Units.fmtLenU(dNom, 2)} + ${fmtFixed(pf, 1)} mm) · ` : '';
           const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${fmtAngleU(ang)}): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
-          sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+          sec.append(h('div', { class: 'hint-box', html: `${dTxt}${tipTxt}${pfHoleNote} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
-          const d = Model.num(it.p.d, V, 6), info = h7Info(d);
-          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          const dNom = Model.num(it.p.d, V, 6), d = dNom + pf, info = h7Info(dNom);
+          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). ${pfi && pf > 0 ? `Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm).` : 'Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.'}` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird ${pfi && pf > 0 ? `inkl. Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm) ` : 'genau das Nennmaß '}gebohrt.`;
           sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
@@ -21249,25 +21363,33 @@ const Panels = (() => {
           const te = threadEntry(it.p.size);
           let screwTxt = '';
           if (te) {
-            const dia = threadHoleDia(te, it.p.fit);
+            const dia = threadHoleDia(te, it.p.fit) + pf;
             const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
             let headTxt = '';
             if (it.p.fit !== 'tap') {
-              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
-              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm + pf, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm + pf, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
             }
-            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}${pfHoleNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
           }
           sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
-        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
-        else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') {
+          sec.append(h('div', { class: 'hint-box', html: `${pfi ? `<b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm` : '0 mm'} Spiel.<br>` : ''}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'threadRod' && pfi) {
+          const nom = parseFloat(String(it.p.size || 'M6').slice(1)) || 6;
+          sec.append(h('div', { id: 'p-threadrod-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> Außengewinde um ${pf > 0 ? `−${Units.fmtLenU(pf, 2)}` : '0 mm'} angepasst (effektiv Ø <b>${Units.fmtLenU(Math.max(0.8, nom - pf), 2)}</b>).` }));
+        } else if (def.lib === 'threadHole' && pfi) {
+          const nom = parseFloat(String(it.p.size || 'M6').slice(1)) || 6;
+          sec.append(h('div', { id: 'p-threadhole-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> Innengewinde mit ${pf > 0 ? `+${Units.fmtLenU(pf, 2)}` : '0 mm'} Spiel (effektiv Ø <b>${Units.fmtLenU(nom + pf, 2)}</b>).` }));
+        } else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
           const pe = pinEntry(it.p.size ?? it.p.d);
           if (pe) {
             const L = Model.num(it.p.length, V, 20), tol = it.p.tol === 'h8' ? 'h8' : 'm6';
             const minD = tol === 'h8' ? pe.h8_min_mm : pe.m6_min_mm, maxD = tol === 'h8' ? pe.h8_max_mm : pe.m6_max_mm;
             const h7 = h7Info(pe.d_mm);
             const fitTxt = h7.um != null ? ` · Empfohlene Bohrung: <b>Ø ${Units.fmtLenU(pe.d_mm, 2)} H7</b> (${h7.rangeText})` : '';
-            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
+            const pfPinTxt = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> Stift-Ø um ${pf > 0 ? `−${Units.fmtLenU(pf, 2)}` : '0 mm'} angepasst → <b>Ø ${Units.fmtLenU(Math.max(0.4, pe.d_mm - pf), 2)}</b>.` : '';
+            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}${pfPinTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
           }
         } else if (def.lib === 'stdKey' && typeof keyEntry === 'function') {
           const ke = keyEntry(it.p.size);
@@ -22049,7 +22171,7 @@ const Panels = (() => {
       const hole = it.role === 'hole';
       const compact = !!(face || App.edges.length);
       b(hole ? 'solid' : 'hole', hole ? T('ctx.toBody') : T('ctx.toHole'), () => Actions.toggleRole(), '', hole ? T('ctx.toBodyTip') : T('ctx.toHoleTip'), compact);
-      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
+      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }, '-', { label: 'Für den Druck ausrichten', icon: 'overhang', help: 'orientPrint', run: () => Print.orientForPrint() }]), '', T('ctx.rotateTip'), true);
       b('mirror', T('ctx.mirror'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.mirrorX'), icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: T('ctx.mirrorY'), icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: T('ctx.mirrorZ'), icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', T('ctx.mirrorTip'), true);
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
       if (App.doc.items.includes(it)) b('moveStep', T('ctx.moveStep'), () => Features.transform(), '', T('ctx.moveStepTip'), true);
@@ -22640,7 +22762,8 @@ const Place = (() => {
     ['insert', 'Gewindeeinsatz'],
     ['nut', 'Mutternfalle'],
   ];
-  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
+  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5', printFit: '' };
+  let lastProjFit = '';
   let hw = null;   // laufender Setz-Modus
   const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
   function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
@@ -22649,8 +22772,9 @@ const Place = (() => {
     const mat = (holePath) => `<path d="M24 ${y0} H212 V${yB} H24 Z" fill="var(--accent)" fill-opacity=".14" stroke="var(--line-strong)" stroke-width="1"/>`
       + `<path d="${holePath}" fill="var(--surface)" stroke="var(--hole)" stroke-width="1.5" stroke-linejoin="round"/>`
       + `<line x1="${cx}" y1="6" x2="${cx}" y2="${yB + 4}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2.5"/>`;
+    const pf = o.type === 'center' ? 0 : printFitMm(o.printFit);
     if (o.type === 'blind') {
-      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const d = hwNum(o.d, 5) + pf, depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
       const scale = Math.min(46 / Math.max(depth + tipH, 1), 36 / Math.max(d / 2, 1));
       const rPx = Math.max(8, Math.min(36, (d / 2) * scale));
@@ -22663,7 +22787,7 @@ const Place = (() => {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
     }
     if (o.type === 'fit') {
-      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      const d = hwNum(o.fitD, 6) + pf, info = h7Info(hwNum(o.fitD, 6));
       const rPx = Math.max(12, Math.min(30, d * 2.4));
       const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
@@ -22701,22 +22825,26 @@ const Place = (() => {
     }
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
-    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
+    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) + pf : null;
     const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
       + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
   function holeInfoHTML(o) {
+    const pf = o.type === 'center' ? 0 : printFitMm(o.printFit);
+    const pfi = o.type === 'center' ? null : printFitInfo(o.printFit);
+    const pfNote = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)}` : '0'} mm Spiel.` : '';
     if (o.type === 'blind') {
-      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const d = hwNum(o.d, 5) + pf, depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
-      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).`;
-      return `<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.`;
+      const dTxt = pfi && pf > 0 ? `Ø <b>${Units.fmtLenU(d, 2)}</b> (${Units.fmtLenU(hwNum(o.d, 5), 2)} + ${fmtFixed(pf, 1)} mm) · ` : '';
+      if (ang >= 179.5) return `${dTxt}<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).${pfNote}`;
+      return `${dTxt}<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.${pfNote}`;
     }
     if (o.type === 'fit') {
-      const d = hwNum(o.fitD, 6), info = h7Info(d);
-      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
-      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+      const nom = hwNum(o.fitD, 6), d = nom + pf, info = h7Info(nom);
+      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). ${pfi && pf > 0 ? `Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm).` : 'Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.'}`;
+      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird ${pfi && pf > 0 ? `inkl. Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm) ` : 'genau das Nennmaß '}gebohrt.`;
     }
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
@@ -22727,21 +22855,24 @@ const Place = (() => {
       if (!te) return '';
       const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmtFixed(te.steigung_mm, 2)} mm)` : `Steigung ${fmtFixed(te.steigung_mm, 2)} mm`;
       const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
-      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm + pf, 2)}</b> (${pitchTxt}${drillTxt}).${pfNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
     if (o.type === 'through') {
       const te = threadEntry(o.size);
       if (!te) return '';
-      const dia = threadHoleDia(te, o.fit);
+      const dia = threadHoleDia(te, o.fit) + pf;
       let headTxt = '';
-      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
-      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
-      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm + pf, 2)} (${te.senkung_winkel_grad || 90}°)`;
+      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm + pf, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.${pfNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
+    if (pfi) return `<b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm Spiel auf das Loch.` : '0 mm Spiel (Presssitz).'}`;
     return '';
   }
   function holeHere(face, anchor, at) {
     if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
+    const curProjFit = typeof Print !== 'undefined' ? Print.printFit() : '';
+    if (curProjFit !== lastProjFit) { lastHole.printFit = curProjFit; lastProjFit = curProjFit; }
     const o = { ...lastHole };
     const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '264px' } });
     const titleEl = h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent');
@@ -22831,6 +22962,15 @@ const Place = (() => {
         body.append(thru);
         if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       }
+      if (o.type !== 'center') {
+        const pff = UI.selectField({
+          id: 'hw-print-fit', label: 'Druck-Passung', value: o.printFit || '',
+          options: PRINT_FIT_HOLE_OPTIONS,
+          onChange: (v) => { o.printFit = v; updatePreview(); },
+        });
+        pff.dataset.help = 'printFit';
+        body.append(pff);
+      }
       updatePreview();
       const popEl = box.closest('.pop');
       if (popEl) { const pr = popEl.getBoundingClientRect(); if (pr.bottom > innerHeight - 8) popEl.style.top = Math.max(8, innerHeight - pr.height - 8) + 'px'; }
@@ -22858,19 +22998,20 @@ const Place = (() => {
   }
   function specFor(o, thick) {
     const depth = o.thru ? thick : o.depth;
-    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118) }];
-    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth }];
+    const pf = o.printFit || '';
+    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118), printFit: pf }];
+    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth, printFit: pf }];
     if (o.type === 'center') return [LIBMAP.centerHole, { size: o.centerSize }];
-    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
-    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
-    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
-    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth }];
+    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth, printFit: pf }];
+    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth, printFit: pf }];
+    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth, printFit: pf }];
+    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth, printFit: pf }];
   }
   function placeAt(id, point, normal, exact) {
     if (!hw) return;
     const [def, params] = specFor(hw.o, thicknessAlong(id, normal));
     const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray(), { exact });
-    Actions.addPart(def, params, { onFace });
+    Actions.addPart(def, params, { onFace, explicitPrintFit: true });
     App.clearSelection(); Handles.clear();
     hw.count++; holeBar();
   }
@@ -22892,18 +23033,19 @@ const Place = (() => {
     };
     const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
     const te = (o.type === 'through' || o.type === 'tap') && typeof threadEntry === 'function' ? threadEntry(o.size) : null;
+    const pf = printFitMm(o.printFit);
     let r = te
-      ? (o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm / 2
-        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm / 2
-        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) / 2)
-      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+      ? ((o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm
+        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm
+        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit)) + pf) / 2
+      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6) + pf / 2;
     if (o.type === 'blind') {
-      r = hwNum(o.d, 5) / 2;
+      r = (hwNum(o.d, 5) + pf) / 2;
       const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);
       grp.add(mkCircle(r, 0), mkCircle(r, -dep));
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]), mkLine([sx * r, sy * r, -dep], [0, 0, -(dep + tip)]));
     } else if (o.type === 'fit') {
-      r = hwNum(o.fitD, 6) / 2;
+      r = (hwNum(o.fitD, 6) + pf) / 2;
       const dep = o.thru ? 12 : hwNum(o.depth, 10);
       grp.add(mkCircle(r, 0), mkCircle(r, -dep));
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]));
@@ -23773,11 +23915,15 @@ const Views = (() => {
     for (const a of [35, 40, 45, 50, 55, 60]) sel.append(h('option', { value: a, ...(a === 45 ? { selected: true } : {}) }, a + '°'));
     sel.onchange = () => { o.angle = +sel.value; drawOverhang(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Ab'), sel, h('span', { class: 'vb-hint' }, 'Neigung gegen die Senkrechte')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'ov-area' }, '')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Rot = hängt beim Drucken in der Luft. Druckbett ist die Unterseite.')));
+    const ob = h('button', { type: 'button', class: 'btn small', id: 'ov-orient', 'data-help': 'orientPrint' });
+    ob.innerHTML = icon('rotate') + 'Für den Druck ausrichten';
+    ob.onclick = () => Print.orientForPrint(null, { angle: o.angle });
+    bar.append(h('div', { class: 'vb-row' }, ob));
     bars().append(bar); o.bar = bar;
     st.ov = o; drawOverhang(); sync();
   }
 
-  // ---------- Wandstärke (3D-Druck, PF-07): Stellen dünner als die Grenze werden rot ----------
+  // ---------- Wandstärke (3D-Druck, PF-07, DR-04): Stellen dünner als die Grenze werden rot ----------
   function drawThin() {
     const o = st.thin; if (!o) return;
     if (o.mesh) { Viewer.groups.overlay.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); o.mesh = null; }
@@ -23790,20 +23936,63 @@ const Views = (() => {
     }
     const t = o.bar && o.bar.querySelector('#thin-area');
     if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} dünner als ${Units.fmtLenU(o.limit, 1)} – dünnste Stelle ${Units.fmtLenU(d.minT, 2)}` : `Überall mindestens ${Units.fmtLenU(o.limit, 1)}`;
+    const nwEl = o.bar && o.bar.querySelector('#thin-nozzle-warn');
+    if (nwEl && typeof Print !== 'undefined' && Print.nozzleWallCheck) {
+      const nw = Print.nozzleWallCheck();
+      nwEl.className = nw.warn ? 'hint-box warn' : 'vb-hint';
+      nwEl.textContent = nw.summary;
+      nwEl.hidden = !nw.summary;
+    }
     Viewer.requestRender();
   }
-  function thin(on = !st.thin) {
+  function thin(on = !st.thin, opts = {}) {
     if (!on) { if (st.thin) { if (st.thin.mesh) { Viewer.groups.overlay.remove(st.thin.mesh); st.thin.mesh.geometry.dispose(); st.thin.mesh.material.dispose(); } if (st.thin.bar) st.thin.bar.remove(); st.thin = null; Viewer.requestRender(); } sync(); return; }
-    if (st.thin) return;
-    const o = { limit: 1.2, mesh: null, area: 0 };
+    const noz = typeof Print !== 'undefined' && Print.nozzle ? Print.nozzle() : 0.4;
+    const minWall = round(2 * noz, 2);
+    const lim = opts && opts.limit > 0 ? round(opts.limit, 2) : 1.2;
+    if (st.thin) {
+      if (opts && opts.limit > 0) {
+        st.thin.limit = lim;
+        const sel = st.thin.bar && st.thin.bar.querySelector('#thin-limit');
+        if (sel) {
+          if (![...sel.options].some((op) => Math.abs(+op.value - lim) < 1e-4)) {
+            sel.append(h('option', { value: lim }, Units.fmtLenFixedU(lim, 2)));
+          }
+          sel.value = String([...sel.options].find((op) => Math.abs(+op.value - lim) < 1e-4)?.value || lim);
+        }
+        drawThin();
+      }
+      return;
+    }
+    const o = { limit: lim, mesh: null, area: 0 };
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Wandstärke' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Wandstärke'));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenFixedU(a, 1)));
+    const vals = [0.4, 0.8, 1.2, 1.6, 2, 3, 5];
+    if (!vals.some((a) => Math.abs(a - minWall) < 1e-4)) vals.push(minWall);
+    if (!vals.some((a) => Math.abs(a - lim) < 1e-4)) vals.push(lim);
+    vals.sort((a, b) => a - b);
+    for (const a of vals) {
+      const isNoz = Math.abs(a - minWall) < 1e-4;
+      const lbl = Units.fmtLenFixedU(a, a % 0.1 > 1e-3 ? 2 : 1) + (isNoz ? ' (2 × Düse)' : '');
+      sel.append(h('option', { value: a, ...(Math.abs(a - lim) < 1e-4 ? { selected: true } : {}) }, lbl));
+    }
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
-    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
+    const nozBtn = h('button', { type: 'button', class: 'btn small', id: 'thin-nozzle-btn', 'data-help': 'nozzleWall' }, 'Düse 2×');
+    nozBtn.onclick = () => {
+      const curMin = round(2 * (typeof Print !== 'undefined' && Print.nozzle ? Print.nozzle() : 0.4), 2);
+      o.limit = curMin;
+      if (![...sel.options].some((op) => Math.abs(+op.value - curMin) < 1e-4)) sel.append(h('option', { value: curMin }, Units.fmtLenFixedU(curMin, 2)));
+      sel.value = String([...sel.options].find((op) => Math.abs(+op.value - curMin) < 1e-4)?.value || curMin);
+      drawThin();
+    };
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, nozBtn),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, `Düse ${fmt(noz, 2)} mm: mindestens ${Units.fmtLenU(minWall, 2)} (2 × Düse)`)),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')),
+      h('div', { class: 'vb-row' }, h('div', { id: 'thin-nozzle-warn', class: 'vb-hint', 'data-help': 'nozzleWall' }, '')));
     bars().append(bar); o.bar = bar;
     st.thin = o; drawThin(); sync();
   }
@@ -24024,6 +24213,7 @@ const Views = (() => {
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    get overhangAngle() { return st.ov ? st.ov.angle : 45; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() {
@@ -30701,7 +30891,9 @@ const Commands = (() => {
     add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, IGES, BREP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step igs iges brep stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
-    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
+    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck passung lose gleitend fest presssitz duese wandstaerke', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
+    add('orient-print', 'Für den Druck ausrichten (wenig Überhang)', 'overhang', 'druck ausrichten drehen ueberhang stuetzen orientieren 3d-druck flach legen', () => Print.orientForPrint(), { group: 'Projekt' });
+    add('nozzle-wall', 'Wandstärke gegen Düse prüfen', 'ruler', 'wandstaerke duese 3d-druck duenn warnung pruefen wand', () => Views.thin(true, { limit: round(2 * Print.nozzle(), 2) }), { group: 'Projekt' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -30731,6 +30923,7 @@ const Commands = (() => {
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
     add('drawingDetail', 'Detailansicht in Zeichnung anlegen', 'zoomIn', 'detail lupe vergrößern ausschnitt kreis zeichnung ze-03', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('detail'); }, { group: 'Werkzeuge' });
+    add('drawingSection', 'Schnittansicht in Zeichnung (A–A)', 'section', 'schnitt schnittansicht schraffur zeichnung a-a', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('section'); }, { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
     for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });
@@ -31186,6 +31379,29 @@ const Print = (() => {
     const hc = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.holeComp) : 0;
     return Number.isFinite(hc) && hc > 0 ? clamp(Math.round(hc * 100) / 100, 0, 1) : 0;
   }
+  function nozzle() {
+    const nz = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.nozzle) : 0.4;
+    return Number.isFinite(nz) && nz > 0 ? clamp(Math.round(nz * 100) / 100, 0.1, 2.0) : 0.4;
+  }
+  function setNozzle(mm) {
+    const v = Number.isFinite(Number(mm)) ? clamp(Math.round(Number(mm) * 100) / 100, 0.1, 2.0) : 0.4;
+    App.change('Düse geändert', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {}, { nozzle: v });
+    });
+  }
+  function printFit() {
+    const pf = App.doc && App.doc.settings && App.doc.settings.printBed ? App.doc.settings.printBed.printFit : '';
+    return ['loose', 'slide', 'snug', 'press'].includes(pf) ? pf : '';
+  }
+  function setPrintFit(id) {
+    const pf = ['loose', 'slide', 'snug', 'press'].includes(id) ? id : '';
+    const info = typeof printFitInfo === 'function' ? printFitInfo(pf) : null;
+    App.change(info ? `Druck-Passung: ${info.label}` : 'Druck-Passung ausgeschaltet', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {}, { printFit: pf });
+    });
+  }
   function setPrinter(id) {
     const p = findPrinter(id);
     App.change(p ? `Drucker: ${p.name}` : id === 'custom' ? 'Eigene Druckergröße' : 'Druckbett deaktiviert', (doc) => {
@@ -31328,6 +31544,266 @@ const Print = (() => {
     UI.toast('Modell für den Drucker gedreht.', { icon: 'check' });
     return true;
   }
+  // ---------- DR-04: Wandstärken-Check gegen die Düse (Wand < 2 × Düse = Warnung) ----------
+  const NON_PRINT_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdBearing', 'stdSleeve', 'stdPin', 'stdKey', 'threadRod']);
+  let wallCache = null;
+  function printableWallNodes(onlyIds = null) {
+    const out = [];
+    for (const n of Viewer.nodes.values()) {
+      if (!n.obj.visible || n.allBodiesHidden || n.role === 'hole' || n.id === '__dragprev' || !n.mesh || !n.data || !n.data.triangles) continue;
+      if (onlyIds && !onlyIds.includes(n.id)) continue;
+      if (!onlyIds) {
+        const f = Model.find(App.doc, n.id);
+        const it = f ? f.item : null;
+        if (it && (typeof Mass !== 'undefined' && Mass.fixedOf(it))) continue;
+        if (it && it.kind === 'part' && it.p && NON_PRINT_LIBS.has(it.p.lib)) continue;
+      }
+      out.push(n);
+    }
+    return out;
+  }
+  function nozzleWallCheck(nozzleVal = nozzle(), onlyIds = null) {
+    const noz = Number(nozzleVal) > 0 ? clamp(Math.round(Number(nozzleVal) * 100) / 100, 0.1, 2.0) : nozzle();
+    const minWall = round(2 * noz, 4);
+    const nodes = printableWallNodes(onlyIds);
+    if (!nodes.length) return { ok: true, warn: false, nozzle: noz, minWall, area: 0, minT: null, summary: '' };
+    const ids = nodes.map((n) => n.id);
+    const geomSig = nodes.map((n) => `${n.id}:${(App.results.get(n.id) && App.results.get(n.id).key) || ''}`).join(',');
+    const cacheKey = `${App.revision}|${noz}|${geomSig}`;
+    if (!App.busy && wallCache && wallCache.key === cacheKey) return wallCache.res;
+    const d = Viewer.thinWalls(Math.max(0.05, minWall - 0.01), ids);
+    const minT = d.minT != null ? round(d.minT + 1e-4, 3) : null;
+    const warn = d.area >= 0.5 && minT != null && minT < minWall - 0.01;
+    const summary = warn
+      ? `Wand zu dünn für ${fmt(noz, 2)}-mm-Düse: dünnste Stelle ${Units.fmtLenU(minT, 2)} (mindestens ${Units.fmtLenU(minWall, 2)} = 2 × Düse, ${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} betroffen).`
+      : `Wandstärke passt zur ${fmt(noz, 2)}-mm-Düse (überall mindestens ${Units.fmtLenU(minWall, 2)} = 2 × Düse).`;
+    const res = { ok: !warn, warn, nozzle: noz, minWall, area: d.area, minT, summary };
+    if (!App.busy) wallCache = { key: cacheKey, res };
+    return res;
+  }
+
+  // ---------- DR-05: Für den Druck ausrichten (minimale Überhangfläche, sichere Auflage auf Z = 0) ----------
+  function orientTargetNodes(ids = null) {
+    const all = [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev' && n.mesh && n.data && n.data.triangles);
+    if (Array.isArray(ids) && ids.length) {
+      const want = new Set();
+      for (const id of ids) {
+        const t = Model.topOf(App.doc, id);
+        if (t) want.add(App.mergedInto(t.id) || t.id);
+        want.add(id);
+      }
+      const sub = all.filter((n) => want.has(n.id));
+      if (sub.length) return sub;
+    }
+    if (App.sel && App.sel.length) {
+      const want = new Set();
+      for (const id of App.sel) {
+        const t = Model.topOf(App.doc, id);
+        if (t) want.add(App.mergedInto(t.id) || t.id);
+      }
+      const sub = all.filter((n) => want.has(n.id));
+      if (sub.length) return sub;
+    }
+    return all;
+  }
+  function collectOrientTris(nodes) {
+    const tris = [];
+    const box = new THREE.Box3();
+    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), nn = new THREE.Vector3();
+    for (const n of nodes) {
+      n.obj.updateMatrixWorld(true);
+      const P = n.mesh.geometry.getAttribute('position').array;
+      const T = n.data.triangles;
+      const M = n.mesh.matrixWorld;
+      for (let i = 0; i + 2 < T.length; i += 3) {
+        va.fromArray(P, T[i] * 3).applyMatrix4(M);
+        vb.fromArray(P, T[i + 1] * 3).applyMatrix4(M);
+        vc.fromArray(P, T[i + 2] * 3).applyMatrix4(M);
+        box.expandByPoint(va).expandByPoint(vb).expandByPoint(vc);
+        nn.crossVectors(ab.subVectors(vb, va), ac.subVectors(vc, va));
+        const L = nn.length();
+        if (L < 1e-10) continue;
+        tris.push({
+          ax: va.x, ay: va.y, az: va.z,
+          bx: vb.x, by: vb.y, bz: vb.z,
+          cx: vc.x, cy: vc.y, cz: vc.z,
+          nx: nn.x / L, ny: nn.y / L, nz: nn.z / L,
+          area: L / 2,
+        });
+      }
+    }
+    return { tris, box };
+  }
+  function orientCandidates(tris) {
+    const cands = [];
+    const add = (dx, dy, dz, eulerHint = null, isCurrent = false) => {
+      const l = Math.hypot(dx, dy, dz);
+      if (l < 1e-9) return;
+      const x = dx / l, y = dy / l, z = dz / l;
+      if (cands.some((c) => c.x * x + c.y * y + c.z * z > 0.9994)) return;
+      cands.push({ x, y, z, eulerHint, isCurrent });
+    };
+    add(0, 0, -1, [0, 0, 0], true);
+    add(0, 0, 1, [180, 0, 0], false);
+    add(1, 0, 0, [0, 90, 0], false);
+    add(-1, 0, 0, [0, -90, 0], false);
+    add(0, 1, 0, [-90, 0, 0], false);
+    add(0, -1, 0, [90, 0, 0], false);
+    // Häufige Flächen-Normalen aus dem Netz clustern
+    const clusters = [];
+    for (const t of tris) {
+      let cl = null;
+      for (const c of clusters) {
+        if (c.x * t.nx + c.y * t.ny + c.z * t.nz > 0.9985) { cl = c; break; }
+      }
+      if (!cl) clusters.push({ x: t.nx, y: t.ny, z: t.nz, area: t.area });
+      else cl.area += t.area;
+    }
+    clusters.sort((a, b) => b.area - a.area);
+    for (const c of clusters.slice(0, 16)) add(c.x, c.y, c.z);
+    for (const c of clusters.slice(0, 6)) add(-c.x, -c.y, -c.z);
+    // 45°-Diagonalen als Ausweichrichtungen
+    const s = Math.SQRT1_2;
+    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      add(sx * s, 0, sy * s);
+      add(0, sx * s, sy * s);
+      add(sx * s, sy * s, 0);
+    }
+    return cands;
+  }
+  function evalOrientCandidate(tris, cand, lim) {
+    const ux = -cand.x, uy = -cand.y, uz = -cand.z;
+    let minH = Infinity, maxH = -Infinity;
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const ha = t.ax * ux + t.ay * uy + t.az * uz;
+      const hb = t.bx * ux + t.by * uy + t.bz * uz;
+      const hc = t.cx * ux + t.cy * uy + t.cz * uz;
+      if (ha < minH) minH = ha; if (hb < minH) minH = hb; if (hc < minH) minH = hc;
+      if (ha > maxH) maxH = ha; if (hb > maxH) maxH = hb; if (hc > maxH) maxH = hc;
+    }
+    let overhangArea = 0, supportVol = 0, bedArea = 0;
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const nz = t.nx * ux + t.ny * uy + t.nz * uz;
+      const ha = t.ax * ux + t.ay * uy + t.az * uz - minH;
+      const hb = t.bx * ux + t.by * uy + t.bz * uz - minH;
+      const hc = t.cx * ux + t.cy * uy + t.cz * uz - minH;
+      const topH = Math.max(ha, hb, hc);
+      if (nz <= -0.996 && topH <= 0.15) bedArea += t.area;
+      if (nz <= lim && topH >= 0.05) {
+        overhangArea += t.area;
+        supportVol += t.area * ((ha + hb + hc) / 3);
+      }
+    }
+    return { ...cand, overhangArea, supportVol, bedArea, height: maxH - minH };
+  }
+  function betterOrient(A, B) {
+    const ovTol = Math.max(0.5, 0.01 * Math.min(A.overhangArea, B.overhangArea));
+    if (Math.abs(A.overhangArea - B.overhangArea) > ovTol) return A.overhangArea < B.overhangArea;
+    if (A.overhangArea > 0.5 && B.overhangArea > 0.5) {
+      const svTol = Math.max(5, 0.05 * Math.min(A.supportVol, B.supportVol));
+      if (Math.abs(A.supportVol - B.supportVol) > svTol) return A.supportVol < B.supportVol;
+    }
+    const bedTol = Math.max(1, 0.05 * Math.max(A.bedArea, B.bedArea));
+    if (Math.abs(A.bedArea - B.bedArea) > bedTol) return A.bedArea > B.bedArea;
+    if (Math.abs(A.height - B.height) > 0.5) return A.height < B.height;
+    if (A.isCurrent !== B.isCurrent) return A.isCurrent;
+    return !!A.eulerHint && !B.eulerHint;
+  }
+  function bestPrintOrientation(ids = null, opts = {}) {
+    const nodes = orientTargetNodes(ids);
+    if (!nodes.length) return null;
+    const { tris, box } = collectOrientTris(nodes);
+    if (!tris.length || box.isEmpty()) return null;
+    const angle = Number(opts.angle) > 0 ? Number(opts.angle) : (typeof Views !== 'undefined' && Views.overhangAngle ? Views.overhangAngle : 45);
+    const lim = -Math.cos((angle * Math.PI) / 180);
+    const cands = orientCandidates(tris);
+    let cur = null, best = null;
+    for (const c of cands) {
+      const ev = evalOrientCandidate(tris, c, lim);
+      if (c.isCurrent) cur = ev;
+      if (!best || betterOrient(ev, best)) best = ev;
+    }
+    return { nodes, tris, box, cur, best, angle };
+  }
+  function orientForPrint(ids = null, opts = {}) {
+    const plan = bestPrintOrientation(ids, opts);
+    if (!plan) { UI.toast('Kein sichtbarer Körper zum Ausrichten.', { icon: 'info' }); return { ok: false, changed: false }; }
+    const { nodes, tris, box, cur, best } = plan;
+    if (best.isCurrent && Math.abs(box.min.z) < 0.05) {
+      const msg = best.overhangArea < 0.5
+        ? 'Liegt schon optimal ohne Überhänge auf dem Druckbett.'
+        : `Schon optimal ausgerichtet (${Units.fmtAreaU(best.overhangArea, best.overhangArea < 100 ? 1 : 0)} Überhang).`;
+      UI.toast(msg, { icon: 'check' });
+      return { ok: true, changed: false, before: cur.overhangArea, after: best.overhangArea, bedArea: best.bedArea, beforeBed: cur.bedArea };
+    }
+    const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+    const piv = box.getCenter(new THREE.Vector3());
+    let qAdd;
+    if (best.eulerHint) {
+      qAdd = new THREE.Quaternion().setFromEuler(new THREE.Euler(best.eulerHint[0] * D2R, best.eulerHint[1] * D2R, best.eulerHint[2] * D2R, 'XYZ'));
+    } else {
+      const dVec = new THREE.Vector3(best.x, best.y, best.z).normalize();
+      qAdd = dVec.z > 0.9999
+        ? new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'XYZ'))
+        : new THREE.Quaternion().setFromUnitVectors(dVec, new THREE.Vector3(0, 0, -1));
+    }
+    const mAdd = new THREE.Matrix4().makeTranslation(piv.x, piv.y, piv.z)
+      .multiply(new THREE.Matrix4().makeRotationFromQuaternion(qAdd))
+      .multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
+    const bRot = new THREE.Box3(), tmpV = new THREE.Vector3();
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      bRot.expandByPoint(tmpV.set(t.ax, t.ay, t.az).applyMatrix4(mAdd));
+      bRot.expandByPoint(tmpV.set(t.bx, t.by, t.bz).applyMatrix4(mAdd));
+      bRot.expandByPoint(tmpV.set(t.cx, t.cy, t.cz).applyMatrix4(mAdd));
+    }
+    const shift = bRot.isEmpty()
+      ? new THREE.Vector3(0, 0, 0)
+      : new THREE.Vector3(piv.x - (bRot.min.x + bRot.max.x) / 2, piv.y - (bRot.min.y + bRot.max.y) / 2, -bRot.min.z);
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const fullModel = nodeIds.size >= [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev').length;
+    const rnd = (v) => Math.round(v * 1e4) / 1e4;
+    const snapDeg = (d) => {
+      for (const a of [0, 90, -90, 180, -180]) if (Math.abs(d - a) < 1e-3) return a;
+      return rnd(d);
+    };
+    App.change('Für den Druck ausgerichtet', (doc) => {
+      const vars = Model.vars(doc);
+      Model.useVars(vars);
+      for (const it of doc.items) {
+        if (!it || it.hidden) continue;
+        if (!fullModel) {
+          const targetMatch = nodeIds.has(it.id) || nodeIds.has(App.mergedInto(it.id));
+          let holeMatch = false;
+          if (!targetMatch && it.role === 'hole') {
+            const hb = typeof Actions !== 'undefined' && Actions.worldBox ? Actions.worldBox(it.id) : null;
+            if (hb && hb.intersectsBox(box)) holeMatch = true;
+          }
+          if (!targetMatch && !holeMatch) continue;
+        }
+        it.t = it.t || { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+        const tn = Model.tNumeric(it);
+        const pNew = new THREE.Vector3(tn.x, tn.y, tn.z).applyMatrix4(mAdd).add(shift);
+        const qOld = new THREE.Quaternion().setFromEuler(new THREE.Euler(tn.rx * D2R, tn.ry * D2R, tn.rz * D2R, 'XYZ'));
+        const qNew = qAdd.clone().multiply(qOld);
+        const eNew = new THREE.Euler().setFromQuaternion(qNew, 'XYZ');
+        it.t.x = rnd(pNew.x); it.t.y = rnd(pNew.y); it.t.z = rnd(pNew.z);
+        it.t.rx = snapDeg(eNew.x * R2D); it.t.ry = snapDeg(eNew.y * R2D); it.t.rz = snapDeg(eNew.z * R2D);
+      }
+    });
+    const beforeTxt = Units.fmtAreaU(cur.overhangArea, cur.overhangArea < 100 ? 1 : 0);
+    const afterTxt = Units.fmtAreaU(best.overhangArea, best.overhangArea < 100 ? 1 : 0);
+    UI.toast(
+      best.overhangArea < 0.5
+        ? `Für den Druck ausgerichtet – keine Überhänge mehr (vorher ${beforeTxt}).`
+        : `Für den Druck ausgerichtet: Überhang von ${beforeTxt} auf ${afterTxt} verringert.`,
+      { icon: 'check', ms: 4200 },
+    );
+    return { ok: true, changed: true, before: cur.overhangArea, after: best.overhangArea, bedArea: best.bedArea, beforeBed: cur.bedArea };
+  }
   function checks() {
     const out = [];
     const st = stats();
@@ -31338,6 +31814,12 @@ const Print = (() => {
     const fit = fitCheck(pb, st);
     if (!fit.fits) {
       out.push({ s: 'warn', t: 'Passt nicht auf den Drucker', d: fit.summary, fit });
+    }
+    const wallNodes = printableWallNodes();
+    const totalTris = wallNodes.reduce((s, n) => s + ((n.data && n.data.triangles && n.data.triangles.length) || 0) / 3, 0);
+    if (wallNodes.length && totalTris <= 25000) {
+      const nw = nozzleWallCheck();
+      if (nw.warn) out.push({ s: 'warn', t: 'Wand zu dünn für die Düse', d: nw.summary, nozzleWall: nw });
     }
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
     if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
@@ -31366,6 +31848,11 @@ const Print = (() => {
         const rb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'So drehen');
         rb.onclick = () => { UI.closePop(); applyRotationSuggestion(c.fit.suggestion); };
         infoCol.append(rb);
+      }
+      if (c.nozzleWall) {
+        const wb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        wb.onclick = () => { UI.closePop(); Views.thin(true, { limit: c.nozzleWall.minWall }); };
+        infoCol.append(wb);
       }
       row.append(stI, infoCol); list.append(row);
     }
@@ -31744,6 +32231,11 @@ const Print = (() => {
         rb.onclick = () => { UI.closeModal(); applyRotationSuggestion(cs[0].fit.suggestion); };
         warnBox.append(rb);
       }
+      if (cs[0].nozzleWall) {
+        const wb = h('button', { type: 'button', class: 'btn', id: 'ex-nozzle-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        wb.onclick = () => { UI.closeModal(); Views.thin(true, { limit: cs[0].nozzleWall.minWall }); };
+        warnBox.append(wb);
+      }
       body.append(warnBox);
     }
     UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
@@ -31968,10 +32460,11 @@ const Print = (() => {
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   function init() {
-    App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
+    App.on('results', () => { wallCache = null; updateAmpel(); });
+    App.on('doc', debounce(() => { wallCache = null; updateAmpel(); }, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { PRINTERS, findPrinter, setPrinter, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
@@ -32055,7 +32548,7 @@ const Drawing = (() => {
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
   const VIEW_NAMES = { front: 'Vorderansicht', top: 'Draufsicht', left: 'Seitenansicht' };
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
-  let proj = null, projRev = -1, loadingProj = false, projId = 0;
+  let proj = null, projRev = -1, loadingProjPromise = null, projId = 0;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
   let layout = null, dragDetail = null;
   let detailDraft = { scale: 2, label: 'Z' };
@@ -32081,6 +32574,7 @@ const Drawing = (() => {
       dims: opts.dims || defaultAutoDims(),
       free: opts.free || [],
       details: opts.details ? opts.details.map((x) => ({ ...x, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null })) : [],
+      sections: Array.isArray(opts.sections) ? opts.sections : [],
       title: {
         titel: t0.titel || '',
         nummer: t0.nummer || '',
@@ -32105,6 +32599,7 @@ const Drawing = (() => {
       dims: raw && Array.isArray(raw.dims) ? raw.dims : undefined,
       free: raw && Array.isArray(raw.free) ? raw.free : undefined,
       details: raw && Array.isArray(raw.details) ? raw.details : [],
+      sections: raw && Array.isArray(raw.sections) ? raw.sections : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
       Object.assign(s.title, raw.title);
@@ -32132,6 +32627,7 @@ const Drawing = (() => {
     }
     for (let i = 0; i < d.drawing.sheets.length; i++) {
       const cur = d.drawing.sheets[i];
+      if (cur && !Array.isArray(cur.sections)) cur.sections = [];
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
       } else if (!Array.isArray(cur.details)) {
@@ -32162,7 +32658,7 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null;
-    toolState = tool === 'dim' ? { stage: 0 } : tool ? {} : null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -32177,7 +32673,7 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null;
-    toolState = tool === 'dim' ? { stage: 0 } : tool ? {} : null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -32192,9 +32688,19 @@ const Drawing = (() => {
     let n = 1, cand = src.name + ' Kopie';
     while (used.has(cand)) { n++; cand = src.name + ' Kopie ' + n; }
     clone.name = cand;
-    const idMap = new Map();
-    clone.details = (clone.details || []).map((x) => { const nid = uid('det'); idMap.set(x.id, nid); return { ...x, id: nid, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null }; });
-    clone.dims = (clone.dims || []).map((x) => ({ ...x, id: uid('d'), view: idMap.get(x.view) || x.view }));
+    const detMap = new Map();
+    clone.details = (clone.details || []).map((x) => { const nid = uid('det'); detMap.set(x.id, nid); return { ...x, id: nid, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null }; });
+    const secMap = new Map();
+    clone.sections = (clone.sections || []).map((s) => {
+      const nid = uid('sec');
+      secMap.set(s.id, nid);
+      return { ...s, id: nid };
+    });
+    clone.dims = (clone.dims || []).map((x) => {
+      let view = detMap.get(x.view) || x.view;
+      if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
+      return { ...x, id: uid('d'), view };
+    });
     clone.free = (clone.free || []).map((x) => ({ ...x, id: uid('f') }));
     if (clone.title) clone.title.blatt = '';
     App.change('Blatt dupliziert', () => {
@@ -32260,12 +32766,13 @@ const Drawing = (() => {
     wrap.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.metaKey && !e.altKey) return; e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)); }, { passive: false });
     wrap.addEventListener('pointerup', onUp);
     wrap.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointerup', onUp);
     dwgState();
     fitZoom(true);
     renderTabs();
     refresh();
   }
-  function close() { tool = null; toolState = null; dragDetail = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; dragDetail = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -32325,27 +32832,92 @@ const Drawing = (() => {
     if (!noRender) setZoom(zoom);
   }
   function sheetSize(sh = dwg()) { const s = SHEETS[sh.sheet] || SHEETS.A4; return sh.orient === 'portrait' ? [s[1], s[0]] : [s[0], s[1]]; }
+  const VIEW_FRAMES = {
+    front: { dir: [0, -1, 0], x: [1, 0, 0], y: [0, 0, 1] },
+    top: { dir: [0, 0, 1], x: [1, 0, 0], y: [0, 1, 0] },
+    left: { dir: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
+  };
+  const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  const vCross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const vNorm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  function sectionPlaneSpec(sec) {
+    const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+    const ex = vf.x, ey = vf.y;
+    const a = sec.a || [0, 0], b = sec.b || [10, 0];
+    const du = b[0] - a[0], dv = b[1] - a[1], L = Math.hypot(du, dv) || 1;
+    const t2 = [du / L, dv / L];
+    const look2 = sec.flip ? [t2[1], -t2[0]] : [-t2[1], t2[0]];
+    const mu = (a[0] + b[0]) * 0.5, mv = (a[1] + b[1]) * 0.5;
+    const o = [ex[0] * mu + ey[0] * mv, ex[1] * mu + ey[1] * mv, ex[2] * mu + ey[2] * mv];
+    const look3 = vNorm([ex[0] * look2[0] + ey[0] * look2[1], ex[1] * look2[0] + ey[1] * look2[1], ex[2] * look2[0] + ey[2] * look2[1]]);
+    const dir = [-look3[0], -look3[1], -look3[2]];
+    let secX, secY;
+    if (Math.abs(dir[2]) < 0.01) {
+      secY = [0, 0, 1];
+      secX = vNorm(vCross(secY, dir));
+    } else {
+      const tPos = (t2[0] > 1e-6 || (Math.abs(t2[0]) <= 1e-6 && t2[1] >= 0)) ? t2 : [-t2[0], -t2[1]];
+      secX = vNorm([ex[0] * tPos[0] + ey[0] * tPos[1], ex[1] * tPos[0] + ey[1] * tPos[1], ex[2] * tPos[0] + ey[2] * tPos[1]]);
+      secY = vNorm(vCross(dir, secX));
+    }
+    return { o, dir, x: secX, y: secY, look2, t2 };
+  }
+  function secCacheKey(sec) {
+    const a = sec.a || [0, 0], b = sec.b || [10, 0];
+    return `${sec.parent}|${r4(a[0])},${r4(a[1])}|${r4(b[0])},${r4(b[1])}|${sec.flip ? 1 : 0}`;
+  }
+  function collectNeededSections() {
+    const map = new Map();
+    for (const sh of sheets()) {
+      for (const sec of sh.sections || []) {
+        const key = secCacheKey(sec);
+        if (!map.has(key)) {
+          const sp = sectionPlaneSpec(sec);
+          map.set(key, { key, o: sp.o, dir: sp.dir, x: sp.x, y: sp.y });
+        }
+      }
+    }
+    return [...map.values()];
+  }
   async function ensureProjections() {
     const needIso = sheets().some((s) => s.views && s.views.iso);
-    const need = App.revision !== projRev || (needIso && (!proj || !proj.views || !proj.views.iso));
-    if (!need) return;
     if (!Model.activeItems(App.doc).length) { proj = null; projRev = App.revision; return; }
-    if (loadingProj) {
-      while (loadingProj) await new Promise((r) => setTimeout(r, 30));
+    const needBase = App.revision !== projRev || !proj || !proj.views || (needIso && !proj.views.iso);
+    const allSecs = collectNeededSections();
+    const existingSecs = (proj && proj.sections) || {};
+    const missingSecs = needBase ? allSecs : allSecs.filter((s) => !existingSecs[s.key]);
+    if (!needBase && !missingSecs.length) return;
+    if (loadingProjPromise) {
+      await loadingProjPromise;
       return ensureProjections();
     }
-    loadingProj = true;
-    try {
-      const views = ['front', 'top', 'left'];
-      if (needIso) views.push('iso');
-      const scene = Model.kernelScene(App.doc);
-      const rev = App.revision;
-      proj = await Kernel.call('project', { scene, views });
-      projId++;
-      projRev = rev;
-    } finally {
-      loadingProj = false;
-    }
+    loadingProjPromise = (async () => {
+      try {
+        const scene = Model.kernelScene(App.doc);
+        const rev = App.revision;
+        if (needBase) {
+          const views = ['front', 'top', 'left'];
+          if (needIso) views.push('iso');
+          proj = await Kernel.call('project', { scene, views, sections: allSecs });
+          projId++;
+          projRev = rev;
+        } else if (missingSecs.length) {
+          const res = await Kernel.call('project', { scene, views: [], sections: missingSecs });
+          if (App.revision === rev) {
+            proj.sections = { ...(proj.sections || {}), ...(res.sections || {}) };
+            projId++;
+          }
+        }
+      } finally {
+        loadingProjPromise = null;
+      }
+    })();
+    await loadingProjPromise;
+  }
+  async function waitReady() {
+    if (loadingProjPromise) await loadingProjPromise;
+    await ensureProjections();
+    if (holder) render();
   }
   async function refresh() {
     if (App.mode !== 'drawing') return;
@@ -32554,6 +33126,55 @@ const Drawing = (() => {
       }
     }
     return { polys, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+  }
+  function sectionGeom(sec, sh = dwg()) {
+    const key = secCacheKey(sec);
+    if (!proj || !proj.sections || !proj.sections[key]) return null;
+    const ck = 'sec|' + key + '|' + projId + '|' + !!sh.hidden + '|' + !!sh.centers;
+    if (geoCache.has(ck)) return geoCache.get(ck);
+    if (geoCache.size > 32) geoCache.clear();
+    const v = proj.sections[key];
+    const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
+    const cg = cleanGeom((v.visible || []).map(raw).filter(Boolean), sh.hidden ? (v.hidden || []).map(raw).filter(Boolean) : []);
+    const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
+    for (const p of polys) {
+      points.push(p.pts[0], p.pts[p.pts.length - 1]);
+      if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
+    }
+    for (const p of hidden) points.push(p.pts[0], p.pts[p.pts.length - 1]);
+    const caps = v.caps || [];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+    for (const cap of caps) {
+      if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
+      for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    }
+    if (!isFinite(x0)) return null;
+    const centers = [];
+    if (sh.centers) {
+      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y), oVec = new THREE.Vector3(...(v.o || [0, 0, 0]));
+      const seen = new Set();
+      for (const a of proj.axes || []) {
+        const d = new THREE.Vector3(...a.d), o = new THREE.Vector3(...a.o);
+        const mid = o.clone().addScaledVector(d, (a.t0 + a.t1) * 0.5);
+        if (mid.sub(oVec).dot(dir) > a.r + 0.5) continue;
+        const k = Math.abs(d.dot(dir));
+        if (k > 0.995) {
+          const c = [o.dot(ex), o.dot(ey)]; const ak = 'c' + Math.round(c[0] * 100) + ',' + Math.round(c[1] * 100);
+          if (seen.has(ak)) continue; seen.add(ak);
+          centers.push({ type: 'cross', c, r: a.r });
+        } else if (k < 0.01) {
+          const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
+          const A = [p0.dot(ex), p0.dot(ey)], B = [p1.dot(ex), p1.dot(ey)];
+          const ak = 'l' + [A, B].flat().map((x) => Math.round(x * 10)).join(',');
+          if (seen.has(ak)) continue; seen.add(ak);
+          centers.push({ type: 'line', a: A, b: B });
+        }
+      }
+    }
+    const g = { polys, hidden, caps, circles, points, centers, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    geoCache.set(ck, g);
+    return g;
   }
   function docThreads() {
     const out = [], V = Model.vars(App.doc).v;
@@ -32830,6 +33451,93 @@ const Drawing = (() => {
     }
     return best;
   }
+  function layoutSheet(sh, s, G, secGeos, area) {
+    const gap = 22;
+    const views = {};
+    const occ = [];
+    const addOcc = (px, py, vw, vh, pad = 8, padBot = 10) => occ.push([px - pad, py - pad, px + vw + pad, py + vh + padBot]);
+    const hits = (r) => {
+      if (r[0] < area.x + 2 || r[1] < area.y + 2 || r[2] > area.x + area.w - 2 || r[3] > area.y + area.h - 2) return true;
+      for (const o of occ) if (r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]) return true;
+      return false;
+    };
+    const main = G.front || G.top || G.left;
+    let x0 = area.x + 12, y0 = area.y + 12, fw = 0, fh = 0, lw = 0, th = 0;
+    if (main) {
+      fw = G.front ? G.front.w * s : G.top.w * s; fh = G.front ? G.front.h * s : 0;
+      lw = G.left ? G.left.w * s : 0; th = G.top ? G.top.h * s : 0;
+      const totalW = fw + (G.left ? gap + lw : 0), totalH = fh + (G.top ? gap + th : 0);
+      const secRoom = secGeos.length && !G.iso ? 0.72 : (G.iso ? 0.72 : 1);
+      x0 = area.x + Math.max(12, (area.w * secRoom - totalW) / 2);
+      y0 = area.y + Math.max(12, (area.h - totalH) / 2);
+      const place = (name, geo, px, py) => {
+        views[name] = { geo, s, ox: px - geo.box[0] * s, oy: py + geo.box[3] * s };
+        addOcc(px, py, geo.w * s, geo.h * s);
+      };
+      if (G.front) place('front', G.front, x0, y0);
+      if (G.left) {
+        const py = G.front ? y0 + (G.front.box[3] - G.left.box[3]) * s : y0;
+        place('left', G.left, x0 + fw + gap, py);
+        if (G.front) views.left.oy = views.front.oy;
+      }
+      if (G.top) {
+        place('top', G.top, x0, y0 + fh + (G.front ? gap : 0));
+        if (G.front) views.top.ox = views.front.ox;
+      }
+      if (G.iso) {
+        const rx = x0 + fw + gap; const ry = G.top ? y0 + fh + gap : y0;
+        const aw = area.x + area.w - rx - 6, ah = area.y + area.h - ry - 6;
+        let si = s; while (si > 0.01 && (G.iso.w * si > aw || G.iso.h * si > ah)) si /= 1.25;
+        if (aw > 20 && ah > 20) {
+          const ix = rx + (aw - G.iso.w * si) / 2, iy = ry + (ah - G.iso.h * si) / 2;
+          views.iso = { geo: G.iso, s: si, ox: ix - G.iso.box[0] * si, oy: iy + G.iso.box[3] * si, noDims: true };
+          addOcc(ix, iy, G.iso.w * si, G.iso.h * si, 4, 4);
+        }
+      }
+    }
+    let fits = true;
+    for (const { sec, geo } of secGeos) {
+      const vw = geo.w * s, vh = geo.h * s;
+      let px = null, py = null;
+      if (Array.isArray(sec.pos) && sec.pos.length >= 2) {
+        px = sec.pos[0]; py = sec.pos[1];
+      } else {
+        const pv = views[sec.parent];
+        const pcx = pv ? pv.ox + ((pv.geo.box[0] + pv.geo.box[2]) * 0.5) * pv.s : area.x + area.w * 0.5;
+        const pcy = pv ? pv.oy - ((pv.geo.box[1] + pv.geo.box[3]) * 0.5) * pv.s : area.y + area.h * 0.5;
+        const cands = [];
+        if (G.left) cands.push([x0 + fw + gap + lw + gap, y0]);
+        if (G.front || G.top) cands.push([x0 + fw + gap, y0 + fh + gap]);
+        if (G.top) cands.push([x0, y0 + fh + gap + th + gap]);
+        cands.push([x0 + fw + gap, y0]);
+        for (let gy = area.y + 8; gy <= area.y + area.h - vh - 14; gy += 14) {
+          for (let gx = area.x + 8; gx <= area.x + area.w - vw - 8; gx += 14) cands.push([gx, gy]);
+        }
+        let best = null, bestD = Infinity;
+        for (const [cx, cy] of cands) {
+          const rect = [cx - 6, cy - 6, cx + vw + 6, cy + vh + 12];
+          if (hits(rect)) continue;
+          const d = Math.hypot(cx + vw * 0.5 - pcx, cy + vh * 0.5 - pcy);
+          if (d < bestD) { bestD = d; best = [cx, cy]; }
+        }
+        if (best) { px = best[0]; py = best[1]; }
+        else {
+          fits = false;
+          px = Math.min(area.x + area.w - vw - 8, x0 + fw + (G.left ? gap + lw + gap : gap));
+          py = area.y + 12;
+        }
+      }
+      views['sec_' + sec.id] = {
+        geo, s,
+        ox: px - geo.box[0] * s,
+        oy: py + geo.box[3] * s,
+        isSection: true,
+        section: sec,
+      };
+      addOcc(px, py, vw, vh, 6, 12);
+    }
+    return { views, fits };
+  }
   function computeLayout(sh = dwg()) {
     const [W, H] = sheetSize(sh);
     // ISO 5457: Heft-Rand links 20 mm; übrige Ränder 10 mm bei A4–A2, 20 mm bei A1–A0
@@ -32838,34 +33546,51 @@ const Drawing = (() => {
     const tb = { w: Math.min(180, frame.w), h: 32 };
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
     const G = { front: sh.views.front ? viewGeom('front', sh) : null, top: sh.views.top ? viewGeom('top', sh) : null, left: sh.views.left ? viewGeom('left', sh) : null, iso: sh.views.iso ? viewGeom('iso', sh) : null, free: freeGeom(sh) };
+    const secGeos = (sh.sections || []).map((sec) => ({ sec, geo: sectionGeom(sec, sh) })).filter((x) => x.geo);
     const main = G.front || G.top || G.left;
     let s = 1;
     const gap = 22;
     const needW = (sc) => (G.front ? G.front.w * sc : G.top ? G.top.w * sc : 0) + (G.left ? gap + G.left.w * sc : 0);
     const needH = (sc) => (G.front ? G.front.h * sc : G.left ? G.left.h * sc : 0) + (G.top ? gap + G.top.h * sc : 0);
     const isoRoom = G.iso ? 0.35 : 0;
-    if (sh.scale === 'auto') {
-      s = SCALES[SCALES.length - 1];
-      for (const sc of SCALES) {
-        if (!main) { s = 1; break; }
-        if (needW(sc) + 24 <= area.w * (G.iso && !G.top ? 1 - isoRoom : 1) && needH(sc) + 24 <= area.h) { s = sc; break; }
+    let views = {};
+    if (!secGeos.length) {
+      if (sh.scale === 'auto') {
+        s = SCALES[SCALES.length - 1];
+        for (const sc of SCALES) {
+          if (!main) { s = 1; break; }
+          if (needW(sc) + 24 <= area.w * (G.iso && !G.top ? 1 - isoRoom : 1) && needH(sc) + 24 <= area.h) { s = sc; break; }
+        }
+      } else s = +sh.scale || 1;
+      if (main) {
+        const fw = G.front ? G.front.w * s : G.top.w * s, fh = G.front ? G.front.h * s : 0;
+        const lw = G.left ? G.left.w * s : 0; const th = G.top ? G.top.h * s : 0;
+        const totalW = fw + (G.left ? gap + lw : 0), totalH = fh + (G.top ? gap + th : 0);
+        const x0 = area.x + Math.max(12, (area.w * (G.iso ? 0.72 : 1) - totalW) / 2), y0 = area.y + Math.max(12, (area.h - totalH) / 2);
+        const place = (name, geo, px, py) => { views[name] = { geo, s, ox: px - geo.box[0] * s, oy: py + geo.box[3] * s }; };
+        if (G.front) place('front', G.front, x0, y0);
+        if (G.left) { const py = G.front ? y0 + (G.front.box[3] - G.left.box[3]) * s : y0; place('left', G.left, x0 + fw + gap, py); if (G.front) views.left.oy = views.front.oy; }
+        if (G.top) { place('top', G.top, x0, y0 + fh + (G.front ? gap : 0)); if (G.front) views.top.ox = views.front.ox; }
+        if (G.iso) {
+          const rx = x0 + fw + gap; const ry = G.top ? y0 + fh + gap : y0;
+          const aw = area.x + area.w - rx - 6, ah = area.y + area.h - ry - 6;
+          let si = s; while (si > 0.01 && (G.iso.w * si > aw || G.iso.h * si > ah)) si /= 1.25;
+          if (aw > 20 && ah > 20) views.iso = { geo: G.iso, s: si, ox: rx + (aw - G.iso.w * si) / 2 - G.iso.box[0] * si, oy: ry + (ah - G.iso.h * si) / 2 + G.iso.box[3] * si, noDims: true };
+        }
       }
-    } else s = +sh.scale || 1;
-    const views = {};
-    if (main) {
-      const fw = G.front ? G.front.w * s : G.top.w * s, fh = G.front ? G.front.h * s : 0;
-      const lw = G.left ? G.left.w * s : 0; const th = G.top ? G.top.h * s : 0;
-      const totalW = fw + (G.left ? gap + lw : 0), totalH = fh + (G.top ? gap + th : 0);
-      const x0 = area.x + Math.max(12, (area.w * (G.iso ? 0.72 : 1) - totalW) / 2), y0 = area.y + Math.max(12, (area.h - totalH) / 2);
-      const place = (name, geo, px, py) => { views[name] = { geo, s, ox: px - geo.box[0] * s, oy: py + geo.box[3] * s }; };
-      if (G.front) place('front', G.front, x0, y0);
-      if (G.left) { const py = G.front ? y0 + (G.front.box[3] - G.left.box[3]) * s : y0; place('left', G.left, x0 + fw + gap, py); if (G.front) views.left.oy = views.front.oy; }
-      if (G.top) { place('top', G.top, x0, y0 + fh + (G.front ? gap : 0)); if (G.front) views.top.ox = views.front.ox; }
-      if (G.iso) {
-        const rx = x0 + fw + gap; const ry = G.top ? y0 + fh + gap : y0;
-        const aw = area.x + area.w - rx - 6, ah = area.y + area.h - ry - 6;
-        let si = s; while (si > 0.01 && (G.iso.w * si > aw || G.iso.h * si > ah)) si /= 1.25;
-        if (aw > 20 && ah > 20) views.iso = { geo: G.iso, s: si, ox: rx + (aw - G.iso.w * si) / 2 - G.iso.box[0] * si, oy: ry + (ah - G.iso.h * si) / 2 + G.iso.box[3] * si, noDims: true };
+    } else {
+      if (sh.scale === 'auto') {
+        s = SCALES[SCALES.length - 1];
+        for (const sc of SCALES) {
+          if (!main && !secGeos.length) { s = 1; break; }
+          if (main && (needW(sc) + 24 > area.w * 0.78 || needH(sc) + 24 > area.h)) continue;
+          const tryLay = layoutSheet(sh, sc, G, secGeos, area);
+          if (tryLay.fits) { s = sc; views = tryLay.views; break; }
+        }
+        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, secGeos, area).views;
+      } else {
+        s = +sh.scale || 1;
+        views = layoutSheet(sh, s, G, secGeos, area).views;
       }
     }
     // Detailansichten platzieren
@@ -33005,12 +33730,103 @@ const Drawing = (() => {
     }
   }
   function fmtDim(v) { return Units.fmtLen(v, 2); }
-  function arrowHead(lines, tip, from, len, inside, id) {
+  function arrowHead(lines, tip, from, len, inside, id, secId) {
     const dx = from[0] - tip[0], dy = from[1] - tip[1]; const L = Math.hypot(dx, dy) || 1; let ux = dx / L, uy = dy / L;
     if (!inside) { ux = -ux; uy = -uy; }
     const w = len * 0.28;
     const b = [tip[0] + ux * len, tip[1] + uy * len];
-    lines.push({ poly: [tip, [b[0] - uy * w, b[1] + ux * w], [b[0] + uy * w, b[1] - ux * w]], cls: 'arrow', id });
+    lines.push({ poly: [tip, [b[0] - uy * w, b[1] + ux * w], [b[0] + uy * w, b[1] - ux * w]], cls: 'arrow', id, ...(secId ? { secId } : {}) });
+  }
+  // ---------- Schraffur & Schnittlinie ----------
+  function hatchStepSheet(s, geo) {
+    const diagMm = geo ? Math.hypot(geo.w * s, geo.h * s) : 60;
+    const byScale = s >= 2 ? 3.2 : s >= 1 ? 2.5 : s >= 0.5 ? 2.0 : 1.6;
+    return clamp(Math.min(byScale, Math.max(1.2, diagMm / 18)), 1.2, 4.5);
+  }
+  function buildHatchLines(v, sec, lines) {
+    const caps = (v.geo && v.geo.caps) || [];
+    if (!caps.length) return;
+    const paperStep = hatchStepSheet(v.s, v.geo);
+    const modelStep = paperStep / (v.s || 1);
+    for (let capIdx = 0; capIdx < caps.length; capIdx++) {
+      const cap = caps[capIdx];
+      const loops = [cap.outer, ...(cap.holes || [])].filter((lp) => lp && lp.length >= 3);
+      if (!loops.length) continue;
+      const deg = (cap.partIdx % 2 === 1) ? 135 : 45;
+      const rad = (deg * Math.PI) / 180;
+      const tx = Math.cos(rad), ty = Math.sin(rad), nx = -ty, ny = tx;
+      let bMin = Infinity, bMax = -Infinity;
+      const rotLoops = loops.map((lp) => lp.map((p) => {
+        const a = p[0] * tx + p[1] * ty;
+        const b = p[0] * nx + p[1] * ny;
+        if (b < bMin) bMin = b;
+        if (b > bMax) bMax = b;
+        return [a, b];
+      }));
+      if (!isFinite(bMin) || bMax - bMin < 1e-6) continue;
+      let k0 = Math.ceil((bMin + 1e-6) / modelStep);
+      let k1 = Math.floor((bMax - 1e-6) / modelStep);
+      const bs = [];
+      if (k0 <= k1) {
+        for (let k = k0; k <= k1; k++) bs.push(k * modelStep);
+      } else {
+        bs.push((bMin + bMax) * 0.5);
+      }
+      for (const b0 of bs) {
+        const hits = [];
+        for (const lp of rotLoops) {
+          for (let i = 0, n = lp.length; i < n; i++) {
+            const p0 = lp[i], p1 = lp[(i + 1) % n];
+            if ((p0[1] <= b0 && p1[1] > b0) || (p1[1] <= b0 && p0[1] > b0)) {
+              const t = (b0 - p0[1]) / (p1[1] - p0[1]);
+              hits.push(p0[0] + t * (p1[0] - p0[0]));
+            }
+          }
+        }
+        hits.sort((x, y) => x - y);
+        for (let i = 0; i + 1 < hits.length; i += 2) {
+          const a0 = hits[i], a1 = hits[i + 1];
+          if (a1 - a0 < 1e-5) continue;
+          const P0 = [a0 * tx + b0 * nx, a0 * ty + b0 * ny];
+          const P1 = [a1 * tx + b0 * nx, a1 * ty + b0 * ny];
+          lines.push({ pts: [toSheet(v, P0), toSheet(v, P1)], cls: 'hatch', id: sec.id, secId: sec.id, capIdx });
+        }
+      }
+    }
+  }
+  function drawSectionLine(v, sec, lines, texts) {
+    const vf = sectionPlaneSpec(sec);
+    const A0 = toSheet(v, sec.a), B0 = toSheet(v, sec.b);
+    const dx = B0[0] - A0[0], dy = B0[1] - A0[1];
+    const L = Math.hypot(dx, dy);
+    if (L < 1e-3) return;
+    const ux = dx / L, uy = dy / L;
+    const b = v.geo.box;
+    const TL = toSheet(v, [b[0], b[3]]), BR = toSheet(v, [b[2], b[1]]);
+    const corners = [TL, [BR[0], TL[1]], BR, [TL[0], BR[1]]];
+    let tMin = Infinity, tMax = -Infinity;
+    for (const c of corners) {
+      const t = (c[0] - A0[0]) * ux + (c[1] - A0[1]) * uy;
+      if (t < tMin) tMin = t;
+      if (t > tMax) tMax = t;
+    }
+    const sStart = Math.min(0, tMin - 5), sEnd = Math.max(L, tMax + 5);
+    const E1 = [A0[0] + ux * sStart, A0[1] + uy * sStart];
+    const E2 = [A0[0] + ux * sEnd, A0[1] + uy * sEnd];
+    const lookSheet = [vf.look2[0], -vf.look2[1]];
+    const endLen = 5;
+    lines.push({ pts: [E1, E2], cls: 'cutline', id: sec.id, secId: sec.id });
+    lines.push({ pts: [E1, [E1[0] + ux * endLen, E1[1] + uy * endLen]], cls: 'cutend', id: sec.id, secId: sec.id });
+    lines.push({ pts: [[E2[0] - ux * endLen, E2[1] - uy * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id });
+    const shaft = 8;
+    for (const [EP, outU] of [[E1, -1], [E2, 1]]) {
+      const tail = [EP[0] - lookSheet[0] * shaft, EP[1] - lookSheet[1] * shaft];
+      lines.push({ pts: [tail, EP], cls: 'dim', id: sec.id, secId: sec.id });
+      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id);
+      const lx = tail[0] - lookSheet[0] * 1.2 + ux * outU * 3.2;
+      const ly = tail[1] - lookSheet[1] * 1.2 + uy * outU * 3.2 + 1.5;
+      texts.push({ x: lx, y: ly, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel' });
+    }
   }
 
   // ---------- Zeichnen ----------
@@ -33029,8 +33845,14 @@ const Drawing = (() => {
         if (p.arc) l.arc = { c: toSheet(v, p.c), r: p.r * v.s, a: p.arc };
         return l;
       };
+      if (v.isSection) buildHatchLines(v, v.section, lines);
       for (const p of v.geo.polys) lines.push(asLine(p, 'vis'));
       for (const p of v.geo.hidden) lines.push(asLine(p, 'hid'));
+      if (v.isSection && v.section) {
+        const b = v.geo.box;
+        const TL = toSheet(v, [b[0], b[3]]), BR = toSheet(v, [b[2], b[1]]);
+        texts.push({ x: (TL[0] + BR[0]) * 0.5, y: BR[1] + 6, t: `Schnitt ${v.section.label}–${v.section.label}`, size: 4, anchor: 'middle', id: v.section.id, secId: v.section.id, cls: 'viewlabel' });
+      }
       for (const c of v.geo.centers) {
         if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr', view: name }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr', view: name }); }
         else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = c.noExt ? 0 : 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name }); }
@@ -33083,6 +33905,11 @@ const Drawing = (() => {
       texts.push({ x: DC[0], y: ly, t: `Detail ${det.label} (${scaleText(detV.s)})`, size: 4, anchor: 'middle', cls: 'detail-lbl', id: det.id, view: det.id });
     }
     if (!Object.keys(lay.views).length) texts.push({ x: W / 2, y: H / 2 - 10, t: 'Noch kein Modell – bau zuerst etwas im Reiter „Modell“.', size: 5, anchor: 'middle', cls: 'note' });
+    // Schnittlinien auf Eltern-Ansichten
+    for (const sec of sh.sections || []) {
+      const pv = lay.views[sec.parent];
+      if (pv) drawSectionLine(pv, sec, lines, texts);
+    }
     // Bemaßungen
     for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay);
     // Schriftfeld
@@ -33097,6 +33924,7 @@ const Drawing = (() => {
     // Werkzeug-Vorschau
     if (tool === 'dim' && toolState) previewDim(cur.lines, cur.texts);
     if (tool === 'detail' && toolState) previewDetail(cur.lines, cur.texts);
+    if (tool === 'section' && toolState) previewSection(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
@@ -33161,7 +33989,7 @@ const Drawing = (() => {
     s.setAttribute('xmlns', NS);
     s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:8 1.2 .6 1.2}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:8 1.2 .6 1.2}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel{stroke:#0c7a70}.dim.sel{stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
@@ -33175,6 +34003,8 @@ const Drawing = (() => {
       el.setAttribute('class', l.cls + (sel ? ' sel' : ''));
       if (l.id) el.dataset.id = l.id;
       if (l.view) el.dataset.view = l.view;
+      if (l.secId) el.dataset.sec = l.secId;
+      if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
       g.append(el);
     }
     for (const t of texts) {
@@ -33184,6 +34014,7 @@ const Drawing = (() => {
       el.setAttribute('class', (t.cls || '') + (t.id && t.id === selDim ? ' sel' : ''));
       if (t.id) el.dataset.id = t.id;
       if (t.view) el.dataset.view = t.view;
+      if (t.secId) el.dataset.sec = t.secId;
       el.textContent = t.t;
       g.append(el);
     }
@@ -33227,6 +34058,57 @@ const Drawing = (() => {
     }
     return best && { ...best, ang: (angOf(best.c, q) * 180) / Math.PI };
   }
+  function sectionParentAt(P) {
+    for (const name of ['front', 'top', 'left']) {
+      const v = layout && layout.views && layout.views[name];
+      if (!v) continue;
+      const b = v.geo.box;
+      const A = toSheet(v, [b[0], b[3]]), B = toSheet(v, [b[2], b[1]]);
+      if (P[0] >= A[0] - 14 && P[0] <= B[0] + 14 && P[1] >= A[1] - 14 && P[1] <= B[1] + 14) return name;
+    }
+    return null;
+  }
+  function snapSectionPt(name, P, anchorA, shiftKey, altKey) {
+    const v = layout.views[name];
+    if (!v) return [0, 0];
+    let q = toView(v, P);
+    if (altKey) return q;
+    const tol = Math.max(1.2, 3.2 / zoom / v.s);
+    const b = v.geo.box;
+    const center = [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5];
+    const snapTargets = [center, ...v.geo.circles.map((c) => c.c), ...v.geo.points];
+    const alignTargets = [center, ...v.geo.circles.map((c) => c.c)];
+    if (!anchorA) {
+      let best = null, bd = tol;
+      for (const p of snapTargets) {
+        const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (d < bd) { bd = d; best = p; }
+      }
+      if (best) return [best[0], best[1]];
+      let bx = null, bxd = tol, by = null, byd = tol;
+      for (const p of alignTargets) {
+        const dx = Math.abs(p[0] - q[0]), dy = Math.abs(p[1] - q[1]);
+        if (dx < bxd) { bxd = dx; bx = p[0]; }
+        if (dy < byd) { byd = dy; by = p[1]; }
+      }
+      if (bx != null) q[0] = bx;
+      if (by != null) q[1] = by;
+      return q;
+    }
+    const dx = q[0] - anchorA[0], dy = q[1] - anchorA[1];
+    if (shiftKey) {
+      if (Math.abs(dx) >= Math.abs(dy)) return [q[0], anchorA[1]];
+      return [anchorA[0], q[1]];
+    }
+    if (Math.abs(dy) < Math.abs(dx) * 0.105) return [q[0], anchorA[1]];
+    if (Math.abs(dx) < Math.abs(dy) * 0.105) return [anchorA[0], q[1]];
+    let best = null, bd = tol;
+    for (const p of snapTargets) {
+      const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      if (d < bd) { bd = d; best = p; }
+    }
+    return best ? [best[0], best[1]] : q;
+  }
   function onMove(e) {
     if (dragDetail) {
       const P = sheetPt(e);
@@ -33247,6 +34129,18 @@ const Drawing = (() => {
       toolState = toolState || { stage: 0 };
       toolState.P = sheetPt(e);
       render();
+    } else if (tool === 'section') {
+      const P = sheetPt(e);
+      toolState = toolState || { stage: 0 };
+      toolState.P = P;
+      if (toolState.stage === 1 && toolState.view) {
+        toolState.b = snapSectionPt(toolState.view, P, toolState.a, e.shiftKey, e.altKey);
+      } else {
+        const name = sectionParentAt(P);
+        toolState.hoverView = name;
+        toolState.snapPt = name ? snapSectionPt(name, P, null, e.shiftKey, e.altKey) : null;
+      }
+      render();
     } else if (tool && tool.startsWith('free-')) { freeMove(e); }
   }
   function onDown(e) {
@@ -33254,6 +34148,7 @@ const Drawing = (() => {
     const P = sheetPt(e);
     if (tool === 'dim') { dimClick(P, e); return; }
     if (tool === 'detail') { detailClick(P); return; }
+    if (tool === 'section') { sectionDown(P, e); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : null;
@@ -33263,11 +34158,25 @@ const Drawing = (() => {
     if (t && e.detail === 2) editFreeText(selDim);
     render(); Panels.renderRight();
   }
-  function onUp() {
-    if (!dragDetail) return;
-    const d = dragDetail;
-    dragDetail = null;
-    if (d.moved && d.curPos) updateDetail(d.id, { pos: d.curPos });
+  function onUp(e) {
+    if (dragDetail) {
+      const d = dragDetail;
+      dragDetail = null;
+      if (d.moved && d.curPos) updateDetail(d.id, { pos: d.curPos });
+      return;
+    }
+    if (!e || e.button !== 0 || tool !== 'section' || !toolState || toolState.stage !== 1 || !svg) return;
+    const P = sheetPt(e);
+    const downP = toolState.downSheet || P;
+    if (Math.hypot(P[0] - downP[0], P[1] - downP[1]) < 4) return;
+    const a = toolState.a;
+    const b = snapSectionPt(toolState.view, P, a, e.shiftKey, e.altKey);
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 2) {
+      addSection({ parent: toolState.view, a, b });
+    } else {
+      toolState = { stage: 0 };
+      render();
+    }
   }
   function detailClick(P) {
     const st = toolState || { stage: 0 };
@@ -33306,6 +34215,105 @@ const Drawing = (() => {
       lines.push({ circle: [st.P[0], st.P[1], DR], cls: 'prev' });
       texts.push({ x: st.P[0], y: st.P[1] - DR - 3, t: `Detail ${detailDraft.label} (${scaleText(ds)})`, size: 4, anchor: 'middle', cls: 'detail-lbl' });
     }
+  }
+  function sectionDown(P, e) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const name = sectionParentAt(P);
+      if (!name) { UI.toast('Zieh oder klick eine Schnittlinie durch die Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
+      const a = snapSectionPt(name, P, null, e.shiftKey, e.altKey);
+      toolState = { stage: 1, view: name, a, b: a, downSheet: P, P };
+      render();
+    } else if (st.stage === 1) {
+      const b = snapSectionPt(st.view, P, st.a, e.shiftKey, e.altKey);
+      if (Math.hypot(b[0] - st.a[0], b[1] - st.a[1]) < 2) return;
+      addSection({ parent: st.view, a: st.a, b });
+    }
+  }
+  function previewSection(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.hoverView && st.snapPt) {
+      const v = layout.views[st.hoverView];
+      if (v) {
+        const S = toSheet(v, st.snapPt);
+        lines.push({ circle: [S[0], S[1], (1.4 / zoom) * 1.4], cls: 'snap' });
+      }
+      return;
+    }
+    if (st.stage === 1 && st.view && st.a && st.b) {
+      const v = layout.views[st.view];
+      if (!v) return;
+      const A = toSheet(v, st.a), B = toSheet(v, st.b);
+      if (Math.hypot(B[0] - A[0], B[1] - A[1]) < 0.5) {
+        lines.push({ circle: [A[0], A[1], (1.4 / zoom) * 1.4], cls: 'snap' });
+        return;
+      }
+      const lbl = nextSectionLabel();
+      drawSectionLine(v, { id: '__secprev', label: lbl, parent: st.view, a: st.a, b: st.b, flip: false }, lines, texts);
+    }
+  }
+  function nextSectionLabel(sh = dwg()) {
+    const used = new Set((sh.sections || []).map((s) => s.label));
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    for (const ch of letters) if (!used.has(ch)) return ch;
+    let n = 1;
+    while (used.has('A' + n)) n++;
+    return 'A' + n;
+  }
+  async function addSection(opts) {
+    if (!opts || !opts.parent || !opts.a || !opts.b) return null;
+    if (Math.hypot(opts.b[0] - opts.a[0], opts.b[1] - opts.a[1]) < 1e-3) return null;
+    let sec = null;
+    App.change('Schnittansicht hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.sections)) d.sections = [];
+      sec = {
+        id: uid('sec'),
+        label: opts.label || nextSectionLabel(d),
+        parent: opts.parent,
+        a: [opts.a[0], opts.a[1]],
+        b: [opts.b[0], opts.b[1]],
+        flip: !!opts.flip,
+        pos: opts.pos || null,
+      };
+      d.sections.push(sec);
+    });
+    selDim = sec.id;
+    tool = null;
+    toolState = null;
+    if (svg) svg.style.cursor = '';
+    UI.hint(null);
+    Panels.renderTools();
+    await ensureProjections();
+    render();
+    Panels.renderRight();
+    return sec;
+  }
+  async function flipSection(id) {
+    const cur = (dwg().sections || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Schnittrichtung umgekehrt', () => {
+      const s = (dwg().sections || []).find((x) => x.id === id);
+      if (s) s.flip = !s.flip;
+    });
+    await ensureProjections();
+    render();
+    Panels.renderRight();
+    return true;
+  }
+  function removeSection(id) {
+    const cur = (dwg().sections || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Schnittansicht gelöscht', () => {
+      const d = dwg();
+      d.sections = (d.sections || []).filter((x) => x.id !== id);
+      d.dims = (d.dims || []).filter((x) => x.view !== 'sec_' + id);
+    });
+    if (selDim === id) selDim = null;
+    render();
+    Panels.renderRight();
+    return true;
   }
   function dimClick(P, e) {
     const st = toolState || { stage: 0 };
@@ -33358,10 +34366,12 @@ const Drawing = (() => {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selDim) { removeSel(); return true; }
     if (e.key.toLowerCase() === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('dim'); return true; }
     if (e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('detail'); return true; }
+    if (e.key.toLowerCase() === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('section'); return true; }
     return false;
   }
   function removeSel() {
     const id = selDim; if (!id) return;
+    if ((dwg().sections || []).some((x) => x.id === id)) { removeSection(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
@@ -33385,14 +34395,15 @@ const Drawing = (() => {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
     } else {
-      toolState = t === 'dim' ? { stage: 0 } : t ? {} : null;
+      toolState = (t === 'dim' || t === 'section') ? { stage: 0 } : t ? {} : null;
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
-    UI.hint(t === 'dim'
-      ? '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.'
-      : t === 'detail'
-        ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
-        : t && t.startsWith('free-') ? HINTS2[t] : null);
+    UI.hint(
+      t === 'dim' ? '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.'
+        : t === 'detail' ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
+          : t === 'section' ? '<b>Schnittansicht:</b> Schnittlinie A–A durch eine Ansicht ziehen oder zwei Punkte anklicken (<b>Umschalt</b> = waagerecht/senkrecht, <b>Alt</b> = frei). <b>Esc</b> beendet.'
+            : t && t.startsWith('free-') ? HINTS2[t] : null
+    );
     Panels.renderTools(); Panels.renderRight(); render();
   }
   function autoDims() {
@@ -33544,6 +34555,9 @@ const Drawing = (() => {
       vis: [0.5, null],
       hid: [0.25, [2.4, 1.2]],
       ctr: [0.25, [8, 1.2, 0.6, 1.2]],
+      hatch: [0.22, null],
+      cutline: [0.35, [7, 1.2, 0.7, 1.2]],
+      cutend: [0.7, null],
       dim: [0.25, null],
       detail: [0.25, null],
       'detail-border': [0.25, [3, 1.5]],
@@ -33588,7 +34602,7 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = t.cls === 'title' || t.cls === 'detail-lbl' ? '/F2' : '/F1';
+      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel') ? '/F2' : '/F1';
       const gray = t.cls === 'lab' ? '0.333' : '0.067';
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
@@ -33673,10 +34687,10 @@ const Drawing = (() => {
     P(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0.0);
     P(0, 'LTYPE', 2, 'DASHED', 70, 0, 3, '__ __ __', 72, 65, 73, 2, 40, 3.6, 49, 2.4, 49, -1.2);
     P(0, 'LTYPE', 2, 'CENTER', 70, 0, 3, '____ _ ____', 72, 65, 73, 4, 40, 11, 49, 8, 49, -1.2, 49, 0.6, 49, -1.2);
-    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 5);
-    for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
+    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 7);
+    for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['SCHRAFFUR', 'CONTINUOUS', 8], ['SCHNITTLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
-    const layer = { vis: 'SICHTBAR', hid: 'VERDECKT', ctr: 'MITTELLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', detail: 'BEMASSUNG', 'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN' };
+    const layer = { vis: 'SICHTBAR', hid: 'VERDECKT', ctr: 'MITTELLINIE', hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', detail: 'BEMASSUNG', 'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN' };
     const Y = (y) => H - y;
     const line = (a, b, ly) => P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
     for (const l of lastLines) {
@@ -33696,7 +34710,7 @@ const Drawing = (() => {
         P(0, 'SEQEND', 8, ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; P(0, 'TEXT', 8, t.cls === 'dimtext' ? 'BEMASSUNG' : 'RAHMEN', 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, String(t.t).replace(/Ø/g, '%%c'), 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
+    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = t.cls === 'dimtext' ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, String(t.t).replace(/Ø/g, '%%c'), 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
@@ -33724,6 +34738,31 @@ const Drawing = (() => {
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + 'Neues Blatt'; bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd)); w.append(info);
+    const secs = d.sections || [];
+    const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, 'Schnittansichten'));
+    const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
+    bSec.innerHTML = icon('section') + 'Schnittlinie ziehen';
+    bSec.onclick = () => tool_('section');
+    secBox.append(bSec);
+    if (secs.length) {
+      const lst = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
+      const pName = { front: 'Vorne', top: 'Oben', left: 'Links' };
+      for (const sec of secs) {
+        const row = h('div', { class: 'mini-row sec-row', 'data-sec-id': sec.id });
+        const lbl = h('span', { class: 'grow' }, `Schnitt ${sec.label}–${sec.label} (${pName[sec.parent] || sec.parent})`);
+        lbl.style.cursor = 'pointer';
+        lbl.onclick = () => { selDim = sec.id; render(); Panels.renderRight(); };
+        const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': 'Blickrichtung der Pfeile umkehren' }, 'Richtung');
+        fb.onclick = () => flipSection(sec.id);
+        const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': 'Schnittansicht löschen' });
+        db.innerHTML = icon('trash');
+        db.onclick = () => removeSection(sec.id);
+        row.append(lbl, fb, db);
+        lst.append(row);
+      }
+      secBox.append(lst);
+    }
+    w.append(secBox);
     // Detailansichten (ZE-03)
     const detSec = h('div', { class: 'section', 'data-help': 'drawingDetail' }, h('div', { class: 'section-h' }, 'Detailansichten'));
     if (tool === 'detail') {
@@ -33755,6 +34794,7 @@ const Drawing = (() => {
     w.append(detSec);
     if (selDim) {
       const selDet = detList.find((x) => x.id === selDim);
+      const isSec = secs.some((x) => x.id === selDim);
       const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : 'Auswahl'));
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
@@ -33766,11 +34806,18 @@ const Drawing = (() => {
         fDet.append(lFld, sFld);
         selSec.append(fDet, rFld);
       }
+      const row = h('div', { class: 'btn-row' });
+      if (isSec) {
+        const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, 'Blickrichtung umkehren');
+        fl.onclick = () => flipSection(selDim);
+        row.append(fl);
+      }
       const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
-      selSec.append(h('div', { class: 'btn-row' }, del));
+      row.append(del);
+      selSec.append(row);
       w.append(selSec);
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Maß oder Detail anklicken und <b>Entf</b> drücken zum Löschen.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Maß, Schnitt oder Detail anklicken und <b>Entf</b> drücken zum Löschen.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
@@ -33781,10 +34828,11 @@ const Drawing = (() => {
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
-    get activeTool() { return tool; },
     get selectedId() { return selDim; },
+    addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
+    get activeTool() { return tool; },
   };
 })();
 
@@ -38535,16 +39583,25 @@ const Weak = (() => {
       if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
       const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
       const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
-      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6, fix: { label: 'Für den Druck ausrichten', run: () => Print.orientForPrint([it.id]) } });
     }
     return out;
+  }
+  function nozzleWalls() {
+    if (typeof Print === 'undefined' || !Print.nozzleWallCheck) return [];
+    const pbOn = !!(App.doc.settings && App.doc.settings.printBed && App.doc.settings.printBed.enabled);
+    const hasPrintMat = Model.activeItems(App.doc).some((it) => !it.hidden && it.role !== 'hole' && !Mass.fixedOf(it) && ['print', 'tpu'].includes(CLASS[Mass.materialFor(it).k] || 'print'));
+    if (!pbOn && !hasPrintMat) return [];
+    const nw = Print.nozzleWallCheck();
+    if (!nw.warn) return [];
+    return [{ id: 'nozzle-wall', s: 'warn', title: 'Wand zu dünn für die Düse', text: nw.summary, fix: { label: 'Stellen zeigen', run: () => Views.thin(true, { limit: nw.minWall }) } }];
   }
   async function analyze() {
     if (!App.doc.items.length) return [];
     const rev = App.revision, out = [];
     for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
     out.push(...(await solidHoles()));
-    out.push(...walls(), ...arms(), ...overhangs());
+    out.push(...walls(), ...nozzleWalls(), ...arms(), ...overhangs());
     if (DroneCheck.isDrone()) {
       const l = (await DroneCheck.run()) || [];
       for (const c of l) if ((c.s === 'bad' || c.s === 'warn') && c.id !== 'weight') out.push({ ...c, id: 'drone-' + c.id, title: c.title + ' (Drohnen-Check)' });

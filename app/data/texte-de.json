@@ -108,6 +108,8 @@
   "tool.sheetTip": "Blattgröße, Maßstab und Ansichten",
   "tool.detail": "Detailansicht",
   "tool.detailTip": "Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)",
+  "tool.dsection": "Schnittansicht",
+  "tool.dsectionTip": "Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur",
   "tool.dim": "Maß",
   "tool.dimTip": "Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken",
   "tool.autodim": "Automatisch bemaßen",

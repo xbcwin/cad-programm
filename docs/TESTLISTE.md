@@ -1950,6 +1950,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ändern, PDF-Export, Speichern/Laden & Rückgängig**: Buchstabe, Maßstab, Löschen, Rückgängig/Wiederholen, Projekt-Speicherung, mehrseitiger PDF-Export und Hilfetext `drawingDetail` funktionieren fehlerfrei.
 - [ ] **Von Hand**: Im Browser eine Detailansicht auf der Vorderansicht anlegen, auf dem Blatt verschieben und als PDF/DXF exportieren.
 
+## 3D-Druck: Passungen, Düsen-Wand und Ausrichten (Auto [A-060], DR-03, DR-04, DR-05)
+
+- [x] **Passungs-Vorgaben (`lose`, `gleitend`, `fest`, `Presssitz`)**: Im Projekt-Panel (`#proj-print-fit`), im Bohrungs-Assistenten (`#hw-print-fit`) sowie an `stdPin` und `threadRod` vergrößert die Vorgabe Bohrungen um `+0,4 / +0,2 / +0,1 / 0 mm` und verkleinert Bolzen/Stifte um `−0,4 / −0,2 / −0,1 / 0 mm` exakt im CAD-Kern.
+- [x] **Düsen-Wandstärken-Check (`< 2 × Düse`)**: Eine `0,6`-mm-Wand meldet bei `0,4`-mm-Düse Warnungen in `#proj-nozzle-wall`, `#ampel`, `Weak.analyze()` (`nozzle-wall`) und `#thin-nozzle-warn`; ab `1,0` mm ist sie grün, bei `0,6`-mm-Düse warnt `1,0` mm wieder.
+- [x] **Für den Druck ausrichten**: Ein L-Winkel mit ≥ 300 mm² Überhang sowie ein schräg gedrehter L-Winkel werden über `#ov-orient` bzw. `#proj-orient-print` mit einem Klick auf `< 1 mm²` Überhang und Unterseite `Z = 0` ausgerichtet (samt Rückgängig).
+- [x] **Hilfetexte**: `printFit`, `nozzleWall` und `orientPrint` sind in `werkzeug-hilfen.json`, `HELP` und als `data-help`-Attribute im DOM vorhanden.
+- [ ] **Von Hand**: Im Browser ein zweiteiliges Steckteil (Bolzen + Bohrung mit Passung „Gleitend“) und ein Bauteil mit dünner Rippe sowie Überhang prüfen und mit „Für den Druck ausrichten“ ausrichten.
+
+## Zeichnung: Schnittansicht (Auto [A-063], ZE-02)
+
+- [x] **Schnittlinie A–A & Bohrungs-Lücke**: Beim Ziehen der Schnittlinie durch die Mitte einer Bohrung (Ø 10 mm im Quader 40 × 30 × 20 mm) entstehen Schnittlinie (`.cutline`, `.cutend`), Richtungspfeile (`.arrow`) mit Buchstaben (`A`) sowie „Schnitt A–A“ mit exakt 2 schraffierten Flächen und einer un-schraffierten Lücke in Bohrungsbreite (10 mm).
+- [x] **45°-Schraffur & Maßstab**: Alle Schraffurlinien (`.hatch`) verlaufen unter 45°; beim Wechsel des Blattmaßstabs (z. B. `2:1` auf `1:2`) passt sich der Schraffurabstand (`hatchStepSheet` und Linienabstand im SVG) sauber an.
+- [x] **Richtung umkehren & weitere Schnitte**: Blickrichtung lässt sich per `.sec-flip` umkehren; ein zweiter Schnitt erzeugt automatisch „Schnitt B–B“.
+- [x] **Export, Rückgängig, Speichern & Hilfe**: PDF-, SVG- und DXF-Export (`SCHRAFFUR`, `SCHNITTLINIE`), Löschen samt `App.undo`/`redo`, Speichern/Laden, Befehlssuche (`schnittansicht`) und Hilfetext `drawingSection` funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser ein Werkstück mit Stufenbohrung und Sackloch in der Zeichnung waagerecht und schräg schneiden, die Schnittansicht nachbemaßen und das erzeugte PDF prüfen.
+
 ## Fehler melden
 
 ```
