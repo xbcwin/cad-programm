@@ -76,7 +76,7 @@ Leitlinien:
   - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
   - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
   - `splitBody`, `applyFinishes` (Rundung, Fase, Vollrundung `fullFillet`, Ecken-Fase `cornerChamfer`, Entformungsschräge `draft`, Wandstärke `shell`), Topologie-Verlauf (`tid`, `sid`, OpenCascade `Generated`/`Modified`, Lage als Ersatz)
-  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
+  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkSymmetry` (Symmetrie-Prüfung PF-16), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
 - Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
 
 **JS-Module (Datei → Aufgabe):**
@@ -93,7 +93,7 @@ Leitlinien:
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`poolStats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker, Zähler & Fingerabdrücke über `stats`/`resetStats`/`clearCache`/`lastStats`/`fingerprint`) |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), Bereinigung/Prüfung von `mergedInto`, mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse & Schritt-Cache (`stepFingerprint`/`stepCacheStatus`/`evalStats`) |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze), `draftAnalysis` (Schräge-/Hinterschnitt-Analyse PF-09/PF-10) |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze), `draftAnalysis` (Schräge-/Hinterschnitt-Analyse PF-09/PF-10), `innerRadiusAnalysis` (Kleinster Innenradius PF-11) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`, am Tablet vergrößert; Schildchen `placeLabels()` weichen bei verkürztem Sehstrahl seitlich aus und reichen Alt-/Rechtsklick per `bindLabelPass` durch), Maus- und Touch-Bedienung (Antippen wählt, langes Tippen öffnet Kontextmenü, Mehr-Finger-Passthrough) |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
@@ -125,6 +125,7 @@ Leitlinien:
 | `86-dronecheck.js` | Drohnen-Check |
 | `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
 | `87-clashcheck.js` | Durchdringungs-Prüfung der ganzen Baugruppe (`ClashCheck`, paarweise Überschneidungsliste mit Volumen, Anspringen & roter Schnittkörper-Hervorhebung) |
+| `87-inspectcheck.js` | Kleinster Innenradius (`InnerRadius`, PF-11) & Symmetrie prüfen (`SymmetryCheck`, PF-16) im Prüfen-Menü |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start, Fenster „Über Tracery“ / „Fremde Bausteine“ (`fremde-bausteine.json`); stellt `window.__M` für Tests bereit |
 
