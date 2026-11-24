@@ -2486,21 +2486,6 @@ const HELP = {
   "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
   "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
  },
- "revolveOptions": {
-  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
-  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
-  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
- },
- "scaleBody": {
-  "tip": "Körper gleichmäßig oder je Achse als Schritt skalieren",
-  "hilfe": "Legt einen Schritt „Skalieren“ im Verlauf an. Rechts stellst du einen gemeinsamen Faktor (z. B. ×2) oder getrennte Faktoren für X, Y und Z ein sowie den Bezugspunkt: Schwerpunkt des Körpers oder Ursprung (0 · 0 · 0).",
-  "tipp": "Als Schritt im Verlauf kannst du das Skalieren jederzeit ändern, unterdrücken oder den Marker davor schieben."
- },
- "thickenFace": {
-  "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
-  "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
-  "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
- },
  "rib": {
   "tip": "Offene Skizzenlinie als Versteifungs-Rippe bis an die Wände ziehen",
   "hilfe": "Verlängert eine offene Linie, einen Bogen oder eine Kurve in deiner Skizze mit einstellbarer Dicke (mittig oder einseitig) bis zu den angrenzenden Wänden des Zielkörpers und verschmilzt sie direkt damit. Optional kannst du eine Schräge und feste Tiefe angeben oder von senkrecht (Steg in einer Schale) auf in der Ebene (Stützrippe) umschalten.",
@@ -2511,10 +2496,10 @@ const HELP = {
   "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
   "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
  },
- "bodyList": {
-  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
-  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
-  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
+ "revolveOptions": {
+  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
+  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
+  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
  },
  "treeReorder": {
   "tip": "Schritte im Verlauf per Ziehen umsortieren",
@@ -2531,20 +2516,40 @@ const HELP = {
   "hilfe": "Legt direkt hinter dem gewählten Schritt eine exakte Kopie mit denselben Maßen und derselben Rolle an (10 mm versetzt). Steckt der Schritt in einem Ordner, landet die Kopie direkt daneben im selben Ordner.",
   "tipp": "Du kannst dafür auch das Kopieren-Symbol in der Zeile oder Strg + D nutzen."
  },
- "mirrorStep": {
-  "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
-  "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
-  "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
+ "bodyList": {
+  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
+  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
+  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
  },
  "patternSkip": {
   "tip": "Einzelne Kopien im Muster auslassen oder wieder einschalten",
   "hilfe": "Rechteck-, Kreis- und Kurvenmuster funktionieren nicht nur für ganze Körper, sondern auch für Formschritte wie Taschen, Nuten oder Rippen – alle Kopien schneiden oder verstärken denselben Zielkörper. Klicke im 3D-Bild auf einen kleinen Zahlen-Punkt oder rechts unter „Kopien“ auf ein Feld, um genau diese Kopie auszulassen (durchgestrichen) oder wieder einzuschalten.",
   "tipp": "Praktisch, wenn an einer Stelle ein Steg, eine Schraube oder ein Bauteil im Weg ist: Mindestens eine Kopie bleibt immer aktiv, und jede Änderung lässt sich rückgängig machen."
  },
+ "scaleBody": {
+  "tip": "Körper gleichmäßig oder je Achse als Schritt skalieren",
+  "hilfe": "Legt einen Schritt „Skalieren“ im Verlauf an. Rechts stellst du einen gemeinsamen Faktor (z. B. ×2) oder getrennte Faktoren für X, Y und Z ein sowie den Bezugspunkt: Schwerpunkt des Körpers oder Ursprung (0 · 0 · 0).",
+  "tipp": "Als Schritt im Verlauf kannst du das Skalieren jederzeit ändern, unterdrücken oder den Marker davor schieben."
+ },
+ "thickenFace": {
+  "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
+  "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
+  "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
+ },
  "refFix": {
   "tip": "Verlorene Kante oder Fläche neu wählen",
   "hilfe": "Verliert eine Rundung, Fase, Wandstärke oder Skizze ihre ursprüngliche Kante oder Fläche (etwa weil ein früheres Maß geändert wurde), erscheint im Verlauf ein gelbes Warnzeichen. Mit „Neu wählen“ blendet Tracery die alte Lage gelb gestrichelt ein – ein Klick auf die neue Kante oder Fläche repariert den Bezug, und alles rechnet weiter.",
   "tipp": "Du kannst die Ansicht währenddessen wie gewohnt drehen, um die gewünschte Kante oder Fläche gut anzuklicken."
+ },
+ "threadFace": {
+  "tip": "Echtes oder kosmetisches Gewinde direkt auf eine runde Fläche setzen",
+  "hilfe": "Rechtsklick auf einen Bolzen (außen) oder eine Bohrung (innen) → „Gewinde …“. Tracery schlägt die passende metrische Größe (M2 bis M24) samt Regelsteigung direkt aus dem Durchmesser vor. Du kannst Länge, Steigung und Ende wählen sowie zwischen echtem 3D-Gewinde und schneller Markierung umschalten.",
+  "tipp": "Bei gedruckten Innengewinden hilft ein kleines Spiel (Standard 0,3 mm), damit Schrauben leicht hineingehen."
+ },
+ "mirrorStep": {
+  "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
+  "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
+  "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
  },
  "threadStandards": {
   "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
@@ -2576,7 +2581,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, STL, 3MF importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, STL, 3MF importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"};
 
 const I18n = (() => {
   let lang = 'de';
@@ -3169,6 +3174,8 @@ const THREAD_SPECS = [
   { size: 'M10',  d: 10.0, pitch: 1.5,  core: 8.5  },
   { size: 'M12',  d: 12.0, pitch: 1.75, core: 10.2 },
   { size: 'M16',  d: 16.0, pitch: 2.0,  core: 14.0 },
+  { size: 'M20',  d: 20.0, pitch: 2.5,  core: 17.5 },
+  { size: 'M24',  d: 24.0, pitch: 3.0,  core: 21.0 },
 ];
 const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
@@ -7909,6 +7916,13 @@ const Viewer = (() => {
   }
   function setAdaptive(on, ms) { adaptive = !!on; if (ms != null) slowMs = ms; if (!adaptive && lowRes) { lowRes = false; setPR(basePR); needsRender = true; } }
   function requestRender() { needsRender = true; }
+  function renderNow() {
+    needsRender = false;
+    updateViewAids();
+    listeners.emit('beforeRender');
+    renderer.render(scene, cam());
+    listeners.emit('afterRender');
+  }
 
   // ---------- Objekte ----------
   function makeMaterial(role, color, look) {
@@ -8199,7 +8213,7 @@ const Viewer = (() => {
       const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
       const rVis = kind === 'int' ? Math.max(0.05, g.r - Math.max(0.02, g.r * 0.004)) : g.r + Math.max(0.02, g.r * 0.004);
       const spec = typeof THREAD_MAP !== 'undefined' ? THREAD_MAP[th.size] : null;
-      const pitch = spec ? spec.pitch : 1;
+      const pitch = (th.pitch > 0 ? th.pitch : null) || (spec ? spec.pitch : 1);
       const tex = getThreadTexture(kind).clone();
       tex.needsUpdate = true;
       tex.repeat.set(1, Math.max(1, Math.min(80, L / pitch)));
@@ -9010,7 +9024,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
+    init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
@@ -9835,7 +9849,7 @@ const Interact = (() => {
         { icon: 'export', label: T('menu.ctx.faceDxf'), id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
         { icon: 'export', label: T('menu.ctx.faceSvg'), id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
         { icon: 'sketch', label: T('menu.ctx.sketchOnFace'), id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
-        { icon: 'thread', label: T('menu.ctx.markThread'), id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
+        { icon: 'thread', label: T('menu.ctx.thread'), id: 'cm-thread', help: 'threadFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a, { mode: 'auto' }); setTimeout(() => a.remove(), 0); } } },
         { icon: 'thicken', label: T('common.thicken'), id: 'cm-thicken', help: 'thickenFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.thicken({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'emboss', label: T('common.emboss'), id: 'cm-emboss', help: 'emboss', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startEmboss({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         '-',
@@ -10021,13 +10035,15 @@ const LIB = [
     { k: 'length', label: 'Lochtiefe', type: 'num', def: 12 },
   ] },
   { lib: 'threadHole', label: 'Gewindeloch (gedruckt)', role: 'hole', icon: 'target', desc: 'Echtes Innengewinde zum Drucken, mit etwas Spiel', params: [
-    { k: 'size', label: 'Gewinde', type: 'select', options: ['M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16'], def: 'M6' },
+    { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
     { k: 'clear', label: 'Spiel', type: 'num', def: 0.3 },
   ] },
   { lib: 'threadRod', label: 'Gewindebolzen', role: 'solid', icon: 'target', desc: 'Außengewinde (ISO metrisch) – z. B. für gedruckte Schraubdeckel', params: [
-    { k: 'size', label: 'Gewinde', type: 'select', options: ['M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16'], def: 'M6' },
+    { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Länge', type: 'num', def: 12 },
+    { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
   ] },
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
@@ -11855,6 +11871,9 @@ const Features = (() => {
     if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return null; }
     const kind = opts.kind === 'int' || opts.kind === 'ext' ? opts.kind : g.kind;
     const size = opts.size && THREAD_MAP[opts.size] ? opts.size : guessThreadSize(g.r, kind);
+    const spec = THREAD_MAP[size] || { d: 6, pitch: 1 };
+    const rawP = Number(opts.pitch);
+    const pitch = isFinite(rawP) && rawP >= 0.25 ? round(clamp(rawP, 0.25, spec.d * 0.45), 3) : spec.pitch;
     const lenRaw = opts.length != null ? Number(opts.length) : round(g.faceLen, 2);
     const length = round(clamp(lenRaw > 0 ? lenRaw : g.faceLen, 0.5, g.faceLen), 3);
     const from = opts.from === 'bottom' ? 'bottom' : 'top';
@@ -11862,6 +11881,7 @@ const Features = (() => {
       id: opts.id || uid('th'),
       size,
       length,
+      ...(Math.abs(pitch - spec.pitch) > 1e-4 ? { pitch } : {}),
       kind,
       from,
       c: g.c.map((v) => round(v, 4)),
@@ -11883,9 +11903,21 @@ const Features = (() => {
     App.change('Gewinde geändert', (doc) => {
       const f = Model.find(doc, itemId); if (!f || !f.item.threads) return false;
       const th = f.item.threads.find((x) => x.id === threadId); if (!th) return false;
-      if (patch.size && THREAD_MAP[patch.size]) th.size = patch.size;
+      if (patch.size && THREAD_MAP[patch.size]) {
+        th.size = patch.size;
+        if (patch.pitch == null) delete th.pitch;
+      }
       if (patch.kind === 'int' || patch.kind === 'ext') th.kind = patch.kind;
       if (patch.from === 'top' || patch.from === 'bottom') th.from = patch.from;
+      if (patch.pitch != null) {
+        const spec = THREAD_MAP[th.size] || { d: 6, pitch: 1 };
+        const n = Number(patch.pitch);
+        if (isFinite(n) && n > 0) {
+          const clamped = round(clamp(n, 0.25, spec.d * 0.45), 3);
+          if (Math.abs(clamped - spec.pitch) > 1e-4) th.pitch = clamped;
+          else delete th.pitch;
+        }
+      }
       if (patch.length != null) {
         const g = Viewer.threadFaceIndex(itemId, th) >= 0 ? Viewer.cylinderFaceInfo(itemId, Viewer.threadFaceIndex(itemId, th)) : null;
         const maxL = g ? g.faceLen : Math.max(0.5, Math.abs((th.t1 ?? 10) - (th.t0 ?? 0)));
@@ -11905,19 +11937,36 @@ const Features = (() => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), zDir.clone().normalize());
     return new THREE.Matrix4().compose(o, q, new THREE.Vector3(1, 1, 1));
   }
-  function makeThreadReal(itemId, threadId) {
+  function insertAfterTarget(doc, top, newItems) {
+    let idx = doc.items.indexOf(top);
+    if (idx < 0) idx = doc.items.length - 1;
+    for (let i = idx + 1; i < doc.items.length; i++) {
+      const x = doc.items[i];
+      if ((x.op && x.op.target === top.id) || (x.p && x.p.target === top.id)) idx = i;
+    }
+    const pos = doc.rollback != null ? Math.min(idx + 1, clamp(doc.rollback, 0, doc.items.length)) : idx + 1;
+    if (doc.rollback != null) doc.rollback += newItems.length;
+    doc.items.splice(pos, 0, ...newItems);
+  }
+  // Echtes 3D-Gewinde direkt auf einer Zylinderfläche (KP-19) oder aus Markierung (KP-20)
+  function applyRealThread(face, opts = {}) {
+    if (!face || !face.id) return null;
+    const itemId = face.id;
     const f = Model.find(App.doc, itemId);
     const it = f && f.item;
-    const th = it && (it.threads || []).find((x) => x.id === threadId);
-    if (!it || !th) return null;
-    const fi = Viewer.threadFaceIndex(itemId, th);
-    const g = (fi >= 0 && Viewer.cylinderFaceInfo(itemId, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
-      o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
-      t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
-    } : null);
+    if (!it || it.role === 'hole') { UI.toast('Klick auf die runde Fläche eines Körpers.', { icon: 'info' }); return null; }
+    const g = (face.idx != null ? Viewer.cylinderFaceInfo(itemId, face.idx) : null) || opts.geom || null;
     if (!g) { UI.toast('Die Zylinderfläche für das Gewinde wurde nicht gefunden.', { kind: 'bad' }); return null; }
-    const L = round(clamp(Number(th.length) || g.faceLen, 0.5, g.faceLen), 3);
-    const fromBottom = th.from === 'bottom';
+    const kind = opts.kind === 'int' || opts.kind === 'ext' ? opts.kind : g.kind;
+    const size = opts.size && THREAD_MAP[opts.size] ? opts.size : guessThreadSize(g.r, kind);
+    const spec = THREAD_MAP[size] || { d: 6, pitch: 1 };
+    const rawP = Number(opts.pitch);
+    const pitch = isFinite(rawP) && rawP >= 0.25 ? round(clamp(rawP, 0.25, spec.d * 0.45), 3) : spec.pitch;
+    const customPitch = Math.abs(pitch - spec.pitch) > 1e-4;
+    const lenRaw = opts.length != null ? Number(opts.length) : g.faceLen;
+    const L = round(clamp(lenRaw > 0 ? lenRaw : g.faceLen, 0.5, g.faceLen), 3);
+    const fromBottom = opts.from === 'bottom';
+    const clear = isFinite(Number(opts.clear)) && Number(opts.clear) >= 0 ? round(Number(opts.clear), 3) : 0.3;
     const s0 = fromBottom ? g.t0 : g.t1 - L;
     const s1 = fromBottom ? g.t0 + L : g.t1;
     const dL = new THREE.Vector3(...g.d).normalize();
@@ -11927,26 +11976,33 @@ const Features = (() => {
     const dW = pEndW.clone().sub(pStartW).normalize();
     const topCur = Model.topOf(App.doc, itemId);
     let selId = topCur ? topCur.id : itemId;
-    App.change(`Gewinde echt gemacht (${th.size} × ${fmt(L, 1)})`, (doc) => {
+    const pitchOpts = customPitch ? { pitch } : {};
+    App.change(opts.fromCosmetic ? `Gewinde echt gemacht (${size} × ${fmt(L, 1)})` : `Gewinde ${size} × ${fmt(L, 1)}`, (doc) => {
       const T = Model.find(doc, itemId).item;
       const top = Model.topOf(doc, itemId);
-      const rest = (T.threads || []).filter((x) => x.id !== threadId);
-      if (rest.length) T.threads = rest; else delete T.threads;
-      if (th.kind === 'int') {
+      if (T.threads && T.threads.length) {
+        const rest = T.threads.filter((x) => {
+          if (opts.removeThreadId && x.id === opts.removeThreadId) return false;
+          if (face.idx != null && Viewer.threadFaceIndex(itemId, x) === face.idx) return false;
+          return true;
+        });
+        if (rest.length) T.threads = rest; else delete T.threads;
+      }
+      if (kind === 'int') {
         const entryPt = fromBottom ? pStartW : pEndW;
         const outDir = fromBottom ? dW.clone().negate() : dW;
-        const hole = Model.newItem('part', { lib: 'threadHole', size: th.size, length: L, clear: 0.3 }, { name: `Innengewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+        const hole = Model.newItem('part', { lib: 'threadHole', size, length: L, clear, ...pitchOpts }, { name: `Innengewinde ${size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
         Model.setFromMatrix(hole, poseFromOriginDir(entryPt, outDir));
         hole.op = { type: 'cut', target: top.id };
-        const ti = doc.items.indexOf(top);
-        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, hole);
+        insertAfterTarget(doc, top, [hole]);
         selId = top.id;
         return;
       }
-      const isPlainCyl = T === top && T.kind === 'cylinder' && !(T.finishes && T.finishes.length) && !T.op;
+      const hasDependents = doc.items.some((x) => (x.op && x.op.target === T.id) || (x.p && x.p.target === T.id));
+      const isPlainCyl = T === top && T.kind === 'cylinder' && !(T.finishes && T.finishes.length) && !T.op && !hasDependents;
       if (isPlainCyl && L >= g.faceLen - 0.05) {
         T.kind = 'part';
-        T.p = { lib: 'threadRod', size: th.size, length: L };
+        T.p = { lib: 'threadRod', size, length: L, ...pitchOpts };
         Model.setFromMatrix(T, poseFromOriginDir(pStartW, dW));
         selId = T.id;
         return;
@@ -11956,68 +12012,123 @@ const Features = (() => {
         T.p.h = rem;
         if (fromBottom) Model.setFromMatrix(T, new THREE.Matrix4().makeTranslation(dW.x * L, dW.y * L, dW.z * L).multiply(Model.localMatrix(T)));
         const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
-        const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: T.color, role: 'solid' });
+        const rod = Model.newItem('part', { lib: 'threadRod', size, length: round(L + 0.05, 3), ...pitchOpts }, { name: `Gewinde ${size} × ${fmt(L, 1)}`, color: T.color, role: 'solid' });
         Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
         rod.op = { type: 'join', target: T.id };
-        const ti = doc.items.indexOf(T);
-        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, rod);
+        insertAfterTarget(doc, T, [rod]);
         selId = T.id;
         return;
       }
       // Beliebiger Körper: erst Überstand glatt abtragen, dann echtes Außengewinde vereinigen
-      const cutD = round(Math.max(2 * g.r, (THREAD_MAP[th.size] ? THREAD_MAP[th.size].d : 6)) + 0.2, 3);
+      const cutD = round(Math.max(2 * g.r, spec.d) + 0.2, 3);
       const cutOrigin = fromBottom ? pStartW.clone().addScaledVector(dW, -0.05) : pStartW;
-      const cut = Model.newItem('cylinder', { d: cutD, h: round(L + 0.05, 3) }, { name: `Gewinde-Freischnitt ${th.size}`, color: top.color, role: 'solid' });
+      const cut = Model.newItem('cylinder', { d: cutD, h: round(L + 0.05, 3) }, { name: `Gewinde-Freischnitt ${size}`, color: top.color, role: 'solid' });
       Model.setFromMatrix(cut, poseFromOriginDir(cutOrigin, dW));
       cut.op = { type: 'cut', target: top.id };
       const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
-      const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+      const rod = Model.newItem('part', { lib: 'threadRod', size, length: round(L + 0.05, 3), ...pitchOpts }, { name: `Gewinde ${size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
       Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
       rod.op = { type: 'join', target: top.id };
-      const ti = doc.items.indexOf(top);
-      doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, cut, rod);
+      insertAfterTarget(doc, top, [cut, rod]);
       selId = top.id;
     });
     App.select([selId]);
-    UI.toast(`Echtes Gewinde ${th.size} × ${fmt(L, 1)} mm erzeugt. Mit Rückgängig kommst du wieder zur Markierung.`, { icon: 'check' });
+    UI.toast(opts.fromCosmetic
+      ? `Echtes Gewinde ${size} × ${fmt(L, 1)} mm erzeugt. Mit Rückgängig kommst du wieder zur Markierung.`
+      : `Echtes ${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${size} × ${fmt(L, 1)} mm erzeugt.`, { icon: 'check' });
     return selId;
   }
-  function threadPop(face, anchor) {
+  function makeThreadReal(itemId, threadId) {
+    const f = Model.find(App.doc, itemId);
+    const it = f && f.item;
+    const th = it && (it.threads || []).find((x) => x.id === threadId);
+    if (!it || !th) return null;
+    const fi = Viewer.threadFaceIndex(itemId, th);
+    const geom = Array.isArray(th.axis) && th.axis.length >= 6 ? {
+      o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+      t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+    } : null;
+    return applyRealThread({ id: itemId, idx: fi >= 0 ? fi : null }, {
+      size: th.size, length: th.length, pitch: th.pitch, from: th.from, kind: th.kind,
+      removeThreadId: threadId, fromCosmetic: true, geom,
+    });
+  }
+  function threadPop(face, anchor, opts = {}) {
     if (!face || !face.id) return;
     const g = Viewer.cylinderFaceInfo(face.id, face.idx);
     if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return; }
     const existing = threadOnFace(face.id, face.idx);
+    let mode = opts.mode === 'real' ? 'real' : opts.mode === 'cosmetic' ? 'cosmetic' : opts.mode === 'auto' ? (existing ? 'cosmetic' : 'real') : 'cosmetic';
     let size = existing ? existing.size : guessThreadSize(g.r, g.kind);
+    let spec = THREAD_MAP[size] || { d: 6, pitch: 1 };
+    let pitch = existing && existing.pitch > 0 ? existing.pitch : spec.pitch;
     let len = existing ? existing.length : round(g.faceLen, 2);
     let from = existing ? (existing.from || 'top') : 'top';
-    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '230px' }, 'data-help': 'cosmeticThread' });
-    box.append(h('div', { class: 'section-h' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${Units.fmtLenU(2 * g.r, 2)}`));
+    let clear = 0.3;
+    const V = Model.vars(App.doc).v;
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '240px' }, 'data-help': 'threadFace' });
+    box.append(h('div', { class: 'section-h', id: 'ct-kind' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${Units.fmtLenU(2 * g.r, 2)}`));
     const fields = h('div', { class: 'fields' });
-    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (Steigung ${fmt(s.pitch, 2)})`]), onChange: (v) => { size = v; } }));
+    const modeRow = UI.selectField({ id: 'ct-mode', label: 'Ausführung', value: mode, options: [['real', 'Echt (3D-Gewinde)'], ['cosmetic', 'Kosmetisch (nur Markierung)']], onChange: (v) => { mode = v; syncMode(); } });
+    fields.append(modeRow);
+    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (P ${fmt(s.pitch, 2)})`]), onChange: (v) => {
+      size = v;
+      const sp = THREAD_MAP[v];
+      if (sp) {
+        pitch = sp.pitch;
+        const pInp = $('#ct-pitch');
+        if (pInp) pInp.value = Units.fmtInput(sp.pitch);
+      }
+    } }));
+    fields.append(UI.numField({ id: 'ct-pitch', label: 'Steigung', value: pitch, min: 0.25, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => { if (v > 0) pitch = v; } }));
     fields.append(UI.numField({ id: 'ct-len', label: 'Länge', value: len, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => { len = v; } }));
+    const clearWrap = h('div', { id: 'ct-clear-wrap' }, UI.numField({ id: 'ct-clear', label: 'Spiel (3D-Druck)', value: clear, min: 0, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => { if (v >= 0) clear = v; } }));
+    fields.append(clearWrap);
     box.append(fields);
     box.append(UI.selectField({ id: 'ct-from', label: 'Beginnt am', value: from, options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)']], onChange: (v) => { from = v; } }));
     const row = h('div', { class: 'btn-row' });
-    const applyB = h('button', { type: 'button', class: 'btn primary', id: 'ct-apply' }, existing ? 'Ändern' : 'Gewinde markieren');
+    const applyB = h('button', { type: 'button', class: 'btn primary', id: 'ct-apply' }, '');
+    const hintEl = h('div', { class: 'hint-box', id: 'ct-hint' }, '');
+    let realB = null, delB = null;
+    if (existing) {
+      realB = h('button', { type: 'button', class: 'btn', id: 'ct-real' }, 'Echt machen');
+      realB.onclick = () => { UI.closePop(); makeThreadReal(face.id, existing.id); };
+      delB = h('button', { type: 'button', class: 'btn ghost danger', id: 'ct-del' }, 'Entfernen');
+      delB.onclick = () => { UI.closePop(); removeThread(face.id, existing.id); };
+    }
+    const syncMode = () => {
+      const isReal = mode === 'real';
+      applyB.textContent = isReal ? 'Gewinde erzeugen' : (existing ? 'Ändern' : 'Gewinde markieren');
+      clearWrap.style.display = isReal && g.kind === 'int' ? '' : 'none';
+      if (realB) realB.style.display = isReal ? 'none' : '';
+      hintEl.textContent = isReal
+        ? 'Schneidet bzw. formt echte Gewindegänge in den 3D-Körper (z. B. für 3D-Druck).'
+        : 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.';
+    };
     applyB.onclick = () => {
-      const lenInp = $('#ct-len');
-      const v = lenInp ? parseNum(lenInp.value) : NaN;
-      if (isFinite(v) && v > 0) len = v;
+      const readLen = (sel, def) => {
+        const inp = $(sel);
+        if (!inp) return def;
+        const parsed = Units.parseLen(inp.value, V, { expr: false });
+        return parsed.ok && isFinite(parsed.value) ? parsed.value : def;
+      };
+      const vLen = readLen('#ct-len', len);
+      if (vLen > 0) len = vLen;
+      const vPitch = readLen('#ct-pitch', pitch);
+      if (vPitch > 0) pitch = vPitch;
+      const vClear = readLen('#ct-clear', clear);
+      if (vClear >= 0) clear = vClear;
+      const selMode = $('#ct-mode'); if (selMode) mode = selMode.value;
       const selSize = $('#ct-size'); if (selSize) size = selSize.value;
       const selFrom = $('#ct-from'); if (selFrom) from = selFrom.value;
-      markThread(face, { id: existing ? existing.id : undefined, size, length: len, from, kind: g.kind });
       UI.closePop();
+      if (mode === 'real') applyRealThread(face, { size, length: len, pitch, from, kind: g.kind, clear });
+      else markThread(face, { id: existing ? existing.id : undefined, size, length: len, pitch, from, kind: g.kind });
     };
     row.append(applyB);
-    if (existing) {
-      const realB = h('button', { type: 'button', class: 'btn', id: 'ct-real' }, 'Echt machen');
-      realB.onclick = () => { UI.closePop(); makeThreadReal(face.id, existing.id); };
-      const delB = h('button', { type: 'button', class: 'btn ghost danger', id: 'ct-del' }, 'Entfernen');
-      delB.onclick = () => { UI.closePop(); removeThread(face.id, existing.id); };
-      row.append(realB, delB);
-    }
-    box.append(row);
-    box.append(h('div', { class: 'hint-box' }, 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.'));
+    if (existing) row.append(realB, delB);
+    box.append(row, hintEl);
+    syncMode();
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
@@ -12749,7 +12860,7 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Spiegelt nur die gewählten Formschritte (z. B. eine Tasche, Erhöhung oder Rippe) direkt im selben Körper. Änderst du das Original, wandert das Spiegelbild automatisch mit.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
@@ -15847,7 +15958,9 @@ const Mass = (() => {
       for (const th of it.threads) {
         const L = round(Model.num(th.length, V, 10), 1);
         const kind = th.kind === 'int' ? 'int' : 'ext';
-        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${Units.fmtLenU(L, 1, doc)}`;
+        const spec = THREAD_MAP[th.size];
+        const sizeLabel = th.pitch > 0 && (!spec || Math.abs(th.pitch - spec.pitch) > 1e-4) ? `${th.size}×${fmt(th.pitch, 2)}` : th.size;
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${sizeLabel} × ${Units.fmtLenU(L, 1, doc)}`;
         const key = label + '|' + part;
         const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
         row.n += n;
@@ -16747,6 +16860,7 @@ const UI = (() => {
     const outside2 = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closePop(); };
     openPop = { el, outside: outside2, onClose: opts.onClose, anchor };
     setTimeout(() => document.addEventListener('pointerdown', outside2, true), 0);
+    if (typeof App !== 'undefined' && App.emit) App.emit('pop');
     return el;
   }
   // ---------- Tooltips ----------
@@ -18489,10 +18603,12 @@ const Panels = (() => {
         }
         for (const th of it.threads || []) {
           const sp = THREAD_MAP[th.size] || { pitch: 1 };
+          const pitch = (th.pitch > 0 ? th.pitch : null) || sp.pitch;
           const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(pitch, 2)}`)));
           const fs = h('div', { class: 'fields' });
           fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
+          fs.append(UI.numField({ id: 'th-pitch-' + th.id, label: 'Steigung', value: pitch, min: 0.25, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { pitch: v }) }));
           fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
           fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
           box.append(fs);
@@ -21430,7 +21546,7 @@ const Sketch = (() => {
     const last = S.undo.pop(); if (last == null) return;
     const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
-  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
+  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); App.emit('sketch'); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
   const vars = () => Model.vars(App.doc).v;
   // fast: beim Ziehen ohne Beweglichkeits-Analyse (die kommt beim Loslassen)
@@ -21472,6 +21588,7 @@ const Sketch = (() => {
     const old = dimFind(sp);
     if (old) { old.v = v; if (ref) old.ref = true; else delete old.ref; }
     else S.dims.push({ ...(sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v }), ...(ref ? { ref: true } : {}) });
+    App.emit('sketch');
   }
   // Maß nur zum Ablesen (Referenzmaß): steht in Klammern, zeigt den Wert, legt aber nichts fest
   function setRefDim(sp, quiet = false) {
@@ -23591,6 +23708,7 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
+    if (S.tool === 'select') { S.cursor = null; return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
     } else {
@@ -23972,7 +24090,11 @@ const Sketch = (() => {
             const spx = Viewer.toScreen(toWorld(a[0], a[1]));
             const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : '') + (confFocusId === c.id ? ' conf-focus' : ''), 'data-tip': (CNAME[c.type] || 'Regel') + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
             el.innerHTML = icon(CICON[c.type] || 'info');
-            el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
+            const lx = spx.x + n * 19, lw = 18, lh = 18;
+            let ly = spx.y;
+            for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - lx) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
+            placed.push([lx, ly, lw, lh]);
+            el.style.left = lx + 'px'; el.style.top = ly + 'px';
             el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
             el.addEventListener('click', () => { S.selCon = c.id; clearSel(); render(); Panels.renderRight(); });
             $('#overlay').append(el); labels.push(el);
@@ -25338,6 +25460,7 @@ const Sketch = (() => {
     $('#overlay').append(stepBox);
     Panels.renderRight();
     updatePreview(); render();
+    App.emit('sketch');
   }
   function updateStepExtInfo() {
     const box = stepBox && stepBox.querySelector('#st-ext-info');
@@ -26895,6 +27018,7 @@ const Commands = (() => {
     add('sketch-free', 'Freie Stellen zeigen (Wo fehlt ein Maß?)', 'unlock', 'skizze freie stellen wackeln freiheit fehlt maß unterbestimmt', () => { if (Sketch.active) Sketch.toggleFreeSpots(); else UI.toast('Öffne zuerst eine Skizze, um freie Stellen zu sehen.', { icon: 'info' }); }, { group: 'Werkzeuge', kbd: 'Umschalt F' });
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung feingewinde zoll unc unf rohrgewinde', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('cosmetic-thread', 'Gewinde markieren (kosmetisch)', 'thread', 'gewinde kosmetisch markieren metrisch m3 m4 m5 m6 m8 echt schraube', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'CYLINDRE') Features.threadPop(f, $('#center')); else UI.toast('Klick zuerst eine runde Fläche (Zylinder) an, um dort ein Gewinde zu markieren.', { icon: 'info' }); }, { group: 'Bearbeiten' });
+    add('thread-face', 'Gewinde auf runde Fläche …', 'thread', 'gewinde bolzen bohrung zylinder aussengewinde innengewinde steigung metrisch echt kosmetisch m10', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'CYLINDRE') Features.threadPop(f, $('#center'), { mode: 'real' }); else UI.toast('Klick zuerst eine runde Fläche (Bolzen oder Bohrung) an, um dort ein Gewinde zu setzen.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
@@ -27922,25 +28046,36 @@ const Print = (() => {
   async function turntable({ seconds = 6, fps = 30, save: doSave = true } = {}) {
     const type = videoType(); if (!type) { UI.toast('Dieser Browser kann keine Videos aufnehmen.', { kind: 'bad' }); return null; }
     const cv = Viewer.canvas, stream = cv.captureStream(fps), chunks = [];
+    const track = stream.getVideoTracks()[0];
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const cam0 = Viewer.saveCamera(), tg = Viewer.controls.target.clone();
     const dx0 = cam0.p.x - tg.x, dy0 = cam0.p.y - tg.y;
     App.clearSelection(); Handles.clear();
     const tst = UI.toast('Aufnahme läuft …', { icon: 'play', ms: seconds * 1000 + 3000 });
-    const done = new Promise((res) => { rec.onstop = res; });
+    const done = new Promise((res) => { rec.onstop = res; rec.onerror = res; });
     rec.start(250);
+    const dur = Math.max(100, seconds * 1000);
+    const stepMs = Math.max(16, Math.round(1000 / Math.max(1, fps)));
+    const minFrames = Math.max(12, Math.min(30, Math.round(seconds * 10)));
     const t0 = performance.now();
     await new Promise((res) => {
-      const step = (t) => {
-        const k = Math.min(1, (t - t0) / (seconds * 1000)), a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
-        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.requestRender();
-        if (k < 1) requestAnimationFrame(step); else res();
+      let frames = 0, raf = 0, timer = 0;
+      const step = () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+        const k = frames === 0 ? 0 : Math.min(1, Math.max(0, (performance.now() - t0) / dur), frames / minFrames);
+        const a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.renderNow();
+        try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
+        frames++;
+        if (k < 1) { raf = requestAnimationFrame(step); timer = setTimeout(step, stepMs + 15); } else res();
       };
-      requestAnimationFrame(step);
+      step();
     });
     await new Promise((r) => setTimeout(r, 120));
-    rec.stop(); await done; stream.getTracks().forEach((x) => x.stop());
+    if (rec.state !== 'inactive') rec.stop();
+    await done; stream.getTracks().forEach((x) => x.stop());
     Viewer.restoreCamera(cam0, false);
     tst.remove();
     const blob = new Blob(chunks, { type: type.split(';')[0] });
@@ -31202,17 +31337,24 @@ const Tour = (() => {
   ];
   const TOURS = { basics: BASICS, sketch: SKETCH };
   let STEPS = BASICS;
-  let timer = null;
-  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check)); timer = setInterval(() => { place(); check(); }, 350); }
-  function stop() { if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
+  let timer = null, advTimer = null, advFor = null;
+  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check), App.on('mode', check), App.on('sketch', check), App.on('pop', check)); timer = setInterval(() => { place(); check(); }, 120); }
+  function stop() { clearTimeout(advTimer); advTimer = null; advFor = null; if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
   function check() {
     const s = STEPS[idx]; if (!s || !s.until) return;
     const last = App.undoStack[App.undoStack.length - 1];
     const ev = last && /Größe|Maß/.test(last.label) ? 'size' : null;
-    if (s.done) return;
-    if (s.until(ev)) { s.done = true; setTimeout(() => { s.done = false; if (STEPS[idx] === s) { idx++; show(); } }, 500); }
+    if (advFor === s) return;
+    if (s.until(ev)) {
+      advFor = s;
+      advTimer = setTimeout(() => {
+        advTimer = null; advFor = null;
+        if (STEPS[idx] === s) { idx++; show(); }
+      }, 220);
+    }
   }
   function show() {
+    clearTimeout(advTimer); advTimer = null; advFor = null;
     if (box) box.remove(); if (ring) ring.remove(); box = ring = null;
     const s = STEPS[idx]; if (!s) { stop(); return; }
     box = h('div', { class: 'tour', role: 'dialog', 'aria-label': 'Einführung' });
@@ -32119,7 +32261,7 @@ ${AI.modelText()}`;
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr, Tour }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

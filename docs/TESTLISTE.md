@@ -1727,6 +1727,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
 
+## Gewinde direkt auf runde Fläche (Auto [A-039], KP-19)
+
+- [x] **Bolzen Ø 10 → Vorschlag M10, echtes Gewinde 15 mm**: Rechtsklick auf die Mantelfläche eines Ø 10 × 25-mm-Bolzens → „Gewinde …“ schlägt M10 (Steigung 1,5 mm) als echtes 3D-Gewinde vor; Übernehmen mit Länge 15 mm erzeugt `threadRod` (`M10`) und verringert das Körpervolumen deutlich ohne Fehler (inkl. Rückgängig).
+- [x] **Bohrung Ø 8,5 → Vorschlag M10 innen**: Rechtsklick in die Bohrung Ø 8,5 mm eines Blocks → „Gewinde …“ erkennt „Innengewinde“, schlägt M10 (Steigung 1,5 mm, mit Druckspiel) vor und schneidet ein echtes 3D-Innengewinde (`threadHole`, `op: cut`), sodass sich das Volumen verringert.
+- [x] **Eigene Steigung & wahlweise kosmetisch**: Umschalten auf „Kosmetisch (nur Markierung)“ sowie abweichende Steigung (z. B. M10 × 1 mm Feingewinde) funktionieren sowohl für die 3D-Markierung als auch für echte 3D-Gewinde (kleinere Steigung ergibt sichtbar anderes Volumen).
+- [x] **Hilfetext & Befehlssuche**: `threadFace` in `werkzeug-hilfen.json` und Befehl `thread-face` („Gewinde auf runde Fläche …“) vorhanden.
+- [ ] **Von Hand**: Im Browser auf einer schräg liegenden Welle und in einer gestuften Bohrung „Gewinde …“ mit verschiedenen Enden („Ende 1“ / „Ende 2“) testen und die gedruckten Gewindegänge aus der Nähe prüfen.
+
 ## Bohrungs-Assistent: mehr Gewinde (Auto [A-038], KP-18)
 
 - [x] **Feingewinde (DIN 13 / DIN 336)**: Norm `metric_fine` bietet M4×0,5 bis M20×1,5 (inkl. M8×1 und M10×1,25); M10×1,25 bohrt exakt Kernloch Ø 8,8 mm (Volumenabzug und Zylinder-Ø geprüft).
@@ -1765,6 +1773,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Höhe, Unterdrücken & Zeitleiste**: Ändern der Prägehöhe (1 → 2 mm) vergrößert den Auftrag weiter; Unterdrücken und Zurückrollen des Zeitleisten-Markers stellen das Ausgangsvolumen exakt wieder her.
 - [x] **Kugel & Hilfetext**: Kreis auf Kugel 1 mm vertieft und erhaben prägen funktioniert ohne Fehler als ein Stück; `emboss` steht mit `tip`/`hilfe`/`tipp` in `werkzeug-hilfen.json` und `Explain.local` erklärt den Schritt.
 - [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel „Prägen“ starten, eigenen Text tippen und platzieren, zwischen „Erhaben“ und „Vertieft“ wechseln und prüfen, dass die Vorschau nur die Vorderseite prägt.
+
+## Volltest-Reparatur (Auto [F-11240521])
+
+- [x] **Drehteller-Video bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` zeichnet `Print.turntable()` alle Zwischenbilder synchron über `Viewer.renderNow()` samt `track.requestFrame()` und Timer-Fallback, erzeugt ein gültiges Video (`> 1000` Bytes) und stellt die Ausgangskamera exakt wieder her.
+- [x] **Einführung „Erste Skizze“ ereignisgesteuert**: `Tour` reagiert sofort auf `mode`, `sketch` (`addEnt`, `putDimSpec`, `extrudeStep`) und `pop` (`UI.pop`), sodass die Schritte nach Skizzenstart, Ebenenwahl und Rechteck-Zeichnen zuverlässig innerhalb von 500 ms weiterschalten.
+- [x] **Abbruch laufender Übergänge**: `Tour.stop()` und `show()` löschen laufende Weiterschalt-Timer (`advTimer`) sauber ohne Zustandsreste auf den Schritt-Definitionen.
+- [ ] **Von Hand**: Im Browser ein Drehteller-Video über „Ansicht → Drehteller-Video …“ herunterladen und abspielen sowie die Einführung „Erste Skizze (5 Minuten)“ einmal komplett durchklicken.
 
 ## Fehler melden
 

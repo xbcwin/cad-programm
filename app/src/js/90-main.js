@@ -12,7 +12,7 @@
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr, Tour }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

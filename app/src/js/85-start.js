@@ -905,17 +905,24 @@ const Tour = (() => {
   ];
   const TOURS = { basics: BASICS, sketch: SKETCH };
   let STEPS = BASICS;
-  let timer = null;
-  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check)); timer = setInterval(() => { place(); check(); }, 350); }
-  function stop() { if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
+  let timer = null, advTimer = null, advFor = null;
+  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check), App.on('mode', check), App.on('sketch', check), App.on('pop', check)); timer = setInterval(() => { place(); check(); }, 120); }
+  function stop() { clearTimeout(advTimer); advTimer = null; advFor = null; if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
   function check() {
     const s = STEPS[idx]; if (!s || !s.until) return;
     const last = App.undoStack[App.undoStack.length - 1];
     const ev = last && /Größe|Maß/.test(last.label) ? 'size' : null;
-    if (s.done) return;
-    if (s.until(ev)) { s.done = true; setTimeout(() => { s.done = false; if (STEPS[idx] === s) { idx++; show(); } }, 500); }
+    if (advFor === s) return;
+    if (s.until(ev)) {
+      advFor = s;
+      advTimer = setTimeout(() => {
+        advTimer = null; advFor = null;
+        if (STEPS[idx] === s) { idx++; show(); }
+      }, 220);
+    }
   }
   function show() {
+    clearTimeout(advTimer); advTimer = null; advFor = null;
     if (box) box.remove(); if (ring) ring.remove(); box = ring = null;
     const s = STEPS[idx]; if (!s) { stop(); return; }
     box = h('div', { class: 'tour', role: 'dialog', 'aria-label': 'Einführung' });

@@ -88,6 +88,7 @@ const UI = (() => {
     const outside2 = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closePop(); };
     openPop = { el, outside: outside2, onClose: opts.onClose, anchor };
     setTimeout(() => document.addEventListener('pointerdown', outside2, true), 0);
+    if (typeof App !== 'undefined' && App.emit) App.emit('pop');
     return el;
   }
   // ---------- Tooltips ----------

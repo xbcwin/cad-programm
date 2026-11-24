@@ -511,25 +511,36 @@ const Print = (() => {
   async function turntable({ seconds = 6, fps = 30, save: doSave = true } = {}) {
     const type = videoType(); if (!type) { UI.toast('Dieser Browser kann keine Videos aufnehmen.', { kind: 'bad' }); return null; }
     const cv = Viewer.canvas, stream = cv.captureStream(fps), chunks = [];
+    const track = stream.getVideoTracks()[0];
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const cam0 = Viewer.saveCamera(), tg = Viewer.controls.target.clone();
     const dx0 = cam0.p.x - tg.x, dy0 = cam0.p.y - tg.y;
     App.clearSelection(); Handles.clear();
     const tst = UI.toast('Aufnahme läuft …', { icon: 'play', ms: seconds * 1000 + 3000 });
-    const done = new Promise((res) => { rec.onstop = res; });
+    const done = new Promise((res) => { rec.onstop = res; rec.onerror = res; });
     rec.start(250);
+    const dur = Math.max(100, seconds * 1000);
+    const stepMs = Math.max(16, Math.round(1000 / Math.max(1, fps)));
+    const minFrames = Math.max(12, Math.min(30, Math.round(seconds * 10)));
     const t0 = performance.now();
     await new Promise((res) => {
-      const step = (t) => {
-        const k = Math.min(1, (t - t0) / (seconds * 1000)), a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
-        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.requestRender();
-        if (k < 1) requestAnimationFrame(step); else res();
+      let frames = 0, raf = 0, timer = 0;
+      const step = () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+        const k = frames === 0 ? 0 : Math.min(1, Math.max(0, (performance.now() - t0) / dur), frames / minFrames);
+        const a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.renderNow();
+        try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
+        frames++;
+        if (k < 1) { raf = requestAnimationFrame(step); timer = setTimeout(step, stepMs + 15); } else res();
       };
-      requestAnimationFrame(step);
+      step();
     });
     await new Promise((r) => setTimeout(r, 120));
-    rec.stop(); await done; stream.getTracks().forEach((x) => x.stop());
+    if (rec.state !== 'inactive') rec.stop();
+    await done; stream.getTracks().forEach((x) => x.stop());
     Viewer.restoreCamera(cam0, false);
     tst.remove();
     const blob = new Blob(chunks, { type: type.split(';')[0] });
