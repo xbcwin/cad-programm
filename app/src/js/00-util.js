@@ -2049,16 +2049,6 @@ const HELP = {
   "hilfe": "Schneidet das entlang des Pfads gezogene Profil sofort als Nut, Rille oder Kanal aus einem bestehenden Körper heraus – wahlweise gleich beim Abschließen der Skizze oder nachträglich rechts unter „Körper“.",
   "tipp": "Zeichne den Pfad direkt auf der Oberfläche des Körpers; mit der Querschnitts-Höhe bestimmst du, wie tief die Nut einschneidet."
  },
- "fullFillet": {
-  "tip": "Drei Flächen wählen – die mittlere wird nahtlos ganz rund (z. B. Steg-Ende)",
-  "hilfe": "Klicke nacheinander erste Seitenfläche, mittlere Stirnfläche und zweite Seitenfläche eines Körpers an. Tracery rundet die mittlere Fläche mit dem exakten vollen Radius zwischen den beiden Seitenflächen ab.",
-  "tipp": "Ideal für abgerundete Stege, Laschen oder Rippenenden – der Radius passt sich automatisch an, wenn sich die Steg-Dicke später ändert."
- },
- "cornerChamfer": {
-  "tip": "Eine Körper-Ecke schräg mit drei verschiedenen Abständen abschneiden",
-  "hilfe": "Klicke eine Ecke an, in der drei Kanten zusammenlaufen. Danach kannst du rechts für jede der drei Kanten einen eigenen Abstand einstellen (oder als Formel eingeben), sodass eine dreieckige schräge Fläche entsteht.",
-  "tipp": "Mit dem Dreh-Symbol neben „Ecken-Fase“ tauschst du die drei Abstände reihum durch die drei Kanten."
- },
  "exportAmfPly": {
   "tip": "Als AMF (Druck-XML mit Farben) oder PLY (Polygonnetz für Scans & Blender) speichern",
   "hilfe": "AMF (Additive Manufacturing File Format) speichert Dreiecksnetze als XML mit Maßeinheit, Teilenamen und Farben für Slicer. PLY (Polygon File Format) schreibt ein kompaktes binäres Polygonnetz mit Eckpunkt-Farben – ideal für 3D-Scans, MeshLab und Blender.",
@@ -2073,6 +2063,26 @@ const HELP = {
   "tip": "Schräge und Hinterschnitte für Guss- oder Spritzgussformen farbig prüfen",
   "hilfe": "Färbt alle Flächen passend zur gewählten Entformungsrichtung: Grün bedeutet genug Entformungsschräge ab dem eingestellten Winkel, Gelb bedeutet zu wenig Schräge (z. B. senkrechte Wände), und Rot zeigt Hinterschnitte, an denen das Teil in der Form hängen bleibt.",
   "tipp": "Wähl über „Fläche“ direkt eine ebene Modellfläche als Auszugsrichtung und schalte bei einteiligen Formen (z. B. Silikonabguss) „Zweiteilige Form“ aus."
+ },
+ "settingsFile": {
+  "tip": "Persönliche Einstellungen als Datei speichern oder laden",
+  "hilfe": "Sichert Tastenkürzel, Werkzeugleisten-Favoriten, Maus-Steuerung, Nachkommastellen, Oberflächen-Größe, Sprache und Darstellungs-Einstellungen in einer .json-Datei – praktisch zum Mitnehmen auf einen anderen Rechner.",
+  "tipp": "Gespeicherte Einstellungsdateien kannst du auch einfach ins Fenster ziehen oder über „Datei öffnen“ laden."
+ },
+ "uiScale": {
+  "tip": "Größe von Schriften, Knöpfen und Leisten (80–150 %)",
+  "hilfe": "Vergrößert oder verkleinert die gesamte Bedienoberfläche stufenlos von 80 % bis 150 % oder über die Schnellwahl-Knöpfe. Die 3D-Ansicht bleibt unabhängig davon gestochen scharf.",
+  "tipp": "Auf großen oder hochauflösenden Bildschirmen helfen 125 % oder 150 % für entspanntes Lesen."
+ },
+ "fullFillet": {
+  "tip": "Drei Flächen wählen – die mittlere wird nahtlos ganz rund (z. B. Steg-Ende)",
+  "hilfe": "Klicke nacheinander erste Seitenfläche, mittlere Stirnfläche und zweite Seitenfläche eines Körpers an. Tracery rundet die mittlere Fläche mit dem exakten vollen Radius zwischen den beiden Seitenflächen ab.",
+  "tipp": "Ideal für abgerundete Stege, Laschen oder Rippenenden – der Radius passt sich automatisch an, wenn sich die Steg-Dicke später ändert."
+ },
+ "cornerChamfer": {
+  "tip": "Eine Körper-Ecke schräg mit drei verschiedenen Abständen abschneiden",
+  "hilfe": "Klicke eine Ecke an, in der drei Kanten zusammenlaufen. Danach kannst du rechts für jede der drei Kanten einen eigenen Abstand einstellen (oder als Formel eingeben), sodass eine dreieckige schräge Fläche entsteht.",
+  "tipp": "Mit dem Dreh-Symbol neben „Ecken-Fase“ tauschst du die drei Abstände reihum durch die drei Kanten."
  },
  "calcCancel": {
   "tip": "Laufende Berechnung abbrechen und zum letzten guten Stand zurückkehren",

@@ -2,11 +2,21 @@
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges', lang: 'auto' };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges', lang: 'auto', mouse: 'tracery', uiScale: 100 };
+  const VALID_MOUSE = new Set(['tracery', 'onshape', 'solidworks', 'fusion', 'blender']);
+  const VALID_THEME = new Set(['system', 'light', 'dark']);
+  const VALID_QUALITY = new Set(['coarse', 'normal', 'fine', 'ultra']);
+  const VALID_LEVEL = new Set(['simple', 'pro']);
+  const VALID_LOOK = new Set(['studio', 'clay', 'chrome', 'simple']);
+  const VALID_MOOD = new Set(['studio', 'bright', 'workshop']);
+  const VALID_DISPLAY = new Set(['edges', 'shaded', 'wire', 'hidden']);
   const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
   const normLang = (x) => (x === 'de' || x === 'en' ? x : 'auto');
+  const normUiScale = (x) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 80, 150) : 100; };
+  const normMouse = (x) => (VALID_MOUSE.has(x) ? x : 'tracery');
   let v = { ...DEF };
   let firstStart = !storageGet(KEY) && !storageGet('masswerk.last') && !storageGet('masswerk.index');
+  let openDialogState = null;
   try {
     const raw = storageGet(KEY);
     if (raw) {
@@ -18,11 +28,21 @@ const ViewPrefs = (() => {
   v.decimals = normDec(v.decimals, DEF.decimals);
   v.angleDecimals = normDec(v.angleDecimals, DEF.angleDecimals);
   v.lang = normLang(v.lang);
+  v.uiScale = normUiScale(v.uiScale);
+  v.mouse = normMouse(v.mouse);
   const ev = makeEmitter();
   function applyTheme() {
     const r = document.documentElement;
     if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
   }
+  function applyUiScale() {
+    const pct = normUiScale(v.uiScale);
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.style.setProperty('--ui-scale', String(pct / 100));
+      document.documentElement.dataset.uiScale = String(pct);
+    }
+  }
+  applyUiScale();
   const simple = () => v.level === 'simple';
   function apply() {
     if (typeof I18n !== 'undefined' && I18n.use) {
@@ -37,6 +57,7 @@ const ViewPrefs = (() => {
     Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' });
     if (typeof Kernel !== 'undefined' && Kernel.setMultiWorker) Kernel.setMultiWorker(v.multiWorker !== false);
     applyTheme();
+    applyUiScale();
     FMT.dec = normDec(v.decimals, DEF.decimals);
     FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
     Viewer.setMouseStyle(v.mouse || 'tracery');
@@ -48,6 +69,8 @@ const ViewPrefs = (() => {
     if ('decimals' in next) next.decimals = normDec(next.decimals, DEF.decimals);
     if ('angleDecimals' in next) next.angleDecimals = normDec(next.angleDecimals, DEF.angleDecimals);
     if ('lang' in next) next.lang = normLang(next.lang);
+    if ('uiScale' in next) next.uiScale = normUiScale(next.uiScale);
+    if ('mouse' in next) next.mouse = normMouse(next.mouse);
     if ('level' in next) firstStart = false;
     Object.assign(v, next); storageSet(KEY, JSON.stringify(v)); apply();
     syncLevel();
@@ -100,6 +123,120 @@ const ViewPrefs = (() => {
       ? T('dlg.settings.langToastAuto', { lang: effName })
       : T(eff === 'en' ? 'dlg.settings.langToastEn' : 'dlg.settings.langToastDe');
     UI.toast(toastMsg, { icon: 'check', ms: 1600 });
+  }
+  function setUiScale(pct) { set({ uiScale: normUiScale(pct) }); }
+  function refreshOpenDialog() {
+    if (!openDialogState) return;
+    const tab = openDialogState.tab;
+    openDialogState.handle.close();
+    dialog(tab);
+  }
+  function exportData() {
+    const tb = typeof Toolbar !== 'undefined' && Toolbar.getState ? Toolbar.getState() : null;
+    return {
+      format: 'tracery-settings',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      view: { ...v },
+      shortcuts: typeof Commands !== 'undefined' && Commands.exportShortcuts ? Commands.exportShortcuts() : {},
+      toolbar: tb ? { items: tb.items, favs: tb.favs } : { items: [], favs: [] },
+      sketch: { angleSnap: typeof Sketch !== 'undefined' ? !!Sketch.angleSnap : true },
+    };
+  }
+  function sanitizeView(src) {
+    const out = { ...DEF };
+    if (!src || typeof src !== 'object') return out;
+    if (src.grid === 'auto' || (typeof src.grid === 'number' && isFinite(src.grid) && src.grid > 0)) out.grid = src.grid;
+    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows']) {
+      if (typeof src[k] === 'boolean') out[k] = src[k];
+    }
+    if (VALID_QUALITY.has(src.quality)) out.quality = src.quality;
+    if (VALID_THEME.has(src.theme)) out.theme = src.theme;
+    if (VALID_LEVEL.has(src.level)) out.level = src.level;
+    if (VALID_LOOK.has(src.look)) out.look = src.look;
+    if (VALID_MOOD.has(src.mood)) out.mood = src.mood;
+    if (VALID_DISPLAY.has(src.display)) out.display = src.display;
+    out.decimals = normDec(src.decimals, DEF.decimals);
+    out.angleDecimals = normDec(src.angleDecimals, DEF.angleDecimals);
+    out.lang = normLang(src.lang);
+    out.mouse = normMouse(src.mouse);
+    out.uiScale = normUiScale(src.uiScale);
+    return out;
+  }
+  function importData(raw, opts = {}) {
+    let obj = raw;
+    if (typeof raw === 'string') {
+      try { obj = JSON.parse(raw); } catch (_) { obj = null; }
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || obj.format !== 'tracery-settings') {
+      if (!opts.silent) UI.toast(T('dlg.settings.loadBadFile'), { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: 'invalid_format' };
+    }
+    set(sanitizeView(obj.view));
+    if (typeof Commands !== 'undefined' && Commands.importShortcuts) {
+      Commands.importShortcuts(obj.shortcuts && typeof obj.shortcuts === 'object' ? obj.shortcuts : {});
+    }
+    if (typeof Toolbar !== 'undefined') {
+      if (obj.toolbar && typeof obj.toolbar === 'object' && Toolbar.setState) Toolbar.setState(obj.toolbar);
+      else if (Toolbar.reset) Toolbar.reset(true);
+    }
+    if (obj.sketch && typeof obj.sketch.angleSnap === 'boolean' && typeof Sketch !== 'undefined' && Sketch.setAngleSnap) {
+      Sketch.setAngleSnap(obj.sketch.angleSnap);
+    }
+    if (!opts.silent) UI.toast(T('dlg.settings.loadedToast'), { icon: 'check' });
+    refreshOpenDialog();
+    return { ok: true };
+  }
+  async function saveToFile() {
+    const data = JSON.stringify(exportData(), null, 2);
+    const filename = T('dlg.settings.fileName');
+    const blob = new Blob([data], { type: 'application/json;charset=utf-8' });
+    if (typeof Print !== 'undefined' && Print.save) {
+      return await Print.save(filename, blob);
+    }
+    const url = URL.createObjectURL(blob);
+    const a = h('a', { href: url, download: filename });
+    document.body.append(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
+    UI.toast(T('dlg.settings.savedToast', { name: filename }), { icon: 'check' });
+    return true;
+  }
+  async function loadFromFile(file) {
+    if (!file) return { ok: false, error: 'no_file' };
+    try {
+      const txt = await file.text();
+      return importData(txt);
+    } catch (_) {
+      UI.toast(T('dlg.settings.loadBadFile'), { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: 'read_error' };
+    }
+  }
+  function openFilePicker() {
+    const inp = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0];
+      inp.remove();
+      if (f) loadFromFile(f);
+    };
+    document.body.append(inp);
+    inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+  }
+  function resetAll(opts = {}) {
+    const backup = exportData();
+    firstStart = false;
+    set({ ...DEF });
+    if (typeof Commands !== 'undefined' && Commands.resetShortcuts) Commands.resetShortcuts();
+    if (typeof Toolbar !== 'undefined' && Toolbar.reset) Toolbar.reset(true);
+    if (typeof Sketch !== 'undefined' && Sketch.setAngleSnap) Sketch.setAngleSnap(true);
+    if (!opts.silent) {
+      UI.toast(T('dlg.settings.resetToast'), {
+        icon: 'undo',
+        action: { label: T('topbar.undo'), run: () => importData(backup) },
+      });
+    }
+    refreshOpenDialog();
   }
   // Zwei Stufen-Karten („Einfach“ / „Profi“) für ersten Start und Einstellungen
   function levelCards({ idPrefix, active = v.level, onPick } = {}) {
@@ -197,11 +334,59 @@ const ViewPrefs = (() => {
         }
       }
     }, T('dlg.settings.unitHint'));
+    const scaleVal = h('span', { id: 'set-uiscale-val', class: 'uiscale-val mono' }, `${v.uiScale} %`);
+    const scaleInp = h('input', {
+      type: 'range',
+      id: 'set-uiscale',
+      min: '80',
+      max: '150',
+      step: '5',
+      value: String(v.uiScale),
+      'aria-label': T('dlg.settings.uiScaleLabel'),
+    });
+    const presetBtns = [];
+    const syncScaleUI = (pct) => {
+      scaleInp.value = String(pct);
+      scaleVal.textContent = `${pct} %`;
+      for (const b of presetBtns) {
+        const on = Number(b.dataset.scale) === pct;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    };
+    scaleInp.oninput = (e) => {
+      const pct = normUiScale(e.target.value);
+      set({ uiScale: pct });
+      syncScaleUI(pct);
+    };
+    const presets = h('div', { class: 'uiscale-presets' });
+    for (const pct of [80, 100, 125, 150]) {
+      const b = h('button', {
+        type: 'button',
+        class: 'btn small' + (v.uiScale === pct ? ' on' : ''),
+        id: `set-uiscale-${pct}`,
+        dataset: { scale: String(pct) },
+        'aria-pressed': v.uiScale === pct ? 'true' : 'false',
+      }, `${pct} %`);
+      b.onclick = () => {
+        set({ uiScale: pct });
+        syncScaleUI(pct);
+      };
+      presetBtns.push(b);
+      presets.append(b);
+    }
+    const scaleField = h('div', { class: 'field', 'data-help': 'uiScale' },
+      h('label', { for: 'set-uiscale' }, T('dlg.settings.uiScaleLabel')),
+      h('div', { class: 'uiscale-row' }, scaleInp, scaleVal),
+      presets,
+      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, T('dlg.settings.uiScaleHint')),
+    );
     paneGen.append(
       lvlField,
       langSel,
       unitSel,
       sel('set-theme', T('dlg.settings.themeLabel'), v.theme, [['system', T('dlg.settings.themeSys')], ['light', T('dlg.settings.themeLight')], ['dark', T('dlg.settings.themeDark')]], (x) => set({ theme: x })),
+      scaleField,
       decBlock,
       sel('set-quality', T('dlg.settings.qualityLabel'), v.quality, [['coarse', T('dlg.settings.qCoarse')], ['normal', T('dlg.settings.qNormal')], ['fine', T('dlg.settings.qFine')], ['ultra', T('dlg.settings.qUltra')]], (x) => set({ quality: x }), T('dlg.settings.qualityHint')),
       sel('set-mouse', T('dlg.settings.mouseLabel'), v.mouse || 'tracery', [['tracery', T('dlg.settings.mTracery')], ['onshape', T('dlg.settings.mOnshape')], ['solidworks', T('dlg.settings.mSolidworks')], ['fusion', T('dlg.settings.mFusion')], ['blender', T('dlg.settings.mBlender')]], (x) => set({ mouse: x }), T('dlg.settings.mouseHint')),
@@ -213,6 +398,35 @@ const ViewPrefs = (() => {
     mwChk.classList.add('pro');
     mwChk.dataset.help = 'multiWorker';
     paneGen.append(mwChk);
+
+    const importInp = h('input', { type: 'file', id: 'set-import-input', accept: '.json,application/json', hidden: true });
+    importInp.onchange = () => {
+      const f = importInp.files && importInp.files[0];
+      importInp.value = '';
+      if (f) loadFromFile(f);
+    };
+    const saveBtn = h('button', { type: 'button', class: 'btn small', id: 'set-save-btn' });
+    saveBtn.innerHTML = icon('save');
+    saveBtn.append(document.createTextNode(T('dlg.settings.ioSave')));
+    saveBtn.onclick = () => saveToFile();
+
+    const loadBtn = h('button', { type: 'button', class: 'btn small', id: 'set-load-btn' });
+    loadBtn.innerHTML = icon('folder');
+    loadBtn.append(document.createTextNode(T('dlg.settings.ioLoad')));
+    loadBtn.onclick = () => importInp.click();
+
+    const resetBtn = h('button', { type: 'button', class: 'btn small', id: 'set-reset-all' });
+    resetBtn.innerHTML = icon('undo');
+    resetBtn.append(document.createTextNode(T('dlg.settings.ioReset')));
+    resetBtn.onclick = () => resetAll();
+
+    const ioBox = h('div', { class: 'set-io-box', 'data-help': 'settingsFile' },
+      h('div', { class: 'section-h' }, T('dlg.settings.ioTitle')),
+      h('small', { style: { color: 'var(--muted)' } }, T('dlg.settings.ioHint')),
+      h('div', { class: 'btn-row' }, saveBtn, loadBtn, resetBtn),
+      importInp,
+    );
+    paneGen.append(ioBox);
 
     const syncTabs = (tab) => {
       tabs.hidden = simple();
@@ -231,9 +445,18 @@ const ViewPrefs = (() => {
 
     body.append(tabs, paneGen, paneKeys);
     syncTabs(curTab);
-    modalHandle = UI.modal({ title: T('dlg.settings.title'), body, actions: [{ label: T('common.done'), primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
+    modalHandle = UI.modal({
+      title: T('dlg.settings.title'),
+      body,
+      actions: [{ label: T('common.done'), primary: true }],
+      onClose: () => {
+        if (kbdEd) kbdEd.destroy();
+        if (openDialogState && openDialogState.handle === modalHandle) openDialogState = null;
+      },
+    });
+    openDialogState = { handle: modalHandle, get tab() { return curTab; } };
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
-  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 

@@ -2319,6 +2319,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Übersetzung & Hilfetexte**: DE/EN-Schlüsselgleichheit (`texte-de.json` / `texte-en.json`) sowie Hilfeeintrag `thirdPartyLibs` (`werkzeug-hilfen.json` und `HELP`) sind vollständig und ohne JavaScript-Fehler vorhanden.
 - [ ] **Von Hand**: Im Browser Menü `⋯` → „Über Tracery“ im hellen und dunklen Design sowie in „Einfach“ und „Profi“ öffnen, über „Fremde Bausteine“ alle Lizenztexte aufklappen und die englische Übersetzung in den Einstellungen prüfen.
 
+## Einstellungen speichern & Oberflächen-Größe (Auto [A-108], BE-30, BE-31)
+
+- [x] **Einstellungen speichern, zurücksetzen & laden**: Geändertes Tastenkürzel (`ortho` → `J`), Werkzeugleisten-Favorit (`fillet`), Maus-Steuerung (`fusion`), Nachkommastellen (`3` / `2`) und Oberflächen-Größe (`125 %`) als `tracery-einstellungen.json` exportiert, komplett zurückgesetzt (`#set-reset-all`) und wieder importiert (`#set-import-input` sowie `Start.openBlob`) → alle Einstellungen und Kürzel (`J` wirkt, `O` nicht) sind wiederhergestellt; ungültige JSON-Dateien werden abgewiesen.
+- [x] **Oberflächen-Größe 80–150 % (Profi & Einfach)**: Schieberegler und Schnellwahl (`80 %`, `100 %`, `125 %`, `150 %`) skalieren die Werkzeugleisten-Schrift exakt (`0,8×`, `1,25×`, `1,5×` in Profi und `1,25×` in Einfach), begrenzen Ausreißer auf `80`–`150` und bleiben beim Neuladen erhalten.
+- [x] **Hilfen, Befehle & Übersetzung**: `settingsFile` und `uiScale` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`settings-export`, `settings-import`, `settings-scale`) und i18n-Testmodus im Einstellungsfenster ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser auf einem großen Monitor die Oberflächen-Größe auf 125 % und 150 % stellen, Modell, Skizze und Zeichnung auf saubere Lesbarkeit ohne Überlappung prüfen und eine gesicherte `.json`-Einstellungsdatei ins Fenster ziehen.
+
 ## Fehler melden
 
 ```

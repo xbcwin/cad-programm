@@ -214,13 +214,25 @@ const Toolbar = (() => {
     return true;
   }
 
-  function reset() {
+  function reset(silent = false) {
     items = [...DEFAULT_ITEMS];
     favs = [];
     storageDel(KEY);
     Panels.renderTools();
     if (openDialogRefresh) openDialogRefresh();
-    UI.toast(T('dlg.tb.resetToast'), { icon: 'undo', ms: 1800 });
+    if (!silent) UI.toast(T('dlg.tb.resetToast'), { icon: 'undo', ms: 1800 });
+  }
+
+  function setState(obj) {
+    if (!obj || typeof obj !== 'object') return false;
+    const map = catalogMap();
+    items = Array.isArray(obj.items) ? uniqValid(obj.items, map) : [...DEFAULT_ITEMS];
+    favs = Array.isArray(obj.favs) ? uniqValid(obj.favs, map) : [];
+    for (const f of favs) {
+      if (!items.includes(f)) items.unshift(f);
+    }
+    syncNormalized();
+    return true;
   }
 
   function buildToolButton(def, fav) {
@@ -625,6 +637,8 @@ const Toolbar = (() => {
     dialog,
     catalog,
     getState,
+    setState,
+    importState: setState,
     add,
     remove,
     toggleFav,
