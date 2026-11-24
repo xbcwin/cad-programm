@@ -2062,6 +2062,11 @@ const HELP = {
   "tip": "Einheit für dieses Projekt wählen (mm, cm, m oder Zoll)",
   "hilfe": "Legt die Anzeige- und Standard-Einheit für dieses Projekt fest. Alle Maße, Schilder, Koordinaten, Messungen und die Stückliste zeigen in dieser Einheit; Eingaben ohne Einheit gelten darin. Eingaben mit Einheit (z. B. 25,4 mm oder 1 in) funktionieren immer.",
   "tipp": "Du kannst die Einheit jederzeit umschalten – die echte Geometrie bleibt immer exakt erhalten."
+ },
+ "angleSnap": {
+  "tip": "Linien in 15°-Schritten und runden Längen fangen",
+  "hilfe": "Rastet Linien und Linienzüge beim Zeichnen mit der Maus in 15°-Schritten mit Hilfslinie und Winkel-Schild ein und rundet die Länge auf 1 mm (bei starkem Zoom auf 0,5 oder 0,1 mm). Die Einstellung wird für diesen Browser gespeichert.",
+  "tipp": "Halte beim Zeichnen die Umschalttaste gedrückt, um Winkelfang und runde Längen vorübergehend abzuschalten."
  }
 };
 
@@ -14260,7 +14265,7 @@ const Sketch = (() => {
   const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
     select: 'Element anklicken oder im Leeren einen <b>Rahmen</b> ziehen (links→rechts: ganz drin · rechts→links: berührt · <b>Umschalt</b> fügt hinzu). Endpunkte lassen sich ziehen. <b>Entf</b> löscht, <b>H</b> verschiebt.',
-    line: 'Klick setzt Punkte. <b>A</b> wechselt zwischen Linie und tangentialem Bogen. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
+    line: 'Klick setzt Punkte (rastet in <b>15°</b>-Schritten und runden Längen ein · <b>Umschalt</b> frei). <b>A</b> wechselt zwischen Linie und tangentialem Bogen. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
     rect: 'Erste Ecke klicken, dann die zweite. Oder Zahlen tippen: Breite <b>Tab</b> Höhe.',
     circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
     bg: 'Lade ein Foto oder eine Zeichnung als Vorlage. Mit <b>Maßstab festlegen</b> klickst du zwei Punkte an, deren Abstand du kennst – dann stimmt die Größe. Ziehen verschiebt das Bild.',
@@ -14689,6 +14694,22 @@ const Sketch = (() => {
   const SNAPRANK = { end: 0, origin: 0, center: 0, cross: 0, mid: 0.25, perp: 0.35, tangent: 0.35, quad: 0.5, curve: 0.9 };
   const SNAPLIST = [['end', 'Endpunkte'], ['mid', 'Mitten'], ['center', 'Mittelpunkte'], ['quad', 'Kreispunkte'], ['cross', 'Schnittpunkte'], ['curve', 'Auf Linien und Kurven'], ['perp', 'Lot (rechtwinklig)'], ['tangent', 'Tangenten an Kreise'], ['align', 'Ausrichtung zu anderen Punkten'], ['grid', 'Raster']];
   function defaultSnapSet() { const o = {}; for (const [k] of SNAPLIST) o[k] = true; return o; }
+  const ANGLE_SNAP_KEY = 'tracery.angleSnap';
+  function loadAngleSnap() {
+    const raw = storageGet(ANGLE_SNAP_KEY);
+    return raw === null ? true : raw !== '0' && raw !== 'false';
+  }
+  let angleSnapOn = loadAngleSnap();
+  function setAngleSnap(on) {
+    angleSnapOn = !!on;
+    storageSet(ANGLE_SNAP_KEY, angleSnapOn ? '1' : '0');
+    const cb = document.getElementById('sk-angle-snap');
+    if (cb) cb.checked = angleSnapOn;
+    if (S && !S.step && S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc && lastMouse) {
+      S.cursor = linePoint(lastMouse.uv, lastMouse.e);
+      render();
+    }
+  }
   let crossCache = null;
   function crossings() {
     const k = JSON.stringify(S.ents) + '|' + S.refs.length;
@@ -14727,23 +14748,69 @@ const Sketch = (() => {
     // Ausrichtung an vorhandenen Punkten
     let p = uv.slice(), guides = [];
     let gx = null, gy = null, dx = tol * 0.7, dy = tol * 0.7;
-    if (set.align !== false) for (const c of pts) {
+    if (!opts.noAlign && set.align !== false) for (const c of pts) {
       if (Math.abs(c.p[0] - uv[0]) < dx) { dx = Math.abs(c.p[0] - uv[0]); gx = c.p; }
       if (Math.abs(c.p[1] - uv[1]) < dy) { dy = Math.abs(c.p[1] - uv[1]); gy = c.p; }
     }
-    const grid = set.grid === false || App.doc.settings.snap === false ? 0 : (opts.fine ? 0.1 : App.doc.settings.grid || 1);
+    const grid = opts.noGrid || set.grid === false || App.doc.settings.snap === false ? 0 : (opts.fine ? 0.1 : App.doc.settings.grid || 1);
     if (grid) { p = [Math.round(p[0] / grid) * grid, Math.round(p[1] / grid) * grid]; }
     if (gx) { p[0] = gx[0]; guides.push([gx, [gx[0], p[1]]]); }
     if (gy) { p[1] = gy[1]; guides.push([gy, [p[0], gy[1]]]); }
     return { p, guides, kind: grid ? 'grid' : null };
   }
+  function lengthSnapStep() {
+    const ps = pxSize();
+    if (ps <= 0.015) return 0.1;
+    if (ps <= 0.055) return 0.5;
+    return 1;
+  }
   function angleSnap(a, b) {
-    const dx = b[0] - a[0], dy = b[1] - a[1]; const L = Math.hypot(dx, dy); if (L < 1e-9) return { p: b, tip: null };
-    const ang = Math.atan2(dy, dx); const deg = (ang * 180) / Math.PI;
-    for (const t of [0, 90, 180, -90, -180]) {
-      if (Math.abs(deg - t) < 2.5) { const r = (t * Math.PI) / 180; return { p: [a[0] + Math.cos(r) * L, a[1] + Math.sin(r) * L], tip: t === 0 || Math.abs(t) === 180 ? 'waagerecht' : 'senkrecht' }; }
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const L0 = Math.hypot(dx, dy);
+    if (L0 < 1e-6) return { p: b.slice(), tip: null, guide: null, angle: null, step: null };
+    const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const near15 = Math.round(deg / 15) * 15;
+    const hitAngle = Math.abs(deg - near15) <= 4;
+    const rad = hitAngle ? (near15 * Math.PI) / 180 : Math.atan2(dy, dx);
+    const step = lengthSnapStep();
+    const L = round(Math.max(step, Math.round(L0 / step) * step), 4);
+    const ux = Math.cos(rad), uy = Math.sin(rad);
+    const p = [round(a[0] + ux * L, 6), round(a[1] + uy * L, 6)];
+    if (!hitAngle) return { p, tip: null, guide: null, angle: null, step };
+    let disp = Math.round(near15);
+    if (disp === -180) disp = 180;
+    if (Object.is(disp, -0)) disp = 0;
+    const tip = disp === 0 || disp === 180 ? `waagerecht · ${disp}°` : (disp === 90 || disp === -90 ? `senkrecht · ${disp}°` : `${disp}°`);
+    const ext = pxSize() * 140;
+    const guide = [a.slice(), [p[0] + ux * ext, p[1] + uy * ext]];
+    return { p, tip, guide, angle: disp, step };
+  }
+  function linePoint(uv0, e) {
+    const shift = !!(e && e.shiftKey), alt = !!(e && e.altKey);
+    if (alt) return snap(uv0, { off: true });
+    const a = S.draft.pts[S.draft.pts.length - 1];
+    const prev = S.draft.last && ent(S.draft.last.id);
+    const prevTan = prev && prev.type === 'arc' ? endTangent(prev, S.draft.last.end) : null;
+    const sn = snap(uv0, { fine: shift, off: false, noGrid: shift, noAlign: shift });
+    const isGeomSnap = !!(sn.kind && sn.kind !== 'grid');
+    if (isGeomSnap) return sn;
+    if (prevTan) {
+      const ts = tanLineSnap(a, shift ? sn.p : uv0, prevTan);
+      if (ts) {
+        let p = ts.p;
+        if (angleSnapOn && !shift) {
+          const L0 = SK.d2(a, p), step = lengthSnapStep(), L = round(Math.max(step, Math.round(L0 / step) * step), 4);
+          p = [round(a[0] + prevTan.t[0] * L, 6), round(a[1] + prevTan.t[1] * L, 6)];
+        }
+        const ext = pxSize() * 140;
+        return { ...sn, p, tip: ts.tip, guides: [...(sn.guides || []), [a.slice(), [p[0] + prevTan.t[0] * ext, p[1] + prevTan.t[1] * ext]]], tan: true };
+      }
     }
-    return { p: b, tip: null };
+    if (!angleSnapOn || shift) return sn;
+    const as = angleSnap(a, uv0);
+    const guides = (sn.guides || []).filter((g) => SK.d2(g[0], a) > 1e-6);
+    if (as.guide) guides.push(as.guide);
+    return { p: as.p, guides, tip: as.tip, kind: as.angle != null ? 'angle' : null, angle: as.angle, lenStep: as.step };
   }
   // ---------- Zeichnen ----------
   function pushUndo() { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
@@ -15918,12 +15985,9 @@ const Sketch = (() => {
         const a = S.draft.pts[S.draft.pts.length - 1];
         const prev = S.draft.last && ent(S.draft.last.id);
         const prevTan = prev && prev.type === 'arc' ? endTangent(prev, S.draft.last.end) : null;
-        let snappedTan = false;
-        if (sn.kind !== 'end' && sn.kind !== 'center' && sn.kind !== 'mid') {
-          const ts = prevTan ? tanLineSnap(a, p, prevTan) : null;
-          if (ts) { p = ts.p; snappedTan = true; }
-          else p = angleSnap(a, p).p;
-        }
+        const lp = linePoint(uv0, e);
+        p = lp.p;
+        const snappedTan = !!lp.tan;
         if (SK.d2(a, p) < 1e-6) return;
         const en = addEnt({ type: 'line', a: a.slice(), b: p.slice() });
         const added = [];
@@ -16568,16 +16632,10 @@ const Sketch = (() => {
       render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
-    S.cursor = snap(uv0, { fine: e.shiftKey, off: e.altKey });
-    if (S.tool === 'line' && S.draft && !S.draft.arc) {
-      const a = S.draft.pts[S.draft.pts.length - 1];
-      if (S.cursor.kind !== 'end' && S.cursor.kind !== 'center' && S.cursor.kind !== 'mid') {
-        const prev = S.draft.last && ent(S.draft.last.id);
-        const pt = prev && prev.type === 'arc' ? endTangent(prev, S.draft.last.end) : null;
-        const ts = pt ? tanLineSnap(a, S.cursor.p, pt) : null;
-        if (ts) { S.cursor.p = ts.p; S.cursor.tip = ts.tip; S.cursor.guides = [...(S.cursor.guides || []), [a, ts.p]]; }
-        else { const as = angleSnap(a, S.cursor.p); S.cursor.p = as.p; if (as.tip) S.cursor.tip = as.tip; }
-      }
+    if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
+      S.cursor = linePoint(uv0, e);
+    } else {
+      S.cursor = snap(uv0, { fine: e.shiftKey, off: e.altKey });
     }
     render();
   }
@@ -17018,8 +17076,8 @@ const Sketch = (() => {
     // Einrast-Markierung
     if (S.cursor && !S.step && S.tool !== 'select') {
       const c = S.cursor;
-      if (c.guides) for (const [a, bb] of c.guides) lineObj([a, bb], acc, 1, { dashed: true, opacity: 0.8, dash: 1.2, gap: 1.2 });
       const w = c.p; const ps = pxSize();
+      if (c.guides) for (const [a, bb] of c.guides) lineObj([a, bb], acc, 1.2, { dashed: true, opacity: 0.85, dash: Math.max(0.15, ps * 8), gap: Math.max(0.15, ps * 6) });
       snapMarker(c.kind, w, ps, acc);
       if (c.tip) { const l = label(c.tip, w, 'snaptip'); }
     }
@@ -17039,6 +17097,7 @@ const Sketch = (() => {
       case 'perp': line([[-1, 1], [-1, -1], [1, -1]]); line([[-1, 0], [0, 0], [0, -1]]); break;
       case 'tangent': circ(4); line([[-1.4, -1.6], [1.4, -1.6]]); break;
       case 'curve': line([[-1, 0], [1, 0]]); line([[0, -1], [0, 1]]); break;
+      case 'angle': circ(3.5); break;
       case 'grid': circ(3); break;
       default: circ(5);
     }
@@ -17504,6 +17563,12 @@ const Sketch = (() => {
       const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sk-con', checked: S.construction }), 'Als Hilfslinien zeichnen');
       con.querySelector('input').onchange = (e) => { S.construction = e.target.checked; syncConBtn(); };
       w.append(con);
+      const angSnap = h('label', { class: 'check', 'data-help': 'angleSnap' },
+        h('input', { type: 'checkbox', id: 'sk-angle-snap', checked: angleSnapOn }),
+        'Winkelfang (15° und runde Längen)'
+      );
+      angSnap.querySelector('input').onchange = (e) => { setAngleSnap(e.target.checked); };
+      w.append(angSnap);
       // Größe der ganzen Skizze – Breite ändern skaliert alles mit (z. B. ein importiertes Logo passend machen)
       const bb = S.tool === 'select' && S.ctx.mode !== 'pushpull' ? SK.bounds(S.ents.filter((e) => !e.con)) : null;
       if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
@@ -17528,7 +17593,7 @@ const Sketch = (() => {
         cbx.querySelector('input').onchange = (e) => { S.snapSet[k] = e.target.checked; };
         sn.append(cbx);
       }
-      sn.append(h('div', { class: 'hint-box', html: 'Mit gedrückter <b>Alt</b>-Taste wird gar nicht gefangen.' }));
+      sn.append(h('div', { class: 'hint-box', html: 'Mit gedrückter <b>Alt</b>-Taste wird gar nicht gefangen. <b>Umschalt</b> schaltet Winkelfang und runde Längen kurz ab.' }));
       w.append(sn);
       if (S.ctx.mode !== 'pushpull') {
         const pe = h('details', { class: 'snapset', id: 'sk-plane' }, h('summary', null, 'Ebene verschieben / neigen'));
@@ -17915,7 +17980,7 @@ const Sketch = (() => {
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
     if (stepBox) { stepBox.remove(); stepBox = null; }
-    S = null; placeArrow();
+    S = null; lastMouse = null; placeArrow();
     if (hid) Viewer.updateNode(hid, { visible: true });
     Viewer.useButtons('model');
     document.body.classList.remove('sketching');
@@ -17930,8 +17995,17 @@ const Sketch = (() => {
     window.addEventListener('pointermove', (e) => { if (S && S.band) bandMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
     window.addEventListener('pointercancel', () => { if (S && S.band) clearBand(); });
+    const onModKey = (e) => {
+      if (!S || S.step || !lastMouse || (e.key !== 'Shift' && e.key !== 'Alt')) return;
+      if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
+        S.cursor = linePoint(lastMouse.uv, e);
+        render();
+      }
+    };
+    window.addEventListener('keydown', onModKey);
+    window.addEventListener('keyup', onModKey);
   }
-  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
 // ---- 56-notes.js ----

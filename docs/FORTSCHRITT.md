@@ -204,6 +204,7 @@ Fertig.
 - [x] Verbundene Kanten: übernommene Kanten merken sich Körper und Kante und wandern mit, wenn sich der Körper ändert (Linie, Bogen, Kreis, Spline); die Nachführung gehört zum selben Rückgängig-Schritt; Ketten-Symbol in der Skizze, „Verbindung lösen“ (Sitzung 33)
 - [x] Werkzeug „Kante übernehmen“ (Z): Klick auf eine Körperkante holt sie in die Skizze – gerade als feste Linie, rund als Bogen oder Kreis, sonst als Spline (Sitzung 32)
 - [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
+- [x] Winkelfang und runde Längen beim Zeichnen (Auto [A-024], SK-14): Linien und Linienzüge rasten beim Zeichnen mit der Maus in 15°-Schritten ein (Hilfslinie und Winkel-Schild wie „45°“) und runden Längen auf 1 mm (bei starkem Zoom auf 0,5 oder 0,1 mm); Umschalt schaltet beides ab; im Skizzen-Panel über „Winkelfang“ ein-/ausschaltbar und in `localStorage` gespeichert
 
 ### Stufe 3 – Features und Ansichten
 - [x] Hochziehen als dünne Wand (Auto [A-007], KP-03): offene Linien/Ketten (Linien, Bögen, Splines) und geschlossene Umrisse (Rohr-Profil) mit Wandstärke und Wand-Lage (mittig, nach innen, nach außen) hochziehen – Live-Vorschau beim Fertigstellen und nachträglich rechts änderbar (`SKO.thinRegions`)

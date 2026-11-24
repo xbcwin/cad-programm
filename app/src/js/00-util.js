@@ -1169,6 +1169,11 @@ const HELP = {
   "tip": "Einheit für dieses Projekt wählen (mm, cm, m oder Zoll)",
   "hilfe": "Legt die Anzeige- und Standard-Einheit für dieses Projekt fest. Alle Maße, Schilder, Koordinaten, Messungen und die Stückliste zeigen in dieser Einheit; Eingaben ohne Einheit gelten darin. Eingaben mit Einheit (z. B. 25,4 mm oder 1 in) funktionieren immer.",
   "tipp": "Du kannst die Einheit jederzeit umschalten – die echte Geometrie bleibt immer exakt erhalten."
+ },
+ "angleSnap": {
+  "tip": "Linien in 15°-Schritten und runden Längen fangen",
+  "hilfe": "Rastet Linien und Linienzüge beim Zeichnen mit der Maus in 15°-Schritten mit Hilfslinie und Winkel-Schild ein und rundet die Länge auf 1 mm (bei starkem Zoom auf 0,5 oder 0,1 mm). Die Einstellung wird für diesen Browser gespeichert.",
+  "tipp": "Halte beim Zeichnen die Umschalttaste gedrückt, um Winkelfang und runde Längen vorübergehend abzuschalten."
  }
 };
 

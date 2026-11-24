@@ -1594,6 +1594,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Startseite, Menüs & Kontextleiste**: Geänderte Texte erscheinen direkt auf Startseite-Knöpfen/Karten, im Haupt- und Ansichtsmenü sowie in der 3D-Kontextleiste; Zurücksetzen stellt alle deutschen Originaltexte wieder her.
 - [ ] **Von Hand**: Einmal Startseite, Werkzeugleiste, alle Menüs (Projekt, Hauptmenü, Ansicht, Rechtsklick, Zeichnung) und Kontextleiste auf fehlende oder abgeschnittene Beschriftungen durchsehen.
 
+## Winkelfang und runde Längen beim Zeichnen (Auto [A-024])
+
+- [x] **15°-Winkelfang & runde Längen**: Linie und Linienzug bei ~44,3° und ~30,8° rasten mit Hilfslinie und Winkel-Schild (`45°`, `30°`) exakt auf 45° bzw. 30° und auf volle 1-mm-Längen ein.
+- [x] **Umschalt frei**: Mit gedrückter Umschalttaste bleiben Winkel und Länge beim Ziehen/Klicken ungerundet (kein `45°`-Schild).
+- [x] **Zoom-abhängige Längenschritte**: `Sketch.lengthSnapStep()` schaltet je nach Zoom von 1 mm auf 0,5 mm (`5,5 mm`) und 0,1 mm (`1,3 mm`) um.
+- [x] **Skizzen-Menü, Speicherung & Hilfe**: Schalter `#sk-angle-snap` schaltet den Winkelfang ab/an, bleibt nach dem Neuladen erhalten (`tracery.angleSnap`) und besitzt den Hilfetext `angleSnap`.
+- [ ] **Von Hand**: Im Browser beim schnellen Bewegen und Zoomen prüfen, ob die gestrichelte Hilfslinie und das Winkel-Schild ruhig lesbar bleiben und beim Übergang von einem tangentialen Bogen auf die nächste Linie sauber zusammenspielen.
+
 ## Fehler melden
 
 ```

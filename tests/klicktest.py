@@ -4556,6 +4556,119 @@ def t_mass_tabelle(p):
     ok3 = p.ev("return document.querySelector('#dim-table').open")
     return [ok1, ok2, ok3]
 
+# ---------- [A-024] Winkelfang und runde Längen beim Zeichnen (SK-14) ----------
+def t_a024_winkelfang(p):
+    sketch_xy(p)
+    p.pg.locator('canvas').first.focus()
+    p.ev("Sketch.setAngleSnap(true)"); p.wait(150)
+    p.pg.keyboard.press('l'); p.wait(200)
+
+    def seg_metrics(ent):
+        dx = ent['b'][0] - ent['a'][0]
+        dy = ent['b'][1] - ent['a'][1]
+        return math.hypot(dx, dy), math.degrees(math.atan2(dy, dx))
+
+    # 1. Linie bei ~44,3° -> genau 45°, runde Länge 20 mm, Hilfslinie und Schild „45°“
+    rad443 = math.radians(44.3)
+    s0 = to_screen(p, 0, 0)
+    s1 = to_screen(p, 20.3 * math.cos(rad443), 20.3 * math.sin(rad443))
+    p.pg.mouse.click(s0[0], s0[1]); p.wait(180)
+    p.pg.mouse.move(s1[0], s1[1]); p.wait(200)
+    tips1 = ' '.join(p.pg.locator('.snaptip').all_text_contents())
+    cur1 = SS(p, "return S.cursor && { angle: S.cursor.angle, guides: (S.cursor.guides || []).length }")
+    p.pg.mouse.click(s1[0], s1[1]); p.wait(200)
+    e1 = SS(p, "return S.ents[0]")
+    l1, a1 = seg_metrics(e1)
+    ok1 = ('45°' in tips1 and cur1 and cur1['angle'] == 45 and cur1['guides'] >= 1
+           and abs(a1 - 45) < 1e-3 and abs(l1 - 20) < 1e-3)
+
+    # 2. Linienzug: 2. Segment bei ~30,8° -> genau 30°, runde Länge 15 mm
+    rad308 = math.radians(30.8)
+    b1 = e1['b']
+    s2 = to_screen(p, b1[0] + 15.2 * math.cos(rad308), b1[1] + 15.2 * math.sin(rad308))
+    p.pg.mouse.move(s2[0], s2[1]); p.wait(200)
+    tips2 = ' '.join(p.pg.locator('.snaptip').all_text_contents())
+    p.pg.mouse.click(s2[0], s2[1]); p.wait(180)
+    p.pg.keyboard.press('Enter'); p.wait(200)
+    e2 = SS(p, "return S.ents[1]")
+    l2, a2 = seg_metrics(e2)
+    ok2 = ('30°' in tips2 and near(e2['a'], b1, 1e-3)
+           and abs(a2 - 30) < 1e-3 and abs(l2 - 15) < 1e-3)
+
+    # 3. Mit gedrückter Umschalttaste bleiben Winkel und Länge ungerundet
+    SS(p, "S.ents=[]; S.cons=[]; S.dims=[]; S.draft=null; Sketch.setTool('line');"); p.wait(180)
+    s3 = to_screen(p, 20.37 * math.cos(rad443), 20.37 * math.sin(rad443))
+    p.pg.mouse.click(s0[0], s0[1]); p.wait(150)
+    p.pg.keyboard.down('Shift'); p.wait(100)
+    p.pg.mouse.move(s3[0], s3[1]); p.wait(200)
+    tips3 = ' '.join(p.pg.locator('.snaptip').all_text_contents())
+    p.pg.mouse.click(s3[0], s3[1]); p.wait(180)
+    p.pg.keyboard.up('Shift'); p.wait(100)
+    p.pg.keyboard.press('Enter'); p.wait(180)
+    e3 = SS(p, "return S.ents[0]")
+    l3, a3 = seg_metrics(e3)
+    ok3 = ('45°' not in tips3 and abs(a3 - 44.3) < 0.35 and abs(a3 - 45) > 0.35
+           and abs(l3 - round(l3)) > 0.15)
+
+    # 4. Zoom-Stufen: normal 1 mm, starker Zoom 0,5 mm, sehr starker Zoom 0,1 mm
+    step1 = SS(p, "return Sketch.lengthSnapStep()")
+    p.ev("Viewer.lookAtPlane([0,0,0],[0,0,1],[1,0,0], 20, false)"); p.wait(200)
+    step05 = SS(p, "return Sketch.lengthSnapStep()")
+    SS(p, "S.ents=[]; S.cons=[]; S.dims=[]; S.draft=null; Sketch.setTool('line');"); p.wait(150)
+    sz0 = to_screen(p, 0, 0)
+    sz1 = to_screen(p, 5.42 * math.cos(rad443), 5.42 * math.sin(rad443))
+    p.pg.mouse.click(sz0[0], sz0[1]); p.wait(150)
+    p.pg.mouse.move(sz1[0], sz1[1]); p.wait(150)
+    p.pg.mouse.click(sz1[0], sz1[1]); p.wait(150)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+    l4a, a4a = seg_metrics(SS(p, "return S.ents[0]"))
+
+    p.ev("Viewer.lookAtPlane([0,0,0],[0,0,1],[1,0,0], 5, false)"); p.wait(200)
+    step01 = SS(p, "return Sketch.lengthSnapStep()")
+    SS(p, "S.ents=[]; S.cons=[]; S.dims=[]; S.draft=null; Sketch.setTool('line');"); p.wait(150)
+    sz0b = to_screen(p, 0, 0)
+    sz2 = to_screen(p, 1.28 * math.cos(rad443), 1.28 * math.sin(rad443))
+    p.pg.mouse.click(sz0b[0], sz0b[1]); p.wait(150)
+    p.pg.mouse.move(sz2[0], sz2[1]); p.wait(150)
+    p.pg.mouse.click(sz2[0], sz2[1]); p.wait(150)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+    l4b, a4b = seg_metrics(SS(p, "return S.ents[0]"))
+    ok4 = (step1 == 1 and step05 == 0.5 and abs(a4a - 45) < 1e-3 and abs(l4a - 5.5) < 1e-3
+           and step01 == 0.1 and abs(a4b - 45) < 1e-3 and abs(l4b - 1.3) < 1e-3)
+
+    # 5. Skizzen-Menü: „Winkelfang“ aus/ein, Einstellung gespeichert, Hilfetext vorhanden
+    p.ev("Viewer.lookAtPlane([0,0,0],[0,0,1],[1,0,0], 70, false)"); p.wait(200)
+    p.pg.uncheck('#sk-angle-snap'); p.wait(150)
+    p.pg.locator('canvas').first.focus()
+    off_ok = (not SS(p, "return Sketch.angleSnap")
+              and p.ev("return localStorage.getItem('tracery.angleSnap')") == '0')
+    SS(p, "S.ents=[]; S.cons=[]; S.dims=[]; S.draft=null; Sketch.setTool('line');"); p.wait(150)
+    s0 = to_screen(p, 0, 0)
+    s3 = to_screen(p, 20.37 * math.cos(rad443), 20.37 * math.sin(rad443))
+    p.pg.mouse.click(s0[0], s0[1]); p.wait(150)
+    p.pg.mouse.move(s3[0], s3[1]); p.wait(150)
+    p.pg.mouse.click(s3[0], s3[1]); p.wait(150)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+    _, a5 = seg_metrics(SS(p, "return S.ents[0]"))
+
+    p.pg.reload()
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.Sketch)")
+    p.wait(500)
+    sketch_xy(p)
+    persisted = (not p.pg.locator('#sk-angle-snap').is_checked()
+                 and not p.ev("return Sketch.angleSnap"))
+    p.pg.check('#sk-angle-snap'); p.wait(150)
+    re_on = (p.pg.locator('#sk-angle-snap').is_checked()
+             and p.ev("return Sketch.angleSnap")
+             and p.ev("return localStorage.getItem('tracery.angleSnap')") == '1')
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_as = hilfen.get('angleSnap') or {}
+    help_ok = (p.pg.locator('[data-help="angleSnap"]').count() == 1
+               and bool(h_as.get('tip') and h_as.get('hilfe') and h_as.get('tipp')))
+    ok5 = off_ok and abs(a5 - 45) > 0.35 and persisted and re_on and help_ok
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # KI verrechnet Körper (vereinigen / abziehen)
 def t_ki_verrechnen(p):
     ki(p); p.empty()
@@ -7041,6 +7154,7 @@ TESTS = [
     ('[A-014] Einheiten je Projekt: Zoll 1 in = 25,4 mm & Eingabe 2 = 50,8 mm / explizite Einheiten / Kontextleiste, Messen & Stückliste / cm & m / Rückgängig & Hilfe', t_a014_einheiten_projekt),
     ('[F-11240028] Volltest-Reparatur: Kamera-Animation bei rAF-Stau / Abbruch bei Nutzer-Start / Übergang-Vorschau ohne Debounce-Stau', t_f11240028),
     ('[A-019] Übersetzbare Oberfläche (Schritt 1): Sammlung & T() / Werkzeugleiste / Startseite / Menüs / Kontextleiste', t_a019_uebersetzbare_oberflaeche),
+    ('[A-024] Winkelfang und runde Längen beim Zeichnen: 45° & runde Länge / Linienzug 30° / Umschalt frei / Zoom 0,5 & 0,1 / Menü & gespeichert', t_a024_winkelfang),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

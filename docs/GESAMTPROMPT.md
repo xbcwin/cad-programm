@@ -244,6 +244,7 @@ Leitlinien:
   - Rechteck mit runden Ecken: `S.rectR` (Feld `#rk-r`) → `roundRect(en, r, keepWH)` (Ecken über `cornerDo`, dann waagerecht/senkrecht, `equal` für die Radien, bei getippten Maßen zwei `distPL`); Ecke bilden: `S.corner.mode = 'meet'` → `meetDo` (zwei Klicks, `S.meetFirst`)
   - Kopieren/Einfügen: Strg C/V in der Skizze (`copySel`/`pasteClip`, Ablage auch in `localStorage` „tracery.sketchClip“; Regeln aus `CLIPCONS` und Maße ohne X/Y kommen mit); Doppelklick in Verschieben/Muster wählt die Kette (`SKO.chainOf`)
   - Verschieben (H): um X/Y oder Drehen um Punkt/Mitte, auch als Kopie (`S.xm`, `applyXmove`, Auswahl über `S.patSel` wie beim Muster)
+  - Winkelfang und runde Längen (SK-14): 15°-Winkelfang und zoomabhängige Längensprünge (1 / 0,5 / 0,1 mm) beim Zeichnen von Linien (`linePoint`, `angleSnap`, `lengthSnapStep`), abschaltbar per Umschalt oder `#sk-angle-snap` (`Sketch.angleSnap`/`setAngleSnap`, `tracery.angleSnap`)
 - **Regeln:** senkrechte Leiste links, 10 Grundregeln (mit „Auf einer Linie“) plus Mittig und Konzentrisch.
 - **Maß zum Ablesen:** in Klammern, legt nichts fest; Knopf „( )“; wird automatisch so angelegt, wenn der Wert schon bestimmt ist.
 - **Löser:** blau = beweglich, dunkel = voll bestimmt; Widersprüche werden abgelehnt.
