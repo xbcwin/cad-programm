@@ -861,6 +861,48 @@ const Panels = (() => {
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Objekte'), h('b', { class: 'mono' }, String(Model.countItems(App.doc)))),
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${Units.fmtLen(st.x, 1)} × ${Units.fmtLen(st.y, 1)} × ${Units.fmtLen(st.z, 1)} ${Units.label()}` : '–'))));
     w.append(info);
+    // 3D-Druck / Druckbett (optional, z. B. über Vorlage „3D-Druck“)
+    const pb = Object.assign({ enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 }, (App.doc.settings && App.doc.settings.printBed) || {});
+    const bedSec = h('div', { class: 'section', id: 'proj-bed-sec', 'data-help': 'printBed' }, h('div', { class: 'section-h' }, '3D-Druck / Druckbett'));
+    const bedOn = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'proj-bed-on', checked: !!pb.enabled }), 'Druckbett aktivieren (Rahmen im Bild)');
+    bedOn.querySelector('input').onchange = (e) => {
+      const on = e.target.checked;
+      App.change(on ? 'Druckbett aktiviert' : 'Druckbett deaktiviert', (doc) => {
+        doc.settings = doc.settings || {};
+        doc.settings.printBed = Object.assign({ enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 }, doc.settings.printBed || {}, { enabled: on });
+      });
+    };
+    bedSec.append(bedOn);
+    if (pb.enabled) {
+      const bedFields = h('div', { class: 'fields three', style: { marginTop: '8px' } });
+      for (const [k, lbl] of [['x', 'Breite'], ['y', 'Tiefe'], ['z', 'Höhe']]) {
+        bedFields.append(UI.numField({
+          id: 'proj-bed-' + k, label: lbl, value: pb[k], axis: k, unit: 'mm', min: 10, expr: false,
+          onCommit: (v) => App.change('Druckbett geändert', (doc) => {
+            doc.settings = doc.settings || {};
+            doc.settings.printBed = Object.assign({ enabled: true, x: 220, y: 220, z: 250, nozzle: 0.4 }, doc.settings.printBed || {});
+            doc.settings.printBed[k] = v;
+            doc.settings.custom = Object.assign({ x: 220, y: 220, z: 250 }, doc.settings.custom || {});
+            doc.settings.custom[k] = v;
+          }),
+        }));
+      }
+      const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
+        id: 'proj-bed-nozzle', label: 'Düse Ø', value: pb.nozzle, unit: 'mm', len: false, min: 0.1, step: 0.1, expr: false,
+        onCommit: (v) => App.change('Düse geändert', (doc) => {
+          doc.settings = doc.settings || {};
+          doc.settings.printBed = Object.assign({ enabled: true, x: 220, y: 220, z: 250, nozzle: 0.4 }, doc.settings.printBed || {});
+          doc.settings.printBed.nozzle = v;
+        }),
+      }));
+      const tooBig = !!(st && (st.x > pb.x + 0.05 || st.y > pb.y + 0.05 || st.z > pb.z + 0.05));
+      const bedStatus = h('div', { class: 'hint-box' + (tooBig ? ' warn' : ''), id: 'proj-bed-status', style: { marginTop: '8px' } },
+        tooBig
+          ? `Größer als das Druckbett (${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()}).`
+          : `Druckbett ${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()} · Düse ${fmt(pb.nozzle, 2)} mm`);
+      bedSec.append(bedFields, nozWrap, bedStatus);
+    }
+    w.append(bedSec);
     // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)
     const curMat = App.doc.settings.material || 'CFK';
     const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));

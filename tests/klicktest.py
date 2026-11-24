@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -10933,6 +10933,125 @@ def t_a052_statusleiste(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-053] Vorlagen für neue Projekte (BE-18) ----------
+def t_a053_projekt_vorlagen(p):
+    # 1. Startseite -> "Neues Projekt" öffnet den Vorlagen-Dialog mit allen 5 Vorlagen
+    p.pg.locator('#start-new-btn').click(); p.wait(300)
+    dlg = p.pg.locator('#new-proj-dialog')
+    ids = [dlg.locator(f'.tpl-card[data-tpl-id="{k}"]').count() for k in ('empty-mm', 'empty-in', 'print3d', 'laser', 'enclosure')]
+    ok1 = dlg.count() == 1 and all(c == 1 for c in ids)
+
+    # 2. Vorlage "3D-Druck" -> Druckbett & 0,4-mm-Düse sind gesetzt, Rahmen im 3D-Bild & Projekt-Panel
+    dlg.locator('.tpl-card[data-tpl-id="print3d"]').click(); p.wait(600)
+    warte_rechnen(p, 30)
+    pb3d = p.ev("return { bed: App.doc.settings.printBed, mat: App.doc.settings.material, unit: Units.key(), visCount: Viewer.groups.printBed.children.length }")
+    panel_on = p.pg.locator('#proj-bed-on').is_checked()
+    panel_noz = p.pg.locator('#proj-bed-nozzle').input_value().replace(',', '.')
+    ok2 = (
+        pb3d['bed']['enabled'] is True
+        and pb3d['bed']['x'] == 220 and pb3d['bed']['y'] == 220 and pb3d['bed']['z'] == 250
+        and abs(pb3d['bed']['nozzle'] - 0.4) < 1e-6
+        and pb3d['mat'] == 'PLA'
+        and pb3d['unit'] == 'mm'
+        and pb3d['visCount'] >= 3
+        and panel_on
+        and panel_noz.startswith('0.4')
+    )
+
+    # 3. Projektmenü -> "Leer (Zoll)", "Laser (Platte 3 mm)" und "Gehäuse"
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="empty-in"]').click(); p.wait(500)
+    in_st = p.ev("return { unit: Units.key(), bedOn: !!(App.doc.settings.printBed && App.doc.settings.printBed.enabled), visCount: Viewer.groups.printBed.children.length }")
+
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="laser"]').click(); p.wait(600)
+    warte_rechnen(p, 40)
+    las_st = p.ev("""const b = Actions.worldBox(App.doc.items[0].id);
+      return { n: App.doc.items.length, errs: App.errors.length, mat: App.doc.settings.material, dz: b ? Math.round((b.max.z - b.min.z)*100)/100 : 0 };""")
+
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="enclosure"]').click(); p.wait(800)
+    warte_rechnen(p, 40)
+    enc_st = p.ev("return { n: App.doc.items.length, names: App.doc.items.map(x=>x.name), errs: App.errors.length }")
+    ok3 = (
+        in_st['unit'] == 'in' and not in_st['bedOn'] and in_st['visCount'] == 0
+        and las_st['n'] == 1 and las_st['errs'] == 0 and las_st['mat'] == 'Pappel-Sperrholz' and abs(las_st['dz'] - 3) < 0.05
+        and enc_st['n'] == 2 and enc_st['errs'] == 0 and enc_st['names'] == ['Gehäuse', 'Deckel']
+    )
+
+    # 4. Eigene Vorlage speichern -> bleibt nach Neuladen in der Liste und öffnet sich wieder
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="print3d"]').click(); p.wait(500)
+    p.ev("""App.change('Vorlagenbau', d => {
+      d.params.push({ id: 'm_cust', name: 'MeinMass', expr: 42 });
+      d.items.push(Model.newItem('box', { w: 'MeinMass', d: 24, h: 12 }, { name: 'Halter' }));
+      d.settings.printBed = { enabled: true, x: 256, y: 256, z: 256, nozzle: 0.6 };
+    });""")
+    warte_rechnen(p, 30)
+    old_id = p.ev("return App.doc.id")
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-save-template').click(); p.wait(300)
+    p.pg.fill('#tpl-save-name', 'Bambu Halter')
+    p.pg.fill('#tpl-save-desc', 'Druckbett 256 mm mit 0,6-mm-Düse')
+    p.pg.locator('#tpl-save-ok').click(); p.wait(400)
+    saved_ok = p.ev("return Templates.customList().some(x => x.name === 'Bambu Halter')")
+
+    # Nach Neuladen steht sie noch in der Liste und öffnet sich als neues Projekt mit allen Daten
+    p.pg.reload()
+    p.pg.wait_for_function("() => !!(window.__masswerk && window.__masswerk.Kernel && window.__masswerk.Kernel.ready)", timeout=30000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=15000)
+    except Exception:
+        pass
+    p.wait(600)
+    p.ev("Start.newProject(true)")
+    p.wait(600)
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    cust_card = p.pg.locator('#tpl-custom-grid .tpl-card.custom', has_text='Bambu Halter')
+    in_list = cust_card.count() == 1
+    cust_card.first.click(); p.wait(700)
+    warte_rechnen(p, 40)
+    reopened = p.ev("""const b = App.doc.items[0] ? Actions.worldBox(App.doc.items[0].id) : null;
+      return {
+        id: App.doc.id,
+        name: App.doc.name,
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        hasParam: App.doc.params.some(x => x.name === 'MeinMass' && Number(x.expr) === 42),
+        bed: App.doc.settings.printBed,
+        dx: b ? Math.round((b.max.x - b.min.x)*100)/100 : 0,
+      };""")
+    ok4 = (
+        saved_ok and in_list
+        and reopened['id'] != old_id
+        and reopened['name'] == 'Bambu Halter'
+        and reopened['n'] == 1 and reopened['errs'] == 0
+        and reopened['hasParam']
+        and reopened['bed']['enabled'] is True and reopened['bed']['x'] == 256 and abs(reopened['bed']['nozzle'] - 0.6) < 1e-6
+        and abs(reopened['dx'] - 42) < 0.05
+    )
+
+    # 5. Auf Startseite gelistet, löschbar, Hilfetexte vorhanden
+    p.ev("Start.show()"); p.wait(300)
+    on_start = p.pg.locator('#start-custom-tpls .tpl-card.custom', has_text='Bambu Halter')
+    start_has = on_start.count() == 1
+    on_start.locator('.tpl-del').click(); p.wait(250)
+    p.pg.locator('.modal .btn.danger').click(); p.wait(300)
+    after_del = (
+        p.pg.locator('#start-custom-tpls .tpl-card.custom', has_text='Bambu Halter').count() == 0
+        and p.ev("return Templates.customList().length") == 0
+    )
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('projectTemplates', 'saveTemplate', 'printBed'))
+    ok5 = start_has and after_del and help_ok
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a051_absturz_wiederherstellen(p):
     import re
     p.empty()
@@ -11460,6 +11579,7 @@ TESTS = [
     ('[A-050] Genauigkeit & Nachkommastellen: Anzeige 0–4 (12,3456 → 12,346 / 12) / Winkel getrennt / Schilder, Maße & Panels gleich / gespeichertes Maß & Kern exakt / Neuladen & Hilfe', t_a050_genauigkeit),
     ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
     ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
+    ('[A-053] Projekt-Vorlagen: 3D-Druck Druckbett / Zoll, Laser, Gehäuse / Eigene Vorlage speichern & wieder öffnen / Löschen', t_a053_projekt_vorlagen),
     ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

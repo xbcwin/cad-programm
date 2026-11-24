@@ -118,7 +118,7 @@ Leitlinien:
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Absturz-Wiederherstellung (`#recovery-bar`, `restoreRecovery`, `dismissRecovery`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
+| `85-start.js` | Startseite, Projekt-Vorlagen (`Templates.PROJECT_LIST`, eigene Vorlagen in `tracery-vorlagen`, `Start.newProjectDialog`/`saveAsTemplate`/`openTemplate`), Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Absturz-Wiederherstellung (`#recovery-bar`, `restoreRecovery`, `dismissRecovery`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |

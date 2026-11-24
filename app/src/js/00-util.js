@@ -1617,6 +1617,21 @@ const HELP = {
   "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
   "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
  },
+ "projectTemplates": {
+  "tip": "Neues Projekt aus einer Vorlage starten (mm, Zoll, 3D-Druck, Laser, Gehäuse)",
+  "hilfe": "Öffnet die Auswahl für neue Projekte: Leer in Millimetern oder Zoll, 3D-Druck mit eingeblendetem Druckbett und 0,4-mm-Düse, Laser mit 3-mm-Platte, ein fertiges Gehäuse sowie deine selbst gespeicherten Vorlagen.",
+  "tipp": "Du kannst auch jedes eigene Projekt als Vorlage ablegen und später mit einem Klick wieder als Startpunkt öffnen."
+ },
+ "saveTemplate": {
+  "tip": "Aktuelles Projekt lokal als eigene Vorlage speichern",
+  "hilfe": "Speichert den aktuellen Stand samt Maßen, Einheiten, Material und Druckbett-Einstellung als eigene Vorlage in diesem Browser. Sie erscheint danach direkt unter „Neues Projekt“ und auf der Startseite.",
+  "tipp": "Ideal für wiederkehrende Halterungen, eigene Druckerprofile oder Gehäuse-Grundformen."
+ },
+ "printBed": {
+  "tip": "Druckbett-Größe im 3D-Bild zeigen und Düsendurchmesser merken",
+  "hilfe": "Zeichnet den Bauraum deines 3D-Druckers als Rahmen auf der Arbeitsfläche ein und prüft, ob das Modell noch auf das Druckbett passt. Außerdem wird der Düsendurchmesser für Wandstärken gespeichert.",
+  "tipp": "Die Vorlage „3D-Druck“ aktiviert das Druckbett automatisch mit 220 × 220 × 250 mm und 0,4-mm-Düse."
+ },
  "crashRecovery": {
   "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
   "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",

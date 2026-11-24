@@ -262,7 +262,8 @@ const Commands = (() => {
     add('toolbar-customize', 'Werkzeugleiste anpassen', 'sliders', 'werkzeugleiste leiste anpassen favoriten stern sortieren zurücksetzen', () => Toolbar.dialog(), { group: 'Ansicht' });
     add('settings-precision', 'Genauigkeit & Nachkommastellen einstellen', 'sliders', 'genauigkeit nachkommastellen dezimalstellen winkel rundung anzeige', () => ViewPrefs.dialog('general'), { group: 'Ansicht' });
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
-    add('new', 'Neues Projekt', 'newfile', 'neu leer anfangen', () => Start.newProject(), { group: 'Projekt' });
+    add('new', 'Neues Projekt', 'newfile', 'neu leer vorlage vorlagen zoll 3d-druck laser gehäuse anfangen', () => Start.newProjectDialog(), { group: 'Projekt' });
+    add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });
     add('open', 'Projekt öffnen', 'folder', 'laden datei öffnen', () => Start.openFile(), { group: 'Projekt' });
     add('loft', 'Übergang (Loft) aus gewählten Skizzenkörpern', 'loft', 'loft übergang profile nase verbinden spitze', () => Actions.loft(), { group: 'Bearbeiten', needSel: true });
     add('loft-tip', 'Zur Spitze zusammenlaufen lassen', 'loft', 'spitze kegel nase verlängern zuspitzen', () => { if (App.sel.length === 1) Actions.loft([App.sel[0]], { tip: 10 }); }, { group: 'Bearbeiten', needSel: true });

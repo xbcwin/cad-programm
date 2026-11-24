@@ -17,6 +17,10 @@ const Print = (() => {
     if (!st) { out.push({ s: 'none', t: 'Noch leer', d: 'Füge einen Körper hinzu oder starte eine Skizze.' }); return out; }
     const errs = App.errors.length;
     if (errs) out.push({ s: 'warn', t: errs === 1 ? 'Ein Schritt hat ein Problem' : errs + ' Schritte haben Probleme', d: App.errors[0].message });
+    const pb = App.doc.settings && App.doc.settings.printBed;
+    if (pb && pb.enabled && (st.x > pb.x + 0.05 || st.y > pb.y + 0.05 || st.z > pb.z + 0.05)) {
+      out.push({ s: 'warn', t: 'Größer als das Druckbett', d: `Das Modell (${Units.fmtLen(st.x, 1)} × ${Units.fmtLen(st.y, 1)} × ${Units.fmtLen(st.z, 1)} ${Units.label()}) überschreitet den Bauraum (${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()}).` });
+    }
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
     if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
     return out;

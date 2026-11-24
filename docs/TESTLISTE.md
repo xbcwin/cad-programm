@@ -1863,6 +1863,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Layout & Hilfetexte**: `#coords`, `#status-sel`, `#status-unit`, `#status-calc` und `#ampel` liegen sauber nebeneinander im Bildbereich; `statusSel`, `statusUnit` und `statusCalc` sind in `werkzeug-hilfen.json` und `HELP` vorhanden.
 - [ ] **Von Hand**: Im Browser bei engem Fenster (< 1100 px), im Skizzen-Modus (Linien, Rechtecke, Mehrfach-Auswahl) und bei langen Neuberechnungen prüfen, dass sich die Felder in der Statusleiste nicht überdecken oder abschneiden.
 
+## Vorlagen für neue Projekte (Auto [A-053], BE-18)
+
+- [x] **Vorlagen-Auswahl bei „Neues Projekt“**: Startseite („Neues Projekt“), Projektmenü (`#pm-new-project`) und Befehlssuche öffnen `#new-proj-dialog` mit allen fünf Vorlagen (`empty-mm`, `empty-in`, `print3d`, `laser`, `enclosure`).
+- [x] **3D-Druck, Zoll, Laser & Gehäuse**: „3D-Druck“ aktiviert `doc.settings.printBed` (`220 × 220 × 250 mm`, Düse `0,4 mm`, Material `PLA`), zeigt den Bauraum-Rahmen im Viewer (`Viewer.groups.printBed`) und die Druckbett-Felder im Projekt-Panel; „Leer (Zoll)“ setzt Einheit `in`; „Laser (Platte 3 mm)“ erzeugt eine 3-mm-Platte; „Gehäuse“ legt Gehäuse und Deckel fehlerfrei an.
+- [x] **Eigene Vorlage speichern & wieder öffnen**: „Als Vorlage speichern …“ (`#pm-save-template`) sichert das aktuelle Projekt lokal unter `tracery-vorlagen`; nach Neuladen der Seite steht die Vorlage weiterhin im Dialog und auf der Startseite und öffnet sich als neues Projekt mit neuer ID, Maßen und Druckbett-Einstellung.
+- [x] **Löschen & Hilfetexte**: Eigene Vorlagen lassen sich über das Papierkorb-Symbol (`.tpl-del`) mit Bestätigung wieder entfernen; `projectTemplates`, `saveTemplate` und `printBed` liegen in `werkzeug-hilfen.json` und `HELP`.
+- [ ] **Von Hand**: Im Browser alle fünf eingebauten Vorlagen einmal durchklicken und prüfen, ob der 3D-Druckbett-Rahmen im hellen und dunklen Design gut sichtbar ist, ohne beim Klicken auf Modelle zu stören.
+
 ## Wiederherstellen nach Absturz (Auto [A-051], BE-15)
 
 - [x] **Meldung nach Absturz / Neuladen ohne Speichern**: Projekt ändern und die Seite ohne Speichern neu laden zeigt `#recovery-bar` mit „Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?“, Projektname und Uhrzeit.
