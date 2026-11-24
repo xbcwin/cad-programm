@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -60,7 +60,7 @@ const Handles = (() => {
       defs.push({ ax: 'x', dir: [1, 0, 0], p: [x1, cy, z0], param: map.x }, { ax: 'x', dir: [-1, 0, 0], p: [x0, cy, z0], param: map.x });
       defs.push({ ax: 'y', dir: [0, 1, 0], p: [cx, y1, z0], param: map.y }, { ax: 'y', dir: [0, -1, 0], p: [cx, y0, z0], param: map.y });
       defs.push({ ax: 'z', dir: [0, 0, 1], p: [cx, cy, z1], param: map.z });
-    } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
+    } else if (it.kind === 'extrude' && it.p && it.p.sketch && !(it.p.extent === 'toNext' || it.p.extent === 'toFace' || it.p.thru)) {
       const pl = it.p.sketch.plane; const n = new THREE.Vector3(...pl.n).normalize();
       const dirSign = it.p.dir === 'reverse' ? -1 : 1;
       const ents = Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents;
@@ -645,7 +645,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
     if (!top || top.locked || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
@@ -806,7 +806,7 @@ const Interact = (() => {
     let items;
     if (top) {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
-      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep') && it.p && it.p.sketch;
+      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib') && it.p && it.p.sketch;
       items = [
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
@@ -832,7 +832,8 @@ const Interact = (() => {
         { icon: 'trash', label: T('common.delete'), kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
       ];
     } else {
-      const hidden = App.doc.items.filter((x) => x.hidden).length;
+      let hidden = App.doc.items.filter((x) => x.hidden).length;
+      Model.walk(App.doc.items, (x) => { if (!x.hidden && x.bodies) hidden += x.bodies.filter((b) => b && b.hidden).length; });
       items = [
         { icon: 'eye', label: hidden ? T('menu.ctx.showAllCount', { n: hidden }) : T('menu.ctx.showAll'), id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
         { icon: 'pointer', label: T('menu.ctx.selectAll'), kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
@@ -904,7 +905,7 @@ const Interact = (() => {
     // Doppelklick auf einen Skizzenkörper: Skizze bearbeiten
     const id = ctxChildAt(hit, e.clientX, e.clientY) || hit.id;
     const f = Model.find(App.doc, id);
-    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
+    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
     // Doppelklick auf eine ebene Fläche: gleich darauf zeichnen
     const r = App.results.get(hit.id); const info = r && r.data && r.data.faces && hit.faceIdx >= 0 ? r.data.faces[hit.faceIdx] : null;
     if (info && info.t === 'PLANE' && info.n && App.doc.items.some((x) => x.id === hit.id)) { Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null }); return; }

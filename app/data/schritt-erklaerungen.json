@@ -199,5 +199,10 @@
     "was": "Macht aus einer gewählten Körperfläche eine Platte mit fester Dicke – nach außen, innen oder mittig.",
     "wozu": "Damit verstärkst du gezielt eine Wand, setzt eine Deckplatte auf oder erzeugst ein passendes Gegenstück als eigenen Körper.",
     "achtung": "Wenn du nach innen aufdickst und es sichtbar sein soll, wähle „Eigene Platte“ oder „Vom Körper abziehen“."
+  },
+  "rib": {
+    "was": "Zieht eine offene Linie aus einer Skizze mit Dicke bis zu den Wänden des Zielkörpers und verschmilzt sie als Versteifungs-Rippe damit.",
+    "wozu": "Ideal für stabile Gehäuse-Stege und Winkel-Stützen – ganz ohne die Umrisse genau an runde oder schräge Wände anpassen zu müssen.",
+    "achtung": "Prüfe bei Fehlern, ob die Linie in Richtung des Körpers zeigt, oder schalte auf „Richtung umkehren“ bzw. zwischen „Senkrecht“ und „In der Skizzenebene“ um."
   }
 }

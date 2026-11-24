@@ -1641,6 +1641,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **CFF/OTF-Hinweis & Hilfe**: Eine CFF/OTF-Datei meldet „noch nicht unterstützt“ ohne das Projekt zu verändern; Hilfetext `loadFont` vorhanden.
 - [ ] **Von Hand**: Im Browser eine dekorative TrueType-Schrift vom eigenen Rechner auf einem Schild im Bogen und entlang einer Kurve testen sowie die lesbare Schrift-Auswahl nach „In Kurven umwandeln“ prüfen.
 
+## Hochziehen bis Fläche (Auto [A-029])
+
+- [x] **Bis zur nächsten Fläche (15 → 20 mm)**: Kreis-Skizze auf Platte mit „Bis zur nächsten Fläche“ zieht exakt 15 mm bis zum darüberliegenden Quader hoch (`App.resolvedDist` = 15); Verschieben des Quaders um 5 mm lässt die Höhe automatisch auf 20 mm mitwachsen.
+- [x] **Verschieben als Schritt (`transform`)**: Ein `transform`-Schritt (`dz: 5`) am Zielkörper führt die Höhe sofort auf 25 mm nach.
+- [x] **Bis zu gewählter Fläche (Klick im 3D & Größenänderung)**: „Bis zu gewählter Fläche“ per Klick auf die Oberseite des Quaders zieht exakt bis dorthin hoch und wächst mit, wenn sich die Höhe des Quaders ändert; Bezug erscheint unter `Model.dependencies`.
+- [x] **Formschritt mit Modus, schräge Fläche, Rückgängig & Hilfe**: Vereinigen (`join`) und Abziehen (`cut`) mit `toNext`, schräge Zielfläche (gedrehter Quader), Wechsel zurück zu fester Höhe mit Rückgängig sowie Hilfetext `extrudeToFace` geprüft.
+- [ ] **Von Hand**: Interaktives Überfahren und Anklicken einer gekrümmten Fläche (Zylinder/Kugel) und einer Bezugsebene beim „Bis zu gewählter Fläche“-Hochziehen prüfen.
+
 ## Volltest-Reparatur (Auto [F-11240211])
 
 - [x] **Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation**: Bei überfälligem `camAnim` während `Sketch.render()`/`Sketch.setTool()` entstehen genau zwei sichtbare, nicht überlappende `.skdim`-Schildchen (sofort und nach dem verzögerten `camera`-Event).
@@ -1656,6 +1664,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export ab eigenem Nullpunkt (STEP, STL, 3MF)**: Auswahl im Export-Dialog (`#ex-csys`) liefert STL-, 3MF- und wieder eingelesene STEP-Dateien mit Hüllmaßen ab `(0 | 0 | 0)` bis `(40 | 30 | 10)` bzw. `(30 | 40 | 10)` im gedrehten Koordinatensystem; Hilfetexte (`datumPoint`, `datumCsys`) und Befehle sind vorhanden.
 - [ ] **Von Hand**: Interaktives Setzen von Bezugspunkten und Koordinatensystem im 3D-Bild über die Skizzen-/Bezugsdialoge und Kontextleiste testen sowie die exportierte STEP-/3MF-Datei in einem Slicer oder CAD-Programm öffnen.
 
+## Rippe (Auto [A-031])
+
+- [x] **Offene Schale mit diagonaler Rippe**: In einer 40×40×20-mm-Schale (2 mm Wandstärke) wird eine kürzere diagonale Skizzenlinie (`[-10,-10]` bis `[10,10]`) mit 2 mm Dicke ohne Lücke bis zu den Seitenwänden und zum Boden verlängert und zu einem einzigen Körper vereinigt (`count == 1`, Hüllmaße unverändert).
+- [x] **Einseitig & Formel für Dicke**: Umschalten zwischen „Mittig“, „Einseitig (Seite 1)“ und „Einseitig (Seite 2)“ sowie Steuern der Dicke über ein benanntes Maß (`Rippe`) aktualisieren den Körper exakt.
+- [x] **Optionale Schräge**: Eine Entformungsschräge (5°) verbreitert die Rippe zum Boden hin ohne Überstand über die Außenwände.
+- [x] **Zeitleiste, Skizze bearbeiten, Stützrippe & Hilfe**: Unterdrücken, Marker zurückrollen, Skizze bearbeiten (`Sketch.editItem`), Stützrippe in der Skizzenebene (`dir: 'parallel'`) am L-Winkel, Bezüge (`Model.dependencies`), Erklärung (`Explain.local`), Befehl `rib` und Hilfetext `werkzeug-hilfen.json` geprüft.
+- [ ] **Von Hand**: Rippe an einer runden Dose (zylindrische Außenwand) und über mehrere gebogene Linien/Splines im Browser zeichnen und die Live-Vorschau im 3D-Bild prüfen.
+
 ## Drehen mit Winkel und bis Fläche (Auto [A-030])
 
 - [x] **90°-Drehung**: Rechteck neben der Y-Achse um 90° gedreht ergibt exakt ein Viertel des vollen 360°-Volumens (±1 %).
@@ -1664,6 +1680,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Bis zu gewählter Fläche & Nachführen**: Drehen bis zu einer ebenen Körperfläche (radial und versetzt) sowie bis zu einer 60°-Bezugsebene trifft exakt; Richtungsumkehr und automatisches Nachführen beim Verschieben des Zielkörpers funktionieren.
 - [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
+
+## Körper-Liste im Teil (Auto [A-033])
+
+- [x] **Körper (n) im Verlauf**: Ein einfacher Quader zeigt keine Liste; ein Teil mit zwei getrennten Körpern zeigt unter seinem Schritt „Körper (2)“ mit beiden Einträgen.
+- [x] **Umbenennen und Färben**: Beide Körper lassen sich per Stift-Knopf und Doppelklick umbenennen sowie über das Farbfeld einfärben (`vertexColors`, getrennte Farben im 3D-Bild).
+- [x] **Ein- und Ausblenden im 3D-Bild**: Ausblenden entfernt die Dreiecke und Kanten des Körpers aus Ansicht und Picking (`Viewer.pick` trifft nur noch den sichtbaren Körper), mit Rückgängig/Wiederholen.
+- [x] **Projektdatei und Export**: Namen, Farben und Sichtbarkeit bleiben in der Projektdatei und nach Neuladen erhalten; ausgeblendete Körper fehlen im Export, und „Jeder Körper als eigene Datei“ übernimmt die Körpernamen und Farben in STL und 3MF (`bodyList`-Hilfe vorhanden).
+- [ ] **Von Hand**: Im Browser bei einem geteilten Körper oder einer mehrteiligen Skizze per Maus über die Körper-Zeilen fahren (Vorschau-Markierung prüfen) und Rechtsklick-Menü („Nur diesen Körper zeigen“, „Alle Körper einblenden“) testen.
 
 ## Fläche aufdicken & Körper skalieren (Auto [A-032])
 

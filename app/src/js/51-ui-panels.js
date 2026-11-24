@@ -1,6 +1,7 @@
 // ================= Oberfläche: Leisten, Verlauf, Einstellungen =================
 const Panels = (() => {
   const expanded = new Set();
+  const collapsedBodies = new Set();
   let leftTab = 'tree';
   let flyout = null;
 
@@ -145,10 +146,14 @@ const Panels = (() => {
   const TFKINDS = [['all', 'Alle'], ['solid', 'Körper'], ['hole', 'Löcher'], ['hidden', 'Ausgeblendet'], ['err', 'Mit Fehler'], ['note', 'Mit Notiz'], ['ai', 'Von der KI']];
   function treeMatch(it) {
     const q = treeFilter.trim().toLowerCase();
-    if (q) { const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || ''; if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q))) return false; }
+    if (q) {
+      const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || '';
+      const bodyHit = (it.bodies || []).some((b) => b && (b.name || '').toLowerCase().includes(q));
+      if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q) || bodyHit)) return false;
+    }
     if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
     if (treeKind === 'hole') return it.role === 'hole';
-    if (treeKind === 'hidden') return !!it.hidden;
+    if (treeKind === 'hidden') return !!it.hidden || (it.bodies || []).some((b) => b && b.hidden);
     if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
     if (treeKind === 'note') return !!it.note;
     if (treeKind === 'ai') return !!it.ai;
@@ -162,6 +167,85 @@ const Panels = (() => {
     const sel = h('select', { id: 'tree-kind', 'aria-label': 'Nur zeigen' }); for (const [k, l] of TFKINDS) sel.append(h('option', { value: k, ...(k === treeKind ? { selected: true } : {}) }, l));
     sel.onchange = () => { treeKind = sel.value; renderLeft(); };
     return h('div', { class: 'tree-filter', 'data-help': 'treeFilter' }, inp, sel);
+  }
+  function openBodyColorPop(anchor, itemId, bodyIdx, curColor, hasOwnColor) {
+    const box = h('div', { class: 'body-color-pop' });
+    box.append(h('div', { class: 'section-h' }, 'Körperfarbe'));
+    const row = h('div', { class: 'colors' });
+    for (const c of COLORS) {
+      const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === curColor ? 'true' : 'false', style: { background: c.c } });
+      b.onclick = () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: c.c }); };
+      row.append(b);
+    }
+    const free = h('input', { type: 'color', class: 'body-color-inp', value: /^#[0-9a-f]{6}$/i.test(curColor || '') ? curColor : '#2f9e91', 'aria-label': 'Eigene Farbe' });
+    free.addEventListener('change', () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: free.value.toLowerCase() }); });
+    row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+    box.append(row);
+    if (hasOwnColor) {
+      const rst = h('button', { type: 'button', class: 'btn ghost small body-color-reset' });
+      rst.innerHTML = icon('undo') + 'Farbe vom Teil';
+      rst.onclick = () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: null }); };
+      box.append(rst);
+    }
+    UI.pop(anchor, box);
+  }
+  async function renameBodyPrompt(itemId, bodyIdx, curName) {
+    const n = await UI.prompt('Körper umbenennen', 'Name', curName, 'Umbenennen');
+    if (n !== null) Actions.setBody(itemId, bodyIdx, { name: n.trim() || null });
+  }
+  function renderBodiesList(it) {
+    if (!App.doc.items.includes(it) || it.role === 'hole' || App.mergedInto(it.id)) return null;
+    const res = App.results.get(it.id);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || evalBodies.length < 2) return null;
+    const meta = Model.matchBodies(it.bodies, evalBodies);
+    const open = !collapsedBodies.has(it.id);
+    const wrap = h('div', { class: 'bodies-wrap', 'data-bodies-of': it.id, 'data-help': 'bodyList' });
+    const head = h('button', { type: 'button', class: 'bodies-head', 'aria-expanded': open ? 'true' : 'false' });
+    const chev = h('span', { class: 'tw' + (open ? ' open' : '') }); chev.innerHTML = icon('chevR');
+    head.append(chev, h('span', null, `Körper (${evalBodies.length})`));
+    head.onclick = (e) => { e.stopPropagation(); open ? collapsedBodies.add(it.id) : collapsedBodies.delete(it.id); renderLeft(); };
+    wrap.append(head);
+    if (!open) return wrap;
+    const list = h('div', { class: 'bodies-list' });
+    const anyHidden = meta.some((m) => m && m.hidden);
+    for (let bi = 0; bi < evalBodies.length; bi++) {
+      const mb = meta[bi];
+      const bName = (mb && mb.name) || `Körper ${bi + 1}`;
+      const ownCol = (mb && mb.color) || null;
+      const bCol = ownCol || it.color || '#2f9e91';
+      const hidden = !!(mb && mb.hidden);
+      const row = h('div', { class: 'body-row' + (hidden ? ' hidden-item' : ''), dataset: { item: it.id, body: String(bi) } });
+      const colBtn = h('button', { type: 'button', class: 'swatch body-color-btn', style: { background: bCol }, 'aria-label': 'Farbe ändern', 'data-tip': 'Farbe ändern' });
+      colBtn.onclick = (e) => { e.stopPropagation(); openBodyColorPop(colBtn, it.id, bi, bCol, !!ownCol); };
+      const nm = h('span', { class: 'nm', title: bName }, bName);
+      const acts = h('span', { class: 'acts' });
+      const ren = h('button', { type: 'button', class: 'body-rename', 'aria-label': 'Umbenennen', 'data-tip': 'Umbenennen' });
+      ren.innerHTML = icon('edit');
+      ren.onclick = (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); };
+      const eye = h('button', { type: 'button', class: 'body-eye', 'aria-label': hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': hidden ? 'Einblenden' : 'Ausblenden' });
+      eye.innerHTML = icon(hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); Actions.setBody(it.id, bi, { hidden: !hidden }); };
+      acts.append(ren, eye);
+      row.append(colBtn, nm, acts);
+      row.addEventListener('click', (e) => { e.stopPropagation(); App.select([it.id]); });
+      row.addEventListener('dblclick', (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'edit', label: 'Umbenennen', run: () => renameBodyPrompt(it.id, bi, bName) },
+          { icon: 'sliders', label: 'Farbe ändern', run: () => openBodyColorPop(colBtn, it.id, bi, bCol, !!ownCol) },
+          { icon: hidden ? 'eye' : 'eyeOff', label: hidden ? 'Einblenden' : 'Ausblenden', run: () => Actions.setBody(it.id, bi, { hidden: !hidden }) },
+          { icon: 'focusView', label: 'Nur diesen Körper zeigen', run: () => Actions.showOnlyBody(it.id, bi) },
+          ...(anyHidden ? [{ icon: 'eye', label: 'Alle Körper einblenden', run: () => Actions.showAllBodies(it.id) }] : []),
+        ]);
+      });
+      row.addEventListener('pointerenter', () => { if (!hidden) Viewer.highlightBody(it.id, bi); });
+      row.addEventListener('pointerleave', () => Viewer.highlightBody(null, null));
+      list.append(row);
+    }
+    wrap.append(list);
+    return wrap;
   }
   function renderTree(body) {
     const items = App.doc.items;
@@ -248,6 +332,8 @@ const Panels = (() => {
           moveInTree(dragId, it.id, mode); dragId = null;
         });
         li.append(row);
+        const bl = renderBodiesList(it);
+        if (bl) li.append(bl);
         if (expanded.has(it.id) || (show && it.kind === 'group')) {
           for (const fin of it.finishes || []) {
             const ferr = errs.find((x) => x.finishId === fin.id);
@@ -424,7 +510,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -575,8 +661,8 @@ const Panels = (() => {
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
-    if (idx < 0 || it.kind === 'group' || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || it.kind === 'group' || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
     const type = it.op ? it.op.type : 'new';
@@ -678,7 +764,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -687,7 +773,8 @@ const Panels = (() => {
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
-    if (!isMoveOnly) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
+    const isMergedStep = isMoveOnly || it.kind === 'rib';
+    if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
@@ -724,10 +811,58 @@ const Panels = (() => {
       const fl = h('div', { class: 'fields' });
       if (it.kind === 'extrude') {
         const cuts = it.role === 'hole' || (it.op && it.op.type === 'cut');
-        if (!it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
-        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']], onChange: (v) => setP('dir', v) }));
+        const ext = it.p.extent === 'toNext' || it.p.extent === 'toFace' ? it.p.extent : 'dist';
+        const extField = UI.selectField({
+          id: 'p-extent',
+          label: 'Bis',
+          value: ext,
+          options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            let pickAfter = false;
+            App.change(v === 'dist' ? 'Feste Höhe' : v === 'toNext' ? 'Bis zur nächsten Fläche' : 'Bis zu gewählter Fläche', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              if (v === 'dist') {
+                const rd = App.resolvedDist(it.id);
+                if (rd != null) T.p.dist = round(rd, 4);
+                delete T.p.extent; delete T.p.toFace;
+              } else {
+                T.p.extent = v;
+                delete T.p.thru;
+                if (T.p.dir === 'both') T.p.dir = 'normal';
+                if (v === 'toNext') delete T.p.toFace;
+                else if (!T.p.toFace) pickAfter = true;
+              }
+            });
+            if (pickAfter) Features.pickExtrudeFace(it.id);
+          },
+        });
+        extField.setAttribute('data-help', 'extrudeToFace');
+        fl.append(extField);
+        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        const dirOpts = ext === 'dist'
+          ? [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']]
+          : [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['two', 'Beidseitig (Seite 2 fest)']];
+        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: dirOpts, onChange: (v) => setP('dir', v) }));
         if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
-        if (cuts || it.p.thru) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext === 'dist' && (cuts || it.p.thru)) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext !== 'dist') {
+          const rd = App.resolvedDist(it.id);
+          const info = App.resolvedOf(it.id);
+          const tgtIt = info && info.targetId ? Model.find(App.doc, info.targetId) : null;
+          const tgtName = ext === 'toFace' && it.p.toFace && it.p.toFace.label ? it.p.toFace.label : tgtIt ? Model.label(tgtIt.item) : null;
+          const txt = ext === 'toFace' && !it.p.toFace
+            ? 'Noch keine Zielfläche gewählt – klick „Fläche im Bild wählen“.'
+            : rd != null
+              ? `Aktuelle Höhe: ${Units.fmtLenU(rd, 2)}${tgtName ? ` (bis ${tgtName})` : ''}`
+              : 'Wird bis zur Zielfläche berechnet …';
+          fl.append(h('div', { class: 'hint-box', id: 'p-ext-info' }, txt));
+          if (ext === 'toFace') {
+            const pb = h('button', { type: 'button', class: 'btn', id: 'p-pick-face' });
+            pb.innerHTML = icon('pointer') + (it.p.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+            pb.onclick = () => Features.pickExtrudeFace(it.id);
+            fl.append(pb);
+          }
+        }
         const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
@@ -939,6 +1074,9 @@ const Panels = (() => {
     } else if (it.kind === 'thicken') {
       sec.firstChild.textContent = 'Aufdicken';
       Features.renderThicken(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'rib') {
+      sec.firstChild.textContent = 'Rippe';
+      Features.renderRib(it, sec, setP); w.append(sec);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -949,7 +1087,7 @@ const Panels = (() => {
     }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
-    if (!isMoveOnly && it.kind !== 'transform') {
+    if (!isMergedStep && it.kind !== 'transform') {
       const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
       const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
@@ -967,7 +1105,7 @@ const Panels = (() => {
       w.append(pos);
     }
     // Kanten
-    if (it.role !== 'hole' && !isMoveOnly) {
+    if (it.role !== 'hole' && !isMergedStep) {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
@@ -1160,6 +1298,17 @@ const Panels = (() => {
       placeCtx();
       return;
     }
+    if (items.length === 1 && items[0].item.kind === 'rib') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, 'Rippe'));
+      b('edit', 'Skizze bearbeiten', () => Sketch.editItem(it.id), 'accent', 'Skizze dieser Rippe bearbeiten');
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      return;
+    }
     const face = Actions.selectedFace();
     // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
     const valLbl = (txt, val, unit, tip) => {
@@ -1205,6 +1354,7 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
         b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
+        b('rib', 'Rippe', () => Features.startRib(face), 'pro', 'Offene Linie als Rippe bis zu den Wänden ziehen').dataset.help = 'rib';
       }
       b('section', T('ctx.sectionHere'), () => Views.section(true, { face }), '', T('ctx.sectionHereTip'), true);
       if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);

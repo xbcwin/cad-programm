@@ -8,7 +8,7 @@ const Viewer = (() => {
   const groups = {};
   const raycaster = new THREE.Raycaster();
   const theme = {};
-  let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
+  let hoverFace = null, hoverEdge = null, hoverBody = null, selFace = null, selEdges = [];
   let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
@@ -429,7 +429,81 @@ const Viewer = (() => {
     n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
     if (n.edges) { n.edges.renderOrder = xr ? 5 : 0; n.edges.visible = disp !== 'shaded' || sel || n.role === 'hole'; if (disp === 'wire' && n.role !== 'hole' && !sel) { n.edges.material.opacity = 0.9; n.edges.material.color = new THREE.Color(theme.edge).lerp(new THREE.Color(n.color || '#2f9e91'), 0.5); } }
     if (disp === 'wire' || disp === 'hidden') n.mesh.castShadow = false;
+    if (n.allBodiesHidden) { n.mesh.visible = false; if (n.edges) n.edges.visible = false; }
+    else n.mesh.visible = true;
     needsRender = true;
+  }
+  function applyBodies(n) {
+    const eb = n.data && n.data.bodies;
+    if (!eb || eb.length < 2) {
+      n.hiddenBodies = null; n.bodyColors = null;
+      if (n._filtered) {
+        n.mesh.geometry.setIndex(new THREE.BufferAttribute(n.data.triangles, 1));
+        n.edges.geometry.setAttribute('position', new THREE.BufferAttribute(n.data.lines, 3));
+        n.mesh.geometry.computeBoundingBox(); n.mesh.geometry.computeBoundingSphere();
+        n.edges.geometry.computeBoundingSphere();
+        n._filtered = false;
+      }
+      n.visFaceGroups = null; n.visEdgeGroups = null; n.visLines = null; n.allBodiesHidden = false;
+      return;
+    }
+    const meta = Model.matchBodies(n.bodies, eb);
+    const hiddenBodies = new Set(), bodyColors = new Map();
+    for (let bi = 0; bi < eb.length; bi++) {
+      const mb = meta[bi];
+      if (!mb) continue;
+      if (mb.hidden) hiddenBodies.add(bi);
+      if (mb.color) bodyColors.set(bi, new THREE.Color(mb.color));
+    }
+    n.hiddenBodies = hiddenBodies;
+    n.bodyColors = bodyColors;
+    if (!hiddenBodies.size) {
+      if (n._filtered) {
+        n.mesh.geometry.setIndex(new THREE.BufferAttribute(n.data.triangles, 1));
+        n.edges.geometry.setAttribute('position', new THREE.BufferAttribute(n.data.lines, 3));
+        n.mesh.geometry.computeBoundingBox(); n.mesh.geometry.computeBoundingSphere();
+        n.edges.geometry.computeBoundingSphere();
+        n._filtered = false;
+      }
+      n.visFaceGroups = null; n.visEdgeGroups = null; n.visLines = null; n.allBodiesHidden = false;
+      return;
+    }
+    const tris = [], visFaceGroups = [];
+    for (const [start, count, fi] of n.data.faceGroups || []) {
+      if (fi >= 0 && n.data.faceBody && hiddenBodies.has(n.data.faceBody[fi])) continue;
+      const newStart = tris.length;
+      for (let k = start; k < start + count; k++) tris.push(n.data.triangles[k]);
+      visFaceGroups.push([newStart, count, fi]);
+    }
+    n.visFaceGroups = visFaceGroups;
+    n.allBodiesHidden = tris.length === 0;
+    n.mesh.geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+    const lines = [], visEdgeGroups = [];
+    for (const [start, count, ei] of n.data.edgeGroups || []) {
+      if (ei >= 0 && n.data.edgeBody && hiddenBodies.has(n.data.edgeBody[ei])) continue;
+      const newStart = lines.length / 3;
+      for (let k = start; k < start + count; k++) lines.push(n.data.lines[k * 3], n.data.lines[k * 3 + 1], n.data.lines[k * 3 + 2]);
+      visEdgeGroups.push([newStart, count, ei]);
+    }
+    const visLines = new Float32Array(lines);
+    n.visEdgeGroups = visEdgeGroups;
+    n.visLines = visLines;
+    n.edges.geometry.setAttribute('position', new THREE.BufferAttribute(visLines, 3));
+    n.edges.geometry.computeBoundingSphere();
+    const box = n.mesh.geometry.boundingBox || (n.mesh.geometry.boundingBox = new THREE.Box3());
+    box.makeEmpty();
+    for (let bi = 0; bi < eb.length; bi++) {
+      if (hiddenBodies.has(bi) || !eb[bi].bbox) continue;
+      const b = eb[bi].bbox;
+      box.expandByPoint(new THREE.Vector3(b[0], b[1], b[2]));
+      box.expandByPoint(new THREE.Vector3(b[3], b[4], b[5]));
+    }
+    if (!n.mesh.geometry.boundingSphere) n.mesh.geometry.boundingSphere = new THREE.Sphere();
+    if (box.isEmpty()) n.mesh.geometry.boundingSphere.set(new THREE.Vector3(), 0);
+    else box.getBoundingSphere(n.mesh.geometry.boundingSphere);
+    n._filtered = true;
+    if (selFace && selFace.id === n.id && selFace.faceIdx >= 0 && n.data.faceBody && hiddenBodies.has(n.data.faceBody[selFace.faceIdx])) highlightFace('sel', null, null);
+    if (hoverBody && hoverBody.id === n.id && hiddenBodies.has(hoverBody.bodyIdx)) highlightBody(null, null);
   }
   // Farbe je Fläche: Ecken der Fläche bekommen ihre Farbe, der Rest die Farbe des Teils (Vertex-Farben)
   function faceIndexOf(n, fc) {
@@ -446,13 +520,17 @@ const Viewer = (() => {
   }
   function applyFaceColors(n) {
     const g = n.mesh.geometry, m = n.mesh.material;
-    if (!n.faceColors || !n.faceColors.length || n.role === 'hole' || !m || m.isMeshMatcapMaterial || !n.data.faceGroups) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
+    const hasFace = !!(n.faceColors && n.faceColors.length && n.data.faceGroups);
+    const hasBody = !!(n.bodyColors && n.bodyColors.size && n.data.faceBody && n.data.faceGroups);
+    if ((!hasFace && !hasBody) || n.role === 'hole' || !m || m.isMeshMatcapMaterial) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
     const base = m.color.clone(), cnt = g.getAttribute('position').count, arr = new Float32Array(cnt * 3);
     for (let i = 0; i < cnt; i++) { arr[i * 3] = base.r; arr[i * 3 + 1] = base.g; arr[i * 3 + 2] = base.b; }
-    const tri = g.index.array, map = new Map(); n.faceIdx = [];
-    for (const fc of n.faceColors) { const fi = faceIndexOf(n, fc); n.faceIdx.push(fi); if (fi >= 0) map.set(fi, new THREE.Color(fc.col)); }
+    const tri = n.data.triangles, map = new Map(); n.faceIdx = [];
+    if (hasFace) for (const fc of n.faceColors) { const fi = faceIndexOf(n, fc); n.faceIdx.push(fi); if (fi >= 0) map.set(fi, new THREE.Color(fc.col)); }
     for (const [start, count, fi] of n.data.faceGroups) {
-      const c = map.get(fi); if (!c) continue;
+      let c = map.get(fi);
+      if (!c && hasBody && fi >= 0) { const bi = n.data.faceBody[fi]; if (bi >= 0) c = n.bodyColors.get(bi); }
+      if (!c) continue;
       for (let k = start; k < start + count; k++) { const v = tri[k]; arr[v * 3] = c.r; arr[v * 3 + 1] = c.g; arr[v * 3 + 2] = c.b; }
     }
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
@@ -555,6 +633,7 @@ const Viewer = (() => {
     const op = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 0.82);
     for (const th of n.threads) {
       const fi = threadFaceIndex(n, th);
+      if (fi >= 0 && n.hiddenBodies && n.hiddenBodies.size && n.data.faceBody && n.hiddenBodies.has(n.data.faceBody[fi])) continue;
       const g = fi >= 0 ? cylinderGeomOf(n.data, fi) : (Array.isArray(th.axis) && th.axis.length >= 6 ? {
         o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
         t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
@@ -616,6 +695,7 @@ const Viewer = (() => {
     n.obj.matrixWorldNeedsUpdate = true;
     // Hervorhebungen dieses Teils wandern mit
     for (const f of [hoverFace, selFace]) if (f && f.id === n.id) f.mesh.matrix.copy(n.obj.matrix);
+    if (hoverBody && hoverBody.id === n.id) hoverBody.mesh.matrix.copy(n.obj.matrix);
     if (hoverEdge && hoverEdge.id === n.id) hoverEdge.line.matrix.copy(n.obj.matrix);
     for (const e of selEdges) if (e.id === n.id) e.line.matrix.copy(n.obj.matrix);
   }
@@ -640,9 +720,9 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, bodies: info.bodies || null, hiddenBodies: null, bodyColors: null, visFaceGroups: null, visEdgeGroups: null, visLines: null, allBodiesHidden: false, _filtered: false, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
-    nodes.set(id, n); styleNode(n);
+    nodes.set(id, n); applyBodies(n); styleNode(n);
     fitShadowSoon();
     needsRender = true;
     return n;
@@ -657,6 +737,7 @@ const Viewer = (() => {
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
     if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
+    if (info.bodies !== undefined && JSON.stringify(info.bodies) !== JSON.stringify(n.bodies)) { n.bodies = info.bodies; applyBodies(n); restyle = true; fitShadowSoon(); }
     if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
@@ -673,6 +754,7 @@ const Viewer = (() => {
     n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
     if (hoverFace && hoverFace.id === id) clearHover();
+    if (hoverBody && hoverBody.id === id) highlightBody(null, null);
     needsRender = true;
   }
   function setGhost(id, data, matrix) {
@@ -761,7 +843,7 @@ const Viewer = (() => {
   // Dreiecke eines Teils in Weltlage, dazu ein einfaches Raster, damit kurze Strahlen nur wenige Dreiecke prüfen
   function worldTris(n) {
     n.obj.updateMatrixWorld(true);
-    const P = n.mesh.geometry.getAttribute('position').array, T = n.data.triangles, M = n.mesh.matrixWorld, nt = Math.floor(T.length / 3);
+    const P = n.mesh.geometry.getAttribute('position').array, T = n.mesh.geometry.index ? n.mesh.geometry.index.array : n.data.triangles, M = n.mesh.matrixWorld, nt = Math.floor(T.length / 3);
     const W = new Float32Array(nt * 9), v = new THREE.Vector3();
     for (let i = 0; i < nt; i++) for (let k = 0; k < 3; k++) { v.fromArray(P, T[i * 3 + k] * 3).applyMatrix4(M); W[i * 9 + k * 3] = v.x; W[i * 9 + k * 3 + 1] = v.y; W[i * 9 + k * 3 + 2] = v.z; }
     return W;
@@ -803,7 +885,7 @@ const Viewer = (() => {
     const out = []; let area = 0, minT = Infinity;
     const c = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), e = new THREE.Vector3(), nrm = new THREE.Vector3();
     for (const n of nodes.values()) {
-      if (!n.obj.visible || n.role === 'hole' || !n.mesh || !n.data || !n.data.triangles || (only && !only.includes(n.id))) continue;
+      if (!n.obj.visible || n.allBodiesHidden || n.role === 'hole' || !n.mesh || !n.data || !n.data.triangles || (only && !only.includes(n.id))) continue;
       const W = worldTris(n), nt = W.length / 9;
       const box = new THREE.Box3(); for (let i = 0; i < W.length; i += 3) box.expandByPoint(c.set(W[i], W[i + 1], W[i + 2]));
       const G = triGrid(W, Math.max(limit, box.getSize(c).length() / 48));
@@ -898,6 +980,29 @@ const Viewer = (() => {
     if (which === 'hover') hoverFace = next; else selFace = next;
     needsRender = true;
   }
+  function highlightBody(id, bodyIdx) {
+    if (hoverBody && hoverBody.id === id && hoverBody.bodyIdx === bodyIdx) return;
+    if (hoverBody) { groups.overlay.remove(hoverBody.mesh); hoverBody.mesh.geometry.dispose(); hoverBody.mesh.material.dispose(); hoverBody = null; }
+    const n = nodes.get(id);
+    if (n && bodyIdx != null && bodyIdx >= 0 && n.data && n.data.faceBody && n.data.faceGroups && !(n.hiddenBodies && n.hiddenBodies.has(bodyIdx))) {
+      const tris = [];
+      for (const [start, count, fi] of n.data.faceGroups) {
+        if (fi >= 0 && n.data.faceBody[fi] === bodyIdx) {
+          for (let k = start; k < start + count; k++) tris.push(n.data.triangles[k]);
+        }
+      }
+      if (tris.length) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', n.mesh.geometry.getAttribute('position'));
+        geo.setAttribute('normal', n.mesh.geometry.getAttribute('normal'));
+        geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+        const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.accent), transparent: true, opacity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat); mesh.matrixAutoUpdate = false; mesh.matrix.copy(n.obj.matrix); mesh.renderOrder = 6;
+        groups.overlay.add(mesh); hoverBody = { id, bodyIdx, mesh };
+      }
+    }
+    needsRender = true;
+  }
   function highlightEdge(id, edgeIdx) {
     if (hoverEdge && hoverEdge.id === id && hoverEdge.edgeIdx === edgeIdx) return;
     if (hoverEdge) { groups.overlay.remove(hoverEdge.line); disposeFat(hoverEdge.line); hoverEdge = null; }
@@ -919,7 +1024,7 @@ const Viewer = (() => {
     }
     needsRender = true;
   }
-  function clearHover() { highlightFace('hover', null, null); highlightEdge(null, null); }
+  function clearHover() { highlightFace('hover', null, null); highlightEdge(null, null); highlightBody(null, null); }
 
   // ---------- Auswahl mit der Maus ----------
   const _ndc = new THREE.Vector2();
@@ -934,14 +1039,14 @@ const Viewer = (() => {
   // alle Teile entlang des Strahls, vorne zuerst (für „Wähle das dahinter“)
   function pickAll(cx, cy) {
     setRay(cx, cy);
-    const meshes = []; for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; meshes.push(n.mesh); }
+    const meshes = []; for (const n of nodes.values()) { if (!n.obj.visible || n.allBodiesHidden || n.ctxDim) continue; meshes.push(n.mesh); }
     let hits = raycaster.intersectObjects(meshes, false);
     if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
     const out = [], seen = new Set();
     for (const x of hits) {
       const n = nodes.get(x.object.userData.nodeId); if (!n) continue;
       const tri = x.faceIndex * 3; let faceIdx = -1;
-      for (const g of n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
+      for (const g of n.visFaceGroups || n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
       const key = n.id + ':' + faceIdx; if (seen.has(key)) continue; seen.add(key);
       out.push({ id: n.id, faceIdx, point: x.point.clone(), normal: x.face ? x.face.normal.clone().transformDirection(n.obj.matrixWorld) : null, distance: x.distance });
     }
@@ -950,7 +1055,7 @@ const Viewer = (() => {
   function pick(cx, cy, opts = {}) {
     setRay(cx, cy);
     const meshes = [];
-    for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
+    for (const n of nodes.values()) { if (!n.obj.visible || n.allBodiesHidden || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
     let hits = raycaster.intersectObjects(meshes, false);
     if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
     if (vis.xray && hits.length) {
@@ -963,7 +1068,7 @@ const Viewer = (() => {
       if (opts.noEdges) return null;
       let best = null;
       for (const n of nodes.values()) {
-        if (!n.obj.visible || n.ctxDim || (opts.solidsOnly && n.role === 'hole') || (opts.exclude && opts.exclude.has(n.id))) continue;
+        if (!n.obj.visible || n.allBodiesHidden || n.ctxDim || (opts.solidsOnly && n.role === 'hole') || (opts.exclude && opts.exclude.has(n.id))) continue;
         const e = edgeNear(n, cx, cy, Infinity, opts.edgePx || 6);
         if (e && (!best || e.px < best.e.px)) best = { n, e };
       }
@@ -977,7 +1082,7 @@ const Viewer = (() => {
     const n = nodes.get(hit.object.userData.nodeId);
     const tri = hit.faceIndex * 3;
     let faceIdx = -1;
-    for (const g of n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
+    for (const g of n.visFaceGroups || n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
     const normal = hit.face ? hit.face.normal.clone().transformDirection(n.obj.matrixWorld) : null;
     const res = { id: n.id, point: hit.point.clone(), faceIdx, normal, distance: hit.distance, node: n };
     if (!opts.noEdges) {
@@ -988,13 +1093,13 @@ const Viewer = (() => {
   }
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _onRay = new THREE.Vector3(), _onSeg = new THREE.Vector3();
   function edgeNear(n, cx, cy, hitDist, maxPx = 7) {
-    const r = rect(); const lines = n.data.lines; const M = n.obj.matrixWorld;
+    const r = rect(); const lines = n.visLines || n.data.lines; const M = n.obj.matrixWorld;
     const px = cx - r.left, py = cy - r.top;
     let best = null, bd = maxPx;
     const C = cam(); const toS = (v) => { const p = v.clone().project(C); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height, p.z]; };
     const camPos = camera.position;
     const tol = ortho ? Math.max(0.3, (8 * orthoHalfH()) / (container.clientHeight || 1)) : Math.max(0.3, (isFinite(hitDist) ? hitDist : 0) * 0.004);
-    for (const g of n.data.edgeGroups) {
+    for (const g of n.visEdgeGroups || n.data.edgeGroups) {
       for (let i = g[0]; i < g[0] + g[1]; i += 2) {
         _a.set(lines[i * 3], lines[i * 3 + 1], lines[i * 3 + 2]).applyMatrix4(M);
         _b.set(lines[i * 3 + 3], lines[i * 3 + 4], lines[i * 3 + 5]).applyMatrix4(M);
@@ -1051,7 +1156,7 @@ const Viewer = (() => {
     const box = new THREE.Box3();
     for (const n of nodes.values()) {
       if (ids && !ids.includes(n.id)) continue;
-      if (!n.obj.visible) continue;
+      if (!n.obj.visible || n.allBodiesHidden) continue;
       const b = n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix);
       box.union(b);
     }
@@ -1237,7 +1342,7 @@ const Viewer = (() => {
   // Schattenriss: Fläche (mm²), die die Teile aus Blickrichtung dir verdecken – z. B. die Stirnfläche im Fahrtwind.
   // Gerechnet durch Pixelzählen in einem eigenen Bild (orthografisch), unabhängig von der Kamera.
   function silhouette(ids, dir, res = 1024) {
-    const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh);
+    const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh && !n.allBodiesHidden);
     if (!show.length) return { area: 0, px: 0 };
     const d = new THREE.Vector3(...dir).normalize();
     groups.nodes.updateMatrixWorld(true);
@@ -1290,7 +1395,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },

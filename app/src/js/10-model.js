@@ -29,6 +29,7 @@ const KINDS = {
   transform: { label: 'Verschieben/Drehen', params: [] },
   scale: { label: 'Skalieren', params: [] },
   thicken: { label: 'Aufdicken', params: [] },
+  rib: { label: 'Rippe', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -92,6 +93,7 @@ const Model = (() => {
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
   const D2R = Math.PI / 180;
   let curV = {};
+  let curDoc = null;
   function useVars(v) { curV = v || {}; }
   const tv = (x) => (typeof x === 'number' ? x : x == null || x === '' ? 0 : num(x, curV, 0));
   function tnum(it, k) { return tv((it.t || {})[k]); }
@@ -222,9 +224,11 @@ const Model = (() => {
     walk(doc.items, (it) => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
+      if (it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) out.push({ from: me, to: top(it.p.toFace.id), what: 'hochgezogen bis Fläche von' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
+      if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -289,6 +293,7 @@ const Model = (() => {
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
+    else if (it.kind === 'rib') o.p = ribParams(it, V);
     else if (it.kind === 'import') {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -326,6 +331,7 @@ const Model = (() => {
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
+    if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
     return o;
   }
   function sketchParams(it, V) {
@@ -348,8 +354,20 @@ const Model = (() => {
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
-      // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
-      if (p.thru) { out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; } }
+      if (p.extent === 'toNext' || p.extent === 'toFace') {
+        out.extent = p.extent;
+        if (p.extent === 'toFace' && p.toFace) {
+          if (p.toFace.datumId) {
+            const dm = typeof Datums !== 'undefined' ? Datums.find(p.toFace.datumId, curDoc || App.doc) : null;
+            out.toFace = dm && dm.plane ? { datumId: p.toFace.datumId, plane: { o: dm.plane.o, n: dm.plane.n } } : { datumId: p.toFace.datumId, missing: true };
+          } else {
+            out.toFace = { id: p.toFace.id, idx: p.toFace.idx, t: p.toFace.t, c: p.toFace.c, n: p.toFace.n, rel: p.toFace.rel, wc: p.toFace.wc, wn: p.toFace.wn };
+          }
+        }
+      } else if (p.thru) {
+        // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
+        out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; }
+      }
     }
     else {
       out.dir = p.dir || 'normal';
@@ -365,6 +383,23 @@ const Model = (() => {
       else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
     }
     return out;
+  }
+  function ribParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+    return {
+      target: p.target || null,
+      plane,
+      chains,
+      thickness: num(p.thickness, V, 2),
+      side: p.side === 'side1' || p.side === 'side2' ? p.side : 'center',
+      dir: p.dir === 'parallel' ? 'parallel' : 'normal',
+      flip: !!p.flip,
+      depth: Math.max(0, num(p.depth, V, 0)),
+      draft: num(p.draft, V, 0),
+    };
   }
   // Muster entlang Kurve: Lage und Drehung jeder Kopie aus der Kurve der Gruppe (p.sketch) berechnen.
   // Die Kopie k wird um (Punkt k − Punkt 0) verschoben; mit „ausrichten“ dreht sie sich mit der Kurve.
@@ -648,10 +683,10 @@ const Model = (() => {
   function kernelScene(doc, extra = [], peek = null) {
     // Lagen mit Formeln (z. B. x = Achsabstand/2) mit den Maßen DIESES Projektstands auflösen – wichtig für Versionen und Varianten
     if (doc && doc.fonts && doc.fonts.length && typeof SK !== 'undefined' && SK.ensureFonts) SK.ensureFonts(doc.fonts);
-    const { v } = vars(doc); const prev = curV; curV = v;
+    const { v } = vars(doc); const prev = curV, prevDoc = curDoc; curV = v; curDoc = doc;
     // peek = Vorschau der Zeitleiste: nur die ersten k Schritte rechnen, ohne den Marker zu verschieben
     let act = activeItems(doc); if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
-    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; }
+    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; curDoc = prevDoc; }
   }
 
   // ---------- Größen ----------
@@ -694,7 +729,15 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
-      case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      case 'extrude': {
+        if (p.extent === 'toNext' || p.extent === 'toFace') {
+          const rd = typeof App !== 'undefined' && App.resolvedDist ? App.resolvedDist(it.id) : null;
+          const base = p.extent === 'toNext' ? 'bis nächste Fläche' : 'bis Fläche';
+          const lenTxt = rd != null ? ` (${f(rd)}${u})` : '';
+          return p.thin ? `${base}${lenTxt} · Wand ${f(p.wall || 2)}${u}` : `${base}${lenTxt}`;
+        }
+        return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      }
       case 'revolve': {
         const dir = (it.p && it.p.dir) || 'normal';
         if (dir === 'toFace') return it.p && it.p.toFace && it.p.toFace.name ? `bis „${it.p.toFace.name}“` : 'bis Fläche';
@@ -709,6 +752,11 @@ const Model = (() => {
         for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
         const s = parts.length ? parts.join(' ') : '0 mm';
         return p.copy ? 'Kopie · ' + s : s;
+      }
+      case 'rib': {
+        const t = f(p.thickness ?? 2);
+        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
+        return `${t}${u} dick${dr}`;
       }
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
@@ -741,8 +789,53 @@ const Model = (() => {
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
-    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
+    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
+  }
+  function matchBodies(saved, evalBodies) {
+    const n = (evalBodies && evalBodies.length) || 0;
+    const out = new Array(n).fill(null);
+    if (!n || !Array.isArray(saved) || !saved.length) return out;
+    const usedS = new Set(), usedE = new Set();
+    const pairs = [];
+    for (let si = 0; si < saved.length; si++) {
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        const ec = evalBodies[ei].c;
+        const d = Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]);
+        if (d < 0.5) pairs.push({ d, si, ei });
+      }
+    }
+    pairs.sort((a, b) => a.d - b.d);
+    for (const p of pairs) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (s && typeof s.idx === 'number' && s.idx >= 0 && s.idx < n && !usedE.has(s.idx)) {
+        usedS.add(si); usedE.add(s.idx); out[s.idx] = s;
+      }
+    }
+    const rem = [];
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        if (usedE.has(ei)) continue;
+        const ec = evalBodies[ei].c;
+        rem.push({ d: Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]), si, ei });
+      }
+    }
+    rem.sort((a, b) => a.d - b.d);
+    for (const p of rem) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    return out;
   }
   // Drehkörper-Bezugssystem (Achse, äußerster Radius und Bogen-Mitte in lokalen Koordinaten)
   function revolveFrame(p, V) {
@@ -822,6 +915,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

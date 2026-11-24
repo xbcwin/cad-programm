@@ -756,6 +756,26 @@ body:not(.simple) .simple-only{display:none!important}
 .tree-filter select{font:12.5px var(--font);padding:5px 4px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);max-width:42%}
 .tree-count{font-size:12px;color:var(--muted);margin:-2px 0 6px 2px}
 
+/* Körper-Liste im Teil (KP-09) */
+.bodies-wrap{margin:2px 6px 4px 28px}
+.bodies-head{display:flex;align-items:center;gap:4px;border:0;background:transparent;padding:2px 4px;font:600 11.5px/1.3 var(--font);color:var(--muted);cursor:pointer;border-radius:4px}
+.bodies-head:hover{color:var(--ink);background:var(--surface-2)}
+.bodies-head .tw{display:inline-grid;place-items:center;width:12px;height:12px}
+.bodies-head .tw svg{width:10px;height:10px;transition:transform .15s}
+.bodies-head .tw.open svg{transform:rotate(90deg)}
+.bodies-list{display:grid;gap:1px;padding-left:6px;border-left:1px solid var(--line)}
+.body-row{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:5px;cursor:pointer;font-size:12.5px}
+.body-row:hover{background:var(--surface-2)}
+.body-row .body-color-btn{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.18);padding:0;flex:none;cursor:pointer}
+.body-row .nm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.body-row.hidden-item .nm{color:var(--faint);text-decoration:line-through}
+.body-row .acts{display:flex;gap:2px;opacity:.72}
+.body-row:hover .acts{opacity:1}
+.body-row .acts button{width:20px;height:20px;border:0;background:transparent;border-radius:4px;display:grid;place-items:center;color:var(--muted);cursor:pointer;padding:0}
+.body-row .acts button:hover{background:var(--surface-3);color:var(--ink)}
+.body-row .acts svg{width:13px;height:13px}
+.body-color-pop{padding:10px;display:grid;gap:8px;max-width:210px}
+
 /* Vorführ-Modus */
 body.presenting #app{grid-template-rows:0 1fr 0}
 body.presenting .topbar,body.presenting .bottombar,body.presenting .left,body.presenting .right,body.presenting .view-btns,body.presenting .viewbars,body.presenting .ctxbar,body.presenting .tl,body.presenting .timeline{display:none!important}
@@ -1310,6 +1330,7 @@ const IC = {
   moveStep: '<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />',
   scaleBody: '<rect x="3" y="13" width="8" height="8" rx="1" opacity=".5"/><rect x="7" y="3" width="14" height="14" rx="1.5" fill="currentColor" opacity=".18"/><rect x="7" y="3" width="14" height="14" rx="1.5"/><path d="M11 13l7-7M14 6h4v4" />',
   thicken: '<path d="M4 15l8 4 8-4-8-4z" opacity=".45" stroke-dasharray="2.5 2"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM4 9v6l8 4 8-4V9" />',
+  rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2166,6 +2187,21 @@ const HELP = {
   "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
   "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
   "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
+ },
+ "rib": {
+  "tip": "Offene Skizzenlinie als Versteifungs-Rippe bis an die Wände ziehen",
+  "hilfe": "Verlängert eine offene Linie, einen Bogen oder eine Kurve in deiner Skizze mit einstellbarer Dicke (mittig oder einseitig) bis zu den angrenzenden Wänden des Zielkörpers und verschmilzt sie direkt damit. Optional kannst du eine Schräge und feste Tiefe angeben oder von senkrecht (Steg in einer Schale) auf in der Ebene (Stützrippe) umschalten.",
+  "tipp": "Die Linie muss die Wand in der Skizze nicht exakt berühren – Tracery verlängert sie automatisch sauber bis an die nächste Wand, ohne nach außen überzustehen."
+ },
+ "extrudeToFace": {
+  "tip": "Bis zur nächsten Fläche oder bis zu einer angeklickten Fläche hochziehen",
+  "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
+  "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
+ },
+ "bodyList": {
+  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
+  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
+  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
  }
 };
 
@@ -2757,6 +2793,7 @@ const KINDS = {
   transform: { label: 'Verschieben/Drehen', params: [] },
   scale: { label: 'Skalieren', params: [] },
   thicken: { label: 'Aufdicken', params: [] },
+  rib: { label: 'Rippe', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -2820,6 +2857,7 @@ const Model = (() => {
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
   const D2R = Math.PI / 180;
   let curV = {};
+  let curDoc = null;
   function useVars(v) { curV = v || {}; }
   const tv = (x) => (typeof x === 'number' ? x : x == null || x === '' ? 0 : num(x, curV, 0));
   function tnum(it, k) { return tv((it.t || {})[k]); }
@@ -2950,9 +2988,11 @@ const Model = (() => {
     walk(doc.items, (it) => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
+      if (it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) out.push({ from: me, to: top(it.p.toFace.id), what: 'hochgezogen bis Fläche von' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
+      if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -3017,6 +3057,7 @@ const Model = (() => {
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
+    else if (it.kind === 'rib') o.p = ribParams(it, V);
     else if (it.kind === 'import') {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -3054,6 +3095,7 @@ const Model = (() => {
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
+    if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
     return o;
   }
   function sketchParams(it, V) {
@@ -3076,8 +3118,20 @@ const Model = (() => {
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
-      // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
-      if (p.thru) { out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; } }
+      if (p.extent === 'toNext' || p.extent === 'toFace') {
+        out.extent = p.extent;
+        if (p.extent === 'toFace' && p.toFace) {
+          if (p.toFace.datumId) {
+            const dm = typeof Datums !== 'undefined' ? Datums.find(p.toFace.datumId, curDoc || App.doc) : null;
+            out.toFace = dm && dm.plane ? { datumId: p.toFace.datumId, plane: { o: dm.plane.o, n: dm.plane.n } } : { datumId: p.toFace.datumId, missing: true };
+          } else {
+            out.toFace = { id: p.toFace.id, idx: p.toFace.idx, t: p.toFace.t, c: p.toFace.c, n: p.toFace.n, rel: p.toFace.rel, wc: p.toFace.wc, wn: p.toFace.wn };
+          }
+        }
+      } else if (p.thru) {
+        // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
+        out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; }
+      }
     }
     else {
       out.dir = p.dir || 'normal';
@@ -3093,6 +3147,23 @@ const Model = (() => {
       else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
     }
     return out;
+  }
+  function ribParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+    return {
+      target: p.target || null,
+      plane,
+      chains,
+      thickness: num(p.thickness, V, 2),
+      side: p.side === 'side1' || p.side === 'side2' ? p.side : 'center',
+      dir: p.dir === 'parallel' ? 'parallel' : 'normal',
+      flip: !!p.flip,
+      depth: Math.max(0, num(p.depth, V, 0)),
+      draft: num(p.draft, V, 0),
+    };
   }
   // Muster entlang Kurve: Lage und Drehung jeder Kopie aus der Kurve der Gruppe (p.sketch) berechnen.
   // Die Kopie k wird um (Punkt k − Punkt 0) verschoben; mit „ausrichten“ dreht sie sich mit der Kurve.
@@ -3376,10 +3447,10 @@ const Model = (() => {
   function kernelScene(doc, extra = [], peek = null) {
     // Lagen mit Formeln (z. B. x = Achsabstand/2) mit den Maßen DIESES Projektstands auflösen – wichtig für Versionen und Varianten
     if (doc && doc.fonts && doc.fonts.length && typeof SK !== 'undefined' && SK.ensureFonts) SK.ensureFonts(doc.fonts);
-    const { v } = vars(doc); const prev = curV; curV = v;
+    const { v } = vars(doc); const prev = curV, prevDoc = curDoc; curV = v; curDoc = doc;
     // peek = Vorschau der Zeitleiste: nur die ersten k Schritte rechnen, ohne den Marker zu verschieben
     let act = activeItems(doc); if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
-    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; }
+    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; curDoc = prevDoc; }
   }
 
   // ---------- Größen ----------
@@ -3422,7 +3493,15 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
-      case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      case 'extrude': {
+        if (p.extent === 'toNext' || p.extent === 'toFace') {
+          const rd = typeof App !== 'undefined' && App.resolvedDist ? App.resolvedDist(it.id) : null;
+          const base = p.extent === 'toNext' ? 'bis nächste Fläche' : 'bis Fläche';
+          const lenTxt = rd != null ? ` (${f(rd)}${u})` : '';
+          return p.thin ? `${base}${lenTxt} · Wand ${f(p.wall || 2)}${u}` : `${base}${lenTxt}`;
+        }
+        return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      }
       case 'revolve': {
         const dir = (it.p && it.p.dir) || 'normal';
         if (dir === 'toFace') return it.p && it.p.toFace && it.p.toFace.name ? `bis „${it.p.toFace.name}“` : 'bis Fläche';
@@ -3437,6 +3516,11 @@ const Model = (() => {
         for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
         const s = parts.length ? parts.join(' ') : '0 mm';
         return p.copy ? 'Kopie · ' + s : s;
+      }
+      case 'rib': {
+        const t = f(p.thickness ?? 2);
+        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
+        return `${t}${u} dick${dr}`;
       }
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
@@ -3469,8 +3553,53 @@ const Model = (() => {
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
-    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
+    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
+  }
+  function matchBodies(saved, evalBodies) {
+    const n = (evalBodies && evalBodies.length) || 0;
+    const out = new Array(n).fill(null);
+    if (!n || !Array.isArray(saved) || !saved.length) return out;
+    const usedS = new Set(), usedE = new Set();
+    const pairs = [];
+    for (let si = 0; si < saved.length; si++) {
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        const ec = evalBodies[ei].c;
+        const d = Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]);
+        if (d < 0.5) pairs.push({ d, si, ei });
+      }
+    }
+    pairs.sort((a, b) => a.d - b.d);
+    for (const p of pairs) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (s && typeof s.idx === 'number' && s.idx >= 0 && s.idx < n && !usedE.has(s.idx)) {
+        usedS.add(si); usedE.add(s.idx); out[s.idx] = s;
+      }
+    }
+    const rem = [];
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        if (usedE.has(ei)) continue;
+        const ec = evalBodies[ei].c;
+        rem.push({ d: Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]), si, ei });
+      }
+    }
+    rem.sort((a, b) => a.d - b.d);
+    for (const p of rem) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    return out;
   }
   // Drehkörper-Bezugssystem (Achse, äußerster Radius und Bogen-Mitte in lokalen Koordinaten)
   function revolveFrame(p, V) {
@@ -3550,7 +3679,7 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 14-ttf.js ----
@@ -6378,7 +6507,7 @@ const Kernel = (() => {
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -6397,7 +6526,7 @@ const App = (() => {
     Model.useVars(Model.vars(S.doc).v);
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.errors = []; S.revision++;
+    S.results.clear(); S.resolved.clear(); S.errors = []; S.revision++;
     Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
@@ -6575,12 +6704,13 @@ const App = (() => {
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
+    S.resolved = new Map(Object.entries(res.resolved || {}));
     for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
       const it = topItem(n.id); if (!it) continue;
-      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key: n.key };
+      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
       if (n.same && S.results.has(n.id)) { Viewer.updateNode(n.id, info); continue; }
       Viewer.setNode(n.id, n, info);
@@ -6655,7 +6785,7 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
-    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key });
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
@@ -6685,7 +6815,7 @@ const App = (() => {
       const top = Model.topOf(S.doc, id);
       if (top) {
         selTop.add(top.id);
-        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
       }
       selTop.add('__ex:' + id);
     }
@@ -6727,6 +6857,8 @@ const App = (() => {
     timeOf(id) { return times.get(id) || null; },
     get times() { return times; },
     mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
+    resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
+    resolvedDist(id) { const r = S.resolved && S.resolved.get(id); return r && isFinite(r.dist) ? r.dist : null; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
@@ -6747,7 +6879,7 @@ const Viewer = (() => {
   const groups = {};
   const raycaster = new THREE.Raycaster();
   const theme = {};
-  let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
+  let hoverFace = null, hoverEdge = null, hoverBody = null, selFace = null, selEdges = [];
   let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
@@ -7168,7 +7300,81 @@ const Viewer = (() => {
     n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
     if (n.edges) { n.edges.renderOrder = xr ? 5 : 0; n.edges.visible = disp !== 'shaded' || sel || n.role === 'hole'; if (disp === 'wire' && n.role !== 'hole' && !sel) { n.edges.material.opacity = 0.9; n.edges.material.color = new THREE.Color(theme.edge).lerp(new THREE.Color(n.color || '#2f9e91'), 0.5); } }
     if (disp === 'wire' || disp === 'hidden') n.mesh.castShadow = false;
+    if (n.allBodiesHidden) { n.mesh.visible = false; if (n.edges) n.edges.visible = false; }
+    else n.mesh.visible = true;
     needsRender = true;
+  }
+  function applyBodies(n) {
+    const eb = n.data && n.data.bodies;
+    if (!eb || eb.length < 2) {
+      n.hiddenBodies = null; n.bodyColors = null;
+      if (n._filtered) {
+        n.mesh.geometry.setIndex(new THREE.BufferAttribute(n.data.triangles, 1));
+        n.edges.geometry.setAttribute('position', new THREE.BufferAttribute(n.data.lines, 3));
+        n.mesh.geometry.computeBoundingBox(); n.mesh.geometry.computeBoundingSphere();
+        n.edges.geometry.computeBoundingSphere();
+        n._filtered = false;
+      }
+      n.visFaceGroups = null; n.visEdgeGroups = null; n.visLines = null; n.allBodiesHidden = false;
+      return;
+    }
+    const meta = Model.matchBodies(n.bodies, eb);
+    const hiddenBodies = new Set(), bodyColors = new Map();
+    for (let bi = 0; bi < eb.length; bi++) {
+      const mb = meta[bi];
+      if (!mb) continue;
+      if (mb.hidden) hiddenBodies.add(bi);
+      if (mb.color) bodyColors.set(bi, new THREE.Color(mb.color));
+    }
+    n.hiddenBodies = hiddenBodies;
+    n.bodyColors = bodyColors;
+    if (!hiddenBodies.size) {
+      if (n._filtered) {
+        n.mesh.geometry.setIndex(new THREE.BufferAttribute(n.data.triangles, 1));
+        n.edges.geometry.setAttribute('position', new THREE.BufferAttribute(n.data.lines, 3));
+        n.mesh.geometry.computeBoundingBox(); n.mesh.geometry.computeBoundingSphere();
+        n.edges.geometry.computeBoundingSphere();
+        n._filtered = false;
+      }
+      n.visFaceGroups = null; n.visEdgeGroups = null; n.visLines = null; n.allBodiesHidden = false;
+      return;
+    }
+    const tris = [], visFaceGroups = [];
+    for (const [start, count, fi] of n.data.faceGroups || []) {
+      if (fi >= 0 && n.data.faceBody && hiddenBodies.has(n.data.faceBody[fi])) continue;
+      const newStart = tris.length;
+      for (let k = start; k < start + count; k++) tris.push(n.data.triangles[k]);
+      visFaceGroups.push([newStart, count, fi]);
+    }
+    n.visFaceGroups = visFaceGroups;
+    n.allBodiesHidden = tris.length === 0;
+    n.mesh.geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+    const lines = [], visEdgeGroups = [];
+    for (const [start, count, ei] of n.data.edgeGroups || []) {
+      if (ei >= 0 && n.data.edgeBody && hiddenBodies.has(n.data.edgeBody[ei])) continue;
+      const newStart = lines.length / 3;
+      for (let k = start; k < start + count; k++) lines.push(n.data.lines[k * 3], n.data.lines[k * 3 + 1], n.data.lines[k * 3 + 2]);
+      visEdgeGroups.push([newStart, count, ei]);
+    }
+    const visLines = new Float32Array(lines);
+    n.visEdgeGroups = visEdgeGroups;
+    n.visLines = visLines;
+    n.edges.geometry.setAttribute('position', new THREE.BufferAttribute(visLines, 3));
+    n.edges.geometry.computeBoundingSphere();
+    const box = n.mesh.geometry.boundingBox || (n.mesh.geometry.boundingBox = new THREE.Box3());
+    box.makeEmpty();
+    for (let bi = 0; bi < eb.length; bi++) {
+      if (hiddenBodies.has(bi) || !eb[bi].bbox) continue;
+      const b = eb[bi].bbox;
+      box.expandByPoint(new THREE.Vector3(b[0], b[1], b[2]));
+      box.expandByPoint(new THREE.Vector3(b[3], b[4], b[5]));
+    }
+    if (!n.mesh.geometry.boundingSphere) n.mesh.geometry.boundingSphere = new THREE.Sphere();
+    if (box.isEmpty()) n.mesh.geometry.boundingSphere.set(new THREE.Vector3(), 0);
+    else box.getBoundingSphere(n.mesh.geometry.boundingSphere);
+    n._filtered = true;
+    if (selFace && selFace.id === n.id && selFace.faceIdx >= 0 && n.data.faceBody && hiddenBodies.has(n.data.faceBody[selFace.faceIdx])) highlightFace('sel', null, null);
+    if (hoverBody && hoverBody.id === n.id && hiddenBodies.has(hoverBody.bodyIdx)) highlightBody(null, null);
   }
   // Farbe je Fläche: Ecken der Fläche bekommen ihre Farbe, der Rest die Farbe des Teils (Vertex-Farben)
   function faceIndexOf(n, fc) {
@@ -7185,13 +7391,17 @@ const Viewer = (() => {
   }
   function applyFaceColors(n) {
     const g = n.mesh.geometry, m = n.mesh.material;
-    if (!n.faceColors || !n.faceColors.length || n.role === 'hole' || !m || m.isMeshMatcapMaterial || !n.data.faceGroups) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
+    const hasFace = !!(n.faceColors && n.faceColors.length && n.data.faceGroups);
+    const hasBody = !!(n.bodyColors && n.bodyColors.size && n.data.faceBody && n.data.faceGroups);
+    if ((!hasFace && !hasBody) || n.role === 'hole' || !m || m.isMeshMatcapMaterial) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
     const base = m.color.clone(), cnt = g.getAttribute('position').count, arr = new Float32Array(cnt * 3);
     for (let i = 0; i < cnt; i++) { arr[i * 3] = base.r; arr[i * 3 + 1] = base.g; arr[i * 3 + 2] = base.b; }
-    const tri = g.index.array, map = new Map(); n.faceIdx = [];
-    for (const fc of n.faceColors) { const fi = faceIndexOf(n, fc); n.faceIdx.push(fi); if (fi >= 0) map.set(fi, new THREE.Color(fc.col)); }
+    const tri = n.data.triangles, map = new Map(); n.faceIdx = [];
+    if (hasFace) for (const fc of n.faceColors) { const fi = faceIndexOf(n, fc); n.faceIdx.push(fi); if (fi >= 0) map.set(fi, new THREE.Color(fc.col)); }
     for (const [start, count, fi] of n.data.faceGroups) {
-      const c = map.get(fi); if (!c) continue;
+      let c = map.get(fi);
+      if (!c && hasBody && fi >= 0) { const bi = n.data.faceBody[fi]; if (bi >= 0) c = n.bodyColors.get(bi); }
+      if (!c) continue;
       for (let k = start; k < start + count; k++) { const v = tri[k]; arr[v * 3] = c.r; arr[v * 3 + 1] = c.g; arr[v * 3 + 2] = c.b; }
     }
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
@@ -7294,6 +7504,7 @@ const Viewer = (() => {
     const op = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 0.82);
     for (const th of n.threads) {
       const fi = threadFaceIndex(n, th);
+      if (fi >= 0 && n.hiddenBodies && n.hiddenBodies.size && n.data.faceBody && n.hiddenBodies.has(n.data.faceBody[fi])) continue;
       const g = fi >= 0 ? cylinderGeomOf(n.data, fi) : (Array.isArray(th.axis) && th.axis.length >= 6 ? {
         o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
         t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
@@ -7355,6 +7566,7 @@ const Viewer = (() => {
     n.obj.matrixWorldNeedsUpdate = true;
     // Hervorhebungen dieses Teils wandern mit
     for (const f of [hoverFace, selFace]) if (f && f.id === n.id) f.mesh.matrix.copy(n.obj.matrix);
+    if (hoverBody && hoverBody.id === n.id) hoverBody.mesh.matrix.copy(n.obj.matrix);
     if (hoverEdge && hoverEdge.id === n.id) hoverEdge.line.matrix.copy(n.obj.matrix);
     for (const e of selEdges) if (e.id === n.id) e.line.matrix.copy(n.obj.matrix);
   }
@@ -7379,9 +7591,9 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, bodies: info.bodies || null, hiddenBodies: null, bodyColors: null, visFaceGroups: null, visEdgeGroups: null, visLines: null, allBodiesHidden: false, _filtered: false, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
-    nodes.set(id, n); styleNode(n);
+    nodes.set(id, n); applyBodies(n); styleNode(n);
     fitShadowSoon();
     needsRender = true;
     return n;
@@ -7396,6 +7608,7 @@ const Viewer = (() => {
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
     if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
+    if (info.bodies !== undefined && JSON.stringify(info.bodies) !== JSON.stringify(n.bodies)) { n.bodies = info.bodies; applyBodies(n); restyle = true; fitShadowSoon(); }
     if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
@@ -7412,6 +7625,7 @@ const Viewer = (() => {
     n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
     if (hoverFace && hoverFace.id === id) clearHover();
+    if (hoverBody && hoverBody.id === id) highlightBody(null, null);
     needsRender = true;
   }
   function setGhost(id, data, matrix) {
@@ -7500,7 +7714,7 @@ const Viewer = (() => {
   // Dreiecke eines Teils in Weltlage, dazu ein einfaches Raster, damit kurze Strahlen nur wenige Dreiecke prüfen
   function worldTris(n) {
     n.obj.updateMatrixWorld(true);
-    const P = n.mesh.geometry.getAttribute('position').array, T = n.data.triangles, M = n.mesh.matrixWorld, nt = Math.floor(T.length / 3);
+    const P = n.mesh.geometry.getAttribute('position').array, T = n.mesh.geometry.index ? n.mesh.geometry.index.array : n.data.triangles, M = n.mesh.matrixWorld, nt = Math.floor(T.length / 3);
     const W = new Float32Array(nt * 9), v = new THREE.Vector3();
     for (let i = 0; i < nt; i++) for (let k = 0; k < 3; k++) { v.fromArray(P, T[i * 3 + k] * 3).applyMatrix4(M); W[i * 9 + k * 3] = v.x; W[i * 9 + k * 3 + 1] = v.y; W[i * 9 + k * 3 + 2] = v.z; }
     return W;
@@ -7542,7 +7756,7 @@ const Viewer = (() => {
     const out = []; let area = 0, minT = Infinity;
     const c = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), e = new THREE.Vector3(), nrm = new THREE.Vector3();
     for (const n of nodes.values()) {
-      if (!n.obj.visible || n.role === 'hole' || !n.mesh || !n.data || !n.data.triangles || (only && !only.includes(n.id))) continue;
+      if (!n.obj.visible || n.allBodiesHidden || n.role === 'hole' || !n.mesh || !n.data || !n.data.triangles || (only && !only.includes(n.id))) continue;
       const W = worldTris(n), nt = W.length / 9;
       const box = new THREE.Box3(); for (let i = 0; i < W.length; i += 3) box.expandByPoint(c.set(W[i], W[i + 1], W[i + 2]));
       const G = triGrid(W, Math.max(limit, box.getSize(c).length() / 48));
@@ -7637,6 +7851,29 @@ const Viewer = (() => {
     if (which === 'hover') hoverFace = next; else selFace = next;
     needsRender = true;
   }
+  function highlightBody(id, bodyIdx) {
+    if (hoverBody && hoverBody.id === id && hoverBody.bodyIdx === bodyIdx) return;
+    if (hoverBody) { groups.overlay.remove(hoverBody.mesh); hoverBody.mesh.geometry.dispose(); hoverBody.mesh.material.dispose(); hoverBody = null; }
+    const n = nodes.get(id);
+    if (n && bodyIdx != null && bodyIdx >= 0 && n.data && n.data.faceBody && n.data.faceGroups && !(n.hiddenBodies && n.hiddenBodies.has(bodyIdx))) {
+      const tris = [];
+      for (const [start, count, fi] of n.data.faceGroups) {
+        if (fi >= 0 && n.data.faceBody[fi] === bodyIdx) {
+          for (let k = start; k < start + count; k++) tris.push(n.data.triangles[k]);
+        }
+      }
+      if (tris.length) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', n.mesh.geometry.getAttribute('position'));
+        geo.setAttribute('normal', n.mesh.geometry.getAttribute('normal'));
+        geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+        const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.accent), transparent: true, opacity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat); mesh.matrixAutoUpdate = false; mesh.matrix.copy(n.obj.matrix); mesh.renderOrder = 6;
+        groups.overlay.add(mesh); hoverBody = { id, bodyIdx, mesh };
+      }
+    }
+    needsRender = true;
+  }
   function highlightEdge(id, edgeIdx) {
     if (hoverEdge && hoverEdge.id === id && hoverEdge.edgeIdx === edgeIdx) return;
     if (hoverEdge) { groups.overlay.remove(hoverEdge.line); disposeFat(hoverEdge.line); hoverEdge = null; }
@@ -7658,7 +7895,7 @@ const Viewer = (() => {
     }
     needsRender = true;
   }
-  function clearHover() { highlightFace('hover', null, null); highlightEdge(null, null); }
+  function clearHover() { highlightFace('hover', null, null); highlightEdge(null, null); highlightBody(null, null); }
 
   // ---------- Auswahl mit der Maus ----------
   const _ndc = new THREE.Vector2();
@@ -7673,14 +7910,14 @@ const Viewer = (() => {
   // alle Teile entlang des Strahls, vorne zuerst (für „Wähle das dahinter“)
   function pickAll(cx, cy) {
     setRay(cx, cy);
-    const meshes = []; for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; meshes.push(n.mesh); }
+    const meshes = []; for (const n of nodes.values()) { if (!n.obj.visible || n.allBodiesHidden || n.ctxDim) continue; meshes.push(n.mesh); }
     let hits = raycaster.intersectObjects(meshes, false);
     if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
     const out = [], seen = new Set();
     for (const x of hits) {
       const n = nodes.get(x.object.userData.nodeId); if (!n) continue;
       const tri = x.faceIndex * 3; let faceIdx = -1;
-      for (const g of n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
+      for (const g of n.visFaceGroups || n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
       const key = n.id + ':' + faceIdx; if (seen.has(key)) continue; seen.add(key);
       out.push({ id: n.id, faceIdx, point: x.point.clone(), normal: x.face ? x.face.normal.clone().transformDirection(n.obj.matrixWorld) : null, distance: x.distance });
     }
@@ -7689,7 +7926,7 @@ const Viewer = (() => {
   function pick(cx, cy, opts = {}) {
     setRay(cx, cy);
     const meshes = [];
-    for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
+    for (const n of nodes.values()) { if (!n.obj.visible || n.allBodiesHidden || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
     let hits = raycaster.intersectObjects(meshes, false);
     if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
     if (vis.xray && hits.length) {
@@ -7702,7 +7939,7 @@ const Viewer = (() => {
       if (opts.noEdges) return null;
       let best = null;
       for (const n of nodes.values()) {
-        if (!n.obj.visible || n.ctxDim || (opts.solidsOnly && n.role === 'hole') || (opts.exclude && opts.exclude.has(n.id))) continue;
+        if (!n.obj.visible || n.allBodiesHidden || n.ctxDim || (opts.solidsOnly && n.role === 'hole') || (opts.exclude && opts.exclude.has(n.id))) continue;
         const e = edgeNear(n, cx, cy, Infinity, opts.edgePx || 6);
         if (e && (!best || e.px < best.e.px)) best = { n, e };
       }
@@ -7716,7 +7953,7 @@ const Viewer = (() => {
     const n = nodes.get(hit.object.userData.nodeId);
     const tri = hit.faceIndex * 3;
     let faceIdx = -1;
-    for (const g of n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
+    for (const g of n.visFaceGroups || n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
     const normal = hit.face ? hit.face.normal.clone().transformDirection(n.obj.matrixWorld) : null;
     const res = { id: n.id, point: hit.point.clone(), faceIdx, normal, distance: hit.distance, node: n };
     if (!opts.noEdges) {
@@ -7727,13 +7964,13 @@ const Viewer = (() => {
   }
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _onRay = new THREE.Vector3(), _onSeg = new THREE.Vector3();
   function edgeNear(n, cx, cy, hitDist, maxPx = 7) {
-    const r = rect(); const lines = n.data.lines; const M = n.obj.matrixWorld;
+    const r = rect(); const lines = n.visLines || n.data.lines; const M = n.obj.matrixWorld;
     const px = cx - r.left, py = cy - r.top;
     let best = null, bd = maxPx;
     const C = cam(); const toS = (v) => { const p = v.clone().project(C); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height, p.z]; };
     const camPos = camera.position;
     const tol = ortho ? Math.max(0.3, (8 * orthoHalfH()) / (container.clientHeight || 1)) : Math.max(0.3, (isFinite(hitDist) ? hitDist : 0) * 0.004);
-    for (const g of n.data.edgeGroups) {
+    for (const g of n.visEdgeGroups || n.data.edgeGroups) {
       for (let i = g[0]; i < g[0] + g[1]; i += 2) {
         _a.set(lines[i * 3], lines[i * 3 + 1], lines[i * 3 + 2]).applyMatrix4(M);
         _b.set(lines[i * 3 + 3], lines[i * 3 + 4], lines[i * 3 + 5]).applyMatrix4(M);
@@ -7790,7 +8027,7 @@ const Viewer = (() => {
     const box = new THREE.Box3();
     for (const n of nodes.values()) {
       if (ids && !ids.includes(n.id)) continue;
-      if (!n.obj.visible) continue;
+      if (!n.obj.visible || n.allBodiesHidden) continue;
       const b = n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix);
       box.union(b);
     }
@@ -7976,7 +8213,7 @@ const Viewer = (() => {
   // Schattenriss: Fläche (mm²), die die Teile aus Blickrichtung dir verdecken – z. B. die Stirnfläche im Fahrtwind.
   // Gerechnet durch Pixelzählen in einem eigenen Bild (orthografisch), unabhängig von der Kamera.
   function silhouette(ids, dir, res = 1024) {
-    const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh);
+    const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh && !n.allBodiesHidden);
     if (!show.length) return { area: 0, px: 0 };
     const d = new THREE.Vector3(...dir).normalize();
     groups.nodes.updateMatrixWorld(true);
@@ -8029,7 +8266,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
@@ -8080,7 +8317,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -8100,7 +8337,7 @@ const Handles = (() => {
       defs.push({ ax: 'x', dir: [1, 0, 0], p: [x1, cy, z0], param: map.x }, { ax: 'x', dir: [-1, 0, 0], p: [x0, cy, z0], param: map.x });
       defs.push({ ax: 'y', dir: [0, 1, 0], p: [cx, y1, z0], param: map.y }, { ax: 'y', dir: [0, -1, 0], p: [cx, y0, z0], param: map.y });
       defs.push({ ax: 'z', dir: [0, 0, 1], p: [cx, cy, z1], param: map.z });
-    } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
+    } else if (it.kind === 'extrude' && it.p && it.p.sketch && !(it.p.extent === 'toNext' || it.p.extent === 'toFace' || it.p.thru)) {
       const pl = it.p.sketch.plane; const n = new THREE.Vector3(...pl.n).normalize();
       const dirSign = it.p.dir === 'reverse' ? -1 : 1;
       const ents = Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents;
@@ -8685,7 +8922,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
     if (!top || top.locked || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
@@ -8846,7 +9083,7 @@ const Interact = (() => {
     let items;
     if (top) {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
-      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep') && it.p && it.p.sketch;
+      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib') && it.p && it.p.sketch;
       items = [
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
@@ -8872,7 +9109,8 @@ const Interact = (() => {
         { icon: 'trash', label: T('common.delete'), kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
       ];
     } else {
-      const hidden = App.doc.items.filter((x) => x.hidden).length;
+      let hidden = App.doc.items.filter((x) => x.hidden).length;
+      Model.walk(App.doc.items, (x) => { if (!x.hidden && x.bodies) hidden += x.bodies.filter((b) => b && b.hidden).length; });
       items = [
         { icon: 'eye', label: hidden ? T('menu.ctx.showAllCount', { n: hidden }) : T('menu.ctx.showAll'), id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
         { icon: 'pointer', label: T('menu.ctx.selectAll'), kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
@@ -8944,7 +9182,7 @@ const Interact = (() => {
     // Doppelklick auf einen Skizzenkörper: Skizze bearbeiten
     const id = ctxChildAt(hit, e.clientX, e.clientY) || hit.id;
     const f = Model.find(App.doc, id);
-    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
+    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
     // Doppelklick auf eine ebene Fläche: gleich darauf zeichnen
     const r = App.results.get(hit.id); const info = r && r.data && r.data.faces && hit.faceIdx >= 0 ? r.data.faces[hit.faceIdx] : null;
     if (info && info.t === 'PLANE' && info.n && App.doc.items.some((x) => x.id === hit.id)) { Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null }); return; }
@@ -9433,9 +9671,77 @@ const Actions = (() => {
     App.clearSelection(); return true;
   }
   function showAll() {
-    if (!App.doc.items.some((x) => x.hidden)) return false;
-    App.change('Alles eingeblendet', (doc) => { Model.walk(doc.items, (x) => { if (x.hidden) delete x.hidden; }); });
+    let any = false;
+    Model.walk(App.doc.items, (x) => { if (x.hidden || (x.bodies && x.bodies.some((b) => b && b.hidden))) any = true; });
+    if (!any) return false;
+    App.change('Alles eingeblendet', (doc) => {
+      Model.walk(doc.items, (x) => {
+        if (x.hidden) delete x.hidden;
+        if (x.bodies) {
+          for (const b of x.bodies) if (b && b.hidden) delete b.hidden;
+          x.bodies = x.bodies.filter((b) => b && (b.name || b.color || b.hidden));
+          if (!x.bodies.length) delete x.bodies;
+        }
+      });
+    });
     return true;
+  }
+  function setBody(itemId, bodyIdx, patch) {
+    const res = App.results.get(itemId);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || !evalBodies[bodyIdx]) return false;
+    const label = 'name' in patch ? 'Körper umbenannt' : 'color' in patch ? (patch.color ? 'Körper gefärbt' : 'Körperfarbe zurückgesetzt') : (patch.hidden ? 'Körper ausgeblendet' : 'Körper eingeblendet');
+    return App.change(label, (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f) return false;
+      const it = f.item;
+      const matched = Model.matchBodies(it.bodies, evalBodies);
+      const next = [];
+      for (let i = 0; i < evalBodies.length; i++) {
+        const cur = matched[i] ? { ...matched[i] } : {};
+        if (i === bodyIdx) Object.assign(cur, patch);
+        cur.idx = i;
+        cur.c = evalBodies[i].c.slice();
+        if (!cur.name) delete cur.name;
+        if (!cur.color) delete cur.color;
+        if (!cur.hidden) delete cur.hidden;
+        if (cur.name || cur.color || cur.hidden) next.push(cur);
+      }
+      if (next.length) it.bodies = next; else delete it.bodies;
+    });
+  }
+  function showOnlyBody(itemId, bodyIdx) {
+    const res = App.results.get(itemId);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || !evalBodies[bodyIdx]) return false;
+    return App.change('Nur diesen Körper zeigen', (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f) return false;
+      const it = f.item;
+      const matched = Model.matchBodies(it.bodies, evalBodies);
+      const next = [];
+      for (let i = 0; i < evalBodies.length; i++) {
+        const cur = matched[i] ? { ...matched[i] } : {};
+        cur.idx = i;
+        cur.c = evalBodies[i].c.slice();
+        if (i === bodyIdx) delete cur.hidden; else cur.hidden = true;
+        if (!cur.name) delete cur.name;
+        if (!cur.color) delete cur.color;
+        if (cur.name || cur.color || cur.hidden) next.push(cur);
+      }
+      if (next.length) it.bodies = next; else delete it.bodies;
+    });
+  }
+  function showAllBodies(itemId) {
+    const f0 = Model.find(App.doc, itemId);
+    if (!f0 || !f0.item.bodies || !f0.item.bodies.some((b) => b && b.hidden)) return false;
+    return App.change('Alle Körper einblenden', (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f || !f.item.bodies) return false;
+      for (const b of f.item.bodies) if (b && b.hidden) delete b.hidden;
+      f.item.bodies = f.item.bodies.filter((b) => b && (b.name || b.color || b.hidden));
+      if (!f.item.bodies.length) delete f.item.bodies;
+    });
   }
   function invertSelection() {
     const cur = new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id));
@@ -9725,7 +10031,7 @@ const Actions = (() => {
     if (nid) App.select([nid]);
     return nid;
   }
-  return { replaneSketch,  duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 
 // ---- 46-features.js ----
@@ -9820,7 +10126,10 @@ const Features = (() => {
   function stopPick() {
     if (!picking) return;
     const cv = Viewer.canvas;
-    cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
+    cv.removeEventListener('pointerdown', picking.down, true);
+    if (picking.move) cv.removeEventListener('pointermove', picking.move);
+    window.removeEventListener('keydown', picking.key, true);
+    Viewer.highlightFace('hover', null, null);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
   // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
@@ -10108,6 +10417,117 @@ const Features = (() => {
     Viewer.canvas.style.cursor = 'crosshair';
     Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
     UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche oder eine Bezugsachse. <b>Esc</b> bricht ab.');
+  }
+  function pickExtrudeFace(itemId) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    const top = Model.topOf(App.doc, itemId);
+    const exclude = top && top.id === itemId ? new Set([itemId, '__preview']) : new Set(['__preview']);
+    pickFaceThen((ref) => {
+      setExtrudeToFace(itemId, ref);
+      UI.toast('Zielfläche gewählt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, { exclude });
+    return true;
+  }
+  function makeFaceRef(hit) {
+    if (!hit || !hit.node || hit.faceIdx == null || hit.faceIdx < 0) return null;
+    const n = hit.node, data = n.data || {}, fi = (data.faces || [])[hit.faceIdx];
+    if (!fi) return null;
+    const bb = data.bbox;
+    const rel = bb && fi.c ? [0, 1, 2].map((k) => { const sp = bb[k + 3] - bb[k]; return sp > 1e-6 ? round((fi.c[k] - bb[k]) / sp, 6) : 0.5; }) : null;
+    const W = n.obj.matrixWorld;
+    const wc = fi.c ? new THREE.Vector3(...fi.c).applyMatrix4(W).toArray().map((v) => round(v, 6)) : null;
+    const wn = fi.n ? new THREE.Vector3(...fi.n).transformDirection(W).normalize().toArray().map((v) => round(v, 6)) : null;
+    const f = Model.find(App.doc, hit.id);
+    return {
+      id: hit.id,
+      idx: hit.faceIdx,
+      t: fi.t,
+      c: fi.c ? fi.c.map((v) => round(v, 6)) : null,
+      n: fi.n ? fi.n.map((v) => round(v, 6)) : null,
+      rel,
+      wc,
+      wn,
+      label: f ? Model.label(f.item) : 'Körper',
+    };
+  }
+  function pickTargetFaceAt(cx, cy, exclude) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true, exclude });
+    if (hit && hit.faceIdx >= 0) {
+      const ref = makeFaceRef(hit);
+      if (ref) return ref;
+    }
+    if (Viewer.groups && Viewer.groups.datums && Viewer.groups.datums.children.length && typeof Datums !== 'undefined') {
+      const rc = Viewer.setRay(cx, cy);
+      const dh = rc.intersectObjects(Viewer.groups.datums.children, true);
+      for (const x of dh) {
+        let o = x.object;
+        while (o && !o.userData.datum) o = o.parent;
+        if (o && o.userData.datum) {
+          const d = Datums.find(o.userData.datum);
+          if (d && d.plane) return { datumId: d.id, label: 'Bezugsebene „' + d.name + '“' };
+        }
+      }
+    }
+    return null;
+  }
+  function pickFaceThen(cb, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const ref = pickTargetFaceAt(e.clientX, e.clientY, opts.exclude);
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      stopPick();
+      cb(ref);
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: opts.exclude });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(opts.hint || '<b>Zielfläche wählen:</b> Klick auf eine Fläche eines Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  function autoFlipDirForFace(plane, W, curDir, ref) {
+    if (!plane || !ref || (curDir !== 'normal' && curDir !== 'reverse')) return curDir;
+    const oW = new THREE.Vector3(...plane.o).applyMatrix4(W);
+    const nW = new THREE.Vector3(...plane.n).transformDirection(W).normalize();
+    let pW = null;
+    if (ref.datumId && typeof Datums !== 'undefined') {
+      const d = Datums.find(ref.datumId);
+      if (d && d.plane) pW = new THREE.Vector3(...d.plane.o);
+    } else if (Array.isArray(ref.wc)) {
+      pW = new THREE.Vector3(...ref.wc);
+    } else if (Array.isArray(ref.c) && ref.id && Model.find(App.doc, ref.id)) {
+      pW = new THREE.Vector3(...ref.c).applyMatrix4(Model.worldMatrix(App.doc, ref.id));
+    }
+    if (!pW) return curDir;
+    const d = pW.sub(oW).dot(nW);
+    if (d > 1e-3) return 'normal';
+    if (d < -1e-3) return 'reverse';
+    return curDir;
+  }
+  function setExtrudeToFace(itemId, ref) {
+    if (!ref) return false;
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    App.change('Bis Fläche gewählt', (doc) => {
+      const T = Model.find(doc, itemId).item;
+      T.p.extent = 'toFace';
+      T.p.toFace = ref;
+      delete T.p.thru;
+      if (T.p.dir === 'both') T.p.dir = 'normal';
+      if (T.p.sketch && T.p.sketch.plane) {
+        T.p.dir = autoFlipDirForFace(T.p.sketch.plane, Model.worldMatrix(doc, itemId), T.p.dir || 'normal', ref);
+      }
+    });
+    App.select([itemId]);
+    return true;
   }
   function setPatternAxis(gid, axisId) {
     const ax = typeof Datums !== 'undefined' ? Datums.findAxis(axisId) : null;
@@ -10459,7 +10879,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -10677,8 +11097,59 @@ const Features = (() => {
     const inJoinHint = p.dir === 'in' && (p.mode || 'join') === 'join' ? ' Hinweis: „Nach innen“ mit „Vereinigen“ liegt im Körper – wähle „Eigene Platte“ oder „Vom Körper abziehen“, um es sichtbar zu machen.' : '';
     sec.append(h('div', { class: 'hint-box', html: 'Macht aus der gewählten Fläche (eben oder gebogen) eine Platte mit fester Dicke – nach außen, innen oder mittig.' + inJoinHint }));
   }
+  // ---------- Rippe (KP-06) ----------
+  function ribTargets(idx = Infinity) {
+    return App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !isModifierStep(x) && !(x.op && x.op.target));
+  }
+  function startRib(face) {
+    if (App.ctx) { UI.toast('Rippen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für eine Rippe braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = face && face.info && face.info.t === 'PLANE' ? face : Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') {
+      Sketch.startOnFace(f, { ribMode: true });
+      UI.toast('Zeichne eine offene Linie oder Kurve für die Rippe und klick „Fertig“.', { icon: 'info', ms: 4200 });
+    } else {
+      Sketch.chooseAndStart({ ribMode: true });
+      UI.toast('Wähl eine Ebene und zeichne eine offene Linie für die Rippe.', { icon: 'info', ms: 4200 });
+    }
+    return true;
+  }
+  function renderRib(it, sec, setP) {
+    const p = it.p || {};
+    const idx = App.doc.items.indexOf(it);
+    const targets = ribTargets(idx >= 0 ? idx : App.doc.items.length);
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    const fl = h('div', { class: 'fields' });
+    if (opts.length) {
+      fl.append(UI.selectField({ id: 'rib-target', label: 'Zielkörper', value: p.target || '', options: opts, onChange: (v) => App.change('Zielkörper gewählt', (doc) => { Model.find(doc, it.id).item.p.target = v; }) }));
+    }
+    fl.append(UI.numField({ id: 'rib-thickness', label: 'Dicke', value: p.thickness ?? 2, min: 0.1, onCommit: (v) => setP('thickness', v) }));
+    fl.append(UI.selectField({ id: 'rib-side', label: 'Lage zur Linie', value: p.side || 'center', options: [['center', 'Mittig'], ['side1', 'Einseitig (Seite 1)'], ['side2', 'Einseitig (Seite 2)']], onChange: (v) => setP('side', v) }));
+    fl.append(UI.selectField({ id: 'rib-dir', label: 'Richtung', value: p.dir || 'normal', options: [['normal', 'Senkrecht zur Skizze (Steg)'], ['parallel', 'In der Skizzenebene (Stütze)']], onChange: (v) => setP('dir', v) }));
+    fl.append(UI.numField({ id: 'rib-draft', label: 'Schräge (optional)', value: p.draft ?? 0, unit: '°', min: 0, onCommit: (v) => setP('draft', v) }));
+    fl.append(UI.numField({ id: 'rib-depth', label: 'Tiefe (0 = bis zur Wand)', value: p.depth ?? 0, min: 0, onCommit: (v) => setP('depth', v) }));
+    sec.append(fl);
+    const flipL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'rib-flip', checked: !!p.flip }), 'Richtung umkehren');
+    flipL.querySelector('input').onchange = (e) => App.change('Rippenrichtung umgekehrt', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(flipL);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'rib-edit-sketch' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
+    eb.onclick = () => Sketch.editItem(it.id);
+    row.append(eb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'rib-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
@@ -13684,7 +14155,7 @@ const Timeline = (() => {
   let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group', transform: 'moveStep', scale: 'scaleBody', thicken: 'thicken' })[it.kind] || 'cube';
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group', transform: 'moveStep', scale: 'scaleBody', thicken: 'thicken', rib: 'rib' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }
@@ -14161,6 +14632,7 @@ const UI = (() => {
 // ================= Oberfläche: Leisten, Verlauf, Einstellungen =================
 const Panels = (() => {
   const expanded = new Set();
+  const collapsedBodies = new Set();
   let leftTab = 'tree';
   let flyout = null;
 
@@ -14305,10 +14777,14 @@ const Panels = (() => {
   const TFKINDS = [['all', 'Alle'], ['solid', 'Körper'], ['hole', 'Löcher'], ['hidden', 'Ausgeblendet'], ['err', 'Mit Fehler'], ['note', 'Mit Notiz'], ['ai', 'Von der KI']];
   function treeMatch(it) {
     const q = treeFilter.trim().toLowerCase();
-    if (q) { const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || ''; if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q))) return false; }
+    if (q) {
+      const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || '';
+      const bodyHit = (it.bodies || []).some((b) => b && (b.name || '').toLowerCase().includes(q));
+      if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q) || bodyHit)) return false;
+    }
     if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
     if (treeKind === 'hole') return it.role === 'hole';
-    if (treeKind === 'hidden') return !!it.hidden;
+    if (treeKind === 'hidden') return !!it.hidden || (it.bodies || []).some((b) => b && b.hidden);
     if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
     if (treeKind === 'note') return !!it.note;
     if (treeKind === 'ai') return !!it.ai;
@@ -14322,6 +14798,85 @@ const Panels = (() => {
     const sel = h('select', { id: 'tree-kind', 'aria-label': 'Nur zeigen' }); for (const [k, l] of TFKINDS) sel.append(h('option', { value: k, ...(k === treeKind ? { selected: true } : {}) }, l));
     sel.onchange = () => { treeKind = sel.value; renderLeft(); };
     return h('div', { class: 'tree-filter', 'data-help': 'treeFilter' }, inp, sel);
+  }
+  function openBodyColorPop(anchor, itemId, bodyIdx, curColor, hasOwnColor) {
+    const box = h('div', { class: 'body-color-pop' });
+    box.append(h('div', { class: 'section-h' }, 'Körperfarbe'));
+    const row = h('div', { class: 'colors' });
+    for (const c of COLORS) {
+      const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === curColor ? 'true' : 'false', style: { background: c.c } });
+      b.onclick = () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: c.c }); };
+      row.append(b);
+    }
+    const free = h('input', { type: 'color', class: 'body-color-inp', value: /^#[0-9a-f]{6}$/i.test(curColor || '') ? curColor : '#2f9e91', 'aria-label': 'Eigene Farbe' });
+    free.addEventListener('change', () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: free.value.toLowerCase() }); });
+    row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+    box.append(row);
+    if (hasOwnColor) {
+      const rst = h('button', { type: 'button', class: 'btn ghost small body-color-reset' });
+      rst.innerHTML = icon('undo') + 'Farbe vom Teil';
+      rst.onclick = () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: null }); };
+      box.append(rst);
+    }
+    UI.pop(anchor, box);
+  }
+  async function renameBodyPrompt(itemId, bodyIdx, curName) {
+    const n = await UI.prompt('Körper umbenennen', 'Name', curName, 'Umbenennen');
+    if (n !== null) Actions.setBody(itemId, bodyIdx, { name: n.trim() || null });
+  }
+  function renderBodiesList(it) {
+    if (!App.doc.items.includes(it) || it.role === 'hole' || App.mergedInto(it.id)) return null;
+    const res = App.results.get(it.id);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || evalBodies.length < 2) return null;
+    const meta = Model.matchBodies(it.bodies, evalBodies);
+    const open = !collapsedBodies.has(it.id);
+    const wrap = h('div', { class: 'bodies-wrap', 'data-bodies-of': it.id, 'data-help': 'bodyList' });
+    const head = h('button', { type: 'button', class: 'bodies-head', 'aria-expanded': open ? 'true' : 'false' });
+    const chev = h('span', { class: 'tw' + (open ? ' open' : '') }); chev.innerHTML = icon('chevR');
+    head.append(chev, h('span', null, `Körper (${evalBodies.length})`));
+    head.onclick = (e) => { e.stopPropagation(); open ? collapsedBodies.add(it.id) : collapsedBodies.delete(it.id); renderLeft(); };
+    wrap.append(head);
+    if (!open) return wrap;
+    const list = h('div', { class: 'bodies-list' });
+    const anyHidden = meta.some((m) => m && m.hidden);
+    for (let bi = 0; bi < evalBodies.length; bi++) {
+      const mb = meta[bi];
+      const bName = (mb && mb.name) || `Körper ${bi + 1}`;
+      const ownCol = (mb && mb.color) || null;
+      const bCol = ownCol || it.color || '#2f9e91';
+      const hidden = !!(mb && mb.hidden);
+      const row = h('div', { class: 'body-row' + (hidden ? ' hidden-item' : ''), dataset: { item: it.id, body: String(bi) } });
+      const colBtn = h('button', { type: 'button', class: 'swatch body-color-btn', style: { background: bCol }, 'aria-label': 'Farbe ändern', 'data-tip': 'Farbe ändern' });
+      colBtn.onclick = (e) => { e.stopPropagation(); openBodyColorPop(colBtn, it.id, bi, bCol, !!ownCol); };
+      const nm = h('span', { class: 'nm', title: bName }, bName);
+      const acts = h('span', { class: 'acts' });
+      const ren = h('button', { type: 'button', class: 'body-rename', 'aria-label': 'Umbenennen', 'data-tip': 'Umbenennen' });
+      ren.innerHTML = icon('edit');
+      ren.onclick = (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); };
+      const eye = h('button', { type: 'button', class: 'body-eye', 'aria-label': hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': hidden ? 'Einblenden' : 'Ausblenden' });
+      eye.innerHTML = icon(hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); Actions.setBody(it.id, bi, { hidden: !hidden }); };
+      acts.append(ren, eye);
+      row.append(colBtn, nm, acts);
+      row.addEventListener('click', (e) => { e.stopPropagation(); App.select([it.id]); });
+      row.addEventListener('dblclick', (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'edit', label: 'Umbenennen', run: () => renameBodyPrompt(it.id, bi, bName) },
+          { icon: 'sliders', label: 'Farbe ändern', run: () => openBodyColorPop(colBtn, it.id, bi, bCol, !!ownCol) },
+          { icon: hidden ? 'eye' : 'eyeOff', label: hidden ? 'Einblenden' : 'Ausblenden', run: () => Actions.setBody(it.id, bi, { hidden: !hidden }) },
+          { icon: 'focusView', label: 'Nur diesen Körper zeigen', run: () => Actions.showOnlyBody(it.id, bi) },
+          ...(anyHidden ? [{ icon: 'eye', label: 'Alle Körper einblenden', run: () => Actions.showAllBodies(it.id) }] : []),
+        ]);
+      });
+      row.addEventListener('pointerenter', () => { if (!hidden) Viewer.highlightBody(it.id, bi); });
+      row.addEventListener('pointerleave', () => Viewer.highlightBody(null, null));
+      list.append(row);
+    }
+    wrap.append(list);
+    return wrap;
   }
   function renderTree(body) {
     const items = App.doc.items;
@@ -14408,6 +14963,8 @@ const Panels = (() => {
           moveInTree(dragId, it.id, mode); dragId = null;
         });
         li.append(row);
+        const bl = renderBodiesList(it);
+        if (bl) li.append(bl);
         if (expanded.has(it.id) || (show && it.kind === 'group')) {
           for (const fin of it.finishes || []) {
             const ferr = errs.find((x) => x.finishId === fin.id);
@@ -14584,7 +15141,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -14735,8 +15292,8 @@ const Panels = (() => {
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
-    if (idx < 0 || it.kind === 'group' || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || it.kind === 'group' || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
     const type = it.op ? it.op.type : 'new';
@@ -14838,7 +15395,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -14847,7 +15404,8 @@ const Panels = (() => {
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
-    if (!isMoveOnly) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
+    const isMergedStep = isMoveOnly || it.kind === 'rib';
+    if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
@@ -14884,10 +15442,58 @@ const Panels = (() => {
       const fl = h('div', { class: 'fields' });
       if (it.kind === 'extrude') {
         const cuts = it.role === 'hole' || (it.op && it.op.type === 'cut');
-        if (!it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
-        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']], onChange: (v) => setP('dir', v) }));
+        const ext = it.p.extent === 'toNext' || it.p.extent === 'toFace' ? it.p.extent : 'dist';
+        const extField = UI.selectField({
+          id: 'p-extent',
+          label: 'Bis',
+          value: ext,
+          options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            let pickAfter = false;
+            App.change(v === 'dist' ? 'Feste Höhe' : v === 'toNext' ? 'Bis zur nächsten Fläche' : 'Bis zu gewählter Fläche', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              if (v === 'dist') {
+                const rd = App.resolvedDist(it.id);
+                if (rd != null) T.p.dist = round(rd, 4);
+                delete T.p.extent; delete T.p.toFace;
+              } else {
+                T.p.extent = v;
+                delete T.p.thru;
+                if (T.p.dir === 'both') T.p.dir = 'normal';
+                if (v === 'toNext') delete T.p.toFace;
+                else if (!T.p.toFace) pickAfter = true;
+              }
+            });
+            if (pickAfter) Features.pickExtrudeFace(it.id);
+          },
+        });
+        extField.setAttribute('data-help', 'extrudeToFace');
+        fl.append(extField);
+        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        const dirOpts = ext === 'dist'
+          ? [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']]
+          : [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['two', 'Beidseitig (Seite 2 fest)']];
+        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: dirOpts, onChange: (v) => setP('dir', v) }));
         if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
-        if (cuts || it.p.thru) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext === 'dist' && (cuts || it.p.thru)) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext !== 'dist') {
+          const rd = App.resolvedDist(it.id);
+          const info = App.resolvedOf(it.id);
+          const tgtIt = info && info.targetId ? Model.find(App.doc, info.targetId) : null;
+          const tgtName = ext === 'toFace' && it.p.toFace && it.p.toFace.label ? it.p.toFace.label : tgtIt ? Model.label(tgtIt.item) : null;
+          const txt = ext === 'toFace' && !it.p.toFace
+            ? 'Noch keine Zielfläche gewählt – klick „Fläche im Bild wählen“.'
+            : rd != null
+              ? `Aktuelle Höhe: ${Units.fmtLenU(rd, 2)}${tgtName ? ` (bis ${tgtName})` : ''}`
+              : 'Wird bis zur Zielfläche berechnet …';
+          fl.append(h('div', { class: 'hint-box', id: 'p-ext-info' }, txt));
+          if (ext === 'toFace') {
+            const pb = h('button', { type: 'button', class: 'btn', id: 'p-pick-face' });
+            pb.innerHTML = icon('pointer') + (it.p.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+            pb.onclick = () => Features.pickExtrudeFace(it.id);
+            fl.append(pb);
+          }
+        }
         const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
@@ -15099,6 +15705,9 @@ const Panels = (() => {
     } else if (it.kind === 'thicken') {
       sec.firstChild.textContent = 'Aufdicken';
       Features.renderThicken(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'rib') {
+      sec.firstChild.textContent = 'Rippe';
+      Features.renderRib(it, sec, setP); w.append(sec);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -15109,7 +15718,7 @@ const Panels = (() => {
     }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
-    if (!isMoveOnly && it.kind !== 'transform') {
+    if (!isMergedStep && it.kind !== 'transform') {
       const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
       const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
@@ -15127,7 +15736,7 @@ const Panels = (() => {
       w.append(pos);
     }
     // Kanten
-    if (it.role !== 'hole' && !isMoveOnly) {
+    if (it.role !== 'hole' && !isMergedStep) {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
@@ -15320,6 +15929,17 @@ const Panels = (() => {
       placeCtx();
       return;
     }
+    if (items.length === 1 && items[0].item.kind === 'rib') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, 'Rippe'));
+      b('edit', 'Skizze bearbeiten', () => Sketch.editItem(it.id), 'accent', 'Skizze dieser Rippe bearbeiten');
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      return;
+    }
     const face = Actions.selectedFace();
     // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
     const valLbl = (txt, val, unit, tip) => {
@@ -15365,6 +15985,7 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
         b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
+        b('rib', 'Rippe', () => Features.startRib(face), 'pro', 'Offene Linie als Rippe bis zu den Wänden ziehen').dataset.help = 'rib';
       }
       b('section', T('ctx.sectionHere'), () => Views.section(true, { face }), '', T('ctx.sectionHereTip'), true);
       if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);
@@ -17523,23 +18144,23 @@ const Sketch = (() => {
   CHINTS.xform = 'Die Kopie folgt ihrem Original: Ändert sich das Original, wandert die Kopie mit. Den Abstand bzw. Winkel kannst du hier ändern.';
   CHINTS.offset = 'Die Kopie bleibt im festen Abstand zum Original. Ändert sich das Original, wandert die Kopie mit. Den Abstand kannst du hier ändern.';
   // ---------- Start ----------
-  function chooseAndStart() {
+  function chooseAndStart(opts = {}) {
     Panels.closeFlyout();
     const face = Actions.selectedFace();
-    if (face && face.info.t === 'PLANE') { startOnFace(face); return; }
+    if (face && face.info.t === 'PLANE') { startOnFace(face, opts); return; }
     const btn = $('#t-sketch');
     const box = h('div', { style: { display: 'grid', gap: '10px' } });
     box.append(h('b', null, 'Wo möchtest du zeichnen?'));
     box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Tipp: Klick eine flache Fläche eines Körpers an und wähle „Skizze hierauf“, um direkt darauf zu zeichnen.'));
     const row = h('div', { class: 'btn-row' });
     let off = 0;
-    const mk = (label, pl) => { const b = h('button', { type: 'button', class: 'btn' }, label); b.onclick = () => { UI.closePop(); startOnPlane(pl, off); }; return b; };
+    const mk = (label, pl) => { const b = h('button', { type: 'button', class: 'btn' }, label); b.onclick = () => { UI.closePop(); startOnPlane(pl, off, opts); }; return b; };
     row.append(mk('Auf der Arbeitsfläche', 'XY'), mk('Stehend (vorne)', 'XZ'), mk('Stehend (seitlich)', 'YZ'));
     box.append(UI.numField({ id: 'sk-off', label: 'Abstand vom Nullpunkt (Ebene verschieben)', value: 0, unit: 'mm', expr: false, onCommit: (v) => { off = v; } }));
     box.append(row);
     // Konstruktionsebenen an Körpern
     const row2 = h('div', { class: 'btn-row' });
-    const pk = (id, label, kind) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); startPlanePick(kind); }; return b; };
+    const pk = (id, label, kind) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); startPlanePick(kind, opts.ribMode ? (pl) => startOnPlaneObj(pl, opts) : undefined); }; return b; };
     row2.append(pk('sk-mid', 'Mittig zwischen zwei Flächen', 'mid'), pk('sk-3p', 'Durch drei Punkte', '3p'));
     box.append(row2);
     // eigene Bezugsebenen des Projekts
@@ -17622,10 +18243,10 @@ const Sketch = (() => {
     return { o: r6v(a), x: r6v(u.normalize()), n: r6v(n) };
   }
   // Skizze auf einer beliebigen Ebene (z. B. einer Bezugsebene)
-  function startOnPlaneObj(plane) { begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null } }); }
-  function startOnPlane(name, off = 0) {
+  function startOnPlaneObj(plane, opts = {}) { begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode } }); }
+  function startOnPlane(name, off = 0, opts = {}) {
     const pl = PLANES[name];
-    begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null }, pOff: off || 0 });
+    begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode }, pOff: off || 0 });
   }
   // Konstruktionsebene: Grundebene um einen Abstand verschieben und um ihre X-Achse neigen
   function applyPlane(look, noRender) {
@@ -17644,19 +18265,19 @@ const Sketch = (() => {
     try { return await Kernel.call('faceLoops', { key: r.key, faceIdx: face.idx }); }
     catch (e) { UI.toast(e.message, { kind: 'bad' }); return null; }
   }
-  async function startOnFace(face) {
+  async function startOnFace(face, opts = {}) {
     const loops = await loopsOf(face); if (loops == null) return;
     const fr = Actions.faceFrame(face.info);
     const plane = { o: fr.o, x: fr.x, n: fr.n };
     const W = Model.worldMatrix(App.doc, face.id);
     const refs = SK.faceLoopsToEnts({ o: fr.o, x: fr.x, y: fr.y }, loops);
-    begin({ plane, W, ents: [], refs, ctx: { mode: 'new', targetId: face.id } });
+    begin({ plane, W, ents: [], refs, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
   }
   function editItem(id) {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
     begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, refs: [], ctx: { mode: 'edit', editId: id } });
-    if (f.item.kind === 'group') return;   // Muster entlang Kurve: Original und Kopien bleiben sichtbar
+    if (f.item.kind === 'group' || f.item.kind === 'rib') return;   // Muster entlang Kurve & Rippe: Zielkörper bleibt sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id);
@@ -17793,7 +18414,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -20080,7 +20701,13 @@ const Sketch = (() => {
   let lastMouse = null;
   function onMove(e) {
     if (!S) return;
-    if (S.step) return stepMove(e);
+    if (S.step) {
+      if (S.step.pickingFace) {
+        const h2 = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: new Set(['__preview']) });
+        Viewer.highlightFace('hover', h2 && h2.faceIdx >= 0 ? h2.id : null, h2 && h2.faceIdx >= 0 ? h2.faceIdx : null);
+      }
+      return stepMove(e);
+    }
     if (S.band) return;
     const uv0 = mouseUV(e); if (!uv0) return;
     lastMouse = { e, uv: uv0 };
@@ -20273,7 +20900,20 @@ const Sketch = (() => {
     if (!S) return false;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
-    if (S.step) { if (e.key === 'Escape') { stepBack(); return true; } if (e.key === 'Enter') { stepOK(); return true; } return false; }
+    if (S.step) {
+      if (e.key === 'Escape') {
+        if (S.step.pickingFace) {
+          S.step.pickingFace = false;
+          Viewer.canvas.style.cursor = '';
+          Viewer.highlightFace('hover', null, null);
+          renderStep();
+          return true;
+        }
+        stepBack(); return true;
+      }
+      if (e.key === 'Enter') { stepOK(); return true; }
+      return false;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) { e.preventDefault(); copySel(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.shiftKey) { e.preventDefault(); pasteClip(); return true; }
@@ -21794,8 +22434,9 @@ const Sketch = (() => {
       const isThinEdit = editKind === 'extrude' && editIt && editIt.p && editIt.p.thin;
       if (!pathMode) {
         if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast('Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.', { kind: 'bad' }); return; }
+        if (editKind === 'rib' && !SK.chains(S.ents).length) { UI.toast('Die Rippe braucht mindestens eine offene Linie, einen Bogen oder eine Kurve.', { kind: 'bad' }); return; }
         if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für eine dünne Wand braucht die Skizze mindestens eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
-        if (editKind !== 'sweep' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+        if (editKind !== 'sweep' && editKind !== 'rib' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
       }
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
@@ -21808,7 +22449,7 @@ const Sketch = (() => {
       const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
       finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
-    if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: true }); return; }
+    if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: !S.ctx.ribMode, rib: !!S.ctx.ribMode }); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
     extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal' });
   }
@@ -21835,32 +22476,109 @@ const Sketch = (() => {
     const regs = SK.regions(S.ents);
     const openOnly = !!opts.openOnly || !regs.length;
     const tgt = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
-    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, sweep: false, openOnly, thin: openOnly ? true : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, revDir: 'normal', angle2: 90, toFace: null, toFaceFlip: false, pickingFace: false, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    const ribTargets = typeof Features !== 'undefined' && Features.ribTargets ? Features.ribTargets() : [];
+    const ctxTop = S.ctx.targetId ? Model.topOf(App.doc, S.ctx.targetId) : null;
+    const ribTarget = (ctxTop && ribTargets.some((x) => x.id === ctxTop.id) ? ctxTop.id : (ribTargets[ribTargets.length - 1] || {}).id) || null;
+    const useRib = !!opts.rib && !!ribTarget;
+    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: false, sweep: false, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, openOnly, thin: openOnly ? !useRib : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
     Panels.renderRight();
     updatePreview(); render();
   }
+  function updateStepExtInfo() {
+    const box = stepBox && stepBox.querySelector('#st-ext-info');
+    if (!box || !S || !S.step) return;
+    const st = S.step;
+    const rd = App.resolvedDist('__preview');
+    const err = App.errorsFor('__preview')[0];
+    box.className = err ? 'err-box' : 'hint-box';
+    if (err) { box.textContent = err.message; return; }
+    if (st.extent === 'toFace' && !st.toFace) { box.textContent = 'Klick im 3D-Bild auf die Zielfläche oder eine Bezugsebene.'; return; }
+    const tgt = st.extent === 'toFace' && st.toFace && st.toFace.label ? ` (${st.toFace.label})` : '';
+    box.textContent = rd != null ? `Berechnete Höhe: ${Units.fmtLenU(rd, 2)}${tgt}` : 'Berechnet die Höhe bis zur Zielfläche …';
+  }
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
-    UI.hint(st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
-    stepBox.append(h('h3', null, st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
+    const ribTargets = typeof Features !== 'undefined' && Features.ribTargets ? Features.ribTargets() : [];
+    UI.hint(st.pickingFace ? '<b>Zielfläche wählen:</b> Klick auf die gewünschte Fläche oder Bezugsebene im Bild. <b>Esc</b> bricht ab.' : st.rib ? 'Verlängert deine offene Linie mit <b>Dicke</b> bis zu den Wänden und vereinigt sie mit dem Körper.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
+    stepBox.append(h('h3', null, st.rib ? 'Rippe' : st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
     const seg = h('div', { class: 'role-switch' });
     if (st.openOnly) {
-      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.thin = true; renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; renderStep(); updatePreview(); };
-      seg.append(a, b); stepBox.append(seg);
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.rib = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; st.rib = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + 'Rippe'; c.onclick = () => { st.rib = true; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      seg.append(a, b, c); stepBox.append(seg);
     } else if (!st.fromPushPull) {
-      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b); stepBox.append(seg);
     }
-    if (st.sweep) {
+    if (st.rib) {
+      if (!ribTargets.length) {
+        stepBox.append(h('div', { class: 'hint-box' }, 'Für eine Rippe braucht es zuerst einen Körper im Projekt.'));
+      } else {
+        if (!st.ribTarget || !ribTargets.some((x) => x.id === st.ribTarget)) st.ribTarget = ribTargets[ribTargets.length - 1].id;
+        stepBox.append(UI.selectField({ id: 'st-rib-target', label: 'Zielkörper', value: st.ribTarget, options: ribTargets.map((x) => [x.id, Model.label(x)]), onChange: (v) => { st.ribTarget = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-rib-t', label: 'Dicke', value: st.ribThickness, min: 0.1, onCommit: (v) => { st.ribThickness = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-rib-side', label: 'Lage zur Linie', value: st.ribSide || 'center', options: [['center', 'Mittig'], ['side1', 'Einseitig (Seite 1)'], ['side2', 'Einseitig (Seite 2)']], onChange: (v) => { st.ribSide = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-rib-dir', label: 'Richtung', value: st.ribDir || 'normal', options: [['normal', 'Senkrecht zur Skizze (Steg)'], ['parallel', 'In der Skizzenebene (Stütze)']], onChange: (v) => { st.ribDir = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-rib-draft', label: 'Schräge (optional)', value: st.ribDraft ?? 0, unit: '°', min: 0, onCommit: (v) => { st.ribDraft = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-rib-depth', label: 'Tiefe (0 = bis zur Wand)', value: st.ribDepth ?? 0, min: 0, onCommit: (v) => { st.ribDepth = v; updatePreview(); } }));
+        const fl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-rib-flip', checked: !!st.ribFlip }), 'Richtung umkehren');
+        fl.querySelector('input').onchange = (e) => { st.ribFlip = e.target.checked; updatePreview(); };
+        stepBox.append(fl);
+      }
+    } else if (st.sweep) {
       stepBox.append(h('p', null, 'Zieht ein Rohr Ø 6 mm entlang des offenen Pfads. Form, Größe und Wand kannst du danach rechts einstellen.'));
     } else if (!st.revolve) {
-      stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
-      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir, options: [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']], onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      const ext = st.extent === 'toNext' || st.extent === 'toFace' ? st.extent : 'dist';
+      const exF = UI.selectField({
+        id: 'st-extent',
+        label: 'Bis',
+        value: ext,
+        options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+        onChange: (v) => {
+          st.extent = v;
+          if (v === 'dist') {
+            const rd = App.resolvedDist('__preview');
+            if (rd != null) st.dist = round(rd, 4);
+            st.pickingFace = false;
+            Viewer.canvas.style.cursor = '';
+            Viewer.highlightFace('hover', null, null);
+          } else {
+            if (st.dir === 'both') st.dir = 'normal';
+            if (v === 'toNext') { st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); }
+            else if (v === 'toFace' && !st.toFace) { st.pickingFace = true; Viewer.canvas.style.cursor = 'crosshair'; }
+          }
+          renderStep(); updatePreview();
+        },
+      });
+      exF.setAttribute('data-help', 'extrudeToFace');
+      stepBox.append(exF);
+      if (ext === 'dist') {
+        stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
+      }
+      const dirOpts = ext === 'dist'
+        ? [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']]
+        : [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten']];
+      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir === 'both' && ext !== 'dist' ? 'normal' : st.dir, options: dirOpts, onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      if (ext === 'toFace') {
+        const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-pick-face' });
+        pb.innerHTML = icon('pointer') + (st.pickingFace ? 'Klick auf eine Fläche …' : st.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.onclick = () => {
+          st.pickingFace = !st.pickingFace;
+          Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : '';
+          if (!st.pickingFace) Viewer.highlightFace('hover', null, null);
+          renderStep();
+        };
+        stepBox.append(pb);
+      }
+      if (ext !== 'dist') {
+        stepBox.append(h('div', { class: 'hint-box', id: 'st-ext-info' }));
+        updateStepExtInfo();
+      }
       if (!st.openOnly && !st.fromPushPull) {
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => { st.thin = e.target.checked; renderStep(); updatePreview(); };
@@ -21887,8 +22605,8 @@ const Sketch = (() => {
         onChange: (v) => {
           st.revDir = v;
           if (v === 'two' && st.angle >= 359) { st.angle = 90; st.angle2 = 90; }
-          if (v !== 'toFace') { st.pickingFace = false; Viewer.canvas.style.cursor = ''; }
-          else if (!st.toFace) { st.pickingFace = true; Viewer.canvas.style.cursor = 'crosshair'; }
+          if (v !== 'toFace') { st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); }
+          else if (!st.revToFace) { st.pickingFace = true; Viewer.canvas.style.cursor = 'crosshair'; }
           renderStep(); updatePreview();
         },
       });
@@ -21901,26 +22619,26 @@ const Sketch = (() => {
         if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(st.angle / 2, 1)}°`)));
         if (rdir === 'two') stepBox.append(UI.numField({ id: 'st-angle2', label: 'Winkel Seite 2', value: st.angle2, unit: '°', min: 0, onCommit: (v) => { st.angle2 = clamp(v, 0, 360); updatePreview(); } }));
       } else {
-        stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.toFace ? `${st.toFace.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${st.toFace.name || 'Fläche'}“` : 'Noch keine Fläche gewählt')));
+        stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.revToFace ? `${st.revToFace.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${st.revToFace.name || 'Fläche'}“` : 'Noch keine Fläche gewählt')));
         const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-rev-face-pick' });
-        pb.innerHTML = icon('cursor') + (st.pickingFace ? 'Fläche im Bild anklicken …' : st.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
-        pb.onclick = () => { st.pickingFace = !st.pickingFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; renderStep(); };
+        pb.innerHTML = icon('cursor') + (st.pickingFace ? 'Fläche im Bild anklicken …' : st.revToFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.onclick = () => { st.pickingFace = !st.pickingFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); };
         stepBox.append(pb);
         const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
         if (dats.length) {
           stepBox.append(UI.selectField({
             id: 'st-rev-face-datum', label: 'Bezugsebene als Ziel',
-            value: st.toFace && st.toFace.kind === 'datum' ? st.toFace.datumId : '',
+            value: st.revToFace && st.revToFace.kind === 'datum' ? st.revToFace.datumId : '',
             options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
             onChange: (v) => {
               const d = v ? Datums.find(v) : null; if (!d || !d.plane) return;
               const inv = S.W.clone().invert(), r6 = (a) => a.map((x) => round(x, 6));
               const oL = new THREE.Vector3(...d.plane.o).applyMatrix4(inv).toArray();
               const nL = new THREE.Vector3(...d.plane.n).transformDirection(inv).normalize().toArray();
-              st.toFace = { kind: 'datum', datumId: d.id, o: r6(oL), fn: r6(nL), name: d.name };
+              st.revToFace = { kind: 'datum', datumId: d.id, o: r6(oL), fn: r6(nL), name: d.name };
               const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
               st.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, oL);
-              st.pickingFace = false; Viewer.canvas.style.cursor = '';
+              st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
               renderStep(); updatePreview();
             },
           }));
@@ -21931,17 +22649,29 @@ const Sketch = (() => {
         if (st.pickingFace) UI.hint('<b>Zielfläche wählen:</b> Klick auf eine ebene Fläche eines Körpers oder eine Bezugsebene.');
       }
     }
-    if (!st.sweep) {
+    if (!st.sweep && !st.rib) {
       const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
       stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
     }
     const row = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } });
     const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? 'Abbrechen' : icon('undo') + 'Skizze'; back.dataset.tip = st.fromPushPull ? '' : 'Zurück zur Skizze'; back.onclick = () => stepBack();
-    const ok = h('button', { type: 'button', class: 'btn primary' }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
+    const ok = h('button', { type: 'button', class: 'btn primary', disabled: st.rib && !ribTargets.length }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
     row.append(back, ok); stepBox.append(row);
   }
   function stepItem() {
     const st = S.step;
+    if (st.rib) {
+      return Model.newItem('rib', {
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) },
+        target: st.ribTarget,
+        thickness: st.ribThickness,
+        side: st.ribSide || 'center',
+        dir: st.ribDir || 'normal',
+        flip: !!st.ribFlip,
+        depth: st.ribDepth ?? 0,
+        draft: st.ribDraft ?? 0,
+      }, { name: 'Rippe', color: st.color });
+    }
     if (st.sweep) {
       return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
     }
@@ -21954,7 +22684,13 @@ const Sketch = (() => {
     const it = Model.newItem(kind, {}, { name, role, color: st.color });
     const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
     if (kind === 'extrude') {
-      p.dist = st.dist; p.dir = st.dir;
+      const rd = (st.extent === 'toNext' || st.extent === 'toFace') ? App.resolvedDist('__preview') : null;
+      p.dist = rd != null ? round(rd, 4) : st.dist;
+      p.dir = st.dir;
+      if (st.extent === 'toNext' || st.extent === 'toFace') {
+        p.extent = st.extent;
+        if (st.extent === 'toFace' && st.toFace) p.toFace = deepClone(st.toFace);
+      }
       if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02;
       if (st.thin) { p.thin = true; p.wall = st.wall; p.wallSide = st.wallSide || 'center'; }
     }
@@ -21963,7 +22699,7 @@ const Sketch = (() => {
       p.angle = st.angle;
       if (p.dir === 'two') p.angle2 = st.angle2;
       if (p.dir === 'toFace') {
-        if (st.toFace) p.toFace = deepClone(st.toFace);
+        if (st.revToFace) p.toFace = deepClone(st.revToFace);
         p.toFaceFlip = !!st.toFaceFlip;
       }
       if (typeof st.axis === 'string' && st.axis.startsWith('da:') && typeof Datums !== 'undefined') {
@@ -21984,6 +22720,7 @@ const Sketch = (() => {
   }
   const previewUpd = debounce(() => {
     if (!S || !S.step) return;
+    if (S.step.rib && !S.step.ribTarget) { App.extra = []; App.rebuild(); placeArrow(); return; }
     const it = stepItem();
     // Vorschau als Objekt in Weltlage
     Model.setFromMatrix(it, S.W);
@@ -22013,7 +22750,7 @@ const Sketch = (() => {
   function placeArrow() {
     if (arrow) { arrow.remove(); arrow = null; }
     for (const l of labels.filter((x) => x.classList.contains('steplabel'))) l.remove();
-    if (!S || !S.step || S.step.revolve || S.step.sweep) { Viewer.requestRender(); return; }
+    if (!S || !S.step || S.step.revolve || S.step.sweep || S.step.rib || S.step.extent === 'toNext' || S.step.extent === 'toFace') { Viewer.requestRender(); return; }
     const p = arrowPos();
     const dir = S.F.n.clone().multiplyScalar(S.step.dir === 'reverse' ? -1 : 1);
     const ps = Viewer.pixelSizeAt(p);
@@ -22046,6 +22783,7 @@ const Sketch = (() => {
   function stepDown(e) {
     if (e.button !== 0 || !S.step) return;
     if (S.step.revolve && S.step.pickingFace) {
+      e.preventDefault(); e.stopPropagation();
       const hits = Viewer.pickAll(e.clientX, e.clientY).filter((h) => h.id !== '__preview');
       const hit = hits[0] || null;
       const r = hit ? App.results.get(hit.id) : null;
@@ -22058,10 +22796,10 @@ const Sketch = (() => {
         const pickW = hit.point ? hit.point.clone() : oW.clone();
         const oL = oW.applyMatrix4(inv).toArray(), nL = nW.transformDirection(inv).normalize().toArray(), pickL = pickW.applyMatrix4(inv).toArray();
         const tgt = Model.find(App.doc, hit.id);
-        S.step.toFace = { kind: 'face', targetId: hit.id, c: r6(fi.c), n: r6(fi.n), o: r6(oL), fn: r6(nL), name: tgt ? Model.label(tgt.item) : 'Fläche' };
+        S.step.revToFace = { kind: 'face', targetId: hit.id, c: r6(fi.c), n: r6(fi.n), o: r6(oL), fn: r6(nL), name: tgt ? Model.label(tgt.item) : 'Fläche' };
         const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
         S.step.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, pickL);
-        S.step.pickingFace = false; Viewer.canvas.style.cursor = '';
+        S.step.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
         renderStep(); updatePreview();
         return;
       }
@@ -22069,14 +22807,26 @@ const Sketch = (() => {
       if (dp) {
         const oL = new THREE.Vector3(...dp.datum.plane.o).applyMatrix4(inv).toArray();
         const nL = new THREE.Vector3(...dp.datum.plane.n).transformDirection(inv).normalize().toArray();
-        S.step.toFace = { kind: 'datum', datumId: dp.datum.id, o: r6(oL), fn: r6(nL), name: dp.datum.name };
+        S.step.revToFace = { kind: 'datum', datumId: dp.datum.id, o: r6(oL), fn: r6(nL), name: dp.datum.name };
         const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
         S.step.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, oL);
-        S.step.pickingFace = false; Viewer.canvas.style.cursor = '';
+        S.step.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
         renderStep(); updatePreview();
         return;
       }
       UI.toast('Bitte wähle eine ebene Fläche eines Körpers oder eine Bezugsebene.', { icon: 'info' });
+      return;
+    }
+    if (S.step.pickingFace) {
+      e.preventDefault(); e.stopPropagation();
+      const ref = Features.pickTargetFaceAt(e.clientX, e.clientY, new Set(['__preview']));
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      S.step.toFace = ref;
+      S.step.pickingFace = false;
+      Viewer.canvas.style.cursor = '';
+      Viewer.highlightFace('hover', null, null);
+      S.step.dir = Features.autoFlipDirForFace(S.plane, S.W, S.step.dir || 'normal', ref);
+      renderStep(); updatePreview();
       return;
     }
     // Fläche an-/abwählen
@@ -22113,6 +22863,7 @@ const Sketch = (() => {
   const placeArrowSoon = throttle(() => { if (S && S.step) { const d = S.step.dragging; placeArrow(); if (d) S.step.dragging = d; } }, 50);
   function stepUp() { if (S && S.step && S.step.dragging) { S.step.dragging = null; renderStep(); } }
   function stepBack() {
+    Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
     if (S.step.fromPushPull) { cancel(); return; }
     Viewer.canvas.style.cursor = '';
     S.step = null; App.extra = []; App.rebuild();
@@ -22121,12 +22872,14 @@ const Sketch = (() => {
     placeArrow(); showBar(); Panels.renderRight(); UI.hint(HINTS[S.tool]); render();
   }
   function stepOK() {
+    if (S.step && S.step.rib && !S.step.ribTarget) { UI.toast('Für eine Rippe braucht es zuerst einen Zielkörper.', { kind: 'bad' }); return; }
+    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib) { UI.toast('Klick zuerst eine Zielfläche im Bild an.', { icon: 'info' }); return; }
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
-    const lbl = it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    const lbl = it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
     App.change(lbl, (doc) => {
-      if (ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
+      if (it.kind !== 'rib' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
     });
     finishSession();
@@ -22134,7 +22887,7 @@ const Sketch = (() => {
     App.select([top ? top.id : it.id]);
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
-    UI.toast(it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
+    UI.toast(it.kind === 'rib' ? 'Rippe erstellt und mit dem Körper vereinigt. Dicke, Lage und Schräge kannst du rechts jederzeit ändern.' : it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
   }
   // ---------- Beenden ----------
   function cancel(silent) {
@@ -22150,6 +22903,7 @@ const Sketch = (() => {
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
     Viewer.highlightFace('hover', null, null);
+    Viewer.canvas.style.cursor = '';
     if (stepBox) { stepBox.remove(); stepBox = null; }
     Viewer.canvas.style.cursor = '';
     S = null; lastMouse = null; placeArrow();
@@ -22160,7 +22914,7 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
-    App.on('results', relinkAll);
+    App.on('results', () => { relinkAll(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
@@ -23091,7 +23845,7 @@ const Commands = (() => {
     { id: 'hideSel', group: 'Modell', label: 'Ausblenden / Alles einblenden', def: 'shift+h', run: () => { if (App.sel.length) Actions.hideSelected(); else Actions.showAll(); } },
     { id: 'invertSel', group: 'Modell', label: 'Auswahl umkehren', def: 'ctrl+shift+i', run: () => Actions.invertSelection() },
     { id: 'dupLinked', group: 'Modell', label: 'Verknüpft duplizieren', def: 'ctrl+shift+d', run: () => Actions.duplicateLinked() },
-    { id: 'editItem', group: 'Modell', label: 'Skizze bzw. Bauteil bearbeiten', def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
+    { id: 'editItem', group: 'Modell', label: 'Skizze bzw. Bauteil bearbeiten', def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
     { id: 'delete', group: 'Modell', label: 'Auswahl löschen', def: 'delete', run: () => { if (App.sel.length) Actions.remove(); else return false; } },
     { id: 'hole', group: 'Modell', label: 'Zwischen Körper und Loch wechseln', def: 'h', run: () => { if (App.sel.length) Actions.toggleRole(); else return false; } },
     { id: 'similar', group: 'Modell', label: 'Ähnliche auswählen', def: 'a', run: () => { if (App.sel.length || App.edges.length) Select.similar(); else return false; } },
@@ -23240,6 +23994,7 @@ const Commands = (() => {
     add('bool-sub', 'Abziehen (Boolesch)', 'boolSubtract', 'boolesch abziehen differenz', () => Features.boolean('subtract'), { group: 'Bearbeiten' });
     add('bool-int', 'Schnittmenge (Boolesch)', 'boolIntersect', 'boolesch schnittmenge', () => Features.boolean('intersect'), { group: 'Bearbeiten' });
     add('shell', 'Aushöhlen / Wandstärke', 'shell', 'wandstärke aushöhlen schale hohl gehäuse', () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast('Klick zuerst die Fläche an, die offen sein soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
+    add('rib', 'Rippe anlegen (Versteifung aus Linie)', 'rib', 'rippe steg versteifung schräge gehäuse schale wand', () => Features.startRib(), { group: 'Bearbeiten' });
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
     add('notes-show', 'Notizen ein- oder ausblenden', 'notesShow', 'notizen zeigen verstecken ausblenden', () => ViewPrefs.toggle('notes'), { group: 'Ansicht' });
@@ -23892,7 +24647,7 @@ const Print = (() => {
     const matName = (it && it.mat) || (App.doc.settings && App.doc.settings.material) || null;
     const L = Viewer.lookOf(matName);
     const matCol = L.nat && !(it && it.colorSet) ? L.col : null;
-    const hex = matCol || (it && it.color) || o.color || '#2f9e91';
+    const hex = o.bodyColor || matCol || (it && it.color) || o.color || '#2f9e91';
     const srgb = parseHexSrgb(hex);
     const opacity = it && it.opacity != null && it.opacity < 1 ? Math.max(0.05, it.opacity) : (L.glass || 1);
     return {
@@ -24289,14 +25044,14 @@ const Print = (() => {
         const STL = opts.stlText ? buildSTLText : buildSTL;
         const objs = (only ? res.objects.filter((o) => only.includes(o.id)) : res.objects).map((o) => {
           const f = Model.find(App.doc, o.id);
-          return f ? { ...o, name: o.name || Model.label(f.item), color: o.color || f.item.color } : o;
+          return f ? { ...o, name: o.name || Model.label(f.item), color: o.bodyColor || o.color || f.item.color } : o;
         });
         if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
         if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
         if (opts.obj) { const r = buildOBJ(objs, name); files.push({ name: name + '.obj', data: r.obj }, { name: name + '.mtl', data: r.mtl }); }
         if (opts.glb) files.push({ name: name + '.glb', data: buildGLB(objs, name) });
-        if (opts.each && objs.length > 1) {
+        if (opts.each && objs.length) {
           const used = new Map();
           for (const o of objs) {
             const f = Model.find(App.doc, o.id); let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper')); const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
@@ -27906,7 +28661,7 @@ const Variants = (() => {
 // die sich mit einem Klick als markierte Schritte umsetzen lassen.
 
 // Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
-const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"blindHole":{"was":"Bohrt ein Sackloch bis zu einer festen Tiefe, mit spitzem Boden wie von einem 118°-Spiralbohrer.","wozu":"Ideal für Bohrungen, die nicht auf der Rückseite wieder heraustreten dürfen.","achtung":"Die Gesamttiefe ist die Zylindertiefe plus die Höhe der Bohrspitze – lass genug Material bis zur Rückseite."},"fitHole":{"was":"Bohrt ein rundes Loch genau mit dem gewählten Nennmaß für eine H7-Passung (ISO 286).","wozu":"Für Passstifte, Wellen und Lager, die spielfrei oder genau geführt sitzen sollen.","achtung":"Im 3D-Modell steht das genaue Nennmaß – beim Fräsen oder Drehen wird danach mit der Reibahle auf H7 gerieben."},"centerHole":{"was":"Erzeugt eine genormte Zentrierbohrung nach DIN 332 Form A mit 60°-Kegel und kleiner Führungsbohrung.","wozu":"Nimmt die Drehbank-Spitze auf oder dient beim Bohren als genaue Anbohrung.","achtung":"Wähle die Größe passend zum Wellendurchmesser – die Maße sind fest durch DIN 332 vorgegeben."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."},"transform":{"was":"Verschiebt oder dreht einen Körper als eigenen Schritt im Verlauf – wahlweise auch als Kopie.","wozu":"Du kannst den Schritt später jederzeit ändern oder unterdrücken, statt die feste Lage des Körpers zu überschreiben.","achtung":"Änderst du das Original weiter vorne im Verlauf, wandert der versetzte Körper oder seine Kopie automatisch mit."},"scale":{"was":"Vergrößert oder verkleinert einen Körper gleichmäßig oder je Achse getrennt – um seinen Schwerpunkt oder den Ursprung.","wozu":"Ideal, um ein Teil an ein anderes Maß anzupassen oder Schwindung und Luftspiel gezielt auszugleichen.","achtung":"Bei verschiedenen Faktoren je Achse werden runde Flächen elliptisch – im Verlauf bleibt der Schritt jederzeit umkehrbar."},"thicken":{"was":"Macht aus einer gewählten Körperfläche eine Platte mit fester Dicke – nach außen, innen oder mittig.","wozu":"Damit verstärkst du gezielt eine Wand, setzt eine Deckplatte auf oder erzeugst ein passendes Gegenstück als eigenen Körper.","achtung":"Wenn du nach innen aufdickst und es sichtbar sein soll, wähle „Eigene Platte“ oder „Vom Körper abziehen“."}};
+const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"blindHole":{"was":"Bohrt ein Sackloch bis zu einer festen Tiefe, mit spitzem Boden wie von einem 118°-Spiralbohrer.","wozu":"Ideal für Bohrungen, die nicht auf der Rückseite wieder heraustreten dürfen.","achtung":"Die Gesamttiefe ist die Zylindertiefe plus die Höhe der Bohrspitze – lass genug Material bis zur Rückseite."},"fitHole":{"was":"Bohrt ein rundes Loch genau mit dem gewählten Nennmaß für eine H7-Passung (ISO 286).","wozu":"Für Passstifte, Wellen und Lager, die spielfrei oder genau geführt sitzen sollen.","achtung":"Im 3D-Modell steht das genaue Nennmaß – beim Fräsen oder Drehen wird danach mit der Reibahle auf H7 gerieben."},"centerHole":{"was":"Erzeugt eine genormte Zentrierbohrung nach DIN 332 Form A mit 60°-Kegel und kleiner Führungsbohrung.","wozu":"Nimmt die Drehbank-Spitze auf oder dient beim Bohren als genaue Anbohrung.","achtung":"Wähle die Größe passend zum Wellendurchmesser – die Maße sind fest durch DIN 332 vorgegeben."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."},"transform":{"was":"Verschiebt oder dreht einen Körper als eigenen Schritt im Verlauf – wahlweise auch als Kopie.","wozu":"Du kannst den Schritt später jederzeit ändern oder unterdrücken, statt die feste Lage des Körpers zu überschreiben.","achtung":"Änderst du das Original weiter vorne im Verlauf, wandert der versetzte Körper oder seine Kopie automatisch mit."},"scale":{"was":"Vergrößert oder verkleinert einen Körper gleichmäßig oder je Achse getrennt – um seinen Schwerpunkt oder den Ursprung.","wozu":"Ideal, um ein Teil an ein anderes Maß anzupassen oder Schwindung und Luftspiel gezielt auszugleichen.","achtung":"Bei verschiedenen Faktoren je Achse werden runde Flächen elliptisch – im Verlauf bleibt der Schritt jederzeit umkehrbar."},"thicken":{"was":"Macht aus einer gewählten Körperfläche eine Platte mit fester Dicke – nach außen, innen oder mittig.","wozu":"Damit verstärkst du gezielt eine Wand, setzt eine Deckplatte auf oder erzeugst ein passendes Gegenstück als eigenen Körper.","achtung":"Wenn du nach innen aufdickst und es sichtbar sein soll, wähle „Eigene Platte“ oder „Vom Körper abziehen“."},"rib":{"was":"Zieht eine offene Linie aus einer Skizze mit Dicke bis zu den Wänden des Zielkörpers und verschmilzt sie als Versteifungs-Rippe damit.","wozu":"Ideal für stabile Gehäuse-Stege und Winkel-Stützen – ganz ohne die Umrisse genau an runde oder schräge Wände anpassen zu müssen.","achtung":"Prüfe bei Fehlern, ob die Linie in Richtung des Körpers zeigt, oder schalte auf „Richtung umkehren“ bzw. zwischen „Senkrecht“ und „In der Skizzenebene“ um."}};
 
 const Explain = (() => {
   function keyOf(it) {
@@ -27961,12 +28716,18 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       lines.push({ k: 'op', t: `${p.mode === 'new' ? 'Erzeugt eine Platte von einer Fläche von' : p.mode === 'cut' ? 'Trägt eine aufgedickte Fläche ab von' : 'Dickt eine Fläche auf von'} „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${size ? ' (' + size + ')' : ''}.` });
     }
+    if (it.kind === 'rib') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const sideTxt = p.side === 'side1' || p.side === 'side2' ? 'einseitig' : 'mittig';
+      const dirTxt = p.dir === 'parallel' ? 'in der Skizzenebene' : 'senkrecht zur Skizze';
+      lines.push({ k: 'op', t: `Verstärkt „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ als Rippe (${Units.fmtLenU(Model.num(p.thickness, V, 2), 2, doc)} dick, ${sideTxt}, ${dirTxt}${Math.abs(Model.num(p.draft, V, 0)) > 1e-6 ? `, ${fmt(Model.num(p.draft, V, 0), 1)}° Schräge` : ''}).` });
+    }
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
     for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });

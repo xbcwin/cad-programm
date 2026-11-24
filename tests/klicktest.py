@@ -7748,6 +7748,143 @@ def t_eigene_schrift(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a029_hochziehen_bis_flaeche(p):
+    # 1. Pflicht-Szenario Teil 1: Platte (z=0..5), darüber im Abstand 15 ein Quader (z=20..30).
+    # Kreis-Skizze auf der Platte mit „Bis zur nächsten Fläche“ → Höhe 15
+    p.empty()
+    p.ev("""App.change('x', d => {
+      const a = Model.newItem('box', { w: 60, d: 60, h: 5 }, { name: 'Platte' }); d.items.push(a);
+      const b = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Quader' }); b.t.z = 20; d.items.push(b);
+    })"""); warte_rechnen(p)
+    p.ev("const r=App.results.get(App.doc.items[0].id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.99); return Sketch.startOnFace({id:App.doc.items[0].id, idx:fi, info:r.data.faces[fi]})")
+    p.wait(1200)
+    p.ev("Sketch.state.ents.push({id:'c1',type:'circle',c:[0,0],r:8})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.select_option('#st-extent', 'toNext'); p.wait(500); warte_rechnen(p)
+    prev_dist = p.ev("return App.resolvedDist('__preview')")
+    prev_txt = p.pg.locator('#st-ext-info').inner_text()
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(800); warte_rechnen(p)
+
+    info1 = p.ev("""const g=App.doc.items[0]; const ext=g.children && g.children[1];
+      return {
+        isGrp: g.kind==='group',
+        ext: ext ? ext.p.extent : null,
+        id: ext ? ext.id : null,
+        dist: ext ? App.resolvedDist(ext.id) : null,
+        bb: App.results.get(g.id) && App.results.get(g.id).data.bbox,
+        errs: App.errors.length
+      }""")
+    vol_map = lambda: p.ev("return Mass.measure().then(r=>Object.fromEntries((r.parts||[]).map(q=>[q.id, q.volume])))")
+    v1 = vol_map()
+    exp_v1 = 60 * 60 * 5 + math.pi * 64 * 15
+    ok1 = (
+        prev_dist is not None and abs(prev_dist - 15) < 0.05 and '15' in prev_txt
+        and info1['isGrp'] and info1['ext'] == 'toNext' and info1['errs'] == 0
+        and info1['dist'] is not None and abs(info1['dist'] - 15) < 0.05
+        and info1['bb'] is not None and abs(info1['bb'][5] - 20) < 0.05
+        and abs(v1.get(p.ev("return App.doc.items[0].id"), 0) - exp_v1) < 15
+    )
+
+    # 2. Pflicht-Szenario Teil 2: Quader um 5 nach oben verschieben → Höhe wächst auf 20
+    p.ev("App.change('Quader hoch', d => { d.items[1].t.z = 25; })"); warte_rechnen(p)
+    ext_id = info1['id']
+    info2 = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox, errs: App.errors.length }", ext_id)
+    v2 = vol_map()
+    exp_v2 = 60 * 60 * 5 + math.pi * 64 * 20
+    p.ev("App.select([arg])", ext_id); p.wait(400)
+    panel_txt = p.pg.locator('#p-ext-info').inner_text() if p.pg.locator('#p-ext-info').count() else ''
+    ok2 = (
+        info2['errs'] == 0 and info2['dist'] is not None and abs(info2['dist'] - 20) < 0.05
+        and abs(info2['bb'][5] - 25) < 0.05
+        and abs(v2.get(p.ev("return App.doc.items[0].id"), 0) - exp_v2) < 15
+        and p.pg.locator('#p-extent').input_value() == 'toNext' and '20' in panel_txt
+    )
+
+    # 3. Verschieben als Schritt (transform) um +5 → Höhe wächst mit auf 25
+    p.ev("""App.change('Transform', d => {
+      const xf = Model.newItem('transform', { target: d.items[1].id, dz: 5 }); d.items.push(xf);
+    })"""); warte_rechnen(p)
+    info3 = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox }", ext_id)
+    v3 = vol_map()
+    exp_v3 = 60 * 60 * 5 + math.pi * 64 * 25
+    ok3 = (
+        info3['dist'] is not None and abs(info3['dist'] - 25) < 0.05
+        and abs(info3['bb'][5] - 30) < 0.05
+        and abs(v3.get(p.ev("return App.doc.items[0].id"), 0) - exp_v3) < 15
+    )
+
+    # 4. „Bis zu gewählter Fläche“ per echtem Klick im 3D auf Oberseite des Quaders (z=35) + Größenänderung (h: 10→16)
+    p.ev("App.change('Transform weg', d => { d.items.splice(2, 1); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(); App.select([arg])", ext_id); p.wait(600)
+    p.pg.select_option('#p-extent', 'toFace'); p.wait(300)
+    top_pt = world_screen(p, 0, 0, 35)
+    p.pg.mouse.click(top_pt[0], top_pt[1]); p.wait(600); warte_rechnen(p)
+    info4a = p.ev("return { ext: Model.find(App.doc, arg).item.p.extent, dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox }", ext_id)
+    p.ev("App.change('Quader höher', d => { d.items[1].p.h = 16; })"); warte_rechnen(p)
+    info4b = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox, deps: Model.dependencies(App.doc) }", ext_id)
+    ok4 = (
+        info4a['ext'] == 'toFace' and info4a['dist'] is not None and abs(info4a['dist'] - 30) < 0.05
+        and abs(info4a['bb'][5] - 35) < 0.05
+        and info4b['dist'] is not None and abs(info4b['dist'] - 36) < 0.05
+        and abs(info4b['bb'][5] - 41) < 0.05
+        and any(x['what'] == 'hochgezogen bis Fläche von' for x in info4b['deps'])
+    )
+
+    # 5. Formschritt mit Modus (join & cut) mit „Bis zur nächsten Fläche“
+    p.ev("""App.change('Modus', d => {
+      d.items = [];
+      const pl = Model.newItem('box', { w: 60, d: 60, h: 5 }, { name: 'Platte' }); d.items.push(pl);
+      const q = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Quader' }); q.t.z = 20; d.items.push(q);
+      const k = Model.newItem('extrude', {
+        sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] },
+        dist: 5, dir: 'normal', extent: 'toNext'
+      }, { name: 'Bolzen' });
+      k.op = { type: 'join', target: pl.id };
+      d.items.push(k);
+    })"""); warte_rechnen(p)
+    v5a = vol_map()
+    pl_id, k_id = p.ev("return [App.doc.items[0].id, App.doc.items[2].id]")
+    m5a = p.ev("return [App.mergedInto(arg), App.resolvedDist(arg)]", k_id)
+    p.ev("App.change('Quader hoch', d => { d.items[1].t.z = 25; })"); warte_rechnen(p)
+    v5b = vol_map()
+    p.ev("App.change('Cut', d => { d.items[2].p.dir = 'reverse'; d.items[2].op = { type: 'cut', target: d.items[0].id }; })"); warte_rechnen(p)
+    v5c = vol_map()
+    d5c = p.ev("return App.resolvedDist(arg)", k_id)
+    ok5 = (
+        m5a[0] == pl_id and m5a[1] is not None and abs(m5a[1] - 15) < 0.05
+        and abs(v5a.get(pl_id, 0) - (60 * 60 * 5 + math.pi * 36 * 15)) < 15
+        and abs(v5b.get(pl_id, 0) - (60 * 60 * 5 + math.pi * 36 * 20)) < 15
+        and d5c is not None and abs(d5c - 5) < 0.05
+        and abs(v5c.get(pl_id, 0) - (60 * 60 * 5 - math.pi * 36 * 5)) < 15
+    )
+
+    # 6. Schräge Zielfläche + Wechsel zu fester Höhe mit Rückgängig + Hilfetext
+    p.ev("""App.change('Schräg', d => {
+      d.items = [];
+      const q = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Dach' }); q.t.z = 20; q.t.rx = 15; d.items.push(q);
+      const k = Model.newItem('extrude', {
+        sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] },
+        dist: 5, dir: 'normal', extent: 'toNext'
+      }, { name: 'Säule' });
+      d.items.push(k);
+    })"""); warte_rechnen(p)
+    k6_id = p.ev("return App.doc.items[1].id")
+    info6 = p.ev("return { errs: App.errors.length, dist: App.resolvedDist(arg), bb: App.results.get(arg) && App.results.get(arg).data.bbox }", k6_id)
+    p.ev("App.select([arg])", k6_id); p.wait(400)
+    p.pg.select_option('#p-extent', 'dist'); p.wait(400); warte_rechnen(p)
+    has_dist_inp = p.pg.locator('#p-dist').count() == 1 and p.ev("return App.doc.items[1].p.extent == null")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(600); warte_rechnen(p)
+    undo_ok = p.ev("return App.doc.items[1].p.extent === 'toNext'")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = 'extrudeToFace' in hilfen and all(k in hilfen['extrudeToFace'] for k in ('tip', 'hilfe', 'tipp')) and p.pg.locator('[data-help="extrudeToFace"]').count() == 1
+    ok6 = (
+        info6['errs'] == 0 and info6['dist'] is not None and 15 < info6['dist'] < 25
+        and info6['bb'] is not None and info6['bb'][5] > 18
+        and has_dist_inp and undo_ok and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 def t_f11240211(p):
     # 1. Schildchen ohne Re-Entranz und mit aktueller Kamera-Matrix bei überfälliger camAnim
     p.empty()
@@ -8014,6 +8151,130 @@ def t_a028_bezugspunkte_koordinatensystem(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a031_rippe(p):
+    # 1. Offene Schale (40×40×20, Wandstärke 2 mm, oben offen bei z=20) + diagonale Rippe (kurze Linie [-10,-10]..[10,10], 2 mm mittig)
+    # Erwartetes Schalen-Volumen: 40*40*20 - 36*36*18 = 32000 - 23328 = 8672 mm³
+    # Erwartetes Rippen-Volumen im 36×36×18-Innenraum (Diagonale 36*sqrt(2), Breite 2, Ecken an der 45°-Wand abgezogen → 2*(36*sqrt(2)-1)*18 = (72*sqrt(2)-2)*18 ≈ 1796.81 mm³):
+    # Gesamt ≈ 10468.81 mm³, genau 1 Körper, keine Lücke zur Wand, Hüllbox unverändert [-20,-20,0,20,20,20]
+    p.empty()
+    p.ev("""App.change('Schale', d => {
+      const b = Model.newItem('box', { w: 40, d: 40, h: 20 }, { name: 'Schale' });
+      b.finishes = [{ id: 'f_sh', type: 'shell', r: 2, faces: [{ c: [0, 0, 20], n: [0, 0, 1] }] }];
+      d.items.push(b);
+    })""")
+    warte_rechnen(p, 30); p.wait(300)
+    m_shell = p.ev("return Mass.measureDoc(App.doc)")
+    vol_shell = m_shell and m_shell['volume']
+
+    p.ev("Sketch.startOnPlane('XY', 20)"); p.wait(1200)
+    p.ev("Sketch.state.ents.push({id:'l1',type:'line',a:[-10,-10],b:[10,10]})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.locator('#st-mode-rib').click(); p.wait(250)
+    has_help = p.pg.locator('#st-mode-rib').get_attribute('data-help') == 'rib'
+    p.pg.fill('#st-rib-t', '2'); p.pg.press('#st-rib-t', 'Enter'); p.wait(150)
+    p.pg.select_option('#st-rib-side', 'center'); p.wait(250)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30); p.wait(300)
+
+    m_rib = p.ev("return Mass.measureDoc(App.doc)")
+    vol_rib = m_rib and m_rib['volume']
+    bb_rib = bbox(p, 0)
+    st_rib = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    exp_center = 8672 + (72 * math.sqrt(2) - 2) * 18
+    ok1 = (
+        has_help
+        and m_shell and m_shell['count'] == 1 and abs(vol_shell - 8672) < 5
+        and st_rib == {'len': 2, 'kind': 'rib', 'merged': True, 'errs': 0}
+        and m_rib and m_rib['count'] == 1
+        and vol_rib > vol_shell + 1500
+        and abs(vol_rib - exp_center) < 15
+        and near(bb_rib, [-20, -20, 0, 20, 20, 20], 0.05)
+    )
+
+    # 2. Einseitig (Seite 1 & Seite 2) + Formel für Dicke
+    p.pg.select_option('#rib-side', 'side1'); warte_rechnen(p, 30); p.wait(250)
+    m_s1 = p.ev("return Mass.measureDoc(App.doc)")
+    p.pg.select_option('#rib-side', 'side2'); warte_rechnen(p, 30); p.wait(250)
+    m_s2 = p.ev("return Mass.measureDoc(App.doc)")
+    p.pg.select_option('#rib-side', 'center'); warte_rechnen(p, 30); p.wait(250)
+    p.ev("App.change('Maß', d => { d.params.push({id:'m_rip', name:'Rippe', expr:3}); })"); p.wait(300)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.fill('#rib-thickness', 'Rippe'); p.pg.press('#rib-thickness', 'Enter'); warte_rechnen(p, 30); p.wait(250)
+    m_f3 = p.ev("return Mass.measureDoc(App.doc)")
+    exp_side = 8672 + (72 * math.sqrt(2) - 4) * 18
+    exp_t3 = 8672 + (108 * math.sqrt(2) - 4.5) * 18
+    ok2 = (
+        m_s1 and m_s1['count'] == 1 and abs(m_s1['volume'] - exp_side) < 15
+        and m_s2 and m_s2['count'] == 1 and abs(m_s2['volume'] - m_s1['volume']) < 5
+        and m_f3 and m_f3['count'] == 1 and abs(m_f3['volume'] - exp_t3) < 20
+        and near(bbox(p, 0), [-20, -20, 0, 20, 20, 20], 0.05)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 3. Optionale Schräge (5°) auf 2 mm Rippe -> Volumen wächst deutlich, Hüllbox bleibt gleich
+    field(p, '#rib-thickness', 2); warte_rechnen(p, 30); p.wait(200)
+    field(p, '#rib-draft', 5); warte_rechnen(p, 30); p.wait(300)
+    m_draft = p.ev("return Mass.measureDoc(App.doc)")
+    ok3 = (
+        m_draft and m_draft['count'] == 1
+        and m_draft['volume'] > vol_rib + 100
+        and near(bbox(p, 0), [-20, -20, 0, 20, 20, 20], 0.05)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 4. Zeitleiste (Unterdrücken + Marker), Skizze bearbeiten, Stützrippe (dir='parallel'), Bezüge & Hilfe
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Unterdrücken').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_sup = volumen(p)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Wieder aktivieren').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_unsup = volumen(p)
+
+    p.ev("Timeline.setMarker(1)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk1 = volumen(p)
+    p.ev("Timeline.setMarker(2)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk2 = volumen(p)
+
+    p.ev("Sketch.editItem(App.doc.items[1].id)"); p.wait(1200)
+    edit_ok = p.ev("return Sketch.active && Sketch.state.ents.length === 1")
+    p.pg.keyboard.press('Enter'); p.wait(1200); warte_rechnen(p, 30)
+
+    deps = p.ev("return Model.dependencies(App.doc)")
+    expl = p.ev("return Explain.local(App.doc.items[1].id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmd_ok = p.ev("return Commands.search('Rippe').some(c=>c.id==='rib')")
+
+    # Stützrippe in der Skizzenebene (L-Winkel mit 2 mm Rippe in XZ)
+    p.ev("""App.change('Winkel', d => {
+      d.items = [];
+      const b1 = Model.newItem('box', { w: 30, d: 20, h: 4 }, { name: 'Boden' });
+      const b2 = Model.newItem('box', { w: 4, d: 20, h: 24 }, { name: 'Wand' });
+      b2.t.x = -13; b2.t.z = 4;
+      b2.op = { type: 'join', target: b1.id };
+      const sk = { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, ents: [{ id: 'g1', type: 'line', a: [-11, 20], b: [5, 4] }], dims: [], cons: [] };
+      const r = Model.newItem('rib', { sketch: sk, target: b1.id, thickness: 2, side: 'center', dir: 'parallel', flip: false, depth: 0, draft: 0 }, { name: 'Stütze' });
+      d.items.push(b1, b2, r);
+    })""")
+    warte_rechnen(p, 30); p.wait(300)
+    m_gus = p.ev("return Mass.measureDoc(App.doc)")
+    # Boden 30*20*4 = 2400, Wand 4*20*24 = 1920, Dreieck 0.5*16*16*2 = 256 -> Summe 4576 mm³
+    ok4 = (
+        v_sup is not None and abs(v_sup - 8672) < 5
+        and v_unsup is not None and abs(v_unsup - m_draft['volume']) < 5
+        and v_mk1 is not None and abs(v_mk1 - 8672) < 5
+        and v_mk2 is not None and abs(v_mk2 - m_draft['volume']) < 5
+        and edit_ok and not p.ev("return Sketch.active")
+        and any(x['what'] == 'Rippe an' for x in deps)
+        and expl and any(l['k'] == 'op' for l in expl['lines'])
+        and 'rib' in hilfen and all(k in hilfen['rib'] for k in ('tip', 'hilfe', 'tipp'))
+        and cmd_ok
+        and m_gus and m_gus['count'] == 1 and abs(m_gus['volume'] - 4576) < 10
+        and p.ev("return App.errors.length") == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a030_drehen_winkel_flaeche(p):
     p.empty()
     p.ev("Sketch.startOnPlane('XY')"); p.wait(600)
@@ -8134,6 +8395,125 @@ def t_a030_drehen_winkel_flaeche(p):
         and drag_ang != 90 and 5 <= drag_ang <= 355
         and p.ev("return App.errorsFor(arg).length", rev_id) == 0
         and abs(undo_ang - 90) < 0.1
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+# ---------- [A-033] Körper-Liste im Teil (KP-09) ----------
+def t_koerper_liste(p):
+    import zipfile, tempfile
+    p.empty()
+    # 1. Einzelner Quader -> keine Körper-Liste; Teil mit 2 getrennten Körpern -> Liste mit 2 Einträgen
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:10,d:10,h:10},{name:'Einzel'})); })"); warte_rechnen(p)
+    no_list_for_one = p.pg.locator('.bodies-wrap').count() == 0
+    p.ev("""App.change('x', d=>{
+      d.items = [];
+      const it = Model.newItem('extrude',{},{name:'Doppelteil'});
+      it.p = {
+        sketch: {
+          plane: { o: [0,0,0], x: [1,0,0], n: [0,0,1] },
+          ents: [
+            { id: 'r1', type: 'rect', a: [-25,-10], b: [-5,10] },
+            { id: 'r2', type: 'rect', a: [5,-10], b: [25,10] }
+          ],
+          dims: [], cons: []
+        },
+        dist: 10, dir: 'normal'
+      };
+      d.items.push(it);
+    })"""); warte_rechnen(p)
+    item_id = p.ev("return App.doc.items[0].id")
+    head_txt = (p.pg.locator('.bodies-wrap .bodies-head').first.text_content() or '').strip().lower()
+    row_cnt = p.pg.locator('.bodies-wrap .body-row').count()
+    ok1 = no_list_for_one and 'körper (2)' in head_txt and row_cnt == 2
+
+    # 2. Beide Körper umbenennen (Knopf & Doppelklick)
+    p.pg.locator('.body-row[data-body="0"] .body-rename').click(); p.wait(150)
+    p.pg.fill('#prompt-inp', 'Links'); p.pg.press('#prompt-inp', 'Enter'); p.wait(300)
+    p.pg.locator('.body-row[data-body="1"] .nm').dblclick(); p.wait(150)
+    p.pg.fill('#prompt-inp', 'Rechts'); p.pg.press('#prompt-inp', 'Enter'); p.wait(300)
+    names_ui = [
+        (p.pg.locator('.body-row[data-body="0"] .nm').text_content() or '').strip(),
+        (p.pg.locator('.body-row[data-body="1"] .nm').text_content() or '').strip(),
+    ]
+    bodies_doc = p.ev("return App.doc.items[0].bodies || []")
+    ok2 = names_ui == ['Links', 'Rechts'] and [b.get('name') for b in bodies_doc] == ['Links', 'Rechts']
+
+    # 3. Körper 0 einfärben -> Farbe gespeichert & Vertex-Farben im Bild aktiv
+    p.pg.locator('.body-row[data-body="0"] .body-color-btn').click(); p.wait(150)
+    p.pg.locator('.body-color-pop .colors button').first.click(); p.wait(300)
+    col_info = p.ev("""const n = Viewer.nodes.get(arg); const c = n.mesh.geometry.getAttribute('color');
+      let diff = false;
+      if (c && n.data.faceGroups && n.data.faceBody) {
+        const cols = [null, null];
+        for (const [st, cnt, fi] of n.data.faceGroups) {
+          const bi = fi >= 0 ? n.data.faceBody[fi] : -1;
+          if (bi === 0 || bi === 1) {
+            const vi = n.data.triangles[st];
+            cols[bi] = [c.getX(vi), c.getY(vi), c.getZ(vi)];
+          }
+        }
+        if (cols[0] && cols[1]) diff = Math.hypot(cols[0][0]-cols[1][0], cols[0][1]-cols[1][1], cols[0][2]-cols[1][2]) > 0.05;
+      }
+      return { col: (App.doc.items[0].bodies[0] || {}).color, vc: !!n.mesh.material.vertexColors, diff };""", item_id)
+    ok3 = bool(col_info.get('col')) and col_info.get('vc') and col_info.get('diff')
+
+    # 4. Körper 1 ausblenden -> im 3D-Bild weg, Rückgängig/Wiederholen funktioniert
+    p.ev("Viewer.setView('top', false); Viewer.fit(null, false);"); p.wait(300)
+    tris_before = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    p.pg.locator('.body-row[data-body="1"] .body-eye').click(); p.wait(300)
+    tris_after = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    has_hidden_cls = p.pg.locator('.body-row[data-body="1"].hidden-item').count() == 1
+    pt_left = world_screen(p, -15, 0, 10)
+    pt_right = world_screen(p, 15, 0, 10)
+    pick_left = p.ev("const h = Viewer.pick(arg[0], arg[1]); return h ? h.id : null;", pt_left)
+    pick_right = p.ev("const h = Viewer.pick(arg[0], arg[1]); return h ? h.id : null;", pt_right)
+    p.ev("App.undo()"); p.wait(250)
+    tris_undo = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    p.ev("App.redo()"); p.wait(250)
+    tris_redo = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    ok4 = (
+        has_hidden_cls and 0 < tris_after < tris_before * 0.75
+        and pick_left == item_id and pick_right is None
+        and tris_undo == tris_before and tris_redo == tris_after
+    )
+
+    # 5. Speichern in Projektdatei & Neuladen + exportMeshes lässt ausgeblendeten Körper weg
+    saved = p.ev("return App.snapshot()")
+    exp_hidden = p.ev("""return (async () => {
+      const { Kernel } = window.__masswerk;
+      const r = await Kernel.call('exportMeshes', { scene: Model.kernelScene(App.doc), fine: true, q: 1 });
+      return r.objects.map(o => o.name);
+    })()""")
+    p.ev("App.setDoc(JSON.parse(arg))", saved); warte_rechnen(p); p.wait(300)
+    reloaded_ok = (
+        p.pg.locator('.bodies-wrap .body-row').count() == 2
+        and (p.pg.locator('.body-row[data-body="0"] .nm').text_content() or '').strip() == 'Links'
+        and (p.pg.locator('.body-row[data-body="1"] .nm').text_content() or '').strip() == 'Rechts'
+        and p.pg.locator('.body-row[data-body="1"].hidden-item').count() == 1
+        and p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id) == tris_after
+    )
+    ok5 = ('"Links"' in saved and '"Rechts"' in saved and '"hidden":true' in saved and exp_hidden == ['Links'] and reloaded_ok)
+
+    # 6. Körper 1 wieder einblenden -> Export „jeder Körper einzeln“ übernimmt die Namen, Hilfetext vorhanden
+    p.pg.locator('.body-row[data-body="1"] .body-eye').click(); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(500)
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-stl'); p.pg.check('#ex-mf'); p.pg.check('#ex-each'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z = os.path.join(tempfile.gettempdir(), 'tracery-koerperliste.zip'); dl.value.save_as(z)
+    import io
+    zf = zipfile.ZipFile(z); znames = set(zf.namelist())
+    mf_name = next((n for n in znames if n.endswith('.3mf') and not n.startswith('Einzeln/')), None)
+    mf_xml = zf.read(mf_name) if mf_name else b''
+    mf_txt = zipfile.ZipFile(io.BytesIO(mf_xml)).read('3D/3dmodel.model').decode('utf-8') if mf_xml else ''
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    bl = hilfen.get('bodyList') or {}
+    help_ok = bool(bl.get('tip') and bl.get('hilfe') and bl.get('tipp')) and p.pg.locator('[data-help="bodyList"]').count() >= 1
+    ok6 = (
+        {'Einzeln/Links.stl', 'Einzeln/Rechts.stl', 'Einzeln/Links.3mf', 'Einzeln/Rechts.3mf'}.issubset(znames)
+        and 'name="Links"' in mf_txt and 'name="Rechts"' in mf_txt
         and help_ok
     )
     return [ok1, ok2, ok3, ok4, ok5, ok6]
@@ -8396,10 +8776,13 @@ TESTS = [
     ('[A-027] Weitere Bezugsebenen: tangential an Zylinder & Kegel / senkrecht zu Kante & Kurve / durch Kante & Punkt / durch zwei Kanten / folgt Maßen & Hilfe', t_a027_weitere_bezugsebenen),
     ('[A-023] Freie Stellen & Widerspruch erklären: Linie mit Länge / Wackeln & Umschalt F / 3. Maß Liste & Hervorheben / Entfernen löst / Regel- & Live-Widerspruch', t_a023_freie_stellen_widerspruch),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
+    ('[A-029] Hochziehen bis Fläche: bis zur nächsten Fläche (15→20) / Transform (+5→25) / gewählte Fläche & Größenänderung / Formschritt mit Modus / schräge Fläche / Rückgängig & Hilfe', t_a029_hochziehen_bis_flaeche),
     ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
     ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
+    ('[A-031] Rippe (KP-06): offene Schale mit diagonaler Rippe / einseitig & Formel / Schräge / Zeitleiste, Stützrippe & Hilfe', t_a031_rippe),
     ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
     ('[A-032] Fläche aufdicken & Körper skalieren: Skalieren ×2 / je Achse 1/1/3 / Ursprung & Schwerpunkt / Aufdicken +3 mm / innen, mittig & Platte / Verlauf & Hilfe', t_a032_aufdicken_skalieren),
+    ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

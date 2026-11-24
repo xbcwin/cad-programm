@@ -380,6 +380,7 @@ const IC = {
   moveStep: '<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />',
   scaleBody: '<rect x="3" y="13" width="8" height="8" rx="1" opacity=".5"/><rect x="7" y="3" width="14" height="14" rx="1.5" fill="currentColor" opacity=".18"/><rect x="7" y="3" width="14" height="14" rx="1.5"/><path d="M11 13l7-7M14 6h4v4" />',
   thicken: '<path d="M4 15l8 4 8-4-8-4z" opacity=".45" stroke-dasharray="2.5 2"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM4 9v6l8 4 8-4V9" />',
+  rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1236,6 +1237,21 @@ const HELP = {
   "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
   "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
   "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
+ },
+ "rib": {
+  "tip": "Offene Skizzenlinie als Versteifungs-Rippe bis an die Wände ziehen",
+  "hilfe": "Verlängert eine offene Linie, einen Bogen oder eine Kurve in deiner Skizze mit einstellbarer Dicke (mittig oder einseitig) bis zu den angrenzenden Wänden des Zielkörpers und verschmilzt sie direkt damit. Optional kannst du eine Schräge und feste Tiefe angeben oder von senkrecht (Steg in einer Schale) auf in der Ebene (Stützrippe) umschalten.",
+  "tipp": "Die Linie muss die Wand in der Skizze nicht exakt berühren – Tracery verlängert sie automatisch sauber bis an die nächste Wand, ohne nach außen überzustehen."
+ },
+ "extrudeToFace": {
+  "tip": "Bis zur nächsten Fläche oder bis zu einer angeklickten Fläche hochziehen",
+  "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
+  "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
+ },
+ "bodyList": {
+  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
+  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
+  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
  }
 };
 

@@ -89,7 +89,10 @@ const Features = (() => {
   function stopPick() {
     if (!picking) return;
     const cv = Viewer.canvas;
-    cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
+    cv.removeEventListener('pointerdown', picking.down, true);
+    if (picking.move) cv.removeEventListener('pointermove', picking.move);
+    window.removeEventListener('keydown', picking.key, true);
+    Viewer.highlightFace('hover', null, null);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
   // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
@@ -377,6 +380,117 @@ const Features = (() => {
     Viewer.canvas.style.cursor = 'crosshair';
     Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
     UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche oder eine Bezugsachse. <b>Esc</b> bricht ab.');
+  }
+  function pickExtrudeFace(itemId) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    const top = Model.topOf(App.doc, itemId);
+    const exclude = top && top.id === itemId ? new Set([itemId, '__preview']) : new Set(['__preview']);
+    pickFaceThen((ref) => {
+      setExtrudeToFace(itemId, ref);
+      UI.toast('Zielfläche gewählt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, { exclude });
+    return true;
+  }
+  function makeFaceRef(hit) {
+    if (!hit || !hit.node || hit.faceIdx == null || hit.faceIdx < 0) return null;
+    const n = hit.node, data = n.data || {}, fi = (data.faces || [])[hit.faceIdx];
+    if (!fi) return null;
+    const bb = data.bbox;
+    const rel = bb && fi.c ? [0, 1, 2].map((k) => { const sp = bb[k + 3] - bb[k]; return sp > 1e-6 ? round((fi.c[k] - bb[k]) / sp, 6) : 0.5; }) : null;
+    const W = n.obj.matrixWorld;
+    const wc = fi.c ? new THREE.Vector3(...fi.c).applyMatrix4(W).toArray().map((v) => round(v, 6)) : null;
+    const wn = fi.n ? new THREE.Vector3(...fi.n).transformDirection(W).normalize().toArray().map((v) => round(v, 6)) : null;
+    const f = Model.find(App.doc, hit.id);
+    return {
+      id: hit.id,
+      idx: hit.faceIdx,
+      t: fi.t,
+      c: fi.c ? fi.c.map((v) => round(v, 6)) : null,
+      n: fi.n ? fi.n.map((v) => round(v, 6)) : null,
+      rel,
+      wc,
+      wn,
+      label: f ? Model.label(f.item) : 'Körper',
+    };
+  }
+  function pickTargetFaceAt(cx, cy, exclude) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true, exclude });
+    if (hit && hit.faceIdx >= 0) {
+      const ref = makeFaceRef(hit);
+      if (ref) return ref;
+    }
+    if (Viewer.groups && Viewer.groups.datums && Viewer.groups.datums.children.length && typeof Datums !== 'undefined') {
+      const rc = Viewer.setRay(cx, cy);
+      const dh = rc.intersectObjects(Viewer.groups.datums.children, true);
+      for (const x of dh) {
+        let o = x.object;
+        while (o && !o.userData.datum) o = o.parent;
+        if (o && o.userData.datum) {
+          const d = Datums.find(o.userData.datum);
+          if (d && d.plane) return { datumId: d.id, label: 'Bezugsebene „' + d.name + '“' };
+        }
+      }
+    }
+    return null;
+  }
+  function pickFaceThen(cb, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const ref = pickTargetFaceAt(e.clientX, e.clientY, opts.exclude);
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      stopPick();
+      cb(ref);
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: opts.exclude });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(opts.hint || '<b>Zielfläche wählen:</b> Klick auf eine Fläche eines Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  function autoFlipDirForFace(plane, W, curDir, ref) {
+    if (!plane || !ref || (curDir !== 'normal' && curDir !== 'reverse')) return curDir;
+    const oW = new THREE.Vector3(...plane.o).applyMatrix4(W);
+    const nW = new THREE.Vector3(...plane.n).transformDirection(W).normalize();
+    let pW = null;
+    if (ref.datumId && typeof Datums !== 'undefined') {
+      const d = Datums.find(ref.datumId);
+      if (d && d.plane) pW = new THREE.Vector3(...d.plane.o);
+    } else if (Array.isArray(ref.wc)) {
+      pW = new THREE.Vector3(...ref.wc);
+    } else if (Array.isArray(ref.c) && ref.id && Model.find(App.doc, ref.id)) {
+      pW = new THREE.Vector3(...ref.c).applyMatrix4(Model.worldMatrix(App.doc, ref.id));
+    }
+    if (!pW) return curDir;
+    const d = pW.sub(oW).dot(nW);
+    if (d > 1e-3) return 'normal';
+    if (d < -1e-3) return 'reverse';
+    return curDir;
+  }
+  function setExtrudeToFace(itemId, ref) {
+    if (!ref) return false;
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    App.change('Bis Fläche gewählt', (doc) => {
+      const T = Model.find(doc, itemId).item;
+      T.p.extent = 'toFace';
+      T.p.toFace = ref;
+      delete T.p.thru;
+      if (T.p.dir === 'both') T.p.dir = 'normal';
+      if (T.p.sketch && T.p.sketch.plane) {
+        T.p.dir = autoFlipDirForFace(T.p.sketch.plane, Model.worldMatrix(doc, itemId), T.p.dir || 'normal', ref);
+      }
+    });
+    App.select([itemId]);
+    return true;
   }
   function setPatternAxis(gid, axisId) {
     const ax = typeof Datums !== 'undefined' ? Datums.findAxis(axisId) : null;
@@ -728,7 +842,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -946,6 +1060,57 @@ const Features = (() => {
     const inJoinHint = p.dir === 'in' && (p.mode || 'join') === 'join' ? ' Hinweis: „Nach innen“ mit „Vereinigen“ liegt im Körper – wähle „Eigene Platte“ oder „Vom Körper abziehen“, um es sichtbar zu machen.' : '';
     sec.append(h('div', { class: 'hint-box', html: 'Macht aus der gewählten Fläche (eben oder gebogen) eine Platte mit fester Dicke – nach außen, innen oder mittig.' + inJoinHint }));
   }
+  // ---------- Rippe (KP-06) ----------
+  function ribTargets(idx = Infinity) {
+    return App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !isModifierStep(x) && !(x.op && x.op.target));
+  }
+  function startRib(face) {
+    if (App.ctx) { UI.toast('Rippen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für eine Rippe braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = face && face.info && face.info.t === 'PLANE' ? face : Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') {
+      Sketch.startOnFace(f, { ribMode: true });
+      UI.toast('Zeichne eine offene Linie oder Kurve für die Rippe und klick „Fertig“.', { icon: 'info', ms: 4200 });
+    } else {
+      Sketch.chooseAndStart({ ribMode: true });
+      UI.toast('Wähl eine Ebene und zeichne eine offene Linie für die Rippe.', { icon: 'info', ms: 4200 });
+    }
+    return true;
+  }
+  function renderRib(it, sec, setP) {
+    const p = it.p || {};
+    const idx = App.doc.items.indexOf(it);
+    const targets = ribTargets(idx >= 0 ? idx : App.doc.items.length);
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    const fl = h('div', { class: 'fields' });
+    if (opts.length) {
+      fl.append(UI.selectField({ id: 'rib-target', label: 'Zielkörper', value: p.target || '', options: opts, onChange: (v) => App.change('Zielkörper gewählt', (doc) => { Model.find(doc, it.id).item.p.target = v; }) }));
+    }
+    fl.append(UI.numField({ id: 'rib-thickness', label: 'Dicke', value: p.thickness ?? 2, min: 0.1, onCommit: (v) => setP('thickness', v) }));
+    fl.append(UI.selectField({ id: 'rib-side', label: 'Lage zur Linie', value: p.side || 'center', options: [['center', 'Mittig'], ['side1', 'Einseitig (Seite 1)'], ['side2', 'Einseitig (Seite 2)']], onChange: (v) => setP('side', v) }));
+    fl.append(UI.selectField({ id: 'rib-dir', label: 'Richtung', value: p.dir || 'normal', options: [['normal', 'Senkrecht zur Skizze (Steg)'], ['parallel', 'In der Skizzenebene (Stütze)']], onChange: (v) => setP('dir', v) }));
+    fl.append(UI.numField({ id: 'rib-draft', label: 'Schräge (optional)', value: p.draft ?? 0, unit: '°', min: 0, onCommit: (v) => setP('draft', v) }));
+    fl.append(UI.numField({ id: 'rib-depth', label: 'Tiefe (0 = bis zur Wand)', value: p.depth ?? 0, min: 0, onCommit: (v) => setP('depth', v) }));
+    sec.append(fl);
+    const flipL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'rib-flip', checked: !!p.flip }), 'Richtung umkehren');
+    flipL.querySelector('input').onchange = (e) => App.change('Rippenrichtung umgekehrt', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(flipL);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'rib-edit-sketch' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
+    eb.onclick = () => Sketch.editItem(it.id);
+    row.append(eb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'rib-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
