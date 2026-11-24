@@ -230,7 +230,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'printBed', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch', 'reffix']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'printBed', 'origin', 'datums', 'pointClouds', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch', 'reffix']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
@@ -1314,6 +1314,12 @@ const Viewer = (() => {
       if (!n.obj.visible || n.allBodiesHidden) continue;
       const b = n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix);
       box.union(b);
+    }
+    if (!ids && groups.pointClouds) {
+      for (const o of groups.pointClouds.children) {
+        if (!o.visible || !o.geometry || !o.geometry.boundingBox) continue;
+        box.union(o.geometry.boundingBox);
+      }
     }
     return box;
   }

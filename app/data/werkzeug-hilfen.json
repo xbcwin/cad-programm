@@ -390,9 +390,9 @@
     "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
   },
   "importCad": {
-    "tip": "Projekt-, STEP-, IGES-, BREP-, STL-, 3MF-, OBJ-, DXF- oder SVG-Datei öffnen bzw. ins Fenster ziehen",
-    "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen (beim Ziehen erscheint ein Hinweis-Rahmen): Eine Projektdatei (.json) öffnet das Projekt. Eine .step-, .stp-, .igs-, .iges-, .brep-, .stl-, .3mf- oder .obj-Datei wird als Teil ins Projekt geladen – bei .3mf und .obj entstehen für mehrere Objekte eigene Teile (bei .3mf mit Farben und umgerechneter Maßeinheit). Bei STEP, IGES, BREP, STL und OBJ stellst du rechts ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Platten-Umriss) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
-    "tipp": "STEP, IGES und BREP sind genauer als STL, 3MF und OBJ: Kanten lassen sich runden und Bohrungen erkennen. BREP ist das direkte Format des OpenCascade-Kerns (verlustfrei, auch für FreeCAD), IGES hilft bei älteren CAD-/CAM-Programmen. STL, 3MF und OBJ sind Dreiecksnetze und eignen sich vor allem zum Anschauen, Ausrichten oder Weiterbearbeiten von Druckmodellen (3MF bringt Farben und Teile-Namen direkt mit). DXF muss als Text (ASCII) gespeichert sein; Zoll, Zentimeter und Meter werden in Millimeter umgerechnet. Zeichnungen in Blöcken vorher im anderen Programm auflösen. In SVG-Dateien muss Text vorher in Pfade umgewandelt sein. Stimmt die Größe nicht: „Skizze bearbeiten“ und rechts unter „Größe der Skizze“ die Breite eintippen – alles wächst mit. Ist gerade eine Skizze offen, landet die DXF oder SVG in dieser Skizze statt als neue Platte – praktisch für ein Logo auf einer Fläche."
+    "tip": "Projekt-, STEP-, IGES-, BREP-, STL-, 3MF-, OBJ-, AMF-, PLY-, Punkte- (CSV/XYZ), DXF- oder SVG-Datei öffnen bzw. ins Fenster ziehen",
+    "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen (beim Ziehen erscheint ein Hinweis-Rahmen): Eine Projektdatei (.json) öffnet das Projekt. Eine .step-, .stp-, .igs-, .iges-, .brep-, .stl-, .3mf-, .obj-, .amf- oder .ply-Datei wird als Teil ins Projekt geladen – bei .3mf, .obj und .amf entstehen für mehrere Objekte eigene Teile (bei .3mf und .amf mit Farben und umgerechneter Maßeinheit, bei .ply auch reine Punktwolken). Eine .csv- oder .xyz-Punktedatei lädst du wahlweise als 3D-Punktwolke, als Skizzenpunkte oder als Spline. Bei STEP, IGES, BREP, STL und OBJ stellst du rechts ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Platten-Umriss) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
+    "tipp": "STEP, IGES und BREP sind genauer als STL, 3MF, OBJ, AMF und PLY: Kanten lassen sich runden und Bohrungen erkennen. BREP ist das direkte Format des OpenCascade-Kerns (verlustfrei, auch für FreeCAD), IGES hilft bei älteren CAD-/CAM-Programmen. STL, 3MF, OBJ, AMF und PLY sind Dreiecksnetze zum Anschauen, Ausrichten oder für Druckmodelle (3MF, AMF und PLY bringen Farben direkt mit). DXF muss als Text (ASCII) gespeichert sein; Zoll, Zentimeter und Meter werden in Millimeter umgerechnet. Zeichnungen in Blöcken vorher im anderen Programm auflösen. In SVG-Dateien muss Text vorher in Pfade umgewandelt sein. Ist gerade eine Skizze offen, landen DXF, SVG, CSV und XYZ direkt in dieser Skizze."
   },
   "sketchTemplate": {
     "tip": "Fertige Umrisse mit echten Maßen einsetzen",
@@ -1328,5 +1328,15 @@
     "tip": "Entlang Pfad direkt von einem Körper abziehen (z. B. Nut entlang einer Kurve)",
     "hilfe": "Schneidet das entlang des Pfads gezogene Profil sofort als Nut, Rille oder Kanal aus einem bestehenden Körper heraus – wahlweise gleich beim Abschließen der Skizze oder nachträglich rechts unter „Körper“.",
     "tipp": "Zeichne den Pfad direkt auf der Oberfläche des Körpers; mit der Querschnitts-Höhe bestimmst du, wie tief die Nut einschneidet."
+  },
+  "exportAmfPly": {
+    "tip": "Als AMF (Druck-XML mit Farben) oder PLY (Polygonnetz für Scans & Blender) speichern",
+    "hilfe": "AMF (Additive Manufacturing File Format) speichert Dreiecksnetze als XML mit Maßeinheit, Teilenamen und Farben für Slicer. PLY (Polygon File Format) schreibt ein kompaktes binäres Polygonnetz mit Eckpunkt-Farben – ideal für 3D-Scans, MeshLab und Blender.",
+    "tipp": "Beide Formate unterstützen „Nur die Auswahl“, „Jeder Körper als eigene Datei“ und einen gewählten Nullpunkt; beim Wiederöffnen in Tracery bleiben Dreiecksanzahl, Maße und Farben erhalten."
+  },
+  "pointCloudImport": {
+    "tip": "CSV- oder XYZ-Punktedatei als 3D-Punktwolke oder Skizzenpunkte laden",
+    "hilfe": "Liest Mess- und Scan-Punkte aus .csv- oder .xyz-Dateien (Komma, Semikolon, Tab oder Leerzeichen als Trenner, optional mit Überschrift und RGB-Farben). Du kannst sie als 3D-Punktwolke im Raum anzeigen oder direkt als Skizzenpunkte bzw. Spline auf der XY-Ebene anlegen.",
+    "tipp": "Eine 3D-Punktwolke lässt sich rechts in Punktgröße, Farbe und Maßeinheit anpassen und jederzeit über „Als Skizzenpunkte übernehmen“ in eine Skizze übertragen."
   }
 }
