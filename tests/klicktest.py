@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -9220,6 +9220,470 @@ def t_a039_gewinde_flaeche(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- A-038: Bohrungs-Assistent mehr Gewinde (KP-18) ----------
+def t_a038_mehr_gewinde(p):
+    # 1. Feingewinde M10×1,25 -> Kernloch 8,8 mm
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:40, d:40, h:10}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,10], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'metric_fine'); p.wait(150)
+    fine_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-size', 'M10×1,25'); p.wait(200)
+    info1 = p.pg.locator('#hw-info').text_content() or ''
+    prev1 = p.pg.locator('#hw-preview').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    v1 = volumen(p)
+    want1 = math.pi * 4.4 * 4.4 * 10.0
+    got1 = 16000.0 - (v1 or 0)
+    cyl1 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    p.ev("const ch=App.doc.items[0].children.find(c=>c.kind==='part'&&c.p.lib==='screwHole'); if(ch) App.select([ch.id]);"); p.wait(300)
+    panel1 = p.pg.locator('#p-screw-hint').text_content() or ''
+    ok1 = ('M8×1' in fine_opts and 'M10×1,25' in fine_opts
+           and '8,8' in info1 and 'DIN 336' in info1 and '8,8' in prev1
+           and p.ev("return App.errors.length") == 0
+           and abs(got1 - want1) < 0.05
+           and any(abs(d - 8.8) < 0.02 for d in cyl1)
+           and 'M10×1,25' in panel1 and '8,8' in panel1)
+
+    # 2. Zoll-Gewinde UNC / UNF (#4 bis 1/2"): 1/4"-20 UNC -> Kernloch 5,1 mm + 82°-Senkung
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:40, d:40, h:10}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,10], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'unf'); p.wait(150)
+    unf_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-norm', 'unc'); p.wait(150)
+    unc_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-size', '1/4"-20 UNC'); p.wait(200)
+    info2 = p.pg.locator('#hw-info').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    v2 = volumen(p)
+    want2 = math.pi * 2.55 * 2.55 * 10.0
+    got2 = 16000.0 - (v2 or 0)
+    cyl2 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    # Durchgangsbohrung mit 82°-Senkung
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[10,10,10], normal:[0,0,1]}})"); p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(300)
+    p.pg.select_option('#hw-type', 'through'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'unc'); p.wait(150)
+    p.pg.select_option('#hw-size', '1/4"-20 UNC'); p.wait(150)
+    p.pg.select_option('#hw-head', 'countersunk'); p.wait(150)
+    csk_lbl = p.pg.locator('#hw-head option[value="countersunk"]').text_content() or ''
+    info2_csk = p.pg.locator('#hw-info').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    has_cone = p.ev("const r=App.results.get(App.doc.items[0].id); return !!(r && r.data && r.data.faces.some(f=>f.t==='CONE'))")
+    ok2 = ('#4-40 UNC' in unc_opts and '1/2"-13 UNC' in unc_opts
+           and '#4-48 UNF' in unf_opts and '1/2"-20 UNF' in unf_opts
+           and '5,1' in info2 and 'ASME B1.1' in info2
+           and p.ev("return App.errors.length") == 0
+           and abs(got2 - want2) < 0.05
+           and any(abs(d - 5.1) < 0.02 for d in cyl2)
+           and '82°' in csk_lbl and '82°' in info2_csk and has_cone)
+
+    # 3. Rohrgewinde G1/8 bis G1: G1/4 wählbar -> Kernloch 11,8 mm + Flachsenkung
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:60, d:60, h:15}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,15], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'pipe_g'); p.wait(150)
+    pipe_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-size', 'G1/4'); p.wait(200)
+    info3 = p.pg.locator('#hw-info').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    v3 = volumen(p)
+    want3 = math.pi * 5.9 * 5.9 * 15.0
+    got3 = 54000.0 - (v3 or 0)
+    cyl3 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    # Durchgang mit Flachsenkung nach DIN 3852-2 (kein Senkkopf bei G-Gewinde)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[18,18,15], normal:[0,0,1]}})"); p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(300)
+    p.pg.select_option('#hw-type', 'through'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'pipe_g'); p.wait(150)
+    p.pg.select_option('#hw-size', 'G1/4'); p.wait(150)
+    pipe_heads = p.pg.evaluate("[...document.querySelectorAll('#hw-head option')].map(o=>o.value)")
+    p.pg.select_option('#hw-head', 'counterbore'); p.wait(150)
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    cyl3_cb = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    ok3 = (pipe_opts == ['G1/8', 'G1/4', 'G3/8', 'G1/2', 'G3/4', 'G1']
+           and '11,8' in info3 and 'ISO 228-1' in info3
+           and p.ev("return App.errors.length") == 0
+           and abs(got3 - want3) < 0.08
+           and any(abs(d - 11.8) < 0.02 for d in cyl3)
+           and 'countersunk' not in pipe_heads and 'counterbore' in pipe_heads
+           and any(abs(d - 20.0) < 0.05 for d in cyl3_cb))
+
+    # 4. Datentabelle app/data/gewinde.json mit Quellen + Hilfetext threadStandards
+    tbl = p.pg.evaluate("fetch('data/gewinde.json').then(r=>r.json())")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    norms = {n['id']: n for n in (tbl.get('normen') or [])}
+    by_id = {g['id']: g for n in norms.values() for g in (n.get('groessen') or [])}
+    th = hilfen.get('threadStandards') or {}
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,15], normal:[0,0,1]}})"); p.wait(250)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(250)
+    dh = p.pg.locator('#hw-norm').locator('..').locator('..').get_attribute('data-help')
+    ok4 = (len(tbl.get('_quellen') or []) >= 5
+           and all(k in norms and norms[k].get('quelle') for k in ('metric', 'metric_fine', 'unc', 'unf', 'pipe_g'))
+           and by_id.get('M10×1,25', {}).get('kernloch_mm') == 8.8
+           and by_id.get('1/4"-20 UNC', {}).get('kernloch_mm') == 5.1
+           and by_id.get('G1/4', {}).get('kernloch_mm') == 11.8
+           and all(f in th and th[f] for f in ('tip', 'hilfe', 'tipp'))
+           and dh == 'threadStandards')
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a037_schritt_spiegeln(p):
+    # Tasche links an Mittelebene spiegeln → 2 Taschen, Volumen sinkt um Taschengröße;
+    # Bezugsebene & Körperfläche, Erhöhung, Mitwandern bei Änderung, Unterdrücken/Marker, Gruppe & Hilfe
+    p.empty()
+    p.ev("""App.change('Grundkörper und Tasche', d => {
+      const base = Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Platte' });
+      d.items.push(base);
+      const pocket = Model.newItem('extrude', {
+        sketch: {
+          plane: { o: [0, 0, 10], x: [1, 0, 0], n: [0, 0, 1] },
+          ents: [{ id: 'r1', type: 'rect', a: [-20, -5], b: [-10, 5] }],
+          dims: [], cons: [],
+        },
+        dist: 5, dir: 'reverse',
+      }, { name: 'Tasche' });
+      pocket.op = { type: 'cut', target: base.id };
+      d.items.push(pocket);
+    })""")
+    warte_rechnen(p, 20); p.wait(300)
+    parts0 = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+
+    # 1. Tasche über Kontextleiste spiegeln (YZ-Mittelebene) → zwei Taschen, Volumen 24000 - 2*500 = 23000
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    btn_ms = p.pg.locator('.ctxbar button[aria-label="Schritt spiegeln"]')
+    has_help = btn_ms.get_attribute('data-help') == 'mirrorStep'
+    btn_ms.click()
+    warte_rechnen(p, 20); p.wait(300)
+    parts1 = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+    pockets1 = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n[2] > 0.9 && Math.abs(f.c[2] - 5) < 0.05)
+        .map(f => [Math.round(f.c[0] * 10) / 10, Math.round(f.c[1] * 10) / 10]).sort((a, b) => a[0] - b[0]);""")
+    st1 = p.ev("return [App.doc.items.length, App.doc.items[2].kind, App.mergedInto(App.doc.items[2].id) === App.doc.items[0].id, App.errors.length]")
+    ok1 = (
+        has_help
+        and len(parts0) == 1 and abs(parts0[0]['v'] - 23500) < 5
+        and st1 == [3, 'mirrorStep', True, 0]
+        and len(parts1) == 1 and abs(parts1[0]['v'] - 23000) < 5
+        and pockets1 == [[-15.0, 0.0], [15.0, 0.0]]
+    )
+
+    # 2. Bezugsebene (XZ bei y = 6 mm) und ebene Körperfläche (x = 0)
+    datum_id = p.ev("return Datums.addOrigin('XZ', -6).id")
+    p.ev("App.select([App.doc.items[2].id])"); p.wait(250)
+    p.pg.select_option('#ms-plane', 'd:' + datum_id)
+    warte_rechnen(p, 20); p.wait(300)
+    parts_dat = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+    pockets_dat = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n[2] > 0.9 && Math.abs(f.c[2] - 5) < 0.05)
+        .map(f => [Math.round(f.c[0] * 10) / 10, Math.round(f.c[1] * 10) / 10]).sort((a, b) => a[1] - b[1]);""")
+
+    helper_id = p.ev("""let hid; App.change('Hilfsquader', d => {
+      const h = Model.newItem('box', { w: 4, d: 10, h: 10 }, { name: 'Spiegelklotz' });
+      h.t.x = -2; h.t.y = 35; d.items.push(h); hid = h.id;
+    }); return hid;""")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("""const hid = arg, r = App.results.get(hid), fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n[0] > 0.9);
+      Features.setMirrorStepPlane(App.doc.items[2].id, { id: hid, idx: fi });""", helper_id)
+    warte_rechnen(p, 20); p.wait(300)
+    v_face = p.ev("return Mass.measure().then(r => (r.parts || []).find(q => q.id === App.doc.items[0].id)?.volume)")
+    pockets_face = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n[2] > 0.9 && Math.abs(f.c[2] - 5) < 0.05)
+        .map(f => [Math.round(f.c[0] * 10) / 10, Math.round(f.c[1] * 10) / 10]).sort((a, b) => a[0] - b[0]);""")
+    face_plane = p.ev("return App.doc.items[2].p.plane")
+    p.ev("Actions.remove([arg])", helper_id); p.ev("Datums.remove(arg)", datum_id)
+    warte_rechnen(p, 20); p.wait(200)
+    ok2 = (
+        len(parts_dat) == 1 and abs(parts_dat[0]['v'] - 23000) < 5
+        and pockets_dat == [[-15.0, 0.0], [-15.0, 12.0]]
+        and face_plane == 'FACE'
+        and v_face is not None and abs(v_face - 23000) < 5
+        and pockets_face == [[-15.0, 0.0], [15.0, 0.0]]
+    )
+
+    # 3. Zurück auf YZ, Taschentiefe 5 → 8 ändert auch Spiegelbild; Erhöhung (join) ebenfalls spiegeln
+    p.ev("App.select([App.doc.items[2].id])"); p.wait(250)
+    p.pg.select_option('#ms-plane', 'YZ')
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("App.change('Tiefe 8', d => { d.items[1].p.dist = 8; })")
+    warte_rechnen(p, 20); p.wait(300)
+    v_deep = volumen(p)
+    p.ev("""App.change('Erhöhung', d => {
+      const boss = Model.newItem('box', { w: 10, d: 10, h: 6 }, { name: 'Zapfen' });
+      boss.t.x = -15; boss.t.z = 10;
+      boss.op = { type: 'join', target: d.items[0].id };
+      d.items.push(boss);
+    })""")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("Features.mirrorStep([App.doc.items[3].id], { plane: 'YZ', off: 0 })")
+    warte_rechnen(p, 20); p.wait(300)
+    parts3 = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+    ok3 = (
+        abs(v_deep - 22400) < 5
+        and len(parts3) == 1 and abs(parts3[0]['v'] - 23600) < 5
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 4. Unterdrücken, Zeitleisten-Marker, Gruppen-Tasche (Loch), Erklärung & Hilfe
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(200)
+    v_sup = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("Timeline.setMarker(2)")
+    warte_rechnen(p, 20); p.wait(200)
+    v_mk2 = volumen(p)
+    p.ev("Timeline.setMarker(App.doc.items.length)")
+    warte_rechnen(p, 20); p.wait(200)
+    v_mk_end = volumen(p)
+    exp_txt = p.ev("return Explain.local(App.doc.items[2].id).lines.map(l => l.t).join(' ')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    has_cmd = p.ev("return Commands.search('schritt spiegeln').some(c => c.id === 'mirror-step')")
+
+    # In einer Gruppe (Loch-Kind spiegeln)
+    p.ev("""App.setDoc(Model.newDoc());""")
+    p.wait(400)
+    p.ev("""App.change('Gruppe mit Tasche', d => {
+      const base = Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Platte' });
+      d.items.push(base);
+      const pocket = Model.newItem('extrude', {
+        sketch: {
+          plane: { o: [0, 0, 10], x: [1, 0, 0], n: [0, 0, 1] },
+          ents: [{ id: 'r1', type: 'rect', a: [-20, -5], b: [-10, 5] }],
+          dims: [], cons: [],
+        },
+        dist: 5, dir: 'reverse',
+      }, { name: 'Tasche', role: 'hole' });
+      Actions.attach(d, base.id, pocket);
+    })""")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("Features.mirrorStep([App.doc.items[0].children[1].id], { plane: 'YZ', off: 0 })")
+    warte_rechnen(p, 20); p.wait(300)
+    grp_parts = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => q.volume))")
+    ok4 = (
+        abs(v_sup - 24400) < 5
+        and abs(v_mk2 - 23200) < 5
+        and abs(v_mk_end - 23600) < 5
+        and 'Spiegelt' in exp_txt
+        and 'mirrorStep' in hilfen and all(k in hilfen['mirrorStep'] for k in ('tip', 'hilfe', 'tipp'))
+        and has_cmd is True
+        and len(grp_parts) == 1 and abs(grp_parts[0] - 23000) < 5
+        and p.ev("return App.errors.length === 0") is True
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a040_varianten_schritte(p):
+    p.empty()
+    p.ev("""
+    App.change('Platte mit Loch', d => {
+      d.params.push({ id: 'm_b', name: 'Breite', expr: 40 });
+      const b = Model.newItem('box', { w: 'Breite', d: 30, h: 10 }, { name: 'Platte' });
+      const h = Model.newItem('cylinder', { d: 10, h: 12 }, { name: 'Loch', role: 'hole' });
+      h.t.z = -1;
+      d.items.push(b, h);
+    });
+    """)
+    warte_rechnen(p)
+    v_full = 40 * 30 * 10
+    v_hole = v_full - math.pi * 25 * 10
+    v0 = volumen(p)
+    hole_id = p.ev("return App.doc.items[1].id")
+
+    p.pg.locator('#lt-params').click(); p.wait(300)
+    p.pg.locator('#var-new').click(); p.wait(250)
+    p.pg.fill('#prompt-inp', 'mit Loch'); p.pg.locator('.modal .actions .btn.primary').click(); p.wait(500)
+    p.pg.locator('#var-new').click(); p.wait(250)
+    p.pg.fill('#prompt-inp', 'ohne Loch'); p.pg.locator('.modal .actions .btn.primary').click(); p.wait(500)
+    v1_id, v2_id = p.ev("return App.doc.variants.map(v=>v.id)")
+    step_names = p.pg.locator('#var-steps .var-step-name').all_text_contents()
+    ok1 = v0 is not None and abs(v0 - v_hole) < 1.0 and step_names == ['Platte', 'Loch']
+
+    # In Variante „ohne Loch“ den Loch-Schritt über die Checkbox unterdrücken
+    p.pg.locator(f'#var-steps .var-step-cb[data-id="{hole_id}"]').click()
+    warte_rechnen(p)
+    v1 = volumen(p)
+    sup_v2 = p.ev("return Variants.suppressedOf(arg)", v2_id)
+    cnt_txt = p.pg.locator('#var-steps .var-steps-count').text_content()
+    ok2 = (p.ev("return !!App.doc.items[1].suppressed")
+           and sup_v2 == [hole_id]
+           and '1 unterdrückt' in cnt_txt
+           and v1 is not None and abs(v1 - v_full) < 1.0)
+
+    # Umschalten auf „mit Loch“ und wieder zurück auf „ohne Loch“ ändert das Volumen hin und zurück
+    p.pg.select_option('#var-sel', v1_id); warte_rechnen(p)
+    v2 = volumen(p)
+    hole_on = p.ev("return !App.doc.items[1].suppressed")
+    p.pg.select_option('#var-sel', v2_id); warte_rechnen(p)
+    v3 = volumen(p)
+    hole_off = p.ev("return !!App.doc.items[1].suppressed")
+    ok3 = (hole_on and hole_off
+           and v2 is not None and abs(v2 - v_hole) < 1.0
+           and v3 is not None and abs(v3 - v_full) < 1.0)
+
+    # Varianten vergleichen zeigt den Schritt-Unterschied und korrektes Gewicht
+    p.pg.locator('#var-cmp').click()
+    p.pg.wait_for_selector('#vtable', timeout=90000); p.wait(250)
+    rows = p.pg.evaluate("[...document.querySelectorAll('#vtable tr')].map(r=>[...r.children].map(c=>c.textContent))")
+    loch_col = rows[0].index('Loch') if 'Loch' in rows[0] else -1
+    gew_col = rows[0].index('Gewicht') if 'Gewicht' in rows[0] else -1
+    w_mit = float(rows[1][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    w_ohne = float(rows[2][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    ok4 = (len(rows) == 3 and loch_col >= 0 and gew_col >= 0
+           and rows[1][loch_col] == 'aktiv' and rows[2][loch_col] == 'unterdrückt'
+           and w_ohne > w_mit)
+    p.pg.keyboard.press('Escape'); p.wait(250)
+
+    # Kombiniert: Maß & Schritt ändern -> Abweichung -> Variantenwechsel -> Undo & Migration -> Hilfe
+    p.pg.select_option('#var-sel', v1_id); warte_rechnen(p)
+    field(p, '#pv-m_b', 50); warte_rechnen(p)
+    p.ev("Timeline.toggleSuppress(arg)", hole_id); warte_rechnen(p)
+    warn_txt = p.pg.locator('.section.variants .hint-box.warn').text_content()
+    has_up = p.pg.locator('#var-update').count() == 1
+    p.pg.select_option('#var-sel', v2_id); warte_rechnen(p)
+    v4 = volumen(p)
+    b_after = p.ev("return App.doc.params.find(x=>x.id==='m_b').expr")
+    p.ev("App.undo()"); warte_rechnen(p)
+    undo_ok = p.ev("return App.doc.params.find(x=>x.id==='m_b').expr") == 50 and p.ev("return App.doc.variant") == v1_id
+    mig_sup = p.ev("const d=Model.migrate(JSON.parse(App.snapshot())); return d.variants[1].suppressed")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    vh = hilfen.get('variants') or {}
+    ok5 = (has_up and 'Maße' in warn_txt and 'Schritte' in warn_txt
+           and b_after == 40 and v4 is not None and abs(v4 - v_full) < 1.0
+           and undo_ok and mig_sup == [hole_id]
+           and 'Schritte' in vh.get('hilfe', '') and 'unterdrückt' in vh.get('hilfe', ''))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a041_formeln(p):
+    p.empty()
+    # 1. wenn(Bedingung; dann; sonst) mit < > <= >= == != und verzögerter Zweig-Auswertung
+    r_wenn = p.ev("""
+      return [
+        Expr.eval('wenn(b > 50; 3; 2)', { b: 60 }),
+        Expr.eval('wenn(b > 50; 3; 2)', { b: 40 }),
+        Expr.eval('wenn(b < 50; 1; 0)', { b: 40 }),
+        Expr.eval('wenn(b <= 50; 1; 0)', { b: 50 }),
+        Expr.eval('wenn(b >= 50; 1; 0)', { b: 50 }),
+        Expr.eval('wenn(b == 50; 7; 8)', { b: 50 }),
+        Expr.eval('wenn(b != 50; 9; 8)', { b: 50 }),
+        Expr.eval('wenn(b > 100; 10; wenn(b > 50; 5; 2))', { b: 60 }),
+        Expr.eval('wenn(b == 0; 0; 100 / b)', { b: 0 }),
+      ];
+    """)
+    ok1 = r_wenn == [3, 2, 1, 1, 1, 7, 8, 5, 0]
+
+    # 2. runden(x; Stellen), aufrunden, abrunden
+    r_round = p.ev("""
+      return [
+        Expr.eval('runden(2,345; 1)', {}),
+        Expr.eval('runden(2,35; 1)', {}),
+        Expr.eval('runden(2,6)', {}),
+        Expr.eval('aufrunden(2,31; 1)', {}),
+        Expr.eval('aufrunden(2,3; 1)', {}),
+        Expr.eval('abrunden(2,39; 1)', {}),
+        Expr.eval('abrunden(2,9)', {}),
+      ];
+    """)
+    ok2 = r_round == [2.3, 2.4, 3, 2.4, 2.3, 2.3, 2]
+
+    # 3. Nachschlagetabelle unter „Maße“ anlegen, umbenennen, Werte ändern & 3D-Quader steuern
+    p.pg.click('#lt-params'); p.wait(300)
+    p.pg.click('#par-table-add'); p.wait(300)
+    tid = p.ev("return App.doc.tables[0].id")
+    p.pg.fill(f'#ptn-{tid}', 'Schraube'); p.pg.press(f'#ptn-{tid}', 'Enter'); p.wait(300)
+    r0, r1 = p.ev("return App.doc.tables[0].rows.map(r=>r.id)")
+    p.pg.fill(f'#ptk-{r0}', 'M3'); p.pg.press(f'#ptk-{r0}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptv-{r0}', '3,4'); p.pg.press(f'#ptv-{r0}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptk-{r1}', 'M5'); p.pg.press(f'#ptk-{r1}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptv-{r1}', '5,5'); p.pg.press(f'#ptv-{r1}', 'Enter'); p.wait(200)
+    p.pg.click(f'#ptadd-{tid}'); p.wait(300)
+    r2 = p.ev("return App.doc.tables[0].rows[2].id")
+    p.pg.fill(f'#ptk-{r2}', 'M6'); p.pg.press(f'#ptk-{r2}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptv-{r2}', '6,6'); p.pg.press(f'#ptv-{r2}', 'Enter'); p.wait(300)
+
+    p.ev("""
+      App.change('Maße für Formeltest', d => {
+        d.params.push({ id: 'pm_b', name: 'b', expr: 60 });
+        d.params.push({ id: 'pm_s', name: 'loch', expr: 'tabelle(Schraube; M5)' });
+        const box = Model.newItem('box', { w: 'tabelle(Schraube; M5)', d: 'runden(2,345; 1) * 10', h: 'wenn(b > 50; 3; 2)' });
+        d.items.push(box);
+      });
+    """)
+    warte_rechnen(p)
+    bb1 = bbox(p, 0)
+    val_loch = p.ev("return Model.vars(App.doc).v.loch")
+    left_txt1 = p.pg.locator('#left-body').text_content()
+
+    p.pg.fill(f'#ptv-{r1}', '6,2'); p.pg.press(f'#ptv-{r1}', 'Enter'); p.wait(300)
+    p.ev("App.change('b ändern', d => { d.params.find(x=>x.name==='b').expr = 40; })")
+    warte_rechnen(p)
+    bb2 = bbox(p, 0)
+
+    p.ev("App.undo()"); warte_rechnen(p)
+    bb_undo = bbox(p, 0)
+    p.ev("App.redo()"); warte_rechnen(p)
+    bb_redo = bbox(p, 0)
+    mig_len = p.ev("const d = Model.migrate(JSON.parse(App.snapshot())); return d.tables && d.tables.length === 1 && d.tables[0].rows.length === 3;")
+
+    ok3 = (
+        abs(val_loch - 5.5) < 1e-6 and '= 5,5' in left_txt1
+        and bb1 is not None and abs((bb1[3] - bb1[0]) - 5.5) < 0.05 and abs((bb1[4] - bb1[1]) - 23.0) < 0.05 and abs((bb1[5] - bb1[2]) - 3.0) < 0.05
+        and bb2 is not None and abs((bb2[3] - bb2[0]) - 6.2) < 0.05 and abs((bb2[5] - bb2[2]) - 2.0) < 0.05
+        and bb_undo is not None and abs((bb_undo[5] - bb_undo[2]) - 3.0) < 0.05
+        and bb_redo is not None and abs((bb_redo[5] - bb_redo[2]) - 2.0) < 0.05
+        and mig_len is True
+    )
+
+    # 4. Fehlermeldungen in Klartext (Expr, Maße-Panel, Zahlenfeld) & Hilfe
+    errs = p.ev("""
+      return [
+        Expr.tryEval('tabelle(Fehlt; M5)', {}),
+        Expr.tryEval('tabelle(Schraube; M9)', {}, App.doc.tables),
+        Expr.tryEval('wenn(b > 50; 3)', { b: 60 }),
+        Expr.tryEval('wenn(b = 50; 3; 2)', { b: 60 }),
+        Expr.tryEval('10 / 0', {}),
+        Expr.tryEval('runden(2,3; 0,5)', {}),
+      ];
+    """)
+    p.pg.locator(f'.ptbl-row[data-row-id="{r1}"] .ptbl-rdel').click(); p.wait(400)
+    left_err = p.pg.locator('#left-body').text_content()
+    var_errs = p.ev("return Object.values(Model.vars(App.doc).errors)")
+
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    fid = p.pg.evaluate("[...document.querySelectorAll('#right-body input')].map(i=>i.id).find(i=>/w$/.test(i))")
+    p.pg.fill('#' + fid, 'wenn(b = 50; 3; 2)'); p.pg.press('#' + fid, 'Enter'); p.wait(400)
+    toast_txt = ' '.join(p.pg.locator('.toast').all_inner_texts())
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    has_help = (
+        'formulaTable' in hilfen
+        and all(k in hilfen['formulaTable'] for k in ('tip', 'hilfe', 'tipp'))
+        and p.pg.locator('#par-table-add[data-help="formulaTable"]').count() == 1
+    )
+
+    ok4 = (
+        all(not e['ok'] for e in errs)
+        and 'nicht gefunden' in errs[0]['error']
+        and 'M9' in errs[1]['error'] and 'Schraube' in errs[1]['error']
+        and '3 Angaben' in errs[2]['error']
+        and '==' in errs[3]['error']
+        and 'Division durch 0' in errs[4]['error']
+        and 'ganze Zahl' in errs[5]['error']
+        and any('Schlüssel „M5“' in m and 'Schraube' in m for m in var_errs)
+        and 'Schlüssel „M5“' in left_err
+        and 'Das kann ich nicht ausrechnen' in toast_txt and '==' in toast_txt
+        and has_help is True
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9355,9 +9819,13 @@ TESTS = [
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
+    ('[A-037] Schritt spiegeln: Tasche links an Mittelebene / Bezugsebene & Fläche / Erhöhung & Änderung folgt / Unterdrücken, Marker, Gruppe & Hilfe', t_a037_schritt_spiegeln),
     ('[A-036] Muster von Schritten: Tasche 6× im Kreis / Kopie per Klick auslassen / wieder aktiv & Undo / Rechteckmuster & Auflösen / Hilfe & Speichern', t_muster_schritte),
     ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
     ('[A-039] Gewinde direkt auf runde Fläche: Bolzen Ø10 M10 echt 15 mm / Bohrung Ø8,5 M10 innen / Steigung & kosmetisch / Hilfe', t_a039_gewinde_flaeche),
+    ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
+    ('[A-040] Varianten schalten Schritte: ohne Loch / Volumen & zurück / Vergleich / Maße & Schritte / Abweichung & Undo', t_a040_varianten_schritte),
+    ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

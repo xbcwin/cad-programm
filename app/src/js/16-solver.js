@@ -544,7 +544,8 @@ const Solver = (() => {
     const names = new Set();
     for (const d of sketch.dims || []) if (typeof d.v === 'string') for (const n of Expr.names(d.v)) names.add(n);
     const vv = [...names].map((n) => { const k = Object.keys(V || {}).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? V[k] : null; });
-    const key = JSON.stringify([sketch.ents, sketch.dims || [], sketch.cons || [], vv]);
+    const tbls = V && V.__tables ? V.__tables : null;
+    const key = JSON.stringify([sketch.ents, sketch.dims || [], sketch.cons || [], vv, tbls]);
     if (memo.has(key)) { const r = memo.get(key); memo.delete(key); memo.set(key, r); return r; }
     const r = solve(sketch, V);
     memo.set(key, r); if (memo.size > 60) memo.delete(memo.keys().next().value);

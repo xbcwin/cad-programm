@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -645,7 +645,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
     if (!top || top.locked || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }

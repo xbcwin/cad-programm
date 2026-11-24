@@ -347,6 +347,7 @@ const Panels = (() => {
           ...(refIssues.length ? [{ icon: 'warn', label: 'Neu wählen (kaputter Bezug)', id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
+          ...(Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
           ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
@@ -583,7 +584,7 @@ const Panels = (() => {
     const { v, errors } = Model.vars(App.doc);
     const wrap = h('div', { class: 'props' });
     wrap.append(h('div', { class: 'hint-box', html: 'Lege hier Maße mit Namen fest, zum Beispiel <b>Wandstärke = 2</b>. In jedem Zahlenfeld kannst du dann den Namen oder eine Formel wie <b>Breite/2 + 3</b> eintippen. Änderst du das Maß hier, passt sich alles an.' }));
-    if ((App.doc.params || []).length) { const vs = Variants.section(); vs.classList.add('pro'); wrap.append(vs); }
+    if ((App.doc.params || []).length || (App.doc.items || []).length || (App.doc.variants || []).length) { const vs = Variants.section(); vs.classList.add('pro'); wrap.append(vs); }
     const list = h('div', { class: 'mini-list' });
     (App.doc.params || []).forEach((p, i) => {
       const row = h('div', { class: 'section' });
@@ -617,6 +618,103 @@ const Panels = (() => {
     const csvIn = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-in', 'data-help': 'paramsCsv' }); csvIn.innerHTML = icon('folder') + 'CSV laden';
     csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); };
     wrap.append(h('div', { class: 'btn-row' }, csvOut, csvIn));
+    // Kleine Nachschlagetabellen (KP-22): zwei Spalten Schlüssel & Wert für tabelle(Name; Schlüssel)
+    const tblSec = h('div', { class: 'section param-tables', id: 'param-tables-sec' }, h('div', { class: 'section-h' }, 'Tabellen'));
+    const tbls = App.doc.tables || [];
+    if (!tbls.length) {
+      tblSec.append(h('div', { class: 'hint-box', html: 'Kleine Nachschlagetabellen mit zwei Spalten (Schlüssel und Wert) – nutzbar in Formeln wie <b>tabelle(Schraube; M5)</b>.' }));
+    }
+    for (const tb of tbls) {
+      const card = h('div', { class: 'ptbl', dataset: { tableId: tb.id, tableName: tb.name } });
+      const head = h('div', { class: 'ptbl-head' });
+      const tNameIn = h('input', { id: 'ptn-' + tb.id, class: 'ptbl-name', value: tb.name, 'aria-label': 'Tabellenname', spellcheck: 'false' });
+      tNameIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') tNameIn.blur(); if (e.key === 'Escape') { tNameIn.value = tb.name; tNameIn.blur(); } });
+      tNameIn.addEventListener('change', (e) => {
+        const nv = e.target.value.trim().replace(/\s+/g, '_');
+        if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nv)) { UI.toast('Tabellennamen dürfen nur Buchstaben, Ziffern und _ enthalten und nicht mit einer Ziffer beginnen.', { kind: 'bad' }); e.target.value = tb.name; return; }
+        renameTable(tb.id, nv);
+      });
+      const tDel = h('button', { type: 'button', class: 'btn ghost small danger ptbl-del', 'data-tip': 'Tabelle entfernen', 'aria-label': 'Tabelle entfernen' });
+      tDel.innerHTML = icon('trash');
+      tDel.onclick = () => removeTable(tb.id);
+      head.append(tNameIn, tDel);
+      card.append(head);
+      const grid = h('div', { class: 'ptbl-grid' }, h('div', { class: 'ptbl-cols' }, h('span', null, 'Schlüssel'), h('span', null, 'Wert'), h('span', null)));
+      for (const r of tb.rows || []) {
+        const rowEl = h('div', { class: 'ptbl-row', dataset: { rowId: r.id } });
+        const kIn = h('input', { id: 'ptk-' + r.id, class: 'ptbl-key', value: r.key ?? '', placeholder: 'z. B. M5', 'aria-label': 'Schlüssel', spellcheck: 'false' });
+        kIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') kIn.blur(); if (e.key === 'Escape') { kIn.value = r.key ?? ''; kIn.blur(); } });
+        kIn.addEventListener('change', () => {
+          const nk = kIn.value.trim();
+          if (!nk) { UI.toast('Bitte einen Schlüssel für die Zeile angeben.', { kind: 'bad' }); kIn.value = r.key ?? ''; return; }
+          if (nk === r.key) return;
+          App.change('Tabellenschlüssel geändert', (doc) => {
+            const t = (doc.tables || []).find((x) => x.id === tb.id);
+            const row = t && (t.rows || []).find((x) => x.id === r.id);
+            if (!row) return false;
+            row.key = nk;
+          });
+        });
+        const valStr = typeof r.val === 'number' ? fmt(r.val, 6) : (r.val ?? '');
+        const vIn = h('input', { id: 'ptv-' + r.id, class: 'ptbl-val mono', value: valStr, placeholder: 'Wert', 'aria-label': 'Wert', spellcheck: 'false' });
+        vIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') vIn.blur(); if (e.key === 'Escape') { vIn.value = valStr; vIn.classList.remove('invalid'); vIn.blur(); } });
+        vIn.addEventListener('change', () => {
+          const raw = vIn.value.trim();
+          if (!raw) { vIn.classList.add('invalid'); UI.toast('Bitte eine Zahl oder Formel eingeben.', { kind: 'bad' }); return; }
+          const n = parseNum(raw);
+          let nextVal = raw;
+          if (!isNaN(n)) nextVal = n;
+          else {
+            const res = Expr.tryEval(raw, Model.vars(App.doc).v, App.doc.tables || []);
+            if (!res.ok) { vIn.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); return; }
+          }
+          vIn.classList.remove('invalid');
+          if (String(nextVal) === String(r.val)) return;
+          App.change('Tabellenwert geändert', (doc) => {
+            const t = (doc.tables || []).find((x) => x.id === tb.id);
+            const row = t && (t.rows || []).find((x) => x.id === r.id);
+            if (!row) return false;
+            row.val = nextVal;
+          }, { merge: 'tbl:' + r.id });
+        });
+        const rDel = h('button', { type: 'button', class: 'ptbl-rdel', 'data-tip': 'Zeile entfernen', 'aria-label': 'Zeile entfernen' }, '×');
+        rDel.onclick = () => App.change('Tabellenzeile entfernt', (doc) => {
+          const t = (doc.tables || []).find((x) => x.id === tb.id);
+          if (!t) return false;
+          t.rows = (t.rows || []).filter((x) => x.id !== r.id);
+        });
+        rowEl.append(kIn, vIn, rDel);
+        grid.append(rowEl);
+      }
+      card.append(grid);
+      const foot = h('div', { class: 'ptbl-foot' });
+      const addRow = h('button', { type: 'button', class: 'btn ghost small ptbl-addrow', id: 'ptadd-' + tb.id });
+      addRow.innerHTML = icon('plus') + 'Zeile';
+      addRow.onclick = () => App.change('Tabellenzeile hinzugefügt', (doc) => {
+        const t = (doc.tables || []).find((x) => x.id === tb.id);
+        if (!t) return false;
+        t.rows = t.rows || [];
+        let k = 'Neu', idx = 1;
+        while (t.rows.some((x) => String(x.key).toLowerCase() === k.toLowerCase())) { idx++; k = 'Neu' + idx; }
+        t.rows.push({ id: uid('tr'), key: k, val: 10 });
+      });
+      const sampleKey = (tb.rows && tb.rows[0] && tb.rows[0].key) ? tb.rows[0].key : 'Schlüssel';
+      foot.append(addRow, h('span', { class: 'ptbl-hint mono', title: `Formel: tabelle(${tb.name}; ${sampleKey})` }, `tabelle(${tb.name}; ${sampleKey})`));
+      card.append(foot);
+      tblSec.append(card);
+    }
+    const addTbl = h('button', { type: 'button', class: 'btn small', id: 'par-table-add', 'data-help': 'formulaTable' });
+    addTbl.innerHTML = icon('plus') + 'Tabelle hinzufügen';
+    addTbl.onclick = () => {
+      let n = 1;
+      while ((App.doc.tables || []).some((x) => x.name.toLowerCase() === ('tabelle' + n))) n++;
+      App.change('Tabelle hinzugefügt', (doc) => {
+        doc.tables = doc.tables || [];
+        doc.tables.push({ id: uid('tb'), name: 'Tabelle' + n, rows: [{ id: uid('tr'), key: 'A', val: 10 }, { id: uid('tr'), key: 'B', val: 20 }] });
+      });
+    };
+    tblSec.append(h('div', { class: 'btn-row' }, addTbl));
+    wrap.append(tblSec);
     body.append(wrap);
   }
   function paramsCSV() {
@@ -650,7 +748,7 @@ const Panels = (() => {
   // Fenster mit Schreibweise und 12 Beispielen zum Ausprobieren
   function formulaHelp() {
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
-    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Klammern, <b>pi</b> und die Funktionen <b>min, max, abs, wurzel, runden, floor, ceil, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
+    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Vergleiche <b>&lt; &gt; &lt;= &gt;= == !=</b>, Klammern, <b>pi</b> und die Funktionen <b>wenn(Bedingung; dann; sonst)</b>, <b>runden(x; Stellen)</b>, <b>aufrunden</b>, <b>abrunden</b>, <b>tabelle(Name; Schlüssel)</b>, <b>min, max, abs, wurzel, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
     const demo = Object.entries(FORMULA_DEMO).map(([k, x]) => `${k} = ${x}`).join(', ');
     box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px' } }, 'Die Ergebnisse gelten für ' + demo + '.'));
     const list = h('div', { class: 'formula-list' });
@@ -667,14 +765,32 @@ const Panels = (() => {
     if (missing.length) actions.unshift({ label: 'Beispiel-Maße anlegen', run: () => { App.change('Beispiel-Maße angelegt', (doc) => { for (const k of missing) doc.params.push({ id: uid('m'), name: k, expr: FORMULA_DEMO[k] }); }); UI.toast(missing.length + ' Maße angelegt – jetzt kannst du die Formeln überall eintippen.', { icon: 'check' }); } });
     UI.modal({ title: 'Formel-Beispiele', body: box, actions });
   }
-  // ersetzt einen Maßnamen überall (Maße, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
+  // ersetzt einen Maßnamen überall (Maße, Tabellen, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
   function replaceName(doc, old, repl) {
     const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß_0-9])' + old.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(?![A-Za-zÄÖÜäöüß_0-9])', 'gi');
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
+  }
+  function replaceTableName(doc, old, repl) {
+    const re = new RegExp('(tabelle\\s*\\(\\s*["\']?)' + old.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(["\']?\\s*;)', 'gi');
+    const fix = (s) => typeof s === 'string' ? s.replace(re, (_, a, b) => a + repl + b) : s;
+    for (const q of doc.params || []) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+  }
+  function renameTable(id, nv) {
+    const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb || tb.name === nv) return;
+    if ((App.doc.tables || []).some((x) => x.id !== id && x.name.toLowerCase() === nv.toLowerCase())) { UI.toast('Eine Tabelle mit diesem Namen gibt es schon.', { kind: 'bad' }); renderLeft(); return; }
+    const old = tb.name;
+    App.change('Tabelle umbenannt', (doc) => { const t = (doc.tables || []).find((x) => x.id === id); if (!t) return false; t.name = nv; replaceTableName(doc, old, nv); });
+  }
+  function removeTable(id) {
+    const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb) return;
+    App.change('Tabelle entfernt', (doc) => { doc.tables = (doc.tables || []).filter((x) => x.id !== id); });
   }
   function renameParam(id, nv) {
     const p = App.doc.params.find((x) => x.id === id); if (!p || p.name === nv) return;
@@ -833,8 +949,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'mirrorStep') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'mirrorStep' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
     const type = it.op ? it.op.type : 'new';
@@ -970,7 +1086,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -978,7 +1094,7 @@ const Panels = (() => {
     }
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
-    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
+    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
     const isMergedStep = isMoveOnly || it.kind === 'rib';
     if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
@@ -1010,7 +1126,21 @@ const Panels = (() => {
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
           sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.` }));
-        } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        } else if (def.lib === 'screwHole') {
+          const te = threadEntry(it.p.size);
+          let screwTxt = '';
+          if (te) {
+            const dia = threadHoleDia(te, it.p.fit);
+            const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
+            let headTxt = '';
+            if (it.p.fit !== 'tap') {
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+            }
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+          }
+          sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
@@ -1283,6 +1413,9 @@ const Panels = (() => {
     } else if (it.kind === 'rib') {
       sec.firstChild.textContent = 'Rippe';
       Features.renderRib(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'mirrorStep') {
+      sec.firstChild.textContent = 'Schritt spiegeln';
+      Features.renderMirrorStep(it, sec, setP); w.append(sec);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -1512,6 +1645,7 @@ const Panels = (() => {
     if (items.length === 1 && ((items[0].item.kind === 'transform' && !(items[0].item.p && items[0].item.p.copy)) || items[0].item.kind === 'scale' || (items[0].item.kind === 'thicken' && !(items[0].item.p && items[0].item.p.mode === 'new')))) {
       const it = items[0].item;
       bar.append(h('span', { class: 'lbl' }, it.kind === 'scale' ? T('ctx.scaleStepLabel') : it.kind === 'thicken' ? T('ctx.thickenStepLabel') : T('ctx.moveStepLabel')));
+      if (it.kind === 'thicken') b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), 'accent', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
@@ -1524,8 +1658,23 @@ const Panels = (() => {
       const it = items[0].item;
       bar.append(h('span', { class: 'lbl' }, 'Rippe'));
       b('edit', 'Skizze bearbeiten', () => Sketch.editItem(it.id), 'accent', 'Skizze dieser Rippe bearbeiten');
+      b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }]), '', T('ctx.patternTip'), true);
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'mirrorStep') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('ctx.mirrorStepLabel')));
+      b('cursor', T('ctx.pickMirrorPlane'), () => Features.pickMirrorStepPlane(it.id), 'accent', T('ctx.pickMirrorPlaneTip')).dataset.help = 'mirrorStep';
+      b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
+      const merged = App.mergedInto(it.id);
+      if (merged && Model.find(App.doc, merged)) b('pointer', T('ctx.targetBody'), () => App.select([merged]), '', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
@@ -1618,7 +1767,8 @@ const Panels = (() => {
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
       if (App.doc.items.includes(it)) b('moveStep', T('ctx.moveStep'), () => Features.transform(), '', T('ctx.moveStepTip'), true);
       if (App.doc.items.includes(it)) b('scaleBody', T('ctx.scale'), () => Features.scale(), '', T('ctx.scaleTip'), true).dataset.help = 'scaleBody';
-      b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }, { label: T('ctx.patMirror'), icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? T('ctx.patternHoleTip') : T('ctx.patternTip'), true);
+      if (Features.canMirrorStep(it, items[0].parent)) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
+      b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }, { label: T('ctx.patMirror'), icon: 'mirror', run: () => Features.pattern('mirror') }, ...(Features.canMirrorStep(it, items[0].parent) ? [{ label: T('ctx.mirrorStep'), icon: 'mirror', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : [])]), '', hole ? T('ctx.patternHoleTip') : T('ctx.patternTip'), true);
       if (!hole) b('split', T('ctx.split'), () => Features.split(), '', T('ctx.splitTip'), true);
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', T('ctx.toTip'), () => Actions.loft([it.id], { tip: 10 }), '', T('ctx.toTipTip'), true);
       if (!App.edges.length) b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarPartsTip'), true);
@@ -1626,6 +1776,7 @@ const Panels = (() => {
       if (it.kind === 'group') b('ungroup', T('ctx.ungroup'), () => Actions.ungroup(), '', T('ctx.ungroupTip'), true);
     } else {
       b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
+      if (items.every((x) => x.list === items[0].list && Features.canMirrorStep(x.item, x.parent))) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep(items.map((x) => x.item.id)), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
       if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
       if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));

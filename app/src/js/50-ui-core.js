@@ -178,29 +178,38 @@ const UI = (() => {
     const dispVal = typeof value === 'number' ? (isLen ? Units.fmtInput(value) : fmt(value, 3)) : (value ?? '');
     const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
     box.append(inp);
+    let badErr = null;
     if (isE) {
-      const ev = Model.num(value, V, NaN);
-      const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
-      const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
-      const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
-      box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+      const res = Expr.tryEval(value, V);
+      if (res.ok) {
+        const ev = res.value;
+        const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
+        const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
+        const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
+        box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+      } else {
+        badErr = res.error;
+        box.classList.add('invalid');
+        box.append(h('span', { class: 'fx bad', title: res.error }, '! Fehler'));
+      }
     } else if (dispUnit) box.append(h('span', { class: 'unit' }, dispUnit));
     wrap.append(box);
+    if (badErr) wrap.append(h('div', { class: 'field-err' }, badErr));
     let orig = inp.value, lastBad = null;
     const commit = () => {
       const raw = inp.value.trim();
-      if (raw === orig) { box.classList.remove('invalid'); lastBad = null; return; }
+      if (raw === orig) { if (!badErr) box.classList.remove('invalid'); lastBad = null; return; }
       let val;
       if (isLen) {
         const p = Units.parseLen(raw, Model.vars(App.doc).v, { expr });
-        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“ – prüf die Schreibweise oder den Namen.'), { kind: 'bad' }); lastBad = raw; return; }
         val = p.value;
       } else {
         val = parseNum(raw);
         if (isNaN(val)) {
           if (!expr) { box.classList.add('invalid'); return; }
-          const vv = Model.num(raw, Model.vars(App.doc).v, NaN);
-          if (isNaN(vv)) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+          const res = Expr.tryEval(raw, Model.vars(App.doc).v);
+          if (!res.ok) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); lastBad = raw; return; }
           val = raw;
         }
       }
@@ -248,7 +257,19 @@ const UI = (() => {
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const sel = h('select', { id });
-    for (const o of options) { const [v, l] = Array.isArray(o) ? o : [o, o]; const op = h('option', { value: v }, l); if (String(v) === String(value)) op.selected = true; sel.append(op); }
+    const addOpt = (parent, o) => {
+      const [v, l] = Array.isArray(o) ? o : [o, o];
+      const op = h('option', { value: v }, l);
+      if (String(v) === String(value)) op.selected = true;
+      parent.append(op);
+    };
+    for (const o of options) {
+      if (o && typeof o === 'object' && !Array.isArray(o) && Array.isArray(o.options)) {
+        const og = h('optgroup', { label: o.group });
+        for (const sub of o.options) addOpt(og, sub);
+        sel.append(og);
+      } else addOpt(sel, o);
+    }
     sel.addEventListener('change', () => onChange(sel.value));
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;

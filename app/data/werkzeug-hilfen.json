@@ -325,9 +325,9 @@
     "tipp": "Fräs- und Laserdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile kommen nicht mit."
   },
   "variants": {
-    "tip": "Mehrere Sätze von Maßen speichern und umschalten",
-    "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „Klein“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
-    "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
+    "tip": "Mehrere Sätze von Maßen und Schritten speichern und umschalten",
+    "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße und welche Schritte gerade unterdrückt sind unter einem Namen, z. B. „mit Loch“ oder „ohne Loch“. Unter „Schritte in dieser Variante“ hakst du einzelne Schritte je Variante an oder ab. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede samt Gewicht.",
+    "tipp": "Änderst du ein Maß oder unterdrückst du einen Schritt in der Zeitleiste, meldet Tracery die Abweichung – über „Überschreiben“ übernimmst du den Stand in die aktive Variante."
   },
   "explainStep": {
     "tip": "Lass dir einen Schritt erklären",
@@ -878,5 +878,20 @@
     "tip": "Echtes oder kosmetisches Gewinde direkt auf eine runde Fläche setzen",
     "hilfe": "Rechtsklick auf einen Bolzen (außen) oder eine Bohrung (innen) → „Gewinde …“. Tracery schlägt die passende metrische Größe (M2 bis M24) samt Regelsteigung direkt aus dem Durchmesser vor. Du kannst Länge, Steigung und Ende wählen sowie zwischen echtem 3D-Gewinde und schneller Markierung umschalten.",
     "tipp": "Bei gedruckten Innengewinden hilft ein kleines Spiel (Standard 0,3 mm), damit Schrauben leicht hineingehen."
+  },
+  "mirrorStep": {
+    "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
+    "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
+    "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
+  },
+  "threadStandards": {
+    "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
+    "hilfe": "Wählt im Bohrungs-Assistenten die Gewindenorm: Metrisch Regelgewinde (M1.6–M12), Metrisch Feingewinde (z. B. M8×1, M10×1,25 nach DIN 13 / DIN 336), Zoll-Gewinde UNC und UNF (#4 bis 1/2\" nach ASME B1.1 mit 82°-Senkung) oder zylindrisches Rohrgewinde G1/8 bis G1 (ISO 228-1 mit Flachsenkung nach DIN 3852-2).",
+    "tipp": "Für zöllige Kameragehäuse oder US-Bauteile wählst du UNC/UNF; bei Hydraulik-, Pneumatik- oder Schlauchanschlüssen passt Rohrgewinde G."
+  },
+  "formulaTable": {
+    "tip": "Nachschlagetabelle für Formeln anlegen",
+    "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
+    "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
   }
 }

@@ -250,40 +250,116 @@ const Plates = (() => {
   return { candidates, file, dxf };
 })();
 
-// ---------- Varianten: benannte Sätze von Maßen, zum Umschalten und Vergleichen ----------
+// ---------- Varianten: benannte Sätze von Maßen und unterdrückten Schritten, zum Umschalten und Vergleichen ----------
 const Variants = (() => {
+  let stepsOpen = true;
   const list = () => App.doc.variants || [];
   const snap = (doc = App.doc) => Object.fromEntries((doc.params || []).map((p) => [p.name, p.expr]));
+  function collectSteps(doc = App.doc) {
+    const out = [];
+    const rec = (items, depth) => {
+      for (const it of items || []) {
+        out.push({ item: it, depth, label: Model.label(it) });
+        if (it.kind === 'group' && !(it.p && it.p.op) && (it.children || []).length) rec(it.children, depth + 1);
+      }
+    };
+    rec(doc && doc.items, 0);
+    return out;
+  }
+  function existingIds(doc = App.doc) {
+    const ids = new Set();
+    Model.walk((doc && doc.items) || [], (it) => { ids.add(it.id); });
+    return ids;
+  }
+  function snapSuppressed(doc = App.doc) {
+    const out = [];
+    Model.walk((doc && doc.items) || [], (it) => { if (it.suppressed) out.push(it.id); });
+    return out;
+  }
+  function suppressedIds(v, doc = App.doc) {
+    if (!v || !Array.isArray(v.suppressed)) return [];
+    const ids = existingIds(doc), seen = new Set(), out = [];
+    for (const id of v.suppressed) if (ids.has(id) && !seen.has(id)) { seen.add(id); out.push(id); }
+    return out;
+  }
+  function isSuppressedIn(v, itemId) { return Array.isArray(v && v.suppressed) && v.suppressed.includes(itemId); }
+  function applyToDoc(doc, v) {
+    const vals = (v && v.values) || {};
+    for (const p of doc.params || []) if (Object.prototype.hasOwnProperty.call(vals, p.name)) p.expr = vals[p.name];
+    const sup = new Set(Array.isArray(v && v.suppressed) ? v.suppressed : []);
+    Model.walk(doc.items || [], (it) => { if (sup.has(it.id)) it.suppressed = true; else if (it.suppressed) delete it.suppressed; });
+  }
   function active() { return list().find((v) => v.id === App.doc.variant) || null; }
-  function changed() { const a = active(); if (!a) return false; const s = snap(); return Object.keys({ ...a.values, ...s }).some((k) => String(a.values[k]) !== String(s[k])); }
-  function save(name) {
-    const v = { id: uid('va'), name: (name || '').trim() || 'Variante ' + (list().length + 1), values: snap() };
+  function changedParts(a = active(), doc = App.doc) {
+    if (!a) return { params: false, steps: false };
+    const s = snap(doc), av = a.values || {};
+    const params = Object.keys({ ...av, ...s }).some((k) => String(av[k]) !== String(s[k]));
+    const sa = new Set(suppressedIds(a, doc)), sb = new Set(snapSuppressed(doc));
+    const steps = sa.size !== sb.size || [...sa].some((id) => !sb.has(id));
+    return { params, steps };
+  }
+  function changed() { const c = changedParts(); return c.params || c.steps; }
+  function save(name, opts = {}) {
+    const sup = Array.isArray(opts.suppressed) ? [...new Set(opts.suppressed)] : snapSuppressed();
+    const v = { id: uid('va'), name: (name || '').trim() || 'Variante ' + (list().length + 1), values: snap(), suppressed: sup };
     App.change(`Variante „${v.name}“ gespeichert`, (doc) => { doc.variants = doc.variants || []; doc.variants.push(v); doc.variant = v.id; });
     return v;
   }
-  function update() { const a = active(); if (!a) return; App.change(`Variante „${a.name}“ aktualisiert`, (doc) => { const v = doc.variants.find((x) => x.id === a.id); v.values = snap(doc); }); }
+  function update() {
+    const a = active(); if (!a) return;
+    App.change(`Variante „${a.name}“ aktualisiert`, (doc) => {
+      const v = (doc.variants || []).find((x) => x.id === a.id);
+      if (v) { v.values = snap(doc); v.suppressed = snapSuppressed(doc); }
+    });
+  }
   function apply(id) {
     const v = list().find((x) => x.id === id); if (!v) return;
     App.change(`Variante „${v.name}“`, (doc) => {
-      for (const p of doc.params) if (Object.prototype.hasOwnProperty.call(v.values, p.name)) p.expr = v.values[p.name];
+      applyToDoc(doc, v);
       doc.variant = v.id;
     });
   }
+  function setStepSuppressed(variantId, itemId, sup) {
+    const v = list().find((x) => x.id === variantId);
+    const f = Model.find(App.doc, itemId);
+    if (!v || !f) return;
+    const want = !!sup;
+    App.change(`Variante „${v.name}“: ${Model.label(f.item)} ${want ? 'unterdrückt' : 'aktiv'}`, (doc) => {
+      const vv = (doc.variants || []).find((x) => x.id === variantId); if (!vv) return;
+      const cur = suppressedIds(vv, doc).filter((id) => id !== itemId);
+      if (want) cur.push(itemId);
+      vv.suppressed = cur;
+      if (doc.variant === vv.id) {
+        const t = Model.find(doc, itemId);
+        if (t) { if (want) t.item.suppressed = true; else delete t.item.suppressed; }
+      }
+    });
+  }
+  function toggleStep(variantId, itemId) {
+    const v = list().find((x) => x.id === variantId); if (!v) return;
+    setStepSuppressed(variantId, itemId, !isSuppressedIn(v, itemId));
+  }
+  function suppressedOf(variantId) {
+    const v = list().find((x) => x.id === variantId);
+    return suppressedIds(v, App.doc);
+  }
   function remove(id) { App.change('Variante gelöscht', (doc) => { doc.variants = (doc.variants || []).filter((x) => x.id !== id); if (doc.variant === id) doc.variant = null; }); }
-  // Vergleich: Maße, die sich unterscheiden, dazu Gewicht und (bei Drohnen) Schub/Gewicht
+  // Vergleich: Maße und unterdrückte Schritte, die sich unterscheiden, dazu Gewicht und (bei Drohnen) Schub/Gewicht
   async function compareData() {
     const vs = list(); if (!vs.length) return null;
-    const names = [...new Set(vs.flatMap((v) => Object.keys(v.values)))].filter((k) => new Set(vs.map((v) => String(v.values[k]))).size > 1);
+    const names = [...new Set(vs.flatMap((v) => Object.keys(v.values || {})))].filter((k) => new Set(vs.map((v) => String((v.values || {})[k]))).size > 1);
+    const steps = collectSteps(App.doc).filter(({ item }) => new Set(vs.map((v) => isSuppressedIn(v, item.id))).size > 1);
     const rowsOut = [];
     for (const v of vs) {
       const d = JSON.parse(App.snapshot());
-      for (const p of d.params) if (Object.prototype.hasOwnProperty.call(v.values, p.name)) p.expr = v.values[p.name];
+      applyToDoc(d, v);
       const m = await Mass.measureDoc(d);
       const t = DroneCheck.thrustOf(d);
       const g = DroneCheck.geometry(d);
-      rowsOut.push({ v, mass: m ? m.mass : null, tw: t && m && g ? (g.n * t) / m.mass : null, gap: g ? g.gap : null });
+      const volume = m && m.parts ? m.parts.reduce((s, p) => s + (p.volume || 0), 0) : null;
+      rowsOut.push({ v, volume, mass: m ? m.mass : null, tw: t && m && g ? (g.n * t) / m.mass : null, gap: g ? g.gap : null });
     }
-    return { names, rows: rowsOut };
+    return { names, steps, rows: rowsOut };
   }
   async function compareDialog() {
     const body = h('div', { class: 'vcmp', style: { overflowX: 'auto' } }, h('div', { class: 'hint-box' }, 'Rechne alle Varianten …'));
@@ -291,10 +367,16 @@ const Variants = (() => {
     const c = await compareData(); body.innerHTML = '';
     if (!c) { body.append(h('div', { class: 'hint-box' }, 'Noch keine Varianten.')); return; }
     const tbl = h('table', { class: 'vtable', id: 'vtable' });
-    const head = h('tr', null, h('th', null, 'Variante'), ...c.names.map((n) => h('th', null, n)), h('th', null, 'Gewicht'), h('th', null, 'Schub/Gewicht'), h('th', null, 'Luft Propeller'));
+    const head = h('tr', null, h('th', null, 'Variante'), ...c.names.map((n) => h('th', null, n)), ...c.steps.map((s) => h('th', null, s.label)), h('th', null, 'Gewicht'), h('th', null, 'Schub/Gewicht'), h('th', null, 'Luft Propeller'));
     tbl.append(head);
     for (const r of c.rows) {
-      tbl.append(h('tr', { class: r.v.id === App.doc.variant ? 'on' : '' }, h('td', null, h('b', null, r.v.name)), ...c.names.map((n) => h('td', { class: 'mono' }, r.v.values[n] == null ? '–' : String(r.v.values[n]).replace('.', ','))), h('td', { class: 'mono' }, r.mass == null ? '–' : Mass.gText(r.mass)), h('td', { class: 'mono' }, r.tw == null ? '–' : fmt(r.tw, 1) + ' : 1'), h('td', { class: 'mono' }, r.gap == null ? '–' : fmt(r.gap, 1) + ' mm')));
+      tbl.append(h('tr', { class: r.v.id === App.doc.variant ? 'on' : '' },
+        h('td', null, h('b', null, r.v.name)),
+        ...c.names.map((n) => h('td', { class: 'mono' }, (r.v.values || {})[n] == null ? '–' : String(r.v.values[n]).replace('.', ','))),
+        ...c.steps.map((s) => { const sup = isSuppressedIn(r.v, s.item.id); return h('td', { class: sup ? 'var-cmp-sup' : 'var-cmp-on' }, sup ? 'unterdrückt' : 'aktiv'); }),
+        h('td', { class: 'mono' }, r.mass == null ? '–' : Mass.gText(r.mass)),
+        h('td', { class: 'mono' }, r.tw == null ? '–' : fmt(r.tw, 1) + ' : 1'),
+        h('td', { class: 'mono' }, r.gap == null ? '–' : fmt(r.gap, 1) + ' mm')));
     }
     body.append(tbl);
   }
@@ -302,21 +384,59 @@ const Variants = (() => {
   function section() {
     const sec = h('div', { class: 'section variants' }, h('div', { class: 'section-h' }, 'Varianten'));
     const vs = list();
-    if (vs.length) {
-      const a = active();
-      sec.append(UI.selectField({ id: 'var-sel', label: 'Aktive Variante', value: a ? a.id : '', options: [...(a ? [] : [['', '– keine –']]), ...vs.map((v) => [v.id, v.name])], onChange: (id) => id && apply(id) }));
-      if (a && changed()) sec.append(h('div', { class: 'hint-box warn' }, `Die Maße weichen von „${a.name}“ ab.`));
-    } else sec.append(h('div', { class: 'hint-box', html: 'Speichere die Maße als Variante – z. B. „5 Zoll“ und „6 Zoll“ oder „leicht“ und „robust“ – und schalte mit einem Klick um.' }));
-    const row = h('div', { class: 'btn-row' });
     const a = active();
-    if (a && changed()) { const up = h('button', { type: 'button', class: 'btn small', id: 'var-update', 'data-tip': `„${a.name}“ mit den jetzigen Maßen überschreiben` }); up.innerHTML = icon('save') + 'Überschreiben'; up.onclick = () => update(); row.append(up); }
-    const nb = h('button', { type: 'button', class: 'btn small', id: 'var-new' }); nb.innerHTML = icon('plus') + 'Neue Variante';
+    if (vs.length) {
+      sec.append(UI.selectField({ id: 'var-sel', label: 'Aktive Variante', value: a ? a.id : '', options: [...(a ? [] : [['', '– keine –']]), ...vs.map((v) => [v.id, v.name])], onChange: (id) => id && apply(id) }));
+      const cp = a ? changedParts(a) : { params: false, steps: false };
+      if (a && (cp.params || cp.steps)) {
+        const msg = cp.params && cp.steps
+          ? `Maße und unterdrückte Schritte weichen von „${a.name}“ ab.`
+          : cp.steps
+            ? `Die unterdrückten Schritte weichen von „${a.name}“ ab.`
+            : `Die Maße weichen von „${a.name}“ ab.`;
+        sec.append(h('div', { class: 'hint-box warn' }, msg));
+      }
+    } else sec.append(h('div', { class: 'hint-box', html: 'Speichere Maße und unterdrückte Schritte als Variante – z. B. „mit Loch“ und „ohne Loch“ oder „klein“ und „groß“ – und schalte mit einem Klick um.' }));
+    const row = h('div', { class: 'btn-row' });
+    const cp = a ? changedParts(a) : { params: false, steps: false };
+    if (a && (cp.params || cp.steps)) { const up = h('button', { type: 'button', class: 'btn small', id: 'var-update', 'data-help': 'variants', 'data-tip': `„${a.name}“ mit den jetzigen Maßen und Schritten überschreiben` }); up.innerHTML = icon('save') + 'Überschreiben'; up.onclick = () => update(); row.append(up); }
+    const nb = h('button', { type: 'button', class: 'btn small', id: 'var-new', 'data-help': 'variants' }); nb.innerHTML = icon('plus') + 'Neue Variante';
     nb.onclick = async () => { const n = await UI.prompt('Variante speichern', 'Name der Variante', 'Variante ' + (vs.length + 1), 'Speichern'); if (n != null) save(n); };
     row.append(nb);
-    if (vs.length > 1) { const cb = h('button', { type: 'button', class: 'btn small', id: 'var-cmp' }); cb.innerHTML = icon('list') + 'Vergleichen'; cb.onclick = () => compareDialog(); row.append(cb); }
-    if (a) { const db = h('button', { type: 'button', class: 'btn ghost small danger', id: 'var-del', 'aria-label': 'Variante löschen', 'data-tip': 'Aktive Variante löschen' }); db.innerHTML = icon('trash'); db.onclick = async () => { if (await UI.confirm('Variante löschen?', `„${a.name}“ wird gelöscht. Die Maße bleiben, wie sie sind.`, 'Löschen', true)) remove(a.id); }; row.append(db); }
+    if (vs.length > 1) { const cb = h('button', { type: 'button', class: 'btn small', id: 'var-cmp', 'data-help': 'variants' }); cb.innerHTML = icon('list') + 'Vergleichen'; cb.onclick = () => compareDialog(); row.append(cb); }
+    if (a) { const db = h('button', { type: 'button', class: 'btn ghost small danger', id: 'var-del', 'aria-label': 'Variante löschen', 'data-tip': 'Aktive Variante löschen' }); db.innerHTML = icon('trash'); db.onclick = async () => { if (await UI.confirm('Variante löschen?', `„${a.name}“ wird gelöscht. Maße und Schritte bleiben, wie sie sind.`, 'Löschen', true)) remove(a.id); }; row.append(db); }
     sec.append(row);
+    const steps = a ? collectSteps(App.doc) : [];
+    if (a && steps.length) {
+      const supCount = steps.filter(({ item }) => isSuppressedIn(a, item.id)).length;
+      const det = h('details', { class: 'var-steps', id: 'var-steps' });
+      det.open = stepsOpen;
+      det.ontoggle = () => { stepsOpen = det.open; };
+      const sum = h('summary', { 'data-help': 'variants' },
+        h('span', null, 'Schritte in dieser Variante'),
+        h('span', { class: 'var-steps-count' + (supCount ? ' has-sup' : '') }, supCount ? `${supCount} unterdrückt` : 'alle aktiv'));
+      const sl = h('div', { class: 'var-step-list' });
+      for (const { item, depth, label } of steps) {
+        const isSup = isSuppressedIn(a, item.id);
+        const liveDiff = !!item.suppressed !== isSup;
+        const lbl = h('label', {
+          class: 'var-step-row' + (isSup ? ' sup' : '') + (liveDiff ? ' diff' : ''),
+          'data-id': item.id,
+          style: { paddingLeft: (6 + depth * 14) + 'px' },
+          title: isSup ? `${label} ist in „${a.name}“ unterdrückt – anklicken zum Aktivieren` : `${label} ist in „${a.name}“ aktiv – anklicken zum Unterdrücken`
+        });
+        const cb = h('input', { type: 'checkbox', class: 'var-step-cb', 'data-id': item.id, 'aria-label': `${label} in Variante „${a.name}“ aktiv` });
+        cb.checked = !isSup;
+        cb.onchange = () => setStepSuppressed(a.id, item.id, !cb.checked);
+        const dot = h('span', { class: 'var-step-dot' + (item.role === 'hole' ? ' hole' : ''), style: item.role === 'hole' ? {} : { background: item.color || 'var(--accent)' } });
+        lbl.append(cb, dot, h('span', { class: 'var-step-name' }, label));
+        if (isSup) lbl.append(h('span', { class: 'var-step-tag' }, 'unterdrückt'));
+        sl.append(lbl);
+      }
+      det.append(sum, sl);
+      sec.append(det);
+    }
     return sec;
   }
-  return { list, active, changed, save, update, apply, remove, compareData, compareDialog, section };
+  return { list, active, changed, save, update, apply, remove, setStepSuppressed, toggleStep, suppressedOf, compareData, compareDialog, section };
 })();

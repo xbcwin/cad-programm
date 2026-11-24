@@ -1,5 +1,24 @@
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
 const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
+const THREAD_DATA = /*JSON:gewinde.json*/null;
+const THREAD_NORMS = (THREAD_DATA && THREAD_DATA.normen) || [];
+const THREAD_NORM_OPTIONS = THREAD_NORMS.map((n) => [n.id, n.name]);
+const THREAD_BY_NORM = new Map(THREAD_NORMS.map((n) => [n.id, n]));
+const THREAD_BY_ID = new Map();
+for (const n of THREAD_NORMS) {
+  for (const g of n.groessen || []) THREAD_BY_ID.set(g.id, { ...g, normId: n.id, normName: n.name, quelle: n.quelle });
+}
+const THREAD_GROUPED_OPTIONS = THREAD_NORMS.map((n) => ({ group: n.name, options: (n.groessen || []).map((g) => g.id) }));
+function threadEntry(size) { return THREAD_BY_ID.get(String(size || '')) || null; }
+function threadSizesForNorm(normId) { const n = THREAD_BY_NORM.get(normId); return n ? (n.groessen || []).map((g) => g.id) : SIZES; }
+function threadDefaultSize(normId) { const n = THREAD_BY_NORM.get(normId); return (n && (n.standard_groesse || (n.groessen && n.groessen[0] && n.groessen[0].id))) || 'M3'; }
+function threadHoleDia(te, fit) {
+  if (!te) return 3.4;
+  if (fit === 'fine') return te.durchgang_fein_mm;
+  if (fit === 'coarse') return te.durchgang_grob_mm;
+  if (fit === 'tap') return te.kernloch_mm;
+  return te.durchgang_mittel_mm;
+}
 // Zentrierbohrungen nach DIN 332 Form A (60°-Kegel + Führungsbohrung mit 118°-Bohrspitze)
 const CENTER_DRILLS = {
   A1: { d1: 1.0, d2: 2.12, t1: 1.3 },
@@ -52,7 +71,7 @@ function centerHoleMetrics(size) {
 }
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
-    { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
+    { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['countersunk', 'Senkkopf'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']], def: 'countersunk' },
     { k: 'fit', label: 'Loch', type: 'select', options: [['medium', 'Mittel (Standard)'], ['fine', 'Eng (genau)'], ['coarse', 'Weit (mit Spiel)'], ['tap', 'Kernloch für Gewinde']], def: 'medium' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },

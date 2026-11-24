@@ -83,7 +83,7 @@ Leitlinien:
 
 | Datei | Aufgabe |
 | --- | --- |
-| `00-util.js` | Hilfen, `Expr`-Rechner mit Einheiten (mm, cm, m, in, zoll, ", °), Projekt-Einheiten `Units` (`mm`, `cm`, `m`, `in`), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
+| `00-util.js` | Hilfen, `Expr`-Rechner (`wenn`, `runden`/`aufrunden`/`abrunden`, `tabelle`, `< > <= >= == !=`, Klartext-Fehler) mit Einheiten (mm, cm, m, in, zoll, ", °), Projekt-Einheiten `Units` (`mm`, `cm`, `m`, `in`), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
 | `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
 | `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
@@ -123,7 +123,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht), `gewinde.json` (Regelgewinde M1.6–M12, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`
@@ -132,13 +132,13 @@ Leitlinien:
 
 ## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
 
-- **`doc`:** `{ id, name, params: [{id, name, expr}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
+- **`doc`:** `{ id, name, params: [{id, name, expr}], tables: [{id, name, rows: [{id, key, val}]}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
 - **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase)}], suppressed, hidden, mat, massG, ai }`
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
   - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
-  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`)
+  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`), `mirrorStep` (einzelne Formschritte `features` an Grundebene, Bezugsebene `DATUM` oder Körperfläche `FACE` im selben Körper spiegeln)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt` (optional `skip` für ausgelassene Kopien und `G.op` für gemusterte Formschritte / Rippen; `Model.patternInstances`):
     - `rect` (nx, ny, dx, dy)
@@ -205,7 +205,7 @@ Leitlinien:
   - Überfahren eines Schritts zeigt kurz den Stand nach diesem Schritt (`App.peek`)
   - Verlauf links: Umsortieren per Ziehen mit Abhängigkeitsprüfung (`Model.validateMove`/`validateTopOrder`, rote Markierung `.drop-bad` bei verletzter Reihenfolge), organisatorische Ordner (`doc.folders`, `Model.folderOf`/`cleanFolders`, `Actions.reorder`/`createFolder`/`toggleFolder`/`renameFolder`/`ungroupFolder`/`removeFromFolder`) und direktes Duplizieren je Schritt (`Actions.duplicate`)
 - Protokoll; Rückgängig/Wiederholen (300)
-- Maße-Tabelle mit Formeln, Varianten und Versionen (Vergleich mit Gewicht)
+- Maße-Tabelle mit Formeln, Varianten (`v.values` und `v.suppressed` mit Schritt-Schaltern `#var-steps` und `Variants.setStepSuppressed`) und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren
 - Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)
 - Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“
@@ -268,10 +268,10 @@ Leitlinien:
 - STEP/STL/3MF-Import (`Start.importCAD`, `Start.import3MF`, `Start.parse3MF` mit `Zip.read`: mehrere Objekte/Komponenten mit Namen, Farben und Einheiten; binär als `blobId` in IndexedDB `tracery-db` über `Store` statt Base64 im Autosave); DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel, `threadShape` M2–M24 auch mit eigener Steigung) und direktes Setzen auf runde Flächen (Rechtsklick „Gewinde …“ auf Bolzen oder Bohrung mit automatischem Durchmesser-Vorschlag, Länge, Steigung und Wahl zwischen echtem 3D-Gewinde `Features.applyRealThread` und **kosmetischem Gewinde** `it.threads` über `Features.threadPop`, gestreifte 3D-Markierung ohne Kern-Neubau, Stückliste, Zeichnung nach DIN ISO 6410-1, „Echt machen“ über `Features.makeThreadReal`)
-- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
+- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf (auch 82° bei Zoll und Flachsenkung bei G), Kernloch für metrische Regel- und Feingewinde, Zoll UNC/UNF (#4 bis 1/2") und Rohrgewinde (G1/8 bis G1) aus `gewinde.json`, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
-- Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)
+- Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit) sowie **Schritt spiegeln** (`mirrorStep`, `Features.mirrorStep`: einzelne Formschritte wie Taschen, Erhöhungen, Rippen oder Löcher an Ebene, Bezugsebene oder Fläche im selben Körper spiegeln)
 - Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge); Verschieben/Drehen/Kopieren als Schritt (`transform` im Verlauf mit Werten, Formeln und Drehpunkt); **Skalieren** (`scale`, gleichmäßig oder je Achse um Schwerpunkt oder Ursprung) und **Fläche aufdicken** (`thicken`, eben oder gewölbt nach außen/innen/mittig als Anbau, eigene Platte oder Abzug) im Verlauf (`Features.scale`/`Features.thicken`)
 - **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich, **Ketten** (Platte → Arm → Greifer). „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen; „Als Anschlag übernehmen“ und „Bewegung abspielen“.
 

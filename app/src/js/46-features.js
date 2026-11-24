@@ -1116,7 +1116,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -1385,6 +1385,314 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
   }
+  // ---------- Schritt spiegeln (KP-14) ----------
+  function canMirrorStep(it, parent) {
+    if (!it) return false;
+    if (it.op && it.op.target) return true;
+    if (it.kind === 'rib') return true;
+    if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
+    if (it.kind === 'mirrorStep') return true;
+    if (it.role === 'hole') return true;
+    if (parent && !isOp(parent) && it.kind !== 'group') return true;
+    return false;
+  }
+  function mirrorCandidatesBefore(stepItem) {
+    const f = Model.find(App.doc, stepItem.id);
+    if (!f) return [];
+    const idx = f.list.indexOf(f.item);
+    if (idx < 0) return [];
+    return f.list.slice(0, idx).filter((x) => !x.suppressed && canMirrorStep(x, f.parent));
+  }
+  function resolveMirrorFace(face) {
+    if (!face || !face.id) return null;
+    const idx = face.idx != null ? face.idx : face.faceIdx;
+    const info = face.info || (idx != null && idx >= 0 ? App.results.get(face.id)?.data?.faces?.[idx] : null);
+    if (!info || info.t !== 'PLANE' || !Array.isArray(info.n) || !Array.isArray(info.c)) return null;
+    const W = Model.worldMatrix(App.doc, face.id);
+    const mo = new THREE.Vector3(...info.c).applyMatrix4(W).toArray().map((v) => round(v, 6));
+    const mn = new THREE.Vector3(...info.n).transformDirection(W).normalize().toArray().map((v) => round(v, 9));
+    const tgt = Model.find(App.doc, face.id);
+    return {
+      mo,
+      mn,
+      faceRef: {
+        id: face.id,
+        idx,
+        c: info.c.map((v) => round(v, 6)),
+        n: info.n.map((v) => round(v, 6)),
+        name: tgt ? Model.label(tgt.item) : 'Fläche',
+      },
+    };
+  }
+  function mirrorStep(idsOrTarget, opts = {}) {
+    const rawIds = Array.isArray(idsOrTarget) ? idsOrTarget : (idsOrTarget ? [idsOrTarget] : App.sel);
+    const found = rawIds.map((id) => Model.find(App.doc, id)).filter(Boolean);
+    let picked = found.length && found.every((f) => f.list === found[0].list)
+      ? found.filter((f) => canMirrorStep(f.item, f.parent))
+      : [];
+    // Komfort-Fallback: Ist ein Zielkörper gewählt, seinen letzten aktiven Formschritt nehmen
+    if (!picked.length && found.length === 1 && !found[0].parent && found[0].item.role !== 'hole') {
+      const bid = found[0].item.id;
+      const cand = App.doc.items.filter((x) => !x.suppressed && (
+        (x.op && x.op.target === bid) ||
+        ((x.kind === 'rib' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+      ));
+      if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
+    }
+    if (!picked.length) {
+      UI.toast('Wähle zuerst einen Formschritt im Verlauf (z. B. eine Tasche, Erhöhung, Rippe oder ein Loch).', { icon: 'info' });
+      return null;
+    }
+    const parent = picked[0].parent;
+    const p = {
+      features: picked.map((f) => f.item.id),
+      plane: opts.plane || (opts.datumId ? 'DATUM' : opts.face ? 'FACE' : 'YZ'),
+      off: opts.off ?? 0,
+    };
+    if (p.plane === 'DATUM') {
+      p.datumId = opts.datumId || null;
+    } else if (p.plane === 'FACE') {
+      const rf = resolveMirrorFace(opts.face);
+      if (!rf) { UI.toast('Bitte wähle eine ebene Körperfläche als Spiegelebene.', { icon: 'info' }); return null; }
+      p.mo = rf.mo; p.mn = rf.mn; p.faceRef = rf.faceRef;
+    }
+    let step;
+    App.change('Schritt spiegeln angelegt', (doc) => {
+      const list = parent ? Model.find(doc, parent.id).item.children : doc.items;
+      const lastIdx = Math.max(...p.features.map((fid) => list.findIndex((x) => x.id === fid)));
+      step = Model.newItem('mirrorStep', p, {
+        name: opts.name || 'Schritt spiegeln',
+        color: picked[0].item.color,
+        role: picked[0].item.role,
+      });
+      if (parent) {
+        const par = Model.find(doc, parent.id).item;
+        const at = clamp(lastIdx + 1, 0, list.length);
+        list.splice(at, 0, step);
+        if (par.rollback != null && at <= par.rollback) par.rollback++;
+      } else {
+        insertAtMarker(doc, step);
+      }
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Formschritt gespiegelt. Rechts wählst du Spiegelebene, Fläche oder weitere Schritte.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function setMirrorStepPlane(stepId, spec) {
+    const f = Model.find(App.doc, stepId);
+    if (!f || f.item.kind !== 'mirrorStep' || !spec) return false;
+    if (spec.datumId) {
+      const dm = typeof Datums !== 'undefined' ? Datums.find(spec.datumId) : null;
+      if (!dm || !dm.plane) return false;
+      App.change(`Spiegelebene „${dm.name}“`, (doc) => {
+        const T = Model.find(doc, stepId)?.item; if (!T) return false;
+        T.p.plane = 'DATUM';
+        T.p.datumId = dm.id;
+        delete T.p.faceRef; delete T.p.mo; delete T.p.mn;
+      });
+      return true;
+    }
+    if (spec.id) {
+      const rf = resolveMirrorFace(spec);
+      if (!rf) return false;
+      App.change('Spiegelfläche gewählt', (doc) => {
+        const T = Model.find(doc, stepId)?.item; if (!T) return false;
+        T.p.plane = 'FACE';
+        T.p.mo = rf.mo; T.p.mn = rf.mn; T.p.faceRef = rf.faceRef;
+        delete T.p.datumId;
+      });
+      return true;
+    }
+    if (['XY', 'XZ', 'YZ'].includes(spec.plane)) {
+      App.change('Spiegelebene geändert', (doc) => {
+        const T = Model.find(doc, stepId)?.item; if (!T) return false;
+        T.p.plane = spec.plane;
+        if (spec.off !== undefined) T.p.off = spec.off;
+        delete T.p.datumId; delete T.p.faceRef; delete T.p.mo; delete T.p.mn;
+      });
+      return true;
+    }
+    return false;
+  }
+  function pickMirrorStepPlane(stepId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (fi && fi.t === 'PLANE' && fi.n) {
+          stopPick();
+          setMirrorStepPlane(stepId, { id: hit.id, idx: hit.faceIdx, info: fi });
+          UI.toast('Ebene Körperfläche als Spiegelebene gesetzt.', { icon: 'check' });
+          return;
+        }
+      }
+      const dp = pickDatumPlaneAt(e.clientX, e.clientY);
+      if (dp) {
+        stopPick();
+        setMirrorStepPlane(stepId, { datumId: dp.datum.id });
+        UI.toast(`Bezugsebene „${dp.datum.name}“ als Spiegelebene gesetzt.`, { icon: 'check' });
+        return;
+      }
+      UI.toast('Bitte wähle eine ebene Körperfläche oder eine Bezugsebene.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? hit.id : null, fi && fi.t === 'PLANE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Spiegelebene wählen:</b> Klick auf eine ebene Körperfläche oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  let mirrorRelinkRounds = 0;
+  function relinkMirrorStepFaces() {
+    if (!App.doc) return;
+    const vDiff = (a, b) => (!Array.isArray(a) || !Array.isArray(b) || a.length < 3 || b.length < 3) ? Infinity : Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const r6 = (a) => a.map((v) => round(v, 6));
+    const r9 = (a) => a.map((v) => round(v, 9));
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      if (it.kind !== 'mirrorStep' || !it.p || it.p.plane !== 'FACE' || !it.p.faceRef) return;
+      const fr = it.p.faceRef;
+      const rId = App.results.has(fr.id) ? fr.id : (App.mergedInto(fr.id) || fr.id);
+      const r = App.results.get(rId), tgt = Model.find(App.doc, fr.id);
+      if (r && r.data && tgt) {
+        const nRef = new THREE.Vector3(...(fr.n || [0, 0, 1])), cRef = new THREE.Vector3(...(fr.c || [0, 0, 0]));
+        let best = null;
+        for (const fc of r.data.faces || []) {
+          if (fc.t !== 'PLANE' || !fc.n) continue;
+          if (new THREE.Vector3(...fc.n).dot(nRef) < 0.999) continue;
+          const dd = new THREE.Vector3(...fc.c).distanceTo(cRef);
+          if (!best || dd < best.dd) best = { fc, dd };
+        }
+        if (best) {
+          const W = Model.worldMatrix(App.doc, rId);
+          const moW = r6(new THREE.Vector3(...best.fc.c).applyMatrix4(W).toArray());
+          const mnW = r9(new THREE.Vector3(...best.fc.n).transformDirection(W).normalize().toArray());
+          const nm = Model.label(tgt.item);
+          if (vDiff(moW, it.p.mo) > 1e-5 || vDiff(mnW, it.p.mn) > 1e-5 || fr.lost || fr.name !== nm) {
+            jobs.push({ id: it.id, mo: moW, mn: mnW, c: r6(best.fc.c), n: r6(best.fc.n), name: nm, lost: false });
+          }
+        } else if (!fr.lost) jobs.push({ id: it.id, lost: true });
+      } else if (!tgt && !fr.lost) jobs.push({ id: it.id, lost: true });
+    });
+    if (!jobs.length) { mirrorRelinkRounds = 0; return; }
+    if (++mirrorRelinkRounds > 3) { mirrorRelinkRounds = 0; return; }
+    App.change('Spiegelfläche nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id); if (!f || !f.item.p || !f.item.p.faceRef) continue;
+        const p = f.item.p;
+        if (j.lost) p.faceRef.lost = true;
+        else {
+          delete p.faceRef.lost;
+          p.mo = j.mo; p.mn = j.mn;
+          p.faceRef.c = j.c; p.faceRef.n = j.n;
+          if (j.name) p.faceRef.name = j.name;
+        }
+      }
+    }, { amend: true });
+  }
+  App.on('results', relinkMirrorStepFaces);
+  function renderMirrorStep(it, sec, setP) {
+    const p = it.p || {};
+    const pl = p.plane || 'YZ';
+    const datums = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
+    const curVal = pl === 'DATUM' ? ('d:' + (p.datumId || '')) : pl === 'FACE' ? 'FACE' : (['XY', 'XZ', 'YZ'].includes(pl) ? pl : 'YZ');
+    const opts = [
+      ['YZ', 'Links ↔ rechts (YZ)'],
+      ['XZ', 'Vorne ↔ hinten (XZ)'],
+      ['XY', 'Oben ↔ unten (XY)'],
+      ...datums.map((d) => ['d:' + d.id, `Bezugsebene „${d.name}“`]),
+    ];
+    if (pl === 'DATUM' && p.datumId && !datums.some((d) => d.id === p.datumId)) {
+      opts.push(['d:' + p.datumId, 'Bezugsebene (fehlt)']);
+    }
+    if (pl === 'FACE') {
+      const fnm = p.faceRef && p.faceRef.name ? `Fläche an „${p.faceRef.name}“` : 'Gewählte Fläche';
+      opts.push(['FACE', fnm]);
+    }
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'ms-plane',
+      label: 'Spiegelebene',
+      value: curVal,
+      options: opts,
+      onChange: (v) => {
+        if (v.startsWith('d:')) setMirrorStepPlane(it.id, { datumId: v.slice(2) });
+        else if (v !== 'FACE') setMirrorStepPlane(it.id, { plane: v });
+      },
+    }));
+    if (pl !== 'DATUM' && pl !== 'FACE') {
+      fl.append(UI.numField({ id: 'ms-off', label: 'Lage der Ebene', value: p.off ?? 0, unit: 'mm', onCommit: (v) => setP('off', v) }));
+    }
+    sec.append(fl);
+    if (pl === 'FACE') {
+      const oTxt = Array.isArray(p.mo) ? p.mo.map((v) => fmt(v, 1)).join(' · ') : '–';
+      const nTxt = Array.isArray(p.mn) ? p.mn.map((v) => fmt(v, 2)).join(' · ') : '–';
+      const lbl = p.faceRef && p.faceRef.lost ? 'Spiegelfläche fehlt' : (p.faceRef && p.faceRef.name ? `Fläche an „${p.faceRef.name}“` : 'Gewählte Fläche');
+      sec.append(h('div', { class: 'mini-row', id: 'ms-planeinfo' }, h('span', { class: 'grow' }, lbl), h('b', { class: 'mono' }, `${oTxt} (n ${nTxt})`)));
+    }
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'ms-pick' });
+    pb.innerHTML = icon('cursor') + 'Ebene oder Fläche im Bild wählen';
+    pb.onclick = () => pickMirrorStepPlane(it.id);
+    sec.append(h('div', { class: 'btn-row' }, pb));
+
+    const cands = mirrorCandidatesBefore(it);
+    const chosen = new Set(Array.isArray(p.features) ? p.features : []);
+    const fsec = h('div', { class: 'field', id: 'ms-features', style: { marginTop: '8px' } }, h('label', null, 'Gespiegelte Schritte'));
+    if (cands.length) {
+      for (const c of cands) {
+        const chk = h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: chosen.has(c.id), dataset: { fid: c.id } }), Model.label(c));
+        chk.querySelector('input').onchange = (e) => {
+          const next = new Set(chosen);
+          if (e.target.checked) next.add(c.id);
+          else {
+            if (next.size <= 1) {
+              e.target.checked = true;
+              UI.toast('Mindestens ein Schritt muss gewählt bleiben.', { icon: 'info' });
+              return;
+            }
+            next.delete(c.id);
+          }
+          App.change('Gespiegelte Schritte geändert', (doc) => {
+            const T = Model.find(doc, it.id)?.item; if (!T) return false;
+            T.p.features = cands.filter((x) => next.has(x.id)).map((x) => x.id);
+          });
+        };
+        fsec.append(chk);
+      }
+    } else {
+      fsec.append(h('div', { class: 'hint-box warn' }, 'Vor diesem Schritt liegt kein spiegelbarer Formschritt.'));
+    }
+    sec.append(fsec);
+
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const firstFid = (p.features || []).find((fid) => Model.find(App.doc, fid));
+    if (firstFid) {
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'ms-goto-feat' });
+      fb.innerHTML = icon('pointer') + 'Original-Schritt wählen';
+      fb.onclick = () => App.select([firstFid]);
+      row.append(fb);
+    }
+    const merged = App.mergedInto(it.id);
+    if (merged && Model.find(App.doc, merged)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'ms-goto-body' });
+      gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([merged]);
+      row.append(gb);
+    }
+    if (row.children.length) sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: 'Spiegelt nur die gewählten Formschritte (z. B. eine Tasche, Erhöhung oder Rippe) direkt im selben Körper. Änderst du das Original, wandert das Spiegelbild automatisch mit.' }));
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

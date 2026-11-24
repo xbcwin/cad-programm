@@ -1735,6 +1735,37 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetext & Befehlssuche**: `threadFace` in `werkzeug-hilfen.json` und Befehl `thread-face` („Gewinde auf runde Fläche …“) vorhanden.
 - [ ] **Von Hand**: Im Browser auf einer schräg liegenden Welle und in einer gestuften Bohrung „Gewinde …“ mit verschiedenen Enden („Ende 1“ / „Ende 2“) testen und die gedruckten Gewindegänge aus der Nähe prüfen.
 
+## Bohrungs-Assistent: mehr Gewinde (Auto [A-038], KP-18)
+
+- [x] **Feingewinde (DIN 13 / DIN 336)**: Norm `metric_fine` bietet M4×0,5 bis M20×1,5 (inkl. M8×1 und M10×1,25); M10×1,25 bohrt exakt Kernloch Ø 8,8 mm (Volumenabzug und Zylinder-Ø geprüft).
+- [x] **Zoll-Gewinde UNC & UNF (ASME B1.1 / B18.3)**: Normen `unc` und `unf` von #4 bis 1/2" wählbar; 1/4"-20 UNC bohrt exakt Kernloch Ø 5,1 mm, Durchgang mit 82°-Senkkopf erzeugt passende Kegelfläche.
+- [x] **Rohrgewinde G (ISO 228-1 / DIN 3852-2)**: Norm `pipe_g` bietet G1/8 bis G1; G1/4 bohrt Kernloch Ø 11,8 mm, Durchgang bietet statt 90°-Senkkopf die Flachsenkung nach DIN 3852-2.
+- [x] **Datentabelle & Hilfetext**: `app/data/gewinde.json` enthält alle Kernloch- und Senkungsmaße mit Norm-Quellenangaben (`_quellen`, `quelle`), und `threadStandards` steht in `app/data/werkzeug-hilfen.json` samt `data-help` an `#hw-norm`.
+- [ ] **Von Hand**: Im Browser den Bohrungs-Assistenten auf einer Fläche öffnen, zwischen den fünf Normen wechseln und Querschnittsvorschau sowie Hinweise im Eigenschaften-Panel prüfen.
+
+## Schritt spiegeln (Auto [A-037], KP-14)
+
+- [x] **Tasche links an Mittelebene spiegeln**: Quader 60 × 40 × 10 mm mit Tasche links (−20..−10 mm, 5 mm tief) über „Schritt spiegeln“ an der YZ-Ebene gespiegelt ergibt einen Körper mit zwei Taschen und um exakt 500 mm³ kleinerem Volumen (23.000 mm³).
+- [x] **Bezugsebene & ebene Körperfläche**: Spiegeln an einer Bezugsebene sowie an einer ebenen Körperfläche (`plane = 'FACE'`) erzeugt die gespiegelte Tasche auf der jeweiligen Gegenseite im selben Körper.
+- [x] **Änderung zieht mit & Erhöhung spiegeln**: Ändern der Taschentiefe (5 → 8 mm) passt auch die gespiegelte Tasche automatisch an; Spiegeln einer Erhöhung (`join`) vergrößert den Körper symmetrisch um beide Seiten.
+- [x] **Unterdrücken, Marker, Gruppe & Hilfe**: Unterdrücken und Zurückrollen des `mirrorStep` entfernen die gespiegelte Tasche sauber, Spiegeln eines Loch-Schritts innerhalb einer Gruppe funktioniert ohne Fehler und `werkzeug-hilfen.json` enthält `mirrorStep`.
+- [ ] **Von Hand**: Im Browser bei „Schritt spiegeln“ auf „Ebene oder Fläche im Bild wählen“ klicken und nacheinander eine schräge Körperfläche und eine Bezugsebene direkt in der 3D-Ansicht anklicken.
+
+## Varianten schalten Schritte (Auto [A-040], KP-21)
+
+- [x] **Ohne Loch schalten**: In der Variante „ohne Loch“ einen Loch-Schritt per Häkchen unter `#var-steps` unterdrücken (`suppressed: [holeId]`); der Loch-Schritt wird unterdrückt und das Volumen steigt von `11214,6 mm³` auf `12000,0 mm³`.
+- [x] **Umschalten & Rückgängig**: Wechsel zwischen „mit Loch“ und „ohne Loch“ schaltet das Loch samt Volumen hin und her; gleichzeitige Abweichungen bei Maßen und unterdrückten Schritten werden gemeldet, lassen sich überschreiben und mit `App.undo()` zurücknehmen; Projektmigration erhält `v.suppressed`.
+- [x] **Varianten vergleichen & Hilfe**: `#vtable` zeigt unterschiedliche Schritte („aktiv“ / „unterdrückt“) sowie die geänderten Gewichte; Hilfetext `variants` in `app/data/werkzeug-hilfen.json` beschreibt Maße und Schritte.
+- [ ] **Von Hand**: In einem Projekt mit mehreren Schritten und Untergruppen im Reiter „Maße“ zwei Varianten mit verschiedenen aktiven Schritten anlegen, Häkchen ein-/ausklappen und umschalten, um Zeitleiste und 3D-Ansicht gemeinsam springen zu sehen.
+
+## Formeln: wenn, runden, Tabelle (Auto [A-041], KP-22)
+
+- [x] **wenn(Bedingung; dann; sonst) & Vergleiche**: `wenn(b > 50; 3; 2)` liefert bei `b = 60` den Wert `3` und bei `b = 40` den Wert `2`; `<`, `<=`, `>=`, `==`, `!=`, verschachteltes `wenn` und verzögerte Zweig-Auswertung (`wenn(b == 0; 0; 100 / b)`) arbeiten exakt.
+- [x] **runden, aufrunden & abrunden**: `runden(2,345; 1)` → `2,3`, `runden(2,35; 1)` → `2,4`, `runden(2,6)` → `3`, `aufrunden(2,31; 1)` → `2,4`, `abrunden(2,39; 1)` → `2,3` und `abrunden(2,9)` → `2`.
+- [x] **Nachschlagetabellen unter „Maße“**: Zweispaltige Tabelle `Schraube` mit `M3` / `M5` / `M6` im UI anlegen, umbenennen und ändern; `tabelle(Schraube; M5)` steuert Maße und 3D-Quader-Abmessungen live nach (samt Undo/Redo und Speichern/Laden).
+- [x] **Fehlermeldungen in Klartext**: Fehlende Tabellen, fehlende Schlüssel, falsche Argumentanzahl, `=` statt `==`, Division durch 0 und ungültige Nachkommastellen werden in Klartext im Feld, unter „Maße“ und als Meldung angezeigt; Hilfetext `formulaTable` vorhanden.
+- [ ] **Von Hand**: Im Browser unter „Maße“ eine neue Tabelle anlegen, in „Formel-Beispiele“ den Hinweistext lesen und in einer offenen Skizze ein Maß direkt mit `tabelle(…)` und `wenn(…)` bemaßen.
+
 ## Fehler melden
 
 ```
