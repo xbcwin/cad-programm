@@ -1092,15 +1092,6 @@ const Sketch = (() => {
     const r = Viewer.canvas.getBoundingClientRect();
     dimBox.style.left = clientX - r.left + 'px'; dimBox.style.top = clientY - r.top + 'px';
     $('#overlay').append(dimBox);
-    let userTyped = false;
-    inp.addEventListener('input', () => { userTyped = true; if (dimBox) dimBox._typed = true; });
-    // nach dem Mausklick fokussieren, sonst holt sich das 3D-Bild den Fokus zurück
-    const grab = () => {
-      if (!dimBox || !dimBox.contains(inp)) return;
-      if (document.activeElement !== inp) inp.focus();
-      if (!userTyped) inp.select();
-    };
-    grab(); setTimeout(grab, 0); requestAnimationFrame(grab);
     const commit = () => {
       const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
       if (raw === orig && cur && !cur.ref) { hideDimBox(); Viewer.canvas.focus(); return; }
@@ -1123,6 +1114,14 @@ const Sketch = (() => {
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
     dimBox._inp = inp; dimBox._commit = commit; dimBox._typed = false;
+    inp.addEventListener('input', () => { if (dimBox) dimBox._typed = true; });
+    // nach dem Mausklick fokussieren, sonst holt sich das 3D-Bild den Fokus zurück
+    const grab = () => {
+      if (!dimBox || !dimBox.contains(inp)) return;
+      if (document.activeElement !== inp && !dimBox.contains(document.activeElement)) inp.focus();
+      if (!dimBox._typed && document.activeElement === inp) inp.select();
+    };
+    grab(); setTimeout(grab, 0); requestAnimationFrame(grab);
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
   }
   // ---------- Spline ----------
@@ -3067,6 +3066,8 @@ const Sketch = (() => {
         dimBox._inp.focus();
         dimBox._inp.value = dimBox._typed ? dimBox._inp.value + e.key : e.key;
         dimBox._typed = true;
+        const pos = dimBox._inp.value.length;
+        try { dimBox._inp.setSelectionRange(pos, pos); } catch (_) {}
         return true;
       }
     }

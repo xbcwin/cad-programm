@@ -2004,6 +2004,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Freie 3D-Ansicht aus Kamera, Rückgängig, Speichern & Hilfen (ZE-05)**: `#dw-add-free` übernimmt die aktuelle 3D-Kamera als neue Zeichnungsansicht (`extraViews`), arbeitet mit Rückgängig/Wiederholen, Speichern/Laden, Befehlen und den Hilfetexten `drawingViews` / `drawingViewProps`.
 - [ ] **Von Hand**: Im Browser eine gerundete Baugruppe mit mehreren Farben und Werkstoffen als schattierte Isometrie und freie 3D-Ansicht anlegen, in der freien Ansicht den Blickwinkel per „Aktuelle 3D-Ansicht übernehmen“ aktualisieren und das exportierte PDF im PDF-Betrachter auf Schattierung, Linienstärken und Beschriftung prüfen.
 
+## Volltest-Reparatur (Auto [F-11241146])
+
+- [x] **Adaptive Auflösung bei geringer Bildrate / `rAF`-Stau (`Viewer.adaptRes` / `scheduleAdaptRestore`)**: Nach Ziehen im 3D-Fenster bei `Viewer.setAdaptive(true, 0)` kehrt `Viewer.lowRes` auch bei blockiertem `requestAnimationFrame` über zeitkompensierte Dämpfung und Timer-Fallback auf `false` und `Viewer.pixelRatio === window.devicePixelRatio` zurück.
+- [x] **`askDim` verliert keine Ziffern bei verzögertem `rAF(grab)` (`Sketch.askDim` / `onKey`)**: Wird die erste Ziffer über `Sketch.onKey()` an `dimBox._inp` weitergereicht und feuert danach das verzögerte `requestAnimationFrame(grab)`, bleibt `dimBox._typed` erhalten; die nächste Ziffer wird angehängt (`60` statt `0`), löst den erwarteten Konflikt (`#sk-conflict`) aus und lässt sich per „Entfernen“ sauber auflösen.
+- [ ] **Von Hand**: Im Browser bei hoher Szenenlast die Ansicht zügig drehen und loslassen (Schärfe springt nach ~0,2 s zurück) sowie beim Bemaßen (`D`) direkt nach dem Klick schnell eine zweistellige Zahl eintippen.
+
 ## Fehler melden
 
 ```

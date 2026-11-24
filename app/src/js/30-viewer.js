@@ -245,7 +245,7 @@ const Viewer = (() => {
     // Lichter folgen der Kamera leicht
     camera.add(new THREE.PointLight(0xffffff, 0, 0));
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = 0.14;
+    controls.enableDamping = true; controls.dampingFactor = BASE_DAMP;
     controls.screenSpacePanning = true; controls.zoomToCursor = true;
     controls.rotateSpeed = 0.85; controls.zoomSpeed = 1.1; controls.panSpeed = 0.9;
     controls.minDistance = 0.2; controls.maxDistance = 12000;
@@ -253,7 +253,8 @@ const Viewer = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
-    controls.addEventListener('start', () => { pushCam(true); cancelCamAnim(); });
+    controls.addEventListener('start', () => { orbitActive = true; pushCam(true); cancelCamAnim(); });
+    controls.addEventListener('end', () => { orbitActive = false; if (lowRes) scheduleAdaptRestore(); });
     buildGrid(autoStep()); buildOrigin();
     applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
@@ -349,9 +350,12 @@ const Viewer = (() => {
 
   function loop() {
     requestAnimationFrame(loop);
+    const loopNow = performance.now();
+    const loopDt = lastLoopAt > 0 ? loopNow - lastLoopAt : 0;
+    lastLoopAt = loopNow;
     let camMoved = false;
     if (camAnim) {
-      const t = Math.min(1, (performance.now() - camAnim.t0) / camAnim.dur);
+      const t = Math.min(1, (loopNow - camAnim.t0) / camAnim.dur);
       const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       camera.position.lerpVectors(camAnim.p0, camAnim.p1, e);
       controls.target.lerpVectors(camAnim.q0, camAnim.q1, e);
@@ -359,9 +363,11 @@ const Viewer = (() => {
       if (t >= 1) cancelCamAnim();
       needsRender = true; camMoved = true;
     }
+    if (controls) controls.dampingFactor = (!orbitActive && loopDt > 24) ? (1 - Math.pow(1 - BASE_DAMP, clamp(loopDt / (1000 / 60), 1, 60))) : BASE_DAMP;
     inLoopCam = true;
     const moved = controls.update();
     inLoopCam = false;
+    if (controls) controls.dampingFactor = BASE_DAMP;
     if (camMoved || moved) { camera.updateMatrixWorld(); listeners.emit('camera'); }
     const now = performance.now();
     if (camAnim) lastMotion = now;
@@ -383,15 +389,57 @@ const Viewer = (() => {
   }
   // Beim Drehen und Zoomen kurz mit weniger Pixeln zeichnen, wenn ein Bild zu lange braucht;
   // in Ruhe sofort wieder in voller Schärfe.
+  const BASE_DAMP = 0.14;
   let basePR = 1, lowRes = false, frameMs = 0, lastMotion = 0, adaptive = true, slowMs = 24;
+  let orbitActive = false, lastLoopAt = 0, adaptTimer = null;
   const _lastCam = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
   function setPR(r) { const w = container.clientWidth || 1, hgt = container.clientHeight || 1; renderer.setPixelRatio(r); renderer.setSize(w, hgt, false); }
+  function clearAdaptTimer() { if (adaptTimer) { clearTimeout(adaptTimer); adaptTimer = null; } }
+  function restoreRes() {
+    clearAdaptTimer();
+    if (!lowRes) return;
+    lowRes = false;
+    setPR(basePR);
+    needsRender = true;
+  }
+  function scheduleAdaptRestore() {
+    clearAdaptTimer();
+    if (!lowRes) return;
+    const wait = Math.max(40, 240 - (performance.now() - lastMotion));
+    adaptTimer = setTimeout(() => {
+      adaptTimer = null;
+      if (!lowRes) return;
+      const now = performance.now();
+      if (!adaptive) { restoreRes(); return; }
+      if (camAnim || orbitActive) { scheduleAdaptRestore(); return; }
+      // Bei rAF-Stau oder sehr langsamen Frames Dämpfung nach verstrichener Wandzeit ausrollen
+      const dt = lastLoopAt > 0 ? now - lastLoopAt : 0;
+      if (dt > 120 && controls) {
+        const steps = clamp(dt / (1000 / 60), 1, 60);
+        controls.dampingFactor = 1 - Math.pow(1 - BASE_DAMP, steps);
+        inLoopCam = true;
+        const moved = controls.update();
+        inLoopCam = false;
+        controls.dampingFactor = BASE_DAMP;
+        if (moved) { camera.updateMatrixWorld(); listeners.emit('camera'); }
+        lastLoopAt = now;
+        const d = camera.position.distanceTo(_lastCam.p) / Math.max(1e-6, camera.position.distanceTo(controls.target)) + 2 * (1 - Math.abs(camera.quaternion.dot(_lastCam.q)));
+        _lastCam.p.copy(camera.position); _lastCam.q.copy(camera.quaternion);
+        if (d > 4e-4) {
+          if (steps < 45) { lastMotion = now; scheduleAdaptRestore(); return; }
+          stopDamping();
+        }
+      }
+      if (now - lastMotion >= 200) restoreRes();
+      else scheduleAdaptRestore();
+    }, wait);
+  }
   function adaptRes(now) {
     const moving = now - lastMotion < 200;
-    if (adaptive && moving && !lowRes && frameMs > slowMs && basePR > 0.8) { lowRes = true; setPR(Math.max(0.6, basePR * 0.55)); }
-    else if (lowRes && (!moving || !adaptive)) { lowRes = false; setPR(basePR); needsRender = true; }
+    if (adaptive && moving && !lowRes && frameMs > slowMs && basePR > 0.8) { lowRes = true; setPR(Math.max(0.6, basePR * 0.55)); scheduleAdaptRestore(); }
+    else if (lowRes && (!moving || !adaptive)) restoreRes();
   }
-  function setAdaptive(on, ms) { adaptive = !!on; if (ms != null) slowMs = ms; if (!adaptive && lowRes) { lowRes = false; setPR(basePR); needsRender = true; } }
+  function setAdaptive(on, ms) { adaptive = !!on; if (ms != null) slowMs = ms; if (!adaptive && lowRes) restoreRes(); }
   function requestRender() { needsRender = true; }
   function renderNow() {
     needsRender = false;
