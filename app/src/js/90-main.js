@@ -64,19 +64,38 @@
   $('#center').addEventListener('pointerdown', () => { if (innerWidth <= 900) ws.classList.remove('show-left', 'show-right'); });
   App.on('busy', (on) => UI.busy(on));
   App.on('selection', () => { if (innerWidth <= 900 && App.sel.length) { /* rechte Leiste nicht aufzwingen */ } });
-  window.addEventListener('beforeunload', () => App.autosave.flush && App.autosave.flush());
+  window.addEventListener('beforeunload', () => {
+    if (Start.flushRecovery) Start.flushRecovery();
+    if (App.autosave && App.autosave.flush && !Start.pendingRecovery) App.autosave.flush();
+  });
 
   // Letztes Projekt aus der Browser-Datenbank laden (ggf. aus localStorage übernehmen) oder Startseite zeigen
   updName(); UI.renderHint();
   UI.loading(true, 0.02);
   const storageReady = (async () => {
     await Store.init();
-    const lastId = Store.getLastId();
-    const last = lastId ? await App.loadStored(lastId) : null;
-    if (last) { try { App.setDoc(last, { fit: true }); } catch (_) { App.setDoc(Model.newDoc()); } }
-    else App.setDoc(Model.newDoc());
-    updName(); syncBed(); UI.renderHint();
-    if (!last) Start.show();
+    const rec = Start.checkRecoveryOnBoot ? await Start.checkRecoveryOnBoot() : null;
+    if (rec) {
+      let baseLoaded = false;
+      if (rec.baseDoc) {
+        try {
+          await Store.hydrateDoc(rec.baseDoc);
+          App.setDoc(rec.baseDoc, { fit: true, fromBoot: true, noAutosave: true });
+          baseLoaded = true;
+        } catch (_) { baseLoaded = false; }
+      }
+      if (!baseLoaded) App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+      updName(); syncBed(); UI.renderHint();
+      Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
+    } else {
+      const lastId = Store.getLastId();
+      const last = lastId ? await App.loadStored(lastId) : null;
+      if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
+      else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+      updName(); syncBed(); UI.renderHint();
+      Start.startRecoveryTracking(last || null);
+      if (!last) Start.show();
+    }
   })();
 
   Kernel.start((p) => UI.loading(true, p, p > 0.84 ? 'CAD-Kern startet …' : 'Der CAD-Kern wird geladen …'))

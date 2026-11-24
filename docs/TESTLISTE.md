@@ -1863,6 +1863,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Löschen & Hilfetexte**: Eigene Vorlagen lassen sich über das Papierkorb-Symbol (`.tpl-del`) mit Bestätigung wieder entfernen; `projectTemplates`, `saveTemplate` und `printBed` liegen in `werkzeug-hilfen.json` und `HELP`.
 - [ ] **Von Hand**: Im Browser alle fünf eingebauten Vorlagen einmal durchklicken und prüfen, ob der 3D-Druckbett-Rahmen im hellen und dunklen Design gut sichtbar ist, ohne beim Klicken auf Modelle zu stören.
 
+## Wiederherstellen nach Absturz (Auto [A-051], BE-15)
+
+- [x] **Meldung nach Absturz / Neuladen ohne Speichern**: Projekt ändern und die Seite ohne Speichern neu laden zeigt `#recovery-bar` mit „Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?“, Projektname und Uhrzeit.
+- [x] **Wiederherstellen & sauberes Neuladen**: Klick auf „Wiederherstellen“ lädt alle ungesicherten Änderungen fehlerfrei ins Modell; ein erneutes Neuladen ohne weitere Änderung startet direkt ohne Meldung.
+- [x] **Verwerfen**: Klick auf „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück und löscht den Wiederherstellungs-Eintrag dauerhaft.
+- [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
+- [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
+
 ## Fehler melden
 
 ```

@@ -431,5 +431,14 @@
   "tpl.missing": "Die Vorlage wurde nicht gefunden.",
   "tpl.loadedPrint3d": "Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.",
   "tpl.loadedEmpty": "Neues leeres Projekt ({unit}) gestartet.",
-  "tpl.loadedNamed": "Vorlage „{name}“ geladen."
+  "tpl.loadedNamed": "Vorlage „{name}“ geladen.",
+
+  "recovery.title": "Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?",
+  "recovery.metaOne": "Projekt „{name}“ · {time} · 1 Objekt",
+  "recovery.metaMany": "Projekt „{name}“ · {time} · {n} Objekte",
+  "recovery.restore": "Wiederherstellen",
+  "recovery.dismiss": "Verwerfen",
+  "recovery.restored": "Letzter Stand von „{name}“ wiederhergestellt.",
+  "recovery.discarded": "Wiederherstellungs-Stand verworfen.",
+  "recovery.failed": "Der letzte Stand konnte nicht wiederhergestellt werden."
 }

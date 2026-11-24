@@ -1042,3 +1042,13 @@ body.presenting .pat-dot{display:none!important}
 .tpl-del{position:absolute;top:8px;right:8px;width:26px;height:26px;padding:0;display:grid;place-items:center;border-radius:6px;color:var(--muted)}
 .tpl-del:hover{background:var(--bad-soft);color:var(--bad)}
 .tpl-del svg{width:14px;height:14px}
+
+/* ---------- Absturz-Wiederherstellung (BE-15) ---------- */
+.recovery-bar{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:28;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius);background:var(--surface);border:1.5px solid var(--warn);box-shadow:var(--shadow-2);max-width:min(92%,700px);flex-wrap:wrap}
+.recovery-bar .rb-ic{color:var(--warn);display:grid;place-items:center;flex:none}
+.recovery-bar .rb-ic svg{width:20px;height:20px}
+.recovery-bar .rb-txt{display:grid;gap:2px;font-size:13px;min-width:0;flex:1 1 220px}
+.recovery-bar .rb-txt b{font-size:13.5px;color:var(--ink)}
+.recovery-bar .rb-txt span{color:var(--muted);font-size:12.5px}
+.recovery-bar .rb-acts{display:flex;gap:6px;flex:none;margin-left:auto}
+.start .recovery-bar{position:static;transform:none;max-width:none;margin:0 0 16px}

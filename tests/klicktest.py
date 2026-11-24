@@ -582,6 +582,8 @@ def t_fies_reload(p):
     p.ev("Timeline.setMarker(0)"); p.wait(2500)
     p.ev("App.autosave.flush && App.autosave.flush()"); p.wait(500)
     p.pg.reload(); p.wait(5000)
+    if p.pg.locator('#recovery-restore').count():
+        p.pg.locator('#recovery-restore').click(); p.wait(4000)
     if p.pg.locator('.start').count():   # falls die Startseite kommt: letztes Projekt öffnen
         p.pg.locator('.recent-row').first.click(); p.wait(5000)
     return p.ev("return App.doc.rollback") == 0 and p.ev("return App.doc.items.length") == 3
@@ -6396,6 +6398,8 @@ def t_a016_speicher_gross(p):
         p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
     except Exception:
         pass
+    if p.pg.locator('#recovery-restore').count():
+        p.pg.locator('#recovery-restore').click(); p.wait(1000)
     warte_rechnen(p, 45)
     st2 = p.ev("""return Mass.measure().then(m => {
       const it = App.doc.items[0];
@@ -6422,6 +6426,8 @@ def t_a016_speicher_gross(p):
         p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
     except Exception:
         pass
+    if p.pg.locator('#recovery-restore').count():
+        p.pg.locator('#recovery-restore').click(); p.wait(1000)
     warte_rechnen(p, 45)
     v_before = p.ev("""return {
       names: Versions.list().map(v => v.name),
@@ -11046,6 +11052,184 @@ def t_a053_projekt_vorlagen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a051_absturz_wiederherstellen(p):
+    import re
+    p.empty()
+
+    # 1. Sauber gespeicherten Ausgangsstand anlegen, danach ohne Speichern ändern und neu laden
+    p.ev("""App.change('Ausgangsstand', d => {
+      d.name = 'Halterung A51';
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 });
+      b.name = 'Basis';
+      d.items.push(b);
+    });""")
+    warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    # Jetzt ohne Speichern ändern (Breite 20 -> 55 und Zylinder dazu) -> Absturz simulieren
+    p.ev("""App.change('Ungesicherte Änderung', d => {
+      d.items[0].p.w = 55;
+      const c = Model.newItem('cylinder', { d: 8, h: 15 });
+      c.name = 'Zapfen';
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    p.ev("return new Promise(r => setTimeout(r, 350)).then(() => Store.whenIdle());")
+
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+
+    bar1 = p.pg.locator('#recovery-bar')
+    has_bar1 = bar1.count() == 1
+    txt1 = bar1.text_content() if has_bar1 else ''
+    before1 = p.ev("return { name: App.doc.name, len: App.doc.items.length, w: App.doc.items[0] && App.doc.items[0].p.w };")
+    help_attr = p.pg.locator('#recovery-restore').get_attribute('data-help') if has_bar1 else None
+    p.pg.locator('#recovery-restore').click()
+    p.wait(1200)
+    warte_rechnen(p, 20)
+    p.ev("return Store.whenIdle();")
+    after1 = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, name: App.doc.name, len: App.doc.items.length, w: App.doc.items[0] && App.doc.items[0].p.w, errs: App.errors.length };")
+    ok1 = (
+        has_bar1
+        and 'Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?' in txt1
+        and 'Halterung A51' in txt1
+        and bool(re.search(r'\b\d{1,2}:\d{2}\b', txt1))
+        and before1 == {'name': 'Halterung A51', 'len': 1, 'w': 20}
+        and after1 == {'bar': 0, 'name': 'Halterung A51', 'len': 2, 'w': 55, 'errs': 0}
+    )
+
+    # 2. Sauberes Neuladen danach ohne weitere Änderung -> keine Meldung
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    clean_st = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, name: App.doc.name, len: App.doc.items.length, w: App.doc.items[0] && App.doc.items[0].p.w };")
+    ok2 = clean_st == {'bar': 0, 'name': 'Halterung A51', 'len': 2, 'w': 55}
+
+    # 3. Nochmals ändern, neu laden und „Verwerfen“ klicken -> alter Stand bleibt
+    p.ev("""App.change('Kugel dazu', d => {
+      const s = Model.newItem('sphere', { d: 10 });
+      s.name = 'Kugel';
+      d.items.push(s);
+    });""")
+    warte_rechnen(p, 20)
+    p.ev("return new Promise(r => setTimeout(r, 350)).then(() => Store.whenIdle());")
+
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    has_bar3 = p.pg.locator('#recovery-bar').count() == 1
+    p.pg.locator('#recovery-dismiss').click()
+    p.wait(800)
+    p.ev("return Store.whenIdle();")
+    after_dis = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, len: App.doc.items.length };")
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    after_dis_reload = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, len: App.doc.items.length };")
+    ok3 = has_bar3 and after_dis == {'bar': 0, 'len': 2} and after_dis_reload == {'bar': 0, 'len': 2}
+
+    # 4. Großes Projekt (> 400 KB Dokument + 15+ MB STEP-Import) rein aus IndexedDB wiederherstellen
+    big_prep = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App, Start, Store } = window.__masswerk;
+      Start.newProject(true);
+      App.change('Basisquader', d => {
+        d.name = 'Grosses Projekt A51';
+        d.items.push(Model.newItem('box', { w: 20, d: 20, h: 20 }));
+      });
+      await App.rebuild();
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      const head = new TextDecoder('utf-8').decode(new Uint8Array(r.data));
+      const line = '/* ' + '0123456789abcdef'.repeat(4) + ' */\\n';
+      const need = 15600000 - head.length;
+      const pad = line.repeat(Math.ceil(need / line.length));
+      const bigStep = head.replace('DATA;', 'DATA;\\n' + pad);
+      App.change('Clean', d => { d.items = []; d.name = 'Grosses Projekt A51'; });
+      await App.autosave.flush();
+      App.markClean();
+      await Store.whenIdle();
+      await Start.importCAD(new File([bigStep], 'GrossesTeilA51.step'));
+      App.change('Grosse Notiz', d => {
+        d.name = 'Grosses Projekt A51';
+        d.notes = [{ id: 'n_big', text: 'x'.repeat(430000) }];
+      });
+      await new Promise(res => setTimeout(res, 350));
+      await Store.whenIdle();
+      return {
+        quick: localStorage.getItem('tracery.recovery.quick'),
+        flag: Store.getRecoveryFlag(),
+        stepLen: bigStep.length,
+      };
+    }""")
+    warte_rechnen(p, 45)
+    p.pg.reload()
+    p.wait(3500)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 45)
+
+    bar4 = p.pg.locator('#recovery-bar')
+    has_bar4 = bar4.count() == 1
+    txt4 = bar4.text_content() if has_bar4 else ''
+    p.pg.locator('#recovery-restore').click()
+    p.wait(1500)
+    warte_rechnen(p, 45)
+    st4 = p.ev("""return Mass.measure().then(m => {
+      const it = App.doc.items[0];
+      return {
+        bar: document.querySelectorAll('#recovery-bar').length,
+        name: App.doc.name,
+        len: App.doc.items.length,
+        hasBlobId: !!(it && it.p && it.p.blobId),
+        errs: App.errors.length,
+        vol: m && m.volume,
+        noteLen: App.doc.notes && App.doc.notes[0] && App.doc.notes[0].text ? App.doc.notes[0].text.length : 0,
+      };
+    });""")
+    ok4 = (
+        big_prep['stepLen'] > 15_500_000
+        and big_prep['quick'] is None
+        and bool(big_prep['flag'] and big_prep['flag'].get('name') == 'Grosses Projekt A51')
+        and has_bar4
+        and 'Grosses Projekt A51' in txt4
+        and bool(re.search(r'\b\d{1,2}:\d{2}\b', txt4))
+        and st4['bar'] == 0
+        and st4['name'] == 'Grosses Projekt A51'
+        and st4['len'] == 1
+        and st4['hasBlobId']
+        and st4['errs'] == 0
+        and abs((st4['vol'] or 0) - 8000) < 10
+        and st4['noteLen'] == 430000
+    )
+
+    # 5. Hilfetext crashRecovery vollständig und am Knopf verknüpft
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_rec = hilfen.get('crashRecovery') or {}
+    ok5 = (
+        help_attr == 'crashRecovery'
+        and bool(h_rec.get('tip') and h_rec.get('hilfe') and h_rec.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -11200,6 +11384,7 @@ TESTS = [
     ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
     ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
     ('[A-053] Projekt-Vorlagen: 3D-Druck Druckbett / Zoll, Laser, Gehäuse / Eigene Vorlage speichern & wieder öffnen / Löschen', t_a053_projekt_vorlagen),
+    ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
