@@ -7882,6 +7882,13 @@ const Viewer = (() => {
   }
   function setAdaptive(on, ms) { adaptive = !!on; if (ms != null) slowMs = ms; if (!adaptive && lowRes) { lowRes = false; setPR(basePR); needsRender = true; } }
   function requestRender() { needsRender = true; }
+  function renderNow() {
+    needsRender = false;
+    updateViewAids();
+    listeners.emit('beforeRender');
+    renderer.render(scene, cam());
+    listeners.emit('afterRender');
+  }
 
   // ---------- Objekte ----------
   function makeMaterial(role, color, look) {
@@ -8983,7 +8990,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
+    init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
@@ -16569,6 +16576,7 @@ const UI = (() => {
     const outside2 = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closePop(); };
     openPop = { el, outside: outside2, onClose: opts.onClose, anchor };
     setTimeout(() => document.addEventListener('pointerdown', outside2, true), 0);
+    if (typeof App !== 'undefined' && App.emit) App.emit('pop');
     return el;
   }
   // ---------- Tooltips ----------
@@ -21227,7 +21235,7 @@ const Sketch = (() => {
     const last = S.undo.pop(); if (last == null) return;
     const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
-  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
+  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); App.emit('sketch'); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
   const vars = () => Model.vars(App.doc).v;
   // fast: beim Ziehen ohne Beweglichkeits-Analyse (die kommt beim Loslassen)
@@ -21269,6 +21277,7 @@ const Sketch = (() => {
     const old = dimFind(sp);
     if (old) { old.v = v; if (ref) old.ref = true; else delete old.ref; }
     else S.dims.push({ ...(sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v }), ...(ref ? { ref: true } : {}) });
+    App.emit('sketch');
   }
   // Maß nur zum Ablesen (Referenzmaß): steht in Klammern, zeigt den Wert, legt aber nichts fest
   function setRefDim(sp, quiet = false) {
@@ -25129,6 +25138,7 @@ const Sketch = (() => {
     $('#overlay').append(stepBox);
     Panels.renderRight();
     updatePreview(); render();
+    App.emit('sketch');
   }
   function updateStepExtInfo() {
     const box = stepBox && stepBox.querySelector('#st-ext-info');
@@ -27653,25 +27663,36 @@ const Print = (() => {
   async function turntable({ seconds = 6, fps = 30, save: doSave = true } = {}) {
     const type = videoType(); if (!type) { UI.toast('Dieser Browser kann keine Videos aufnehmen.', { kind: 'bad' }); return null; }
     const cv = Viewer.canvas, stream = cv.captureStream(fps), chunks = [];
+    const track = stream.getVideoTracks()[0];
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const cam0 = Viewer.saveCamera(), tg = Viewer.controls.target.clone();
     const dx0 = cam0.p.x - tg.x, dy0 = cam0.p.y - tg.y;
     App.clearSelection(); Handles.clear();
     const tst = UI.toast('Aufnahme läuft …', { icon: 'play', ms: seconds * 1000 + 3000 });
-    const done = new Promise((res) => { rec.onstop = res; });
+    const done = new Promise((res) => { rec.onstop = res; rec.onerror = res; });
     rec.start(250);
+    const dur = Math.max(100, seconds * 1000);
+    const stepMs = Math.max(16, Math.round(1000 / Math.max(1, fps)));
+    const minFrames = Math.max(12, Math.min(30, Math.round(seconds * 10)));
     const t0 = performance.now();
     await new Promise((res) => {
-      const step = (t) => {
-        const k = Math.min(1, (t - t0) / (seconds * 1000)), a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
-        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.requestRender();
-        if (k < 1) requestAnimationFrame(step); else res();
+      let frames = 0, raf = 0, timer = 0;
+      const step = () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+        const k = frames === 0 ? 0 : Math.min(1, Math.max(0, (performance.now() - t0) / dur), frames / minFrames);
+        const a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.renderNow();
+        try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
+        frames++;
+        if (k < 1) { raf = requestAnimationFrame(step); timer = setTimeout(step, stepMs + 15); } else res();
       };
-      requestAnimationFrame(step);
+      step();
     });
     await new Promise((r) => setTimeout(r, 120));
-    rec.stop(); await done; stream.getTracks().forEach((x) => x.stop());
+    if (rec.state !== 'inactive') rec.stop();
+    await done; stream.getTracks().forEach((x) => x.stop());
     Viewer.restoreCamera(cam0, false);
     tst.remove();
     const blob = new Blob(chunks, { type: type.split(';')[0] });
@@ -30933,17 +30954,24 @@ const Tour = (() => {
   ];
   const TOURS = { basics: BASICS, sketch: SKETCH };
   let STEPS = BASICS;
-  let timer = null;
-  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check)); timer = setInterval(() => { place(); check(); }, 350); }
-  function stop() { if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
+  let timer = null, advTimer = null, advFor = null;
+  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check), App.on('mode', check), App.on('sketch', check), App.on('pop', check)); timer = setInterval(() => { place(); check(); }, 120); }
+  function stop() { clearTimeout(advTimer); advTimer = null; advFor = null; if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
   function check() {
     const s = STEPS[idx]; if (!s || !s.until) return;
     const last = App.undoStack[App.undoStack.length - 1];
     const ev = last && /Größe|Maß/.test(last.label) ? 'size' : null;
-    if (s.done) return;
-    if (s.until(ev)) { s.done = true; setTimeout(() => { s.done = false; if (STEPS[idx] === s) { idx++; show(); } }, 500); }
+    if (advFor === s) return;
+    if (s.until(ev)) {
+      advFor = s;
+      advTimer = setTimeout(() => {
+        advTimer = null; advFor = null;
+        if (STEPS[idx] === s) { idx++; show(); }
+      }, 220);
+    }
   }
   function show() {
+    clearTimeout(advTimer); advTimer = null; advFor = null;
     if (box) box.remove(); if (ring) ring.remove(); box = ring = null;
     const s = STEPS[idx]; if (!s) { stop(); return; }
     box = h('div', { class: 'tour', role: 'dialog', 'aria-label': 'Einführung' });
@@ -31846,7 +31874,7 @@ ${AI.modelText()}`;
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr, Tour }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

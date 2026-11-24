@@ -1758,6 +1758,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Fehlermeldungen in Klartext**: Fehlende Tabellen, fehlende Schlüssel, falsche Argumentanzahl, `=` statt `==`, Division durch 0 und ungültige Nachkommastellen werden in Klartext im Feld, unter „Maße“ und als Meldung angezeigt; Hilfetext `formulaTable` vorhanden.
 - [ ] **Von Hand**: Im Browser unter „Maße“ eine neue Tabelle anlegen, in „Formel-Beispiele“ den Hinweistext lesen und in einer offenen Skizze ein Maß direkt mit `tabelle(…)` und `wenn(…)` bemaßen.
 
+## Volltest-Reparatur (Auto [F-11240521])
+
+- [x] **Drehteller-Video bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` zeichnet `Print.turntable()` alle Zwischenbilder synchron über `Viewer.renderNow()` samt `track.requestFrame()` und Timer-Fallback, erzeugt ein gültiges Video (`> 1000` Bytes) und stellt die Ausgangskamera exakt wieder her.
+- [x] **Einführung „Erste Skizze“ ereignisgesteuert**: `Tour` reagiert sofort auf `mode`, `sketch` (`addEnt`, `putDimSpec`, `extrudeStep`) und `pop` (`UI.pop`), sodass die Schritte nach Skizzenstart, Ebenenwahl und Rechteck-Zeichnen zuverlässig innerhalb von 500 ms weiterschalten.
+- [x] **Abbruch laufender Übergänge**: `Tour.stop()` und `show()` löschen laufende Weiterschalt-Timer (`advTimer`) sauber ohne Zustandsreste auf den Schritt-Definitionen.
+- [ ] **Von Hand**: Im Browser ein Drehteller-Video über „Ansicht → Drehteller-Video …“ herunterladen und abspielen sowie die Einführung „Erste Skizze (5 Minuten)“ einmal komplett durchklicken.
+
 ## Fehler melden
 
 ```

@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr,Tour}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -9565,6 +9565,46 @@ def t_a041_formeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung ----------
+def t_f11240521(p):
+    # 1. Drehteller-Video bei komplett blockiertem requestAnimationFrame
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:30,d:20,h:10},{name:'Teil'})); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false)"); p.wait(400)
+    c0 = p.ev("return Viewer.camera.position.toArray()")
+    size = p.ev("""
+      const origRAF = window.requestAnimationFrame;
+      window._blockedRAF = [];
+      window.requestAnimationFrame = (cb) => { window._blockedRAF.push(cb); return window._blockedRAF.length; };
+      return Print.turntable({seconds: 1.5, save: false})
+        .then(b => b ? b.size : 0)
+        .finally(() => { window.requestAnimationFrame = origRAF; });
+    """)
+    c1 = p.ev("return Viewer.camera.position.toArray()")
+    vid_type = p.ev("return (Print.lastVideo && Print.lastVideo.type) || ''")
+    ok1 = size > 1000 and vid_type.startswith('video/') and max(abs(a - b) for a, b in zip(c0, c1)) < 1e-6
+
+    # 2. Einführung „Erste Skizze“ reagiert ereignisgesteuert innerhalb von 500 ms je Schritt
+    step = lambda: p.pg.locator('.tour h3').inner_text() if p.pg.locator('.tour').count() else ''
+    p.ev("Tour.start('sketch')")
+    s0 = step()
+    p.pg.click('#t-sketch'); p.wait(500); s1 = step()
+    p.pg.get_by_role('button', name='Auf der Arbeitsfläche').click(); p.wait(500); s2 = step()
+    cx, cy = p.canvas_center()
+    p.pg.mouse.click(cx - 120, cy + 60); p.pg.mouse.move(cx + 60, cy - 20)
+    p.pg.keyboard.type('40'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('20'); p.pg.keyboard.press('Enter')
+    p.wait(500); s3 = step()
+    ok2 = (s0 == 'Skizze starten' and s1 == 'Zeichenblatt wählen' and s2 == 'Ein Rechteck zeichnen' and s3 == 'Kreis für das Loch')
+
+    # 3. Tour.stop() bricht einen bereits ausgelösten Schrittwechsel sauber ab
+    p.ev("Tour.start('sketch'); App.emit('sketch'); Tour.stop();")
+    p.ev("Sketch.cancel(true); Tour.start('sketch');")
+    p.wait(400)
+    ok3 = step() == 'Skizze starten'
+    p.ev("Tour.stop()")
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9706,6 +9746,7 @@ TESTS = [
     ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
     ('[A-040] Varianten schalten Schritte: ohne Loch / Volumen & zurück / Vergleich / Maße & Schritte / Abweichung & Undo', t_a040_varianten_schritte),
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
+    ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -93,7 +93,7 @@ Leitlinien:
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
@@ -184,7 +184,7 @@ Leitlinien:
 - Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf/.obj/.mtl/.glb“ an; `Print.buildOBJ`, `Print.buildGLB`; `Print.lastExport` = Dateinamen des letzten ZIP
 - Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms inkl. letztem Mauspunkt am Bewegungsende; `Measure.coords`)
 - Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
-- Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
+- Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt mit Timer-Fallback, synchronem `Viewer.renderNow()` und `track.requestFrame()`, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
 - Vorführen: `Views.present(on)` (Taste P, Klasse `body.presenting`, Vollbild, Drehteller über `requestAnimationFrame`, Leiste `#present-bar`), `Views.presenting`
 - Vorige Ansicht: `Viewer.viewBack()` (Umschalt Z), Verlauf `camHist` bis 40 – `moveCamera` (setzt über `stopDamping()` Restdämpfung der OrbitControls zurück, schließt `camAnim` per Timer-Fallback `finishCamAnim()` auch bei stockendem `rAF` ab und entdoppelt das `camera`-Event pro Frame) und der Beginn jeder Maus-Bewegung (`controls` 'start', schnelle Folgen zusammengefasst, bricht `camAnim` per `cancelCamAnim()` ab) legen den Blick davor ab; `Viewer.viewHistory`
 - Teil dahinter: `Viewer.pickAll(cx, cy)` (alle Treffer, vorne zuerst); Alt + Klick → `Interact.selectBehind`; Rechtsklick-Einträge `cm-behind-N`
@@ -208,7 +208,7 @@ Leitlinien:
 - Maße-Tabelle mit Formeln, Varianten (`v.values` und `v.suppressed` mit Schritt-Schaltern `#var-steps` und `Variants.setStepSuppressed`) und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren
 - Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)
-- Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“
+- Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“ (`Tour`, ereignisgesteuert über `history`/`doc`/`mode`/`sketch`/`pop`)
 - Projekt in einen Ordner speichern (BE-14): `Start.saveToFolder`/`saveToFolderNow`/`disconnectFolder`/`folderSupported`/`folderInfo` (File System Access API, gebündelt alle 10 s, Anzeige `#btn-folder-status`)
 - Eigene Tastenkürzel (nur „Profi“): `Commands.shortcuts`/`setShortcut`/`resetShortcuts`/`renderShortcutsEditor`, gespeichert in `localStorage` (`tracery-kuerzel`), Duplikat-Prüfung, Einstellungs-Tab `#set-tab-keys`
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt

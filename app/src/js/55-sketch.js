@@ -612,7 +612,7 @@ const Sketch = (() => {
     const last = S.undo.pop(); if (last == null) return;
     const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
-  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
+  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); App.emit('sketch'); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
   const vars = () => Model.vars(App.doc).v;
   // fast: beim Ziehen ohne Beweglichkeits-Analyse (die kommt beim Loslassen)
@@ -654,6 +654,7 @@ const Sketch = (() => {
     const old = dimFind(sp);
     if (old) { old.v = v; if (ref) old.ref = true; else delete old.ref; }
     else S.dims.push({ ...(sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v }), ...(ref ? { ref: true } : {}) });
+    App.emit('sketch');
   }
   // Maß nur zum Ablesen (Referenzmaß): steht in Klammern, zeigt den Wert, legt aber nichts fest
   function setRefDim(sp, quiet = false) {
@@ -4514,6 +4515,7 @@ const Sketch = (() => {
     $('#overlay').append(stepBox);
     Panels.renderRight();
     updatePreview(); render();
+    App.emit('sketch');
   }
   function updateStepExtInfo() {
     const box = stepBox && stepBox.querySelector('#st-ext-info');
