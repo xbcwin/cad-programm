@@ -1053,5 +1053,10 @@
     "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
     "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
     "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
+  },
+  "drawingCenters": {
+    "tip": "Mittelkreuze und Mittellinien für Bohrungen und Zylinder automatisch ein- und ausblenden",
+    "hilfe": "Bohrungen und Zylinder erhalten in jeder Ansicht automatisch strichpunktierte Mittelkreuze (Draufsicht bzw. Blick auf die Öffnung) und Mittellinien (Seiten- und Schnittansichten). Klicke ein einzelnes Mittelkreuz oder eine Mittellinie im Blatt an und drücke Entf (oder Rechtsklick → Ausblenden), um es auszublenden – oder schalte sie rechts in der Liste einzeln ein und aus.",
+    "tipp": "Mit „Alle einblenden“ holst du einzeln ausgeblendete Mittellinien jederzeit mit einem Klick zurück; alle Änderungen lassen sich rückgängig machen."
   }
 }

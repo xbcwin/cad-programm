@@ -2888,6 +2888,11 @@ const HELP = {
   "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
   "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
   "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
+ },
+ "drawingCenters": {
+  "tip": "Mittelkreuze und Mittellinien für Bohrungen und Zylinder automatisch ein- und ausblenden",
+  "hilfe": "Bohrungen und Zylinder erhalten in jeder Ansicht automatisch strichpunktierte Mittelkreuze (Draufsicht bzw. Blick auf die Öffnung) und Mittellinien (Seiten- und Schnittansichten). Klicke ein einzelnes Mittelkreuz oder eine Mittellinie im Blatt an und drücke Entf (oder Rechtsklick → Ausblenden), um es auszublenden – oder schalte sie rechts in der Liste einzeln ein und aus.",
+  "tipp": "Mit „Alle einblenden“ holst du einzeln ausgeblendete Mittellinien jederzeit mit einem Klick zurück; alle Änderungen lassen sich rückgängig machen."
  }
 };
 
@@ -30981,6 +30986,8 @@ const Commands = (() => {
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
     add('drawingDetail', 'Detailansicht in Zeichnung anlegen', 'zoomIn', 'detail lupe vergrößern ausschnitt kreis zeichnung ze-03', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('detail'); }, { group: 'Werkzeuge' });
     add('drawingSection', 'Schnittansicht in Zeichnung (A–A)', 'section', 'schnitt schnittansicht schraffur zeichnung a-a', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('section'); }, { group: 'Werkzeuge' });
+    add('drawingCenters', 'Mittellinien automatisch ein-/ausblenden', 'target', 'mittellinie mittellinien mittelkreuz mittelkreuze achse bohrung zylinder zeichnung ze-06', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setCenters(!Drawing.activeSheet().centers); }, { group: 'Werkzeuge' });
+    add('drawingCentersShowAll', 'Alle Mittellinien in Zeichnung einblenden', 'eye', 'mittellinie mittellinien mittelkreuz alle einblenden zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.showAllCenters(); }, { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
     for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });
@@ -32609,6 +32616,7 @@ const Drawing = (() => {
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
   let layout = null, dragDetail = null;
   let detailDraft = { scale: 2, label: 'Z' };
+  let centersListOpen = false;
   function defaultAutoDims() {
     return [
       { id: uid('d'), auto: 'width', view: 'front' },
@@ -32628,6 +32636,7 @@ const Drawing = (() => {
       views: opts.views ? { ...opts.views } : { front: true, top: true, left: true, iso: true },
       hidden: opts.hidden != null ? !!opts.hidden : (tpl ? !!tpl.hidden : true),
       centers: opts.centers != null ? !!opts.centers : (tpl ? !!tpl.centers : true),
+      hiddenCenters: Array.isArray(opts.hiddenCenters) ? opts.hiddenCenters.slice() : [],
       dims: opts.dims || defaultAutoDims(),
       free: opts.free || [],
       details: opts.details ? opts.details.map((x) => ({ ...x, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null })) : [],
@@ -32653,6 +32662,7 @@ const Drawing = (() => {
       views: raw && raw.views,
       hidden: raw && raw.hidden,
       centers: raw && raw.centers,
+      hiddenCenters: raw && Array.isArray(raw.hiddenCenters) ? raw.hiddenCenters : [],
       dims: raw && Array.isArray(raw.dims) ? raw.dims : undefined,
       free: raw && Array.isArray(raw.free) ? raw.free : undefined,
       details: raw && Array.isArray(raw.details) ? raw.details : [],
@@ -32685,6 +32695,7 @@ const Drawing = (() => {
     for (let i = 0; i < d.drawing.sheets.length; i++) {
       const cur = d.drawing.sheets[i];
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
+      if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
       } else if (!Array.isArray(cur.details)) {
@@ -32757,6 +32768,15 @@ const Drawing = (() => {
       let view = detMap.get(x.view) || x.view;
       if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
       return { ...x, id: uid('d'), view };
+    });
+    clone.hiddenCenters = (clone.hiddenCenters || []).map((cid) => {
+      if (typeof cid !== 'string' || !cid.startsWith('ctr|')) return cid;
+      const parts = cid.split('|');
+      let vName = parts[1];
+      if (detMap.has(vName)) vName = detMap.get(vName);
+      else if (vName && vName.startsWith('sec_') && secMap.has(vName.slice(4))) vName = 'sec_' + secMap.get(vName.slice(4));
+      parts[1] = vName;
+      return parts.join('|');
     });
     clone.free = (clone.free || []).map((x) => ({ ...x, id: uid('f') }));
     if (clone.title) clone.title.blatt = '';
@@ -33118,13 +33138,99 @@ const Drawing = (() => {
   }
   // ---------- Geometrie der Ansichten ----------
   const geoCache = new Map();
+  function filterVisibleCenters(allCtrs, sh = dwg()) {
+    if (!sh || !sh.centers) return [];
+    const hid = new Set(sh.hiddenCenters || []);
+    return (allCtrs || []).filter((c) => !hid.has(c.id));
+  }
+  function computeViewCenters(viewName, v, filterFn = null) {
+    if (viewName === 'iso' || !v || !proj || !Array.isArray(proj.axes)) return [];
+    const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
+    const crosses = [];
+    const lines2d = [];
+    for (const a of proj.axes) {
+      const d = new THREE.Vector3(...a.d).normalize();
+      const o = new THREE.Vector3(...a.o);
+      if (filterFn && !filterFn(a, o, d)) continue;
+      const k = Math.abs(d.dot(dir));
+      if (k > 0.995) {
+        const c = [o.dot(ex), o.dot(ey)];
+        const hit = crosses.find((cr) => Math.hypot(cr.c[0] - c[0], cr.c[1] - c[1]) < 0.05);
+        if (hit) {
+          hit.r = Math.max(hit.r, a.r);
+          if (a.kind === 'cyl') hit.kind = 'cyl';
+        } else {
+          crosses.push({ type: 'cross', c, r: a.r, kind: a.kind || 'cyl' });
+        }
+      } else if (k < 0.95) {
+        const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
+        let A = [p0.dot(ex), p0.dot(ey)], B = [p1.dot(ex), p1.dot(ey)];
+        const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+        if (L < 0.5) continue;
+        if (A[0] > B[0] + 1e-6 || (Math.abs(A[0] - B[0]) <= 1e-6 && A[1] > B[1])) [A, B] = [B, A];
+        const ux = (B[0] - A[0]) / L, uy = (B[1] - A[1]) / L;
+        let merged = null;
+        for (const ln of lines2d) {
+          if (Math.abs(ln.ux * ux + ln.uy * uy) <= 0.9995) continue;
+          const perp = Math.abs((A[0] - ln.a[0]) * ln.nx + (A[1] - ln.a[1]) * ln.ny);
+          if (perp >= 0.08) continue;
+          const tA = (A[0] - ln.a[0]) * ln.ux + (A[1] - ln.a[1]) * ln.uy;
+          const tB = (B[0] - ln.a[0]) * ln.ux + (B[1] - ln.a[1]) * ln.uy;
+          const tMin = Math.min(tA, tB), tMax = Math.max(tA, tB);
+          if (tMin <= ln.len + 0.5 && tMax >= -0.5) {
+            const m0 = Math.min(0, tMin), m1 = Math.max(ln.len, tMax);
+            let nA = [ln.a[0] + ln.ux * m0, ln.a[1] + ln.uy * m0];
+            let nB = [ln.a[0] + ln.ux * m1, ln.a[1] + ln.uy * m1];
+            if (nA[0] > nB[0] + 1e-6 || (Math.abs(nA[0] - nB[0]) <= 1e-6 && nA[1] > nB[1])) [nA, nB] = [nB, nA];
+            const nL = Math.hypot(nB[0] - nA[0], nB[1] - nA[1]) || 1;
+            ln.a = nA; ln.b = nB; ln.len = nL;
+            ln.ux = (nB[0] - nA[0]) / nL; ln.uy = (nB[1] - nA[1]) / nL;
+            ln.nx = -ln.uy; ln.ny = ln.ux;
+            ln.r = Math.max(ln.r, a.r);
+            if (a.kind === 'cyl') ln.kind = 'cyl';
+            merged = ln;
+            break;
+          }
+        }
+        if (!merged) {
+          lines2d.push({ type: 'line', a: A, b: B, len: L, ux, uy, nx: -uy, ny: ux, r: a.r, kind: a.kind || 'cyl' });
+        }
+      }
+    }
+    crosses.sort((p, q) => (p.c[0] - q.c[0]) || (p.c[1] - q.c[1]) || (p.r - q.r));
+    lines2d.sort((p, q) => (p.a[0] - q.a[0]) || (p.a[1] - q.a[1]) || (p.b[0] - q.b[0]) || (p.b[1] - q.b[1]) || (p.r - q.r));
+    const usedIds = new Set();
+    const uniqId = (base) => {
+      if (!usedIds.has(base)) { usedIds.add(base); return base; }
+      let k = 2;
+      while (usedIds.has(base + '|' + k)) k++;
+      const out = base + '|' + k;
+      usedIds.add(out);
+      return out;
+    };
+    const out = [];
+    for (const cr of crosses) {
+      const id = uniqId('ctr|' + viewName + '|x|' + Math.round(cr.c[0] * 10) + ',' + Math.round(cr.c[1] * 10));
+      out.push({ id, view: viewName, type: 'cross', kind: cr.kind, r: cr.r, c: cr.c });
+    }
+    for (const ln of lines2d) {
+      const id = uniqId('ctr|' + viewName + '|l|' + [ln.a[0], ln.a[1], ln.b[0], ln.b[1]].map((q) => Math.round(q * 10)).join(','));
+      out.push({ id, view: viewName, type: 'line', kind: ln.kind, r: ln.r, a: ln.a, b: ln.b });
+    }
+    return out;
+  }
   function viewGeom(name, sh = dwg()) {
     if (!proj || !proj.views || !proj.views[name]) return null;
     // beim Bemaßen wird bei jeder Mausbewegung neu gezeichnet – die aufgeräumten Kanten merken
-    const ck = name + '|' + projId + '|' + !!sh.hidden + '|' + !!sh.centers;
-    if (geoCache.has(ck)) return geoCache.get(ck);
-    if (geoCache.size > 16) geoCache.clear();
-    const g = viewGeom_(name, sh); geoCache.set(ck, g); return g;
+    const ck = name + '|' + projId + '|' + !!sh.hidden;
+    let g = geoCache.get(ck);
+    if (!g) {
+      if (geoCache.size > 16) geoCache.clear();
+      g = viewGeom_(name, sh);
+      if (!g) return null;
+      geoCache.set(ck, g);
+    }
+    return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
   }
   function viewGeom_(name, sh = dwg()) {
     const v = proj.views[name];
@@ -33142,26 +33248,7 @@ const Drawing = (() => {
     for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
     // Mittellinien und kosmetische Gewinde (KP-20)
-    const centers = [];
-    if (sh.centers) {
-      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
-      const seen = new Set();
-      for (const a of proj.axes || []) {
-        const d = new THREE.Vector3(...a.d); const o = new THREE.Vector3(...a.o);
-        const k = Math.abs(d.dot(dir));
-        if (k > 0.995) {
-          const c = [o.dot(ex), o.dot(ey)]; const key = 'c' + Math.round(c[0] * 100) + ',' + Math.round(c[1] * 100);
-          if (seen.has(key)) continue; seen.add(key);
-          centers.push({ type: 'cross', c, r: a.r });
-        } else if (k < 0.01) {
-          const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
-          const A = [p0.dot(ex), p0.dot(ey)], B = [p1.dot(ex), p1.dot(ey)];
-          const key = 'l' + [A, B].flat().map((x) => Math.round(x * 10)).join(',');
-          if (seen.has(key)) continue; seen.add(key);
-          centers.push({ type: 'line', a: A, b: B });
-        }
-      }
-    }
+    const allCenters = computeViewCenters(name, v);
     const threads = [];
     if (name !== 'iso') {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
@@ -33182,56 +33269,43 @@ const Drawing = (() => {
         }
       }
     }
-    return { polys, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    return { polys, hidden, circles, points, allCenters, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
   function sectionGeom(sec, sh = dwg()) {
     const key = secCacheKey(sec);
     if (!proj || !proj.sections || !proj.sections[key]) return null;
-    const ck = 'sec|' + key + '|' + projId + '|' + !!sh.hidden + '|' + !!sh.centers;
-    if (geoCache.has(ck)) return geoCache.get(ck);
-    if (geoCache.size > 32) geoCache.clear();
-    const v = proj.sections[key];
-    const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
-    const cg = cleanGeom((v.visible || []).map(raw).filter(Boolean), sh.hidden ? (v.hidden || []).map(raw).filter(Boolean) : []);
-    const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
-    for (const p of polys) {
-      points.push(p.pts[0], p.pts[p.pts.length - 1]);
-      if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
-    }
-    for (const p of hidden) points.push(p.pts[0], p.pts[p.pts.length - 1]);
-    const caps = v.caps || [];
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
-    for (const cap of caps) {
-      if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
-      for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
-    }
-    if (!isFinite(x0)) return null;
-    const centers = [];
-    if (sh.centers) {
-      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y), oVec = new THREE.Vector3(...(v.o || [0, 0, 0]));
-      const seen = new Set();
-      for (const a of proj.axes || []) {
-        const d = new THREE.Vector3(...a.d), o = new THREE.Vector3(...a.o);
-        const mid = o.clone().addScaledVector(d, (a.t0 + a.t1) * 0.5);
-        if (mid.sub(oVec).dot(dir) > a.r + 0.5) continue;
-        const k = Math.abs(d.dot(dir));
-        if (k > 0.995) {
-          const c = [o.dot(ex), o.dot(ey)]; const ak = 'c' + Math.round(c[0] * 100) + ',' + Math.round(c[1] * 100);
-          if (seen.has(ak)) continue; seen.add(ak);
-          centers.push({ type: 'cross', c, r: a.r });
-        } else if (k < 0.01) {
-          const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
-          const A = [p0.dot(ex), p0.dot(ey)], B = [p1.dot(ex), p1.dot(ey)];
-          const ak = 'l' + [A, B].flat().map((x) => Math.round(x * 10)).join(',');
-          if (seen.has(ak)) continue; seen.add(ak);
-          centers.push({ type: 'line', a: A, b: B });
-        }
+    const viewName = 'sec_' + sec.id;
+    const ck = 'sec|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden;
+    let g = geoCache.get(ck);
+    if (!g) {
+      if (geoCache.size > 32) geoCache.clear();
+      const v = proj.sections[key];
+      const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
+      const cg = cleanGeom((v.visible || []).map(raw).filter(Boolean), sh.hidden ? (v.hidden || []).map(raw).filter(Boolean) : []);
+      const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
+      for (const p of polys) {
+        points.push(p.pts[0], p.pts[p.pts.length - 1]);
+        if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
       }
+      for (const p of hidden) points.push(p.pts[0], p.pts[p.pts.length - 1]);
+      const caps = v.caps || [];
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+      for (const cap of caps) {
+        if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
+        for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+      }
+      if (!isFinite(x0)) return null;
+      const sDir = new THREE.Vector3(...v.dir), oVec = new THREE.Vector3(...(v.o || [0, 0, 0]));
+      const allCenters = computeViewCenters(viewName, v, (a, o, d) => {
+        const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
+        const w0 = p0.sub(oVec).dot(sDir), w1 = p1.sub(oVec).dot(sDir);
+        return Math.min(w0, w1) <= a.r + 0.5;
+      });
+      g = { polys, hidden, caps, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+      geoCache.set(ck, g);
     }
-    const g = { polys, hidden, caps, circles, points, centers, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
-    geoCache.set(ck, g);
-    return g;
+    return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
   }
   function docThreads() {
     const out = [], V = Model.vars(App.doc).v;
@@ -33282,7 +33356,7 @@ const Drawing = (() => {
     for (const p of polys) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     for (const e of sh.free) if (e.type === 'text') { x0 = Math.min(x0, e.p[0]); y0 = Math.min(y0, e.p[1]); x1 = Math.max(x1, e.p[0] + 10); y1 = Math.max(y1, e.p[1] + 5); }
     if (!isFinite(x0)) { x0 = -10; y0 = -10; x1 = 10; y1 = 10; }
-    return { polys, hidden: [], circles, points, centers: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    return { polys, hidden: [], circles, points, centers: [], allCenters: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
   // ---------- Detailansichten (ZE-03) ----------
   function details(sh = dwg()) { return sh.details || []; }
@@ -33354,6 +33428,7 @@ const Drawing = (() => {
       const d = dwg();
       d.details = (d.details || []).filter((x) => x.id !== id);
       d.dims = d.dims.filter((x) => x.view !== id);
+      d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
     });
     if (selDim === id) selDim = null;
     render(); Panels.renderRight();
@@ -33442,9 +33517,9 @@ const Drawing = (() => {
     }
     return out;
   }
-  function clipViewGeomToCircle(srcGeo, c, r) {
+  function clipViewGeomToCircle(srcGeo, c, r, detId = '', sh = null) {
     const [cx, cy] = c, R = r;
-    const polys = [], hidden = [], circles = [], points = [], centers = [], threads = [];
+    const polys = [], hidden = [], circles = [], points = [], allCenters = [], threads = [];
     for (const p of srcGeo.polys || []) {
       if (p.c) polys.push(...clipArcCircle(p, cx, cy, R));
       else polys.push(...clipPolyCircle(p.pts, cx, cy, R));
@@ -33463,14 +33538,19 @@ const Drawing = (() => {
       if (Math.hypot(cc.c[0] - cx, cc.c[1] - cy) <= R + 1e-4) points.push(cc.c);
     }
     for (const ctr of srcGeo.centers || []) {
+      const cid = detId && ctr.id ? 'ctr|' + detId + '|' + ctr.id.split('|').slice(2).join('|') : ctr.id;
       if (ctr.type === 'cross') {
-        const hSeg = clipSegCircle([ctr.c[0] - ctr.r, ctr.c[1]], [ctr.c[0] + ctr.r, ctr.c[1]], cx, cy, R);
-        const vSeg = clipSegCircle([ctr.c[0], ctr.c[1] - ctr.r], [ctr.c[0], ctr.c[1] + ctr.r], cx, cy, R);
-        if (hSeg) centers.push({ type: 'line', a: hSeg[0], b: hSeg[1], noExt: true });
-        if (vSeg) centers.push({ type: 'line', a: vSeg[0], b: vSeg[1], noExt: true });
+        if (Math.hypot(ctr.c[0] - cx, ctr.c[1] - cy) + ctr.r <= R + 1e-4) {
+          allCenters.push({ type: 'cross', c: ctr.c, r: ctr.r, kind: ctr.kind, id: cid, view: detId || ctr.view });
+        } else {
+          const hSeg = clipSegCircle([ctr.c[0] - ctr.r, ctr.c[1]], [ctr.c[0] + ctr.r, ctr.c[1]], cx, cy, R);
+          const vSeg = clipSegCircle([ctr.c[0], ctr.c[1] - ctr.r], [ctr.c[0], ctr.c[1] + ctr.r], cx, cy, R);
+          if (hSeg) allCenters.push({ type: 'line', a: hSeg[0], b: hSeg[1], noExt: true, kind: ctr.kind, r: ctr.r, id: cid, view: detId || ctr.view, ctrGroup: 'cross' });
+          if (vSeg) allCenters.push({ type: 'line', a: vSeg[0], b: vSeg[1], noExt: true, kind: ctr.kind, r: ctr.r, id: cid, view: detId || ctr.view, ctrGroup: 'cross' });
+        }
       } else {
         const seg = clipSegCircle(ctr.a, ctr.b, cx, cy, R);
-        if (seg) centers.push({ type: 'line', a: seg[0], b: seg[1], noExt: true });
+        if (seg) allCenters.push({ type: 'line', a: seg[0], b: seg[1], noExt: true, kind: ctr.kind, r: ctr.r, id: cid, view: detId || ctr.view });
       }
     }
     for (const th of srcGeo.threads || []) {
@@ -33481,7 +33561,8 @@ const Drawing = (() => {
         if (seg && Math.hypot(seg[1][0] - seg[0][0], seg[1][1] - seg[0][1]) > 0.2) threads.push({ ...th, a: seg[0], b: seg[1] });
       }
     }
-    return { polys, hidden, circles, points, centers, threads, box: [cx - R, cy - R, cx + R, cy + R], w: 2 * R, h: 2 * R };
+    const centers = sh ? filterVisibleCenters(allCenters, sh) : allCenters.slice();
+    return { polys, hidden, circles, points, centers, allCenters, threads, box: [cx - R, cy - R, cx + R, cy + R], w: 2 * R, h: 2 * R };
   }
   function placeDetailAuto(R, frame, occupied) {
     const xMin = frame.x + R + 5, xMax = frame.x + frame.w - R - 5;
@@ -33660,7 +33741,7 @@ const Drawing = (() => {
       for (const det of sh.details) {
         const srcGeo = G[det.source];
         if (!srcGeo || !views[det.source]) continue;
-        const detGeo = clipViewGeomToCircle(srcGeo, det.c, det.r);
+        const detGeo = clipViewGeomToCircle(srcGeo, det.c, det.r, det.id, sh);
         const ds = Math.max(0.1, Number(det.scale) || 2);
         const R = det.r * ds;
         let pos;
@@ -33911,8 +33992,20 @@ const Drawing = (() => {
         texts.push({ x: (TL[0] + BR[0]) * 0.5, y: BR[1] + 6, t: `Schnitt ${v.section.label}–${v.section.label}`, size: 4, anchor: 'middle', id: v.section.id, secId: v.section.id, cls: 'viewlabel' });
       }
       for (const c of v.geo.centers) {
-        if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr', view: name }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr', view: name }); }
-        else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = c.noExt ? 0 : 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name }); }
+        if (c.type === 'cross') {
+          const C = toSheet(v, c.c);
+          const r = c.r * v.s + 2;
+          lines.push(
+            { pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr', view: name, id: c.id, ctrType: 'cross' },
+            { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr', view: name, id: c.id, ctrType: 'cross' }
+          );
+        } else {
+          const A = toSheet(v, c.a), B = toSheet(v, c.b);
+          const dx = B[0] - A[0], dy = B[1] - A[1];
+          const L = Math.hypot(dx, dy) || 1;
+          const e = c.noExt ? 0 : 2.5;
+          lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name, id: c.id, ctrType: c.ctrGroup || 'line' });
+        }
       }
       // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
       const labelSide = !v.detail && (name === 'front' || (name === 'left' && !lay.views.front));
@@ -34046,7 +34139,7 @@ const Drawing = (() => {
     s.setAttribute('xmlns', NS);
     s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:8 1.2 .6 1.2}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel{stroke:#0c7a70}.dim.sel{stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel{stroke:#0c7a70}.dim.sel{stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
@@ -34060,6 +34153,7 @@ const Drawing = (() => {
       el.setAttribute('class', l.cls + (sel ? ' sel' : ''));
       if (l.id) el.dataset.id = l.id;
       if (l.view) el.dataset.view = l.view;
+      if (l.ctrType) el.dataset.ctr = l.ctrType;
       if (l.secId) el.dataset.sec = l.secId;
       if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
       g.append(el);
@@ -34076,7 +34170,7 @@ const Drawing = (() => {
       g.append(el);
     }
     holder.innerHTML = ''; holder.append(s); svg = s;
-    s.addEventListener('pointermove', onMove); s.addEventListener('pointerdown', onDown);
+    s.addEventListener('pointermove', onMove); s.addEventListener('pointerdown', onDown); s.addEventListener('contextmenu', onContextMenu);
     lastLines = lines; lastTexts = texts;
   }
   let lastLines = [], lastTexts = [];
@@ -34200,6 +34294,42 @@ const Drawing = (() => {
       render();
     } else if (tool && tool.startsWith('free-')) { freeMove(e); }
   }
+  function centerAt(P) {
+    const tol = Math.max(1.8, 2.6 / zoom);
+    let best = null, bd = tol;
+    for (const l of lastLines) {
+      if (l.cls !== 'ctr' || !l.id || !l.pts || l.pts.length < 2) continue;
+      for (let i = 0; i < l.pts.length - 1; i++) {
+        const a = l.pts[i], b = l.pts[i + 1];
+        const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+        let t = L2 ? ((P[0] - a[0]) * dx + (P[1] - a[1]) * dy) / L2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        const d = Math.hypot(P[0] - (a[0] + t * dx), P[1] - (a[1] + t * dy));
+        if (d < bd) { bd = d; best = l.id; }
+      }
+    }
+    return best;
+  }
+  function onContextMenu(e) {
+    if (tool) return;
+    const t = e.target.closest && e.target.closest('.ctr[data-id]');
+    const P = sheetPt(e);
+    const id = t ? t.dataset.id : centerAt(P);
+    if (!id || !String(id).startsWith('ctr|')) return;
+    e.preventDefault();
+    selDim = id;
+    render(); Panels.renderRight();
+    const c = findCenterById(id);
+    const isCross = c ? c.type === 'cross' : id.includes('|x|');
+    const anchor = { getBoundingClientRect: () => ({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY, width: 0, height: 0 }) };
+    const entries = [
+      { label: isCross ? 'Mittelkreuz ausblenden' : 'Mittellinie ausblenden', icon: 'eyeOff', run: () => hideCenter(id) },
+    ];
+    if ((dwg().hiddenCenters || []).length) {
+      entries.push({ label: 'Alle Mittellinien einblenden', icon: 'eye', run: () => showAllCenters() });
+    }
+    UI.menu(anchor, entries);
+  }
   function onDown(e) {
     if (e.button !== 0) return;
     const P = sheetPt(e);
@@ -34208,7 +34338,7 @@ const Drawing = (() => {
     if (tool === 'section') { sectionDown(P, e); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
-    selDim = t ? t.dataset.id : null;
+    selDim = t ? t.dataset.id : centerAt(P);
     if (selDim && layout && layout.views[selDim] && layout.views[selDim].detail) {
       dragDetail = { id: selDim, startP: P, origPos: [...layout.views[selDim].sheetCenter], curPos: null, moved: false };
     }
@@ -34366,6 +34496,7 @@ const Drawing = (() => {
       const d = dwg();
       d.sections = (d.sections || []).filter((x) => x.id !== id);
       d.dims = (d.dims || []).filter((x) => x.view !== 'sec_' + id);
+      d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|sec_' + id + '|'));
     });
     if (selDim === id) selDim = null;
     render();
@@ -34426,14 +34557,103 @@ const Drawing = (() => {
     if (e.key.toLowerCase() === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('section'); return true; }
     return false;
   }
+  function viewLabel(vName, sh = dwg()) {
+    if (VIEW_NAMES[vName]) return VIEW_NAMES[vName];
+    if (String(vName).startsWith('sec_')) {
+      const sec = (sh.sections || []).find((x) => 'sec_' + x.id === vName);
+      return sec ? `Schnitt ${sec.label}–${sec.label}` : 'Schnitt';
+    }
+    const det = (sh.details || []).find((x) => x.id === vName);
+    return det ? `Detail ${det.label}` : vName;
+  }
+  function allCenters(viewName = null) {
+    const sh = dwg();
+    const lay = layout || computeLayout(sh);
+    const hid = new Set(sh.hiddenCenters || []);
+    const seen = new Set();
+    const out = [];
+    for (const [vName, v] of Object.entries(lay.views || {})) {
+      if (viewName && vName !== viewName) continue;
+      for (const c of (v.geo && v.geo.allCenters) || []) {
+        if (!c.id || seen.has(c.id)) continue;
+        seen.add(c.id);
+        out.push({
+          id: c.id,
+          view: c.view || vName,
+          type: c.ctrGroup || c.type,
+          kind: c.kind || 'cyl',
+          r: c.r || 0,
+          c: c.c ? [...c.c] : null,
+          a: c.a ? [...c.a] : null,
+          b: c.b ? [...c.b] : null,
+          hidden: !sh.centers || hid.has(c.id),
+        });
+      }
+    }
+    return out;
+  }
+  function centers(viewName = null) {
+    return allCenters(viewName).filter((x) => !x.hidden);
+  }
+  function findCenterById(id) {
+    return allCenters().find((x) => x.id === id) || null;
+  }
+  function setCenters(on) {
+    const val = !!on;
+    if (dwg().centers === val) return;
+    App.change(val ? 'Mittellinien eingeblendet' : 'Mittellinien ausgeblendet', () => { dwg().centers = val; });
+    if (!val && selDim && String(selDim).startsWith('ctr|')) selDim = null;
+    render(); Panels.renderRight();
+  }
+  function hideCenter(id) {
+    if (!id || !String(id).startsWith('ctr|')) return false;
+    const d = dwg();
+    if ((d.hiddenCenters || []).includes(id)) return false;
+    App.change('Mittellinie ausgeblendet', () => {
+      const sh = dwg();
+      if (!Array.isArray(sh.hiddenCenters)) sh.hiddenCenters = [];
+      if (!sh.hiddenCenters.includes(id)) sh.hiddenCenters.push(id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function showCenter(id) {
+    if (!id) return false;
+    const d = dwg();
+    if (!(d.hiddenCenters || []).includes(id)) return false;
+    App.change('Mittellinie eingeblendet', () => {
+      const sh = dwg();
+      sh.hiddenCenters = (sh.hiddenCenters || []).filter((x) => x !== id);
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function toggleCenter(id) {
+    const d = dwg();
+    return (d.hiddenCenters || []).includes(id) ? showCenter(id) : hideCenter(id);
+  }
+  function showAllCenters() {
+    const d = dwg();
+    if (d.centers && !(d.hiddenCenters || []).length) return false;
+    App.change('Alle Mittellinien eingeblendet', () => {
+      const sh = dwg();
+      sh.centers = true;
+      sh.hiddenCenters = [];
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
   function removeSel() {
     const id = selDim; if (!id) return;
+    if (String(id).startsWith('ctr|')) { hideCenter(id); return; }
     if ((dwg().sections || []).some((x) => x.id === id)) { removeSection(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
         d.details = (d.details || []).filter((x) => x.id !== id);
         d.dims = d.dims.filter((x) => x.view !== id);
+        d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
         return;
       }
       // automatische Maße: das ganze Maß (Breite, Höhe …) oder bei Bohrungen nur das angeklickte
@@ -34556,8 +34776,11 @@ const Drawing = (() => {
       c.querySelector('input').onchange = (e) => set((x) => { x.views[k] = e.target.checked; }); box.append(c);
     }
     for (const [k, l] of [['hidden', T('menu.draw.hiddenEdges')], ['centers', T('menu.draw.centers')]]) {
-      const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-' + k, checked: !!d[k] }), l);
-      c.querySelector('input').onchange = (e) => set((x) => { x[k] = e.target.checked; }); box.append(c);
+      const c = h('label', { class: 'check', ...(k === 'centers' ? { 'data-help': 'drawingCenters' } : {}) }, h('input', { type: 'checkbox', id: 'dw-' + k, checked: !!d[k] }), l);
+      c.querySelector('input').onchange = k === 'centers'
+        ? (e) => { setCenters(e.target.checked); }
+        : (e) => set((x) => { x[k] = e.target.checked; });
+      box.append(c);
     }
     UI.pop(anchor, box);
   }
@@ -34611,7 +34834,7 @@ const Drawing = (() => {
       thin: [0.25, null],
       vis: [0.5, null],
       hid: [0.25, [2.4, 1.2]],
-      ctr: [0.25, [8, 1.2, 0.6, 1.2]],
+      ctr: [0.25, [5, 1.2, 0.6, 1.2]],
       hatch: [0.22, null],
       cutline: [0.35, [7, 1.2, 0.7, 1.2]],
       cutend: [0.7, null],
@@ -34743,7 +34966,7 @@ const Drawing = (() => {
     P(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LTYPE', 70, 3);
     P(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0.0);
     P(0, 'LTYPE', 2, 'DASHED', 70, 0, 3, '__ __ __', 72, 65, 73, 2, 40, 3.6, 49, 2.4, 49, -1.2);
-    P(0, 'LTYPE', 2, 'CENTER', 70, 0, 3, '____ _ ____', 72, 65, 73, 4, 40, 11, 49, 8, 49, -1.2, 49, 0.6, 49, -1.2);
+    P(0, 'LTYPE', 2, 'CENTER', 70, 0, 3, '____ _ ____', 72, 65, 73, 4, 40, 8, 49, 5, 49, -1.2, 49, 0.6, 49, -1.2);
     P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 7);
     for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['SCHRAFFUR', 'CONTINUOUS', 8], ['SCHNITTLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
@@ -34849,10 +35072,59 @@ const Drawing = (() => {
     bDet.onclick = () => tool_('detail');
     detSec.append(h('div', { class: 'btn-row' }, bDet));
     w.append(detSec);
+    // Mittellinien & Mittelkreuze (ZE-06)
+    const ctrSec = h('div', { class: 'section', id: 'dw-centers-sec', 'data-help': 'drawingCenters' }, h('div', { class: 'section-h' }, 'Mittellinien'));
+    const ctrToggle = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-panel-centers', checked: !!d.centers }), 'Mittellinien automatisch');
+    ctrToggle.querySelector('input').onchange = (e) => setCenters(e.target.checked);
+    ctrSec.append(ctrToggle);
+    const allCtrs = allCenters();
+    const visCtrs = allCtrs.filter((c) => !c.hidden);
+    const visCrossN = visCtrs.filter((c) => c.type === 'cross').length;
+    const visLineN = visCtrs.filter((c) => c.type === 'line').length;
+    const hiddenN = allCtrs.filter((c) => c.hidden).length || (d.hiddenCenters || []).length;
+    const sumParts = [`${visCrossN} ${visCrossN === 1 ? 'Mittelkreuz' : 'Mittelkreuze'}`, `${visLineN} ${visLineN === 1 ? 'Mittellinie' : 'Mittellinien'}`];
+    if (d.centers && hiddenN > 0) sumParts.push(`${hiddenN} ausgeblendet`);
+    ctrSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row', id: 'dw-centers-summary' }, h('span', { class: 'grow' }, sumParts.join(' · ')))));
+    if ((d.hiddenCenters || []).length > 0 || !d.centers) {
+      const bShowAll = h('button', { type: 'button', class: 'btn', id: 'dw-centers-show-all' });
+      bShowAll.innerHTML = icon('eye') + ((d.hiddenCenters || []).length ? `Alle einblenden (${(d.hiddenCenters || []).length})` : 'Alle einblenden');
+      bShowAll.onclick = () => showAllCenters();
+      ctrSec.append(h('div', { class: 'btn-row' }, bShowAll));
+    }
+    if (allCtrs.length) {
+      const detCtrs = h('details', { id: 'dw-centers-list', ...(centersListOpen ? { open: true } : {}) }, h('summary', null, `Einzeln ein-/ausblenden (${allCtrs.length})`));
+      detCtrs.addEventListener('toggle', () => { centersListOpen = detCtrs.open; });
+      const cl = h('div', { class: 'mini-list' });
+      for (const c of allCtrs) {
+        const lbl = `${viewLabel(c.view, d)} · ${c.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie'} Ø${fmtDim(c.r * 2)}`;
+        const row = h('div', {
+          class: 'mini-row ctr-row',
+          'data-ctr-id': c.id,
+          style: { padding: '3px 5px', borderRadius: '6px', background: selDim === c.id ? 'var(--accent-soft)' : '', opacity: c.hidden ? '0.55' : '' },
+        });
+        const sp = h('span', { class: 'grow', style: { cursor: 'pointer' } }, lbl);
+        sp.onclick = () => { selDim = c.id; render(); Panels.renderRight(); };
+        const tb = h('button', {
+          type: 'button',
+          class: 'btn ctr-toggle',
+          'aria-pressed': String(!c.hidden),
+          'data-tip': c.hidden ? 'Einblenden' : 'Ausblenden',
+          style: { padding: '2px 6px' },
+        });
+        tb.innerHTML = icon(c.hidden ? 'eyeOff' : 'eye');
+        tb.onclick = (e) => { e.stopPropagation(); toggleCenter(c.id); };
+        row.append(sp, tb);
+        cl.append(row);
+      }
+      detCtrs.append(cl);
+      ctrSec.append(detCtrs);
+    }
+    w.append(ctrSec);
     if (selDim) {
       const selDet = detList.find((x) => x.id === selDim);
       const isSec = secs.some((x) => x.id === selDim);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : 'Auswahl'));
+      const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : 'Auswahl'));
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
         const lFld = UI.textField({ id: 'dw-det-label', label: 'Buchstabe', value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
@@ -34863,18 +35135,28 @@ const Drawing = (() => {
         fDet.append(lFld, sFld);
         selSec.append(fDet, rFld);
       }
+      if (selCtr) {
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, viewLabel(selCtr.view, d)), h('b', { class: 'mono' }, `Ø${fmtDim(selCtr.r * 2)}`))));
+      }
       const row = h('div', { class: 'btn-row' });
       if (isSec) {
         const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, 'Blickrichtung umkehren');
         fl.onclick = () => flipSection(selDim);
         row.append(fl);
       }
-      const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
-      row.append(del);
+      if (selCtr) {
+        const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ctr-hide' });
+        hb.innerHTML = icon('eyeOff') + 'Ausblenden';
+        hb.onclick = () => hideCenter(selCtr.id);
+        row.append(hb);
+      } else {
+        const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
+        row.append(del);
+      }
       selSec.append(row);
       w.append(selSec);
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Maß, Schnitt oder Detail anklicken und <b>Entf</b> drücken zum Löschen.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Maß, Schnitt, Detail oder Mittellinie anklicken und <b>Entf</b> drücken zum Löschen bzw. Ausblenden.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
@@ -34887,6 +35169,7 @@ const Drawing = (() => {
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
     get selectedId() { return selDim; },
     addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
+    centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
     get activeTool() { return tool; },
