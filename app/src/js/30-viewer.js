@@ -652,7 +652,7 @@ const Viewer = (() => {
       const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
       const rVis = kind === 'int' ? Math.max(0.05, g.r - Math.max(0.02, g.r * 0.004)) : g.r + Math.max(0.02, g.r * 0.004);
       const spec = typeof THREAD_MAP !== 'undefined' ? THREAD_MAP[th.size] : null;
-      const pitch = spec ? spec.pitch : 1;
+      const pitch = (th.pitch > 0 ? th.pitch : null) || (spec ? spec.pitch : 1);
       const tex = getThreadTexture(kind).clone();
       tex.needsUpdate = true;
       tex.repeat.set(1, Math.max(1, Math.min(80, L / pitch)));

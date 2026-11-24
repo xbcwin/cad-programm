@@ -200,6 +200,7 @@
   "menu.ctx.faceDxf": "Fläche als DXF speichern",
   "menu.ctx.faceSvg": "Fläche als SVG speichern",
   "menu.ctx.sketchOnFace": "Skizze auf dieser Fläche",
+  "menu.ctx.thread": "Gewinde …",
   "menu.ctx.markThread": "Gewinde markieren …",
   "menu.ctx.dupLinked": "Verknüpft duplizieren",
   "menu.ctx.toSolid": "Zum Körper machen",
@@ -384,5 +385,8 @@
   "ctx.alignFront": "Vorne bündig",
   "ctx.alignCy": "Mittig (Y)",
   "ctx.alignBack": "Hinten bündig",
-  "ctx.alignBottom": "Unten bündig"
+  "ctx.alignBottom": "Unten bündig",
+  "common.emboss": "Prägen",
+  "ctx.emboss": "Prägen",
+  "ctx.embossTip": "Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"
 }

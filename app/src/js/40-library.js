@@ -82,13 +82,15 @@ const LIB = [
     { k: 'length', label: 'Lochtiefe', type: 'num', def: 12 },
   ] },
   { lib: 'threadHole', label: 'Gewindeloch (gedruckt)', role: 'hole', icon: 'target', desc: 'Echtes Innengewinde zum Drucken, mit etwas Spiel', params: [
-    { k: 'size', label: 'Gewinde', type: 'select', options: ['M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16'], def: 'M6' },
+    { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
     { k: 'clear', label: 'Spiel', type: 'num', def: 0.3 },
   ] },
   { lib: 'threadRod', label: 'Gewindebolzen', role: 'solid', icon: 'target', desc: 'Außengewinde (ISO metrisch) – z. B. für gedruckte Schraubdeckel', params: [
-    { k: 'size', label: 'Gewinde', type: 'select', options: ['M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16'], def: 'M6' },
+    { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Länge', type: 'num', def: 12 },
+    { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
   ] },
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },

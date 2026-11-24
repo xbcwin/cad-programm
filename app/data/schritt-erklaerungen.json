@@ -214,5 +214,10 @@
     "was": "Wickelt eine ebene Skizze ohne Verzerrung um eine runde Zylinderfläche – als erhabene oder vertiefte Prägung oder als Linie auf der Fläche.",
     "wozu": "Ideal für umlaufende Beschriftungen, Rillen, Nuten, Spiralkanäle oder Griffmuster auf runden Teilen.",
     "achtung": "Im Modus „Prägung“ darf der Umriss nicht breiter als der ganze Umfang (360°) sein; eine Linie kann sich auch mehrfach herumwickeln."
+  },
+  "emboss": {
+    "was": "Projiziert eine geschlossene Skizze (Text, Logo oder Form) auf eine ebene oder gewölbte Körperfläche (z. B. Zylinder oder Kugel) und prägt sie erhaben heraus oder vertieft hinein.",
+    "wozu": "Ideal für Beschriftungen, Logos, Typenschilder und griffige Markierungen auf runden Gehäusen, Rohren oder Griffen – bleibt als einzelner Körper im Verlauf änderbar.",
+    "achtung": "Prüfe bei Fehlern, ob die Skizze geschlossene Flächen hat (z. B. Text oder Kreis) und vor der gewählten Fläche liegt."
   }
 }

@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -645,7 +645,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
     if (!top || top.locked || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
@@ -806,7 +806,7 @@ const Interact = (() => {
     let items;
     if (top) {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
-      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib') && it.p && it.p.sketch;
+      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib' || it.kind === 'emboss') && it.p && it.p.sketch;
       items = [
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
@@ -814,8 +814,9 @@ const Interact = (() => {
         { icon: 'export', label: T('menu.ctx.faceDxf'), id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
         { icon: 'export', label: T('menu.ctx.faceSvg'), id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
         { icon: 'sketch', label: T('menu.ctx.sketchOnFace'), id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
-        { icon: 'thread', label: T('menu.ctx.markThread'), id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
+        { icon: 'thread', label: T('menu.ctx.thread'), id: 'cm-thread', help: 'threadFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a, { mode: 'auto' }); setTimeout(() => a.remove(), 0); } } },
         { icon: 'thicken', label: T('common.thicken'), id: 'cm-thicken', help: 'thickenFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.thicken({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'emboss', label: T('common.emboss'), id: 'cm-emboss', help: 'emboss', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startEmboss({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         '-',
         { icon: 'copy', label: T('common.duplicate'), kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
         { icon: 'moveStep', label: T('common.moveStep'), id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
@@ -905,7 +906,7 @@ const Interact = (() => {
     // Doppelklick auf einen Skizzenkörper: Skizze bearbeiten
     const id = ctxChildAt(hit, e.clientX, e.clientY) || hit.id;
     const f = Model.find(App.doc, id);
-    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
+    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib' || f.item.kind === 'emboss') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
     // Doppelklick auf eine ebene Fläche: gleich darauf zeichnen
     const r = App.results.get(hit.id); const info = r && r.data && r.data.faces && hit.faceIdx >= 0 ? r.data.faces[hit.faceIdx] : null;
     if (info && info.t === 'PLANE' && info.n && App.doc.items.some((x) => x.id === hit.id)) { Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null }); return; }

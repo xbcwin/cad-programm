@@ -520,6 +520,75 @@ export function createKernel(R, oc) {
     safeDelete(offSh);
     return res;
   }
+  function embossFaceShell(face, height, mode) {
+    const d = Math.abs(height);
+    const eps = Math.min(0.1, Math.max(0.02, d * 0.25));
+    if (face.geomType === 'PLANE') {
+      const nv = face.normalAt();
+      const nl = Math.hypot(nv.x, nv.y, nv.z) || 1;
+      const nx = nv.x / nl, ny = nv.y / nl, nz = nv.z / nl;
+      const fStart = face.clone().translate(mode === 'deboss' ? [nx * eps, ny * eps, nz * eps] : [-nx * eps, -ny * eps, -nz * eps]);
+      const vecArg = new oc.gp_Vec(...(mode === 'deboss'
+        ? [-nx * (d + eps), -ny * (d + eps), -nz * (d + eps)]
+        : [nx * (d + eps), ny * (d + eps), nz * (d + eps)]));
+      const pr = new oc.BRepPrimAPI_MakePrism(fStart.wrapped, vecArg, false, true);
+      let res = R.cast(pr.Shape());
+      pr.delete(); vecArg.delete(); fStart.delete();
+      if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+      return res;
+    }
+    const sphereShell = () => {
+      const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+      const sp = ad.Sphere();
+      const l = sp.Location();
+      const sc = [l.X(), l.Y(), l.Z()];
+      const rad = sp.Radius();
+      ad.delete();
+      const pt = face.pointOnSurface(0.5, 0.5);
+      const nv = face.normalAt();
+      const outRad = (pt.x - sc[0]) * nv.x + (pt.y - sc[1]) * nv.y + (pt.z - sc[2]) * nv.z >= 0 ? 1 : -1;
+      const d1 = mode === 'deboss' ? -d : -eps;
+      const d2 = mode === 'deboss' ? eps : d;
+      const rA = rad + outRad * d1, rB = rad + outRad * d2;
+      const rIn = Math.min(rA, rB), rOut = Math.max(rA, rB);
+      const sOut = R.makeSphere(rOut).translate(sc);
+      if (rIn <= 0.05) return sOut;
+      const sIn = R.makeSphere(rIn).translate(sc);
+      const res = sOut.cut(sIn);
+      safeDelete(sOut); safeDelete(sIn);
+      return res;
+    };
+    const fw = face.wrapped;
+    if (face.geomType === 'SPHERE' && (oc.BRep_Tool.NaturalRestriction(fw) || face.edges.length <= 2)) {
+      return sphereShell();
+    }
+    const off1 = mode === 'deboss' ? eps : -eps;
+    const off2 = mode === 'deboss' ? -(d + eps) : (d + eps);
+    let offSh = null, ts = null, sfs = null;
+    try {
+      const ob = new oc.BRepOffsetAPI_MakeOffsetShape();
+      ob.PerformBySimple(fw, off1);
+      offSh = ob.Shape();
+      ob.delete();
+      ts = new oc.BRepOffsetAPI_MakeThickSolid();
+      ts.MakeThickSolidBySimple(offSh, off2);
+      const raw = ts.Shape();
+      ts.delete(); ts = null;
+      sfs = new oc.ShapeFix_Solid(oc.TopoDS.Solid(raw));
+      sfs.Perform();
+      let res = R.cast(oc.TopoDS.Solid(sfs.Solid()));
+      sfs.delete(); sfs = null;
+      if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+      return res;
+    } catch (err) {
+      if (face.geomType === 'SPHERE') return sphereShell();
+      throw err;
+    } finally {
+      safeDelete(offSh);
+      if (ts && ts.delete) try { ts.delete(); } catch (_) {}
+      if (sfs && sfs.delete) try { sfs.delete(); } catch (_) {}
+    }
+  }
   const bboxHit = (a, b, m = 0.01) => !(a[3] < b[0] - m || b[3] < a[0] - m || a[4] < b[1] - m || b[4] < a[1] - m || a[5] < b[2] - m || b[5] < a[2] - m);
 
   function fuseAll(shapes, ownInputs = false) {
@@ -1373,30 +1442,45 @@ export function createKernel(R, oc) {
     return R.basicFaceExtrusion(polygonFace(pts), new R.Vector([0, 0, z1 - z0]));
   }
   // Metrisches ISO-Regelgewinde (vereinfacht): Kern + Gewindegang als Sweep entlang einer Schraubenlinie
-  const PITCH = { M2: 0.4, 'M2.5': 0.45, M3: 0.5, M4: 0.7, M5: 0.8, M6: 1.0, M8: 1.25, M10: 1.5, M12: 1.75, M16: 2.0 };
-  function threadShape(size, L, grow) {
-    const D = (parseFloat(String(size).slice(1)) || 6) + grow, P = PITCH[size] || 1;
-    const rMaj = D / 2, depth = 0.5413 * P, rMin = rMaj - depth;
-    const core = R.makeCylinder(rMin + 0.01, L, [0, 0, 0], [0, 0, 1]);
+  const PITCH = { M2: 0.4, 'M2.5': 0.45, M3: 0.5, M4: 0.7, M5: 0.8, M6: 1.0, M8: 1.25, M10: 1.5, M12: 1.75, M16: 2.0, M20: 2.5, M24: 3.0 };
+  function threadShape(size, L, grow, pitch) {
+    const D = (parseFloat(String(size).slice(1)) || 6) + grow;
+    const defP = PITCH[size] || 1, rawP = num(pitch, 0);
+    const P = rawP > 0 ? Math.min(Math.max(rawP, 0.25), D * 0.45) : defP;
+    const rMaj = D / 2, depth = 0.5413 * P, rMin = Math.max(0.25, rMaj - depth);
     // Trapez im Schnitt (60°-Flanken, Spitze P/8 breit)
     const crest = P / 8, root = crest + 2 * depth * Math.tan(Math.PI / 6);
-    const x0 = rMin - 0.05, z0 = -P;
-    const pts = [[x0, 0, z0 - root / 2], [rMaj, 0, z0 - crest / 2], [rMaj, 0, z0 + crest / 2], [x0, 0, z0 + root / 2]];
-    const prof = R.assembleWire([R.makeLine(pts[0], pts[1]), R.makeLine(pts[1], pts[2]), R.makeLine(pts[2], pts[3]), R.makeLine(pts[3], pts[0])]);
-    const helix = R.makeHelix(P, L + 2 * P, x0, [0, 0, z0], [0, 0, 1]);
-    let gang = R.genericSweep(prof, helix, { frenet: true });
-    const box = R.makeCylinder(rMaj + 0.5, L, [0, 0, 0], [0, 0, 1]);
-    const cut = gang.intersect(box); safeDelete(gang); safeDelete(box);
-    const out = core.fuse(cut); safeDelete(core); safeDelete(cut);
-    return out;
+    const x0 = rMin - 0.05;
+    let lastErr = null;
+    for (const phase of [0, 0.17, 0.37]) {
+      let core = null, gang = null, full = null, box = null, out = null;
+      try {
+        const z0 = -(1 + phase) * P;
+        const pts = [[x0, 0, z0 - root / 2], [rMaj, 0, z0 - crest / 2], [rMaj, 0, z0 + crest / 2], [x0, 0, z0 + root / 2]];
+        const prof = R.assembleWire([R.makeLine(pts[0], pts[1]), R.makeLine(pts[1], pts[2]), R.makeLine(pts[2], pts[3]), R.makeLine(pts[3], pts[0])]);
+        const helix = R.makeHelix(P, L + (2 + phase) * P, x0, [0, 0, z0], [0, 0, 1]);
+        gang = R.genericSweep(prof, helix, { frenet: true });
+        core = R.makeCylinder(rMin + 0.01, L + 3 * P, [0, 0, -1.5 * P], [0, 0, 1]);
+        full = core.fuse(gang); safeDelete(core); core = null; safeDelete(gang); gang = null;
+        box = R.makeCylinder(rMaj + 0.5, L, [0, 0, 0], [0, 0, 1]);
+        out = full.intersect(box); safeDelete(full); full = null; safeDelete(box); box = null;
+        if (!out || out.isNull) throw new Error('Leere Gewindeform');
+        bboxOf(out);
+        return out;
+      } catch (err) {
+        lastErr = err;
+        safeDelete(core); safeDelete(gang); safeDelete(full); safeDelete(box); safeDelete(out);
+      }
+    }
+    throw lastErr || new Error('Gewinde konnte nicht gebaut werden.');
   }
   function buildPart(p) {
     const lib = p.lib;
-    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, 0); }
+    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, 0, p.pitch); }
     if (lib === 'threadHole') {
       const L = pos(p.length, 10);
       // Innengewinde zum Drucken: etwas Luft (Spiel), durchgehend nach unten
-      const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3)).translate([0, 0, -L]);
+      const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3), p.pitch).translate([0, 0, -L]);
       return s;
     }
     if (lib === 'stdScrew') return buildStdScrew(p);
@@ -2106,7 +2190,7 @@ export function createKernel(R, oc) {
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it) };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -3165,6 +3249,121 @@ export function createKernel(R, oc) {
     if (!solids.length) throw new Error('Entlang Pfad: Die gewickelte Linie ließ sich nicht ziehen.');
     return solids.length === 1 ? solids[0] : fuseAll(solids, true);
   }
+  function buildEmbossOn(baseShape, rel, p) {
+    const regions = p.regions || [];
+    if (!regions.length) throw new Error('Prägen: Die Skizze hat keine geschlossene Fläche (z. B. Text oder Logo).');
+    const height = num(p.height, 1);
+    if (!(height > 1e-4 && isFinite(height))) throw new Error('Prägen: Die Höhe muss größer als 0 mm sein.');
+    const mode = p.mode === 'deboss' ? 'deboss' : 'emboss';
+    const flip = !!p.flip;
+
+    let f = matchFace(baseShape, p.face);
+    if (!f && p.face && p.face.t && Array.isArray(p.face.c)) {
+      const sameT = baseShape.faces.filter((fc) => fc.geomType === p.face.t);
+      let bd = Infinity;
+      for (const fc of sameT) {
+        const c = vec(fc.center);
+        const d = Math.hypot(c[0] - p.face.c[0], c[1] - p.face.c[1], c[2] - p.face.c[2]);
+        if (d < bd) { bd = d; f = fc; }
+      }
+    }
+    if (!f) throw new Error('Prägen: Die gewählte Fläche gibt es nicht mehr.');
+
+    const pl = p.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const M = planeMap({
+      o: transformPoint(rel, pl.o || [0, 0, 0]),
+      x: norm(transformDir(rel, pl.x || [1, 0, 0])),
+      n: norm(transformDir(rel, pl.n || [0, 0, 1])),
+    });
+    const samples = sampleRegionsLocal(regions, M);
+    const fInfo = faceInfo(f);
+    const fBbox = bboxOf(f);
+
+    let projDir, t0, t1;
+    const centeredSpan = (centerPt, R) => {
+      const dC = dot(sub(centerPt, M.o), M.n);
+      if (Math.abs(dC) > 1e-3) {
+        const toward = dC > 0 ? 1 : -1;
+        projDir = mul(M.n, toward);
+        const D = dot(sub(centerPt, M.o), projDir);
+        if (!flip) {
+          t0 = Math.min(0, D - R) - height - 2;
+          t1 = D;
+        } else {
+          t0 = D;
+          t1 = D + R + height + 2;
+        }
+      } else {
+        projDir = mul(M.n, flip ? -1 : 1);
+        t0 = 0;
+        t1 = R + height + 2;
+      }
+    };
+
+    const diagF = Math.hypot(fBbox[3] - fBbox[0], fBbox[4] - fBbox[1], fBbox[5] - fBbox[2]);
+    if ((f.geomType === 'CYLINDRE' || f.geomType === 'CONE') && Array.isArray(fInfo.axis)) {
+      const axO = fInfo.axis.slice(0, 3), axD = norm(fInfo.axis.slice(3, 6));
+      const closestOnAxis = add(axO, mul(axD, dot(sub(samples.center, axO), axD)));
+      const R_val = fInfo.r || diagF / 2;
+      centeredSpan(closestOnAxis, R_val);
+    } else if (f.geomType === 'SPHERE' && Array.isArray(fInfo.sc)) {
+      const R_val = fInfo.r || diagF / 2;
+      centeredSpan(fInfo.sc, R_val);
+    } else {
+      const fc = fInfo.c || [(fBbox[0] + fBbox[3]) / 2, (fBbox[1] + fBbox[4]) / 2, (fBbox[2] + fBbox[5]) / 2];
+      const dF = dot(sub(fc, samples.center), M.n);
+      const baseSign = Math.abs(dF) > 1e-4 ? (dF > 0 ? 1 : -1) : (fInfo.n && dot(M.n, fInfo.n) >= 0 ? -1 : 1);
+      projDir = mul(M.n, flip ? -baseSign : baseSign);
+      let uMin = Infinity, uMax = -Infinity;
+      for (const q of cornersOf(fBbox)) {
+        const u = dot(sub(q, M.o), projDir);
+        if (u < uMin) uMin = u;
+        if (u > uMax) uMax = u;
+      }
+      t0 = Math.min(0, uMin) - height - 2;
+      t1 = Math.max(0, uMax) + height + 2;
+    }
+
+    const shell = embossFaceShell(f, height, mode);
+    const stamps = [];
+    let cur = null;
+    try {
+      for (const rg of regions) {
+        let rf = null, prism = null, stamp = null;
+        try {
+          rf = regionFace(rg, M);
+          if (Math.abs(t0) > 1e-7) {
+            const rft = rf.translate(mul(projDir, t0));
+            safeDelete(rf);
+            rf = rft;
+          }
+          prism = R.basicFaceExtrusion(rf, new R.Vector(mul(projDir, t1 - t0)));
+          safeDelete(rf); rf = null;
+          stamp = prism.intersect(shell);
+          safeDelete(prism); prism = null;
+          let vol = 0;
+          try { vol = R.measureVolume(stamp); } catch (_) { vol = 0; }
+          if (vol > 1e-5) stamps.push(stamp);
+          else safeDelete(stamp);
+        } catch (_) {
+          safeDelete(rf); safeDelete(prism); safeDelete(stamp);
+        }
+      }
+      if (!stamps.length) throw new Error('Prägen: Die Skizze trifft die gewählte Fläche nicht – prüf Lage, Größe oder „Andere Seite“.');
+      cur = baseShape.clone();
+      for (const st of stamps) {
+        const next = mode === 'deboss' ? cur.cut(st) : cur.fuse(st);
+        safeDelete(cur);
+        cur = next;
+      }
+      const out = cur; cur = null;
+      return out;
+    } finally {
+      safeDelete(shell);
+      safeDelete(cur);
+      for (const st of stamps) safeDelete(st);
+    }
+  }
 
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
@@ -3438,6 +3637,38 @@ export function createKernel(R, oc) {
         if (mode === 'line' && wires) wrapWires.set(it.id, { wires, m: src.m, key: kWires });
         if (mode !== 'line' && anyMirror && tool) {
           featureOps.set(it.id, { targetId: tid, opType: mode === 'deboss' ? 'cut' : 'join', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        }
+        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        continue;
+      }
+      if (it.kind === 'emboss') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Prägen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const prevShape = src.shape, prevKey = src.key;
+        const rel = matMul(matInvRigid(src.m), it.m);
+        const k = keyOf([src.key, 'emboss', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+        let next = cacheGet(k);
+        if (!next) {
+          try { next = buildEmbossOn(src.shape, rel, p); cachePut(k, next); }
+          catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+        }
+        if (anyMirror) {
+          const isDeb = p.mode === 'deboss';
+          const kDelta = keyOf([k, 'embossDelta', prevKey, isDeb]);
+          let delta = cacheGet(kDelta);
+          if (!delta) {
+            try { delta = isDeb ? prevShape.cut(next) : next.cut(prevShape); cachePut(kDelta, delta); } catch (_) { delta = null; }
+          }
+          if (delta) featureOps.set(it.id, { targetId: tid, opType: isDeb ? 'cut' : 'join', tools: [{ shape: delta, m: src.m, key: kDelta }] });
         }
         src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);

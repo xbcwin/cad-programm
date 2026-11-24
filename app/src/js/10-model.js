@@ -31,6 +31,7 @@ const KINDS = {
   thicken: { label: 'Aufdicken', params: [] },
   rib: { label: 'Rippe', params: [] },
   wrap: { label: 'Wickeln', params: [] },
+  emboss: { label: 'Prägen', params: [] },
   mirrorStep: { label: 'Schritt spiegeln', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
@@ -47,6 +48,8 @@ const THREAD_SPECS = [
   { size: 'M10',  d: 10.0, pitch: 1.5,  core: 8.5  },
   { size: 'M12',  d: 12.0, pitch: 1.75, core: 10.2 },
   { size: 'M16',  d: 16.0, pitch: 2.0,  core: 14.0 },
+  { size: 'M20',  d: 20.0, pitch: 2.5,  core: 17.5 },
+  { size: 'M24',  d: 24.0, pitch: 3.0,  core: 21.0 },
 ];
 const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
@@ -256,6 +259,7 @@ const Model = (() => {
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
       if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
+      if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
@@ -326,6 +330,7 @@ const Model = (() => {
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
     else if (it.kind === 'rib') o.p = ribParams(it, V);
     else if (it.kind === 'wrap') o.p = wrapParams(it, V);
+    else if (it.kind === 'emboss') o.p = embossParams(it, V);
     else if (it.kind === 'import') {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -522,6 +527,23 @@ const Model = (() => {
     const deg = (width / R) * (180 / Math.PI);
     const pct = (width / (2 * Math.PI * R)) * 100;
     return { width, radius: R, deg, pct };
+  }
+  function embossParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      plane,
+      regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })),
+      height: num(p.height, V, 1),
+      mode: p.mode === 'deboss' ? 'deboss' : 'emboss',
+      flip: !!p.flip,
+    };
   }
   function mirrorStepParams(it, V) {
     const p = it.p || {};
@@ -884,7 +906,7 @@ const Model = (() => {
     if (!it) return null;
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
-    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'revolve') && it.p && it.p.sketch) {
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
       const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
       const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
       if (b) {
@@ -967,6 +989,7 @@ const Model = (() => {
         const d = f(p.depth ?? 2);
         return `${p.mode === 'deboss' ? '−' : '+'}${d}${u}${angTxt}`;
       }
+      case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'mirrorStep': {
@@ -1105,7 +1128,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'wrap' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
