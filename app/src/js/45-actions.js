@@ -336,7 +336,7 @@ const Actions = (() => {
       const GM = Model.localMatrix(G);
       const at = ff.list.indexOf(G);
       ff.list.splice(at, 1);
-      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); ff.list.splice(at + i, 0, c); kids.push(c.id); });
+      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
     });
     App.select(kids);
     if ((f.item.finishes || []).length) UI.toast('Die Rundungen der Gruppe wurden entfernt, weil es die Gruppe nicht mehr gibt.', { icon: 'info' });
@@ -442,9 +442,20 @@ const Actions = (() => {
     });
   }
   // ---------- Kanten ----------
+  function edgeSigOf(id, edgeIdx) {
+    const r = App.results.get(id); if (!r || !r.data || !r.data.edges) return null;
+    const g = r.data.edges[edgeIdx]; if (!g) return null;
+    const r5 = (arr) => arr.map((v) => round(v, 5));
+    const sig = { m: r5(g.m), l: round(g.l, 5), t: g.t };
+    if (Array.isArray(g.a)) sig.a = r5(g.a);
+    if (Array.isArray(g.b)) sig.b = r5(g.b);
+    if (g.t === 'CIRCLE' && g.c && g.n && g.r != null) { sig.c = r5(g.c); sig.n = r5(g.n); sig.r = round(g.r, 5); }
+    if (Array.isArray(g.pts) && g.pts.length >= 2) sig.pts = g.pts.map(r5);
+    return sig;
+  }
   function edgeSigs(edges) {
     const out = [];
-    for (const e of edges) { const r = App.results.get(e.id); if (!r) continue; const g = r.data.edges[e.edgeIdx]; if (!g) continue; out.push({ id: e.id, sig: { m: g.m.map((v) => round(v, 5)), l: round(g.l, 5), t: g.t } }); }
+    for (const e of edges) { const sig = edgeSigOf(e.id, e.edgeIdx); if (sig) out.push({ id: e.id, sig }); }
     return out;
   }
   function cuttersOf(id) {
@@ -512,6 +523,8 @@ const Actions = (() => {
     App.change(`Skizze auf „${name}“`, (doc) => {
       const f = Model.find(doc, id); if (!f || !f.item.p || !f.item.p.sketch) return;
       const it = f.item; it.p.sketch.plane = deepClone(plane); it.t = Model.T0();
+      if (key.startsWith('d:')) it.p.sketch.planeRef = { kind: 'datum', datumId: key.slice(2), name };
+      else delete it.p.sketch.planeRef;
       for (const e of it.p.sketch.ents || []) if (e.link) { delete e.link; dropped++; }
     });
     UI.toast(`Die Skizze liegt jetzt auf „${name}“.` + (dropped ? ` ${dropped} übernommene Kanten hängen nicht mehr am Körper.` : ''), { icon: 'check' });
@@ -730,6 +743,6 @@ const Actions = (() => {
     });
     return true;
   }
-  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

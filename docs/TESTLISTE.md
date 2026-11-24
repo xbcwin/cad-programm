@@ -1703,6 +1703,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Gelenk-Abspielen bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` bewegt `Joints.play()` das bewegliche Teil über den Timer-Fallback und stellt am Ende Ausgangslage, `Joints.playing` und den `#jt-play`-Knopf selbst nach zwischenzeitlichem `Panels.renderRight()` sauber zurück (`App.revision` unverändert).
 - [ ] **Von Hand**: Im Bauteil-Bearbeiten-Modus auf eine Bohrung klicken und direkt „Muster → Kreismuster“ wählen sowie bei einem Gelenk unter Last „Bewegung abspielen“ ansehen.
 
+## Muster von Schritten (Auto [A-036])
+
+- [x] **Tasche 6× im Kreis im selben Körper**: Skizzen-Tasche mit `op: cut` per „Muster → Kreismuster“ (Anzahl 6) gemustert; alle 6 Taschen landen im Zielkörper (`Viewer.nodes.size === 1`, `App.mergedInto`, Volumenabzug `6 × Taschenvolumen`).
+- [x] **Kopie per Klick auslassen & durchgestrichen**: Klick auf `.pat-dot[data-idx="2"]` im 3D-Bild lässt Kopie 3 aus (`p.skip = [2]`), markiert 3D-Punkt und Chip durchgestrichen (`.skipped`, `line-through`) und erhöht das Volumen exakt um eine Tasche (`5` Taschen, Anzeige `5/6× 360°`).
+- [x] **Wieder aktivieren, Undo/Redo & Speichern**: Klick auf `.pat-chip[data-idx="2"]` stellt 6 Taschen wieder her; `App.undo()` / `App.redo()` sowie Speichern und Neuladen der Projektdatei erhalten `G.op`, `p.skip` und das Volumen; Hilfetext `patternSkip` ist vorhanden.
+- [x] **Rechteckmuster & Auflösen**: Tasche als 3×2-Rechteckmuster ergibt 6 Taschen im Zielkörper, Auslassen einer Kopie ergibt 5 Taschen, „Auflösen“ behält nur 1 Tasche mit wiederhergestelltem `op: cut`.
+- [ ] **Von Hand**: Im Browser bei einer schräg stehenden Tasche und bei einer Rippe (`rib`) ein Muster anlegen, Kopien per Klick im 3D-Bild durchgestrichen auslassen und mit „Alle aktivieren“ zurücksetzen.
+
 ## Fläche aufdicken & Körper skalieren (Auto [A-032])
 
 - [x] **Skalieren gleichmäßig (×2)**: Würfel 10×10×10 über Kontextleiste skaliert (`#sc-s = 2`) ergibt das 8-fache Volumen (8000 mm³) und 20×20×20 mm als Schritt `scale` im Verlauf.
@@ -1711,6 +1719,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Richtungen & Modi sowie gewölbte Fläche**: Eigene Platte (`mode='new'`) außen/innen/mittig, Abzug (`mode='cut'`) nach innen (27 mm), Unterdrücken/Zeitleisten-Marker sowie Aufdicken einer gewölbten Zylinderfläche (Ø 20 → Ø 24 mm) funktionieren ohne Fehler.
 - [x] **Hilfetexte & Befehle**: `scaleBody` und `thickenFace` in `werkzeug-hilfen.json` sowie Befehle `scale-body` und `thicken-face` vorhanden.
 - [ ] **Von Hand**: Im Browser einen Körper mit Rundungen ungleichmäßig skalieren sowie an einer gekrümmten Freiformfläche „Aufdicken“ mit „Andere Fläche wählen“ und „Eigene Platte“ prüfen.
+
+## Kaputter Bezug: neu wählen (Auto [A-035], KP-12)
+
+- [x] **Verlorene Kante bei Rundung & Fase**: Ändert sich ein Maß so, dass die Kante einer Rundung oder Fase verschwindet, zeigen Verlauf (`.node .warn-ref`), Zeitleiste (`.tl-chip.warn`) und Eigenschaften-Panel (`.warn-box`) ein gelbes Warnzeichen samt „Neu wählen“.
+- [x] **Gestrichelte Alt-Lage & Kante neu wählen**: Der Assistent (`RefFix`) blendet die alte Lage gelb gestrichelt im 3D-Bild ein (`Viewer.hasRefGhost()`), übernimmt per Klick eine neue Kante am Körper und rechnet danach fehlerfrei weiter.
+- [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
+
+## Bohrungs-Assistent: mehr Gewinde (Auto [A-038], KP-18)
+
+- [x] **Feingewinde (DIN 13 / DIN 336)**: Norm `metric_fine` bietet M4×0,5 bis M20×1,5 (inkl. M8×1 und M10×1,25); M10×1,25 bohrt exakt Kernloch Ø 8,8 mm (Volumenabzug und Zylinder-Ø geprüft).
+- [x] **Zoll-Gewinde UNC & UNF (ASME B1.1 / B18.3)**: Normen `unc` und `unf` von #4 bis 1/2" wählbar; 1/4"-20 UNC bohrt exakt Kernloch Ø 5,1 mm, Durchgang mit 82°-Senkkopf erzeugt passende Kegelfläche.
+- [x] **Rohrgewinde G (ISO 228-1 / DIN 3852-2)**: Norm `pipe_g` bietet G1/8 bis G1; G1/4 bohrt Kernloch Ø 11,8 mm, Durchgang bietet statt 90°-Senkkopf die Flachsenkung nach DIN 3852-2.
+- [x] **Datentabelle & Hilfetext**: `app/data/gewinde.json` enthält alle Kernloch- und Senkungsmaße mit Norm-Quellenangaben (`_quellen`, `quelle`), und `threadStandards` steht in `app/data/werkzeug-hilfen.json` samt `data-help` an `#hw-norm`.
+- [ ] **Von Hand**: Im Browser den Bohrungs-Assistenten auf einer Fläche öffnen, zwischen den fünf Normen wechseln und Querschnittsvorschau sowie Hinweise im Eigenschaften-Panel prüfen.
 
 ## Schritt spiegeln (Auto [A-037], KP-14)
 

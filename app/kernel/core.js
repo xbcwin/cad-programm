@@ -62,7 +62,7 @@ export function createKernel(R, oc) {
     if (e) { e.gen = gen; return e.shape; }
     return null;
   }
-  function cachePut(key, shape, errs, resolved) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null }); return shape; }
+  function cachePut(key, shape, errs, resolved, baseBox = null) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null, baseBox: baseBox || null }); return shape; }
 
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
@@ -122,6 +122,49 @@ export function createKernel(R, oc) {
     const Ry = [cb, 0, -sb, 0, 0, 1, 0, 0, sb, 0, cb, 0, 0, 0, 0, 1];
     const Rz = [cc, sc, 0, 0, -sc, cc, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
     return matMul(Rx, matMul(Ry, Rz));
+  }
+  function matRotAxis(c, ax, deg) {
+    const a = norm(ax), x = a[0], y = a[1], z = a[2], rad = (deg * Math.PI) / 180;
+    const cs = Math.cos(rad), sn = Math.sin(rad), t = 1 - cs;
+    const R = [
+      cs + x * x * t, x * y * t + z * sn, x * z * t - y * sn, 0,
+      x * y * t - z * sn, cs + y * y * t, y * z * t + x * sn, 0,
+      x * z * t + y * sn, y * z * t - x * sn, cs + z * z * t, 0,
+      0, 0, 0, 1,
+    ];
+    return matMul(matTrans(c[0], c[1], c[2]), matMul(R, matTrans(-c[0], -c[1], -c[2])));
+  }
+  function patternStepMatrices(p) {
+    const ID = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const skipSet = new Set(Array.isArray(p.skip) ? p.skip.map((x) => Math.round(Number(x))) : []);
+    const out = [];
+    if (p.pt === 'rect') {
+      const nx = Math.max(1, Math.min(60, Math.round(num(p.nx, 1)))), ny = Math.max(1, Math.min(60, Math.round(num(p.ny, 1))));
+      const dx = num(p.dx, 10), dy = num(p.dy, 10);
+      let idx = 0;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
+        if (!skipSet.has(idx)) out.push(idx === 0 ? ID : matTrans(i * dx, j * dy, 0));
+      }
+    } else if (p.pt === 'circ') {
+      const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
+      const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
+      const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
+      const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
+      const c = picked ? p.ao.map(Number) : [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)];
+      for (let k = 0; k < n; k++) if (!skipSet.has(k)) out.push(k === 0 ? ID : matRotAxis(c, ax, k * step));
+    } else if (p.pt === 'path' && Array.isArray(p.places)) {
+      const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
+      const lim = Math.min(p.places.length, 200);
+      for (let k = 0; k < lim; k++) {
+        if (skipSet.has(k)) continue;
+        if (k === 0) { out.push(ID); continue; }
+        const q = p.places[k], d = (q.d || [0, 0, 0]).map(Number);
+        let m = matTrans(d[0], d[1], d[2]);
+        if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m = matMul(m, matRotAxis(p0, ax, Number(q.a)));
+        out.push(m);
+      }
+    }
+    return out.length ? out : [ID];
   }
   function buildTransformMatrix(p, wb) {
     const dx = num(p.dx, 0), dy = num(p.dy, 0), dz = num(p.dz, 0);
@@ -803,11 +846,12 @@ export function createKernel(R, oc) {
     };
 
     const pool = (ctx && ctx.pool) || [];
+    const refErr = (m) => { const e = new Error(m); e.code = 'ref'; return e; };
     if (p.extent === 'toFace') {
       const ref = p.toFace;
-      if (!ref) throw new Error('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
+      if (!ref) throw refErr('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
       if (ref.datumId) {
-        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw new Error('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
+        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw refErr('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
         const r = extrudeToPlane(ref.plane.o, norm(ref.plane.n), 'Bis zu gewählter Fläche');
         return { shape: r.shape, resolved: { dist: Math.round(r.dist * 1e6) / 1e6, targetId: ref.datumId } };
       }
@@ -815,11 +859,11 @@ export function createKernel(R, oc) {
       const wasConsumed = !!(ctx && ctx.consumed && ctx.consumed.has(tid));
       while (tid && ctx && ctx.consumed && ctx.consumed.has(tid)) tid = ctx.consumed.get(tid);
       const T = pool.find((e) => e.ids.has(tid));
-      if (!T) throw new Error('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
+      if (!T) throw refErr('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
       if (T.id === it.id) throw new Error('Bis zu gewählter Fläche: Das Teil kann nicht bis zu sich selbst hochgezogen werden.');
       const useWorld = wasConsumed && T.id !== ref.id;
       const matched = matchFaceOnShape(useWorld ? T.worldShape : T.localShape, ref, useWorld);
-      if (!matched) throw new Error('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
+      if (!matched) throw refErr('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
       const fi = matched.info;
       if (fi.t === 'PLANE' && fi.n && fi.c) {
         const pF = useWorld ? fi.c : transformPoint(T.m, fi.c);
@@ -1358,17 +1402,19 @@ export function createKernel(R, oc) {
     if (lib === 'stdScrew') return buildStdScrew(p);
     if (lib === 'stdNut') return buildStdNut(p);
     if (lib === 'stdWasher') return buildStdWasher(p);
-    const s = SCREW[p.size] || SCREW.M3;
+    const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0);
     if (lib === 'screwHole') {
       const L = pos(p.length, 10);
       const hd = holeD(s, p.fit);
       let shape = R.makeCylinder((hd + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
-      if (p.head === 'countersunk') {
-        const rTop = (s.csk + tol) / 2, rBot = (hd + tol) / 2, h = rTop - rBot; // 90°-Senkung
+      if (p.head === 'countersunk' && s.csk > hd) {
+        const rTop = (s.csk + tol) / 2, rBot = (hd + tol) / 2;
+        const halfAng = (num(s.cskAngle, 90) * Math.PI) / 360;
+        const h = (rTop - rBot) / Math.tan(halfAng); // 90° (metrisch) oder 82° (Zoll UNC/UNF)
         const cone = revolveProfile([[0, -h], [rBot, -h], [rTop, 0], [rTop, LIFT], [0, LIFT]]);
         shape = shape.fuse(cone);
-      } else if (p.head === 'counterbore') {
+      } else if (p.head === 'counterbore' && s.cbD > hd && s.cbH > 0) {
         shape = shape.fuse(R.makeCylinder((s.cbD + tol) / 2, s.cbH + LIFT, [0, 0, -s.cbH], [0, 0, 1]));
       }
       return shape;
@@ -1868,9 +1914,17 @@ export function createKernel(R, oc) {
     const t = num(fin.r, 2);
     const b = bboxOf(shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     const sigs = (fin.faces || []).filter((f) => f && f.c);
-    const pick = (f) => { const c = vec(f.center); return sigs.some((s) => Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol); };
-    let count = 0; try { for (const f of shape.faces) if (pick(f)) count++; } catch (_) {}
-    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    const matchFace = (f, s) => { const c = vec(f.center); return Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol; };
+    const pick = (f) => sigs.some((s) => matchFace(f, s));
+    let count = 0;
+    const faceArr = [];
+    try { for (const f of shape.faces) { faceArr.push(f); if (pick(f)) count++; } } catch (_) {}
+    const missing = [];
+    sigs.forEach((s, i) => { if (!faceArr.some((f) => matchFace(f, s))) missing.push(i); });
+    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: sigs.map((_, i) => i), message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    if (missing.length) {
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', partial: true, missing, message: `${missing.length} von ${sigs.length} offenen Flächen für die Wandstärke gibt es nicht mehr.` });
+    }
     const minDim = Math.min(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     if (!(t > 0) || 2 * t >= minDim - 1e-6) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` }); return shape; }
     try {
@@ -1889,9 +1943,30 @@ export function createKernel(R, oc) {
       if (!(r > 0)) continue;
       let matcher;
       try { matcher = makeEdgeMatcher(fin.edges, shape); } catch (e) { continue; }
+      const shapeEdges = [];
       let count = 0;
-      try { for (const e of shape.edges) if (matcher(e)) count++; } catch (_) {}
-      if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die gewählten Kanten gibt es nicht mehr.' }); continue; }
+      try { for (const e of shape.edges) { shapeEdges.push(e); if (matcher(e)) count++; } } catch (_) {}
+      const missing = [];
+      if (Array.isArray(fin.edges)) {
+        const mids = shapeEdges.map((e) => { try { return vec(e.pointAt(0.5)); } catch (_) { return null; } });
+        fin.edges.forEach((s, i) => {
+          if (!s || !s.m) { missing.push(i); return; }
+          const tol = 0.02 + 0.002 * num(s.l, 1);
+          const ok = mids.some((m) => m && Math.hypot(m[0] - s.m[0], m[1] - s.m[1], m[2] - s.m[2]) < tol);
+          if (!ok) missing.push(i);
+        });
+      }
+      const kindTxt = fin.type === 'chamfer' ? 'Fase' : 'Rundung';
+      if (!count) {
+        const msg = Array.isArray(fin.edges) && fin.edges.length === 1
+          ? `Die gewählte Kante der ${kindTxt} gibt es nicht mehr.`
+          : `Die gewählten Kanten der ${kindTxt} gibt es nicht mehr.`;
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', missing: Array.isArray(fin.edges) ? fin.edges.map((_, i) => i) : null, message: msg });
+        continue;
+      }
+      if (missing.length) {
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', partial: true, missing, message: `${missing.length} von ${fin.edges.length} gewählten Kanten der ${kindTxt} gibt es nicht mehr.` });
+      }
       try {
         shape = tryFinish(shape, fin.type, r, matcher, fin);
       } catch (err) {
@@ -1934,11 +2009,16 @@ export function createKernel(R, oc) {
 
   // ---------- Muster, Spiegeln mit Kopie, Teilen ----------
   function patternShape(base, p) {
-    const copies = [base];
+    const skipSet = new Set(Array.isArray(p.skip) ? p.skip.map((x) => Math.round(Number(x))) : []);
+    const copies = [];
     if (p.pt === 'rect') {
       const nx = Math.max(1, Math.min(60, Math.round(num(p.nx, 1)))), ny = Math.max(1, Math.min(60, Math.round(num(p.ny, 1))));
       const dx = num(p.dx, 10), dy = num(p.dy, 10);
-      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) copies.push(base.clone().translate([i * dx, j * dy, 0]));
+      let idx = 0;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
+        if (skipSet.has(idx)) continue;
+        copies.push(idx === 0 ? base : base.clone().translate([i * dx, j * dy, 0]));
+      }
     } else if (p.pt === 'circ') {
       const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
@@ -1946,11 +2026,18 @@ export function createKernel(R, oc) {
       const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
       const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
       const c = picked ? p.ao.map(Number) : [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)];
-      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, c, ax));
+      for (let k = 0; k < n; k++) {
+        if (skipSet.has(k)) continue;
+        copies.push(k === 0 ? base : base.clone().rotate(k * step, c, ax));
+      }
     } else if (p.pt === 'path' && Array.isArray(p.places)) {
       // Muster entlang Kurve: Lage und Drehung je Kopie kommen fertig aus dem Modell
       const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
-      for (const q of p.places.slice(1, 200)) {
+      const lim = Math.min(p.places.length, 200);
+      for (let k = 0; k < lim; k++) {
+        if (skipSet.has(k)) continue;
+        if (k === 0) { copies.push(base); continue; }
+        const q = p.places[k];
         let c = base.clone();
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) c = c.rotate(Number(q.a), p0, ax);
         const d = (q.d || [0, 0, 0]).map(Number);
@@ -1958,6 +2045,7 @@ export function createKernel(R, oc) {
         copies.push(c);
       }
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
+      copies.push(base);
       const mn = p.mn.map(Number); let mo = p.mo.map(Number);
       if (p.bind) {
         // an die Fläche gebunden: die äußerste ebene Fläche mit dieser Richtung – wächst das Original, wandert die Ebene mit
@@ -1973,11 +2061,14 @@ export function createKernel(R, oc) {
       }
       copies.push(base.clone().mirror(mn, mo));
     } else if (p.pt === 'mirror') {
+      copies.push(base);
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ';
       const n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = num(p.off, 0);
       copies.push(base.clone().mirror(pl, [n[0] * off, n[1] * off, n[2] * off]));
     }
-    if (copies.length === 1) return base;
+    if (!copies.length) return base;
+    if (!copies.includes(base)) safeDelete(base);
+    if (copies.length === 1) return copies[0];
     return fuseAll(copies, true);
   }
   function splitBody(shape, p) {
@@ -2030,10 +2121,10 @@ export function createKernel(R, oc) {
         if (it.kind === 'group') Object.assign(ctx.resolved, ce.resolved);
         else ctx.resolved[it.id] = ce.resolved;
       }
-      return { shape: hit, key };
+      return { shape: hit, key, baseBox: ce.baseBox || null };
     }
     const e0 = errors.length;
-    let shape, resolvedInfo = null;
+    let shape, resolvedInfo = null, baseBox = null;
     try {
       if (it.kind === 'group') {
         const kids = (it.children || []).filter((c) => !c.hidden);
@@ -2092,7 +2183,7 @@ export function createKernel(R, oc) {
           if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
         } else if (holes.length) shape = fuseAll(holes, true);
         else shape = null;
-        if (shape && op === 'pattern') shape = patternShape(shape, it.p);
+        if (shape && op === 'pattern') { baseBox = bboxOf(shape); shape = patternShape(shape, it.p); }
         if (shape && op === 'split') shape = splitBody(shape, it.p);
       } else if (it.kind === 'extrude' && isDynamicExtent(it.p)) {
         const res = buildExtrudeToTarget(it, W || it.m, ctx);
@@ -2113,11 +2204,11 @@ export function createKernel(R, oc) {
         if (it.mir[2] < 0) shape = shape.mirror('XY', [0, 0, 0]);
       }
     } catch (err) {
-      errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
+      errors.push({ itemId: it.id, code: err && (err.code === 'split' || err.code === 'ref') ? err.code : 'build', message: friendlyError(err) });
       shape = null;
     }
-    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo);
-    return { shape, key };
+    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo, baseBox);
+    return { shape, key, baseBox };
   }
   function friendlyError(err) {
     const msg = String((err && err.message) || err || '');
@@ -3020,6 +3111,42 @@ export function createKernel(R, oc) {
         if (produced.length && firstTid) featureOps.set(it.id, { targetId: firstTid, opType: firstOp || 'cut', tools: produced });
         continue;
       }
+      if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) {
+        const rib = it.children.find((c) => c.kind === 'rib');
+        const rp = (rib && rib.p) || {};
+        let tid = (it.op && it.op.target) || rp.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Rippen-Muster: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const mats = patternStepMatrices(it.p);
+        const k = keyOf([src.key, 'ribPat', it.p, rp, it.m.map((v) => Math.round(v * 1e6) / 1e6), rib.m.map((v) => Math.round(v * 1e6) / 1e6)]);
+        let next = cacheGet(k);
+        if (!next) {
+          let cur = src.shape;
+          try {
+            for (const M of mats) {
+              const rel = matMul(matInvRigid(src.m), matMul(it.m, matMul(M, rib.m)));
+              const nxt = buildRibOn(cur, rel, rp);
+              if (cur !== src.shape) safeDelete(cur);
+              cur = nxt;
+            }
+            next = cur === src.shape ? src.shape.clone() : cur;
+            cachePut(k, next);
+          } catch (err) {
+            if (cur && cur !== src.shape) safeDelete(cur);
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        continue;
+      }
       const op = it.op, o = live.get(it.id);
       if (!op || !NAMES[op.type] || !o || !o.shape || it.role === 'hole') continue;
       let tid = op.target;
@@ -3126,7 +3253,7 @@ export function createKernel(R, oc) {
       });
     }
     const ctx = { pool, poolKey: poolKeyOf(), consumed: p1Consumed, resolved: {} };
-    const evald = pass1Evald.map((e) => ({ it: e.it, shape: e.shape, key: e.key, wb: e.wb }));
+    const evald = pass1Evald.map((e) => ({ it: e.it, shape: e.shape, key: e.key, wb: e.wb, baseBox: e.baseBox }));
     try {
       for (let i = 0; i < tops.length; i++) {
         if (!pass1Evald[i].dyn) continue;
@@ -3173,7 +3300,7 @@ export function createKernel(R, oc) {
     const nodes = [];
     for (const e of evald) {
       const it = e.it;
-      if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id) }); continue; }
+      if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id), ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...(e.wb ? { ownBox: e.wb } : {}) }); continue; }
       if (!e.shape) { nodes.push({ id: it.id, key: null, empty: true }); continue; }
       let resultKey = e.key, result = e.shape;
       if (it.role !== 'hole') {
@@ -3199,7 +3326,7 @@ export function createKernel(R, oc) {
           }
         }
       }
-      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true }); continue; }
+      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) }); continue; }
       const mk = resultKey + '|' + Q.level;
       let payload = meshCache.get(mk);
       if (!payload) {
@@ -3207,7 +3334,7 @@ export function createKernel(R, oc) {
         try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
-      nodes.push({ id: it.id, key: resultKey, ...clonePayload(payload) });
+      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...clonePayload(payload) });
     }
     gc();
     return { nodes, errors, times, resolved };

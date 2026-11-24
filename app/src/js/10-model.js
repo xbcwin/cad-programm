@@ -114,35 +114,51 @@ const Model = (() => {
     if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
     return m;
   }
-  // Lage jeder Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
-  function patternMatrices(g, V) {
-    const I = new THREE.Matrix4(), out = [I];
-    if (!g.p || g.p.op !== 'pattern') return out;
+  // Alle Kopie-Instanzen einer Muster-Gruppe (inkl. skipped-Flag) – genau wie der Kern sie baut
+  function patternInstances(g, V) {
+    const I = new THREE.Matrix4();
+    if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, matrix: I, skipped: false, label: '1' }];
     const p = g.p.pt === 'path' ? pathPatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
+    const skipSet = new Set(Array.isArray(g.p.skip) ? g.p.skip.map((x) => Math.round(Number(x))) : []);
     const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
     const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
+    const out = [];
     if (p.pt === 'rect') {
       const nx = clamp(Math.round(N('nx', 1)), 1, 60), ny = clamp(Math.round(N('ny', 1)), 1, 60), dx = N('dx', 10), dy = N('dy', 10);
-      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) out.push(new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0));
+      let idx = 0;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
+        out.push({ idx, matrix: idx === 0 ? I : new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0), skipped: skipSet.has(idx), label: nx > 1 && ny > 1 ? `${i + 1}·${j + 1}` : String(idx + 1) });
+      }
     } else if (p.pt === 'circ') {
       const n = clamp(Math.round(N('n', 4)), 1, 120), ang = N('ang', 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
       const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
       const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
       const c = picked ? p.ao.map(Number) : [N('cx', 0), N('cy', 0), N('cz', 0)];
-      for (let k = 1; k < n; k++) out.push(rot(c, ax, k * step));
+      for (let k = 0; k < n; k++) {
+        out.push({ idx: k, matrix: k === 0 ? I : rot(c, ax, k * step), skipped: skipSet.has(k), label: String(k + 1) });
+      }
     } else if (p.pt === 'path') {
-      for (const q of (p.places || []).slice(1, 200)) {
+      const places = (p.places || []).slice(0, 200);
+      if (!places.length) out.push({ idx: 0, matrix: I, skipped: false, label: '1' });
+      else places.forEach((q, k) => {
+        if (k === 0) { out.push({ idx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
         const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
-        out.push(m);
-      }
-    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) out.push(refl(p.mn.map(Number), p.mo.map(Number)));
-    else if (p.pt === 'mirror') {
+        out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
+      });
+    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
+      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(p.mn.map(Number), p.mo.map(Number)), skipped: false, label: '2' });
+    } else if (p.pt === 'mirror') {
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ', n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = N('off', 0);
-      out.push(refl(n, [n[0] * off, n[1] * off, n[2] * off]));
+      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(n, [n[0] * off, n[1] * off, n[2] * off]), skipped: false, label: '2' });
     }
-    return out;
+    return out.length ? out : [{ idx: 0, matrix: I, skipped: false, label: '1' }];
+  }
+  // Lage jeder aktiven Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
+  function patternMatrices(g, V) {
+    const mats = patternInstances(g, V).filter((x) => !x.skipped).map((x) => x.matrix);
+    return mats.length ? mats : [new THREE.Matrix4()];
   }
   // Weltlage eines Teils – einmal je Kopie, wenn es in Muster-Gruppen steckt (z. B. ein Motor, viermal im Kreis kopiert)
   function instanceMatrices(doc, id, V = vars(doc).v) {
@@ -334,7 +350,16 @@ const Model = (() => {
     } else if (it.kind === 'mirrorStep') {
       o.p = mirrorStepParams(it, V);
     }
-    else o.p = resolveP(it.p, V);
+    else {
+      o.p = resolveP(it.p, V);
+      if (it.kind === 'part') {
+        if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
+        if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
+          const te = threadEntry(o.p.size);
+          if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+        }
+      }
+    }
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
@@ -475,6 +500,7 @@ const Model = (() => {
   }
   function pathPatternParams(it, V) {
     const p = it.p || {}, out = { op: 'pattern', pt: 'path', places: [], n: [0, 0, 1], p0: [0, 0, 0], align: p.align !== false && p.align !== 'nein' };
+    if (Array.isArray(p.skip) && p.skip.length) out.skip = p.skip.slice();
     if (!p.sketch) return out;
     const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0)); if (!L.length) return out;
     const pl = p.sketch.plane, x = pl.x, n = pl.n, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
@@ -753,6 +779,46 @@ const Model = (() => {
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
         return null;
       }
+    }
+    return null;
+  }
+  function itemLocalBox(it, V = {}) {
+    if (!it) return null;
+    const pb = primitiveBox(it.kind, resolveP(it.p, V));
+    if (pb) return pb;
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'revolve') && it.p && it.p.sketch) {
+      const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
+      const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
+      if (b) {
+        const pl = it.p.sketch.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+        const x = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize(), n = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize(), y = new THREE.Vector3().crossVectors(n, x), o = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+        const dist = num(it.p.dist, V, 10), dir = it.p.dir || 'normal';
+        const w0 = it.kind === 'extrude' ? (dir === 'both' ? -dist / 2 : dir === 'two' ? -num(it.p.dist2, V, dist) : dir === 'reverse' ? -dist : 0) : -1;
+        const w1 = it.kind === 'extrude' ? (dir === 'both' ? dist / 2 : dir === 'reverse' ? 0 : dist) : 1;
+        const box = new THREE.Box3();
+        for (const u of [b[0], b[2]]) for (const v of [b[1], b[3]]) for (const w of [w0, w1]) {
+          box.expandByPoint(o.clone().addScaledVector(x, u).addScaledVector(y, v).addScaledVector(n, w));
+        }
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      }
+    }
+    if (it.kind === 'part') {
+      const p = resolveP(it.p || {}, V);
+      const r = Math.max(1, Number(p.d) || 6) / 2, dep = Math.max(2, Number(p.depth || p.length || p.h) || 10);
+      return [-r, -r, -dep / 2, r, r, dep / 2];
+    }
+    if (it.kind === 'group' && it.children && it.children.length) {
+      const prev = curV; curV = V;
+      try {
+        const box = new THREE.Box3();
+        for (const c of it.children) {
+          if (c.hidden) continue;
+          const cb = itemLocalBox(c, V); if (!cb) continue;
+          const b = new THREE.Box3(new THREE.Vector3(cb[0], cb[1], cb[2]), new THREE.Vector3(cb[3], cb[4], cb[5])).applyMatrix4(localMatrix(c, new THREE.Matrix4()));
+          box.union(b);
+        }
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      } finally { curV = prev; }
     }
     return null;
   }
@@ -1132,6 +1198,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

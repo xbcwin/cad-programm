@@ -160,7 +160,7 @@ const Panels = (() => {
     if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
     if (treeKind === 'hole') return it.role === 'hole';
     if (treeKind === 'hidden') return !!it.hidden || (it.bodies || []).some((b) => b && b.hidden);
-    if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
+    if (treeKind === 'err') return App.errorsFor(it.id).length > 0 || RefFix.hasBrokenRef(it.id);
     if (treeKind === 'note') return !!it.note;
     if (treeKind === 'ai') return !!it.ai;
     return true;
@@ -310,7 +310,8 @@ const Panels = (() => {
       if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
-      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
+      const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
+      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
       const acts = h('span', { class: 'acts' });
       const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
       dup.innerHTML = icon('copy');
@@ -325,8 +326,17 @@ const Panels = (() => {
       acts.append(dup, eye, del);
       row.append(tw, sw, nm);
       if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
-      const errs = App.errorsFor(it.id);
-      if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      const hardErrs = RefFix.hardErrorsFor(it.id);
+      const refIssues = RefFix.issuesOf(it.id);
+      const childRef = !refIssues.length && it.kind === 'group' && !expanded.has(it.id) ? RefFix.firstDescendantIssue(it) : null;
+      if (hardErrs.length) { const er = h('span', { class: 'err', 'data-tip': hardErrs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      if (refIssues.length || childRef) {
+        const iss = refIssues[0] || childRef;
+        const wr = h('span', { class: 'warn-ref', 'data-tip': iss.message + ' · Klicken zum Neu wählen', title: iss.message + ' · Klicken zum Neu wählen', 'data-help': 'refFix' });
+        wr.innerHTML = icon('warn');
+        wr.onclick = (e) => { e.stopPropagation(); RefFix.start(iss); };
+        row.append(wr);
+      }
       row.append(sub, acts);
       row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
       row.addEventListener('contextmenu', (e) => {
@@ -334,10 +344,12 @@ const Panels = (() => {
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
+          ...(refIssues.length ? [{ icon: 'warn', label: 'Neu wählen (kaputter Bezug)', id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
-          ...(Features.canMirrorStep(it, f.parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
+          ...(Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
+          ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -395,13 +407,23 @@ const Panels = (() => {
       const bl = renderBodiesList(it);
       if (bl) li.append(bl);
       if (expanded.has(it.id) || (show && it.kind === 'group')) {
+        const errs = App.errorsFor(it.id);
         for (const fin of it.finishes || []) {
           const ferr = errs.find((x) => x.finishId === fin.id);
-          const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
+          const isRef = !!(ferr && RefFix.isRefError(ferr));
+          const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
           fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
           else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
           else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+          if (isRef) {
+            const iss = refIssues.find((x) => x.finishId === fin.id);
+            if (iss) {
+              const fb = h('button', { type: 'button', class: 'fin-fix-btn', 'data-help': 'refFix' }, 'Neu wählen');
+              fb.onclick = (e) => { e.stopPropagation(); RefFix.start(iss); };
+              fr.append(fb);
+            }
+          }
           fr.onclick = () => App.select([it.id]);
           li.append(fr);
         }
@@ -811,7 +833,8 @@ const Panels = (() => {
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
-    if (idx < 0 || it.kind === 'group' || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'mirrorStep') return null;
+    const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'mirrorStep') return null;
     const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'mirrorStep' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
@@ -891,10 +914,44 @@ const Panels = (() => {
       if (it.note) nd.open = true;
       w.append(nd);
     }
+    const rightIssues = RefFix.issuesOf(it.id);
+    const shownKeys = new Set();
     for (const e of App.errorsFor(it.id)) {
+      if (RefFix.isRefError(e)) {
+        const iss = e.finishId
+          ? rightIssues.find((x) => x.finishId === e.finishId)
+          : rightIssues.find((x) => x.kind === 'extrude-toFace');
+        if (iss) shownKeys.add(iss.key);
+        const box = h('div', { class: 'warn-box', 'data-help': 'refFix' }, h('span', null, e.message));
+        const brow = h('div', { class: 'btn-row' });
+        if (iss) {
+          const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-reffix': '1', 'data-help': 'refFix' });
+          fb.innerHTML = icon('warn') + 'Neu wählen';
+          fb.onclick = () => RefFix.start(iss);
+          brow.append(fb);
+        }
+        if (e.finishId) {
+          const fin = (it.finishes || []).find((x) => x.id === e.finishId);
+          const rmLabel = fin && fin.type === 'chamfer' ? 'Fase entfernen' : fin && fin.type === 'shell' ? 'Aushöhlen entfernen' : 'Rundung entfernen';
+          const b = h('button', { type: 'button', class: 'btn small' }, rmLabel);
+          b.onclick = () => Actions.removeFinish(it.id, e.finishId);
+          brow.append(b);
+        }
+        if (brow.children.length) box.append(brow);
+        w.append(box);
+        continue;
+      }
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
       if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${Units.fmtLenU(e.max, 1)} setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
-      if (e.code === 'edges') { const b = h('button', { type: 'button', class: 'btn small' }, 'Rundung entfernen'); b.onclick = () => Actions.removeFinish(it.id, e.finishId); box.append(h('div', null, b)); }
+      w.append(box);
+    }
+    for (const iss of rightIssues) {
+      if (shownKeys.has(iss.key)) continue;
+      const box = h('div', { class: 'warn-box', 'data-help': 'refFix' }, h('span', null, iss.message));
+      const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-reffix': '1', 'data-help': 'refFix' });
+      fb.innerHTML = icon('warn') + 'Neu wählen';
+      fb.onclick = () => RefFix.start(iss);
+      box.append(h('div', { class: 'btn-row' }, fb));
       w.append(box);
     }
     if (it.link) {
@@ -954,7 +1011,21 @@ const Panels = (() => {
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
           sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.` }));
-        } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        } else if (def.lib === 'screwHole') {
+          const te = threadEntry(it.p.size);
+          let screwTxt = '';
+          if (te) {
+            const dia = threadHoleDia(te, it.p.fit);
+            const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
+            let headTxt = '';
+            if (it.p.fit !== 'tap') {
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+            }
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+          }
+          sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
@@ -1262,19 +1333,26 @@ const Panels = (() => {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
+        const isRef = !!(err && RefFix.isRefError(err));
         const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Wandstärke'));
-        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
         const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
-        if (err) nf.querySelector('.inp').classList.add('invalid');
+        if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+        row.append(nf);
+        if (isRef) {
+          const iss = rightIssues.find((x) => x.finishId === fin.id);
+          if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, 'Neu wählen'); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+        }
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Aushöhlen entfernen', 'data-tip': 'Aushöhlen entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
-        row.append(nf, del); sh.append(row);
+        row.append(del); sh.append(row);
         sh.append(h('div', { class: 'hint-box', html: 'Klick eine weitere Fläche an und wähle <b>Aushöhlen</b>, um sie zu öffnen oder wieder zu schließen.' }));
         w.append(sh);
       }
       for (const fin of (it.finishes || []).filter((x) => x.type !== 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
-        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const isRef = !!(err && RefFix.isRefError(err));
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
         if (fin.type === 'draft') {
           const nf = UI.numField({ id: 'fin-' + fin.id, label: 'Entformungsschräge', value: fin.r, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
           if (err) nf.querySelector('.inp').classList.add('invalid');
@@ -1285,10 +1363,15 @@ const Panels = (() => {
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
         const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
-        if (err) nf.querySelector('.inp').classList.add('invalid');
+        if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+        row.append(nf);
+        if (isRef) {
+          const iss = rightIssues.find((x) => x.finishId === fin.id);
+          if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, 'Neu wählen'); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+        }
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
-        row.append(nf, del); ks.append(row);
+        row.append(del); ks.append(row);
         // Art: Rundung gleichmäßig oder von … bis; Fase gleich, mit zwei Abständen oder mit Winkel
         const r0 = Model.num(fin.r, V, 1);
         const mo = h('div', { class: 'fields pro fin-more' });
@@ -1424,8 +1507,8 @@ const Panels = (() => {
   let ctx = null;
   function renderCtx() {
     if (ctx) { ctx.remove(); ctx = null; }
-    if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
-    const items = App.selectedItems(); if (!items.length) return;
+    if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) { Features.syncPatternMarkers(); return; }
+    const items = App.selectedItems(); if (!items.length) { Features.syncPatternMarkers(); return; }
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': T('ctx.toolbarAria') });
     const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'thicken'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
@@ -1439,6 +1522,7 @@ const Panels = (() => {
       else b('rollback', T('ctx.markerAfter'), () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', T('ctx.markerAfterTip'));
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     if (items.length === 1 && ((items[0].item.kind === 'transform' && !(items[0].item.p && items[0].item.p.copy)) || items[0].item.kind === 'scale' || (items[0].item.kind === 'thicken' && !(items[0].item.p && items[0].item.p.mode === 'new')))) {
@@ -1450,6 +1534,7 @@ const Panels = (() => {
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     if (items.length === 1 && items[0].item.kind === 'rib') {
@@ -1457,11 +1542,13 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, 'Rippe'));
       b('edit', 'Skizze bearbeiten', () => Sketch.editItem(it.id), 'accent', 'Skizze dieser Rippe bearbeiten');
       b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
+      b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }]), '', T('ctx.patternTip'), true);
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     if (items.length === 1 && items[0].item.kind === 'mirrorStep') {
@@ -1475,6 +1562,7 @@ const Panels = (() => {
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     const face = Actions.selectedFace();
@@ -1582,6 +1670,7 @@ const Panels = (() => {
     b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
     $('#overlay').append(bar); ctx = bar;
     placeCtx();
+    Features.syncPatternMarkers();
   }
   function placeCtx() {
     if (!ctx) return;
