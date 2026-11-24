@@ -1218,5 +1218,10 @@
     "tip": "Stift im Langloch: gleitet entlang der Mittellinie bis zum Endanschlag",
     "hilfe": "Setzt einen Stift (Zylinder, Kreisrand oder Punkt) genau auf die Mittellinie eines Langlochs. Der Stift lässt sich entlang des Langlochs schieben und drehen und bleibt am Anfang und Ende des Langlochs automatisch am Anschlag stehen.",
     "tipp": "Klick zuerst auf die Innenfläche oder den Rand des Langlochs und dann auf den Stift. Rechts kannst du Weg, Drehwinkel und die Anschläge jederzeit anpassen."
+  },
+  "dockSnap": {
+    "tip": "Andock-Punkte beim Ziehen: automatisch einrasten und verbinden",
+    "hilfe": "Beim Ziehen eines Teils zeigen sich Lochmitten, Flächenmitten und Kantenmitten an den anderen Teilen. Ziehst du ein Teil (zum Beispiel eine Schraube) nahe an einen passenden Punkt, rastet es genau ausgerichtet ein. Im Modus „Einfach“ wird dabei automatisch eine feste Verbindung angelegt, im Modus „Profi“ wählst du beim Loslassen die gewünschte Verbindungsart.",
+    "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. In der Profi-Auswahl übernimmt Enter „Fest“ und Esc rastet nur ohne Verbindung ein."
   }
 }
