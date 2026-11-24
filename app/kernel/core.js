@@ -1201,7 +1201,7 @@ export function createKernel(R, oc) {
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors) {
-    if (it.kind === 'transform') return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'rib') return { shape: null, key: defKey(it) };
     const key = defKey(it);
     const hit = cacheGet(key);
     if (hit) {
@@ -1422,6 +1422,292 @@ export function createKernel(R, oc) {
     };
   }
 
+  // ---------- Rippe (KP-06) ----------
+  function transformDir(m, v) {
+    return [m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]];
+  }
+  function extractSolids(shape) {
+    if (!shape) return [];
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(shape.wrapped, TA.TopAbs_SOLID, TA.TopAbs_SHAPE);
+    const buckets = new Map(), out = [];
+    try {
+      while (ex.More()) {
+        const it = ex.Current();
+        const hc = oc.ReplicadShapeHasher.HashCode(it, HMAX);
+        let b = buckets.get(hc); if (!b) { b = []; buckets.set(hc, b); }
+        if (!b.some((x) => x.IsSame(it))) { b.push(it); out.push(R.cast(oc.TopoDS.Solid(it)).clone()); }
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    return out;
+  }
+  function minDistShapes(s1, s2) {
+    const t = new oc.BRepExtrema_DistShapeShape();
+    try {
+      t.LoadS1(s1.wrapped); t.LoadS2(s2.wrapped); t.Perform();
+      return t.IsDone() && t.NbSolution() > 0 ? t.Value() : Infinity;
+    } catch (_) { return Infinity; }
+    finally { try { t.delete(); } catch (_) {} }
+  }
+  function arcInfo2D(a, m, b) {
+    const ax = a[0], ay = a[1], bx = m[0], by = m[1], cx = b[0], cy = b[1];
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (Math.abs(d) < 1e-12) return null;
+    const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+    const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+    const r = Math.hypot(ax - ux, ay - uy), T = Math.PI * 2, nm = (x) => ((x % T) + T) % T;
+    const a0 = Math.atan2(ay - uy, ax - ux), am = Math.atan2(by - uy, bx - ux), a1 = Math.atan2(cy - uy, cx - ux);
+    const ccw = nm(am - a0) < nm(a1 - a0);
+    return { c: [ux, uy], r, sweep: ccw ? nm(a1 - a0) : -nm(a0 - a1) };
+  }
+  function extendChain2D(segs, extLen) {
+    const cloneS = (s) => (s.t === 'bez' ? { t: 'bez', a: s.a.slice(), c1: s.c1.slice(), c2: s.c2.slice(), b: s.b.slice() } : s.t === 'arc' ? { t: 'arc', a: s.a.slice(), m: s.m.slice(), b: s.b.slice() } : { t: 'line', a: s.a.slice(), b: s.b.slice() });
+    const n2 = (dx, dy) => { const L = Math.hypot(dx, dy); return L > 1e-9 ? [dx / L, dy / L] : null; };
+    const out = segs.map(cloneS);
+    if (!out.length) return out;
+    const s0 = out[0], s1 = out[out.length - 1];
+    let tStart = null, tEnd = null;
+    if (s0.t === 'line') tStart = n2(s0.a[0] - s0.b[0], s0.a[1] - s0.b[1]);
+    else if (s0.t === 'bez') tStart = n2(s0.a[0] - s0.c1[0], s0.a[1] - s0.c1[1]) || n2(s0.a[0] - s0.b[0], s0.a[1] - s0.b[1]);
+    else if (s0.t === 'arc') {
+      const ai = arcInfo2D(s0.a, s0.m, s0.b);
+      if (ai) { const rx = s0.a[0] - ai.c[0], ry = s0.a[1] - ai.c[1]; tStart = ai.sweep > 0 ? n2(ry, -rx) : n2(-ry, rx); }
+      else tStart = n2(s0.a[0] - s0.b[0], s0.a[1] - s0.b[1]);
+    }
+    if (s1.t === 'line') tEnd = n2(s1.b[0] - s1.a[0], s1.b[1] - s1.a[1]);
+    else if (s1.t === 'bez') tEnd = n2(s1.b[0] - s1.c2[0], s1.b[1] - s1.c2[1]) || n2(s1.b[0] - s1.a[0], s1.b[1] - s1.a[1]);
+    else if (s1.t === 'arc') {
+      const ai = arcInfo2D(s1.a, s1.m, s1.b);
+      if (ai) { const rx = s1.b[0] - ai.c[0], ry = s1.b[1] - ai.c[1]; tEnd = ai.sweep > 0 ? n2(-ry, rx) : n2(ry, -rx); }
+      else tEnd = n2(s1.b[0] - s1.a[0], s1.b[1] - s1.a[1]);
+    }
+    if (tStart) {
+      const aExt = [s0.a[0] + tStart[0] * extLen, s0.a[1] + tStart[1] * extLen];
+      if (s0.t === 'line') s0.a = aExt; else out.unshift({ t: 'line', a: aExt, b: s0.a.slice() });
+    }
+    if (tEnd) {
+      const bExt = [s1.b[0] + tEnd[0] * extLen, s1.b[1] + tEnd[1] * extLen];
+      if (s1.t === 'line') s1.b = bExt; else out.push({ t: 'line', a: s1.b.slice(), b: bExt });
+    }
+    return out;
+  }
+  function offsetOpen2D(segs, d) {
+    const pts = [];
+    const pushP = (q) => { if (!pts.length || Math.hypot(pts[pts.length - 1][0] - q[0], pts[pts.length - 1][1] - q[1]) > 1e-7) pts.push([q[0], q[1]]); };
+    for (const s of segs) {
+      if (s.t === 'line') { pushP(s.a); pushP(s.b); }
+      else if (s.t === 'arc') { for (const q of arcSample(s.a, s.m, s.b, 24)) pushP(q); }
+      else if (s.t === 'bez') {
+        for (let i = 0; i <= 16; i++) {
+          const t = i / 16, u = 1 - t;
+          pushP([0, 1].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k]));
+        }
+      }
+    }
+    if (pts.length < 2) throw new Error('Die Rippen-Linie ist zu kurz.');
+    const m = pts.length, ec = m - 1, norms = [];
+    for (let i = 0; i < ec; i++) {
+      const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      norms.push([-dy / L, dx / L]);
+    }
+    const V = [];
+    for (let i = 0; i < m; i++) {
+      let off;
+      if (i === 0) off = [norms[0][0] * d, norms[0][1] * d];
+      else if (i === m - 1) off = [norms[ec - 1][0] * d, norms[ec - 1][1] * d];
+      else {
+        const nA = norms[i - 1], nB = norms[i];
+        const bx = nA[0] + nB[0], by = nA[1] + nB[1], den = 1 + nA[0] * nB[0] + nA[1] * nB[1];
+        if (den > 0.1) off = [(bx / den) * d, (by / den) * d];
+        else { const bl = Math.hypot(bx, by); off = bl > 1e-9 ? [(bx / bl) * 3 * d, (by / bl) * 3 * d] : [nA[0] * d, nA[1] * d]; }
+      }
+      V.push([pts[i][0] + off[0], pts[i][1] + off[1]]);
+    }
+    const out = [];
+    for (let i = 0; i < ec; i++) if (Math.hypot(V[i + 1][0] - V[i][0], V[i + 1][1] - V[i][1]) > 1e-7) out.push({ t: 'line', a: V[i], b: V[i + 1] });
+    for (let i = 1; i < out.length; i++) out[i].a = out[i - 1].b.slice();
+    return out;
+  }
+  function stripLoop2D(extSegs, dLeft, dRight) {
+    const A = offsetOpen2D(extSegs, dLeft);
+    const B = offsetOpen2D(extSegs, dRight);
+    const rev = (s) => ({ t: 'line', a: s.b.slice(), b: s.a.slice() });
+    return [
+      ...A,
+      { t: 'line', a: A[A.length - 1].b.slice(), b: B[B.length - 1].b.slice() },
+      ...B.slice().reverse().map(rev),
+      { t: 'line', a: B[0].a.slice(), b: A[0].a.slice() },
+    ];
+  }
+  function buildRibOn(baseShape, rel, p) {
+    const chains = p.chains || [];
+    if (!chains.length) throw new Error('Die Rippe braucht mindestens eine offene Linie, einen Bogen oder eine Kurve in der Skizze.');
+    const thickness = num(p.thickness, 2);
+    if (!(thickness > 1e-4)) throw new Error('Die Dicke der Rippe muss größer als 0 mm sein.');
+    const draft = num(p.draft, 0);
+    if (Math.abs(draft) >= 45) throw new Error('Die Schräge der Rippe muss kleiner als 45° sein.');
+    const depth = Math.max(0, num(p.depth, 0));
+    const side = p.side === 'side1' || p.side === 'side2' ? p.side : 'center';
+    const mode = p.dir === 'parallel' ? 'parallel' : 'normal';
+    const flip = !!p.flip;
+
+    const pl = p.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const M = planeMap({
+      o: transformPoint(rel, pl.o || [0, 0, 0]),
+      x: norm(transformDir(rel, pl.x || [1, 0, 0])),
+      n: norm(transformDir(rel, pl.n || [0, 0, 1])),
+    });
+    const bb = bboxOf(baseShape);
+    const diag = Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
+    const extLen = Math.max(50, diag * 2);
+    const cBase = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2];
+    const baseSolidCount = Math.max(1, extractSolids(baseShape).length);
+
+    const projectSpan = (dir3) => {
+      let sMin = Infinity, sMax = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const pt = [i & 1 ? bb[3] : bb[0], i & 2 ? bb[4] : bb[1], i & 4 ? bb[5] : bb[2]];
+        const s = dot(sub(pt, M.o), dir3);
+        if (s < sMin) sMin = s;
+        if (s > sMax) sMax = s;
+      }
+      return [sMin, sMax];
+    };
+
+    const tryRibDirection = (sign) => {
+      let curShape = baseShape.clone(), added = 0;
+      const cleanupCur = () => { if (curShape !== baseShape) safeDelete(curShape); };
+      try {
+        for (const ch of chains) {
+          if (!ch || !ch.segs || !ch.segs.length) continue;
+          let rawRib = null, origWire = null, diff = null, kept = [], outside = [];
+          try {
+            if (mode === 'normal') {
+              const sC = dot(sub(cBase, M.o), M.n);
+              const d0 = sC > 1e-4 ? M.n : mul(M.n, -1);
+              const dirVec = mul(d0, sign);
+              const [, sMax] = projectSpan(dirVec);
+              if (sMax <= 1e-4) { continue; }
+              const H = depth > 1e-4 ? depth : Math.max(1, sMax + 5);
+              const dL = side === 'side1' ? thickness : side === 'side2' ? 0 : thickness / 2;
+              const dR = side === 'side1' ? 0 : side === 'side2' ? -thickness : -thickness / 2;
+              const extSegs = extendChain2D(ch.segs, extLen);
+              if (Math.abs(draft) < 1e-6) {
+                const face = regionFace({ outer: { segs: stripLoop2D(extSegs, dL, dR) }, holes: [] }, M);
+                rawRib = R.basicFaceExtrusion(face, new R.Vector(mul(dirVec, H)));
+                safeDelete(face);
+              } else {
+                const delta = H * Math.tan((draft * Math.PI) / 180);
+                if (thickness + 2 * delta <= 0.05) throw new Error('Die Schräge ist für diese Dicke und Höhe zu groß.');
+                const w0 = loopWire({ segs: stripLoop2D(extSegs, dL, dR) }, M, true);
+                const w1 = loopWire({ segs: stripLoop2D(extSegs, dL + delta, dR - delta) }, M, true).translate(mul(dirVec, H));
+                try { rawRib = R.loft([w0, w1], { ruled: true }); }
+                finally { safeDelete(w0); safeDelete(w1); }
+              }
+            } else {
+              const pA = ch.segs[0].a, pB = ch.segs[ch.segs.length - 1].b;
+              const cdx = pB[0] - pA[0], cdy = pB[1] - pA[1], cLen = Math.hypot(cdx, cdy);
+              if (cLen < 1e-7) continue;
+              const n1 = [-cdy / cLen, cdx / cLen], n2 = [cdy / cLen, -cdx / cLen];
+              const cBase2 = [dot(sub(cBase, M.o), M.x), dot(sub(cBase, M.o), M.y)];
+              const mid2 = [(pA[0] + pB[0]) / 2, (pA[1] + pB[1]) / 2];
+              const f0 = (cBase2[0] - mid2[0]) * n1[0] + (cBase2[1] - mid2[1]) * n1[1] >= 0 ? n1 : n2;
+              const fill2D = [f0[0] * sign, f0[1] * sign];
+              const fillDir3 = norm(add(mul(M.x, fill2D[0]), mul(M.y, fill2D[1])));
+              const [, sMax] = projectSpan(fillDir3);
+              if (sMax <= 1e-4) { continue; }
+              const fillLen = depth > 1e-4 ? depth : Math.max(50, diag * 1.5);
+              const extSegs = extendChain2D(ch.segs, extLen);
+              const aExt = extSegs[0].a, bExt = extSegs[extSegs.length - 1].b;
+              const bFar = [bExt[0] + fill2D[0] * fillLen, bExt[1] + fill2D[1] * fillLen];
+              const aFar = [aExt[0] + fill2D[0] * fillLen, aExt[1] + fill2D[1] * fillLen];
+              const polyLoop = [...extSegs, { t: 'line', a: bExt.slice(), b: bFar }, { t: 'line', a: bFar.slice(), b: aFar }, { t: 'line', a: aFar.slice(), b: aExt.slice() }];
+              const z0 = side === 'side1' ? 0 : side === 'side2' ? -thickness : -thickness / 2;
+              let face = regionFace({ outer: { segs: polyLoop }, holes: [] }, M);
+              if (Math.abs(z0) > 1e-9) { const ft = face.translate(mul(M.n, z0)); safeDelete(face); face = ft; }
+              rawRib = R.basicFaceExtrusion(face, new R.Vector(mul(M.n, thickness)));
+              safeDelete(face);
+              if (Math.abs(draft) >= 1e-6) {
+                const dDir = R.asDir(fillDir3), pln = new oc.gp_Pln(R.asPnt(M.P(mid2)), dDir);
+                const builder = new oc.BRepOffsetAPI_DraftAngle(rawRib.wrapped);
+                let fn = 0;
+                try {
+                  for (const fc of rawRib.faces) {
+                    let v = null; try { v = fc.normalAt(); } catch (_) {}
+                    if (v && Math.abs(v.x * M.n[0] + v.y * M.n[1] + v.z * M.n[2]) > 0.98) {
+                      builder.Add(fc.wrapped, dDir, (draft * Math.PI) / 180, pln, true);
+                      fn++;
+                    }
+                  }
+                  if (fn) {
+                    builder.Build();
+                    if (builder.IsDone && builder.IsDone()) {
+                      const drafted = R.cast(builder.Shape());
+                      safeDelete(rawRib); rawRib = drafted;
+                    }
+                  }
+                } finally { try { builder.delete(); pln.delete(); dDir.delete(); } catch (_) {} }
+              }
+            }
+
+            origWire = R.assembleWire(segEdges(ch.segs, M));
+            diff = rawRib.cut(curShape);
+            const solids = extractSolids(diff);
+            for (const s of solids) {
+              let vol = 0; try { vol = R.measureVolume(s); } catch (_) { vol = 0; }
+              if (!(vol > 1e-4)) { safeDelete(s); continue; }
+              const sb = bboxOf(s);
+              const escaped = sb[0] < bb[0] - 0.5 || sb[3] > bb[3] + 0.5 || sb[1] < bb[1] - 0.5 || sb[4] > bb[4] + 0.5 || sb[2] < bb[2] - 0.5 || sb[5] > bb[5] + 0.5;
+              if (!escaped && minDistShapes(s, origWire) < 0.25) kept.push(s);
+              else outside.push(s);
+            }
+            if (kept.length) {
+              let fused = null;
+              let ribPart = kept.length === 1 ? kept[0] : fuseAll(kept, true);
+              kept = [];
+              try {
+                fused = curShape.fuse(ribPart);
+                if (extractSolids(fused).length <= baseSolidCount) {
+                  safeDelete(curShape); curShape = fused; fused = null; added++;
+                } else {
+                  safeDelete(fused); fused = null;
+                }
+              } catch (_) { safeDelete(fused); fused = null; }
+              finally { safeDelete(ribPart); }
+              if (!fused && added === 0) {
+                // Fallback: unverzerrtes Rohstück abzüglich der Außenbereiche mit dem Zielkörper vereinigen
+                let outUnion = outside.length ? fuseAll(outside, true) : null;
+                outside = [];
+                let trimmed = null;
+                try {
+                  trimmed = outUnion ? rawRib.cut(outUnion) : rawRib.clone();
+                  const f2 = curShape.fuse(trimmed);
+                  if (extractSolids(f2).length <= baseSolidCount) {
+                    safeDelete(curShape); curShape = f2; added++;
+                  } else safeDelete(f2);
+                } catch (_) {}
+                finally { safeDelete(outUnion); safeDelete(trimmed); }
+              }
+            }
+          } finally {
+            safeDelete(origWire); safeDelete(diff); safeDelete(rawRib);
+            for (const s of kept) safeDelete(s);
+            for (const s of outside) safeDelete(s);
+          }
+        }
+        if (added > 0) { const out = curShape; curShape = null; return out; }
+        return null;
+      } finally { cleanupCur(); }
+    };
+
+    const firstSign = flip ? -1 : 1;
+    let res = tryRibDirection(firstSign);
+    if (!res && !flip) res = tryRibDirection(-firstSign);
+    if (!res) throw new Error('Die Rippe trifft keine angrenzenden Wände des Zielkörpers. Prüfe die Skizzenebene, die Linienlage oder kehre die Richtung um.');
+    return res;
+  }
+
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
   // known = { id: resultKey } (was die Anzeige schon hat)
@@ -1482,6 +1768,28 @@ export function createKernel(R, oc) {
             bodies.set(tid, src);
           }
         }
+        continue;
+      }
+      if (it.kind === 'rib') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Rippe: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const rel = matMul(matInvRigid(src.m), it.m);
+        const k = keyOf([src.key, 'rib', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+        let next = cacheGet(k);
+        if (!next) {
+          try { next = buildRibOn(src.shape, rel, p); cachePut(k, next); }
+          catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+        }
+        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
         continue;
       }
       const op = it.op, o = live.get(it.id);

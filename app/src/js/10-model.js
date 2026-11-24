@@ -27,6 +27,7 @@ const KINDS = {
   group: { label: 'Gruppe', params: [] },
   part: { label: 'Bauteil', params: [] },
   transform: { label: 'Verschieben/Drehen', params: [] },
+  rib: { label: 'Rippe', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -221,6 +222,7 @@ const Model = (() => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
+      if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -282,6 +284,7 @@ const Model = (() => {
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
+    else if (it.kind === 'rib') o.p = ribParams(it, V);
     else if (it.kind === 'import') {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -332,6 +335,23 @@ const Model = (() => {
       else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
     }
     return out;
+  }
+  function ribParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+    return {
+      target: p.target || null,
+      plane,
+      chains,
+      thickness: num(p.thickness, V, 2),
+      side: p.side === 'side1' || p.side === 'side2' ? p.side : 'center',
+      dir: p.dir === 'parallel' ? 'parallel' : 'normal',
+      flip: !!p.flip,
+      depth: Math.max(0, num(p.depth, V, 0)),
+      draft: num(p.draft, V, 0),
+    };
   }
   // Muster entlang Kurve: Lage und Drehung jeder Kopie aus der Kurve der Gruppe (p.sketch) berechnen.
   // Die Kopie k wird um (Punkt k − Punkt 0) verschoben; mit „ausrichten“ dreht sie sich mit der Kurve.
@@ -669,6 +689,11 @@ const Model = (() => {
         for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
         const s = parts.length ? parts.join(' ') : '0 mm';
         return p.copy ? 'Kopie · ' + s : s;
+      }
+      case 'rib': {
+        const t = f(p.thickness ?? 2);
+        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
+        return `${t}${u} dick${dr}`;
       }
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {

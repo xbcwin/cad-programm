@@ -8014,6 +8014,130 @@ def t_a028_bezugspunkte_koordinatensystem(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a031_rippe(p):
+    # 1. Offene Schale (40×40×20, Wandstärke 2 mm, oben offen bei z=20) + diagonale Rippe (kurze Linie [-10,-10]..[10,10], 2 mm mittig)
+    # Erwartetes Schalen-Volumen: 40*40*20 - 36*36*18 = 32000 - 23328 = 8672 mm³
+    # Erwartetes Rippen-Volumen im 36×36×18-Innenraum (Diagonale 36*sqrt(2), Breite 2, Ecken an der 45°-Wand abgezogen → 2*(36*sqrt(2)-1)*18 = (72*sqrt(2)-2)*18 ≈ 1796.81 mm³):
+    # Gesamt ≈ 10468.81 mm³, genau 1 Körper, keine Lücke zur Wand, Hüllbox unverändert [-20,-20,0,20,20,20]
+    p.empty()
+    p.ev("""App.change('Schale', d => {
+      const b = Model.newItem('box', { w: 40, d: 40, h: 20 }, { name: 'Schale' });
+      b.finishes = [{ id: 'f_sh', type: 'shell', r: 2, faces: [{ c: [0, 0, 20], n: [0, 0, 1] }] }];
+      d.items.push(b);
+    })""")
+    warte_rechnen(p, 30); p.wait(300)
+    m_shell = p.ev("return Mass.measureDoc(App.doc)")
+    vol_shell = m_shell and m_shell['volume']
+
+    p.ev("Sketch.startOnPlane('XY', 20)"); p.wait(1200)
+    p.ev("Sketch.state.ents.push({id:'l1',type:'line',a:[-10,-10],b:[10,10]})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.locator('#st-mode-rib').click(); p.wait(250)
+    has_help = p.pg.locator('#st-mode-rib').get_attribute('data-help') == 'rib'
+    p.pg.fill('#st-rib-t', '2'); p.pg.press('#st-rib-t', 'Enter'); p.wait(150)
+    p.pg.select_option('#st-rib-side', 'center'); p.wait(250)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30); p.wait(300)
+
+    m_rib = p.ev("return Mass.measureDoc(App.doc)")
+    vol_rib = m_rib and m_rib['volume']
+    bb_rib = bbox(p, 0)
+    st_rib = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    exp_center = 8672 + (72 * math.sqrt(2) - 2) * 18
+    ok1 = (
+        has_help
+        and m_shell and m_shell['count'] == 1 and abs(vol_shell - 8672) < 5
+        and st_rib == {'len': 2, 'kind': 'rib', 'merged': True, 'errs': 0}
+        and m_rib and m_rib['count'] == 1
+        and vol_rib > vol_shell + 1500
+        and abs(vol_rib - exp_center) < 15
+        and near(bb_rib, [-20, -20, 0, 20, 20, 20], 0.05)
+    )
+
+    # 2. Einseitig (Seite 1 & Seite 2) + Formel für Dicke
+    p.pg.select_option('#rib-side', 'side1'); warte_rechnen(p, 30); p.wait(250)
+    m_s1 = p.ev("return Mass.measureDoc(App.doc)")
+    p.pg.select_option('#rib-side', 'side2'); warte_rechnen(p, 30); p.wait(250)
+    m_s2 = p.ev("return Mass.measureDoc(App.doc)")
+    p.pg.select_option('#rib-side', 'center'); warte_rechnen(p, 30); p.wait(250)
+    p.ev("App.change('Maß', d => { d.params.push({id:'m_rip', name:'Rippe', expr:3}); })"); p.wait(300)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.fill('#rib-thickness', 'Rippe'); p.pg.press('#rib-thickness', 'Enter'); warte_rechnen(p, 30); p.wait(250)
+    m_f3 = p.ev("return Mass.measureDoc(App.doc)")
+    exp_side = 8672 + (72 * math.sqrt(2) - 4) * 18
+    exp_t3 = 8672 + (108 * math.sqrt(2) - 4.5) * 18
+    ok2 = (
+        m_s1 and m_s1['count'] == 1 and abs(m_s1['volume'] - exp_side) < 15
+        and m_s2 and m_s2['count'] == 1 and abs(m_s2['volume'] - m_s1['volume']) < 5
+        and m_f3 and m_f3['count'] == 1 and abs(m_f3['volume'] - exp_t3) < 20
+        and near(bbox(p, 0), [-20, -20, 0, 20, 20, 20], 0.05)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 3. Optionale Schräge (5°) auf 2 mm Rippe -> Volumen wächst deutlich, Hüllbox bleibt gleich
+    field(p, '#rib-thickness', 2); warte_rechnen(p, 30); p.wait(200)
+    field(p, '#rib-draft', 5); warte_rechnen(p, 30); p.wait(300)
+    m_draft = p.ev("return Mass.measureDoc(App.doc)")
+    ok3 = (
+        m_draft and m_draft['count'] == 1
+        and m_draft['volume'] > vol_rib + 100
+        and near(bbox(p, 0), [-20, -20, 0, 20, 20, 20], 0.05)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 4. Zeitleiste (Unterdrücken + Marker), Skizze bearbeiten, Stützrippe (dir='parallel'), Bezüge & Hilfe
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Unterdrücken').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_sup = volumen(p)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Wieder aktivieren').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_unsup = volumen(p)
+
+    p.ev("Timeline.setMarker(1)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk1 = volumen(p)
+    p.ev("Timeline.setMarker(2)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk2 = volumen(p)
+
+    p.ev("Sketch.editItem(App.doc.items[1].id)"); p.wait(1200)
+    edit_ok = p.ev("return Sketch.active && Sketch.state.ents.length === 1")
+    p.pg.keyboard.press('Enter'); p.wait(1200); warte_rechnen(p, 30)
+
+    deps = p.ev("return Model.dependencies(App.doc)")
+    expl = p.ev("return Explain.local(App.doc.items[1].id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmd_ok = p.ev("return Commands.search('Rippe').some(c=>c.id==='rib')")
+
+    # Stützrippe in der Skizzenebene (L-Winkel mit 2 mm Rippe in XZ)
+    p.ev("""App.change('Winkel', d => {
+      d.items = [];
+      const b1 = Model.newItem('box', { w: 30, d: 20, h: 4 }, { name: 'Boden' });
+      const b2 = Model.newItem('box', { w: 4, d: 20, h: 24 }, { name: 'Wand' });
+      b2.t.x = -13; b2.t.z = 4;
+      b2.op = { type: 'join', target: b1.id };
+      const sk = { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, ents: [{ id: 'g1', type: 'line', a: [-11, 20], b: [5, 4] }], dims: [], cons: [] };
+      const r = Model.newItem('rib', { sketch: sk, target: b1.id, thickness: 2, side: 'center', dir: 'parallel', flip: false, depth: 0, draft: 0 }, { name: 'Stütze' });
+      d.items.push(b1, b2, r);
+    })""")
+    warte_rechnen(p, 30); p.wait(300)
+    m_gus = p.ev("return Mass.measureDoc(App.doc)")
+    # Boden 30*20*4 = 2400, Wand 4*20*24 = 1920, Dreieck 0.5*16*16*2 = 256 -> Summe 4576 mm³
+    ok4 = (
+        v_sup is not None and abs(v_sup - 8672) < 5
+        and v_unsup is not None and abs(v_unsup - m_draft['volume']) < 5
+        and v_mk1 is not None and abs(v_mk1 - 8672) < 5
+        and v_mk2 is not None and abs(v_mk2 - m_draft['volume']) < 5
+        and edit_ok and not p.ev("return Sketch.active")
+        and any(x['what'] == 'Rippe an' for x in deps)
+        and expl and any(l['k'] == 'op' for l in expl['lines'])
+        and 'rib' in hilfen and all(k in hilfen['rib'] for k in ('tip', 'hilfe', 'tipp'))
+        and cmd_ok
+        and m_gus and m_gus['count'] == 1 and abs(m_gus['volume'] - 4576) < 10
+        and p.ev("return App.errors.length") == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8142,6 +8266,7 @@ TESTS = [
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
     ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
     ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
+    ('[A-031] Rippe (KP-06): offene Schale mit diagonaler Rippe / einseitig & Formel / Schräge / Zeitleiste, Stützrippe & Hilfe', t_a031_rippe),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

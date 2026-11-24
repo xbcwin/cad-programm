@@ -1656,6 +1656,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export ab eigenem Nullpunkt (STEP, STL, 3MF)**: Auswahl im Export-Dialog (`#ex-csys`) liefert STL-, 3MF- und wieder eingelesene STEP-Dateien mit Hüllmaßen ab `(0 | 0 | 0)` bis `(40 | 30 | 10)` bzw. `(30 | 40 | 10)` im gedrehten Koordinatensystem; Hilfetexte (`datumPoint`, `datumCsys`) und Befehle sind vorhanden.
 - [ ] **Von Hand**: Interaktives Setzen von Bezugspunkten und Koordinatensystem im 3D-Bild über die Skizzen-/Bezugsdialoge und Kontextleiste testen sowie die exportierte STEP-/3MF-Datei in einem Slicer oder CAD-Programm öffnen.
 
+## Rippe (Auto [A-031])
+
+- [x] **Offene Schale mit diagonaler Rippe**: In einer 40×40×20-mm-Schale (2 mm Wandstärke) wird eine kürzere diagonale Skizzenlinie (`[-10,-10]` bis `[10,10]`) mit 2 mm Dicke ohne Lücke bis zu den Seitenwänden und zum Boden verlängert und zu einem einzigen Körper vereinigt (`count == 1`, Hüllmaße unverändert).
+- [x] **Einseitig & Formel für Dicke**: Umschalten zwischen „Mittig“, „Einseitig (Seite 1)“ und „Einseitig (Seite 2)“ sowie Steuern der Dicke über ein benanntes Maß (`Rippe`) aktualisieren den Körper exakt.
+- [x] **Optionale Schräge**: Eine Entformungsschräge (5°) verbreitert die Rippe zum Boden hin ohne Überstand über die Außenwände.
+- [x] **Zeitleiste, Skizze bearbeiten, Stützrippe & Hilfe**: Unterdrücken, Marker zurückrollen, Skizze bearbeiten (`Sketch.editItem`), Stützrippe in der Skizzenebene (`dir: 'parallel'`) am L-Winkel, Bezüge (`Model.dependencies`), Erklärung (`Explain.local`), Befehl `rib` und Hilfetext `werkzeug-hilfen.json` geprüft.
+- [ ] **Von Hand**: Rippe an einer runden Dose (zylindrische Außenwand) und über mehrere gebogene Linien/Splines im Browser zeichnen und die Live-Vorschau im 3D-Bild prüfen.
+
 ## Fehler melden
 
 ```
