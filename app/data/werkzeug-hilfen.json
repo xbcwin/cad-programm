@@ -778,5 +778,10 @@
     "tip": "Fehlende Regeln und Maße automatisch vorschlagen",
     "hilfe": "Prüft deine Skizze und schlägt fehlende Regeln vor: Waagerecht oder Senkrecht bei Linien unter 2° Abweichung, Deckungsgleich bei Punkten unter 0,05 mm Abstand, dazu fehlende Maße für Längen, Durchmesser, Radien und die Lage zum Ursprung. Alle Vorschläge erscheinen zuerst gestrichelt im Bild – „Übernehmen“ legt alles in einem einzigen Rückgängig-Schritt an, „Abbrechen“ verwirft sie.",
     "tipp": "Danach ist die Skizze voll bestimmt (alle Linien dunkel) und kann nicht mehr aus Versehen verrutschen."
+  },
+  "sketchFreeSpots": {
+    "tip": "Freie Punkte und fehlende Angaben anzeigen",
+    "hilfe": "Markiert alle noch beweglichen Punkte und Elemente pulsierend in Orange und zeigt die Zahl der fehlenden Angaben. Klickst du auf eine freie Stelle, wackelt sie kurz in der Richtung, in der sie noch Spiel hat.",
+    "tipp": "Mit Umschalt + F schaltest du die Anzeige direkt in der Skizze ein oder aus – so siehst du sofort, wo noch ein Maß oder eine Regel fehlt."
   }
 }
