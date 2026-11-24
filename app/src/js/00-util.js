@@ -1577,6 +1577,21 @@ const HELP = {
   "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
   "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
   "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
+ },
+ "statusSel": {
+  "tip": "Auswahl-Info in der Statusleiste",
+  "hilfe": "Zeigt unten rechts sofort, was du gerade gewählt hast – zum Beispiel die Länge einer Kante, die Summe mehrerer Kanten, den Flächeninhalt einer Fläche, den Durchmesser einer Rundung oder die Größe eines Körpers.",
+  "tipp": "Ein Klick auf das Auswahl-Schild kopiert den Zahlenwert in die Zwischenablage."
+ },
+ "statusUnit": {
+  "tip": "Aktuelle Projekt-Einheit – Klick öffnet die Einstellung",
+  "hilfe": "Zeigt die gerade eingestellte Einheit dieses Projekts (mm, cm, m oder Zoll). Alle Längen, Flächen und Maßeingaben ohne eigene Einheit richten sich danach.",
+  "tipp": "Klick direkt auf die Einheit, um sie in den Einstellungen umzustellen."
+ },
+ "statusCalc": {
+  "tip": "Rechenzustand des CAD-Kerns",
+  "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
+  "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
  }
 };
 

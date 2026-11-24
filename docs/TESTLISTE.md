@@ -1847,6 +1847,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Sauberer Abbruch über Regler & `Views.reset()`**: `stopExAnim()` bricht sowohl `st.exAnim` als auch `st.exTimer` ab, sodass manuelles Ziehen an `#ex-range` den Zustand exakt beibehält.
 - [ ] **Von Hand**: Im Browser bei einem Übergang eine Führungs- oder Mittellinie ziehen und prüfen, dass die Vorschau mitgeht, sowie bei einer Baugruppe „Explosion“ mit „Gruppen auch zerlegen“ öffnen, am Regler schieben und wieder zusammensetzen.
 
+## Statusleiste vollständig (Auto [A-052], BE-17)
+
+- [x] **Auswahl-Info (`#status-sel`)**: Zwei gewählte Kanten zeigen „2 Kanten“ samt aufsummierter Länge (inkl. „37,7 mm“ bei `17,7 + 20 mm`), Klick kopiert den Wert; eine ebene Fläche zeigt „Fläche“ samt Flächeninhalt (`1200 mm²`), eine runde Fläche Fläche + Durchmesser, ein Körper seine Hüllmaße; bei leerer Auswahl wird das Schild ausgeblendet.
+- [x] **Einheit & Einstellungen (`#status-unit`)**: Zeigt die aktuelle Projekt-Einheit (`mm`/`cm`/…); Klick öffnet das Einstellungsfenster mit Fokus auf `#set-proj-unit`; Umstellen auf `cm` aktualisiert Einheit und Auswahl-Anzeige (`12 cm²`) sofort.
+- [x] **Rechenzustand (`#status-calc`)**: Wechselt zwischen „Bereit“ (`ready`), „Rechnet …“ (`busy`) und Fehleranzahl („1 Fehler“, `error`) samt Rückkehr nach `App.undo()`.
+- [x] **Layout & Hilfetexte**: `#coords`, `#status-sel`, `#status-unit`, `#status-calc` und `#ampel` liegen sauber nebeneinander im Bildbereich; `statusSel`, `statusUnit` und `statusCalc` sind in `werkzeug-hilfen.json` und `HELP` vorhanden.
+- [ ] **Von Hand**: Im Browser bei engem Fenster (< 1100 px), im Skizzen-Modus (Linien, Rechtecke, Mehrfach-Auswahl) und bei langen Neuberechnungen prüfen, dass sich die Felder in der Statusleiste nicht überdecken oder abschneiden.
+
 ## Fehler melden
 
 ```

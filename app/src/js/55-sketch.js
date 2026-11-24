@@ -464,8 +464,9 @@ const Sketch = (() => {
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
     if (uniq.length) S.selCon = null;
+    if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel');
   }
-  function clearSel() { if (!S) return; S.sels = []; }
+  function clearSel() { if (!S) return; S.sels = []; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;

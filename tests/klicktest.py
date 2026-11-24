@@ -10812,6 +10812,121 @@ def t_f11240651(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- [A-052] Statusleiste vollständig (BE-17) ----------
+def t_a052_statusleiste(p):
+    p.empty()
+    # 1. Zwei Kanten gewählt: 40 + 30 mm = 70 mm, sowie 17,7 + 20 mm = 37,7 mm; Klick kopiert Wert
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:40,d:30,h:10},{name:'Platte'})); })"); warte_rechnen(p)
+    p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const i1 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 40) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      const i2 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 30) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      App.select([id], { edges: [{ id, edgeIdx: i1 }, { id, edgeIdx: i2 }] });
+    """); p.wait(300)
+    sel_txt1 = (p.pg.locator('#status-sel').text_content() or '').strip()
+    p.pg.locator('#status-sel').click(); p.wait(250)
+    copied1 = p.ev("return Measure.copied")
+
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:17.7,d:20,h:10},{name:'Streifen'})); })"); warte_rechnen(p)
+    p.ev("""
+      const id = App.doc.items[1].id, r = App.results.get(id).data;
+      const i1 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 17.7) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      const i2 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 20) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      App.select([id], { edges: [{ id, edgeIdx: i1 }, { id, edgeIdx: i2 }] });
+    """); p.wait(300)
+    sel_txt2 = (p.pg.locator('#status-sel').text_content() or '').strip()
+    ok1 = (
+        p.pg.locator('#status-sel').is_visible()
+        and '2 Kanten' in sel_txt1 and '70 mm' in sel_txt1 and copied1 == '70'
+        and '2 Kanten' in sel_txt2 and '37,7 mm' in sel_txt2
+    )
+
+    # 2. Fläche (1200 mm²), runde Fläche (Fläche + Ø), einzelner Körper & leere Auswahl blendet aus
+    p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });
+    """); p.wait(300)
+    face_txt = (p.pg.locator('#status-sel').text_content() or '').strip()
+
+    p.ev("App.change('x', d=>{ const c=Model.newItem('cylinder',{d:10,h:20},{name:'Bolzen'}); c.t.x=50; d.items.push(c); })"); warte_rechnen(p)
+    p.ev("""
+      const id = App.doc.items[2].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([id], { face: { id, faceIdx: fi } });
+    """); p.wait(300)
+    cyl_txt = (p.pg.locator('#status-sel').text_content() or '').strip()
+
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(250)
+    body_txt = (p.pg.locator('#status-sel').text_content() or '').strip()
+
+    p.ev("App.clearSelection()"); p.wait(250)
+    hidden_empty = not p.pg.locator('#status-sel').is_visible()
+    ok2 = (
+        'Fläche' in face_txt and '1200 mm²' in face_txt
+        and 'Fläche' in cyl_txt and 'mm²' in cyl_txt and 'Ø 10 mm' in cyl_txt
+        and '1 Körper' in body_txt and '40 × 30 × 10 mm' in body_txt
+        and hidden_empty
+    )
+
+    # 3. Einheit & Klick öffnet Einstellungen mit Fokus auf #set-proj-unit
+    unit_init = (p.pg.locator('#status-unit').text_content() or '').strip()
+    p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });
+    """); p.wait(250)
+    p.pg.locator('#status-unit').click(); p.wait(300)
+    modal_open = p.pg.locator('#set-proj-unit').count() == 1 and p.ev("return document.activeElement && document.activeElement.id === 'set-proj-unit'")
+    p.pg.select_option('#set-proj-unit', 'cm'); p.wait(300)
+    unit_cm = (p.pg.locator('#status-unit').text_content() or '').strip()
+    face_cm = (p.pg.locator('#status-sel').text_content() or '').strip()
+    p.pg.select_option('#set-proj-unit', 'mm'); p.wait(250)
+    p.pg.keyboard.press('Escape'); p.wait(250)
+    unit_mm = (p.pg.locator('#status-unit').text_content() or '').strip()
+    ok3 = unit_init == 'mm' and modal_open and unit_cm == 'cm' and '12 cm²' in face_cm and unit_mm == 'mm'
+
+    # 4. Rechenzustand: Bereit → Rechnet → Bereit → Fehler → Undo → Bereit
+    st_ready = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.emit('calc', true)"); p.wait(100)
+    st_busy = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.emit('calc', false)"); p.wait(100)
+    st_back = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.change('x', d=>{ d.items[0].finishes.push({id:'f_bad',type:'fillet',r:999,edges:[0]}); })"); warte_rechnen(p)
+    st_err = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.undo()"); warte_rechnen(p)
+    st_fixed = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    ok4 = (
+        st_ready == ['ready', 'Bereit']
+        and st_busy[0] == 'busy' and 'Rechnet' in st_busy[1]
+        and st_back == ['ready', 'Bereit']
+        and st_err[0] == 'error' and 'Fehler' in st_err[1]
+        and st_fixed == ['ready', 'Bereit']
+    )
+
+    # 5. Zusammenspiel mit #coords und #ampel sowie Hilfetexte
+    p.ev("App.select([App.doc.items[0].id]); Viewer.setView('iso', false)"); p.wait(500)
+    sx, sy = world_screen(p, 5, -5, 10)
+    p.pg.mouse.move(sx - 15, sy); p.pg.mouse.move(sx, sy, steps=4); p.wait(300)
+    box_ok = p.ev("""
+      const ids = ['#coords', '#status-sel', '#status-unit', '#status-calc', '#ampel'];
+      return ids.every(s => {
+        const el = document.querySelector(s);
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
+      });
+    """)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    attr_ok = p.ev("return ['#status-sel:statusSel','#status-unit:statusUnit','#status-calc:statusCalc'].every(s=>{ const [sel,k]=s.split(':'); const el=document.querySelector(sel); return el && el.dataset.help===k; })")
+    ok5 = (
+        box_ok
+        and attr_ok
+        and all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('statusSel', 'statusUnit', 'statusCalc'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -10964,6 +11079,7 @@ TESTS = [
     ('[A-047] Import prüfen und heilen: offenes STEP / Hinweis / Heilen mit Ergebnis / Lücken & gültiges STEP', t_a047_import_heilen),
     ('[A-049] Werkzeugleiste anpassen & Favoriten: Rechtsklick / Entfernen / Hinzufügen & Sortieren per Ziehen / Favorit ganz links / Neu laden / Zurücksetzen & Hilfe', t_a049_werkzeugleiste),
     ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
+    ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

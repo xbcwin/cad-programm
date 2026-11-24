@@ -168,6 +168,7 @@ const App = (() => {
   async function runRebuild() {
     if (!Kernel.ready) { await Kernel.whenReady().catch(() => {}); if (!Kernel.ready) return; }
     busy = true;
+    ev.emit('calc', true);
     clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
     while (dirty) {
       dirty = false;
@@ -185,7 +186,7 @@ const App = (() => {
       apply(res);
       ev.emit('rebuilt');
     }
-    busy = false; clearTimeout(busyTimer); ev.emit('busy', false);
+    busy = false; clearTimeout(busyTimer); ev.emit('busy', false); ev.emit('calc', false);
     ev.emit('rebuilt');
   }
   // Aussehen am Werkstoff: eigener Werkstoff des Teils, sonst der ausdrücklich gewählte Projekt-Werkstoff

@@ -227,7 +227,7 @@ body.sketching .viewcube{display:none}
 .check input{accent-color:var(--accent);width:16px;height:16px}
 
 /* ---------- Fußzeile ---------- */
-.bottombar{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,560px) minmax(0,1fr);align-items:center;gap:12px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);position:relative;z-index:25}
+.bottombar{display:grid;grid-template-columns:minmax(140px,1fr) minmax(240px,440px) minmax(0,auto);align-items:center;gap:10px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);position:relative;z-index:25}
 .hintline{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;line-height:1.3;min-width:0}
 .hintline svg{width:17px;height:17px;flex:none;color:var(--accent)}
 .hintline span{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -608,6 +608,7 @@ body.sketching .timeline{display:none}
   .tool .l-short{display:inline}
   .brand b{display:none}
   .tool{padding:7px 8px}
+  .bottombar{grid-template-columns:minmax(100px,1fr) minmax(200px,340px) minmax(0,auto)}
 }
 @media (max-width: 900px){
   .workspace,.workspace.drawing-mode{grid-template-columns:minmax(0,1fr)}
@@ -799,9 +800,23 @@ body:not(.simple) .simple-only{display:none!important}
 .note-sec textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:54px;font:13px/1.4 var(--font);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:6px;padding:6px 8px}
 .tl-chip.note{box-shadow:inset 0 -3px 0 var(--accent)}
 
-/* Lage unter der Maus (Statusleiste) */
-.ampel-wrap{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
-.coords{font:500 11.5px/1 var(--font-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* Statusleiste unten rechts (BE-17) */
+.ampel-wrap{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.coords{font:500 11.5px/1 var(--font-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.coords:empty{display:none}
+.st-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);color:var(--ink-2);font:500 11.5px/1 var(--font-mono);white-space:nowrap;flex:none;min-width:0}
+.st-chip[hidden]{display:none}
+.st-sel{background:var(--accent-soft);border-color:var(--accent-line);color:var(--ink);cursor:pointer;max-width:220px;overflow:hidden;text-overflow:ellipsis;display:inline-block;line-height:24px}
+.st-sel:hover{border-color:var(--accent)}
+.st-unit{font-weight:600;cursor:pointer}
+.st-unit:hover{border-color:var(--accent-line);color:var(--accent);background:var(--surface)}
+.st-calc{color:var(--muted)}
+.st-calc .st-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.st-calc.ok .st-dot{background:var(--ok)}
+.st-calc.busy{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.st-calc.busy .st-dot{width:9px;height:9px;border:1.5px solid var(--accent);border-top-color:transparent;background:transparent;animation:spin .7s linear infinite}
+.st-calc.warn{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.st-calc.warn .st-dot{background:var(--warn)}
 @media (max-width:900px){.coords{display:none}}
 
 /* Suchen im Verlauf */
@@ -1078,7 +1093,7 @@ body.presenting .pat-dot{display:none!important}
         <button class="go" id="cmd-go" type="button" aria-label="Ausführen" data-i18n-aria="topbar.cmdGo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </div>
-    <div class="ampel-wrap"><span class="coords" id="coords" data-help="coords" aria-live="off"></span><button class="ampel" id="ampel" type="button"><i class="dot"></i><span class="t">Wird geladen …</span></button></div>
+    <div class="ampel-wrap"><span class="coords" id="coords" data-help="coords" aria-live="off"></span><button class="st-chip st-sel" id="status-sel" type="button" data-help="statusSel" hidden></button><button class="st-chip st-unit" id="status-unit" type="button" data-help="statusUnit" aria-label="Einheit ändern">mm</button><span class="st-chip st-calc busy" id="status-calc" data-help="statusCalc" data-state="loading" aria-live="polite"><i class="st-dot"></i><span class="t">Lädt …</span></span><button class="ampel" id="ampel" type="button"><i class="dot"></i><span class="t">Wird geladen …</span></button></div>
   </footer>
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
@@ -2669,6 +2684,21 @@ const HELP = {
   "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
   "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
   "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
+ },
+ "statusSel": {
+  "tip": "Auswahl-Info in der Statusleiste",
+  "hilfe": "Zeigt unten rechts sofort, was du gerade gewählt hast – zum Beispiel die Länge einer Kante, die Summe mehrerer Kanten, den Flächeninhalt einer Fläche, den Durchmesser einer Rundung oder die Größe eines Körpers.",
+  "tipp": "Ein Klick auf das Auswahl-Schild kopiert den Zahlenwert in die Zwischenablage."
+ },
+ "statusUnit": {
+  "tip": "Aktuelle Projekt-Einheit – Klick öffnet die Einstellung",
+  "hilfe": "Zeigt die gerade eingestellte Einheit dieses Projekts (mm, cm, m oder Zoll). Alle Längen, Flächen und Maßeingaben ohne eigene Einheit richten sich danach.",
+  "tipp": "Klick direkt auf die Einheit, um sie in den Einstellungen umzustellen."
+ },
+ "statusCalc": {
+  "tip": "Rechenzustand des CAD-Kerns",
+  "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
+  "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
  }
 };
 
@@ -7583,6 +7613,7 @@ const App = (() => {
   async function runRebuild() {
     if (!Kernel.ready) { await Kernel.whenReady().catch(() => {}); if (!Kernel.ready) return; }
     busy = true;
+    ev.emit('calc', true);
     clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
     while (dirty) {
       dirty = false;
@@ -7600,7 +7631,7 @@ const App = (() => {
       apply(res);
       ev.emit('rebuilt');
     }
-    busy = false; clearTimeout(busyTimer); ev.emit('busy', false);
+    busy = false; clearTimeout(busyTimer); ev.emit('busy', false); ev.emit('calc', false);
     ev.emit('rebuilt');
   }
   // Aussehen am Werkstoff: eigener Werkstoff des Teils, sonst der ausdrücklich gewählte Projekt-Werkstoff
@@ -16950,7 +16981,7 @@ const ViewPrefs = (() => {
     return wrap;
   }
   // Einstellungen-Fenster (Menü ⋯ → Einstellungen)
-  function dialog(initialTab = 'general') {
+  function dialog(initialTab = 'general', opts = {}) {
     const body = h('div', { style: { display: 'grid', gap: '14px', minWidth: 'min(480px, 84vw)' } });
     const sel = (id, label, val, opts, fn, hint) => { const f = UI.selectField({ id, label, value: String(val), options: opts, onChange: fn }); if (hint) f.append(h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, hint)); return f; };
     const chk = (k, label, hint) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'set-' + k, checked: !!v[k] }), h('span', null, label, hint ? h('small', { style: { display: 'block', color: 'var(--muted)' } }, hint) : null)); l.querySelector('input').onchange = (e) => set({ [k]: e.target.checked }); return l; };
@@ -16998,6 +17029,7 @@ const ViewPrefs = (() => {
     body.append(tabs, paneGen, paneKeys);
     syncTabs(curTab);
     UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
+    if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
   return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
@@ -17440,6 +17472,7 @@ const UI = (() => {
   function busy(on) {
     if (on && !busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), 'Rechnet …'); $('#overlay').append(busyEl); }
     else if (!on && busyEl) { busyEl.remove(); busyEl = null; }
+    if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
   function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
@@ -22575,8 +22608,9 @@ const Sketch = (() => {
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
     if (uniq.length) S.selCon = null;
+    if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel');
   }
-  function clearSel() { if (!S) return; S.sels = []; }
+  function clearSel() { if (!S) return; S.sels = []; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
@@ -27898,6 +27932,7 @@ const Measure = (() => {
       if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
+    updateStatus();
   }
   function clearPins() {
     const g = Viewer.groups.measures;
@@ -28026,13 +28061,168 @@ const Measure = (() => {
     return ok;
   }
   function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, 'Wert'); return false; }
+  let calcBusy = false, uiBusy = false, selCopyVal = null, selCopyWhat = null;
+  const statusState = { selText: '', unit: 'mm', calcState: 'loading', calcText: 'Lädt …' };
+  function sketchEntLen(e) {
+    if (!e) return 0;
+    if (e.type === 'line') return Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+    if (e.type === 'circle') return 2 * Math.PI * (e.r || 0);
+    if (e.type === 'arc') {
+      const info = typeof SK !== 'undefined' && SK.arcInfo ? SK.arcInfo(e.a, e.m, e.b) : null;
+      return info ? Math.abs(info.sweep) * info.r : Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+    }
+    if (e.type === 'rect') return 2 * (Math.abs(e.b[0] - e.a[0]) + Math.abs(e.b[1] - e.a[1]));
+    if (typeof SK !== 'undefined' && SK.segsOf) {
+      let len = 0;
+      for (const s of SK.segsOf([e])) {
+        if (s.t === 'line') len += Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+        else if (s.t === 'arc') {
+          const info = SK.arcInfo(s.a, s.m, s.b);
+          len += info ? Math.abs(info.sweep) * info.r : Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+        } else if (s.t === 'bez' && SK.bezPoints) {
+          const pts = SK.bezPoints(s);
+          for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        }
+      }
+      return len;
+    }
+    return 0;
+  }
+  function computeSelectionStatus() {
+    if (typeof Sketch !== 'undefined' && Sketch.active && Sketch.state) {
+      const S = Sketch.state;
+      const els = [...new Set(S.sels || [])].map((id) => S.ents.find((e) => e.id === id)).filter(Boolean);
+      if (!els.length) return null;
+      if (els.length === 1) {
+        const e = els[0];
+        if (e.type === 'circle' && e.r > 0) {
+          return { text: `Kreis · Ø ${Units.fmtLenU(e.r * 2, 2)}`, tip: 'Durchmesser · Klick kopiert den Wert', copyVal: Units.fmtLen(e.r * 2, 2), copyWhat: 'Durchmesser' };
+        }
+        if (e.type === 'rect') {
+          const a = Math.abs(e.b[0] - e.a[0]) * Math.abs(e.b[1] - e.a[1]);
+          const d = a < 100 ? 2 : 1;
+          return { text: `Rechteck · ${Units.fmtAreaU(a, d)}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(a, d), copyWhat: 'Fläche' };
+        }
+        if (e.type === 'point') {
+          return { text: `Punkt · X ${Units.fmtLen(e.a[0], 1)} Y ${Units.fmtLen(e.a[1], 1)} ${Units.label()}`, tip: 'Skizzenpunkt' };
+        }
+        const len = sketchEntLen(e);
+        if (len > 0) return { text: `1 Element · ${Units.fmtLenU(len, 2)}`, tip: 'Länge · Klick kopiert den Wert', copyVal: Units.fmtLen(len, 2), copyWhat: 'Länge' };
+        return { text: '1 Element', tip: 'Auswahl in der Skizze' };
+      }
+      const total = els.reduce((s, e) => s + sketchEntLen(e), 0);
+      if (total > 0) return { text: `${els.length} Elemente · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
+      return { text: `${els.length} Elemente`, tip: 'Auswahl in der Skizze' };
+    }
+    if (App.edges.length) {
+      const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data && r.data.edges ? r.data.edges[x.edgeIdx] : null; }).filter(Boolean);
+      const total = eds.reduce((s, e) => s + (e.l || 0), 0);
+      const one = App.edges.length === 1 && eds.length === 1 ? eds[0] : null;
+      const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
+      if (full) {
+        const d = one.r * 2;
+        return { text: `Kreiskante · Ø ${Units.fmtLenU(d, 2)}`, tip: `Radius ${Units.fmtLenU(one.r, 2)} · Umfang ${Units.fmtLenU(total, 2)} · Klick kopiert den Wert`, copyVal: Units.fmtLen(d, 2), copyWhat: 'Durchmesser' };
+      }
+      if (App.edges.length === 1) {
+        if (total > 0) return { text: `1 Kante · ${Units.fmtLenU(total, 2)}`, tip: 'Kantenlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Länge' };
+        return { text: '1 Kante', tip: 'Gewählte Kante' };
+      }
+      if (total > 0) return { text: `${App.edges.length} Kanten · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge der gewählten Kanten · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
+      return { text: `${App.edges.length} Kanten`, tip: 'Gewählte Kanten' };
+    }
+    if (App.face) {
+      const face = typeof Actions !== 'undefined' && Actions.selectedFace ? Actions.selectedFace() : null;
+      if (face) {
+        const area = Viewer.faceArea(face.id, face.idx);
+        const fi = face.info;
+        const isRound = fi && (fi.t === 'CYLINDRE' || fi.t === 'SPHERE') && fi.r;
+        const dec = area < 100 ? 2 : 1;
+        const areaStr = area > 0 ? Units.fmtAreaU(area, dec) : '';
+        if (isRound && area > 0) {
+          return { text: `Fläche · ${areaStr} · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Flächeninhalt und Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert die Fläche`, copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+        }
+        if (isRound) {
+          return { text: `Runde Fläche · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert den Wert`, copyVal: Units.fmtLen(fi.r * 2, 2), copyWhat: 'Durchmesser' };
+        }
+        if (area > 0) {
+          return { text: `Fläche · ${areaStr}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+        }
+        return { text: 'Fläche', tip: 'Gewählte Fläche' };
+      }
+    }
+    if (App.sel.length) {
+      const items = App.selectedItems();
+      if (items.length === 1) {
+        const it = items[0].item;
+        const r = App.results.get(it.id);
+        const b = (r && r.data && r.data.bbox) || App.localBox(it.id);
+        const kindLbl = it.role === 'hole' ? '1 Loch' : '1 Körper';
+        if (b) {
+          const dx = Math.abs(b[3] - b[0]), dy = Math.abs(b[4] - b[1]), dz = Math.abs(b[5] - b[2]);
+          const sz = `${Units.fmtLen(dx, 1)} × ${Units.fmtLen(dy, 1)} × ${Units.fmtLen(dz, 1)} ${Units.label()}`;
+          return { text: `${kindLbl} · ${sz}`, tip: `${Model.label(it)} (${sz})` };
+        }
+        return { text: kindLbl, tip: Model.label(it) };
+      }
+      if (items.length > 1) {
+        const allHoles = items.every((x) => x.item.role === 'hole');
+        const allSolids = items.every((x) => x.item.role !== 'hole');
+        const lbl = allHoles ? `${items.length} Löcher` : allSolids ? `${items.length} Körper` : `${items.length} Objekte`;
+        return { text: lbl, tip: items.map((x) => Model.label(x.item)).join(', ') };
+      }
+    }
+    const m = sel ? find(sel) : null;
+    if (m) {
+      const ev = evalOf(m);
+      return { text: `Messung · ${ev.lost ? 'verloren' : ev.short}`, tip: `${m.name}: ${ev.text}`, copyVal: ev.lost ? null : firstNumber(ev.text), copyWhat: 'Messwert' };
+    }
+    return null;
+  }
+  function updateCalc() {
+    let state = 'ready', cls = 'st-chip st-calc ok', text = 'Bereit', tip = 'CAD-Kern ist bereit';
+    if (typeof Kernel === 'undefined' || !Kernel.ready) {
+      state = 'loading'; cls = 'st-chip st-calc busy'; text = 'Lädt …'; tip = 'CAD-Kern wird geladen …';
+    } else if (calcBusy || uiBusy || App.busy) {
+      state = 'busy'; cls = 'st-chip st-calc busy'; text = 'Rechnet …'; tip = 'Modell wird neu berechnet …';
+    } else if (App.errors && App.errors.length) {
+      state = 'error'; cls = 'st-chip st-calc warn';
+      text = App.errors.length === 1 ? '1 Fehler' : `${App.errors.length} Fehler`;
+      tip = App.errors[0].message || 'Ein Schritt hat ein Problem';
+    }
+    statusState.calcState = state; statusState.calcText = text;
+    const el = $('#status-calc');
+    if (el) {
+      el.className = cls; el.dataset.state = state; el.dataset.tip = tip;
+      const t = el.querySelector('.t'); if (t) t.textContent = text;
+    }
+  }
+  function updateStatus() {
+    const selEl = $('#status-sel');
+    const info = computeSelectionStatus();
+    if (info) {
+      selCopyVal = info.copyVal || null; selCopyWhat = info.copyWhat || null;
+      statusState.selText = info.text;
+      if (selEl) { selEl.hidden = false; selEl.textContent = info.text; selEl.dataset.tip = info.tip; }
+    } else {
+      selCopyVal = null; selCopyWhat = null; statusState.selText = '';
+      if (selEl) { selEl.hidden = true; selEl.textContent = ''; }
+    }
+    const u = Units.def();
+    statusState.unit = u.k;
+    const unitEl = $('#status-unit');
+    if (unitEl) { unitEl.textContent = u.label; unitEl.dataset.tip = `Einheit: ${u.name} – Klick öffnet die Einstellungen`; }
+    updateCalc();
+  }
+  function setCalcBusy(on) { uiBusy = !!on; updateCalc(); }
   function init() {
     App.on('selection', () => {
       if (App.sel.length !== 2) clearDist();
       if (sel && App.sel.length) { sel = null; drawSaved(); }
+      updateStatus();
     });
-    App.on('results', relink);
+    App.on('results', () => { relink(); updateStatus(); });
     App.on('remeshed', relink);
+    App.on('rebuilt', updateCalc);
     let lastUnit = Units.key();
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
@@ -28040,8 +28230,19 @@ const Measure = (() => {
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
       if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); }
       drawSaved();
+      updateStatus();
     });
-    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
+    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); updateStatus(); });
+    App.on('sketch', updateStatus);
+    App.on('sketchSel', updateStatus);
+    App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
+    App.on('busy', (b) => { uiBusy = !!b; updateCalc(); });
+    if (typeof Kernel !== 'undefined' && Kernel.whenReady) Kernel.whenReady().then(updateStatus).catch(() => {});
+    const selBtn = $('#status-sel');
+    if (selBtn) selBtn.addEventListener('click', () => { if (selCopyVal) copyText(selCopyVal, selCopyWhat || 'Wert'); });
+    const unitBtn = $('#status-unit');
+    if (unitBtn) unitBtn.addEventListener('click', () => ViewPrefs.dialog('general', { focus: 'set-proj-unit' }));
+    updateStatus();
     let d0 = null;
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
@@ -28101,7 +28302,7 @@ const Measure = (() => {
     return r;
   }
   return {
-    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop,
+    showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
   };
