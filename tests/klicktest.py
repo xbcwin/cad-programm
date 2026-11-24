@@ -21179,6 +21179,162 @@ def t_a102_pfad_verdrehung_schnitt(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-103] Vollrundung und Fase an einer Ecke (KP-38, KP-41) ----------
+def t_a103_vollrundung_eckenfase(p):
+    import math
+    warte_idle = lambda: warte_rechnen(p, 30)
+    def set_num(sel, val):
+        p.pg.locator(sel).fill(str(val))
+        p.pg.locator(sel).press('Enter')
+        warte_idle()
+
+    p.empty()
+
+    # 1. Vollrundung auf Steg 40 × 10 × 20 über 3D-Flächenklicks
+    steg_id = p.ev("""let id; App.change('Steg', d => {
+      const b = Model.newItem('box', { w: 40, d: 10, h: 20 }, { name: 'Steg' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("App.select([arg])", steg_id); p.wait(300)
+    p.pg.locator('#btn-full-fillet').click(); p.wait(200)
+    picking_on = p.ev("return Features.picking")
+
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(65, -65, 50), c.clone().set(10, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    s1 = world_screen(p, 0, -5, 10)
+    p.pg.mouse.click(s1[0], s1[1]); p.wait(150)
+    sc = world_screen(p, 20, 0, 10)
+    p.pg.mouse.click(sc[0], sc[1]); p.wait(150)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(65, 65, 50), c.clone().set(10, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    s2 = world_screen(p, 0, 5, 10)
+    p.pg.mouse.click(s2[0], s2[1]); warte_idle()
+
+    ff_res = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE' && f.c && f.c[0] > 14);
+      const endPlanes = r.data.faces.filter(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+      const minEdge = Math.min(...r.data.edges.map(e => e.l || 999));
+      return { errs: App.errors.length, cyls, endPlanes: endPlanes.length, minEdge, faceCount: r.data.faces.length };""", steg_id)
+    v_ff = volumen(p)
+    exp_vol_ff = (40 * 10 - (10 * 5 - math.pi * 25 / 2)) * 20  # 7785.398
+    ok1 = (
+        picking_on
+        and ff_res['errs'] == 0
+        and len(ff_res['cyls']) == 1
+        and abs(ff_res['cyls'][0]['r'] - 5.0) < 0.01
+        and ff_res['endPlanes'] == 0
+        and ff_res['minEdge'] > 1.0
+        and v_ff is not None and abs(v_ff - exp_vol_ff) < 0.5
+    )
+
+    # 2. Parametrisch: Steg-Dicke 10 -> 14 mm, Vollrundung wächst mit auf Radius 7 mm; plus verjüngter Steg
+    p.ev("App.change('Dicker', d => { Model.find(d, arg).item.p.d = 14; })", steg_id); warte_idle()
+    ff_res2 = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE' && f.c && f.c[0] > 12);
+      return { errs: App.errors.length, cyls };""", steg_id)
+    trap_id = p.ev("""let id; App.change('Trapez', d => {
+      const sk = { plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]}, ents:[
+        {id:'e1',type:'line',a:[-20,-8],b:[20,-5]},
+        {id:'e2',type:'line',a:[20,-5],b:[20,5]},
+        {id:'e3',type:'line',a:[20,5],b:[-20,8]},
+        {id:'e4',type:'line',a:[-20,8],b:[-20,-8]}
+      ], dims:[], cons:[] };
+      const it = Model.newItem('extrude', { sketch: sk, dist: 20, dir: 'normal' }, { name: 'Verjuengt' });
+      d.items.push(it); id = it.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("""const fs = App.results.get(arg).data.faces;
+      const f1 = fs.findIndex(f => f.t === 'PLANE' && f.n[1] < -0.5);
+      const fc = fs.findIndex(f => f.t === 'PLANE' && f.n[0] > 0.99);
+      const f2 = fs.findIndex(f => f.t === 'PLANE' && f.n[1] > 0.5);
+      Features.addFullFillet(arg, [f1, fc, f2]);""", trap_id); warte_idle()
+    trap_ok = p.ev("""const r = App.results.get(arg);
+      return App.errors.length === 0 && r && r.data.faces.some(f => f.t === 'CYLINDRE' && f.r > 4.0);""", trap_id)
+    ok2 = (
+        ff_res2['errs'] == 0
+        and len(ff_res2['cyls']) == 1
+        and abs(ff_res2['cyls'][0]['r'] - 7.0) < 0.01
+        and trap_ok
+    )
+
+    # 3. Ecken-Fase 2 / 3 / 4 auf Quader 20 × 20 × 20 über UI-Ecken-Klick
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    box_id = p.ev("""let id; App.change('Wuerfel', d => {
+      const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("App.select([arg])", box_id); p.wait(300)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(35, 35, 38), c.clone().set(0, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    p.pg.locator('#btn-corner-chamfer').click(); p.wait(200)
+    cc_picking = p.ev("return Features.picking")
+    c_scr = world_screen(p, 10, 10, 20)
+    p.pg.mouse.click(c_scr[0], c_scr[1]); warte_idle()
+
+    fin_id = p.ev("return App.doc.items[0].finishes[0]?.id")
+    set_num(f'#fin-d1-{fin_id}', '2')
+    set_num(f'#fin-d2-{fin_id}', '3')
+    set_num(f'#fin-d3-{fin_id}', '4')
+    v_cc = volumen(p)
+    tri_info = p.ev("""const r = App.results.get(arg);
+      const f = r.data.faces.find(x => x.t === 'PLANE' && x.n && Math.abs(x.n[0]) > 0.1 && Math.abs(x.n[1]) > 0.1 && Math.abs(x.n[2]) > 0.1);
+      if (!f) return null;
+      const dot = (u, v) => u[0]*v[0] + u[1]*v[1] + u[2]*v[2];
+      const onPlane = (pt) => Math.abs(dot(f.n, [pt[0]-f.c[0], pt[1]-f.c[1], pt[2]-f.c[2]])) < 1e-3;
+      const lens = r.data.edges.filter(e => e.a && e.b && onPlane(e.a) && onPlane(e.b) && onPlane(e.m)).map(e => e.l).sort((a,b) => a - b);
+      return { errs: App.errors.length, n: f.n, lens, faces: r.data.faces.length };""", box_id)
+    exp_lens = sorted([math.sqrt(13), math.sqrt(20), 5.0])
+    ok3 = (
+        cc_picking
+        and bool(fin_id)
+        and bool(tri_info)
+        and tri_info['errs'] == 0
+        and tri_info['faces'] == 7
+        and len(tri_info['lens']) == 3
+        and all(abs(tri_info['lens'][i] - exp_lens[i]) < 0.01 for i in range(3))
+        and v_cc is not None and abs(v_cc - 7996.0) < 0.1
+    )
+
+    # 4. Reihenfolge drehen, Formeln, Fehler bei zu großem Abstand & Rückgängig
+    p.pg.locator(f'#fin-rot-{fin_id}').click(); warte_idle()
+    rot_info = p.ev("""const f = App.doc.items[0].finishes[0];
+      const r = App.results.get(arg);
+      const tf = r.data.faces.find(x => x.t === 'PLANE' && x.n && Math.abs(x.n[0]) > 0.1 && Math.abs(x.n[1]) > 0.1 && Math.abs(x.n[2]) > 0.1);
+      return { d1: f.d1, d2: f.d2, d3: f.d3, n: tf && tf.n };""", box_id)
+    v_rot = volumen(p)
+    p.ev("App.change('Mass', d => { d.params.push({ id: 'pm1', name: 'F', expr: 3 }); })"); warte_idle()
+    set_num(f'#fin-d1-{fin_id}', 'F')
+    set_num(f'#fin-d2-{fin_id}', 'F*2')
+    set_num(f'#fin-d3-{fin_id}', 'F+1')
+    v_formula = volumen(p)  # 8000 - (3*6*4)/6 = 7988
+    err_formula = p.ev("return App.errors.length")
+    set_num(f'#fin-d1-{fin_id}', '25')
+    err_toobig = p.ev("return App.errors.some(e => e.code === 'toobig')")
+    p.ev("App.undo()"); warte_idle()
+    v_undo = volumen(p)
+    err_after_undo = p.ev("return App.errors.length")
+    ok4 = (
+        rot_info['d1'] == 3 and rot_info['d2'] == 4 and rot_info['d3'] == 2
+        and v_rot is not None and abs(v_rot - 7996.0) < 0.1
+        and abs(rot_info['n'][0] - tri_info['n'][0]) > 0.05
+        and err_formula == 0
+        and v_formula is not None and abs(v_formula - 7988.0) < 0.1
+        and err_toobig
+        and err_after_undo == 0
+        and v_undo is not None and abs(v_undo - 7988.0) < 0.1
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('vollrundung').some(c => c.id === 'fullFillet') && Commands.search('ecken-fase').some(c => c.id === 'cornerChamfer')")
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'fin' && /Ecken-Fase/.test(l.t))", box_id)
+    ok5 = (
+        all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('fullFillet', 'cornerChamfer'))
+        and i18n_ok and cmds_ok and explain_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a106_amf_ply_punkte(p):
     import base64, io, tempfile, zipfile
 
@@ -21874,6 +22030,7 @@ TESTS = [
     ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
+    ('[A-103] Vollrundung und Ecken-Fase mit drei Abständen (KP-38, KP-41)', t_a103_vollrundung_eckenfase),
     ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),

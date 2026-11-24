@@ -113,7 +113,14 @@ const Explain = (() => {
       lines.push({ k: 'op', t: `Spiegelt ${fNames.length ? fNames.join(', ') : 'einen fehlenden Schritt'} an ${plTxt} direkt im selben Körper.` });
     }
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
-    for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
+    for (const fin of it.finishes || []) {
+      let ft;
+      if (fin.type === 'shell') ft = `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.`;
+      else if (fin.type === 'fullFillet') ft = 'Vollrundung über drei gewählte Flächen (mittlere Fläche ganz abgerundet).';
+      else if (fin.type === 'cornerChamfer') ft = `Ecken-Fase mit den drei Abständen ${[fin.d1, fin.d2, fin.d3].map((x) => Units.fmtLenU(Model.num(x, V, 2), 2, doc)).join(' / ')}.`;
+      else ft = `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.`;
+      lines.push({ k: 'fin', t: ft });
+    }
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });

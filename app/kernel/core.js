@@ -3410,6 +3410,429 @@ export function createKernel(R, oc) {
       for (const f of faceArr) safeDelete(f);
     }
   }
+  function applyFullFillet(shape, fin, errors, itemId, topo = null, isLeaf = false) {
+    const sigs = (fin.faces || []).filter((f) => f && (f.c || f.tid));
+    if (sigs.length < 3) {
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: [0, 1, 2], message: 'Für die Vollrundung werden drei Flächen gebraucht.' });
+      return { shape, topo };
+    }
+    const b = bboxOf(shape);
+    const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const faceArr = [];
+    try { for (const f of shape.faces) faceArr.push(f); } catch (_) {}
+    const resolved = [];
+    const missing = [];
+    for (let i = 0; i < 3; i++) {
+      const hits = resolveFaceRef({ ...sigs[i], tol }, faceArr, topo, itemId, isLeaf);
+      if (!hits.length) missing.push(i);
+      resolved.push(hits[0] || null);
+    }
+    if (missing.length) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing, message: 'Eine der drei Flächen der Vollrundung gibt es nicht mehr.' });
+      return { shape, topo };
+    }
+    const [f1, fc, f2] = resolved;
+    if (f1.isSame(fc) || f2.isSame(fc) || f1.isSame(f2)) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'fullfillet', message: 'Bitte drei verschiedene Flächen für die Vollrundung wählen.' });
+      return { shape, topo };
+    }
+    const f1Edges = [], fcEdges = [], f2Edges = [];
+    try { for (const e of f1.edges) f1Edges.push(e); } catch (_) {}
+    try { for (const e of fc.edges) fcEdges.push(e); } catch (_) {}
+    try { for (const e of f2.edges) f2Edges.push(e); } catch (_) {}
+    const e1s = fcEdges.filter((e) => f1Edges.some((x) => x.isSame(e)));
+    const e2s = fcEdges.filter((e) => f2Edges.some((x) => x.isSame(e)));
+    const freeLists = () => {
+      for (const e of f1Edges) safeDelete(e);
+      for (const e of fcEdges) safeDelete(e);
+      for (const e of f2Edges) safeDelete(e);
+      for (const f of faceArr) safeDelete(f);
+    };
+    if (!e1s.length || !e2s.length) {
+      freeLists();
+      errors.push({ itemId, finishId: fin.id, code: 'fullfillet', message: 'Die mittlere Fläche der Vollrundung muss an beide Seitenflächen grenzen.' });
+      return { shape, topo };
+    }
+
+    let radEst = 0;
+    try {
+      const m1 = vec(e1s[0].pointAt(0.5)), m2 = vec(e2s[0].pointAt(0.5));
+      radEst = len(sub(m2, m1)) * 0.5;
+    } catch (_) {}
+
+    // Primärweg: exakter analytischer Schnitt bei drei ebenen Flächen mit parallelen geraden Grenzkanten
+    if (f1.geomType === 'PLANE' && fc.geomType === 'PLANE' && f2.geomType === 'PLANE' &&
+        e1s.length === 1 && e2s.length === 1 && e1s[0].geomType === 'LINE' && e2s[0].geomType === 'LINE') {
+      try {
+        const a1 = vec(e1s[0].startPoint), b1 = vec(e1s[0].endPoint);
+        const a2 = vec(e2s[0].startPoint), b2 = vec(e2s[0].endPoint);
+        const u = norm(sub(b1, a1)), u2 = norm(sub(b2, a2));
+        const n1 = norm(vec(f1.normalAt())), nc = norm(vec(fc.normalAt())), n2 = norm(vec(f2.normalAt()));
+        const pc = vec(fc.center);
+        if (Math.abs(dot(u, u2)) > 0.9999 &&
+            Math.abs(dot(n1, u)) < 1e-4 && Math.abs(dot(nc, u)) < 1e-4 && Math.abs(dot(n2, u)) < 1e-4 &&
+            dot(sub(pc, a1), n1) < -1e-4 && dot(sub(pc, a2), n2) < -1e-4) {
+          const ex = nc;
+          const ey = norm(cross(u, ex));
+          const to2 = (p) => { const d = sub(p, a1); return [dot(d, ex), dot(d, ey)]; };
+          const n2d = (nv) => [dot(nv, ex), dot(nv, ey)];
+          const P1 = to2(a1), Pc = to2(pc), P2 = to2(a2);
+          const N1 = n2d(n1), Nc = n2d(nc), N2 = n2d(n2);
+          const M = [
+            [N1[0], N1[1], 1, N1[0] * P1[0] + N1[1] * P1[1]],
+            [Nc[0], Nc[1], 1, Nc[0] * Pc[0] + Nc[1] * Pc[1]],
+            [N2[0], N2[1], 1, N2[0] * P2[0] + N2[1] * P2[1]],
+          ];
+          let okMat = true;
+          for (let i = 0; i < 3; i++) {
+            let piv = i;
+            for (let r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[piv][i])) piv = r;
+            if (Math.abs(M[piv][i]) < 1e-9) { okMat = false; break; }
+            [M[i], M[piv]] = [M[piv], M[i]];
+            for (let r = 0; r < 3; r++) if (r !== i) {
+              const k = M[r][i] / M[i][i];
+              for (let c = i; c < 4; c++) M[r][c] -= k * M[i][c];
+            }
+          }
+          if (okMat) {
+            const Cx = M[0][3] / M[0][0], Cy = M[1][3] / M[1][1], rad = M[2][3] / M[2][2];
+            if (rad > 1e-4) {
+              radEst = rad;
+              const T1 = [Cx + rad * N1[0], Cy + rad * N1[1]];
+              const Tc = [Cx + rad * Nc[0], Cy + rad * Nc[1]];
+              const T2 = [Cx + rad * N2[0], Cy + rad * N2[1]];
+              const us = [a1, b1, a2, b2].map((p) => dot(sub(p, a1), u));
+              const uMin = Math.min(...us), uMax = Math.max(...us);
+              let shUMin = Infinity, shUMax = -Infinity;
+              for (const ix of [b[0], b[3]]) for (const iy of [b[1], b[4]]) for (const iz of [b[2], b[5]]) {
+                const pr = dot(sub([ix, iy, iz], a1), u);
+                if (pr < shUMin) shUMin = pr;
+                if (pr > shUMax) shUMax = pr;
+              }
+              const padLo = uMin <= shUMin + 1e-3 ? Math.max(0.5, rad * 0.2) : 0;
+              const padHi = uMax >= shUMax - 1e-3 ? Math.max(0.5, rad * 0.2) : 0;
+              const d1v = [P1[0] - T1[0], P1[1] - T1[1]]; const d1l = Math.hypot(d1v[0], d1v[1]) || 1;
+              const d2v = [P2[0] - T2[0], P2[1] - T2[1]]; const d2l = Math.hypot(d2v[0], d2v[1]) || 1;
+              const padOut = Math.max(1, rad * 0.5);
+              const E1 = [P1[0] + (d1v[0] / d1l) * padOut, P1[1] + (d1v[1] / d1l) * padOut];
+              const E2 = [P2[0] + (d2v[0] / d2l) * padOut, P2[1] + (d2v[1] / d2l) * padOut];
+              const to3 = (xy, zU) => add(add(a1, mul(u, zU)), add(mul(ex, xy[0]), mul(ey, xy[1])));
+              const z0 = uMin - padLo, hU = (uMax - uMin) + padLo + padHi;
+              const pT1 = to3(T1, z0), pE1 = to3(E1, z0), pE2 = to3(E2, z0), pT2 = to3(T2, z0), pTc = to3(Tc, z0);
+
+              let wb = null, fb = null, pr = null, gv = null, cut = null, usd = null;
+              let l1 = null, l2 = null, l3 = null, a3 = null, faceW = null, prismSh = null, cutRes = null, res = null, chk = null, cutTopo = null;
+              try {
+                wb = new oc.BRepBuilderAPI_MakeWire();
+                l1 = R.makeLine(pT1, pE1); wb.Add(l1.wrapped);
+                l2 = R.makeLine(pE1, pE2); wb.Add(l2.wrapped);
+                l3 = R.makeLine(pE2, pT2); wb.Add(l3.wrapped);
+                a3 = R.makeThreePointArc(pT2, pTc, pT1); wb.Add(a3.wrapped);
+                wb.Build();
+                fb = new oc.BRepBuilderAPI_MakeFace(wb.Wire(), false);
+                faceW = fb.Face();
+                gv = new oc.gp_Vec(u[0] * hU, u[1] * hU, u[2] * hU);
+                pr = new oc.BRepPrimAPI_MakePrism(faceW, gv, false, true);
+                pr.Build();
+                prismSh = pr.Shape();
+                cut = new oc.BRepAlgoAPI_Cut(shape.wrapped, prismSh);
+                cut.Build();
+                cutRes = R.cast(cut.Shape());
+                if (cutRes && R.isShape3D(cutRes)) {
+                  const volBefore = R.measureVolume(shape);
+                  const volCut = R.measureVolume(cutRes);
+                  if (volBefore - volCut > 1e-4) {
+                    cutTopo = propagateHistory(cut, [{ topo, selfId: itemId }], cutRes, 'Ff:' + (fin.id || 'f'));
+                    usd = new oc.ShapeUpgrade_UnifySameDomain(cutRes.wrapped, true, true, false);
+                    usd.Build();
+                    res = R.cast(usd.Shape());
+                    chk = new oc.BRepCheck_Analyzer(res.wrapped);
+                    if (res && R.isShape3D(res) && chk.IsValid() && Math.abs(R.measureVolume(res) - volCut) < 1e-2) {
+                      const outTopo = createTopoMap();
+                      const cutFaces = [];
+                      try { for (const f of cutRes.faces) cutFaces.push(f); } catch (_) {}
+                      const cutMeta = cutFaces.map((cf) => {
+                        let cn = null; try { cn = vec(cf.normalAt()); } catch (_) {}
+                        return { gt: cf.geomType, c: vec(cf.center), n: cn, tid: tmGet(cutTopo.faces, cf.wrapped) };
+                      });
+                      const resFaces = exploreUnique(res, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+                      for (const rf of resFaces) {
+                        const rObj = new R.Face(oc.TopoDS.Face(rf.s));
+                        try {
+                          const rGt = rObj.geomType, rc = vec(rObj.center);
+                          let rn = null; try { rn = vec(rObj.normalAt()); } catch (_) {}
+                          const match = cutMeta.find((m) => m.tid && m.gt === rGt && len(sub(m.c, rc)) < 1e-3 && (!m.n || !rn || dot(m.n, rn) > 0.999));
+                          if (match) tmAdd(outTopo.faces, rf.s, match.tid);
+                          else rf.s.delete();
+                        } finally { rObj.delete(); }
+                      }
+                      for (const cf of cutFaces) safeDelete(cf);
+                      ensureTopoComplete(res, outTopo, 'Ff:' + (fin.id || 'f'));
+                      freeTopoMap(cutTopo);
+                      freeLists();
+                      return { shape: res, topo: outTopo };
+                    }
+                    safeDelete(res); res = null;
+                  }
+                }
+                safeDelete(cutRes); cutRes = null;
+              } catch (_) {
+                safeDelete(res);
+                safeDelete(cutRes);
+              } finally {
+                if (cutTopo) freeTopoMap(cutTopo);
+                safeDelete(chk); safeDelete(usd); safeDelete(cut); safeDelete(prismSh); safeDelete(pr);
+                safeDelete(gv); safeDelete(faceW); safeDelete(fb); safeDelete(wb);
+                safeDelete(l1); safeDelete(l2); safeDelete(l3); safeDelete(a3);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Fallback-Weg für gekrümmte Flächen/Kanten über MakeFillet
+    if (radEst > 1e-4) {
+      const edgeList = [...e1s, ...e2s];
+      const runFilletR = (rad, skipTopo) => {
+        const bld = new oc.BRepFilletAPI_MakeFillet(shape.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);
+        try {
+          for (const e of edgeList) bld.Add(rad, e.wrapped);
+          bld.Build();
+          const sh = R.cast(bld.Shape());
+          if (!sh || !R.isShape3D(sh)) { safeDelete(sh); throw new Error('fullfillet'); }
+          const chk = new oc.BRepCheck_Analyzer(sh.wrapped);
+          const valid = chk.IsValid(); chk.delete();
+          if (!valid) { safeDelete(sh); throw new Error('fullfillet'); }
+          const outTopo = skipTopo ? null : propagateHistory(bld, [{ topo, selfId: itemId }], sh, 'Ff:' + (fin.id || 'f'));
+          return { shape: sh, topo: outTopo };
+        } finally { bld.delete(); }
+      };
+      let best = null;
+      try { best = runFilletR(radEst * (1 - 1e-4), false); } catch (_) {}
+      if (!best) {
+        let lo = 0, hi = radEst * 1.2, rBest = 0;
+        for (let i = 0; i < 8; i++) {
+          const mid = (lo + hi) / 2;
+          try { const t = runFilletR(mid, true); safeDelete(t.shape); lo = mid; rBest = mid; } catch (_) { hi = mid; }
+        }
+        if (rBest > 1e-3) {
+          try { best = runFilletR(rBest * (1 - 1e-4), false); } catch (_) {}
+        }
+      }
+      if (best) {
+        freeLists();
+        return best;
+      }
+    }
+
+    freeLists();
+    errors.push({ itemId, finishId: fin.id, code: 'fullfillet', message: 'Die Vollrundung lässt sich an diesen drei Flächen nicht bauen.' });
+    return { shape, topo };
+  }
+
+  function applyCornerChamfer(shape, fin, errors, itemId, topo = null, isLeaf = false) {
+    const d1 = num(fin.d1, 2), d2 = num(fin.d2, 2), d3 = num(fin.d3, 2);
+    if (!(d1 > 0 && d2 > 0 && d3 > 0)) {
+      errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Alle drei Abstände der Ecken-Fase müssen größer als 0 sein.' });
+      return { shape, topo };
+    }
+    const shapeEdges = [];
+    try { for (const e of shape.edges) shapeEdges.push(e); } catch (_) {}
+    const freeEdges = () => { for (const e of shapeEdges) safeDelete(e); };
+    const b = bboxOf(shape);
+    const maxDim = Math.max(1, b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const edgeEnds = (e) => [vec(e.startPoint), vec(e.endPoint)];
+
+    let V = null;
+    let orderedEdges = null;
+
+    // Pfad A: stabile Topologie über fin.edges[0..2]
+    if (Array.isArray(fin.edges) && fin.edges.length === 3) {
+      const cands = fin.edges.map((s) => resolveEdgeRef(s, shapeEdges, topo, itemId, isLeaf));
+      if (cands.every((arr) => arr.length > 0)) {
+        outer: for (const e0 of cands[0]) {
+          for (const pt of edgeEnds(e0)) {
+            const e1 = cands[1].find((x) => !x.isSame(e0) && edgeEnds(x).some((q) => dist3(q, pt) < 1e-2));
+            const e2 = cands[2].find((x) => !x.isSame(e0) && (!e1 || !x.isSame(e1)) && edgeEnds(x).some((q) => dist3(q, pt) < 1e-2));
+            if (e1 && e2) { V = pt; orderedEdges = [e0, e1, e2]; break outer; }
+          }
+        }
+      }
+    }
+
+    // Pfad B: Fallback über gespeicherte Ecke fin.v
+    if (!V && Array.isArray(fin.v) && fin.v.length === 3) {
+      const vTol = Math.max(0.2, 0.01 * maxDim);
+      let bestDist = Infinity, bestPt = null;
+      for (const e of shapeEdges) {
+        try {
+          for (const pt of edgeEnds(e)) {
+            const dd = dist3(pt, fin.v);
+            if (dd < vTol && dd < bestDist) { bestDist = dd; bestPt = pt; }
+          }
+        } catch (_) {}
+      }
+      if (bestPt) {
+        const inc = shapeEdges.filter((e) => {
+          try { return edgeEnds(e).some((q) => dist3(q, bestPt) < 1e-2); } catch (_) { return false; }
+        });
+        if (inc.length < 3) {
+          freeEdges();
+          errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', message: 'Die gewählte Ecke der Ecken-Fase gibt es nicht mehr.' });
+          return { shape, topo };
+        }
+        const dirOf = (e) => {
+          const [ea, eb] = edgeEnds(e);
+          const other = dist3(ea, bestPt) < dist3(eb, bestPt) ? eb : ea;
+          return norm(sub(other, bestPt));
+        };
+        if (inc.length === 3) {
+          V = bestPt;
+          if (Array.isArray(fin.edges) && fin.edges.length === 3 && fin.edges.every((s) => s && Array.isArray(s.dir))) {
+            const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+            const dirs = inc.map(dirOf);
+            let bestP = perms[0], bestScore = -Infinity;
+            for (const pm of perms) {
+              const sc = dot(dirs[pm[0]], fin.edges[0].dir) + dot(dirs[pm[1]], fin.edges[1].dir) + dot(dirs[pm[2]], fin.edges[2].dir);
+              if (sc > bestScore) { bestScore = sc; bestP = pm; }
+            }
+            orderedEdges = bestP.map((i) => inc[i]);
+          } else {
+            const domKey = (d) => {
+              const ax = [Math.abs(d[0]), Math.abs(d[1]), Math.abs(d[2])];
+              const m = ax[0] >= ax[1] && ax[0] >= ax[2] ? 0 : ax[1] >= ax[2] ? 1 : 2;
+              return [m, d[0], d[1], d[2]];
+            };
+            orderedEdges = inc.slice().sort((a, c) => cmpSortKey(domKey(dirOf(a)), domKey(dirOf(c))));
+          }
+        } else if (Array.isArray(fin.edges) && fin.edges.length === 3 && fin.edges.every((s) => s && Array.isArray(s.dir))) {
+          const picked = [];
+          for (const s of fin.edges) {
+            let bestE = null, bestDot = -Infinity;
+            for (const e of inc) {
+              if (picked.includes(e)) continue;
+              const dp = dot(dirOf(e), s.dir);
+              if (dp > bestDot) { bestDot = dp; bestE = e; }
+            }
+            if (bestE && bestDot > 0.7) picked.push(bestE);
+          }
+          if (picked.length === 3) { V = bestPt; orderedEdges = picked; }
+        }
+        if (!V) {
+          freeEdges();
+          errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Die Ecken-Fase funktioniert nur an einer Ecke mit drei Kanten.' });
+          return { shape, topo };
+        }
+      }
+    }
+
+    if (!V || !orderedEdges || orderedEdges.length !== 3) {
+      freeEdges();
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', message: 'Die gewählte Ecke der Ecken-Fase gibt es nicht mehr.' });
+      return { shape, topo };
+    }
+
+    const ds = [d1, d2, d3];
+    const pts = [];
+    for (let k = 0; k < 3; k++) {
+      const ek = orderedEdges[k], dk = ds[k];
+      let L = 0; try { L = ek.length; } catch (_) {}
+      if (!(L > 1e-4) || dk >= L - 1e-4) {
+        const max = Math.floor(Math.max(0, L - 0.05) * 10) / 10;
+        freeEdges();
+        errors.push({ itemId, finishId: fin.id, code: 'toobig', max, message: `Ein Abstand der Ecken-Fase ist zu groß für die Kante (Kantenlänge: ${String(Math.round(L * 10) / 10).replace('.', ',')} mm).` });
+        return { shape, topo };
+      }
+      const [ea, eb] = edgeEnds(ek);
+      const fromStart = dist3(ea, V) < dist3(eb, V);
+      if (ek.geomType === 'LINE') {
+        const other = fromStart ? eb : ea;
+        pts.push(add(V, mul(norm(sub(other, V)), dk)));
+      } else {
+        const t = fromStart ? dk / L : 1 - dk / L;
+        pts.push(vec(ek.pointAt(Math.max(0, Math.min(1, t)))));
+      }
+    }
+    freeEdges();
+
+    let [Q1, Q2, Q3] = pts;
+    let N = cross(sub(Q2, Q1), sub(Q3, Q1));
+    const nLen = len(N);
+    if (!(nLen > 1e-6)) {
+      errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Die drei Kanten dieser Ecke liegen in einer Ebene.' });
+      return { shape, topo };
+    }
+    if (dot(sub(V, Q1), N) < 0) {
+      [Q2, Q3] = [Q3, Q2];
+      N = mul(N, -1);
+    }
+    if (dot(sub(V, Q1), norm(N)) <= 1e-5) {
+      errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Die Ecken-Fase lässt sich an dieser Ecke nicht schneiden.' });
+      return { shape, topo };
+    }
+
+    const M = [(Q1[0] + Q2[0] + Q3[0]) / 3, (Q1[1] + Q2[1] + Q3[1]) / 3, (Q1[2] + Q2[2] + Q3[2]) / 3];
+    const dil = (p) => add(M, mul(sub(p, M), 2));
+    const V2 = dil(V), A = dil(Q1), B = dil(Q2), C = dil(Q3);
+    const triFace = (p, q, r) => {
+      const wb = new oc.BRepBuilderAPI_MakeWire();
+      const e1 = R.makeLine(p, q), e2 = R.makeLine(q, r), e3 = R.makeLine(r, p);
+      wb.Add(e1.wrapped); wb.Add(e2.wrapped); wb.Add(e3.wrapped);
+      wb.Build();
+      const w = wb.Wire();
+      const fb = new oc.BRepBuilderAPI_MakeFace(w, true);
+      const fc = fb.Face();
+      wb.delete(); w.delete(); fb.delete();
+      e1.delete(); e2.delete(); e3.delete();
+      return fc;
+    };
+
+    let sew = null, sh = null, ms = null, solid = null, sfs = null, cut = null, res = null, chk = null;
+    const tf = [];
+    try {
+      sew = new oc.BRepBuilderAPI_Sewing(1e-6);
+      tf.push(triFace(A, B, C), triFace(A, C, V2), triFace(C, B, V2), triFace(B, A, V2));
+      for (const f of tf) sew.Add(f);
+      sew.Perform();
+      sh = oc.TopoDS.Shell(sew.SewedShape());
+      ms = new oc.BRepBuilderAPI_MakeSolid(sh);
+      solid = ms.Solid();
+      sfs = new oc.ShapeFix_Solid(solid);
+      sfs.Perform();
+      const fixedSolid = sfs.Solid();
+      cut = new oc.BRepAlgoAPI_Cut(shape.wrapped, fixedSolid);
+      cut.Build();
+      safeDelete(fixedSolid);
+      res = R.cast(cut.Shape());
+      chk = new oc.BRepCheck_Analyzer(res.wrapped);
+      const valid = !!(res && R.isShape3D(res) && chk.IsValid());
+      if (!valid) {
+        safeDelete(res);
+        errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Die Ecken-Fase ließ sich an dieser Ecke nicht bauen.' });
+        return { shape, topo };
+      }
+      const volBefore = R.measureVolume(shape), volAfter = R.measureVolume(res);
+      if (!(volBefore - volAfter > 1e-4)) {
+        safeDelete(res);
+        errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Die Ecken-Fase funktioniert nur an einer äußeren Ecke.' });
+        return { shape, topo };
+      }
+      const outTopo = propagateHistory(cut, [{ topo, selfId: itemId }], res, 'Cc:' + (fin.id || 'c'));
+      return { shape: res, topo: outTopo };
+    } catch (_) {
+      safeDelete(res);
+      errors.push({ itemId, finishId: fin.id, code: 'chamfer', message: 'Die Ecken-Fase ließ sich an dieser Ecke nicht bauen.' });
+      return { shape, topo };
+    } finally {
+      for (const f of tf) safeDelete(f);
+      safeDelete(chk); safeDelete(cut); safeDelete(sfs); safeDelete(solid); safeDelete(ms); safeDelete(sh); safeDelete(sew);
+    }
+  }
+
   function applyFinishes(shape, finishes, errors, itemId, topo = null, isLeaf = false) {
     let curShape = shape;
     let curTopo = topo;
@@ -3426,6 +3849,24 @@ export function createKernel(R, oc) {
       }
       if (fin.type === 'draft') {
         const res = applyDraft(curShape, fin, errors, itemId, curTopo);
+        if (res.shape !== curShape) {
+          if (curShape !== shape) safeDelete(curShape);
+          if (ownsTopo) freeTopoMap(curTopo);
+          curShape = res.shape; curTopo = res.topo; ownsTopo = true;
+        }
+        continue;
+      }
+      if (fin.type === 'fullFillet') {
+        const res = applyFullFillet(curShape, fin, errors, itemId, curTopo, isLeaf);
+        if (res.shape !== curShape) {
+          if (curShape !== shape) safeDelete(curShape);
+          if (ownsTopo) freeTopoMap(curTopo);
+          curShape = res.shape; curTopo = res.topo; ownsTopo = true;
+        }
+        continue;
+      }
+      if (fin.type === 'cornerChamfer') {
+        const res = applyCornerChamfer(curShape, fin, errors, itemId, curTopo, isLeaf);
         if (res.shape !== curShape) {
           if (curShape !== shape) safeDelete(curShape);
           if (ownsTopo) freeTopoMap(curTopo);
