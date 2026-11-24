@@ -1,0 +1,92 @@
+[
+  {
+    "id": "bambu-a1",
+    "name": "Bambu Lab A1",
+    "x": 256,
+    "y": 256,
+    "z": 256,
+    "nozzle": 0.4,
+    "quelle": "Bambu Lab A1 Spezifikationen (bambulab.com)"
+  },
+  {
+    "id": "bambu-a1-mini",
+    "name": "Bambu Lab A1 mini",
+    "x": 180,
+    "y": 180,
+    "z": 180,
+    "nozzle": 0.4,
+    "quelle": "Bambu Lab A1 mini Spezifikationen (bambulab.com)"
+  },
+  {
+    "id": "bambu-p1s",
+    "name": "Bambu Lab P1S",
+    "x": 256,
+    "y": 256,
+    "z": 256,
+    "nozzle": 0.4,
+    "quelle": "Bambu Lab P1S Spezifikationen (bambulab.com)"
+  },
+  {
+    "id": "bambu-x1c",
+    "name": "Bambu Lab X1C",
+    "x": 256,
+    "y": 256,
+    "z": 256,
+    "nozzle": 0.4,
+    "quelle": "Bambu Lab X1 Carbon Spezifikationen (bambulab.com)"
+  },
+  {
+    "id": "prusa-mk4",
+    "name": "Prusa MK4",
+    "x": 250,
+    "y": 210,
+    "z": 220,
+    "nozzle": 0.4,
+    "quelle": "Original Prusa MK4/MK4S Datenblatt (prusa3d.com)"
+  },
+  {
+    "id": "prusa-mini",
+    "name": "Prusa Mini",
+    "x": 180,
+    "y": 180,
+    "z": 180,
+    "nozzle": 0.4,
+    "quelle": "Original Prusa MINI+ Datenblatt (prusa3d.com)"
+  },
+  {
+    "id": "ender-3",
+    "name": "Ender 3",
+    "x": 220,
+    "y": 220,
+    "z": 250,
+    "nozzle": 0.4,
+    "quelle": "Creality Ender-3 Spezifikationen (creality.com)"
+  },
+  {
+    "id": "voron-24-250",
+    "name": "Voron 2.4 (250)",
+    "x": 250,
+    "y": 250,
+    "z": 250,
+    "nozzle": 0.4,
+    "quelle": "Voron Design V2.4 Spezifikation (vorondesign.com)"
+  },
+  {
+    "id": "voron-24-300",
+    "name": "Voron 2.4 (300)",
+    "x": 300,
+    "y": 300,
+    "z": 300,
+    "nozzle": 0.4,
+    "quelle": "Voron Design V2.4 Spezifikation (vorondesign.com)"
+  },
+  {
+    "id": "voron-24-350",
+    "name": "Voron 2.4 (350)",
+    "x": 350,
+    "y": 350,
+    "z": 350,
+    "nozzle": 0.4,
+    "quelle": "Voron Design V2.4 Spezifikation (vorondesign.com)"
+  }
+]

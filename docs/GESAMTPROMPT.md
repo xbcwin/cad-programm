@@ -114,7 +114,7 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), Drucker-Liste `PRINTERS`, Bauraum-Prüfung `fitCheck`/`applyRotationSuggestion`, Loch-Ausgleich `holeComp` für STL/3MF, `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
@@ -125,7 +125,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht), `gewinde.json` (Regelgewinde M1.6–M12, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `drucker.json` (10 3D-Drucker-Profile), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht), `gewinde.json` (Regelgewinde M1.6–M12, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`

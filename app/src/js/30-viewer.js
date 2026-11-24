@@ -18,7 +18,7 @@ const Viewer = (() => {
   function readTheme() {
     const cs = getComputedStyle(document.documentElement);
     const g = (n, d) => (cs.getPropertyValue(n).trim() || d);
-    theme.ink = g('--ink', '#16202b'); theme.accent = g('--accent', '#0c7a70'); theme.hole = g('--hole', '#d9483f');
+    theme.ink = g('--ink', '#16202b'); theme.accent = g('--accent', '#0c7a70'); theme.hole = g('--hole', '#d9483f'); theme.warn = g('--warn', '#b77a06');
     theme.dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.getAttribute('data-theme') !== 'light' || document.documentElement.getAttribute('data-theme') === 'dark';
     theme.edge = theme.dark ? '#0b0f13' : '#1c2630';
     theme.surface = g('--surface', theme.dark ? '#1a2027' : '#ffffff');
@@ -168,9 +168,10 @@ const Viewer = (() => {
     if (!bed || !bed.enabled || !(bed.x > 0) || !(bed.y > 0)) { needsRender = true; return; }
     const bx = Number(bed.x), by = Number(bed.y), bz = Number(bed.z) > 0 ? Number(bed.z) : 250;
     const hx = bx / 2, hy = by / 2;
+    const bedCol = bed.warn ? theme.warn : theme.accent;
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(bx, by),
-      new THREE.MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: bedCol, transparent: true, opacity: bed.warn ? 0.09 : 0.05, side: THREE.DoubleSide, depthWrite: false }),
     );
     plate.position.z = -0.02;
     plate.renderOrder = -2;
@@ -183,7 +184,7 @@ const Viewer = (() => {
     ];
     const baseGeo = new THREE.BufferGeometry();
     baseGeo.setAttribute('position', new THREE.Float32BufferAttribute(basePts, 3));
-    const baseFrame = new THREE.LineSegments(baseGeo, new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.75, depthWrite: false }));
+    const baseFrame = new THREE.LineSegments(baseGeo, new THREE.LineBasicMaterial({ color: bedCol, transparent: true, opacity: bed.warn ? 0.9 : 0.75, depthWrite: false }));
     baseFrame.renderOrder = -1;
     baseFrame.userData.noPick = true;
     const volPts = [
@@ -198,7 +199,7 @@ const Viewer = (() => {
     ];
     const volGeo = new THREE.BufferGeometry();
     volGeo.setAttribute('position', new THREE.Float32BufferAttribute(volPts, 3));
-    const volFrame = new THREE.LineSegments(volGeo, new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.22, depthWrite: false }));
+    const volFrame = new THREE.LineSegments(volGeo, new THREE.LineBasicMaterial({ color: bedCol, transparent: true, opacity: bed.warn ? 0.45 : 0.22, depthWrite: false }));
     volFrame.renderOrder = -1;
     volFrame.userData.noPick = true;
     groups.printBed.add(plate, baseFrame, volFrame);

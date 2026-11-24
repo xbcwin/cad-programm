@@ -55,7 +55,7 @@ const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
-  const defBed = () => ({ enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 });
+  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 });
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
@@ -1071,10 +1071,12 @@ const Model = (() => {
     const rawBed = doc.settings.printBed && typeof doc.settings.printBed === 'object' ? doc.settings.printBed : {};
     doc.settings.printBed = {
       enabled: !!rawBed.enabled,
+      printer: typeof rawBed.printer === 'string' && rawBed.printer ? rawBed.printer : 'custom',
       x: Number(rawBed.x) > 0 ? Number(rawBed.x) : 220,
       y: Number(rawBed.y) > 0 ? Number(rawBed.y) : 220,
       z: Number(rawBed.z) > 0 ? Number(rawBed.z) : 250,
       nozzle: Number(rawBed.nozzle) > 0 ? Number(rawBed.nozzle) : 0.4,
+      holeComp: Number.isFinite(Number(rawBed.holeComp)) ? clamp(Math.round(Number(rawBed.holeComp) * 100) / 100, 0, 1) : 0,
     };
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;

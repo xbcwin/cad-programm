@@ -892,18 +892,30 @@ const Panels = (() => {
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Objekte'), h('b', { class: 'mono' }, String(Model.countItems(App.doc)))),
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${Units.fmtLen(st.x, 1)} × ${Units.fmtLen(st.y, 1)} × ${Units.fmtLen(st.z, 1)} ${Units.label()}` : '–'))));
     w.append(info);
-    // 3D-Druck / Druckbett (optional, z. B. über Vorlage „3D-Druck“)
-    const pb = Object.assign({ enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 }, (App.doc.settings && App.doc.settings.printBed) || {});
+    // 3D-Druck / Druckbett (Drucker-Auswahl, Bauraum-Warnung mit Drehvorschlag, Loch-Ausgleich)
+    const pb = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, (App.doc.settings && App.doc.settings.printBed) || {});
     const bedSec = h('div', { class: 'section', id: 'proj-bed-sec', 'data-help': 'printBed' }, h('div', { class: 'section-h' }, '3D-Druck / Druckbett'));
     const bedOn = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'proj-bed-on', checked: !!pb.enabled }), 'Druckbett aktivieren (Rahmen im Bild)');
     bedOn.querySelector('input').onchange = (e) => {
       const on = e.target.checked;
       App.change(on ? 'Druckbett aktiviert' : 'Druckbett deaktiviert', (doc) => {
         doc.settings = doc.settings || {};
-        doc.settings.printBed = Object.assign({ enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 }, doc.settings.printBed || {}, { enabled: on });
+        doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {}, { enabled: on });
       });
     };
-    bedSec.append(bedOn);
+    const printerVal = !pb.enabled ? '' : (Print.findPrinter(pb.printer) ? pb.printer : 'custom');
+    const printerOpts = [
+      ['', 'Kein Drucker (aus)'],
+      ...(Print.PRINTERS || []).map((p) => [p.id, `${p.name} (${p.x}×${p.y}×${p.z} mm)`]),
+      ['custom', 'Eigene Größe'],
+    ];
+    const printerSel = UI.selectField({
+      id: 'proj-printer', label: 'Drucker', value: printerVal, options: printerOpts,
+      onChange: (v) => Print.setPrinter(v),
+    });
+    printerSel.setAttribute('data-help', 'printerSelect');
+    printerSel.style.marginTop = '8px';
+    bedSec.append(bedOn, printerSel);
     if (pb.enabled) {
       const bedFields = h('div', { class: 'fields three', style: { marginTop: '8px' } });
       for (const [k, lbl] of [['x', 'Breite'], ['y', 'Tiefe'], ['z', 'Höhe']]) {
@@ -911,8 +923,10 @@ const Panels = (() => {
           id: 'proj-bed-' + k, label: lbl, value: pb[k], axis: k, unit: 'mm', min: 10, expr: false,
           onCommit: (v) => App.change('Druckbett geändert', (doc) => {
             doc.settings = doc.settings || {};
-            doc.settings.printBed = Object.assign({ enabled: true, x: 220, y: 220, z: 250, nozzle: 0.4 }, doc.settings.printBed || {});
+            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
             doc.settings.printBed[k] = v;
+            const pr = Print.findPrinter(doc.settings.printBed.printer);
+            if (!pr || pr[k] !== v) doc.settings.printBed.printer = 'custom';
             doc.settings.custom = Object.assign({ x: 220, y: 220, z: 250 }, doc.settings.custom || {});
             doc.settings.custom[k] = v;
           }),
@@ -922,16 +936,39 @@ const Panels = (() => {
         id: 'proj-bed-nozzle', label: 'Düse Ø', value: pb.nozzle, unit: 'mm', len: false, min: 0.1, step: 0.1, expr: false,
         onCommit: (v) => App.change('Düse geändert', (doc) => {
           doc.settings = doc.settings || {};
-          doc.settings.printBed = Object.assign({ enabled: true, x: 220, y: 220, z: 250, nozzle: 0.4 }, doc.settings.printBed || {});
+          doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
           doc.settings.printBed.nozzle = v;
         }),
       }));
-      const tooBig = !!(st && (st.x > pb.x + 0.05 || st.y > pb.y + 0.05 || st.z > pb.z + 0.05));
-      const bedStatus = h('div', { class: 'hint-box' + (tooBig ? ' warn' : ''), id: 'proj-bed-status', style: { marginTop: '8px' } },
-        tooBig
-          ? `Größer als das Druckbett (${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()}).`
-          : `Druckbett ${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()} · Düse ${fmt(pb.nozzle, 2)} mm`);
+      const fit = Print.fitCheck(pb, st);
+      const bedStatus = h('div', { class: 'hint-box' + (!fit.fits ? ' warn' : ''), id: 'proj-bed-status', style: { marginTop: '8px' } });
+      if (!fit.fits) {
+        bedStatus.append(h('div', null, fit.summary));
+        if (fit.suggestion && fit.suggestion.canFit) {
+          const rotBtn = h('button', { type: 'button', class: 'btn', id: 'proj-bed-rotate', style: { marginTop: '6px' } }, 'So drehen');
+          rotBtn.onclick = () => Print.applyRotationSuggestion(fit.suggestion);
+          bedStatus.append(rotBtn);
+        }
+      } else {
+        const pPrefix = fit.printer ? fit.printer.name + ' · ' : 'Druckbett ';
+        bedStatus.textContent = `${pPrefix}${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()} · Düse ${fmt(pb.nozzle, 2)} mm`;
+      }
       bedSec.append(bedFields, nozWrap, bedStatus);
+    }
+    const hcVal = Print.holeComp();
+    const hcChoices = [0, 0.1, 0.2, 0.3, 0.4];
+    if (hcVal > 0 && !hcChoices.some((v) => Math.abs(v - hcVal) < 1e-4)) hcChoices.push(hcVal);
+    hcChoices.sort((a, b) => a - b);
+    const hcSel = UI.selectField({
+      id: 'proj-hole-comp', label: 'Loch-Ausgleich (beim STL/3MF-Export)', value: String(hcVal),
+      options: hcChoices.map((v) => [String(v), v === 0 ? 'Aus (0 mm)' : `+${fmt(v, 2)} mm`]),
+      onChange: (v) => Print.setHoleComp(+v),
+    });
+    hcSel.setAttribute('data-help', 'holeComp');
+    hcSel.style.marginTop = '8px';
+    bedSec.append(hcSel);
+    if (hcVal > 0) {
+      bedSec.append(h('small', { style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, `Runde Löcher werden beim STL/3MF-Export um +${fmt(hcVal, 2)} mm größer – das Modell selbst bleibt gleich.`));
     }
     w.append(bedSec);
     // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)

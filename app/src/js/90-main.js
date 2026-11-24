@@ -21,7 +21,10 @@
   const updHist = () => { $('#btn-undo').disabled = !App.undoStack.length; $('#btn-redo').disabled = !App.redoStack.length; const l = App.undoStack[App.undoStack.length - 1]; $('#btn-undo').dataset.tip = l ? T('topbar.undoLabel', { label: l.label }) : T('topbar.undo'); };
   App.on('history', updHist); App.on('doc', updHist); updHist();
   const updName = () => { $('#btn-project').textContent = App.doc.name; document.title = App.doc.name && App.doc.name !== 'Neues Projekt' ? App.doc.name + ' – Tracery' : 'Tracery'; };
-  const syncBed = () => Viewer.setPrintBed(App.doc && App.doc.settings && App.doc.settings.printBed);
+  const syncBed = () => {
+    const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
+    Viewer.setPrintBed(pb && pb.enabled ? { ...pb, warn: !Print.fitCheck(pb).fits } : pb);
+  };
   App.on('doc', updName); App.on('doc', syncBed);
   $('#btn-level').onclick = () => ViewPrefs.setLevel(ViewPrefs.simple ? 'pro' : 'simple'); ViewPrefs.syncLevel();
   $('#tab-model').onclick = () => Commands.setMode('model');

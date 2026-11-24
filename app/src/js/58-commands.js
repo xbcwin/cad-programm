@@ -216,6 +216,7 @@ const Commands = (() => {
     add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, IGES, BREP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step igs iges brep stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });

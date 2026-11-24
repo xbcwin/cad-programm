@@ -11942,6 +11942,147 @@ def t_a056_normteile_stifte_lager(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-059] 3D-Druck: Drucker und Loch-Ausgleich (DR-01, DR-02) ----------
+def t_a059_drucker_loch_ausgleich(p):
+    import io, zipfile, tempfile, struct, re
+    p.empty()
+
+    # 1. Drucker-Liste prüfen (Bambu A1/A1 mini/P1S/X1C, Prusa MK4/Mini, Ender 3, Voron 2.4) & A1 mini wählen
+    printers = p.ev("return Print.PRINTERS")
+    names = [x['name'] for x in printers]
+    req = ['Bambu Lab A1', 'Bambu Lab A1 mini', 'Bambu Lab P1S', 'Bambu Lab X1C', 'Prusa MK4', 'Prusa Mini', 'Ender 3']
+    has_voron = any('Voron 2.4' in n for n in names)
+    sel_opts = p.pg.locator('#proj-printer option').all_text_contents()
+    p.pg.select_option('#proj-printer', 'bambu-a1-mini'); p.wait(300)
+    bed_st = p.ev("return { bed: App.doc.settings.printBed, visCount: Viewer.groups.printBed.children.length }")
+    ok1 = (
+        all(r in names for r in req) and has_voron
+        and len(sel_opts) >= len(printers) + 2
+        and bed_st['bed']['enabled'] is True
+        and bed_st['bed']['printer'] == 'bambu-a1-mini'
+        and bed_st['bed']['x'] == 180 and bed_st['bed']['y'] == 180 and bed_st['bed']['z'] == 180
+        and bed_st['visCount'] >= 3
+    )
+
+    # 2. Bambu A1 mini (180³) und ein 200-mm-Teil -> Warnung + Drehvorschlag (45° diagonal) + So drehen
+    p.ev("App.change('Langes Teil', d => { d.items.push(Model.newItem('box', { w: 200, d: 20, h: 20 }, { name: 'Schiene' })); })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    warn_cls = p.pg.locator('#proj-bed-status').get_attribute('class') or ''
+    warn_txt = p.pg.locator('#proj-bed-status').text_content() or ''
+    amp_cls = p.pg.locator('#ampel').get_attribute('class') or ''
+    fit_before = p.ev("return Print.fitCheck()")
+
+    # Auch Export-Dialog zeigt die Warnung samt Drehvorschlag
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(300)
+    ex_warn = p.pg.locator('#ex-warn-box').count() == 1 and p.pg.locator('#ex-bed-rotate').count() == 1
+    p.pg.get_by_role('button', name='Abbrechen').click(); p.wait(200)
+
+    # Ein Klick auf "So drehen" richtet das Teil passend aufs Bett aus
+    p.pg.locator('#proj-bed-rotate').click(); p.wait(500)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    fit_after = p.ev("return Print.fitCheck()")
+    after_cls = p.pg.locator('#proj-bed-status').get_attribute('class') or ''
+    amp_after = p.pg.locator('#ampel').get_attribute('class') or ''
+
+    # Ein 200x200x200-Teil passt auch gedreht nicht
+    p.ev("App.change('Zu groß', d => { d.items[0].p = { w: 200, d: 200, h: 200 }; d.items[0].t = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    fit_cube = p.ev("return Print.fitCheck()")
+    no_rot_btn = p.pg.locator('#proj-bed-rotate').count() == 0
+    ok2 = (
+        'warn' in warn_cls and '45°' in warn_txt and 'warn' in amp_cls
+        and fit_before['fits'] is False and fit_before['suggestion']['canFit'] is True
+        and ex_warn
+        and fit_after['fits'] is True and 'warn' not in after_cls and 'ok' in amp_after
+        and fit_cube['fits'] is False and fit_cube['suggestion']['canFit'] is False and no_rot_btn
+    )
+
+    # 3. Loch-Ausgleich 0,2 mm -> Loch Ø 5 hat im STL und 3MF Ø 5,2, Zapfen und Modell bleiben Ø 5,0
+    p.ev("Start.newProject(true)"); p.wait(400)
+    p.ev("""App.change('Lochtest', d => {
+      d.items.push(Model.newItem('box', { w: 30, d: 30, h: 10 }, { name: 'Platte' }));
+      const h = Model.newItem('cylinder', { d: 5, h: 20 }, { name: 'Loch', role: 'hole' });
+      h.t.z = -5; d.items.push(h);
+      const z = Model.newItem('cylinder', { d: 5, h: 10 }, { name: 'Zapfen' });
+      z.t.x = 35; d.items.push(z);
+    })""")
+    warte_rechnen(p, 40)
+    p.pg.select_option('#proj-hole-comp', '0.2'); p.wait(300)
+    hc_set = p.ev("return Print.holeComp()")
+
+    def measure_stl_diam(data, cx, cy):
+        rs = []
+        n = struct.unpack('<I', data[80:84])[0]
+        for i in range(n):
+            base = 84 + i * 50 + 12
+            for k in range(3):
+                x, y, z = struct.unpack('<3f', data[base + k * 12:base + k * 12 + 12])
+                r = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+                if 0.5 < r < 8:
+                    rs.append(r)
+        return 2 * (sum(rs) / len(rs)) if rs else 0
+
+    def measure_3mf_diam(xml_bytes, cx, cy):
+        txt = xml_bytes.decode('utf-8', errors='replace')
+        rs = []
+        for m in re.finditer(r'<vertex\s+x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"', txt):
+            x, y, z = float(m.group(1)), float(m.group(2)), float(m.group(3))
+            r = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            if 0.5 < r < 8:
+                rs.append(r)
+        return 2 * (sum(rs) / len(rs)) if rs else 0
+
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(300)
+    ex_hc_val = p.pg.locator('#ex-hole-comp').input_value()
+    p.pg.check('#ex-stl'); p.pg.check('#ex-mf'); p.pg.uncheck('#ex-step')
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z1 = os.path.join(tempfile.gettempdir(), 'tracery-a059-1.zip'); dl.value.save_as(z1)
+    zf1 = zipfile.ZipFile(z1)
+    stl1 = zf1.read([n for n in zf1.namelist() if n.endswith('.stl')][0])
+    mf1_zip = zf1.read([n for n in zf1.namelist() if n.endswith('.3mf')][0])
+    mf1 = zipfile.ZipFile(io.BytesIO(mf1_zip)).read('3D/3dmodel.model')
+    d_stl_hole = measure_stl_diam(stl1, 0, 0)
+    d_stl_pin = measure_stl_diam(stl1, 35, 0)
+    d_3mf_hole = measure_3mf_diam(mf1, 0, 0)
+
+    # Modell im CAD-Kern bleibt exakt Ø 5,0 mm
+    model_r = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      const cf = r && r.data && r.data.faces ? r.data.faces.find(f => f.t === 'CYLINDRE') : null;
+      return cf ? cf.r : 0;""")
+
+    # Export ohne Ausgleich -> wieder Ø 5,0 mm
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(300)
+    p.pg.select_option('#ex-hole-comp', '0')
+    p.pg.check('#ex-stl'); p.pg.uncheck('#ex-step')
+    with p.pg.expect_download(timeout=90000) as dl2:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z2 = os.path.join(tempfile.gettempdir(), 'tracery-a059-2.zip'); dl2.value.save_as(z2)
+    zf2 = zipfile.ZipFile(z2)
+    stl2 = zf2.read([n for n in zf2.namelist() if n.endswith('.stl')][0])
+    d_stl_off = measure_stl_diam(stl2, 0, 0)
+
+    ok3 = (
+        abs(hc_set - 0.2) < 1e-6 and ex_hc_val == '0.2'
+        and abs(d_stl_hole - 5.2) < 0.04
+        and abs(d_3mf_hole - 5.2) < 0.04
+        and abs(d_stl_pin - 5.0) < 0.04
+        and abs(model_r - 2.5) < 1e-3
+        and abs(d_stl_off - 5.0) < 0.04
+    )
+
+    # 4. Hilfetexte & DOM-Attribute prüfen
+    help_ok = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      json: ['printerSelect', 'holeComp'].every(k => d[k] && d[k].tip && d[k].hilfe && d[k].tipp),
+      dom: document.querySelectorAll('[data-help="printerSelect"]').length === 1 && document.querySelectorAll('[data-help="holeComp"]').length >= 1,
+    }))""")
+    ok4 = bool(help_ok['json'] and help_ok['dom'])
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -12101,6 +12242,7 @@ TESTS = [
     ('[A-054] Schneller Start: Oberfläche sofort / Skizzieren ohne Kern / Kern & Schrift bei Bedarf / Protokoll', t_a054_schneller_start),
     ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
+    ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

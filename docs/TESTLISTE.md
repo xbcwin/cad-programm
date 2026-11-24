@@ -1903,6 +1903,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Bibliothek, Suche, Hilfen & Geometrie-Prüfung**: Alle fünf Normteile erscheinen im Bauteile-Flyout unter „Normteile“, sind über die Befehlssuche auffindbar, besitzen vollständige Hilfetexte (`stdPin`, `stdKey`, `stdKeyway`, `stdBearing`, `stdSleeve`) und bestehen `GeomCheck` ohne Geometriefehler.
 - [ ] **Von Hand**: Im Browser ein Kugellager (offen und geschlossen), einen Zylinderstift sowie Passfeder samt Nut auf eine Welle setzen und im Schnitt sowie bei der Stückliste prüfen.
 
+## 3D-Druck: Drucker und Loch-Ausgleich (Auto [A-059], DR-01, DR-02)
+
+- [x] **Drucker-Liste & Bauraum**: Alle geforderten Drucker (Bambu A1 / A1 mini / P1S / X1C, Prusa MK4 / Mini, Ender 3, Voron 2.4) lassen sich im Projekt-Panel (`#proj-printer`) und über die Befehlssuche wählen; Bauraum und Düse werden übernommen und im 3D-Rahmen angezeigt.
+- [x] **Warnung & Drehvorschlag**: Bei Bambu A1 mini (180³) und einem 200-mm-Teil warnen `#proj-bed-status`, `#ampel` und der Export-Dialog samt diagonalem 45°-Drehvorschlag; Klick auf `#proj-bed-rotate` dreht das Modell passend auf das Druckbett; ein 200×200×200-Teil meldet korrekt „passt auch gedreht nicht“.
+- [x] **Loch-Ausgleich im STL & 3MF**: Bei Loch-Ausgleich `+0,20 mm` hat ein Loch Ø 5 mm im exportierten STL und 3MF exakt Ø 5,20 mm, während ein Außenzapfen Ø 5 mm bei Ø 5,00 mm bleibt und das CAD-Modell unverändert Ø 5,00 mm behält.
+- [x] **Hilfetexte**: `printerSelect` und `holeComp` sind in `werkzeug-hilfen.json` und `HELP` vollständig gepflegt.
+- [ ] **Von Hand**: Im Browser ein Druckteil mit Bohrung und Senkung auf „Bambu Lab A1 mini“ prüfen, per „So drehen“ ausrichten und die exportierte 3MF/STL-Datei im Slicer (z. B. Bambu Studio oder PrusaSlicer) nachmessen.
+
 ## Fehler melden
 
 ```

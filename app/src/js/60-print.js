@@ -1,6 +1,36 @@
 // ================= Modell-Status und Export =================
 // (Der Name „Print“ ist historisch – hier gibt es keinen Drucker und keine Druckplatte mehr.)
+const PRINTERS = /*JSON:drucker.json*/null;
+
 const Print = (() => {
+  const findPrinter = (id) => (PRINTERS || []).find((p) => p.id === id) || null;
+  function holeComp() {
+    const hc = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.holeComp) : 0;
+    return Number.isFinite(hc) && hc > 0 ? clamp(Math.round(hc * 100) / 100, 0, 1) : 0;
+  }
+  function setPrinter(id) {
+    const p = findPrinter(id);
+    App.change(p ? `Drucker: ${p.name}` : id === 'custom' ? 'Eigene Druckergröße' : 'Druckbett deaktiviert', (doc) => {
+      doc.settings = doc.settings || {};
+      const cur = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
+      if (!id) {
+        doc.settings.printBed = { ...cur, enabled: false };
+      } else if (p) {
+        doc.settings.printer = p.id;
+        doc.settings.printBed = { ...cur, enabled: true, printer: p.id, x: p.x, y: p.y, z: p.z, nozzle: p.nozzle || cur.nozzle || 0.4 };
+      } else {
+        doc.settings.printer = 'custom';
+        doc.settings.printBed = { ...cur, enabled: true, printer: 'custom' };
+      }
+    });
+  }
+  function setHoleComp(mm) {
+    const v = Number.isFinite(Number(mm)) ? clamp(Math.round(Number(mm) * 100) / 100, 0, 1) : 0;
+    App.change('Loch-Ausgleich geändert', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {}, { holeComp: v });
+    });
+  }
   function solidBox() {
     const box = new THREE.Box3();
     for (const n of Viewer.nodes.values()) { if (n.role === 'hole' || !n.obj.visible || n.id === '__dragprev') continue; box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix)); }
@@ -11,6 +41,115 @@ const Print = (() => {
     const s = b.getSize(new THREE.Vector3());
     return { x: s.x, y: s.y, z: s.z, box: b };
   }
+  function fitCheck(bed = App.doc && App.doc.settings && App.doc.settings.printBed, st = stats()) {
+    const pr = bed && bed.printer ? findPrinter(bed.printer) : null;
+    const printerName = pr ? pr.name : 'Druckbett';
+    if (!bed || !bed.enabled || !st) return { active: !!(bed && bed.enabled), fits: true, printer: pr, printerName, overflow: [], suggestion: null, summary: '' };
+    const EPS = 0.05;
+    const bx = Number(bed.x) || 220, by = Number(bed.y) || 220, bz = Number(bed.z) || 250;
+    const sx = st.x, sy = st.y, sz = st.z;
+    const overflow = [];
+    if (sx > bx + EPS) overflow.push({ axis: 'X', label: 'Breite', size: sx, limit: bx, excess: sx - bx });
+    if (sy > by + EPS) overflow.push({ axis: 'Y', label: 'Tiefe', size: sy, limit: by, excess: sy - by });
+    if (sz > bz + EPS) overflow.push({ axis: 'Z', label: 'Höhe', size: sz, limit: bz, excess: sz - bz });
+    if (!overflow.length) return { active: true, fits: true, printer: pr, printerName, overflow: [], suggestion: null, summary: '' };
+    // Drehvorschläge prüfen: zuerst 90°-Drehungen, danach diagonale Drehung auf dem Bett (z. B. 45°)
+    let suggestion = null;
+    const orthoCandidates = [
+      { rx: 0, ry: 0, rz: 90, w: sy, d: sx, h: sz, desc: 'Um 90° um Z drehen' },
+      { rx: 90, ry: 0, rz: 0, w: sx, d: sz, h: sy, desc: 'Um 90° um X kippen' },
+      { rx: 0, ry: 90, rz: 0, w: sz, d: sy, h: sx, desc: 'Um 90° um Y kippen' },
+      { rx: 90, ry: 0, rz: 90, w: sz, d: sx, h: sy, desc: 'Um 90° um X kippen und 90° um Z drehen' },
+      { rx: 0, ry: 90, rz: 90, w: sy, d: sz, h: sx, desc: 'Um 90° um Y kippen und 90° um Z drehen' },
+    ];
+    for (const c of orthoCandidates) {
+      if (c.w <= bx + EPS && c.d <= by + EPS && c.h <= bz + EPS) {
+        suggestion = {
+          canFit: true, rx: c.rx, ry: c.ry, rz: c.rz, w: c.w, d: c.d, h: c.h,
+          text: `Vorschlag: ${c.desc} – dann passt es (${Units.fmtLen(c.w, 1)} × ${Units.fmtLen(c.d, 1)} × ${Units.fmtLen(c.h, 1)} ${Units.label()}).`,
+        };
+        break;
+      }
+    }
+    if (!suggestion) {
+      const bases = [
+        { rx: 0, ry: 0, a: sx, b: sy, h: sz, prefix: '' },
+        { rx: 90, ry: 0, a: sx, b: sz, h: sy, prefix: 'um 90° um X kippen und ' },
+        { rx: 0, ry: 90, a: sz, b: sy, h: sx, prefix: 'um 90° um Y kippen und ' },
+      ];
+      const angles = [45, 30, 60, 15, 75];
+      for (let ang = 5; ang <= 85; ang += 5) if (!angles.includes(ang)) angles.push(ang);
+      for (let ang = 1; ang <= 89; ang++) if (!angles.includes(ang)) angles.push(ang);
+      for (const base of bases) {
+        if (base.h > bz + EPS) continue;
+        for (const rz of angles) {
+          const rad = (rz * Math.PI) / 180, cs = Math.abs(Math.cos(rad)), sn = Math.abs(Math.sin(rad));
+          const w = base.a * cs + base.b * sn, d = base.a * sn + base.b * cs;
+          if (w <= bx + EPS && d <= by + EPS) {
+            const diagNote = rz === 45 ? ' (diagonal aufs Bett)' : '';
+            suggestion = {
+              canFit: true, rx: base.rx, ry: base.ry, rz, w, d, h: base.h,
+              text: `Vorschlag: ${base.prefix ? base.prefix[0].toUpperCase() + base.prefix.slice(1) : 'Um '}${rz}° um Z drehen${diagNote} – dann passt es (${Units.fmtLen(w, 1)} × ${Units.fmtLen(d, 1)} × ${Units.fmtLen(base.h, 1)} ${Units.label()}).`,
+            };
+            break;
+          }
+        }
+        if (suggestion) break;
+      }
+    }
+    if (!suggestion) {
+      suggestion = {
+        canFit: false,
+        text: 'Passt auch gedreht nicht in den Bauraum – Teil verkleinern oder mit „Teilen“ in zwei Stücke zerlegen.',
+      };
+    }
+    const overText = overflow.map((o) => `${o.axis} um +${Units.fmtLen(o.excess, 1)}`).join(', ');
+    const summary = `${printerName} (${Units.fmtLen(bx, 0)} × ${Units.fmtLen(by, 0)} × ${Units.fmtLen(bz, 0)} ${Units.label()}): Modell (${Units.fmtLen(sx, 1)} × ${Units.fmtLen(sy, 1)} × ${Units.fmtLen(sz, 1)} ${Units.label()}) überschreitet ${overText} ${Units.label()}. ${suggestion.text}`;
+    return { active: true, fits: false, printer: pr, printerName, overflow, suggestion, summary };
+  }
+  function applyRotationSuggestion(sug) {
+    if (!sug || !sug.canFit) return false;
+    const st = stats(); if (!st) return false;
+    const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+    const piv = st.box.getCenter(new THREE.Vector3());
+    const qAdd = new THREE.Quaternion().setFromEuler(new THREE.Euler((sug.rx || 0) * D2R, (sug.ry || 0) * D2R, (sug.rz || 0) * D2R, 'XYZ'));
+    const mAdd = new THREE.Matrix4().makeTranslation(piv.x, piv.y, piv.z)
+      .multiply(new THREE.Matrix4().makeRotationFromQuaternion(qAdd))
+      .multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
+    // gedrehte Hüllbox berechnen, um das Modell sauber auf (0, 0) und Z = 0 abzusetzen
+    const bRot = new THREE.Box3(), tmpV = new THREE.Vector3();
+    for (const n of Viewer.nodes.values()) {
+      if (n.role === 'hole' || !n.obj.visible || n.id === '__dragprev') continue;
+      const pos = n.mesh.geometry && n.mesh.geometry.attributes && n.mesh.geometry.attributes.position;
+      if (!pos) continue;
+      const mTotal = mAdd.clone().multiply(n.obj.matrix);
+      for (let i = 0; i < pos.count; i++) {
+        tmpV.fromBufferAttribute(pos, i).applyMatrix4(mTotal);
+        bRot.expandByPoint(tmpV);
+      }
+    }
+    const shift = bRot.isEmpty()
+      ? new THREE.Vector3(0, 0, 0)
+      : new THREE.Vector3(-(bRot.min.x + bRot.max.x) / 2, -(bRot.min.y + bRot.max.y) / 2, -bRot.min.z);
+    const rnd = (v) => Math.round(v * 1e4) / 1e4;
+    App.change('Für Drucker gedreht', (doc) => {
+      const vars = Model.vars(doc);
+      Model.useVars(vars);
+      for (const it of doc.items) {
+        if (!it || it.hidden) continue;
+        it.t = it.t || { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+        const tn = Model.tNumeric(it);
+        const pNew = new THREE.Vector3(tn.x, tn.y, tn.z).applyMatrix4(mAdd).add(shift);
+        const qOld = new THREE.Quaternion().setFromEuler(new THREE.Euler(tn.rx * D2R, tn.ry * D2R, tn.rz * D2R, 'XYZ'));
+        const qNew = qAdd.clone().multiply(qOld);
+        const eNew = new THREE.Euler().setFromQuaternion(qNew, 'XYZ');
+        it.t.x = rnd(pNew.x); it.t.y = rnd(pNew.y); it.t.z = rnd(pNew.z);
+        it.t.rx = rnd(eNew.x * R2D); it.t.ry = rnd(eNew.y * R2D); it.t.rz = rnd(eNew.z * R2D);
+      }
+    });
+    UI.toast('Modell für den Drucker gedreht.', { icon: 'check' });
+    return true;
+  }
   function checks() {
     const out = [];
     const st = stats();
@@ -18,8 +157,9 @@ const Print = (() => {
     const errs = App.errors.length;
     if (errs) out.push({ s: 'warn', t: errs === 1 ? 'Ein Schritt hat ein Problem' : errs + ' Schritte haben Probleme', d: App.errors[0].message });
     const pb = App.doc.settings && App.doc.settings.printBed;
-    if (pb && pb.enabled && (st.x > pb.x + 0.05 || st.y > pb.y + 0.05 || st.z > pb.z + 0.05)) {
-      out.push({ s: 'warn', t: 'Größer als das Druckbett', d: `Das Modell (${Units.fmtLen(st.x, 1)} × ${Units.fmtLen(st.y, 1)} × ${Units.fmtLen(st.z, 1)} ${Units.label()}) überschreitet den Bauraum (${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()}).` });
+    const fit = fitCheck(pb, st);
+    if (!fit.fits) {
+      out.push({ s: 'warn', t: 'Passt nicht auf den Drucker', d: fit.summary, fit });
     }
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
     if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
@@ -32,6 +172,8 @@ const Print = (() => {
     const main = cs.find((c) => c.s === worst) || cs[0];
     el.querySelector('.t').textContent = main ? main.t : '';
     el.setAttribute('data-tip', 'Modell-Status');
+    const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
+    if (pb && pb.enabled) Viewer.setPrintBed({ ...pb, warn: !fitCheck(pb).fits });
   }
   function openAmpel(anchor) {
     const cs = checks();
@@ -41,7 +183,13 @@ const Print = (() => {
     for (const c of cs) {
       const row = h('div', { class: 'check-row ' + c.s });
       const stI = h('span', { class: 'st' }); stI.innerHTML = icon(c.s === 'ok' ? 'check' : c.s === 'warn' ? 'warn' : c.s === 'none' ? 'info' : 'close');
-      row.append(stI, h('div', { class: 'grow' }, h('b', null, c.t), h('small', null, c.d))); list.append(row);
+      const infoCol = h('div', { class: 'grow' }, h('b', null, c.t), h('small', null, c.d));
+      if (c.fit && c.fit.suggestion && c.fit.suggestion.canFit) {
+        const rb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'So drehen');
+        rb.onclick = () => { UI.closePop(); applyRotationSuggestion(c.fit.suggestion); };
+        infoCol.append(rb);
+      }
+      row.append(stI, infoCol); list.append(row);
     }
     box.append(list);
     const ex = h('button', { type: 'button', class: 'btn primary' }); ex.innerHTML = icon('export') + 'Exportieren';
@@ -365,7 +513,8 @@ const Print = (() => {
     const plates = Plates.candidates();
     const csysAll = typeof Datums !== 'undefined' ? Datums.csysList().filter((c) => c.csys) : [];
     const initCsys = preset.csysId && csysAll.some((c) => c.id === preset.csysId) ? preset.csysId : '';
-    const opts = { step: true, iges: false, brep: false, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys };
+    const initHc = holeComp();
+    const opts = { step: true, iges: false, brep: false, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys, holeComp: initHc };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
@@ -385,6 +534,15 @@ const Print = (() => {
     const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
     st.setAttribute('data-help', 'exportSettings');
     body.append(h('div', { class: 'fields' }, qs, st));
+    // Loch-Ausgleich für den 3D-Druck (DR-02, nur STL & 3MF)
+    const hcChoices = [0, 0.1, 0.2, 0.3, 0.4];
+    if (initHc > 0 && !hcChoices.some((v) => Math.abs(v - initHc) < 1e-4)) hcChoices.push(initHc);
+    hcChoices.sort((a, b) => a - b);
+    const hcWrap = h('div', { 'data-help': 'holeComp' },
+      UI.selectField({ id: 'ex-hole-comp', label: 'Loch-Ausgleich (nur STL / 3MF)', value: String(initHc), options: hcChoices.map((v) => [String(v), v === 0 ? 'Aus (0 mm)' : `+${fmt(v, 2)} mm`]), onChange: (v) => { opts.holeComp = +v; } }),
+      h('small', { style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, 'Vergrößert runde innere Löcher nur in den 3D-Druck-Dateien (STL/3MF) – das Modell und STEP bleiben exakt.'),
+    );
+    body.append(hcWrap);
     if (csysAll.length) {
       const cf = UI.selectField({ id: 'ex-csys', label: 'Nullpunkt (Koordinatensystem)', value: opts.csysId, options: [['', 'Welt-Ursprung (0 | 0 | 0)'], ...csysAll.map((c) => [c.id, c.name])], onChange: (v) => { opts.csysId = v; } });
       cf.setAttribute('data-help', 'datumCsys');
@@ -401,7 +559,15 @@ const Print = (() => {
       body.append(d, pl);
     }
     const cs = checks().filter((c) => c.s === 'warn' || c.s === 'bad');
-    if (cs.length) body.append(h('div', { class: 'hint-box', html: '<b>Hinweis:</b> ' + esc(cs[0].t) + ' – ' + esc(cs[0].d) }));
+    if (cs.length) {
+      const warnBox = h('div', { class: 'hint-box warn', id: 'ex-warn-box' }, h('div', { html: '<b>Hinweis:</b> ' + esc(cs[0].t) + ' – ' + esc(cs[0].d) }));
+      if (cs[0].fit && cs[0].fit.suggestion && cs[0].fit.suggestion.canFit) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'ex-bed-rotate', style: { marginTop: '6px' } }, 'So drehen');
+        rb.onclick = () => { UI.closeModal(); applyRotationSuggestion(cs[0].fit.suggestion); };
+        warnBox.append(rb);
+      }
+      body.append(warnBox);
+    }
     UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
   }
   // Bild speichern (PNG) – in Bildschirm- oder Druckgröße, auf Wunsch mit durchsichtigem Hintergrund
@@ -555,7 +721,7 @@ const Print = (() => {
     if (doSave) await save(safeName(App.doc.name) + (blob.type.includes('mp4') ? '.mp4' : '.webm'), blob);
     return blob;
   }
-  let lastExport = null, lastTris = 0;
+  let lastExport = null, lastTris = 0, lastHoleComp = null;
   async function runExport(opts) {
     if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !opts.iges && !opts.brep && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
@@ -564,29 +730,50 @@ const Print = (() => {
       const only = opts.onlySel ? exportSelection() : null;
       const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
       const csysObj = opts.csysId && typeof Datums !== 'undefined' ? Datums.findCsys(opts.csysId) : null;
+      const hc = opts.holeComp != null ? Math.max(0, Math.min(1, Number(opts.holeComp) || 0)) : holeComp();
       const name = safeName(App.doc.name);
       const files = [];
-      if (opts.stl || opts.mf || opts.obj || opts.glb) {
-        const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat });
-        lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
-        const STL = opts.stlText ? buildSTLText : buildSTL;
-        const objs = (only ? res.objects.filter((o) => only.includes(o.id)) : res.objects).map((o) => {
-          const f = Model.find(App.doc, o.id);
-          return f ? { ...o, name: o.name || Model.label(f.item), color: o.bodyColor || o.color || f.item.color } : o;
-        });
-        if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
-        if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
-        if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
-        if (opts.obj) { const r = buildOBJ(objs, name); files.push({ name: name + '.obj', data: r.obj }, { name: name + '.mtl', data: r.mtl }); }
-        if (opts.glb) files.push({ name: name + '.glb', data: buildGLB(objs, name) });
-        if (opts.each && objs.length) {
+      const mapObjs = (rawObjs) => (only ? rawObjs.filter((o) => only.includes(o.id)) : rawObjs).map((o) => {
+        const f = Model.find(App.doc, o.id);
+        return f ? { ...o, name: o.name || Model.label(f.item), color: o.bodyColor || o.color || f.item.color } : o;
+      });
+      let printObjs = null, visObjs = null;
+      lastHoleComp = { mm: hc, holes: 0 };
+      if (opts.stl || opts.mf) {
+        const resPrint = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: hc });
+        lastTris = resPrint.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
+        lastHoleComp = { mm: hc, holes: resPrint.compensatedHoles || 0 };
+        printObjs = mapObjs(resPrint.objects);
+        if (!printObjs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
+        if (hc === 0) visObjs = printObjs;
+      }
+      if (opts.obj || opts.glb) {
+        if (!visObjs) {
+          const resVis = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: 0 });
+          if (!printObjs) lastTris = resVis.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
+          visObjs = mapObjs(resVis.objects);
+          if (!visObjs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
+        }
+      }
+      const STL = opts.stlText ? buildSTLText : buildSTL;
+      if (opts.stl) files.push({ name: name + '.stl', data: STL(printObjs, name) });
+      if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(printObjs, name) });
+      if (opts.obj) { const r = buildOBJ(visObjs, name); files.push({ name: name + '.obj', data: r.obj }, { name: name + '.mtl', data: r.mtl }); }
+      if (opts.glb) files.push({ name: name + '.glb', data: buildGLB(visObjs, name) });
+      if (opts.each) {
+        const eachList = printObjs || visObjs || [];
+        if (eachList.length) {
           const used = new Map();
-          for (const o of objs) {
-            const f = Model.find(App.doc, o.id); let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper')); const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
-            if (opts.stl) files.push({ name: 'Einzeln/' + base + '.stl', data: STL([o], base) });
-            if (opts.mf) files.push({ name: 'Einzeln/' + base + '.3mf', data: await build3MF([o], base) });
-            if (opts.obj) { const r = buildOBJ([o], base); files.push({ name: 'Einzeln/' + base + '.obj', data: r.obj }, { name: 'Einzeln/' + base + '.mtl', data: r.mtl }); }
-            if (opts.glb) files.push({ name: 'Einzeln/' + base + '.glb', data: buildGLB([o], base) });
+          for (let i = 0; i < eachList.length; i++) {
+            const po = (printObjs && printObjs[i]) || eachList[i];
+            const vo = (visObjs && visObjs[i]) || eachList[i];
+            const f = Model.find(App.doc, (po || vo).id);
+            let base = safeName((po || vo).name || (f ? Model.label(f.item) : 'Körper'));
+            const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
+            if (opts.stl) files.push({ name: 'Einzeln/' + base + '.stl', data: STL([po], base) });
+            if (opts.mf) files.push({ name: 'Einzeln/' + base + '.3mf', data: await build3MF([po], base) });
+            if (opts.obj) { const r = buildOBJ([vo], base); files.push({ name: 'Einzeln/' + base + '.obj', data: r.obj }, { name: 'Einzeln/' + base + '.mtl', data: r.mtl }); }
+            if (opts.glb) files.push({ name: 'Einzeln/' + base + '.glb', data: buildGLB([vo], base) });
           }
         }
       }
@@ -594,7 +781,7 @@ const Print = (() => {
       if (opts.iges) { const r = await Kernel.call('exportIGES', { scene, only, originMat }); files.push({ name: name + '.igs', data: new Uint8Array(r.data) }); }
       if (opts.brep) { const r = await Kernel.call('exportBREP', { scene, only, originMat }); files.push({ name: name + '.brep', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}\nSTEP: exakte Geometrie mit Teilenamen, Farben und Gruppen-Struktur (XCAF) für andere CAD-Programme\nIGES / BREP: exakte Geometrie für andere CAD-Programme (BREP = OpenCascade-Format)\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}${hc > 0 ? `Loch-Ausgleich (STL/3MF): +${fmt(hc, 2)} mm Durchmesser\n` : ''}\nSTEP: exakte Geometrie mit Teilenamen, Farben und Gruppen-Struktur (XCAF) für andere CAD-Programme\nIGES / BREP: exakte Geometrie für andere CAD-Programme (BREP = OpenCascade-Format)\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();
@@ -606,7 +793,7 @@ const Print = (() => {
     App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, findPrinter, setPrinter, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
