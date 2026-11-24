@@ -623,6 +623,14 @@ const App = (() => {
     }
     if (doc.rollback >= doc.items.length) doc.rollback = null;
   }
+  function pruneMerged() {
+    if (!S.merged || !S.merged.size) return;
+    const valid = new Set();
+    Model.walk(S.doc.items, (it) => valid.add(it.id));
+    for (const [k, v] of S.merged) {
+      if (!valid.has(k) || !valid.has(v)) S.merged.delete(k);
+    }
+  }
   function touched(noRebuild, keepModified) {
     if (S.peek != null) { S.peek = null; ev.emit('peek'); }
     Model.useVars(Model.vars(S.doc).v);
@@ -633,6 +641,7 @@ const App = (() => {
       if (S.undo.length && !S.redo.length && oldMod !== newMod) syncTopModified(oldMod, newMod);
     }
     S.revision = nextRev();
+    pruneMerged();
     syncCurrentMeta();
     ev.emit('doc');
     ev.emit('dirty', { doc: S.doc, revision: S.revision });
@@ -650,6 +659,7 @@ const App = (() => {
     if (S.face && !valid.has(S.face.id)) S.face = null;
     S.edges = S.edges.filter((e) => valid.has(e.id));
     S.revision = nextRev();
+    pruneMerged();
     syncCurrentMeta();
     ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('tabs'); ev.emit('selection'); autosave(); rebuild();
   }
@@ -1044,7 +1054,10 @@ const App = (() => {
     peek, get peeking() { return S.peek == null ? null : S.peek; },
     timeOf(id) { return times.get(id) || null; },
     get times() { return times; },
-    mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
+    mergedInto(id) {
+      const to = S.merged && S.merged.get(id);
+      return to && Model.find(S.doc, to) ? to : null;
+    },
     baseBox(id) { return (S.baseBoxes && S.baseBoxes.get(id)) || null; },
     ownBox(id) { return (S.ownBoxes && S.ownBoxes.get(id)) || null; },
     resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },

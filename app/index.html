@@ -8873,6 +8873,14 @@ const App = (() => {
     }
     if (doc.rollback >= doc.items.length) doc.rollback = null;
   }
+  function pruneMerged() {
+    if (!S.merged || !S.merged.size) return;
+    const valid = new Set();
+    Model.walk(S.doc.items, (it) => valid.add(it.id));
+    for (const [k, v] of S.merged) {
+      if (!valid.has(k) || !valid.has(v)) S.merged.delete(k);
+    }
+  }
   function touched(noRebuild, keepModified) {
     if (S.peek != null) { S.peek = null; ev.emit('peek'); }
     Model.useVars(Model.vars(S.doc).v);
@@ -8883,6 +8891,7 @@ const App = (() => {
       if (S.undo.length && !S.redo.length && oldMod !== newMod) syncTopModified(oldMod, newMod);
     }
     S.revision = nextRev();
+    pruneMerged();
     syncCurrentMeta();
     ev.emit('doc');
     ev.emit('dirty', { doc: S.doc, revision: S.revision });
@@ -8900,6 +8909,7 @@ const App = (() => {
     if (S.face && !valid.has(S.face.id)) S.face = null;
     S.edges = S.edges.filter((e) => valid.has(e.id));
     S.revision = nextRev();
+    pruneMerged();
     syncCurrentMeta();
     ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('tabs'); ev.emit('selection'); autosave(); rebuild();
   }
@@ -9294,7 +9304,10 @@ const App = (() => {
     peek, get peeking() { return S.peek == null ? null : S.peek; },
     timeOf(id) { return times.get(id) || null; },
     get times() { return times; },
-    mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
+    mergedInto(id) {
+      const to = S.merged && S.merged.get(id);
+      return to && Model.find(S.doc, to) ? to : null;
+    },
     baseBox(id) { return (S.baseBoxes && S.baseBoxes.get(id)) || null; },
     ownBox(id) { return (S.ownBoxes && S.ownBoxes.get(id)) || null; },
     resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
@@ -21973,9 +21986,9 @@ const Panels = (() => {
       const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
       if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
-      const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
+      const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
-      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
+      const sub = h('span', { class: 'sub mono' }, intoF && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(intoF.item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
       const acts = h('span', { class: 'acts' });
       const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
       dup.innerHTML = icon('copy');
@@ -22771,8 +22784,8 @@ const Panels = (() => {
     fl.append(UI.selectField({ id: 'op-type', label: T('panel.op.what'), value: type, options: [['new', T('panel.op.new')], ['join', T('panel.op.join')], ['cut', T('panel.op.cut')], ['common', T('panel.op.common')]], onChange: (v) => Actions.setOp(it.id, v === 'new' ? null : v, tgt) }));
     if (type !== 'new') fl.append(UI.selectField({ id: 'op-target', label: T('panel.op.target'), value: tgt, options: targets.map((x) => [x.id, Model.label(x)]), onChange: (v) => Actions.setOp(it.id, type, v) }));
     sec.append(fl);
-    const into = App.mergedInto(it.id);
-    if (type !== 'new') sec.append(h('div', { class: 'hint-box' }, into ? T('panel.op.mergedHint', { name: Model.label(Model.find(App.doc, into).item) }) : T('panel.op.missingHint')));
+    const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null;
+    if (type !== 'new') sec.append(h('div', { class: 'hint-box' }, intoF ? T('panel.op.mergedHint', { name: Model.label(intoF.item) }) : T('panel.op.missingHint')));
     return sec;
   }
   function roleSwitch(role, onSet) {
