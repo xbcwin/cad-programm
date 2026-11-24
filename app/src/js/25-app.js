@@ -227,7 +227,9 @@ const App = (() => {
   };
   const ev = makeEmitter();
   const times = new Map();
+  const SLOW_CALC_MS = 2000;
   let dirty = false, busy = false, busyTimer = null;
+  let cancelTimer = null, canCancel = false, runSeq = 0, curRunId = 0, cancelRunId = 0, lastCancelledAt = 0;
   const tabs = [];
   let activeTabId = null;
   let revSeq = 0;
@@ -257,6 +259,7 @@ const App = (() => {
       times: new Map(),
       stepStats: new Map(),
       evalStats: null,
+      lastGood: null,
     };
   }
   {
@@ -835,6 +838,58 @@ const App = (() => {
     if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
     return act.length > 0;
   }
+  function setCanCancel(on) {
+    const next = !!on;
+    if (next === canCancel) return;
+    canCancel = next;
+    ev.emit('calcCancelable', canCancel);
+  }
+  function restoreLastGood() {
+    const tab = currentTab();
+    const lg = tab && tab.lastGood;
+    if (!lg || !lg.doc) return false;
+    while (S.undo.length > lg.undoLen) {
+      const st = S.undo.pop();
+      S.undoBytes = Math.max(0, S.undoBytes - st.bytes);
+      S.redo.push(st);
+      S.redoBytes += st.bytes;
+    }
+    if (S.undo.length < lg.undoLen && S.redo.length >= lg.undoLen - S.undo.length) {
+      while (S.undo.length < lg.undoLen && S.redo.length) {
+        const st = S.redo.pop();
+        S.redoBytes = Math.max(0, S.redoBytes - st.bytes);
+        S.undo.push(st);
+        S.undoBytes += st.bytes;
+      }
+    }
+    trimHistory();
+    S.doc = cloneDoc(lg.doc);
+    if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
+    Model.useVars(Model.vars(S.doc).v);
+    const valid = new Set(); Model.walk(S.doc.items, (it) => valid.add(it.id));
+    S.sel = S.sel.filter((id) => valid.has(id));
+    if (S.face && !valid.has(S.face.id)) S.face = null;
+    S.edges = S.edges.filter((e) => valid.has(e.id));
+    S.revision = nextRev();
+    pruneMerged();
+    syncCurrentMeta();
+    ev.emit('doc');
+    ev.emit('history');
+    ev.emit('tabs');
+    ev.emit('selection');
+    ev.emit('results');
+    autosave();
+    return true;
+  }
+  function cancelRebuild() {
+    if (!busy) return false;
+    cancelRunId = curRunId;
+    dirty = false;
+    clearTimeout(cancelTimer); cancelTimer = null;
+    setCanCancel(false);
+    if (typeof Kernel !== 'undefined' && Kernel.cancel) Kernel.cancel();
+    return true;
+  }
   function rebuild() {
     dirty = true;
     if (!busy) return runRebuild();
@@ -842,7 +897,10 @@ const App = (() => {
   }
   async function runRebuild() {
     busy = true;
+    const myRunId = ++runSeq;
+    curRunId = myRunId;
     let calcEmitted = false;
+    let wasCancelled = false;
     while (dirty) {
       dirty = false;
       const buildTabId = activeTabId;
@@ -859,10 +917,12 @@ const App = (() => {
       }
       if (typeof Comp !== 'undefined' && Comp.ensureRefs) {
         await Comp.ensureRefs(S.doc).catch((e) => console.warn(e));
+        if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
         if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
       if (typeof SK !== 'undefined' && SK.ensureDocFonts) {
         await SK.ensureDocFonts(S.doc, S.extra).catch((e) => console.warn(e));
+        if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
         if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
       if (!Kernel.ready) {
@@ -872,6 +932,7 @@ const App = (() => {
           UI.toast('Der CAD-Kern konnte nicht gestartet werden: ' + (e.message || e), { kind: 'bad', ms: 6000 });
           break;
         }
+        if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
         if (!Kernel.ready) break;
         if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
@@ -879,6 +940,7 @@ const App = (() => {
         const ids = Store.collectBlobIds(S.doc);
         if ([...ids].some((id) => !Store.getBlobSync(id))) {
           await Store.hydrateDoc(S.doc);
+          if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
           if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
         }
       }
@@ -886,14 +948,36 @@ const App = (() => {
       scene.quality = ViewPrefs.get().quality || 'normal';
       const known = {}; if (!S.forceMesh) for (const [id, r] of S.results) known[id] = r.key;
       S.forceMesh = false;
+      clearTimeout(cancelTimer);
+      cancelTimer = setTimeout(() => {
+        if (busy && curRunId === myRunId && cancelRunId !== myRunId) setCanCancel(true);
+      }, SLOW_CALC_MS);
       let res;
       try { res = await Kernel.call('evaluate', { scene, known }); }
-      catch (e) { console.error(e); UI.toast('Beim Berechnen ist ein Fehler passiert: ' + e.message, { kind: 'bad' }); break; }
+      catch (e) {
+        if ((e && (e.cancelled || e.code === 'cancelled')) || cancelRunId === myRunId) {
+          wasCancelled = true;
+          dirty = false;
+          break;
+        }
+        console.error(e); UI.toast('Beim Berechnen ist ein Fehler passiert: ' + e.message, { kind: 'bad' }); break;
+      } finally {
+        clearTimeout(cancelTimer); cancelTimer = null;
+        setCanCancel(false);
+      }
+      if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
       if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       apply(res);
       ev.emit('rebuilt');
     }
-    busy = false; clearTimeout(busyTimer);
+    busy = false; clearTimeout(busyTimer); clearTimeout(cancelTimer); cancelTimer = null; setCanCancel(false);
+    if (wasCancelled) {
+      const restored = restoreLastGood();
+      lastCancelledAt = Date.now();
+      ev.emit('cancelled', { restored });
+      ev.emit('log', { kind: 'info', text: T('status.calcCancelledLog') });
+      UI.toast(T('status.calcCancelledToast'), { icon: 'info', ms: 3800, noNotice: true });
+    }
     if (calcEmitted) { ev.emit('busy', false); ev.emit('calc', false); }
     ev.emit('rebuilt');
   }
@@ -967,6 +1051,10 @@ const App = (() => {
       let span = 0;
       for (const [id, r] of S.results) { const it = topItem(id); if (!it || it.role === 'hole' || (it.p && it.p.thru) || !r.data || !r.data.bbox) continue; const b = r.data.bbox, m = Model.localMatrix(it).elements; const c = Math.hypot(m[12], m[13], m[14]); span = Math.max(span, c + Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2])); }
       if (Model.setSceneSpan(span * 2 + 10)) dirty = true;
+    }
+    const cur = currentTab();
+    if (cur && cur.tabId === activeTabId && S.peek == null) {
+      cur.lastGood = { doc: cloneDoc(S.doc), undoLen: S.undo.length };
     }
     ev.emit('results');
     if (S.fitNext) { S.fitNext = false; Viewer.fit(); }
@@ -1111,6 +1199,7 @@ const App = (() => {
   return {
     get doc() { return S.doc; }, get sel() { return S.sel; }, get face() { return S.face; }, get edges() { return S.edges; }, get results() { return S.results; }, get errors() { return S.errors; },
     get undoStack() { return S.undo; }, get redoStack() { return S.redo; }, get revision() { return S.revision; }, get busy() { return busy; },
+    get canCancel() { return canCancel; }, get lastCancelledAt() { return lastCancelledAt; }, cancelRebuild,
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
     peek, get peeking() { return S.peek == null ? null : S.peek; },

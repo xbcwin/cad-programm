@@ -2288,6 +2288,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `sweep`, `sweepTwist`, `sweepCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('nut')` / `Commands.search('verdrehung')` und `Explain.local` sind vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine gebogene Kurve als Pfad mit eigener Skizzenform und Verdrehung sowie eine verdrehte Nut auf einer Körperfläche samt Live-Vorschau ausprobieren.
 
+## Rechnen abbrechen und Meldungs-Zentrale (Auto [A-107], BE-27, BE-25)
+
+- [x] **Abbrechen ab > 2 s & letzter guter Stand bleibt**: Künstlich langsamer Schritt (`_testDelayMs: 6000`) zeigt unter 2 s noch kein `#status-cancel`, blendet ab > 2 s „Abbrechen“ ein, stoppt die Berechnung nach Klick sofort (`< 2,5 s`) und hält Dokument, Rückgängig-Stand und 3D-Ansicht beim letzten guten Quader; ein neuer Zylinder danach rechnet fehlerfrei.
+- [x] **Meldungs-Zentrale (Glocke `#status-bell`)**: Sammelt Rechenfehler, Abbruch-Hinweis und Info-Meldungen mit `HH:MM:SS`-Uhrzeit, zeigt Ungelesen-/Fehler-Badge, filtert nach „Alle“ / „Fehler“ / „Hinweise“, springt per „Hinspringen“ direkt zum fehlerhaften Schritt, setzt Ungelesen beim Öffnen zurück und leert über „Leeren“.
+- [x] **Einfach-Modus, Hilfen, DE/EN & Befehle**: Glocke bleibt in „Einfach“ sichtbar; `calcCancel` und `noticeCenter` sind in `werkzeug-hilfen.json`/`HELP` vollständig; DE/EN-Schlüssel sind gleich und `Commands.search` findet `notices` und `cancel-calc`.
+- [ ] **Von Hand**: Im Browser eine sehr rechenintensive Rundung oder große Muster-Kopie auslösen, nach 2 s „Abbrechen“ klicken und in der Glocke bei einem fehlerhaften Schritt auf „Hinspringen“ klicken.
+
 ## Fehler melden
 
 ```

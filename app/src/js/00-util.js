@@ -598,6 +598,7 @@ const IC = {
   zoomIn: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8 M10.5 7.5v6 M7.5 10.5h6" />',
   zoomOut: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8 M7.5 10.5h6" />',
   stop: '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0" />',
   cursor: '<path d="M6 3v15l4-4 3 7 2-1-3-7h6z" />',
   play: '<path d="M8 5v14l11-7z" />',
   box3: '<path d="M3 8 12 3l9 5-9 5z M3 8v8l9 5 9-5V8 M12 13v8" />',
@@ -2052,6 +2053,16 @@ const HELP = {
   "tip": "Schräge und Hinterschnitte für Guss- oder Spritzgussformen farbig prüfen",
   "hilfe": "Färbt alle Flächen passend zur gewählten Entformungsrichtung: Grün bedeutet genug Entformungsschräge ab dem eingestellten Winkel, Gelb bedeutet zu wenig Schräge (z. B. senkrechte Wände), und Rot zeigt Hinterschnitte, an denen das Teil in der Form hängen bleibt.",
   "tipp": "Wähl über „Fläche“ direkt eine ebene Modellfläche als Auszugsrichtung und schalte bei einteiligen Formen (z. B. Silikonabguss) „Zweiteilige Form“ aus."
+ },
+ "calcCancel": {
+  "tip": "Laufende Berechnung abbrechen und zum letzten guten Stand zurückkehren",
+  "hilfe": "Dauert ein Rechenschritt länger als 2 Sekunden, erscheint hier „Abbrechen“. Ein Klick stoppt den CAD-Kern sofort und stellt automatisch das zuletzt fertig gerechnete Modell wieder her.",
+  "tipp": "Ideal bei versehentlich zu feinen Rundungen, großen Mustern oder komplexen Texten – nichts geht verloren."
+ },
+ "noticeCenter": {
+  "tip": "Meldungs-Zentrale: Fehler und Hinweise dieser Sitzung ansehen",
+  "hilfe": "Die Glocke sammelt alle Rechenfehler, Warnungen und Hinweise dieser Sitzung mit genauer Uhrzeit. Du kannst nach Fehlern oder Hinweisen filtern und bei Schritt-Fehlern mit „Hinspringen“ direkt das betroffene Teil markieren.",
+  "tipp": "Ein roter Punkt zeigt unbehobene oder neue Fehler; über „Leeren“ räumst du die Liste wieder auf."
  }
 };
 

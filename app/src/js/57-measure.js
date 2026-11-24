@@ -977,6 +977,15 @@ const Measure = (() => {
       el.className = cls; el.dataset.state = state; el.dataset.tip = tip;
       const t = el.querySelector('.t'); if (t) t.textContent = text;
     }
+    const cBtn = $('#status-cancel');
+    if (cBtn) {
+      const showCancel = !!(typeof App !== 'undefined' && App.canCancel && App.busy && kState !== 'loading');
+      cBtn.hidden = !showCancel;
+      if (showCancel) {
+        cBtn.innerHTML = icon('stop') + '<span>' + esc(T('status.cancelCalc')) + '</span>';
+        cBtn.dataset.tip = T('status.cancelCalcTip');
+      }
+    }
   }
   function updateStatus() {
     const selEl = $('#status-sel');
@@ -1029,6 +1038,7 @@ const Measure = (() => {
     App.on('sketch', updateStatus);
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
+    App.on('calcCancelable', updateCalc);
     App.on('busy', (b) => { uiBusy = !!b; updateCalc(); });
     if (typeof Kernel !== 'undefined' && Kernel.on) Kernel.on('state', updateCalc);
     if (typeof Kernel !== 'undefined' && Kernel.whenReady) Kernel.whenReady().then(updateStatus).catch(() => {});
@@ -1036,6 +1046,10 @@ const Measure = (() => {
     if (selBtn) selBtn.addEventListener('click', () => { if (selCopyVal) copyText(selCopyVal, selCopyWhat || 'Wert'); });
     const unitBtn = $('#status-unit');
     if (unitBtn) unitBtn.addEventListener('click', () => ViewPrefs.dialog('general', { focus: 'set-proj-unit' }));
+    const cancelBtn = $('#status-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => App.cancelRebuild && App.cancelRebuild());
+    const calcEl = $('#status-calc');
+    if (calcEl) calcEl.addEventListener('click', () => { if (statusState.calcState === 'error' && typeof Notices !== 'undefined') Notices.open($('#status-bell')); });
     updateStatus();
     let d0 = null;
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);

@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -21290,6 +21290,184 @@ def t_a105_schraege_hinterschnitt(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25) ----------
+def t_a107_abbrechen_meldungen(p):
+    p.empty()
+
+    # 1. Guten Stand aufbauen (Quader 20x20x20), dann künstlich langsamen Schritt (> 2 s) anstoßen und abbrechen
+    p.ev("App.change('Quader', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:20},{name:'Quader'})); })")
+    warte_rechnen(p)
+    good_before = p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      return { id: it.id, n: App.doc.items.length, resN: App.results.size, bbox: r && r.data && r.data.bbox };
+    """)
+
+    p.ev("""
+      App.change('Langsamer Quader', d => {
+        const b = Model.newItem('box', { w: 40, d: 40, h: 40, _testDelayMs: 6000 }, { name: 'Langsam' });
+        b.t.x = 40;
+        d.items.push(b);
+      });
+    """)
+    p.wait(400)
+    early_busy = p.ev("return !!App.busy")
+    early_cancel_vis = p.pg.locator('#status-cancel').is_visible()
+
+    p.pg.locator('#status-cancel').wait_for(state='visible', timeout=4000)
+    cancel_txt = (p.pg.locator('#status-cancel').text_content() or '').strip()
+    t_click = p.ev("return performance.now()")
+    p.pg.locator('#status-cancel').click()
+    p.pg.wait_for_function("()=>!window.__M.App.busy", timeout=2500)
+    cancel_ms = p.ev("return performance.now() - arg;", t_click)
+    p.wait(250)
+
+    after_cancel = p.ev("""
+      return {
+        cancelVis: document.querySelector('#status-cancel') ? !document.querySelector('#status-cancel').hidden : null,
+        calcState: document.querySelector('#status-calc') ? document.querySelector('#status-calc').dataset.state : null,
+        n: App.doc.items.length,
+        firstId: App.doc.items[0] ? App.doc.items[0].id : null,
+        resN: App.results.size,
+        bbox: App.results.get(App.doc.items[0].id)?.data?.bbox || null,
+        hasSlow: App.doc.items.some(x => x.name === 'Langsam'),
+        nodeCount: Viewer.nodes.size,
+      };
+    """)
+    ok1 = (
+        early_busy is True and early_cancel_vis is False
+        and 'Abbrechen' in cancel_txt
+        and cancel_ms < 2500
+        and after_cancel['cancelVis'] is False
+        and after_cancel['calcState'] == 'ready'
+        and after_cancel['n'] == 1
+        and after_cancel['firstId'] == good_before['id']
+        and after_cancel['resN'] == 1
+        and after_cancel['hasSlow'] is False
+        and after_cancel['nodeCount'] == 1
+        and after_cancel['bbox'] == good_before['bbox']
+    )
+
+    # 2. CAD-Kern arbeitet nach dem Abbruch mit einem normalen Körper sofort weiter
+    p.ev("""
+      App.change('Zylinder', d => {
+        const c = Model.newItem('cylinder', { d: 10, h: 20 }, { name: 'Bolzen' });
+        c.t.x = 35;
+        d.items.push(c);
+      });
+    """)
+    warte_rechnen(p)
+    after_ok = p.ev("return { n: App.doc.items.length, resN: App.results.size, errs: App.errors.length };")
+    ok2 = after_ok['n'] == 2 and after_ok['resN'] == 2 and after_ok['errs'] == 0
+
+    # 3. Meldungs-Zentrale: Fehler, Hinweise, Uhrzeit, Filter, Hinspringen & Leeren
+    p.ev("""
+      App.change('Kaputte Rundung', d => {
+        d.items[0].finishes.push({ id: 'f_bad_107', type: 'fillet', r: 999, edges: [0] });
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("UI.toast('Sitzungshinweis Test', { icon: 'info' });")
+    p.wait(200)
+
+    bell_before = p.ev("""
+      const b = document.querySelector('#status-bell');
+      const badge = document.querySelector('#status-bell-badge');
+      return {
+        vis: !!b && b.getBoundingClientRect().width > 0,
+        hasErr: !!b && b.classList.contains('has-err'),
+        badgeHidden: badge ? badge.hidden : null,
+        badgeText: badge ? badge.textContent.trim() : '',
+        unread: Notices.unreadCount(),
+        errCount: Notices.errorCount(),
+      };
+    """)
+    p.pg.locator('#status-bell').click()
+    p.wait(250)
+    pop_info = p.ev("""
+      const rows = [...document.querySelectorAll('#nc-list .nc-row')];
+      const errRow = rows.find(r => r.dataset.level === 'error');
+      const timeTxt = errRow ? (errRow.querySelector('.nc-time')?.textContent || '').trim() : '';
+      const hasJump = !!(errRow && errRow.querySelector('.nc-jump'));
+      const hasInfo = rows.some(r => r.textContent.includes('Sitzungshinweis Test'));
+      const hasCancel = rows.some(r => r.textContent.includes('abgebrochen'));
+      return {
+        open: !!document.querySelector('#notice-center'),
+        total: rows.length,
+        timeOk: /^\\d{2}:\\d{2}:\\d{2}$/.test(timeTxt),
+        hasJump,
+        hasInfo,
+        hasCancel,
+        unreadAfterOpen: Notices.unreadCount(),
+      };
+    """)
+
+    p.pg.locator('#nc-filter-error').click()
+    p.wait(150)
+    only_err = p.ev("const r=[...document.querySelectorAll('#nc-list .nc-row')]; return r.length > 0 && r.every(x => x.dataset.level === 'error');")
+    p.pg.locator('#nc-filter-info').click()
+    p.wait(150)
+    only_info = p.ev("const r=[...document.querySelectorAll('#nc-list .nc-row')]; return r.length > 0 && r.every(x => x.dataset.level !== 'error');")
+    p.pg.locator('#nc-filter-all').click()
+    p.wait(150)
+
+    p.ev("App.clearSelection()")
+    p.pg.locator('#nc-list .nc-row[data-level="error"] .nc-jump').first.click()
+    p.wait(250)
+    jump_res = p.ev("return { open: !!document.querySelector('#notice-center'), sel: App.sel.slice(), targetId: App.doc.items[0].id };")
+
+    p.pg.locator('#status-bell').click()
+    p.wait(200)
+    p.pg.locator('#nc-clear').click()
+    p.wait(200)
+    cleared = p.ev("return { len: Notices.entries().length, emptyVis: !!document.querySelector('#nc-list .nc-empty') };")
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+
+    ok3 = (
+        bell_before['vis'] and bell_before['hasErr'] and bell_before['badgeHidden'] is False
+        and bell_before['unread'] >= 2 and bell_before['errCount'] >= 1
+        and pop_info['open'] and pop_info['total'] >= 3 and pop_info['timeOk']
+        and pop_info['hasJump'] and pop_info['hasInfo'] and pop_info['hasCancel']
+        and pop_info['unreadAfterOpen'] == 0
+        and only_err and only_info
+        and jump_res['open'] is False and jump_res['targetId'] in jump_res['sel']
+        and cleared['len'] == 0 and cleared['emptyVis'] is True
+    )
+
+    # 4. Einfach-Modus, Hilfetexte, DE/EN-Schlüssel & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(200)
+    simple_bell = p.pg.locator('#status-bell').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(200)
+
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    de_txt = p.pg.evaluate("fetch('data/texte-de.json').then(r=>r.json())")
+    en_txt = p.pg.evaluate("fetch('data/texte-en.json').then(r=>r.json())")
+    i18n_eq = sorted(de_txt.keys()) == sorted(en_txt.keys())
+    p.pg.locator('#status-bell').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip.big', timeout=3000)
+        bell_tip_big = p.pg.locator('.tooltip.big').text_content() or ''
+    except Exception:
+        bell_tip_big = ''
+    help_ok = p.ev("""
+      const aOk = document.querySelector('#status-cancel')?.dataset.help === 'calcCancel'
+               && document.querySelector('#status-bell')?.dataset.help === 'noticeCenter';
+      const cmdOk = Commands.search('meldungs').some(c => c.id === 'notices')
+                 && Commands.search('abbrechen').some(c => c.id === 'cancel-calc');
+      return aOk && cmdOk;
+    """)
+    ok4 = (
+        simple_bell is True
+        and i18n_eq
+        and all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('calcCancel', 'noticeCenter'))
+        and hilfen['noticeCenter']['hilfe'] in bell_tip_big
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21502,6 +21680,7 @@ TESTS = [
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
+    ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

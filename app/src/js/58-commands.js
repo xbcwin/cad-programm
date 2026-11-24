@@ -232,6 +232,8 @@ const Commands = (() => {
     add('orient-print', 'Für den Druck ausrichten (wenig Überhang)', 'overhang', 'druck ausrichten drehen ueberhang stuetzen orientieren 3d-druck flach legen', () => Print.orientForPrint(), { group: 'Projekt' });
     add('nozzle-wall', 'Wandstärke gegen Düse prüfen', 'ruler', 'wandstaerke duese 3d-druck duenn warnung pruefen wand', () => Views.thin(true, { limit: round(2 * Print.nozzle(), 2) }), { group: 'Projekt' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
+    add('notices', 'Meldungs-Zentrale öffnen (Fehler und Hinweise)', 'bell', 'meldungen meldungszentrale glocke fehler hinweise warnung', () => Notices.toggle(), { group: 'Werkzeuge' });
+    add('cancel-calc', 'Laufendes Rechnen abbrechen', 'stop', 'rechnen abbrechen stopp kern langsam', () => { if (!App.cancelRebuild()) UI.toast('Es läuft gerade keine Berechnung.', { icon: 'info', noNotice: true }); }, { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
     add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
