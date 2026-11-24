@@ -6,6 +6,7 @@ const Drawing = (() => {
   const DETAIL_SCALES = [1, 2, 2.5, 3, 4, 5, 10, 20];
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
   const VIEW_NAMES = { front: 'Vorderansicht', top: 'Draufsicht', left: 'Seitenansicht' };
+  const ISO286_DATA = /*JSON:iso286.json*/null;
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, loadingProjPromise = null, projId = 0;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
@@ -160,9 +161,23 @@ const Drawing = (() => {
       return { ...s, id: nid };
     });
     clone.dims = (clone.dims || []).map((x) => {
+      const oldId = x.id, nid = uid('d');
       let view = detMap.get(x.view) || x.view;
       if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
-      return { ...x, id: uid('d'), view };
+      const out = { ...x, id: nid, view };
+      if (Array.isArray(x.hide)) {
+        out.hide = x.hide.map((hId) => (hId && hId.startsWith(oldId + '_') ? nid + hId.slice(oldId.length) : hId));
+      }
+      if (x.tols && typeof x.tols === 'object') {
+        const nt = {};
+        for (const [tk, tv] of Object.entries(x.tols)) {
+          const nk = tk.startsWith(oldId + '_') ? nid + tk.slice(oldId.length) : tk;
+          nt[nk] = JSON.parse(JSON.stringify(tv));
+        }
+        out.tols = nt;
+      }
+      if (x.tol && typeof x.tol === 'object') out.tol = JSON.parse(JSON.stringify(x.tol));
+      return out;
     });
     clone.hiddenCenters = (clone.hiddenCenters || []).map((cid) => {
       if (typeof cid !== 'string' || !cid.startsWith('ctr|')) return cid;
@@ -1154,6 +1169,259 @@ const Drawing = (() => {
   const toSheet = (v, p) => [v.ox + p[0] * v.s, v.oy - p[1] * v.s];
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
 
+  // ---------- Toleranzen & ISO-286-Passungen (ZE-08, ZE-09) ----------
+  function decNeeded(v) {
+    const r = Math.round(Math.abs(v) * 10000) / 10000;
+    if (r < 1e-9) return 0;
+    const s = r.toFixed(4).replace(/\.?0+$/, '');
+    const dot = s.indexOf('.');
+    return dot >= 0 ? s.length - dot - 1 : 0;
+  }
+  function fmtTolVal(vDisp, dec) {
+    const r = round(vDisp, dec);
+    const clean = Object.is(r, -0) ? 0 : r;
+    return clean.toFixed(dec).replace('.', ',');
+  }
+  function fmtDevPair(upperMm, lowerMm, { minDec = 0 } = {}) {
+    const u = Units.fromMM(upperMm);
+    const l = Units.fromMM(lowerMm);
+    const isZero = (v) => Math.abs(round(v, 4)) < 1e-9;
+    const dec = Units.key() === 'mm'
+      ? Math.max(minDec, decNeeded(u), decNeeded(l))
+      : Math.max(minDec, Units.def().dec, decNeeded(u), decNeeded(l));
+    const fmtOne = (v) => {
+      if (isZero(v)) return '0';
+      return (v > 0 ? '+' : '\u2212') + fmtTolVal(Math.abs(v), dec);
+    };
+    return { upStr: fmtOne(u), loStr: fmtOne(l), dec };
+  }
+  function fmtLimitsPair(nominalMm, upperMm, lowerMm, { minDec = 0 } = {}) {
+    const loMm = Math.min(upperMm, lowerMm);
+    const hiMm = Math.max(upperMm, lowerMm);
+    const hi = Units.fromMM(nominalMm + hiMm);
+    const lo = Units.fromMM(nominalMm + loMm);
+    const dec = Units.key() === 'mm'
+      ? Math.max(minDec, decNeeded(hi), decNeeded(lo))
+      : Math.max(minDec, Units.def().dec, decNeeded(hi), decNeeded(lo));
+    return { maxStr: fmtTolVal(hi, dec), minStr: fmtTolVal(lo, dec), dec };
+  }
+  function fmtSymVal(symMm) {
+    const v = Math.abs(Units.fromMM(symMm));
+    const dec = Units.key() === 'mm' ? Math.max(1, decNeeded(v)) : Math.max(Units.def().dec, decNeeded(v));
+    return fmtFixed(v, dec);
+  }
+  function iso286(code, nominalMm) {
+    const classes = (ISO286_DATA && ISO286_DATA.klassen) || {};
+    const raw = String(code || '').trim();
+    const key = classes[raw] ? raw : Object.keys(classes).find((k) => k.toLowerCase() === raw.toLowerCase());
+    const entry = key ? classes[key] : null;
+    if (!entry) return null;
+    const nom = Number(nominalMm);
+    const steps = (ISO286_DATA && ISO286_DATA.stufen_mm) || [];
+    if (!(nom > 0) || !steps.length || nom > steps[steps.length - 1]) {
+      return {
+        code: key,
+        kind: entry.art,
+        hint: entry.hinweis || '',
+        norm: ISO286_DATA.norm || 'DIN EN ISO 286-2:2010',
+        sources: ISO286_DATA._quellen || [],
+        outOfRange: true,
+      };
+    }
+    const idx = steps.findIndex((hi) => nom <= hi);
+    const pair = entry.abmasse_um[idx];
+    const upperUm = pair[0], lowerUm = pair[1];
+    const upperMm = upperUm / 1000, lowerMm = lowerUm / 1000;
+    const rangeMin = idx === 0 ? 0 : steps[idx - 1];
+    const rangeMax = steps[idx];
+    const minDec = (!Number.isInteger(upperUm) || !Number.isInteger(lowerUm)) ? 4 : 3;
+    const dev = fmtDevPair(upperMm, lowerMm, { minDec });
+    const lim = fmtLimitsPair(nom, upperMm, lowerMm, { minDec });
+    return {
+      code: key,
+      kind: entry.art,
+      hint: entry.hinweis || '',
+      norm: ISO286_DATA.norm || 'DIN EN ISO 286-2:2010',
+      sources: ISO286_DATA._quellen || [],
+      rangeMin,
+      rangeMax,
+      upperUm,
+      lowerUm,
+      upperMm,
+      lowerMm,
+      minMm: nom + lowerMm,
+      maxMm: nom + upperMm,
+      upStr: dev.upStr,
+      loStr: dev.loStr,
+      minStr: lim.minStr,
+      maxStr: lim.maxStr,
+      outOfRange: false,
+    };
+  }
+  function dimNominal(dim) {
+    if (!dim) return 0;
+    if (dim.type === 'dia') return Number(dim.r || 0) * 2;
+    if (dim.type === 'rad') return Number(dim.r || 0);
+    if (dim.type === 'lin') {
+      if (dim.dir === 'h') return Math.abs(dim.b[0] - dim.a[0]);
+      if (dim.dir === 'v') return Math.abs(dim.b[1] - dim.a[1]);
+      return Math.hypot(dim.b[0] - dim.a[0], dim.b[1] - dim.a[1]);
+    }
+    return 0;
+  }
+  function dimLabelParts(dim, nominalMm) {
+    const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
+    if (dim.type === 'dia' || dim.type === 'rad') {
+      if (dim.threadLabel) return { mainLabel: countPrefix + dim.threadLabel, prefix: '', isThread: true };
+      const prefix = dim.type === 'dia' ? 'Ø' : 'R';
+      return { mainLabel: countPrefix + prefix + fmtDim(nominalMm), prefix, isThread: false };
+    }
+    return { mainLabel: fmtDim(nominalMm), prefix: '', isThread: false };
+  }
+  function findDimById(id, sh = dwg(), lay = layout) {
+    if (!id || !sh) return null;
+    const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
+    const dim = list.find((x) => x.id === id);
+    if (!dim) return null;
+    const nominalMm = dimNominal(dim);
+    const { mainLabel } = dimLabelParts(dim, nominalMm);
+    return { dim, nominalMm, label: mainLabel };
+  }
+  function sanitizeTol(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.mode || raw.mode === 'none') return null;
+    if (raw.mode === 'sym') {
+      const sym = Math.abs(Number(raw.sym) || 0);
+      return { mode: 'sym', sym: round(sym, 6) };
+    }
+    if (raw.mode === 'dev' || raw.mode === 'limits') {
+      let upper = Number(raw.upper) || 0, lower = Number(raw.lower) || 0;
+      if (lower > upper) [upper, lower] = [lower, upper];
+      return { mode: raw.mode, upper: round(upper, 6), lower: round(lower, 6) };
+    }
+    if (raw.mode === 'fit') {
+      const classes = (ISO286_DATA && ISO286_DATA.klassen) || {};
+      const rawCode = String(raw.fit || 'H7').trim();
+      const code = classes[rawCode] ? rawCode : (Object.keys(classes).find((k) => k.toLowerCase() === rawCode.toLowerCase()) || 'H7');
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(raw.fitShow) ? raw.fitShow : 'both';
+      return { mode: 'fit', fit: code, fitShow };
+    }
+    return null;
+  }
+  function getDimTol(id) {
+    const d = dwg();
+    const direct = (d.dims || []).find((x) => x.id === id);
+    if (direct) return direct.tol ? { ...direct.tol } : null;
+    const parent = (d.dims || []).find((x) => x.auto === 'circles' && id.startsWith(x.id + '_'));
+    if (parent && parent.tols && parent.tols[id]) return { ...parent.tols[id] };
+    return null;
+  }
+  function setDimTol(id, tol) {
+    if (!id) return false;
+    const clean = sanitizeTol(tol);
+    let found = false;
+    App.change(clean ? 'Toleranz geändert' : 'Toleranz entfernt', () => {
+      const d = dwg();
+      const direct = (d.dims || []).find((x) => x.id === id);
+      if (direct) {
+        if (clean) direct.tol = clean;
+        else delete direct.tol;
+        found = true;
+        return;
+      }
+      const parent = (d.dims || []).find((x) => x.auto === 'circles' && id.startsWith(x.id + '_'));
+      if (parent) {
+        if (clean) {
+          if (!parent.tols) parent.tols = {};
+          parent.tols[id] = clean;
+        } else if (parent.tols) {
+          delete parent.tols[id];
+          if (!Object.keys(parent.tols).length) delete parent.tols;
+        }
+        found = true;
+      }
+    });
+    if (found) { render(); Panels.renderRight(); }
+    return found;
+  }
+  function resolveDimTol(dim, nominalMm) {
+    const tol = dim && dim.tol;
+    if (!tol || !tol.mode || tol.mode === 'none') return null;
+    if (tol.mode === 'sym') {
+      const sym = Math.abs(Number(tol.sym) || 0);
+      return { mode: 'sym', sym, symStr: fmtSymVal(sym), upperMm: sym, lowerMm: -sym };
+    }
+    if (tol.mode === 'dev') {
+      const upperMm = Number(tol.upper) || 0, lowerMm = Number(tol.lower) || 0;
+      const dev = fmtDevPair(upperMm, lowerMm);
+      return { mode: 'dev', upperMm, lowerMm, upStr: dev.upStr, loStr: dev.loStr };
+    }
+    if (tol.mode === 'limits') {
+      const upperMm = Number(tol.upper) || 0, lowerMm = Number(tol.lower) || 0;
+      const lim = fmtLimitsPair(nominalMm, upperMm, lowerMm);
+      return { mode: 'limits', upperMm, lowerMm, maxStr: lim.maxStr, minStr: lim.minStr };
+    }
+    if (tol.mode === 'fit') {
+      const info = iso286(tol.fit, nominalMm);
+      if (!info) return null;
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(tol.fitShow) ? tol.fitShow : 'both';
+      return { mode: 'fit', fitShow, ...info };
+    }
+    return null;
+  }
+  function measureDimLabel(mainLabel, prefix, tolInfo, TXT, count = 1) {
+    if (!tolInfo) return { totalW: textW(mainLabel, TXT) * 0.92 };
+    if (tolInfo.mode === 'sym') return { totalW: textW(`${mainLabel} ±${tolInfo.symStr}`, TXT) * 0.92 };
+    if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
+      return { totalW: textW(`${mainLabel} ${tolInfo.code}`, TXT) * 0.92 };
+    }
+    if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
+      const LIM = 2.8;
+      const countPrefix = count > 1 ? count + '× ' : '';
+      return { totalW: Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95 };
+    }
+    const SUB = 2.3, gap = 0.8;
+    const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
+    const wMain = textW(leftText, TXT) * 0.92;
+    const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
+    return { totalW: wMain + gap + wStack };
+  }
+  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT) {
+    const rad = (ang * Math.PI) / 180;
+    const exX = Math.cos(rad), exY = Math.sin(rad);
+    const euX = Math.sin(rad), euY = -Math.cos(rad);
+    const pt = (lx, ly) => [cx + exX * lx + euX * ly, cy + exY * lx + euY * ly];
+    const base = { rot: ang, id: dim.id, view: dim.view };
+    if (!tolInfo) {
+      texts.push({ ...base, x: cx, y: cy, t: mainLabel, size: TXT, anchor: 'middle', cls: 'dimtext' });
+      return;
+    }
+    if (tolInfo.mode === 'sym') {
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ±${tolInfo.symStr}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'sym' });
+      return;
+    }
+    if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ${tolInfo.code}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'fit' });
+      return;
+    }
+    if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
+      const LIM = 2.8;
+      const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
+      const pTop = pt(0, 2.7), pBot = pt(0, 0);
+      texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
+      texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+      return;
+    }
+    const SUB = 2.3, gap = 0.8;
+    const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
+    const wMain = textW(leftText, TXT) * 0.92;
+    const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
+    const x0 = -(wMain + gap + wStack) / 2;
+    const pMain = pt(x0, 0.1), pUp = pt(x0 + wMain + gap, 2.0), pLo = pt(x0 + wMain + gap, -0.2);
+    texts.push({ ...base, x: pMain[0], y: pMain[1], t: leftText, size: TXT, anchor: 'start', cls: 'dimtext', tolPart: 'main' });
+    texts.push({ ...base, x: pUp[0], y: pUp[1], t: tolInfo.upStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'upper' });
+    texts.push({ ...base, x: pLo[0], y: pLo[1], t: tolInfo.loStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'lower' });
+  }
+
   // ---------- Bemaßung ----------
   function autoDimList(sh = dwg(), lay = layout) {
     const all = [];
@@ -1182,7 +1450,12 @@ const Drawing = (() => {
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
           const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
-          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length)}` } : {}) });
+          const subId = dim.id + '_' + Math.round(best.r * 200);
+          const subTol = dim.tols && dim.tols[subId] ? dim.tols[subId] : undefined;
+          const item = { ...dim, id: subId, type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length)}` } : {}) };
+          delete item.tols;
+          if (subTol) item.tol = subTol;
+          out.push(item);
         }
         // Rundungen: gleiche Radien zusammenfassen („4× R5“). Nur deutliche Bögen – Zahnköpfe und Ähnliches bleiben weg.
         const ag = new Map();
@@ -1192,7 +1465,12 @@ const Drawing = (() => {
           let best = g[0], bd = -1;
           for (const c of g) { const mid = (c.arc[0] + c.arc[1]) / 2; const d = Math.hypot(c.c[0] + c.r * Math.cos(mid) - mx, c.c[1] + c.r * Math.sin(mid) - my); if (d > bd) { bd = d; best = c; } }
           const mid = (best.arc[0] + best.arc[1]) / 2;
-          out.push({ ...dim, id: dim.id + '_r' + Math.round(best.r * 200), type: 'rad', c: best.c, r: best.r, ang: (mid * 180) / Math.PI, count: g.length });
+          const subId = dim.id + '_r' + Math.round(best.r * 200);
+          const subTol = dim.tols && dim.tols[subId] ? dim.tols[subId] : undefined;
+          const item = { ...dim, id: subId, type: 'rad', c: best.c, r: best.r, ang: (mid * 180) / Math.PI, count: g.length };
+          delete item.tols;
+          if (subTol) item.tol = subTol;
+          out.push(item);
         }
       }
       // einzeln gelöschte automatische Maße bleiben weg
@@ -1233,7 +1511,9 @@ const Drawing = (() => {
       let ang = (Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) * 180) / Math.PI;
       if (ang >= 89.99) ang -= 180; if (ang < -90.01) ang += 180;
       const r = (ang * Math.PI) / 180; const tx = mx + Math.sin(r) * 1.2, ty = my - Math.cos(r) * 1.2;
-      texts.push({ x: tx, y: ty, t: fmtDim(val), size: TXT, rot: ang, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      const { mainLabel, prefix } = dimLabelParts(dim, val);
+      const tolInfo = resolveDimTol(dim, val);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -1245,8 +1525,11 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r));
-      const tl = textW(label, TXT) * 0.92 + 2;
+      const nomVal = dim.type === 'dia' ? dim.r * 2 : dim.r;
+      const { mainLabel, prefix } = dimLabelParts(dim, nomVal);
+      const tolInfo = resolveDimTol(dim, nomVal);
+      const { totalW } = measureDimLabel(mainLabel, prefix, tolInfo, TXT, dim.count);
+      const tl = totalW + 2.5;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
@@ -1259,7 +1542,7 @@ const Drawing = (() => {
       } else if (R >= AR * 1.3) { lines.push({ pts: [C, P], cls: 'dim', id: dim.id }); arrowHead(lines, P, C, AR, true, dim.id); }
       else arrowHead(lines, P, out, AR, true, dim.id);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - 1.2, 0, dim, mainLabel, prefix, tolInfo, TXT);
     }
   }
   function fmtDim(v) { return Units.fmtLen(v, 2); }
@@ -1522,7 +1805,7 @@ const Drawing = (() => {
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
   // Die Standardschrift im PDF kennt nur Latin-1: typografische Zeichen ersetzen
   function latin1(s) {
-    return String(s).replace(/[–—]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
+    return String(s).replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
   }
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
@@ -1534,7 +1817,7 @@ const Drawing = (() => {
     s.setAttribute('xmlns', NS);
     s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel{stroke:#0c7a70}.dim.sel{stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel{stroke:#0c7a70}.dim.sel{stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
@@ -1561,6 +1844,7 @@ const Drawing = (() => {
       if (t.id) el.dataset.id = t.id;
       if (t.view) el.dataset.view = t.view;
       if (t.secId) el.dataset.sec = t.secId;
+      if (t.tolPart) el.dataset.tol = t.tolPart;
       el.textContent = t.t;
       g.append(el);
     }
@@ -2385,7 +2669,7 @@ const Drawing = (() => {
         P(0, 'SEQEND', 8, ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = t.cls === 'dimtext' ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, String(t.t).replace(/Ø/g, '%%c'), 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
+    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = String(t.cls || '').startsWith('dimtext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
@@ -2393,6 +2677,42 @@ const Drawing = (() => {
     await Print.save(fileBase(true) + ' DXF.zip', new Blob([zip]));
   }
   // ---------- Rechte Leiste ----------
+  function tolNumField({ id, label, value, min = null, placeholder = '0', onCommit }) {
+    const wrap = h('div', { class: 'field' });
+    if (label) wrap.append(h('label', { for: id }, label));
+    const box = h('div', { class: 'inp' });
+    const fmtVal = (mm) => {
+      if (typeof mm !== 'number' || !isFinite(mm)) return '';
+      const v = Units.fromMM(mm);
+      const r = round(v, 4);
+      const clean = Object.is(r, -0) ? 0 : r;
+      return clean.toFixed(4).replace(/\.?0+$/, '').replace('.', ',');
+    };
+    const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: fmtVal(value), placeholder, autocomplete: 'off', spellcheck: 'false' });
+    box.append(inp, h('span', { class: 'unit' }, Units.label()));
+    wrap.append(box);
+    let orig = inp.value;
+    const commit = () => {
+      const raw = inp.value.trim().replace(/\u2212/g, '-');
+      if (raw === orig) { box.classList.remove('invalid'); return; }
+      const p = raw ? Units.parseLen(raw, {}, { expr: false }) : { ok: true, value: 0 };
+      if (!p.ok || !isFinite(p.value)) { box.classList.add('invalid'); return; }
+      let v = p.value;
+      if (min != null && v < min) v = min;
+      box.classList.remove('invalid');
+      orig = fmtVal(v);
+      inp.value = orig;
+      onCommit(v);
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { commit(); inp.blur(); }
+      if (e.key === 'Escape') { inp.value = orig; inp.blur(); }
+    });
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('focus', () => inp.select());
+    return wrap;
+  }
   function renderPanel(body) {
     const all = sheets(), idx = activeIndex(), d = all[idx] || dwg();
     const w = h('div', { class: 'props' });
@@ -2519,7 +2839,8 @@ const Drawing = (() => {
       const selDet = detList.find((x) => x.id === selDim);
       const isSec = secs.some((x) => x.id === selDim);
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : 'Auswahl'));
+      const selDimInfo = !selDet && !isSec && !selCtr ? findDimById(selDim, d, layout) : null;
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
         const lFld = UI.textField({ id: 'dw-det-label', label: 'Buchstabe', value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
@@ -2532,6 +2853,134 @@ const Drawing = (() => {
       }
       if (selCtr) {
         selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, viewLabel(selCtr.view, d)), h('b', { class: 'mono' }, `Ø${fmtDim(selCtr.r * 2)}`))));
+      }
+      if (selDimInfo) {
+        const curTol = selDimInfo.dim.tol || null;
+        const curMode = curTol && curTol.mode ? curTol.mode : 'none';
+        const tolBox = h('div', { id: 'dw-tol-sec', 'data-help': 'drawingTolerance', style: { display: 'grid', gap: '8px', marginBottom: '8px' } });
+        const prefillDev = () => {
+          if (curTol && curTol.mode === 'fit') {
+            const fi = iso286(curTol.fit, selDimInfo.nominalMm);
+            if (fi && !fi.outOfRange) return { upper: fi.upperMm, lower: fi.lowerMm };
+          }
+          if (curTol && curTol.mode === 'sym') return { upper: curTol.sym || 0, lower: -(curTol.sym || 0) };
+          if (curTol && (curTol.mode === 'dev' || curTol.mode === 'limits')) return { upper: curTol.upper || 0, lower: curTol.lower || 0 };
+          return { upper: 0.05, lower: -0.05 };
+        };
+        tolBox.append(UI.selectField({
+          id: 'dw-tol-mode',
+          label: 'Toleranz',
+          value: curMode,
+          options: [
+            ['none', 'Keine (Allgemeintoleranz)'],
+            ['sym', 'Symmetrisch (±)'],
+            ['dev', 'Abmaße (oben / unten)'],
+            ['limits', 'Grenzmaße (min / max)'],
+            ['fit', 'ISO-Passung (H7, g6 …)'],
+          ],
+          onChange: (m) => {
+            if (m === 'none') setDimTol(selDimInfo.dim.id, null);
+            else if (m === 'sym') setDimTol(selDimInfo.dim.id, { mode: 'sym', sym: curTol && curTol.sym != null ? curTol.sym : 0.1 });
+            else if (m === 'dev' || m === 'limits') setDimTol(selDimInfo.dim.id, { mode: m, ...prefillDev() });
+            else if (m === 'fit') setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: (curTol && curTol.fit) || (selDimInfo.dim.type === 'dia' ? 'H7' : 'h6'), fitShow: (curTol && curTol.fitShow) || 'both' });
+          },
+        }));
+        if (curMode === 'sym') {
+          tolBox.append(tolNumField({
+            id: 'dw-tol-sym',
+            label: 'Toleranz ±',
+            value: curTol.sym ?? 0.1,
+            min: 0,
+            onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'sym', sym: Math.abs(v) }),
+          }));
+        } else if (curMode === 'dev') {
+          const fRow = h('div', { class: 'fields' });
+          fRow.append(
+            tolNumField({
+              id: 'dw-tol-upper',
+              label: 'Oberes Abmaß',
+              value: curTol.upper ?? 0,
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'dev', upper: v, lower: curTol.lower ?? 0 }),
+            }),
+            tolNumField({
+              id: 'dw-tol-lower',
+              label: 'Unteres Abmaß',
+              value: curTol.lower ?? 0,
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'dev', upper: curTol.upper ?? 0, lower: v }),
+            })
+          );
+          tolBox.append(fRow);
+        } else if (curMode === 'limits') {
+          const fRow = h('div', { class: 'fields' });
+          fRow.append(
+            tolNumField({
+              id: 'dw-tol-max',
+              label: 'Höchstmaß',
+              value: selDimInfo.nominalMm + (curTol.upper ?? 0),
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'limits', upper: v - selDimInfo.nominalMm, lower: curTol.lower ?? 0 }),
+            }),
+            tolNumField({
+              id: 'dw-tol-min',
+              label: 'Mindestmaß',
+              value: selDimInfo.nominalMm + (curTol.lower ?? 0),
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'limits', upper: curTol.upper ?? 0, lower: v - selDimInfo.nominalMm }),
+            })
+          );
+          tolBox.append(fRow);
+        } else if (curMode === 'fit') {
+          const classes = (ISO286_DATA && ISO286_DATA.klassen) || {};
+          const holeOpts = Object.entries(classes).filter(([, v]) => v.art === 'bohrung').map(([k]) => [k, k]);
+          const shaftOpts = Object.entries(classes).filter(([, v]) => v.art === 'welle').map(([k]) => [k, k]);
+          const fitSel = UI.selectField({
+            id: 'dw-tol-fit',
+            label: 'Passung (ISO 286)',
+            value: curTol.fit || 'H7',
+            options: [
+              { group: 'Bohrung (ISO 286)', options: holeOpts },
+              { group: 'Welle (ISO 286)', options: shaftOpts },
+            ],
+            onChange: (v) => setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: v, fitShow: curTol.fitShow || 'both' }),
+          });
+          fitSel.dataset.help = 'drawingFit';
+          const showSel = UI.selectField({
+            id: 'dw-tol-fit-show',
+            label: 'Anzeige',
+            value: curTol.fitShow || 'both',
+            options: [
+              ['both', 'Kurzzeichen + Abmaße'],
+              ['code', 'Nur Kurzzeichen'],
+              ['dev', 'Nur Abmaße'],
+              ['limits', 'Grenzmaße (min / max)'],
+            ],
+            onChange: (v) => setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: curTol.fit || 'H7', fitShow: v }),
+          });
+          tolBox.append(fitSel, showSel);
+        }
+        const tolInfo = resolveDimTol(selDimInfo.dim, selDimInfo.nominalMm);
+        if (tolInfo) {
+          if (tolInfo.outOfRange) {
+            tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: `<b>${esc(tolInfo.code)}</b>: Nennmaß liegt außerhalb der ISO-286-Tabelle (0–500 mm).` }));
+          } else {
+            const fitDec = tolInfo.mode === 'fit' ? ((!Number.isInteger(tolInfo.upperUm) || !Number.isInteger(tolInfo.lowerUm)) ? 4 : 3) : 0;
+            const dev = fmtDevPair(tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
+            const lim = fmtLimitsPair(selDimInfo.nominalMm, tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
+            const linesHtml = [];
+            if (tolInfo.mode === 'fit') {
+              const kindTxt = tolInfo.kind === 'bohrung' ? 'Bohrung' : 'Welle';
+              linesHtml.push(`<b>${esc(tolInfo.code)} (${kindTxt})</b> · Bereich &gt;${tolInfo.rangeMin} bis ${tolInfo.rangeMax} mm`);
+              const umU = tolInfo.upperUm === 0 ? '0' : (tolInfo.upperUm > 0 ? '+' : '\u2212') + String(Math.abs(tolInfo.upperUm)).replace('.', ',');
+              const umL = tolInfo.lowerUm === 0 ? '0' : (tolInfo.lowerUm > 0 ? '+' : '\u2212') + String(Math.abs(tolInfo.lowerUm)).replace('.', ',');
+              linesHtml.push(`Abmaße: <b>${esc(dev.upStr)} / ${esc(dev.loStr)} ${esc(Units.label())}</b> (${umU} / ${umL} µm)`);
+            } else {
+              linesHtml.push(`Abmaße: <b>${esc(dev.upStr)} / ${esc(dev.loStr)} ${esc(Units.label())}</b>`);
+            }
+            linesHtml.push(`Grenzmaße: <b>${esc(lim.minStr)} – ${esc(lim.maxStr)} ${esc(Units.label())}</b>`);
+            if (tolInfo.mode === 'fit' && tolInfo.hint) linesHtml.push(`<span style="color:var(--muted)">${esc(tolInfo.hint)}</span>`);
+            if (tolInfo.mode === 'fit' && tolInfo.norm) linesHtml.push(`<span style="color:var(--muted)">Quelle: ${esc(tolInfo.norm)}</span>`);
+            tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: linesHtml.join('<br>') }));
+          }
+        }
+        selSec.append(tolBox);
       }
       const row = h('div', { class: 'btn-row' });
       if (isSec) {
@@ -2551,7 +3000,7 @@ const Drawing = (() => {
       selSec.append(row);
       w.append(selSec);
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Maß, Schnitt, Detail oder Mittellinie anklicken und <b>Entf</b> drücken zum Löschen bzw. Ausblenden.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Klick ein <b>Maß</b> an für Toleranzen (±, Abmaße, Grenzmaße) oder ISO-286-Passungen (H7, g6 …) – oder drück <b>Entf</b> zum Löschen bzw. Ausblenden.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
@@ -2565,6 +3014,9 @@ const Drawing = (() => {
     get selectedId() { return selDim; },
     addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
+    iso286, ISO286: ISO286_DATA,
+    dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
+    getDimTol, setDimTol,
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
     get activeTool() { return tool; },

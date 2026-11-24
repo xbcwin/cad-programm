@@ -13738,6 +13738,249 @@ def t_a066_mittellinien(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a068_toleranzen_passungen(p):
+    p.empty()
+    p.ev("""
+      App.change('Platte mit Passbohrung 20', d => {
+        d.items.push(Model.newItem('box', { w: 50, d: 40, h: 12 }, { name: 'Platte' }));
+        const h = Model.newItem('cylinder', { d: 20, h: 16 }, { name: 'Passbohrung', role: 'hole' });
+        h.t.z = -2;
+        d.items.push(h);
+      });
+    """)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    # 1. ISO-286-Tabelle mit Quelle prüfen & Ø20 H7 per Klick auf Maß setzen
+    tbl_ok = p.ev("""
+      return fetch('data/iso286.json').then(r => r.json()).then(d => {
+        const h7 = Drawing.iso286('H7', 20);
+        const g6 = Drawing.iso286('g6', 20);
+        return {
+          hasSources: Array.isArray(d._quellen) && d._quellen.length >= 2,
+          h7: h7 && h7.upperUm === 21 && h7.lowerUm === 0 && h7.upStr === '+0,021' && h7.loStr === '0',
+          g6: g6 && g6.upperUm === -7 && g6.lowerUm === -20 && g6.upStr === '−0,007' && g6.loStr === '−0,020',
+        };
+      });
+    """)
+
+    dia_pt = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const el = [...svg.querySelectorAll('text.dimtext')].find(t => (t.textContent || '').includes('Ø20'));
+      if (!el) return null;
+      const bb = el.getBBox();
+      const pt = svg.createSVGPoint();
+      pt.x = bb.x + bb.width / 2;
+      pt.y = bb.y + bb.height / 2;
+      const q = pt.matrixTransform(svg.getScreenCTM());
+      return { x: q.x, y: q.y, id: el.dataset.id };
+    """)
+    if not dia_pt:
+        return [False, False, False, False, False]
+
+    p.pg.mouse.click(dia_pt['x'], dia_pt['y'])
+    p.wait(150)
+    p.pg.select_option('#dw-tol-mode', 'fit')
+    p.wait(120)
+    p.pg.select_option('#dw-tol-fit', 'H7')
+    p.wait(150)
+
+    h7_res = p.ev("""
+      const id = arg;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const texts = [...svg.querySelectorAll(`text[data-id="${id}"]`)].map(t => t.textContent);
+      const info = document.querySelector('#dw-tol-info')?.textContent || '';
+      return {
+        selected: Drawing.selectedId === id,
+        texts,
+        info,
+      };
+    """, dia_pt['id'])
+
+    ok1 = bool(
+        tbl_ok['hasSources'] and tbl_ok['h7'] and tbl_ok['g6']
+        and h7_res['selected']
+        and 'Ø20 H7' in h7_res['texts'] and '+0,021' in h7_res['texts'] and '0' in h7_res['texts']
+        and '+0,021 / 0' in h7_res['info'] and '20,000 – 20,021' in h7_res['info']
+    )
+
+    # 2. Ø20 g6 sowie Anzeige-Arten (Grenzmaße, Nur Kurzzeichen, Kurzzeichen + Abmaße)
+    p.pg.select_option('#dw-tol-fit', 'g6')
+    p.wait(150)
+    g6_res = p.ev("""
+      const id = arg;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const texts = [...svg.querySelectorAll(`text[data-id="${id}"]`)].map(t => t.textContent);
+      const info = document.querySelector('#dw-tol-info')?.textContent || '';
+      return { texts, info };
+    """, dia_pt['id'])
+
+    p.pg.select_option('#dw-tol-fit-show', 'limits')
+    p.wait(120)
+    g6_lim = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return [...svg.querySelectorAll(`text[data-id="${arg}"]`)].map(t => t.textContent);
+    """, dia_pt['id'])
+
+    p.pg.select_option('#dw-tol-fit-show', 'code')
+    p.wait(120)
+    g6_code = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return [...svg.querySelectorAll(`text[data-id="${arg}"]`)].map(t => t.textContent);
+    """, dia_pt['id'])
+
+    p.pg.select_option('#dw-tol-fit-show', 'both')
+    p.wait(120)
+
+    ok2 = bool(
+        'Ø20 g6' in g6_res['texts'] and '−0,007' in g6_res['texts'] and '−0,020' in g6_res['texts']
+        and '−0,007 / −0,020' in g6_res['info'] and '19,980 – 19,993' in g6_res['info']
+        and 'Ø19,993' in g6_lim and 'Ø19,980' in g6_lim
+        and g6_code == ['Ø20 g6']
+    )
+
+    # 3. Symmetrisch ±, Abmaße oben/unten und Grenzmaße am Längenmaß (horizontal & senkrecht)
+    w_pt = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const el = [...svg.querySelectorAll('text.dimtext')].find(t => (t.textContent || '').trim() === '50');
+      if (!el) return null;
+      const bb = el.getBBox();
+      const pt = svg.createSVGPoint();
+      pt.x = bb.x + bb.width / 2; pt.y = bb.y + bb.height / 2;
+      const q = pt.matrixTransform(svg.getScreenCTM());
+      return { x: q.x, y: q.y, id: el.dataset.id };
+    """)
+    if not w_pt:
+        return [ok1, ok2, False, False, False]
+
+    p.pg.mouse.click(w_pt['x'], w_pt['y'])
+    p.wait(150)
+    p.pg.select_option('#dw-tol-mode', 'sym')
+    p.wait(120)
+    p.pg.fill('#dw-tol-sym', '0,1')
+    p.pg.press('#dw-tol-sym', 'Enter')
+    p.wait(150)
+    sym_txt = p.ev("return [...document.querySelectorAll(`#sheet svg text[data-id='${arg}']`)].map(t => t.textContent)", w_pt['id'])
+
+    p.pg.select_option('#dw-tol-mode', 'dev')
+    p.wait(120)
+    p.pg.fill('#dw-tol-upper', '0,05')
+    p.pg.press('#dw-tol-upper', 'Enter')
+    p.wait(120)
+    p.pg.fill('#dw-tol-lower', '-0,02')
+    p.pg.press('#dw-tol-lower', 'Enter')
+    p.wait(150)
+    dev_txt = p.ev("return [...document.querySelectorAll(`#sheet svg text[data-id='${arg}']`)].map(t => t.textContent)", w_pt['id'])
+
+    p.pg.select_option('#dw-tol-mode', 'limits')
+    p.wait(120)
+    lim_init = p.ev("return [...document.querySelectorAll(`#sheet svg text[data-id='${arg}']`)].map(t => t.textContent)", w_pt['id'])
+    p.pg.fill('#dw-tol-max', '50,2')
+    p.pg.press('#dw-tol-max', 'Enter')
+    p.wait(120)
+    p.pg.fill('#dw-tol-min', '49,9')
+    p.pg.press('#dw-tol-min', 'Enter')
+    p.wait(150)
+    lim_edit = p.ev("return [...document.querySelectorAll(`#sheet svg text[data-id='${arg}']`)].map(t => t.textContent)", w_pt['id'])
+
+    # Senkrechtes Höhenmaß (12) mit gedrehten Abmaßen (+0,10 / −0,05)
+    h_pt = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const el = [...svg.querySelectorAll('text.dimtext')].find(t => (t.textContent || '').trim() === '12');
+      if (!el) return null;
+      const bb = el.getBoundingClientRect();
+      return { x: bb.left + bb.width / 2, y: bb.top + bb.height / 2, id: el.dataset.id };
+    """)
+    if not h_pt:
+        return [ok1, ok2, False, False, False]
+
+    p.pg.mouse.click(h_pt['x'], h_pt['y'])
+    p.wait(150)
+    p.pg.select_option('#dw-tol-mode', 'dev')
+    p.wait(120)
+    p.pg.fill('#dw-tol-upper', '0,1')
+    p.pg.press('#dw-tol-upper', 'Enter')
+    p.wait(120)
+    p.pg.fill('#dw-tol-lower', '-0,05')
+    p.pg.press('#dw-tol-lower', 'Enter')
+    p.wait(150)
+    h_res = p.ev("""
+      const els = [...document.querySelectorAll(`#sheet svg text[data-id="${arg}"]`)];
+      return {
+        texts: els.map(t => t.textContent),
+        allRot90: els.length === 3 && els.every(t => (t.getAttribute('transform') || '').includes('rotate(-90 ')),
+      };
+    """, h_pt['id'])
+
+    ok3 = bool(
+        sym_txt == ['50 ±0,1']
+        and '50' in dev_txt and '+0,05' in dev_txt and '−0,02' in dev_txt
+        and '50,05' in lim_init and '49,98' in lim_init
+        and '50,2' in lim_edit and '49,9' in lim_edit
+        and '12' in h_res['texts'] and '+0,10' in h_res['texts'] and '−0,05' in h_res['texts']
+        and h_res['allRot90']
+    )
+
+    # 4. Rückgängig/Wiederholen, Speichern/Neuladen & PDF-Export
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    after_undo = p.ev("return [...document.querySelectorAll(`#sheet svg text[data-id='${arg}']`)].map(t => t.textContent)", h_pt['id'])
+    p.ev("App.redo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    after_redo = p.ev("return [...document.querySelectorAll(`#sheet svg text[data-id='${arg}']`)].map(t => t.textContent)", h_pt['id'])
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+
+    after_reload = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const allT = [...svg.querySelectorAll('text.dimtext')].map(t => t.textContent);
+      return {
+        hasG6: allT.includes('Ø20 g6') && allT.includes('−0,007') && allT.includes('−0,020'),
+        hasLim: allT.includes('50,2') && allT.includes('49,9'),
+        hasDev: allT.includes('12') && allT.includes('+0,10') && allT.includes('−0,05'),
+      };
+    """)
+
+    pdf_res = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const text = new TextDecoder('latin1').decode(bytes);
+        return {
+          hdr: text.startsWith('%PDF-1.4'),
+          hasG6: text.includes('g6') && text.includes('-0,007') && text.includes('-0,020'),
+          hasLim: text.includes('50,2') && text.includes('49,9'),
+          noQMarkMinus: !text.includes('?0,007') && !text.includes('?0,020') && !text.includes('?0,05'),
+        };
+      });
+    """)
+
+    ok4 = bool(
+        '+0,10' not in after_undo and '+0,05' in after_undo and '+0,10' in after_redo
+        and after_reload['hasG6'] and after_reload['hasLim'] and after_reload['hasDev']
+        and pdf_res['hdr'] and pdf_res['hasG6'] and pdf_res['hasLim'] and pdf_res['noQMarkMinus']
+    )
+
+    # 5. Befehlssuche & Hilfetexte (drawingTolerance & drawingFit)
+    p.ev("Drawing.select(arg)", dia_pt['id']); p.wait(200)
+    p.pg.hover('#dw-tol-fit'); p.wait(600)
+    tip_fit = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    p.pg.hover('#dw-tol-mode'); p.wait(600)
+    tip_tol = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        jsonTol: !!(d.drawingTolerance && d.drawingTolerance.tip && d.drawingTolerance.hilfe && d.drawingTolerance.tipp),
+        jsonFit: !!(d.drawingFit && d.drawingFit.tip && d.drawingFit.hilfe && d.drawingFit.tipp),
+        domTol: document.querySelectorAll('[data-help="drawingTolerance"]').length >= 1,
+        domFit: document.querySelectorAll('[data-help="drawingFit"]').length >= 1,
+        cmd: Commands.search('passung').some(c => c.id === 'drawingTolerance'),
+      }));
+    """)
+    ok5 = bool(all(help_ok.values()) and 'ISO-286-Passungen' in tip_fit and 'Toleranz' in tip_tol)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -13908,6 +14151,7 @@ TESTS = [
     ('[A-064] Zeichnung: Detailansicht (Detail Z 4:1, wahre Maße, 4× Geometrie)', t_a064_zeichnung_detailansicht),
     ('[F-11241014] Volltest-Reparatur: Skizze-Fertig wartet auf Schrift-Laden / rechtes Panel schützt fokussiertes Eingabefeld bei results', t_f11241014),
     ('[A-066] Zeichnung: Mittellinien automatisch (4 Mittelkreuze, 4 Mittellinien, einzeln ausblendbar)', t_a066_mittellinien),
+    ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
