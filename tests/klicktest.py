@@ -8846,6 +8846,151 @@ def t_a032_aufdicken_skalieren(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a037_schritt_spiegeln(p):
+    # Tasche links an Mittelebene spiegeln → 2 Taschen, Volumen sinkt um Taschengröße;
+    # Bezugsebene & Körperfläche, Erhöhung, Mitwandern bei Änderung, Unterdrücken/Marker, Gruppe & Hilfe
+    p.empty()
+    p.ev("""App.change('Grundkörper und Tasche', d => {
+      const base = Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Platte' });
+      d.items.push(base);
+      const pocket = Model.newItem('extrude', {
+        sketch: {
+          plane: { o: [0, 0, 10], x: [1, 0, 0], n: [0, 0, 1] },
+          ents: [{ id: 'r1', type: 'rect', a: [-20, -5], b: [-10, 5] }],
+          dims: [], cons: [],
+        },
+        dist: 5, dir: 'reverse',
+      }, { name: 'Tasche' });
+      pocket.op = { type: 'cut', target: base.id };
+      d.items.push(pocket);
+    })""")
+    warte_rechnen(p, 20); p.wait(300)
+    parts0 = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+
+    # 1. Tasche über Kontextleiste spiegeln (YZ-Mittelebene) → zwei Taschen, Volumen 24000 - 2*500 = 23000
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    btn_ms = p.pg.locator('.ctxbar button[aria-label="Schritt spiegeln"]')
+    has_help = btn_ms.get_attribute('data-help') == 'mirrorStep'
+    btn_ms.click()
+    warte_rechnen(p, 20); p.wait(300)
+    parts1 = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+    pockets1 = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n[2] > 0.9 && Math.abs(f.c[2] - 5) < 0.05)
+        .map(f => [Math.round(f.c[0] * 10) / 10, Math.round(f.c[1] * 10) / 10]).sort((a, b) => a[0] - b[0]);""")
+    st1 = p.ev("return [App.doc.items.length, App.doc.items[2].kind, App.mergedInto(App.doc.items[2].id) === App.doc.items[0].id, App.errors.length]")
+    ok1 = (
+        has_help
+        and len(parts0) == 1 and abs(parts0[0]['v'] - 23500) < 5
+        and st1 == [3, 'mirrorStep', True, 0]
+        and len(parts1) == 1 and abs(parts1[0]['v'] - 23000) < 5
+        and pockets1 == [[-15.0, 0.0], [15.0, 0.0]]
+    )
+
+    # 2. Bezugsebene (XZ bei y = 6 mm) und ebene Körperfläche (x = 0)
+    datum_id = p.ev("return Datums.addOrigin('XZ', -6).id")
+    p.ev("App.select([App.doc.items[2].id])"); p.wait(250)
+    p.pg.select_option('#ms-plane', 'd:' + datum_id)
+    warte_rechnen(p, 20); p.wait(300)
+    parts_dat = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+    pockets_dat = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n[2] > 0.9 && Math.abs(f.c[2] - 5) < 0.05)
+        .map(f => [Math.round(f.c[0] * 10) / 10, Math.round(f.c[1] * 10) / 10]).sort((a, b) => a[1] - b[1]);""")
+
+    helper_id = p.ev("""let hid; App.change('Hilfsquader', d => {
+      const h = Model.newItem('box', { w: 4, d: 10, h: 10 }, { name: 'Spiegelklotz' });
+      h.t.x = -2; h.t.y = 35; d.items.push(h); hid = h.id;
+    }); return hid;""")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("""const hid = arg, r = App.results.get(hid), fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n[0] > 0.9);
+      Features.setMirrorStepPlane(App.doc.items[2].id, { id: hid, idx: fi });""", helper_id)
+    warte_rechnen(p, 20); p.wait(300)
+    v_face = p.ev("return Mass.measure().then(r => (r.parts || []).find(q => q.id === App.doc.items[0].id)?.volume)")
+    pockets_face = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return (r?.data?.faces || []).filter(f => f.t === 'PLANE' && f.n[2] > 0.9 && Math.abs(f.c[2] - 5) < 0.05)
+        .map(f => [Math.round(f.c[0] * 10) / 10, Math.round(f.c[1] * 10) / 10]).sort((a, b) => a[0] - b[0]);""")
+    face_plane = p.ev("return App.doc.items[2].p.plane")
+    p.ev("Actions.remove([arg])", helper_id); p.ev("Datums.remove(arg)", datum_id)
+    warte_rechnen(p, 20); p.wait(200)
+    ok2 = (
+        len(parts_dat) == 1 and abs(parts_dat[0]['v'] - 23000) < 5
+        and pockets_dat == [[-15.0, 0.0], [-15.0, 12.0]]
+        and face_plane == 'FACE'
+        and v_face is not None and abs(v_face - 23000) < 5
+        and pockets_face == [[-15.0, 0.0], [15.0, 0.0]]
+    )
+
+    # 3. Zurück auf YZ, Taschentiefe 5 → 8 ändert auch Spiegelbild; Erhöhung (join) ebenfalls spiegeln
+    p.ev("App.select([App.doc.items[2].id])"); p.wait(250)
+    p.pg.select_option('#ms-plane', 'YZ')
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("App.change('Tiefe 8', d => { d.items[1].p.dist = 8; })")
+    warte_rechnen(p, 20); p.wait(300)
+    v_deep = volumen(p)
+    p.ev("""App.change('Erhöhung', d => {
+      const boss = Model.newItem('box', { w: 10, d: 10, h: 6 }, { name: 'Zapfen' });
+      boss.t.x = -15; boss.t.z = 10;
+      boss.op = { type: 'join', target: d.items[0].id };
+      d.items.push(boss);
+    })""")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("Features.mirrorStep([App.doc.items[3].id], { plane: 'YZ', off: 0 })")
+    warte_rechnen(p, 20); p.wait(300)
+    parts3 = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => ({ id: q.id, v: q.volume })))")
+    ok3 = (
+        abs(v_deep - 22400) < 5
+        and len(parts3) == 1 and abs(parts3[0]['v'] - 23600) < 5
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 4. Unterdrücken, Zeitleisten-Marker, Gruppen-Tasche (Loch), Erklärung & Hilfe
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(200)
+    v_sup = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("Timeline.setMarker(2)")
+    warte_rechnen(p, 20); p.wait(200)
+    v_mk2 = volumen(p)
+    p.ev("Timeline.setMarker(App.doc.items.length)")
+    warte_rechnen(p, 20); p.wait(200)
+    v_mk_end = volumen(p)
+    exp_txt = p.ev("return Explain.local(App.doc.items[2].id).lines.map(l => l.t).join(' ')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    has_cmd = p.ev("return Commands.search('schritt spiegeln').some(c => c.id === 'mirror-step')")
+
+    # In einer Gruppe (Loch-Kind spiegeln)
+    p.ev("""App.setDoc(Model.newDoc());""")
+    p.wait(400)
+    p.ev("""App.change('Gruppe mit Tasche', d => {
+      const base = Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Platte' });
+      d.items.push(base);
+      const pocket = Model.newItem('extrude', {
+        sketch: {
+          plane: { o: [0, 0, 10], x: [1, 0, 0], n: [0, 0, 1] },
+          ents: [{ id: 'r1', type: 'rect', a: [-20, -5], b: [-10, 5] }],
+          dims: [], cons: [],
+        },
+        dist: 5, dir: 'reverse',
+      }, { name: 'Tasche', role: 'hole' });
+      Actions.attach(d, base.id, pocket);
+    })""")
+    warte_rechnen(p, 20); p.wait(200)
+    p.ev("Features.mirrorStep([App.doc.items[0].children[1].id], { plane: 'YZ', off: 0 })")
+    warte_rechnen(p, 20); p.wait(300)
+    grp_parts = p.ev("return Mass.measure().then(r => (r.parts || []).map(q => q.volume))")
+    ok4 = (
+        abs(v_sup - 24400) < 5
+        and abs(v_mk2 - 23200) < 5
+        and abs(v_mk_end - 23600) < 5
+        and 'Spiegelt' in exp_txt
+        and 'mirrorStep' in hilfen and all(k in hilfen['mirrorStep'] for k in ('tip', 'hilfe', 'tipp'))
+        and has_cmd is True
+        and len(grp_parts) == 1 and abs(grp_parts[0] - 23000) < 5
+        and p.ev("return App.errors.length === 0") is True
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8981,6 +9126,7 @@ TESTS = [
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
+    ('[A-037] Schritt spiegeln: Tasche links an Mittelebene / Bezugsebene & Fläche / Erhöhung & Änderung folgt / Unterdrücken, Marker, Gruppe & Hilfe', t_a037_schritt_spiegeln),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

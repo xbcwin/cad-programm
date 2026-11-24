@@ -137,7 +137,7 @@ Leitlinien:
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
   - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
-  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`)
+  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`), `mirrorStep` (einzelne Formschritte `features` an Grundebene, Bezugsebene `DATUM` oder Körperfläche `FACE` im selben Körper spiegeln)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt`:
     - `rect` (nx, ny, dx, dy)
@@ -270,7 +270,7 @@ Leitlinien:
 - Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
-- Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)
+- Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit) sowie **Schritt spiegeln** (`mirrorStep`, `Features.mirrorStep`: einzelne Formschritte wie Taschen, Erhöhungen, Rippen oder Löcher an Ebene, Bezugsebene oder Fläche im selben Körper spiegeln)
 - Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge); Verschieben/Drehen/Kopieren als Schritt (`transform` im Verlauf mit Werten, Formeln und Drehpunkt); **Skalieren** (`scale`, gleichmäßig oder je Achse um Schwerpunkt oder Ursprung) und **Fläche aufdicken** (`thicken`, eben oder gewölbt nach außen/innen/mittig als Anbau, eigene Platte oder Abzug) im Verlauf (`Features.scale`/`Features.thicken`)
 - **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich, **Ketten** (Platte → Arm → Greifer). „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen; „Als Anschlag übernehmen“ und „Bewegung abspielen“.
 

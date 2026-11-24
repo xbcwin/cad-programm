@@ -204,5 +204,10 @@
     "was": "Zieht eine offene Linie aus einer Skizze mit Dicke bis zu den Wänden des Zielkörpers und verschmilzt sie als Versteifungs-Rippe damit.",
     "wozu": "Ideal für stabile Gehäuse-Stege und Winkel-Stützen – ganz ohne die Umrisse genau an runde oder schräge Wände anpassen zu müssen.",
     "achtung": "Prüfe bei Fehlern, ob die Linie in Richtung des Körpers zeigt, oder schalte auf „Richtung umkehren“ bzw. zwischen „Senkrecht“ und „In der Skizzenebene“ um."
+  },
+  "mirrorStep": {
+    "was": "Spiegelt einzelne Formschritte (wie eine Tasche, Erhöhung, Rippe oder ein Loch) an einer Ebene oder Körperfläche direkt im selben Körper.",
+    "wozu": "So übernimmst du symmetrische Taschen, Stege oder Bohrungen auf die andere Seite, ohne sie ein zweites Mal zu zeichnen – änderst du das Original, zieht das Spiegelbild mit.",
+    "achtung": "Für ganze eigene Körper nutzt du „Gespiegelte Kopie“; „Schritt spiegeln“ wirkt direkt im Zielkörper."
   }
 }

@@ -168,6 +168,7 @@ const Commands = (() => {
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
+    add('mirror-step', 'Schritt spiegeln (Formschritt im selben Körper)', 'mirror', 'spiegeln schritt formschritt tasche loch rippe symmetrisch ebene fläche körper', () => Features.mirrorStep(), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
     add('move-step', 'Verschieben/Drehen als Schritt', 'moveStep', 'verschieben drehen kopieren schritt transform versetzen bewegen lage verlauf', () => Features.transform(), { group: 'Bearbeiten' });
     add('scale-body', 'Körper skalieren (als Schritt)', 'scaleBody', 'skalieren groesser kleiner faktor achse strecken stauchen verlauf', () => Features.scale(), { group: 'Bearbeiten' });

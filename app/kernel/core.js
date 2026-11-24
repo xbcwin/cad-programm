@@ -2015,7 +2015,7 @@ export function createKernel(R, oc) {
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib') return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'mirrorStep') return { shape: null, key: defKey(it) };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -2038,12 +2038,44 @@ export function createKernel(R, oc) {
       if (it.kind === 'group') {
         const kids = (it.children || []).filter((c) => !c.hidden);
         const solids = [], holes = [];
+        const kidById = new Map();
         const beforeRes = ctx && ctx.resolved ? new Set(Object.keys(ctx.resolved)) : null;
         for (const c of kids) {
+          if (c.kind === 'mirrorStep') {
+            const mp = c.p || {};
+            if (mp.missingPlane) { errors.push({ itemId: c.id, code: 'op', message: 'Schritt spiegeln: ' + mp.missingPlane + '.' }); continue; }
+            const mo = Array.isArray(mp.mo) && mp.mo.length >= 3 ? mp.mo.map(Number) : null;
+            const mnRaw = Array.isArray(mp.mn) && mp.mn.length >= 3 ? mp.mn.map(Number) : null;
+            const mnLen = mnRaw ? Math.hypot(mnRaw[0], mnRaw[1], mnRaw[2]) : 0;
+            const fids = Array.isArray(mp.features) ? mp.features : [];
+            if (!mo || !(mnLen > 1e-6) || !fids.length) {
+              errors.push({ itemId: c.id, code: 'op', message: 'Schritt spiegeln: Ebene oder gespiegelter Schritt fehlen.' });
+              continue;
+            }
+            const mn = [mnRaw[0] / mnLen, mnRaw[1] / mnLen, mnRaw[2] / mnLen];
+            const mirTools = [];
+            let firstRole = null;
+            for (const fid of fids) {
+              const src = kidById.get(fid);
+              if (!src || !src.tools.length) {
+                errors.push({ itemId: c.id, code: 'op', message: 'Schritt spiegeln: Der gewählte Schritt fehlt oder kommt erst später.' });
+                continue;
+              }
+              if (!firstRole) firstRole = src.role;
+              for (const st of src.tools) {
+                const ms = st.shape.clone().mirror(mn, mo);
+                (src.role === 'hole' ? holes : solids).push(ms);
+                mirTools.push({ shape: ms });
+              }
+            }
+            if (mirTools.length) kidById.set(c.id, { role: firstRole || c.role, tools: mirTools });
+            continue;
+          }
           const r = evalItem(c, errors, W, ctx);
           if (!r.shape) continue;
           const s = applyMatrix(r.shape, c.m);
           (c.role === 'hole' ? holes : solids).push(s);
+          kidById.set(c.id, { role: c.role, tools: [{ shape: s }] });
         }
         if (beforeRes && ctx && ctx.resolved) {
           const subRes = {};
@@ -2660,7 +2692,10 @@ export function createKernel(R, oc) {
   // Ergebnis: bodies (id → {shape, key, wb} im Koordinatensystem des Zielkörpers), consumed (id → Ziel-id)
   function resolveOps(evald, errors, hiddenIds) {
     const byId = new Map(evald.map((e, i) => [e.it.id, { e, i }]));
-    const consumed = new Map(), live = new Map(), bodies = new Map();
+    const consumed = new Map(), live = new Map(), bodies = new Map(), featureOps = new Map();
+    const anyMirror = evald.some((e) => e.it.kind === 'mirrorStep');
+    const r6 = (v) => Math.round(v * 1e6) / 1e6;
+    const ID_MAT = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
     for (const e of evald) if (e.shape) live.set(e.it.id, { shape: e.shape, key: e.key, wb: e.wb, m: e.it.m, it: e.it });
     const NAMES = { join: 'Vereinigen', cut: 'Abziehen', common: 'Schnittmenge' };
     for (let i = 0; i < evald.length; i++) {
@@ -2818,21 +2853,31 @@ export function createKernel(R, oc) {
           bodies.set(it.id, entry);
         } else {
           consumed.set(it.id, tid);
+          const prevShape = src.shape, prevKey = src.key;
           const k = keyOf([src.key, 'thicken', mode, p.face, Math.round(dist * 1e6) / 1e6, dir]);
+          const kPlate = keyOf([prevKey, 'thickenPlate', p.face, r6(dist), dir, mode]);
           let next = cacheGet(k);
+          let plate = anyMirror ? cacheGet(kPlate) : null;
           if (!next) {
             const f = matchFace(src.shape, p.face);
             if (!f) { errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
             try {
-              const plate = thickenFaceShape(f, dist, dir, mode);
+              plate = thickenFaceShape(f, dist, dir, mode);
               next = mode === 'cut' ? src.shape.cut(plate) : src.shape.fuse(plate);
-              safeDelete(plate);
+              if (anyMirror) cachePut(kPlate, plate);
+              else safeDelete(plate);
               cachePut(k, next);
             } catch (err) {
               errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
               continue;
             }
+          } else if (anyMirror && !plate) {
+            const f = matchFace(prevShape, p.face);
+            if (f) {
+              try { plate = thickenFaceShape(f, dist, dir, mode); cachePut(kPlate, plate); } catch (_) { plate = null; }
+            }
           }
+          if (anyMirror && plate) featureOps.set(it.id, { targetId: tid, opType: mode, tools: [{ shape: plate, m: src.m, key: kPlate }] });
           src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
           bodies.set(tid, src);
         }
@@ -2849,6 +2894,7 @@ export function createKernel(R, oc) {
           continue;
         }
         consumed.set(it.id, tid);
+        const prevShape = src.shape, prevKey = src.key;
         const rel = matMul(matInvRigid(src.m), it.m);
         const k = keyOf([src.key, 'rib', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
         let next = cacheGet(k);
@@ -2856,8 +2902,122 @@ export function createKernel(R, oc) {
           try { next = buildRibOn(src.shape, rel, p); cachePut(k, next); }
           catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
         }
+        if (anyMirror) {
+          const kDelta = keyOf([k, 'ribDelta', prevKey]);
+          let delta = cacheGet(kDelta);
+          if (!delta) {
+            try { delta = next.cut(prevShape); cachePut(kDelta, delta); } catch (_) { delta = null; }
+          }
+          if (delta) featureOps.set(it.id, { targetId: tid, opType: 'join', tools: [{ shape: delta, m: src.m, key: kDelta }] });
+        }
         src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
+        continue;
+      }
+      if (it.kind === 'mirrorStep') {
+        const p = it.p || {};
+        if (p.missingPlane) { errors.push({ itemId: it.id, code: 'op', message: 'Schritt spiegeln: ' + p.missingPlane + '.' }); continue; }
+        const fids = Array.isArray(p.features) ? p.features : [];
+        const mo = Array.isArray(p.mo) && p.mo.length >= 3 ? p.mo.map(Number) : null;
+        const mnRaw = Array.isArray(p.mn) && p.mn.length >= 3 ? p.mn.map(Number) : null;
+        const mnLen = mnRaw ? Math.hypot(mnRaw[0], mnRaw[1], mnRaw[2]) : 0;
+        if (!fids.length || !mo || !(mnLen > 1e-6) || !mo.every(isFinite) || !mnRaw.every(isFinite)) {
+          errors.push({ itemId: it.id, code: 'op', message: 'Schritt spiegeln: Wähle mindestens einen Schritt und eine gültige Spiegelebene.' });
+          continue;
+        }
+        const mn = [mnRaw[0] / mnLen, mnRaw[1] / mnLen, mnRaw[2] / mnLen];
+        const mirrorWorld = (toolShape, toolM, toolKey) => {
+          const kMir = keyOf([toolKey, 'mirWorld', toolM.map(r6), mo.map(r6), mn.map(r6)]);
+          let wMir = cacheGet(kMir);
+          if (!wMir) {
+            const wTool = applyMatrix(toolShape, toolM);
+            wMir = wTool.mirror(mn, mo);
+            cachePut(kMir, wMir);
+          }
+          return { shape: wMir, key: kMir };
+        };
+        let firstTid = null, firstOp = null;
+        const produced = [];
+        for (const fid of fids) {
+          const srcRec = byId.get(fid);
+          if (!srcRec || srcRec.i >= i) {
+            if (hiddenIds && hiddenIds.has(fid)) continue;
+            errors.push({ itemId: it.id, code: 'op', message: 'Schritt spiegeln: Der gewählte Formschritt fehlt oder kommt erst später im Verlauf.' });
+            continue;
+          }
+          const fo = featureOps.get(fid);
+          if (fo) {
+            let tid = fo.targetId;
+            while (tid && consumed.has(tid)) tid = consumed.get(tid);
+            const base = tid ? live.get(tid) : null;
+            if (!base || !base.shape || base.it.role === 'hole') {
+              if (tid && hiddenIds && hiddenIds.has(tid)) { if (!firstTid) firstTid = tid; continue; }
+              errors.push({ itemId: it.id, code: 'op', message: 'Schritt spiegeln: Der Zielkörper fehlt oder ist ausgeblendet.' });
+              continue;
+            }
+            if (!firstTid) { firstTid = tid; firstOp = fo.opType; }
+            for (const te of fo.tools) {
+              try {
+                const mw = mirrorWorld(te.shape, te.m, te.key);
+                const kOp = keyOf([base.key, 'mirFeat', fo.opType, mw.key, base.m.map(r6)]);
+                let next = cacheGet(kOp);
+                if (!next) {
+                  const idB = isIdentity(base.m);
+                  const locMir = idB ? mw.shape : applyMatrix(mw.shape, matInvRigid(base.m));
+                  next = fo.opType === 'join' ? base.shape.fuse(locMir) : fo.opType === 'cut' ? base.shape.cut(locMir) : base.shape.intersect(locMir);
+                  if (!idB) safeDelete(locMir);
+                  cachePut(kOp, next);
+                }
+                base.shape = next; base.key = kOp; base.wb = bboxTransform(bboxCached(kOp, next), base.m);
+                bodies.set(tid, base);
+                produced.push({ shape: mw.shape, m: ID_MAT, key: mw.key });
+              } catch (err) {
+                errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              }
+            }
+            continue;
+          }
+          const srcLive = live.get(fid);
+          if (srcLive && srcLive.shape && srcLive.it.role === 'hole') {
+            try {
+              const mw = mirrorWorld(srcLive.shape, srcLive.m, srcLive.key);
+              const mwBox = bboxCached(mw.key, mw.shape);
+              for (let k = 0; k < i; k++) {
+                const eid = evald[k].it.id;
+                if (consumed.has(eid)) continue;
+                const s = live.get(eid);
+                if (!s || !s.shape || s.it.role === 'hole' || !bboxHit(mwBox, s.wb)) continue;
+                const kCut = keyOf([s.key, 'mirHoleCut', mw.key, s.m.map(r6)]);
+                let next = cacheGet(kCut);
+                if (!next) {
+                  const idS = isIdentity(s.m);
+                  const locMir = idS ? mw.shape : applyMatrix(mw.shape, matInvRigid(s.m));
+                  next = s.shape.cut(locMir);
+                  if (!idS) safeDelete(locMir);
+                  cachePut(kCut, next);
+                }
+                s.shape = next; s.key = kCut; s.wb = bboxTransform(bboxCached(kCut, next), s.m);
+                bodies.set(eid, s);
+                if (!firstTid) { firstTid = eid; firstOp = 'cut'; }
+              }
+              if (!firstTid) {
+                for (let k = 0; k < i; k++) {
+                  const eid = evald[k].it.id;
+                  if (consumed.has(eid)) continue;
+                  const s = live.get(eid);
+                  if (s && s.shape && s.it.role !== 'hole' && bboxHit(srcLive.wb, s.wb)) { firstTid = eid; firstOp = 'cut'; break; }
+                }
+              }
+              produced.push({ shape: mw.shape, m: ID_MAT, key: mw.key });
+            } catch (err) {
+              errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            }
+            continue;
+          }
+          errors.push({ itemId: it.id, code: 'op', message: 'Schritt spiegeln: Wähle einen Formschritt (z. B. eine Tasche, Erhöhung, Rippe oder Aufdicken) – für ganze Körper nutze „Gespiegelte Kopie“.' });
+        }
+        if (firstTid) consumed.set(it.id, firstTid);
+        if (produced.length && firstTid) featureOps.set(it.id, { targetId: firstTid, opType: firstOp || 'cut', tools: produced });
         continue;
       }
       const op = it.op, o = live.get(it.id);
@@ -2871,6 +3031,7 @@ export function createKernel(R, oc) {
       const k = keyOf([base.key, op.type, o.key, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
       let next = cacheGet(k);
       if (next) {
+        featureOps.set(it.id, { targetId: tid, opType: op.type, tools: [{ shape: o.shape, m: o.m, key: o.key }] });
         base.shape = next; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
         bodies.set(tid, base); continue;
       }
@@ -2879,6 +3040,7 @@ export function createKernel(R, oc) {
         next = op.type === 'join' ? base.shape.fuse(tool) : op.type === 'cut' ? base.shape.cut(tool) : base.shape.intersect(tool);
         safeDelete(tool);
         cachePut(k, next);
+        featureOps.set(it.id, { targetId: tid, opType: op.type, tools: [{ shape: o.shape, m: o.m, key: o.key }] });
         base.shape = next; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
         bodies.set(tid, base);
       } catch (err) {

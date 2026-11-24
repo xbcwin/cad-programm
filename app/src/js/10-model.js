@@ -30,6 +30,7 @@ const KINDS = {
   scale: { label: 'Skalieren', params: [] },
   thicken: { label: 'Aufdicken', params: [] },
   rib: { label: 'Rippe', params: [] },
+  mirrorStep: { label: 'Schritt spiegeln', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -229,6 +230,10 @@ const Model = (() => {
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
+      if (it.kind === 'mirrorStep' && it.p) {
+        for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
+        if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
+      }
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -326,6 +331,8 @@ const Model = (() => {
         dir: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out',
         mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
       };
+    } else if (it.kind === 'mirrorStep') {
+      o.p = mirrorStepParams(it, V);
     }
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
@@ -400,6 +407,37 @@ const Model = (() => {
       depth: Math.max(0, num(p.depth, V, 0)),
       draft: num(p.draft, V, 0),
     };
+  }
+  function mirrorStepParams(it, V) {
+    const p = it.p || {};
+    const features = Array.isArray(p.features) ? p.features.slice() : [];
+    const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+    let moW, mnW;
+    if (p.plane === 'DATUM') {
+      const dm = typeof Datums !== 'undefined' && doc ? Datums.find(p.datumId, doc) : null;
+      if (!dm || !dm.plane) return { features, missingPlane: 'Die gewählte Bezugsebene fehlt' };
+      moW = dm.plane.o.map(Number);
+      mnW = dm.plane.n.map(Number);
+    } else if (p.plane === 'FACE') {
+      if (!Array.isArray(p.mo) || !Array.isArray(p.mn)) return { features, missingPlane: 'Keine Spiegelfläche gewählt' };
+      moW = p.mo.map(Number);
+      mnW = p.mn.map(Number);
+    } else {
+      const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ';
+      const off = num(p.off, V, 0);
+      mnW = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl];
+      moW = [mnW[0] * off, mnW[1] * off, mnW[2] * off];
+    }
+    const len = Math.hypot(mnW[0], mnW[1], mnW[2]);
+    if (!(len > 1e-6) || !moW.every(isFinite) || !mnW.every(isFinite)) return { features, missingPlane: 'Ungültige Spiegelebene' };
+    let mo = moW, mn = [mnW[0] / len, mnW[1] / len, mnW[2] / len];
+    const ps = doc ? parentsOf(doc, it.id) : [];
+    if (ps.length) {
+      const inv = parentWorld(doc, it.id).invert();
+      mo = new THREE.Vector3(...mo).applyMatrix4(inv).toArray();
+      mn = new THREE.Vector3(...mn).transformDirection(inv).normalize().toArray();
+    }
+    return { features, mo: mo.map((x) => round(x, 6)), mn: mn.map((x) => round(x, 9)), plane: p.plane || 'YZ' };
   }
   // Muster entlang Kurve: Lage und Drehung jeder Kopie aus der Kurve der Gruppe (p.sketch) berechnen.
   // Die Kopie k wird um (Punkt k − Punkt 0) verschoben; mit „ausrichten“ dreht sie sich mit der Kurve.
@@ -760,6 +798,17 @@ const Model = (() => {
       }
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
+      case 'mirrorStep': {
+        const mp = it.p || {};
+        if (mp.plane === 'DATUM') {
+          const dm = typeof Datums !== 'undefined' && typeof App !== 'undefined' && App.doc ? Datums.find(mp.datumId, App.doc) : null;
+          return dm ? `an „${dm.name}“` : 'Bezugsebene fehlt';
+        }
+        if (mp.plane === 'FACE') return 'an Fläche';
+        const pl = ['XY', 'XZ', 'YZ'].includes(mp.plane) ? mp.plane : 'YZ';
+        const off = num(mp.off, V, 0);
+        return Math.abs(off) > 1e-6 ? `${pl} (${off > 0 ? '+' : ''}${f(off)}${u})` : `${pl}-Ebene`;
+      }
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
         const L = String(p.lib || '');
@@ -879,7 +928,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib') {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
@@ -920,6 +969,11 @@ const Model = (() => {
         if (kids[i].role === 'hole') continue;
         for (let j = i + 1; j < kids.length; j++) {
           if (kids[j].role === 'hole' && boxesTouch(doc, kids[i], kids[j], opts, true)) edges.push({ child: kids[j].id, parent: kids[i].id });
+        }
+      }
+      for (const k of kids) {
+        if (k.kind === 'mirrorStep' && k.p && Array.isArray(k.p.features)) {
+          for (const fid of k.p.features) edges.push({ child: k.id, parent: fid });
         }
       }
       const order = kids.map((x) => x.id).filter((id) => !srcSet.has(id));

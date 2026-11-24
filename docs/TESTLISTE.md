@@ -1712,6 +1712,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte & Befehle**: `scaleBody` und `thickenFace` in `werkzeug-hilfen.json` sowie Befehle `scale-body` und `thicken-face` vorhanden.
 - [ ] **Von Hand**: Im Browser einen Körper mit Rundungen ungleichmäßig skalieren sowie an einer gekrümmten Freiformfläche „Aufdicken“ mit „Andere Fläche wählen“ und „Eigene Platte“ prüfen.
 
+## Schritt spiegeln (Auto [A-037], KP-14)
+
+- [x] **Tasche links an Mittelebene spiegeln**: Quader 60 × 40 × 10 mm mit Tasche links (−20..−10 mm, 5 mm tief) über „Schritt spiegeln“ an der YZ-Ebene gespiegelt ergibt einen Körper mit zwei Taschen und um exakt 500 mm³ kleinerem Volumen (23.000 mm³).
+- [x] **Bezugsebene & ebene Körperfläche**: Spiegeln an einer Bezugsebene sowie an einer ebenen Körperfläche (`plane = 'FACE'`) erzeugt die gespiegelte Tasche auf der jeweiligen Gegenseite im selben Körper.
+- [x] **Änderung zieht mit & Erhöhung spiegeln**: Ändern der Taschentiefe (5 → 8 mm) passt auch die gespiegelte Tasche automatisch an; Spiegeln einer Erhöhung (`join`) vergrößert den Körper symmetrisch um beide Seiten.
+- [x] **Unterdrücken, Marker, Gruppe & Hilfe**: Unterdrücken und Zurückrollen des `mirrorStep` entfernen die gespiegelte Tasche sauber, Spiegeln eines Loch-Schritts innerhalb einer Gruppe funktioniert ohne Fehler und `werkzeug-hilfen.json` enthält `mirrorStep`.
+- [ ] **Von Hand**: Im Browser bei „Schritt spiegeln“ auf „Ebene oder Fläche im Bild wählen“ klicken und nacheinander eine schräge Körperfläche und eine Bezugsebene direkt in der 3D-Ansicht anklicken.
+
 ## Fehler melden
 
 ```
