@@ -1510,6 +1510,79 @@ export function createKernel(R, oc) {
     const a = R.makeCylinder(n.w2 / 2, n.wh, [0, 0, 0], [0, 0, 1]), b = R.makeCylinder(n.w1 / 2, n.wh + 1, [0, 0, -0.5], [0, 0, 1]);
     const out = a.cut(b); safeDelete(a); safeDelete(b); return out;
   }
+  function stadiumExtrude(L, b, z0, dz) {
+    const r = b / 2, a = Math.max(0, L / 2 - r);
+    const M = planeMap({ o: [0, 0, z0], x: [1, 0, 0], n: [0, 0, 1] });
+    const loop = a < 1e-5 ? { circle: { c: [0, 0], r } } : { segs: [
+      { t: 'line', a: [-a, -r], b: [a, -r] }, { t: 'arc', a: [a, -r], m: [a + r, 0], b: [a, r] },
+      { t: 'line', a: [a, r], b: [-a, r] }, { t: 'arc', a: [-a, r], m: [-a - r, 0], b: [-a, -r] },
+    ] };
+    const face = R.makeFace(loopWire(loop, M));
+    return R.basicFaceExtrusion(face, new R.Vector([0, 0, dz]));
+  }
+  function buildStdPin(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, pos(p.d, 6)), L = pos(p.length, 20), r = d / 2;
+    const cRaw = num(sp.c, d * 0.18);
+    const c = Math.min(Math.max(0.05, cRaw), L * 0.3, r * 0.8);
+    const dr = Math.min(r * 0.45, c * Math.tan((15 * Math.PI) / 180));
+    if (dr > 1e-4 && c > 1e-4 && L > 2.2 * c) {
+      return revolveProfile([[0, 0], [r - dr, 0], [r, c], [r, L - c], [r - dr, L], [0, L]]);
+    }
+    return R.makeCylinder(r, L, [0, 0, 0], [0, 0, 1]);
+  }
+  function buildStdKey(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const b = pos(sp.b, 6), h = pos(sp.h, 6), L = pos(p.length, 20);
+    return stadiumExtrude(L, b, 0, h);
+  }
+  function buildStdKeyway(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const b = pos(sp.b, 6), L = pos(p.length, 20);
+    const dep = pos(p.kind === 'hub' ? sp.t2 : sp.t1, p.kind === 'hub' ? 2.8 : 3.5);
+    const up = Math.max(LIFT, num(p.extra, 0.5));
+    if (p.kind === 'hub') return R.makeBox([-L / 2, -b / 2, -dep], [L / 2, b / 2, up]);
+    return stadiumExtrude(L, b, up, -(dep + up));
+  }
+  function buildStdBearing(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, 8), D = pos(sp.D, 22), B = pos(sp.B, 7);
+    const ri = d / 2, ro = Math.max(ri + 1, D / 2), rw = ro - ri;
+    const c = Math.min(Math.max(0.1, num(sp.r, 0.3)), rw * 0.12, B * 0.15);
+    const rIn = ri + rw * 0.30, rOut = ro - rw * 0.30;
+    if (p.seal !== 'open') {
+      const rec = Math.min(B * 0.14, 0.8);
+      return revolveProfile([
+        [ri + c, 0], [rIn, 0], [rIn, rec], [rOut, rec], [rOut, 0], [ro - c, 0],
+        [ro, c], [ro, B - c], [ro - c, B],
+        [rOut, B], [rOut, B - rec], [rIn, B - rec], [rIn, B], [ri + c, B],
+        [ri, B - c], [ri, c],
+      ]);
+    }
+    const inner = revolveProfile([[ri + c, 0], [rIn, 0], [rIn, B], [ri + c, B], [ri, B - c], [ri, c]]);
+    const outer = revolveProfile([[rOut, 0], [ro - c, 0], [ro, c], [ro, B - c], [ro - c, B], [rOut, B]]);
+    const nB = Math.max(5, Math.min(18, Math.round(num(sp.balls, 7))));
+    const rm = (ri + ro) / 2, rb = Math.min((rOut - rIn) * 0.56, B * 0.34, rw * 0.28);
+    const balls = [];
+    for (let i = 0; i < nB; i++) {
+      const a = (i / nB) * Math.PI * 2;
+      balls.push(R.makeSphere(rb).translate([rm * Math.cos(a), rm * Math.sin(a), B / 2]));
+    }
+    return R.makeCompound([inner, outer, ...balls]);
+  }
+  function buildStdSleeve(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, 8), D = pos(sp.D, 10), L = pos(p.length, 10);
+    const ri = d / 2, ro = Math.max(ri + 0.3, D / 2), wall = ro - ri;
+    const c = Math.min(0.25, wall * 0.25, L * 0.1);
+    if (p.flange === 'flange') {
+      const rf = Math.max(ro + 0.5, pos(sp.fD, D + 4 * wall) / 2);
+      const sf = Math.min(pos(sp.wall, wall), L * 0.45);
+      const cf = Math.min(c, sf * 0.25);
+      return revolveProfile([[ri + cf, 0], [rf - cf, 0], [rf, cf], [rf, sf - cf], [rf - cf, sf], [ro, sf], [ro, L - c], [ro - c, L], [ri + c, L], [ri, L - c], [ri, cf]]);
+    }
+    return revolveProfile([[ri + c, 0], [ro - c, 0], [ro, c], [ro, L - c], [ro - c, L], [ri + c, L], [ri, L - c], [ri, c]]);
+  }
   // Lochdurchmesser je nach Passung: eng, mittel (Standard), weit oder Kernloch zum Gewindeschneiden
   const holeD = (s, fit) => (fit === 'fine' ? s.fine : fit === 'coarse' ? s.coarse : fit === 'tap' ? s.tap : s.hole);
   const LIFT = 0.2; // Löcher ragen ein wenig über die Fläche hinaus, damit sie sauber schneiden
@@ -1564,6 +1637,11 @@ export function createKernel(R, oc) {
     if (lib === 'stdScrew') return buildStdScrew(p);
     if (lib === 'stdNut') return buildStdNut(p);
     if (lib === 'stdWasher') return buildStdWasher(p);
+    if (lib === 'stdPin') return buildStdPin(p);
+    if (lib === 'stdKey') return buildStdKey(p);
+    if (lib === 'stdKeyway') return buildStdKeyway(p);
+    if (lib === 'stdBearing') return buildStdBearing(p);
+    if (lib === 'stdSleeve') return buildStdSleeve(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0);
     if (lib === 'screwHole') {

@@ -62,16 +62,26 @@ const Panels = (() => {
       el.classList.add('drone');
       DroneUI.flyout(el);
     } else {
-      el.append(h('h3', null, T('tool.fly.partsTitle')));
-      const tiles = h('div', { class: 'tiles' });
-      for (const d of LIB.filter((x) => !x.buy && !x.drone)) {
+      el.classList.add('parts');
+      const makeTile = (d) => {
         const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? T('common.hole') : T('common.body')));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
-        tiles.append(t);
-      }
+        return t;
+      };
+      const base = LIB.filter((x) => !x.buy && !x.drone && !x.std);
+      const stds = LIB.filter((x) => !x.buy && !x.drone && x.std);
+      el.append(h('h3', null, T('tool.fly.partsTitle')));
+      const tiles = h('div', { class: 'tiles' });
+      for (const d of base) tiles.append(makeTile(d));
       el.append(tiles);
+      if (stds.length) {
+        el.append(h('h3', { class: 'pro' }, 'Normteile'));
+        const stdTiles = h('div', { class: 'tiles pro' });
+        for (const d of stds) stdTiles.append(makeTile(d));
+        el.append(stdTiles);
+      }
       el.append(h('div', { class: 'foot' }, T('tool.fly.partsFoot')));
     }
     $('#center').append(el);
@@ -1167,6 +1177,46 @@ const Panels = (() => {
           }
           sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
+          const pe = pinEntry(it.p.size ?? it.p.d);
+          if (pe) {
+            const L = Model.num(it.p.length, V, 20), tol = it.p.tol === 'h8' ? 'h8' : 'm6';
+            const minD = tol === 'h8' ? pe.h8_min_mm : pe.m6_min_mm, maxD = tol === 'h8' ? pe.h8_max_mm : pe.m6_max_mm;
+            const h7 = h7Info(pe.d_mm);
+            const fitTxt = h7.um != null ? ` · Empfohlene Bohrung: <b>Ø ${Units.fmtLenU(pe.d_mm, 2)} H7</b> (${h7.rangeText})` : '';
+            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
+          }
+        } else if (def.lib === 'stdKey' && typeof keyEntry === 'function') {
+          const ke = keyEntry(it.p.size);
+          if (ke) {
+            const L = Model.num(it.p.length, V, 20);
+            const normL = Array.isArray(ke.laengen_mm) && ke.laengen_mm.includes(Math.round(L)) ? 'Normlänge' : `üblich: ${(ke.laengen_mm || []).slice(0, 5).join(', ')} … mm`;
+            sec.append(h('div', { id: 'p-stdkey-hint', class: 'hint-box', html: `<b>DIN 6885 A ${ke.b_mm} × ${ke.h_mm} × ${Units.fmtLenU(L, 1)}</b> (${normL})<br>Passend für Welle <b>Ø &gt; ${Units.fmtLenU(ke.welle_min_mm, 1)} – ${Units.fmtLenU(ke.welle_max_mm, 1)}</b><br>Wellennut t₁ = <b>${Units.fmtLenU(ke.t1_mm, 2)}</b> · Nabennut t₂ = <b>${Units.fmtLenU(ke.t2_mm, 2)}</b><br><span style="color:var(--muted)">Norm: DIN 6885-1 Form A</span>` }));
+            const row = h('div', { class: 'btn-row' });
+            const kwBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-keyway' }, 'Passende Nut anlegen');
+            kwBtn.onclick = () => Actions.addPart(LIBMAP.stdKeyway, { size: ke.id, kind: 'shaft', length: it.p.length ?? 20, extra: 0.5 }, { name: 'Passfedernut ' + ke.id });
+            row.append(kwBtn); sec.append(row);
+          }
+        } else if (def.lib === 'stdKeyway' && typeof keyEntry === 'function') {
+          const ke = keyEntry(it.p.size);
+          if (ke) {
+            const isHub = it.p.kind === 'hub', dep = isHub ? ke.t2_mm : ke.t1_mm;
+            sec.append(h('div', { id: 'p-stdkeyway-hint', class: 'hint-box', html: `<b>${isHub ? 'Nabennut (t₂)' : 'Wellennut (t₁)'} DIN 6885 A ${ke.b_mm} × ${ke.h_mm}</b><br>Breite b = <b>${Units.fmtLenU(ke.b_mm, 2)}</b> · Nuttiefe = <b>${Units.fmtLenU(dep, 2)}</b> · Welle Ø &gt; ${ke.welle_min_mm}–${ke.welle_max_mm} mm<br><span style="color:var(--muted)">Norm: DIN 6885-1 · Öffnung zeigt nach +Z, Nut schneidet nach −Z.</span>` }));
+          }
+        } else if (def.lib === 'stdBearing' && typeof bearingEntry === 'function') {
+          const be = bearingEntry(it.p.size);
+          if (be) {
+            sec.append(h('div', { id: 'p-stdbearing-hint', class: 'hint-box', html: `<b>Rillenkugellager ${esc(be.id)}</b> (${esc(be.reiheName)})<br>Innen-Ø d = <b>${Units.fmtLenU(be.d_mm, 2)}</b> · Außen-Ø D = <b>${Units.fmtLenU(be.D_mm, 2)}</b> · Breite B = <b>${Units.fmtLenU(be.B_mm, 2)}</b><br>Kantenabstand r<sub>min</sub> = ${Units.fmtLenU(be.r_min_mm, 2)}<br><span style="color:var(--muted)">Norm: ${esc(be.quelle)}</span>` }));
+          }
+        } else if (def.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
+          const se = sleeveEntry(it.p.size);
+          if (se) {
+            const flTxt = se.flansch_d_mm ? `Bund-Ø D<sub>fl</sub> = ${Units.fmtLenU(se.flansch_d_mm, 2)}` : `Bund-Ø ≈ ${Units.fmtLenU(se.D_mm + 4 * se.wand_mm, 2)} (Richtwert)`;
+            const h7 = h7Info(se.D_mm);
+            const h7Txt = h7.um != null ? ` · Gehäusebohrung: <b>Ø ${Units.fmtLenU(se.D_mm, 2)} H7</b>` : '';
+            sec.append(h('div', { id: 'p-stdsleeve-hint', class: 'hint-box', html: `<b>Gleitlager ${esc(se.id)}</b> (${it.p.flange === 'flange' ? 'Form F mit Bund' : 'Form C zylindrisch'})<br>Innen-Ø d = <b>${Units.fmtLenU(se.d_mm, 2)}</b> · Außen-Ø D = <b>${Units.fmtLenU(se.D_mm, 2)}</b> · Wand s₃ = <b>${Units.fmtLenU(se.wand_mm, 2)}</b><br>${flTxt}${h7Txt}<br><span style="color:var(--muted)">Norm: ISO 3547-1 / DIN 1850</span>` }));
+          }
+        }
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
