@@ -7190,6 +7190,39 @@ export function createKernel(R, oc) {
     out.pts = pts;
     return out;
   }
+  function projectEdgesSplit(shape, cam) {
+    const getE = (comp) => {
+      if (!comp || comp.IsNull()) return [];
+      const s = R.cast(comp);
+      const edges = s.edges;
+      const res = [];
+      for (const e of edges) {
+        oc.BRepLib.BuildCurves3d(e.wrapped);
+        res.push(edge2d(e));
+      }
+      return res;
+    };
+    const hlr = new oc.HLRBRep_Algo();
+    const projector = new oc.HLRAlgo_Projector(cam.wrapped);
+    let hlrShapes = null;
+    try {
+      hlr.Add(shape.wrapped, 0);
+      hlr.Projector(projector);
+      hlr.Update();
+      hlr.Hide();
+      hlrShapes = new oc.HLRBRep_HLRToShape(hlr);
+      return {
+        visible: [...getE(hlrShapes.VCompound()), ...getE(hlrShapes.OutLineVCompound())],
+        tangentVisible: getE(hlrShapes.Rg1LineVCompound()),
+        hidden: [...getE(hlrShapes.HCompound()), ...getE(hlrShapes.OutLineHCompound())],
+        tangentHidden: getE(hlrShapes.Rg1LineHCompound()),
+      };
+    } finally {
+      safeDelete(hlrShapes);
+      safeDelete(projector);
+      safeDelete(hlr);
+    }
+  }
   function polyArea2D(pts) {
     let a = 0;
     for (let i = 0, n = pts.length; i < n; i++) {
@@ -7446,11 +7479,23 @@ export function createKernel(R, oc) {
           shape = c;
         }
       }
-      for (const name of views) {
-        const v = VIEWS[name]; if (!v) continue;
-        const cam = new R.ProjectionCamera([0, 0, 0], v.dir, v.x);
-        const { visible, hidden } = R.makeProjectedEdges(shape, cam);
-        out[name] = { visible: visible.map(edge2d), hidden: hidden.map(edge2d), dir: v.dir, x: v.x, y: cross(v.dir, v.x) };
+      for (const entry of views) {
+        let key, dir, x;
+        if (typeof entry === 'string') {
+          const v = VIEWS[entry]; if (!v) continue;
+          key = entry; dir = v.dir; x = v.x;
+        } else if (entry && entry.key && Array.isArray(entry.dir)) {
+          key = String(entry.key);
+          const dl = Math.hypot(entry.dir[0], entry.dir[1], entry.dir[2]);
+          if (dl < 1e-8) continue;
+          dir = norm(entry.dir);
+          let x0 = Array.isArray(entry.x) ? sub(entry.x, mul(dir, dot(entry.x, dir))) : [0, 0, 0];
+          if (Math.hypot(x0[0], x0[1], x0[2]) < 1e-6) x0 = cross(Math.abs(dir[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1], dir);
+          x = norm(x0);
+        } else continue;
+        const cam = new R.ProjectionCamera([0, 0, 0], dir, x);
+        const res = projectEdgesSplit(shape, cam);
+        out[key] = { ...res, dir, x, y: cross(dir, x) };
         cam.delete();
       }
       // Achsen von Zylinderflächen für Mittellinien (robust auch bei geteilten Vollzylindern)

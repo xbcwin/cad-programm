@@ -1996,6 +1996,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Speichern/Neuladen, PDF-Export & Hilfe**: Toleranzen bleiben nach `App.undo()`/`App.redo()` und JSON-Roundtrip erhalten, erscheinen im PDF ohne `?`-Ersatzzeichen und sind über die Befehlssuche (`drawingTolerance`) sowie die Hilfetexte `drawingTolerance` und `drawingFit` dokumentiert.
 - [ ] **Von Hand**: Im Browser ein Bauteil mit Passbohrung `Ø20 H7` und Passwelle `Ø20 g6` in die Zeichnung übernehmen, Passungen setzen und die erzeugte PDF- und DXF-Datei im Betrachter prüfen.
 
+## Zeichnung: Ansichten einstellen (Auto [A-065], ZE-04, ZE-05)
+
+- [x] **Verdeckte Kanten je Ansicht (ZE-04)**: Im Panel unter „Ansichten“ (`#dw-view-list`, `#dw-v-hidden`) lassen sich verdeckte Kanten pro Ansicht unabhängig ein- und ausschalten; aktivierte Ansichten zeigen zusätzliche gestrichelte `.hid`-Linien (`stroke-dasharray`).
+- [x] **Tangentiale Kanten & Maßstab je Ansicht (ZE-04)**: Übergangskanten von Rundungen (`.tan` aus `Rg1LineVCompound`/`Rg1LineHCompound`) sowie der Maßstab (`#dw-v-scale`, „Wie Blatt“ oder Normmaßstab z. B. `2:1`) lassen sich je Ansicht einzeln schalten.
+- [x] **Isometrische Ansicht, Schattierung & PDF-Export (ZE-05)**: `#dw-add-iso` legt eine isometrische Ansicht auf dem Blatt an; `#dw-v-shaded` legt ein orthografisch gerendertes 3D-Schattierungsbild (`image.shade-img`) hinter die Kanten, und der PDF-Export enthält die Isometrie samt gestrichelter Linien und eingebettetem Schattierungsbild (`/Subtype /Image`, `/Filter /DCTDecode`).
+- [x] **Freie 3D-Ansicht aus Kamera, Rückgängig, Speichern & Hilfen (ZE-05)**: `#dw-add-free` übernimmt die aktuelle 3D-Kamera als neue Zeichnungsansicht (`extraViews`), arbeitet mit Rückgängig/Wiederholen, Speichern/Laden, Befehlen und den Hilfetexten `drawingViews` / `drawingViewProps`.
+- [ ] **Von Hand**: Im Browser eine gerundete Baugruppe mit mehreren Farben und Werkstoffen als schattierte Isometrie und freie 3D-Ansicht anlegen, in der freien Ansicht den Blickwinkel per „Aktuelle 3D-Ansicht übernehmen“ aktualisieren und das exportierte PDF im PDF-Betrachter auf Schattierung, Linienstärken und Beschriftung prüfen.
+
 ## Fehler melden
 
 ```
