@@ -944,6 +944,7 @@ const Panels = (() => {
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
   }
   function replaceTableName(doc, old, repl) {
@@ -952,6 +953,7 @@ const Panels = (() => {
     for (const q of doc.params || []) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
   }
   function renameTable(id, nv) {
     const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb || tb.name === nv) return;
@@ -2443,6 +2445,10 @@ const Panels = (() => {
           { label: T('ctx.mateCenter'), icon: 'cSymmetric', help: 'mateCenter', run: () => Joints.startCenter() },
           { label: T('ctx.mateBall'), icon: 'circle', help: 'mateBall', run: () => Joints.startBall() },
           { label: T('ctx.mateSlot'), icon: 'slot', help: 'mateSlot', run: () => Joints.startSlot() },
+          '-',
+          { label: T('ctx.mateParallel'), icon: 'cParallel', help: 'mateParallel', run: () => Joints.startParallel() },
+          { label: T('ctx.mateTangent'), icon: 'cTangent', help: 'mateTangent', run: () => Joints.startTangent() },
+          { label: T('ctx.mateDistance'), icon: 'clearance', help: 'mateDistance', run: () => Joints.startDistance() },
           '-',
           { label: T('ctx.mateRot'), icon: 'hinge', run: () => Joints.start('rot') },
           { label: T('ctx.mateSlide'), icon: 'moveStep', run: () => Joints.start('slide') },

@@ -18877,6 +18877,338 @@ def t_a092_durchdringungen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-088] Verbindungen parallel, tangential, mit Abstand (BG-07) ----------
+def t_a088_verbindungen_locker(p):
+    # 1. Zwei Quader, Abstand 5 mm -> gemessen 5 -> auf 12 mm ändern -> gemessen 12 + Formel
+    p.empty()
+    ids = p.ev("""
+      App.change('Zwei Quader', (d) => {
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Quader A' });
+        const b = Model.newItem('box', { w: 14, d: 14, h: 8 }, { name: 'Quader B' });
+        b.t.x = 2; b.t.y = -1; b.t.z = 25; b.t.ry = 15;
+        d.items.push(a, b);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    # Kontextleiste zeigt im Verbindung-Menü Parallel, Tangential und Abstand
+    p.ev("App.select(arg)", ids)
+    p.wait(350)
+    mate_btn = p.pg.locator('.ctxbar button[aria-label="Verbindung"]')
+    menu_ok = False
+    if mate_btn.count() == 1:
+        mate_btn.click()
+        p.wait(200)
+        mtxt = p.pg.locator('.menu').inner_text()
+        menu_ok = 'Parallel' in mtxt and 'Tangential' in mtxt and 'Abstand' in mtxt
+        p.ev("document.querySelector('.menu')?.remove()")
+
+    dist_res = p.ev("""
+      const [aid, bid] = arg;
+      const af = (App.results.get(aid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] < -0.9);
+      const r = Joints.addDistance({ id: aid, faceIdx: af }, { id: bid, faceIdx: bf }, 5);
+      return { r, af, bf };
+    """, ids)
+    warte_rechnen(p, 20)
+
+    def dist_metrics():
+        return p.ev("""
+          const { aid, bid, af, bf } = arg;
+          const a = Joints.planarFaceOf({ id: aid, faceIdx: af });
+          const b = Joints.planarFaceOf({ id: bid, faceIdx: bf });
+          const planeDist = b.p.clone().sub(a.p).dot(a.n);
+          const dot = a.n.dot(b.n);
+          return Measure.minDistance([aid, bid]).then(md => ({
+            planeDist,
+            dot,
+            minDist: md ? md.d : -1,
+          }));
+        """, {'aid': ids[0], 'bid': ids[1], 'af': dist_res['af'], 'bf': dist_res['bf']})
+
+    dm5 = dist_metrics()
+    # Im Verlauf anklicken -> rechts #jt-dist auf 12 ändern -> gemessen 12
+    p.ev("App.clearSelection()")
+    p.wait(200)
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    field(p, '#jt-dist', 12)
+    warte_rechnen(p, 20)
+    dm12 = dist_metrics()
+
+    # Formel mit Maß: spalt = 8, Abstand = "spalt + 2" -> 10, dann spalt = 15 -> 17
+    p.ev("""
+      App.change('Maß spalt anlegen', d => {
+        d.params = d.params || [];
+        d.params.push({ id: 'm_spalt', name: 'spalt', expr: 8 });
+      });
+    """)
+    p.wait(200)
+    field(p, '#jt-dist', 'spalt + 2')
+    warte_rechnen(p, 20)
+    dm_f1 = dist_metrics()
+    p.ev("App.change('spalt ändern', d => { d.params.find(x => x.name === 'spalt').expr = 15; });")
+    warte_rechnen(p, 20)
+    dm_f2 = dist_metrics()
+
+    ok1 = (
+        menu_ok
+        and dist_res['r']['ok'] is True
+        and abs(dm5['planeDist'] - 5.0) < 0.01 and abs(dm5['minDist'] - 5.0) < 0.01 and dm5['dot'] < -0.99999
+        and abs(dm12['planeDist'] - 12.0) < 0.01 and abs(dm12['minDist'] - 12.0) < 0.01
+        and abs(dm_f1['planeDist'] - 10.0) < 0.01
+        and abs(dm_f2['planeDist'] - 17.0) < 0.01
+    )
+
+    # 2. Parallel: zwei Quader, schräg gekippt -> parallel, Position bleibt, Verschieben frei, Kippen korrigiert, Umdrehen
+    p.ev("Start.openNewTab(Model.newDoc('Parallel-Test'))")
+    p.wait(350)
+    pids = p.ev("""
+      App.change('Parallel-Teile', d => {
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Basis' });
+        const b = Model.newItem('box', { w: 12, d: 12, h: 10 }, { name: 'Deckel' });
+        b.t.x = 30; b.t.y = 10; b.t.z = 22; b.t.rx = 25; b.t.ry = 35;
+        d.items.push(a, b);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 20)
+
+    par_res = p.ev("""
+      const [aid, bid] = arg;
+      const af = (App.results.get(aid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const before = Joints.planarFaceOf({ id: bid, faceIdx: bf }).p.toArray();
+      const r = Joints.addParallel({ id: aid, faceIdx: af }, { id: bid, faceIdx: bf });
+      return { r, af, bf, before };
+    """, pids)
+    warte_rechnen(p, 20)
+
+    def par_metrics():
+        return p.ev("""
+          const { aid, bid, af, bf } = arg;
+          const a = Joints.planarFaceOf({ id: aid, faceIdx: af });
+          const b = Joints.planarFaceOf({ id: bid, faceIdx: bf });
+          return { dot: a.n.dot(b.n), p: b.p.toArray() };
+        """, {'aid': pids[0], 'bid': pids[1], 'af': par_res['af'], 'bf': par_res['bf']})
+
+    pm0 = par_metrics()
+    # Frei verschieben in X und Z erlaubt, Kippen über rx wird zurückgedreht
+    p.ev("""
+      App.change('Frei verschieben', d => {
+        const b = d.items[1];
+        b.t.x += 12; b.t.z += 7;
+        Joints.constrain(d, b.id);
+      });
+    """)
+    warte_rechnen(p, 20)
+    pm1 = par_metrics()
+    p.ev("""
+      App.change('Kippen korrigieren', d => {
+        const b = d.items[1];
+        b.t.rx += 20;
+        Joints.constrain(d, b.id);
+      });
+    """)
+    warte_rechnen(p, 20)
+    pm_tilt = par_metrics()
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    p.pg.locator('#jt-flip').click()
+    warte_rechnen(p, 20)
+    pm2 = par_metrics()
+
+    ok2 = (
+        par_res['r']['ok'] is True
+        and pm0['dot'] > 0.99999
+        and math.sqrt(sum((pm0['p'][k] - par_res['before'][k]) ** 2 for k in range(3))) < 0.05
+        and pm1['dot'] > 0.99999
+        and abs(pm1['p'][0] - (pm0['p'][0] + 12.0)) < 0.05
+        and abs(pm1['p'][2] - (pm0['p'][2] + 7.0)) < 0.05
+        and pm_tilt['dot'] > 0.99999
+        and pm2['dot'] < -0.99999
+    )
+
+    # 3. Tangential: Ebene an Zylinder (beide Reihenfolgen), Seite umkehren, Radiusänderung folgt nach
+    p.ev("Start.openNewTab(Model.newDoc('Tangential-Test'))")
+    p.wait(350)
+    tids = p.ev("""
+      App.change('Platte und Rolle', d => {
+        const box = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Platte' });
+        const cyl = Model.newItem('cylinder', { d: 16, h: 20 }, { name: 'Rolle' });
+        cyl.t.x = 5; cyl.t.y = 5; cyl.t.z = 30; cyl.t.rx = 25; cyl.t.ry = 20;
+        d.items.push(box, cyl);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 20)
+
+    tan_res = p.ev("""
+      const [bid, cid] = arg;
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const cf = (App.results.get(cid)?.data?.faces || []).findIndex(f => f && f.t === 'CYLINDRE');
+      const r = Joints.addTangent({ id: bid, faceIdx: bf }, { id: cid, faceIdx: cf });
+      return { r, bf, cf };
+    """, tids)
+    warte_rechnen(p, 20)
+
+    def tan_metrics(a_id, f_plane, c_id, f_cyl):
+        return p.ev("""
+          const { a_id, f_plane, c_id, f_cyl } = arg;
+          const pl = Joints.planarFaceOf({ id: a_id, faceIdx: f_plane });
+          const cy = Joints.cylAxisOf({ id: c_id, faceIdx: f_cyl });
+          const dot = Math.abs(cy.d.dot(pl.n));
+          const signed = cy.o.clone().sub(pl.p).dot(pl.n);
+          return Measure.minDistance([a_id, c_id]).then(md => ({
+            dot,
+            signed,
+            minDist: md ? md.d : -1,
+          }));
+        """, {'a_id': a_id, 'f_plane': f_plane, 'c_id': c_id, 'f_cyl': f_cyl})
+
+    tm0 = tan_metrics(tids[0], tan_res['bf'], tids[1], tan_res['cf'])
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    p.pg.locator('#jt-flip').click()
+    warte_rechnen(p, 20)
+    tm1 = tan_metrics(tids[0], tan_res['bf'], tids[1], tan_res['cf'])
+    p.pg.locator('#jt-flip').click()
+    warte_rechnen(p, 20)
+
+    # Durchmesser von 16 auf 24 (r = 12) ändern -> Abstand Achse-Ebene folgt auf 12 mm
+    p.ev("App.change('Rolle dicker', d => { d.items[1].p.d = 24; });")
+    warte_rechnen(p, 25)
+    p.wait(300)
+    tm2 = tan_metrics(tids[0], tan_res['bf'], tids[1], tan_res['cf'])
+
+    # Umgekehrte Reihenfolge: Zylinder fest, Quader beweglich
+    p.ev("Joints.remove(App.doc.joints[0].id); App.change('Quader weg', d => { d.items[0].t.x = 50; d.items[0].t.y = 0; d.items[0].t.z = 17; });")
+    warte_rechnen(p, 20)
+    tan_rev = p.ev("""
+      const [bid, cid] = arg;
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[0] < -0.9);
+      const cf = (App.results.get(cid)?.data?.faces || []).findIndex(f => f && f.t === 'CYLINDRE');
+      const r = Joints.addTangent({ id: cid, faceIdx: cf }, { id: bid, faceIdx: bf });
+      return { r, bf, cf };
+    """, tids)
+    warte_rechnen(p, 20)
+    tm3 = tan_metrics(tids[0], tan_rev['bf'], tids[1], tan_rev['cf'])
+
+    ok3 = (
+        tan_res['r']['ok'] is True
+        and tm0['dot'] < 1e-4 and abs(tm0['signed'] - 8.0) < 0.01 and 0 <= tm0['minDist'] < 0.02
+        and tm1['dot'] < 1e-4 and abs(tm1['signed'] - (-8.0)) < 0.01
+        and tm2['dot'] < 1e-4 and abs(tm2['signed'] - 12.0) < 0.01 and 0 <= tm2['minDist'] < 0.02
+        and tan_rev['r']['ok'] is True
+        and tm3['dot'] < 1e-4 and abs(abs(tm3['signed']) - 12.0) < 0.01 and 0 <= tm3['minDist'] < 0.02
+    )
+
+    # 4. Kombinierbar: Eben (Z = 0) + Abstand (6 mm in X), in Y frei verschiebbar, Abstand ändern -> 11, Konflikt abgelehnt
+    p.ev("Start.openNewTab(Model.newDoc('Kombi-Test'))")
+    p.wait(350)
+    cids = p.ev("""
+      App.change('Platte und Block', d => {
+        const plate = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Platte' });
+        const block = Model.newItem('box', { w: 12, d: 12, h: 10 }, { name: 'Block' });
+        block.t.x = 35; block.t.y = 8; block.t.z = 22;
+        d.items.push(plate, block);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 20)
+
+    comb_res = p.ev("""
+      const [aid, bid] = arg;
+      const facesA = App.results.get(aid).data.faces;
+      const facesB = App.results.get(bid).data.faces;
+      const az = facesA.findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const bz = facesB.findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] < -0.9);
+      const ax = facesA.findIndex(f => f && f.t === 'PLANE' && f.n && f.n[0] > 0.9);
+      const bx = facesB.findIndex(f => f && f.t === 'PLANE' && f.n && f.n[0] < -0.9);
+      const r1 = Joints.addPlanar({ id: aid, faceIdx: az }, { id: bid, faceIdx: bz });
+      const r2 = Joints.addDistance({ id: aid, faceIdx: ax }, { id: bid, faceIdx: bx }, 6);
+      const rBad = Joints.addDistance({ id: aid, faceIdx: ax }, { id: bid, faceIdx: bx }, 20);
+      return { r1, r2, rBad, az, bz, ax, bx };
+    """, cids)
+    warte_rechnen(p, 20)
+
+    def comb_metrics():
+        return p.ev("""
+          const { aid, bid, az, bz, ax, bx } = arg;
+          const paz = Joints.planarFaceOf({ id: aid, faceIdx: az });
+          const pbz = Joints.planarFaceOf({ id: bid, faceIdx: bz });
+          const pax = Joints.planarFaceOf({ id: aid, faceIdx: ax });
+          const pbx = Joints.planarFaceOf({ id: bid, faceIdx: bx });
+          const ba = Actions.worldBox(aid), bb = Actions.worldBox(bid);
+          return {
+            dz: Math.abs(pbz.p.clone().sub(paz.p).dot(paz.n)),
+            dx: pbx.p.clone().sub(pax.p).dot(pax.n),
+            cy: (bb.min.y + bb.max.y) / 2,
+          };
+        """, {'aid': cids[0], 'bid': cids[1], 'az': comb_res['az'], 'bz': comb_res['bz'], 'ax': comb_res['ax'], 'bx': comb_res['bx']})
+
+    cm0 = comb_metrics()
+    # Block auswählen -> X/Y/Z ändern: Y wandert frei, X und Z bleiben durch Eben + Abstand gehalten
+    p.ev("App.select([arg])", cids[1])
+    p.wait(300)
+    cur_t = p.ev("return { ...App.doc.items[1].t };")
+    field(p, '#t-y', round(cur_t['y'] + 14, 2))
+    field(p, '#t-x', round(cur_t['x'] + 15, 2))
+    field(p, '#t-z', round(cur_t['z'] + 12, 2))
+    warte_rechnen(p, 20)
+    cm1 = comb_metrics()
+
+    # Abstand im kombinierten Panel auf 11 mm ändern -> Z bleibt 0, X wird 11
+    field(p, '#jt-dist-1', 11)
+    warte_rechnen(p, 20)
+    cm2 = comb_metrics()
+
+    ok4 = (
+        comb_res['r1']['ok'] is True
+        and comb_res['r2']['ok'] is True
+        and comb_res['rBad']['ok'] is False
+        and cm0['dz'] < 0.01 and abs(cm0['dx'] - 6.0) < 0.01
+        and cm1['dz'] < 0.01 and abs(cm1['dx'] - 6.0) < 0.01
+        and abs(cm1['cy'] - (cm0['cy'] + 14.0)) < 0.05
+        and cm2['dz'] < 0.01 and abs(cm2['dx'] - 11.0) < 0.01
+    )
+
+    # 5. Verlauf, Rückgängig, Löschen, Befehlssuche, Hilfetexte, keine Fehler
+    tree_cnt = p.pg.locator('#joint-tree .joint-row').count()
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    cm_undo = comb_metrics()
+    p.pg.locator('#joint-tree .joint-row').nth(1).click()
+    p.wait(250)
+    p.pg.locator('#jt-del').click()
+    warte_rechnen(p, 20)
+    cnt_after_del = p.ev("return App.doc.joints.length")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    cnt_after_undo_del = p.ev("return App.doc.joints.length")
+
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      cmdPar: Commands.search('parallel').some(c => c.id === 'mate-parallel'),
+      cmdTan: Commands.search('tangential').some(c => c.id === 'mate-tangent'),
+      cmdDist: Commands.search('abstand').some(c => c.id === 'mate-distance'),
+      helpPar: !!(d.mateParallel && d.mateParallel.tip && d.mateParallel.hilfe && d.mateParallel.tipp),
+      helpTan: !!(d.mateTangent && d.mateTangent.tip && d.mateTangent.hilfe && d.mateTangent.tipp),
+      helpDist: !!(d.mateDistance && d.mateDistance.tip && d.mateDistance.hilfe && d.mateDistance.tipp),
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = (
+        tree_cnt == 2
+        and abs(cm_undo['dx'] - 6.0) < 0.01
+        and cnt_after_del == 1
+        and cnt_after_undo_del == 2
+        and all(meta.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -19071,6 +19403,7 @@ TESTS = [
     ('[A-085] Verbindung „fest“: Flächen/Punkte, bündig, umdrehen, gesperrt, Verlauf', t_a085_verbindung_fest),
     ('[A-084] Unterbaugruppen & Teil festsetzen: gemeinsam verschieben, fixiert, Schloss', t_a084_unterbaugruppe_festsetzen),
     ('[F-11241523] Volltest-Reparatur: Griff-Schilder bei Frontansicht & Alt/Rechtsklick / Skizze ohne 3D-Ansichtsleiste / Zeitleiste sofort bei Bauteil-Wechsel', t_f11241523),
+    ('[A-088] Verbindungen: parallel, tangential & Abstand (mit Formeln und kombinierbar)', t_a088_verbindungen_locker),
     ('[A-090] Andock-Punkte & Einrasten beim Ziehen: Schraube in Bohrung (Einfach & Profi)', t_a090_andock_punkte),
     ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
     ('[A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)', t_a092_durchdringungen),

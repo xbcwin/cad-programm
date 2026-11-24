@@ -258,6 +258,9 @@ const Commands = (() => {
     add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });
     add('mate-cyl', 'Verbindung: Zylindrisch (Welle in Bohrung)', 'axes', 'verbindung gelenk zylindrisch welle bohrung bolzen achse drehen schieben bg-06', () => Joints.startCylindrical(), { group: 'Baugruppe' });
     add('mate-planar', 'Verbindung: Eben (Fläche auf Fläche)', 'planeXY', 'verbindung gelenk eben planar flaeche fläche schieben drehen bg-06', () => Joints.startPlanar(), { group: 'Baugruppe' });
+    add('mate-parallel', 'Verbindung: Parallel (zwei Flächen)', 'cParallel', 'verbindung parallel flaechen flächen ausrichten bg-07', () => Joints.startParallel(), { group: 'Baugruppe' });
+    add('mate-tangent', 'Verbindung: Tangential (Fläche an Zylinder)', 'cTangent', 'verbindung tangential beruehren berühren zylinder flaeche fläche bg-07', () => Joints.startTangent(), { group: 'Baugruppe' });
+    add('mate-distance', 'Verbindung: Abstand (zwei Flächen)', 'clearance', 'verbindung abstand distanz spalt flaechen flächen formel bg-07', () => Joints.startDistance(), { group: 'Baugruppe' });
     add('mate-angle', 'Verbindung: Winkel (Flächen oder Kanten)', 'rotate', 'verbindung gelenk winkel grad formel flaeche fläche kante schraeg schräg neigung angle mate bg-07', () => Joints.startAngle(), { group: 'Baugruppe' });
     add('mate-center', 'Verbindung: Mittig (zwischen zwei Flächen / Nut)', 'cSymmetric', 'verbindung gelenk mittig mitte zentriert breite nut flaeche fläche width center mate bg-07', () => Joints.startCenter(), { group: 'Baugruppe' });
     add('mate-ball', 'Verbindung: Kugel (Kugelgelenk)', 'circle', 'verbindung gelenk kugel kugelgelenk ball punkt drehen frei bg-06', () => Joints.startBall(), { group: 'Baugruppe' });
