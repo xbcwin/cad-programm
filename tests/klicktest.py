@@ -19209,6 +19209,142 @@ def t_a088_verbindungen_locker(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-093] Eigenschaften je Teil (BG-12) ----------
+def t_a093_eigenschaften_je_teil(p):
+    # 1. Zwei Teile anlegen, im Panel rechts Teilenummer, Beschreibung, Lieferant und Preis (2,50 und 4,00) setzen; erstes Teil duplizieren
+    p.empty()
+    ids = p.ev("""
+      App.change('A-093 Teile', (d) => {
+        const a = Model.newItem('box', { w: 30, d: 20, h: 10 }, { name: 'Halter' });
+        const b = Model.newItem('box', { w: 40, d: 25, h: 5 }, { name: 'Deckel' });
+        b.t.x = 60;
+        d.items.push(a, b);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    p.ev("App.select([arg])", ids[0])
+    p.pg.wait_for_selector('#part-props-sec', timeout=10000)
+    p.pg.fill('#p-partno', 'TN-01')
+    p.pg.locator('#p-partno').press('Enter')
+    p.pg.fill('#p-supplier', 'Metallwerk')
+    p.pg.locator('#p-supplier').press('Enter')
+    p.pg.fill('#p-desc', 'Montagehalter')
+    p.pg.locator('#p-desc').press('Enter')
+    p.pg.fill('#p-price', '2,50')
+    p.pg.locator('#p-price').press('Enter')
+    p.wait(200)
+
+    # Halter einmal duplizieren (ergibt 2x Halter à 2,50)
+    p.ev("Actions.duplicate([arg])", ids[0])
+    warte_rechnen(p, 25)
+
+    p.ev("App.select([arg])", ids[1])
+    p.pg.wait_for_selector('#part-props-sec', timeout=10000)
+    p.pg.fill('#p-partno', 'TN-02')
+    p.pg.locator('#p-partno').press('Enter')
+    p.pg.fill('#p-supplier', 'Kunststoff AG')
+    p.pg.locator('#p-supplier').press('Enter')
+    p.pg.fill('#p-desc', 'Abdeckplatte')
+    p.pg.locator('#p-desc').press('Enter')
+    p.pg.fill('#p-price', '4,00')
+    p.pg.locator('#p-price').press('Enter')
+    p.wait(250)
+
+    bom = p.ev("return Mass.bom()")
+    rows = bom['rows'] if bom else []
+    r_halter = next((r for r in rows if r['name'] == 'Halter'), None)
+    r_deckel = next((r for r in rows if r['name'] == 'Deckel'), None)
+    ok1 = bool(
+        bom and len(rows) == 2
+        and r_halter and r_halter['n'] == 2 and r_halter['partNo'] == 'TN-01'
+        and r_halter['desc'] == 'Montagehalter' and r_halter['supplier'] == 'Metallwerk'
+        and abs(r_halter['price'] - 2.5) < 1e-6
+        and r_deckel and r_deckel['n'] == 1 and r_deckel['partNo'] == 'TN-02'
+        and r_deckel['desc'] == 'Abdeckplatte' and r_deckel['supplier'] == 'Kunststoff AG'
+        and abs(r_deckel['price'] - 4.0) < 1e-6
+        and bom['hasPrice'] is True and abs(bom['totalPrice'] - 9.0) < 1e-6
+    )
+
+    # 2. Stücklisten-Dialog zeigt Spalten und Gesamtpreis 9,00 € unten
+    p.ev("App.select([])"); p.wait(300)
+    p.pg.locator('#proj-bom').click()
+    p.pg.wait_for_selector('#bom table', timeout=15000)
+    p.wait(250)
+    bom_hdr = p.pg.locator('#bom table tr').first.text_content()
+    bom_txt = p.pg.locator('#bom').text_content()
+    total_cell = p.pg.locator('#bom-total-price').text_content()
+    sum_box = p.pg.locator('#bom-price-sum').text_content()
+    ok2 = (
+        p.pg.locator('#bom .bom-row').count() == 2
+        and all(col in bom_hdr for col in ['Teilenummer', 'Beschreibung', 'Lieferant', 'Preis je Stück', 'Preis gesamt'])
+        and 'TN-01' in bom_txt and 'Montagehalter' in bom_txt and 'Metallwerk' in bom_txt
+        and 'TN-02' in bom_txt and 'Abdeckplatte' in bom_txt and 'Kunststoff AG' in bom_txt
+        and '2,50 €' in bom_txt and '5,00 €' in bom_txt and '4,00 €' in bom_txt
+        and '9,00 €' in total_cell and 'Gesamtpreis:' in sum_box and '9,00 €' in sum_box
+    )
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # 3. CSV-Export enthält alle neuen Spalten und Gesamtpreis 9,00 in der Summenzeile
+    csv = p.ev("return Mass.bom().then(b => Mass.bomCSV(b, 'Baugruppe'))")
+    lines = [ln for ln in csv.lstrip('\ufeff').splitlines() if ln.strip()]
+    col_counts = [len(ln.split(';')) for ln in lines]
+    ok3 = (
+        len(lines) == 4
+        and all(c == 12 for c in col_counts)
+        and '"Teilenummer";"Beschreibung";"Lieferant";"Preis je Stück (€)";"Preis gesamt (€)"' in lines[0]
+        and '"TN-01";"Montagehalter";"Metallwerk";2,50;5,00' in csv
+        and '"TN-02";"Abdeckplatte";"Kunststoff AG";4,00;4,00' in csv
+        and '"Summe Baugruppe";3;' in lines[3]
+        and lines[3].endswith(';9,00')
+    )
+
+    # 4. Ungültiger Preis markiert Feld als .invalid, Rückgängig/Wiederholen & Speichern/Laden
+    p.ev("App.select([arg])", ids[1])
+    p.pg.wait_for_selector('#p-price', timeout=10000)
+    p.pg.fill('#p-price', 'abc')
+    p.pg.locator('#p-price').press('Enter')
+    p.wait(150)
+    inv_ok = p.ev("return document.querySelector('#p-price').closest('.inp').classList.contains('invalid')")
+    p.pg.locator('#p-price').press('Escape'); p.wait(150)
+
+    p.ev("App.undo()")
+    bom_undo = p.ev("return Mass.bom()")
+    p.ev("App.redo()")
+    bom_redo = p.ev("return Mass.bom()")
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), { fit: false })", saved)
+    warte_rechnen(p, 20)
+    bom_reload = p.ev("return Mass.bom()")
+    ok4 = bool(
+        inv_ok
+        and bom_undo and abs(bom_undo['totalPrice'] - 5.0) < 1e-6
+        and bom_redo and abs(bom_redo['totalPrice'] - 9.0) < 1e-6
+        and bom_reload and abs(bom_reload['totalPrice'] - 9.0) < 1e-6
+        and any(r['partNo'] == 'TN-01' and r['supplier'] == 'Metallwerk' for r in bom_reload['rows'])
+    )
+
+    # 5. Hilfetexte (JSON + eingebettete HELP via Tooltip) und keine Seitenfehler
+    p.ev("App.select([arg])", ids[0])
+    p.pg.wait_for_selector('#part-props-sec .section-h', timeout=10000)
+    p.ev("return Mass.measure()"); p.wait(150)
+    p.pg.locator('#part-props-sec .section-h').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=5000)
+        tip_txt = p.pg.locator('.tooltip').text_content()
+    except Exception:
+        tip_txt = ''
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      helpJson: !!(d.partProps && d.partProps.tip && d.partProps.hilfe && d.partProps.tipp),
+      tipMatch: !!(d.partProps && String(arg || '').includes(d.partProps.tip)),
+      domHelp: document.querySelectorAll('[data-help="partProps"]').length >= 1,
+      errs: App.errors.length === 0,
+    }));""", tip_txt)
+    ok5 = bool(all(meta.values()) and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -19407,6 +19543,7 @@ TESTS = [
     ('[A-090] Andock-Punkte & Einrasten beim Ziehen: Schraube in Bohrung (Einfach & Profi)', t_a090_andock_punkte),
     ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
     ('[A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)', t_a092_durchdringungen),
+    ('[A-093] Eigenschaften je Teil: Teilenummer, Beschreibung, Lieferant, Preis in Stückliste & CSV', t_a093_eigenschaften_je_teil),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

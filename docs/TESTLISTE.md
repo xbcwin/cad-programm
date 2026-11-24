@@ -2184,6 +2184,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Echte Baugruppe mit Verweisen (`ref`), Suche & Hilfe**: In einer Baugruppe (`docType: 'assembly'`) mit 3 eingesetzten `ref`-Instanzen findet `#t-clashes` exakt das überlappende Paar (`≈ 1000 mm³`); Prüfen-Menü, Befehlssuche (`clash-check`) und Hilfetext (`clashCheck`) arbeiten ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine Baugruppe mit mehreren leicht überlappenden und berührenden Teilen öffnen, auf „Durchdringungen suchen“ klicken, einen Listeneintrag anklicken und prüfen, ob die Kamera zur Stelle springt und die Überschneidung rot durchschimmert.
 
+## Eigenschaften je Teil (Auto [A-093], BG-12)
+
+- [x] **Teileigenschaften im Panel rechts**: Für Teile oberster Ebene erscheinen Teilenummer (`#p-partno`), Preis (`#p-price`), Lieferant (`#p-supplier`) und Beschreibung (`#p-desc`) unter `#part-props-sec` und werden rückgängig machbar in `it.props` gespeichert; ungültige Preiseingaben markieren das Feld als `.invalid`.
+- [x] **Stückliste mit Spalten & Gesamtpreis**: Zwei Teile mit Preis `2,50 €` (zweimal vorhanden) und `4,00 €` (einmal vorhanden) zeigen in `Mass.bom()` und im Stücklisten-Dialog (`#bom`) alle Spalten sowie den Gesamtpreis `9,00 €` in `#bom-total-price` und `#bom-price-sum`.
+- [x] **CSV-Export, Rückgängig, Speichern/Laden & Hilfe**: `Mass.bomCSV()` enthält die Spalten `Teilenummer`, `Beschreibung`, `Lieferant`, `Preis je Stück (€)`, `Preis gesamt (€)` samt `9,00` in der Summenzeile bei einheitlicher Spaltenzahl; Undo/Redo, JSON-Roundtrip und Hilfetext `partProps` arbeiten ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser zwei Teile mit Teilenummer, Beschreibung, Lieferant und Preis versehen, die Stückliste öffnen, eine Zeile zum Auswählen anklicken und die gespeicherte `.csv`-Datei in Excel oder Numbers prüfen.
+
 ## Fehler melden
 
 ```

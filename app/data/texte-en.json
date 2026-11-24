@@ -2456,5 +2456,22 @@
   "clash.rerun": "Re-run",
   "clash.rerunTip": "Check interferences again",
   "clash.closeAria": "Close interference check",
-  "clash.failTitle": "Check failed"
+  "clash.failTitle": "Check failed",
+  "panel.partProps.title": "Part properties",
+  "panel.partProps.partNo": "Part number",
+  "panel.partProps.partNoPh": "e.g. PN-100",
+  "panel.partProps.desc": "Description",
+  "panel.partProps.descPh": "Short description",
+  "panel.partProps.supplier": "Supplier",
+  "panel.partProps.supplierPh": "e.g. Manufacturer or shop",
+  "panel.partProps.price": "Price",
+  "panel.partProps.pricePh": "0.00",
+  "panel.partProps.priceErr": "Please enter a valid number for the price.",
+  "panel.partProps.undo": "Part properties changed",
+  "dlg.bom.colPartNo": "Part no.",
+  "dlg.bom.colDesc": "Description",
+  "dlg.bom.colSupplier": "Supplier",
+  "dlg.bom.colPriceEach": "Unit price",
+  "dlg.bom.colPriceTotal": "Total price",
+  "dlg.bom.totalPriceHtml": "<b>Total price:</b> {total}"
 }

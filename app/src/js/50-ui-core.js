@@ -294,6 +294,7 @@ const UI = (() => {
     const commit = () => { if (inp.value === orig) return; orig = inp.value; onCommit(inp.value); };
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { commit(); inp.blur(); } if (e.key === 'Escape') { inp.value = orig; inp.blur(); } });
     if (live) inp.addEventListener('input', commit);
+    inp.addEventListener('change', commit);
     inp.addEventListener('blur', commit);
     wrap.append(h('div', { class: 'inp' }, inp));
     return wrap;

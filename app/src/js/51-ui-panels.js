@@ -2185,6 +2185,68 @@ const Panels = (() => {
         if (st) ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'stability' }, h('span', { class: 'grow' }, T('panel.item.stable')), h('b', { class: 'mono', id: 'p-stand', style: { color: st.ok ? '' : 'var(--bad)' } }, st.ok ? T('panel.item.stableTip', { ang: fmtFixed(st.angle, 0) }) : T('panel.item.unstable'))));
       });
       w.append(ms);
+      // Teileigenschaften (BG-12): Teilenummer, Beschreibung, Lieferant, Preis
+      const ownProps = (it.props && typeof it.props === 'object') ? it.props : {};
+      const effProps = Mass.partProps(it);
+      const psec = h('div', { class: 'section part-props-sec', id: 'part-props-sec', 'data-help': 'partProps' }, h('div', { class: 'section-h' }, T('panel.partProps.title')));
+      const row1 = h('div', { class: 'fields' });
+      row1.append(UI.textField({
+        id: 'p-partno',
+        label: T('panel.partProps.partNo'),
+        value: ownProps.partNo || '',
+        placeholder: (isRef && !ownProps.partNo && effProps.partNo) ? effProps.partNo : T('panel.partProps.partNoPh'),
+        onCommit: (v) => Mass.setPartProps(it.id, { partNo: v }),
+      }));
+      const priceWrap = h('div', { class: 'field' }, h('label', { for: 'p-price' }, T('panel.partProps.price')));
+      const priceBox = h('div', { class: 'inp' });
+      const priceVal = typeof ownProps.price === 'number' && isFinite(ownProps.price) ? Mass.fmtPriceNum(ownProps.price) : '';
+      const pricePh = (isRef && ownProps.price == null && effProps.price != null) ? Mass.fmtPriceNum(effProps.price) : T('panel.partProps.pricePh');
+      const priceInp = h('input', { id: 'p-price', type: 'text', inputmode: 'decimal', value: priceVal, placeholder: pricePh, autocomplete: 'off', spellcheck: 'false' });
+      priceBox.append(priceInp, h('span', { class: 'unit' }, '€'));
+      priceWrap.append(priceBox);
+      let priceOrig = priceInp.value, priceLastBad = null;
+      const commitPrice = () => {
+        const raw = priceInp.value.trim();
+        if (raw === priceOrig) { priceBox.classList.remove('invalid'); priceLastBad = null; return; }
+        const pv = Mass.parsePrice(raw);
+        if (Number.isNaN(pv)) {
+          priceBox.classList.add('invalid');
+          if (priceLastBad !== raw) UI.toast(T('panel.partProps.priceErr'), { kind: 'bad' });
+          priceLastBad = raw;
+          return;
+        }
+        priceBox.classList.remove('invalid');
+        priceLastBad = null;
+        priceOrig = pv != null ? Mass.fmtPriceNum(pv) : '';
+        priceInp.value = priceOrig;
+        Mass.setPartProps(it.id, { price: pv });
+      };
+      priceInp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { commitPrice(); priceInp.blur(); }
+        if (e.key === 'Escape') { priceInp.value = priceOrig; priceBox.classList.remove('invalid'); priceLastBad = null; priceInp.blur(); }
+      });
+      priceInp.addEventListener('change', commitPrice);
+      priceInp.addEventListener('blur', commitPrice);
+      priceInp.addEventListener('focus', () => priceInp.select());
+      row1.append(priceWrap);
+      psec.append(row1);
+      const row2 = h('div', { style: { marginTop: '6px' } }, UI.textField({
+        id: 'p-supplier',
+        label: T('panel.partProps.supplier'),
+        value: ownProps.supplier || '',
+        placeholder: (isRef && !ownProps.supplier && effProps.supplier) ? effProps.supplier : T('panel.partProps.supplierPh'),
+        onCommit: (v) => Mass.setPartProps(it.id, { supplier: v }),
+      }));
+      const row3 = h('div', { style: { marginTop: '6px' } }, UI.textField({
+        id: 'p-desc',
+        label: T('panel.partProps.desc'),
+        value: ownProps.desc || '',
+        placeholder: (isRef && !ownProps.desc && effProps.desc) ? effProps.desc : T('panel.partProps.descPh'),
+        onCommit: (v) => Mass.setPartProps(it.id, { desc: v }),
+      }));
+      psec.append(row2, row3);
+      w.append(psec);
     }
     // Mehr
     const more = h('button', { type: 'button', class: 'more', 'aria-expanded': 'false' }); more.innerHTML = icon('chevR') + esc(T('panel.item.moreOpts'));

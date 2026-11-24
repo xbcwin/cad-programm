@@ -1901,6 +1901,11 @@ const HELP = {
   "tip": "Prüft alle Teile der Baugruppe paarweise auf Durchdringungen und listet jede Überschneidung",
   "hilfe": "Sucht in der ganzen Baugruppe nach Stellen, an denen zwei Teile ineinanderstecken. Jedes betroffene Paar erscheint in einer Liste mit seinem Überschneidungs-Volumen. Klickst du auf einen Eintrag, springt die Kamera direkt hin und hebt den gemeinsamen Überschneidungskörper rot hervor.",
   "tipp": "Teile, die sich nur exakt Fläche an Fläche berühren, werden nicht als Fehler gemeldet – nur echte Überschneidungen mit Volumen."
+ },
+ "partProps": {
+  "tip": "Teilenummer, Beschreibung, Lieferant und Stückpreis für dieses Teil eintragen",
+  "hilfe": "Hier hinterlegst du feste Angaben zum Teil – wie Teilenummer, kurze Beschreibung, Lieferant und Stückpreis in Euro. Alle Werte erscheinen als eigene Spalten in der Stückliste und im CSV-Export, und die Stückliste rechnet automatisch den Gesamtpreis aller Teile aus.",
+  "tipp": "Gleiche Teile mit denselben Angaben werden in der Stückliste automatisch zusammengefasst und mit ihrer Stückzahl malgenommen."
  }
 };
 
