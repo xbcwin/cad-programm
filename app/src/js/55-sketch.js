@@ -50,6 +50,11 @@ const Sketch = (() => {
   const hintFor = (id) => {
     if (!id) return null;
     if (id.startsWith('c:')) { const k = id.slice(2); return `<b>${cname(k)}:</b> ${chint(k)}`; }
+    if (id === 'dim' && S) {
+      if (S.dimMode === 'arcLen') return T('sk.hint.dimArcLen');
+      if (S.dimMode === 'ang3') return T('sk.hint.dimAng3_' + Math.min(2, (S.dimPicks || []).length));
+      if (S.dimMode === 'ord') return T(S.ordBase ? 'sk.hint.dimOrd1' : 'sk.hint.dimOrd0');
+    }
     return T('sk.hint.' + id);
   };
   const CICON = Object.fromEntries(CTOOLS.map((t) => [t.id, t.icon]));
@@ -362,7 +367,7 @@ const Sketch = (() => {
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
     S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
-    S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
+    S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
     ensureSketchFonts(S.tool === 'text' ? S.txt.font : null);
@@ -435,12 +440,21 @@ const Sketch = (() => {
   }
   function clearSel() { if (!S) return; S.sels = []; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
+  const isSimpleMode = () => typeof ViewPrefs !== 'undefined' && ViewPrefs.level === 'simple';
+  function setDimMode(mode) {
+    if (!S || !['auto', 'arcLen', 'ang3', 'ord'].includes(mode)) return false;
+    if (mode === 'ord' && isSimpleMode()) return false;
+    S.dimMode = mode; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; hideDimBox();
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
+    return true;
+  }
   function setTool(id) {
     if (!S) return;
     commitDraftPolyline();
     clearBand();
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
-    S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; hideEntry(); hideDimBox();
+    S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; hideEntry(); hideDimBox();
+    if (isSimpleMode() && S.dimMode === 'ord') S.dimMode = 'auto';
     S.mir = null; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
     Viewer.highlightFace('hover', null, null);
     if (id !== 'select') clearSel();
@@ -585,7 +599,7 @@ const Sketch = (() => {
   function sketchUndo() {
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.dimPicks = []; S.ordBase = null; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
   function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); App.emit('sketch'); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
@@ -621,14 +635,22 @@ const Sketch = (() => {
   }
   let entList = null;
   const ent = (id) => (entList || S.ents).find((x) => x.id === id);
+  const isAngDim = (k) => k === 'ang' || k === 'angLL' || k === 'ang3';
+  const dimSpecOf = (dm) => (dm.refs ? { k: dm.k, refs: dm.refs, ...(dm.k === 'ord' ? { ...(dm.sg != null ? { sg: dm.sg } : {}), ...(dm.axis ? { axis: dm.axis } : {}) } : {}) } : { e: dm.e, k: dm.k });
   const sameRefs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const specMatch = (d, sp) => d.k === sp.k && (sp.e ? d.e === sp.e : !!d.refs && sameRefs(d.refs, sp.refs));
+  const specMatch = (d, sp) => d.k === sp.k && (sp.e ? d.e === sp.e : !!d.refs && sameRefs(d.refs, sp.refs) && (sp.k !== 'ord' || (d.axis || null) === (sp.axis || null)));
   function dimFind(sp) { return S.dims.find((d) => specMatch(d, sp)) || null; }
   function dimOf(eid, k) { return dimFind({ e: eid, k }); }
   function putDimSpec(sp, v, ref = false) {
     const old = dimFind(sp);
-    if (old) { old.v = v; if (ref) old.ref = true; else delete old.ref; }
-    else S.dims.push({ ...(sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v }), ...(ref ? { ref: true } : {}) });
+    if (old) {
+      old.v = v; if (ref) old.ref = true; else delete old.ref;
+      if (sp.k === 'ord') { if (sp.sg != null) old.sg = sp.sg; if (sp.axis) old.axis = sp.axis; }
+    } else {
+      const dm = sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v, ...(sp.k === 'ord' ? { ...(sp.sg != null ? { sg: sp.sg } : {}), ...(sp.axis ? { axis: sp.axis } : {}) } : {}) };
+      if (ref) dm.ref = true;
+      S.dims.push(dm);
+    }
     App.emit('sketch');
   }
   // Maß nur zum Ablesen (Referenzmaß): steht in Klammern, zeigt den Wert, legt aber nichts fest
@@ -643,13 +665,13 @@ const Sketch = (() => {
   function setDimSpec(sp, v) {
     if (sp.e && !ent(sp.e)) return false;
     const n = Model.num(v, vars(), NaN);
-    const signed = sp.k === 'ang' || sp.k === 'x' || sp.k === 'y';
-    const zeroOk = sp.k === 'dist' || sp.k === 'distPL' || sp.k === 'angLL';
-    if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || (sp.k === 'angLL' && n > 180)) { UI.toast(T('sk.toast.badVal', { v }), { kind: 'bad' }); return false; }
+    const signed = sp.k === 'ang' || sp.k === 'x' || sp.k === 'y' || sp.k === 'ord';
+    const zeroOk = sp.k === 'dist' || sp.k === 'distPL' || sp.k === 'angLL' || sp.k === 'ang3';
+    if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || ((sp.k === 'angLL' || sp.k === 'ang3') && n > 180)) { UI.toast(T('sk.toast.badVal', { v }), { kind: 'bad' }); return false; }
     if (typeof v === 'string' && !Expr.names(v).length) v = round(n, 4);   // reine Rechnung wie 10*3 → 30
     if (sp.k !== 'n') {
       const others = S.dims.filter((d) => !specMatch(d, sp));
-      const candDim = sp.e ? { id: '_neu', e: sp.e, k: sp.k, v } : { id: '_neu', k: sp.k, refs: sp.refs, v };
+      const candDim = sp.e ? { id: '_neu', e: sp.e, k: sp.k, v } : { id: '_neu', k: sp.k, refs: sp.refs, v, ...(sp.k === 'ord' ? { ...(sp.sg != null ? { sg: sp.sg } : {}), ...(sp.axis ? { axis: sp.axis } : {}) } : {}) };
       const tr = Solver.trial({ ents: S.ents, cons: S.cons, dims: [...others, candDim], dimsBefore: others }, vars());
       if (!tr.ok) {
         recordConflict({ kind: 'dim', sp, v, raw: candDim }, { ents: S.ents, cons: S.cons, dims: [...others, candDim] }, '_neu');
@@ -806,7 +828,7 @@ const Sketch = (() => {
       for (const k of ['pts', 'onP']) if (Array.isArray(e[k])) e[k].forEach(P);
       for (const k of ['r', 'rx', 'ry', 'bend', 'os', 'sp'].concat(e.type === 'text' ? ['h'] : [])) if (typeof e[k] === 'number') e[k] = round(e[k] * f, 4);
     }
-    for (const d of S.dims) { if (d.k === 'ang' || d.k === 'angLL' || d.k === 'n') continue; d.v = typeof d.v === 'number' ? round(d.v * f, 4) : `(${d.v})*${fs}`; }
+    for (const d of S.dims) { if (isAngDim(d.k) || d.k === 'n') continue; d.v = typeof d.v === 'number' ? round(d.v * f, 4) : `(${d.v})*${fs}`; }
     for (const c of S.cons) {
       for (const k of c.type === 'offset' ? ['v'] : c.type === 'xform' && c.mode !== 'rot' ? ['dx', 'dy'] : []) c[k] = typeof c[k] === 'number' ? round(c[k] * f, 4) : c[k] != null ? `(${c[k]})*${fs}` : c[k];
       if (Array.isArray(c.at)) P(c.at);
@@ -826,6 +848,7 @@ const Sketch = (() => {
     S.dims = S.dims.filter((d) => d.e !== id && !(d.refs || []).some((r) => usesEnt(r, id)));
     S.cons = S.cons.filter((c) => !conRefs(c).some((r) => usesEnt(r, id)));
     if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== id);
+    if (S.ordBase && S.ordBase.ref && S.ordBase.ref.e === id) S.ordBase = null;
     S.patSel = (S.patSel || []).filter((x) => x !== id);
   }
   function deleteEnts(ids) {
@@ -931,6 +954,25 @@ const Sketch = (() => {
     if (sp.k === 'dist') { const a = refXY(r0), b = refXY(r1); return a && b ? SK.d2(a, b) : NaN; }
     if (sp.k === 'distPL') { const p = refXY(r0), L = refLine(r1); if (!p || !L) return NaN; const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1]; return Math.abs((p[0] - L[0][0]) * dy - (p[1] - L[0][1]) * dx) / (Math.hypot(dx, dy) || 1); }
     if (sp.k === 'angLL') { const A = refLine(r0), B = refLine(r1); if (!A || !B) return NaN; const ux = A[1][0] - A[0][0], uy = A[1][1] - A[0][1], vx = B[1][0] - B[0][0], vy = B[1][1] - B[0][1]; return (Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy) * 180) / Math.PI; }
+    if (sp.k === 'ang3') {
+      const a = refXY(sp.refs[0]), v0 = refXY(sp.refs[1]), b = refXY(sp.refs[2]);
+      if (!a || !v0 || !b) return NaN;
+      const ux = a[0] - v0[0], uy = a[1] - v0[1], wx = b[0] - v0[0], wy = b[1] - v0[1];
+      if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(wx, wy) < 1e-12) return NaN;
+      return (Math.atan2(Math.abs(ux * wy - uy * wx), ux * wx + uy * wy) * 180) / Math.PI;
+    }
+    if (sp.k === 'ord') {
+      const p = refXY(r0); if (!p) return NaN;
+      const sg = sp.sg === -1 ? -1 : 1;
+      const Ln = refLine(r1);
+      if (Ln) {
+        const dx = Ln[1][0] - Ln[0][0], dy = Ln[1][1] - Ln[0][1];
+        return sg * (-(p[0] - Ln[0][0]) * dy + (p[1] - Ln[0][1]) * dx) / (Math.hypot(dx, dy) || 1);
+      }
+      const o = refXY(r1); if (!o) return NaN;
+      const ax = sp.axis === 'y' ? 1 : 0;
+      return sg * (p[ax] - o[ax]);
+    }
     return NaN;
   }
   // ---------- Regeln hinzufügen ----------
@@ -1026,11 +1068,11 @@ const Sketch = (() => {
   // kleines Eingabefeld direkt im Bild
   let dimBox = null;
   function hideDimBox() { if (dimBox) { dimBox.remove(); dimBox = null; } }
-  const DIMLABEL = (k) => SK.DIMNAME[k] || { dist: T('sk.dim.dist'), distPL: T('sk.dim.distPL'), angLL: T('sk.dim.angLL'), r: T('sk.dim.r') }[k] || T('sk.dim.fallback');
+  const DIMLABEL = (k) => SK.DIMNAME[k] || { dist: T('sk.dim.dist'), distPL: T('sk.dim.distPL'), angLL: T('sk.dim.angLL'), ang3: T('sk.dim.ang3'), r: T('sk.dim.r'), arcLen: T('sk.dim.arcLen'), ord: T('sk.dim.ord') }[k] || T('sk.dim.fallback');
   function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
     const cur = dimFind(sp);
-    const isAng = sp.k === 'ang' || sp.k === 'angLL';
+    const isAng = isAngDim(sp.k);
     const isLen = !isAng && sp.k !== 'n';
     const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 6);
     const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : sp.k === 'n' ? String(Math.round(rawNum)) : fmtFixed(rawNum, Math.max(4, FMT.angle))) : rawNum;
@@ -1039,6 +1081,15 @@ const Sketch = (() => {
     const inp = h('input', { type: 'text', value: val, 'aria-label': DIMLABEL(sp.k), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
     const lbl = DIMLABEL(sp.k) + (isLen && Units.key() !== 'mm' ? ' (' + Units.label() + ')' : '');
     dimBox.append(h('label', null, lbl, inp));
+    if (sp.e && (sp.k === 'r' || sp.k === 'arcLen')) {
+      const en = ent(sp.e);
+      if (en && en.type === 'arc') {
+        const nk = sp.k === 'r' ? 'arcLen' : 'r';
+        const ab = h('button', { type: 'button', class: 'dimlock', id: 'dim-arc-toggle', 'data-tip': T(sp.k === 'r' ? 'sk.dimBox.toArcLen' : 'sk.dimBox.toRadius'), 'aria-label': T(sp.k === 'r' ? 'sk.dimBox.toArcLen' : 'sk.dimBox.toRadius') }, sp.k === 'r' ? '⌒' : 'R');
+        ab.onclick = () => askDim({ e: sp.e, k: nk }, clientX, clientY);
+        dimBox.append(ab);
+      }
+    }
     if (sp.k !== 'n' && !(cur && cur.ref)) {
       // Knopf „( )“: nur ablesen statt festlegen
       const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': T('sk.dimBox.refTip'), 'aria-label': T('sk.dimBox.refAria') }, '( )');
@@ -1700,6 +1751,80 @@ const Sketch = (() => {
     let p = sn.p;
     const t = S.tool;
     if (t === 'dim') {
+      const dmMode = (S.dimMode === 'ord' && isSimpleMode()) ? 'auto' : (S.dimMode || 'auto');
+      const dimPointOf = (q) => {
+        if (!q) return null;
+        if (q.kind === 'point') return { ref: q.ref, xy: q.xy };
+        if (q.ent && (q.ent.type === 'circle' || q.ent.type === 'arc' || q.ent.type === 'poly' || q.ent.type === 'ellipse')) {
+          const xy = refXY({ e: q.ent.id, p: 'c' });
+          return xy ? { ref: { e: q.ent.id, p: 'c' }, xy } : null;
+        }
+        return null;
+      };
+      if (dmMode === 'arcLen') {
+        const pk = pickAt(uv0, { points: false });
+        if (!pk || !pk.ent || pk.ent.type !== 'arc' || !SK.arcInfo(pk.ent.a, pk.ent.m, pk.ent.b)) {
+          UI.toast(T('sk.toast.arcLenPickArc'), { icon: 'info', ms: 2000 }); render(); return;
+        }
+        e.preventDefault(); setSel([pk.ent.id]); render(); Panels.renderRight();
+        askDim({ e: pk.ent.id, k: 'arcLen' }, e.clientX, e.clientY); return;
+      }
+      if (dmMode === 'ang3') {
+        const pk = pickAt(uv0);
+        const pt = dimPointOf(pk);
+        if (!pt) { UI.toast(T('sk.toast.ang3PickPt'), { icon: 'info', ms: 2000 }); render(); return; }
+        if ((S.dimPicks || []).some((x) => sameRefs(x.ref, pt.ref) || SK.d2(x.xy, pt.xy) < 1e-6)) {
+          UI.toast(T('sk.toast.ang3SamePt'), { icon: 'info', ms: 1800 }); return;
+        }
+        S.dimPicks.push(pt);
+        if (S.dimPicks.length < 3) { hideDimBox(); UI.hint(hintFor('dim')); render(); return; }
+        const refs = S.dimPicks.map((x) => x.ref);
+        S.dimPicks = [];
+        e.preventDefault(); UI.hint(hintFor('dim'));
+        askDim({ k: 'ang3', refs }, e.clientX, e.clientY); render(); return;
+      }
+      if (dmMode === 'ord') {
+        const pk = pickAt(uv0);
+        if (!pk) { UI.toast(T(S.ordBase ? 'sk.toast.ordPickPoint' : 'sk.toast.ordPickBase'), { icon: 'info', ms: 2000 }); render(); return; }
+        if (!S.ordBase) {
+          if (pk.kind !== 'line' && pk.kind !== 'point') { UI.toast(T('sk.toast.ordPickBase'), { icon: 'info', ms: 2000 }); return; }
+          const ex = S.dims.find((d) => d.k === 'ord' && d.refs && sameRefs(d.refs[1], pk.ref));
+          S.ordBase = { ref: pk.ref, kind: pk.kind, sg: ex && ex.sg != null ? ex.sg : null, axis: pk.kind === 'point' ? (ex && ex.axis ? ex.axis : (S.ordAxis || 'auto')) : null, xy: pk.xy || null, ent: pk.ent || null };
+          hideDimBox(); UI.hint(hintFor('dim')); render(); Panels.renderRight(); return;
+        }
+        let pt = dimPointOf(pk);
+        if (!pt && S.ordBase.kind === 'line' && pk.kind === 'line' && !sameRefs(pk.ref, S.ordBase.ref)) {
+          const pRef = pk.ent.type === 'rect' ? { e: pk.ent.id, p: 'k' + (pk.ref.edge || 0) } : { e: pk.ent.id, p: 'a' };
+          const xy = refXY(pRef);
+          if (xy) pt = { ref: pRef, xy };
+        }
+        if (!pt || sameRefs(pt.ref, S.ordBase.ref)) { UI.toast(T('sk.toast.ordPickPoint'), { icon: 'info', ms: 2000 }); return; }
+        let axis = S.ordBase.axis;
+        if (S.ordBase.kind === 'point' && (!axis || axis === 'auto')) {
+          const o = refXY(S.ordBase.ref) || [0, 0];
+          axis = Math.abs(pt.xy[0] - o[0]) >= Math.abs(pt.xy[1] - o[1]) ? 'x' : 'y';
+          S.ordBase.axis = axis;
+        }
+        if (S.ordBase.sg == null) {
+          if (S.ordBase.kind === 'line') {
+            const Ln = refLine(S.ordBase.ref);
+            if (Ln) {
+              const dx = Ln[1][0] - Ln[0][0], dy = Ln[1][1] - Ln[0][1];
+              const raw = -(pt.xy[0] - Ln[0][0]) * dy + (pt.xy[1] - Ln[0][1]) * dx;
+              if (Math.abs(raw) > 1e-6 * (Math.hypot(dx, dy) || 1)) S.ordBase.sg = raw >= 0 ? 1 : -1;
+              else S.ordBase.sg = Math.abs(dy) >= Math.abs(dx) ? (-dy >= 0 ? 1 : -1) : (dx >= 0 ? 1 : -1);
+            }
+          } else {
+            const o = refXY(S.ordBase.ref) || [0, 0];
+            const ax = axis === 'y' ? 1 : 0;
+            const raw = pt.xy[ax] - o[ax];
+            S.ordBase.sg = Math.abs(raw) > 1e-6 ? (raw >= 0 ? 1 : -1) : 1;
+          }
+        }
+        e.preventDefault();
+        askDim({ k: 'ord', refs: [pt.ref, S.ordBase.ref], sg: S.ordBase.sg, ...(S.ordBase.kind === 'point' ? { axis } : {}) }, e.clientX, e.clientY);
+        render(); return;
+      }
       const pk = pickAt(uv0);
       if (!pk) { S.dimFirst = null; UI.toast('Klick genau auf eine Linie, einen Kreis oder einen Punkt.', { icon: 'info', ms: 1800 }); render(); return; }
       const f = S.dimFirst;
@@ -2855,7 +2980,7 @@ const Sketch = (() => {
       }
       S.cursor = null; render(); return;
     }
-    if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
+    if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' && !(S.tool === 'dim' && S.dimMode === 'arcLen') }); S.cursor = null; render(); return; }
     if (S.tool === 'select') { S.cursor = null; if (isLoftLine()) loftPreview(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
@@ -3058,7 +3183,7 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
-    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(hintFor(S.tool)); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
+    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
     if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc') && S.patSel.length) { createPattern(); return true; }
@@ -3176,6 +3301,15 @@ const Sketch = (() => {
       // gewählte und überfahrene Punkte
       for (const p of S.picks) if (p.kind === 'point') ring(p.xy, pxSize() * 5, acc, 2.6);
       if (S.dimFirst && S.dimFirst.kind === 'point') ring(S.dimFirst.xy, pxSize() * 5, acc, 2.6);
+      for (let i = 0; i < (S.dimPicks || []).length; i++) {
+        const dp = S.dimPicks[i];
+        ring(dp.xy, pxSize() * (i === 1 ? 6 : 5), acc, 2.6);
+      }
+      if ((S.dimPicks || []).length === 2) lineObj([S.dimPicks[1].xy, S.dimPicks[0].xy], acc, 1.5, { dashed: true, dash: 1.5, gap: 1.2 });
+      if (S.ordBase) {
+        if (S.ordBase.kind === 'line') { const Ln = refLine(S.ordBase.ref); if (Ln) lineObj(Ln, acc, 3.8, { order: 27 }); }
+        else { const q = refXY(S.ordBase.ref); if (q) ring(q, pxSize() * 6, acc, 2.8); }
+      }
       if (hov && hov.kind === 'point') ring(hov.xy, pxSize() * 4.5, acc, 1.8);
       if (hov && hov.kind === 'refent') for (const p of entPts(hov.ent)) lineObj(p, acc, 3, { order: 26 });
       // feste Maße als Schildchen, anklicken zum Ändern
@@ -3202,27 +3336,38 @@ const Sketch = (() => {
         }
       }
       const placed = [];   // Schildchen, die schon stehen – neue rücken nach unten, statt sie zu verdecken
+      const ordInfo = !S.step ? ordLayout(S.dims) : { zeros: [], map: new Map() };
+      const placeBadge = (el, uv) => {
+        $('#overlay').append(el); labels.push(el);
+        const spx = Viewer.toScreen(toWorld(uv[0], uv[1]));
+        const br = el.getBoundingClientRect();
+        const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18;
+        let ly = spx.y;
+        for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
+        placed.push([spx.x, ly, lw, lh]);
+        el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+      };
+      for (const z of ordInfo.zeros) {
+        if (z.line) lineObj(z.line, acc, 1, { dashed: true, opacity: 0.7, dash: 1.2, gap: 1.2 });
+        const el = h('div', { class: 'skdim ord-zero', 'data-tip': T('sk.dim.ordZeroTip') }, '0');
+        placeBadge(el, z.p);
+        el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+      }
       if (!S.step) for (const dm of S.dims) {
-        const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
-        const pos = dimPosSpec(dm); if (!pos) continue;
-        if (pos.line) lineObj(pos.line, confFocusId === dm.id ? '#e03131' : acc, confFocusId === dm.id ? 2 : 1, { dashed: true, opacity: confFocusId === dm.id ? 0.95 : 0.7, dash: 1.2, gap: 1.2 });
+        const sp = dimSpecOf(dm);
+        const pos = dimPosSpec(dm, ordInfo.map); if (!pos) continue;
+        for (const ln of pos.lines || (pos.line ? [pos.line] : [])) lineObj(ln, confFocusId === dm.id ? '#e03131' : acc, confFocusId === dm.id ? 2 : 1, { dashed: true, opacity: confFocusId === dm.id ? 0.95 : 0.7, dash: 1.2, gap: 1.2 });
         const val = measureSpec(sp);
         const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
         const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
-        const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-        const isAng = dm.k === 'ang' || dm.k === 'angLL';
+        const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ', arcLen: '⌒ ' }[dm.k] || '';
+        const isAng = isAngDim(dm.k);
         const isLen = !isAng && dm.k !== 'n';
         const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
         const valTxt = isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val));
         const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
         el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
-        $('#overlay').append(el); labels.push(el);
-        const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-        const br = el.getBoundingClientRect();
-        const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18; let ly = spx.y;
-        for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
-        placed.push([spx.x, ly, lw, lh]);
-        el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+        placeBadge(el, pos.p);
         el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
         el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
       }
@@ -3231,21 +3376,15 @@ const Sketch = (() => {
         const pd = S.conflict.pending.raw;
         const pos = dimPosSpec(pd);
         if (pos) {
-          if (pos.line) lineObj(pos.line, '#e03131', 1.5, { dashed: true, opacity: 0.9, dash: 1.2, gap: 1.2 });
+          for (const ln of pos.lines || (pos.line ? [pos.line] : [])) lineObj(ln, '#e03131', 1.5, { dashed: true, opacity: 0.9, dash: 1.2, gap: 1.2 });
           const val = Model.num(pd.v, vars(), NaN);
-          const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[pd.k] || '';
-          const isAng = pd.k === 'ang' || pd.k === 'angLL';
+          const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ', arcLen: '⌒ ' }[pd.k] || '';
+          const isAng = isAngDim(pd.k);
           const isLen = !isAng && pd.k !== 'n';
           const unit = isAng ? '°' : pd.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
           const valTxt = isFinite(val) ? (isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val))) : String(pd.v);
           const el = h('div', { class: 'skdim bad conf-pending' + (confFocusId === '_neu' ? ' conf-focus' : ''), 'data-tip': 'Neues widersprüchliches Maß – klicken zum Hervorheben', dataset: { dim: '_neu' } }, pre + valTxt + unit);
-          $('#overlay').append(el); labels.push(el);
-          const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-          const br = el.getBoundingClientRect();
-          const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18; let ly = spx.y;
-          for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
-          placed.push([spx.x, ly, lw, lh]);
-          el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+          placeBadge(el, pos.p);
           el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
           el.addEventListener('click', () => focusConflictItem('_neu'));
         }
@@ -3311,14 +3450,14 @@ const Sketch = (() => {
             }
           }
           for (const dm of ad.dims) {
-            const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
+            const sp = dimSpecOf(dm);
             const pos = dimPosSpec(dm); if (!pos) continue;
             const en = dm.e ? ent(dm.e) : null;
             const gd = dimGuide(en, dm.k, pos);
             if (gd) lineObj(gd, acc, 1.3, { dashed: true, opacity: 0.85, dash: 1.4, gap: 1.2, order: 27 });
             const val = measureSpec(sp);
-            const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-            const isAng = dm.k === 'ang' || dm.k === 'angLL';
+            const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ', arcLen: '⌒ ' }[dm.k] || '';
+            const isAng = isAngDim(dm.k);
             const isLen = !isAng && dm.k !== 'n';
             const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
             const dv = isFinite(val) ? val : dm.v;
@@ -3571,7 +3710,42 @@ const Sketch = (() => {
     }
     return out;
   }
-  function dimPosSpec(dm) {
+  function ordDir(baseRef, axis) {
+    const Ln = refLine(baseRef);
+    if (Ln) {
+      const dx = Ln[1][0] - Ln[0][0], dy = Ln[1][1] - Ln[0][1], L = Math.hypot(dx, dy) || 1;
+      const sg = (Math.abs(dy) >= Math.abs(dx) ? dy : dx) >= 0 ? 1 : -1;
+      return [(sg * dx) / L, (sg * dy) / L];
+    }
+    return axis === 'y' ? [1, 0] : [0, 1];
+  }
+  function ordLayout(dims) {
+    const groups = new Map(), zeros = [], map = new Map();
+    for (const dm of dims || []) {
+      if (dm.k !== 'ord' || !dm.refs || dm.refs.length < 2) continue;
+      const p = refXY(dm.refs[0]); if (!p) continue;
+      const Ln = refLine(dm.refs[1]), o = Ln ? null : refXY(dm.refs[1]);
+      if (!Ln && !o) continue;
+      const key = JSON.stringify(dm.refs[1]) + '|' + (dm.axis || '');
+      if (!groups.has(key)) groups.set(key, { u: ordDir(dm.refs[1], dm.axis), basePts: Ln ? [Ln[0], Ln[1]] : [o], items: [] });
+      groups.get(key).items.push({ dm, p });
+    }
+    const pad = pxSize() * 24;
+    for (const g of groups.values()) {
+      const u = g.u, dot = (q) => q[0] * u[0] + q[1] * u[1];
+      let tBar = -Infinity;
+      for (const q of g.basePts) tBar = Math.max(tBar, dot(q));
+      for (const it of g.items) tBar = Math.max(tBar, dot(it.p));
+      tBar += pad;
+      const bPt = g.basePts.reduce((a, b) => (dot(b) > dot(a) ? b : a), g.basePts[0]);
+      const proj = (q) => { const dt = tBar - dot(q); return [q[0] + dt * u[0], q[1] + dt * u[1]]; };
+      const q0 = proj(bPt);
+      zeros.push({ p: q0, line: [bPt, q0] });
+      for (const it of g.items) { const q = proj(it.p); map.set(it.dm.id, { p: q, line: [it.p, q] }); }
+    }
+    return { zeros, map };
+  }
+  function dimPosSpec(dm, ordMap) {
     if (!dm.refs) { const en = ent(dm.e); return en ? dimPos(en, dm.k) : null; }
     const px = pxSize(); const [r0, r1] = dm.refs;
     if (dm.k === 'dist') { const a = refXY(r0), b = refXY(r1); if (!a || !b) return null; const L = SK.d2(a, b) || 1; const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L; return { p: [(a[0] + b[0]) / 2 + nx * px * 14, (a[1] + b[1]) / 2 + ny * px * 14], line: [a, b] }; }
@@ -3580,6 +3754,26 @@ const Sketch = (() => {
       const A = refLine(r0), B = refLine(r1); if (!A || !B) return null;
       const ma = [(A[0][0] + A[1][0]) / 2, (A[0][1] + A[1][1]) / 2], mb = [(B[0][0] + B[1][0]) / 2, (B[0][1] + B[1][1]) / 2];
       return { p: [(ma[0] + mb[0]) / 2, (ma[1] + mb[1]) / 2] };
+    }
+    if (dm.k === 'ang3') {
+      const a = refXY(r0), v0 = refXY(r1), b = refXY(dm.refs[2]);
+      if (!a || !v0 || !b) return null;
+      const la = SK.d2(v0, a), lb = SK.d2(v0, b);
+      if (la < 1e-6 || lb < 1e-6) return null;
+      const t0 = Math.atan2(a[1] - v0[1], a[0] - v0[0]);
+      const t1 = Math.atan2(b[1] - v0[1], b[0] - v0[0]);
+      const d = ((t1 - t0 + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+      const ra = clamp(Math.min(la, lb) * 0.45, px * 14, Math.max(px * 14, Math.min(la, lb) * 0.8));
+      const arcPts = [];
+      for (let i = 0; i <= 16; i++) { const t = t0 + (d * i) / 16; arcPts.push([v0[0] + Math.cos(t) * ra, v0[1] + Math.sin(t) * ra]); }
+      const tm = t0 + d / 2, rt = ra + px * 14;
+      return { p: [v0[0] + Math.cos(tm) * rt, v0[1] + Math.sin(tm) * rt], lines: [arcPts, [v0, a], [v0, b]] };
+    }
+    if (dm.k === 'ord') {
+      if (ordMap && dm.id && ordMap.has(dm.id)) return ordMap.get(dm.id);
+      const p = refXY(r0); if (!p) return null;
+      const u = ordDir(r1, dm.axis), q = [p[0] + u[0] * px * 24, p[1] + u[1] * px * 24];
+      return { p: q, line: [p, q] };
     }
     return null;
   }
@@ -3602,7 +3796,16 @@ const Sketch = (() => {
       if (k === 'w') return { p: [(x0 + x1) / 2, y0 - px * 16] };
       if (k === 'h') return { p: [x1 + px * 26, (y0 + y1) / 2] };
     }
-    if (en.type === 'arc' && k === 'r') { const ai = SK.arcInfo(en.a, en.m, en.b); if (!ai) return null; const d = SK.d2(en.m, ai.c) || 1; const q = px * 16; return { p: [en.m[0] + (en.m[0] - ai.c[0]) / d * q, en.m[1] + (en.m[1] - ai.c[1]) / d * q], line: [ai.c, en.m] }; }
+    if (en.type === 'arc' && (k === 'r' || k === 'arcLen')) {
+      const ai = SK.arcInfo(en.a, en.m, en.b); if (!ai) return null;
+      if (k === 'arcLen') {
+        const r = ai.r + px * 12, n = 24, pts = [];
+        for (let i = 0; i <= n; i++) { const t = ai.a0 + (ai.sweep * i) / n; pts.push([ai.c[0] + Math.cos(t) * r, ai.c[1] + Math.sin(t) * r]); }
+        const tm = ai.a0 + ai.sweep / 2, rl = r + px * 12;
+        return { p: [ai.c[0] + Math.cos(tm) * rl, ai.c[1] + Math.sin(tm) * rl], line: pts };
+      }
+      const d = SK.d2(en.m, ai.c) || 1; const q = px * 16; return { p: [en.m[0] + (en.m[0] - ai.c[0]) / d * q, en.m[1] + (en.m[1] - ai.c[1]) / d * q], line: [ai.c, en.m] };
+    }
     if (en.type === 'text' && k === 'h') { const tb = SK.textBox(en); if (!tb) return null; const r = en.rot || 0; return { p: [tb.c[0] - Math.sin(r) * (tb.h / 2 + px * 14), tb.c[1] + Math.cos(r) * (tb.h / 2 + px * 14)] }; }
     if (en.type === 'ellipse') { const r = en.rot || 0, cs = Math.cos(r), sn = Math.sin(r); if (k === 'w') return { p: [en.c[0] + cs * (en.rx + px * 16), en.c[1] + sn * (en.rx + px * 16)] }; if (k === 'h') return { p: [en.c[0] - sn * (en.ry + px * 14), en.c[1] + cs * (en.ry + px * 14)] }; }
     if (en.type === 'circle' || en.type === 'poly') {
@@ -3916,7 +4119,7 @@ const Sketch = (() => {
     return `${ENT_TITLES[e.type] || e.type} ${nr > 0 ? nr : ''}`.trim();
   }
   function describeDim(d, entsList) {
-    const isAng = d.k === 'ang' || d.k === 'angLL';
+    const isAng = isAngDim(d.k);
     const num = Model.num(d.v, vars(), NaN);
     const valTxt = isFinite(num) ? (isAng ? fmtAngleU(num) : d.k === 'n' ? String(Math.round(num)) : Units.fmtLenU(num)) : String(d.v);
     const exprPre = typeof d.v === 'string' && Model.isExpr(d.v) ? `${d.v} = ` : '';
@@ -4215,8 +4418,8 @@ const Sketch = (() => {
       }
       else if (sel.type === 'slot') { f.append(dimField('len', T('sk.panel.slotLenMM'), 'mm', { min: 0.01 }), dimField('w', T('param.w'), 'mm', { min: 0.01 })); }
       else if (sel.type === 'arc') {
-        // Radius als Feld: Eintippen legt ihn fest (gilt über „Gleich“ auch für verbundene Bögen)
-        if (SK.arcInfo(sel.a, sel.m, sel.b)) f.append(dimField('r', T('sk.dim.r'), 'mm', { min: 0.01 }));
+        // Radius oder Bogenlänge als Feld: Eintippen legt den Wert fest
+        if (SK.arcInfo(sel.a, sel.m, sel.b)) f.append(dimField('r', T('sk.dim.r'), 'mm', { min: 0.01 }), dimField('arcLen', T('sk.dim.arcLen'), 'mm', { min: 0.01 }));
       }
       w.append(f);
       if (sel.type === 'poly') {
@@ -4301,6 +4504,28 @@ const Sketch = (() => {
         appendFreeInfo();
       }
       w.append(h('div', { class: 'hint-box', html: hintFor(S.tool) }));
+      if (S.tool === 'dim') {
+        if (isSimpleMode() && S.dimMode === 'ord') { S.dimMode = 'auto'; S.ordBase = null; }
+        const opts = [['auto', T('sk.panel.dimAuto')], ['arcLen', T('sk.panel.dimArcLen')], ['ang3', T('sk.panel.dimAng3')]];
+        if (!isSimpleMode()) opts.push(['ord', T('sk.panel.dimOrd')]);
+        const dmField = UI.selectField({ id: 'dm-mode', label: T('sk.panel.dimMode'), value: S.dimMode || 'auto', options: opts, onChange: (v) => setDimMode(v) });
+        dmField.dataset.help = 'dimModes';
+        w.append(dmField);
+        if (S.dimMode === 'ord' && !isSimpleMode()) {
+          const ob = h('div', { class: 'pro', style: { display: 'grid', gap: '6px' }, dataset: { help: 'ordinateDim' } });
+          const baseName = S.ordBase ? (S.ordBase.ref.e === 'origin' ? 'Ursprung' : entName(S.ordBase.ref.e)) : '';
+          ob.append(h('div', { class: S.ordBase ? 'ok-box' : 'hint-box', id: 'dm-ord-status', html: S.ordBase ? T('sk.panel.ordBaseSet', { name: esc(baseName) }) : T('sk.panel.ordBaseNone') }));
+          if (S.ordBase && S.ordBase.kind === 'point') {
+            ob.append(UI.selectField({ id: 'dm-ord-axis', label: T('sk.panel.ordAxis'), value: S.ordBase.axis || 'auto', options: [['auto', T('sk.panel.ordAxisAuto')], ['x', T('sk.panel.ordAxisX')], ['y', T('sk.panel.ordAxisY')]], onChange: (v) => { S.ordAxis = v; if (S.ordBase) S.ordBase.axis = v; render(); } }));
+          }
+          if (S.ordBase) {
+            const rb = h('button', { type: 'button', class: 'btn', id: 'dm-ord-reset' }, T('sk.panel.ordBaseReset'));
+            rb.onclick = () => { S.ordBase = null; UI.hint(hintFor('dim')); render(); Panels.renderRight(); };
+            ob.append(h('div', { class: 'btn-row' }, rb));
+          }
+          w.append(ob);
+        }
+      }
       if (S.tool === 'corner') {
         const C = S.corner;
         const opts = [['fillet', T('sk.panel.cornerFillet')], ['chamfer', T('sk.panel.cornerChamfer')], ['meet', T('sk.panel.cornerMeet')]];
@@ -4525,9 +4750,9 @@ const Sketch = (() => {
           // Alle Maße der Skizze als Tabelle (SK-53): Wert oder Formel direkt ändern
           const TN = { line: T('sk.panel.ent.line'), rect: T('sk.panel.ent.rect'), circle: T('sk.panel.ent.circle'), arc: T('sk.panel.ent.arc'), slot: T('sk.panel.ent.slot'), poly: T('sk.panel.ent.poly'), ellipse: T('sk.panel.ent.ellipse'), text: T('sk.panel.ent.text'), point: T('sk.panel.ent.point'), spline: T('sk.panel.ent.spline') };
           const tbl = h('details', { class: 'section dim-table', id: 'dim-table', 'data-help': 'dimTable' }, h('summary', { class: 'section-h' }, T('sk.panel.allDims', { n: S.dims.length })));
-          const unitOf = (k) => (k === 'ang' || k === 'angLL' ? '°' : k === 'n' ? '' : 'mm');
+          const unitOf = (k) => (isAngDim(k) ? '°' : k === 'n' ? '' : 'mm');
           S.dims.forEach((d, i) => {
-            const sp = d.refs ? { k: d.k, refs: d.refs } : { e: d.e, k: d.k };
+            const sp = dimSpecOf(d);
             const e = d.e ? ent(d.e) : null;
             const nr = e ? S.ents.filter((x) => x.type === e.type).indexOf(e) + 1 : 0;
             const what = (DIMLABEL(d.k) + (e ? ` · ${TN[e.type] || e.type} ${nr}` : '')) + (d.ref ? T('sk.panel.dimReadSuffix') : '');
@@ -5279,6 +5504,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

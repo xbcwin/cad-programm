@@ -2206,6 +2206,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **CSV-Export, Rückgängig, Speichern/Laden & Hilfe**: `Mass.bomCSV()` enthält die Spalten `Teilenummer`, `Beschreibung`, `Lieferant`, `Preis je Stück (€)`, `Preis gesamt (€)` samt `9,00` in der Summenzeile bei einheitlicher Spaltenzahl; Undo/Redo, JSON-Roundtrip und Hilfetext `partProps` arbeiten ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser zwei Teile mit Teilenummer, Beschreibung, Lieferant und Preis versehen, die Stückliste öffnen, eine Zeile zum Auswählen anklicken und die gespeicherte `.csv`-Datei in Excel oder Numbers prüfen.
 
+## Koordinatenmaße, Bogenlänge & Winkel über drei Punkte (Auto [A-095], SK-27, SK-28)
+
+- [x] **Bogenlänge (`arcLen`)**: Im Maß-Werkzeug (D → „Bogenlänge“) einen Kreisbogen auf Länge `30` bemaßen → `SK.measure(…, 'arcLen')` ist `30`, Schild zeigt `⌒ 30`; Änderung über `#se-arcLen` auf `25` und Rückgängig zurück auf `30`.
+- [x] **Winkel über drei Punkte (`ang3`)**: Drei Punkte (Endpunkt, Scheitelpunkt, Endpunkt) auf `60°` bemaßen → gemessener Winkel `60°`, Schild zeigt `60°`, nachträgliches Ändern auf `120°` zieht den Winkel nach.
+- [x] **Koordinatenmaße (Profi, `ord`)**: Nullkante wählen, drei Punkte fortlaufend mit `15`, `25` und `-10` bemaßen → X-Werte folgen samt `0`-Markierung an der Nullkante; im Modus „Einfach“ ausgeblendet, Rückgängig (`Strg+Z`) und Hilfetexte (`dimModes`, `ordinateDim`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser im Profi-Modus beim Werkzeug „Maß“ (D) zwischen „Bogenlänge“, „Winkel über 3 Punkte“ und „Koordinatenmaße“ umschalten und die ausgerichteten Hilfslinien sowie den Umschalter `⌒`/`R` am Bogen prüfen.
+
 ## Fehler melden
 
 ```

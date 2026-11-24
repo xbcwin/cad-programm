@@ -609,15 +609,17 @@ const SK = (() => {
   // Ein Maß ist { id, e: Element-ID, k: Größe, v: Zahl oder Formel }.
   const DIMKEYS = {
     line: ['len', 'ang', 'x', 'y'], point: ['x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
-    poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'], spline: ['x', 'y'],
+    poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'arcLen', 'x', 'y'], spline: ['x', 'y'],
   };
   const DIMNAME = {
     get len() { return T('common.length'); }, get ang() { return T('common.angle'); },
     get w() { return T('common.width'); }, get h() { return T('common.height'); },
     get d() { return T('common.diameter'); }, get n() { return T('param.n'); },
     get x() { return T('sk.panel.dx'); }, get y() { return T('sk.panel.dy'); },
-    get r() { return T('common.radius'); }, get dist() { return T('common.distance'); },
-    get distPL() { return T('common.distance'); }, get angLL() { return T('common.angle'); },
+    get r() { return T('common.radius'); }, get arcLen() { return T('sk.dim.arcLen'); },
+    get dist() { return T('common.distance'); }, get distPL() { return T('common.distance'); },
+    get angLL() { return T('common.angle'); }, get ang3() { return T('sk.dim.ang3'); },
+    get ord() { return T('sk.dim.ord'); },
   };
   const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a');
   const anchorOf = (e) => (e.type === 'spline' ? e.pts[0] : e[anchorKey(e)]);
@@ -629,6 +631,7 @@ const SK = (() => {
       case 'h': return e.type === 'text' ? e.h : e.type === 'ellipse' ? 2 * e.ry : Math.abs(e.b[1] - e.a[1]);
       case 'd': return 2 * e.r;
       case 'r': { if (e.type === 'circle') return e.r; const ai = arcInfo(e.a, e.m, e.b); return ai ? ai.r : NaN; }
+      case 'arcLen': { if (e.type !== 'arc') return NaN; const ai = arcInfo(e.a, e.m, e.b); return ai ? Math.abs(ai.sweep) * ai.r : NaN; }
       case 'n': return e.n;
       case 'x': return anchorOf(e)[0];
       case 'y': return anchorOf(e)[1];

@@ -851,6 +851,7 @@ body:not(.simple) .simple-only{display:none!important}
 
 /* Maß nur zum Ablesen (Referenzmaß) */
 .skdim.ref { border-style: dashed; border-color: var(--faint); color: var(--ink-2); font-style: italic; }
+.skdim.ord-zero{border-style:solid;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--surface));color:var(--accent);font-weight:700;cursor:default}
 .dimlock.refmark, #dim-ref { font: 600 11px/1 var(--font-mono); letter-spacing: -1px; }
 
 /* Notiz am Schritt */

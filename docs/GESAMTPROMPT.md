@@ -157,7 +157,7 @@ Leitlinien:
   - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
   - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
   - **Regeln:** horizontal, vertical, parallel, perpendicular, collinear (zwei Linien auf einer Geraden), tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)
-  - **Maße:** w/h/len/d/r/x/y/ang/n, dist, distPL, angLL – auch als Formel; `ref: true` = Maß zum Ablesen (der Löser überspringt es, das Schildchen zeigt den gemessenen Wert in Klammern; `Sketch.setRefDim(spec)`)
+  - **Maße:** w/h/len/d/r/arcLen/x/y/ang/n, dist, distPL, angLL, ang3, ord – auch als Formel; `ref: true` = Maß zum Ablesen (der Löser überspringt es, das Schildchen zeigt den gemessenen Wert in Klammern; `Sketch.setRefDim(spec)`)
 - **Gelenk:** `{id, a (fest), b (beweglich), ao, ad (Achse/Normale, Welt), au (U-Richtung bei planar / Normale bei slot), bo (zweiter Endpunkt bei distance), home (Matrix bei 0), ang, min, max, pos/minPos/maxPos (cyl/slot), u/v/minU/maxU/minV/maxV (planar), rx/ry/minRx/maxRx/minRy/maxRy (ball), angle/axisA/alignSign (angle), bMode/refA1/refA2/refB1/refB2 (center), dist (distance, Zahl oder Formel), flip, kind: 'rot'|'slide'|'cyl'|'planar'|'ball'|'slot'|'fixed'|'angle'|'center'|'parallel'|'tangent'|'distance'}`
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
@@ -245,6 +245,7 @@ Leitlinien:
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
   - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
+  - Maß-Arten (`S.dimMode`, `Sketch.setDimMode`): Automatisch, Bogenlänge (`arcLen` mit Umschalter `⌒`/`R`), Winkel über 3 Punkte (`ang3`), Koordinatenmaße (`ord` ab gewählter Nullkante, nur Profi)
   - Maße als Tabelle: `details#dim-table` (Felder `#dt-N`, Zustand `S.dimTableOpen`)
   - Skizzen-Prüfer (SK-09): `SKO.inspect(ents, {gapTol, dupTol, dims, cons})`, `Sketch.check`/`repair`/`focusCheckIssue`, Knöpfe `#sk-check`/`#sk-repair`, Liste `#sk-check-res` (findet offene Enden, doppelte/überlappende Linien und winzige Lücken < 0,05 mm, hebt per Klick hervor, repariert mit `coincident` und Löschen)
   - Skizze fertig bestimmen (SK-06): `SKO.autoDefine(sketch, V, {angleTol, gapTol})`, `Sketch.autoDefine`/`applyAutoDefine`/`cancelAutoDefine`, Knöpfe `#sk-autodef`/`#sk-autodef-apply`/`#sk-autodef-cancel` (schlägt fehlende Regeln < 2° / < 0,05 mm und Maße gestrichelt vor; Übernehmen in einem Rückgängig-Schritt)
