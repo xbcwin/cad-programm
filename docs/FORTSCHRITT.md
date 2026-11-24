@@ -245,6 +245,7 @@ Fertig.
 - [x] Schritt spiegeln (Auto [A-037], KP-14): eigener Formschritt `mirrorStep` (`Features.mirrorStep`), der einzelne Formschritte (z. B. Tasche/Abziehen, Erhöhung/Vereinigen, Loch, Rippe, Aufdicken – auch in Gruppen) an einer Grundebene, Bezugsebene oder ebenen Körperfläche direkt im selben Körper spiegelt und bei Änderungen mitwandert
 - [x] Muster von Schritten und Kopien auslassen (Auto [A-036], KP-13): Rechteck-, Kreis- und Kurvenmuster funktionieren jetzt auch direkt für Formschritte mit Modus (`join`/`cut`/`common`, z. B. Taschen oder Aufsätze) und Rippen (`rib`) auf demselben Zielkörper; einzelne Kopien lassen sich per Klick im 3D-Bild (`.pat-dot`) oder rechts im Panel (`.pat-chip`) durchgestrichen auslassen und wieder aktivieren
 - [x] Kaputter Bezug: neu wählen (Auto [A-035], KP-12): verliert eine Rundung, Fase, Wandstärke oder Skizze ihre Kante oder Fläche, zeigt der Verlauf (und die Zeitleiste) ein gelbes Warnzeichen; der Assistent „Neu wählen“ (`RefFix`) blendet die alte Lage gelb gestrichelt ein, lässt eine neue Kante bzw. Fläche anklicken und rechnet danach sauber weiter
+- [x] Varianten schalten Schritte (Auto [A-040], KP-21): Varianten unter „Maße“ speichern neben Maßwerten auch unterdrückte Schritte (`v.suppressed`), bieten pro Variante direkte An-/Aus-Häkchen (`#var-steps`) samt Abweichungserkennung beim Ändern in Zeitleiste/Verlauf, schalten Schritte samt Maßen mit Rückgängig um und berücksichtigen sie im Varianten-Vergleich
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul

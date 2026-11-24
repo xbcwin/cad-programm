@@ -205,7 +205,7 @@ Leitlinien:
   - Überfahren eines Schritts zeigt kurz den Stand nach diesem Schritt (`App.peek`)
   - Verlauf links: Umsortieren per Ziehen mit Abhängigkeitsprüfung (`Model.validateMove`/`validateTopOrder`, rote Markierung `.drop-bad` bei verletzter Reihenfolge), organisatorische Ordner (`doc.folders`, `Model.folderOf`/`cleanFolders`, `Actions.reorder`/`createFolder`/`toggleFolder`/`renameFolder`/`ungroupFolder`/`removeFromFolder`) und direktes Duplizieren je Schritt (`Actions.duplicate`)
 - Protokoll; Rückgängig/Wiederholen (300)
-- Maße-Tabelle mit Formeln, Varianten und Versionen (Vergleich mit Gewicht)
+- Maße-Tabelle mit Formeln, Varianten (`v.values` und `v.suppressed` mit Schritt-Schaltern `#var-steps` und `Variants.setStepSuppressed`) und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren
 - Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)
 - Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“

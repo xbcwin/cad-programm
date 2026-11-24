@@ -729,9 +729,9 @@ const HELP = {
   "tipp": "Fräs- und Laserdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile kommen nicht mit."
  },
  "variants": {
-  "tip": "Mehrere Sätze von Maßen speichern und umschalten",
-  "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „Klein“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
-  "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
+  "tip": "Mehrere Sätze von Maßen und Schritten speichern und umschalten",
+  "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße und welche Schritte gerade unterdrückt sind unter einem Namen, z. B. „mit Loch“ oder „ohne Loch“. Unter „Schritte in dieser Variante“ hakst du einzelne Schritte je Variante an oder ab. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede samt Gewicht.",
+  "tipp": "Änderst du ein Maß oder unterdrückst du einen Schritt in der Zeitleiste, meldet Tracery die Abweichung – über „Überschreiben“ übernimmst du den Stand in die aktive Variante."
  },
  "explainStep": {
   "tip": "Lass dir einen Schritt erklären",

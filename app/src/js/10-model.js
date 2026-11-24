@@ -903,6 +903,10 @@ const Model = (() => {
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
+    if (Array.isArray(doc.variants)) for (const v of doc.variants) {
+      if (!v.values || typeof v.values !== 'object') v.values = {};
+      if (v.suppressed != null && !Array.isArray(v.suppressed)) v.suppressed = [];
+    }
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
     if (doc.folders != null && !Array.isArray(doc.folders)) doc.folders = [];
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
