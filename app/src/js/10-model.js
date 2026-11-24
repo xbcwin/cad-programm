@@ -358,7 +358,7 @@ const Model = (() => {
     for (const pt of doc.points || []) {
       const b = pt.base || {};
       if ((b.type === 'edgeMid' || b.type === 'curvePercent') && b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
-      else if (b.type === 'faceCenter' && b.id) out.push({ from: 'point:' + pt.id, to: top(b.id), what: 'Bezugspunkt an', point: pt.name });
+      else if ((b.type === 'faceCenter' || b.type === 'centerOfMass') && b.id) out.push({ from: 'point:' + pt.id, to: top(b.id), what: 'Bezugspunkt an', point: pt.name });
       else if (b.type === 'edgePlaneIntersect') {
         if (b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
         if (b.planeRef && b.planeRef.kind === 'face' && b.planeRef.id) out.push({ from: 'point:' + pt.id, to: top(b.planeRef.id), what: 'Bezugspunkt an', point: pt.name });

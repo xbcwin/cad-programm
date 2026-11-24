@@ -1288,5 +1288,20 @@
     "tip": "Kurve durch 2D-Punkte aus einer CSV-Datei oder Texttabelle anlegen",
     "hilfe": "Lade eine .csv- oder Textdatei mit X/Y-Koordinaten (oder füg die Zeilen direkt ins Textfeld ein) und wähl zwischen einer weichen Spline genau durch alle Punkte oder einem geraden Linienzug.",
     "tipp": "Spalten dürfen mit Semikolon (;), Komma (,), Tab oder Leerzeichen getrennt sein; eine Überschrift wie x;y wird automatisch übersprungen."
+  },
+  "datumPointCom": {
+    "tip": "Bezugspunkt genau im Volumen-Schwerpunkt eines Körpers anlegen",
+    "hilfe": "Legt einen Bezugspunkt im räumlichen Schwerpunkt des gewählten Körpers an. Ändert sich die Größe, Form oder Lage des Körpers (z. B. durch Bohrungen oder Verschieben), wandert der Punkt automatisch in den neuen Schwerpunkt mit.",
+    "tipp": "Praktisch, um eine Achse oder ein eigenes Koordinatensystem exakt durch die Mitte der Masse eines unregelmäßigen Bauteils zu legen."
+  },
+  "datumStyle": {
+    "tip": "Bezugsebene größer ziehen und zur besseren Übersicht einfärben",
+    "hilfe": "Zieh im 3D-Bild an einem der vier weißen Ecken-Griffe einer gewählten Bezugsebene, um ihre dargestellte Breite und Höhe frei anzupassen – oder tipp die Maße hier ein. Darunter kannst du die Ebene farblich markieren.",
+    "tipp": "Halte beim Ziehen die Alt-Taste für eine quadratische Ebene oder die Umschalttaste für feine 0,1-mm-Schritte."
+  },
+  "datumSeries": {
+    "tip": "Mehrere parallele Bezugsebenen im gleichen Abstand auf einmal anlegen",
+    "hilfe": "Erzeugt eine Ebenen-Schar aus beliebig vielen parallelen Bezugsebenen (z. B. 4 Ebenen alle 10 mm) ausgehend von einer Grundebene, einer gewählten ebenen Fläche oder einer bestehenden Bezugsebene – alles in einem Rückgängig-Schritt.",
+    "tipp": "Ideal für Spanten, Rippen oder Schnitte in festen Abständen; als Abstand kannst du auch eine Formel mit Projektmaßen eingeben."
   }
 }

@@ -2247,6 +2247,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **CSV mit 5 Punkten → Spline durch alle 5 & geschlossener Linienzug**: Hochgeladene `.csv` mit 5 Punkten erzeugt eine `spline` genau durch alle 5 Punkte; eingefügter Semikolon/Dezimalkomma-Text als geschlossener Linienzug ergibt `5` Linien, `1` Region ohne offene Enden und den exakten 3D-Körper; Hilfetexte (`formulaCurve`, `csvCurve`), DE/EN-Schlüsselgleichheit und Befehlssuche sind ohne Fehler vorhanden.
 - [ ] **Von Hand**: Im Browser eine eigene Formel eintippen (z. B. Parabel mit Projektmaß) und die gestrichelte Live-Vorschau beim Ändern von Bereich und Punktzahl sowie das Ziehen einer `.csv`-Datei direkt in die offene Skizze prüfen.
 
+## Schwerpunkt als Bezugspunkt, Ebenen ziehen & einfärben, Ebenen-Schar (Auto [A-099], BZ-11, BZ-12, BZ-13)
+
+- [x] **Schwerpunkt als Bezugspunkt (BZ-11)**: Bezugspunkt „Im Schwerpunkt“ eines Quaders `40×20×10` liegt exakt in der Mitte (`[20, 10, 5]`), wandert bei Größen-/Lageänderung auf `[30, 10, 10]` und bei asymmetrischem Körper mit exzentrischer Bohrung exakt in den Volumenschwerpunkt mit, meldet fehlenden Körper und übersteht Rückgängig.
+- [x] **Bezugsebene größer ziehen & einfärben (BZ-12)**: Gewählte Bezugsebene zeigt 4 Ecken-Griffe (`handlePositions()`), Ziehen eines Griffs mit der Maus vergrößert `d.size` rückgängig machbar; Breiten-/Höhenfelder, „Auto-Größe“, Farb-Knöpfe und „Standardfarbe“ aktualisieren 3D-Fläche und Verlaufssymbol.
+- [x] **Ebenen-Schar (BZ-13)**: Im Dialog „Ebenen-Schar“ (`#dp-series`) erzeugen `4` Ebenen mit Abstand `10` exakt `4` Ebenen bei `10, 20, 30, 40` in einem Rückgängig-Schritt; Schar ab Körperfläche wandert beim Wachsen mit, und `flip: true` erzeugt negative Abstände (`-10, -20, -30`).
+- [x] **Befehlssuche, Hilfetexte & Seitenfehler**: `datum-series` und `datum-point-com` sind suchbar; Hilfetexte `datumPointCom`, `datumStyle` und `datumSeries` sind vollständig ohne JavaScript-Fehler vorhanden.
+- [ ] **Von Hand**: Im Browser eine Bezugsebene schräg im 3D-Bild an einer Ecke größer ziehen, einfärben, danach eine Ebenen-Schar ab einer Körperfläche anlegen und den Schwerpunkt-Punkt an einem zusammengesetzten Teil prüfen.
+
 ## Fehler melden
 
 ```

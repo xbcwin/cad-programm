@@ -20521,6 +20521,176 @@ def t_a098_formel_und_csv_kurve(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-099] Schwerpunkt als Bezugspunkt, Ebenen ziehen & einfärben, Ebenen-Schar (BZ-11, BZ-12, BZ-13) ----------
+def t_a099_bezuege_schwerpunkt_schar(p):
+    # 1. BZ-11: Schwerpunkt eines Quaders 40x20x10 liegt in seiner Mitte + Mitwandern + asymmetrisch + Verlust/Undo
+    p.empty()
+    p.ev("""App.change('Quader', d => {
+      const b = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Quader' });
+      b.t.x = 20; b.t.y = 10; b.t.z = 0;
+      d.items.push(b);
+    })""")
+    warte_rechnen(p)
+    bid = p.ev("return App.doc.items[0].id")
+    p.ev("App.select([arg]); Datums.pointDialog();", bid); p.wait(250)
+    p.pg.locator('#dpt-com').click(); p.wait(300)
+    pt0 = p.ev("return App.doc.points[0]")
+    tree_sub = (p.pg.locator('#point-tree .point-row .sub').first.text_content() or '').strip().lower()
+    deps = p.ev("return Model.dependencies(App.doc)")
+
+    # Quader ändern -> Schwerpunkt wandert mit auf [30, 10, 10]
+    p.ev("App.change('Wachsen', d => { d.items[0].p.w = 60; d.items[0].p.h = 20; d.items[0].t.x = 30; })")
+    warte_rechnen(p); p.wait(400)
+    pt_moved = p.ev("return App.doc.points[0].point")
+
+    # Asymmetrischer Körper (exzentrisches Loch rechts bei x = +12..+22 -> Schwerpunkt rückt nach links < 0)
+    p.ev("Start.newProject(true)"); p.wait(600)
+    p.ev("""App.change('Asym', d => {
+      const b = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Block' });
+      const h = Model.newItem('cylinder', { d: 12, h: 12 }, { name: 'Loch', role: 'hole' });
+      h.t.x = 12; h.t.z = -1; h.op = { type: 'cut', target: b.id };
+      d.items.push(b, h);
+    })""")
+    warte_rechnen(p); p.wait(300)
+    asym_info = p.ev("""return (async () => {
+      const id = App.doc.items[0].id;
+      const pt = Datums.addPointCenterOfMass(id);
+      const m = await Mass.measure();
+      const mp = m && m.parts ? m.parts.find(x => x.id === id) : null;
+      return { pt: pt && pt.point, com: mp && mp.com };
+    })();""")
+
+    # Körper löschen -> Bezugspunkt wird verloren, Undo stellt ihn wieder her
+    p.ev("Actions.remove([App.doc.items[0].id])"); warte_rechnen(p); p.wait(300)
+    lost_ok = p.ev("const pid=App.doc.points[0].id; Datums.selectPoint(pid); return Datums.lostPoints.includes(pid)")
+    err_vis = p.pg.locator('#right-body .err-box').count() == 1
+    p.ev("App.undo()"); warte_rechnen(p); p.wait(350)
+    undo_com_ok = p.ev("return App.doc.points.length === 1 && !Datums.lostPoints.includes(App.doc.points[0].id)")
+
+    ok1 = (
+        pt0 and pt0['base']['type'] == 'centerOfMass'
+        and near(pt0['point'], [20, 10, 5], 1e-3)
+        and 'schwerpunkt' in tree_sub
+        and any(d.get('point') == pt0['name'] for d in deps)
+        and near(pt_moved, [30, 10, 10], 1e-3)
+        and asym_info and asym_info['pt'] and asym_info['com']
+        and asym_info['pt'][0] < -0.5
+        and near(asym_info['pt'], asym_info['com'], 0.05)
+        and lost_ok and err_vis and undo_com_ok
+    )
+
+    # 2. BZ-12: Bezugsebene an Ecken-Griffen größer ziehen, im Panel einstellen und einfärben
+    p.ev("Start.newProject(true)"); p.wait(600)
+    p.ev("Datums.addOrigin('XY', 10, 0)"); p.wait(350)
+    size0 = p.ev("return Datums.planeSize(App.doc.datums[0])")
+    handles0 = p.ev("return Datums.handlePositions()")
+    drag_info = p.ev("""const hs = Datums.handlePositions();
+      const h = hs.find(x => x.sx === 1 && x.sy === 1) || hs[0];
+      const o = App.doc.datums[0].plane.o;
+      const pt3 = (a) => Viewer.camera.position.clone().set(a[0], a[1], a[2]);
+      const sc0 = Viewer.toScreen(pt3(h.p));
+      const scO = Viewer.toScreen(pt3(o));
+      const r = Viewer.canvas.getBoundingClientRect();
+      const dx = sc0.x - scO.x, dy = sc0.y - scO.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return {
+        x0: r.left + sc0.x, y0: r.top + sc0.y,
+        x1: r.left + sc0.x + (dx / len) * 50, y1: r.top + sc0.y + (dy / len) * 50,
+      };""")
+    p.pg.mouse.move(drag_info['x0'], drag_info['y0'])
+    p.pg.mouse.down()
+    p.pg.mouse.move(drag_info['x1'], drag_info['y1'], steps=6)
+    p.pg.mouse.up()
+    p.wait(300)
+    size_after_drag = p.ev("return App.doc.datums[0].size")
+    p.ev("App.undo()"); p.wait(300)
+    size_after_undo = p.ev("return App.doc.datums[0].size || null")
+
+    # Größe im Panel ändern & zurücksetzen
+    p.pg.fill('#datum-size-w', '120'); p.pg.press('#datum-size-w', 'Enter'); p.wait(250)
+    p.pg.fill('#datum-size-h', '80'); p.pg.press('#datum-size-h', 'Enter'); p.wait(250)
+    size_panel = p.ev("return App.doc.datums[0].size")
+    p.pg.locator('#datum-size-reset').click(); p.wait(250)
+    size_reset = p.ev("return App.doc.datums[0].size || null")
+
+    # Einfärben (Knopf im Panel -> 3D-Materialfarbe & Verlaufs-Icon) & zurücksetzen + Undo
+    p.pg.locator('.datum-col-btn[data-color="#3f7fd6"]').click(); p.wait(250)
+    col_state = p.ev("""const d = App.doc.datums[0];
+      let meshHex = null;
+      for (const ch of Viewer.groups.datums.children) {
+        if (ch.userData && ch.userData.datum === d.id && ch.children[0]) {
+          meshHex = '#' + ch.children[0].material.color.getHexString();
+        }
+      }
+      return { col: d.color, meshHex };""")
+    swatch_col = p.pg.locator('#datum-tree .datum-row .swatch').first.evaluate("el => el.style.color")
+    p.pg.locator('#datum-color-reset').click(); p.wait(250)
+    col_reset = p.ev("return App.doc.datums[0].color || null")
+    p.ev("App.undo()"); p.wait(250)
+    col_undo = p.ev("return App.doc.datums[0].color")
+
+    ok2 = (
+        len(handles0) == 4
+        and isinstance(size_after_drag, list) and len(size_after_drag) == 2
+        and size_after_drag[0] > size0[0] + 1 and size_after_drag[1] > size0[1] + 1
+        and size_after_undo is None
+        and near(size_panel, [120, 80], 1e-2)
+        and size_reset is None
+        and col_state['col'] == '#3f7fd6' and col_state['meshHex'] == '#3f7fd6'
+        and '63' in swatch_col and '127' in swatch_col and '214' in swatch_col
+        and col_reset is None and col_undo == '#3f7fd6'
+    )
+
+    # 3. BZ-13: Ebenen-Schar über Dialog (4 Ebenen, Abstand 10 -> 10, 20, 30, 40) + ein Rückgängig
+    p.ev("Start.newProject(true)"); p.wait(600)
+    p.ev("Datums.dialog()"); p.wait(300)
+    p.pg.locator('#dp-series').click(); p.wait(300)
+    p.pg.fill('#dps-count', '4')
+    p.pg.fill('#dps-step', '10')
+    p.wait(150)
+    prev_txt = p.pg.locator('#dps-preview').text_content() or ''
+    p.pg.locator('#dps-create').click(); p.wait(350)
+    series_z = p.ev("return App.doc.datums.map(d => d.plane.o[2])")
+    tree_cnt = p.pg.locator('#datum-tree .datum-row').count()
+    p.ev("App.undo()"); p.wait(300)
+    undo_series_cnt = p.ev("return (App.doc.datums || []).length")
+    p.ev("App.redo()"); p.wait(300)
+    redo_series_cnt = p.ev("return (App.doc.datums || []).length")
+
+    ok3 = (
+        '10' in prev_txt and '40' in prev_txt
+        and len(series_z) == 4 and near(series_z, [10, 20, 30, 40], 1e-4)
+        and tree_cnt == 4
+        and undo_series_cnt == 0 and redo_series_cnt == 4
+    )
+
+    # 4. BZ-13: Ebenen-Schar ab Körperfläche + Mitwandern + Richtung umkehren (flip)
+    p.ev("Start.newProject(true)"); p.wait(600)
+    p.ev("App.change('Box', d => d.items.push(Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Basis' })))")
+    warte_rechnen(p)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Datums.addSeries({ id, idx: fi }, 3, 5);""")
+    warte_rechnen(p); p.wait(300)
+    face_z0 = p.ev("return App.doc.datums.map(d => d.plane.o[2])")
+    p.ev("App.change('Höher', d => { d.items[0].p.h = 20; })")
+    warte_rechnen(p); p.wait(350)
+    face_z1 = p.ev("return App.doc.datums.map(d => d.plane.o[2])")
+    flip_z = p.ev("return Datums.addSeries('XY', 3, 10, { flip: true }).map(d => d.plane.o[2])")
+
+    ok4 = (
+        near(face_z0, [15, 20, 25], 1e-4)
+        and near(face_z1, [25, 30, 35], 1e-4)
+        and near(flip_z, [-10, -20, -30], 1e-4)
+    )
+
+    # 5. Befehlssuche, Hilfetexte & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmds_ok = p.ev("return Commands.search('Ebenen-Schar').some(c => c.id === 'datum-series') && Commands.search('Schwerpunkt').some(c => c.id === 'datum-point-com')")
+    ok5 = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ['datumPointCom', 'datumStyle', 'datumSeries']) and cmds_ok and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20728,6 +20898,7 @@ TESTS = [
     ('[F-11241932] Volltest-Reparatur: Zeichnung-Panel schützt fokussiertes Toleranzfeld bei verzögertem doc-Refresh', t_f11241932),
     ('[A-097] Teil-Ellipse (elliptischer Bogen) & Formen-Sammlung (SK-37, SK-41)', t_a097_teilellipse_formen),
     ('[A-098] Kurve aus Formel und aus Tabelle (SK-38, SK-39)', t_a098_formel_und_csv_kurve),
+    ('[A-099] Schwerpunkt als Bezugspunkt, Ebenen ziehen & einfärben, Ebenen-Schar (BZ-11, BZ-12, BZ-13)', t_a099_bezuege_schwerpunkt_schar),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

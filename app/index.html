@@ -3354,6 +3354,21 @@ const HELP = {
   "tip": "Kurve durch 2D-Punkte aus einer CSV-Datei oder Texttabelle anlegen",
   "hilfe": "Lade eine .csv- oder Textdatei mit X/Y-Koordinaten (oder füg die Zeilen direkt ins Textfeld ein) und wähl zwischen einer weichen Spline genau durch alle Punkte oder einem geraden Linienzug.",
   "tipp": "Spalten dürfen mit Semikolon (;), Komma (,), Tab oder Leerzeichen getrennt sein; eine Überschrift wie x;y wird automatisch übersprungen."
+ },
+ "datumPointCom": {
+  "tip": "Bezugspunkt genau im Volumen-Schwerpunkt eines Körpers anlegen",
+  "hilfe": "Legt einen Bezugspunkt im räumlichen Schwerpunkt des gewählten Körpers an. Ändert sich die Größe, Form oder Lage des Körpers (z. B. durch Bohrungen oder Verschieben), wandert der Punkt automatisch in den neuen Schwerpunkt mit.",
+  "tipp": "Praktisch, um eine Achse oder ein eigenes Koordinatensystem exakt durch die Mitte der Masse eines unregelmäßigen Bauteils zu legen."
+ },
+ "datumStyle": {
+  "tip": "Bezugsebene größer ziehen und zur besseren Übersicht einfärben",
+  "hilfe": "Zieh im 3D-Bild an einem der vier weißen Ecken-Griffe einer gewählten Bezugsebene, um ihre dargestellte Breite und Höhe frei anzupassen – oder tipp die Maße hier ein. Darunter kannst du die Ebene farblich markieren.",
+  "tipp": "Halte beim Ziehen die Alt-Taste für eine quadratische Ebene oder die Umschalttaste für feine 0,1-mm-Schritte."
+ },
+ "datumSeries": {
+  "tip": "Mehrere parallele Bezugsebenen im gleichen Abstand auf einmal anlegen",
+  "hilfe": "Erzeugt eine Ebenen-Schar aus beliebig vielen parallelen Bezugsebenen (z. B. 4 Ebenen alle 10 mm) ausgehend von einer Grundebene, einer gewählten ebenen Fläche oder einer bestehenden Bezugsebene – alles in einem Rückgängig-Schritt.",
+  "tipp": "Ideal für Spanten, Rippen oder Schnitte in festen Abständen; als Abstand kannst du auch eine Formel mit Projektmaßen eingeben."
  }
 };
 
@@ -4512,7 +4527,7 @@ const Model = (() => {
     for (const pt of doc.points || []) {
       const b = pt.base || {};
       if ((b.type === 'edgeMid' || b.type === 'curvePercent') && b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
-      else if (b.type === 'faceCenter' && b.id) out.push({ from: 'point:' + pt.id, to: top(b.id), what: 'Bezugspunkt an', point: pt.name });
+      else if ((b.type === 'faceCenter' || b.type === 'centerOfMass') && b.id) out.push({ from: 'point:' + pt.id, to: top(b.id), what: 'Bezugspunkt an', point: pt.name });
       else if (b.type === 'edgePlaneIntersect') {
         if (b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
         if (b.planeRef && b.planeRef.kind === 'face' && b.planeRef.id) out.push({ from: 'point:' + pt.id, to: top(b.planeRef.id), what: 'Bezugspunkt an', point: pt.name });
@@ -18937,6 +18952,7 @@ const Features = (() => {
 //   faceCenter         – Mitte einer Fläche
 //   edgePlaneIntersect – Schnittpunkt einer Kante mit einer Ebene/Fläche
 //   curvePercent       – auf einer Kurve/Kante bei x %
+//   centerOfMass       – Schwerpunkt eines Körpers (wandert mit)
 //   fixed              – feste Weltkoordinaten
 //
 // Eigene Koordinatensysteme liegen in doc.csys und erscheinen im Verlauf unter „Koordinatensysteme“.
@@ -18946,12 +18962,19 @@ const Features = (() => {
 const Datums = (() => {
   const ORIGIN = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
   const NAMES = { XY: 'Arbeitsfläche', XZ: 'Vorne', YZ: 'Seite' };
+  const DATUM_COLORS = ['#d9a441', '#3f7fd6', '#2f9e91', '#5b9f55', '#e8833a', '#d6574c', '#8a6ad1', '#8b96a1'];
+  const HEX_RE = /^#[0-9a-f]{6}$/i;
   let sel = null;       // gewählte Bezugsebene (Kennung)
   let selAxis = null;   // gewählte Bezugsachse (Kennung)
   let selPoint = null;  // gewählter Bezugspunkt (Kennung)
   let selCsys = null;   // gewähltes Koordinatensystem (Kennung)
   let pickState = null; // aktiver interaktiver 3D-Picker
   let relinkRounds = 0; // Schutz gegen Nachführ-Schleifen
+  let datumHandles = []; // 3D-Ecken-Ziehgriffe der gewählten Bezugsebene
+  let hoveredHandle = null;
+  let handleDrag = null;
+  let handleLiveEl = null;
+  let ownCursor = false;
   const lost = new Set();       // Ebenen, deren Bezug fehlt
   const lostAxes = new Set();   // Achsen, deren Bezug fehlt
   const lostPoints = new Set(); // Punkte, deren Bezug fehlt
@@ -19047,6 +19070,35 @@ const Datums = (() => {
       const span = bb[k + 3] - bb[k];
       return span > 1e-6 ? (p[k] - bb[k]) / span : 0.5;
     });
+  }
+  function meshCenterOfMass(r) {
+    if (!r || !r.data) return null;
+    const v = r.data.vertices, tris = r.data.triangles;
+    const bb = localBbox(r);
+    if (v && v.length >= 9 && tris && tris.length >= 3) {
+      const rx = bb ? (bb[0] + bb[3]) * 0.5 : 0;
+      const ry = bb ? (bb[1] + bb[4]) * 0.5 : 0;
+      const rz = bb ? (bb[2] + bb[5]) * 0.5 : 0;
+      let V6 = 0, cx = 0, cy = 0, cz = 0;
+      for (let i = 0; i + 2 < tris.length; i += 3) {
+        const i0 = tris[i] * 3, i1 = tris[i + 1] * 3, i2 = tris[i + 2] * 3;
+        if (i0 + 2 >= v.length || i1 + 2 >= v.length || i2 + 2 >= v.length) continue;
+        const ax = v[i0] - rx, ay = v[i0 + 1] - ry, az = v[i0 + 2] - rz;
+        const bx = v[i1] - rx, by = v[i1 + 1] - ry, bz = v[i1 + 2] - rz;
+        const dx = v[i2] - rx, dy = v[i2 + 1] - ry, dz = v[i2 + 2] - rz;
+        const cpx = by * dz - bz * dy, cpy = bz * dx - bx * dz, cpz = bx * dy - by * dx;
+        const v6 = ax * cpx + ay * cpy + az * cpz;
+        V6 += v6;
+        cx += v6 * (ax + bx + dx);
+        cy += v6 * (ay + by + dy);
+        cz += v6 * (az + bz + dz);
+      }
+      if (Math.abs(V6) > 1e-9) {
+        const inv = 1 / (4 * V6);
+        return [rx + cx * inv, ry + cy * inv, rz + cz * inv];
+      }
+    }
+    return bb ? [(bb[0] + bb[3]) * 0.5, (bb[1] + bb[4]) * 0.5, (bb[2] + bb[5]) * 0.5] : null;
   }
   function makeEdgeRef(eRef) {
     const g = eRef.info, r = App.results.get(eRef.id), bb = localBbox(r);
@@ -19696,11 +19748,143 @@ const Datums = (() => {
     return add({ type: 'twoEdges', e1: makeEdgeRef(er1), e2: makeEdgeRef(er2) }, name || `Durch 2 Kanten (${top ? Model.label(top.item) : 'Körper'})`);
   }
   function set(id, patch, label = 'Bezugsebene geändert') {
+    const noMerge = 'color' in patch || 'hidden' in patch || patch.size === null;
     App.change(label, (doc) => {
       const d = find(id, doc); if (!d) return false;
-      for (const [k, v] of Object.entries(patch)) { if (k === 'name') d.name = v; else if (k === 'hidden') { if (v) d.hidden = true; else delete d.hidden; } else d.base[k] = v; }
+      for (const [k, v] of Object.entries(patch)) {
+        if (k === 'name') d.name = v;
+        else if (k === 'hidden') { if (v) d.hidden = true; else delete d.hidden; }
+        else if (k === 'color') {
+          if (typeof v === 'string' && HEX_RE.test(v.trim())) d.color = v.trim().toLowerCase();
+          else delete d.color;
+        } else if (k === 'size') {
+          if (Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFinite(v[1]) && Number(v[0]) > 0 && Number(v[1]) > 0) {
+            d.size = [round(Math.max(10, Number(v[0])), 2), round(Math.max(10, Number(v[1])), 2)];
+          } else delete d.size;
+        } else d.base[k] = v;
+      }
       d.plane = solve(d);
-    }, { merge: 'datum:' + id + ':' + Object.keys(patch).join() });
+    }, noMerge ? {} : { merge: 'datum:' + id + ':' + Object.keys(patch).join() });
+  }
+  function addSeries(baseSpec, count = 4, step = 10, opts = {}) {
+    const n = Math.round(Number(count));
+    if (!isFinite(n) || n < 1 || n > 50) {
+      UI.toast('Bitte eine Anzahl zwischen 1 und 50 angeben.', { icon: 'info' });
+      return [];
+    }
+    const V = Model.vars(App.doc).v;
+    const stepNum = Model.num(step, V, NaN);
+    if (!isFinite(stepNum) || Math.abs(stepNum) < 1e-6) {
+      UI.toast('Bitte einen Abstand ungleich 0 angeben.', { icon: 'info' });
+      return [];
+    }
+    const flip = !!opts.flip;
+    const effStepNum = flip ? -stepNum : stepNum;
+    const effStep = typeof step === 'number'
+      ? round(effStepNum, 6)
+      : (flip ? `-(${String(step).trim()})` : String(step).trim());
+    const hasStart = opts.start !== undefined && opts.start !== null && opts.start !== '';
+    const offsetAt = (k) => {
+      if (!hasStart) {
+        if (typeof effStep === 'number') return round(effStep * k, 6);
+        return k === 1 ? effStep : `(${effStep})*${k}`;
+      }
+      const startIsNum = typeof opts.start === 'number' && isFinite(opts.start);
+      if (startIsNum && typeof effStep === 'number') return round(opts.start + effStep * (k - 1), 6);
+      return k === 1 ? (startIsNum ? opts.start : String(opts.start)) : `(${opts.start})+(${effStep})*(${k - 1})`;
+    };
+    const addDist = (baseVal, offVal) => {
+      const bNum = Model.num(baseVal, V, 0);
+      if (typeof baseVal === 'number' && typeof offVal === 'number') return round(bNum + offVal, 6);
+      if (!baseVal) return offVal;
+      return `(${baseVal})+(${offVal})`;
+    };
+
+    let mode = null, refPlane = null, refFace = null, refOrig = null, prefix = opts.name || '';
+    if (typeof baseSpec === 'string') {
+      if (ORIGIN[baseSpec]) {
+        mode = 'origin';
+        refOrig = { plane: baseSpec, dist: 0, tilt: opts.tilt || 0 };
+        if (!prefix) prefix = NAMES[baseSpec] || baseSpec;
+      } else {
+        const refId = baseSpec.startsWith('d:') ? baseSpec.slice(2) : baseSpec;
+        const refD = find(refId);
+        if (!refD || !refD.plane) { UI.toast('Ausgangsebene nicht gefunden.', { icon: 'info' }); return []; }
+        const rb = refD.base || {};
+        if (rb.type === 'origin' && !Model.num(rb.tilt, V, 0)) {
+          mode = 'origin';
+          refOrig = { plane: rb.plane || 'XY', dist: rb.dist || 0, tilt: 0 };
+        } else if (rb.type === 'face' && rb.id) {
+          mode = 'face';
+          refFace = { id: rb.id, n: rb.n, c: rb.c, dist: rb.dist || 0 };
+        } else {
+          mode = 'fixed';
+          refPlane = refD.plane;
+        }
+        if (!prefix) prefix = refD.name;
+      }
+    } else if (baseSpec && typeof baseSpec === 'object' && baseSpec.o && baseSpec.n) {
+      mode = 'fixed';
+      refPlane = planeFrame(baseSpec.o, baseSpec.n, baseSpec.x);
+      if (!prefix) prefix = 'Schar';
+    } else if (baseSpec) {
+      const f = resolveFace(baseSpec);
+      if (!f || f.info.t !== 'PLANE') {
+        UI.toast('Wähl eine ebene Fläche als Ausgangsebene.', { icon: 'info' });
+        return [];
+      }
+      const top = Model.find(App.doc, f.id);
+      mode = 'face';
+      refFace = { id: f.id, n: f.info.n, c: f.info.c, dist: 0 };
+      if (!prefix) prefix = `Fläche von „${top ? Model.label(top.item) : 'Körper'}“`;
+    } else {
+      mode = 'origin';
+      refOrig = { plane: 'XY', dist: 0, tilt: opts.tilt || 0 };
+      if (!prefix) prefix = NAMES.XY;
+    }
+
+    const colOpt = typeof opts.color === 'string' && HEX_RE.test(opts.color.trim()) ? opts.color.trim().toLowerCase() : null;
+    const sizeOpt = Array.isArray(opts.size) && opts.size.length >= 2 && isFinite(opts.size[0]) && isFinite(opts.size[1]) && opts.size[0] > 0 && opts.size[1] > 0
+      ? [round(Math.max(10, Number(opts.size[0])), 2), round(Math.max(10, Number(opts.size[1])), 2)]
+      : null;
+
+    const created = [];
+    for (let k = 1; k <= n; k++) {
+      const offK = offsetAt(k);
+      let base, plane = null, nm;
+      if (mode === 'origin') {
+        const distK = addDist(refOrig.dist, offK);
+        base = { type: 'origin', plane: refOrig.plane, dist: distK, tilt: refOrig.tilt || 0 };
+        const dTxt = typeof distK === 'number' ? Units.fmtLenU(distK, 2) : String(distK);
+        nm = opts.name ? `${opts.name} ${k}` : `${prefix} ${dTxt}`;
+      } else if (mode === 'face') {
+        const distK = addDist(refFace.dist, offK);
+        base = { type: 'face', id: refFace.id, n: refFace.n, c: refFace.c, dist: distK };
+        const dTxt = typeof distK === 'number'
+          ? (distK >= 0 ? '+ ' + Units.fmtLenU(distK, 2) : '− ' + Units.fmtLenU(Math.abs(distK), 2))
+          : '+ ' + distK;
+        nm = opts.name ? `${opts.name} ${k}` : `${prefix} ${dTxt}`;
+      } else {
+        const offNum = Model.num(offK, V, stepNum * k);
+        const oVec = V3(refPlane.o).addScaledVector(V3(refPlane.n).normalize(), offNum);
+        base = { type: 'fixed' };
+        plane = planeFrame(oVec, refPlane.n, refPlane.x);
+        const oTxt = Units.fmtLenU(offNum, 2);
+        nm = opts.name ? `${opts.name} ${k}` : `${prefix} (${offNum >= 0 ? '+' : ''}${oTxt})`;
+      }
+      const d = { id: uid('dp'), name: nm, base, plane };
+      d.plane = solve({ ...d, plane: plane || ORIGIN.XY });
+      if (colOpt) d.color = colOpt;
+      if (sizeOpt) d.size = sizeOpt.slice();
+      created.push(d);
+    }
+    App.change(`Ebenen-Schar (${created.length}×)`, (doc) => {
+      doc.datums = doc.datums || [];
+      for (const d of created) doc.datums.push(d);
+    });
+    select(created[created.length - 1].id);
+    UI.toast(`${created.length} Bezugsebenen im Abstand ${Units.fmtLenU(Math.abs(stepNum), 2)} angelegt.`, { icon: 'check' });
+    return created;
   }
   function remove(id) { App.change('Bezugsebene gelöscht', (doc) => { doc.datums = list(doc).filter((d) => d.id !== id); }); if (sel === id) select(null); }
   function select(id) {
@@ -20046,6 +20230,20 @@ const Datums = (() => {
       if (rE || !Model.find(App.doc, b.edgeId) || !pl) lostPoints.add(pt.id);
       return pt.point;
     }
+    if (b.type === 'centerOfMass') {
+      const f = b.id ? Model.find(App.doc, b.id) : null;
+      const r = f && f.item && f.item.role !== 'hole' && Model.isActive(App.doc, b.id) ? App.results.get(b.id) : null;
+      if (r && r.data && r.data.vertices && r.data.vertices.length >= 9) {
+        const cLoc = meshCenterOfMass(r);
+        if (cLoc) {
+          const W = Model.worldMatrix(App.doc, b.id);
+          lostPoints.delete(pt.id);
+          return r6(V3(cLoc).applyMatrix4(W).toArray());
+        }
+      }
+      if (r || !f || !Model.isActive(App.doc, b.id)) lostPoints.add(pt.id);
+      return pt.point;
+    }
     return pt.point;
   }
 
@@ -20109,6 +20307,22 @@ const Datums = (() => {
   function addPointFixed(p, name) {
     const a = Array.isArray(p) ? p : p instanceof THREE.Vector3 ? p.toArray() : [0, 0, 0];
     return addPoint({ type: 'fixed', x: a[0] ?? 0, y: a[1] ?? 0, z: a[2] ?? 0 }, name || `Punkt ${points().length + 1}`, r6(a));
+  }
+  function addPointCenterOfMass(bodySpec, name) {
+    const id = typeof bodySpec === 'string'
+      ? bodySpec
+      : (bodySpec && bodySpec.id ? bodySpec.id : (App.sel.length === 1 ? App.sel[0] : null));
+    const f = id ? Model.find(App.doc, id) : null;
+    if (!f || !f.item || f.item.role === 'hole') {
+      UI.toast('Wähl zuerst einen Körper.', { icon: 'info' });
+      return null;
+    }
+    const r = App.results.get(id);
+    if (App.mergedInto(id) || !r || !meshCenterOfMass(r)) {
+      UI.toast('Dieser Körper hat keine eigene Form (wurde verrechnet) – wähle den Zielkörper.', { icon: 'info' });
+      return null;
+    }
+    return addPoint({ type: 'centerOfMass', id }, name || `Schwerpunkt (${Model.label(f.item)})`);
   }
   function setPoint(id, patch, label = 'Bezugspunkt geändert') {
     App.change(label, (doc) => {
@@ -20366,20 +20580,185 @@ const Datums = (() => {
   }
 
   // ---------- Zeichnen im Bild & Picking ----------
+  function autoPlaneSize() {
+    const box = Viewer.sceneBox ? Viewer.sceneBox() : null;
+    return box && !box.isEmpty() ? Math.max(30, box.getSize(new THREE.Vector3()).length() * 0.45) : 60;
+  }
+  function planeSize(d) {
+    if (d && Array.isArray(d.size) && d.size.length >= 2 && Number(d.size[0]) > 0 && Number(d.size[1]) > 0) {
+      return [Math.max(10, Number(d.size[0])), Math.max(10, Number(d.size[1]))];
+    }
+    const s = autoPlaneSize();
+    return [s, s];
+  }
+  function scaleDatumHandles() {
+    if (!datumHandles.length) return;
+    const tMul = document.body.classList.contains('tablet') ? 1.35 : 1;
+    for (const m of datumHandles) {
+      const ps = Viewer.pixelSizeAt(m.position);
+      m.scale.setScalar(12 * ps * tMul);
+    }
+    Viewer.requestRender();
+  }
+  function hitHandle(cx, cy) {
+    if (!datumHandles.length) return null;
+    const rc = Viewer.setRay(cx, cy);
+    const hits = rc.intersectObjects(datumHandles, false);
+    if (hits.length) return hits[0].object;
+    const r = Viewer.canvas.getBoundingClientRect(), px = cx - r.left, py = cy - r.top;
+    let best = null;
+    for (const m of datumHandles) {
+      const sc = Viewer.toScreen(m.position);
+      if (sc.behind) continue;
+      const dist = Math.hypot(sc.x - px, sc.y - py);
+      if (dist <= 12 && (!best || dist < best.dist)) best = { m, dist };
+    }
+    return best ? best.m : null;
+  }
+  function canDragHandles() {
+    return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active
+      && !Features.picking && !Sketch.picking && !pickState && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking);
+  }
+  function onHandleMove(e) {
+    if (!handleDrag) return;
+    const st = handleDrag;
+    const d = find(st.id);
+    if (!d) return;
+    const p = Viewer.rayPlane(e.clientX, e.clientY, st.o, st.n);
+    if (!p) return;
+    const rel = p.clone().sub(st.o);
+    const du = rel.dot(st.x) - st.u0, dv = rel.dot(st.y) - st.v0;
+    let w = Math.max(10, st.w0 + 2 * st.sx * du);
+    let hh = Math.max(10, st.h0 + 2 * st.sy * dv);
+    if (e.altKey) { const m = Math.max(w, hh); w = hh = m; }
+    const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
+    if (grid) {
+      w = Math.max(10, round(Math.round(w / grid) * grid, 2));
+      hh = Math.max(10, round(Math.round(hh / grid) * grid, 2));
+    } else {
+      w = round(w, 2); hh = round(hh, 2);
+    }
+    d.size = [w, hh];
+    draw();
+    const corner = st.o.clone().addScaledVector(st.x, st.sx * w * 0.5).addScaledVector(st.y, st.sy * hh * 0.5);
+    const sc = Viewer.toScreen(corner);
+    const ov = $('#overlay');
+    if (ov) {
+      if (!handleLiveEl) { handleLiveEl = h('div', { class: 'dimlabel live' }); ov.append(handleLiveEl); }
+      handleLiveEl.textContent = `${Units.fmtLen(w, 1)} × ${Units.fmtLen(hh, 1)} ${Units.label()}`;
+      handleLiveEl.style.left = sc.x + 'px';
+      handleLiveEl.style.top = (sc.y - 26) + 'px';
+    }
+  }
+  function onHandleUp() {
+    if (!handleDrag) return;
+    const st = handleDrag;
+    handleDrag = null;
+    window.removeEventListener('pointermove', onHandleMove);
+    window.removeEventListener('pointerup', onHandleUp);
+    window.removeEventListener('pointercancel', onHandleUp);
+    try { Viewer.canvas.releasePointerCapture(st.pointerId); } catch (_) {}
+    if (handleLiveEl) { handleLiveEl.remove(); handleLiveEl = null; }
+    Viewer.controls.enabled = true;
+    if (ownCursor) { Viewer.canvas.style.cursor = ''; ownCursor = false; }
+    if (App.snapshot() !== st.before) {
+      App.pushUndo('Ebenengröße geändert', st.before);
+      App.touched(true);
+      Panels.renderRight();
+    } else {
+      draw();
+    }
+  }
+  function onHandleDown(e) {
+    if (!canDragHandles() || !datumHandles.length) return;
+    const isTouch = e.pointerType === 'touch';
+    if (!isTouch && e.button !== 0) return;
+    const hnd = hitHandle(e.clientX, e.clientY);
+    if (!hnd) return;
+    const d = find(hnd.userData.datumId);
+    if (!d || !d.plane) return;
+    e.preventDefault(); e.stopPropagation();
+    Viewer.controls.enabled = false;
+    const o = V3(d.plane.o), x = V3(d.plane.x).normalize(), n = V3(d.plane.n).normalize();
+    const y = new THREE.Vector3().crossVectors(n, x).normalize();
+    const [w0, h0] = planeSize(d);
+    const p0 = Viewer.rayPlane(e.clientX, e.clientY, o, n) || hnd.position.clone();
+    const rel0 = p0.clone().sub(o);
+    handleDrag = {
+      id: d.id, sx: hnd.userData.sx, sy: hnd.userData.sy, before: App.snapshot(),
+      o, x, y, n, w0, h0, u0: rel0.dot(x), v0: rel0.dot(y), pointerId: e.pointerId,
+    };
+    try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    window.addEventListener('pointermove', onHandleMove);
+    window.addEventListener('pointerup', onHandleUp);
+    window.addEventListener('pointercancel', onHandleUp);
+  }
+  function onHandleHover(e) {
+    if (handleDrag) return;
+    if (!datumHandles.length || !canDragHandles()) {
+      if (ownCursor) { Viewer.canvas.style.cursor = ''; ownCursor = false; }
+      return;
+    }
+    const hnd = hitHandle(e.clientX, e.clientY);
+    if (hoveredHandle !== hnd) {
+      hoveredHandle = hnd;
+      for (const m of datumHandles) m.material.color.set(m === hnd ? Viewer.theme.accent : 0xffffff);
+      Viewer.requestRender();
+    }
+    if (hnd) {
+      Viewer.canvas.style.cursor = 'nwse-resize';
+      ownCursor = true;
+    } else if (ownCursor) {
+      Viewer.canvas.style.cursor = '';
+      ownCursor = false;
+    }
+  }
+  function handlePositions() {
+    return datumHandles.map((m) => ({ sx: m.userData.sx, sy: m.userData.sy, p: r6(m.position.toArray()) }));
+  }
+
   function draw() {
     const g = Viewer.groups.datums; if (!g) return;
     for (const c of [...g.children]) { g.remove(c); c.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
-    let box = Viewer.sceneBox ? Viewer.sceneBox() : null;
-    const size = box && !box.isEmpty() ? Math.max(30, box.getSize(new THREE.Vector3()).length() * 0.45) : 60;
+    const ov = Viewer.groups.overlay;
+    for (const hm of datumHandles) {
+      if (ov) ov.remove(hm);
+      hm.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    }
+    datumHandles = [];
+    hoveredHandle = null;
+    const size = autoPlaneSize();
+    const showHandles = App.mode === 'model' && typeof Sketch !== 'undefined' && !Sketch.active;
     for (const d of list()) {
       if (d.hidden || !d.plane) continue;
-      const on = d.id === sel, col = new THREE.Color(lost.has(d.id) ? '#e03131' : on ? '#f08c00' : '#d9a441');
+      const on = d.id === sel, isLost = lost.has(d.id);
+      const hasCol = typeof d.color === 'string' && HEX_RE.test(d.color);
+      const hex = isLost ? '#e03131' : hasCol ? d.color : (on ? '#f08c00' : '#d9a441');
+      const col = new THREE.Color(hex);
+      const [w, hh] = planeSize(d);
       const n = V3(d.plane.n).normalize(), x = V3(d.plane.x).normalize(), y = new THREE.Vector3().crossVectors(n, x), o = V3(d.plane.o);
       const m = new THREE.Matrix4().makeBasis(x, y, n).setPosition(o);
-      const quad = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: on ? 0.16 : 0.08, side: THREE.DoubleSide, depthWrite: false }));
-      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(size, size)), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: on ? 1 : 0.7 }));
+      const fillOp = on ? (hasCol ? 0.22 : 0.16) : (hasCol ? 0.12 : 0.08);
+      const edgeOp = on ? 1 : (hasCol ? 0.85 : 0.7);
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: fillOp, side: THREE.DoubleSide, depthWrite: false }));
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, hh)), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: edgeOp }));
       const grp = new THREE.Group(); grp.add(quad, edge); grp.matrixAutoUpdate = false; grp.matrix.copy(m); grp.userData.datum = d.id;
       g.add(grp);
+      if (on && showHandles && ov) {
+        for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          const geo = new THREE.BoxGeometry(1, 1, 1);
+          const hm = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true }));
+          const outline = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: col, depthTest: false, transparent: true }));
+          outline.renderOrder = 33;
+          hm.add(outline);
+          hm.position.copy(o).addScaledVector(x, sx * w * 0.5).addScaledVector(y, sy * hh * 0.5);
+          hm.quaternion.setFromRotationMatrix(m);
+          hm.renderOrder = 32;
+          hm.userData = { datumHandle: true, datumId: d.id, sx, sy };
+          ov.add(hm);
+          datumHandles.push(hm);
+        }
+      }
     }
     for (const ax of axes()) {
       if (ax.hidden || !ax.axis || !Array.isArray(ax.axis.o) || !Array.isArray(ax.axis.d)) continue;
@@ -20443,6 +20822,7 @@ const Datums = (() => {
       }
       g.add(grp);
     }
+    scaleDatumHandles();
     Viewer.requestRender();
   }
 
@@ -20706,11 +21086,21 @@ const Datums = (() => {
       edgePlaneIntersect: edgeRef
         ? '<b>Schnittpunkt Kante / Ebene:</b> Klick eine ebene Fläche als Schnitt-Ebene. <b>Esc</b> bricht ab.'
         : '<b>Schnittpunkt Kante / Ebene:</b> Klick zuerst eine Kante oder Kurve. <b>Esc</b> bricht ab.',
+      centerOfMass: '<b>Bezugspunkt im Schwerpunkt:</b> Klick einen Körper im Bild. <b>Esc</b> bricht ab.',
     }[mode] || '<b>Bezugspunkt wählen:</b> <b>Esc</b> bricht ab.');
 
     const down = (e) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
+      if (mode === 'centerOfMass') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        const top = hit ? Model.topOf(App.doc, hit.id) : null;
+        const id = top ? top.id : (hit && hit.id);
+        if (!id) { UI.toast('Klick einen Körper im Bild an.', { icon: 'info' }); return; }
+        stopPick();
+        addPointCenterOfMass(id);
+        return;
+      }
       if (mode === 'edgeMid' || mode === 'curvePercent') {
         const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
         const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
@@ -20821,6 +21211,7 @@ const Datums = (() => {
     for (const d of ds) {
       const row = h('div', { class: 'tree-row datum-row' + (d.id === sel ? ' sel' : '') + (d.hidden ? ' dim' : ''), 'data-datum': d.id });
       const ic = h('span', { class: 'swatch datum' }); ic.innerHTML = icon('originPlanes');
+      if (typeof d.color === 'string' && HEX_RE.test(d.color)) ic.style.color = d.color;
       const b = d.base || {};
       const sub = lost.has(d.id) ? (b.type === 'face' ? 'Fläche fehlt' : 'Bezug fehlt') : {
         origin: 'Grundebene', face: 'an Fläche', edgeAngle: 'an Kante',
@@ -20857,7 +21248,7 @@ const Datums = (() => {
       const row = h('div', { class: 'tree-row point-row' + (pt.id === selPoint ? ' sel' : '') + (pt.hidden ? ' dim' : ''), 'data-point': pt.id });
       const ic = h('span', { class: 'swatch point' }); ic.innerHTML = icon('point');
       const b = pt.base || {};
-      const sub = lostPoints.has(pt.id) ? 'Bezug fehlt' : { edgeMid: 'Kantenmitte', faceCenter: 'Flächenmitte', edgePlaneIntersect: 'Schnittpunkt', curvePercent: 'auf Kurve', fixed: 'fest' }[b.type] || '';
+      const sub = lostPoints.has(pt.id) ? 'Bezug fehlt' : { edgeMid: 'Kantenmitte', faceCenter: 'Flächenmitte', edgePlaneIntersect: 'Schnittpunkt', curvePercent: 'auf Kurve', centerOfMass: 'Schwerpunkt', fixed: 'fest' }[b.type] || '';
       row.append(ic, h('span', { class: 'nm' }, pt.name), h('span', { class: 'sub mono' }, sub));
       row.onclick = () => selectPoint(pt.id === selPoint ? null : pt.id);
       sec.append(row);
@@ -20926,11 +21317,50 @@ const Datums = (() => {
     if (b.type === 'edgePoint') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Kante oder Bezugspunkt gibt es nicht mehr – die Ebene bleibt an ihrer letzten Stelle.' : 'Die Ebene geht durch die Kante und den Punkt – ändert sich der Körper, wandert sie mit.'));
     if (b.type === 'twoEdges') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Eine Kante fehlt oder die Kanten liegen nicht mehr in einer Ebene.' : 'Die Ebene läuft durch beide Kanten – ändert sich der Körper, wandert sie mit.'));
     if (b.type === 'fixed') w.append(h('div', { class: 'hint-box' }, 'Feste Ebene – sie bleibt, wo sie angelegt wurde.'));
+
+    const styleSec = h('div', { class: 'section', id: 'datum-style-sec', 'data-help': 'datumStyle' }, h('div', { class: 'section-h' }, 'Größe & Farbe'));
+    const [curW, curH] = planeSize(d);
+    const szFields = h('div', { class: 'fields' });
+    szFields.append(
+      UI.numField({ id: 'datum-size-w', label: 'Breite', value: round(curW, 2), min: 10, expr: false, onCommit: (v) => set(d.id, { size: [v, planeSize(d)[1]] }, 'Ebenengröße geändert') }),
+      UI.numField({ id: 'datum-size-h', label: 'Höhe', value: round(curH, 2), min: 10, expr: false, onCommit: (v) => set(d.id, { size: [planeSize(d)[0], v] }, 'Ebenengröße geändert') }),
+    );
+    styleSec.append(szFields);
+    if (Array.isArray(d.size)) {
+      const rb = h('button', { type: 'button', class: 'btn small ghost', id: 'datum-size-reset' }, 'Auto-Größe');
+      rb.onclick = () => set(d.id, { size: null }, 'Ebenengröße zurückgesetzt');
+      styleSec.append(h('div', { class: 'btn-row' }, rb));
+    }
+    const curCol = typeof d.color === 'string' && HEX_RE.test(d.color) ? d.color.toLowerCase() : null;
+    const colRow = h('div', { class: 'colors', style: { marginTop: '6px' } });
+    for (const c of DATUM_COLORS) {
+      const btnC = h('button', {
+        type: 'button', class: 'datum-col-btn', 'data-color': c,
+        'aria-label': 'Farbe ' + c, 'data-tip': c,
+        'aria-pressed': (curCol || '#d9a441') === c ? 'true' : 'false',
+        style: { background: c },
+      });
+      btnC.onclick = () => set(d.id, { color: c }, 'Ebenenfarbe geändert');
+      colRow.append(btnC);
+    }
+    const freeC = h('input', { type: 'color', id: 'datum-color', value: curCol || '#d9a441', 'aria-label': 'Eigene Ebenenfarbe' });
+    freeC.addEventListener('change', () => set(d.id, { color: freeC.value.toLowerCase() }, 'Ebenenfarbe geändert'));
+    colRow.append(h('label', { class: 'color-free', 'data-tip': 'Eigene Farbe wählen' }, freeC));
+    styleSec.append(colRow);
+    if (curCol) {
+      const rc = h('button', { type: 'button', class: 'btn small ghost', id: 'datum-color-reset' }, 'Standardfarbe');
+      rc.onclick = () => set(d.id, { color: null }, 'Ebenenfarbe zurückgesetzt');
+      styleSec.append(h('div', { class: 'btn-row' }, rc));
+    }
+    styleSec.append(h('div', { class: 'hint-box' }, 'Zieh an den vier Ecken im Bild, um die Ebene größer oder kleiner zu machen.'));
+    w.append(styleSec);
+
     const row = h('div', { class: 'btn-row' });
     const bs = h('button', { type: 'button', class: 'btn primary', id: 'datum-sketch' }); bs.innerHTML = icon('sketch') + 'Skizze hierauf'; bs.onclick = () => sketchOn(d.id);
+    const bser = h('button', { type: 'button', class: 'btn', id: 'datum-series-from', 'data-help': 'datumSeries' }); bser.innerHTML = icon('originPlanes') + 'Ebenen-Schar ab hier …'; bser.onclick = () => seriesDialog(bser, 'd:' + d.id);
     const bh = h('button', { type: 'button', class: 'btn', id: 'datum-hide' }); bh.innerHTML = icon(d.hidden ? 'eye' : 'eyeOff') + (d.hidden ? 'Einblenden' : 'Ausblenden'); bh.onclick = () => set(d.id, { hidden: !d.hidden }, d.hidden ? 'Bezugsebene eingeblendet' : 'Bezugsebene ausgeblendet');
     const bd = h('button', { type: 'button', class: 'btn ghost', id: 'datum-del' }); bd.innerHTML = icon('trash') + 'Löschen'; bd.onclick = () => remove(d.id);
-    row.append(bs, bh, bd); w.append(row);
+    row.append(bs, bser, bh, bd); w.append(row);
     body.append(w);
     return true;
   }
@@ -20982,6 +21412,10 @@ const Datums = (() => {
       w.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Lage'), h('b', { class: 'mono', id: 'point-coords' }, pTxt))));
     }
     const b = pt.base || { type: 'fixed' };
+    if (b.type === 'centerOfMass' && b.id) {
+      const bf = Model.find(App.doc, b.id);
+      if (bf) w.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Körper'), h('b', null, Model.label(bf.item)))));
+    }
     const fl = h('div', { class: 'fields' });
     if (b.type === 'curvePercent') {
       fl.append(UI.numField({ id: 'point-percent', label: 'Lage entlang Kurve', value: b.percent ?? 50, unit: '%', onCommit: (v) => setPoint(pt.id, { percent: v }) }));
@@ -21006,6 +21440,7 @@ const Datums = (() => {
         faceCenter: 'Liegt in der Mitte der gewählten Fläche – wandert mit dem Teil mit.',
         edgePlaneIntersect: 'Schnittpunkt von Kante und Ebene – wandert mit, wenn sich eines davon verschiebt.',
         curvePercent: 'Liegt bei dem eingestellten Prozentwert auf der Kurve – wandert mit der Kante mit.',
+        centerOfMass: 'Liegt genau im Schwerpunkt des Körpers – wandert mit, wenn sich Form, Größe oder Lage ändern.',
         fixed: 'Fester Bezugspunkt im Raum.',
       }[b.type] || 'Bezugspunkt im Projekt.';
       w.append(h('div', { class: 'hint-box' }, txt));
@@ -21103,6 +21538,9 @@ const Datums = (() => {
     b2e.dataset.help = 'datumTwoEdges';
     row2b.append(btan, bnc, bep, b2e);
     box.append(row2b);
+    const bser = h('button', { type: 'button', class: 'btn', id: 'dp-series', 'data-help': 'datumSeries' }, 'Ebenen-Schar (n im Abstand) …');
+    bser.onclick = () => { UI.closePop(); seriesDialog(anchor); };
+    box.append(h('div', { class: 'btn-row' }, bser));
     box.append(h('div', { class: 'section-h', style: { marginTop: '4px' } }, 'Bezugsachsen'));
     const row3 = h('div', { class: 'btn-row' });
     const b2p = mk('da-2p', 'Durch 2 Punkte', () => startAxisPick('twoPoints'));
@@ -21118,9 +21556,16 @@ const Datums = (() => {
     const bpep = mk('dp-pt-int', 'Schnitt Kante/Ebene', () => startPointPick('edgePlaneIntersect', { preEdge: edge }));
     const bpp = mk('dp-pt-pct', 'Auf Kurve (%)', () => { if (edge) addPointOnCurve(edge, 50); else startPointPick('curvePercent', { percent: 50 }); });
     for (const x of [bpm, bpfc, bpep, bpp]) x.dataset.help = 'datumPoint';
+    const bpcom = mk('dp-pt-com', 'Im Schwerpunkt', () => {
+      const sid = App.sel && App.sel.length === 1 ? App.sel[0] : null;
+      const sf = sid ? Model.find(App.doc, sid) : null;
+      if (sf && sf.item && sf.item.role !== 'hole' && !App.mergedInto(sid)) addPointCenterOfMass(sid);
+      else startPointPick('centerOfMass');
+    });
+    bpcom.dataset.help = 'datumPointCom';
     const bcs = mk('dp-csys', 'Koordinatensystem …', () => startCsysPick());
     bcs.dataset.help = 'datumCsys';
-    row4.append(bpm, bpfc, bpep, bpp, bcs);
+    row4.append(bpm, bpfc, bpep, bpp, bpcom, bcs);
     box.append(row4);
     UI.pop(anchor || $('#t-sketch'), box);
   }
@@ -21155,7 +21600,87 @@ const Datums = (() => {
       mk('dpt-edge-plane', 'Schnittpunkt Kante/Ebene', () => startPointPick('edgePlaneIntersect', { preEdge: edge })),
       mk('dpt-curve-pct', 'Auf Kurve bei x %', () => { if (edge) addPointOnCurve(edge, pct); else startPointPick('curvePercent', { percent: pct }); }),
     );
+    const bcom = mk('dpt-com', 'Im Schwerpunkt (Körper)', () => {
+      const sid = App.sel && App.sel.length === 1 ? App.sel[0] : null;
+      const sf = sid ? Model.find(App.doc, sid) : null;
+      if (sf && sf.item && sf.item.role !== 'hole' && !App.mergedInto(sid)) addPointCenterOfMass(sid);
+      else startPointPick('centerOfMass');
+    });
+    bcom.dataset.help = 'datumPointCom';
+    row.append(bcom);
     box.append(row);
+    UI.pop(anchor || $('#t-sketch'), box);
+  }
+
+  function seriesDialog(anchor, preBase) {
+    const face = Actions.selectedFace();
+    const hasFace = !!(face && face.info && face.info.t === 'PLANE');
+    const opts = [];
+    if (hasFace) opts.push(['face', 'Gewählte Fläche']);
+    opts.push(['XY', 'Arbeitsfläche (XY)'], ['XZ', 'Vorne (XZ)'], ['YZ', 'Seite (YZ)']);
+    for (const d of list()) if (d.plane) opts.push(['d:' + d.id, `Bezugsebene „${d.name}“`]);
+    let baseVal = preBase && opts.some((o) => o[0] === preBase) ? preBase : (hasFace ? 'face' : 'XY');
+    let count = 4, step = 10, flip = false;
+
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '290px' }, 'data-help': 'datumSeries' });
+    box.append(h('b', null, 'Ebenen-Schar'), h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Legt mehrere parallele Bezugsebenen im gleichen Abstand auf einmal an.'));
+    const baseField = UI.selectField({ id: 'dps-base', label: 'Ausgangsebene', value: baseVal, options: opts, onChange: (v) => { baseVal = v; updatePreview(); } });
+    const cntField = UI.numField({ id: 'dps-count', label: 'Anzahl Ebenen', value: count, min: 1, int: true, unit: '', expr: false, onCommit: (v) => { count = clamp(Math.round(v), 1, 50); updatePreview(); } });
+    const stepField = UI.numField({ id: 'dps-step', label: 'Abstand', value: step, unit: 'mm', expr: true, onCommit: (v) => { step = v; updatePreview(); } });
+    const flipInp = h('input', { type: 'checkbox', id: 'dps-flip' });
+    const flipLbl = h('label', { class: 'chk', for: 'dps-flip' }, flipInp, h('span', null, 'In die andere Richtung (−)'));
+    const preview = h('div', { class: 'hint-box', id: 'dps-preview' });
+    box.append(baseField, cntField, stepField, flipLbl, preview);
+
+    const readInputs = () => {
+      const cntEl = $('#dps-count', box), stepEl = $('#dps-step', box);
+      if (cntEl) {
+        const cn = parseNum(cntEl.value);
+        if (isFinite(cn) && cn >= 1) count = clamp(Math.round(cn), 1, 50);
+      }
+      if (stepEl) {
+        const V = Model.vars(App.doc).v;
+        const ps = Units.parseLen(stepEl.value.trim(), V, { expr: true });
+        if (ps.ok) step = ps.value;
+      }
+      flip = !!flipInp.checked;
+    };
+    const updatePreview = () => {
+      readInputs();
+      const V = Model.vars(App.doc).v;
+      const stepNum = Model.num(step, V, NaN);
+      if (!isFinite(stepNum) || Math.abs(stepNum) < 1e-6) {
+        preview.textContent = 'Bitte einen Abstand ungleich 0 eingeben.';
+        return;
+      }
+      const dir = flip ? -stepNum : stepNum;
+      let off0 = 0;
+      if (baseVal.startsWith('d:')) {
+        const rd = find(baseVal.slice(2));
+        if (rd && rd.base && (rd.base.type === 'origin' || rd.base.type === 'face')) off0 = Model.num(rd.base.dist, V, 0);
+      }
+      const vals = [];
+      for (let k = 1; k <= count; k++) {
+        if (count > 6 && k > 4 && k < count) { if (k === 5) vals.push('…'); continue; }
+        vals.push(Units.fmtLen(off0 + dir * k, 1));
+      }
+      preview.textContent = `${count} ${count === 1 ? 'Ebene' : 'Ebenen'} bei: ${vals.join(' · ')} ${Units.label()}`;
+    };
+    cntField.querySelector('input').addEventListener('input', updatePreview);
+    stepField.querySelector('input').addEventListener('input', updatePreview);
+    flipInp.addEventListener('change', updatePreview);
+    updatePreview();
+
+    const okBtn = h('button', { type: 'button', class: 'btn primary', id: 'dps-create' }, 'Ebenen anlegen');
+    okBtn.onclick = () => {
+      readInputs();
+      const spec = baseVal === 'face' ? face : baseVal;
+      UI.closePop();
+      addSeries(spec, count, step, { flip });
+    };
+    const cancelBtn = h('button', { type: 'button', class: 'btn', id: 'dps-cancel' }, 'Abbrechen');
+    cancelBtn.onclick = () => UI.closePop();
+    box.append(h('div', { class: 'btn-row' }, okBtn, cancelBtn));
     UI.pop(anchor || $('#t-sketch'), box);
   }
 
@@ -21189,18 +21714,22 @@ const Datums = (() => {
         sel = null; selAxis = null; selPoint = null; selCsys = null; draw();
       }
     });
+    App.on('mode', draw);
+    Viewer.on('camera', scaleDatumHandles);
+    Viewer.canvas.addEventListener('pointerdown', onHandleDown, true);
+    Viewer.canvas.addEventListener('pointermove', onHandleHover);
   }
 
   return {
-    init, list, find, add, addOrigin, addFromFace, addEdgeAngle, addTangent, addNormalToCurve, addEdgePoint, addTwoEdges, addFixed, set, remove, select, sketchOn,
+    init, list, find, add, addOrigin, addFromFace, addEdgeAngle, addTangent, addNormalToCurve, addEdgePoint, addTwoEdges, addFixed, addSeries, set, remove, select, sketchOn,
     axes, findAxis, addAxis, addAxisTwoPoints, addAxisFromFace, addAxisFromCircleEdge, addAxisNormalAtPoint, addAxisFixed,
     setAxis, removeAxis, selectAxis, solveAxis, axisTreeSection, renderAxisPanel, axisDialog, pickAxis, applyAxisToRevolve,
-    points, findPoint, addPoint, addPointEdgeMid, addPointFaceCenter, addPointOnCurve, addPointEdgePlane, addPointFixed,
+    points, findPoint, addPoint, addPointEdgeMid, addPointFaceCenter, addPointOnCurve, addPointEdgePlane, addPointCenterOfMass, addPointFixed,
     setPoint, removePoint, selectPoint, solvePoint, pointTreeSection, renderPointPanel, pointDialog, pickPoint, startPointPick,
     csysList, findCsys, addCsys, addCsysFromPointEdges, addCsysFixed, setCsys, removeCsys, selectCsys, solveCsys, csysExportMatrix,
     csysTreeSection, renderCsysPanel, csysDialog, startCsysPick,
     startEdgeAnglePick, startTangentPick, startNormalCurvePick, startEdgePointPick, startTwoEdgesPick, startAxisPick, stopPick,
-    draw, dialog, treeSection, renderPanel, solve, relink,
+    draw, dialog, seriesDialog, treeSection, renderPanel, solve, relink, planeSize, hitHandle, handlePositions,
     get selected() { return sel; }, get lost() { return [...lost]; },
     get selectedAxis() { return selAxis; }, get lostAxes() { return [...lostAxes]; },
     get selectedPoint() { return selPoint; }, get lostPoints() { return [...lostPoints]; },
@@ -42301,6 +42830,7 @@ const Commands = (() => {
     add('invertSel', 'Auswahl umkehren', 'pointer', 'auswahl umkehren invertieren andere', () => Actions.invertSelection(), { group: 'Ansicht', kbd: 'Strg Umschalt I' });
     add('repeat', 'Letzten Befehl wiederholen', 'undo', 'wiederholen nochmal letzter befehl', () => repeat(), { group: 'Werkzeuge', kbd: 'Leertaste' });
     add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg winkel kante', () => Datums.dialog(), { group: 'Werkzeuge' });
+    add('datum-series', 'Ebenen-Schar anlegen (mehrere Ebenen im gleichen Abstand)', 'originPlanes', 'ebenen schar reihe mehrfach parallel bezugsebene abstand', () => Datums.seriesDialog(), { group: 'Werkzeuge' });
     add('datum-edge-angle', 'Bezugsebene im Winkel an Kante', 'originPlanes', 'bezugsebene ebene kante winkel schräg geneigt', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; Datums.startEdgeAnglePick(30, e); }, { group: 'Werkzeuge' });
     add('datum-tangent', 'Bezugsebene tangential an Rundung', 'originPlanes', 'bezugsebene ebene tangential zylinder kegel rundung mantel', () => { const f = Actions.selectedFace(); Datums.startTangentPick(f && (f.info.t === 'CYLINDRE' || f.info.t === 'CONE') ? f : null); }, { group: 'Werkzeuge' });
     add('datum-normal-curve', 'Bezugsebene senkrecht zu Kante oder Kurve', 'originPlanes', 'bezugsebene ebene senkrecht kante kurve bogen pfad prozent mitte', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; Datums.startNormalCurvePick('mid', 50, e); }, { group: 'Werkzeuge' });
@@ -42315,6 +42845,7 @@ const Commands = (() => {
     add('datum-point-face-center', 'Bezugspunkt: Flächenmitte', 'point', 'bezugspunkt punkt fläche mitte flächenmitte', () => { const f = Actions.selectedFace(); if (f) Datums.addPointFaceCenter(f); else Datums.startPointPick('faceCenter'); }, { group: 'Werkzeuge' });
     add('datum-point-edge-plane', 'Bezugspunkt: Schnittpunkt Kante und Ebene', 'point', 'bezugspunkt punkt schnittpunkt kante ebene fläche', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; Datums.startPointPick('edgePlaneIntersect', { preEdge: e }); }, { group: 'Werkzeuge' });
     add('datum-point-curve-pct', 'Bezugspunkt: auf Kurve bei x %', 'point', 'bezugspunkt punkt kurve kante prozent anteil entlang', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; if (e) Datums.addPointOnCurve(e, 50); else Datums.startPointPick('curvePercent', { percent: 50 }); }, { group: 'Werkzeuge' });
+    add('datum-point-com', 'Bezugspunkt: Schwerpunkt eines Körpers', 'point', 'bezugspunkt punkt schwerpunkt mitte masse zentrum cog com', () => { const id = App.sel.length === 1 ? App.sel[0] : null; const f = id ? Model.find(App.doc, id) : null; if (f && f.item.role !== 'hole') Datums.addPointCenterOfMass(id); else Datums.startPointPick('centerOfMass'); }, { group: 'Werkzeuge' });
     add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, IGES, BREP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step igs iges brep stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
