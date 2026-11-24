@@ -23,6 +23,8 @@ const Panels = (() => {
     } else {
       const sheetBtn = btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
       sheetBtn.dataset.help = 'drawingFormat';
+      const viewBtn = btn('t-view-add', 'cube', T('tool.viewAdd'), T('tool.viewAddTip'), '', (e) => Drawing.viewMenu(e.currentTarget));
+      viewBtn.dataset.help = 'drawingViews';
       const secBtn = btn('t-section', 'section', T('tool.dsection'), T('tool.dsectionTip'), 'S', () => Drawing.tool('section'), Drawing.activeTool === 'section' ? 'active' : '');
       secBtn.dataset.help = 'drawingSection';
       secBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'section'));

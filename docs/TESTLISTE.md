@@ -1998,6 +1998,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Speichern/Laden, PDF & Hilfe**: Löschen/Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Notiztext), Befehlssuche und Hilfetexte (`drawingDimStyle`, `drawingLeader`) funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser mehrere Blätter mit unterschiedlichen Maß-Stilen (z. B. Schrägstrich und Punkt) anlegen, eine mehrzeilige Notiz an eine Rundung setzen, die Ansicht verschieben und die exportierte PDF-/DXF-Datei prüfen.
 
+## Zeichnung: Ansichten einstellen (Auto [A-065], ZE-04, ZE-05)
+
+- [x] **Verdeckte Kanten je Ansicht (ZE-04)**: Im Panel unter „Ansichten“ (`#dw-view-list`, `#dw-v-hidden`) lassen sich verdeckte Kanten pro Ansicht unabhängig ein- und ausschalten; aktivierte Ansichten zeigen zusätzliche gestrichelte `.hid`-Linien (`stroke-dasharray`).
+- [x] **Tangentiale Kanten & Maßstab je Ansicht (ZE-04)**: Übergangskanten von Rundungen (`.tan` aus `Rg1LineVCompound`/`Rg1LineHCompound`) sowie der Maßstab (`#dw-v-scale`, „Wie Blatt“ oder Normmaßstab z. B. `2:1`) lassen sich je Ansicht einzeln schalten.
+- [x] **Isometrische Ansicht, Schattierung & PDF-Export (ZE-05)**: `#dw-add-iso` legt eine isometrische Ansicht auf dem Blatt an; `#dw-v-shaded` legt ein orthografisch gerendertes 3D-Schattierungsbild (`image.shade-img`) hinter die Kanten, und der PDF-Export enthält die Isometrie samt gestrichelter Linien und eingebettetem Schattierungsbild (`/Subtype /Image`, `/Filter /DCTDecode`).
+- [x] **Freie 3D-Ansicht aus Kamera, Rückgängig, Speichern & Hilfen (ZE-05)**: `#dw-add-free` übernimmt die aktuelle 3D-Kamera als neue Zeichnungsansicht (`extraViews`), arbeitet mit Rückgängig/Wiederholen, Speichern/Laden, Befehlen und den Hilfetexten `drawingViews` / `drawingViewProps`.
+- [ ] **Von Hand**: Im Browser eine gerundete Baugruppe mit mehreren Farben und Werkstoffen als schattierte Isometrie und freie 3D-Ansicht anlegen, in der freien Ansicht den Blickwinkel per „Aktuelle 3D-Ansicht übernehmen“ aktualisieren und das exportierte PDF im PDF-Betrachter auf Schattierung, Linienstärken und Beschriftung prüfen.
+
 ## Fehler melden
 
 ```

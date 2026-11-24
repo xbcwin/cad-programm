@@ -1014,6 +1014,21 @@
     "hilfe": "Beim 3D-Druck schrumpfen runde Bohrungen oft leicht nach innen. Mit dem Loch-Ausgleich (+0,1 bis +0,4 mm Durchmesser) werden alle runden inneren Löcher beim Export als STL oder 3MF entsprechend größer gerechnet.",
     "tipp": "Dein CAD-Modell selbst sowie STEP, IGES und BREP bleiben dabei unverändert exakt."
   },
+  "printFit": {
+    "tip": "Passungs-Vorgaben für 3D-Druckteile: lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0 mm",
+    "hilfe": "Gedruckte Teile brauchen etwas Spiel, damit Bolzen, Stifte und Schrauben sauber passen. Wähle eine Vorgabe: bei Bohrungen wird das Spiel auf den Durchmesser addiert, bei Bolzen und Stiften abgezogen – als Projekt-Vorgabe oder direkt am Teil.",
+    "tipp": "Für bewegliche Deckel und Gleitsitze nimm „Gleitend“ (0,2 mm), für stramme Verbindungen „Fest“ (0,1 mm)."
+  },
+  "nozzleWall": {
+    "tip": "Prüft alle Wände gegen die gewählte Düse (Warnung unter 2 × Düse)",
+    "hilfe": "Wände dünner als zwei Bahnen der Druckdüse (unter 2 × Düse, z. B. 0,8 mm bei einer 0,4-mm-Düse) druckt der Slicer nicht mehr stabil oder lässt Lücken. Tracery warnt im Projekt-Panel, an der Ampel und bei den Schwachstellen.",
+    "tipp": "Klick auf „Stellen zeigen“, um alle zu dünnen Bereiche rot am Modell hervorzuheben."
+  },
+  "orientPrint": {
+    "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
+    "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
+    "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
+  },
   "userLibrary": {
     "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
     "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
@@ -1029,25 +1044,20 @@
     "hilfe": "Du kannst jedes Blatt einzeln auf DIN A4, A3, A2, A1 oder A0 sowie zwischen Quer- und Hochformat umstellen. Rahmen (20 mm Heftrand links, 10 bzw. 20 mm Außenrand) und das Schriftfeld passen sich der gewählten Blattgröße automatisch an.",
     "tipp": "Größere Formate wie A2, A1 oder A0 eignen sich besonders für Baugruppen oder große Werkstücke im Maßstab 1:1."
   },
+  "drawingViews": {
+    "tip": "Isometrische oder freie 3D-Ansichten zur Zeichnung hinzufügen",
+    "hilfe": "Über „Ansicht +“ oder rechts unter „Ansichten“ fügst du eine isometrische Ansicht oder eine freie Ansicht aus deiner aktuellen 3D-Kamera hinzu – wahlweise gleich schattiert. Bei freien Ansichten kannst du den Blickwinkel später über „Aktuelle 3D-Ansicht übernehmen“ aktualisieren.",
+    "tipp": "Mit Klick auf eine Ansicht auf dem Blatt oder in der Liste rechts wählst du sie aus und stellst sie einzeln ein."
+  },
+  "drawingViewProps": {
+    "tip": "Maßstab, Kantenarten und Schattierung je Ansicht einstellen",
+    "hilfe": "Für die gewählte Ansicht legst du einen eigenen Maßstab („Wie Blatt“ oder einen Normmaßstab), verdeckte Kanten (gestrichelt), tangentiale Übergangskanten (dünne Volllinie an Rundungen) und eine schattierte 3D-Füllung fest. Alles wird auch im PDF und SVG gespeichert.",
+    "tipp": "Schalte verdeckte Kanten in der Isometrie aus und nur in den Schnitt- oder Hauptansichten ein, damit das Blatt übersichtlich bleibt."
+  },
   "drawingDetail": {
     "tip": "Ausschnitt einer Ansicht vergrößert als Detailansicht (z. B. Detail Z, 4:1) darstellen",
     "hilfe": "Ziehe einen Kreis um einen Bereich der Vorder-, Drauf- oder Seitenansicht, wähle den Vergrößerungsmaßstab (z. B. 2:1, 4:1 oder 5:1) sowie einen Kennbuchstaben und platziere die Detailansicht frei auf dem Blatt. Beide Stellen tragen denselben Kennbuchstaben, und Maße innerhalb der Detailansicht zeigen immer die wahren Längen am Modell.",
     "tipp": "Nach dem Platzieren kannst du die Detailansicht auf dem Blatt verschieben und Maßstab, Buchstabe oder Kreisradius rechts anpassen."
-  },
-  "printFit": {
-    "tip": "Passungs-Vorgaben für 3D-Druckteile: lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0 mm",
-    "hilfe": "Gedruckte Teile brauchen etwas Spiel, damit Bolzen, Stifte und Schrauben sauber passen. Wähle eine Vorgabe: bei Bohrungen wird das Spiel auf den Durchmesser addiert, bei Bolzen und Stiften abgezogen – als Projekt-Vorgabe oder direkt am Teil.",
-    "tipp": "Für bewegliche Deckel und Gleitsitze nimm „Gleitend“ (0,2 mm), für stramme Verbindungen „Fest“ (0,1 mm)."
-  },
-  "nozzleWall": {
-    "tip": "Prüft alle Wände gegen die gewählte Düse (Warnung unter 2 × Düse)",
-    "hilfe": "Wände dünner als zwei Bahnen der Druckdüse (unter 2 × Düse, z. B. 0,8 mm bei einer 0,4-mm-Düse) druckt der Slicer nicht mehr stabil oder lässt Lücken. Tracery warnt im Projekt-Panel, an der Ampel und bei den Schwachstellen.",
-    "tipp": "Klick auf „Stellen zeigen“, um alle zu dünnen Bereiche rot am Modell hervorzuheben."
-  },
-  "orientPrint": {
-    "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
-    "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
-    "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
   },
   "drawingSection": {
     "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",

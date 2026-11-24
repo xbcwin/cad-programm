@@ -13373,6 +13373,187 @@ def t_a060_druck_passung_wand_ausrichten(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a065_zeichnung_ansichten(p):
+    p.empty()
+    p.ev("""
+      const box = Model.newItem('box', { w: 50, d: 30, h: 25 }, { name: 'Block' });
+      const hole = Model.newItem('cylinder', { d: 12, h: 30 }, { name: 'Bohrung', role: 'hole', t: { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } });
+      App.change('Modell mit Loch', d => { d.items.push(box, hole); });
+    """)
+    warte_rechnen(p)
+    p.ev("""
+      const box = App.doc.items.find(x => x.kind === 'box');
+      Actions.finishAll(box.id, 'fillet', 'all', 3);
+    """)
+    warte_rechnen(p)
+
+    # 1. In Zeichnung wechseln & verdeckte Kanten je Ansicht (gestrichelt) prüfen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.pg.wait_for_selector('#dw-view-list .dw-view-row')
+    p.pg.click('#dw-view-list .dw-view-row[data-view-id="front"]'); p.wait(200)
+
+    h_before = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        fHid: svg.querySelectorAll('.hid[data-view="front"]').length,
+        lHid: svg.querySelectorAll('.hid[data-view="left"]').length,
+        css: svg.querySelector('style')?.textContent || '',
+      };
+    """)
+    p.pg.uncheck('#dw-v-hidden'); p.wait(250)
+    h_off = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        fHid: svg.querySelectorAll('.hid[data-view="front"]').length,
+        lHid: svg.querySelectorAll('.hid[data-view="left"]').length,
+      };
+    """)
+    p.pg.check('#dw-v-hidden'); p.wait(250)
+    h_on = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg .hid[data-view=\"front\"]').length")
+
+    ok1 = (
+        h_before['fHid'] > 0 and h_before['lHid'] > 0
+        and 'stroke-dasharray' in h_before['css']
+        and h_off['fHid'] == 0 and h_off['lHid'] > 0
+        and h_on == h_before['fHid']
+    )
+
+    # 2. Tangentiale Kanten & eigener Maßstab je Ansicht prüfen
+    t_before = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        fTan: svg.querySelectorAll('.tan[data-view="front"]').length,
+        tTan: svg.querySelectorAll('.tan[data-view="top"]').length,
+      };
+    """)
+    p.pg.uncheck('#dw-v-tangent'); p.wait(250)
+    t_off = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        fTan: svg.querySelectorAll('.tan[data-view="front"]').length,
+        tTan: svg.querySelectorAll('.tan[data-view="top"]').length,
+      };
+    """)
+    p.pg.check('#dw-v-tangent'); p.wait(250)
+    t_on = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg .tan[data-view=\"front\"]').length")
+
+    sheet_scale_before = p.ev("return Drawing.layout.s")
+    p.pg.select_option('#dw-v-scale', '2'); p.wait(250)
+    sc_after = p.ev("""
+      const lay = Drawing.layout;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        fScale: lay?.views?.front?.s,
+        tScale: lay?.views?.top?.s,
+        txt: svg?.textContent || '',
+      };
+    """)
+    p.pg.select_option('#dw-v-scale', 'sheet'); p.wait(200)
+
+    ok2 = (
+        t_before['fTan'] > 0 and t_before['tTan'] > 0
+        and t_off['fTan'] == 0 and t_off['tTan'] > 0
+        and t_on == t_before['fTan']
+        and abs(sc_after['fScale'] - 2.0) < 1e-6
+        and abs(sc_after['tScale'] - sheet_scale_before) < 1e-6
+        and '2:1' in sc_after['txt']
+    )
+
+    # 3. Isometrische Ansicht anlegen, schattieren & PDF-Export prüfen
+    had_iso_before = p.ev("return Boolean(Drawing.layout?.views?.iso) || (Drawing.activeSheet().extraViews || []).length > 0")
+    p.pg.click('#dw-add-iso')
+    p.pg.wait_for_function("() => { const ex = window.__M.Drawing.activeSheet().extraViews || []; return ex.length === 1 && Boolean(document.querySelector('#sheet .sheet-holder svg .vis[data-view=\"' + ex[0].id + '\"]')); }", timeout=15000)
+    iso_id = p.ev("return Drawing.activeSheet().extraViews[0].id")
+    p.pg.check('#dw-v-shaded'); p.wait(400)
+    iso_st = p.ev("""
+      const id = arg;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const img = svg.querySelector('image.shade-img[data-view="' + id + '"]');
+      const href = img ? (img.getAttribute('href') || '') : '';
+      return {
+        visCount: svg.querySelectorAll('.vis[data-view="' + id + '"]').length,
+        hasShade: href.startsWith('data:image/png'),
+        txt: svg.textContent || '',
+      };
+    """, iso_id)
+
+    p.pg.click('#t-dexport'); p.wait(200)
+    with p.pg.expect_download(timeout=30000) as dl_info:
+        p.pg.locator('.menu button', has_text='PDF').click()
+    dl = dl_info.value
+    pdf_bytes = open(dl.path(), 'rb').read()
+    ok3 = (
+        not had_iso_before
+        and iso_st['visCount'] > 0 and iso_st['hasShade']
+        and 'Isometrie' in iso_st['txt']
+        and dl.suggested_filename.lower().endswith('.pdf')
+        and pdf_bytes.startswith(b'%PDF-1.4')
+        and b'Isometrie' in pdf_bytes
+        and b'] 0 d' in pdf_bytes
+        and b'/Subtype /Image' in pdf_bytes and b'/Filter /DCTDecode' in pdf_bytes
+    )
+
+    # 4. Freie 3D-Ansicht aus aktueller Kamera, Rückgängig, Speichern/Laden & Hilfen prüfen
+    p.pg.click('#tab-model'); p.wait(250)
+    cam_dir = p.ev("""
+      const p0 = Viewer.camera.position.clone().set(110, 175, 95);
+      const t0 = Viewer.controls.target.clone().set(0, 0, 12);
+      Viewer.moveCamera(p0, t0, null, false);
+      return Viewer.cameraBasis().dir;
+    """)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#dw-add-free', timeout=15000)
+    p.pg.click('#dw-add-free')
+    p.pg.wait_for_function("() => { const ex = window.__M.Drawing.activeSheet().extraViews || []; return ex.length === 2 && Boolean(document.querySelector('#sheet .sheet-holder svg .vis[data-view=\"' + ex[1].id + '\"]')); }", timeout=15000)
+
+    free_st = p.ev("""
+      const d = arg;
+      const ex = Drawing.activeSheet().extraViews[1];
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dot = ex.dir[0]*d[0] + ex.dir[1]*d[1] + ex.dir[2]*d[2];
+      return {
+        kind: ex.kind,
+        name: ex.name,
+        dot,
+        visCount: svg.querySelectorAll('.vis[data-view="' + ex.id + '"]').length,
+        txt: svg.textContent || '',
+      };
+    """, cam_dir)
+
+    p.ev("App.undo()"); p.wait(300)
+    n_undo = p.ev("return (Drawing.activeSheet().extraViews || []).length")
+    p.ev("App.redo()"); p.wait(300)
+    n_redo = p.ev("return (Drawing.activeSheet().extraViews || []).length")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(400)
+    reloaded = p.ev("""
+      const sh = Drawing.activeSheet();
+      return {
+        exLen: (sh.extraViews || []).length,
+        isoShaded: Boolean(sh.viewOpts && sh.extraViews[0] && sh.viewOpts[sh.extraViews[0].id]?.shaded),
+      };
+    """)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => ({
+        json: ['drawingViews', 'drawingViewProps'].every(k => hj[k] && hj[k].tip && hj[k].hilfe && hj[k].tipp),
+        dom: ['drawingViews', 'drawingViewProps'].every(k => document.querySelectorAll(`[data-help="${k}"]`).length >= 1),
+        cmd: Commands.search('isometrische ansicht').length >= 1 && Commands.search('freie 3d-ansicht').length >= 1,
+      }));
+    """)
+
+    ok4 = (
+        free_st['kind'] == 'free' and free_st['visCount'] > 0
+        and free_st['dot'] > 0.99 and 'Freie Ansicht' in free_st['txt']
+        and n_undo == 1 and n_redo == 2
+        and reloaded['exLen'] == 2 and reloaded['isoShaded']
+        and bool(help_ok['json'] and help_ok['dom'] and help_ok['cmd'])
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_f11241014(p):
     # 1. Skizze-Fertig (Prägen) wartet auf verzögert geladene Schrift, und Schrift-Laden schützt fokussiertes Feld
     p.empty()
@@ -14414,6 +14595,7 @@ TESTS = [
     ('[A-060] 3D-Druck: Passungs-Vorgaben, Düsen-Wandstärken-Check & Für den Druck ausrichten', t_a060_druck_passung_wand_ausrichten),
     ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
     ('[A-062] Zeichnung: mehrere Blätter, A4 bis A0 & PDF-Export', t_a062_zeichnung_blaetter),
+    ('[A-065] Zeichnung: Ansichten einstellen (Maßstab, verdeckte & tangentiale Kanten, Isometrie, freie 3D-Ansicht & schattiert)', t_a065_zeichnung_ansichten),
     ('[A-063] Zeichnung: Schnittansicht (A–A) mit Schraffur, Pfeilen & Bohrungs-Lücke', t_a063_schnittansicht),
     ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
