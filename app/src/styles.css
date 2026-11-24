@@ -616,6 +616,9 @@ body.sketching .timeline{display:none}
 .dw-view-row .dw-view-del svg{width:12px;height:12px}
 .dw-view-props{display:grid;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
 .dw-view-props-h{font:600 12px/1.2 var(--font);color:var(--ink);margin-bottom:2px}
+.dw-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.dw-dim-grid .btn{justify-content:flex-start;padding:6px 8px;font-size:12.5px}
+.dw-dim-grid .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }
