@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -7402,6 +7402,212 @@ def t_a027_weitere_bezugsebenen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def _make_kern_ttf_bytes(kern_val=-200):
+    import struct
+
+    def pad4(b):
+        return b + b'\x00' * ((-len(b)) % 4)
+
+    def pack_rect(x0, y0, x1, y1):
+        pts = [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
+        out = bytearray(struct.pack('>5h', 1, x0, y0, x1, y1))
+        out += struct.pack('>HH', 3, 0)  # endPtsOfContours=[3], instructionLength=0
+        flags = bytearray([0x01] * 4)
+        xs = bytearray()
+        ys = bytearray()
+        px = py = 0
+        for x, y in pts:
+            xs += struct.pack('>h', x - px)
+            ys += struct.pack('>h', y - py)
+            px, py = x, y
+        return bytes(out) + bytes(flags) + bytes(xs) + bytes(ys)
+
+    g_notdef = b''
+    g_A = pack_rect(0, 0, 500, 700)
+    g_V = pack_rect(0, 0, 500, 700)
+    glyf_parts = [g_notdef, g_A, g_V]
+    glyf = bytearray()
+    offs = []
+    for g in glyf_parts:
+        while len(glyf) % 2:
+            glyf.append(0)
+        offs.append(len(glyf))
+        glyf += g
+    while len(glyf) % 2:
+        glyf.append(0)
+    offs.append(len(glyf))
+
+    loca = b''.join(struct.pack('>H', o // 2) for o in offs)
+    head = bytearray(54)
+    struct.pack_into('>IIHH', head, 0, 0x00010000, 0x00010000, 0, 0)
+    struct.pack_into('>IHH', head, 12, 0x5F0F3CF5, 0, 1000)
+    struct.pack_into('>hhhhHHhhh', head, 36, 0, 0, 500, 700, 0, 8, 2, 0, 0)
+    hhea = struct.pack('>IhhhhhhhhhhhhhhhH', 0x00010000, 700, -200, 0, 600, 0, 0, 500, 1, 0, 0, 0, 0, 0, 0, 0, 3)
+    maxp = struct.pack('>IH', 0x00005000, 3) + b'\x00' * 26
+    hmtx = struct.pack('>HhHhHh', 500, 0, 600, 0, 600, 0)
+
+    # cmap format 4 mapping 'A' (65) -> 1, 'V' (86) -> 2
+    end_codes = struct.pack('>HHH', 65, 86, 0xFFFF)
+    start_codes = struct.pack('>HHH', 65, 86, 0xFFFF)
+    id_deltas = struct.pack('>hhh', 1 - 65, 2 - 86, 1)
+    id_range = struct.pack('>HHH', 0, 0, 0)
+    fmt4_body = struct.pack('>HHHH', 6, 4, 1, 2) + end_codes + struct.pack('>H', 0) + start_codes + id_deltas + id_range
+    fmt4 = struct.pack('>HHH', 4, 6 + len(fmt4_body), 0) + fmt4_body
+    cmap = struct.pack('>HH', 0, 1) + struct.pack('>HHI', 3, 1, 12) + fmt4
+
+    # name table: nameID 4 = "KernTest"
+    nbytes = 'KernTest'.encode('utf-16-be')
+    name = struct.pack('>HHH', 0, 1, 18) + struct.pack('>HHHHHH', 3, 1, 0x0409, 4, len(nbytes), 0) + nbytes
+
+    # kern table: version 0, 1 subtable format 0 horizontal, 1 pair (1, 2) -> kern_val
+    sub_body = struct.pack('>HHHH', 1, 6, 0, 0) + struct.pack('>HHh', 1, 2, kern_val)
+    sub_hdr = struct.pack('>HHH', 0, 6 + len(sub_body), 0x0001)
+    kern = struct.pack('>HH', 0, 1) + sub_hdr + sub_body
+
+    tbls = {
+        'cmap': cmap, 'glyf': bytes(glyf), 'head': bytes(head), 'hhea': hhea,
+        'hmtx': hmtx, 'kern': kern, 'loca': loca, 'maxp': maxp, 'name': name,
+    }
+    tags = sorted(tbls.keys())
+    nt = len(tags)
+    hdr_len = 12 + nt * 16
+    cur = hdr_len
+    dir_bytes = bytearray()
+    body = bytearray()
+    for tag in tags:
+        raw = tbls[tag]
+        dir_bytes += tag.encode('ascii') + struct.pack('>III', 0, cur, len(raw))
+        padded = pad4(raw)
+        body += padded
+        cur += len(padded)
+    return struct.pack('>IHHHH', 0x00010000, nt, 16, 0, 0) + bytes(dir_bytes) + bytes(body)
+
+
+def t_eigene_schrift(p):
+    ttf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'daten', 'Balthazar-Regular.ttf')
+    sketch_xy(p)
+    p.pg.keyboard.press('b'); p.wait(250)
+
+    # 1. Freie OFL-TTF laden, „Tracery“ schreiben und zu 3D-Körper mit Fläche > 0 hochziehen
+    with p.pg.expect_file_chooser() as fc:
+        p.pg.locator('#tx-load-font').click()
+    fc.value.set_files(ttf_path)
+    p.wait(500)
+
+    info1 = p.ev("""
+      const fonts = App.doc.fonts || [];
+      const f = fonts[0];
+      const opts = [...document.querySelectorAll('#tx-font option')].map(o=>o.value);
+      return { n: fonts.length, id: f && f.id, name: f && f.name, hasB64: !!(f && f.data && f.data.length > 1000), inSel: !!(f && opts.includes(f.id)), inSK: !!(f && SK.FONTNAMES[f.id]), cur: Sketch.state.txt.font };
+    """)
+    font_id = info1['id']
+    p.pg.fill('#tx-s', 'Tracery'); p.pg.fill('#tx-h', '10'); p.pg.press('#tx-h', 'Enter'); p.wait(150)
+    o = to_screen(p, -20, 0)
+    p.pg.mouse.click(o[0], o[1]); p.wait(400)
+    sk_area = SS(p, "return SK.regions(S.ents).reduce((s,r)=>s+r.area,0)")
+    fertig_hoch(p)
+    m1 = p.ev("""return (async () => {
+      const it = App.doc.items[0], r = it && App.results.get(it.id);
+      if (!r || !r.data) return { ok: false, errs: App.errors.length };
+      const ms = await Mass.measure();
+      const pt = ms && Mass.partOf(ms, it.id);
+      return { ok: App.errors.length === 0, faces: r.data.faces.length, area: pt && pt.area, vol: pt && pt.volume, font: it.p.sketch.ents[0].font };
+    })();""")
+    ok1 = (
+        info1['n'] == 1 and info1['hasB64'] and info1['inSel'] and info1['inSK'] and info1['cur'] == font_id
+        and sk_area > 50 and m1.get('ok') and m1.get('faces', 0) > 20 and (m1.get('area') or 0) > 100 and (m1.get('vol') or 0) > 10 and m1.get('font') == font_id
+    )
+
+    # 2. Projekt speichern und neu laden -> Schrift ist noch da, Körper rechnet mit Fläche > 0
+    with p.pg.expect_download() as dl:
+        p.ev("Start.saveFile()")
+    proj_tmp = tempfile.NamedTemporaryFile(suffix='.tracery.json', delete=False)
+    proj_tmp.close()
+    dl.value.save_as(proj_tmp.name)
+    saved_txt = open(proj_tmp.name, encoding='utf-8').read()
+    os.unlink(proj_tmp.name)
+    saved_json = json.loads(saved_txt)
+
+    p.ev("App.setDoc(Model.newDoc('Leer'))"); p.wait(400)
+    gone_after_reset = p.ev("return !SK.FONTNAMES[arg]", font_id)
+    p.ev("""return (async () => {
+      const f = new File([arg], 'schrift-test.tracery.json', { type: 'application/json' });
+      await Start.openBlob(f);
+    })();""", saved_txt)
+    warte_rechnen(p, 30)
+    m2 = p.ev("""return (async () => {
+      const it = App.doc.items[0], r = it && App.results.get(it.id);
+      const ms = it ? await Mass.measure() : null;
+      const pt = ms && it ? Mass.partOf(ms, it.id) : null;
+      return {
+        fonts: (App.doc.fonts || []).length,
+        hasId: (App.doc.fonts || []).some(f => f.id === arg),
+        inSK: !!SK.FONTNAMES[arg],
+        textFont: it && it.p && it.p.sketch && it.p.sketch.ents && it.p.sketch.ents[0] && it.p.sketch.ents[0].font,
+        errs: App.errors.length,
+        area: pt && pt.area,
+        faces: r && r.data ? r.data.faces.length : 0,
+      };
+    })();""", font_id)
+    ok2 = (
+        len(saved_json.get('fonts') or []) == 1 and gone_after_reset
+        and m2['fonts'] == 1 and m2['hasId'] and m2['inSK'] and m2['textFont'] == font_id
+        and m2['errs'] == 0 and m2['faces'] > 20 and (m2['area'] or 0) > 100
+    )
+
+    # 3. Unterschneidung (kern-Tabelle) und zusätzliche Laufweite (Zeichenabstand sp)
+    p.ev("App.setDoc(Model.newDoc('Kerning')); Sketch.startOnPlane('XY')"); p.wait(1200)
+    p.pg.keyboard.press('b'); p.wait(200)
+    kern_tmp = tempfile.NamedTemporaryFile(suffix='.ttf', delete=False)
+    kern_tmp.write(_make_kern_ttf_bytes(-200))
+    kern_tmp.close()
+    try:
+        with p.pg.expect_file_chooser() as fc:
+            p.pg.locator('#tx-load-font').click()
+        fc.value.set_files(kern_tmp.name)
+        p.wait(400)
+    finally:
+        os.unlink(kern_tmp.name)
+
+    kern_res = p.ev("""
+      const fid = Sketch.state.txt.font;
+      const e = { id: 'tk', type: 'text', a: [0, 0], s: 'AV', h: 10, font: fid, align: 'l', rot: 0, sp: 0 };
+      const bKern = SK.textBox(e);
+      const bSp = SK.textBox({ ...e, sp: 2 });
+      // Erwartung ohne Kerning: 600 (A adv) + 500 (V width) = 1100; mit -200 Kerning: 900 -> bei cap=700, h=10: 900/700*10
+      const f = SK.FONTS[fid];
+      return { hasKern: !!(f && f.hasKern), kv: f ? f.kern('A', 'V') : 0, wKern: bKern ? bKern.w : 0, wSp: bSp ? bSp.w : 0, exp: (900 / 700) * 10 };
+    """)
+    ok3 = (
+        kern_res['hasKern'] and kern_res['kv'] == -200
+        and abs(kern_res['wKern'] - kern_res['exp']) < 1e-3
+        and abs((kern_res['wSp'] - kern_res['wKern']) - 2.0) < 1e-3
+    )
+
+    # 4. CFF/OTF-Datei liefert klare Meldung „noch nicht unterstützt“ + Hilfetext vorhanden
+    n_before = p.ev("return (App.doc.fonts || []).length")
+    otf_tmp = tempfile.NamedTemporaryFile(suffix='.otf', delete=False)
+    otf_tmp.write(b'OTTO\x00\x01\x00\x00\x00\x10\x00\x00\x00\x00CFF \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+    otf_tmp.close()
+    try:
+        with p.pg.expect_file_chooser() as fc:
+            p.pg.locator('#tx-load-font').click()
+        fc.value.set_files(otf_tmp.name)
+        p.wait(400)
+    finally:
+        os.unlink(otf_tmp.name)
+
+    toast_txt = ' '.join(p.pg.locator('.toast').all_inner_texts()).lower()
+    n_after = p.ev("return (App.doc.fonts || []).length")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok4 = (
+        'noch nicht unterstützt' in toast_txt
+        and n_after == n_before
+        and 'loadFont' in hilfen and all(k in hilfen['loadFont'] for k in ('tip', 'hilfe', 'tipp'))
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -7526,6 +7732,7 @@ TESTS = [
     ('[A-022] Skizze fertig bestimmen: Rechteck & Kreis / Regeln <2° & <0,05 mm / gestrichelte Vorschau & Abbrechen / Übernehmen & Rückgängig / Einfach & Profi', t_a022_skizze_fertig_bestimmen),
     ('[A-025] Ganze Fläche in die Skizze, mit Versatz: 4 Linien + 1 Kreis / verbunden / Versatz +2 mm (44×34, Ø6) / Versatz −2 mm / folgt Körperänderung & Rückgängig', t_a025_flaeche_uebernehmen),
     ('[A-027] Weitere Bezugsebenen: tangential an Zylinder & Kegel / senkrecht zu Kante & Kurve / durch Kante & Punkt / durch zwei Kanten / folgt Maßen & Hilfe', t_a027_weitere_bezugsebenen),
+    ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

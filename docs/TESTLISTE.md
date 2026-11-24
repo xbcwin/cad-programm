@@ -1625,6 +1625,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Dialog, Abhängigkeiten, Fehlerzustand & Hilfetexte**: Alle vier Knöpfe im Bezugsebenen-Dialog (`#dp-tangent`, `#dp-normal-curve`, `#dp-edge-point`, `#dp-two-edges`), `Model.dependencies`, Anzeige „Bezug fehlt“ samt Rückgängig, Befehle und Hilfetexte (`datumTangent`, `datumNormalCurve`, `datumEdgePoint`, `datumTwoEdges`) geprüft.
 - [ ] **Von Hand**: Interaktives Anklicken im 3D-Bild für alle vier Arten (Kontextleiste „Ebene tangential“ / „Ebene senkrecht“ / „Ebene durch 2 Kanten“ sowie Punkt-Einrasten bei „Durch Kante & Punkt“).
 
+## Eigene Schrift laden (Auto [A-026])
+
+- [x] **TrueType-Schrift (OFL) laden & 3D-Körper**: Über „Schrift laden …“ (`#tx-load-font`) wird `tests/daten/Balthazar-Regular.ttf` eingelesen, in der Schriftliste (`#tx-font`) und `doc.fonts` (Base64) abgelegt und als Text „Tracery“ ohne Fehler zu einem 3D-Körper mit Fläche > 0 hochgezogen.
+- [x] **Speichern & Neu-Laden**: Nach dem Speichern (`.tracery.json`) und Neu-Öffnen bleiben die geladene Schrift in `doc.fonts` und `SK.FONTNAMES` sowie das Text-Element samt 3D-Körper erhalten.
+- [x] **Unterschneidung (`kern`) & Laufweite**: Paare aus der `kern`-Tabelle verringern/erhöhen den Zeichenabstand automatisch; der eingestellte Zeichenabstand (`sp`) wirkt weiterhin zusätzlich.
+- [x] **CFF/OTF-Hinweis & Hilfe**: Eine CFF/OTF-Datei meldet „noch nicht unterstützt“ ohne das Projekt zu verändern; Hilfetext `loadFont` vorhanden.
+- [ ] **Von Hand**: Im Browser eine dekorative TrueType-Schrift vom eigenen Rechner auf einem Schild im Bogen und entlang einer Kurve testen sowie die lesbare Schrift-Auswahl nach „In Kurven umwandeln“ prüfen.
+
 ## Fehler melden
 
 ```

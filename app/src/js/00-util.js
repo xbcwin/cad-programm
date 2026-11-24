@@ -1199,6 +1199,11 @@ const HELP = {
   "tip": "Bezugsebene durch zwei gerade Kanten",
   "hilfe": "Wählt zwei gerade Kanten, die parallel sind oder sich schneiden. Die Ebene läuft durch beide Kanten und passt sich an, sobald sich die Maße des Körpers ändern.",
   "tipp": "Windschiefe Kanten (die aneinander vorbeilaufen) liegen nicht in einer Ebene – nutze dort lieber „Durch Kante & Punkt“."
+ },
+ "loadFont": {
+  "tip": "Eigene TrueType-Schrift (.ttf) aus einer Datei laden",
+  "hilfe": "Lädt eine TrueType-Schriftdatei (.ttf) von deinem Gerät, liest die Buchstaben-Umrisse und eventuelle Unterschneidungs-Paare (Kerning) direkt im Browser und speichert die Schrift im Projekt. Danach steht sie in der Schriftliste und bleibt beim Speichern und Öffnen erhalten.",
+  "tipp": "Wenn die Schrift eigene Zeichenabstände (kern-Tabelle) mitbringt, werden sie automatisch genutzt – zusätzlich kannst du rechts jederzeit den Zeichenabstand anpassen."
  }
 };
 
