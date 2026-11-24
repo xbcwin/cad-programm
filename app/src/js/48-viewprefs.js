@@ -59,8 +59,14 @@ const ViewPrefs = (() => {
     if (msg) UI.toast(msg, { icon: 'check', ms: 1600 });
   }
   function toggle(k) {
-    const labels = { ortho: ['Orthografische Ansicht', 'Perspektivische Ansicht'], gridOn: ['Raster an', 'Raster aus'], planes: ['Ursprungsebenen an', 'Ursprungsebenen aus'], axes: ['Achsen an', 'Achsen aus'], notes: ['Notizen eingeblendet', 'Notizen ausgeblendet'] }[k];
-    set({ [k]: !v[k] }, labels ? labels[v[k] ? 1 : 0] : null);
+    const labels = {
+      ortho: ['dlg.settings.tOrthoOn', 'dlg.settings.tOrthoOff'],
+      gridOn: ['dlg.settings.tGridOn', 'dlg.settings.tGridOff'],
+      planes: ['dlg.settings.tPlanesOn', 'dlg.settings.tPlanesOff'],
+      axes: ['dlg.settings.tAxesOn', 'dlg.settings.tAxesOff'],
+      notes: ['dlg.settings.tNotesOn', 'dlg.settings.tNotesOff'],
+    }[k];
+    set({ [k]: !v[k] }, labels ? T(labels[v[k] ? 1 : 0]) : null);
   }
   // Schild oben rechts: Einfach ↔ Profi
   function syncLevel() {
@@ -72,7 +78,7 @@ const ViewPrefs = (() => {
       b.dataset.tip = simple() ? T('level.tipSimple') : T('level.tipPro');
     }
   }
-  function setLevel(l) { set({ level: l }, l === 'simple' ? 'Einfach: wenige, große Knöpfe, alles erklärt.' : 'Profi: alle Werkzeuge und Tastenkürzel.'); }
+  function setLevel(l) { set({ level: l }, T(l === 'simple' ? 'dlg.settings.levelSimpleToast' : 'dlg.settings.levelProToast')); }
   // Zwei Stufen-Karten („Einfach“ / „Profi“) für ersten Start und Einstellungen
   function levelCards({ idPrefix, active = v.level, onPick } = {}) {
     const wrap = h('div', { class: 'level-cards', role: 'group', 'aria-label': T('level.chooseAria') });
@@ -116,30 +122,32 @@ const ViewPrefs = (() => {
 
     let curTab = !simple() && initialTab === 'keys' ? 'keys' : 'general';
     let kbdEd = null;
-    const tabs = h('div', { class: 'seg set-tabs', role: 'tablist', 'aria-label': 'Einstellungsbereiche' });
-    const tabGen = h('button', { type: 'button', role: 'tab', id: 'set-tab-general', 'aria-selected': 'true', 'aria-pressed': 'true' }, 'Allgemein');
-    const tabKeys = h('button', { type: 'button', role: 'tab', id: 'set-tab-keys', 'data-help': 'customShortcuts', 'aria-selected': 'false', 'aria-pressed': 'false' }, 'Tastenkürzel');
+    const tabs = h('div', { class: 'seg set-tabs', role: 'tablist', 'aria-label': T('dlg.settings.tabsAria') });
+    const tabGen = h('button', { type: 'button', role: 'tab', id: 'set-tab-general', 'aria-selected': 'true', 'aria-pressed': 'true' }, T('dlg.settings.tabGeneral'));
+    const tabKeys = h('button', { type: 'button', role: 'tab', id: 'set-tab-keys', 'data-help': 'customShortcuts', 'aria-selected': 'false', 'aria-pressed': 'false' }, T('dlg.settings.tabKeys'));
     tabs.append(tabGen, tabKeys);
 
     const paneGen = h('div', { id: 'set-pane-general', style: { display: 'grid', gap: '14px' } });
     const paneKeys = h('div', { id: 'set-pane-keys', style: { display: 'grid', gap: '10px' }, hidden: true });
 
     const lvlField = h('div', { class: 'field' },
-      h('label', null, 'Stufe'),
+      h('label', null, T('dlg.settings.levelLabel')),
       levelCards({ idPrefix: 'set-level', active: v.level, onPick: () => syncTabs(curTab) }),
-      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, 'Einfach blendet Messen, Notizen, Ansicht, Zeichnung und Profi-Werkzeuge aus. Über „Mehr“ kommst du trotzdem hin.'),
+      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, T('dlg.settings.levelHint')),
     );
-    const decOpts = () => [0, 1, 2, 3, 4].map((d) => [String(d), `${d} ${d === 1 ? 'Stelle' : 'Stellen'} (${fmtFixed(12.3456, d)} ${Units.label()})`]);
-    const angOpts = [0, 1, 2, 3, 4].map((d) => [String(d), `${d} ${d === 1 ? 'Stelle' : 'Stellen'} (${fmtFixed(45.1234, d)}°)`]);
+    const decWord = (d) => T(d === 1 ? 'dlg.settings.decOne' : 'dlg.settings.decMany', { d, ex: `${fmtFixed(12.3456, d)} ${Units.label()}` });
+    const angWord = (d) => T(d === 1 ? 'dlg.settings.decOne' : 'dlg.settings.decMany', { d, ex: `${fmtFixed(45.1234, d)}°` });
+    const decOpts = () => [0, 1, 2, 3, 4].map((d) => [String(d), decWord(d)]);
+    const angOpts = [0, 1, 2, 3, 4].map((d) => [String(d), angWord(d)]);
     const decFields = h('div', { class: 'fields', 'data-help': 'precision' },
-      sel('set-dec', 'Nachkommastellen (Anzeige)', v.decimals, decOpts(), (x) => set({ decimals: +x })),
-      sel('set-angle-dec', 'Nachkommastellen (Winkel)', v.angleDecimals, angOpts, (x) => set({ angleDecimals: +x })),
+      sel('set-dec', T('dlg.settings.decLen'), v.decimals, decOpts(), (x) => set({ decimals: +x })),
+      sel('set-angle-dec', T('dlg.settings.decAng'), v.angleDecimals, angOpts, (x) => set({ angleDecimals: +x })),
     );
     const decBlock = h('div', { 'data-help': 'precision' },
       decFields,
-      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, 'Gilt für Schilder, Maße, Messungen und Panels. Gespeicherte Werte und die Rechengenauigkeit bleiben immer exakt.'),
+      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, T('dlg.settings.decHint')),
     );
-    const unitSel = sel('set-proj-unit', 'Einheit in diesem Projekt', Units.key(), Units.OPTIONS, (x) => {
+    const unitSel = sel('set-proj-unit', T('dlg.settings.unitLabel'), Units.key(), Units.OPTIONS, (x) => {
       Units.set(x);
       const sd = decFields.querySelector('#set-dec');
       if (sd) {
@@ -151,15 +159,15 @@ const ViewPrefs = (() => {
           sd.append(op);
         }
       }
-    }, 'Gilt für alle Anzeigen, Maße und Eingaben ohne eigene Einheit in diesem Projekt.');
+    }, T('dlg.settings.unitHint'));
     paneGen.append(
       lvlField,
       unitSel,
-      sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
+      sel('set-theme', T('dlg.settings.themeLabel'), v.theme, [['system', T('dlg.settings.themeSys')], ['light', T('dlg.settings.themeLight')], ['dark', T('dlg.settings.themeDark')]], (x) => set({ theme: x })),
       decBlock,
-      sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
-      sel('set-mouse', 'Maus-Steuerung', v.mouse || 'tracery', [['tracery', 'Tracery – links drehen, rechts verschieben, Rad zoomt'], ['onshape', 'Wie Onshape – rechts drehen, Mitte verschieben'], ['solidworks', 'Wie SolidWorks – Mitte drehen, rechts verschieben'], ['fusion', 'Wie Fusion – Mitte verschieben, Umschalt + Mitte drehen'], ['blender', 'Wie Blender – Mitte drehen, Umschalt + Mitte verschieben']], (x) => set({ mouse: x }), 'Bei allen außer Tracery zieht die linke Maustaste im Leeren einen Auswahl-Rahmen auf. Das Mausrad zoomt immer.'),
-      chk('adaptive', 'Darstellung automatisch anpassen', 'Teile, die du von nah ansiehst, werden feiner dargestellt. Beim Drehen eines großen Modells wird kurz gröber gezeichnet, damit es flüssig bleibt.'),
+      sel('set-quality', T('dlg.settings.qualityLabel'), v.quality, [['coarse', T('dlg.settings.qCoarse')], ['normal', T('dlg.settings.qNormal')], ['fine', T('dlg.settings.qFine')], ['ultra', T('dlg.settings.qUltra')]], (x) => set({ quality: x }), T('dlg.settings.qualityHint')),
+      sel('set-mouse', T('dlg.settings.mouseLabel'), v.mouse || 'tracery', [['tracery', T('dlg.settings.mTracery')], ['onshape', T('dlg.settings.mOnshape')], ['solidworks', T('dlg.settings.mSolidworks')], ['fusion', T('dlg.settings.mFusion')], ['blender', T('dlg.settings.mBlender')]], (x) => set({ mouse: x }), T('dlg.settings.mouseHint')),
+      chk('adaptive', T('dlg.settings.adaptive'), T('dlg.settings.adaptiveHint')),
     );
 
     const syncTabs = (tab) => {
@@ -179,7 +187,7 @@ const ViewPrefs = (() => {
 
     body.append(tabs, paneGen, paneKeys);
     syncTabs(curTab);
-    UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
+    UI.modal({ title: T('dlg.settings.title'), body, actions: [{ label: T('common.done'), primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
   return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };

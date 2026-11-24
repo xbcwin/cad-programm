@@ -250,7 +250,7 @@ const App = (() => {
       fileSavedRev: opts.saved ? rev : -1,
       ctx: null,
       iso: null,
-      mode: 'model',
+      mode: opts.mode || 'model',
       camera: null,
       times: new Map(),
       stepStats: new Map(),
@@ -404,7 +404,8 @@ const App = (() => {
       if (S.doc) { try { autosave.flush(); } catch (_) {} }
     }
     const idx = tabs.findIndex((t) => t.tabId === activeTabId);
-    const nextRec = createTabRecord(doc, { tabId: activeTabId, saved: !!(opts && opts.saved) });
+    const keepMode = !!(S.doc && doc && doc.id && S.doc.id === doc.id);
+    const nextRec = createTabRecord(doc, { tabId: activeTabId, saved: !!(opts && opts.saved), mode: keepMode ? S.mode : 'model' });
     if (idx >= 0) tabs[idx] = nextRec;
     else tabs.push(nextRec);
     activateTab(nextRec, { ...opts, isSwitch: false });

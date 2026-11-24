@@ -2054,6 +2054,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abhängiger Boolesch-Abzug, Rückgängig & Marker-Sprung**: Ein von Körper 3 abhängiger Schnitt rechnet bei Höhenänderung mit Körper 3 zusammen neu, während Körper 1 und 2 im Speicher bleiben; `App.undo()` sowie Zurück- und Vorrollen des Zeitleisten-Markers bedienen alle Schritte mit `0` Neuberechnungen aus dem Cache.
 - [ ] **Von Hand**: Im Browser bei einem größeren Modell mit mehreren Körpern und Verrundungen ein Maß am letzten Schritt ändern und im Protokoll („Rechenzeit je Schritt“) sowie an den Tooltips der Zeitleiste prüfen, dass frühere Schritte aus dem Speicher kommen.
 
+## Übersetzbare Oberfläche, Schritt 2 (Auto [A-074], PL-01)
+
+- [x] **Test-Modus (`I18n.setTestMode`)**: `I18n.setTestMode(true)` versieht bekannte Sammlungstexte (inkl. HTML-Inhalte) mit Markierungen (`⟦…⟧`), lässt unbekannte Schlüssel unverändert und stellt per `I18n.setTestMode(false)` alle Originaltexte wieder her.
+- [x] **Startseite & 3D-Ansicht (Profi & Einfach)**: Im markierten Test-Modus enthält der sichtbare DOM auf Startseite sowie mit gewähltem Quader in Profi und Einfach (Werkzeugleiste, linkes/rechtes Panel, Kontextleiste, ViewCube, Zeitleiste, Statusleiste) höchstens 5 unmarkierte Ausnahmen.
+- [x] **Offene Skizze & Zeichnung**: Bei offener Skizze (Profi & Einfach inkl. Skizzen-Panel, Fang-/Regel-Leiste und Hinweiszeile) sowie im Zeichnungsmodus (`Commands.setMode('drawing')`) bleiben unmarkierte sichtbare Texte jeweils bei höchstens 5 Ausnahmen.
+- [x] **Dialoge**: Die Dialoge Einstellungen (`ViewPrefs.dialog()`), Export (`Print.exportDialog()`) und Tastenkürzel (`Commands.showKeys()`) kommen vollständig über `T()` mit höchstens 5 Ausnahmen im DOM.
+- [ ] **Von Hand**: Test-Modus (`I18n.setTestMode(true)`) im Browser über alle Arbeitsschritte (Skizzen-Assistent, Bohrungs-Assistent, Werkzeugleiste anpassen, Stückliste, Versionen) durchklicken und prüfen, ob alle Hinweise und Tooltips sauber markiert sind.
+
 ## Fehler melden
 
 ```

@@ -20,34 +20,34 @@ const Toolbar = (() => {
       { id: 'check', group: 'Grundwerkzeuge', domId: 't-check', icon: 'target', label: T('tool.check'), tip: T('tool.checkTip'), cls: 'minor pro', run: (e) => GeomCheck.menu(e.currentTarget) },
       { id: 'export', group: 'Grundwerkzeuge', domId: 't-export', icon: 'export', label: T('tool.export'), short: T('tool.exportShort'), tip: T('tool.exportTip'), kbd: 'Strg E', cls: 'primary', run: () => Print.exportDialog() },
       // Bearbeiten & Formen
-      { id: 'holeWizard', group: 'Bearbeiten & Formen', domId: 't-holeWizard', icon: 'holeWizard', label: 'Bohrung', tip: 'Bohrungs-Assistent öffnen', cls: 'minor', help: 'holeWizard', run: (e) => Place.holeWizard(e.currentTarget) },
-      { id: 'fillet', group: 'Bearbeiten & Formen', domId: 't-fillet', icon: 'fillet', label: 'Abrunden', tip: 'Gewählte Kanten oder Körper abrunden', cls: 'minor', help: 'fillet', run: () => { if (App.edges.length) Actions.addFinish('fillet', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'fillet', 'all', 1); else UI.toast('Wähle zuerst einen Körper oder eine Kante.', { icon: 'info' }); } },
-      { id: 'chamfer', group: 'Bearbeiten & Formen', domId: 't-chamfer', icon: 'chamfer', label: 'Abschrägen', tip: 'Gewählte Kanten oder Körper abschrägen (Fase)', cls: 'minor', help: 'chamfer', run: () => { if (App.edges.length) Actions.addFinish('chamfer', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'chamfer', 'all', 1); else UI.toast('Wähle zuerst einen Körper oder eine Kante.', { icon: 'info' }); } },
-      { id: 'shell', group: 'Bearbeiten & Formen', domId: 't-shell', icon: 'shell', label: 'Aushöhlen', tip: 'Wandstärke / Aushöhlen auf gewählte Fläche', cls: 'minor', help: 'shell', run: () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast('Klick zuerst die Fläche an, die offen sein soll.', { icon: 'info' }); } },
-      { id: 'patternRect', group: 'Bearbeiten & Formen', domId: 't-patternRect', icon: 'patternRect', label: 'Rechteckmuster', tip: 'Rechteckmuster aus gewähltem Teil anlegen', cls: 'minor', help: 'patternRect', run: () => Features.pattern('rect') },
-      { id: 'patternCirc', group: 'Bearbeiten & Formen', domId: 't-patternCirc', icon: 'patternCirc', label: 'Kreismuster', tip: 'Kreismuster aus gewähltem Teil anlegen', cls: 'minor', help: 'patternCirc', run: () => Features.pattern('circ') },
-      { id: 'patternPath', group: 'Bearbeiten & Formen', domId: 't-patternPath', icon: 'patternPath', label: 'Kurvenmuster', tip: 'Muster entlang einer Kurve anlegen', cls: 'minor', help: 'patternPath', run: () => Features.patternPath() },
-      { id: 'mirror', group: 'Bearbeiten & Formen', domId: 't-mirror', icon: 'mirror', label: 'Spiegeln', tip: 'Gespiegelte Kopie anlegen', cls: 'minor', help: 'mirror', run: () => Features.pattern('mirror') },
-      { id: 'split', group: 'Bearbeiten & Formen', domId: 't-split', icon: 'split', label: 'Teilen', tip: 'Gewählten Körper teilen', cls: 'minor', help: 'split', run: () => Features.split() },
-      { id: 'rib', group: 'Bearbeiten & Formen', domId: 't-rib', icon: 'rib', label: 'Rippe', tip: 'Versteifungs-Rippe aus einer Skizzenlinie', cls: 'minor', help: 'rib', run: () => Features.startRib() },
-      { id: 'route3d', group: 'Bearbeiten & Formen', domId: 't-route3d', icon: 'sweep', label: 'Rohr im Raum', tip: 'Rohr oder Kabelkanal im Raum zeichnen', cls: 'minor', help: 'route3d', run: () => Features.route3d() },
+      { id: 'holeWizard', group: T('dlg.tb.grpEdit'), domId: 't-holeWizard', icon: 'holeWizard', label: T('dlg.tb.hole'), tip: T('dlg.tb.holeTip'), cls: 'minor', help: 'holeWizard', run: (e) => Place.holeWizard(e.currentTarget) },
+      { id: 'fillet', group: T('dlg.tb.grpEdit'), domId: 't-fillet', icon: 'fillet', label: T('ctx.fillet'), tip: T('dlg.tb.filletTip'), cls: 'minor', help: 'fillet', run: () => { if (App.edges.length) Actions.addFinish('fillet', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'fillet', 'all', 1); else UI.toast(T('dlg.tb.needBodyOrEdge'), { icon: 'info' }); } },
+      { id: 'chamfer', group: T('dlg.tb.grpEdit'), domId: 't-chamfer', icon: 'chamfer', label: T('ctx.chamfer'), tip: T('dlg.tb.chamferTip'), cls: 'minor', help: 'chamfer', run: () => { if (App.edges.length) Actions.addFinish('chamfer', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'chamfer', 'all', 1); else UI.toast(T('dlg.tb.needBodyOrEdge'), { icon: 'info' }); } },
+      { id: 'shell', group: T('dlg.tb.grpEdit'), domId: 't-shell', icon: 'shell', label: T('ctx.shell'), tip: T('dlg.tb.shellTip'), cls: 'minor', help: 'shell', run: () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast(T('dlg.tb.needOpenFace'), { icon: 'info' }); } },
+      { id: 'patternRect', group: T('dlg.tb.grpEdit'), domId: 't-patternRect', icon: 'patternRect', label: T('ctx.patRect'), tip: T('tool.fly.patRectTip'), cls: 'minor', help: 'patternRect', run: () => Features.pattern('rect') },
+      { id: 'patternCirc', group: T('dlg.tb.grpEdit'), domId: 't-patternCirc', icon: 'patternCirc', label: T('ctx.patCirc'), tip: T('tool.fly.patCircTip'), cls: 'minor', help: 'patternCirc', run: () => Features.pattern('circ') },
+      { id: 'patternPath', group: T('dlg.tb.grpEdit'), domId: 't-patternPath', icon: 'patternPath', label: T('dlg.tb.patternPath'), tip: T('dlg.tb.patternPathTip'), cls: 'minor', help: 'patternPath', run: () => Features.patternPath() },
+      { id: 'mirror', group: T('dlg.tb.grpEdit'), domId: 't-mirror', icon: 'mirror', label: T('ctx.mirror'), tip: T('dlg.tb.mirrorTip'), cls: 'minor', help: 'mirror', run: () => Features.pattern('mirror') },
+      { id: 'split', group: T('dlg.tb.grpEdit'), domId: 't-split', icon: 'split', label: T('ctx.split'), tip: T('dlg.tb.splitTip'), cls: 'minor', help: 'split', run: () => Features.split() },
+      { id: 'rib', group: T('dlg.tb.grpEdit'), domId: 't-rib', icon: 'rib', label: T('kind.rib'), tip: T('dlg.tb.ribTip'), cls: 'minor', help: 'rib', run: () => Features.startRib() },
+      { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
       // Konstruktion
-      { id: 'datum', group: 'Konstruktion', domId: 't-datum', icon: 'originPlanes', label: 'Bezugsebene', tip: 'Neue Bezugsebene anlegen', cls: 'minor', help: 'datum', run: (e) => Datums.dialog(e.currentTarget) },
-      { id: 'datumAxis', group: 'Konstruktion', domId: 't-datumAxis', icon: 'axes', label: 'Bezugsachse', tip: 'Neue Bezugsachse anlegen', cls: 'minor', help: 'datumAxis', run: (e) => Datums.axisDialog(e.currentTarget) },
-      { id: 'datumPoint', group: 'Konstruktion', domId: 't-datumPoint', icon: 'point', label: 'Bezugspunkt', tip: 'Neuen Bezugspunkt anlegen', cls: 'minor', help: 'datumPoint', run: (e) => Datums.pointDialog(e.currentTarget) },
-      { id: 'params', group: 'Konstruktion', domId: 't-params', icon: 'sliders', label: 'Maße', tip: 'Maße mit Namen und Formeln festlegen', cls: 'minor', help: 'params', run: () => Panels.showParams() },
+      { id: 'datum', group: T('dlg.tb.grpConstruct'), domId: 't-datum', icon: 'originPlanes', label: T('panel.title.datumPlane'), tip: T('dlg.tb.datumTip'), cls: 'minor', help: 'datum', run: (e) => Datums.dialog(e.currentTarget) },
+      { id: 'datumAxis', group: T('dlg.tb.grpConstruct'), domId: 't-datumAxis', icon: 'axes', label: T('dlg.tb.datumAxis'), tip: T('dlg.tb.datumAxisTip'), cls: 'minor', help: 'datumAxis', run: (e) => Datums.axisDialog(e.currentTarget) },
+      { id: 'datumPoint', group: T('dlg.tb.grpConstruct'), domId: 't-datumPoint', icon: 'point', label: T('dlg.tb.datumPoint'), tip: T('dlg.tb.datumPointTip'), cls: 'minor', help: 'datumPoint', run: (e) => Datums.pointDialog(e.currentTarget) },
+      { id: 'params', group: T('dlg.tb.grpConstruct'), domId: 't-params', icon: 'sliders', label: T('topbar.params'), tip: T('dlg.tb.paramsTip'), cls: 'minor', help: 'params', run: () => Panels.showParams() },
       // Ansicht & Prüfen
-      { id: 'section', group: 'Ansicht & Prüfen', domId: 't-section', icon: 'section', label: 'Schnitt', tip: 'Schnittansicht ein/aus', kbd: 'C', cls: 'minor', help: 'section', run: () => Views.section() },
-      { id: 'xray', group: 'Ansicht & Prüfen', domId: 't-xray', icon: 'xray', label: 'Röntgen', tip: 'Röntgenansicht ein/aus', kbd: 'X', cls: 'minor', help: 'xray', run: () => Views.xray() },
-      { id: 'explode', group: 'Ansicht & Prüfen', domId: 't-explode', icon: 'explode', label: 'Explosion', tip: 'Explosionsansicht ein/aus', kbd: 'U', cls: 'minor', help: 'explode', run: () => Views.explode() },
-      { id: 'fit', group: 'Ansicht & Prüfen', domId: 't-fit', icon: 'fit', label: 'Alles zeigen', tip: 'Auswahl oder ganzes Modell ins Bild einpassen', kbd: 'F', cls: 'minor', run: () => Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null) },
-      { id: 'weak', group: 'Ansicht & Prüfen', domId: 't-weak', icon: 'target', label: 'Schwachstellen', tip: 'Modell auf Schwachstellen prüfen', cls: 'minor', help: 'weakSpots', run: () => Weak.dialog() },
-      { id: 'bom', group: 'Ansicht & Prüfen', domId: 't-bom', icon: 'list', label: 'Stückliste', tip: 'Stückliste mit Anzahl und Gewicht öffnen', cls: 'minor', help: 'bom', run: () => Mass.bomDialog() },
+      { id: 'section', group: T('dlg.tb.grpViewCheck'), domId: 't-section', icon: 'section', label: T('menu.view.section'), tip: T('dlg.tb.sectionTip'), kbd: 'C', cls: 'minor', help: 'section', run: () => Views.section() },
+      { id: 'xray', group: T('dlg.tb.grpViewCheck'), domId: 't-xray', icon: 'xray', label: T('menu.view.xray'), tip: T('dlg.tb.xrayTip'), kbd: 'X', cls: 'minor', help: 'xray', run: () => Views.xray() },
+      { id: 'explode', group: T('dlg.tb.grpViewCheck'), domId: 't-explode', icon: 'explode', label: T('menu.view.explode'), tip: T('dlg.tb.explodeTip'), kbd: 'U', cls: 'minor', help: 'explode', run: () => Views.explode() },
+      { id: 'fit', group: T('dlg.tb.grpViewCheck'), domId: 't-fit', icon: 'fit', label: T('menu.ctx.fitAll'), tip: T('dlg.tb.fitTip'), kbd: 'F', cls: 'minor', run: () => Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null) },
+      { id: 'weak', group: T('dlg.tb.grpViewCheck'), domId: 't-weak', icon: 'target', label: T('dlg.tb.weak'), tip: T('dlg.tb.weakTip'), cls: 'minor', help: 'weakSpots', run: () => Weak.dialog() },
+      { id: 'bom', group: T('dlg.tb.grpViewCheck'), domId: 't-bom', icon: 'list', label: T('dlg.tb.bom'), tip: T('dlg.tb.bomTip'), cls: 'minor', help: 'bom', run: () => Mass.bomDialog() },
       // Projekt & Datei
-      { id: 'save', group: 'Projekt & Datei', domId: 't-save', icon: 'save', label: 'Speichern', tip: 'Projekt als Datei speichern', kbd: 'Strg S', cls: 'minor', run: () => Start.saveFile() },
-      { id: 'import', group: 'Projekt & Datei', domId: 't-import', icon: 'folder', label: 'Importieren', tip: 'STEP, IGES, BREP, STL, 3MF, OBJ, DXF oder SVG öffnen', cls: 'minor', help: 'importCad', run: () => Start.openFile() },
-      { id: 'image', group: 'Projekt & Datei', domId: 't-image', icon: 'image', label: 'Bild', tip: 'Bild (PNG) vom Modell speichern', cls: 'minor', run: () => Print.imageDialog() },
-      { id: 'versions', group: 'Projekt & Datei', domId: 't-versions', icon: 'rollback', label: 'Versionen', tip: 'Gespeicherte Versionen ansehen und vergleichen', cls: 'minor', help: 'versions', run: () => Versions.dialog() },
+      { id: 'save', group: T('dlg.tb.grpProject'), domId: 't-save', icon: 'save', label: T('common.save'), tip: T('dlg.tb.saveTip'), kbd: 'Strg S', cls: 'minor', run: () => Start.saveFile() },
+      { id: 'import', group: T('dlg.tb.grpProject'), domId: 't-import', icon: 'folder', label: T('dlg.tb.import'), tip: T('dlg.tb.importTip'), cls: 'minor', help: 'importCad', run: () => Start.openFile() },
+      { id: 'image', group: T('dlg.tb.grpProject'), domId: 't-image', icon: 'image', label: T('dlg.tb.image'), tip: T('dlg.tb.imageTip'), cls: 'minor', run: () => Print.imageDialog() },
+      { id: 'versions', group: T('dlg.tb.grpProject'), domId: 't-versions', icon: 'rollback', label: T('dlg.tb.versions'), tip: T('dlg.tb.versionsTip'), cls: 'minor', help: 'versions', run: () => Versions.dialog() },
     ];
   }
 
@@ -216,7 +216,7 @@ const Toolbar = (() => {
     storageDel(KEY);
     Panels.renderTools();
     if (openDialogRefresh) openDialogRefresh();
-    UI.toast('Werkzeugleiste zurückgesetzt.', { icon: 'undo', ms: 1800 });
+    UI.toast(T('dlg.tb.resetToast'), { icon: 'undo', ms: 1800 });
   }
 
   function buildToolButton(def, fav) {
@@ -317,18 +317,18 @@ const Toolbar = (() => {
     const toolId = toolBtn ? toolBtn.dataset.toolId : null;
     const anchor = virtualAnchor(e.clientX, e.clientY, toolBtn || $('#tools'));
     const entries = [
-      { id: 'cm-tb-customize', label: 'Anpassen …', icon: 'sliders', help: 'toolbarCustomize', run: () => dialog() },
+      { id: 'cm-tb-customize', label: T('dlg.tb.customizeMenu'), icon: 'sliders', help: 'toolbarCustomize', run: () => dialog() },
     ];
     if (toolId && App.mode === 'model') {
       entries.push(
         '-',
-        { id: 'cm-tb-fav', label: isFav(toolId) ? 'Aus Favoriten entfernen' : 'Als Favorit markieren', icon: isFav(toolId) ? 'starFill' : 'star', run: () => toggleFav(toolId) },
-        { id: 'cm-tb-remove', label: 'Aus Leiste entfernen', icon: 'trash', run: () => remove(toolId) },
+        { id: 'cm-tb-fav', label: isFav(toolId) ? T('dlg.tb.favRemove') : T('dlg.tb.favAdd'), icon: isFav(toolId) ? 'starFill' : 'star', run: () => toggleFav(toolId) },
+        { id: 'cm-tb-remove', label: T('dlg.tb.removeFromBar'), icon: 'trash', run: () => remove(toolId) },
       );
     }
     entries.push(
       '-',
-      { id: 'cm-tb-reset', label: 'Zurücksetzen', icon: 'undo', disabled: isDefault(), run: () => reset() },
+      { id: 'cm-tb-reset', label: T('common.reset'), icon: 'undo', disabled: isDefault(), run: () => reset() },
     );
     UI.menu(anchor, entries);
   }
@@ -338,25 +338,25 @@ const Toolbar = (() => {
     let searchQuery = '';
 
     const wrap = h('div', { class: 'tb-cust', id: 'tb-dialog' });
-    const intro = h('p', { class: 'tb-intro' }, 'Zieh Werkzeuge per Maus in deine Leiste, entferne nicht benötigte oder sortiere sie neu. Mit ', h('b', null, '★ Favorit'), ' markierte Werkzeuge stehen immer ganz links.');
+    const intro = h('p', { class: 'tb-intro' }, T('dlg.tb.intro'), h('b', null, T('dlg.tb.introFav')), T('dlg.tb.introEnd'));
 
     const cols = h('div', { class: 'tb-cols' });
 
     // Linke Spalte: Aktive Werkzeuge
     const colActive = h('div', { class: 'tb-col' });
     const countEl = h('span', { class: 'tb-count', id: 'tb-active-count' });
-    const resetBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'tb-reset', 'data-help': 'toolbarCustomize' }, iconEl('undo'), 'Zurücksetzen');
+    const resetBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'tb-reset', 'data-help': 'toolbarCustomize' }, iconEl('undo'), T('common.reset'));
     resetBtn.onclick = () => reset();
-    const headActive = h('div', { class: 'tb-col-head' }, h('div', { class: 'tb-col-title' }, h('b', null, 'In deiner Werkzeugleiste'), countEl), resetBtn);
+    const headActive = h('div', { class: 'tb-col-head' }, h('div', { class: 'tb-col-title' }, h('b', null, T('dlg.tb.inBar')), countEl), resetBtn);
     const activeList = h('div', { class: 'tb-list', id: 'tb-active', role: 'list' });
     colActive.append(headActive, activeList);
 
     // Rechte Spalte: Verfügbare Werkzeuge
     const colAvail = h('div', { class: 'tb-col' });
-    const searchInp = h('input', { type: 'search', id: 'tb-search', class: 'tb-search', placeholder: 'Werkzeuge filtern …', 'aria-label': 'Verfügbare Werkzeuge filtern', autocomplete: 'off', spellcheck: 'false' });
+    const searchInp = h('input', { type: 'search', id: 'tb-search', class: 'tb-search', placeholder: T('dlg.tb.searchPh'), 'aria-label': T('dlg.tb.searchAria'), autocomplete: 'off', spellcheck: 'false' });
     searchInp.addEventListener('keydown', (e) => e.stopPropagation());
     searchInp.addEventListener('input', () => { searchQuery = searchInp.value; renderLists(); });
-    const headAvail = h('div', { class: 'tb-col-head' }, h('div', { class: 'tb-col-title' }, h('b', null, 'Verfügbare Werkzeuge')), searchInp);
+    const headAvail = h('div', { class: 'tb-col-head' }, h('div', { class: 'tb-col-title' }, h('b', null, T('dlg.tb.avail'))), searchInp);
     const availList = h('div', { class: 'tb-list', id: 'tb-avail', role: 'list' });
     colAvail.append(headAvail, availList);
 
@@ -402,9 +402,9 @@ const Toolbar = (() => {
         const starBtn = h('button', {
           type: 'button',
           class: 'tb-star' + (fav ? ' on' : ''),
-          'aria-label': fav ? 'Aus Favoriten entfernen' : 'Als Favorit markieren',
+          'aria-label': fav ? T('dlg.tb.favRemove') : T('dlg.tb.favAdd'),
           'aria-pressed': fav ? 'true' : 'false',
-          'data-tip': fav ? 'Favorit entfernen' : 'Als Favorit ganz links anheften',
+          'data-tip': fav ? T('dlg.tb.favUnpinTip') : T('dlg.tb.favPinTip'),
         });
         starBtn.innerHTML = icon(fav ? 'starFill' : 'star');
         starBtn.onclick = (e) => { e.stopPropagation(); toggleFav(def.id); };
@@ -412,8 +412,8 @@ const Toolbar = (() => {
         const delBtn = h('button', {
           type: 'button',
           class: 'tb-del',
-          'aria-label': 'Aus Leiste entfernen',
-          'data-tip': 'Entfernen',
+          'aria-label': T('dlg.tb.removeFromBar'),
+          'data-tip': T('common.remove'),
         });
         delBtn.innerHTML = icon('close');
         delBtn.onclick = (e) => { e.stopPropagation(); remove(def.id); };
@@ -422,8 +422,8 @@ const Toolbar = (() => {
         const addBtn = h('button', {
           type: 'button',
           class: 'tb-add',
-          'aria-label': 'Zur Werkzeugleiste hinzufügen',
-          'data-tip': 'Hinzufügen',
+          'aria-label': T('dlg.tb.addAria'),
+          'data-tip': T('common.add'),
         });
         addBtn.innerHTML = icon('plus');
         addBtn.onclick = (e) => { e.stopPropagation(); add(def.id); };
@@ -523,19 +523,19 @@ const Toolbar = (() => {
       const activeIds = orderedItems().filter((id) => !!map[id]);
       const favCount = favs.filter((id) => activeIds.includes(id)).length;
 
-      countEl.textContent = `${activeIds.length} aktiv` + (favCount ? ` · ${favCount} Favorit${favCount === 1 ? '' : 'en'}` : '');
+      countEl.textContent = T('dlg.tb.countActive', { n: activeIds.length }) + (favCount ? T('dlg.tb.countFav', { n: favCount, word: favCount === 1 ? T('dlg.tb.favOne') : T('dlg.tb.favMany') }) : '');
       resetBtn.disabled = isDefault();
 
       activeList.innerHTML = '';
       if (!activeIds.length) {
-        activeList.append(h('div', { class: 'tb-empty' }, 'Keine Werkzeuge in der Leiste. Zieh rechts ein Werkzeug hierher.'));
+        activeList.append(h('div', { class: 'tb-empty' }, T('dlg.tb.emptyActive')));
       } else {
         let nonFavStarted = false;
         activeIds.forEach((id) => {
           const fav = isFav(id);
           if (!fav && favCount > 0 && !nonFavStarted) {
             nonFavStarted = true;
-            activeList.append(h('div', { class: 'tb-fav-div' }, 'Weitere Werkzeuge'));
+            activeList.append(h('div', { class: 'tb-fav-div' }, T('dlg.tb.moreTools')));
           }
           activeList.append(makeRow(map[id], 'active', fav));
         });
@@ -547,7 +547,7 @@ const Toolbar = (() => {
 
       availList.innerHTML = '';
       if (!avail.length) {
-        availList.append(h('div', { class: 'tb-empty' }, q ? 'Kein passendes Werkzeug gefunden.' : 'Alle verfügbaren Werkzeuge sind bereits in deiner Leiste.'));
+        availList.append(h('div', { class: 'tb-empty' }, q ? T('dlg.tb.emptyAvailSearch') : T('dlg.tb.emptyAvailAll')));
       } else {
         let lastGroup = null;
         for (const c of avail) {
@@ -563,10 +563,10 @@ const Toolbar = (() => {
     openDialogRefresh = renderLists;
     renderLists();
     UI.modal({
-      title: 'Werkzeugleiste anpassen',
+      title: T('dlg.tb.title'),
       body: wrap,
       wide: true,
-      actions: [{ label: 'Fertig', primary: true }],
+      actions: [{ label: T('common.done'), primary: true }],
       onClose: () => { openDialogRefresh = null; },
     });
   }

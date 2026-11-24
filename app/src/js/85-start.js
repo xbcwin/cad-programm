@@ -120,7 +120,7 @@ const Templates = (() => {
       id: 'empty-in',
       get name() { return T('start.projTpl.emptyIn.name'); },
       get desc() { return T('start.projTpl.emptyIn.desc'); },
-      get badge() { return 'Zoll (in)'; },
+      get badge() { return T('unit.inBadge'); },
       build() {
         const d = Model.newDoc('Neues Projekt');
         d.settings.unit = 'in';
@@ -492,12 +492,12 @@ const Start = (() => {
   function hide() { if (el) { el.remove(); el = null; if (recPending) renderRecoveryBanner(); } }
   function openDrone(t) {
     App.setDoc(t.build()); hide();
-    UI.toast(`${t.name} geladen. Links unter „Maße“ änderst du Achsabstand, Armbreite, Stack und mehr – alles wandert mit.`, { icon: 'check', ms: 6000 });
+    UI.toast(T('start.droneToast', { name: t.name }), { icon: 'check', ms: 6000 });
   }
   function newProject(silent, opts = {}) {
     App.setDoc(Model.newDoc('Neues Projekt'), opts && opts.newTab ? { newTab: true } : {});
     hide();
-    if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
+    if (!silent) UI.toast(T('start.newProjToast'), { icon: 'newfile', ms: 4500 });
   }
   function openNewTab(doc) {
     App.openTab(doc || Model.newDoc('Neues Projekt'));
@@ -521,10 +521,10 @@ const Start = (() => {
     const d = ct && ct.doc ? ct.doc : {};
     const u = d.settings && d.settings.unit ? d.settings.unit : 'mm';
     const n = Model.countItems(d);
-    const bits = [u === 'in' ? 'Zoll' : u];
-    if (n > 0) bits.push(`${n} ${n === 1 ? 'Teil' : 'Teile'}`);
+    const bits = [u === 'in' ? T('unit.inShort') : u];
+    if (n > 0) bits.push(`${n} ${n === 1 ? T('tpl.metaPartOne') : T('tpl.metaPartMany')}`);
     const pb = d.settings && d.settings.printBed;
-    if (pb && pb.enabled) bits.push(`Druckbett ${Math.round(pb.x)}×${Math.round(pb.y)}`);
+    if (pb && pb.enabled) bits.push(T('tpl.metaBed', { x: Math.round(pb.x), y: Math.round(pb.y) }));
     return bits.join(' · ');
   }
   function customTplCard(ct, { onOpen, onAfterDelete, openOpts } = {}) {
@@ -620,7 +620,7 @@ const Start = (() => {
     return modalRef;
   }
   function saveAsTemplate(opts = {}) {
-    const defName = (App.doc && App.doc.name && App.doc.name !== 'Neues Projekt') ? App.doc.name : 'Meine Vorlage';
+    const defName = (App.doc && App.doc.name && App.doc.name !== 'Neues Projekt') ? App.doc.name : T('tpl.myTemplate');
     const nameF = h('div', { class: 'field' },
       h('label', { for: 'tpl-save-name' }, T('tpl.saveNameLabel')),
       h('div', { class: 'inp' }, h('input', { id: 'tpl-save-name', type: 'text', value: defName, autocomplete: 'off' })));
@@ -628,12 +628,13 @@ const Start = (() => {
       h('label', { for: 'tpl-save-desc' }, T('tpl.saveDescLabel')),
       h('div', { class: 'inp' }, h('input', { id: 'tpl-save-desc', type: 'text', placeholder: T('tpl.saveDescPh'), autocomplete: 'off' })));
     const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
+    const nItems = Model.countItems(App.doc);
     const summaryBits = [
-      `Einheit: ${Units.key() === 'in' ? 'Zoll' : Units.label()}`,
-      `${Model.countItems(App.doc)} ${Model.countItems(App.doc) === 1 ? 'Objekt' : 'Objekte'}`,
+      T('tpl.saveSummaryUnit', { u: Units.key() === 'in' ? T('unit.inShort') : Units.label() }),
+      T('tpl.saveSummaryCount', { n: nItems, unit: nItems === 1 ? T('common.object') : T('common.objects') }),
     ];
-    if (App.doc && App.doc.settings && App.doc.settings.material) summaryBits.push(`Material: ${App.doc.settings.material}`);
-    if (pb && pb.enabled) summaryBits.push(`Druckbett ${pb.x}×${pb.y}×${pb.z} mm · Düse ${fmt(pb.nozzle, 2)} mm`);
+    if (App.doc && App.doc.settings && App.doc.settings.material) summaryBits.push(T('tpl.saveSummaryMat', { mat: App.doc.settings.material }));
+    if (pb && pb.enabled) summaryBits.push(T('tpl.saveSummaryBed', { x: pb.x, y: pb.y, z: pb.z, nozzle: fmt(pb.nozzle, 2) }));
     const body = h('div', { id: 'save-tpl-dialog', style: { display: 'grid', gap: '12px' } },
       nameF, descF, h('div', { class: 'hint-box' }, summaryBits.join(' · ')));
 
@@ -1942,19 +1943,19 @@ const Start = (() => {
     }
     btn.hidden = false;
     btn.className = 'folder-badge ' + folder.status;
-    let ico = 'check', label = `gespeichert in ${folder.name}`, tip = `Automatisch gespeichert in „${folder.name}/${folder.fileName}“`;
+    let ico = 'check', label = T('folder.savedLabel', { name: folder.name }), tip = T('folder.savedTip', { name: folder.name, file: folder.fileName });
     if (folder.status === 'saving') {
       ico = 'save';
-      label = `speichert in ${folder.name} …`;
-      tip = `Schreibt gerade nach „${folder.name}/${folder.fileName}“ …`;
+      label = T('folder.savingLabel', { name: folder.name });
+      tip = T('folder.savingTip', { name: folder.name, file: folder.fileName });
     } else if (folder.status === 'pending') {
       ico = 'folder';
-      label = `speichert gleich in ${folder.name} …`;
-      tip = `Änderung vorgemerkt – schreibt automatisch in „${folder.name}/${folder.fileName}“`;
+      label = T('folder.pendingLabel', { name: folder.name });
+      tip = T('folder.pendingTip', { name: folder.name, file: folder.fileName });
     } else if (folder.status === 'error') {
       ico = 'warn';
-      label = `Fehler · ${folder.name}`;
-      tip = `Fehler beim Speichern in „${folder.name}“: ${folder.lastErr || 'unbekannt'}`;
+      label = T('folder.errorLabel', { name: folder.name });
+      tip = T('folder.errorTip', { name: folder.name, err: folder.lastErr || T('common.unknown') });
     } else if (folder.lastSavedAt) {
       tip += ` (${new Date(folder.lastSavedAt).toLocaleTimeString('de-DE')})`;
     }
@@ -2126,9 +2127,9 @@ const Start = (() => {
     const bar = h('div', { id: 'import-check-bar', class: 'import-bar', role: 'status', 'aria-live': 'polite' });
     const ic = h('div', { class: 'ib-ic' }); ic.innerHTML = icon('warn');
     const txt = h('div', { class: 'ib-txt' },
-      h('b', null, `Import-Prüfung: „${Model.label(f.item)}“ hat Fehler`),
+      h('b', null, T('imp.bannerTitle', { name: Model.label(f.item) })),
       h('span', null, issueSummaryText(st.report)));
-    const healBtn = h('button', { type: 'button', id: 'import-bar-heal', class: 'btn warn-act small', 'data-help': 'importHeal', disabled: !!st.checking, onclick: () => healImport(checkBarItemId) }, st.checking ? 'Heilt …' : 'Heilen');
+    const healBtn = h('button', { type: 'button', id: 'import-bar-heal', class: 'btn warn-act small', 'data-help': 'importHeal', disabled: !!st.checking, onclick: () => healImport(checkBarItemId) }, st.checking ? T('imp.bannerHealing') : T('panel.imp.heal'));
     const closeBtn = h('button', { type: 'button', id: 'import-bar-close', class: 'btn ghost small', 'aria-label': T('common.close'), onclick: () => dismissImportBanner() }, '×');
     bar.append(ic, txt, healBtn, closeBtn);
     host.append(bar);

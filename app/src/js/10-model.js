@@ -1,38 +1,38 @@
 // ================= Datenmodell =================
 const COLORS = [
-  { c: '#2f9e91', n: 'Petrol' }, { c: '#3f7fd6', n: 'Blau' }, { c: '#e8833a', n: 'Orange' }, { c: '#e2b53a', n: 'Gelb' },
-  { c: '#d6574c', n: 'Rot' }, { c: '#8a6ad1', n: 'Violett' }, { c: '#5b9f55', n: 'Grün' }, { c: '#8b96a1', n: 'Grau' },
-  { c: '#eceff2', n: 'Weiß' }, { c: '#3b4149', n: 'Schwarz' },
+  { c: '#2f9e91', get n() { return T('color.petrol'); } }, { c: '#3f7fd6', get n() { return T('color.blue'); } }, { c: '#e8833a', get n() { return T('color.orange'); } }, { c: '#e2b53a', get n() { return T('color.yellow'); } },
+  { c: '#d6574c', get n() { return T('color.red'); } }, { c: '#8a6ad1', get n() { return T('color.violet'); } }, { c: '#5b9f55', get n() { return T('color.green'); } }, { c: '#8b96a1', get n() { return T('color.gray'); } },
+  { c: '#eceff2', get n() { return T('color.white'); } }, { c: '#3b4149', get n() { return T('color.black'); } },
 ];
 let colorTurn = 0;
 function nextColor() { const c = COLORS[colorTurn % 6].c; colorTurn++; return c; }
 
-const P = (k, label, def, opt = {}) => ({ k, label, def, unit: 'mm', min: 0.1, ...opt });
+const P = (k, labelKey, def, opt = {}) => ({ k, get label() { return T(labelKey); }, def, unit: 'mm', min: 0.1, ...opt });
 const KINDS = {
-  box: { label: 'Quader', icon: 'cube', params: [P('w', 'Breite', 20, { axis: 'x' }), P('d', 'Tiefe', 20, { axis: 'y' }), P('h', 'Höhe', 20, { axis: 'z' })] },
-  cylinder: { label: 'Zylinder', params: [P('d', 'Durchmesser', 20, { sym: 'Ø' }), P('h', 'Höhe', 20)] },
-  tube: { label: 'Rohr', params: [P('d', 'Außen-Ø', 20, { sym: 'Ø' }), P('wall', 'Wandstärke', 2), P('h', 'Höhe', 20)] },
-  sphere: { label: 'Kugel', params: [P('d', 'Durchmesser', 20, { sym: 'Ø' })] },
-  hemisphere: { label: 'Halbkugel', params: [P('d', 'Durchmesser', 20, { sym: 'Ø' })] },
-  cone: { label: 'Kegel', params: [P('d1', 'Ø unten', 20), P('d2', 'Ø oben', 0, { min: 0 }), P('h', 'Höhe', 20)] },
-  pyramid: { label: 'Pyramide', params: [P('w', 'Breite', 20, { axis: 'x' }), P('d', 'Tiefe', 20, { axis: 'y' }), P('h', 'Höhe', 20, { axis: 'z' })] },
-  torus: { label: 'Ring', params: [P('d', 'Außen-Ø', 30), P('t', 'Ringdicke', 6)] },
-  prism: { label: 'Vieleck', params: [P('n', 'Ecken', 6, { unit: '', min: 3, max: 64, step: 1, int: true }), P('d', 'Durchmesser', 20), P('h', 'Höhe', 20)] },
-  wedge: { label: 'Keil', params: [P('w', 'Breite', 20, { axis: 'x' }), P('d', 'Tiefe', 20, { axis: 'y' }), P('h', 'Höhe', 20, { axis: 'z' })] },
-  extrude: { label: 'Skizzenkörper', params: [] },
-  revolve: { label: 'Drehkörper', params: [] },
-  loft: { label: 'Übergang', params: [] },
-  sweep: { label: 'Entlang Pfad', params: [] },
-  import: { label: 'Importiert', params: [] },
-  group: { label: 'Gruppe', params: [] },
-  part: { label: 'Bauteil', params: [] },
-  transform: { label: 'Verschieben/Drehen', params: [] },
-  scale: { label: 'Skalieren', params: [] },
-  thicken: { label: 'Aufdicken', params: [] },
-  rib: { label: 'Rippe', params: [] },
-  wrap: { label: 'Wickeln', params: [] },
-  emboss: { label: 'Prägen', params: [] },
-  mirrorStep: { label: 'Schritt spiegeln', params: [] },
+  box: { get label() { return T('kind.box'); }, icon: 'cube', params: [P('w', 'param.w', 20, { axis: 'x' }), P('d', 'param.d', 20, { axis: 'y' }), P('h', 'param.h', 20, { axis: 'z' })] },
+  cylinder: { get label() { return T('kind.cylinder'); }, params: [P('d', 'param.dia', 20, { sym: 'Ø' }), P('h', 'param.h', 20)] },
+  tube: { get label() { return T('kind.tube'); }, params: [P('d', 'param.od', 20, { sym: 'Ø' }), P('wall', 'param.wall', 2), P('h', 'param.h', 20)] },
+  sphere: { get label() { return T('kind.sphere'); }, params: [P('d', 'param.dia', 20, { sym: 'Ø' })] },
+  hemisphere: { get label() { return T('kind.hemisphere'); }, params: [P('d', 'param.dia', 20, { sym: 'Ø' })] },
+  cone: { get label() { return T('kind.cone'); }, params: [P('d1', 'param.d1', 20), P('d2', 'param.d2', 0, { min: 0 }), P('h', 'param.h', 20)] },
+  pyramid: { get label() { return T('kind.pyramid'); }, params: [P('w', 'param.w', 20, { axis: 'x' }), P('d', 'param.d', 20, { axis: 'y' }), P('h', 'param.h', 20, { axis: 'z' })] },
+  torus: { get label() { return T('kind.torus'); }, params: [P('d', 'param.od', 30), P('t', 'param.t', 6)] },
+  prism: { get label() { return T('kind.prism'); }, params: [P('n', 'param.n', 6, { unit: '', min: 3, max: 64, step: 1, int: true }), P('d', 'param.dia', 20), P('h', 'param.h', 20)] },
+  wedge: { get label() { return T('kind.wedge'); }, params: [P('w', 'param.w', 20, { axis: 'x' }), P('d', 'param.d', 20, { axis: 'y' }), P('h', 'param.h', 20, { axis: 'z' })] },
+  extrude: { get label() { return T('kind.extrude'); }, params: [] },
+  revolve: { get label() { return T('kind.revolve'); }, params: [] },
+  loft: { get label() { return T('kind.loft'); }, params: [] },
+  sweep: { get label() { return T('kind.sweep'); }, params: [] },
+  import: { get label() { return T('kind.import'); }, params: [] },
+  group: { get label() { return T('kind.group'); }, params: [] },
+  part: { get label() { return T('kind.part'); }, params: [] },
+  transform: { get label() { return T('kind.transform'); }, params: [] },
+  scale: { get label() { return T('kind.scale'); }, params: [] },
+  thicken: { get label() { return T('kind.thicken'); }, params: [] },
+  rib: { get label() { return T('kind.rib'); }, params: [] },
+  wrap: { get label() { return T('kind.wrap'); }, params: [] },
+  emboss: { get label() { return T('kind.emboss'); }, params: [] },
+  mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
