@@ -693,6 +693,8 @@ const IC = {
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
+  conic: '<path d="M4 17l8-11 8 11" stroke-dasharray="2.2 2" opacity=".5"/><path d="M4 17Q12 6 20 17" /><circle cx="12" cy="11.5" r="1.7" fill="currentColor"/><circle cx="4" cy="17" r="1.4" fill="currentColor"/><circle cx="20" cy="17" r="1.4" fill="currentColor"/>',
+  bridge: '<path d="M3 16h3.5M17.5 8H21" opacity=".55"/><path d="M6.5 16C11 16 13 8 17.5 8" /><circle cx="6.5" cy="16" r="1.6" fill="currentColor"/><circle cx="17.5" cy="8" r="1.6" fill="currentColor"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2109,6 +2111,16 @@ const HELP = {
   "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
   "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
   "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
+ },
+ "conic2d": {
+  "tip": "Kegelschnitt aus Start, Ende, Schulterpunkt und Rho-Wert",
+  "hilfe": "Klicke im Profi-Modus Startpunkt, Endpunkt und den spitzen Schulterpunkt (Tangentenschnittpunkt) an und ziehe die Kurve über den Rho-Wert auf (oder tippe ihn ein). Unter 0,5 entsteht ein Ellipsenstück, bei genau 0,5 eine Parabel und darüber eine Hyperbel.",
+  "tipp": "Mit Rho = 0,5 bekommst du exakt eine Parabel; den Rho-Wert kannst du danach rechts jederzeit zwischen 0,05 und 0,95 nachstellen."
+ },
+ "bridge2d": {
+  "tip": "Brückenkurve: weicher Übergang zwischen zwei offenen Kurvenenden",
+  "hilfe": "Klicke im Profi-Modus nacheinander zwei offene Kurvenenden (Linie, Bogen, Teil-Ellipse, Spline, Kegelschnitt oder Brücke) an. Wähle rechts „Tangential (G1)“ für einen knickfreien Übergang oder „Krümmungsglatt (G2)“, wenn auch die Krümmung ohne Sprung anschließen soll.",
+  "tipp": "Mit „Stärke 1“ und „Stärke 2“ steuerst du, wie weit die Brückenkurve an jedem Ende in die bestehende Richtung weiterläuft. Änderst du später eine der beiden Kurven, wandert die Brücke automatisch mit."
  }
 };
 

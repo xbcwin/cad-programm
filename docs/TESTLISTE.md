@@ -2333,6 +2333,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `stretch2d` und `liveMirror` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`strecken`, `live-spiegeln`) ohne Fehler.
 - [ ] **Von Hand**: In einer Skizze mit gemischtem Profil einen Rahmen schräg mit Winkel/Weg strecken und Live-Spiegeln an einer schrägen Hilfslinie beim freien Zeichnen testen.
 
+## Kegelschnitt und Brückenkurve (Auto [A-113], SK-36, SK-40)
+- [x] **Profi-Modus**: Werkzeuge `conic` („Kegelschnitt“) und `bridge` („Brücke“) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Kegelschnitt mit Rho = 0,5 (Parabel), Ellipse & Hyperbel**: Start `(0, 0)`, Ende `(40, 0)`, Schulterpunkt `(20, 20)` und Rho `0,5` per Maus/Tastatur erzeugt `conic`, dessen Mittelpunkt exakt mit der Parabel `(20, 10)` übereinstimmt; Umschalten auf `0,3` (Ellipsenstück) und `0,75` (Hyperbel) über `#se-rho` passt die Kurvenmitte exakt an; geschlossen mit Linie und hochgezogen ergibt einen fehlerfreien 3D-Körper mit Parabel-Volumen.
+- [x] **Brückenkurve zwischen zwei Linien (G1 tangential) & Mitwandern**: Verbindet zwei Linienenden knickfrei; Winkelfehler an beiden Enden liegt unter `0,1°`; bei Änderung einer Anschlusslinie wandert die Brücke per `SK.syncBridges` mit und bleibt unter `0,1°` tangential; `Strg+Z` macht rückgängig.
+- [x] **Brückenkurve krümmungsglatt (G2) & 3D-Hochziehen**: Verbindet Kreisbogen (`R = 20`) und Linie mit `pts.length === 6`, Winkelfehler `< 0,1°` sowie passender Krümmung (`1/20` bzw. `0`) an beiden Enden, schließt zum Profil und lässt sich ohne Fehler hochziehen; Hilfetexte `conic2d` / `bridge2d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kegelschnitt`, `brückenkurve`) vollständig.
+- [ ] **Von Hand**: In einer Skizze einen Kegelschnitt frei mit der Maus aufziehen (Ellipsenstück, Parabel und Hyperbel am Schulterpunkt beobachten) und zwei schräge Splines bzw. Bögen mit „Brücke“ (G1 und G2) sowie Stärke 1/2 verbinden.
+
 ## Fehler melden
 
 ```

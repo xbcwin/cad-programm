@@ -19,7 +19,7 @@ const Solver = (() => {
   // ---------- Variablen je Element ----------
   const VARS = {
     line: ['a0', 'a1', 'b0', 'b1'], point: ['a0', 'a1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
-    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], ellarc: ['c0', 'c1', 'rx', 'ry', 'a0', 'a1'], text: ['a0', 'a1', 'h'],
+    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], ellarc: ['c0', 'c1', 'rx', 'ry', 'a0', 'a1'], conic: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], text: ['a0', 'a1', 'h'],
   };
   // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
   const varsOf = (e) => (e.type === 'spline' ? (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']) : VARS[e.type]);
@@ -81,7 +81,12 @@ const Solver = (() => {
         const a = I(e.id, 'p' + i + '_0'), b = I(e.id, 'p' + i + '_1');
         return { deps: [a, b], get: (X) => [X[a], X[b]] };
       }
-      if (e.type === 'line' || e.type === 'slot') { if (p === 'a' || p === 'b') return two(p); if (p === 'mid' || p === 'c') { const A = two('a'), B = two('b'); return { deps: [...A.deps, ...B.deps], get: (X) => { const a = A.get(X), b = B.get(X); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; } }; } }
+      if (e.type === 'line' || e.type === 'slot' || e.type === 'conic') { if (p === 'a' || p === 'b' || (e.type === 'conic' && p === 'm')) return two(p); if (p === 'mid' || p === 'c') { const A = two('a'), B = two('b'); return { deps: [...A.deps, ...B.deps], get: (X) => { const a = A.get(X), b = B.get(X); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; } }; } }
+      if (e.type === 'bridge') {
+        if (p === 'a' && e.refA) return point(e.refA);
+        if (p === 'b' && e.refB) return point(e.refB);
+        return null;
+      }
       if (e.type === 'arc') {
         if (p === 'a' || p === 'b') return two(p);
         const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
@@ -151,7 +156,7 @@ const Solver = (() => {
       const put = (ref, e) => { const P = point(ref); if (!P) return; const k = qk(P.get(x)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(P); };
       groups.set(qk([0, 0]), [point({ e: 'origin' })]);
       for (const e of ents) {
-        if (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
+        if (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'conic' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });
         else if (e.type === 'text' || e.type === 'point') put({ e: e.id, p: 'a' });
@@ -485,6 +490,10 @@ const Solver = (() => {
         const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
         if (loose.has(m.rx)) pushPt(e.id, 'rx', [e.c[0] + cs * e.rx, e.c[1] + sn * e.rx], [m.rx], 'radius');
         if (loose.has(m.ry)) pushPt(e.id, 'ry', [e.c[0] - sn * e.ry, e.c[1] + cs * e.ry], [m.ry], 'radius');
+      } else if (e.type === 'conic') {
+        pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
+        pushPt(e.id, 'b', e.b, [m.b0, m.b1]);
+        pushPt(e.id, 'm', e.m, [m.m0, m.m1]);
       } else if (e.type === 'rect') {
         pushPt(e.id, 'k0', [e.a[0], e.a[1]], [m.a0, m.a1]);
         pushPt(e.id, 'k1', [e.b[0], e.a[1]], [m.b0, m.a1]);
@@ -495,6 +504,9 @@ const Solver = (() => {
       } else if (e.type === 'point' || e.type === 'text') {
         pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
       }
+    }
+    for (const e of ents || []) {
+      if (e.type === 'bridge' && (!e.refA || freeEnts.has(e.refA.e) || !e.refB || freeEnts.has(e.refB.e))) freeEnts.add(e.id);
     }
     return { rank, dof: n - rank, freeEnts, looseVars: loose, freePoints, nullBasis, varIdx: sys.idx };
   }
@@ -524,6 +536,8 @@ const Solver = (() => {
     } else err = iterate(sys, X, active);
     // zurückschreiben
     for (const e of ents) { const m = sys.idx.get(e.id); if (!m) continue; for (const k in m) setK(e, k, Math.round(X[m[k]] * 1e6) / 1e6); }
+    // Brückenkurven nachziehen, falls sich die verknüpften Kurvenenden geändert haben
+    SK.syncBridges(ents);
     // Text entlang einer Kurve folgt der Kurve, wenn sie sich durch Maße oder Regeln ändert
     for (const e of ents) if (e.type === 'text' && e.on) { const c = ents.find((x) => x.id === e.on), pts = c ? SK.textPathPts(c, e.flip) : null; if (pts) e.onP = pts; }
     const res = residuals(sys, X);

@@ -155,7 +155,7 @@ Leitlinien:
   - `intersect`
   - Löcher in einer Gruppe werden aus den Körpern geschnitten.
 - **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, bg }`
-  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), ellarc(c,rx,ry,rot,a0,a1,ccw), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
+  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), ellarc(c,rx,ry,rot,a0,a1,ccw), conic(a,m,b,rho), bridge(a,b,mode,s1,s2,refA,refB,pts), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
   - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
   - **Regeln:** horizontal, vertical, parallel, perpendicular, collinear (zwei Linien auf einer Geraden), tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)
   - **Maße:** w/h/len/d/r/arcLen/x/y/ang/n, dist, distPL, angLL, ang3, ord – auch als Formel; `ref: true` = Maß zum Ablesen (der Löser überspringt es, das Schildchen zeigt den gemessenen Wert in Klammern; `Sketch.setRefDim(spec)`)
@@ -238,7 +238,7 @@ Leitlinien:
 - **Zeichnen:**
   - Auswahl (V), Linie (L), Rechteck (R: Ecke/Mitte/gedreht über 3 Punkte), Kreis (C: Mitte/2P/3P), Ellipse (E), Teil-Ellipse (`ellarc`)
   - Bogen (A: 3 Punkte oder tangential), Langloch (G: auch gebogen), Vieleck (P: Umkreis oder Schlüsselweite), Punkt (O)
-  - Schablone (J), Formen-Sammlung (`SKO.SHAPES`/`SKO.shapeEnts`/`Sketch.insertShape`: Stern, Pfeil, Herz, Zahnrad-Umriss, Schlüsselloch im Panel `#sk-shapes`), Text (B: Schrift Inter oder eigene TTF über `Sketch.loadFontFile`, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**, `kern`-Unterschneidung + Laufweite), Spline (S)
+  - Schablone (J), Formen-Sammlung (`SKO.SHAPES`/`SKO.shapeEnts`/`Sketch.insertShape`: Stern, Pfeil, Herz, Zahnrad-Umriss, Schlüsselloch im Panel `#sk-shapes`), Text (B: Schrift Inter oder eigene TTF über `Sketch.loadFontFile`, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**, `kern`-Unterschneidung + Laufweite), Spline (S), Kegelschnitt (`conic`, nur Profi, Rho-Wert), Brückenkurve (`bridge`, nur Profi, G1/G2)
   - Kurve aus Formel (`#sk-formula`, `SKO.FORMULA_CURVES`/`SKO.evalFormulaCurve`/`Sketch.insertFormulaCurve` über `Expr.evalRad`, nur Profi: `y = f(x)` oder `x(t), y(t)`, Sinus, Evolvente) und Kurve aus Tabelle (`#sk-csv`, `SKO.parsePointsCSV`/`SKO.pointsToCurveEnts`/`Sketch.insertPointsCSV`, nur Profi: CSV-Datei oder Text als Spline oder Linienzug)
 - **Schablonen:** Pin-Raster, Lüftungsgitter, QFP, QFN, BGA, SOIC, DIP (Maße 2026 gegen JEDEC und Datenblätter geprüft), USB-C-Buchse 9,5 × 3,8, USB-C-Stecker 13 × 7 mit Eckradius, Befestigungslöcher
 - **Bearbeiten:**

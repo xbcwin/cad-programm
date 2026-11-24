@@ -22403,6 +22403,210 @@ def t_a110_strecken_live_spiegeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a113_kegelschnitt_bruecke(p):
+    # 1. Nur Profi-Modus: Kegelschnitt und Brücke im Modus „Einfach“ ausgeblendet, in „Profi“ sichtbar
+    p.empty()
+    p.ev("ViewPrefs.set({ level: 'simple', firstStart: false }); Sketch.startOnPlane('XY')"); p.wait(1200)
+    vis_simple = (
+        not sichtbar(p, '.sketchbar .tool[data-tool="conic"]')
+        and not sichtbar(p, '.sketchbar .tool[data-tool="bridge"]')
+    )
+    p.ev("ViewPrefs.set({ level: 'pro', firstStart: false });"); p.wait(300)
+    vis_pro = (
+        sichtbar(p, '.sketchbar .tool[data-tool="conic"]')
+        and sichtbar(p, '.sketchbar .tool[data-tool="bridge"]')
+    )
+    ok1 = vis_simple and vis_pro
+
+    # 2. Kegelschnitt mit Rho = 0,5 -> Mittelpunkt stimmt exakt mit Parabel überein + Ellipse/Hyperbel + 3D
+    p.pg.click('.sketchbar .tool[data-tool="conic"]'); p.wait(150)
+    for x, y in ((0, 0), (40, 0), (20, 20), (20, 10)):
+        sx, sy = to_screen(p, x, y)
+        p.pg.mouse.click(sx, sy); p.wait(120)
+    p.wait(200)
+    c_res = p.ev("""
+      const e = Sketch.state.ents.find((x) => x.type === 'conic');
+      if (!e) return null;
+      const para = [
+        0.25 * e.a[0] + 0.5 * e.m[0] + 0.25 * e.b[0],
+        0.25 * e.a[1] + 0.5 * e.m[1] + 0.25 * e.b[1],
+      ];
+      const ptMid = SK.conicPt(e.a, e.m, e.b, e.rho, 0.5);
+      const bz = SK.conicBez(e.a, e.m, e.b, e.rho);
+      const bzMid = SK.bezEval([bz[0].a, bz[0].c1, bz[0].c2, bz[0].b], 0.5);
+      const segPts = SK.segPoints(SK.segsOf(e)[0]);
+      const segMid = segPts[Math.floor(segPts.length / 2)];
+      return { rho: e.rho, para, ptMid, bzMid, segMid };
+    """)
+    ok2a = bool(
+        c_res
+        and abs(c_res['rho'] - 0.5) < 1e-4
+        and math.hypot(c_res['ptMid'][0] - c_res['para'][0], c_res['ptMid'][1] - c_res['para'][1]) < 1e-4
+        and math.hypot(c_res['bzMid'][0] - c_res['para'][0], c_res['bzMid'][1] - c_res['para'][1]) < 1e-4
+        and math.hypot(c_res['segMid'][0] - c_res['para'][0], c_res['segMid'][1] - c_res['para'][1]) < 1e-3
+    )
+    # Rho auf Ellipsenstück (0,3) und Hyperbel (0,75), dann zurück auf 0,5
+    p.pg.click('.sketchbar .tool[data-tool="select"]'); p.wait(150)
+    sc = to_screen(p, 20, 10)
+    p.pg.mouse.click(sc[0], sc[1]); p.wait(200)
+    p.pg.fill('#se-rho', '0.3'); p.pg.press('#se-rho', 'Enter'); p.wait(200)
+    c_ell = p.ev("const e=Sketch.state.ents.find(x=>x.type==='conic'); return [e.rho, SK.conicPt(e.a,e.m,e.b,e.rho,0.5)[1], document.querySelector('#se-conic-kind')?.textContent||'']")
+    p.pg.fill('#se-rho', '0.75'); p.pg.press('#se-rho', 'Enter'); p.wait(200)
+    c_hyp = p.ev("const e=Sketch.state.ents.find(x=>x.type==='conic'); return [e.rho, SK.conicPt(e.a,e.m,e.b,e.rho,0.5)[1], document.querySelector('#se-conic-kind')?.textContent||'']")
+    p.pg.fill('#se-rho', '0.5'); p.pg.press('#se-rho', 'Enter'); p.wait(200)
+    # Schließen und hochziehen -> Parabel-Volumen = (2/3 * 40 * 10) * 3 = 800
+    p.ev("const e=Sketch.state.ents.find(x=>x.type==='conic'); Sketch.state.ents.push({id:'e_close_c',type:'line',a:e.b.slice(),b:e.a.slice()});")
+    reg_c = p.ev("const S=Sketch.state; return [SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v_conic = volumen(p)
+    err_c = p.ev("return App.errors.length")
+    ok2 = (
+        ok2a
+        and abs(c_ell[0] - 0.3) < 1e-4 and abs(c_ell[1] - 6.0) < 1e-4 and 'ellip' in c_ell[2].lower()
+        and abs(c_hyp[0] - 0.75) < 1e-4 and abs(c_hyp[1] - 15.0) < 1e-4 and 'hyperb' in c_hyp[2].lower()
+        and reg_c == [1, 0] and err_c == 0 and abs(v_conic - 800.0) < 16.0
+    )
+
+    # 3. Brückenkurve (G1) zwischen zwei Linien -> beide Enden tangential (Winkelfehler < 0,1°) + Mitwandern + Undo
+    p.ev("App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("""
+      Sketch.startOnPlane('XY');
+      const S = Sketch.state;
+      S.ents.push(
+        { id: 'l1', type: 'line', a: [0, 0], b: [20, 0] },
+        { id: 'l2', type: 'line', a: [40, 15], b: [60, 25] }
+      );
+      Sketch.render();
+    """); p.wait(1200)
+    p.pg.click('.sketchbar .tool[data-tool="bridge"]'); p.wait(150)
+    p1 = to_screen(p, 20, 0)
+    p2 = to_screen(p, 40, 15)
+    p.pg.mouse.click(p1[0], p1[1]); p.wait(150)
+    p.pg.mouse.click(p2[0], p2[1]); p.wait(250)
+    br1 = p.ev("""
+      const S = Sketch.state;
+      const b = S.ents.find((x) => x.type === 'bridge');
+      const l1 = S.ents.find((x) => x.id === 'l1');
+      const l2 = S.ents.find((x) => x.id === 'l2');
+      if (!b || !l1 || !l2) return null;
+      const degErr = (u, v) => {
+        const lu = Math.hypot(u[0], u[1]) || 1, lv = Math.hypot(v[0], v[1]) || 1;
+        const dot = Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)));
+        return Math.acos(dot) * 180 / Math.PI;
+      };
+      const i0 = SK.bezDerivInfo(b.pts, false);
+      const i1 = SK.bezDerivInfo(b.pts, true);
+      const t1 = [l1.b[0] - l1.a[0], l1.b[1] - l1.a[1]];
+      const t2 = [l2.b[0] - l2.a[0], l2.b[1] - l2.a[1]];
+      return {
+        mode: b.mode,
+        nPts: b.pts.length,
+        dA: SK.d2(b.a, l1.b),
+        dB: SK.d2(b.b, l2.a),
+        err0: degErr(i0.t, t1),
+        err1: degErr(i1.t, t2),
+      };
+    """)
+    # Linie 2 verschieben -> Brücke wandert mit und bleibt tangential < 0,1°
+    br1_moved = p.ev("""
+      const S = Sketch.state;
+      const l2 = S.ents.find((x) => x.id === 'l2');
+      l2.a = [38, 22];
+      const sol = Solver.solve({ ents: S.ents, dims: S.dims, cons: S.cons }, {});
+      S.ents = sol.ents;
+      const b = S.ents.find((x) => x.type === 'bridge');
+      const l1 = S.ents.find((x) => x.id === 'l1');
+      const l2n = S.ents.find((x) => x.id === 'l2');
+      const degErr = (u, v) => {
+        const lu = Math.hypot(u[0], u[1]) || 1, lv = Math.hypot(v[0], v[1]) || 1;
+        const dot = Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)));
+        return Math.acos(dot) * 180 / Math.PI;
+      };
+      const i0 = SK.bezDerivInfo(b.pts, false);
+      const i1 = SK.bezDerivInfo(b.pts, true);
+      return {
+        dB: SK.d2(b.b, l2n.a),
+        err0: degErr(i0.t, [l1.b[0] - l1.a[0], l1.b[1] - l1.a[1]]),
+        err1: degErr(i1.t, [l2n.b[0] - l2n.a[0], l2n.b[1] - l2n.a[1]]),
+      };
+    """)
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(200)
+    br_undo = p.ev("return Sketch.state.ents.filter(x => x.type === 'bridge').length")
+    ok3 = bool(
+        br1 and br1['mode'] == 'g1' and br1['nPts'] == 4
+        and br1['dA'] < 1e-4 and br1['dB'] < 1e-4
+        and br1['err0'] < 0.1 and br1['err1'] < 0.1
+        and br1_moved and br1_moved['dB'] < 1e-4
+        and br1_moved['err0'] < 0.1 and br1_moved['err1'] < 0.1
+        and br_undo == 0
+    )
+
+    # 4. Brückenkurve krümmungsglatt (G2) zwischen Bogen (R=20) und Linie + Hochziehen + Hilfen/i18n/Befehle
+    p.ev("Sketch.cancel(true); App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("""
+      Sketch.startOnPlane('XY');
+      const S = Sketch.state;
+      const s45 = Math.SQRT1_2;
+      S.ents.push(
+        { id: 'a1', type: 'arc', a: [-30, -10], m: [-30 + 20 * s45, 10 - 20 * s45], b: [-10, 10] },
+        { id: 'l2', type: 'line', a: [15, 15], b: [30, 15] }
+      );
+      Sketch.render();
+    """); p.wait(1200)
+    p.pg.click('.sketchbar .tool[data-tool="bridge"]'); p.wait(150)
+    p.pg.select_option('#br-mode', 'g2'); p.wait(150)
+    pa = to_screen(p, -10, 10)
+    pb = to_screen(p, 15, 15)
+    p.pg.mouse.click(pa[0], pa[1]); p.wait(150)
+    p.pg.mouse.click(pb[0], pb[1]); p.wait(250)
+    br2 = p.ev("""
+      const S = Sketch.state;
+      const b = S.ents.find((x) => x.type === 'bridge');
+      if (!b) return null;
+      const degErr = (u, v) => {
+        const lu = Math.hypot(u[0], u[1]) || 1, lv = Math.hypot(v[0], v[1]) || 1;
+        const dot = Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)));
+        return Math.acos(dot) * 180 / Math.PI;
+      };
+      const i0 = SK.bezDerivInfo(b.pts, false);
+      const i1 = SK.bezDerivInfo(b.pts, true);
+      return {
+        mode: b.mode, nPts: b.pts.length,
+        err0: degErr(i0.t, [0, 1]),
+        err1: degErr(i1.t, [1, 0]),
+        k0: i0.kappa, k1: i1.kappa,
+      };
+    """)
+    # Profil schließen und hochziehen
+    p.ev("""
+      const S = Sketch.state;
+      S.ents.push(
+        { id: 'c1', type: 'line', a: [30, 15], b: [30, -10] },
+        { id: 'c2', type: 'line', a: [30, -10], b: [-30, -10] }
+      );
+    """)
+    reg_b = p.ev("const S=Sketch.state; return [SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v_bridge = volumen(p)
+    err_b = p.ev("return App.errors.length")
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("""
+      return Commands.search('kegelschnitt').some((c) => c.id === 'sketch-conic')
+          && Commands.search('brückenkurve').some((c) => c.id === 'sketch-bridge');
+    """)
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('conic2d', 'bridge2d'))
+    ok4 = bool(
+        br2 and br2['mode'] == 'g2' and br2['nPts'] == 6
+        and br2['err0'] < 0.1 and br2['err1'] < 0.1
+        and abs(br2['k0'] - 0.05) < 1e-4 and abs(br2['k1']) < 1e-4
+        and reg_b == [1, 0] and err_b == 0 and v_bridge > 100
+        and de_keys == en_keys and cmd_ok and help_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -22621,6 +22825,7 @@ TESTS = [
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
+    ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -15,6 +15,8 @@ const Sketch = (() => {
     { id: 'tpl', icon: 'chip', get label() { return T('sk.tool.tpl'); }, key: 'J', get tip() { return T('sk.toolTip.tpl'); } },
     { id: 'text', icon: 'text', get label() { return T('sk.tool.text'); }, key: 'B', get tip() { return T('sk.toolTip.text'); } },
     { id: 'spline', icon: 'spline', get label() { return T('sk.tool.spline'); }, key: 'S', get tip() { return T('sk.toolTip.spline'); } },
+    { id: 'conic', icon: 'conic', get label() { return T('sk.tool.conic'); }, key: '', get tip() { return T('sk.toolTip.conic'); }, pro: true },
+    { id: 'bridge', icon: 'bridge', get label() { return T('sk.tool.bridge'); }, key: '', get tip() { return T('sk.toolTip.bridge'); }, pro: true },
     { id: 'corner', icon: 'fillet', get label() { return T('sk.tool.corner'); }, key: 'K', get tip() { return T('sk.toolTip.corner'); }, sep: true },
     { id: 'trim', icon: 'trim', get label() { return T('sk.tool.trim'); }, key: 'T', get tip() { return T('sk.toolTip.trim'); } },
     { id: 'extend', icon: 'extend', get label() { return T('sk.tool.extend'); }, key: 'U', get tip() { return T('sk.toolTip.extend'); } },
@@ -30,7 +32,7 @@ const Sketch = (() => {
     { id: 'dim', icon: 'dim', get label() { return T('sk.tool.dim'); }, key: 'D', get tip() { return T('sk.toolTip.dim'); }, sep: true },
     { id: 'bg', icon: 'image', get label() { return T('sk.tool.bg'); }, key: 'I', get tip() { return T('sk.toolTip.bg'); } },
   ];
-  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', stretch: 'stretch2d' };
+  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', conic: 'conic2d', bridge: 'bridge2d', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', stretch: 'stretch2d' };
   // Bedingungen (Regeln): zweite Leiste unter den Zeichenwerkzeugen
   const CTOOLS = [
     { id: 'horizontal', icon: 'cHoriz', get label() { return T('sk.con.horizontal'); }, help: 'cHoriz' },
@@ -61,6 +63,11 @@ const Sketch = (() => {
       if (S.dimMode === 'ang3') return T('sk.hint.dimAng3_' + Math.min(2, (S.dimPicks || []).length));
       if (S.dimMode === 'ord') return T(S.ordBase ? 'sk.hint.dimOrd1' : 'sk.hint.dimOrd0');
     }
+    if (id === 'conic' && S && S.draft) {
+      if (S.draft.m) return T('sk.hint.conicRho');
+      if (S.draft.b) return T('sk.hint.conicApex');
+    }
+    if (id === 'bridge' && S && S.bridge && S.bridge.first) return T('sk.hint.bridge2');
     return T('sk.hint.' + id);
   };
   const CICON = Object.fromEntries(CTOOLS.map((t) => [t.id, t.icon]));
@@ -372,7 +379,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -483,6 +490,7 @@ const Sketch = (() => {
       S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null;
       S.autoDef = null; S.mir = null; S.liveMirPick = false; S.patPick = false;
       if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
+      if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; }
       stopWiggle(true);
       if (S.freeMode) setFreeMode(false);
       hideEntry(); hideDimBox();
@@ -500,7 +508,7 @@ const Sketch = (() => {
   function setTool(id) {
     if (!S) return;
     if (S.locked && id !== 'select') { guardLocked(); return; }
-    if (id === 'stretch' && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
+    if ((id === 'stretch' || id === 'conic' || id === 'bridge') && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
     commitDraftPolyline();
     clearBand();
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
@@ -508,6 +516,7 @@ const Sketch = (() => {
     if (isSimpleMode() && S.dimMode === 'ord') S.dimMode = 'auto';
     S.mir = null; S.liveMirPick = false; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
     if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
+    if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; }
     Viewer.highlightFace('hover', null, null);
     if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
@@ -655,6 +664,7 @@ const Sketch = (() => {
     const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.dimPicks = []; S.ordBase = null; S.autoDef = null; S.conflict = null;
     if (S.liveMir && !ent(S.liveMir.axis)) { S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn(); }
     if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
+    if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; }
     stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
   function addEnt(e, opts = {}) {
@@ -973,6 +983,12 @@ const Sketch = (() => {
       S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn();
       UI.toast(T('sk.toast.liveMirLost'), { icon: 'info', ms: 2600 });
     }
+    if (S.bridge && S.bridge.first && S.bridge.first.e === id) { S.bridge.first = null; }
+    for (const b of S.ents) {
+      if (b.type !== 'bridge') continue;
+      if (b.refA && b.refA.e === id) b.refA = null;
+      if (b.refB && b.refB.e === id) b.refB = null;
+    }
   }
   function deleteEnts(ids) {
     if (guardLocked()) return 0;
@@ -1030,6 +1046,8 @@ const Sketch = (() => {
     else if (e.type === 'spline') { e.pts.forEach((q, i) => P('p' + i, q)); P('a', e.pts[0]); P('b', e.pts[e.pts.length - 1]); }
     else if (e.type === 'circle' || e.type === 'ellipse') P('c', e.c);
     else if (e.type === 'ellarc') { P('c', e.c); P('a', SK.endA(e)); P('b', SK.endB(e)); }
+    else if (e.type === 'conic') { P('a', e.a); P('b', e.b); P('m', e.m); }
+    else if (e.type === 'bridge') { P('a', SK.endA(e)); P('b', SK.endB(e)); }
     else if (e.type === 'text' || e.type === 'point') P('a', e.a);
     else if (e.type === 'poly') { P('c', e.c); SK.polyCorners(e).forEach((q, i) => P('v' + i, q)); }
     else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => P('k' + i, q)); P('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
@@ -1337,6 +1355,8 @@ const Sketch = (() => {
     if (SIMPLE.includes(hit.type)) return { target: hit, skip: null };
     if (hit.type === 'ellipse') return { target: { id: '_tmp', ...ellipseSpline(hit) }, skip: { ent: hit, i: 0 } };
     if (hit.type === 'ellarc') return { target: { id: '_tmp', ...ellArcSpline(hit) }, skip: { ent: hit, i: 0 } };
+    if (hit.type === 'conic') return { target: { id: '_tmp', ...conicSpline(hit) }, skip: { ent: hit, i: 0 } };
+    if (hit.type === 'bridge') return { target: { id: '_tmp', ...bridgeSpline(hit) }, skip: { ent: hit, i: 0 } };
     if (hit.type === 'text') return null;
     let best = null, bd = Infinity, bi = -1;
     SK.segsOf(hit).forEach((s, i) => { const q = SKO.closest(SKO.curve(s), uv), d = SK.d2(q, uv); if (d < bd) { bd = d; best = s; bi = i; } });
@@ -1347,6 +1367,8 @@ const Sketch = (() => {
   // Ellipse als geschlossene Spline durch 48 Punkte auf ihr (Abweichung weit unter 0,01 mm bei üblichen Größen)
   function ellipseSpline(e) { return { type: 'spline', pts: SK.ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 48).map((q) => [round(q[0], 5), round(q[1], 5)]), closed: true }; }
   function ellArcSpline(e) { return { type: 'spline', pts: SK.ellArcPoints(e.c, e.rx, e.ry, e.rot || 0, e.a0, e.a1, e.ccw !== false, 36).map((q) => [round(q[0], 5), round(q[1], 5)]), closed: false }; }
+  function conicSpline(e) { return { type: 'spline', pts: SK.conicPoints(e.a, e.m, e.b, e.rho, 40).map((q) => [round(q[0], 5), round(q[1], 5)]), closed: false }; }
+  function bridgeSpline(e) { return { type: 'spline', pts: SK.bridgePoints(e.pts, 40).map((q) => [round(q[0], 5), round(q[1], 5)]), closed: false }; }
   function trimCutters(skip) {
     const parts = [...SKO.partsOf(S.ents), ...SKO.partsOf(S.refs, true)];
     return skip ? parts.filter((k) => !(k.ent === skip.ent && k.i === skip.i)) : parts;
@@ -1382,6 +1404,12 @@ const Sketch = (() => {
       removeEntData(hit.id);
       S.ents.splice(at, 0, sp); target = sp;
       UI.toast('Der elliptische Bogen wurde dafür zu einer Spline, die genau auf ihm liegt.', { icon: 'info', ms: 2600 });
+    } else if (hit.type === 'conic' || hit.type === 'bridge') {
+      const sp = { id: uid('e'), ...(hit.con ? { con: true } : {}), ...(hit.type === 'conic' ? conicSpline(hit) : bridgeSpline(hit)) };
+      const at = S.ents.indexOf(hit);
+      removeEntData(hit.id);
+      S.ents.splice(at, 0, sp); target = sp;
+      UI.toast('Die Kurve wurde dafür zu einer Spline, die genau auf ihr liegt.', { icon: 'info', ms: 2600 });
     } else if (!SIMPLE.includes(hit.type)) {
       // Rechteck, Vieleck, Langloch: erst in einzelne Linien und Bögen zerlegen
       const parts = SKO.explode(hit);
@@ -2241,6 +2269,7 @@ const Sketch = (() => {
       if (!e.shiftKey) {
         for (const en of S.ents) {
           if (en.type === 'line' || en.type === 'arc') { for (const k of ['a', 'b']) if (SK.d2(en[k], uv0) < tol) endHit.push([en, k]); }
+          else if (en.type === 'conic') { for (const k of ['a', 'b', 'm']) if (SK.d2(en[k], uv0) < tol) endHit.push([en, k]); }
           else if (en.type === 'spline') en.pts.forEach((q, i) => { if (SK.d2(q, uv0) < tol) endHit.push([en, 'p' + i + '_']); });
         }
       }
@@ -2252,7 +2281,7 @@ const Sketch = (() => {
           if (idx >= 0) cur.splice(idx, 1); else cur.push(hit.id);
           setSel(cur); S.selCon = null; render(); Panels.renderRight(); return;
         }
-        if (hit.type === 'point' || hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'ellarc' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline') {
+        if (hit.type === 'point' || hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'ellarc' || hit.type === 'conic' || hit.type === 'bridge' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline') {
           pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) };
         }
         setSel([hit.id]); S.selCon = null; render(); Panels.renderRight(); return;
@@ -2289,6 +2318,7 @@ const Sketch = (() => {
     if (t === 'offset') { offsetDown(uv0, e); return; }
     if (t === 'mirror') { mirrorDown(uv0); return; }
     if (t === 'patrect' || t === 'patcirc' || t === 'xmove') { patternDown(uv0, p); return; }
+    if (t === 'bridge') { bridgeDown(uv0); return; }
     if (t === 'spline') {
       if (!S.draft) S.draft = { pts: [p] };
       else {
@@ -2454,8 +2484,80 @@ const Sketch = (() => {
         else if (r > 1e-6) addEnt({ type: 'slot', a: S.draft.a, b: S.draft.b, r: round(r, 4) });
         S.draft = null; hideEntry();
       }
+    } else if (t === 'conic') {
+      if (!S.draft) { S.draft = { a: p }; UI.hint(hintFor('conic')); }
+      else if (!S.draft.b) { if (SK.d2(S.draft.a, p) > 1e-6) { S.draft.b = p; UI.hint(hintFor('conic')); } }
+      else if (!S.draft.m) { if (SK.d2(S.draft.a, p) > 1e-6 && SK.d2(S.draft.b, p) > 1e-6) { S.draft.m = p; UI.hint(hintFor('conic')); } }
+      else {
+        const rho = conicRhoAt(S.draft.a, S.draft.m, S.draft.b, p);
+        S.conicRho = rho;
+        addEnt({ type: 'conic', a: S.draft.a, m: S.draft.m, b: S.draft.b, rho });
+        S.draft = null; hideEntry(); UI.hint(hintFor('conic'));
+      }
     }
     reapply(); render(); Panels.renderRight();
+  }
+  // Kegelschnitt (SK-36) & Brückenkurve (SK-40)
+  function conicRhoAt(a, m, b, uv) {
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const vx = m[0] - mid[0], vy = m[1] - mid[1], l2 = vx * vx + vy * vy;
+    let r = l2 > 1e-9 ? ((uv[0] - mid[0]) * vx + (uv[1] - mid[1]) * vy) / l2 : 0.5;
+    if (Math.abs(r - 0.5) < 0.025) r = 0.5;
+    return round(clamp(r, 0.05, 0.95), 4);
+  }
+  function conicKindLabel(rho) {
+    if (Math.abs(rho - 0.5) < 1e-4) return T('sk.panel.conicParabola');
+    return rho < 0.5 ? T('sk.panel.conicEllipse') : T('sk.panel.conicHyperbola');
+  }
+  const BRIDGE_OPEN_TYPES = ['line', 'arc', 'ellarc', 'spline', 'conic', 'bridge'];
+  function pickCurveEnd(uv, tol = pxSize() * 14, exclude = null) {
+    const open = S.ents.filter((e) => BRIDGE_OPEN_TYPES.includes(e.type) && !(e.type === 'spline' && e.closed));
+    let best = null, bd = tol;
+    for (const e of open) {
+      for (const k of ['a', 'b']) {
+        if (exclude && exclude.e === e.id && exclude.k === k) continue;
+        const p = k === 'a' ? SK.endA(e) : SK.endB(e);
+        if (!p) continue;
+        const d = SK.d2(p, uv);
+        if (d < bd) {
+          const end = SK.curveEnd(e, k);
+          if (end) { bd = d; best = end; }
+        }
+      }
+    }
+    if (best) return best;
+    const hit = SK.hit(open, uv, pxSize() * 10);
+    if (hit) {
+      const ea = SK.endA(hit), eb = SK.endB(hit);
+      if (ea && eb) {
+        const order = SK.d2(ea, uv) <= SK.d2(eb, uv) ? ['a', 'b'] : ['b', 'a'];
+        for (const k of order) {
+          if (exclude && exclude.e === hit.id && exclude.k === k) continue;
+          const end = SK.curveEnd(hit, k);
+          if (end) return end;
+        }
+      }
+    }
+    return null;
+  }
+  function bridgeDown(uv0) {
+    const B = S.bridge;
+    const end = pickCurveEnd(uv0, pxSize() * 14, B.first);
+    if (!B.first) {
+      if (!end) { UI.toast(T('sk.toast.bridgePickEnd'), { icon: 'info' }); return; }
+      B.first = end;
+      B.hoverEnd = null;
+      UI.hint(hintFor('bridge')); render(); Panels.renderRight();
+      return;
+    }
+    if (!end) { UI.toast(T('sk.toast.bridgePickSecond'), { icon: 'info' }); return; }
+    if (SK.d2(B.first.p, end.p) < 1e-4) { UI.toast(T('sk.toast.bridgeSamePt'), { icon: 'info' }); return; }
+    const pts = SK.bridgeControlPoints(B.first, end, B.mode, B.s1, B.s2);
+    addEnt({ type: 'bridge', a: pts[0].slice(), b: pts[pts.length - 1].slice(), mode: B.mode, s1: B.s1, s2: B.s2, refA: { e: B.first.e, p: B.first.k }, refB: { e: end.e, p: end.k }, pts });
+    const modeLbl = T(B.mode === 'g2' ? 'sk.panel.bridgeG2' : 'sk.panel.bridgeG1');
+    B.first = null; B.hoverEnd = null;
+    reapply(); UI.hint(hintFor('bridge')); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.bridgeDone', { mode: modeLbl }), { icon: 'check', ms: 2400 });
   }
   // Tangente an zwei Kreise oder Bögen (SK-19): die äußere Tangente auf der Seite, auf die geklickt wurde
   function circOf(e) { if (e.type === 'circle') return { c: e.c, r: e.r }; if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); return ai ? { c: ai.c, r: ai.r } : null; } return null; }
@@ -3400,6 +3502,7 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'stretch') { S.cursor = null; return; }
+    if (S.tool === 'bridge') { S.bridge.hoverEnd = pickCurveEnd(uv0, pxSize() * 14, S.bridge.first); S.cursor = null; render(); return; }
     if (S.tool === 'offset' || S.tool === 'mirror' || S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'xmove') {
       const hv = SK.hit(S.ents, uv0, pxSize() * 9); S.hoverEnt = hv ? hv.id : null;
       S.cursor = (S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick ? snap(uv0, { fine: e.shiftKey, off: e.altKey }) : null;
@@ -3484,6 +3587,7 @@ const Sketch = (() => {
     if (t === 'rect') return [['w', 'Breite'], ['h', 'Höhe']];
     if (t === 'ellipse') return [['w', 'Breite'], ['h', 'Höhe']];
     if (t === 'ellarc') return !d.ax ? [['rx', 'Halbachse 1'], ['ry', 'Halbachse 2'], ['a0', 'Start °'], ['a1', 'Ende °']] : !d.ry ? [['ry', 'Halbachse 2'], ['a0', 'Start °'], ['a1', 'Ende °']] : d.a0 == null ? [['a0', 'Start °'], ['a1', 'Ende °']] : [['a1', 'Ende °']];
+    if (t === 'conic' && d.m) return [['rho', 'Rho']];
     if (t === 'circle' && d.pts) return null;
     if (t === 'arc') return null;
     if (t === 'circle') return [['d', 'Ø']];
@@ -3501,7 +3605,7 @@ const Sketch = (() => {
     const inputs = [];
     for (const [k, label] of fields) {
       const inp = h('input', { type: 'text', inputmode: 'decimal', 'aria-label': label, dataset: { k } });
-      const isAngF = k === 'ang' || k === 'a0' || k === 'a1';
+      const isAngF = k === 'ang' || k === 'a0' || k === 'a1' || k === 'rho';
       const lbl = !isAngF && Units.key() !== 'mm' ? `${label} (${Units.label()})` : label;
       entry.append(h('label', null, lbl, inp)); inputs.push(inp);
     }
@@ -3524,13 +3628,13 @@ const Sketch = (() => {
   function applyEntry(inputs) {
     const val = (k) => {
       const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return NaN;
-      if (k !== 'ang' && k !== 'a0' && k !== 'a1') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.num : NaN; }
+      if (k !== 'ang' && k !== 'a0' && k !== 'a1' && k !== 'rho') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.num : NaN; }
       const n = parseNum(i.value); return isNaN(n) ? Model.num(i.value, Model.vars(App.doc).v, NaN) : n;
     };
     // Eingetippte Werte werden zu festen Maßen (Formeln bleiben Formeln)
     const raw = (k) => {
       const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return null;
-      if (k !== 'ang' && k !== 'a0' && k !== 'a1') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.value : i.value.trim(); }
+      if (k !== 'ang' && k !== 'a0' && k !== 'a1' && k !== 'rho') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.value : i.value.trim(); }
       const n = parseNum(i.value); return isNaN(n) ? i.value.trim() : n;
     };
     const fix = (en, k, rk) => { const r = raw(rk); if (r == null || !en) return; putDim(en.id, k, typeof r === 'number' ? round(r, 4) : r); };
@@ -3607,6 +3711,13 @@ const Sketch = (() => {
     } else if (t === 'offset' && d.off) {
       const r = raw('dist'); if (r == null) { UI.toast('Bitte einen Abstand eingeben.', { kind: 'bad' }); return; }
       hideEntry(); commitOffset(r); Viewer.canvas.focus(); return;
+    } else if (t === 'conic' && d.m) {
+      const rho = val('rho');
+      if (isNaN(rho) || rho <= 0.01 || rho >= 0.99) { UI.toast('Bitte einen Rho-Wert zwischen 0,05 und 0,95 eingeben.', { kind: 'bad' }); return; }
+      const r = round(rho, 4);
+      S.conicRho = r;
+      addEnt({ type: 'conic', a: d.a, m: d.m, b: d.b, rho: r });
+      S.draft = null; UI.hint(hintFor('conic'));
     }
     reapply(); hideEntry(); Viewer.canvas.focus(); render(); Panels.renderRight();
   }
@@ -3654,11 +3765,16 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.liveMirPick) { S.liveMirPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.mir) { S.mir = null; UI.hint(hintFor('mirror')); render(); return true; }
     if (e.key === 'Escape' && S.tool === 'stretch' && S.stretch && S.stretch.box) { S.stretch.box = null; S.stretch.sel = null; UI.hint(hintFor('stretch')); render(); Panels.renderRight(); return true; }
+    if (e.key === 'Escape' && S.tool === 'bridge' && S.bridge && S.bridge.first) { S.bridge.first = null; S.bridge.hoverEnd = null; UI.hint(hintFor('bridge')); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
-    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
+    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); UI.hint(hintFor(S.tool)); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
+    if (e.key === 'Enter' && S.draft && S.tool === 'conic' && S.draft.m) {
+      addEnt({ type: 'conic', a: S.draft.a, m: S.draft.m, b: S.draft.b, rho: S.conicRho });
+      S.draft = null; hideEntry(); UI.hint(hintFor('conic')); reapply(); render(); Panels.renderRight(); return true;
+    }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
     if (e.key === 'Enter' && S.tool === 'stretch' && S.stretch && S.stretch.sel && S.stretch.sel.pointCount > 0) { applyStretch(); return true; }
     if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc') && S.patSel.length) { createPattern(); return true; }
@@ -3787,6 +3903,10 @@ const Sketch = (() => {
           lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 });
         }
         if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
+        if (sel && e.type === 'conic' && !S.step) {
+          lineObj([e.a, e.m, e.b], acc, 1.2, { dashed: true, opacity: 0.55, order: 24 });
+          ring(e.m, pxSize() * 3.8, acc, 1.8);
+        }
       }
       // gewählte und überfahrene Punkte
       for (const p of S.picks) if (p.kind === 'point') ring(p.xy, pxSize() * 5, acc, 2.6);
@@ -4130,6 +4250,25 @@ const Sketch = (() => {
         else if (!d.e) { const g = arcSlotGeom({ ...d, e: cur }, null); if (g) lineObj(SK.arcPoints(g.s, g.m, g.e), acc, 1.4, { dashed: true }); }
         else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${Units.fmtLen(2 * g.w, 2)}`, cur); } }
       } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${S.slotTotal ? 'gesamt ' : ''}${Units.fmtLenU(SK.d2(d.a, cur), 2)}`, cur); } else { const r = slotR(d.a, d.b, cur); const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b }; if (S.slotTotal) lineObj([d.a, d.b], acc, 1, { dashed: true }); if (r > 1e-6 && q) { const e = { type: 'slot', a: q.a, b: q.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${Units.fmtLen(2 * r, 2)}`, cur); } } }
+      if (t === 'conic') {
+        if (!d.b) {
+          lineObj([d.a, cur], acc, 1.4, { dashed: true });
+          label(Units.fmtLenU(SK.d2(d.a, cur), 2), cur);
+        } else if (!d.m) {
+          lineObj([d.a, cur, d.b], acc, 1.2, { dashed: true, opacity: 0.65 });
+          if (SK.d2(d.a, cur) > 1e-6 && SK.d2(d.b, cur) > 1e-6) lineObj(SK.conicPoints(d.a, cur, d.b, S.conicRho), acc, 2.2);
+          label(`ρ ${fmt(S.conicRho, 2)} · ${conicKindLabel(S.conicRho)}`, cur);
+        } else {
+          const rho = conicRhoAt(d.a, d.m, d.b, cur);
+          const mid = [(d.a[0] + d.b[0]) / 2, (d.a[1] + d.b[1]) / 2];
+          lineObj([d.a, d.m, d.b], acc, 1.2, { dashed: true, opacity: 0.65 });
+          lineObj([mid, d.m], acc, 1, { dashed: true, opacity: 0.45 });
+          const sh = SK.conicPt(d.a, d.m, d.b, rho, 0.5);
+          ring(sh, pxSize() * 4, acc, 2);
+          lineObj(SK.conicPoints(d.a, d.m, d.b, rho), acc, 2.4);
+          label(`ρ ${fmt(rho, 2)} · ${conicKindLabel(rho)}`, cur);
+        }
+      }
       // Live-Spiegeln: gespiegelte Entwurfsvorschau gestrichelt
       const lmAx = S.liveMir && !isSimpleMode() ? ent(S.liveMir.axis) : null;
       if (lmAx && lmAx.type === 'line') {
@@ -4173,6 +4312,10 @@ const Sketch = (() => {
           const r = slotR(d.a, d.b, cur);
           const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b };
           if (r > 1e-6 && q) pvEnts.push({ id: '_pv', type: 'slot', a: q.a, b: q.b, r });
+        } else if (t === 'conic' && d.b) {
+          const m = d.m || cur;
+          const rho = d.m ? conicRhoAt(d.a, d.m, d.b, cur) : S.conicRho;
+          if (SK.d2(d.a, d.b) > 1e-6 && SK.d2(d.a, m) > 1e-6 && SK.d2(d.b, m) > 1e-6) pvEnts.push({ id: '_pv', type: 'conic', a: d.a, m, b: d.b, rho });
         }
         const lmCol = th.dark ? '#f06595' : '#c2255c';
         for (const pe of pvEnts) {
@@ -4274,6 +4417,22 @@ const Sketch = (() => {
             ring([cx + dx, cy + dy], pxSize() * 4, '#e67700', 2);
           }
         }
+      }
+    }
+    // Brückenkurve: Enden, Tangenten & Live-Vorschau
+    if (S.tool === 'bridge' && S.bridge && !S.step) {
+      const B = S.bridge, ps = pxSize();
+      const drawEnd = (end, col) => {
+        if (!end) return;
+        ring(end.p, ps * 5, col, 2.4);
+        lineObj([end.p, [end.p[0] + end.t[0] * ps * 24, end.p[1] + end.t[1] * ps * 24]], col, 1.5, { dashed: true, opacity: 0.75, order: 27 });
+      };
+      drawEnd(B.first, acc);
+      drawEnd(B.hoverEnd, B.first ? acc : '#e67700');
+      if (B.first && B.hoverEnd && SK.d2(B.first.p, B.hoverEnd.p) > 1e-4) {
+        const pts = SK.bridgeControlPoints(B.first, B.hoverEnd, B.mode, B.s1, B.s2);
+        lineObj(SK.bridgePoints(pts), acc, 2.4, { order: 28 });
+        label(T(B.mode === 'g2' ? 'sk.panel.bridgeG2' : 'sk.panel.bridgeG1'), B.hoverEnd.p);
       }
     }
     // Einrast-Markierung
@@ -4448,7 +4607,7 @@ const Sketch = (() => {
   Viewer.on('camera', () => { if (S) { render(); placeEntry(); } });
 
   // ---------- Skizzen-Prüfer (SK-09) ----------
-  const getEndPt = (e, p) => (e.type === 'spline' ? (p === 'a' ? e.pts[0] : e.pts[e.pts.length - 1]) : e.type === 'ellarc' ? (p === 'a' ? SK.endA(e) : SK.endB(e)) : e[p]);
+  const getEndPt = (e, p) => (e.type === 'spline' ? (p === 'a' ? e.pts[0] : e.pts[e.pts.length - 1]) : e.type === 'ellarc' ? (p === 'a' ? SK.endA(e) : SK.endB(e)) : e.type === 'bridge' ? (p === 'a' ? SK.endA(e) : SK.endB(e)) : e[p]);
   function setEndPt(e, p, xy) {
     if (e.type === 'spline') { e.pts = e.pts.slice(); e.pts[p === 'a' ? 0 : e.pts.length - 1] = xy.slice(); }
     else if (e.type === 'ellarc') { e[p === 'a' ? 'a0' : 'a1'] = round(ellParamAt(e.c, e.rx, e.ry, e.rot, xy), 6); }
@@ -4742,7 +4901,7 @@ const Sketch = (() => {
   function toggleFreeSpots() { return S ? setFreeMode(!S.freeMode) : false; }
 
   // ---------- Widerspruch erklären & auflösen (SK-08) ----------
-  const ENT_TITLES = { get line() { return T('sk.panel.ent.line'); }, get rect() { return T('sk.panel.ent.rect'); }, get circle() { return T('sk.panel.ent.circle'); }, get arc() { return T('sk.panel.ent.arc'); }, get slot() { return T('sk.panel.ent.slot'); }, get poly() { return T('sk.panel.ent.poly'); }, get ellipse() { return T('sk.panel.ent.ellipse'); }, get ellarc() { return T('sk.panel.ent.ellarc'); }, get text() { return T('sk.panel.ent.text'); }, get point() { return T('sk.panel.ent.point'); }, get spline() { return T('sk.panel.ent.spline'); } };
+  const ENT_TITLES = { get line() { return T('sk.panel.ent.line'); }, get rect() { return T('sk.panel.ent.rect'); }, get circle() { return T('sk.panel.ent.circle'); }, get arc() { return T('sk.panel.ent.arc'); }, get slot() { return T('sk.panel.ent.slot'); }, get poly() { return T('sk.panel.ent.poly'); }, get ellipse() { return T('sk.panel.ent.ellipse'); }, get ellarc() { return T('sk.panel.ent.ellarc'); }, get conic() { return T('sk.panel.ent.conic'); }, get bridge() { return T('sk.panel.ent.bridge'); }, get text() { return T('sk.panel.ent.text'); }, get point() { return T('sk.panel.ent.point'); }, get spline() { return T('sk.panel.ent.spline'); } };
   function entName(id, list = S && S.ents) {
     if (id === 'origin') return 'Ursprung';
     const arr = list || [];
@@ -5037,10 +5196,10 @@ const Sketch = (() => {
         f.append(UI.selectField({ id: 'se-align', label: T('sk.panel.align'), value: sel.align || 'l', options: [['l', T('sk.panel.alignL')], ['m', T('sk.panel.alignM')], ['r', T('sk.panel.alignR')]], onChange: (v) => upd((e) => { e.align = v; }) }));
         if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: T('ctx.rotate'), value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: T('sk.panel.charSpacing'), value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
-        // entlang einer offenen Kurve der Skizze (Linie, Bogen, Teil-Ellipse, Spline)
-        const curves = S.ents.filter((x) => x.type === 'line' || x.type === 'arc' || x.type === 'ellarc' || (x.type === 'spline' && !x.closed));
+        // entlang einer offenen Kurve der Skizze (Linie, Bogen, Teil-Ellipse, Kegelschnitt, Brücke, Spline)
+        const curves = S.ents.filter((x) => x.type === 'line' || x.type === 'arc' || x.type === 'ellarc' || x.type === 'conic' || x.type === 'bridge' || (x.type === 'spline' && !x.closed));
         if (curves.length || sel.on) {
-          const nm = { line: T('sk.panel.ent.line'), arc: T('sk.panel.ent.arc'), ellarc: T('sk.panel.ent.ellarc'), spline: T('sk.panel.ent.spline') };
+          const nm = { line: T('sk.panel.ent.line'), arc: T('sk.panel.ent.arc'), ellarc: T('sk.panel.ent.ellarc'), conic: T('sk.panel.ent.conic'), bridge: T('sk.panel.ent.bridge'), spline: T('sk.panel.ent.spline') };
           f.append(UI.selectField({ id: 'se-on', label: T('sk.panel.along'), value: sel.on || '', options: [['', T('sk.panel.straight')], ...curves.map((c, i) => [c.id, `${nm[c.type]} ${i + 1}${c.con ? T('sk.panel.conSuffix') : ''}`])], onChange: (v) => upd((e) => {
             if (v) { const c = S.ents.find((x) => x.id === v), pts = c && SK.textPathPts(c, false); if (!pts) return; e.on = v; e.onP = pts; e.align = 'm'; delete e.bend; }
             else { delete e.on; delete e.onP; delete e.os; delete e.flip; }
@@ -5096,7 +5255,16 @@ const Sketch = (() => {
         // Radius oder Bogenlänge als Feld: Eintippen legt den Wert fest
         if (SK.arcInfo(sel.a, sel.m, sel.b)) f.append(dimField('r', T('sk.dim.r'), 'mm', { min: 0.01 }), dimField('arcLen', T('sk.dim.arcLen'), 'mm', { min: 0.01 }));
       }
+      else if (sel.type === 'conic') {
+        f.append(UI.numField({ id: 'se-rho', label: T('sk.panel.conicRho'), value: sel.rho != null ? sel.rho : 0.5, unit: '', expr: false, min: 0.05, max: 0.95, step: 0.05, onCommit: (v) => upd((e) => { e.rho = round(clamp(v, 0.05, 0.95), 4); }) }));
+      }
+      else if (sel.type === 'bridge') {
+        f.append(UI.selectField({ id: 'se-br-mode', label: T('sk.panel.bridgeMode'), value: sel.mode || 'g1', options: [['g1', T('sk.panel.bridgeG1')], ['g2', T('sk.panel.bridgeG2')]], onChange: (v) => upd((e) => { e.mode = v; SK.syncBridges(S.ents); }) }));
+        f.append(UI.numField({ id: 'se-br-s1', label: T('sk.panel.bridgeS1'), value: sel.s1 != null ? sel.s1 : 1, unit: '', expr: false, min: 0.1, max: 4, step: 0.1, onCommit: (v) => upd((e) => { e.s1 = round(clamp(v, 0.1, 4), 3); SK.syncBridges(S.ents); }) }));
+        f.append(UI.numField({ id: 'se-br-s2', label: T('sk.panel.bridgeS2'), value: sel.s2 != null ? sel.s2 : 1, unit: '', expr: false, min: 0.1, max: 4, step: 0.1, onCommit: (v) => upd((e) => { e.s2 = round(clamp(v, 0.1, 4), 3); SK.syncBridges(S.ents); }) }));
+      }
       w.append(f);
+      if (sel.type === 'conic') w.append(h('div', { class: 'hint-box', id: 'se-conic-kind' }, conicKindLabel(sel.rho != null ? sel.rho : 0.5)));
       if (sel.type === 'ellarc') {
         const fb = h('button', { type: 'button', class: 'btn', id: 'se-ellarc-flip' });
         fb.innerHTML = icon('rotate') + esc(T('sk.panel.ellArcFlip'));
@@ -5304,6 +5472,24 @@ const Sketch = (() => {
       if (S.tool === 'poly') w.append(UI.selectField({ id: 'po-mode', label: T('sk.panel.polyMeasure'), value: S.polyFlats ? 'flats' : 'corners', options: [['corners', T('sk.panel.polyCorners')], ['flats', T('sk.panel.polyFlats')]], onChange: (v) => { S.polyFlats = v === 'flats'; } }));
       if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: T('sk.panel.corners'), value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
       if (S.tool === 'ellarc') w.append(UI.selectField({ id: 'ea-dir', label: T('sk.panel.ellArcDir'), value: S.ellArcCW ? 'cw' : 'ccw', options: [['ccw', T('sk.panel.ellArcCCW')], ['cw', T('sk.panel.ellArcCW')]], onChange: (v) => { S.ellArcCW = v === 'cw'; render(); } }));
+      if (S.tool === 'conic' && !isSimpleMode()) {
+        w.append(UI.numField({ id: 'cn-rho', label: T('sk.panel.conicRho'), value: S.conicRho, unit: '', expr: false, min: 0.05, max: 0.95, step: 0.05, onCommit: (v) => { S.conicRho = round(clamp(v, 0.05, 0.95), 4); render(); Panels.renderRight(); } }));
+        w.append(h('div', { class: 'hint-box', id: 'cn-kind' }, conicKindLabel(S.conicRho)));
+      }
+      if (S.tool === 'bridge' && !isSimpleMode()) {
+        const B = S.bridge;
+        const fb = h('div', { class: 'fields' });
+        fb.append(UI.selectField({ id: 'br-mode', label: T('sk.panel.bridgeMode'), value: B.mode, options: [['g1', T('sk.panel.bridgeG1')], ['g2', T('sk.panel.bridgeG2')]], onChange: (v) => { B.mode = v; render(); } }));
+        fb.append(UI.numField({ id: 'br-s1', label: T('sk.panel.bridgeS1'), value: B.s1, unit: '', expr: false, min: 0.1, max: 4, step: 0.1, onCommit: (v) => { B.s1 = round(clamp(v, 0.1, 4), 3); render(); } }));
+        fb.append(UI.numField({ id: 'br-s2', label: T('sk.panel.bridgeS2'), value: B.s2, unit: '', expr: false, min: 0.1, max: 4, step: 0.1, onCommit: (v) => { B.s2 = round(clamp(v, 0.1, 4), 3); render(); } }));
+        w.append(fb);
+        w.append(h('div', { class: B.first ? 'ok-box' : 'hint-box', id: 'br-info' }, T(B.first ? 'sk.panel.bridgeWait2' : 'sk.panel.bridgeWait1')));
+        if (B.first) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'br-reset' }, T('sk.panel.bridgeReset'));
+          rb.onclick = () => { B.first = null; B.hoverEnd = null; UI.hint(hintFor('bridge')); render(); Panels.renderRight(); };
+          w.append(h('div', { class: 'btn-row' }, rb));
+        }
+      }
       if (S.tool === 'patrect' || S.tool === 'patcirc') {
         const P = S.pat; const f2 = h('div', { class: 'fields' });
         const fld = (id, label, key, unit, opts = {}) => f2.append(UI.numField({ id, label, value: P[key], unit, expr: false, min: opts.min, int: opts.int, onCommit: (v) => { P[key] = v; render(); } }));
@@ -5603,7 +5789,7 @@ const Sketch = (() => {
         }
         if (S.dims.length && S.tool === 'select' && !S.sel) {
           // Alle Maße der Skizze als Tabelle (SK-53): Wert oder Formel direkt ändern
-          const TN = { line: T('sk.panel.ent.line'), rect: T('sk.panel.ent.rect'), circle: T('sk.panel.ent.circle'), arc: T('sk.panel.ent.arc'), slot: T('sk.panel.ent.slot'), poly: T('sk.panel.ent.poly'), ellipse: T('sk.panel.ent.ellipse'), ellarc: T('sk.panel.ent.ellarc'), text: T('sk.panel.ent.text'), point: T('sk.panel.ent.point'), spline: T('sk.panel.ent.spline') };
+          const TN = { line: T('sk.panel.ent.line'), rect: T('sk.panel.ent.rect'), circle: T('sk.panel.ent.circle'), arc: T('sk.panel.ent.arc'), slot: T('sk.panel.ent.slot'), poly: T('sk.panel.ent.poly'), ellipse: T('sk.panel.ent.ellipse'), ellarc: T('sk.panel.ent.ellarc'), conic: T('sk.panel.ent.conic'), bridge: T('sk.panel.ent.bridge'), text: T('sk.panel.ent.text'), point: T('sk.panel.ent.point'), spline: T('sk.panel.ent.spline') };
           const tbl = h('details', { class: 'section dim-table', id: 'dim-table', 'data-help': 'dimTable' }, h('summary', { class: 'section-h' }, T('sk.panel.allDims', { n: S.dims.length })));
           const unitOf = (k) => (isAngDim(k) ? '°' : k === 'n' ? '' : 'mm');
           S.dims.forEach((d, i) => {
@@ -6442,7 +6628,7 @@ const Sketch = (() => {
     if (S.step) { renderStep(); return; }
     if (isSimpleMode()) {
       S.liveMir = null; S.liveMirPick = false;
-      if (S.tool === 'stretch') { S.tool = 'select'; S.stretch.box = null; S.stretch.sel = null; }
+      if (S.tool === 'stretch' || S.tool === 'conic' || S.tool === 'bridge') { S.tool = 'select'; S.stretch.box = null; S.stretch.sel = null; if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; } }
     }
     showBar();
     UI.hint(hintFor(S.tool));

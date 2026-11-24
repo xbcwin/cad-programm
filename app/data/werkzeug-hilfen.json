@@ -1388,5 +1388,15 @@
     "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
     "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
     "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
+  },
+  "conic2d": {
+    "tip": "Kegelschnitt aus Start, Ende, Schulterpunkt und Rho-Wert",
+    "hilfe": "Klicke im Profi-Modus Startpunkt, Endpunkt und den spitzen Schulterpunkt (Tangentenschnittpunkt) an und ziehe die Kurve über den Rho-Wert auf (oder tippe ihn ein). Unter 0,5 entsteht ein Ellipsenstück, bei genau 0,5 eine Parabel und darüber eine Hyperbel.",
+    "tipp": "Mit Rho = 0,5 bekommst du exakt eine Parabel; den Rho-Wert kannst du danach rechts jederzeit zwischen 0,05 und 0,95 nachstellen."
+  },
+  "bridge2d": {
+    "tip": "Brückenkurve: weicher Übergang zwischen zwei offenen Kurvenenden",
+    "hilfe": "Klicke im Profi-Modus nacheinander zwei offene Kurvenenden (Linie, Bogen, Teil-Ellipse, Spline, Kegelschnitt oder Brücke) an. Wähle rechts „Tangential (G1)“ für einen knickfreien Übergang oder „Krümmungsglatt (G2)“, wenn auch die Krümmung ohne Sprung anschließen soll.",
+    "tipp": "Mit „Stärke 1“ und „Stärke 2“ steuerst du, wie weit die Brückenkurve an jedem Ende in die bestehende Richtung weiterläuft. Änderst du später eine der beiden Kurven, wandert die Brücke automatisch mit."
   }
 }
