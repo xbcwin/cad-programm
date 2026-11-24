@@ -1252,6 +1252,21 @@ const HELP = {
   "tip": "Mehrere getrennte Körper in einem Teil verwalten",
   "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
   "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
+ },
+ "treeReorder": {
+  "tip": "Schritte im Verlauf per Ziehen umsortieren",
+  "hilfe": "Zieh einen Schritt oder einen Ordner im Verlauf an eine neue Stelle, um die Reihenfolge zu ändern. Unabhängige Schritte lassen sich frei tauschen – nicht erlaubte Plätze (etwa ein Loch oder abhängiger Schritt vor seinem Zielkörper) werden rot markiert und beim Loslassen abgelehnt.",
+  "tipp": "Wenn du auf die grüne/rote Linie achtest, siehst du schon beim Ziehen, ob der neue Platz erlaubt ist."
+ },
+ "treeFolder": {
+  "tip": "Mehrere gewählte Schritte in einen auf- und zuklappbaren Ordner legen",
+  "hilfe": "Wähle zwei oder mehr Schritte mit Umschalt + Klick und klick auf „In Ordner“ (oder nutze das Rechtsklick-Menü). Ein Ordner hält den Verlauf links übersichtlich und lässt sich auf- und zuklappen, umbenennen, als Ganzes verschieben und jederzeit wieder auflösen – die 3D-Körper bleiben davon unberührt.",
+  "tipp": "Per Doppelklick auf den Ordnernamen benennst du ihn um; weitere Schritte ziehst du einfach direkt auf den Ordner."
+ },
+ "treeDuplicate": {
+  "tip": "Schritt im Verlauf duplizieren",
+  "hilfe": "Legt direkt hinter dem gewählten Schritt eine exakte Kopie mit denselben Maßen und derselben Rolle an (10 mm versetzt). Steckt der Schritt in einem Ordner, landet die Kopie direkt daneben im selben Ordner.",
+  "tipp": "Du kannst dafür auch das Kopieren-Symbol in der Zeile oder Strg + D nutzen."
  }
 };
 

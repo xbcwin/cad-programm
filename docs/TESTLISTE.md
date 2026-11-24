@@ -1681,6 +1681,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
 
+## Verlauf umsortieren, Ordner, duplizieren (Auto [A-034])
+
+- [x] **Unabhängige Schritte umsortieren**: Zwei unabhängige Löcher sowie zwei unabhängige Schnitt-Formschritte lassen sich im Verlauf per Ziehen vertauschen; das 3D-Volumen bleibt identisch und es entstehen keine Fehler.
+- [x] **Abhängige Reihenfolge rot markiert und abgelehnt**: Das Ziehen eines Lochs vor seinen Körper, eines Körpers hinter sein Loch oder eines Schnitt-Schritts vor seinen Zielkörper markiert die Zielzeile rot (`.drop-bad`), lehnt das Ablegen ab und meldet den Grund.
+- [x] **Ordner anlegen, auf-/zuklappen & auflösen**: Mehrere gewählte Schritte lassen sich über „In Ordner“ (`#btn-tree-folder`) in einen Ordner (`doc.folders`) legen, ohne das 3D-Modell zu verändern; Zuklappen blendet die enthaltenen Schritte im Baum ein/aus, Auflösen und Rückgängig funktionieren.
+- [x] **Duplizieren & Hilfetexte**: „Duplizieren“ im Rechtsklick-Menü des Verlaufs legt eine gleiche Kopie direkt hinter dem Schritt (auch innerhalb eines Ordners) mit Rückgängig an; Hilfetexte (`treeReorder`, `treeFolder`, `treeDuplicate`) sind vorhanden.
+- [ ] **Von Hand**: Im Browser Schritte mit der Maus direkt in einen Ordner hinein- und herausziehen, einen ganzen Ordner verschieben sowie per Doppelklick umbenennen.
+
 ## Körper-Liste im Teil (Auto [A-033])
 
 - [x] **Körper (n) im Verlauf**: Ein einfacher Quader zeigt keine Liste; ein Teil mit zwei getrennten Körpern zeigt unter seinem Schritt „Körper (2)“ mit beiden Einträgen.
@@ -1688,6 +1696,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ein- und Ausblenden im 3D-Bild**: Ausblenden entfernt die Dreiecke und Kanten des Körpers aus Ansicht und Picking (`Viewer.pick` trifft nur noch den sichtbaren Körper), mit Rückgängig/Wiederholen.
 - [x] **Projektdatei und Export**: Namen, Farben und Sichtbarkeit bleiben in der Projektdatei und nach Neuladen erhalten; ausgeblendete Körper fehlen im Export, und „Jeder Körper als eigene Datei“ übernimmt die Körpernamen und Farben in STL und 3MF (`bodyList`-Hilfe vorhanden).
 - [ ] **Von Hand**: Im Browser bei einem geteilten Körper oder einer mehrteiligen Skizze per Maus über die Körper-Zeilen fahren (Vorschau-Markierung prüfen) und Rechtsklick-Menü („Nur diesen Körper zeigen“, „Alle Körper einblenden“) testen.
+
+## Volltest-Reparatur (Auto [F-11240339])
+
+- [x] **Kontextleiste nach Ghost-Auswertung**: Beim Auswählen eines Loch-Kindes innerhalb einer Gruppe über `App.select` erscheint `.ctxbar` automatisch nach dem `App.on('ghosts')`-Ereignis, sodass der Knopf „Muster“ (→ „Kreismuster“) klickbar ist.
+- [x] **Gelenk-Abspielen bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` bewegt `Joints.play()` das bewegliche Teil über den Timer-Fallback und stellt am Ende Ausgangslage, `Joints.playing` und den `#jt-play`-Knopf selbst nach zwischenzeitlichem `Panels.renderRight()` sauber zurück (`App.revision` unverändert).
+- [ ] **Von Hand**: Im Bauteil-Bearbeiten-Modus auf eine Bohrung klicken und direkt „Muster → Kreismuster“ wählen sowie bei einem Gelenk unter Last „Bewegung abspielen“ ansehen.
 
 ## Fläche aufdicken & Körper skalieren (Auto [A-032])
 

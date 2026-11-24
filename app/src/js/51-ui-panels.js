@@ -140,7 +140,13 @@ const Panels = (() => {
     return box;
   }
   function firstStepDone(k) { fsSet({ [k]: true }); if (leftTab === 'tree') renderLeft(); }
-  let dragId = null;
+  let dragInfo = null;
+  function clearDropClasses() {
+    for (const n of document.querySelectorAll('#left-body .node')) {
+      n.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-bad', 'dragging');
+      n.removeAttribute('title');
+    }
+  }
   // Suchen und Filtern im Verlauf (BE-09)
   let treeFilter = '', treeKind = 'all';
   const TFKINDS = [['all', 'Alle'], ['solid', 'Körper'], ['hole', 'Löcher'], ['hidden', 'Ausgeblendet'], ['err', 'Mit Fehler'], ['note', 'Mit Notiz'], ['ai', 'Von der KI']];
@@ -264,90 +270,240 @@ const Panels = (() => {
     const selSet = new Set(App.sel);
     let nAll = 0; Model.walk(items, () => { nAll++; });
     if (nAll >= 6 || filtering()) body.append(treeFilterBar(nAll));
-    // beim Filtern: Treffer und die Gruppen, in denen sie liegen
+    // beim Filtern: Treffer und die Gruppen/Ordner, in denen sie liegen
     let show = null, hits = 0;
+    const folders = App.doc.folders || [];
+    const itemFolder = new Map();
+    for (const fld of folders) for (const id of fld.ids || []) itemFolder.set(id, fld);
     if (filtering()) {
       show = new Set();
       const mark = (list, chain) => { for (const it of list) { if (treeMatch(it)) { hits++; show.add(it.id); for (const c of chain) show.add(c); } if (it.kind === 'group') mark(it.children || [], [...chain, it.id]); } };
       mark(items, []);
+      const q = treeFilter.trim().toLowerCase();
+      if (q && treeKind === 'all') {
+        for (const fld of folders) if ((fld.name || '').toLowerCase().includes(q)) for (const id of fld.ids || []) show.add(id);
+      }
       body.append(h('div', { class: 'tree-count', id: 'tree-count' }, hits ? `${hits} von ${nAll} ${nAll === 1 ? 'Schritt' : 'Schritten'}` : 'Nichts gefunden'));
     }
+    const topSel = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
+    if (topSel.length >= 2 && !App.ctx) {
+      const sb = h('div', { class: 'tree-sel-bar', id: 'tree-sel-bar' }, h('span', null, `${topSel.length} Schritte gewählt`));
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'btn-tree-folder', 'data-help': 'treeFolder' });
+      fb.innerHTML = icon('folder') + esc(T('menu.tree.toFolder'));
+      fb.onclick = () => Actions.createFolder(topSel);
+      sb.append(fb);
+      body.append(sb);
+    }
     const ul = h('ul', { class: 'tree', role: 'tree' });
+    const ctxTop = App.ctx ? App.doc.items.find((x) => x.id === App.ctx) : null;
+    const renderItemLi = (it) => {
+      const li = h('li', { role: 'treeitem' });
+      const topIdx = App.doc.items.indexOf(it);
+      const inCtx = !!ctxTop && Model.topOf(App.doc, it.id) === ctxTop;
+      const ownList = ctxTop ? ctxTop.children : App.doc.items, ownIdx = ownList.indexOf(it);
+      const rolled = ownIdx >= 0 && (!ctxTop || inCtx) && ownIdx >= Timeline.markerPos();
+      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
+      const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': 'Aufklappen' });
+      if (it.kind === 'group' || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
+      else tw.style.visibility = 'hidden';
+      const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
+      if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
+      const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
+      const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
+      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
+      const acts = h('span', { class: 'acts' });
+      const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
+      dup.innerHTML = icon('copy');
+      dup.onclick = (e) => { e.stopPropagation(); Actions.duplicate([it.id]); };
+      const eye = h('button', { type: 'button', 'aria-label': it.hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': it.hidden ? 'Einblenden' : 'Ausblenden' }); eye.innerHTML = icon(it.hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); App.change(it.hidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { const f = Model.find(doc, it.id); f.item.hidden = !f.item.hidden; }); };
+      const del = h('button', { type: 'button', 'aria-label': 'Löschen', 'data-tip': 'Löschen' }); del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); Actions.remove([it.id]); };
+      if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': 'Bauteil bearbeiten', 'data-tip': App.ctx === it.id ? 'Bearbeitung beenden' : 'Als Bauteil bearbeiten (Rest wird durchsichtig)' }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
+      if (topIdx >= 0) { const io = h('button', { type: 'button', 'aria-label': 'Isolieren', 'data-tip': App.iso === it.id ? 'Alle wieder zeigen' : 'Nur dieses Teil zeigen' }); io.innerHTML = icon('focusView'); io.onclick = (e) => { e.stopPropagation(); Comp.toggleIso(it.id); }; acts.append(io); }
+      if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)', 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
+      acts.append(dup, eye, del);
+      row.append(tw, sw, nm);
+      if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
+      const errs = App.errorsFor(it.id);
+      if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      row.append(sub, acts);
+      row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
+        const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
+        const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
+        UI.menu(row, [
+          { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
+          { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
+          ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
+          ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
+          ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
+          ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? T('common.unsuppress') : T('common.suppress'), run: () => Timeline.toggleSuppress(it.id) }] : []),
+          '-', { icon: 'trash', label: T('common.delete'), run: () => Actions.remove([it.id]) },
+        ]);
+      });
+      row.addEventListener('dblclick', async (e) => { e.stopPropagation(); const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
+      // Ziehen im Verlauf: umsortieren oder in eine Gruppe legen
+      row.addEventListener('dragstart', (e) => {
+        dragInfo = { type: 'item', id: it.id };
+        row.classList.add('dragging');
+        if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', it.id); } catch (_) {} }
+      });
+      row.addEventListener('dragend', () => { dragInfo = null; clearDropClasses(); });
+      row.addEventListener('dragover', (e) => {
+        if (!dragInfo) return;
+        const srcIds = dragInfo.type === 'folder' ? dragInfo.ids : [dragInfo.id];
+        if (srcIds.includes(it.id)) return;
+        e.preventDefault();
+        const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / Math.max(1, r.height);
+        const mode = dragInfo.type === 'item' && it.kind === 'group' && y > 0.3 && y < 0.7 ? 'into' : (y < 0.5 ? 'before' : 'after');
+        let dst = it.id;
+        if (dragInfo.type === 'folder' && topIdx >= 0) {
+          const otherFld = itemFolder.get(it.id);
+          if (otherFld) dst = mode === 'before' ? otherFld.ids[0] : otherFld.ids[otherFld.ids.length - 1];
+        }
+        const chk = Model.validateMove(App.doc, srcIds, dst, mode, { boxOf: Actions.worldBox });
+        row.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-bad');
+        row.classList.add(mode === 'into' ? 'drop-into' : mode === 'before' ? 'drop-before' : 'drop-after');
+        if (!chk.ok) row.classList.add('drop-bad');
+        row.title = chk.ok ? '' : (chk.reason || '');
+      });
+      row.addEventListener('dragleave', () => { row.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-bad'); row.removeAttribute('title'); });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / Math.max(1, r.height);
+        const mode = row.classList.contains('drop-into') ? 'into' : row.classList.contains('drop-before') ? 'before' : row.classList.contains('drop-after') ? 'after' : (dragInfo && dragInfo.type === 'item' && it.kind === 'group' && y > 0.3 && y < 0.7 ? 'into' : y < 0.5 ? 'before' : 'after');
+        const src = dragInfo;
+        clearDropClasses();
+        dragInfo = null;
+        if (!src) {
+          const raw = e.dataTransfer && e.dataTransfer.getData('text/plain');
+          if (raw) Actions.reorder([raw], it.id, mode);
+          return;
+        }
+        let dst = it.id;
+        if (src.type === 'folder' && topIdx >= 0) {
+          const otherFld = itemFolder.get(it.id);
+          if (otherFld) dst = mode === 'before' ? otherFld.ids[0] : otherFld.ids[otherFld.ids.length - 1];
+        }
+        Actions.reorder(src.type === 'folder' ? src.ids : [src.id], dst, mode, src.type === 'folder' ? { folderId: src.id } : {});
+      });
+      li.append(row);
+      const bl = renderBodiesList(it);
+      if (bl) li.append(bl);
+      if (expanded.has(it.id) || (show && it.kind === 'group')) {
+        for (const fin of it.finishes || []) {
+          const ferr = errs.find((x) => x.finishId === fin.id);
+          const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
+          fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
+          if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
+          else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
+          else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+          fr.onclick = () => App.select([it.id]);
+          li.append(fr);
+        }
+        if (it.kind === 'group') { const cu = h('ul', { role: 'group' }); rec(it.children || [], cu); li.append(cu); }
+      }
+      return li;
+    };
+    const renderFolderLi = (fld, fItems) => {
+      const li = h('li', { role: 'treeitem', dataset: { folderLi: fld.id } });
+      const allSel = fItems.length > 0 && fItems.every((x) => selSet.has(x.id));
+      const row = h('div', { class: 'node folder-node' + (allSel ? ' sel' : ''), draggable: 'true', dataset: { folderId: fld.id } });
+      const tw = h('button', { type: 'button', class: 'tw' + (!fld.collapsed ? ' open' : ''), 'aria-label': fld.collapsed ? T('menu.tree.expandFolder') : T('menu.tree.collapseFolder'), 'aria-expanded': String(!fld.collapsed), dataset: { folderToggle: fld.id } });
+      tw.innerHTML = icon('chevR');
+      tw.onclick = (e) => { e.stopPropagation(); Actions.toggleFolder(fld.id); };
+      const sw = h('span', { class: 'swatch folder-ic' }); sw.innerHTML = icon('folder');
+      const nm = h('span', { class: 'nm', title: fld.name }, fld.name);
+      const sub = h('span', { class: 'sub mono' }, `${fItems.length} ${fItems.length === 1 ? 'Schritt' : 'Schritte'}`);
+      const acts = h('span', { class: 'acts' });
+      const un = h('button', { type: 'button', 'aria-label': T('menu.tree.dissolveFolder'), 'data-tip': T('menu.tree.dissolveFolder') });
+      un.innerHTML = icon('ungroup');
+      un.onclick = (e) => { e.stopPropagation(); Actions.ungroupFolder(fld.id); };
+      acts.append(un);
+      row.append(tw, sw, nm, sub, acts);
+      row.addEventListener('click', () => { App.select(fItems.map((x) => x.id)); });
+      row.addEventListener('dblclick', async (e) => {
+        e.stopPropagation();
+        const n = await UI.prompt('Ordner umbenennen', T('common.name'), fld.name, T('common.rename'));
+        if (n && n.trim()) Actions.renameFolder(fld.id, n);
+      });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const allHidden = fItems.every((x) => x.hidden);
+        const allSupp = fItems.every((x) => x.suppressed);
+        UI.menu(row, [
+          { icon: 'chevR', label: fld.collapsed ? T('menu.tree.expandFolder') : T('menu.tree.collapseFolder'), run: () => Actions.toggleFolder(fld.id) },
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt('Ordner umbenennen', T('common.name'), fld.name, T('common.rename')); if (n && n.trim()) Actions.renameFolder(fld.id, n); } },
+          { icon: 'pointer', label: T('menu.tree.selectFolder'), run: () => App.select(fItems.map((x) => x.id)) },
+          { icon: allHidden ? 'eye' : 'eyeOff', label: allHidden ? 'Alle einblenden' : 'Alle ausblenden', run: () => App.change(allHidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { for (const x of fItems) { const f = Model.find(doc, x.id); if (f) f.item.hidden = !allHidden; } }) },
+          { icon: 'suppress', label: allSupp ? 'Alle aktivieren' : 'Alle unterdrücken', run: () => App.change(allSupp ? 'Aktiviert' : 'Unterdrückt', (doc) => { for (const x of fItems) { const f = Model.find(doc, x.id); if (f) f.item.suppressed = !allSupp; } }) },
+          '-',
+          { icon: 'ungroup', label: T('menu.tree.dissolveFolder'), run: () => Actions.ungroupFolder(fld.id) },
+        ]);
+      });
+      row.addEventListener('dragstart', (e) => {
+        dragInfo = { type: 'folder', id: fld.id, ids: fItems.map((x) => x.id) };
+        row.classList.add('dragging');
+        if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'folder:' + fld.id); } catch (_) {} }
+      });
+      row.addEventListener('dragend', () => { dragInfo = null; clearDropClasses(); });
+      row.addEventListener('dragover', (e) => {
+        if (!dragInfo) return;
+        if (dragInfo.type === 'folder' && dragInfo.id === fld.id) return;
+        e.preventDefault();
+        const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / Math.max(1, r.height);
+        const mode = dragInfo.type === 'item' && y > 0.25 && y < 0.75 ? 'into-folder' : (y < 0.5 ? 'before' : 'after');
+        const srcIds = dragInfo.type === 'folder' ? dragInfo.ids : [dragInfo.id];
+        const dst = mode === 'into-folder' ? fld.id : (mode === 'before' ? fItems[0].id : fItems[fItems.length - 1].id);
+        const chk = Model.validateMove(App.doc, srcIds, dst, mode, { boxOf: Actions.worldBox });
+        row.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-bad');
+        row.classList.add(mode === 'into-folder' ? 'drop-into' : mode === 'before' ? 'drop-before' : 'drop-after');
+        if (!chk.ok) row.classList.add('drop-bad');
+        row.title = chk.ok ? '' : (chk.reason || '');
+      });
+      row.addEventListener('dragleave', () => { row.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-bad'); row.removeAttribute('title'); });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / Math.max(1, r.height);
+        const mode = row.classList.contains('drop-into') ? 'into-folder' : row.classList.contains('drop-before') ? 'before' : row.classList.contains('drop-after') ? 'after' : (dragInfo && dragInfo.type === 'item' && y > 0.25 && y < 0.75 ? 'into-folder' : y < 0.5 ? 'before' : 'after');
+        const src = dragInfo;
+        clearDropClasses();
+        dragInfo = null;
+        if (!src) return;
+        const srcIds = src.type === 'folder' ? src.ids : [src.id];
+        const dst = mode === 'into-folder' ? fld.id : (mode === 'before' ? fItems[0].id : fItems[fItems.length - 1].id);
+        Actions.reorder(srcIds, dst, mode, src.type === 'folder' ? { folderId: src.id, outsideFolder: true } : { outsideFolder: mode !== 'into-folder' });
+      });
+      li.append(row);
+      if (!fld.collapsed || show) {
+        const cu = h('ul', { role: 'group', class: 'folder-list' });
+        for (const fit of fItems) {
+          if (show && !show.has(fit.id)) continue;
+          cu.append(renderItemLi(fit));
+        }
+        li.append(cu);
+      }
+      return li;
+    };
+    const renderedFolders = new Set();
     const rec = (list, parentUl) => {
       for (const it of list) {
-        if (show && !show.has(it.id)) continue;
-        const li = h('li', { role: 'treeitem' });
-        const topIdx = App.doc.items.indexOf(it);
-        const ctxTop = App.ctx ? App.doc.items.find((x) => x.id === App.ctx) : null;
-        const inCtx = !!ctxTop && Model.topOf(App.doc, it.id) === ctxTop;
-        const ownList = ctxTop ? ctxTop.children : App.doc.items, ownIdx = ownList.indexOf(it);
-        const rolled = ownIdx >= 0 && (!ctxTop || inCtx) && ownIdx >= Timeline.markerPos();
-        const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
-        const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': 'Aufklappen' });
-        if (it.kind === 'group' || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
-        else tw.style.visibility = 'hidden';
-        const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
-        if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
-        const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
-        const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
-        const sub = h('span', { class: 'sub mono' }, into && it.op ? `${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
-        const acts = h('span', { class: 'acts' });
-        const eye = h('button', { type: 'button', 'aria-label': it.hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': it.hidden ? 'Einblenden' : 'Ausblenden' }); eye.innerHTML = icon(it.hidden ? 'eyeOff' : 'eye');
-        eye.onclick = (e) => { e.stopPropagation(); App.change(it.hidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { const f = Model.find(doc, it.id); f.item.hidden = !f.item.hidden; }); };
-        const del = h('button', { type: 'button', 'aria-label': 'Löschen', 'data-tip': 'Löschen' }); del.innerHTML = icon('trash');
-        del.onclick = (e) => { e.stopPropagation(); Actions.remove([it.id]); };
-        if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': 'Bauteil bearbeiten', 'data-tip': App.ctx === it.id ? 'Bearbeitung beenden' : 'Als Bauteil bearbeiten (Rest wird durchsichtig)' }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
-        if (topIdx >= 0) { const io = h('button', { type: 'button', 'aria-label': 'Isolieren', 'data-tip': App.iso === it.id ? 'Alle wieder zeigen' : 'Nur dieses Teil zeigen' }); io.innerHTML = icon('focusView'); io.onclick = (e) => { e.stopPropagation(); Comp.toggleIso(it.id); }; acts.append(io); }
-        if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)', 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
-        acts.append(eye, del);
-        row.append(tw, sw, nm);
-        if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
-        const errs = App.errorsFor(it.id);
-        if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
-        row.append(sub, acts);
-        row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
-        row.addEventListener('contextmenu', (e) => {
-          e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
-          UI.menu(row, [
-            { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
-            ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
-            { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
-            ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? T('common.unsuppress') : T('common.suppress'), run: () => Timeline.toggleSuppress(it.id) }] : []),
-            '-', { icon: 'trash', label: T('common.delete'), run: () => Actions.remove([it.id]) },
-          ]);
-        });
-        row.addEventListener('dblclick', async (e) => { e.stopPropagation(); const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
-        // Ziehen im Verlauf: umsortieren oder in eine Gruppe legen
-        row.addEventListener('dragstart', (e) => { dragId = it.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', it.id); } catch (_) {} });
-        row.addEventListener('dragover', (e) => {
-          if (!dragId || dragId === it.id) return; e.preventDefault();
-          const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height;
-          row.classList.remove('drop-before', 'drop-after', 'drop-into');
-          if (it.kind === 'group' && y > 0.3 && y < 0.7) row.classList.add('drop-into'); else row.classList.add(y < 0.5 ? 'drop-before' : 'drop-after');
-        });
-        row.addEventListener('dragleave', () => row.classList.remove('drop-before', 'drop-after', 'drop-into'));
-        row.addEventListener('drop', (e) => {
-          e.preventDefault(); const mode = row.classList.contains('drop-into') ? 'into' : row.classList.contains('drop-before') ? 'before' : 'after';
-          row.classList.remove('drop-before', 'drop-after', 'drop-into');
-          moveInTree(dragId, it.id, mode); dragId = null;
-        });
-        li.append(row);
-        const bl = renderBodiesList(it);
-        if (bl) li.append(bl);
-        if (expanded.has(it.id) || (show && it.kind === 'group')) {
-          for (const fin of it.finishes || []) {
-            const ferr = errs.find((x) => x.finishId === fin.id);
-            const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
-            fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
-            if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
-            else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
-            else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
-            fr.onclick = () => App.select([it.id]);
-            li.append(fr);
+        if (list === items && itemFolder.has(it.id)) {
+          const fld = itemFolder.get(it.id);
+          if (renderedFolders.has(fld.id)) continue;
+          renderedFolders.add(fld.id);
+          const fItems = (fld.ids || []).map((id) => items.find((x) => x.id === id)).filter(Boolean);
+          if (fItems.length) {
+            if (show && !fItems.some((x) => show.has(x.id))) continue;
+            parentUl.append(renderFolderLi(fld, fItems));
+            continue;
           }
-          if (it.kind === 'group') { const cu = h('ul', { role: 'group' }); rec(it.children || [], cu); li.append(cu); }
         }
-        parentUl.append(li);
+        if (show && !show.has(it.id)) continue;
+        parentUl.append(renderItemLi(it));
       }
     };
     rec(items, ul);
@@ -359,22 +515,7 @@ const Panels = (() => {
     const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
-    if (!srcId || srcId === dstId) return;
-    const src = Model.find(App.doc, srcId);
-    if (!src) return;
-    // nicht in sich selbst legen
-    let bad = false; if (src.item.children) Model.walk(src.item.children, (c) => { if (c.id === dstId) bad = true; });
-    if (bad) return;
-    App.change('Verschoben im Verlauf', (doc) => {
-      const s = Model.find(doc, srcId), d = Model.find(doc, dstId);
-      const W = Model.worldMatrix(doc, srcId);
-      s.list.splice(s.list.indexOf(s.item), 1);
-      let targetList, parentW;
-      if (mode === 'into') { targetList = d.item.children; parentW = Model.worldMatrix(doc, d.item.id); targetList.push(s.item); }
-      else { targetList = d.list; parentW = d.parent ? Model.worldMatrix(doc, d.parent.id) : new THREE.Matrix4(); const i = targetList.indexOf(d.item); targetList.splice(mode === 'before' ? i : i + 1, 0, s.item); }
-      Model.setFromMatrix(s.item, parentW.clone().invert().multiply(W));
-      Model.walk(doc.items, (it, parent, depth, list, i) => { if (it.kind === 'group' && !it.comp && !it.children.length) list.splice(i, 1); });
-    });
+    return Actions.reorder(srcId, dstId, mode);
   }
   // ---------- Protokoll ----------
   let logFilter = 'all';
@@ -638,9 +779,17 @@ const Panels = (() => {
     w.append(roleSwitch(allHole ? 'hole' : found.every((f) => f.item.role !== 'hole') ? 'solid' : null, (r) => Actions.setRole(null, r)));
     const r1 = h('div', { class: 'btn-row' });
     const g = h('button', { type: 'button', class: 'btn primary' }); g.innerHTML = icon('group') + 'Gruppieren'; g.onclick = () => Actions.group();
+    const topSel = [...new Set(found.map((f) => (Model.topOf(App.doc, f.item.id) || {}).id).filter(Boolean))];
     const d = h('button', { type: 'button', class: 'btn' }); d.innerHTML = icon('copy') + 'Duplizieren'; d.onclick = () => Actions.duplicate();
     const x = h('button', { type: 'button', class: 'btn danger' }); x.innerHTML = icon('trash') + 'Löschen'; x.onclick = () => Actions.remove();
-    r1.append(g, d, x); w.append(r1);
+    r1.append(g);
+    if (topSel.length >= 2 && !App.ctx) {
+      const fldB = h('button', { type: 'button', class: 'btn', id: 'btn-multi-folder', 'data-help': 'treeFolder' });
+      fldB.innerHTML = icon('folder') + esc(T('menu.tree.toFolder'));
+      fldB.onclick = () => Actions.createFolder(topSel);
+      r1.append(fldB);
+    }
+    r1.append(d, x); w.append(r1);
     // zwei Teile: kleinster Abstand (nur verschiedene Hauptteile, nicht ein Teil mit seiner eigenen Gruppe)
     const tops = found.length === 2 ? found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id) : null;
     if (tops && tops[0] !== tops[1]) {
@@ -1506,6 +1655,7 @@ const Panels = (() => {
     const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
     App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
+    App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
   return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };

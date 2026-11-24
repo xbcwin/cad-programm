@@ -789,8 +789,171 @@ const Model = (() => {
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
+    if (doc.folders != null && !Array.isArray(doc.folders)) doc.folders = [];
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
+    cleanFolders(doc);
     return doc;
+  }
+  // ---------- Ordner & Reihenfolge im Verlauf (KP-10) ----------
+  function folderOf(doc, id) {
+    for (const f of (doc && doc.folders) || []) if ((f.ids || []).includes(id)) return f;
+    return null;
+  }
+  function cleanFolders(doc) {
+    if (!doc || !Array.isArray(doc.folders)) return;
+    const topPos = new Map((doc.items || []).map((x, i) => [x.id, i]));
+    const used = new Set();
+    for (const f of doc.folders) {
+      f.ids = (f.ids || []).filter((id) => topPos.has(id) && !used.has(id) && (used.add(id), true));
+      f.ids.sort((a, b) => topPos.get(a) - topPos.get(b));
+    }
+    doc.folders = doc.folders.filter((f) => f.ids.length > 0);
+  }
+  function itemWorldBox(doc, it, opts) {
+    if (opts && opts.boxOf) { const b = opts.boxOf(it.id); if (b && !b.isEmpty()) return b; }
+    let b = null;
+    if (typeof App !== 'undefined' && App.results) { const r = App.results.get(it.id); if (r && r.data && r.data.bbox) b = r.data.bbox; }
+    if (!b) b = primitiveBox(it.kind, resolveP(it.p || {}, vars(doc).v));
+    if (!b) return null;
+    return new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5])).applyMatrix4(worldMatrix(doc, it.id));
+  }
+  function boxesTouch(doc, solid, hole, opts, unknownMeansTouch = false) {
+    const bs = itemWorldBox(doc, solid, opts), bh = itemWorldBox(doc, hole, opts);
+    if (bs && bh) return bs.intersectsBox(bh);
+    return unknownMeansTouch;
+  }
+  function topOrderEdges(doc, opts) {
+    const topIds = new Set((doc.items || []).map((x) => x.id));
+    const edges = [];
+    for (const d of dependencies(doc)) {
+      if (topIds.has(d.from) && topIds.has(d.to) && d.from !== d.to) edges.push({ child: d.from, parent: d.to, what: d.what });
+    }
+    const items = doc.items || [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].role === 'hole') continue;
+      for (let j = i + 1; j < items.length; j++) {
+        if (items[j].role !== 'hole') continue;
+        if (boxesTouch(doc, items[i], items[j], opts, true)) edges.push({ child: items[j].id, parent: items[i].id, what: 'Loch in' });
+      }
+    }
+    return edges;
+  }
+  function orderFailReason(doc, edge, srcSet) {
+    const nm = (id) => { const f = find(doc, id); return f ? label(f.item) : 'Schritt'; };
+    if (srcSet && srcSet.has(edge.child)) return `„${nm(edge.child)}“ kann nicht vor „${nm(edge.parent)}“ verschoben werden.`;
+    return `„${nm(edge.parent)}“ muss vor „${nm(edge.child)}“ bleiben.`;
+  }
+  function validateTopOrder(doc, orderedIds, opts = {}) {
+    const pos = new Map(orderedIds.map((id, i) => [id, i]));
+    for (const e of topOrderEdges(doc, opts)) {
+      if (!pos.has(e.parent) || !pos.has(e.child)) continue;
+      if (pos.get(e.parent) >= pos.get(e.child)) return { ok: false, parentId: e.parent, childId: e.child, reason: orderFailReason(doc, e, null) };
+    }
+    return { ok: true };
+  }
+  function validateMove(doc, srcIds, dstId, mode, opts = {}) {
+    const ids = (Array.isArray(srcIds) ? srcIds : [srcIds]).filter(Boolean);
+    if (!ids.length) return { ok: false, reason: '' };
+    const topIds = new Set((doc.items || []).map((x) => x.id));
+    if (mode === 'into-folder') {
+      const fld = (doc.folders || []).find((f) => f.id === dstId);
+      if (!fld) return { ok: false, reason: '' };
+      if (!ids.every((id) => topIds.has(id))) return { ok: false, reason: 'Nur Schritte auf oberster Ebene passen in einen Ordner.' };
+      const inFld = new Set(fld.ids || []);
+      if (ids.every((id) => inFld.has(id))) return { ok: true };
+      const rest = (fld.ids || []).filter((id) => !ids.includes(id));
+      if (!rest.length) return { ok: true };
+      return validateMove(doc, ids, rest[rest.length - 1], 'after', opts);
+    }
+    if (ids.includes(dstId)) return { ok: false, reason: '' };
+    const srcs = ids.map((id) => find(doc, id)).filter(Boolean);
+    const dst = find(doc, dstId);
+    if (!srcs.length || !dst) return { ok: false, reason: '' };
+    for (const s of srcs) {
+      let self = false;
+      if (s.item.children) walk(s.item.children, (c) => { if (c.id === dstId) { self = true; return false; } });
+      if (self) return { ok: false, reason: 'Ein Schritt lässt sich nicht in sich selbst legen.' };
+    }
+    const srcSet = new Set(ids);
+    const sameParent = srcs.every((s) => s.parent === srcs[0].parent);
+    if (mode === 'into') {
+      if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
+      const s = srcs[0];
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib') {
+        return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
+      }
+      if (!s.parent && !dst.parent) {
+        const gIdx = doc.items.indexOf(dst.item);
+        for (const e of topOrderEdges(doc, opts)) {
+          if (e.child === s.item.id) {
+            const pIdx = doc.items.findIndex((x) => x.id === e.parent);
+            if (pIdx > gIdx) return { ok: false, parentId: e.parent, childId: e.child, reason: orderFailReason(doc, e, srcSet) };
+          }
+          if (e.parent === s.item.id) {
+            const cIdx = doc.items.findIndex((x) => x.id === e.child);
+            if (cIdx < gIdx) return { ok: false, parentId: e.parent, childId: e.child, reason: orderFailReason(doc, e, srcSet) };
+          }
+        }
+      }
+      return { ok: true };
+    }
+    // Beide auf oberster Ebene
+    if (sameParent && !srcs[0].parent && !dst.parent) {
+      const order = (doc.items || []).map((x) => x.id).filter((id) => !srcSet.has(id));
+      const di = order.indexOf(dstId);
+      if (di < 0) return { ok: false, reason: '' };
+      const moving = (doc.items || []).map((x) => x.id).filter((id) => srcSet.has(id));
+      order.splice(mode === 'before' ? di : di + 1, 0, ...moving);
+      const pos = new Map(order.map((id, i) => [id, i]));
+      for (const e of topOrderEdges(doc, opts)) {
+        if (!srcSet.has(e.child) && !srcSet.has(e.parent)) continue;
+        if (!pos.has(e.parent) || !pos.has(e.child)) continue;
+        if (pos.get(e.parent) >= pos.get(e.child)) return { ok: false, parentId: e.parent, childId: e.child, reason: orderFailReason(doc, e, srcSet) };
+      }
+      return { ok: true };
+    }
+    // Gleiche Eltern-Gruppe
+    if (sameParent && srcs[0].parent && srcs[0].parent === dst.parent) {
+      const kids = srcs[0].parent.children || [];
+      const edges = [];
+      for (let i = 0; i < kids.length; i++) {
+        if (kids[i].role === 'hole') continue;
+        for (let j = i + 1; j < kids.length; j++) {
+          if (kids[j].role === 'hole' && boxesTouch(doc, kids[i], kids[j], opts, true)) edges.push({ child: kids[j].id, parent: kids[i].id });
+        }
+      }
+      const order = kids.map((x) => x.id).filter((id) => !srcSet.has(id));
+      const di = order.indexOf(dstId);
+      if (di < 0) return { ok: false, reason: '' };
+      const moving = kids.map((x) => x.id).filter((id) => srcSet.has(id));
+      order.splice(mode === 'before' ? di : di + 1, 0, ...moving);
+      const pos = new Map(order.map((id, i) => [id, i]));
+      for (const e of edges) {
+        if (!srcSet.has(e.child) && !srcSet.has(e.parent)) continue;
+        if (pos.get(e.parent) >= pos.get(e.child)) return { ok: false, parentId: e.parent, childId: e.child, reason: orderFailReason(doc, e, srcSet) };
+      }
+      return { ok: true };
+    }
+    // Aus einer Gruppe auf die oberste Ebene ziehen
+    if (sameParent && srcs[0].parent && !dst.parent) {
+      const g = topOf(doc, srcs[0].id);
+      if (g) {
+        const gIdx = doc.items.indexOf(g);
+        const dIdx = doc.items.indexOf(dst.item);
+        const targetPos = mode === 'before' ? dIdx : dIdx + 1;
+        if (targetPos <= gIdx) {
+          for (const s of srcs) {
+            if (s.item.role !== 'hole') continue;
+            const kids = s.parent.children || [];
+            const si = kids.indexOf(s.item);
+            if (kids.slice(0, si).some((k) => k.role !== 'hole' && boxesTouch(doc, k, s.item, opts, true))) {
+              return { ok: false, parentId: g.id, childId: s.item.id, reason: `„${label(s.item)}“ kann nicht vor „${label(g)}“ verschoben werden.` };
+            }
+          }
+        }
+      }
+    }
+    return { ok: true };
   }
   function matchBodies(saved, evalBodies) {
     const n = (evalBodies && evalBodies.length) || 0;
@@ -915,6 +1078,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

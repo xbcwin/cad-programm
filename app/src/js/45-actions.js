@@ -140,19 +140,32 @@ const Actions = (() => {
     });
   }
   function duplicate(ids) {
-    ids = ids || App.sel; if (!ids.length) return;
+    ids = ids || App.sel; if (!ids.length) return [];
     const newIds = [];
     App.change('Dupliziert', (doc) => {
       for (const id of ids) {
         const f = Model.find(doc, id); if (!f) continue;
         const c = Model.reId(deepClone(f.item));
-        const tn = Model.tNumeric(c); c.t.x = round(tn.x + 10, 4); c.t.y = round(tn.y + 10, 4);
+        if (c.kind !== 'transform') {
+          const tn = Model.tNumeric(c); c.t.x = round(tn.x + 10, 4); c.t.y = round(tn.y + 10, 4);
+        }
         c.name = f.item.name;
-        f.list.splice(f.list.indexOf(f.item) + 1, 0, c); newIds.push(c.id);
+        const idx = f.list.indexOf(f.item);
+        f.list.splice(idx + 1, 0, c); newIds.push(c.id);
+        if (!f.parent) {
+          if (doc.rollback != null && idx < doc.rollback) {
+            doc.rollback++;
+            if (doc.rollback >= doc.items.length) doc.rollback = null;
+          }
+          const fld = Model.folderOf(doc, f.item.id);
+          if (fld) fld.ids.splice(fld.ids.indexOf(f.item.id) + 1, 0, c.id);
+        }
       }
+      Model.cleanFolders(doc);
     });
     App.select(newIds);
     UI.toast(newIds.length > 1 ? `${newIds.length} Objekte dupliziert` : 'Dupliziert – die Kopie liegt 10 mm versetzt', { icon: 'copy' });
+    return newIds;
   }
   // Verknüpft duplizieren: die Kopie folgt dem Original (Maße, Kanten), Lage und Farbe bleiben eigen
   function duplicateLinked(ids) {
@@ -544,6 +557,179 @@ const Actions = (() => {
     if (nid) App.select([nid]);
     return nid;
   }
-  return { setBody, showOnlyBody, showAllBodies, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  // ---------- Verlauf umsortieren & Ordner (KP-10) ----------
+  function reorder(srcIds, dstId, mode, opts = {}) {
+    const ids = (Array.isArray(srcIds) ? srcIds : [srcIds]).filter(Boolean);
+    if (!ids.length) return false;
+    const v = Model.validateMove(App.doc, ids, dstId, mode, { boxOf: worldBox });
+    if (!v.ok) {
+      if (v.reason && !opts.quiet) UI.toast(v.reason, { kind: 'bad' });
+      return false;
+    }
+    let changed = false;
+    App.change('Verschoben im Verlauf', (doc) => {
+      if (mode === 'into-folder') {
+        const fld = (doc.folders || []).find((f) => f.id === dstId);
+        if (!fld) return false;
+        const rest = fld.ids.filter((id) => !ids.includes(id));
+        const allAlready = ids.every((id) => fld.ids.includes(id));
+        if (allAlready) return false;
+        for (const f of doc.folders || []) f.ids = (f.ids || []).filter((id) => !ids.includes(id));
+        if (rest.length) {
+          const moving = ids.map((id) => doc.items.find((x) => x.id === id)).filter(Boolean);
+          for (const it of moving) doc.items.splice(doc.items.indexOf(it), 1);
+          const anchor = doc.items.findIndex((x) => x.id === rest[rest.length - 1]);
+          doc.items.splice(anchor + 1, 0, ...moving);
+        }
+        fld.ids.push(...ids);
+        Model.cleanFolders(doc);
+        changed = true;
+        return true;
+      }
+      const d = Model.find(doc, dstId);
+      const srcs = ids.map((id) => Model.find(doc, id)).filter(Boolean);
+      if (!d || !srcs.length) return false;
+      const targetList = mode === 'into' ? d.item.children : d.list;
+      const targetParent = mode === 'into' ? d.item : d.parent;
+      const sameList = srcs.every((s) => s.list === targetList);
+      const dstFld = !targetParent && !opts.outsideFolder && mode !== 'into' ? Model.folderOf(doc, dstId) : null;
+      const srcFldSame = !targetParent && srcs.every((s) => Model.folderOf(doc, s.item.id) === dstFld);
+      if (sameList && (opts.folderId || srcFldSame)) {
+        const beforeOrder = targetList.map((x) => x.id).join(',');
+        const sim = targetList.filter((x) => !ids.includes(x.id));
+        const di = sim.findIndex((x) => x.id === dstId);
+        const moving = targetList.filter((x) => ids.includes(x.id));
+        sim.splice(mode === 'before' ? di : di + 1, 0, ...moving);
+        if (sim.map((x) => x.id).join(',') === beforeOrder) return false;
+      }
+      const worlds = new Map(srcs.map((s) => [s.item.id, Model.worldMatrix(doc, s.item.id)]));
+      const parentChanged = srcs.some((s) => s.parent !== targetParent);
+      for (const s of srcs) {
+        const i = s.list.indexOf(s.item);
+        if (i >= 0) s.list.splice(i, 1);
+      }
+      if (mode === 'into') targetList.push(...srcs.map((s) => s.item));
+      else {
+        const di = targetList.indexOf(d.item);
+        targetList.splice(mode === 'before' ? di : di + 1, 0, ...srcs.map((s) => s.item));
+      }
+      if (parentChanged) {
+        const parentW = targetParent ? Model.worldMatrix(doc, targetParent.id) : new THREE.Matrix4();
+        const inv = parentW.clone().invert();
+        for (const s of srcs) Model.setFromMatrix(s.item, inv.clone().multiply(worlds.get(s.item.id)));
+      }
+      if (!opts.folderId) {
+        for (const f of doc.folders || []) f.ids = (f.ids || []).filter((id) => !ids.includes(id));
+        if (dstFld) dstFld.ids.push(...ids.filter((id) => doc.items.some((x) => x.id === id)));
+      }
+      cleanupGroups(doc);
+      Model.cleanFolders(doc);
+      changed = true;
+      return true;
+    });
+    return changed;
+  }
+  function createFolder(ids, name) {
+    const raw = ids || App.sel;
+    const set = new Set(raw.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean));
+    const ordered = App.doc.items.filter((x) => set.has(x.id)).map((x) => x.id);
+    if (ordered.length < 2) { UI.toast('Wähle mindestens zwei Schritte für einen Ordner (mit Umschalt klicken).', { icon: 'info' }); return null; }
+    const idxs = ordered.map((id) => App.doc.items.findIndex((x) => x.id === id));
+    const minIdx = Math.min(...idxs), maxIdx = Math.max(...idxs);
+    let chosenOrder = null;
+    if (maxIdx - minIdx + 1 !== ordered.length) {
+      const rest = App.doc.items.map((x) => x.id).filter((id) => !set.has(id));
+      const beforeTarget = App.doc.items[minIdx];
+      const anchorA = App.doc.items.slice(minIdx).find((x) => !set.has(x.id));
+      const candA = rest.slice();
+      candA.splice(anchorA ? candA.indexOf(anchorA.id) : candA.length, 0, ...ordered);
+      const anchorB = App.doc.items.slice(0, maxIdx).reverse().find((x) => !set.has(x.id));
+      const candB = rest.slice();
+      candB.splice(anchorB ? candB.indexOf(anchorB.id) + 1 : 0, 0, ...ordered);
+      if (Model.validateTopOrder(App.doc, candA, { boxOf: worldBox }).ok) chosenOrder = candA;
+      else if (Model.validateTopOrder(App.doc, candB, { boxOf: worldBox }).ok) chosenOrder = candB;
+      else {
+        UI.toast('Diese Schritte lassen sich nicht zusammen in einen Ordner legen – ein Schritt dazwischen hängt davon ab.', { kind: 'bad' });
+        return null;
+      }
+    }
+    const existingNames = new Set((App.doc.folders || []).map((f) => f.name));
+    let n = 1; while (existingNames.has(`Ordner ${n}`)) n++;
+    const fname = (name && name.trim()) || `Ordner ${n}`;
+    let fid = null;
+    App.change('In Ordner gelegt', (doc) => {
+      if (chosenOrder) {
+        const byId = new Map(doc.items.map((x) => [x.id, x]));
+        doc.items = chosenOrder.map((id) => byId.get(id)).filter(Boolean);
+      }
+      doc.folders = doc.folders || [];
+      for (const f of doc.folders) f.ids = (f.ids || []).filter((id) => !set.has(id));
+      const fld = { id: uid('fld'), name: fname, ids: ordered.slice(), collapsed: false };
+      doc.folders.push(fld);
+      fid = fld.id;
+      Model.cleanFolders(doc);
+    });
+    UI.toast(`Ordner „${fname}“ angelegt (${ordered.length} Schritte).`, { icon: 'folder' });
+    return fid;
+  }
+  function toggleFolder(folderId, collapsed) {
+    const fld = (App.doc.folders || []).find((f) => f.id === folderId);
+    if (!fld) return null;
+    fld.collapsed = collapsed != null ? !!collapsed : !fld.collapsed;
+    if (typeof Panels !== 'undefined') Panels.renderLeft();
+    App.autosave();
+    return fld.collapsed;
+  }
+  function renameFolder(folderId, name) {
+    if (!name || !name.trim()) return false;
+    App.change('Ordner umbenannt', (doc) => {
+      const f = (doc.folders || []).find((x) => x.id === folderId);
+      if (!f) return false;
+      f.name = name.trim();
+    });
+    return true;
+  }
+  function ungroupFolder(folderId) {
+    const cur = (App.doc.folders || []).find((x) => x.id === folderId);
+    if (!cur) return false;
+    App.change('Ordner aufgelöst', (doc) => {
+      doc.folders = (doc.folders || []).filter((x) => x.id !== folderId);
+    });
+    UI.toast('Ordner aufgelöst – alle Schritte bleiben erhalten.', { icon: 'folder' });
+    return true;
+  }
+  function removeFromFolder(ids) {
+    ids = (ids || App.sel).filter(Boolean);
+    if (!ids.length) return false;
+    const set = new Set(ids);
+    App.change('Aus Ordner genommen', (doc) => {
+      for (const f of doc.folders || []) {
+        const hit = (f.ids || []).filter((id) => set.has(id));
+        if (!hit.length) continue;
+        const stay = f.ids.filter((id) => !set.has(id));
+        f.ids = stay;
+        if (stay.length) {
+          const stayIdxs = stay.map((id) => doc.items.findIndex((x) => x.id === id)).filter((i) => i >= 0);
+          const minS = Math.min(...stayIdxs), maxS = Math.max(...stayIdxs);
+          const middle = hit.filter((id) => { const idx = doc.items.findIndex((x) => x.id === id); return idx > minS && idx < maxS; });
+          if (middle.length) {
+            const restIds = doc.items.map((x) => x.id).filter((id) => !middle.includes(id));
+            const candAfter = restIds.slice();
+            candAfter.splice(candAfter.indexOf(stay[stay.length - 1]) + 1, 0, ...middle);
+            const candBefore = restIds.slice();
+            candBefore.splice(candBefore.indexOf(stay[0]), 0, ...middle);
+            const pick = Model.validateTopOrder(doc, candAfter, { boxOf: worldBox }).ok ? candAfter : Model.validateTopOrder(doc, candBefore, { boxOf: worldBox }).ok ? candBefore : null;
+            if (pick) {
+              const byId = new Map(doc.items.map((x) => [x.id, x]));
+              doc.items = pick.map((id) => byId.get(id)).filter(Boolean);
+            }
+          }
+        }
+      }
+      Model.cleanFolders(doc);
+    });
+    return true;
+  }
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

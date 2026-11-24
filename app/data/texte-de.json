@@ -220,6 +220,13 @@
   "menu.tl.markerAfter": "Marker hinter diesen Schritt",
   "menu.tl.markerBefore": "Marker vor diesen Schritt",
 
+  "menu.tree.toFolder": "In Ordner",
+  "menu.tree.fromFolder": "Aus Ordner nehmen",
+  "menu.tree.dissolveFolder": "Ordner auflösen",
+  "menu.tree.collapseFolder": "Ordner zuklappen",
+  "menu.tree.expandFolder": "Ordner aufklappen",
+  "menu.tree.selectFolder": "Alle Schritte wählen",
+
   "menu.draw.line": "Linie",
   "menu.draw.rect": "Rechteck",
   "menu.draw.circle": "Kreis",

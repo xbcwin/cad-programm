@@ -69,6 +69,9 @@ const Timeline = (() => {
     box.append(h('div', { class: 'section-h' }, `${i + 1}. ${Model.label(it)}`));
     add('edit', T('common.edit'), () => App.select([it.id]));
     add('help', T('common.explainStep'), () => Explain.dialog(it.id));
+    add('copy', T('common.duplicate'), () => Actions.duplicate([it.id]));
+    const topSel = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
+    if (topSel.length >= 2 && !App.ctx) add('folder', T('menu.tree.toFolder'), () => Actions.createFolder(topSel));
     add('rollback', T('menu.tl.markerAfter'), () => setMarker(i + 1));
     add('rollback', T('menu.tl.markerBefore'), () => setMarker(i));
     add('suppress', it.suppressed ? T('common.unsuppress') : T('common.suppress'), () => toggleSuppress(it.id));
