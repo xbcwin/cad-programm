@@ -1846,6 +1846,21 @@ const HELP = {
   "tip": "Zwei Teile an gewählten Flächen oder Punkten fest verbinden",
   "hilfe": "Legt das zweite gewählte Teil bündig an das erste (Flächen gegeneinander und Mitten übereinander oder Punkt auf Punkt). Das verbundene Teil wandert bei jeder Bewegung oder Größenänderung des ersten Teils mit und lässt sich nicht mehr einzeln verschieben. Unter „Verbindungen“ links im Verlauf kannst du die Verbindung jederzeit umdrehen, drehen, einen Abstand setzen oder lösen.",
   "tipp": "Halte während der Wahl die rechte Maustaste gedrückt, um das Modell zu drehen und verdeckte Unterseiten bequem anzuklicken."
+ },
+ "mateParallel": {
+  "tip": "Zwei ebene Flächen parallel zueinander ausrichten",
+  "hilfe": "Dreht das zweite Teil so, dass beide gewählten Flächen exakt parallel stehen. Das Teil bleibt frei verschiebbar (in allen drei Richtungen) und lässt sich weiter um die Flächennormale drehen – und du kannst diese Verbindung mit weiteren Abständen oder Gelenken kombinieren.",
+  "tipp": "Mit „Richtung umkehren“ im Eigenschaften-Panel drehst du die gewählte Fläche um 180° auf die Gegenseite."
+ },
+ "mateTangent": {
+  "tip": "Ebene Fläche tangential an einen Zylinder legen",
+  "hilfe": "Richtet eine ebene Fläche und eine runde Zylinderfläche so aus, dass sich beide genau an einer Linie berühren (Reihenfolge egal). Änderst du später den Durchmesser des Zylinders oder schiebst das erste Teil, wandert die tangentiale Lage automatisch mit.",
+  "tipp": "Mit „Seite umkehren“ springt das Teil auf die gegenüberliegende Seite des Zylinders bzw. der Ebene."
+ },
+ "mateDistance": {
+  "tip": "Zwei ebene Flächen parallel im festen Abstand halten",
+  "hilfe": "Hält zwei ebene Flächen verschiedener Teile parallel und genau im angegebenen Abstand – mit Zahl, Einheit oder Formel (z. B. spalt + 2). Der Abstand lässt sich jederzeit rechts oder in der Maße-Tabelle ändern und mit weiteren Verbindungen (z. B. Eben oder einem zweiten Abstand quer dazu) kombinieren.",
+  "tipp": "Ein negativer Abstand oder „Seite umkehren“ legt die Fläche auf die andere Seite – perfekt für Überlappungen oder Anschläge."
  }
 };
 

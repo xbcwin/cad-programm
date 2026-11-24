@@ -2138,6 +2138,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zeitleiste sofort bei Bauteil-Wechsel**: `Timeline` reagiert auf `App.on('ctx')` und `App.on('peek')` synchron ohne 30-ms-Entprell-Verzug (`t_bauteil`, `[F-11241523]`).
 - [ ] **Von Hand**: In der Frontansicht auf einem Quader `Alt + Klick` und Rechtsklick auf ein Maßschild prüfen, in eine Skizze wechseln (Ansichtsknöpfe rechts unten bleiben ausgeblendet) und über „Neues Bauteil“ die leere Bauteil-Zeitleiste prüfen.
 
+## Verbindungen parallel, tangential, mit Abstand (Auto [A-088], BG-07)
+
+- [x] **Abstand zwischen zwei Flächen (`5 → 12 mm` & Formeln)**: Zwei Quader mit `addDistance(..., 5)` liefern gemessen `5,0 mm` (`Measure.minDistance` und Flächenabstand); Änderung über `#jt-dist` auf `12` ergibt `12,0 mm`; Formel `spalt + 2` mit Maß `spalt = 8` → `10,0 mm`, nach Maßänderung `spalt = 15` automatisch `17,0 mm`.
+- [x] **Parallel (`addParallel`)**: Zwei ebene Flächen werden parallel ausgerichtet (`|nA · nB| > 0,99999`), ohne die Lage zu verschieben; freies Verschieben in X/Y/Z bleibt erhalten, Kippen wird zurückgeführt und „Richtung umkehren“ (`#jt-flip`) dreht die Normale um `180°`.
+- [x] **Tangential (`addTangent`)**: Ebene Fläche an Zylinder (`d = 16`, `r = 8`) berührt in beiden Reihenfolgen (`Ebene→Zylinder` und `Zylinder→Ebene`) mit `minDist < 0,02 mm`; „Seite umkehren“ spiegelt auf `-8,0 mm`, Durchmesseränderung auf `24` führt automatisch auf `12,0 mm` nach.
+- [x] **Kombinierbar & Konfliktschutz**: `planar` (`Z = 0`) + `distance` (`6 mm` in X) gelten gleichzeitig (Verschieben in Y frei, X/Z gehalten, Änderung auf `11 mm` wirkt); ein widersprüchlicher zweiter Abstand wird sauber abgelehnt (`ok: false`).
+- [x] **Verlauf, Rückgängig, Befehle & Hilfetexte**: Verbindungen erscheinen in `#joint-tree`, lassen sich per `Strg+Z` rückgängig machen und löschen; Befehlssuche (`mate-parallel`, `mate-tangent`, `mate-distance`) und Hilfetexte (`mateParallel`, `mateTangent`, `mateDistance`) sind ohne Seitenfehler vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Parallel“, „Tangential“ und „Abstand“ (inkl. Eingabefeld `#jp-dist` in der oberen Leiste) verbinden, im 3D-Bild ziehen und die orange Abstandslinie im Verlauf prüfen.
+
 ## Fehler melden
 
 ```
