@@ -9101,6 +9101,125 @@ def t_kaputter_bezug(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- A-039: Gewinde direkt auf runde Fläche (KP-19) ----------
+def t_a039_gewinde_flaeche(p):
+    p.empty()
+    # 1. Bolzen Ø 10 × 25 mm → Rechtsklick „Gewinde …“ → Vorschlag M10, Steigung 1,5 → echtes Gewinde 15 mm → Volumen ändert sich
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('cylinder',{d:10,h:25},{name:'Bolzen'})); })")
+    warte_rechnen(p)
+    vol_before = volumen(p)
+    p.ev("Viewer.setView('front', false)"); p.wait(500); p.ev("Viewer.fit()"); p.wait(800)
+    pt_ext = world_screen(p, 0, -5, 12.5)
+    p.pg.mouse.click(pt_ext[0], pt_ext[1], button='right'); p.wait(500)
+    has_ctx_ext = p.pg.locator('#cm-thread').count() == 1 and 'Gewinde …' in (p.pg.locator('#cm-thread').text_content() or '')
+    p.pg.locator('#cm-thread').click(); p.wait(300)
+    ext_kind = (p.pg.locator('#ct-kind').text_content() or '').lower()
+    ext_size = p.pg.locator('#ct-size').input_value()
+    ext_mode = p.pg.locator('#ct-mode').input_value()
+    ext_pitch = p.ev("return Units.parseLen(document.querySelector('#ct-pitch').value, {}).value")
+    p.pg.fill('#ct-len', '15'); p.pg.click('#ct-apply')
+    warte_rechnen(p, 60)
+    vol_after_ext = volumen(p)
+    its_ext = p.ev("return App.doc.items.map(x=>({kind:x.kind, lib:x.p&&x.p.lib, size:x.p&&x.p.size, op:x.op}))")
+    ext_bb = p.ev("const b=Actions.worldBox(App.doc.items[0].id); return b?[b.min.z, b.max.z]:null")
+    ok1_create = (
+        has_ctx_ext and 'außengewinde' in ext_kind and ext_size == 'M10' and ext_mode == 'real'
+        and abs((ext_pitch or 0) - 1.5) < 1e-6
+        and p.ev("return App.errors.length") == 0
+        and any(x['lib'] == 'threadRod' and x['size'] == 'M10' for x in its_ext)
+        and ext_bb is not None and abs((ext_bb[1] - ext_bb[0]) - 25) < 0.5
+        and vol_after_ext is not None and vol_before is not None and vol_after_ext < vol_before - 50
+    )
+    p.ev("App.undo()"); warte_rechnen(p)
+    vol_undo = volumen(p)
+    ok1 = ok1_create and vol_undo is not None and abs(vol_undo - vol_before) < 1.0
+
+    # 2. Bohrung Ø 8,5 mm → Rechtsklick „Gewinde …“ → Vorschlag M10 innen → echtes Innengewinde 12 mm → Volumen ändert sich
+    p.ev("App.change('x', d=>{ d.items=[]; const b=Model.newItem('box',{w:24,d:24,h:20},{name:'Block'}); d.items.push(b); const h=Model.newItem('cylinder',{d:8.5,h:24},{name:'Bohrung'}); h.t.z=-2; h.op={type:'cut',target:b.id}; d.items.push(h); })")
+    warte_rechnen(p)
+    vol_hole_before = volumen(p)
+    bid = p.ev("return App.doc.items[0].id")
+    p.ev("Viewer.setView('iso', false)"); p.wait(500); p.ev("Viewer.fit()"); p.wait(800)
+    hit_int = p.ev("""
+      const id = arg, r = Viewer.canvas.getBoundingClientRect(), opts = Select.pickOpts();
+      const v = Viewer.camera.position.clone();
+      for (const z of [18.5, 16, 13, 10]) {
+        for (let k = 0; k < 24; k++) {
+          const a = (k / 24) * Math.PI * 2;
+          v.set(4.25 * Math.cos(a), 4.25 * Math.sin(a), z);
+          const s = Viewer.toScreen(v);
+          const sx = s.x + r.left, sy = s.y + r.top;
+          const h = Select.adjust(Viewer.pick(sx, sy, opts));
+          const res = h && App.results.get(h.id);
+          const f = res && h.faceIdx != null ? res.data.faces[h.faceIdx] : null;
+          if (h && h.id === id && f && f.t === 'CYLINDRE') return [sx, sy];
+        }
+      }
+      return null;
+    """, bid)
+    p.pg.mouse.click(hit_int[0], hit_int[1], button='right'); p.wait(500)
+    has_ctx_int = p.pg.locator('#cm-thread').count() == 1 and 'Gewinde …' in (p.pg.locator('#cm-thread').text_content() or '')
+    p.pg.locator('#cm-thread').click(); p.wait(300)
+    int_kind = (p.pg.locator('#ct-kind').text_content() or '').lower()
+    int_size = p.pg.locator('#ct-size').input_value()
+    int_mode = p.pg.locator('#ct-mode').input_value()
+    int_pitch = p.ev("return Units.parseLen(document.querySelector('#ct-pitch').value, {}).value")
+    clear_vis = p.pg.locator('#ct-clear').is_visible()
+    p.pg.fill('#ct-len', '12'); p.pg.click('#ct-apply')
+    warte_rechnen(p, 60)
+    vol_hole_after = volumen(p)
+    its_int = p.ev("return App.doc.items.map(x=>({kind:x.kind, lib:x.p&&x.p.lib, size:x.p&&x.p.size, op:x.op}))")
+    ok2 = (
+        hit_int is not None and has_ctx_int and 'innengewinde' in int_kind
+        and int_size == 'M10' and int_mode == 'real' and clear_vis
+        and abs((int_pitch or 0) - 1.5) < 1e-6
+        and p.ev("return App.errors.length") == 0
+        and any(x['lib'] == 'threadHole' and x['size'] == 'M10' and (x['op'] or {}).get('type') == 'cut' for x in its_int)
+        and vol_hole_after is not None and vol_hole_before is not None and vol_hole_after < vol_hole_before - 20
+    )
+
+    # 3. Wahlweise kosmetisch & eigene Steigung (P = 1,0 mm vs. Regelsteigung 1,5 mm)
+    p.ev("App.undo()"); warte_rechnen(p)
+    p.pg.mouse.click(hit_int[0], hit_int[1], button='right'); p.wait(500)
+    p.pg.locator('#cm-thread').click(); p.wait(300)
+    p.pg.select_option('#ct-mode', 'cosmetic'); p.wait(150)
+    p.pg.fill('#ct-pitch', '1'); p.pg.fill('#ct-len', '12'); p.pg.click('#ct-apply'); p.wait(400)
+    cth = p.ev("return (App.doc.items[0].threads || [])[0]")
+    tg_n = p.ev("const n=Viewer.nodes.get(arg); return n && n.threadGroup ? n.threadGroup.children.length : 0", bid)
+    ok3a = (
+        p.ev("return App.doc.items.length") == 2
+        and cth and cth['kind'] == 'int' and cth['size'] == 'M10'
+        and abs((cth.get('pitch') or 0) - 1) < 1e-6 and abs(cth['length'] - 12) < 1e-6
+        and tg_n >= 1
+    )
+    # Echtes M10 × 15 mm mit eigener Steigung 1,0 mm vs. Regelsteigung 1,5 mm
+    p.ev("App.change('x', d=>{ d.items=[]; d.items.push(Model.newItem('cylinder',{d:10,h:15},{name:'Bolzen'})); })")
+    warte_rechnen(p)
+    id_c = p.ev("return App.doc.items[0].id")
+    fi_c = p.ev("const r=App.results.get(arg); return r.data.faces.findIndex(f=>f.t==='CYLINDRE')", id_c)
+    p.ev("Features.applyRealThread({id:arg[0], idx:arg[1]}, {size:'M10', length:15, pitch:1.5})", [id_c, fi_c])
+    warte_rechnen(p, 60)
+    vol_coarse = volumen(p)
+    p.ev("App.undo()"); warte_rechnen(p)
+    p.ev("Features.applyRealThread({id:arg[0], idx:arg[1]}, {size:'M10', length:15, pitch:1.0})", [id_c, fi_c])
+    warte_rechnen(p, 60)
+    vol_fine = volumen(p)
+    fine_pitch = p.ev("return App.doc.items[0].p && App.doc.items[0].p.pitch")
+    ok3 = (
+        ok3a and p.ev("return App.errors.length") == 0
+        and fine_pitch == 1
+        and vol_coarse is not None and vol_fine is not None and vol_fine > vol_coarse + 10
+    )
+
+    # 4. Hilfetext & Befehlssuche
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    th_help = hilfen.get('threadFace') or {}
+    cmd_ok = p.ev("return Commands.list().some(c=>c.id==='thread-face')")
+    ok4 = bool(th_help.get('tip') and th_help.get('hilfe') and th_help.get('tipp') and cmd_ok)
+
+    return [ok1, ok2, ok3, ok4]
+
+
 # ---------- A-038: Bohrungs-Assistent mehr Gewinde (KP-18) ----------
 def t_a038_mehr_gewinde(p):
     # 1. Feingewinde M10×1,25 -> Kernloch 8,8 mm
@@ -9743,6 +9862,7 @@ TESTS = [
     ('[A-037] Schritt spiegeln: Tasche links an Mittelebene / Bezugsebene & Fläche / Erhöhung & Änderung folgt / Unterdrücken, Marker, Gruppe & Hilfe', t_a037_schritt_spiegeln),
     ('[A-036] Muster von Schritten: Tasche 6× im Kreis / Kopie per Klick auslassen / wieder aktiv & Undo / Rechteckmuster & Auflösen / Hilfe & Speichern', t_muster_schritte),
     ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
+    ('[A-039] Gewinde direkt auf runde Fläche: Bolzen Ø10 M10 echt 15 mm / Bohrung Ø8,5 M10 innen / Steigung & kosmetisch / Hilfe', t_a039_gewinde_flaeche),
     ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
     ('[A-040] Varianten schalten Schritte: ohne Loch / Volumen & zurück / Vergleich / Maße & Schritte / Abweichung & Undo', t_a040_varianten_schritte),
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),

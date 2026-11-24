@@ -1727,6 +1727,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
 
+## Gewinde direkt auf runde Fläche (Auto [A-039], KP-19)
+
+- [x] **Bolzen Ø 10 → Vorschlag M10, echtes Gewinde 15 mm**: Rechtsklick auf die Mantelfläche eines Ø 10 × 25-mm-Bolzens → „Gewinde …“ schlägt M10 (Steigung 1,5 mm) als echtes 3D-Gewinde vor; Übernehmen mit Länge 15 mm erzeugt `threadRod` (`M10`) und verringert das Körpervolumen deutlich ohne Fehler (inkl. Rückgängig).
+- [x] **Bohrung Ø 8,5 → Vorschlag M10 innen**: Rechtsklick in die Bohrung Ø 8,5 mm eines Blocks → „Gewinde …“ erkennt „Innengewinde“, schlägt M10 (Steigung 1,5 mm, mit Druckspiel) vor und schneidet ein echtes 3D-Innengewinde (`threadHole`, `op: cut`), sodass sich das Volumen verringert.
+- [x] **Eigene Steigung & wahlweise kosmetisch**: Umschalten auf „Kosmetisch (nur Markierung)“ sowie abweichende Steigung (z. B. M10 × 1 mm Feingewinde) funktionieren sowohl für die 3D-Markierung als auch für echte 3D-Gewinde (kleinere Steigung ergibt sichtbar anderes Volumen).
+- [x] **Hilfetext & Befehlssuche**: `threadFace` in `werkzeug-hilfen.json` und Befehl `thread-face` („Gewinde auf runde Fläche …“) vorhanden.
+- [ ] **Von Hand**: Im Browser auf einer schräg liegenden Welle und in einer gestuften Bohrung „Gewinde …“ mit verschiedenen Enden („Ende 1“ / „Ende 2“) testen und die gedruckten Gewindegänge aus der Nähe prüfen.
+
 ## Bohrungs-Assistent: mehr Gewinde (Auto [A-038], KP-18)
 
 - [x] **Feingewinde (DIN 13 / DIN 336)**: Norm `metric_fine` bietet M4×0,5 bis M20×1,5 (inkl. M8×1 und M10×1,25); M10×1,25 bohrt exakt Kernloch Ø 8,8 mm (Volumenabzug und Zylinder-Ø geprüft).

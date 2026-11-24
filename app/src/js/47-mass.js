@@ -128,7 +128,9 @@ const Mass = (() => {
       for (const th of it.threads) {
         const L = round(Model.num(th.length, V, 10), 1);
         const kind = th.kind === 'int' ? 'int' : 'ext';
-        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${Units.fmtLenU(L, 1, doc)}`;
+        const spec = THREAD_MAP[th.size];
+        const sizeLabel = th.pitch > 0 && (!spec || Math.abs(th.pitch - spec.pitch) > 1e-4) ? `${th.size}×${fmt(th.pitch, 2)}` : th.size;
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${sizeLabel} × ${Units.fmtLenU(L, 1, doc)}`;
         const key = label + '|' + part;
         const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
         row.n += n;

@@ -855,6 +855,9 @@ const Features = (() => {
     if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return null; }
     const kind = opts.kind === 'int' || opts.kind === 'ext' ? opts.kind : g.kind;
     const size = opts.size && THREAD_MAP[opts.size] ? opts.size : guessThreadSize(g.r, kind);
+    const spec = THREAD_MAP[size] || { d: 6, pitch: 1 };
+    const rawP = Number(opts.pitch);
+    const pitch = isFinite(rawP) && rawP >= 0.25 ? round(clamp(rawP, 0.25, spec.d * 0.45), 3) : spec.pitch;
     const lenRaw = opts.length != null ? Number(opts.length) : round(g.faceLen, 2);
     const length = round(clamp(lenRaw > 0 ? lenRaw : g.faceLen, 0.5, g.faceLen), 3);
     const from = opts.from === 'bottom' ? 'bottom' : 'top';
@@ -862,6 +865,7 @@ const Features = (() => {
       id: opts.id || uid('th'),
       size,
       length,
+      ...(Math.abs(pitch - spec.pitch) > 1e-4 ? { pitch } : {}),
       kind,
       from,
       c: g.c.map((v) => round(v, 4)),
@@ -883,9 +887,21 @@ const Features = (() => {
     App.change('Gewinde geändert', (doc) => {
       const f = Model.find(doc, itemId); if (!f || !f.item.threads) return false;
       const th = f.item.threads.find((x) => x.id === threadId); if (!th) return false;
-      if (patch.size && THREAD_MAP[patch.size]) th.size = patch.size;
+      if (patch.size && THREAD_MAP[patch.size]) {
+        th.size = patch.size;
+        if (patch.pitch == null) delete th.pitch;
+      }
       if (patch.kind === 'int' || patch.kind === 'ext') th.kind = patch.kind;
       if (patch.from === 'top' || patch.from === 'bottom') th.from = patch.from;
+      if (patch.pitch != null) {
+        const spec = THREAD_MAP[th.size] || { d: 6, pitch: 1 };
+        const n = Number(patch.pitch);
+        if (isFinite(n) && n > 0) {
+          const clamped = round(clamp(n, 0.25, spec.d * 0.45), 3);
+          if (Math.abs(clamped - spec.pitch) > 1e-4) th.pitch = clamped;
+          else delete th.pitch;
+        }
+      }
       if (patch.length != null) {
         const g = Viewer.threadFaceIndex(itemId, th) >= 0 ? Viewer.cylinderFaceInfo(itemId, Viewer.threadFaceIndex(itemId, th)) : null;
         const maxL = g ? g.faceLen : Math.max(0.5, Math.abs((th.t1 ?? 10) - (th.t0 ?? 0)));
@@ -905,19 +921,36 @@ const Features = (() => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), zDir.clone().normalize());
     return new THREE.Matrix4().compose(o, q, new THREE.Vector3(1, 1, 1));
   }
-  function makeThreadReal(itemId, threadId) {
+  function insertAfterTarget(doc, top, newItems) {
+    let idx = doc.items.indexOf(top);
+    if (idx < 0) idx = doc.items.length - 1;
+    for (let i = idx + 1; i < doc.items.length; i++) {
+      const x = doc.items[i];
+      if ((x.op && x.op.target === top.id) || (x.p && x.p.target === top.id)) idx = i;
+    }
+    const pos = doc.rollback != null ? Math.min(idx + 1, clamp(doc.rollback, 0, doc.items.length)) : idx + 1;
+    if (doc.rollback != null) doc.rollback += newItems.length;
+    doc.items.splice(pos, 0, ...newItems);
+  }
+  // Echtes 3D-Gewinde direkt auf einer Zylinderfläche (KP-19) oder aus Markierung (KP-20)
+  function applyRealThread(face, opts = {}) {
+    if (!face || !face.id) return null;
+    const itemId = face.id;
     const f = Model.find(App.doc, itemId);
     const it = f && f.item;
-    const th = it && (it.threads || []).find((x) => x.id === threadId);
-    if (!it || !th) return null;
-    const fi = Viewer.threadFaceIndex(itemId, th);
-    const g = (fi >= 0 && Viewer.cylinderFaceInfo(itemId, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
-      o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
-      t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
-    } : null);
+    if (!it || it.role === 'hole') { UI.toast('Klick auf die runde Fläche eines Körpers.', { icon: 'info' }); return null; }
+    const g = (face.idx != null ? Viewer.cylinderFaceInfo(itemId, face.idx) : null) || opts.geom || null;
     if (!g) { UI.toast('Die Zylinderfläche für das Gewinde wurde nicht gefunden.', { kind: 'bad' }); return null; }
-    const L = round(clamp(Number(th.length) || g.faceLen, 0.5, g.faceLen), 3);
-    const fromBottom = th.from === 'bottom';
+    const kind = opts.kind === 'int' || opts.kind === 'ext' ? opts.kind : g.kind;
+    const size = opts.size && THREAD_MAP[opts.size] ? opts.size : guessThreadSize(g.r, kind);
+    const spec = THREAD_MAP[size] || { d: 6, pitch: 1 };
+    const rawP = Number(opts.pitch);
+    const pitch = isFinite(rawP) && rawP >= 0.25 ? round(clamp(rawP, 0.25, spec.d * 0.45), 3) : spec.pitch;
+    const customPitch = Math.abs(pitch - spec.pitch) > 1e-4;
+    const lenRaw = opts.length != null ? Number(opts.length) : g.faceLen;
+    const L = round(clamp(lenRaw > 0 ? lenRaw : g.faceLen, 0.5, g.faceLen), 3);
+    const fromBottom = opts.from === 'bottom';
+    const clear = isFinite(Number(opts.clear)) && Number(opts.clear) >= 0 ? round(Number(opts.clear), 3) : 0.3;
     const s0 = fromBottom ? g.t0 : g.t1 - L;
     const s1 = fromBottom ? g.t0 + L : g.t1;
     const dL = new THREE.Vector3(...g.d).normalize();
@@ -927,26 +960,33 @@ const Features = (() => {
     const dW = pEndW.clone().sub(pStartW).normalize();
     const topCur = Model.topOf(App.doc, itemId);
     let selId = topCur ? topCur.id : itemId;
-    App.change(`Gewinde echt gemacht (${th.size} × ${fmt(L, 1)})`, (doc) => {
+    const pitchOpts = customPitch ? { pitch } : {};
+    App.change(opts.fromCosmetic ? `Gewinde echt gemacht (${size} × ${fmt(L, 1)})` : `Gewinde ${size} × ${fmt(L, 1)}`, (doc) => {
       const T = Model.find(doc, itemId).item;
       const top = Model.topOf(doc, itemId);
-      const rest = (T.threads || []).filter((x) => x.id !== threadId);
-      if (rest.length) T.threads = rest; else delete T.threads;
-      if (th.kind === 'int') {
+      if (T.threads && T.threads.length) {
+        const rest = T.threads.filter((x) => {
+          if (opts.removeThreadId && x.id === opts.removeThreadId) return false;
+          if (face.idx != null && Viewer.threadFaceIndex(itemId, x) === face.idx) return false;
+          return true;
+        });
+        if (rest.length) T.threads = rest; else delete T.threads;
+      }
+      if (kind === 'int') {
         const entryPt = fromBottom ? pStartW : pEndW;
         const outDir = fromBottom ? dW.clone().negate() : dW;
-        const hole = Model.newItem('part', { lib: 'threadHole', size: th.size, length: L, clear: 0.3 }, { name: `Innengewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+        const hole = Model.newItem('part', { lib: 'threadHole', size, length: L, clear, ...pitchOpts }, { name: `Innengewinde ${size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
         Model.setFromMatrix(hole, poseFromOriginDir(entryPt, outDir));
         hole.op = { type: 'cut', target: top.id };
-        const ti = doc.items.indexOf(top);
-        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, hole);
+        insertAfterTarget(doc, top, [hole]);
         selId = top.id;
         return;
       }
-      const isPlainCyl = T === top && T.kind === 'cylinder' && !(T.finishes && T.finishes.length) && !T.op;
+      const hasDependents = doc.items.some((x) => (x.op && x.op.target === T.id) || (x.p && x.p.target === T.id));
+      const isPlainCyl = T === top && T.kind === 'cylinder' && !(T.finishes && T.finishes.length) && !T.op && !hasDependents;
       if (isPlainCyl && L >= g.faceLen - 0.05) {
         T.kind = 'part';
-        T.p = { lib: 'threadRod', size: th.size, length: L };
+        T.p = { lib: 'threadRod', size, length: L, ...pitchOpts };
         Model.setFromMatrix(T, poseFromOriginDir(pStartW, dW));
         selId = T.id;
         return;
@@ -956,68 +996,123 @@ const Features = (() => {
         T.p.h = rem;
         if (fromBottom) Model.setFromMatrix(T, new THREE.Matrix4().makeTranslation(dW.x * L, dW.y * L, dW.z * L).multiply(Model.localMatrix(T)));
         const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
-        const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: T.color, role: 'solid' });
+        const rod = Model.newItem('part', { lib: 'threadRod', size, length: round(L + 0.05, 3), ...pitchOpts }, { name: `Gewinde ${size} × ${fmt(L, 1)}`, color: T.color, role: 'solid' });
         Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
         rod.op = { type: 'join', target: T.id };
-        const ti = doc.items.indexOf(T);
-        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, rod);
+        insertAfterTarget(doc, T, [rod]);
         selId = T.id;
         return;
       }
       // Beliebiger Körper: erst Überstand glatt abtragen, dann echtes Außengewinde vereinigen
-      const cutD = round(Math.max(2 * g.r, (THREAD_MAP[th.size] ? THREAD_MAP[th.size].d : 6)) + 0.2, 3);
+      const cutD = round(Math.max(2 * g.r, spec.d) + 0.2, 3);
       const cutOrigin = fromBottom ? pStartW.clone().addScaledVector(dW, -0.05) : pStartW;
-      const cut = Model.newItem('cylinder', { d: cutD, h: round(L + 0.05, 3) }, { name: `Gewinde-Freischnitt ${th.size}`, color: top.color, role: 'solid' });
+      const cut = Model.newItem('cylinder', { d: cutD, h: round(L + 0.05, 3) }, { name: `Gewinde-Freischnitt ${size}`, color: top.color, role: 'solid' });
       Model.setFromMatrix(cut, poseFromOriginDir(cutOrigin, dW));
       cut.op = { type: 'cut', target: top.id };
       const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
-      const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+      const rod = Model.newItem('part', { lib: 'threadRod', size, length: round(L + 0.05, 3), ...pitchOpts }, { name: `Gewinde ${size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
       Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
       rod.op = { type: 'join', target: top.id };
-      const ti = doc.items.indexOf(top);
-      doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, cut, rod);
+      insertAfterTarget(doc, top, [cut, rod]);
       selId = top.id;
     });
     App.select([selId]);
-    UI.toast(`Echtes Gewinde ${th.size} × ${fmt(L, 1)} mm erzeugt. Mit Rückgängig kommst du wieder zur Markierung.`, { icon: 'check' });
+    UI.toast(opts.fromCosmetic
+      ? `Echtes Gewinde ${size} × ${fmt(L, 1)} mm erzeugt. Mit Rückgängig kommst du wieder zur Markierung.`
+      : `Echtes ${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${size} × ${fmt(L, 1)} mm erzeugt.`, { icon: 'check' });
     return selId;
   }
-  function threadPop(face, anchor) {
+  function makeThreadReal(itemId, threadId) {
+    const f = Model.find(App.doc, itemId);
+    const it = f && f.item;
+    const th = it && (it.threads || []).find((x) => x.id === threadId);
+    if (!it || !th) return null;
+    const fi = Viewer.threadFaceIndex(itemId, th);
+    const geom = Array.isArray(th.axis) && th.axis.length >= 6 ? {
+      o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+      t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+    } : null;
+    return applyRealThread({ id: itemId, idx: fi >= 0 ? fi : null }, {
+      size: th.size, length: th.length, pitch: th.pitch, from: th.from, kind: th.kind,
+      removeThreadId: threadId, fromCosmetic: true, geom,
+    });
+  }
+  function threadPop(face, anchor, opts = {}) {
     if (!face || !face.id) return;
     const g = Viewer.cylinderFaceInfo(face.id, face.idx);
     if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return; }
     const existing = threadOnFace(face.id, face.idx);
+    let mode = opts.mode === 'real' ? 'real' : opts.mode === 'cosmetic' ? 'cosmetic' : opts.mode === 'auto' ? (existing ? 'cosmetic' : 'real') : 'cosmetic';
     let size = existing ? existing.size : guessThreadSize(g.r, g.kind);
+    let spec = THREAD_MAP[size] || { d: 6, pitch: 1 };
+    let pitch = existing && existing.pitch > 0 ? existing.pitch : spec.pitch;
     let len = existing ? existing.length : round(g.faceLen, 2);
     let from = existing ? (existing.from || 'top') : 'top';
-    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '230px' }, 'data-help': 'cosmeticThread' });
-    box.append(h('div', { class: 'section-h' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${Units.fmtLenU(2 * g.r, 2)}`));
+    let clear = 0.3;
+    const V = Model.vars(App.doc).v;
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '240px' }, 'data-help': 'threadFace' });
+    box.append(h('div', { class: 'section-h', id: 'ct-kind' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${Units.fmtLenU(2 * g.r, 2)}`));
     const fields = h('div', { class: 'fields' });
-    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (Steigung ${fmt(s.pitch, 2)})`]), onChange: (v) => { size = v; } }));
+    const modeRow = UI.selectField({ id: 'ct-mode', label: 'Ausführung', value: mode, options: [['real', 'Echt (3D-Gewinde)'], ['cosmetic', 'Kosmetisch (nur Markierung)']], onChange: (v) => { mode = v; syncMode(); } });
+    fields.append(modeRow);
+    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (P ${fmt(s.pitch, 2)})`]), onChange: (v) => {
+      size = v;
+      const sp = THREAD_MAP[v];
+      if (sp) {
+        pitch = sp.pitch;
+        const pInp = $('#ct-pitch');
+        if (pInp) pInp.value = Units.fmtInput(sp.pitch);
+      }
+    } }));
+    fields.append(UI.numField({ id: 'ct-pitch', label: 'Steigung', value: pitch, min: 0.25, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => { if (v > 0) pitch = v; } }));
     fields.append(UI.numField({ id: 'ct-len', label: 'Länge', value: len, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => { len = v; } }));
+    const clearWrap = h('div', { id: 'ct-clear-wrap' }, UI.numField({ id: 'ct-clear', label: 'Spiel (3D-Druck)', value: clear, min: 0, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => { if (v >= 0) clear = v; } }));
+    fields.append(clearWrap);
     box.append(fields);
     box.append(UI.selectField({ id: 'ct-from', label: 'Beginnt am', value: from, options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)']], onChange: (v) => { from = v; } }));
     const row = h('div', { class: 'btn-row' });
-    const applyB = h('button', { type: 'button', class: 'btn primary', id: 'ct-apply' }, existing ? 'Ändern' : 'Gewinde markieren');
+    const applyB = h('button', { type: 'button', class: 'btn primary', id: 'ct-apply' }, '');
+    const hintEl = h('div', { class: 'hint-box', id: 'ct-hint' }, '');
+    let realB = null, delB = null;
+    if (existing) {
+      realB = h('button', { type: 'button', class: 'btn', id: 'ct-real' }, 'Echt machen');
+      realB.onclick = () => { UI.closePop(); makeThreadReal(face.id, existing.id); };
+      delB = h('button', { type: 'button', class: 'btn ghost danger', id: 'ct-del' }, 'Entfernen');
+      delB.onclick = () => { UI.closePop(); removeThread(face.id, existing.id); };
+    }
+    const syncMode = () => {
+      const isReal = mode === 'real';
+      applyB.textContent = isReal ? 'Gewinde erzeugen' : (existing ? 'Ändern' : 'Gewinde markieren');
+      clearWrap.style.display = isReal && g.kind === 'int' ? '' : 'none';
+      if (realB) realB.style.display = isReal ? 'none' : '';
+      hintEl.textContent = isReal
+        ? 'Schneidet bzw. formt echte Gewindegänge in den 3D-Körper (z. B. für 3D-Druck).'
+        : 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.';
+    };
     applyB.onclick = () => {
-      const lenInp = $('#ct-len');
-      const v = lenInp ? parseNum(lenInp.value) : NaN;
-      if (isFinite(v) && v > 0) len = v;
+      const readLen = (sel, def) => {
+        const inp = $(sel);
+        if (!inp) return def;
+        const parsed = Units.parseLen(inp.value, V, { expr: false });
+        return parsed.ok && isFinite(parsed.value) ? parsed.value : def;
+      };
+      const vLen = readLen('#ct-len', len);
+      if (vLen > 0) len = vLen;
+      const vPitch = readLen('#ct-pitch', pitch);
+      if (vPitch > 0) pitch = vPitch;
+      const vClear = readLen('#ct-clear', clear);
+      if (vClear >= 0) clear = vClear;
+      const selMode = $('#ct-mode'); if (selMode) mode = selMode.value;
       const selSize = $('#ct-size'); if (selSize) size = selSize.value;
       const selFrom = $('#ct-from'); if (selFrom) from = selFrom.value;
-      markThread(face, { id: existing ? existing.id : undefined, size, length: len, from, kind: g.kind });
       UI.closePop();
+      if (mode === 'real') applyRealThread(face, { size, length: len, pitch, from, kind: g.kind, clear });
+      else markThread(face, { id: existing ? existing.id : undefined, size, length: len, pitch, from, kind: g.kind });
     };
     row.append(applyB);
-    if (existing) {
-      const realB = h('button', { type: 'button', class: 'btn', id: 'ct-real' }, 'Echt machen');
-      realB.onclick = () => { UI.closePop(); makeThreadReal(face.id, existing.id); };
-      const delB = h('button', { type: 'button', class: 'btn ghost danger', id: 'ct-del' }, 'Entfernen');
-      delB.onclick = () => { UI.closePop(); removeThread(face.id, existing.id); };
-      row.append(realB, delB);
-    }
-    box.append(row);
-    box.append(h('div', { class: 'hint-box' }, 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.'));
+    if (existing) row.append(realB, delB);
+    box.append(row, hintEl);
+    syncMode();
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
@@ -1599,5 +1694,5 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Spiegelt nur die gewählten Formschritte (z. B. eine Tasche, Erhöhung oder Rippe) direkt im selben Körper. Änderst du das Original, wandert das Spiegelbild automatisch mit.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
