@@ -1950,6 +1950,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte**: `printFit`, `nozzleWall` und `orientPrint` sind in `werkzeug-hilfen.json`, `HELP` und als `data-help`-Attribute im DOM vorhanden.
 - [ ] **Von Hand**: Im Browser ein zweiteiliges Steckteil (Bolzen + Bohrung mit Passung „Gleitend“) und ein Bauteil mit dünner Rippe sowie Überhang prüfen und mit „Für den Druck ausrichten“ ausrichten.
 
+## Zeichnung: Schnittansicht (Auto [A-063], ZE-02)
+
+- [x] **Schnittlinie A–A & Bohrungs-Lücke**: Beim Ziehen der Schnittlinie durch die Mitte einer Bohrung (Ø 10 mm im Quader 40 × 30 × 20 mm) entstehen Schnittlinie (`.cutline`, `.cutend`), Richtungspfeile (`.arrow`) mit Buchstaben (`A`) sowie „Schnitt A–A“ mit exakt 2 schraffierten Flächen und einer un-schraffierten Lücke in Bohrungsbreite (10 mm).
+- [x] **45°-Schraffur & Maßstab**: Alle Schraffurlinien (`.hatch`) verlaufen unter 45°; beim Wechsel des Blattmaßstabs (z. B. `2:1` auf `1:2`) passt sich der Schraffurabstand (`hatchStepSheet` und Linienabstand im SVG) sauber an.
+- [x] **Richtung umkehren & weitere Schnitte**: Blickrichtung lässt sich per `.sec-flip` umkehren; ein zweiter Schnitt erzeugt automatisch „Schnitt B–B“.
+- [x] **Export, Rückgängig, Speichern & Hilfe**: PDF-, SVG- und DXF-Export (`SCHRAFFUR`, `SCHNITTLINIE`), Löschen samt `App.undo`/`redo`, Speichern/Laden, Befehlssuche (`schnittansicht`) und Hilfetext `drawingSection` funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser ein Werkstück mit Stufenbohrung und Sackloch in der Zeichnung waagerecht und schräg schneiden, die Schnittansicht nachbemaßen und das erzeugte PDF prüfen.
+
 ## Fehler melden
 
 ```
