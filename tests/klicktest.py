@@ -13373,6 +13373,272 @@ def t_a060_druck_passung_wand_ausrichten(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a066_mittellinien(p):
+    # 1. Platte mit 4 Durchgangsbohrungen (verschiedene X und Y -> 4 Kreuze in Draufsicht, je 4 Linien in Seiten- und Vorderansicht)
+    p.empty()
+    p.ev("""
+      App.change('Platte mit 4 Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 80, d: 60, h: 10 }, { name: 'Platte' }));
+        const holes = [[-24, -18], [-8, -6], [8, 6], [24, 18]];
+        holes.forEach(([x, y], i) => {
+          const h = Model.newItem('cylinder', { d: 6, h: 14 }, { name: 'Bohrung ' + (i + 1), role: 'hole' });
+          h.t.x = x; h.t.y = y; h.t.z = -2;
+          d.items.push(h);
+        });
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const css = svg.querySelector('style')?.textContent || '';
+      const dashOk = /\\.ctr\\{[^}]*stroke-dasharray:\\s*5\\s+1\\.2\\s+\\.6\\s+1\\.2/.test(css);
+      const byView = (view) => [...svg.querySelectorAll(`polyline.ctr[data-view="${view}"][data-id]`)];
+      const topEls = byView('top'), leftEls = byView('left'), frontEls = byView('front'), isoEls = byView('iso');
+      const topIds = new Set(topEls.map(e => e.dataset.id));
+      const leftIds = new Set(leftEls.map(e => e.dataset.id));
+      const frontIds = new Set(frontEls.map(e => e.dataset.id));
+      const topAllCross = topEls.length === 8 && topEls.every(e => e.dataset.ctr === 'cross');
+      const leftAllLine = leftEls.length === 4 && leftEls.every(e => e.dataset.ctr === 'line');
+      const frontAllLine = frontEls.length === 4 && frontEls.every(e => e.dataset.ctr === 'line');
+      // Prüfe ob jede der 4 Bohrungen ein gekreuztes Paar mit Überstand hat
+      const pairCounts = {};
+      for (const el of topEls) {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(q => q.split(',').map(Number));
+        const dx = Math.abs(pts[1][0] - pts[0][0]), dy = Math.abs(pts[1][1] - pts[0][1]);
+        const id = el.dataset.id;
+        pairCounts[id] = pairCounts[id] || { h: 0, v: 0, len: 0 };
+        if (dx > dy && dy < 0.05) { pairCounts[id].h++; pairCounts[id].len = Math.max(pairCounts[id].len, dx); }
+        if (dy > dx && dx < 0.05) { pairCounts[id].v++; pairCounts[id].len = Math.max(pairCounts[id].len, dy); }
+      }
+      const crossesValid = Object.keys(pairCounts).length === 4 && Object.values(pairCounts).every(c => c.h === 1 && c.v === 1 && c.len > 6);
+      return {
+        dashOk,
+        topCount: topIds.size,
+        leftCount: leftIds.size,
+        frontCount: frontIds.size,
+        isoCount: isoEls.length,
+        topAllCross,
+        leftAllLine,
+        frontAllLine,
+        crossesValid,
+        summary: document.querySelector('#dw-centers-summary')?.textContent || '',
+      };
+    """)
+    ok1 = (
+        s1['dashOk']
+        and s1['topCount'] == 4 and s1['topAllCross'] and s1['crossesValid']
+        and s1['leftCount'] == 4 and s1['leftAllLine']
+        and s1['frontCount'] == 4 and s1['frontAllLine']
+        and s1['isoCount'] == 0
+        and '4 Mittelkreuze' in s1['summary'] and '8 Mittellinien' in s1['summary']
+    )
+
+    # 2. Liegender Zylinder, konzentrisches Rohr (verschmolzen) und Quader mit Eckenrundung (keine Mittellinien)
+    p.pg.click('#tab-model'); p.wait(150)
+    p.ev("App.setDoc(Model.newDoc(), { fit: false })"); p.wait(200)
+    p.ev("""
+      App.change('Zylinder, Rohr und Rundung', d => {
+        const b = Model.newItem('box', { w: 40, d: 30, h: 12 }, { name: 'Block' });
+        b.finishes = [{ id: 'fn1', type: 'fillet', r: 4, edges: [[20, 15, 6], [-20, 15, 6], [20, -15, 6], [-20, -15, 6]] }];
+        d.items.push(b);
+        const c = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Liegender Bolzen' });
+        c.t.x = 20; c.t.z = 6; c.t.ry = 90;
+        const tb = Model.newItem('tube', { d: 16, wall: 4, h: 16 }, { name: 'Rohr' });
+        tb.t.z = 12;
+        d.items.push(c, tb);
+      });
+    """)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    s2 = p.ev("""
+      const topC = Drawing.centers('top');
+      const leftC = Drawing.centers('left');
+      const frontC = Drawing.centers('front');
+      const topCross = topC.filter(c => c.type === 'cross');
+      const topLine = topC.filter(c => c.type === 'line');
+      const leftCross = leftC.filter(c => c.type === 'cross');
+      const leftLine = leftC.filter(c => c.type === 'line');
+      const frontCross = frontC.filter(c => c.type === 'cross');
+      const frontLine = frontC.filter(c => c.type === 'line');
+      // Rohr (od 16 -> r=8) muss zu genau 1 Kreuz in Draufsicht verschmelzen (keine 4 Eckenrundungs-Kreuze!)
+      return {
+        topCrossN: topCross.length, topCrossR: topCross[0]?.r,
+        topLineN: topLine.length,
+        leftCrossN: leftCross.length,
+        leftLineN: leftLine.length,
+        frontCrossN: frontCross.length,
+        frontLineN: frontLine.length,
+      };
+    """)
+    ok2 = (
+        s2['topCrossN'] == 1 and abs((s2['topCrossR'] or 0) - 8.0) < 0.1
+        and s2['topLineN'] == 1
+        and s2['leftCrossN'] == 1 and s2['leftLineN'] == 1
+        and s2['frontCrossN'] == 0 and s2['frontLineN'] == 2
+    )
+
+    # 3. Zurück zur Platte mit 4 Bohrungen -> einzeln ausblenden (Klick + Entf und Panel) + Undo/Redo
+    p.pg.click('#tab-model'); p.wait(150)
+    p.ev("App.setDoc(Model.newDoc(), { fit: false })"); p.wait(200)
+    p.ev("""
+      App.change('Platte mit 4 Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 80, d: 60, h: 10 }, { name: 'Platte' }));
+        [[-24, -18], [-8, -6], [8, 6], [24, 18]].forEach(([x, y], i) => {
+          const h = Model.newItem('cylinder', { d: 6, h: 14 }, { name: 'Bohrung ' + (i + 1), role: 'hole' });
+          h.t.x = x; h.t.y = y; h.t.z = -2;
+          d.items.push(h);
+        });
+      });
+    """)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    click_pt = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const el = svg.querySelector('polyline.ctr[data-view="top"][data-ctr="cross"]');
+      const pts = el.getAttribute('points').trim().split(/\\s+/).map(q => q.split(',').map(Number));
+      const pt = svg.createSVGPoint();
+      pt.x = pts[0][0] + (pts[1][0] - pts[0][0]) * 0.08;
+      pt.y = pts[0][1] + (pts[1][1] - pts[0][1]) * 0.08;
+      const q = pt.matrixTransform(svg.getScreenCTM());
+      return { x: q.x, y: q.y, id: el.dataset.id };
+    """)
+    p.pg.mouse.click(click_pt['x'], click_pt['y'])
+    p.wait(150)
+    sel_ok = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const sel = [...svg.querySelectorAll('polyline.ctr.sel')].map(e => e.dataset.id);
+      return { selId: Drawing.selectedId, selCount: sel.length, hasHideBtn: !!document.querySelector('#dw-ctr-hide') };
+    """)
+    p.pg.keyboard.press('Delete')
+    p.wait(200)
+    after_del_top = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const topIds = new Set([...svg.querySelectorAll('polyline.ctr[data-view="top"][data-id]')].map(e => e.dataset.id));
+      const leftIds = new Set([...svg.querySelectorAll('polyline.ctr[data-view="left"][data-id]')].map(e => e.dataset.id));
+      return { top: topIds.size, left: leftIds.size, hidden: (Drawing.activeSheet().hiddenCenters || []).slice() };
+    """)
+
+    # Eine Mittellinie der Seitenansicht über das Panel ausblenden
+    p.pg.locator('#dw-centers-list summary').click()
+    p.wait(120)
+    left_row_btn = p.pg.locator('#dw-centers-list .ctr-row[data-ctr-id^="ctr|left|"] .ctr-toggle').first
+    left_row_btn.click()
+    p.wait(200)
+    after_del_left = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const topIds = new Set([...svg.querySelectorAll('polyline.ctr[data-view="top"][data-id]')].map(e => e.dataset.id));
+      const leftIds = new Set([...svg.querySelectorAll('polyline.ctr[data-view="left"][data-id]')].map(e => e.dataset.id));
+      return {
+        top: topIds.size,
+        left: leftIds.size,
+        hiddenCount: (Drawing.activeSheet().hiddenCenters || []).length,
+        showAllTxt: document.querySelector('#dw-centers-show-all')?.textContent || '',
+      };
+    """)
+
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    after_undo = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return new Set([...svg.querySelectorAll('polyline.ctr[data-view="left"][data-id]')].map(e => e.dataset.id)).size;
+    """)
+    p.ev("App.redo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    after_redo = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return new Set([...svg.querySelectorAll('polyline.ctr[data-view="left"][data-id]')].map(e => e.dataset.id)).size;
+    """)
+
+    ok3 = (
+        sel_ok['selId'] == click_pt['id'] and sel_ok['selCount'] == 2 and sel_ok['hasHideBtn']
+        and after_del_top['top'] == 3 and after_del_top['left'] == 4 and click_pt['id'] in after_del_top['hidden']
+        and after_del_left['top'] == 3 and after_del_left['left'] == 3 and after_del_left['hiddenCount'] == 2
+        and '2' in after_del_left['showAllTxt']
+        and after_undo == 4 and after_redo == 3
+    )
+
+    # 4. Speichern/Laden (JSON-Roundtrip), PDF-Export, Alle einblenden & Hauptschalter
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.ev("Panels.renderRight()"); p.wait(100)
+
+    after_reload = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        top: new Set([...svg.querySelectorAll('polyline.ctr[data-view="top"][data-id]')].map(e => e.dataset.id)).size,
+        left: new Set([...svg.querySelectorAll('polyline.ctr[data-view="left"][data-id]')].map(e => e.dataset.id)).size,
+        hiddenCount: (Drawing.activeSheet().hiddenCenters || []).length,
+      };
+    """)
+    pdf_ok = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const text = new TextDecoder('latin1').decode(bytes);
+        return text.startsWith('%PDF-1.4') && text.includes('[14.173 3.402 1.701 3.402] 0 d');
+      });
+    """)
+
+    p.pg.locator('#dw-centers-show-all').click()
+    p.wait(200)
+    after_show_all = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        top: new Set([...svg.querySelectorAll('polyline.ctr[data-view="top"][data-id]')].map(e => e.dataset.id)).size,
+        left: new Set([...svg.querySelectorAll('polyline.ctr[data-view="left"][data-id]')].map(e => e.dataset.id)).size,
+        front: new Set([...svg.querySelectorAll('polyline.ctr[data-view="front"][data-id]')].map(e => e.dataset.id)).size,
+        hiddenCount: (Drawing.activeSheet().hiddenCenters || []).length,
+      };
+    """)
+
+    p.pg.locator('#dw-panel-centers').uncheck()
+    p.wait(200)
+    after_off = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.ctr[data-id]').length")
+    p.pg.locator('#dw-panel-centers').check()
+    p.wait(200)
+    after_on = p.ev("return new Set([...document.querySelectorAll('#sheet .sheet-holder svg polyline.ctr[data-id]')].map(e => e.dataset.id)).size")
+
+    ok4 = (
+        after_reload['top'] == 3 and after_reload['left'] == 3 and after_reload['hiddenCount'] == 2
+        and bool(pdf_ok)
+        and after_show_all['top'] == 4 and after_show_all['left'] == 4 and after_show_all['front'] == 4 and after_show_all['hiddenCount'] == 0
+        and after_off == 0 and after_on == 12
+    )
+
+    # 5. Schnittansicht durch eine Bohrung, Befehlssuche & Hilfetext
+    p.ev("return Drawing.addSection({ parent: 'top', a: [-40, -18], b: [40, -18] })")
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    sec_ctrs = p.ev("""
+      const sec = Drawing.sections()[0];
+      if (!sec) return 0;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return new Set([...svg.querySelectorAll(`polyline.ctr[data-view="sec_${sec.id}"][data-id]`)].map(e => e.dataset.id)).size;
+    """)
+    p.pg.hover('#dw-centers-sec'); p.wait(500)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        json: !!(d.drawingCenters && d.drawingCenters.tip && d.drawingCenters.hilfe && d.drawingCenters.tipp),
+        tip: (document.querySelector('.tooltip')?.textContent || '').includes('Mittelkreuze'),
+        dom: document.querySelectorAll('[data-help="drawingCenters"]').length >= 1,
+        cmd: Commands.search('mittellinien').some(c => c.id === 'drawingCenters'),
+      }));
+    """)
+    ok5 = bool(sec_ctrs >= 1 and help_ok['json'] and help_ok['tip'] and help_ok['dom'] and help_ok['cmd'])
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -13541,6 +13807,7 @@ TESTS = [
     ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
     ('[A-064] Zeichnung: Detailansicht (Detail Z 4:1, wahre Maße, 4× Geometrie)', t_a064_zeichnung_detailansicht),
+    ('[A-066] Zeichnung: Mittellinien automatisch (4 Mittelkreuze, 4 Mittellinien, einzeln ausblendbar)', t_a066_mittellinien),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

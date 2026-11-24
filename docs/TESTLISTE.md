@@ -1966,6 +1966,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export, Rückgängig, Speichern & Hilfe**: PDF-, SVG- und DXF-Export (`SCHRAFFUR`, `SCHNITTLINIE`), Löschen samt `App.undo`/`redo`, Speichern/Laden, Befehlssuche (`schnittansicht`) und Hilfetext `drawingSection` funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser ein Werkstück mit Stufenbohrung und Sackloch in der Zeichnung waagerecht und schräg schneiden, die Schnittansicht nachbemaßen und das erzeugte PDF prüfen.
 
+## Zeichnung: Mittellinien automatisch (Auto [A-066], ZE-06)
+
+- [x] **4 Bohrungen → 4 Mittelkreuze & 4 Mittellinien**: Platte mit 4 Durchgangsbohrungen zeigt in der Draufsicht exakt 4 strichpunktierte Mittelkreuze (`data-ctr="cross"`), in der Seiten- und Vorderansicht jeweils exakt 4 strichpunktierte Mittellinien (`data-ctr="line"`) und in der Isometrie 0 Mittellinien.
+- [x] **Zylinder, konzentrische Bohrungen & keine Eckenrundungen**: Liegender Zylinder (Achse entlang X) erhält ein Mittelkreuz in der Seitenansicht und Mittellinien in Drauf- und Vorderansicht; konzentrisches Rohr verschmilzt ohne Doppellinien zu einer gemeinsamen Achse; 90°-Kantenrundungen am Quader erzeugen keine Mittellinien.
+- [x] **Einzeln aus- und einblenden (Blatt, Panel & Rückgängig)**: Einzelne Mittelkreuze lassen sich per Klick im SVG + `Entf` und einzelne Mittellinien über `.ctr-toggle` in `#dw-centers-list` ausblenden, per `App.undo()`/`App.redo()` schalten, über `#dw-centers-show-all` wiederholen und über `#dw-panel-centers` gesamt schalten.
+- [x] **Speichern/Neuladen, Schnittansicht, PDF-Export & Hilfe**: Ausgeblendete Mittellinien (`hiddenCenters`) bleiben nach Speichern und Neuladen erhalten; Schnittansicht durch eine Bohrung zeigt eine Mittellinie; PDF enthält das Strichpunkt-Muster `[14.173 3.402 1.701 3.402] 0 d`; Befehlssuche und Hilfetext `drawingCenters` sind vorhanden.
+- [ ] **Von Hand**: Im Browser eine Platte mit Bohrungen und einem quer liegenden Bolzen in der Zeichnung öffnen, einzelne Mittelkreuze per Rechtsklick ausblenden und die erzeugte PDF- und DXF-Datei prüfen.
+
 ## Fehler melden
 
 ```
