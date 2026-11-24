@@ -35,6 +35,7 @@ const Drawing = (() => {
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null, selView = null;
   let dimMode = 'lin';
   let layout = null, dragDetail = null, dragNote = null, dragView = null;
+  let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let noteDraft = { tip: 'auto', text: '' };
   let centersListOpen = false;
@@ -2785,45 +2786,57 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  function buildSVG(lines, texts, images = []) {
-    const { W, H } = layout;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
+    const { W, H } = cur.layout;
+    const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
     const NS = 'http://www.w3.org/2000/svg';
+    const XLINK = 'http://www.w3.org/1999/xlink';
     const s = document.createElementNS(NS, 'svg');
     s.setAttribute('xmlns', NS);
-    s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
+    if (!interactive) s.setAttribute('xmlns:xlink', XLINK);
+    s.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    s.setAttribute('width', widthAttr != null ? widthAttr : `${W}mm`);
+    s.setAttribute('height', heightAttr != null ? heightAttr : `${H}mm`);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = SHEET_SVG_CSS;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
+    const skipCls = interactive ? null : new Set(['prev', 'snap', 'view-sel']);
     const appendLine = (l) => {
+      if (skipCls && skipCls.has(l.cls)) return;
       let el;
-      const sel = l.id && l.id === selDim;
+      const sel = interactive && l.id && l.id === selDim;
       if (l.rect) { el = document.createElementNS(NS, 'rect'); el.setAttribute('x', f(l.rect[0])); el.setAttribute('y', f(l.rect[1])); el.setAttribute('width', f(l.rect[2])); el.setAttribute('height', f(l.rect[3])); }
       else if (l.circle) { el = document.createElementNS(NS, 'circle'); el.setAttribute('cx', f(l.circle[0])); el.setAttribute('cy', f(l.circle[1])); el.setAttribute('r', f(l.circle[2])); }
       else if (l.poly) { el = document.createElementNS(NS, 'polygon'); el.setAttribute('points', l.poly.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       else { el = document.createElementNS(NS, 'polyline'); el.setAttribute('points', l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       el.setAttribute('class', l.cls + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
-      if (l.id) el.dataset.id = l.id;
-      if (l.lost) el.dataset.lost = '1';
-      if (l.view) el.dataset.view = l.view;
-      if (l.ctrType) el.dataset.ctr = l.ctrType;
-      if (l.secId) el.dataset.sec = l.secId;
-      if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
-      if (l.noteTip) el.dataset.tipKind = l.noteTip;
-      if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
+      if (interactive) {
+        if (l.id) el.dataset.id = l.id;
+        if (l.lost) el.dataset.lost = '1';
+        if (l.view) el.dataset.view = l.view;
+        if (l.ctrType) el.dataset.ctr = l.ctrType;
+        if (l.secId) el.dataset.sec = l.secId;
+        if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
+        if (l.noteTip) el.dataset.tipKind = l.noteTip;
+        if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
+      }
       g.append(el);
     };
-    for (const l of lines) if (l.cls === 'paper') appendLine(l);
+    if (!transparent) for (const l of lines) if (l.cls === 'paper') appendLine(l);
     for (const im of images) {
-      if (!im.png && !im.jpg) continue;
+      const src = im.png || im.jpg;
+      if (!src) continue;
       const el = document.createElementNS(NS, 'image');
       el.setAttribute('class', 'shade-img');
       el.setAttribute('x', f(im.x)); el.setAttribute('y', f(im.y));
       el.setAttribute('width', f(im.w)); el.setAttribute('height', f(im.h));
       el.setAttribute('preserveAspectRatio', 'none');
-      el.setAttribute('href', im.png || im.jpg);
-      if (im.viewKey) el.dataset.view = im.viewKey;
+      el.setAttribute('href', src);
+      if (!interactive) el.setAttributeNS(XLINK, 'xlink:href', src);
+      if (interactive && im.viewKey) el.dataset.view = im.viewKey;
       g.append(el);
     }
     for (const l of lines) if (l.cls !== 'paper') appendLine(l);
@@ -2831,15 +2844,27 @@ const Drawing = (() => {
       const el = document.createElementNS(NS, 'text');
       el.setAttribute('x', f(t.x)); el.setAttribute('y', f(t.y)); el.setAttribute('font-size', f(t.size)); el.setAttribute('text-anchor', t.anchor || 'start');
       if (t.rot) el.setAttribute('transform', `rotate(${f(t.rot)} ${f(t.x)} ${f(t.y)})`);
-      el.setAttribute('class', (t.cls || '') + (t.lost ? ' lost' : '') + (t.id && t.id === selDim ? ' sel' : ''));
-      if (t.id) el.dataset.id = t.id;
-      if (t.lost) el.dataset.lost = '1';
-      if (t.view) el.dataset.view = t.view;
-      if (t.secId) el.dataset.sec = t.secId;
-      if (t.tolPart) el.dataset.tol = t.tolPart;
+      el.setAttribute('class', (t.cls || '') + (t.lost ? ' lost' : '') + (interactive && t.id && t.id === selDim ? ' sel' : ''));
+      if (interactive) {
+        if (t.id) el.dataset.id = t.id;
+        if (t.lost) el.dataset.lost = '1';
+        if (t.view) el.dataset.view = t.view;
+        if (t.secId) el.dataset.sec = t.secId;
+        if (t.tolPart) el.dataset.tol = t.tolPart;
+      }
       el.textContent = t.t;
       g.append(el);
     }
+    return s;
+  }
+  function buildSVG(lines, texts, images = []) {
+    const { W, H } = layout;
+    const s = buildSheetSVGElement({ layout, lines, texts, images }, {
+      widthAttr: W * zoom * 3.2,
+      heightAttr: H * zoom * 3.2,
+      transparent: false,
+      interactive: true,
+    });
     holder.innerHTML = ''; holder.append(s); svg = s;
     s.addEventListener('pointermove', onMove); s.addEventListener('pointerdown', onDown); s.addEventListener('contextmenu', onContextMenu);
     lastLines = lines; lastTexts = texts; lastImages = images;
@@ -4312,25 +4337,29 @@ const Drawing = (() => {
     ]);
   }
   function exportMenu(anchor) {
-    UI.menu(anchor, [
-      { label: T('menu.draw.exportPdf'), icon: 'file', run: () => exportPDF() },
-      { label: T('menu.draw.exportSvg'), icon: 'file', run: () => exportSVG() },
-      { label: T('menu.draw.exportDxf'), icon: 'file', run: () => exportDXF() },
-    ]);
+    const entries = [
+      { id: 'dw-exp-pdf', label: T('menu.draw.exportPdf'), icon: 'file', run: () => exportPDF() },
+      { id: 'dw-exp-svg', label: T('menu.draw.exportSvg'), icon: 'file', run: () => exportSVG() },
+      { id: 'dw-exp-dxf', label: T('menu.draw.exportDxf'), icon: 'file', help: 'drawingExportDxf', run: () => exportDXF() },
+    ];
+    if (sheets().length > 1) {
+      entries.push({ id: 'dw-exp-dxf-all', label: T('menu.draw.exportDxfAll'), icon: 'file', help: 'drawingExportDxf', run: () => exportDXF({ allSheets: true }) });
+    }
+    entries.push('-', { id: 'dw-exp-png', label: T('menu.draw.exportPng'), icon: 'image', help: 'drawingExportPng', run: () => pngDialog() });
+    UI.menu(anchor, entries);
   }
-  function fileBase(withSheet = false) {
-    const d = dwg();
-    const base = (d.title.titel || App.doc.name) + ' Zeichnung';
-    return Print.safeName(withSheet && sheets().length > 1 ? `${base} ${d.name}` : base);
+  function fileBase(withSheet = false, sh = dwg()) {
+    const base = ((sh.title && sh.title.titel) || App.doc.name) + ' Zeichnung';
+    return Print.safeName(withSheet && sheets().length > 1 ? `${base} ${sh.name}` : base);
   }
-  function exportSVG() {
-    if (!svg) return;
-    const clone = svg.cloneNode(true); clone.removeAttribute('width'); clone.removeAttribute('height');
-    const [W, H] = sheetSize(); clone.setAttribute('width', W + 'mm'); clone.setAttribute('height', H + 'mm');
-    clone.querySelectorAll('.sel').forEach((el) => el.classList.remove('sel'));
-    clone.querySelectorAll('.view-sel').forEach((el) => el.remove());
-    const str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-    Print.save(fileBase(true) + '.svg', str);
+  async function exportSVG() {
+    await ensureProjections();
+    const all = sheets(), idx = activeIndex(), sh = all[idx] || dwg();
+    const cur = buildSheetContent(sh, idx, all.length);
+    const [W, H] = [cur.layout.W, cur.layout.H];
+    const el = buildSheetSVGElement(cur, { widthAttr: `${W}mm`, heightAttr: `${H}mm`, transparent: false, interactive: false });
+    const str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(el);
+    await Print.save(fileBase(true, sh) + '.svg', str);
   }
   // Eingebauter PDF-1.4-Writer ohne externe Abhängigkeit: unterstützt mehrere Blätter mit beliebigen Größen (A4–A0, hoch/quer)
   const PT = 72 / 25.4;
@@ -4526,45 +4555,307 @@ const Drawing = (() => {
       await Print.save(fileBase(false) + '.pdf', new Blob([bytes], { type: 'application/pdf' }));
     } catch (e) { tst.remove(); UI.toast('PDF hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
-  async function exportDXF() {
-    render();
-    const [W, H] = sheetSize();
+  const DXF_LAYERS = [
+    ['SICHTBAR', 'CONTINUOUS', 7],
+    ['TANGENTIAL', 'CONTINUOUS', 9],
+    ['VERDECKT', 'DASHED', 8],
+    ['MITTELLINIE', 'CENTER', 1],
+    ['SCHRAFFUR', 'CONTINUOUS', 8],
+    ['SCHNITTLINIE', 'CENTER', 1],
+    ['BEMASSUNG', 'CONTINUOUS', 3],
+    ['RAHMEN', 'CONTINUOUS', 7],
+  ];
+  function dxfEscText(s) {
+    return String(s ?? '')
+      .replace(/\r?\n/g, ' ')
+      .replace(/Ø/g, '%%c')
+      .replace(/±/g, '%%p')
+      .replace(/°/g, '%%d')
+      .replace(/[–—−]/g, '-')
+      .replace(/…/g, '...')
+      .replace(/[„“”]/g, '"')
+      .replace(/[‚‘’]/g, "'");
+  }
+  function buildSheetDXF(cur) {
+    const W = cur.layout.W, H = cur.layout.H;
     const out = [];
     const P = (...a) => out.push(...a.map(String));
-    P(0, 'SECTION', 2, 'HEADER', 9, '$INSUNITS', 70, 4, 9, '$EXTMIN', 10, 0, 20, 0, 9, '$EXTMAX', 10, W, 20, H, 0, 'ENDSEC');
+    P(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 4, 9, '$MEASUREMENT', 70, 1, 9, '$EXTMIN', 10, 0, 20, 0, 30, 0, 9, '$EXTMAX', 10, W, 20, H, 30, 0, 0, 'ENDSEC');
     P(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LTYPE', 70, 3);
     P(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0.0);
     P(0, 'LTYPE', 2, 'DASHED', 70, 0, 3, '__ __ __', 72, 65, 73, 2, 40, 3.6, 49, 2.4, 49, -1.2);
     P(0, 'LTYPE', 2, 'CENTER', 70, 0, 3, '____ _ ____', 72, 65, 73, 4, 40, 8, 49, 5, 49, -1.2, 49, 0.6, 49, -1.2);
-    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 8);
-    for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['TANGENTIAL', 'CONTINUOUS', 9], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['SCHRAFFUR', 'CONTINUOUS', 8], ['SCHNITTLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
+    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, DXF_LAYERS.length);
+    for (const [n, lt, col] of DXF_LAYERS) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
-    const layer = { vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE', hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG', leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG', 'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN' };
+    const layer = {
+      vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE',
+      hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE',
+      dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
+      leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
+      'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN',
+    };
+    const stats = { lines: 0, circles: 0, arcs: 0, polylines: 0, solids: 0, texts: 0, byLayer: {} };
+    const bumpLayer = (ly) => { stats.byLayer[ly] = (stats.byLayer[ly] || 0) + 1; };
     const Y = (y) => H - y;
-    const line = (a, b, ly) => P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
-    for (const l of lastLines) {
+    const line = (a, b, ly) => {
+      P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
+      stats.lines++; bumpLayer(ly);
+    };
+    for (const l of cur.lines || []) {
       const ly = layer[l.cls]; if (!ly) continue;
-      if (l.rect) { const [x, y, w, hh] = l.rect; const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]]; for (let i = 0; i < 4; i++) line(c[i], c[(i + 1) % 4], ly); }
-      else if (l.circle) P(0, 'CIRCLE', 8, ly, 10, l.circle[0].toFixed(4), 20, Y(l.circle[1]).toFixed(4), 30, 0, 40, l.circle[2].toFixed(4));
-      else if (l.poly) { const q = l.poly; for (let i = 0; i < q.length; i++) line(q[i], q[(i + 1) % q.length], ly); }
-      else if (l.arc) {
+      if (l.rect) {
+        const [x, y, w, hh] = l.rect;
+        const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]];
+        for (let i = 0; i < 4; i++) line(c[i], c[(i + 1) % 4], ly);
+      } else if (l.circle) {
+        P(0, 'CIRCLE', 8, ly);
+        if (l.cls === 'detail-border') P(6, 'DASHED');
+        P(10, l.circle[0].toFixed(4), 20, Y(l.circle[1]).toFixed(4), 30, 0, 40, l.circle[2].toFixed(4));
+        stats.circles++; bumpLayer(ly);
+      } else if (l.poly) {
+        const q = l.poly;
+        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow')) {
+          P(0, 'SOLID', 8, ly,
+            10, q[0][0].toFixed(4), 20, Y(q[0][1]).toFixed(4), 30, 0,
+            11, q[1][0].toFixed(4), 21, Y(q[1][1]).toFixed(4), 31, 0,
+            12, q[2][0].toFixed(4), 22, Y(q[2][1]).toFixed(4), 32, 0,
+            13, q[2][0].toFixed(4), 23, Y(q[2][1]).toFixed(4), 33, 0);
+          stats.solids++; bumpLayer(ly);
+        } else {
+          for (let i = 0; i < q.length; i++) line(q[i], q[(i + 1) % q.length], ly);
+        }
+      } else if (l.arc) {
         // echter Bogen (gegen den Uhrzeigersinn); die Winkel der Ansicht gelten unverändert, weil DXF wie die Ansicht nach oben zählt
         const deg = (x) => ((((x * 180) / Math.PI) % 360) + 360) % 360;
         P(0, 'ARC', 8, ly, 10, l.arc.c[0].toFixed(4), 20, Y(l.arc.c[1]).toFixed(4), 30, 0, 40, l.arc.r.toFixed(4), 50, deg(l.arc.a[0]).toFixed(4), 51, deg(l.arc.a[1]).toFixed(4));
-      }
-      else if (l.pts && l.pts.length === 2) line(l.pts[0], l.pts[1], ly);
-      else if (l.pts && l.pts.length > 2) {
+        stats.arcs++; bumpLayer(ly);
+      } else if (l.pts && l.pts.length === 2) {
+        line(l.pts[0], l.pts[1], ly);
+      } else if (l.pts && l.pts.length > 2) {
         P(0, 'POLYLINE', 8, ly, 66, 1, 10, 0, 20, 0, 30, 0, 70, 0);
         for (const q of l.pts) P(0, 'VERTEX', 8, ly, 10, q[0].toFixed(4), 20, Y(q[1]).toFixed(4), 30, 0);
         P(0, 'SEQEND', 8, ly);
+        stats.polylines++; bumpLayer(ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = (String(t.cls || '').startsWith('dimtext') || t.cls === 'leadertext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : []; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/°/g, '%%d').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...align); }
+    for (const t of cur.texts || []) {
+      if (t.cls === 'note') continue;
+      const cls = String(t.cls || '');
+      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl') ? 'BEMASSUNG'
+        : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
+      const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
+        : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
+      P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfEscText(t.t), 50, (-(t.rot || 0)).toFixed(3), ...align);
+      stats.texts++; bumpLayer(tLy);
+    }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
-    const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
-    const zip = await Zip.make([{ name: fileBase(true) + '.dxf', data: bytes }]);
-    await Print.save(fileBase(true) + ' DXF.zip', new Blob([zip]));
+    const bytes = new TextEncoder().encode(text);
+    return { text, bytes, layers: DXF_LAYERS.map((x) => x[0]), stats };
+  }
+  async function buildDXF(opts = {}) {
+    await ensureProjections();
+    const all = sheets();
+    const idx = opts.sheetIndex != null ? clamp(opts.sheetIndex, 0, all.length - 1) : activeIndex();
+    const sh = all[idx] || dwg();
+    const cur = buildSheetContent(sh, idx, all.length);
+    const res = buildSheetDXF(cur);
+    return { ...res, filename: fileBase(true, sh) + '.dxf', sheet: sh.name };
+  }
+  async function exportDXF(opts = {}) {
+    const tst = UI.toast('DXF wird erstellt …', { icon: 'file', ms: 15000 });
+    try {
+      const all = sheets();
+      if (opts.allSheets && all.length > 1) {
+        await ensureProjections();
+        const files = [];
+        const used = new Set();
+        for (let i = 0; i < all.length; i++) {
+          const sh = all[i];
+          const cur = buildSheetContent(sh, i, all.length);
+          const dxf = buildSheetDXF(cur);
+          let fname = fileBase(true, sh) + '.dxf';
+          if (used.has(fname)) fname = Print.safeName(`${fileBase(false, sh)} ${i + 1}`) + '.dxf';
+          used.add(fname);
+          files.push({ name: fname, data: dxf.bytes });
+        }
+        const zip = await Zip.make(files);
+        tst.remove();
+        const zipName = fileBase(false) + ' DXF.zip';
+        await Print.save(zipName, new Blob([zip]));
+        lastDXF = { filename: zipName, files: files.map((f) => f.name), zipBytes: zip.length };
+        return lastDXF;
+      }
+      const res = await buildDXF(opts);
+      tst.remove();
+      await Print.save(res.filename, new Blob([res.bytes], { type: 'application/dxf' }));
+      lastDXF = res;
+      return res;
+    } catch (e) {
+      tst.remove();
+      UI.toast('DXF hat nicht geklappt: ' + e.message, { kind: 'bad' });
+      return null;
+    }
+  }
+  // ---------- PNG-Export mit wählbarer Auflösung (ZE-13) ----------
+  const PNG_MIN_DIM = 200;
+  const PNG_MAX_DIM = 8192;
+  const PNG_PRESETS = [
+    { key: '1600', label: 'Bildschirm (1600 px breit)' },
+    { key: '2400', label: 'Präsentation (2400 px breit)' },
+    { key: '3840', label: 'Sehr scharf / 4K (3840 px breit)' },
+    { key: 'dpi150', label: 'Druck 150 DPI' },
+    { key: 'dpi300', label: 'Druck 300 DPI' },
+    { key: 'custom', label: 'Eigene Breite' },
+  ];
+  function pngDimensions(opts = {}, sh = dwg()) {
+    const [W, H] = sheetSize(sh);
+    let rawW = 2400;
+    if (typeof opts.width === 'number' && isFinite(opts.width) && opts.width > 0) {
+      rawW = Math.round(opts.width);
+    } else if (typeof opts.dpi === 'number' && isFinite(opts.dpi) && opts.dpi > 0) {
+      rawW = Math.round((W / 25.4) * opts.dpi);
+    } else if (opts.preset === 'dpi150') {
+      rawW = Math.round((W / 25.4) * 150);
+    } else if (opts.preset === 'dpi300') {
+      rawW = Math.round((W / 25.4) * 300);
+    } else if (opts.preset && isFinite(+opts.preset) && +opts.preset > 0) {
+      rawW = Math.round(+opts.preset);
+    }
+    let width = clamp(rawW, PNG_MIN_DIM, PNG_MAX_DIM);
+    let height = Math.max(1, Math.round((width * H) / W));
+    let clamped = width !== rawW;
+    if (height > PNG_MAX_DIM) {
+      height = PNG_MAX_DIM;
+      width = Math.max(PNG_MIN_DIM, Math.round((height * W) / H));
+      clamped = true;
+    }
+    return { width, height, clamped, sheetW: W, sheetH: H };
+  }
+  async function buildPNG(opts = {}) {
+    await ensureProjections();
+    const all = sheets();
+    const idx = opts.sheetIndex != null ? clamp(opts.sheetIndex, 0, all.length - 1) : activeIndex();
+    const sh = all[idx] || dwg();
+    const cur = buildSheetContent(sh, idx, all.length);
+    const transparent = !!opts.transparent;
+    const { width, height, clamped } = pngDimensions(opts, sh);
+    const svgEl = buildSheetSVGElement(cur, {
+      widthAttr: String(width),
+      heightAttr: String(height),
+      transparent,
+      interactive: false,
+    });
+    const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svgEl);
+    const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('Zeichnung konnte nicht als Bild gerendert werden.'));
+        im.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!transparent) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG konnte nicht erzeugt werden.'))), 'image/png');
+      });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { blob, bytes, width, height, clamped, transparent, filename: fileBase(true, sh) + '.png', sheet: sh.name };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  async function exportPNG(opts = {}) {
+    const tst = UI.toast('PNG wird erstellt …', { icon: 'image', ms: 15000 });
+    try {
+      const res = await buildPNG(opts);
+      tst.remove();
+      await Print.save(res.filename, res.blob);
+      lastPNG = res;
+      return res;
+    } catch (e) {
+      tst.remove();
+      UI.toast('PNG hat nicht geklappt: ' + e.message, { kind: 'bad' });
+      return null;
+    }
+  }
+  function pngDialog() {
+    const sh = dwg();
+    const st = { preset: '2400', width: pngDimensions({ preset: '2400' }, sh).width, transparent: false };
+    const body = h('div', { style: { display: 'grid', gap: '12px', minWidth: 'min(380px, 80vw)' } });
+    const presetOpts = PNG_PRESETS.map((p) => {
+      if (p.key === 'custom') return [p.key, p.label];
+      const d = pngDimensions({ preset: p.key }, sh);
+      return [p.key, `${p.label} (${d.width} × ${d.height})`];
+    });
+    const infoEl = h('div', { class: 'mini-row', id: 'dw-png-info', style: { color: 'var(--muted)', fontSize: '12.5px' } });
+    const widthInp = h('input', { id: 'dw-png-width', type: 'number', min: String(PNG_MIN_DIM), max: String(PNG_MAX_DIM), step: '10', value: String(st.width), autocomplete: 'off' });
+    const widthFld = h('div', { class: 'field' },
+      h('label', { for: 'dw-png-width' }, 'Breite in Pixeln'),
+      h('div', { class: 'inp' }, widthInp, h('span', { class: 'unit' }, 'px'))
+    );
+    const presetFld = UI.selectField({
+      id: 'dw-png-preset',
+      label: 'Auflösung',
+      value: st.preset,
+      options: presetOpts,
+      onChange: (v) => {
+        st.preset = v;
+        if (v !== 'custom') {
+          st.width = pngDimensions({ preset: v }, sh).width;
+          widthInp.value = String(st.width);
+        }
+        updateInfo();
+      },
+    });
+    const presetSel = presetFld.querySelector('select');
+    const updateInfo = () => {
+      const d = pngDimensions({ width: st.width }, sh);
+      const orientTxt = sh.orient === 'portrait' ? 'hoch' : 'quer';
+      infoEl.textContent = `Ergebnis: ${d.width} × ${d.height} Pixel · ${sh.sheet} ${orientTxt}${d.clamped ? ` (begrenzt auf max. ${PNG_MAX_DIM} px)` : ''}`;
+    };
+    const onWidthInput = () => {
+      const n = Math.round(Number(widthInp.value));
+      if (isFinite(n) && n > 0) st.width = n;
+      st.preset = 'custom';
+      if (presetSel) presetSel.value = 'custom';
+      updateInfo();
+    };
+    widthInp.addEventListener('input', onWidthInput);
+    widthInp.addEventListener('change', () => {
+      const d = pngDimensions({ width: Number(widthInp.value) || st.width }, sh);
+      st.width = d.width;
+      widthInp.value = String(d.width);
+      updateInfo();
+    });
+    widthInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const transChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-png-transparent' }), 'Durchsichtiger Hintergrund (ohne weißes Papier)');
+    transChk.querySelector('input').onchange = (e) => { st.transparent = e.target.checked; };
+    updateInfo();
+    body.append(
+      presetFld,
+      widthFld,
+      infoEl,
+      transChk,
+      h('div', { class: 'hint-box' }, 'Die Höhe passt sich automatisch dem Blattformat an. Empfohlen: 2400 px für Dokumente oder 300 DPI für den Ausdruck.')
+    );
+    UI.modal({
+      title: 'Zeichnung als PNG speichern',
+      body,
+      actions: [
+        { label: 'Abbrechen' },
+        { id: 'dw-png-save', label: 'Als PNG speichern', primary: true, run: () => { exportPNG({ width: st.width, transparent: st.transparent }); } },
+      ],
+    });
   }
   // ---------- Rechte Leiste ----------
   function tolNumField({ id, label, value, min = null, placeholder = '0', onCommit }) {
@@ -5130,7 +5421,9 @@ const Drawing = (() => {
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
     lostDims, removeDim, removeLostDims, startRebind, rebindDim, addDim,
     getDimTol, setDimTol,
-    exportPDF, buildPDFBytes,
+    exportPDF, buildPDFBytes, exportSVG, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
+    get lastDXF() { return lastDXF; },
+    get lastPNG() { return lastPNG; },
     get layout() { return layout; },
     get activeTool() { return tool; },
     get dimMode() { return dimMode; },

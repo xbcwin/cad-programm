@@ -15068,6 +15068,200 @@ def t_a072_zeichnung_modellaenderung(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a071_zeichnung_dxf_png(p):
+    import struct
+
+    # 1. Platte 60×40×12 mit Rundung r=5 (echter ARC) und Durchgangsbohrung Ø12 (CIRCLE + Mittellinie)
+    p.empty()
+    p.ev("""
+      App.change('Platte anlegen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 12 }, { name: 'Halterung' }));
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("""
+      const it = App.doc.items[0];
+      const edges = App.results.get(it.id).data.edges;
+      const eFil = edges.findIndex(e => e && e.m && Math.hypot(e.m[0] + 30, e.m[1] - 20, e.m[2] - 6) < 0.25);
+      if (eFil >= 0) Actions.addFinish('fillet', 5, [{ id: it.id, edgeIdx: eFil }]);
+      App.change('Bohrung hinzufügen', d => {
+        const h = Model.newItem('cylinder', { d: 12, h: 20 }, { name: 'Bohrung', role: 'hole' });
+        h.t.x = 5; h.t.y = 0; h.t.z = -4;
+        d.items.push(h);
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    # In Zeichnung wechseln, verdeckte Kanten an, Schriftfeld ausfüllen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.pg.click('#t-sheet'); p.wait(150)
+    if not p.pg.is_checked('#dw-hidden'):
+        p.pg.check('#dw-hidden')
+    p.pg.click('#sheet-tabs'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.fill('#tb-titel', 'Halterung Alpha-71'); p.pg.locator('#tb-titel').press('Enter')
+    p.pg.fill('#tb-nummer', 'TR-071'); p.pg.locator('#tb-nummer').press('Enter')
+    p.pg.fill('#tb-name', 'Nils'); p.pg.locator('#tb-name').press('Enter')
+    p.pg.fill('#tb-werkstoff', 'Alu 7075'); p.pg.locator('#tb-werkstoff').press('Enter')
+    p.wait(250)
+
+    # 2. DXF-Export über Menü (#t-dexport -> #dw-exp-dxf) prüfen: LINE, CIRCLE, ARC, TEXT, Layer & Schriftfeld
+    p.pg.click('#t-dexport'); p.wait(150)
+    with p.pg.expect_download(timeout=30000) as dl_dxf:
+        p.pg.click('#dw-exp-dxf')
+    dxf_name = dl_dxf.value.suggested_filename
+    dxf_bytes = open(dl_dxf.value.path(), 'rb').read()
+    dxf_txt = dxf_bytes.decode('utf-8', errors='replace')
+    dxf_lines = [l.strip() for l in dxf_txt.splitlines()]
+
+    def entity_layers(kind):
+        out = []
+        for i in range(0, len(dxf_lines) - 1, 2):
+            if dxf_lines[i] == '0' and dxf_lines[i + 1] == kind:
+                j = i + 2
+                while j < len(dxf_lines) - 1 and dxf_lines[j] != '0':
+                    if dxf_lines[j] == '8':
+                        out.append(dxf_lines[j + 1])
+                        break
+                    j += 2
+        return out
+
+    line_layers = set(entity_layers('LINE'))
+    circle_layers = set(entity_layers('CIRCLE'))
+    arc_layers = set(entity_layers('ARC'))
+    text_layers = set(entity_layers('TEXT'))
+
+    ok1 = bool(
+        dxf_name.endswith('.dxf')
+        and 'SECTION' in dxf_lines and 'ENTITIES' in dxf_lines and 'EOF' in dxf_lines
+        and '$INSUNITS' in dxf_lines
+        and all(ly in dxf_lines for ly in ('SICHTBAR', 'VERDECKT', 'MITTELLINIE', 'BEMASSUNG', 'RAHMEN'))
+        and 'LINE' in dxf_lines and 'CIRCLE' in dxf_lines and 'ARC' in dxf_lines and 'TEXT' in dxf_lines
+        and {'SICHTBAR', 'VERDECKT', 'MITTELLINIE', 'RAHMEN'}.issubset(line_layers)
+        and 'SICHTBAR' in circle_layers and 'RAHMEN' in circle_layers
+        and 'SICHTBAR' in arc_layers
+        and 'RAHMEN' in text_layers
+        and 'Halterung Alpha-71' in dxf_txt
+        and 'TR-071' in dxf_txt
+        and 'Nils' in dxf_txt
+        and 'Alu 7075' in dxf_txt
+        and 'ISO 2768-m' in dxf_txt
+    )
+
+    # 3. PNG-Export mit gewählter Breite (1800 px) über Dialog (#t-dexport -> #dw-exp-png)
+    p.pg.click('#t-dexport'); p.wait(150)
+    p.pg.click('#dw-exp-png')
+    p.pg.wait_for_selector('#dw-png-width', timeout=5000)
+    p.pg.fill('#dw-png-width', '1800')
+    p.wait(150)
+    info_txt = p.ev("return document.querySelector('#dw-png-info')?.textContent || ''")
+    with p.pg.expect_download(timeout=30000) as dl_png:
+        p.pg.click('#dw-png-save')
+    png_name = dl_png.value.suggested_filename
+    png_bytes = open(dl_png.value.path(), 'rb').read()
+    png_sig_ok = png_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+    pw, ph = struct.unpack('>II', png_bytes[16:24]) if len(png_bytes) >= 24 else (0, 0)
+
+    # Prüfen, dass das gerenderte PNG nicht nur weiß ist (enthält gezeichnete dunkle Pixel)
+    dark_px = p.ev("""
+      return new Promise((res) => {
+        const b = new Blob([new Uint8Array(arg)], { type: 'image/png' });
+        const u = URL.createObjectURL(b);
+        const im = new Image();
+        im.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = im.width; c.height = im.height;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(im, 0, 0);
+          const d = ctx.getImageData(0, 0, c.width, c.height).data;
+          let dark = 0;
+          for (let i = 0; i < d.length; i += 4) if (d[i] < 120 && d[i + 3] > 200) dark++;
+          URL.revokeObjectURL(u);
+          res({ w: im.width, h: im.height, dark });
+        };
+        im.src = u;
+      });
+    """, list(png_bytes))
+
+    ok2 = bool(
+        '1800 × 1273' in info_txt
+        and png_name.endswith('.png')
+        and png_sig_ok
+        and (pw, ph) == (1800, 1273)
+        and len(png_bytes) > 10000
+        and dark_px['w'] == 1800 and dark_px['h'] == 1273 and dark_px['dark'] > 500
+    )
+
+    # 4. Zweite PNG-Auflösung (3200 px, transparenter Hintergrund) + 300-DPI-Berechnung + Mehrblatt-DXF-ZIP
+    png2 = p.ev("""
+      return Drawing.buildPNG({ width: 3200, transparent: true }).then(async r => {
+        const b = r.blob;
+        const u = URL.createObjectURL(b);
+        const cornerA = await new Promise((res) => {
+          const im = new Image();
+          im.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = im.width; c.height = im.height;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(im, 0, 0);
+            const px = ctx.getImageData(2, 2, 1, 1).data;
+            URL.revokeObjectURL(u);
+            res(px[3]);
+          };
+          im.src = u;
+        });
+        return {
+          w: r.width, h: r.height, hdr: r.bytes.slice(0, 8),
+          ihdrW: (r.bytes[16] << 24) | (r.bytes[17] << 16) | (r.bytes[18] << 8) | r.bytes[19],
+          ctype: r.bytes[25],
+          cornerA,
+          dpi300: Drawing.pngDimensions({ preset: 'dpi300' }),
+        };
+      });
+    """)
+
+    # Zweites Blatt anlegen → Menü zeigt Mehrblatt-DXF-ZIP (#dw-exp-dxf-all)
+    p.ev("Drawing.addSheet()"); p.wait(200)
+    p.pg.click('#t-dexport'); p.wait(150)
+    has_dxf_all = p.pg.locator('#dw-exp-dxf-all').count() == 1
+    with p.pg.expect_download(timeout=30000) as dl_zip:
+        p.pg.click('#dw-exp-dxf-all')
+    zip_name = dl_zip.value.suggested_filename
+    zip_bytes = open(dl_zip.value.path(), 'rb').read()
+
+    ok3 = bool(
+        png2['w'] == 3200 and png2['h'] == 2263 and png2['ihdrW'] == 3200
+        and png2['ctype'] == 6 and png2['cornerA'] == 0
+        and png2['dpi300']['width'] == 3508 and png2['dpi300']['height'] == 2480
+        and has_dxf_all and zip_name.endswith('DXF.zip') and zip_bytes[:2] == b'PK'
+    )
+
+    # 5. Befehlssuche & Hilfetexte (drawingExportDxf, drawingExportPng über eingebettetes HELP + JSON)
+    p.pg.click('#t-dexport'); p.wait(150)
+    p.pg.hover('#dw-exp-dxf'); p.wait(1700)
+    tip_dxf = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    p.pg.hover('#dw-exp-png'); p.wait(1700)
+    tip_png = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    p.pg.click('#sheet-tabs'); p.wait(100)
+    meta = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        jsonDxf: !!(d.drawingExportDxf && d.drawingExportDxf.tip && d.drawingExportDxf.hilfe && d.drawingExportDxf.tipp),
+        jsonPng: !!(d.drawingExportPng && d.drawingExportPng.tip && d.drawingExportPng.hilfe && d.drawingExportPng.tipp),
+        domDxf: document.querySelectorAll('[data-help="drawingExportDxf"]').length >= 1,
+        cmdDxf: Commands.search('zeichnung dxf').some(c => c.id === 'drawingExportDxf'),
+        cmdPng: Commands.search('zeichnung png').some(c => c.id === 'drawingExportPng'),
+      }));
+    """)
+    ok4 = bool(
+        all(meta.values())
+        and 'DXF-Datei' in tip_dxf and 'AC1009/R12' in tip_dxf
+        and 'PNG-Bild' in tip_png and '300 DPI' in tip_png
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15244,6 +15438,7 @@ TESTS = [
     ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
     ('[A-072] Zeichnung merkt Modelländerungen: verlorene Maße rot & in Liste, Längenmaß aktualisiert, neu zuordnen', t_a072_zeichnung_modellaenderung),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
+    ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
