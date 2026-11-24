@@ -104,7 +104,7 @@ Leitlinien:
 | `46-reffix.js` | Kaputte Bezüge (`RefFix`): gelbe Warnung bei verlorener Kante/Fläche an Rundung, Fase, Wandstärke oder Skizze, gestrichelte Alt-Lage (`Viewer.setRefGhost`) und Assistent „Neu wählen“ |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
-| `49-*` | Bauteile im Kontext, Zeitleiste (`Timeline.refreshLabels`, mit Speicher-Status je Schritt), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
+| `49-*` | Bauteile im Kontext, Baugruppen-Tabs (`49-assembly.js`, `Assembly`), Zeitleiste (`Timeline.refreshLabels`, mit Speicher-Status je Schritt), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
 | `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, Tablet-Erkennung (`UI.hasTouch`/`UI.isTablet`/`UI.syncTablet`/`UI.initTablet`, Klasse `body.tablet` unter 1100 px mit Touch, mindestens 44 px große Knöpfe, einklappbare Seitenleisten mit `#btn-left-close`/`#btn-right-close`), ViewCube (`Panels.refreshViewCube`), rechtes Panel „Eigenschaften“ (sofort bei Auswahl, `renderRight({ preserveFocus })` schützt fokussierte Eingabefelder bei asynchronen `results`-Updates), Null-Prüfung für `mergedInto` in `renderLeft`/`opSection`, Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
 | `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |

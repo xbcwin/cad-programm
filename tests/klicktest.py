@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -16789,6 +16789,197 @@ def t_a080_tablet(p):
         ctx.close()
 
 
+def t_a083_bauteil_im_tab(p):
+    p.empty()
+
+    # 1. Bauteil "Leiste" (Quader 40 x 20 x 10 mm) anlegen, sichern und Baugruppe mit 2 Instanzen anlegen
+    part_id = p.ev("""
+      App.change('Leiste 40mm', (doc) => {
+        doc.name = 'Leiste';
+        const b = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Grundkörper' });
+        doc.items.push(b);
+      });
+      return App.doc.id;
+    """)
+    warte_rechnen(p, 20)
+    p.ev("return App.saveNow().then(() => Store.whenIdle());")
+
+    # Baugruppe in neuem Tab über "+ -> Neue Baugruppe" öffnen
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-assembly'); p.wait(400)
+    p.ev("App.change('Baugruppe benennen', d => { d.name = 'Test-Baugruppe'; });")
+
+    insts = p.ev("""return (async (pid) => {
+      const i1 = await Assembly.insertPart(pid, { pos: [0, 0, 0] });
+      const i2 = await Assembly.insertPart(pid, { pos: [0, 40, 0] });
+      return [i1 && i1.id, i2 && i2.id];
+    })(arg);""", part_id)
+    warte_rechnen(p, 30)
+    p.ev("App.select([arg]); Viewer.fit(null, false);", insts[0])
+    p.wait(500)
+
+    init_state = p.ev("""return Mass.measure().then(r => {
+      const [id1, id2] = arg;
+      const b1 = App.results.get(id1)?.data?.bbox;
+      const b2 = App.results.get(id2)?.data?.bbox;
+      const wb1 = Actions.worldBox(id1);
+      const m1 = Mass.partOf(r, id1);
+      return {
+        isAsm: Assembly.isAssembly(App.doc),
+        tabs: App.tabs.length,
+        dx1: b1 ? b1[3] - b1[0] : 0,
+        dx2: b2 ? b2[3] - b2[0] : 0,
+        wbx1: wb1 ? wb1.max.x - wb1.min.x : 0,
+        mdx1: m1 && m1.bbox ? m1.bbox[3] - m1.bbox[0] : 0,
+        bboxText: document.querySelector('#p-bbox')?.textContent || '',
+      };
+    });""", insts)
+    ok1 = (
+        init_state['isAsm'] is True
+        and init_state['tabs'] == 2
+        and abs(init_state['dx1'] - 40.0) < 0.05
+        and abs(init_state['dx2'] - 40.0) < 0.05
+        and abs(init_state['wbx1'] - 40.0) < 0.05
+        and abs(init_state['mdx1'] - 40.0) < 0.05
+        and '40' in init_state['bboxText']
+    )
+
+    # Ersten Leiste-Tab schließen, damit Doppelklick in der Baugruppe den Tab frisch aus dem Speicher öffnet
+    p.ev("""return (async (pid) => {
+      const t = App.tabs.find(x => x.docId === pid);
+      if (t) await App.closeTab(t.tabId, { force: true });
+      return App.tabs.length;
+    })(arg);""", part_id)
+    p.wait(300)
+    warte_rechnen(p, 20)
+    p.ev("Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(300)
+
+    # 2. Doppelklick auf inst1 im 3D-Bild -> öffnet Bauteil "Leiste" im eigenen Tab
+    pt = p.ev("""const wb = Actions.worldBox(arg);
+      const c = wb.getCenter(Viewer.camera.position.clone());
+      const s = Viewer.toScreen(c);
+      const r = Viewer.canvas.getBoundingClientRect();
+      return [s.x + r.left, s.y + r.top];""", insts[0])
+    p.pg.mouse.dblclick(pt[0], pt[1])
+    p.wait(500)
+    warte_rechnen(p, 20)
+
+    part_tab_info = p.ev("""return {
+      tabs: App.tabs.length,
+      docId: App.doc.id,
+      docName: App.doc.name,
+      hasBanner: !!document.querySelector('#asm-part-banner'),
+      hasSave: !!document.querySelector('#asm-save-btn'),
+      hasBack: !!document.querySelector('#asm-back-btn'),
+    };""")
+    ok2 = (
+        part_tab_info['tabs'] == 2
+        and part_tab_info['docId'] == part_id
+        and part_tab_info['docName'] == 'Leiste'
+        and part_tab_info['hasBanner'] is True
+        and part_tab_info['hasSave'] is True
+        and part_tab_info['hasBack'] is True
+    )
+
+    # 3. Länge 40 -> 60 ändern, über Banner speichern & zurück zur Baugruppe -> Hüllmaß beider Teile 60
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.wait(200)
+    p.pg.locator('#p-w').fill('60')
+    p.pg.locator('#p-w').press('Enter')
+    warte_rechnen(p, 20)
+    p.pg.locator('#asm-save-btn').click()
+    p.wait(300)
+    p.pg.locator('#asm-back-btn').click()
+    p.wait(500)
+    warte_rechnen(p, 30)
+
+    p.ev("App.select([arg]);", insts[0])
+    p.wait(400)
+    after_60 = p.ev("""return Mass.measure().then(r => {
+      const [id1, id2] = arg;
+      const b1 = App.results.get(id1)?.data?.bbox;
+      const b2 = App.results.get(id2)?.data?.bbox;
+      const wb1 = Actions.worldBox(id1);
+      const m1 = Mass.partOf(r, id1);
+      const m2 = Mass.partOf(r, id2);
+      const it2 = Model.find(App.doc, id2)?.item;
+      return {
+        docName: App.doc.name,
+        dx1: b1 ? b1[3] - b1[0] : 0,
+        dx2: b2 ? b2[3] - b2[0] : 0,
+        wbx1: wb1 ? wb1.max.x - wb1.min.x : 0,
+        mdx1: m1 && m1.bbox ? m1.bbox[3] - m1.bbox[0] : 0,
+        mdx2: m2 && m2.bbox ? m2.bbox[3] - m2.bbox[0] : 0,
+        y2: it2 && it2.t ? it2.t.y : 0,
+        bboxText: document.querySelector('#p-bbox')?.textContent || '',
+      };
+    });""", insts)
+    ok3 = (
+        after_60['docName'] == 'Test-Baugruppe'
+        and abs(after_60['dx1'] - 60.0) < 0.05
+        and abs(after_60['dx2'] - 60.0) < 0.05
+        and abs(after_60['wbx1'] - 60.0) < 0.05
+        and abs(after_60['mdx1'] - 60.0) < 0.05
+        and abs(after_60['mdx2'] - 60.0) < 0.05
+        and abs(after_60['y2'] - 40.0) < 0.05
+        and '60' in after_60['bboxText']
+    )
+
+    # 4. Doppelklick im Verlauf öffnet vorhandenen Tab (kein Duplikat), Länge 60 -> 75, direkter Tab-Klick aktualisiert ebenfalls
+    p.pg.locator(f'#left-body .node[data-id="{insts[0]}"]').dblclick()
+    p.wait(400)
+    warte_rechnen(p, 20)
+    in_tab_again = p.ev("return { tabs: App.tabs.length, docId: App.doc.id };")
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.wait(200)
+    p.pg.locator('#p-w').fill('75')
+    p.pg.locator('#p-w').press('Enter')
+    warte_rechnen(p, 20)
+    p.pg.locator('.proj-tab', has_text='Test-Baugruppe').click()
+    p.wait(500)
+    warte_rechnen(p, 30)
+    after_75 = p.ev("""return Mass.measure().then(r => {
+      const m1 = Mass.partOf(r, arg);
+      const b1 = App.results.get(arg)?.data?.bbox;
+      return {
+        docName: App.doc.name,
+        dx1: b1 ? b1[3] - b1[0] : 0,
+        mdx1: m1 && m1.bbox ? m1.bbox[3] - m1.bbox[0] : 0,
+      };
+    });""", insts[0])
+    ok4 = (
+        in_tab_again['tabs'] == 2
+        and in_tab_again['docId'] == part_id
+        and after_75['docName'] == 'Test-Baugruppe'
+        and abs(after_75['dx1'] - 75.0) < 0.05
+        and abs(after_75['mdx1'] - 75.0) < 0.05
+    )
+
+    # 5. UI-Einstiegspunkte, Befehlssuche & Hilfetext
+    p.ev("App.select([arg]);", insts[0])
+    p.wait(250)
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => {
+      const wb = Actions.worldBox(arg);
+      const ctr = wb.min.clone().add(wb.max).multiplyScalar(0.5);
+      const sc = Viewer.toScreen(ctr);
+      const rc = Viewer.canvas.getBoundingClientRect();
+      const cmIds = Interact.contextMenu(sc.x + rc.left, sc.y + rc.top).map(x => x && x.id).filter(Boolean);
+      document.querySelector('.menu')?.remove();
+      const h = d.assemblyPartTab || {};
+      return {
+        hasPanelSec: !!document.querySelector('#partref-sec'),
+        hasPanelBtn: !!document.querySelector('#btn-open-part-tab'),
+        hasCm: cmIds.includes('cm-open-part-tab'),
+        hasCmdOpen: Commands.search('bauteil im tab').some(c => c.id === 'open-part-tab'),
+        hasCmdNewAsm: Commands.search('neue baugruppe').some(c => c.id === 'new-assembly'),
+        helpOk: !!(h.tip && h.hilfe && h.tipp),
+      };
+    });""", insts[0])
+    ok5 = bool(all(meta.values()))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16975,6 +17166,7 @@ TESTS = [
     ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
     ('[A-081] Englische Oberfläche: texte-en.json Schlüsselgleichheit / Einstellungen / Sketch / Fallback / Browser-Sprache', t_a081_englische_oberflaeche),
     ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
+    ('[A-083] Baugruppe: Bauteil im Tab öffnen, Länge 40 → 60 & aktualisieren', t_a083_bauteil_im_tab),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

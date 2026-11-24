@@ -1122,6 +1122,13 @@ body.presenting .pat-dot{display:none!important}
 .proj-tab.active{background:var(--surface);color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 2px 0 var(--accent);margin-bottom:-1px;height:30px}
 .proj-tab .ptab-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;display:none}
 .proj-tab.dirty .ptab-dot{display:block;background:var(--warn)}
+.proj-tab .ptab-kind{width:13px;height:13px;display:inline-flex;align-items:center;justify-content:center;flex:none;opacity:.8;color:var(--accent)}
+.proj-tab .ptab-kind svg{width:13px;height:13px}
+.ctx-banner.asm-banner{gap:8px;padding:6px 8px 6px 12px}
+.ctx-banner.asm-banner .btn-save-hl{background:#fff;color:var(--accent)}
+.ctx-banner.asm-banner .btn-save-hl:hover{background:#f3f6fb}
+.swatch.partref{display:grid;place-items:center;color:#fff}
+.swatch.partref svg{width:11px;height:11px}
 .proj-tab .ptab-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .proj-tab .ptab-close{width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0;flex:none;opacity:.65;cursor:pointer}
 .proj-tab:hover .ptab-close,.proj-tab.active .ptab-close,.proj-tab:focus-within .ptab-close{opacity:1}

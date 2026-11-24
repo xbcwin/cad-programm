@@ -2286,14 +2286,16 @@ const Start = (() => {
     list.innerHTML = '';
     const allTabs = App.tabs || [];
     for (const t of allTabs) {
+      const isAsm = t.docType === 'assembly';
       const tab = h('div', {
-        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : ''),
+        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : '') + (isAsm ? ' is-assembly' : ''),
         role: 'tab',
         tabindex: '0',
         'aria-selected': String(!!t.active),
-        dataset: { tabId: t.tabId, docId: t.docId || '' },
+        dataset: { tabId: t.tabId, docId: t.docId || '', docType: t.docType || 'part' },
       });
       const dot = h('span', { class: 'ptab-dot', 'aria-hidden': 'true' });
+      const kindEl = isAsm ? h('span', { class: 'ptab-kind', 'data-tip': T('asm.tabKindTip'), html: icon('layers') }) : null;
       const tip = t.name + (t.dirty ? ' (ungespeicherte Änderungen)' : '');
       const nameEl = h('span', { class: 'ptab-name', 'data-tip': tip }, t.name);
       const closeBtn = h('button', {
@@ -2340,7 +2342,8 @@ const Start = (() => {
         }
         UI.menu(tab, menuItems);
       };
-      tab.append(dot, nameEl, closeBtn);
+      if (kindEl) tab.append(dot, kindEl, nameEl, closeBtn);
+      else tab.append(dot, nameEl, closeBtn);
       list.append(tab);
     }
     const act = list.querySelector('.proj-tab.active');
@@ -2351,6 +2354,7 @@ const Start = (() => {
     const openIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
     const items = [
       { id: 'tab-add-empty', label: T('tabs.newEmpty'), icon: 'newfile', run: () => openNewTab() },
+      { id: 'tab-add-assembly', label: T('tabs.newAssembly'), icon: 'parts', help: 'assemblyPartTab', run: () => openNewTab(Assembly.newAssembly()) },
       { id: 'tab-add-tpl', label: T('tabs.newTemplate'), icon: 'cube', run: () => newProjectDialog({ newTab: true }) },
       { id: 'tab-add-file', label: T('tabs.openFile'), icon: 'folder', run: () => openFile({ newTab: true }) },
     ];
