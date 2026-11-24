@@ -1647,6 +1647,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Eigenschaften-Panel sofort bei Auswahl**: Nach `App.select(...)` auf ein 3D-Rohr sind `#p3-ax-0`/`#p3-ax-1` sofort ohne Wartezeit im DOM und schalten zuverlässig auf `perp` um.
 - [ ] **Von Hand**: In einer Skizze mit mehreren Maßen am selben Punkt zügig drehen/zoomen und prüfen, dass sich keine Maß-Schildchen doppeln oder überdecken.
 
+## Drehen mit Winkel und bis Fläche (Auto [A-030])
+
+- [x] **90°-Drehung**: Rechteck neben der Y-Achse um 90° gedreht ergibt exakt ein Viertel des vollen 360°-Volumens (±1 %).
+- [x] **Symmetrisch 2×45°**: Modus `both` mit 90° Gesamtwinkel ergibt dasselbe Viertel-Volumen (±1 %) symmetrisch zu beiden Seiten der Skizze.
+- [x] **Beidseitig verschieden & Umgekehrt**: Modus `two` (`45°/45°` und `60°/30°`) sowie `reverse` (`90°`) erzeugen das erwartete Volumen und die erwartete Lage.
+- [x] **Bis zu gewählter Fläche & Nachführen**: Drehen bis zu einer ebenen Körperfläche (radial und versetzt) sowie bis zu einer 60°-Bezugsebene trifft exakt; Richtungsumkehr und automatisches Nachführen beim Verschieben des Zielkörpers funktionieren.
+- [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
+
 ## Fehler melden
 
 ```
