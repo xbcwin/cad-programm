@@ -591,7 +591,7 @@ const Interact = (() => {
     const hnd = Handles.hitHandle(e.clientX, e.clientY);
     if (hnd) {
       Viewer.controls.enabled = false;
-      if (Handles.start(hnd, e)) { down = { handle: true }; Viewer.canvas.setPointerCapture(e.pointerId); }
+      if (Handles.start(hnd, e)) { down = { handle: true }; try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {} }
       return;
     }
     // gewähltes Unterobjekt (z. B. ein Loch in einer Gruppe) direkt ziehen
@@ -616,7 +616,7 @@ const Interact = (() => {
     if (!hit && (e.shiftKey || !Viewer.leftOrbits)) {
       Viewer.controls.enabled = false;
       band = { x: e.clientX, y: e.clientY, el: h('div', { class: 'sel-band' }) }; document.body.append(band.el);
-      down = { band: true, x: e.clientX, y: e.clientY }; Viewer.canvas.setPointerCapture(e.pointerId);
+      down = { band: true, x: e.clientX, y: e.clientY }; try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };

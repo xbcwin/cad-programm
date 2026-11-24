@@ -2069,6 +2069,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Dialoge**: Die Dialoge Einstellungen (`ViewPrefs.dialog()`), Export (`Print.exportDialog()`) und Tastenkürzel (`Commands.showKeys()`) kommen vollständig über `T()` mit höchstens 5 Ausnahmen im DOM.
 - [ ] **Von Hand**: Test-Modus (`I18n.setTestMode(true)`) im Browser über alle Arbeitsschritte (Skizzen-Assistent, Bohrungs-Assistent, Werkzeugleiste anpassen, Stückliste, Versionen) durchklicken und prüfen, ob alle Hinweise und Tooltips sauber markiert sind.
 
+## Läuft in Firefox und Safari (Auto [A-079], PL-09)
+
+- [x] **Schalter `--browser firefox|webkit` & Grundtests**: `tests/klicktest.py` startet je nach Schalter Chromium (Standard), Firefox oder WebKit; Grundtests, Vorführ-Modus (`Esc` über `fullscreenchange`/`webkitfullscreenchange`) und Zeichnungs-DXF/-PNG (`[A-071]`) laufen in Firefox und WebKit fehlerfrei.
+- [x] **Quader mit Bohrung in WebKit & Firefox**: Startseite, leeres Projekt, Quader `40 × 30 × 20 mm` mit Durchgangsbohrung `Ø 10 mm` bauen in beiden Engines ohne Seitenfehler und ohne `App.errors` mit passendem Volumen (`≈ 22429,2 mm³`).
+- [x] **Tastenkürzel, fehlende API & Datei-Dialoge**: `O` (Orthografisch), `Strg+Z`/`Strg+Y`, `Start.folderSupported() === false`, Speichern (`.tracery.json`) und Datei-Dialog (`Start.openFile()`) funktionieren in Firefox und WebKit ohne Fehler.
+- [ ] **Von Hand**: In echtem Safari auf macOS, Firefox und auf einem iPad ein Modell bauen, Datei öffnen/speichern, Bild/PDF/DXF exportieren und Vorführ-Modus per `Esc` beenden.
+
 ## Fehler melden
 
 ```

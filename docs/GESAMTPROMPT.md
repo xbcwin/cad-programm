@@ -316,7 +316,7 @@ Leitlinien:
 
 ## 6. Tests – Pflicht vor jedem Commit
 
-- `tests/klicktest.py` (Playwright, echter Browser, echte Klicks), ca. **190 Durchläufe**:
+- `tests/klicktest.py` (Playwright, echter Browser, echte Klicks), ca. **190 Durchläufe** (mit `--browser chromium|firefox|webkit`, Standard `chromium`):
   ```
   cd app && python3 -m http.server 8765 &
   TRACERY_URL=http://localhost:8765/ python3 tests/klicktest.py [Stichwort …]

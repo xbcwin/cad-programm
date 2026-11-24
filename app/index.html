@@ -1024,7 +1024,7 @@ body.presenting .pat-dot{display:none!important}
 .ptbl-hint{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 
 /* Dateien ins Fenster ziehen (IO-09) */
-.drop-overlay{position:fixed;inset:0;z-index:98;pointer-events:none;display:grid;place-items:center;padding:18px;background:color-mix(in srgb,var(--accent) 10%,rgba(14,19,24,.34));backdrop-filter:blur(2px);animation:fadeIn .12s ease-out}
+.drop-overlay{position:fixed;inset:0;z-index:98;pointer-events:none;display:grid;place-items:center;padding:18px;background:color-mix(in srgb,var(--accent) 10%,rgba(14,19,24,.34));-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:fadeIn .12s ease-out}
 .drop-overlay[hidden]{display:none!important}
 .drop-frame{width:100%;height:100%;border:3px dashed var(--accent);border-radius:16px;display:grid;place-items:center;background:color-mix(in srgb,var(--surface) 16%,transparent)}
 .drop-card{display:grid;justify-items:center;gap:8px;text-align:center;max-width:460px;padding:24px 28px;border-radius:14px;background:var(--surface);border:1px solid var(--accent-line);box-shadow:var(--shadow-2);color:var(--ink)}
@@ -11623,7 +11623,7 @@ const Interact = (() => {
     const hnd = Handles.hitHandle(e.clientX, e.clientY);
     if (hnd) {
       Viewer.controls.enabled = false;
-      if (Handles.start(hnd, e)) { down = { handle: true }; Viewer.canvas.setPointerCapture(e.pointerId); }
+      if (Handles.start(hnd, e)) { down = { handle: true }; try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {} }
       return;
     }
     // gewähltes Unterobjekt (z. B. ein Loch in einer Gruppe) direkt ziehen
@@ -11648,7 +11648,7 @@ const Interact = (() => {
     if (!hit && (e.shiftKey || !Viewer.leftOrbits)) {
       Viewer.controls.enabled = false;
       band = { x: e.clientX, y: e.clientY, el: h('div', { class: 'sel-band' }) }; document.body.append(band.el);
-      down = { band: true, x: e.clientX, y: e.clientY }; Viewer.canvas.setPointerCapture(e.pointerId);
+      down = { band: true, x: e.clientX, y: e.clientY }; try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
@@ -20523,7 +20523,7 @@ const Timeline = (() => {
     return chips.length;
   }
   function startDrag(e) {
-    e.preventDefault(); const m = e.currentTarget; m.setPointerCapture(e.pointerId); m.classList.add('drag');
+    e.preventDefault(); const m = e.currentTarget; try { m.setPointerCapture(e.pointerId); } catch (_) {} m.classList.add('drag');
     drag = { k: markerPos(), ind: null };
     const move = (ev) => {
       const k = gapAt(ev.clientX); if (k === drag.k && drag.ind) return; drag.k = k;
@@ -22308,7 +22308,7 @@ const Panels = (() => {
     const csvOut = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-out', 'data-help': 'paramsCsv' }); csvOut.innerHTML = icon('export') + esc(T('left.par.csvSave'));
     csvOut.disabled = !(App.doc.params || []).length; csvOut.onclick = () => Print.save(Print.safeName(App.doc.name) + ' – Maße.csv', new Blob(['\ufeff' + paramsCSV()], { type: 'text/csv' }));
     const csvIn = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-in', 'data-help': 'paramsCsv' }); csvIn.innerHTML = icon('folder') + esc(T('left.par.csvLoad'));
-    csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); };
+    csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000); };
     wrap.append(h('div', { class: 'btn-row' }, csvOut, csvIn));
     // Kleine Nachschlagetabellen (KP-22): zwei Spalten Schlüssel & Wert für tabelle(Name; Schlüssel)
     const tblSec = h('div', { class: 'section param-tables', id: 'param-tables-sec' }, h('div', { class: 'section-h' }, T('left.par.tablesTitle')));
@@ -23967,7 +23967,7 @@ const Panels = (() => {
       UI.renderHint();
     }, 16);
     const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; rerender(); };
-    App.on('doc', () => scheduleRerender(true));
+    App.on('doc', () => scheduleRerender(false));
     App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); rerenderLeftHint(); });
     App.on('results', () => scheduleRerender(false));
     DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
@@ -25519,7 +25519,7 @@ const Views = (() => {
     bars().append(el);
     const f = { el, body, empty, title: head.firstChild, rot: [0, 0], ids: [] };
     let drag = null;
-    body.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, r: f.rot.slice() }; body.setPointerCapture(e.pointerId); e.stopPropagation(); });
+    body.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, r: f.rot.slice() }; try { body.setPointerCapture(e.pointerId); } catch (_) {} e.stopPropagation(); });
     body.addEventListener('pointermove', (e) => { if (!drag) return; f.rot = [drag.r[0] - (e.clientX - drag.x) * 0.6, clamp(drag.r[1] + (e.clientY - drag.y) * 0.5, -80, 80)]; Viewer.requestRender(); });
     body.addEventListener('pointerup', () => { drag = null; });
     body.addEventListener('dblclick', () => { f.rot = [0, 0]; Viewer.requestRender(); });
@@ -25679,20 +25679,41 @@ const Views = (() => {
   }
 
   // ---------- Vorführ-Modus (AN-19): nur das Modell, Vollbild, auf Wunsch langsam drehend ----------
+  function fsEl() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
   function present(on = !st.present) {
     if (!on) {
       if (!st.present) return;
       cancelAnimationFrame(st.present.raf); if (st.present.bar) st.present.bar.remove();
       Viewer.canvas.removeEventListener('pointerdown', st.present.pd); removeEventListener('pointerup', st.present.pu);
+      if (st.present.onFs) {
+        document.removeEventListener('fullscreenchange', st.present.onFs);
+        document.removeEventListener('webkitfullscreenchange', st.present.onFs);
+      }
       document.body.classList.remove('presenting');
-      try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {}
+      try {
+        if (fsEl()) {
+          if (document.exitFullscreen) Promise.resolve(document.exitFullscreen()).catch(() => {});
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+      } catch (_) {}
       st.present = null; sync(); setTimeout(() => Viewer.requestRender(), 50); return;
     }
     if (st.present) return;
     App.clearSelection(); Handles.clear();
-    const o = { spin: true, raf: 0, last: performance.now() };
+    const o = { spin: true, raf: 0, last: performance.now(), wasFs: false };
+    o.onFs = () => {
+      const fs = !!fsEl();
+      if (fs) o.wasFs = true;
+      else if (o.wasFs && st.present === o) present(false);
+    };
+    document.addEventListener('fullscreenchange', o.onFs);
+    document.addEventListener('webkitfullscreenchange', o.onFs);
     document.body.classList.add('presenting');
-    try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (_) {}
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) Promise.resolve(el.requestFullscreen()).catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch (_) {}
     const bar = h('div', { class: 'present-bar', id: 'present-bar' });
     const sp = h('button', { type: 'button', class: 'btn small', id: 'present-spin' }, 'Drehen anhalten');
     sp.onclick = () => { o.spin = !o.spin; sp.textContent = o.spin ? 'Drehen anhalten' : 'Langsam drehen'; o.last = performance.now(); };
@@ -31084,7 +31105,7 @@ const Sketch = (() => {
       e.preventDefault(); e.stopPropagation();
       const p0 = arrowPos();
       S.step.dragging = { p0, s0: axisParam(p0, e), d0: signedDist() };
-      arrow.setPointerCapture(e.pointerId);
+      try { arrow.setPointerCapture(e.pointerId); } catch (_) {}
     });
     arrow.addEventListener('pointermove', (e) => { if (S && S.step && S.step.dragging) stepMove(e); });
     arrow.addEventListener('pointerup', () => stepUp());
@@ -31368,7 +31389,7 @@ const Notes = (() => {
     if (!first) return;
     // Die Folie liegt dort, wo der Strich anfängt – so bleibt er auch neben dem Teil in passender Tiefe
     cur = { pts: [first.p.toArray().map((x) => round(x, 3))], color, w: width, plane: viewPlane(first.p), last: { x: e.clientX, y: e.clientY } };
-    Viewer.canvas.setPointerCapture(e.pointerId);
+    try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
   }
   function onMove(e) {
     if (!on || !cur) return;
@@ -33876,8 +33897,9 @@ const Print = (() => {
     if (!dl) {
       // Außerhalb von Claude (lokal oder auf GitHub Pages): normaler Browser-Download
       const blob = data instanceof Blob ? data : new Blob([data]);
-      const a = h('a', { href: URL.createObjectURL(blob), download: filename }); document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      const url = URL.createObjectURL(blob);
+      const a = h('a', { href: url, download: filename }); document.body.append(a); a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
       UI.toast('Gespeichert: ' + filename, { icon: 'check' }); return true;
     }
     try { const r = await dl.save({ filename, data }); if (r && r.status === 'saved') UI.toast('Gespeichert: ' + filename, { icon: 'check' }); return true; }
@@ -34061,6 +34083,7 @@ const Print = (() => {
   // ---------- Drehteller-Video (AN-14): das Modell dreht sich einmal um sich selbst, als WebM ----------
   let lastVideo = null;
   function videoType() {
+    if (!Viewer.canvas || typeof Viewer.canvas.captureStream !== 'function') return null;
     for (const t of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {} }
     return null;
   }
@@ -35034,7 +35057,7 @@ const Drawing = (() => {
     await ensureProjections();
     if (holder) {
       render();
-      if (App.mode === 'drawing') Panels.renderRight();
+      if (App.mode === 'drawing') Panels.renderRight({ preserveFocus: true });
     }
   }
   async function refresh() {
@@ -35044,7 +35067,7 @@ const Drawing = (() => {
       await ensureProjections();
     } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
     render();
-    Panels.renderRight();
+    Panels.renderRight({ preserveFocus: true });
     const curLost = layout ? lostDims(dwg()) : [];
     const curLostKey = curLost.map((x) => x.id).sort().join(',');
     if (projId !== prevProjId && curLost.length) {
@@ -39969,7 +39992,7 @@ const Drawing = (() => {
     w.append(vSec);
 
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.titleBlock')));
-    const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); f.querySelector('input').addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); f.querySelector('input').addEventListener('keydown', (e) => e.stopPropagation()); return f; };
+    const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); const inp = f.querySelector('input'); inp.addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }); return f; };
     sec.append(tf('titel', T('draw.tb.title'), App.doc.name), h('div', { class: 'fields' }, tf('nummer', T('draw.tb.dwgNo')), tf('blatt', T('draw.tb.sheet'), `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', T('draw.panel.drawnBy')), tf('datum', T('draw.tb.date'))), h('div', { class: 'fields' }, tf('werkstoff', T('draw.tb.material')), tf('firma', T('draw.tb.company'))));
     w.append(sec);
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.sheetHeading')));
@@ -43634,6 +43657,7 @@ const Start = (() => {
     const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.dxf,.svg', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f, opts); };
     document.body.append(inp); inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
   }
   // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import oder 2D-Skizze)
   const DROP_RE = /\.(json|step|stp|igs|iges|brep|stl|3mf|obj|dxf|svg)$/i;

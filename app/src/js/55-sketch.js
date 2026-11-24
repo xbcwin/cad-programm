@@ -5042,7 +5042,7 @@ const Sketch = (() => {
       e.preventDefault(); e.stopPropagation();
       const p0 = arrowPos();
       S.step.dragging = { p0, s0: axisParam(p0, e), d0: signedDist() };
-      arrow.setPointerCapture(e.pointerId);
+      try { arrow.setPointerCapture(e.pointerId); } catch (_) {}
     });
     arrow.addEventListener('pointermove', (e) => { if (S && S.step && S.step.dragging) stepMove(e); });
     arrow.addEventListener('pointerup', () => stepUp());

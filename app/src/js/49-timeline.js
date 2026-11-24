@@ -99,7 +99,7 @@ const Timeline = (() => {
     return chips.length;
   }
   function startDrag(e) {
-    e.preventDefault(); const m = e.currentTarget; m.setPointerCapture(e.pointerId); m.classList.add('drag');
+    e.preventDefault(); const m = e.currentTarget; try { m.setPointerCapture(e.pointerId); } catch (_) {} m.classList.add('drag');
     drag = { k: markerPos(), ind: null };
     const move = (ev) => {
       const k = gapAt(ev.clientX); if (k === drag.k && drag.ind) return; drag.k = k;
