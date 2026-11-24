@@ -2414,5 +2414,20 @@
   "asm.groundedCannotMove": "“{name}” is grounded and cannot be moved.",
   "asm.groundedJointErr": "“{name}” is grounded and cannot be moved by a connection.",
   "asm.groundedLockedHint": "This part is grounded and stays fixed in place.",
-  "asm.selectPartToGround": "Select a part first to ground or unground it."
+  "asm.selectPartToGround": "Select a part first to ground or unground it.",
+  "ctx.mateAngle": "Angle (faces or edges)",
+  "ctx.mateCenter": "Center (between two faces)",
+  "joint.angleKind": "angle",
+  "joint.centerKind": "centered",
+  "joint.angleLabel": "Angle",
+  "joint.angleFlip": "Flip angle",
+  "joint.angleStep1": "Angle: click 1st planar face or straight edge on the first part (stays fixed).",
+  "joint.angleStep2": "Angle: click 2nd face or edge on the second part (aligns to “{name}”).",
+  "joint.centerStep1": "Center (1/3): click 1st groove/wall face on the fixed part.",
+  "joint.centerStep2": "Center (2/3): click the parallel opposite face on the same part.",
+  "joint.centerStep3Body": "Center (3/3): click the part to center between those two faces.",
+  "joint.centerStep3Face": "Center (3/4): click 1st outer face on the movable part.",
+  "joint.centerStep4Face": "Center (4/4): click the parallel opposite face on the same movable part.",
+  "joint.repickAngleBtn": "Re-pick faces / edges",
+  "joint.repickCenterBtn": "Re-pick faces"
 }

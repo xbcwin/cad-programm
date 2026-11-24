@@ -2437,6 +2437,8 @@ const Panels = (() => {
         b('axes', T('ctx.mate'), (e) => UI.menu(e.currentTarget, [
           { label: T('ctx.mateCyl'), icon: 'axes', help: 'mateCyl', run: () => Joints.startCylindrical() },
           { label: T('ctx.matePlanar'), icon: 'planeXY', help: 'matePlanar', run: () => Joints.startPlanar() },
+          { label: T('ctx.mateAngle'), icon: 'rotate', help: 'mateAngle', run: () => Joints.startAngle() },
+          { label: T('ctx.mateCenter'), icon: 'cSymmetric', help: 'mateCenter', run: () => Joints.startCenter() },
           { label: T('ctx.mateBall'), icon: 'circle', help: 'mateBall', run: () => Joints.startBall() },
           { label: T('ctx.mateSlot'), icon: 'slot', help: 'mateSlot', run: () => Joints.startSlot() },
           '-',

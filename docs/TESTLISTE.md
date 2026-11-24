@@ -2159,6 +2159,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Flächenmitte, „Nur einrasten“ & Strg**: Ein Quader rastet auf der Flächenmitte der Platte ein, bietet „Eben“ und „Nur einrasten“ an, legt bei „Nur einrasten“ keine Verbindung an und ignoriert bei gedrücktem `Strg` die Andock-Punkte; Hilfetext `dockSnap` ist vorhanden und es treten keine Seitenfehler auf.
 - [ ] **Von Hand**: Im Browser eine Baugruppe mit gelochter Platte und Normschraube öffnen, die Schraube per Maus über verschiedene Löcher und Kanten ziehen, die farbigen Andock-Punkte und das Einrasten prüfen und im Modus „Profi“ verschiedene Verbindungsarten ausprobieren.
 
+## Verbindungen mit Winkel und mittig (Auto [A-089], BG-07)
+
+- [x] **Winkel 30° zwischen zwei Flächen & Messen**: Zwei Quader über Kontextleiste → „Verbindung“ → „Winkel“ auf `30°` ausrichten; `Joints.measureAngle`, Normalen-Winkel und das Werkzeug „Messen“ zwischen beiden Flächen liefern exakt `30°`. Ändern über `#jt-angle` auf `45°` und „Winkel umkehren“ (`#jt-flip`) richten den zweiten Quader nach.
+- [x] **Formel-Winkel & Kante-an-Kante**: Ein Maß `Neigung = 30` in `#jt-angle` legt die Formel ab (`.fx`-Vorschau `30`), und das Ändern des Maßes auf `60` dreht das verbundene Teil automatisch auf `60°`; zwei gerade Kanten richten sich auf `30°` aus.
+- [x] **Quader mittig in 20-mm-Nut**: Ein schmaler Quader (`8 mm`) wird mittig zwischen die beiden Seitenwände einer `20 mm` breiten Nut gesetzt; links und rechts ergibt sich exakt derselbe Abstand (`6,00 mm`), der auch beim Verschieben entlang/quer zur Nut, beim Verschieben des Nut-Blocks und im 2-Flächen-Modus (`bMode: 'faces'`) erhalten bleibt.
+- [x] **Verlauf, Löschen, Rückgängig, Suche & Hilfe**: Verbindungen erscheinen im Verlauf unter `#joint-tree`, lassen sich rechts bearbeiten, per `#jt-del` lösen und per `Strg+Z` wiederherstellen; Befehlssuche (`mate-angle`, `mate-center`) und Hilfetexte (`mateAngle`, `mateCenter`) sind ohne Seitenfehler vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Körper über „Verbindung“ → „Winkel“ (Fläche/Kante) bzw. „Mittig“ (Nutwand 1, Nutwand 2, Teil) durch Anklicken im 3D-Bild verbinden und im Panel rechts Winkel/Formel sowie die angezeigten Nutabstände prüfen.
+
 ## Fehler melden
 
 ```
