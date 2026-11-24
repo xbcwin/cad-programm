@@ -43,7 +43,8 @@ const Panels = (() => {
       noteBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'note'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
-      btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));
+      const dexBtn = btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));
+      dexBtn.dataset.help = 'drawingExportDxf';
     }
   }
   // weiche Trennstellen für lange Wörter auf schmalen Kacheln (nur Anzeige)

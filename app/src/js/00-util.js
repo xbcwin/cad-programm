@@ -1766,6 +1766,16 @@ const HELP = {
   "tip": "ISO-286-Passungen (H7, g6, h6, k6, m6 …) aus der Normtabelle wählen",
   "hilfe": "Wähle ein Passungs-Kurzzeichen nach DIN EN ISO 286-2:2010: Großbuchstaben (z. B. H7, K7, P7) für Bohrungen, Kleinbuchstaben (z. B. g6, h6, k6, m6, p6) für Wellen. Tracery schlägt die Abmaße passend zum Nennmaß automatisch in der Tabelle nach (z. B. Ø20 H7 → +0,021 / 0 und Ø20 g6 → −0,007 / −0,020) und zeigt die Grenzmaße direkt daneben.",
   "tipp": "Unter „Anzeige“ stellst du ein, ob Kurzzeichen samt Abmaßen, nur das Kurzzeichen, nur Abmaße oder die Grenzmaße auf dem Blatt stehen."
+ },
+ "drawingExportDxf": {
+  "tip": "Zeichnung als DXF-Datei mit Layern je Linienart speichern",
+  "hilfe": "Speichert das aktive Zeichnungsblatt als DXF-Datei (AC1009/R12) in Millimetern mit echten Linien, Kreisen, Bögen, Texten und dem Schriftfeld. Sichtbare Kanten, verdeckte Kanten, Tangentialkanten, Mittellinien, Schraffuren, Schnittlinien, Bemaßungen und der Rahmen liegen auf eigenen Layern mit passenden Linienarten.",
+  "tipp": "Bei mehreren Blättern kannst du zusätzlich alle Blätter zusammen als ZIP-Archiv speichern."
+ },
+ "drawingExportPng": {
+  "tip": "Zeichnung als PNG-Bild in wählbarer Auflösung speichern",
+  "hilfe": "Rendert das aktive Zeichnungsblatt gestochen scharf als PNG-Bild. Wähle eine feste Breite (1600, 2400 oder 3840 Pixel), eine Druckauflösung (150 oder 300 DPI) oder eine eigene Breite in Pixeln – die Höhe passt sich automatisch dem Blattformat an.",
+  "tipp": "Aktiviere „Durchsichtiger Hintergrund“, wenn du die Zeichnung direkt in eine Präsentation oder Dokumentation einfügen willst."
  }
 };
 

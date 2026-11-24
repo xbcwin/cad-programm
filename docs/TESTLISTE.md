@@ -2019,6 +2019,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **`askDim` verliert keine Ziffern bei verzögertem `rAF(grab)` (`Sketch.askDim` / `onKey`)**: Wird die erste Ziffer über `Sketch.onKey()` an `dimBox._inp` weitergereicht und feuert danach das verzögerte `requestAnimationFrame(grab)`, bleibt `dimBox._typed` erhalten; die nächste Ziffer wird angehängt (`60` statt `0`), löst den erwarteten Konflikt (`#sk-conflict`) aus und lässt sich per „Entfernen“ sauber auflösen.
 - [ ] **Von Hand**: Im Browser bei hoher Szenenlast die Ansicht zügig drehen und loslassen (Schärfe springt nach ~0,2 s zurück) sowie beim Bemaßen (`D`) direkt nach dem Klick schnell eine zweistellige Zahl eintippen.
 
+## Zeichnung als DXF und PNG (Auto [A-071], ZE-13)
+
+- [x] **DXF-Export (`LINE`, `CIRCLE`, `ARC`, Layer & Schriftfeld)**: Export über `#t-dexport` → `#dw-exp-dxf` liefert eine gültige `.dxf`-Datei (`$INSUNITS = 4`, Layer `SICHTBAR`, `VERDECKT`, `MITTELLINIE`, `BEMASSUNG`, `RAHMEN` mit `CONTINUOUS`/`DASHED`/`CENTER`), enthält `LINE`-, `CIRCLE`-, `ARC`- und `TEXT`-Einträge auf den passenden Layern sowie alle Schriftfeld-Texte (`Benennung`, `Zeichnungsnummer`, `Gezeichnet`, `Werkstoff`, `ISO 2768-m`); bei mehreren Blättern steht zusätzlich der Mehrblatt-ZIP-Export (`#dw-exp-dxf-all`) bereit.
+- [x] **PNG-Export mit wählbarer Auflösung**: Dialog (`#dw-exp-png`) übernimmt eigene Pixelbreiten (`1800 px` → `1800 × 1273 px`), 300-DPI-Vorgabe (`3508 × 2480 px` bei A4 quer), rendert das komplette Blatt sichtbar (nicht leer) und unterstützt durchsichtigen Hintergrund (`3200 × 2263 px`, RGBA mit transparentem Rand).
+- [x] **Befehlssuche & Hilfetexte**: Befehle `drawingExportDxf` und `drawingExportPng` sowie Hilfetexte `drawingExportDxf` und `drawingExportPng` in `werkzeug-hilfen.json` und `00-util.js` sind vorhanden.
+- [ ] **Von Hand**: Im Browser eine bemaßte Zeichnung mit Schnittansicht, Mittellinien und Schriftfeld als `.dxf` in einem DXF-Betrachter (z. B. LibreCAD / QCAD) auf Layer und Linientypen sowie das exportierte `.png` auf Schärfe und Lesbarkeit prüfen.
+
 ## Fehler melden
 
 ```
