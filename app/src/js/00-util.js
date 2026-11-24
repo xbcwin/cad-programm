@@ -692,6 +692,7 @@ const IC = {
   replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
+  stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2083,6 +2084,16 @@ const HELP = {
   "tip": "Meldungs-Zentrale: Fehler und Hinweise dieser Sitzung ansehen",
   "hilfe": "Die Glocke sammelt alle Rechenfehler, Warnungen und Hinweise dieser Sitzung mit genauer Uhrzeit. Du kannst nach Fehlern oder Hinweisen filtern und bei Schritt-Fehlern mit „Hinspringen“ direkt das betroffene Teil markieren.",
   "tipp": "Ein roter Punkt zeigt unbehobene oder neue Fehler; über „Leeren“ räumst du die Liste wieder auf."
+ },
+ "stretch2d": {
+  "tip": "Einen Teil der Skizze per Rahmen in eine Richtung strecken",
+  "hilfe": "Zieh im Profi-Modus einen Rahmen über die Endpunkte oder Kanten, die wandern sollen. Danach gibst du rechts die Richtung (X, Y, Winkel oder X/Y) und den Weg ein. Nur die Punkte im Rahmen verschieben sich, der Rest bleibt stehen und bestehende Regeln sowie Maße bleiben erhalten.",
+  "tipp": "Zieh den Rahmen zum Beispiel nur über die rechte Kante eines Rechtecks und gib 5 mm in X ein – die linke Kante bleibt stehen und die Breite wächst um 5 mm."
+ },
+ "liveMirror": {
+  "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
+  "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
+  "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
  }
 };
 

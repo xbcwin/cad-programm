@@ -1334,6 +1334,14 @@ body.tablet .inp .meas-btn svg{width:17px;height:17px}
 .nc-actions{display:flex;justify-content:flex-end;margin-top:2px}
 .nc-jump{padding:3px 8px;min-height:24px;font-size:11.5px;color:var(--accent)}
 
+/* Strecken & Live-Spiegeln (SK-30, SK-46) */
+.sel-band.stretch{border-style:dashed;border-color:#e67700;background:color-mix(in srgb,#e67700 10%,transparent)}
+.sk-live-mir-badge{position:absolute;top:12px;right:12px;z-index:17;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1.5px solid #c2255c;color:var(--ink);font:600 12.5px/1.2 var(--font-cond);letter-spacing:.02em;box-shadow:var(--shadow-1);pointer-events:none}
+.sk-live-mir-badge svg{width:14px;height:14px;color:#c2255c}
+[data-theme="dark"] .sk-live-mir-badge{border-color:#f06595}
+[data-theme="dark"] .sk-live-mir-badge svg{color:#f06595}
+.sk-lm-box{display:grid;gap:6px}
+
 
 
 
