@@ -1058,5 +1058,10 @@
     "tip": "Maß-Arten: Kettenmaß, Bezugsmaß, Winkel, Radius (R), Durchmesser (Ø) und Fase (1×45°)",
     "hilfe": "Wähle rechts unter „Bemaßung“ oder über „Maß-Arten“ in der Leiste die gewünschte Maß-Art: Kettenmaß setzt mehrere Maße hintereinander auf eine Linie, Bezugsmaß staffelt alle Maße ab einer gemeinsamen Kante, Winkel misst zwischen zwei Kanten, R und Ø bemaßen Rundungen und Bohrungen, und Fase erkennt abgeschrägte Kanten wie 1×45°.",
     "tipp": "Bei Ketten- und Bezugsmaß klickst du einfach weitere Punkte an; Enter schließt die Reihe ab. Bei Winkelmaßen kannst du nach dem Anklicken rechts auf „Gegenwinkel“ umschalten."
+  },
+  "drawingCenters": {
+    "tip": "Mittelkreuze und Mittellinien für Bohrungen und Zylinder automatisch ein- und ausblenden",
+    "hilfe": "Bohrungen und Zylinder erhalten in jeder Ansicht automatisch strichpunktierte Mittelkreuze (Draufsicht bzw. Blick auf die Öffnung) und Mittellinien (Seiten- und Schnittansichten). Klicke ein einzelnes Mittelkreuz oder eine Mittellinie im Blatt an und drücke Entf (oder Rechtsklick → Ausblenden), um es auszublenden – oder schalte sie rechts in der Liste einzeln ein und aus.",
+    "tipp": "Mit „Alle einblenden“ holst du einzeln ausgeblendete Mittellinien jederzeit mit einem Klick zurück; alle Änderungen lassen sich rückgängig machen."
   }
 }

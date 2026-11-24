@@ -256,6 +256,8 @@ const Commands = (() => {
     add('drawingDimRadius', 'Zeichnung: Radius-Maß (R)', 'dim', 'radius r rundung bogen bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('rad'); }, { group: 'Werkzeuge' });
     add('drawingDimDia', 'Zeichnung: Durchmesser-Maß (Ø)', 'dim', 'durchmesser ø bohrung kreis bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('dia'); }, { group: 'Werkzeuge' });
     add('drawingDimChamfer', 'Zeichnung: Fasenmaß (1×45°)', 'dim', 'fase fasenmaß 45 grad schräge bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('chamfer'); }, { group: 'Werkzeuge' });
+    add('drawingCenters', 'Mittellinien automatisch ein-/ausblenden', 'target', 'mittellinie mittellinien mittelkreuz mittelkreuze achse bohrung zylinder zeichnung ze-06', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setCenters(!Drawing.activeSheet().centers); }, { group: 'Werkzeuge' });
+    add('drawingCentersShowAll', 'Alle Mittellinien in Zeichnung einblenden', 'eye', 'mittellinie mittellinien mittelkreuz alle einblenden zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.showAllCenters(); }, { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
     for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });
