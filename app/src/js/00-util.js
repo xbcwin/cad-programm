@@ -1572,6 +1572,11 @@ const HELP = {
   "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
   "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
   "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
+ },
+ "crashRecovery": {
+  "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
+  "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",
+  "tipp": "Mit „Wiederherstellen“ holst du alle ungesicherten Änderungen sofort zurück; „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück."
  }
 };
 

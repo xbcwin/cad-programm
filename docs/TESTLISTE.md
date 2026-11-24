@@ -1838,6 +1838,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Sauberer Abbruch über Regler & `Views.reset()`**: `stopExAnim()` bricht sowohl `st.exAnim` als auch `st.exTimer` ab, sodass manuelles Ziehen an `#ex-range` den Zustand exakt beibehält.
 - [ ] **Von Hand**: Im Browser bei einem Übergang eine Führungs- oder Mittellinie ziehen und prüfen, dass die Vorschau mitgeht, sowie bei einer Baugruppe „Explosion“ mit „Gruppen auch zerlegen“ öffnen, am Regler schieben und wieder zusammensetzen.
 
+## Wiederherstellen nach Absturz (Auto [A-051], BE-15)
+
+- [x] **Meldung nach Absturz / Neuladen ohne Speichern**: Projekt ändern und die Seite ohne Speichern neu laden zeigt `#recovery-bar` mit „Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?“, Projektname und Uhrzeit.
+- [x] **Wiederherstellen & sauberes Neuladen**: Klick auf „Wiederherstellen“ lädt alle ungesicherten Änderungen fehlerfrei ins Modell; ein erneutes Neuladen ohne weitere Änderung startet direkt ohne Meldung.
+- [x] **Verwerfen**: Klick auf „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück und löscht den Wiederherstellungs-Eintrag dauerhaft.
+- [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
+- [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
+
 ## Fehler melden
 
 ```

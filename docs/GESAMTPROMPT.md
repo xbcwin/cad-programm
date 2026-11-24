@@ -85,7 +85,7 @@ Leitlinien:
 | --- | --- |
 | `00-util.js` | Hilfen, `Expr`-Rechner (`wenn`, `runden`/`aufrunden`/`abrunden`, `tabelle`, `< > <= >= == !=`, Klartext-Fehler) mit Einheiten (mm, cm, m, in, zoll, ", °), Projekt-Einheiten `Units` (`mm`, `cm`, `m`, `in`), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
 | `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
-| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
+| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Absturz-Sicherung (`saveRecovery`/`loadRecovery`/`clearRecovery`), Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `14-ttf.js` (`TTF`) | Kleiner TrueType-Leser im Browser (`parse`: `glyf`-Umrisse mit quadratischen Béziers und zusammengesetzten Glyphen, `cmap`, `hmtx`, `kern`, CFF/OTF-Abweisung) |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
@@ -118,7 +118,7 @@ Leitlinien:
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
+| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Absturz-Wiederherstellung (`#recovery-bar`, `restoreRecovery`, `dismissRecovery`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
@@ -211,6 +211,7 @@ Leitlinien:
 - Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)
 - Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“ (`Tour`, ereignisgesteuert über `history`/`doc`/`mode`/`sketch`/`pop`)
 - Projekt in einen Ordner speichern (BE-14): `Start.saveToFolder`/`saveToFolderNow`/`disconnectFolder`/`folderSupported`/`folderInfo` (File System Access API, gebündelt alle 10 s, Anzeige `#btn-folder-status`)
+- Wiederherstellen nach Absturz (BE-15): `Store.saveRecovery`/`loadRecovery`/`clearRecovery` (IndexedDB `meta.recovery` + kompakte Schnellkopie in `localStorage`), `App.dirty`/`markClean`, Banner `#recovery-bar` mit Projektname, Zeit, „Wiederherstellen“ und „Verwerfen“
 - Eigene Tastenkürzel (nur „Profi“): `Commands.shortcuts`/`setShortcut`/`resetShortcuts`/`renderShortcutsEditor`, gespeichert in `localStorage` (`tracery-kuerzel`), Duplikat-Prüfung, Einstellungs-Tab `#set-tab-keys`
 - Werkzeugleiste anpassen (BE-04): `Toolbar` in `51-toolbar.js`, Rechtsklick → „Anpassen …“, Werkzeuge per Ziehen hinzufügen/entfernen/sortieren, Favoriten mit Stern ganz links, gespeichert in `localStorage` (`tracery-werkzeugleiste`), „Zurücksetzen“
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt

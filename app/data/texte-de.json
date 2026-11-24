@@ -388,5 +388,14 @@
   "ctx.alignBottom": "Unten bündig",
   "common.emboss": "Prägen",
   "ctx.emboss": "Prägen",
-  "ctx.embossTip": "Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"
+  "ctx.embossTip": "Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren",
+
+  "recovery.title": "Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?",
+  "recovery.metaOne": "Projekt „{name}“ · {time} · 1 Objekt",
+  "recovery.metaMany": "Projekt „{name}“ · {time} · {n} Objekte",
+  "recovery.restore": "Wiederherstellen",
+  "recovery.dismiss": "Verwerfen",
+  "recovery.restored": "Letzter Stand von „{name}“ wiederhergestellt.",
+  "recovery.discarded": "Wiederherstellungs-Stand verworfen.",
+  "recovery.failed": "Der letzte Stand konnte nicht wiederhergestellt werden."
 }
