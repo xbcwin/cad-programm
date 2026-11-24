@@ -1341,30 +1341,40 @@ export function createKernel(R, oc) {
     return shape;
   }
 
-  // Importierte STEP- oder STL-Datei (binär per blobId/bytes oder Base64)
+  // Importierte STEP-, IGES-, BREP- oder STL-Datei (binär per blobId/bytes oder Base64)
   function buildImport(p) {
     let bytes = p.bytes ? (p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) : (p.blobId ? importBlobs.get(p.blobId) : null);
     if (!bytes && p.data) {
       const bin = atob(p.data); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     }
     if (!bytes || !bytes.byteLength) throw new Error('Die importierte Datei ist leer.');
-    const fn = 'imp_' + Math.random().toString(36).slice(2);
-    oc.FS.writeFile('/' + fn, bytes);
     let shape = null;
-    try {
-      if (p.fmt === 'stl') {
-        const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
-        if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
-        const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
-        const ms = new oc.BRepBuilderAPI_MakeSolid();
-        try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
-        reader.delete(); up.delete(); ms.delete();
-      } else {
-        const reader = new oc.STEPControl_Reader();
-        if (!reader.ReadFile(fn)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
-        reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
-      }
-    } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    if (p.fmt === 'brep') {
+      const txt = new TextDecoder('utf-8').decode(bytes);
+      const raw = oc.BRepToolsWrapper.Read(txt);
+      if (!raw || raw.IsNull()) { safeDelete(raw); throw new Error('Die BREP-Datei ließ sich nicht lesen.'); }
+      shape = R.cast(raw);
+    } else if (p.fmt === 'iges') {
+      const txt = new TextDecoder('utf-8').decode(bytes);
+      shape = parseIGESToShape(txt);
+    } else {
+      const fn = 'imp_' + Math.random().toString(36).slice(2);
+      oc.FS.writeFile('/' + fn, bytes);
+      try {
+        if (p.fmt === 'stl') {
+          const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
+          if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
+          const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
+          const ms = new oc.BRepBuilderAPI_MakeSolid();
+          try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
+          reader.delete(); up.delete(); ms.delete();
+        } else {
+          const reader = new oc.STEPControl_Reader();
+          if (!reader.ReadFile(fn)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
+          reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
+        }
+      } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    }
     const s = num(p.scale, 1);
     if (shape && Math.abs(s - 1) > 1e-9) shape = shape.scale(s, [0, 0, 0]);
     return shape;
@@ -4229,7 +4239,863 @@ export function createKernel(R, oc) {
     }
     return { objects: objs, errors };
   }
-  function exportSTEP(scene, only, originMat = null) {
+  function makeArr1P2(pts) {
+    const a = new oc.NCollection_Array1_gp_Pnt2d(1, pts.length);
+    for (let i = 0; i < pts.length; i++) { const p = new oc.gp_Pnt2d(pts[i][0], pts[i][1]); a.SetValue(i + 1, p); p.delete(); }
+    return a;
+  }
+  function makeArr1P3(pts) {
+    const a = new oc.NCollection_Array1_gp_Pnt(1, pts.length);
+    for (let i = 0; i < pts.length; i++) { const p = new oc.gp_Pnt(pts[i][0], pts[i][1], pts[i][2]); a.SetValue(i + 1, p); p.delete(); }
+    return a;
+  }
+  function expandKnots(knots, mults) {
+    const out = [];
+    for (let i = 0; i < knots.length; i++) for (let k = 0; k < mults[i]; k++) out.push(knots[i]);
+    return out;
+  }
+  function compressKnots(seq) {
+    const knots = [], mults = [];
+    for (const v of seq) {
+      if (knots.length && Math.abs(v - knots[knots.length - 1]) < 1e-9) mults[mults.length - 1]++;
+      else { knots.push(v); mults.push(1); }
+    }
+    return { knots, mults };
+  }
+  function clampBSplineCurve(bc) {
+    if (bc.IsPeriodic()) bc.SetNotPeriodic();
+    if (bc.Multiplicity(1) < bc.Degree() + 1 || bc.Multiplicity(bc.NbKnots()) < bc.Degree() + 1) {
+      bc.Segment(bc.FirstParameter(), bc.LastParameter());
+    }
+  }
+  function clampBSplineSurface(bs) {
+    if (bs.IsUPeriodic()) bs.SetUNotPeriodic();
+    if (bs.IsVPeriodic()) bs.SetVNotPeriodic();
+    const u1 = bs.UKnot(bs.FirstUKnotIndex()), u2 = bs.UKnot(bs.LastUKnotIndex());
+    const v1 = bs.VKnot(bs.FirstVKnotIndex()), v2 = bs.VKnot(bs.LastVKnotIndex());
+    const needU = bs.UMultiplicity(1) < bs.UDegree() + 1 || bs.UMultiplicity(bs.NbUKnots()) < bs.UDegree() + 1;
+    const needV = bs.VMultiplicity(1) < bs.VDegree() + 1 || bs.VMultiplicity(bs.NbVKnots()) < bs.VDegree() + 1;
+    if (needU || needV) bs.Segment(u1, u2, v1, v2);
+  }
+  function faceToBSplineSurface(face, fw) {
+    const loc = new oc.TopLoc_Location();
+    const surf = oc.BRep_Tool.Surface(fw, loc);
+    const trsf = !loc.IsIdentity() ? loc.Transformation() : null;
+    const uv = oc.BRepTools.UVBounds(fw);
+    const xPt = (pt) => {
+      let x = pt.X(), y = pt.Y(), z = pt.Z();
+      if (trsf) { const p2 = pt.Transformed(trsf); x = p2.X(); y = p2.Y(); z = p2.Z(); p2.delete(); }
+      return [x, y, z];
+    };
+    let bsp;
+    if (face.geomType === 'PLANE') {
+      const du = Math.max(1e-3, (uv.UMax - uv.UMin) * 0.02), dv = Math.max(1e-3, (uv.VMax - uv.VMin) * 0.02);
+      const u0 = uv.UMin - du, u1 = uv.UMax + du, v0 = uv.VMin - dv, v1 = uv.VMax + dv;
+      const poles = new oc.NCollection_Array2_gp_Pnt(1, 2, 1, 2);
+      const setP = (iu, iv, u, v) => {
+        const p = surf.Value(u, v), q = xPt(p); p.delete();
+        const gp = new oc.gp_Pnt(q[0], q[1], q[2]); poles.SetValue(iu, iv, gp); gp.delete();
+      };
+      setP(1, 1, u0, v0); setP(2, 1, u1, v0); setP(1, 2, u0, v1); setP(2, 2, u1, v1);
+      const uk = makeArr1D([u0, u1]), vk = makeArr1D([v0, v1]), um = makeArr1I([2, 2]), vm = makeArr1I([2, 2]);
+      bsp = new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, 1, 1, false, false);
+      poles.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete();
+    } else if (face.geomType === 'CYLINDRE' || face.geomType === 'CONE' || face.geomType === 'EXTRUSION') {
+      const fullU = surf.IsUPeriodic() && Math.abs((uv.UMax - uv.UMin) - surf.UPeriod()) < 1e-4;
+      const dv = Math.max(1e-3, (uv.VMax - uv.VMin) * 0.02);
+      const v0 = uv.VMin - dv, v1 = uv.VMax + dv;
+      const iso1 = surf.VIso(v0), iso2 = surf.VIso(v1);
+      const c1 = fullU ? iso1 : new oc.Geom_TrimmedCurve(iso1, uv.UMin, uv.UMax, true, true);
+      const c2 = fullU ? iso2 : new oc.Geom_TrimmedCurve(iso2, uv.UMin, uv.UMax, true, true);
+      const pt = oc.Convert_ParameterisationType.Convert_QuasiAngular;
+      const b1 = oc.GeomConvert.CurveToBSplineCurve(c1, pt);
+      const b2 = oc.GeomConvert.CurveToBSplineCurve(c2, pt);
+      if (!fullU) { c1.delete(); c2.delete(); }
+      clampBSplineCurve(b1); clampBSplineCurve(b2);
+      const nu = b1.NbPoles(), nk = b1.NbKnots(), uDeg = b1.Degree();
+      const poles = new oc.NCollection_Array2_gp_Pnt(1, nu, 1, 2);
+      const weights = new oc.NCollection_Array2_double(1, nu, 1, 2);
+      for (let i = 1; i <= nu; i++) {
+        const p1 = b1.Pole(i), p2 = b2.Pole(i), q1 = xPt(p1), q2 = xPt(p2);
+        const gp1 = new oc.gp_Pnt(q1[0], q1[1], q1[2]), gp2 = new oc.gp_Pnt(q2[0], q2[1], q2[2]);
+        poles.SetValue(i, 1, gp1); poles.SetValue(i, 2, gp2);
+        weights.SetValue(i, 1, b1.Weight(i)); weights.SetValue(i, 2, b2.Weight(i));
+        gp1.delete(); gp2.delete(); p1.delete(); p2.delete();
+      }
+      const uK = [], uM = [];
+      for (let i = 1; i <= nk; i++) { uK.push(b1.Knot(i)); uM.push(b1.Multiplicity(i)); }
+      const uk = makeArr1D(uK), um = makeArr1I(uM), vk = makeArr1D([v0, v1]), vm = makeArr1I([2, 2]);
+      bsp = b1.IsRational()
+        ? new oc.Geom_BSplineSurface(poles, weights, uk, vk, um, vm, uDeg, 1, false, false)
+        : new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, uDeg, 1, false, false);
+      poles.delete(); weights.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete(); b1.delete(); b2.delete();
+    } else {
+      try {
+        bsp = oc.GeomConvert.SurfaceToBSplineSurface(surf);
+        clampBSplineSurface(bsp);
+        if (trsf) {
+          const nu = bsp.NbUPoles(), nv = bsp.NbVPoles();
+          for (let u = 1; u <= nu; u++) for (let v = 1; v <= nv; v++) {
+            const pt = bsp.Pole(u, v), q = xPt(pt), np = new oc.gp_Pnt(q[0], q[1], q[2]);
+            bsp.SetPole(u, v, np); np.delete(); pt.delete();
+          }
+        }
+      } catch (_) {
+        const N = 9, du = (uv.UMax - uv.UMin) / (N - 1), dv = (uv.VMax - uv.VMin) / (N - 1);
+        const grid = new oc.NCollection_Array2_gp_Pnt(1, N, 1, N);
+        for (let iu = 0; iu < N; iu++) for (let iv = 0; iv < N; iv++) {
+          const pt = surf.Value(uv.UMin + iu * du, uv.VMin + iv * dv), q = xPt(pt), np = new oc.gp_Pnt(q[0], q[1], q[2]);
+          grid.SetValue(iu + 1, iv + 1, np); np.delete(); pt.delete();
+        }
+        const fit = new oc.GeomAPI_PointsToBSplineSurface();
+        fit.Interpolate(grid);
+        bsp = fit.Surface();
+        grid.delete(); fit.delete();
+        const uK0 = bsp.UKnot(1), uK1 = bsp.UKnot(bsp.NbUKnots()), vK0 = bsp.VKnot(1), vK1 = bsp.VKnot(bsp.NbVKnots());
+        if (Math.abs(uK1 - uK0) > 1e-12) {
+          for (let i = 1; i <= bsp.NbUKnots(); i++) bsp.SetUKnot(i, uv.UMin + ((bsp.UKnot(i) - uK0) / (uK1 - uK0)) * (uv.UMax - uv.UMin));
+        }
+        if (Math.abs(vK1 - vK0) > 1e-12) {
+          for (let i = 1; i <= bsp.NbVKnots(); i++) bsp.SetVKnot(i, uv.VMin + ((bsp.VKnot(i) - vK0) / (vK1 - vK0)) * (uv.VMax - uv.VMin));
+        }
+      }
+    }
+    if (trsf) trsf.delete();
+    loc.delete();
+    return bsp;
+  }
+  function orderWireEdges2D(edges) {
+    if (edges.length <= 1) return edges;
+    const used = new Array(edges.length).fill(false);
+    const ordered = [edges[0]];
+    used[0] = true;
+    let cur = edges[0].end2;
+    while (ordered.length < edges.length) {
+      let best = -1, bd = Infinity;
+      for (let i = 0; i < edges.length; i++) {
+        if (used[i]) continue;
+        const d = Math.hypot(edges[i].start2[0] - cur[0], edges[i].start2[1] - cur[1]);
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best < 0) break;
+      used[best] = true;
+      ordered.push(edges[best]);
+      cur = edges[best].end2;
+    }
+    return ordered;
+  }
+  function shapeToIGES(shape, name = 'Tracery') {
+    const padL = (s, w) => String(s).padStart(w, ' ');
+    const padR = (s, w) => String(s).padEnd(w, ' ').slice(0, w);
+    const igsNum = (v) => (Math.abs(v) < 1e-12 ? '0' : Number(Number(v).toPrecision(12)).toString());
+    const igsH = (s) => { const str = String(s || 'Tracery').replace(/[^\x20-\x7e]/g, '_'); return `${str.length}H${str}`; };
+    const now = new Date();
+    const ts = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}.${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}`;
+    const startLines = [padR('Tracery IGES 5.3 Export', 72) + 'S' + padL(1, 7)];
+    const gFields = [
+      '1H,', '1H;', igsH('Tracery'), igsH((name || 'Tracery') + '.igs'), igsH('Tracery'), igsH('Tracery'),
+      '32', '38', '6', '308', '15', igsH('Tracery'), '1.0', '2', '2HMM', '1', '0.01',
+      igsH(ts), '1E-08', '1000.', igsH('Tracery'), igsH('Tracery'), '11', '0', igsH(ts),
+    ];
+    const globalLines = [];
+    let gCur = '';
+    for (let i = 0; i < gFields.length; i++) {
+      const tok = gFields[i] + (i === gFields.length - 1 ? ';' : ',');
+      if (gCur.length + tok.length > 72 && gCur.length > 0) {
+        globalLines.push(padR(gCur, 72) + 'G' + padL(globalLines.length + 1, 7));
+        gCur = tok;
+      } else {
+        gCur += tok;
+      }
+    }
+    if (gCur) globalLines.push(padR(gCur, 72) + 'G' + padL(globalLines.length + 1, 7));
+
+    const dirLines = [], paramLines = [];
+    const addEntity = (type, params, { sub = 1, use = 0, form = 0, xform = 0 } = {}) => {
+      const deNum = dirLines.length + 1;
+      const pStart = paramLines.length + 1;
+      const tokens = [String(type), ...params.map((x) => (typeof x === 'string' ? x : igsNum(x)))];
+      let cur = '';
+      let pCount = 0;
+      for (let i = 0; i < tokens.length; i++) {
+        const sep = i === tokens.length - 1 ? ';' : ',';
+        const tok = tokens[i] + sep;
+        if (cur.length + tok.length > 64 && cur.length > 0) {
+          pCount++;
+          paramLines.push(padR(cur, 64) + padL(deNum, 8) + 'P' + padL(paramLines.length + 1, 7));
+          cur = tok;
+        } else {
+          cur += tok;
+        }
+      }
+      if (cur) {
+        pCount++;
+        paramLines.push(padR(cur, 64) + padL(deNum, 8) + 'P' + padL(paramLines.length + 1, 7));
+      }
+      const status = `00${String(sub).padStart(2, '0')}${String(use).padStart(2, '0')}00`;
+      const d1 = padL(type, 8) + padL(pStart, 8) + padL(0, 8) + padL(1, 8) + padL(0, 8) + padL(0, 8) + padL(xform, 8) + padL(0, 8) + status + 'D' + padL(deNum, 7);
+      const d2 = padL(type, 8) + padL(0, 8) + padL(0, 8) + padL(pCount, 8) + padL(form, 8) + '        ' + '        ' + '        ' + padL(0, 8) + 'D' + padL(deNum + 1, 7);
+      dirLines.push(d1, d2);
+      return deNum;
+    };
+
+    const emitCurve126 = (bc, is2d) => {
+      const np = bc.NbPoles(), deg = bc.Degree();
+      const ck = [], cm = [];
+      for (let i = 1; i <= bc.NbKnots(); i++) { ck.push(bc.Knot(i)); cm.push(bc.Multiplicity(i)); }
+      const cSeq = expandKnots(ck, cm);
+      const cw = [], cp = [];
+      for (let i = 1; i <= np; i++) {
+        cw.push(bc.Weight(i));
+        const pt = bc.Pole(i);
+        cp.push(is2d ? [pt.X(), pt.Y(), 0] : [pt.X(), pt.Y(), pt.Z()]);
+        pt.delete();
+      }
+      const isRat = cw.some((w) => Math.abs(w - 1) > 1e-12);
+      const f = bc.FirstParameter(), l = bc.LastParameter();
+      const params = [
+        np - 1, deg, is2d ? 1 : 0, 0, isRat ? 0 : 1, 0,
+        ...cSeq,
+        ...cw,
+        ...cp.flatMap((q) => q),
+        f, l,
+        0, 0, is2d ? 1 : 0,
+      ];
+      return addEntity(126, params, { sub: 1, use: is2d ? 5 : 0 });
+    };
+
+    const convMode = oc.Convert_ParameterisationType.Convert_QuasiAngular;
+    for (const face of shape.faces) {
+      const fwOrig = oc.TopoDS.Face(face.wrapped);
+      const fw = oc.TopoDS.Face(fwOrig.Oriented(oc.TopAbs_Orientation.TopAbs_FORWARD));
+      const bsp = faceToBSplineSurface(face, fw);
+      const nu = bsp.NbUPoles(), nv = bsp.NbVPoles(), uDeg = bsp.UDegree(), vDeg = bsp.VDegree();
+      const uK = [], uM = [], vK = [], vM = [];
+      for (let i = 1; i <= bsp.NbUKnots(); i++) { uK.push(bsp.UKnot(i)); uM.push(bsp.UMultiplicity(i)); }
+      for (let i = 1; i <= bsp.NbVKnots(); i++) { vK.push(bsp.VKnot(i)); vM.push(bsp.VMultiplicity(i)); }
+      const uSeq = expandKnots(uK, uM), vSeq = expandKnots(vK, vM);
+      const W = [], P = [];
+      for (let j = 1; j <= nv; j++) for (let i = 1; i <= nu; i++) {
+        W.push(bsp.Weight(i, j));
+        const pt = bsp.Pole(i, j); P.push(pt.X(), pt.Y(), pt.Z()); pt.delete();
+      }
+      const isRat = W.some((w) => Math.abs(w - 1) > 1e-12);
+      const deSurf = addEntity(128, [
+        nu - 1, nv - 1, uDeg, vDeg, 0, 0, isRat ? 0 : 1, 0, 0,
+        ...uSeq, ...vSeq, ...W, ...P,
+        uSeq[0], uSeq[uSeq.length - 1], vSeq[0], vSeq[vSeq.length - 1],
+      ], { sub: 1, use: 0 });
+      bsp.delete();
+
+      const wires = collectWires(fw);
+      const uv = oc.BRepTools.UVBounds(fw);
+      const isNaturalClosed = wires.length === 1 && (face.geomType === 'SPHERE' || face.geomType === 'TORUS') &&
+        Math.abs((uv.UMax - uv.UMin) - (uSeq[uSeq.length - 1] - uSeq[0])) < 1e-4 &&
+        Math.abs((uv.VMax - uv.VMin) - (vSeq[vSeq.length - 1] - vSeq[0])) < 1e-4;
+      if (isNaturalClosed) {
+        addEntity(144, [deSurf, 0, 0, 0], { sub: 0, use: 0 });
+        continue;
+      }
+
+      const wire142s = [];
+      for (const w of wires) {
+        const rawEdges = collectEdges(w);
+        const edgeRecords = [];
+        for (const ew of rawEdges) {
+          const isRev = ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
+          const ad = new oc.BRepAdaptor_Curve2d(ew, fw);
+          const trim2 = new oc.Geom2d_TrimmedCurve(ad.Curve(), ad.FirstParameter(), ad.LastParameter(), true, true);
+          const bc2 = oc.Geom2dConvert.CurveToBSplineCurve(trim2, convMode);
+          trim2.delete(); ad.delete();
+          clampBSplineCurve(bc2);
+          if (isRev) bc2.Reverse();
+          const pS = bc2.Value(bc2.FirstParameter()), pE = bc2.Value(bc2.LastParameter());
+          const start2 = [pS.X(), pS.Y()], end2 = [pE.X(), pE.Y()];
+          pS.delete(); pE.delete();
+
+          let bc3 = null;
+          if (!oc.BRep_Tool.Degenerated(ew)) {
+            const locE = new oc.TopLoc_Location();
+            const crvRes = oc.BRep_Tool.Curve(ew, locE);
+            if (crvRes && crvRes.returnValue) {
+              const trim3 = new oc.Geom_TrimmedCurve(crvRes.returnValue, crvRes.First, crvRes.Last, true, true);
+              bc3 = oc.GeomConvert.CurveToBSplineCurve(trim3, convMode);
+              trim3.delete();
+              clampBSplineCurve(bc3);
+              if (!locE.IsIdentity()) {
+                const tr = locE.Transformation();
+                for (let i = 1; i <= bc3.NbPoles(); i++) {
+                  const pt = bc3.Pole(i), p2 = pt.Transformed(tr);
+                  bc3.SetPole(i, p2); p2.delete(); pt.delete();
+                }
+                tr.delete();
+              }
+              if (isRev) bc3.Reverse();
+            }
+            locE.delete();
+          }
+          edgeRecords.push({ bc2, bc3, start2, end2 });
+        }
+        const ordered = orderWireEdges2D(edgeRecords);
+        const des2d = [], des3d = [];
+        for (const rec of ordered) {
+          des2d.push(emitCurve126(rec.bc2, true));
+          rec.bc2.delete();
+          if (rec.bc3) {
+            des3d.push(emitCurve126(rec.bc3, false));
+            rec.bc3.delete();
+          }
+        }
+        const de2dComp = des2d.length === 1 ? des2d[0] : addEntity(102, [des2d.length, ...des2d], { sub: 1, use: 5 });
+        const de3dComp = des3d.length === 0 ? 0 : des3d.length === 1 ? des3d[0] : addEntity(102, [des3d.length, ...des3d], { sub: 1, use: 0 });
+        wire142s.push(addEntity(142, [2, deSurf, de2dComp, de3dComp, de3dComp ? 3 : 1], { sub: 1, use: 0 }));
+      }
+      if (!wire142s.length) continue;
+      const outer142 = wire142s[0], inner142s = wire142s.slice(1);
+      addEntity(144, [deSurf, 1, inner142s.length, outer142, ...inner142s], { sub: 0, use: 0 });
+    }
+    const termLine = `S${padL(startLines.length, 7)}G${padL(globalLines.length, 7)}D${padL(dirLines.length, 7)}P${padL(paramLines.length, 7)}` + ' '.repeat(40) + 'T' + padL(1, 7);
+    return [...startLines, ...globalLines, ...dirLines, ...paramLines, termLine].join('\n') + '\n';
+  }
+  function parseIGESToShape(txt) {
+    const rawLines = String(txt || '').split(/\r\n|\n|\r/);
+    const gLines = [], dLines = [], pLines = [];
+    for (const ln of rawLines) {
+      if (ln.length < 73) continue;
+      const sec = ln[72];
+      if (sec === 'G') gLines.push(ln.slice(0, 72));
+      else if (sec === 'D') dLines.push(ln);
+      else if (sec === 'P') pLines.push(ln);
+    }
+    if (!dLines.length || !pLines.length) throw new Error('Die IGES-Datei ließ sich nicht lesen.');
+
+    const parseGlobal = (str) => {
+      const s = str.replace(/^\s+/, '');
+      let paramDelim = ',', recordDelim = ';', idx = 0;
+      const readDelimSpec = () => {
+        while (idx < s.length && /\s/.test(s[idx])) idx++;
+        if (s[idx] === ',' || s[idx] === ';') { const ch = s[idx]; idx++; return ch; }
+        const m = /^(\d+)H/.exec(s.slice(idx));
+        if (m) {
+          const len = parseInt(m[1], 10);
+          idx += m[0].length;
+          const val = s.slice(idx, idx + len);
+          idx += len;
+          while (idx < s.length && (s[idx] === ',' || /\s/.test(s[idx]))) idx++;
+          return val[0];
+        }
+        return null;
+      };
+      const d1 = readDelimSpec();
+      if (d1) paramDelim = d1;
+      const d2 = readDelimSpec();
+      if (d2) recordDelim = d2;
+      const fields = [paramDelim, recordDelim];
+      while (idx < s.length) {
+        while (idx < s.length && /\s/.test(s[idx])) idx++;
+        if (idx >= s.length || s[idx] === recordDelim) break;
+        if (s[idx] === paramDelim) { fields.push(''); idx++; continue; }
+        const hm = /^(\d+)H/.exec(s.slice(idx));
+        if (hm) {
+          const n = parseInt(hm[1], 10);
+          idx += hm[0].length;
+          fields.push(s.slice(idx, idx + n));
+          idx += n;
+          while (idx < s.length && /\s/.test(s[idx])) idx++;
+          if (s[idx] === paramDelim) idx++;
+        } else {
+          let j = idx;
+          while (j < s.length && s[j] !== paramDelim && s[j] !== recordDelim) j++;
+          fields.push(s.slice(idx, j).trim());
+          idx = s[j] === paramDelim ? j + 1 : j;
+        }
+      }
+      return { paramDelim, recordDelim, fields };
+    };
+    const G = parseGlobal(gLines.join(''));
+    const PD = G.paramDelim, RD = G.recordDelim;
+    const UNITS = { 1: 25.4, 2: 1, 4: 304.8, 5: 1609344, 6: 1000, 7: 1e6, 8: 0.0254, 9: 0.001, 10: 10, 11: 2.54e-5 };
+    const uFlag = parseInt(G.fields[13], 10);
+    let unitScale = UNITS[uFlag];
+    if (!unitScale) {
+      const uName = String(G.fields[14] || '').trim().toUpperCase();
+      unitScale = uName.startsWith('IN') ? 25.4 : uName === 'CM' ? 10 : uName === 'M' ? 1000 : uName === 'FT' ? 304.8 : uName === 'UM' ? 0.001 : 1;
+    }
+
+    const deMap = new Map();
+    for (let i = 0; i + 1 < dLines.length; i += 2) {
+      const l1 = dLines[i], l2 = dLines[i + 1];
+      const de = parseInt(l1.slice(73, 80), 10) || (i + 1);
+      const type = parseInt(l1.slice(0, 8), 10);
+      const paramPtr = parseInt(l1.slice(8, 16), 10) || 0;
+      const xformPtr = parseInt(l1.slice(48, 56), 10) || 0;
+      const statusStr = l1.slice(64, 72).replace(/\s/g, '0').padStart(8, '0');
+      const sub = parseInt(statusStr.slice(2, 4), 10) || 0;
+      const paramCount = parseInt(l2.slice(24, 32), 10) || 0;
+      const form = parseInt(l2.slice(32, 40), 10) || 0;
+      deMap.set(de, { de, type, paramPtr, xformPtr, sub, paramCount, form, raw: [], params: null });
+    }
+    for (const ln of pLines) {
+      const dePtr = parseInt(ln.slice(64, 72), 10);
+      const ent = deMap.get(dePtr);
+      if (ent) ent.raw.push(ln.slice(0, 64));
+    }
+    const tokenizeParams = (rawText) => {
+      const toks = [];
+      let i = 0;
+      while (i < rawText.length) {
+        while (i < rawText.length && /\s/.test(rawText[i])) i++;
+        if (i >= rawText.length || rawText[i] === RD) break;
+        if (rawText[i] === PD) { toks.push(''); i++; continue; }
+        const hm = /^(\d+)H/.exec(rawText.slice(i));
+        if (hm) {
+          const n = parseInt(hm[1], 10);
+          i += hm[0].length;
+          toks.push(rawText.slice(i, i + n));
+          i += n;
+          while (i < rawText.length && /\s/.test(rawText[i])) i++;
+          if (rawText[i] === PD) i++;
+        } else {
+          let j = i;
+          while (j < rawText.length && rawText[j] !== PD && rawText[j] !== RD) j++;
+          toks.push(rawText.slice(i, j).trim());
+          i = rawText[j] === PD ? j + 1 : j;
+        }
+      }
+      return toks;
+    };
+    for (const ent of deMap.values()) ent.params = tokenizeParams(ent.raw.join(''));
+    const pNum = (ent, idx, def = 0) => {
+      const s = ent.params[idx];
+      if (!s) return def;
+      const v = parseFloat(s.replace(/[dD]/g, 'e'));
+      return Number.isFinite(v) ? v : def;
+    };
+    const pInt = (ent, idx, def = 0) => Math.round(pNum(ent, idx, def));
+
+    const ID = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const xformCache = new Map();
+    const getXform = (dePtr, seen = new Set()) => {
+      if (!dePtr || seen.has(dePtr)) return ID;
+      if (xformCache.has(dePtr)) return xformCache.get(dePtr);
+      const ent = deMap.get(dePtr);
+      if (!ent || ent.type !== 124) return ID;
+      seen.add(dePtr);
+      const r11 = pNum(ent, 1, 1), r12 = pNum(ent, 2, 0), r13 = pNum(ent, 3, 0), t1 = pNum(ent, 4, 0);
+      const r21 = pNum(ent, 5, 0), r22 = pNum(ent, 6, 1), r23 = pNum(ent, 7, 0), t2 = pNum(ent, 8, 0);
+      const r31 = pNum(ent, 9, 0), r32 = pNum(ent, 10, 0), r33 = pNum(ent, 11, 1), t3 = pNum(ent, 12, 0);
+      const local = [r11, r21, r31, 0, r12, r22, r32, 0, r13, r23, r33, 0, t1, t2, t3, 1];
+      const res = ent.xformPtr ? matMul(getXform(ent.xformPtr, seen), local) : local;
+      xformCache.set(dePtr, res);
+      return res;
+    };
+    const xformPnt = (dePtr, pt) => (dePtr ? transformPoint(getXform(dePtr), pt) : pt);
+
+    const buildSurface = (dePtr) => {
+      const ent = deMap.get(dePtr);
+      if (!ent) return null;
+      if (ent.type === 128) {
+        const K1 = pInt(ent, 1), K2 = pInt(ent, 2), M1 = pInt(ent, 3), M2 = pInt(ent, 4);
+        const nu = K1 + 1, nv = K2 + 1, A = nu + M1 + 1, B = nv + M2 + 1, C = nu * nv;
+        let idx = 10;
+        const uSeq = [], vSeq = [], W = [], P = [];
+        for (let i = 0; i < A; i++) uSeq.push(pNum(ent, idx++));
+        for (let i = 0; i < B; i++) vSeq.push(pNum(ent, idx++));
+        for (let i = 0; i < C; i++) W.push(pNum(ent, idx++, 1));
+        for (let i = 0; i < C; i++) {
+          const pt = [pNum(ent, idx++), pNum(ent, idx++), pNum(ent, idx++)];
+          P.push(xformPnt(ent.xformPtr, pt));
+        }
+        const uC = compressKnots(uSeq), vC = compressKnots(vSeq);
+        const poles = new oc.NCollection_Array2_gp_Pnt(1, nu, 1, nv);
+        const weights = new oc.NCollection_Array2_double(1, nu, 1, nv);
+        let k = 0;
+        for (let j = 1; j <= nv; j++) for (let i = 1; i <= nu; i++, k++) {
+          const gp = new oc.gp_Pnt(P[k][0], P[k][1], P[k][2]);
+          poles.SetValue(i, j, gp); gp.delete();
+          weights.SetValue(i, j, W[k]);
+        }
+        const uk = makeArr1D(uC.knots), vk = makeArr1D(vC.knots), um = makeArr1I(uC.mults), vm = makeArr1I(vC.mults);
+        const isRat = W.some((w) => Math.abs(w - 1) > 1e-12);
+        const surf = isRat
+          ? new oc.Geom_BSplineSurface(poles, weights, uk, vk, um, vm, M1, M2, false, false)
+          : new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, M1, M2, false, false);
+        poles.delete(); weights.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete();
+        return surf;
+      }
+      if (ent.type === 190 || ent.type === 108) {
+        // Ebene als große BSplineSurface (für getrimmte Flächen 144/143)
+        let o, uDir, vDir;
+        if (ent.type === 108) {
+          const A = pNum(ent, 1), B = pNum(ent, 2), C = pNum(ent, 3), D = pNum(ent, 4);
+          const n = norm([A, B, C]);
+          o = mul(n, D / (Math.hypot(A, B, C) || 1));
+          const ref = Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+          uDir = norm(cross(ref, n));
+          vDir = cross(n, uDir);
+        } else {
+          const pEnt = deMap.get(pInt(ent, 1)), nEnt = deMap.get(pInt(ent, 2));
+          o = pEnt ? [pNum(pEnt, 1), pNum(pEnt, 2), pNum(pEnt, 3)] : [0, 0, 0];
+          const n = norm(nEnt ? [pNum(nEnt, 1), pNum(nEnt, 2), pNum(nEnt, 3)] : [0, 0, 1]);
+          const rEnt = ent.form === 1 ? deMap.get(pInt(ent, 3)) : null;
+          uDir = rEnt ? norm([pNum(rEnt, 1), pNum(rEnt, 2), pNum(rEnt, 3)]) : norm(cross(Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], n));
+          vDir = cross(n, uDir);
+        }
+        if (ent.xformPtr) {
+          const m = getXform(ent.xformPtr);
+          o = transformPoint(m, o); uDir = transformDir(m, uDir); vDir = transformDir(m, vDir);
+        }
+        const S = 1e4;
+        const poles = new oc.NCollection_Array2_gp_Pnt(1, 2, 1, 2);
+        const setP = (iu, iv, u, v) => {
+          const q = [o[0] + uDir[0] * u + vDir[0] * v, o[1] + uDir[1] * u + vDir[1] * v, o[2] + uDir[2] * u + vDir[2] * v];
+          const gp = new oc.gp_Pnt(q[0], q[1], q[2]); poles.SetValue(iu, iv, gp); gp.delete();
+        };
+        setP(1, 1, -S, -S); setP(2, 1, S, -S); setP(1, 2, -S, S); setP(2, 2, S, S);
+        const uk = makeArr1D([-S, S]), vk = makeArr1D([-S, S]), um = makeArr1I([2, 2]), vm = makeArr1I([2, 2]);
+        const surf = new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, 1, 1, false, false);
+        poles.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete();
+        return surf;
+      }
+      if (ent.type === 192 || ent.type === 194 || ent.type === 196) {
+        const pEnt = deMap.get(pInt(ent, 1)), aEnt = deMap.get(pInt(ent, 2));
+        const o0 = pEnt ? [pNum(pEnt, 1), pNum(pEnt, 2), pNum(pEnt, 3)] : [0, 0, 0];
+        const ax0 = norm(aEnt ? [pNum(aEnt, 1), pNum(aEnt, 2), pNum(aEnt, 3)] : [0, 0, 1]);
+        const r = Math.max(1e-6, pNum(ent, 3, 1));
+        const rEnt = ent.form === 1 ? deMap.get(pInt(ent, ent.type === 194 ? 5 : 4)) : null;
+        const x0 = rEnt ? norm([pNum(rEnt, 1), pNum(rEnt, 2), pNum(rEnt, 3)]) : norm(cross(Math.abs(ax0[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], ax0));
+        const m = ent.xformPtr ? getXform(ent.xformPtr) : null;
+        const o = m ? transformPoint(m, o0) : o0, ax = m ? transformDir(m, ax0) : ax0, xd = m ? transformDir(m, x0) : x0;
+        const p = new oc.gp_Pnt(o[0], o[1], o[2]), d = new oc.gp_Dir(ax[0], ax[1], ax[2]), xdG = new oc.gp_Dir(xd[0], xd[1], xd[2]);
+        const ax3 = new oc.gp_Ax3(p, d, xdG);
+        let surf = null;
+        if (ent.type === 192) surf = new oc.Geom_CylindricalSurface(ax3, r);
+        else if (ent.type === 194) surf = new oc.Geom_ConicalSurface(ax3, (pNum(ent, 4, 45) * Math.PI) / 180, r);
+        else surf = new oc.Geom_SphericalSurface(ax3, r);
+        ax3.delete(); p.delete(); d.delete(); xdG.delete();
+        return surf;
+      }
+      return null;
+    };
+
+    const collectCurveDEs = (dePtr, seen = new Set()) => {
+      if (!dePtr || seen.has(dePtr)) return [];
+      const ent = deMap.get(dePtr);
+      if (!ent) return [];
+      if (ent.type === 102) {
+        seen.add(dePtr);
+        const n = pInt(ent, 1, 0);
+        const out = [];
+        for (let i = 0; i < n; i++) out.push(...collectCurveDEs(pInt(ent, 2 + i), seen));
+        return out;
+      }
+      return [ent];
+    };
+
+    const build2DEdges = (dePtr, surf) => {
+      const ents = collectCurveDEs(dePtr);
+      const edges = [];
+      for (const ent of ents) {
+        if (ent.type === 126) {
+          const K = pInt(ent, 1), M = pInt(ent, 2), np = K + 1, nKnots = np + M + 1;
+          let idx = 7;
+          const seq = [], W = [], P = [];
+          for (let i = 0; i < nKnots; i++) seq.push(pNum(ent, idx++));
+          for (let i = 0; i < np; i++) W.push(pNum(ent, idx++, 1));
+          for (let i = 0; i < np; i++) {
+            const pt = xformPnt(ent.xformPtr, [pNum(ent, idx++), pNum(ent, idx++), pNum(ent, idx++)]);
+            P.push([pt[0], pt[1]]);
+          }
+          const v0 = pNum(ent, idx++, seq[0]), v1 = pNum(ent, idx++, seq[seq.length - 1]);
+          const cC = compressKnots(seq);
+          const cp = makeArr1P2(P), ck = makeArr1D(cC.knots), cm = makeArr1I(cC.mults);
+          const isRat = W.some((w) => Math.abs(w - 1) > 1e-12);
+          let bc;
+          if (isRat) { const cw = makeArr1D(W); bc = new oc.Geom2d_BSplineCurve(cp, cw, ck, cm, M, false); cw.delete(); }
+          else bc = new oc.Geom2d_BSplineCurve(cp, ck, cm, M, false);
+          cp.delete(); ck.delete(); cm.delete();
+          const me = new oc.BRepBuilderAPI_MakeEdge(bc, surf, v0, v1);
+          if (me.IsDone()) edges.push(me.Edge());
+          me.delete(); bc.delete();
+        } else if (ent.type === 110) {
+          const a = xformPnt(ent.xformPtr, [pNum(ent, 1), pNum(ent, 2), pNum(ent, 3)]);
+          const b = xformPnt(ent.xformPtr, [pNum(ent, 4), pNum(ent, 5), pNum(ent, 6)]);
+          if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-12) continue;
+          const cp = makeArr1P2([[a[0], a[1]], [b[0], b[1]]]), ck = makeArr1D([0, 1]), cm = makeArr1I([2, 2]);
+          const bc = new oc.Geom2d_BSplineCurve(cp, ck, cm, 1, false);
+          cp.delete(); ck.delete(); cm.delete();
+          const me = new oc.BRepBuilderAPI_MakeEdge(bc, surf, 0, 1);
+          if (me.IsDone()) edges.push(me.Edge());
+          me.delete(); bc.delete();
+        } else if (ent.type === 100) {
+          const c = xformPnt(ent.xformPtr, [pNum(ent, 2), pNum(ent, 3), pNum(ent, 1)]);
+          const s = xformPnt(ent.xformPtr, [pNum(ent, 4), pNum(ent, 5), pNum(ent, 1)]);
+          const e = xformPnt(ent.xformPtr, [pNum(ent, 6), pNum(ent, 7), pNum(ent, 1)]);
+          const r = Math.hypot(s[0] - c[0], s[1] - c[1]);
+          if (r < 1e-12) continue;
+          const a0 = Math.atan2(s[1] - c[1], s[0] - c[0]);
+          let a1 = Math.atan2(e[1] - c[1], e[0] - c[0]);
+          if (a1 <= a0 + 1e-9) a1 += Math.PI * 2;
+          const cp = new oc.gp_Pnt2d(c[0], c[1]), d = new oc.gp_Dir2d(1, 0), ax = new oc.gp_Ax2d(cp, d);
+          const circ = new oc.Geom2d_Circle(ax, r, true);
+          const trim = new oc.Geom2d_TrimmedCurve(circ, a0, a1, true, true);
+          const me = new oc.BRepBuilderAPI_MakeEdge(trim, surf, a0, a1);
+          if (me.IsDone()) edges.push(me.Edge());
+          me.delete(); trim.delete(); circ.delete(); ax.delete(); d.delete(); cp.delete();
+        } else if (ent.type === 106) {
+          const ip = pInt(ent, 1, 1), n = pInt(ent, 2, 0);
+          const pts = [];
+          let idx = 3;
+          if (ip === 1) {
+            const z = pNum(ent, idx++, 0);
+            for (let i = 0; i < n; i++) pts.push(xformPnt(ent.xformPtr, [pNum(ent, idx++), pNum(ent, idx++), z]));
+          } else if (ip === 2) {
+            for (let i = 0; i < n; i++) pts.push(xformPnt(ent.xformPtr, [pNum(ent, idx++), pNum(ent, idx++), pNum(ent, idx++)]));
+          }
+          if (ent.form === 63 && pts.length > 1) pts.push(pts[0]);
+          for (let i = 0; i + 1 < pts.length; i++) {
+            const a = pts[i], b = pts[i + 1];
+            if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-12) continue;
+            const cp = makeArr1P2([[a[0], a[1]], [b[0], b[1]]]), ck = makeArr1D([0, 1]), cm = makeArr1I([2, 2]);
+            const bc = new oc.Geom2d_BSplineCurve(cp, ck, cm, 1, false);
+            cp.delete(); ck.delete(); cm.delete();
+            const me = new oc.BRepBuilderAPI_MakeEdge(bc, surf, 0, 1);
+            if (me.IsDone()) edges.push(me.Edge());
+            me.delete(); bc.delete();
+          }
+        }
+      }
+      return edges;
+    };
+
+    const build3DEdges = (dePtr) => {
+      const ents = collectCurveDEs(dePtr);
+      const edges = [];
+      for (const ent of ents) {
+        if (ent.type === 126) {
+          const K = pInt(ent, 1), M = pInt(ent, 2), np = K + 1, nKnots = np + M + 1;
+          let idx = 7;
+          const seq = [], W = [], P = [];
+          for (let i = 0; i < nKnots; i++) seq.push(pNum(ent, idx++));
+          for (let i = 0; i < np; i++) W.push(pNum(ent, idx++, 1));
+          for (let i = 0; i < np; i++) P.push(xformPnt(ent.xformPtr, [pNum(ent, idx++), pNum(ent, idx++), pNum(ent, idx++)]));
+          const v0 = pNum(ent, idx++, seq[0]), v1 = pNum(ent, idx++, seq[seq.length - 1]);
+          const cC = compressKnots(seq);
+          const cp = makeArr1P3(P), ck = makeArr1D(cC.knots), cm = makeArr1I(cC.mults);
+          const isRat = W.some((w) => Math.abs(w - 1) > 1e-12);
+          let bc;
+          if (isRat) { const cw = makeArr1D(W); bc = new oc.Geom_BSplineCurve(cp, cw, ck, cm, M, false); cw.delete(); }
+          else bc = new oc.Geom_BSplineCurve(cp, ck, cm, M, false);
+          cp.delete(); ck.delete(); cm.delete();
+          const trim = new oc.Geom_TrimmedCurve(bc, v0, v1, true, true);
+          const me = new oc.BRepBuilderAPI_MakeEdge(trim);
+          if (me.IsDone()) edges.push(me.Edge());
+          me.delete(); trim.delete(); bc.delete();
+        } else if (ent.type === 110) {
+          const a = xformPnt(ent.xformPtr, [pNum(ent, 1), pNum(ent, 2), pNum(ent, 3)]);
+          const b = xformPnt(ent.xformPtr, [pNum(ent, 4), pNum(ent, 5), pNum(ent, 6)]);
+          if (Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) < 1e-9) continue;
+          edges.push(R.makeLine(a, b).wrapped);
+        } else if (ent.type === 100) {
+          const z = pNum(ent, 1), cx = pNum(ent, 2), cy = pNum(ent, 3);
+          const sx = pNum(ent, 4), sy = pNum(ent, 5), ex = pNum(ent, 6), ey = pNum(ent, 7);
+          const r = Math.hypot(sx - cx, sy - cy);
+          if (r < 1e-9) continue;
+          const a0 = Math.atan2(sy - cy, sx - cx);
+          let a1 = Math.atan2(ey - cy, ex - cx);
+          if (a1 <= a0 + 1e-9) a1 += Math.PI * 2;
+          const c = xformPnt(ent.xformPtr, [cx, cy, z]);
+          const n = ent.xformPtr ? transformDir(getXform(ent.xformPtr), [0, 0, 1]) : [0, 0, 1];
+          if (Math.abs(a1 - a0 - Math.PI * 2) < 1e-6) {
+            edges.push(R.makeCircle(r, c, n).wrapped);
+          } else {
+            const am = (a0 + a1) / 2;
+            const p0 = xformPnt(ent.xformPtr, [sx, sy, z]);
+            const pm = xformPnt(ent.xformPtr, [cx + r * Math.cos(am), cy + r * Math.sin(am), z]);
+            const p1 = xformPnt(ent.xformPtr, [ex, ey, z]);
+            edges.push(R.makeThreePointArc(p0, pm, p1).wrapped);
+          }
+        }
+      }
+      return edges;
+    };
+
+    const makeFaceWithWires = (surf, wireSpecs) => {
+      const wires = [];
+      for (const sp of wireSpecs) {
+        let edgeList = sp.d2 ? build2DEdges(sp.d2, surf) : [];
+        if (!edgeList.length && sp.d3) edgeList = build3DEdges(sp.d3);
+        if (edgeList.length) wires.push(makeWireFromEdges(edgeList));
+      }
+      if (!wires.length) return null;
+      const mf = new oc.BRepBuilderAPI_MakeFace(surf, wires[0], true);
+      for (let i = 1; i < wires.length; i++) mf.Add(wires[i]);
+      if (!mf.IsDone()) { mf.delete(); return null; }
+      let nf = mf.Face(); mf.delete();
+      oc.BRepLib.BuildCurves3d(nf);
+      const sff = new oc.ShapeFix_Face(nf); sff.Perform(); nf = sff.Face(); sff.delete();
+      return nf;
+    };
+
+    const faces = [];
+    const usedSurfaces = new Set();
+    for (const ent of deMap.values()) {
+      if (ent.type === 144) {
+        const deSurf = pInt(ent, 1), n1 = pInt(ent, 2), n2 = pInt(ent, 3), pto = pInt(ent, 4);
+        usedSurfaces.add(deSurf);
+        const surf = buildSurface(deSurf);
+        if (!surf) continue;
+        if (n1 === 0 && n2 === 0) {
+          const mf = new oc.BRepBuilderAPI_MakeFace(surf, 1e-6);
+          if (mf.IsDone()) faces.push(mf.Face());
+          mf.delete();
+          continue;
+        }
+        const specs = [];
+        const add142 = (de142) => {
+          const e142 = deMap.get(de142);
+          if (!e142 || e142.type !== 142) return;
+          specs.push({ d2: pInt(e142, 3), d3: pInt(e142, 4) });
+        };
+        if (pto) add142(pto);
+        for (let i = 0; i < n2; i++) add142(pInt(ent, 5 + i));
+        let nf = makeFaceWithWires(surf, specs);
+        if (!nf && specs.length) {
+          const mf = new oc.BRepBuilderAPI_MakeFace(surf, 1e-6);
+          if (mf.IsDone()) nf = mf.Face();
+          mf.delete();
+        }
+        if (nf) faces.push(nf);
+      } else if (ent.type === 143) {
+        const deSurf = pInt(ent, 2), n = pInt(ent, 3);
+        usedSurfaces.add(deSurf);
+        const surf = buildSurface(deSurf);
+        if (!surf) continue;
+        const specs = [];
+        for (let i = 0; i < n; i++) {
+          const bEnt = deMap.get(pInt(ent, 4 + i));
+          if (!bEnt || bEnt.type !== 141) continue;
+          const nb = pInt(bEnt, 4);
+          const d2List = [], d3List = [];
+          let idx = 5;
+          for (let k = 0; k < nb; k++) {
+            const crv = pInt(bEnt, idx++); idx++; // sense
+            const nPsc = pInt(bEnt, idx++);
+            for (let m = 0; m < nPsc; m++) d2List.push(pInt(bEnt, idx++));
+            if (!nPsc && crv) d3List.push(crv);
+          }
+          if (d2List.length) {
+            const e2 = [];
+            for (const c of d2List) e2.push(...build2DEdges(c, surf));
+            if (e2.length) specs.push({ preEdges: e2 });
+          } else if (d3List.length) {
+            const e3 = [];
+            for (const c of d3List) e3.push(...build3DEdges(c));
+            if (e3.length) specs.push({ preEdges: e3 });
+          }
+        }
+        if (specs.length) {
+          const wires = specs.map((sp) => makeWireFromEdges(sp.preEdges));
+          const mf = new oc.BRepBuilderAPI_MakeFace(surf, wires[0], true);
+          for (let i = 1; i < wires.length; i++) mf.Add(wires[i]);
+          if (mf.IsDone()) {
+            let nf = mf.Face();
+            oc.BRepLib.BuildCurves3d(nf);
+            const sff = new oc.ShapeFix_Face(nf); sff.Perform(); nf = sff.Face(); sff.delete();
+            faces.push(nf);
+          }
+          mf.delete();
+        }
+      }
+    }
+    // Eigenständige ungetrimmte Flächen (128 / 108 mit sub === 0), falls nicht über 144/143 eingebunden
+    for (const ent of deMap.values()) {
+      if ((ent.type === 128 || ent.type === 108) && ent.sub === 0 && !usedSurfaces.has(ent.de)) {
+        if (ent.type === 108) {
+          const ptr = pInt(ent, 5);
+          const A = pNum(ent, 1), B = pNum(ent, 2), C = pNum(ent, 3), D = pNum(ent, 4);
+          const n = norm([A, B, C]), o = mul(n, D / (Math.hypot(A, B, C) || 1));
+          const m = ent.xformPtr ? getXform(ent.xformPtr) : null;
+          const ow = m ? transformPoint(m, o) : o, nw = m ? transformDir(m, n) : n;
+          const gpP = new oc.gp_Pnt(ow[0], ow[1], ow[2]), gpD = new oc.gp_Dir(nw[0], nw[1], nw[2]);
+          const pln = new oc.gp_Pln(gpP, gpD); gpP.delete(); gpD.delete();
+          if (ptr) {
+            const e3 = build3DEdges(ptr);
+            if (e3.length) {
+              const mf = new oc.BRepBuilderAPI_MakeFace(pln, makeWireFromEdges(e3), true);
+              if (mf.IsDone()) {
+                let nf = mf.Face();
+                const sff = new oc.ShapeFix_Face(nf); sff.Perform(); nf = sff.Face(); sff.delete();
+                faces.push(nf);
+              }
+              mf.delete();
+            }
+          }
+          pln.delete();
+        } else {
+          const surf = buildSurface(ent.de);
+          if (surf) {
+            const mf = new oc.BRepBuilderAPI_MakeFace(surf, 1e-6);
+            if (mf.IsDone()) faces.push(mf.Face());
+            mf.delete();
+          }
+        }
+      }
+    }
+
+    if (!faces.length) throw new Error('Die IGES-Datei enthält keine lesbare 3D-Geometrie.');
+    const sew = new oc.BRepBuilderAPI_Sewing(1e-2, true, true, true, false);
+    for (const f of faces) sew.Add(f);
+    sew.Perform();
+    const sewed = sew.SewedShape(); sew.delete();
+
+    const outShapes = [];
+    const shExp = new oc.TopExp_Explorer(sewed, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (shExp.More()) {
+      const shell = oc.TopoDS.Shell(shExp.Current());
+      let done = false;
+      try {
+        const ms = new oc.BRepBuilderAPI_MakeSolid(shell);
+        if (ms.IsDone()) {
+          let sol = ms.Solid(); ms.delete();
+          const sfs = new oc.ShapeFix_Solid(sol); sfs.Perform(); sol = oc.TopoDS.Solid(sfs.Solid()); sfs.delete();
+          let res = R.cast(sol);
+          const v = R.measureVolume(res);
+          if (Math.abs(v) > 1e-6) { if (v < 0) res = R.cast(sol.Reversed()); outShapes.push(res); done = true; }
+        } else ms.delete();
+      } catch (_) {}
+      if (!done) outShapes.push(R.cast(shell));
+      shExp.Next();
+    }
+    shExp.delete();
+
+    if (!outShapes.length) {
+      const fExp = new oc.TopExp_Explorer(sewed, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+      while (fExp.More()) {
+        const f = oc.TopoDS.Face(fExp.Current());
+        let done = false;
+        try {
+          const sf = oc.BRep_Tool.Surface(f);
+          const sh = new oc.BRepBuilderAPI_MakeShell(sf, false).Shell();
+          const ms = new oc.BRepBuilderAPI_MakeSolid(sh);
+          if (ms.IsDone()) {
+            let sol = ms.Solid(); ms.delete();
+            let res = R.cast(sol);
+            const v = R.measureVolume(res);
+            if (Math.abs(v) > 1e-6) { if (v < 0) res = R.cast(sol.Reversed()); outShapes.push(res); done = true; }
+          } else ms.delete();
+        } catch (_) {}
+        if (!done) outShapes.push(R.cast(f));
+        fExp.Next();
+      }
+      fExp.delete();
+    }
+    if (!outShapes.length) throw new Error('Die IGES-Datei enthält keine lesbare 3D-Geometrie.');
+    let shape = outShapes.length === 1 ? outShapes[0] : R.makeCompound(outShapes);
+    if (Math.abs(unitScale - 1) > 1e-9) shape = shape.scale(unitScale, [0, 0, 0]);
+    return shape;
+  }
+  function collectExportShape(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
     let solids = evaluateShapes(scene, errors);
@@ -4264,7 +5130,27 @@ export function createKernel(R, oc) {
       }
     }
     const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
-    return comp.blobSTEP();
+    return { comp, solids };
+  }
+  function freeExportShape({ comp, solids }) {
+    if (solids.length > 1) safeDelete(comp);
+    for (const s of solids) safeDelete(s.shape);
+  }
+  function exportSTEP(scene, only, originMat = null) {
+    const ex = collectExportShape(scene, only, originMat);
+    try { return ex.comp.blobSTEP(); } finally { freeExportShape(ex); }
+  }
+  function exportIGES(scene, only, originMat = null) {
+    const ex = collectExportShape(scene, only, originMat);
+    try { return new Blob([shapeToIGES(ex.comp)], { type: 'model/iges' }); } finally { freeExportShape(ex); }
+  }
+  function exportBREP(scene, only, originMat = null) {
+    const ex = collectExportShape(scene, only, originMat);
+    try {
+      const str = oc.BRepToolsWrapper.Write(ex.comp.wrapped);
+      if (!str || !str.length) throw new Error('BREP-Export fehlgeschlagen.');
+      return new Blob([str], { type: 'text/plain' });
+    } finally { freeExportShape(ex); }
   }
   // Volumen, Oberfläche und Schwerpunkt – je Teil der obersten Ebene und gesamt
   function measure(scene) {
@@ -4475,5 +5361,5 @@ export function createKernel(R, oc) {
     }
     return { holes: out, errors };
   }
-  return { evaluate, remesh, exportMeshes, exportSTEP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, _cache: cache };
 }

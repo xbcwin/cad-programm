@@ -1789,6 +1789,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verlauf, Zeitleiste & Hilfe**: Unterdrücken, Marker zurückrollen, `Sketch.editItem`, `Model.dependencies`, `Explain.local`, `Commands.search('Wickeln')` und Hilfetext `wrapCyl` funktionieren fehlerfrei.
 - [ ] **Von Hand**: Im Browser eine Zylinderfläche anklicken, auf „Wickeln“ klicken, ein Rechteck und eine geschwungene Linie zeichnen und zwischen erhaben, vertieft und Linie mit „Entlang Pfad“ umschalten.
 
+## IGES und BREP (Auto [A-044], IO-01)
+
+- [x] **BREP-Roundtrip (Quader 30×20×15)**: `exportBREP` liefert eine gültige OpenCascade-BREP-Datei (`CASCADE`), Re-Import über `.brep` erzeugt fehlerfrei ein `import`-Teil mit exakt gleichem Volumen (`±0,1 %`) und passenden Hüllmaßen.
+- [x] **IGES-Roundtrip (Quader `.igs` & `.iges`)**: `exportIGES` erzeugt eine gültige IGES-5.3-Datei (`S/G/D/P/T`, Type 144/128/142/126), Re-Import über `.igs` und `.iges` liefert `fmt='iges'` mit gleichem Volumen (`±0,1 %`).
+- [x] **Gekrümmter Körper mit Bohrung (IGES & BREP)**: Quader `30×20×15` mit Durchgangsbohrung `Ø 8 mm` behält nach IGES- und BREP-Roundtrip das exakte Volumen (`±0,1 %`) ohne Fehler.
+- [x] **Export-Dialog, ZIP, Skalierung, Hilfe & Fehler**: `#ex-iges` und `#ex-brep` mit `exportIgesBrep`-Hilfe schreiben `.igs` und `.brep` ins ZIP; `#p-scale` skaliert Einheiten (cm = 10×); defekte `.brep`/`.igs`-Dateien melden einen Fehler ohne Absturz.
+- [ ] **Von Hand**: Exportierte `.igs`- und `.brep`-Dateien in FreeCAD öffnen und die Kanten-/Flächenqualität prüfen.
+
 ## Fehler melden
 
 ```
