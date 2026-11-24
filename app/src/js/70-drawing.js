@@ -789,12 +789,12 @@ const Drawing = (() => {
   }
   function drawMenu(anchor) {
     UI.menu(anchor, [
-      { label: 'Linie', icon: 'line', run: () => setTool('free-line') },
-      { label: 'Rechteck', icon: 'rect', run: () => setTool('free-rect') },
-      { label: 'Kreis', icon: 'circle', run: () => setTool('free-circle') },
-      { label: 'Text', icon: 'text', run: () => setTool('free-text') },
+      { label: T('menu.draw.line'), icon: 'line', run: () => setTool('free-line') },
+      { label: T('menu.draw.rect'), icon: 'rect', run: () => setTool('free-rect') },
+      { label: T('menu.draw.circle'), icon: 'circle', run: () => setTool('free-circle') },
+      { label: T('menu.draw.text'), icon: 'text', run: () => setTool('free-text') },
       '-',
-      { label: 'Alles Gezeichnete löschen', icon: 'trash', disabled: !dwg().free.length, run: async () => { if (await UI.confirm('Gezeichnetes löschen?', 'Alle frei gezeichneten Linien und Texte werden entfernt.', 'Löschen', true)) App.change('Gezeichnetes gelöscht', () => { dwg().free = []; }); render(); } },
+      { label: T('menu.draw.clearAll'), icon: 'trash', disabled: !dwg().free.length, run: async () => { if (await UI.confirm(T('menu.draw.clearTitle'), T('menu.draw.clearBody'), T('common.delete'), true)) App.change('Gezeichnetes gelöscht', () => { dwg().free = []; }); render(); } },
     ]);
   }
   // ---------- Menüs ----------
@@ -804,16 +804,16 @@ const Drawing = (() => {
     const d = dwg();
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
     const f = h('div', { class: 'fields' });
-    f.append(UI.selectField({ id: 'dw-sheet', label: 'Blatt', value: d.sheet, options: [['A4', 'A4'], ['A3', 'A3']], onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); } }));
-    f.append(UI.selectField({ id: 'dw-orient', label: 'Ausrichtung', value: d.orient, options: [['landscape', 'Quer'], ['portrait', 'Hoch']], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); } }));
+    f.append(UI.selectField({ id: 'dw-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: [['A4', 'A4'], ['A3', 'A3']], onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); } }));
+    f.append(UI.selectField({ id: 'dw-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); } }));
     box.append(f);
-    box.append(UI.selectField({ id: 'dw-scale', label: 'Maßstab', value: String(d.scale), options: [['auto', 'Automatisch'], ...SCALES.map((s) => [String(s), scaleText(s)])], onChange: (v) => set((x) => { x.scale = v === 'auto' ? 'auto' : +v; }) }));
-    box.append(h('div', { class: 'section-h' }, 'Ansichten'));
-    for (const [k, l] of [['front', 'Vorderansicht'], ['top', 'Draufsicht'], ['left', 'Seitenansicht von links'], ['iso', 'Isometrie (3D-Bild)']]) {
+    box.append(UI.selectField({ id: 'dw-scale', label: T('menu.draw.scale'), value: String(d.scale), options: [['auto', T('menu.draw.scaleAuto')], ...SCALES.map((s) => [String(s), scaleText(s)])], onChange: (v) => set((x) => { x.scale = v === 'auto' ? 'auto' : +v; }) }));
+    box.append(h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
+    for (const [k, l] of [['front', T('menu.draw.vFront')], ['top', T('menu.draw.vTop')], ['left', T('menu.draw.vLeft')], ['iso', T('menu.draw.vIso')]]) {
       const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-' + k, checked: !!d.views[k] }), l);
       c.querySelector('input').onchange = (e) => set((x) => { x.views[k] = e.target.checked; }); box.append(c);
     }
-    for (const [k, l] of [['hidden', 'Verdeckte Kanten (gestrichelt)'], ['centers', 'Mittellinien']]) {
+    for (const [k, l] of [['hidden', T('menu.draw.hiddenEdges')], ['centers', T('menu.draw.centers')]]) {
       const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-' + k, checked: !!d[k] }), l);
       c.querySelector('input').onchange = (e) => set((x) => { x[k] = e.target.checked; }); box.append(c);
     }
@@ -821,9 +821,9 @@ const Drawing = (() => {
   }
   function exportMenu(anchor) {
     UI.menu(anchor, [
-      { label: 'Als PDF speichern', icon: 'file', run: () => exportPDF() },
-      { label: 'Als SVG speichern', icon: 'file', run: () => exportSVG() },
-      { label: 'Als DXF speichern (ZIP)', icon: 'file', run: () => exportDXF() },
+      { label: T('menu.draw.exportPdf'), icon: 'file', run: () => exportPDF() },
+      { label: T('menu.draw.exportSvg'), icon: 'file', run: () => exportSVG() },
+      { label: T('menu.draw.exportDxf'), icon: 'file', run: () => exportDXF() },
     ]);
   }
   function fileBase() { return Print.safeName((dwg().title.titel || App.doc.name) + ' Zeichnung'); }

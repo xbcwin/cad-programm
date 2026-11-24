@@ -38,15 +38,15 @@ const UI = (() => {
     setTimeout(() => { const f = box.querySelector('input,select,textarea,button.primary'); if (f) f.focus(); }, 30);
     return { close, el: box };
   }
-  function confirm(title, text, okLabel = 'OK', danger = false) {
-    return new Promise((res) => modal({ title, body: text, actions: [{ label: 'Abbrechen', value: false }, { label: okLabel, primary: !danger, danger, value: true }], onClose: (v) => res(!!v) }));
+  function confirm(title, text, okLabel = T('common.ok'), danger = false) {
+    return new Promise((res) => modal({ title, body: text, actions: [{ label: T('common.cancel'), value: false }, { label: okLabel, primary: !danger, danger, value: true }], onClose: (v) => res(!!v) }));
   }
-  function prompt(title, label, value = '', okLabel = 'OK') {
+  function prompt(title, label, value = '', okLabel = T('common.ok')) {
     return new Promise((res) => {
       const inp = h('input', { type: 'text', value, id: 'prompt-inp', style: { width: '100%', padding: '10px 12px', border: '1px solid var(--line-strong)', borderRadius: '8px', background: 'var(--surface)', fontSize: '15px' } });
       const body = h('div', { style: { display: 'grid', gap: '6px' } }, h('label', { for: 'prompt-inp', style: { color: 'var(--muted)', fontSize: '13.5px' } }, label), inp);
       let result = null;
-      const m = modal({ title, body, actions: [{ label: 'Abbrechen' }, { label: okLabel, primary: true, run: () => { result = inp.value; } }], onClose: () => res(result) });
+      const m = modal({ title, body, actions: [{ label: T('common.cancel') }, { label: okLabel, primary: true, run: () => { result = inp.value; } }], onClose: () => res(result) });
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { result = inp.value; m.close(); } });
       setTimeout(() => { inp.focus(); inp.select(); }, 40);
     });

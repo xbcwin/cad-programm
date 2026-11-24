@@ -84,6 +84,7 @@ Leitlinien:
 | Datei | Aufgabe |
 | --- | --- |
 | `00-util.js` | Hilfen, `Expr`-Rechner mit Einheiten (mm, cm, m, in, zoll, ", °), Projekt-Einheiten `Units` (`mm`, `cm`, `m`, `in`), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
+| `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
 | `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
@@ -120,7 +121,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`
@@ -154,7 +155,7 @@ Leitlinien:
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
 - **Übergang mit Mittellinie:** `loft.p.path` = Skizze mit offenem Zug (Kern: Pipe-Shell mit mehreren Schnitten).
-- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`.
+- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`; `loftPreview` in `55-sketch.js` verzögert nur bei geänderter Kurve neu, damit Kamera-/Maus-`render()`-Aufrufe die Vorschau nicht aushungern.
 - **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth, rules: [{ax:'x'|'y'|'z'|'perp'|'par', len}|null, …], bind: [{id, lp}|null, …] (Punkt hängt an Körper id, lp = Lage im Körper)}` statt `p.sketch`; `Model.path3dPoints` rechnet die Lage mit Regeln.
 - **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
 
@@ -183,7 +184,7 @@ Leitlinien:
 - Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
 - Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
 - Vorführen: `Views.present(on)` (Taste P, Klasse `body.presenting`, Vollbild, Drehteller über `requestAnimationFrame`, Leiste `#present-bar`), `Views.presenting`
-- Vorige Ansicht: `Viewer.viewBack()` (Umschalt Z), Verlauf `camHist` bis 40 – `moveCamera` (setzt über `stopDamping()` Restdämpfung der OrbitControls zurück) und der Beginn jeder Maus-Bewegung (`controls` 'start', schnelle Folgen zusammengefasst) legen den Blick davor ab; `Viewer.viewHistory`
+- Vorige Ansicht: `Viewer.viewBack()` (Umschalt Z), Verlauf `camHist` bis 40 – `moveCamera` (setzt über `stopDamping()` Restdämpfung der OrbitControls zurück, schließt `camAnim` per Timer-Fallback `finishCamAnim()` auch bei stockendem `rAF` ab und entdoppelt das `camera`-Event pro Frame) und der Beginn jeder Maus-Bewegung (`controls` 'start', schnelle Folgen zusammengefasst, bricht `camAnim` per `cancelCamAnim()` ab) legen den Blick davor ab; `Viewer.viewHistory`
 - Teil dahinter: `Viewer.pickAll(cx, cy)` (alle Treffer, vorne zuerst); Alt + Klick → `Interact.selectBehind`; Rechtsklick-Einträge `cm-behind-N`
 - Bedienung: Rechtsklick-Menü im Bild (`Interact.contextMenu`, Rechtsklick ohne Ziehen), Rahmen-Auswahl mit Umschalt + Ziehen im Leeren (`Interact.bandSelect`), `Commands.exec` merkt Befehle (`Commands.last`, `recent`, Leertaste = `Commands.repeat`), `Actions.hideSelected`/`showAll`/`invertSelection`
 - Anzeige: `ViewPrefs.display` ('edges' | 'shaded' | 'wire' | 'hidden'), `it.opacity` (nur Anzeige), `Viewer.lookAtFace(id, faceIdx)`, `doc.views = [{id, name, p, t, up, ortho}]` mit `Views.saveView`/`goView`

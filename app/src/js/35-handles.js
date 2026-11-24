@@ -647,7 +647,7 @@ const Interact = (() => {
     for (const x of Viewer.pickAll(cx, cy)) {
       const t = Model.topOf(App.doc, x.id); if (!t || seen.has(t.id) || App.mergedInto(t.id)) continue;
       seen.add(t.id);
-      out.push({ icon: 'pointer', label: `Dahinter wählen: „${Model.label(t)}“`, id: 'cm-behind-' + out.length, run: () => App.select([t.id]) });
+      out.push({ icon: 'pointer', label: T('menu.ctx.behind', { name: Model.label(t) }), id: 'cm-behind-' + out.length, run: () => App.select([t.id]) });
       if (out.length >= 4) break;
     }
     return out.length ? ['-', ...out] : [];
@@ -673,39 +673,39 @@ const Interact = (() => {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
       const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep') && it.p && it.p.sketch;
       items = [
-        ...(sk ? [{ icon: 'edit', label: 'Skizze bearbeiten', kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
-        { icon: 'help', label: 'Erklär diesen Schritt', id: 'cm-explain', run: () => Explain.dialog(it.id) },
-        { icon: 'viewOrtho', label: 'Blick senkrecht auf die Fläche', id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },
-        { icon: 'export', label: 'Fläche als DXF speichern', id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
-        { icon: 'export', label: 'Fläche als SVG speichern', id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
-        { icon: 'sketch', label: 'Skizze auf dieser Fläche', id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
-        { icon: 'thread', label: 'Gewinde markieren …', id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
+        ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
+        { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
+        { icon: 'viewOrtho', label: T('menu.ctx.lookAtFace'), id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },
+        { icon: 'export', label: T('menu.ctx.faceDxf'), id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
+        { icon: 'export', label: T('menu.ctx.faceSvg'), id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
+        { icon: 'sketch', label: T('menu.ctx.sketchOnFace'), id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'thread', label: T('menu.ctx.markThread'), id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
         '-',
-        { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
-        { icon: 'moveStep', label: 'Verschieben/Drehen (Schritt)', id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
-        { icon: 'copy', label: 'Verknüpft duplizieren', kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
-        { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? 'Zum Körper machen' : 'Zum Loch machen', kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
-        { icon: 'eyeOff', label: 'Ausblenden', id: 'cm-hide', run: () => Actions.hideSelected() },
-        { icon: 'focusView', label: 'Isolieren', kbd: 'I', id: 'cm-iso', run: () => Comp.toggleIso(it.id) },
-        { icon: 'pointer', label: 'Ähnliche wählen', kbd: 'A', id: 'cm-similar', run: () => Select.similar() },
-        { icon: 'fit', label: 'Heranzoomen', kbd: 'F', id: 'cm-fit', run: () => Viewer.fit([it.id]) },
-        { icon: 'pointer', label: 'Auswahl speichern …', id: 'cm-selsave', help: 'selSets', run: () => saveSelection() },
+        { icon: 'copy', label: T('common.duplicate'), kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
+        { icon: 'moveStep', label: T('common.moveStep'), id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
+        { icon: 'copy', label: T('menu.ctx.dupLinked'), kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
+        { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? T('menu.ctx.toSolid') : T('menu.ctx.toHole'), kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
+        { icon: 'eyeOff', label: T('common.hide'), id: 'cm-hide', run: () => Actions.hideSelected() },
+        { icon: 'focusView', label: T('common.isolate'), kbd: 'I', id: 'cm-iso', run: () => Comp.toggleIso(it.id) },
+        { icon: 'pointer', label: T('menu.ctx.selectSimilar'), kbd: 'A', id: 'cm-similar', run: () => Select.similar() },
+        { icon: 'fit', label: T('menu.ctx.zoomFit'), kbd: 'F', id: 'cm-fit', run: () => Viewer.fit([it.id]) },
+        { icon: 'pointer', label: T('menu.ctx.saveSelection'), id: 'cm-selsave', help: 'selSets', run: () => saveSelection() },
         ...behindItems(cx, cy, top.id),
         '-',
-        { icon: 'trash', label: 'Löschen', kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
+        { icon: 'trash', label: T('common.delete'), kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
       ];
     } else {
       const hidden = App.doc.items.filter((x) => x.hidden).length;
       items = [
-        { icon: 'eye', label: hidden ? `Alles einblenden (${hidden})` : 'Alles einblenden', id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
-        { icon: 'pointer', label: 'Alles wählen', kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
-        { icon: 'fit', label: 'Alles zeigen', kbd: 'F', id: 'cm-fitall', run: () => Viewer.fit() },
-        ...(App.doc.selSets || []).map((s, i) => ({ icon: 'pointer', label: `Auswahl: ${s.name}`, id: 'cm-selset-' + i, help: 'selSets', run: () => useSelection(s.id) })),
-        { icon: 'undo', label: 'Vorige Ansicht', kbd: 'Umschalt Z', id: 'cm-viewback', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() },
+        { icon: 'eye', label: hidden ? T('menu.ctx.showAllCount', { n: hidden }) : T('menu.ctx.showAll'), id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
+        { icon: 'pointer', label: T('menu.ctx.selectAll'), kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
+        { icon: 'fit', label: T('menu.ctx.fitAll'), kbd: 'F', id: 'cm-fitall', run: () => Viewer.fit() },
+        ...(App.doc.selSets || []).map((s, i) => ({ icon: 'pointer', label: T('menu.ctx.selSet', { name: s.name }), id: 'cm-selset-' + i, help: 'selSets', run: () => useSelection(s.id) })),
+        { icon: 'undo', label: T('menu.ctx.viewBack'), kbd: 'Umschalt Z', id: 'cm-viewback', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() },
         '-',
-        { icon: 'sketch', label: 'Neue Skizze', kbd: 'S', id: 'cm-sketch', run: () => Sketch.chooseAndStart() },
-        { icon: 'image', label: 'Bild speichern (PNG)', id: 'cm-image', run: () => Print.imageDialog() },
-        ...(Commands.last ? ['-', { icon: 'undo', label: `Wiederholen: ${Commands.last.label}`, kbd: 'Leertaste', id: 'cm-repeat', run: () => Commands.repeat() }] : []),
+        { icon: 'sketch', label: T('menu.ctx.newSketch'), kbd: 'S', id: 'cm-sketch', run: () => Sketch.chooseAndStart() },
+        { icon: 'image', label: T('menu.ctx.saveImage'), id: 'cm-image', run: () => Print.imageDialog() },
+        ...(Commands.last ? ['-', { icon: 'undo', label: T('menu.ctx.repeat', { label: Commands.last.label }), kbd: 'Leertaste', id: 'cm-repeat', run: () => Commands.repeat() }] : []),
       ];
     }
     UI.menu(anchor, items);

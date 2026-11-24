@@ -1580,6 +1580,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kontextleiste, Messen, Stückliste & Hilfe**: Kantenlänge `#sel-val` (`1 in`), Messen (`1 in²`, `Wand 1 in`), Stückliste (`1 × 1 × 1 in`) und Hilfetext `projectUnit` geprüft.
 - [ ] **Von Hand**: In der Skizze (Maße eintippen, `.skdim`-Schildchen, Skizzen-Tabelle) und in der technischen Zeichnung prüfen, ob alle Angaben in Zoll/cm/m sauber umgerechnet sind und mit `STEP`/`STL` zusammenpassen.
 
+## Volltest-Reparatur (Auto [F-11240028])
+
+- [x] **Kamera-Animation bei blockiertem `requestAnimationFrame`**: `Viewer.lookAtFace` erreicht trotz pausierter `rAF`-Frames per Timer-Fallback (`finishCamAnim`) exakt das Ziel senkrecht auf der Fläche.
+- [x] **Abbruch bei Nutzer-Eingriff**: Löst während einer laufenden Kamera-Animation das `start`-Event der `OrbitControls` aus, wird sowohl `camAnim` als auch der Fallback-Timer sauber abgebrochen.
+- [x] **Übergangs-Vorschau ohne Debounce-Stau**: Wiederholte Mausbewegungen ohne Änderung der Führungskurve setzen den 250-ms-Debounce von `loftPreview` nicht mehr zurück; die bauchige `__preview`-Vorschau wird berechnet.
+- [ ] **Von Hand**: Bei „Blick senkrecht auf die Fläche“ per Rechtsklick und beim Ziehen einer Übergangs-Führungskurve im Browser kurz prüfen, ob die Kamera-Fahrt flüssig wirkt und die Vorschau zügig nachzieht.
+
+## Übersetzbare Oberfläche, Schritt 1 (Auto [A-019])
+
+- [x] **Sammlung & `T()`**: `app/data/texte-de.json` enthält alle Oberflächentexte; `T(key, vars)` liefert deutsche Texte, ersetzt Platzhalter (`{n}`) und fällt bei unbekannten Schlüsseln auf den Schlüssel zurück.
+- [x] **Werkzeugleiste & Kopfzeile**: Überschreiben von `I18n.texts['tool.body']` sowie `I18n.set(...)` ändert die sichtbaren Beschriftungen an Werkzeugleiste und Arbeitsbereich-Reitern sofort.
+- [x] **Startseite, Menüs & Kontextleiste**: Geänderte Texte erscheinen direkt auf Startseite-Knöpfen/Karten, im Haupt- und Ansichtsmenü sowie in der 3D-Kontextleiste; Zurücksetzen stellt alle deutschen Originaltexte wieder her.
+- [ ] **Von Hand**: Einmal Startseite, Werkzeugleiste, alle Menüs (Projekt, Hauptmenü, Ansicht, Rechtsklick, Zeichnung) und Kontextleiste auf fehlende oder abgeschnittene Beschriftungen durchsehen.
+
 ## Fehler melden
 
 ```
