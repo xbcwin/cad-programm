@@ -10004,6 +10004,311 @@ END-ISO-10303-21;"""
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a044_iges_brep(p):
+    import zipfile, tempfile
+    p.empty()
+
+    # 1. BREP-Roundtrip am Quader (30 x 20 x 15 = 9000 mm^3)
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:30,d:20,h:15},{name:'Quader'})); })")
+    warte_rechnen(p, 30)
+    v0 = volumen(p)
+    brep_ok = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportBREP', { scene: Model.kernelScene(App.doc) });
+      window.__brepBytes = new Uint8Array(r.data);
+      const head = new TextDecoder().decode(window.__brepBytes.slice(0, 64));
+      return window.__brepBytes.byteLength > 200 && head.includes('CASCADE');
+    }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__brepBytes], 'Quader.brep'))")
+    warte_rechnen(p, 30)
+    it_brep = p.ev("const it=App.doc.items[0]; const r=it && App.results.get(it.id); return { kind:it&&it.kind, name:it&&it.name, fmt:it&&it.p&&it.p.fmt, errs:App.errors.length, bb:r&&r.data&&r.data.bbox }")
+    v_brep = volumen(p)
+    ok1 = (bool(brep_ok) and v0 is not None and abs(v0 - 9000) < 0.1
+           and it_brep['kind'] == 'import' and it_brep['name'] == 'Quader' and it_brep['fmt'] == 'brep'
+           and it_brep['errs'] == 0 and v_brep is not None and abs(v_brep - v0) / v0 < 0.001
+           and it_brep['bb'] is not None and abs((it_brep['bb'][3] - it_brep['bb'][0]) - 30) < 0.05)
+
+    # 2. IGES-Roundtrip am Quader (.igs und .iges)
+    p.ev("App.change('x', d=>{ d.items=[]; d.items.push(Model.newItem('box',{w:30,d:20,h:15},{name:'Quader'})); })")
+    warte_rechnen(p, 30)
+    iges_ok = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportIGES', { scene: Model.kernelScene(App.doc) });
+      window.__igesBytes = new Uint8Array(r.data);
+      const txt = new TextDecoder().decode(window.__igesBytes);
+      return txt.includes('S      1') && txt.includes('G      1') && txt.includes('D      1') && txt.includes('P      1') && txt.includes('T      1') && txt.includes('144,');
+    }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__igesBytes], 'Quader.igs'))")
+    warte_rechnen(p, 30)
+    it_igs = p.ev("const it=App.doc.items[0]; const r=it && App.results.get(it.id); return { kind:it&&it.kind, name:it&&it.name, fmt:it&&it.p&&it.p.fmt, errs:App.errors.length, bb:r&&r.data&&r.data.bbox }")
+    v_igs = volumen(p)
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__igesBytes], 'Quader2.iges'))")
+    warte_rechnen(p, 30)
+    it_iges = p.ev("const it=App.doc.items[0]; return { name:it&&it.name, fmt:it&&it.p&&it.p.fmt, errs:App.errors.length }")
+    v_iges = volumen(p)
+    ok2 = (bool(iges_ok)
+           and it_igs['kind'] == 'import' and it_igs['name'] == 'Quader' and it_igs['fmt'] == 'iges'
+           and it_igs['errs'] == 0 and v_igs is not None and abs(v_igs - v0) / v0 < 0.001
+           and it_igs['bb'] is not None and abs((it_igs['bb'][3] - it_igs['bb'][0]) - 30) < 0.05
+           and it_iges['name'] == 'Quader2' and it_iges['fmt'] == 'iges' and it_iges['errs'] == 0
+           and v_iges is not None and abs(v_iges - v0) / v0 < 0.001)
+
+    # 3. Gekrümmter Körper mit Durchgangsbohrung (Quader 30x20x15 - Zylinder D8): IGES und BREP
+    p.ev("""App.change('x', d=>{
+      d.items=[];
+      const g=Model.newItem('group',{},{name:'Lochteil'});
+      const b=Model.newItem('box',{w:30,d:20,h:15});
+      const c=Model.newItem('cylinder',{d:8,h:20},{role:'hole'}); c.t.z=-2;
+      g.children=[b,c]; d.items.push(g);
+    })""")
+    warte_rechnen(p, 30)
+    v_hole0 = volumen(p)
+    p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const ri = await Kernel.call('exportIGES', { scene: Model.kernelScene(App.doc) });
+      const rb = await Kernel.call('exportBREP', { scene: Model.kernelScene(App.doc) });
+      window.__holeIges = new Uint8Array(ri.data);
+      window.__holeBrep = new Uint8Array(rb.data);
+    }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__holeIges], 'Loch.igs'))")
+    warte_rechnen(p, 30)
+    v_hole_igs = volumen(p)
+    err_hole_igs = p.ev("return App.errors.length")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__holeBrep], 'Loch.brep'))")
+    warte_rechnen(p, 30)
+    v_hole_brep = volumen(p)
+    err_hole_brep = p.ev("return App.errors.length")
+    ok3 = (v_hole0 is not None and abs(v_hole0 - (9000 - math.pi * 16 * 15)) < 1.0
+           and err_hole_igs == 0 and v_hole_igs is not None and abs(v_hole_igs - v_hole0) / v_hole0 < 0.001
+           and err_hole_brep == 0 and v_hole_brep is not None and abs(v_hole_brep - v_hole0) / v_hole0 < 0.001)
+
+    # 4. Export-Dialog, ZIP-Download, Einheit (#p-scale), Hilfe & Fehlerbehandlung
+    p.ev("App.change('x', d=>{ d.items=[]; d.items.push(Model.newItem('box',{w:30,d:20,h:15},{name:'ExportTeil'})); })")
+    warte_rechnen(p, 30)
+    help_ok = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json()).then(d=>{ const h=d.exportIgesBrep; return !!(h && h.tip && h.hilfe && h.tipp); })")
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    dlg_ok = (p.pg.locator('#ex-iges').count() == 1 and p.pg.locator('#ex-brep').count() == 1
+              and p.pg.locator('[data-help="exportIgesBrep"]').count() == 2)
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-iges'); p.pg.check('#ex-brep'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a044.zip')
+    dl.value.save_as(zpath)
+    names = zipfile.ZipFile(zpath).namelist()
+    igs_in_zip = [n for n in names if n.endswith('.igs')]
+    brep_in_zip = [n for n in names if n.endswith('.brep')]
+    zip_ok = len(igs_in_zip) == 1 and len(brep_in_zip) == 1 and len(zipfile.ZipFile(zpath).read(igs_in_zip[0])) > 500 and len(zipfile.ZipFile(zpath).read(brep_in_zip[0])) > 200
+
+    # Einheit cm (10x) am importierten BREP + defekte Dateien melden Fehler ohne Absturz
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__brepBytes], 'Skal.brep'))")
+    warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    p.pg.select_option('#p-scale', '10'); warte_rechnen(p, 30)
+    bb_cm = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
+    scale_ok = bb_cm is not None and abs((bb_cm[3] - bb_cm[0]) - 300) < 0.2
+
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File(['ungueltig'], 'kaputt.brep'))")
+    warte_rechnen(p, 30)
+    err_brep = p.ev("return App.errors.length") > 0
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File(['ungueltig'], 'kaputt.igs'))")
+    warte_rechnen(p, 30)
+    err_igs = p.ev("return App.errors.length") > 0
+
+    ok4 = help_ok and dlg_ok and zip_ok and scale_ok and err_brep and err_igs
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a046_dateien_ziehen(p):
+    import json as _json
+    p.empty()
+
+    # 1. Hinweis-Rahmen beim Ziehen einer Datei und Schutz gegen internes Ziehen (text/plain)
+    drag_res = p.pg.evaluate("""() => {
+      const ov = () => document.querySelector('#drop-overlay');
+      const dt = new DataTransfer();
+      dt.items.add(new File(['x'], 'test.stl', { type: 'model/stl' }));
+      window.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt });
+      window.dispatchEvent(over);
+      const el = ov();
+      const shown = !!el && !el.hidden;
+      const txt = el ? (el.textContent || '') : '';
+      window.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, relatedTarget: null, clientX: 0, clientY: 0 }));
+      const hiddenAfter = !ov() || !!ov().hidden;
+      const dtInt = new DataTransfer();
+      dtInt.setData('text/plain', 'i_1');
+      window.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dtInt }));
+      window.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dtInt }));
+      const hiddenInternal = !ov() || !!ov().hidden;
+      return { prevented: over.defaultPrevented, shown, txt, hiddenAfter, hiddenInternal };
+    }""")
+    ok1 = (drag_res['prevented'] and drag_res['shown']
+           and 'STL' in drag_res['txt'] and 'OBJ' in drag_res['txt'] and 'Projekt' in drag_res['txt']
+           and drag_res['hiddenAfter'] and drag_res['hiddenInternal'])
+
+    # 2. Drop-Ereignis mit einer STL-Datei -> ein neuer Koerper
+    stl_txt = """solid spitze
+ facet normal 0 0 -1
+  outer loop
+   vertex 0 0 0
+   vertex 0 10 0
+   vertex 10 0 0
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 0 0 0
+   vertex 10 0 0
+   vertex 0 0 10
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex 0 0 0
+   vertex 0 0 10
+   vertex 0 10 0
+  endloop
+ endfacet
+ facet normal 1 1 1
+  outer loop
+   vertex 10 0 0
+   vertex 0 10 0
+   vertex 0 0 10
+  endloop
+ endfacet
+endsolid spitze
+"""
+    p.pg.evaluate("""(txt) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([txt], 'spitze.stl', { type: 'model/stl' }));
+      window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }""", stl_txt)
+    warte_rechnen(p, 30)
+    stl_info = p.ev("""const it = App.doc.items[0];
+      const ov = document.querySelector('#drop-overlay');
+      return { n: App.doc.items.length, kind: it && it.kind, name: it && it.name, fmt: it && it.p && it.p.fmt, errs: App.errors.length, ovHidden: !ov || !!ov.hidden };""")
+    v_stl = volumen(p)
+    ok2 = (stl_info['n'] == 1 and stl_info['kind'] == 'import' and stl_info['name'] == 'spitze'
+           and stl_info['fmt'] == 'stl' and stl_info['errs'] == 0 and stl_info['ovHidden']
+           and v_stl is not None and abs(abs(v_stl) - 1000 / 6) < 2)
+
+    # 3. Drop-Ereignis mit einer Projektdatei -> das Projekt ist geoeffnet
+    proj_json = _json.dumps({
+        'format': 'masswerk',
+        'id': 'p_a046_drop',
+        'name': 'Gezogenes Projekt',
+        'params': [{'id': 'm_a046', 'name': 'Breite', 'expr': 55}],
+        'items': [{
+            'id': 'i_a046_box', 'kind': 'box', 'name': 'Sockel', 'role': 'solid', 'color': '#2f9e91',
+            't': {'x': 0, 'y': 0, 'z': 0, 'rx': 0, 'ry': 0, 'rz': 0},
+            'p': {'w': 'Breite', 'd': 25, 'h': 12},
+            'finishes': [], 'suppressed': False, 'hidden': False,
+        }],
+    })
+    p.pg.evaluate("""(txt) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([txt], 'Gezogenes_Projekt.tracery.json', { type: 'application/json' }));
+      window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }""", proj_json)
+    warte_rechnen(p, 30)
+    proj_info = p.ev("""return {
+      docName: App.doc.name,
+      btnName: document.querySelector('#btn-project') && document.querySelector('#btn-project').textContent,
+      n: App.doc.items.length,
+      first: App.doc.items[0] && App.doc.items[0].name,
+      errs: App.errors.length,
+    }""")
+    v_proj = volumen(p)
+    ok3 = (proj_info['docName'] == 'Gezogenes Projekt' and proj_info['btnName'] == 'Gezogenes Projekt'
+           and proj_info['n'] == 1 and proj_info['first'] == 'Sockel' and proj_info['errs'] == 0
+           and v_proj is not None and abs(v_proj - 16500) < 1)
+
+    # 4. Drop-Ereignis mit OBJ-Datei -> Import als neuer Koerper
+    obj_txt = "\n".join([
+        "o Wuerfel",
+        "v 0 0 0", "v 10 0 0", "v 10 20 0", "v 0 20 0",
+        "v 0 0 5", "v 10 0 5", "v 10 20 5", "v 0 20 5",
+        "f 1 4 3 2",
+        "f 5 6 7 8",
+        "f 1 2 6 5",
+        "f 2 3 7 6",
+        "f 3 4 8 7",
+        "f 4 1 5 8",
+    ]) + "\n"
+    p.pg.evaluate("""(txt) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([txt], 'Wuerfel.obj', { type: 'text/plain' }));
+      window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }""", obj_txt)
+    warte_rechnen(p, 30)
+    obj_info = p.ev("""const it = App.doc.items[1];
+      const r = it && App.results.get(it.id);
+      return { n: App.doc.items.length, kind: it && it.kind, name: it && it.name, errs: App.errors.length, bb: r && r.data && r.data.bbox };""")
+    bb_obj = obj_info['bb']
+    ok4 = (obj_info['n'] == 2 and obj_info['kind'] == 'import' and obj_info['name'] == 'Wuerfel'
+           and obj_info['errs'] == 0 and bb_obj is not None
+           and abs((bb_obj[3] - bb_obj[0]) - 10) < 0.2
+           and abs((bb_obj[4] - bb_obj[1]) - 20) < 0.2
+           and abs((bb_obj[5] - bb_obj[2]) - 5) < 0.2)
+
+    # 5. Drop-Ereignis mit SVG (neue Skizze), DXF in offene Skizze und unbekannte Datei
+    svg_txt = '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="10mm" viewBox="0 0 20 10"><rect x="0" y="0" width="20" height="10"/></svg>'
+    p.pg.evaluate("""(txt) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([txt], 'Schild.svg', { type: 'image/svg+xml' }));
+      window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }""", svg_txt)
+    warte_rechnen(p, 30)
+    svg_info = p.ev("""const it = App.doc.items[2];
+      return { n: App.doc.items.length, kind: it && it.kind, name: it && it.name, ents: it && it.p && it.p.sketch && it.p.sketch.ents ? it.p.sketch.ents.length : 0, errs: App.errors.length };""")
+
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(500)
+    sk_hint = p.pg.evaluate("""() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File(['0'], 'Kreis.dxf'));
+      window.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      const el = document.querySelector('#drop-overlay');
+      const txt = el ? (el.textContent || '') : '';
+      window.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, relatedTarget: null, clientX: 0, clientY: 0 }));
+      return txt;
+    }""")
+    dxf_txt = "\n".join(str(x) for x in [0, 'SECTION', 2, 'ENTITIES', 0, 'CIRCLE', 10, 0, 20, 0, 40, 5, 0, 'ENDSEC', 0, 'EOF']) + "\n"
+    p.pg.evaluate("""(txt) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([txt], 'Kreis.dxf'));
+      window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }""", dxf_txt)
+    p.wait(700)
+    dxf_radii = SS(p, "return S.ents.filter(e => e.type === 'circle').map(e => e.r)")
+    p.ev("Sketch.cancel(true)"); p.wait(300)
+
+    bad_drop = p.pg.evaluate("""() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File(['hallo'], 'notiz.txt', { type: 'text/plain' }));
+      const ev = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
+      window.dispatchEvent(ev);
+      const ov = document.querySelector('#drop-overlay');
+      return { prevented: ev.defaultPrevented, ovHidden: !ov || !!ov.hidden };
+    }""")
+    p.wait(300)
+    bad_toast = p.pg.locator('.toast.bad').count() >= 1
+    n_after_bad = p.ev("return App.doc.items.length")
+    ok5 = (svg_info['n'] == 3 and svg_info['kind'] == 'extrude' and svg_info['name'] == 'Schild'
+           and svg_info['ents'] >= 4 and svg_info['errs'] == 0
+           and 'Skizze' in sk_hint and dxf_radii == [5]
+           and bad_drop['prevented'] and bad_drop['ovHidden'] and bad_toast and n_after_bad == 3)
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -10149,6 +10454,8 @@ TESTS = [
     ('[A-042] Prägen auf gewölbter Fläche: Text auf Zylindermantel vertieft / erhaben ein Stück / Höhe, Unterdrücken & Marker / Kugel & Hilfe', t_a042_praegen),
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
     ('[A-045] STEP mit Farben und Namen: Gruppe mit Deckel (rot) & Boden (blau) exportieren / Import stellt Gruppe, Namen & Farben wieder her / 3D-Farben & Verlauf / Roundtrip & Ordner / Hilfe', t_a045_step_farben_namen),
+    ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
+    ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1790,6 +1790,23 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfe & Dialog**: Export-Dialog verweist auf `exportStep`; Eintrag in `werkzeug-hilfen.json` ist vollständig (`tip`, `hilfe`, `tipp`).
 - [ ] **Von Hand**: Eine mehrfarbige Baugruppe aus Tracery als STEP exportieren und in FreeCAD oder Fusion öffnen sowie umgekehrt eine fremde STEP-Baugruppe ins Tracery-Fenster ziehen und Namen, Farben und Lage prüfen.
 
+## IGES und BREP (Auto [A-044], IO-01)
+
+- [x] **BREP-Roundtrip (Quader 30×20×15)**: `exportBREP` liefert eine gültige OpenCascade-BREP-Datei (`CASCADE`), Re-Import über `.brep` erzeugt fehlerfrei ein `import`-Teil mit exakt gleichem Volumen (`±0,1 %`) und passenden Hüllmaßen.
+- [x] **IGES-Roundtrip (Quader `.igs` & `.iges`)**: `exportIGES` erzeugt eine gültige IGES-5.3-Datei (`S/G/D/P/T`, Type 144/128/142/126), Re-Import über `.igs` und `.iges` liefert `fmt='iges'` mit gleichem Volumen (`±0,1 %`).
+- [x] **Gekrümmter Körper mit Bohrung (IGES & BREP)**: Quader `30×20×15` mit Durchgangsbohrung `Ø 8 mm` behält nach IGES- und BREP-Roundtrip das exakte Volumen (`±0,1 %`) ohne Fehler.
+- [x] **Export-Dialog, ZIP, Skalierung, Hilfe & Fehler**: `#ex-iges` und `#ex-brep` mit `exportIgesBrep`-Hilfe schreiben `.igs` und `.brep` ins ZIP; `#p-scale` skaliert Einheiten (cm = 10×); defekte `.brep`/`.igs`-Dateien melden einen Fehler ohne Absturz.
+- [ ] **Von Hand**: Exportierte `.igs`- und `.brep`-Dateien in FreeCAD öffnen und die Kanten-/Flächenqualität prüfen.
+
+## Dateien ins Fenster ziehen (Auto [A-046], IO-09)
+
+- [x] **Hinweis-Rahmen & Schutz gegen internes Ziehen**: `dragenter`/`dragover` mit Dateien blendet den gestrichelten Hinweis-Rahmen `#drop-overlay` ein (`dragleave` blendet ihn aus); internes Ziehen mit `text/plain` löst ihn nicht aus.
+- [x] **STL per Drop importieren**: Drop-Ereignis mit `spitze.stl` erzeugt einen neuen `import`-Körper (`fmt='stl'`, passendes Tetraeder-Volumen) ohne Fehler und schließt den Rahmen.
+- [x] **Projektdatei per Drop öffnen**: Drop-Ereignis mit einer `.tracery.json`-Datei öffnet das Projekt (`App.doc.name` und `#btn-project` zeigen „Gezogenes Projekt“) samt Maßen und berechnetem Körper.
+- [x] **OBJ per Drop importieren**: Drop-Ereignis mit `Wuerfel.obj` importiert den Würfel mit Objektnamen und exakten Hüllmaßen (`10 × 20 × 5 mm`) ohne Fehler.
+- [x] **DXF/SVG per Drop & unbekannte Datei**: Drop einer SVG im Modellmodus legt einen Skizzenkörper an; in einer offenen Skizze zeigt der Rahmen den Skizzen-Hinweis und ein DXF-Drop fügt den Kreis direkt in die Skizze ein; eine unbekannte `.txt`-Datei meldet einen Fehler ohne Änderung am Modell.
+- [ ] **Von Hand**: Im Finder/Explorer echte Projekt-, STEP-, OBJ-, 3MF- und SVG-Dateien direkt über die Startseite, über den 3D-Bereich und über eine offene Skizze ziehen und prüfen, ob der Rahmen flüssig ein- und ausblendet.
+
 ## Fehler melden
 
 ```

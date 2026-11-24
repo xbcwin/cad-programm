@@ -113,11 +113,11 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, STL, 3MF, DXF, SVG) |
+| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
@@ -138,7 +138,7 @@ Leitlinien:
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
   - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
-  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`), `emboss` (Prägen einer Skizze auf eine ebene/gewölbte Fläche `face` von `p.target` mit `height`, `mode` `'emboss'|'deboss'`, `flip`), `mirrorStep` (einzelne Formschritte `features` an Grundebene, Bezugsebene `DATUM` oder Körperfläche `FACE` im selben Körper spiegeln)
+  - Sonstige: `import` (STEP/IGES/BREP/STL), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`), `emboss` (Prägen einer Skizze auf eine ebene/gewölbte Fläche `face` von `p.target` mit `height`, `mode` `'emboss'|'deboss'`, `flip`), `mirrorStep` (einzelne Formschritte `features` an Grundebene, Bezugsebene `DATUM` oder Körperfläche `FACE` im selben Körper spiegeln)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt` (optional `skip` für ausgelassene Kopien und `G.op` für gemusterte Formschritte / Rippen; `Model.patternInstances`):
     - `rect` (nx, ny, dx, dy)
@@ -265,7 +265,7 @@ Leitlinien:
 **3D-Features**
 - Grundkörper mit Ziehgriffen; Hochziehen (Push/Pull an Flächen); Drehkörper
 - Übergang (Loft) mit Spitze („Zur Spitze“) oder **entlang einer Mittellinie** (Punkte ziehen biegt den Körper, Warnung bei schrägem Auftreffen) oder mit **einer oder zwei Führungskurven** (Seitenlinie von der Seite und von oben, der Übergang wird dazwischen so breit, dass er sie berührt); Entlang Pfad (Rohr, Kanal, eigener Querschnitt); **Rohr im Raum** (Punkte auf Körper oder in den Raum klicken)
-- STEP/STL/3MF-Import (`Start.importCAD`, `Start.import3MF`, `Start.parse3MF` mit `Zip.read`: mehrere Objekte/Komponenten mit Namen, Farben und Einheiten; binär als `blobId` in IndexedDB `tracery-db` über `Store` statt Base64 im Autosave); DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
+- STEP/IGES/BREP/STL/3MF/OBJ-Import (`Start.importCAD`, `Start.import3MF`, `Start.parse3MF` mit `Zip.read`, `Start.importOBJ`, `Start.parseOBJ`: mehrere Objekte/Komponenten mit Namen, Farben und Einheiten; binär als `blobId` in IndexedDB `tracery-db` über `Store` statt Base64 im Autosave); DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`) und Drag-and-Drop mit Hinweis-Rahmen `#drop-overlay` (Projekt, 3D-Import oder DXF/SVG in die offene Skizze)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel, `threadShape` M2–M24 auch mit eigener Steigung) und direktes Setzen auf runde Flächen (Rechtsklick „Gewinde …“ auf Bolzen oder Bohrung mit automatischem Durchmesser-Vorschlag, Länge, Steigung und Wahl zwischen echtem 3D-Gewinde `Features.applyRealThread` und **kosmetischem Gewinde** `it.threads` über `Features.threadPop`, gestreifte 3D-Markierung ohne Kern-Neubau, Stückliste, Zeichnung nach DIN ISO 6410-1, „Echt machen“ über `Features.makeThreadReal`)
 - Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf (auch 82° bei Zoll und Flachsenkung bei G), Kernloch für metrische Regel- und Feingewinde, Zoll UNC/UNF (#4 bis 1/2") und Rohrgewinde (G1/8 bis G1) aus `gewinde.json`, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
@@ -304,7 +304,7 @@ Leitlinien:
   - Überhänge ab 100 mm² bei Druckteilen
   - mit Fundstellen-Ringen und KI-Vorschlägen
 
-**Export:** STEP, STL, 3MF, OBJ/MTL (`Print.buildOBJ`), GLB (`Print.buildGLB`), DXF (Platten), Projektdatei, technische Zeichnung (PDF).
+**Export:** STEP, IGES (`exportIGES`), BREP (`exportBREP`), STL, 3MF, OBJ/MTL (`Print.buildOBJ`), GLB (`Print.buildGLB`), DXF (Platten), Projektdatei, technische Zeichnung (PDF).
 
 ## 6. Tests – Pflicht vor jedem Commit
 
