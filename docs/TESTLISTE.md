@@ -2279,6 +2279,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `sweep`, `sweepTwist`, `sweepCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('nut')` / `Commands.search('verdrehung')` und `Explain.local` sind vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine gebogene Kurve als Pfad mit eigener Skizzenform und Verdrehung sowie eine verdrehte Nut auf einer Körperfläche samt Live-Vorschau ausprobieren.
 
+## Vollrundung und Fase an einer Ecke (Auto [A-103], KP-38, KP-41)
+
+- [x] **Vollrundung auf 10-mm-Steg**: Über `#btn-full-fillet` und drei 3D-Flächenklicks angelegt → Stirnfläche wird genau ein Zylinder mit Radius `5 mm`, Volumen `≈ 7785,4 mm³`, keine Mini-Kanten oder Kernfehler; bei Änderung der Stegdicke (`10 → 14 mm`) wächst der Radius automatisch auf `7 mm` mit; verjüngter Steg baut ebenfalls fehlerfrei.
+- [x] **Ecken-Fase 2 / 3 / 4**: Über `#btn-corner-chamfer` und Ecken-Klick am `20×20×20`-Quader angelegt, Abstände `2 / 3 / 4 mm` gesetzt → neue dreieckige Ebene mit exakten Kantenlängen (`√13`, `√20`, `5 mm`) und Volumen `7996 mm³`.
+- [x] **Reihenfolge drehen, Formeln, Fehler & Rückgängig**: `#fin-rot-*` tauscht `d1/d2/d3` reihum, Formeln (`F`, `F*2`, `F+1`) rechnen exakt (`7988 mm³`), zu großer Abstand (`25 mm`) meldet `toobig` ohne Absturz und `App.undo()` stellt den gültigen Zustand wieder her.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `fullFillet` und `cornerChamfer` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('vollrundung')` / `Commands.search('ecken-fase')` und `Explain.local` sind vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine Vollrundung an einem gebogenen Steg oder über das Kontextmenü anlegen und eine Ecken-Fase an einer schrägen Körper-Ecke prüfen.
+
 ## Fehler melden
 
 ```

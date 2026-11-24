@@ -625,7 +625,7 @@ const Kernel = (() => {
     if (Array.isArray(it.finishes)) {
       for (const f of it.finishes) {
         if (!f) continue;
-        extraPad = Math.max(extraPad, 2 + Math.abs(numOr(f.r, 0)), 2 + Math.abs(numOr(f.r2, 0)));
+        extraPad = Math.max(extraPad, 2 + Math.abs(numOr(f.r, 0)), 2 + Math.abs(numOr(f.r2, 0)), 2 + Math.abs(numOr(f.d1, 0)), 2 + Math.abs(numOr(f.d2, 0)), 2 + Math.abs(numOr(f.d3, 0)));
       }
     }
     return padBox(box, extraPad);

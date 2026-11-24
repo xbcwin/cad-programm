@@ -2047,6 +2047,16 @@ const HELP = {
   "tip": "Entlang Pfad direkt von einem Körper abziehen (z. B. Nut entlang einer Kurve)",
   "hilfe": "Schneidet das entlang des Pfads gezogene Profil sofort als Nut, Rille oder Kanal aus einem bestehenden Körper heraus – wahlweise gleich beim Abschließen der Skizze oder nachträglich rechts unter „Körper“.",
   "tipp": "Zeichne den Pfad direkt auf der Oberfläche des Körpers; mit der Querschnitts-Höhe bestimmst du, wie tief die Nut einschneidet."
+ },
+ "fullFillet": {
+  "tip": "Drei Flächen wählen – die mittlere wird nahtlos ganz rund (z. B. Steg-Ende)",
+  "hilfe": "Klicke nacheinander erste Seitenfläche, mittlere Stirnfläche und zweite Seitenfläche eines Körpers an. Tracery rundet die mittlere Fläche mit dem exakten vollen Radius zwischen den beiden Seitenflächen ab.",
+  "tipp": "Ideal für abgerundete Stege, Laschen oder Rippenenden – der Radius passt sich automatisch an, wenn sich die Steg-Dicke später ändert."
+ },
+ "cornerChamfer": {
+  "tip": "Eine Körper-Ecke schräg mit drei verschiedenen Abständen abschneiden",
+  "hilfe": "Klicke eine Ecke an, in der drei Kanten zusammenlaufen. Danach kannst du rechts für jede der drei Kanten einen eigenen Abstand einstellen (oder als Formel eingeben), sodass eine dreieckige schräge Fläche entsteht.",
+  "tipp": "Mit dem Dreh-Symbol neben „Ecken-Fase“ tauschst du die drei Abstände reihum durch die drei Kanten."
  }
 };
 

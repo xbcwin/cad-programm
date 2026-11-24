@@ -75,7 +75,7 @@ Leitlinien:
   - Grundkörper und `buildPart` (Bibliotheksteile)
   - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
   - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
-  - `splitBody`, `applyFinishes` (Rundung, Fase, Entformungsschräge `draft`, Wandstärke `shell`), Topologie-Verlauf (`tid`, `sid`, OpenCascade `Generated`/`Modified`, Lage als Ersatz)
+  - `splitBody`, `applyFinishes` (Rundung, Fase, Vollrundung `fullFillet`, Ecken-Fase `cornerChamfer`, Entformungsschräge `draft`, Wandstärke `shell`), Topologie-Verlauf (`tid`, `sid`, OpenCascade `Generated`/`Modified`, Lage als Ersatz)
   - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
 - Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
 
@@ -138,7 +138,7 @@ Leitlinien:
 ## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
 
 - **`doc`:** `{ id, docType: 'part'|'assembly', name, params: [{id, name, expr}], tables: [{id, name, rows: [{id, key, val}]}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
-- **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase)}], suppressed, hidden, mat, massG, props: {partNo, desc, supplier, price}, ai }`
+- **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'fullFillet'|'cornerChamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase), v+d1+d2+d3 (Ecken-Fase)}], suppressed, hidden, mat, massG, props: {partNo, desc, supplier, price}, ai }`
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
