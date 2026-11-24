@@ -1724,7 +1724,7 @@ const Sketch = (() => {
     if (t.startsWith('c:')) { consPick(t === 'c:project' ? null : pickAt(uv0), e); return; }
     if (t === 'select') {
       // Endpunkt ziehen? (alle Linien, die sich dort treffen, gehen mit)
-      const tol = pxSize() * 9;
+      const tol = pxSize() * (e.pointerType === 'touch' ? 16 : 9);
       const endHit = [];
       if (!e.shiftKey) {
         for (const en of S.ents) {
@@ -5221,11 +5221,47 @@ const Sketch = (() => {
     });
     App.on('results', () => { relinkAll(); relinkSketchPlanes(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
-    cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
-    cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
-    window.addEventListener('pointermove', (e) => { if (S && S.band) bandMove(e); });
-    window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
-    window.addEventListener('pointercancel', () => { if (S && S.band) clearBand(); });
+    const skTouches = new Set();
+    let skTouchMulti = false;
+    cv.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') {
+        skTouches.add(e.pointerId);
+        if (skTouches.size >= 2) {
+          skTouchMulti = true;
+          clearBand();
+          if (S && S.drag) {
+            if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
+            if (!S.dragged && S.undo.length) S.undo.pop();
+            S.drag = null; S.dragPins = null;
+          }
+          return;
+        }
+        if (skTouchMulti) return;
+      }
+      if (S) { onDown(e); }
+    }, true);
+    cv.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2)) return;
+      if (S) onMove(e);
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2)) return;
+      if (S && S.band) bandMove(e);
+    });
+    window.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch') {
+        skTouches.delete(e.pointerId);
+        if (skTouchMulti) { if (skTouches.size === 0) skTouchMulti = false; return; }
+      }
+      if (S) { onUp(e); stepUp(e); }
+    });
+    window.addEventListener('pointercancel', (e) => {
+      if (e.pointerType === 'touch') {
+        skTouches.delete(e.pointerId);
+        if (skTouches.size === 0) skTouchMulti = false;
+      }
+      if (S && S.band) clearBand();
+    });
     const onModKey = (e) => {
       if (!S || S.step || !lastMouse || (e.key !== 'Shift' && e.key !== 'Alt')) return;
       if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {

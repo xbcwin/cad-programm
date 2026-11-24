@@ -1801,6 +1801,11 @@ const HELP = {
   "tip": "Mehrere Projekte gleichzeitig in Tabs öffnen und wechseln",
   "hilfe": "In der Tab-Leiste oben arbeitest du an mehreren Projekten parallel. Mit „+“ öffnest du ein neues leeres Projekt, eine Vorlage, eine Datei oder ein bereits gespeichertes Projekt in einem neuen Tab. Ein Klick auf einen Tab wechselt samt eigenem Verlauf und eigenem Rückgängig dorthin; „×“ schließt den Tab und fragt bei ungespeicherten Änderungen nach.",
   "tipp": "Mit einem Doppelklick auf den Tab-Namen benennst du das Projekt um, und ein Rechtsklick schließt bei Bedarf alle anderen Tabs."
+ },
+ "tabletPanels": {
+  "tip": "Seitenleiste ein- und ausklappen",
+  "hilfe": "Auf schmalen Bildschirmen und am Tablet lassen sich Verlauf (links) und Eigenschaften (rechts) ein- und ausklappen, damit mehr Platz für die 3D-Ansicht bleibt. Tippe in die 3D-Ansicht oder auf das Schließen-Symbol, um die Leiste wieder einzuklappen.",
+  "tipp": "Am Tablet wählt ein Antippen den Körper, und zwei Finger drehen und zoomen die Ansicht."
  }
 };
 

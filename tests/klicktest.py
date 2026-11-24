@@ -16266,6 +16266,186 @@ def t_f11241334(p):
     return [ok1, ok2, ok3]
 
 
+PW_DEVICES = {}
+
+
+def t_a080_tablet(p):
+    dev = dict(PW_DEVICES.get('iPad Pro 11') or {
+        'viewport': {'width': 834, 'height': 1194},
+        'device_scale_factor': 2,
+        'is_mobile': True,
+        'has_touch': True,
+    })
+    dev['accept_downloads'] = True
+    ctx = p.ctx.browser.new_context(**dev)
+    errs = []
+    try:
+        pg = ctx.new_page()
+        pg.on('pageerror', lambda e: errs.append(str(e)))
+        pg.add_init_script("try{if(!sessionStorage.getItem('kt')){localStorage.clear();sessionStorage.setItem('kt','1')}}catch(e){}")
+        pg.goto(URL)
+        pg.wait_for_timeout(2500)
+        pg.get_by_text('Leeres Projekt').first.tap()
+        pg.wait_for_timeout(4500)
+        try:
+            pg.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
+        ev = lambda js, arg=None: pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+
+        # 1. Tablet-Modus aktiv (< 1100 px + Touch), Panels eingeklappt, Toggle-Knöpfe >= 44 px
+        st1 = pg.evaluate("""() => {
+          const l = document.querySelector('#left').getBoundingClientRect();
+          const r = document.querySelector('#right').getBoundingClientRect();
+          const bl = document.querySelector('#btn-left').getBoundingClientRect();
+          const br = document.querySelector('#btn-right').getBoundingClientRect();
+          return {
+            tablet: document.body.classList.contains('tablet'),
+            simple: document.body.classList.contains('simple'),
+            w: innerWidth,
+            lRight: l.right,
+            rLeft: r.left,
+            blH: bl.height, blW: bl.width,
+            brH: br.height, brW: br.width
+          };
+        }""")
+        ok1 = (
+            st1['tablet'] is True
+            and st1['simple'] is False
+            and st1['w'] < 1100
+            and st1['lRight'] <= 1
+            and st1['rLeft'] >= st1['w'] - 1
+            and st1['blH'] >= 44 and st1['blW'] >= 44
+            and st1['brH'] >= 44 and st1['brW'] >= 44
+        )
+
+        # 2. Profi: alle sichtbaren Werkzeugleisten- und Kopfzeilen-Knöpfe >= 44 px
+        def check_bar_btns():
+            return pg.evaluate("""() => {
+              const tools = [...document.querySelectorAll('#tools button.tool')].filter(b => b.offsetParent);
+              const top = ['#btn-left', '#btn-right', '#btn-undo', '#btn-redo', '#btn-menu', '#btn-level', '#tab-model', '#tab-drawing']
+                .map(s => document.querySelector(s)).filter(b => b && b.offsetParent);
+              const minToolH = Math.min(...tools.map(b => b.getBoundingClientRect().height));
+              const minToolW = Math.min(...tools.map(b => b.getBoundingClientRect().width));
+              const minTopH = Math.min(...top.map(b => b.getBoundingClientRect().height));
+              const minTopW = Math.min(...top.map(b => b.getBoundingClientRect().width));
+              return { nTools: tools.length, minToolH, minToolW, minTopH, minTopW };
+            }""")
+        b_pro = check_bar_btns()
+        ok2 = (
+            b_pro['nTools'] >= 4
+            and b_pro['minToolH'] >= 44
+            and b_pro['minToolW'] >= 44
+            and b_pro['minTopH'] >= 44
+            and b_pro['minTopW'] >= 44
+        )
+
+        def wait_cond(js, tries=80):
+            for _ in range(tries):
+                if pg.evaluate(js):
+                    return True
+                pg.wait_for_timeout(50)
+            return False
+
+        # 3. Panels ein- und ausklappbar (links & rechts)
+        pg.locator('#btn-left').tap()
+        wait_cond("() => document.querySelector('#left').getBoundingClientRect().left >= -1")
+        l_open = pg.evaluate("() => ({ l: document.querySelector('#left').getBoundingClientRect().left, exp: document.querySelector('#btn-left').getAttribute('aria-expanded') })")
+        pg.locator('#btn-left-close').tap()
+        wait_cond("() => document.querySelector('#left').getBoundingClientRect().right <= 1")
+        l_closed = pg.evaluate("() => ({ r: document.querySelector('#left').getBoundingClientRect().right, exp: document.querySelector('#btn-left').getAttribute('aria-expanded') })")
+        pg.locator('#btn-right').tap()
+        wait_cond("() => document.querySelector('#right').getBoundingClientRect().right <= innerWidth + 1")
+        r_open = pg.evaluate("() => ({ r: document.querySelector('#right').getBoundingClientRect().right, w: innerWidth, exp: document.querySelector('#btn-right').getAttribute('aria-expanded') })")
+        cb = pg.locator('canvas').first.bounding_box()
+        pg.touchscreen.tap(cb['x'] + 24, cb['y'] + 24)
+        wait_cond("() => document.querySelector('#right').getBoundingClientRect().left >= innerWidth - 1")
+        r_closed = pg.evaluate("() => ({ l: document.querySelector('#right').getBoundingClientRect().left, w: innerWidth, exp: document.querySelector('#btn-right').getAttribute('aria-expanded') })")
+        ok3 = (
+            l_open['l'] >= -1 and l_open['exp'] == 'true'
+            and l_closed['r'] <= 1 and l_closed['exp'] == 'false'
+            and r_open['r'] <= r_open['w'] + 1 and r_open['exp'] == 'true'
+            and r_closed['l'] >= r_closed['w'] - 1 and r_closed['exp'] == 'false'
+        )
+
+        # 4. Körper anlegen, Antippen wählt ihn, Kontextleiste >= 44 px, Antippen ins Leere hebt Auswahl auf
+        ev("Actions.addPrimitive('box')")
+        for _ in range(30):
+            if ev("return !App.busy && App.results.size >= 1"):
+                break
+            pg.wait_for_timeout(300)
+        pg.wait_for_timeout(400)
+        bid = ev("return App.doc.items[0].id")
+        ev("App.clearSelection(); Viewer.fit();"); pg.wait_for_timeout(700)
+        pt = ev("""const b=Actions.worldBox(arg); const c=b.getCenter(Viewer.camera.position.clone());
+          const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect();
+          return [s.x+r.left, s.y+r.top];""", bid)
+        pg.touchscreen.tap(pt[0], pt[1]); pg.wait_for_timeout(400)
+        sel_after_tap = ev("return App.sel.slice()")
+        ctx_btns = pg.evaluate("""() => {
+          const btns = [...document.querySelectorAll('.ctxbar button')].filter(b => b.offsetParent);
+          return btns.length ? Math.min(...btns.map(b => b.getBoundingClientRect().height)) : 0;
+        }""")
+        pg.touchscreen.tap(cb['x'] + 20, cb['y'] + cb['height'] - 20); pg.wait_for_timeout(350)
+        sel_cleared = ev("return App.sel.slice()")
+        ok4 = sel_after_tap == [bid] and ctx_btns >= 44 and sel_cleared == []
+
+        # 5. Zwei Finger drehen und zoomen die Ansicht
+        cam0 = ev("const c=Viewer.camera.position, t=Viewer.controls.target; const v=c.clone().sub(t); return { dir: v.clone().normalize().toArray(), dist: v.length() };")
+        cdp = ctx.new_cdp_session(pg)
+        p1x, p1y = pt[0], pt[1]
+        p2x, p2y = pt[0] + 90, pt[1]
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': p1x, 'y': p1y, 'id': 1}, {'x': p2x, 'y': p2y, 'id': 2}]})
+        steps = 10
+        for s_i in range(1, steps + 1):
+            f = s_i / steps
+            x1 = p1x + 55 * f - 80 * f
+            y1 = p1y - 45 * f
+            x2 = p2x + 55 * f + 80 * f
+            y2 = p2y - 45 * f
+            cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': x1, 'y': y1, 'id': 1}, {'x': x2, 'y': y2, 'id': 2}]})
+            pg.wait_for_timeout(25)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        pg.wait_for_timeout(500)
+        cam1 = ev("const c=Viewer.camera.position, t=Viewer.controls.target; const v=c.clone().sub(t); return { dir: v.clone().normalize().toArray(), dist: v.length() };")
+        dot = max(-1.0, min(1.0, sum(a * b for a, b in zip(cam0['dir'], cam1['dir']))))
+        ang_deg = math.degrees(math.acos(dot))
+        sel_after_two = ev("return App.sel.slice()")
+        ok5 = ang_deg > 3.0 and cam1['dist'] < cam0['dist'] * 0.92 and sel_after_two == []
+
+        # 6. Einfach-Stufe am Tablet: Knöpfe >= 44 px, Panels klappen, Antippen wählt
+        pg.locator('#btn-level').tap(); pg.wait_for_timeout(500)
+        b_sim = check_bar_btns()
+        sim_cls = pg.evaluate("() => [document.body.classList.contains('simple'), document.body.classList.contains('tablet')]")
+        pg.locator('#btn-left').tap()
+        sim_l_open = wait_cond("() => document.querySelector('#left').getBoundingClientRect().left >= -1")
+        pg.locator('#btn-left-close').tap()
+        wait_cond("() => document.querySelector('#left').getBoundingClientRect().right <= 1")
+        pt2 = ev("""const b=Actions.worldBox(arg); const c=b.getCenter(Viewer.camera.position.clone());
+          const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect();
+          return [s.x+r.left, s.y+r.top];""", bid)
+        pg.touchscreen.tap(pt2[0], pt2[1]); pg.wait_for_timeout(350)
+        sim_sel = ev("return App.sel.slice()")
+        ok6 = (
+            sim_cls == [True, True]
+            and b_sim['nTools'] >= 3
+            and b_sim['minToolH'] >= 44
+            and sim_l_open is True
+            and sim_sel == [bid]
+        )
+
+        # 7. Querformat 1024x768 (< 1100 px + Touch): bleibt im Tablet-Modus und >= 44 px
+        pg.locator('#btn-level').tap(); pg.wait_for_timeout(400)
+        pg.set_viewport_size({'width': 1024, 'height': 768}); pg.wait_for_timeout(400)
+        b_land = check_bar_btns()
+        land_tab = pg.evaluate("() => [document.body.classList.contains('tablet'), document.querySelector('#left').getBoundingClientRect().right <= 1]")
+        ok7 = land_tab == [True, True] and b_land['minToolH'] >= 44 and len(errs) == 0
+
+        return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+    finally:
+        ctx.close()
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16449,6 +16629,7 @@ TESTS = [
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
     ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
+    ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
@@ -16586,6 +16767,7 @@ TESTS = [
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as pw:
+        PW_DEVICES = pw.devices
         b = pw.chromium.launch(args=ARGS)
         ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
         teil = os.environ.get('TRACERY_TEIL', '')     # „i/n“: nur jeden n-ten Test ab Nummer i (Volltest in Teilen, gleichzeitig)

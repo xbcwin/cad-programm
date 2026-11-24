@@ -99,6 +99,7 @@ const UI = (() => {
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
   function initTips() {
     document.addEventListener('pointerover', (e) => {
+      if (e.pointerType === 'touch') return;
       const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
       clearTimeout(tipTimer); clearTimeout(helpTimer);
       if (!t) { hideTip(); return; }
@@ -131,6 +132,43 @@ const UI = (() => {
     tipEl.style.left = clamp(x, 8, innerWidth - tr.width - 8) + 'px'; tipEl.style.top = Math.max(8, y) + 'px';
   }
   function hideTip() { clearTimeout(helpTimer); if (tipEl) { tipEl.remove(); tipEl = null; } }
+  // ---------- Tablet- & Touch-Erkennung ----------
+  let seenTouch = false;
+  function hasTouch() {
+    return seenTouch
+      || (navigator.maxTouchPoints > 0)
+      || ('ontouchstart' in window)
+      || (typeof matchMedia === 'function' && (matchMedia('(pointer: coarse)').matches || matchMedia('(any-pointer: coarse)').matches));
+  }
+  function viewportWidth() {
+    return (document.documentElement && document.documentElement.clientWidth) || innerWidth;
+  }
+  function isTablet() {
+    return viewportWidth() < 1100 && hasTouch();
+  }
+  function syncTablet() {
+    const t = hasTouch(), tab = isTablet();
+    document.body.classList.toggle('touch', t);
+    document.body.classList.toggle('tablet', tab);
+    const ws = $('#workspace');
+    if (ws && !tab && viewportWidth() > 900) ws.classList.remove('show-left', 'show-right');
+    const bl = $('#btn-left'), br = $('#btn-right');
+    if (bl && ws) bl.setAttribute('aria-expanded', String(ws.classList.contains('show-left')));
+    if (br && ws) br.setAttribute('aria-expanded', String(ws.classList.contains('show-right')));
+    return tab;
+  }
+  function initTablet() {
+    syncTablet();
+    window.addEventListener('resize', syncTablet);
+    if (typeof matchMedia === 'function') {
+      const mq = matchMedia('(pointer: coarse)');
+      if (mq.addEventListener) mq.addEventListener('change', syncTablet);
+      else if (mq.addListener) mq.addListener(syncTablet);
+    }
+    document.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch' && !seenTouch) { seenTouch = true; syncTablet(); }
+    }, { capture: true, passive: true });
+  }
   // ---------- Hinweiszeile ----------
   let hintOverride = null;
   function hint(html) { hintOverride = html; renderHint(); }
@@ -148,7 +186,7 @@ const UI = (() => {
     if (App.face && App.sel.length === 1) return T('hint.defaultFace');
     if (App.sel.length > 1) return T('hint.defaultMulti', { n: App.sel.length });
     if (App.sel.length === 1) return T('hint.defaultOne');
-    return T('hint.defaultIdle');
+    return isTablet() ? T('hint.defaultIdleTouch') : T('hint.defaultIdle');
   }
   // ---------- Ladeanzeige ----------
   let loadingEl = null;
@@ -281,6 +319,6 @@ const UI = (() => {
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
   }
-  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hint, renderHint, loading, busy, numField, selectField, textField };
+  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
 })();
 
