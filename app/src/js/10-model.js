@@ -45,6 +45,8 @@ const THREAD_SPECS = [
   { size: 'M10',  d: 10.0, pitch: 1.5,  core: 8.5  },
   { size: 'M12',  d: 12.0, pitch: 1.75, core: 10.2 },
   { size: 'M16',  d: 16.0, pitch: 2.0,  core: 14.0 },
+  { size: 'M20',  d: 20.0, pitch: 2.5,  core: 17.5 },
+  { size: 'M24',  d: 24.0, pitch: 3.0,  core: 21.0 },
 ];
 const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 

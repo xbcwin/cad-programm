@@ -1373,30 +1373,45 @@ export function createKernel(R, oc) {
     return R.basicFaceExtrusion(polygonFace(pts), new R.Vector([0, 0, z1 - z0]));
   }
   // Metrisches ISO-Regelgewinde (vereinfacht): Kern + Gewindegang als Sweep entlang einer Schraubenlinie
-  const PITCH = { M2: 0.4, 'M2.5': 0.45, M3: 0.5, M4: 0.7, M5: 0.8, M6: 1.0, M8: 1.25, M10: 1.5, M12: 1.75, M16: 2.0 };
-  function threadShape(size, L, grow) {
-    const D = (parseFloat(String(size).slice(1)) || 6) + grow, P = PITCH[size] || 1;
-    const rMaj = D / 2, depth = 0.5413 * P, rMin = rMaj - depth;
-    const core = R.makeCylinder(rMin + 0.01, L, [0, 0, 0], [0, 0, 1]);
+  const PITCH = { M2: 0.4, 'M2.5': 0.45, M3: 0.5, M4: 0.7, M5: 0.8, M6: 1.0, M8: 1.25, M10: 1.5, M12: 1.75, M16: 2.0, M20: 2.5, M24: 3.0 };
+  function threadShape(size, L, grow, pitch) {
+    const D = (parseFloat(String(size).slice(1)) || 6) + grow;
+    const defP = PITCH[size] || 1, rawP = num(pitch, 0);
+    const P = rawP > 0 ? Math.min(Math.max(rawP, 0.25), D * 0.45) : defP;
+    const rMaj = D / 2, depth = 0.5413 * P, rMin = Math.max(0.25, rMaj - depth);
     // Trapez im Schnitt (60°-Flanken, Spitze P/8 breit)
     const crest = P / 8, root = crest + 2 * depth * Math.tan(Math.PI / 6);
-    const x0 = rMin - 0.05, z0 = -P;
-    const pts = [[x0, 0, z0 - root / 2], [rMaj, 0, z0 - crest / 2], [rMaj, 0, z0 + crest / 2], [x0, 0, z0 + root / 2]];
-    const prof = R.assembleWire([R.makeLine(pts[0], pts[1]), R.makeLine(pts[1], pts[2]), R.makeLine(pts[2], pts[3]), R.makeLine(pts[3], pts[0])]);
-    const helix = R.makeHelix(P, L + 2 * P, x0, [0, 0, z0], [0, 0, 1]);
-    let gang = R.genericSweep(prof, helix, { frenet: true });
-    const box = R.makeCylinder(rMaj + 0.5, L, [0, 0, 0], [0, 0, 1]);
-    const cut = gang.intersect(box); safeDelete(gang); safeDelete(box);
-    const out = core.fuse(cut); safeDelete(core); safeDelete(cut);
-    return out;
+    const x0 = rMin - 0.05;
+    let lastErr = null;
+    for (const phase of [0, 0.17, 0.37]) {
+      let core = null, gang = null, full = null, box = null, out = null;
+      try {
+        const z0 = -(1 + phase) * P;
+        const pts = [[x0, 0, z0 - root / 2], [rMaj, 0, z0 - crest / 2], [rMaj, 0, z0 + crest / 2], [x0, 0, z0 + root / 2]];
+        const prof = R.assembleWire([R.makeLine(pts[0], pts[1]), R.makeLine(pts[1], pts[2]), R.makeLine(pts[2], pts[3]), R.makeLine(pts[3], pts[0])]);
+        const helix = R.makeHelix(P, L + (2 + phase) * P, x0, [0, 0, z0], [0, 0, 1]);
+        gang = R.genericSweep(prof, helix, { frenet: true });
+        core = R.makeCylinder(rMin + 0.01, L + 3 * P, [0, 0, -1.5 * P], [0, 0, 1]);
+        full = core.fuse(gang); safeDelete(core); core = null; safeDelete(gang); gang = null;
+        box = R.makeCylinder(rMaj + 0.5, L, [0, 0, 0], [0, 0, 1]);
+        out = full.intersect(box); safeDelete(full); full = null; safeDelete(box); box = null;
+        if (!out || out.isNull) throw new Error('Leere Gewindeform');
+        bboxOf(out);
+        return out;
+      } catch (err) {
+        lastErr = err;
+        safeDelete(core); safeDelete(gang); safeDelete(full); safeDelete(box); safeDelete(out);
+      }
+    }
+    throw lastErr || new Error('Gewinde konnte nicht gebaut werden.');
   }
   function buildPart(p) {
     const lib = p.lib;
-    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, 0); }
+    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, 0, p.pitch); }
     if (lib === 'threadHole') {
       const L = pos(p.length, 10);
       // Innengewinde zum Drucken: etwas Luft (Spiel), durchgehend nach unten
-      const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3)).translate([0, 0, -L]);
+      const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3), p.pitch).translate([0, 0, -L]);
       return s;
     }
     if (lib === 'stdScrew') return buildStdScrew(p);

@@ -2772,6 +2772,7 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
+    if (S.tool === 'select') { S.cursor = null; return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
     } else {
@@ -3153,7 +3154,11 @@ const Sketch = (() => {
             const spx = Viewer.toScreen(toWorld(a[0], a[1]));
             const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : '') + (confFocusId === c.id ? ' conf-focus' : ''), 'data-tip': (CNAME[c.type] || 'Regel') + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
             el.innerHTML = icon(CICON[c.type] || 'info');
-            el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
+            const lx = spx.x + n * 19, lw = 18, lh = 18;
+            let ly = spx.y;
+            for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - lx) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
+            placed.push([lx, ly, lw, lh]);
+            el.style.left = lx + 'px'; el.style.top = ly + 'px';
             el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
             el.addEventListener('click', () => { S.selCon = c.id; clearSel(); render(); Panels.renderRight(); });
             $('#overlay').append(el); labels.push(el);

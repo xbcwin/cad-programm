@@ -199,6 +199,7 @@
   "menu.ctx.faceDxf": "Fläche als DXF speichern",
   "menu.ctx.faceSvg": "Fläche als SVG speichern",
   "menu.ctx.sketchOnFace": "Skizze auf dieser Fläche",
+  "menu.ctx.thread": "Gewinde …",
   "menu.ctx.markThread": "Gewinde markieren …",
   "menu.ctx.dupLinked": "Verknüpft duplizieren",
   "menu.ctx.toSolid": "Zum Körper machen",
