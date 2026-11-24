@@ -10135,6 +10135,185 @@ endsolid spitze
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a047_import_heilen(p):
+    p.empty()
+
+    # 1. Gültigen Quader (20x20x20) als STEP exportieren und eine offene Variante (eine Fläche fehlt) bauen
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:20},{name:'Quader'})); })")
+    warte_rechnen(p, 30)
+    step_info = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      const txt = new TextDecoder().decode(new Uint8Array(r.data));
+      const m = txt.match(/CLOSED_SHELL\\s*\\([^,]*,\\s*\\(([^)]+)\\)\\)/);
+      if (!m) return { ok: false };
+      const fIds = m[1].split(',').map(s => s.trim());
+      if (fIds.length < 6) return { ok: false };
+      const openTxt = txt
+        .replace(m[0], `OPEN_SHELL('',(${fIds.slice(0, 5).join(',')}))`)
+        .replace(/MANIFOLD_SOLID_BREP\\s*\\(([^,]*),\\s*(#\\d+)\\)/, 'SHELL_BASED_SURFACE_MODEL($1,($2))')
+        .replace(/ADVANCED_BREP_SHAPE_REPRESENTATION/g, 'MANIFOLD_SURFACE_SHAPE_REPRESENTATION');
+      window.__a047ValidStep = txt;
+      window.__a047OpenStep = openTxt;
+      return { ok: true, nFaces: fIds.length };
+    }""")
+
+    # Offenes STEP importieren -> automatische BRepCheck/Sewing-Prüfung -> Hinweis mit „Heilen“ erscheint
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(250)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(new File([window.__a047OpenStep], 'OffenerKasten.step'))")
+    warte_rechnen(p, 30)
+    p.pg.wait_for_function("""() => {
+      const { App, Start } = window.__masswerk;
+      const it = App.doc.items[0];
+      const st = it && Start.importCheckOf(it.id);
+      return !!(st && !st.checking && st.report);
+    }""", timeout=20000)
+    p.wait(200)
+
+    check_open = p.ev("""
+      const it = App.doc.items[0];
+      const st = it && Start.importCheckOf(it.id);
+      return { id: it && it.id, st };
+    """)
+    bar_visible = p.pg.locator('#import-check-bar').is_visible()
+    bar_text = p.pg.locator('#import-check-bar').text_content() or ''
+    heal_btn_bar = p.pg.locator('#import-bar-heal').is_visible()
+    panel_text = p.pg.locator('#import-check-panel').text_content() or ''
+    heal_btn_panel = p.pg.locator('#btn-import-heal').is_visible()
+
+    ok1 = (bool(step_info and step_info.get('ok'))
+           and bool(check_open and check_open['st'] and check_open['st']['report'])
+           and check_open['st']['report']['hasIssues'] is True
+           and check_open['st']['report']['openEdges'] == 4
+           and check_open['st']['report']['solids'] == 0
+           and bar_visible and heal_btn_bar and heal_btn_panel
+           and ('4' in bar_text) and ('offen' in bar_text.lower())
+           and ('offene kanten' in panel_text.lower()))
+
+    # 2. Klick auf „Heilen“ -> Meldung mit Vorher/Nachher-Ergebnis, kein Absturz, Rückgängig
+    p.pg.locator('#import-bar-heal').click()
+    p.pg.wait_for_function("""() => {
+      const { App, Start } = window.__masswerk;
+      const it = App.doc.items[0];
+      const st = it && Start.importCheckOf(it.id);
+      return !!(it && it.p && it.p.fmt === 'brep' && st && !st.checking && st.lastHeal);
+    }""", timeout=25000)
+    warte_rechnen(p, 30)
+    p.wait(250)
+
+    healed_info = p.ev("""
+      const it = App.doc.items[0];
+      const st = it && Start.importCheckOf(it.id);
+      return { fmt: it && it.p && it.p.fmt, errs: App.errors.length, st, healed: it && it.p && it.p.healed };
+    """)
+    toast_txt = p.pg.evaluate("() => [...document.querySelectorAll('#toasts .toast')].map(el => el.textContent || '').join(' | ')")
+    diff_txt = p.pg.locator('#import-heal-diff').text_content() or ''
+    bar_gone = p.pg.locator('#import-check-bar').count() == 0
+    vol_healed = volumen(p)
+
+    # Rückgängig stellt ursprüngliches STEP wieder her
+    p.ev("App.undo()")
+    warte_rechnen(p, 30)
+    undo_fmt = p.ev("const it = App.doc.items[0]; return it && it.p && it.p.fmt")
+
+    ok2 = (healed_info is not None
+           and healed_info['errs'] == 0
+           and healed_info['fmt'] == 'brep'
+           and healed_info['st']['report']['hasIssues'] is False
+           and healed_info['st']['report']['openEdges'] == 0
+           and healed_info['st']['report']['brepValid'] is True
+           and healed_info['st']['report']['solids'] >= 1
+           and bar_gone
+           and ('4' in toast_txt and '0' in toast_txt)
+           and ('4' in diff_txt and '0' in diff_txt)
+           and vol_healed is not None and abs(vol_healed - 8000) < 2.0
+           and undo_fmt == 'step')
+
+    # 3. Lücken (Nähen mit Toleranz) und falsch herum liegende Flächen prüfen und heilen
+    gap_flip = p.pg.evaluate("""async () => {
+      const { Kernel } = window.__masswerk;
+      const ID = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+      const rb = await Kernel.call('exportBREP', { scene: { items: [{ id: 'b1', kind: 'box', role: 'solid', m: ID, p: { w: 20, d: 20, h: 20 } }] } });
+      const brepTxt = new TextDecoder().decode(new Uint8Array(rb.data));
+
+      // a) Umgedrehte Fläche im BREP (+/-faceId in Shell umdrehen)
+      const invFaceTxt = brepTxt.replace(/(Sh\\n\\n[^\\n]+\\n)([+-])(\\d+ )/, (_, a, s, d) => a + (s === '+' ? '-' : '+') + d);
+      const invBytes = new TextEncoder().encode(invFaceTxt);
+      const chkInv = await Kernel.call('checkImport', { p: { fmt: 'brep', bytes: invBytes, scale: 1 } });
+      const healInv = await Kernel.call('healImport', { p: { fmt: 'brep', bytes: invBytes, scale: 1 }, tol: 0.1, capOpen: true });
+
+      // b) Umgedrehter Volumenkörper (+shellId -> -shellId in Solid)
+      const invSolTxt = brepTxt.replace(/(So\\n\\n[^\\n]+\\n)\\+(\\d+ 0 \\*)/, '$1-$2');
+      const invSolBytes = new TextEncoder().encode(invSolTxt);
+      const chkSol = await Kernel.call('checkImport', { p: { fmt: 'brep', bytes: invSolBytes, scale: 1 } });
+      const healSol = await Kernel.call('healImport', { p: { fmt: 'brep', bytes: invSolBytes, scale: 1 }, tol: 0.1, capOpen: true });
+
+      return { chkInv, healInv: { ok: healInv.ok, before: healInv.before, after: healInv.after }, chkSol, healSol: { ok: healSol.ok, before: healSol.before, after: healSol.after } };
+    }""")
+    # Auch eine echte Lücke (0,05 mm zwischen Flächen) prüfen und mit Toleranz vernähen
+    gap_res = p.pg.evaluate("""async () => {
+      const { Kernel } = window.__masswerk;
+      const ID = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+      const txt = window.__a047ValidStep;
+      const m = txt.match(/CLOSED_SHELL\\s*\\([^,]*,\\s*\\(([^)]+)\\)\\)/);
+      const fIds = m[1].split(',').map(s => s.trim());
+      const oneFaceStep = txt
+        .replace(m[0], `OPEN_SHELL('',(${fIds[5]}))`)
+        .replace(/MANIFOLD_SOLID_BREP\\s*\\(([^,]*),\\s*(#\\d+)\\)/, 'SHELL_BASED_SURFACE_MODEL($1,($2))')
+        .replace(/ADVANCED_BREP_SHAPE_REPRESENTATION/g, 'MANIFOLD_SURFACE_SHAPE_REPRESENTATION');
+      const s5 = await Kernel.call('healImport', { p: { fmt: 'step', bytes: new TextEncoder().encode(window.__a047OpenStep), scale: 1 }, tol: 0.05, capOpen: false });
+      const s1 = await Kernel.call('healImport', { p: { fmt: 'step', bytes: new TextEncoder().encode(oneFaceStep), scale: 1 }, tol: 0.05, capOpen: false });
+      const mShift = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0.05,1];
+      const gapBrep = await Kernel.call('exportBREP', { scene: { items: [
+        { id: 'p5', kind: 'import', role: 'solid', m: ID, p: { fmt: 'brep', bytes: s5.brepBytes, scale: 1 } },
+        { id: 'p1', kind: 'import', role: 'solid', m: mShift, p: { fmt: 'brep', bytes: s1.brepBytes, scale: 1 } },
+      ] } });
+      const gapBytes = new Uint8Array(gapBrep.data);
+      const chkGap = await Kernel.call('checkImport', { p: { fmt: 'brep', bytes: gapBytes, scale: 1 } });
+      const healGap = await Kernel.call('healImport', { p: { fmt: 'brep', bytes: gapBytes, scale: 1 }, tol: 0.1, capOpen: false });
+      return { chkGap, healGap: { ok: healGap.ok, before: healGap.before, after: healGap.after } };
+    }""")
+
+    ok3 = (bool(gap_flip)
+           and gap_flip['chkInv']['hasIssues'] and gap_flip['chkInv']['invertedFaces'] >= 1
+           and gap_flip['healInv']['ok'] and gap_flip['healInv']['after']['invertedFaces'] == 0 and gap_flip['healInv']['after']['brepValid']
+           and gap_flip['chkSol']['hasIssues'] and gap_flip['chkSol']['invertedFaces'] >= 1
+           and gap_flip['healSol']['ok'] and gap_flip['healSol']['after']['invertedFaces'] == 0
+           and bool(gap_res)
+           and gap_res['chkGap']['hasIssues'] and gap_res['chkGap']['openEdges'] > 0 and gap_res['chkGap']['gaps'] > 0
+           and gap_res['healGap']['ok'] and gap_res['healGap']['after']['openEdges'] == 0
+           and gap_res['healGap']['after']['gaps'] == 0 and gap_res['healGap']['after']['solids'] >= 1)
+
+    # 4. Gültiges STEP erzeugt keinen Fehler-Hinweis & Hilfetexte sind vorhanden
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(250)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(new File([window.__a047ValidStep], 'Gueltig.step'))")
+    warte_rechnen(p, 30)
+    p.pg.wait_for_function("""() => {
+      const { App, Start } = window.__masswerk;
+      const it = App.doc.items[0];
+      const st = it && Start.importCheckOf(it.id);
+      return !!(st && !st.checking && st.report);
+    }""", timeout=20000)
+    p.wait(150)
+    valid_st = p.ev("const it = App.doc.items[0]; return it && Start.importCheckOf(it.id)")
+    no_bar = p.pg.locator('#import-check-bar').count() == 0
+    valid_panel = p.pg.locator('#import-check-panel').text_content() or ''
+    help_ok = p.pg.evaluate("""() => fetch('data/werkzeug-hilfen.json').then(r=>r.json()).then(d => {
+      const c = d.importCheck, h = d.importHeal;
+      return !!(c && c.tip && c.hilfe && c.tipp && h && h.tip && h.hilfe && h.tipp);
+    })""")
+
+    ok4 = (bool(valid_st and valid_st['report'])
+           and valid_st['report']['hasIssues'] is False
+           and valid_st['report']['openEdges'] == 0
+           and valid_st['report']['brepValid'] is True
+           and no_bar
+           and ('in ordnung' in valid_panel.lower())
+           and bool(help_ok))
+
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -10281,6 +10460,7 @@ TESTS = [
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
+    ('[A-047] Import prüfen und heilen: offenes STEP / Hinweis / Heilen mit Ergebnis / Lücken & gültiges STEP', t_a047_import_heilen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

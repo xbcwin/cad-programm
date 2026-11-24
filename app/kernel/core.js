@@ -1348,6 +1348,7 @@ export function createKernel(R, oc) {
       const bin = atob(p.data); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     }
     if (!bytes || !bytes.byteLength) throw new Error('Die importierte Datei ist leer.');
+    if (p.blobId && bytes) importBlobs.set(p.blobId, bytes);
     let shape = null;
     if (p.fmt === 'brep') {
       const txt = new TextDecoder('utf-8').decode(bytes);
@@ -4888,5 +4889,421 @@ export function createKernel(R, oc) {
     }
     return { holes: out, errors };
   }
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, _cache: cache };
+  // ---------- Import prüfen & heilen (IO-10: BRepCheck, ShapeFix, Nähen mit Toleranz) ----------
+  function uniqueShapes(raw, shapeEnum) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(raw, shapeEnum, TA.TopAbs_SHAPE);
+    const buckets = new Map(), out = [];
+    try {
+      while (ex.More()) {
+        const it = ex.Current();
+        const hc = oc.ReplicadShapeHasher.HashCode(it, HMAX);
+        let b = buckets.get(hc);
+        if (!b) { b = []; buckets.set(hc, b); }
+        if (!b.some((x) => x.IsSame(it))) { b.push(it); out.push(it); }
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    return out;
+  }
+
+  function signedVolumeOf(raw) {
+    let props = null;
+    try {
+      props = new oc.GProp_GProps();
+      oc.BRepGProp.VolumeProperties(raw, props, false, false, false);
+      const m = props.Mass();
+      return Number.isFinite(m) ? m : 0;
+    } catch (_) { return 0; } finally { if (props) try { props.delete(); } catch (_) {} }
+  }
+
+  // Prüft innerhalb jeder Hülle über gemeinsame Kanten, ob Flächen umgekehrt orientiert sind,
+  // sowie bei Volumenkörpern auf negatives Vorzeichenvolumen.
+  function countInvertedFaces(raw) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ORI = oc.TopAbs_Orientation;
+    let flippedInShell = 0;
+    const shells = uniqueShapes(raw, TA.TopAbs_SHELL);
+    const groups = shells.length ? shells : [raw];
+    for (const grp of groups) {
+      const faces = uniqueShapes(grp, TA.TopAbs_FACE);
+      if (faces.length < 2) continue;
+      const edgeMap = new Map();
+      for (let fi = 0; fi < faces.length; fi++) {
+        const exE = new oc.TopExp_Explorer(faces[fi], TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+        try {
+          while (exE.More()) {
+            const ed = oc.TopoDS.Edge(exE.Current());
+            let degen = false;
+            try { degen = oc.BRep_Tool.Degenerated(ed); } catch (_) {}
+            if (!degen) {
+              const ori = ed.Orientation();
+              if (ori !== ORI.TopAbs_INTERNAL && ori !== ORI.TopAbs_EXTERNAL) {
+                const hc = oc.ReplicadShapeHasher.HashCode(ed, HMAX);
+                let arr = edgeMap.get(hc);
+                if (!arr) { arr = []; edgeMap.set(hc, arr); }
+                let entry = arr.find((x) => x.edge.IsSame(ed));
+                if (!entry) { entry = { edge: ed, uses: [] }; arr.push(entry); }
+                entry.uses.push({ fi, fwd: ori === ORI.TopAbs_FORWARD });
+              }
+            }
+            exE.Next();
+          }
+        } finally { exE.delete(); }
+      }
+      const adj = Array.from({ length: faces.length }, () => []);
+      for (const arr of edgeMap.values()) {
+        for (const e of arr) {
+          if (e.uses.length !== 2) continue;
+          const a = e.uses[0], b = e.uses[1];
+          if (a.fi === b.fi) continue;
+          const consistent = a.fwd !== b.fwd;
+          adj[a.fi].push([b.fi, consistent]);
+          adj[b.fi].push([a.fi, consistent]);
+        }
+      }
+      const color = new Int8Array(faces.length).fill(-1);
+      for (let i = 0; i < faces.length; i++) {
+        if (color[i] !== -1) continue;
+        color[i] = 0;
+        const q = [i];
+        let c0 = 1, c1 = 0, conflict = 0;
+        for (let qi = 0; qi < q.length; qi++) {
+          const u = q[qi];
+          for (const [v, cons] of adj[u]) {
+            const want = color[u] ^ (cons ? 0 : 1);
+            if (color[v] === -1) {
+              color[v] = want;
+              if (want === 0) c0++; else c1++;
+              q.push(v);
+            } else if (color[v] !== want) {
+              conflict++;
+            }
+          }
+        }
+        flippedInShell += conflict > 0 ? Math.max(1, Math.min(c0, c1)) : Math.min(c0, c1);
+      }
+    }
+    let negativeSolidFaces = 0;
+    const solids = uniqueShapes(raw, TA.TopAbs_SOLID);
+    for (const so of solids) {
+      if (signedVolumeOf(so) < -1e-6) {
+        negativeSolidFaces += Math.max(1, uniqueShapes(so, TA.TopAbs_FACE).length);
+      }
+    }
+    return Math.max(flippedInShell, negativeSolidFaces);
+  }
+
+  function inspectImportShape(raw, gapTol = 0.5) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const faces = uniqueShapes(raw, TA.TopAbs_FACE);
+    const edges = uniqueShapes(raw, TA.TopAbs_EDGE);
+    const shells = uniqueShapes(raw, TA.TopAbs_SHELL);
+    const solids = uniqueShapes(raw, TA.TopAbs_SOLID);
+    let brepValid = true, invalidCount = 0;
+    let ana = null;
+    try {
+      ana = new oc.BRepCheck_Analyzer(raw, true);
+      brepValid = Boolean(ana.IsValid());
+      for (const list of [faces, edges, shells, solids]) {
+        for (const sub of list) {
+          try { if (!ana.IsValid(sub)) invalidCount++; } catch (_) {}
+        }
+      }
+      const wires = uniqueShapes(raw, TA.TopAbs_WIRE);
+      for (const w of wires) {
+        try { if (!ana.IsValid(w)) invalidCount++; } catch (_) {}
+      }
+      if (!brepValid && invalidCount === 0) invalidCount = 1;
+    } catch (_) {
+      brepValid = false;
+      invalidCount = Math.max(1, invalidCount);
+    } finally { if (ana) try { ana.delete(); } catch (_) {} }
+
+    let openEdges = 0, gaps = 0, multipleEdges = 0, degenerated = 0;
+    let sewTight = null, sewGap = null;
+    try {
+      sewTight = new oc.BRepBuilderAPI_Sewing(1e-5, true, true, true, false);
+      sewTight.Load(raw);
+      sewTight.Perform();
+      openEdges = sewTight.NbFreeEdges();
+      multipleEdges = sewTight.NbMultipleEdges();
+      degenerated = sewTight.NbDegeneratedShapes();
+      if (openEdges > 0) {
+        const gTol = Math.max(num(gapTol, 0.5), 0.05);
+        sewGap = new oc.BRepBuilderAPI_Sewing(gTol, true, true, true, false);
+        sewGap.Load(raw);
+        sewGap.Perform();
+        const freeWide = sewGap.NbFreeEdges();
+        const closedBySew = Math.max(0, openEdges - freeWide);
+        if (closedBySew > 0) gaps = Math.max(1, Math.round(closedBySew / 2));
+      }
+    } catch (_) {} finally {
+      if (sewTight) try { sewTight.delete(); } catch (_) {}
+      if (sewGap) try { sewGap.delete(); } catch (_) {}
+    }
+
+    let invertedFaces = 0;
+    try { invertedFaces = countInvertedFaces(raw); } catch (_) {}
+    const openShell = (shells.length > 0 && solids.length === 0) || (faces.length > 0 && openEdges > 0);
+    const hasIssues = !brepValid || invalidCount > 0 || openEdges > 0 || gaps > 0
+      || invertedFaces > 0 || multipleEdges > 0 || degenerated > 0 || openShell;
+
+    return {
+      ok: true,
+      brepValid,
+      hasIssues,
+      faces: faces.length,
+      edges: edges.length,
+      shells: shells.length,
+      solids: solids.length,
+      openEdges,
+      gaps,
+      invertedFaces,
+      invalidCount,
+      multipleEdges,
+      degenerated,
+      openShell,
+    };
+  }
+
+  function checkImport(p, opts = {}) {
+    ingestBlobs(opts.scene || { items: [] });
+    let shape = null;
+    try {
+      shape = buildImport(p);
+      if (!shape || !shape.wrapped) return { ok: false, error: 'Keine Geometrie im Import gefunden.' };
+      return inspectImportShape(shape.wrapped, num(opts.gapTol, 0.5));
+    } catch (err) {
+      return { ok: false, error: friendlyError(err) };
+    } finally {
+      safeDelete(shape);
+    }
+  }
+
+  function edgeEndpoints(edge) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(edge, TA.TopAbs_VERTEX, TA.TopAbs_SHAPE);
+    const pts = [];
+    try {
+      while (ex.More()) {
+        const v = oc.TopoDS.Vertex(ex.Current());
+        const p = oc.BRep_Tool.Pnt(v);
+        pts.push([p.X(), p.Y(), p.Z()]);
+        p.delete();
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    if (!pts.length) return null;
+    if (pts.length === 1) return { start: pts[0], end: pts[0], closed: true };
+    const a = pts[0], b = pts[pts.length - 1];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    return { start: a, end: b, closed: d < 1e-6 };
+  }
+
+  function groupFreeEdgeLoops(edges, tol) {
+    const eps = Math.max(tol * 2, 0.05);
+    const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const items = edges.map((e, idx) => ({ idx, edge: e, ep: edgeEndpoints(e), used: false })).filter((x) => x.ep);
+    const loops = [];
+    for (const it of items) {
+      if (it.used) continue;
+      if (it.ep.closed) { it.used = true; loops.push([it.edge]); continue; }
+      it.used = true;
+      const chain = [it.edge];
+      const loopStart = it.ep.start;
+      let curEnd = it.ep.end;
+      let closed = false;
+      for (let step = 0; step < items.length; step++) {
+        if (chain.length >= 2 && dist(curEnd, loopStart) <= eps) { closed = true; break; }
+        let best = null, bestD = eps, flip = false;
+        for (const cand of items) {
+          if (cand.used || cand.ep.closed) continue;
+          const d1 = dist(curEnd, cand.ep.start);
+          if (d1 < bestD) { bestD = d1; best = cand; flip = false; }
+          const d2 = dist(curEnd, cand.ep.end);
+          if (d2 < bestD) { bestD = d2; best = cand; flip = true; }
+        }
+        if (!best) break;
+        best.used = true;
+        chain.push(best.edge);
+        curEnd = flip ? best.ep.start : best.ep.end;
+      }
+      if (closed || (chain.length >= 2 && dist(curEnd, loopStart) <= eps)) loops.push(chain);
+    }
+    return loops;
+  }
+
+  function healImport(p, opts = {}) {
+    const tol = Math.max(1e-5, Math.min(10, num(opts.tol, 0.1)));
+    const capOpen = opts.capOpen !== false;
+    let shape = null;
+    const toDelete = [];
+    try {
+      shape = buildImport(p);
+      if (!shape || !shape.wrapped) return { ok: false, error: 'Keine Geometrie im Import gefunden.' };
+      const raw = shape.wrapped;
+      const before = inspectImportShape(raw, Math.max(tol, 0.5));
+      const TA = oc.TopAbs_ShapeEnum;
+
+      // Phase A: Einzelflächen mit ShapeFix_Face korrigieren
+      const rawFaces = uniqueShapes(raw, TA.TopAbs_FACE);
+      const fixedFaces = [];
+      for (const f of rawFaces) {
+        let sff = null;
+        try {
+          sff = new oc.ShapeFix_Face(oc.TopoDS.Face(f));
+          sff.SetPrecision(tol);
+          sff.SetMaxTolerance(Math.max(tol * 2, 0.5));
+          sff.FixOrientation();
+          sff.Perform();
+          const nf = sff.Face();
+          fixedFaces.push(nf);
+        } catch (_) {
+          fixedFaces.push(f);
+        } finally { if (sff) try { sff.delete(); } catch (_) {} }
+      }
+
+      // Phase B: Alle Flächen mit gewählter Toleranz nähen
+      const sew = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+      toDelete.push(sew);
+      sew.SetMaxTolerance(Math.max(tol * 2, 0.5));
+      for (const f of fixedFaces) sew.Add(f);
+      sew.Perform();
+      let current = sew.SewedShape();
+      let curFree = sew.NbFreeEdges();
+      let cappedFaces = 0;
+
+      // Phase C: Geschlossene Randkanten-Schleifen mit Flächen schließen
+      if (capOpen && curFree > 0) {
+        const freeEdges = [];
+        for (let i = 1; i <= curFree; i++) freeEdges.push(sew.FreeEdge(i));
+        const loops = groupFreeEdgeLoops(freeEdges, tol);
+        const capFaces = [];
+        for (const chain of loops) {
+          let mw = null, mf = null, fill = null;
+          try {
+            mw = new oc.BRepBuilderAPI_MakeWire();
+            for (const ed of chain) mw.Add(ed);
+            if (!mw.IsDone()) continue;
+            const wire = mw.Wire();
+            let candidate = null;
+            mf = new oc.BRepBuilderAPI_MakeFace(wire, true);
+            if (mf.IsDone()) {
+              candidate = mf.Face();
+            } else if (chain.length >= 2 && chain.length <= 12) {
+              try {
+                fill = new oc.BRepOffsetAPI_MakeFilling(3, 15, 2, false, 0.0001, 0.0001, 0.01, 0.1, 8, 9);
+                for (const ed of chain) fill.Add(ed, oc.GeomAbs_Shape.GeomAbs_C0, true);
+                fill.Build();
+                if (fill.IsDone()) candidate = oc.TopoDS.Face(fill.Shape());
+              } catch (_) {}
+            }
+            if (candidate) {
+              let validCap = true, area = 0;
+              let anaCap = null;
+              try {
+                anaCap = new oc.BRepCheck_Analyzer(candidate, true);
+                validCap = Boolean(anaCap.IsValid());
+                area = R.measureArea(R.cast(candidate));
+              } catch (_) { validCap = false; } finally { if (anaCap) try { anaCap.delete(); } catch (_) {} }
+              if (validCap && area > 1e-6) {
+                let sff2 = null;
+                try {
+                  sff2 = new oc.ShapeFix_Face(candidate);
+                  sff2.SetPrecision(tol);
+                  sff2.FixOrientation();
+                  sff2.Perform();
+                  candidate = sff2.Face();
+                } catch (_) {} finally { if (sff2) try { sff2.delete(); } catch (_) {} }
+                capFaces.push(candidate);
+              }
+            }
+          } catch (_) {} finally {
+            if (mw) try { mw.delete(); } catch (_) {}
+            if (mf) try { mf.delete(); } catch (_) {}
+            if (fill) try { fill.delete(); } catch (_) {}
+          }
+        }
+        if (capFaces.length > 0) {
+          const sew2 = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+          toDelete.push(sew2);
+          sew2.SetMaxTolerance(Math.max(tol * 2, 0.5));
+          sew2.Add(current);
+          for (const cf of capFaces) sew2.Add(cf);
+          sew2.Perform();
+          if (sew2.NbFreeEdges() < curFree) {
+            current = sew2.SewedShape();
+            curFree = sew2.NbFreeEdges();
+            cappedFaces = capFaces.length;
+          }
+        }
+      }
+
+      // Phase D: Geschlossene Hüllen zu Volumenkörpern machen und Orientierung richten
+      const shells = uniqueShapes(current, TA.TopAbs_SHELL);
+      const healedParts = [];
+      for (const sh of shells) {
+        let sewSh = null, ms = null, sfs = null;
+        try {
+          sewSh = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+          sewSh.Load(sh);
+          sewSh.Perform();
+          if (sewSh.NbFreeEdges() === 0) {
+            ms = new oc.BRepBuilderAPI_MakeSolid();
+            ms.Add(oc.TopoDS.Shell(sh));
+            if (ms.IsDone()) {
+              let sol = ms.Solid();
+              try {
+                sfs = new oc.ShapeFix_Solid(sol);
+                sfs.SetPrecision(tol);
+                sfs.SetMaxTolerance(Math.max(tol * 2, 0.5));
+                sfs.Perform();
+                sol = oc.TopoDS.Solid(sfs.Solid());
+              } catch (_) {}
+              if (signedVolumeOf(sol) < -1e-6) {
+                try { oc.BRepLib.OrientClosedSolid(sol); } catch (_) {}
+                if (signedVolumeOf(sol) < -1e-6) sol = oc.TopoDS.Solid(sol.Reversed());
+              }
+              healedParts.push(sol);
+              continue;
+            }
+          }
+          healedParts.push(sh);
+        } catch (_) {
+          healedParts.push(sh);
+        } finally {
+          if (sewSh) try { sewSh.delete(); } catch (_) {}
+          if (ms) try { ms.delete(); } catch (_) {}
+          if (sfs) try { sfs.delete(); } catch (_) {}
+        }
+      }
+
+      let healedRaw = current;
+      let compWrap = null;
+      if (healedParts.length === 1) healedRaw = healedParts[0];
+      else if (healedParts.length > 1) {
+        compWrap = R.makeCompound(healedParts.map((x) => R.cast(x)));
+        healedRaw = compWrap.wrapped;
+      }
+
+      const after = inspectImportShape(healedRaw, Math.max(tol, 0.5));
+      const brepStr = oc.BRepToolsWrapper.Write(healedRaw);
+      const brepBytes = new TextEncoder().encode(brepStr);
+      if (compWrap) safeDelete(compWrap);
+
+      const improved = (after.openEdges < before.openEdges) || (after.gaps < before.gaps)
+        || (after.invertedFaces < before.invertedFaces) || (after.invalidCount < before.invalidCount)
+        || (after.solids > before.solids) || (!before.brepValid && after.brepValid);
+
+      return { ok: true, before, after, tol, cappedFaces, improved, brepBytes };
+    } catch (err) {
+      return { ok: false, error: friendlyError(err) };
+    } finally {
+      for (const x of toDelete) try { x.delete(); } catch (_) {}
+      safeDelete(shape);
+    }
+  }
+
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkImport, healImport, _cache: cache };
 }

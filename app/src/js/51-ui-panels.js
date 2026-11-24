@@ -1287,7 +1287,56 @@ const Panels = (() => {
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Datei'), h('b', { class: 'mono' }, it.p.file || '–')));
       const fl = h('div', { class: 'fields' });
       fl.append(UI.selectField({ id: 'p-scale', label: 'Einheit der Datei', value: String(it.p.scale || 1), options: [['1', 'Millimeter'], ['10', 'Zentimeter'], ['25.4', 'Zoll'], ['1000', 'Meter']], onChange: (v) => setP('scale', parseFloat(v)) }));
-      sec.append(fl, h('div', { class: 'hint-box', html: 'Importierte Teile sind feste Formen ohne Zeitleiste. Du kannst sie verschieben, drehen, runden, als Loch nutzen oder mit anderen Körpern verbinden.' }));
+      sec.append(fl);
+      const icPanel = h('div', { id: 'import-check-panel', style: { display: 'grid', gap: '8px' } });
+      const st = typeof Start !== 'undefined' && Start.importCheckOf ? Start.importCheckOf(it.id) : null;
+      const healed = (st && st.lastHeal) || (it.p && it.p.healed) || null;
+      if (st && st.checking) {
+        icPanel.append(h('div', { class: 'hint-box' }, 'Prüft Import-Geometrie (BRepCheck) …'));
+      } else if (st && st.report && st.report.hasIssues) {
+        const rep = st.report;
+        const wb = h('div', { class: 'warn-box' });
+        wb.append(h('b', null, 'Import-Prüfung: Fehler gefunden'));
+        const met = h('div', { class: 'import-metrics' },
+          h('span', null, 'Offene Kanten'), h('b', null, String(rep.openEdges)),
+          h('span', null, 'Lücken'), h('b', null, String(rep.gaps)),
+          h('span', null, 'Falsche Flächen'), h('b', null, String(rep.invertedFaces)),
+          h('span', null, 'BRepCheck'), h('b', null, rep.brepValid ? 'OK' : `${Math.max(1, rep.invalidCount)} Fehler`),
+          h('span', null, 'Körper'), h('b', null, rep.solids > 0 ? `${rep.solids} Volumenkörper` : 'Offene Hülle'));
+        wb.append(met);
+        const hOpts = h('div', { class: 'fields' });
+        hOpts.append(UI.numField({ id: 'imp-heal-tol', label: 'Näh-Toleranz', value: st.tol != null ? st.tol : 0.1, min: 0.001, step: 0.05, expr: false, onCommit: (v) => Start.setImportHealOpts(it.id, { tol: v }) }));
+        const capInp = h('input', { id: 'imp-heal-cap', type: 'checkbox', checked: st.capOpen !== false, onchange: (e) => Start.setImportHealOpts(it.id, { capOpen: e.target.checked }) });
+        wb.append(hOpts, h('label', { class: 'check' }, capInp, h('span', null, 'Offene Löcher schließen (ebene Flächen)')));
+        const healBtn = h('button', { type: 'button', id: 'btn-import-heal', class: 'btn warn-act', 'data-help': 'importHeal', onclick: () => Start.healImport(it.id) }, 'Heilen');
+        const recheckBtn = h('button', { type: 'button', id: 'btn-import-check', class: 'btn small', 'data-help': 'importCheck', onclick: () => Start.checkImport(it.id) }, 'Neu prüfen');
+        wb.append(h('div', { class: 'btn-row' }, healBtn, recheckBtn));
+        icPanel.append(wb);
+      } else if (st && st.report && !st.report.hasIssues) {
+        const rep = st.report;
+        icPanel.append(h('div', { class: 'hint-box' }, `Import geprüft: Alles in Ordnung (${rep.faces} Flächen, ${rep.solids > 0 ? 'geschlossener Körper' : 'geprüft'}).`));
+        icPanel.append(h('button', { type: 'button', id: 'btn-import-check', class: 'btn small', 'data-help': 'importCheck', onclick: () => Start.checkImport(it.id) }, 'Erneut prüfen'));
+      } else if (st && st.error) {
+        icPanel.append(h('div', { class: 'err-box' }, `Import-Prüfung: ${st.error}`));
+        icPanel.append(h('button', { type: 'button', id: 'btn-import-check', class: 'btn small', 'data-help': 'importCheck', onclick: () => Start.checkImport(it.id) }, 'Erneut prüfen'));
+      } else {
+        icPanel.append(h('button', { type: 'button', id: 'btn-import-check', class: 'btn small', 'data-help': 'importCheck', onclick: () => Start.checkImport(it.id) }, 'Import prüfen (BRepCheck)'));
+      }
+      if (healed && healed.before && healed.after) {
+        const b = healed.before, a = healed.after;
+        const diff = h('div', { id: 'import-heal-diff', class: 'hint-box import-diff' });
+        diff.append(h('b', null, `Heil-Ergebnis (Toleranz ${fmt(healed.tol ?? 0.1, 3)} mm)`));
+        const rows = h('div', { class: 'import-metrics' },
+          h('span', null, 'Offene Kanten'), h('b', null, `${b.openEdges} → ${a.openEdges}`),
+          h('span', null, 'Lücken'), h('b', null, `${b.gaps} → ${a.gaps}`),
+          h('span', null, 'Falsche Flächen'), h('b', null, `${b.invertedFaces} → ${a.invertedFaces}`),
+          h('span', null, 'BRepCheck'), h('b', null, `${b.brepValid ? 'OK' : b.invalidCount + ' Fehler'} → ${a.brepValid ? 'OK' : a.invalidCount + ' Fehler'}`),
+          h('span', null, 'Körper'), h('b', null, `${b.solids > 0 ? b.solids + ' Volumen' : 'Offene Hülle'} → ${a.solids > 0 ? a.solids + ' Volumen' : 'Offene Hülle'}`));
+        if (healed.cappedFaces > 0) rows.append(h('span', null, 'Ergänzte Flächen'), h('b', null, `+${healed.cappedFaces}`));
+        diff.append(rows);
+        icPanel.append(diff);
+      }
+      sec.append(icPanel, h('div', { class: 'hint-box', html: 'Importierte Teile sind feste Formen ohne Zeitleiste. Du kannst sie verschieben, drehen, runden, als Loch nutzen oder mit anderen Körpern verbinden.' }));
       w.append(sec);
     } else if (it.kind === 'sweep') {
       const fl = h('div', { class: 'fields' });

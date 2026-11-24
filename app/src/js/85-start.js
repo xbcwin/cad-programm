@@ -215,6 +215,7 @@ const Start = (() => {
     App.change('Importiert', (doc) => { doc.items.push(it); });
     App.select([it.id]);
     UI.toast(`„${f.name}“ importiert. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 5000 });
+    checkImport(it.id).catch(() => {});
     setTimeout(() => { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) Viewer.fit([it.id]); }, 1500);
   }
   // ---------- 3MF lesen: ZIP mit 3D/3dmodel.model, mehrere Teile mit Namen, Farben, Einheiten und Transform-Matrizen ----------
@@ -416,6 +417,7 @@ const Start = (() => {
     }
     App.change('3MF importiert', (doc) => { doc.items.push(...items); });
     App.select(items.map((x) => x.id));
+    checkImportedList(items.map((x) => x.id));
     const unitNote = parsed.unitScale !== 1 ? ` (von ${parsed.unit} in Millimeter umgerechnet)` : '';
     UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}${unitNote}. Mit „Auf die XY-Ebene setzen“ legst du sie auf den Boden.`, { icon: 'folder', ms: 6000 });
     setTimeout(() => {
@@ -514,6 +516,7 @@ const Start = (() => {
     }
     App.change('OBJ importiert', (doc) => { doc.items.push(...items); });
     App.select(items.map((x) => x.id));
+    checkImportedList(items.map((x) => x.id));
     UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 6000 });
     setTimeout(() => {
       const box = new THREE.Box3();
@@ -1031,10 +1034,216 @@ const Start = (() => {
     if (!folder) return null;
     return { name: folder.name, fileName: folder.fileName, status: folder.status, lastSavedAt: folder.lastSavedAt, dirty: folder.dirty, lastErr: folder.lastErr };
   }
+  // ---------- Import prüfen & heilen (IO-10) ----------
+  const importChecks = new Map();
+  let checkBarEl = null, checkBarItemId = null;
+
+  function importParamFor(it) {
+    const V = Model.vars(App.doc).v;
+    const scale = Model.num ? Model.num(it.p.scale, V, 1) : (Number(it.p.scale) || 1);
+    const p = { fmt: it.p.fmt, scale };
+    if (it.p.blobId) p.blobId = it.p.blobId;
+    else if (it.p.data) p.data = it.p.data;
+    return p;
+  }
+
+  function issueSummaryText(rep) {
+    if (!rep) return '';
+    const parts = [];
+    if (rep.openEdges > 0) parts.push(`${rep.openEdges} ${rep.openEdges === 1 ? 'offene Kante' : 'offene Kanten'}`);
+    if (rep.gaps > 0) parts.push(`${rep.gaps} ${rep.gaps === 1 ? 'Lücke' : 'Lücken'}`);
+    if (rep.invertedFaces > 0) parts.push(`${rep.invertedFaces} falsch herum liegende ${rep.invertedFaces === 1 ? 'Fläche' : 'Flächen'}`);
+    if (!rep.brepValid || rep.invalidCount > 0) parts.push(`${Math.max(1, rep.invalidCount || 0)} Geometriefehler (BRepCheck)`);
+    if (rep.multipleEdges > 0) parts.push(`${rep.multipleEdges} Mehrfachkanten`);
+    if (rep.degenerated > 0) parts.push(`${rep.degenerated} entartete Kanten`);
+    if (!parts.length && rep.openShell) parts.push('nicht geschlossene Hülle');
+    return parts.join(' · ') || 'Geometrie prüfen';
+  }
+
+  function healDiffSummary(before, after, tol, cappedFaces) {
+    const diffs = [];
+    if (before.openEdges !== after.openEdges || before.openEdges > 0 || after.openEdges > 0) diffs.push(`Offene Kanten ${before.openEdges} → ${after.openEdges}`);
+    if (before.gaps !== after.gaps || before.gaps > 0 || after.gaps > 0) diffs.push(`Lücken ${before.gaps} → ${after.gaps}`);
+    if (before.invertedFaces !== after.invertedFaces || before.invertedFaces > 0 || after.invertedFaces > 0) diffs.push(`Falsche Flächen ${before.invertedFaces} → ${after.invertedFaces}`);
+    if (before.invalidCount !== after.invalidCount || !before.brepValid || !after.brepValid) diffs.push(`BRepCheck-Fehler ${before.invalidCount} → ${after.invalidCount}`);
+    const bodyTxt = before.solids === 0 && after.solids > 0 ? ' · geschlossener Körper' : '';
+    const capTxt = cappedFaces > 0 ? ` (+${cappedFaces} ${cappedFaces === 1 ? 'Fläche' : 'Flächen'})` : '';
+    const tolTxt = fmt(tol, 3);
+    if (!after.hasIssues) return `Geheilt (Toleranz ${tolTxt} mm): ${diffs.join(' · ')}${bodyTxt}${capTxt}.`;
+    return `Heilen abgeschlossen (Toleranz ${tolTxt} mm): ${diffs.join(' · ')}${capTxt} – noch offen: ${issueSummaryText(after)}. Versuch eine größere Toleranz.`;
+  }
+
+  function dismissImportBanner() {
+    if (checkBarEl) { checkBarEl.remove(); checkBarEl = null; }
+    checkBarItemId = null;
+  }
+
+  function renderImportBanner() {
+    if (checkBarEl) { checkBarEl.remove(); checkBarEl = null; }
+    if (!checkBarItemId) return;
+    const f = Model.find(App.doc, checkBarItemId);
+    const st = importChecks.get(checkBarItemId);
+    if (!f || !f.item || !st || !st.report || !st.report.hasIssues) { checkBarItemId = null; return; }
+    const host = $('#overlay') || $('#center') || document.body;
+    const bar = h('div', { id: 'import-check-bar', class: 'import-bar', role: 'status', 'aria-live': 'polite' });
+    const ic = h('div', { class: 'ib-ic' }); ic.innerHTML = icon('warn');
+    const txt = h('div', { class: 'ib-txt' },
+      h('b', null, `Import-Prüfung: „${Model.label(f.item)}“ hat Fehler`),
+      h('span', null, issueSummaryText(st.report)));
+    const healBtn = h('button', { type: 'button', id: 'import-bar-heal', class: 'btn warn-act small', 'data-help': 'importHeal', disabled: !!st.checking, onclick: () => healImport(checkBarItemId) }, st.checking ? 'Heilt …' : 'Heilen');
+    const closeBtn = h('button', { type: 'button', id: 'import-bar-close', class: 'btn ghost small', 'aria-label': T('common.close'), onclick: () => dismissImportBanner() }, '×');
+    bar.append(ic, txt, healBtn, closeBtn);
+    host.append(bar);
+    checkBarEl = bar;
+  }
+
+  function importCheckOf(id) {
+    return importChecks.get(id) || null;
+  }
+
+  function setImportHealOpts(id, patch) {
+    const prev = importChecks.get(id) || { checking: false, report: null, lastHeal: null, tol: 0.1, capOpen: true };
+    const next = { ...prev };
+    if (patch && patch.tol != null && Number.isFinite(Number(patch.tol))) next.tol = Math.max(0.001, Math.min(10, Number(patch.tol)));
+    if (patch && patch.capOpen !== undefined) next.capOpen = !!patch.capOpen;
+    importChecks.set(id, next);
+    if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+  }
+
+  async function checkImport(id, opts = {}) {
+    const f0 = Model.find(App.doc, id);
+    if (!f0 || !f0.item || f0.item.kind !== 'import') return null;
+    const it0 = f0.item;
+    const startBlobId = it0.p.blobId || null;
+    const prev = importChecks.get(id) || {};
+    importChecks.set(id, {
+      blobId: startBlobId,
+      checking: true,
+      report: prev.report || null,
+      error: null,
+      lastHeal: prev.lastHeal || (it0.p && it0.p.healed) || null,
+      tol: prev.tol != null ? prev.tol : 0.1,
+      capOpen: prev.capOpen !== undefined ? prev.capOpen : true,
+    });
+    if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+    try {
+      if (!Kernel.ready) await Kernel.whenReady();
+      if (startBlobId && !Store.getBlobSync(startBlobId)) await Store.getBlob(startBlobId);
+      const fNow = Model.find(App.doc, id);
+      if (!fNow || !fNow.item || fNow.item.kind !== 'import') return null;
+      const res = await Kernel.call('checkImport', { p: importParamFor(fNow.item), gapTol: opts.gapTol || 0.5 });
+      const fAfter = Model.find(App.doc, id);
+      if (!fAfter || !fAfter.item || (fAfter.item.p.blobId || null) !== startBlobId) return null;
+      const curPrev = importChecks.get(id) || {};
+      importChecks.set(id, {
+        blobId: startBlobId,
+        checking: false,
+        report: res && res.ok ? res : null,
+        error: res && !res.ok ? res.error : null,
+        lastHeal: curPrev.lastHeal || (fAfter.item.p && fAfter.item.p.healed) || null,
+        tol: curPrev.tol != null ? curPrev.tol : 0.1,
+        capOpen: curPrev.capOpen !== undefined ? curPrev.capOpen : true,
+      });
+      if (res && res.ok && res.hasIssues && !opts.silent) {
+        checkBarItemId = id;
+        renderImportBanner();
+      } else if (res && res.ok && !res.hasIssues && checkBarItemId === id) {
+        dismissImportBanner();
+      }
+      if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+      return res;
+    } catch (e) {
+      const curPrev = importChecks.get(id) || {};
+      importChecks.set(id, { ...curPrev, checking: false, error: (e && e.message) || 'Prüfung fehlgeschlagen' });
+      if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+      return null;
+    }
+  }
+
+  async function checkImportedList(ids) {
+    let shown = false;
+    for (const id of ids) {
+      const res = await checkImport(id, { silent: shown });
+      if (res && res.ok && res.hasIssues) shown = true;
+    }
+  }
+
+  async function healImport(id, opts = {}) {
+    const f0 = Model.find(App.doc, id);
+    if (!f0 || !f0.item || f0.item.kind !== 'import') return null;
+    const prev = importChecks.get(id) || {};
+    const tol = opts.tol != null ? Math.max(0.001, Math.min(10, Number(opts.tol))) : (prev.tol != null ? prev.tol : 0.1);
+    const capOpen = opts.capOpen !== undefined ? !!opts.capOpen : (prev.capOpen !== undefined ? prev.capOpen : true);
+    importChecks.set(id, { ...prev, checking: true, tol, capOpen });
+    if (checkBarItemId === id) renderImportBanner();
+    if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+    try {
+      if (!Kernel.ready) await Kernel.whenReady();
+      if (f0.item.p.blobId && !Store.getBlobSync(f0.item.p.blobId)) await Store.getBlob(f0.item.p.blobId);
+      const res = await Kernel.call('healImport', { p: importParamFor(f0.item), tol, capOpen });
+      if (!res || !res.ok || !res.brepBytes || !res.brepBytes.byteLength) {
+        importChecks.set(id, { ...prev, checking: false, tol, capOpen });
+        if (checkBarItemId === id) renderImportBanner();
+        if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+        UI.toast('Das Teil ließ sich nicht heilen: ' + ((res && res.error) || 'unbekannter Fehler'), { kind: 'bad', ms: 6000 });
+        return res;
+      }
+      const newBlobId = await Store.putBlob(new Uint8Array(res.brepBytes));
+      const healedMeta = {
+        tol: res.tol,
+        cappedFaces: res.cappedFaces || 0,
+        before: { openEdges: res.before.openEdges, gaps: res.before.gaps, invertedFaces: res.before.invertedFaces, invalidCount: res.before.invalidCount, brepValid: res.before.brepValid, solids: res.before.solids, faces: res.before.faces },
+        after: { openEdges: res.after.openEdges, gaps: res.after.gaps, invertedFaces: res.after.invertedFaces, invalidCount: res.after.invalidCount, brepValid: res.after.brepValid, solids: res.after.solids, faces: res.after.faces },
+      };
+      App.change('Import geheilt', (doc) => {
+        const f = Model.find(doc, id);
+        if (!f || !f.item || f.item.kind !== 'import') return false;
+        f.item.p.fmt = 'brep';
+        f.item.p.blobId = newBlobId;
+        f.item.p.size = res.brepBytes.byteLength;
+        f.item.p.scale = 1;
+        delete f.item.p.data;
+        f.item.p.healed = healedMeta;
+      });
+      importChecks.set(id, {
+        blobId: newBlobId,
+        checking: false,
+        report: res.after,
+        error: null,
+        lastHeal: { ...healedMeta, improved: res.improved },
+        tol: res.tol,
+        capOpen,
+      });
+      if (res.after && !res.after.hasIssues) dismissImportBanner();
+      else { checkBarItemId = id; renderImportBanner(); }
+      UI.toast(healDiffSummary(res.before, res.after, res.tol, res.cappedFaces || 0), { icon: res.after.hasIssues ? 'warn' : 'check', ms: 7000 });
+      if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+      return res;
+    } catch (e) {
+      importChecks.set(id, { ...prev, checking: false, tol, capOpen });
+      if (checkBarItemId === id) renderImportBanner();
+      if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
+      UI.toast('Beim Heilen ist ein Fehler passiert: ' + ((e && e.message) || 'unbekannter Fehler'), { kind: 'bad', ms: 6000 });
+      return null;
+    }
+  }
+
+  function syncImportChecks() {
+    for (const [id, st] of [...importChecks.entries()]) {
+      const f = Model.find(App.doc, id);
+      if (!f || !f.item || f.item.kind !== 'import' || (st.blobId && f.item.p.blobId !== st.blobId)) {
+        importChecks.delete(id);
+        if (checkBarItemId === id) dismissImportBanner();
+      }
+    }
+    if (checkBarItemId && !importChecks.has(checkBarItemId)) dismissImportBanner();
+  }
+
   function init() {
     if (folderInited) return;
     folderInited = true;
     App.on('doc', () => {
+      syncImportChecks();
       if (!folder) return;
       if (App.doc.id !== folder.docId) { disconnectFolder(true); return; }
       if (App.revision === folder.lastRev) return;
@@ -1082,6 +1291,7 @@ const Start = (() => {
   }
   return {
     init, importCAD, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
+    checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
     openDrone, get open() { return !!el; },

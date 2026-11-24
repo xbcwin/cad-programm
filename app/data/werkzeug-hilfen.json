@@ -903,5 +903,15 @@
     "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
     "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
     "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
+  },
+  "importCheck": {
+    "tip": "Importierte Geometrie mit BRepCheck auf Fehler, Lücken und offene Kanten prüfen",
+    "hilfe": "Untersucht das importierte Teil mit dem OpenCascade-Prüfer (BRepCheck) auf offene Kanten, schmale Lücken zwischen Flächen, falsch herum orientierte Flächen sowie auf eine geschlossene Hülle für echte Volumenkörper.",
+    "tipp": "Nach jedem 3D-Import läuft diese Prüfung automatisch und meldet sich oben im Bild, falls etwas repariert werden sollte."
+  },
+  "importHeal": {
+    "tip": "Offene Kanten schließen, Flächen richten und Lücken mit Toleranz vernähen",
+    "hilfe": "Repariert ein fehlerhaftes Import-Teil in mehreren Schritten: Einzelflächen korrigieren (ShapeFix), benachbarte Flächen mit der eingestellten Näh-Toleranz verbinden, einfache offene Löcher schließen und daraus wieder einen geschlossenen Volumenkörper bauen. Danach siehst du die Vorher/Nachher-Zahlen.",
+    "tipp": "Bleiben nach dem Heilen noch Lücken offen, erhöhe rechts beim Teil die Näh-Toleranz etwas (z. B. von 0,1 auf 0,3 mm) und klick erneut auf „Heilen“."
   }
 }
