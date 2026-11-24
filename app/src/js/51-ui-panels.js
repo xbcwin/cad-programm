@@ -1010,7 +1010,21 @@ const Panels = (() => {
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
           sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.` }));
-        } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        } else if (def.lib === 'screwHole') {
+          const te = threadEntry(it.p.size);
+          let screwTxt = '';
+          if (te) {
+            const dia = threadHoleDia(te, it.p.fit);
+            const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
+            let headTxt = '';
+            if (it.p.fit !== 'tap') {
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+            }
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+          }
+          sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {

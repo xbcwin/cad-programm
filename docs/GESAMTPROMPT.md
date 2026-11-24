@@ -123,7 +123,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht), `gewinde.json` (Regelgewinde M1.6–M12, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`
@@ -268,7 +268,7 @@ Leitlinien:
 - STEP/STL/3MF-Import (`Start.importCAD`, `Start.import3MF`, `Start.parse3MF` mit `Zip.read`: mehrere Objekte/Komponenten mit Namen, Farben und Einheiten; binär als `blobId` in IndexedDB `tracery-db` über `Store` statt Base64 im Autosave); DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel) und **kosmetische Gewinde** (`it.threads`, gestreifte 3D-Markierung ohne Kern-Neubau, Stückliste, Zeichnung nach DIN ISO 6410-1, „Echt machen“ über `Features.makeThreadReal`)
-- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
+- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf (auch 82° bei Zoll und Flachsenkung bei G), Kernloch für metrische Regel- und Feingewinde, Zoll UNC/UNF (#4 bis 1/2") und Rohrgewinde (G1/8 bis G1) aus `gewinde.json`, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
 - Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)

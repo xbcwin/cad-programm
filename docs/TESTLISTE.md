@@ -1727,6 +1727,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
 
+## Bohrungs-Assistent: mehr Gewinde (Auto [A-038], KP-18)
+
+- [x] **Feingewinde (DIN 13 / DIN 336)**: Norm `metric_fine` bietet M4×0,5 bis M20×1,5 (inkl. M8×1 und M10×1,25); M10×1,25 bohrt exakt Kernloch Ø 8,8 mm (Volumenabzug und Zylinder-Ø geprüft).
+- [x] **Zoll-Gewinde UNC & UNF (ASME B1.1 / B18.3)**: Normen `unc` und `unf` von #4 bis 1/2" wählbar; 1/4"-20 UNC bohrt exakt Kernloch Ø 5,1 mm, Durchgang mit 82°-Senkkopf erzeugt passende Kegelfläche.
+- [x] **Rohrgewinde G (ISO 228-1 / DIN 3852-2)**: Norm `pipe_g` bietet G1/8 bis G1; G1/4 bohrt Kernloch Ø 11,8 mm, Durchgang bietet statt 90°-Senkkopf die Flachsenkung nach DIN 3852-2.
+- [x] **Datentabelle & Hilfetext**: `app/data/gewinde.json` enthält alle Kernloch- und Senkungsmaße mit Norm-Quellenangaben (`_quellen`, `quelle`), und `threadStandards` steht in `app/data/werkzeug-hilfen.json` samt `data-help` an `#hw-norm`.
+- [ ] **Von Hand**: Im Browser den Bohrungs-Assistenten auf einer Fläche öffnen, zwischen den fünf Normen wechseln und Querschnittsvorschau sowie Hinweise im Eigenschaften-Panel prüfen.
+
 ## Fehler melden
 
 ```

@@ -2268,6 +2268,11 @@ const HELP = {
   "tip": "Verlorene Kante oder Fläche neu wählen",
   "hilfe": "Verliert eine Rundung, Fase, Wandstärke oder Skizze ihre ursprüngliche Kante oder Fläche (etwa weil ein früheres Maß geändert wurde), erscheint im Verlauf ein gelbes Warnzeichen. Mit „Neu wählen“ blendet Tracery die alte Lage gelb gestrichelt ein – ein Klick auf die neue Kante oder Fläche repariert den Bezug, und alles rechnet weiter.",
   "tipp": "Du kannst die Ansicht währenddessen wie gewohnt drehen, um die gewünschte Kante oder Fläche gut anzuklicken."
+ },
+ "threadStandards": {
+  "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
+  "hilfe": "Wählt im Bohrungs-Assistenten die Gewindenorm: Metrisch Regelgewinde (M1.6–M12), Metrisch Feingewinde (z. B. M8×1, M10×1,25 nach DIN 13 / DIN 336), Zoll-Gewinde UNC und UNF (#4 bis 1/2\" nach ASME B1.1 mit 82°-Senkung) oder zylindrisches Rohrgewinde G1/8 bis G1 (ISO 228-1 mit Flachsenkung nach DIN 3852-2).",
+  "tipp": "Für zöllige Kameragehäuse oder US-Bauteile wählst du UNC/UNF; bei Hydraulik-, Pneumatik- oder Schlauchanschlüssen passt Rohrgewinde G."
  }
 };
 
@@ -3173,7 +3178,16 @@ const Model = (() => {
         mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
       };
     }
-    else o.p = resolveP(it.p, V);
+    else {
+      o.p = resolveP(it.p, V);
+      if (it.kind === 'part') {
+        if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
+        if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
+          const te = threadEntry(o.p.size);
+          if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+        }
+      }
+    }
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
@@ -9548,6 +9562,25 @@ const Interact = (() => {
 // ---- 40-library.js ----
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
 const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
+const THREAD_DATA = {"_hinweis":"Normbasierte Gewinde- und Bohrungstabelle (alle Maße in mm, Winkel in Grad) für Regelgewinde, Feingewinde, Zoll-Gewinde (UNC/UNF) und Rohrgewinde (G).","_quellen":["ISO 261 / DIN 13-1 bis 13-11: Metrische ISO-Gewinde (Regel- und Feingewinde)","DIN 336: Kernlochdurchmesser zum Gewindeschneiden (metrische Gewinde und Whitworth-Rohrgewinde)","ISO 273: Durchgangslöcher für Schrauben mit metrischem Gewinde (fein, mittel, grob)","DIN 974-1 / ISO 4762 / ISO 10642 / DIN 965: Senkungen für Zylinder- und Senkkopfschrauben (metrisch, 90°)","ASME B1.1: Unified Inch Screw Threads (UNC und UNF, #4 bis 1/2 Zoll, ~75 % Gewindetiefe)","ASME B18.2.8: Durchgangsbohrungen für Zoll-Schrauben (Close / Normal / Free Fit)","ASME B18.3: Zylinderkopf- und 82°-Senkkopf-Abmessungen für Zoll-Schrauben","DIN EN ISO 228-1: Zylindrische Rohrgewinde für nicht im Gewinde dichtende Verbindungen (G1/8 bis G1)","DIN 3852-2 / ISO 1179-1 (Form X): Einschraublöcher und Flachsenkungen (d4 Form N, a1) für Rohrgewinde G"],"normen":[{"id":"metric","name":"Metrisch Regelgewinde (ISO)","standard_groesse":"M3","quelle":"DIN 13-1 / ISO 261, Kernloch DIN 336, Durchgang ISO 273, Senkung DIN 974-1 / ISO 10642","groessen":[{"id":"M1.6","nenn_d_mm":1.6,"steigung_mm":0.35,"kernloch_mm":1.25,"durchgang_fein_mm":1.7,"durchgang_mittel_mm":1.8,"durchgang_grob_mm":2.0,"senkung_zyl_d_mm":3.5,"senkung_zyl_t_mm":1.8,"senkung_senk_d_mm":3.0,"senkung_winkel_grad":90},{"id":"M2","nenn_d_mm":2.0,"steigung_mm":0.4,"kernloch_mm":1.6,"durchgang_fein_mm":2.2,"durchgang_mittel_mm":2.4,"durchgang_grob_mm":2.6,"senkung_zyl_d_mm":4.4,"senkung_zyl_t_mm":2.4,"senkung_senk_d_mm":3.8,"senkung_winkel_grad":90},{"id":"M2.5","nenn_d_mm":2.5,"steigung_mm":0.45,"kernloch_mm":2.05,"durchgang_fein_mm":2.7,"durchgang_mittel_mm":2.9,"durchgang_grob_mm":3.1,"senkung_zyl_d_mm":5.5,"senkung_zyl_t_mm":2.9,"senkung_senk_d_mm":4.7,"senkung_winkel_grad":90},{"id":"M3","nenn_d_mm":3.0,"steigung_mm":0.5,"kernloch_mm":2.5,"durchgang_fein_mm":3.2,"durchgang_mittel_mm":3.4,"durchgang_grob_mm":3.6,"senkung_zyl_d_mm":6.5,"senkung_zyl_t_mm":3.4,"senkung_senk_d_mm":6.72,"senkung_winkel_grad":90},{"id":"M4","nenn_d_mm":4.0,"steigung_mm":0.7,"kernloch_mm":3.3,"durchgang_fein_mm":4.3,"durchgang_mittel_mm":4.5,"durchgang_grob_mm":4.8,"senkung_zyl_d_mm":8.0,"senkung_zyl_t_mm":4.4,"senkung_senk_d_mm":8.96,"senkung_winkel_grad":90},{"id":"M5","nenn_d_mm":5.0,"steigung_mm":0.8,"kernloch_mm":4.2,"durchgang_fein_mm":5.3,"durchgang_mittel_mm":5.5,"durchgang_grob_mm":5.8,"senkung_zyl_d_mm":10.0,"senkung_zyl_t_mm":5.4,"senkung_senk_d_mm":11.2,"senkung_winkel_grad":90},{"id":"M6","nenn_d_mm":6.0,"steigung_mm":1.0,"kernloch_mm":5.0,"durchgang_fein_mm":6.4,"durchgang_mittel_mm":6.6,"durchgang_grob_mm":7.0,"senkung_zyl_d_mm":11.0,"senkung_zyl_t_mm":6.4,"senkung_senk_d_mm":13.44,"senkung_winkel_grad":90},{"id":"M8","nenn_d_mm":8.0,"steigung_mm":1.25,"kernloch_mm":6.8,"durchgang_fein_mm":8.4,"durchgang_mittel_mm":9.0,"durchgang_grob_mm":10.0,"senkung_zyl_d_mm":15.0,"senkung_zyl_t_mm":8.6,"senkung_senk_d_mm":17.92,"senkung_winkel_grad":90},{"id":"M10","nenn_d_mm":10.0,"steigung_mm":1.5,"kernloch_mm":8.5,"durchgang_fein_mm":10.5,"durchgang_mittel_mm":11.0,"durchgang_grob_mm":12.0,"senkung_zyl_d_mm":18.0,"senkung_zyl_t_mm":10.6,"senkung_senk_d_mm":22.4,"senkung_winkel_grad":90},{"id":"M12","nenn_d_mm":12.0,"steigung_mm":1.75,"kernloch_mm":10.2,"durchgang_fein_mm":13.0,"durchgang_mittel_mm":13.5,"durchgang_grob_mm":14.5,"senkung_zyl_d_mm":20.0,"senkung_zyl_t_mm":12.6,"senkung_senk_d_mm":26.88,"senkung_winkel_grad":90}]},{"id":"metric_fine","name":"Metrisch Feingewinde (ISO)","standard_groesse":"M8×1","quelle":"DIN 13-2 bis 13-11 / ISO 261, Kernloch DIN 336, Durchgang ISO 273, Senkung DIN 974-1 / ISO 10642","groessen":[{"id":"M4×0,5","nenn_d_mm":4.0,"steigung_mm":0.5,"kernloch_mm":3.5,"durchgang_fein_mm":4.3,"durchgang_mittel_mm":4.5,"durchgang_grob_mm":4.8,"senkung_zyl_d_mm":8.0,"senkung_zyl_t_mm":4.4,"senkung_senk_d_mm":8.96,"senkung_winkel_grad":90},{"id":"M5×0,5","nenn_d_mm":5.0,"steigung_mm":0.5,"kernloch_mm":4.5,"durchgang_fein_mm":5.3,"durchgang_mittel_mm":5.5,"durchgang_grob_mm":5.8,"senkung_zyl_d_mm":10.0,"senkung_zyl_t_mm":5.4,"senkung_senk_d_mm":11.2,"senkung_winkel_grad":90},{"id":"M6×0,75","nenn_d_mm":6.0,"steigung_mm":0.75,"kernloch_mm":5.2,"durchgang_fein_mm":6.4,"durchgang_mittel_mm":6.6,"durchgang_grob_mm":7.0,"senkung_zyl_d_mm":11.0,"senkung_zyl_t_mm":6.4,"senkung_senk_d_mm":13.44,"senkung_winkel_grad":90},{"id":"M8×1","nenn_d_mm":8.0,"steigung_mm":1.0,"kernloch_mm":7.0,"durchgang_fein_mm":8.4,"durchgang_mittel_mm":9.0,"durchgang_grob_mm":10.0,"senkung_zyl_d_mm":15.0,"senkung_zyl_t_mm":8.6,"senkung_senk_d_mm":17.92,"senkung_winkel_grad":90},{"id":"M8×0,75","nenn_d_mm":8.0,"steigung_mm":0.75,"kernloch_mm":7.2,"durchgang_fein_mm":8.4,"durchgang_mittel_mm":9.0,"durchgang_grob_mm":10.0,"senkung_zyl_d_mm":15.0,"senkung_zyl_t_mm":8.6,"senkung_senk_d_mm":17.92,"senkung_winkel_grad":90},{"id":"M10×1,25","nenn_d_mm":10.0,"steigung_mm":1.25,"kernloch_mm":8.8,"durchgang_fein_mm":10.5,"durchgang_mittel_mm":11.0,"durchgang_grob_mm":12.0,"senkung_zyl_d_mm":18.0,"senkung_zyl_t_mm":10.6,"senkung_senk_d_mm":22.4,"senkung_winkel_grad":90},{"id":"M10×1","nenn_d_mm":10.0,"steigung_mm":1.0,"kernloch_mm":9.0,"durchgang_fein_mm":10.5,"durchgang_mittel_mm":11.0,"durchgang_grob_mm":12.0,"senkung_zyl_d_mm":18.0,"senkung_zyl_t_mm":10.6,"senkung_senk_d_mm":22.4,"senkung_winkel_grad":90},{"id":"M12×1,5","nenn_d_mm":12.0,"steigung_mm":1.5,"kernloch_mm":10.5,"durchgang_fein_mm":13.0,"durchgang_mittel_mm":13.5,"durchgang_grob_mm":14.5,"senkung_zyl_d_mm":20.0,"senkung_zyl_t_mm":12.6,"senkung_senk_d_mm":26.88,"senkung_winkel_grad":90},{"id":"M12×1,25","nenn_d_mm":12.0,"steigung_mm":1.25,"kernloch_mm":10.8,"durchgang_fein_mm":13.0,"durchgang_mittel_mm":13.5,"durchgang_grob_mm":14.5,"senkung_zyl_d_mm":20.0,"senkung_zyl_t_mm":12.6,"senkung_senk_d_mm":26.88,"senkung_winkel_grad":90},{"id":"M14×1,5","nenn_d_mm":14.0,"steigung_mm":1.5,"kernloch_mm":12.5,"durchgang_fein_mm":15.0,"durchgang_mittel_mm":15.5,"durchgang_grob_mm":16.5,"senkung_zyl_d_mm":24.0,"senkung_zyl_t_mm":14.6,"senkung_senk_d_mm":30.8,"senkung_winkel_grad":90},{"id":"M16×1,5","nenn_d_mm":16.0,"steigung_mm":1.5,"kernloch_mm":14.5,"durchgang_fein_mm":17.0,"durchgang_mittel_mm":17.5,"durchgang_grob_mm":18.5,"senkung_zyl_d_mm":26.0,"senkung_zyl_t_mm":16.6,"senkung_senk_d_mm":33.6,"senkung_winkel_grad":90},{"id":"M18×1,5","nenn_d_mm":18.0,"steigung_mm":1.5,"kernloch_mm":16.5,"durchgang_fein_mm":19.0,"durchgang_mittel_mm":20.0,"durchgang_grob_mm":21.0,"senkung_zyl_d_mm":30.0,"senkung_zyl_t_mm":18.6,"senkung_senk_d_mm":36.0,"senkung_winkel_grad":90},{"id":"M20×1,5","nenn_d_mm":20.0,"steigung_mm":1.5,"kernloch_mm":18.5,"durchgang_fein_mm":21.0,"durchgang_mittel_mm":22.0,"durchgang_grob_mm":24.0,"senkung_zyl_d_mm":33.0,"senkung_zyl_t_mm":20.6,"senkung_senk_d_mm":40.32,"senkung_winkel_grad":90}]},{"id":"unc","name":"Zoll UNC (Regelgewinde)","standard_groesse":"1/4\"-20 UNC","quelle":"ASME B1.1 (Kernloch ~75 %), Durchgang ASME B18.2.8, Senkung ASME B18.3 (82°)","groessen":[{"id":"#4-40 UNC","nenn_d_mm":2.845,"tpi":40,"steigung_mm":0.635,"kernloch_mm":2.26,"bohrer":"#43","durchgang_fein_mm":3.05,"durchgang_mittel_mm":3.26,"durchgang_grob_mm":3.66,"senkung_zyl_d_mm":5.56,"senkung_zyl_t_mm":2.84,"senkung_senk_d_mm":5.72,"senkung_winkel_grad":82},{"id":"#5-40 UNC","nenn_d_mm":3.175,"tpi":40,"steigung_mm":0.635,"kernloch_mm":2.58,"bohrer":"#38","durchgang_fein_mm":3.57,"durchgang_mittel_mm":3.97,"durchgang_grob_mm":4.37,"senkung_zyl_d_mm":6.35,"senkung_zyl_t_mm":3.18,"senkung_senk_d_mm":6.4,"senkung_winkel_grad":82},{"id":"#6-32 UNC","nenn_d_mm":3.505,"tpi":32,"steigung_mm":0.794,"kernloch_mm":2.71,"bohrer":"#36","durchgang_fein_mm":3.91,"durchgang_mittel_mm":4.32,"durchgang_grob_mm":4.7,"senkung_zyl_d_mm":7.14,"senkung_zyl_t_mm":3.51,"senkung_senk_d_mm":7.09,"senkung_winkel_grad":82},{"id":"#8-32 UNC","nenn_d_mm":4.166,"tpi":32,"steigung_mm":0.794,"kernloch_mm":3.45,"bohrer":"#29","durchgang_fein_mm":4.57,"durchgang_mittel_mm":4.98,"durchgang_grob_mm":5.41,"senkung_zyl_d_mm":7.95,"senkung_zyl_t_mm":4.17,"senkung_senk_d_mm":8.43,"senkung_winkel_grad":82},{"id":"#10-24 UNC","nenn_d_mm":4.826,"tpi":24,"steigung_mm":1.058,"kernloch_mm":3.8,"bohrer":"#25","durchgang_fein_mm":5.23,"durchgang_mittel_mm":5.61,"durchgang_grob_mm":6.05,"senkung_zyl_d_mm":9.53,"senkung_zyl_t_mm":4.83,"senkung_senk_d_mm":9.88,"senkung_winkel_grad":82},{"id":"#12-24 UNC","nenn_d_mm":5.486,"tpi":24,"steigung_mm":1.058,"kernloch_mm":4.5,"bohrer":"#16","durchgang_fein_mm":5.61,"durchgang_mittel_mm":5.95,"durchgang_grob_mm":6.35,"senkung_zyl_d_mm":10.31,"senkung_zyl_t_mm":5.49,"senkung_senk_d_mm":11.2,"senkung_winkel_grad":82},{"id":"1/4\"-20 UNC","nenn_d_mm":6.35,"tpi":20,"steigung_mm":1.27,"kernloch_mm":5.1,"bohrer":"#7","durchgang_fein_mm":6.75,"durchgang_mittel_mm":7.14,"durchgang_grob_mm":7.54,"senkung_zyl_d_mm":11.11,"senkung_zyl_t_mm":6.35,"senkung_senk_d_mm":12.8,"senkung_winkel_grad":82},{"id":"5/16\"-18 UNC","nenn_d_mm":7.938,"tpi":18,"steigung_mm":1.411,"kernloch_mm":6.53,"bohrer":"F","durchgang_fein_mm":8.33,"durchgang_mittel_mm":8.73,"durchgang_grob_mm":9.13,"senkung_zyl_d_mm":13.49,"senkung_zyl_t_mm":7.95,"senkung_senk_d_mm":16.0,"senkung_winkel_grad":82},{"id":"3/8\"-16 UNC","nenn_d_mm":9.525,"tpi":16,"steigung_mm":1.588,"kernloch_mm":7.94,"bohrer":"5/16\"","durchgang_fein_mm":9.92,"durchgang_mittel_mm":10.31,"durchgang_grob_mm":10.72,"senkung_zyl_d_mm":15.88,"senkung_zyl_t_mm":9.53,"senkung_senk_d_mm":19.2,"senkung_winkel_grad":82},{"id":"7/16\"-14 UNC","nenn_d_mm":11.113,"tpi":14,"steigung_mm":1.814,"kernloch_mm":9.35,"bohrer":"U","durchgang_fein_mm":11.51,"durchgang_mittel_mm":11.91,"durchgang_grob_mm":12.3,"senkung_zyl_d_mm":18.26,"senkung_zyl_t_mm":11.11,"senkung_senk_d_mm":22.4,"senkung_winkel_grad":82},{"id":"1/2\"-13 UNC","nenn_d_mm":12.7,"tpi":13,"steigung_mm":1.954,"kernloch_mm":10.72,"bohrer":"27/64\"","durchgang_fein_mm":13.49,"durchgang_mittel_mm":14.29,"durchgang_grob_mm":15.48,"senkung_zyl_d_mm":20.64,"senkung_zyl_t_mm":12.7,"senkung_senk_d_mm":25.6,"senkung_winkel_grad":82}]},{"id":"unf","name":"Zoll UNF (Feingewinde)","standard_groesse":"1/4\"-28 UNF","quelle":"ASME B1.1 (Kernloch ~75 %), Durchgang ASME B18.2.8, Senkung ASME B18.3 (82°)","groessen":[{"id":"#4-48 UNF","nenn_d_mm":2.845,"tpi":48,"steigung_mm":0.529,"kernloch_mm":2.38,"bohrer":"#42","durchgang_fein_mm":3.05,"durchgang_mittel_mm":3.26,"durchgang_grob_mm":3.66,"senkung_zyl_d_mm":5.56,"senkung_zyl_t_mm":2.84,"senkung_senk_d_mm":5.72,"senkung_winkel_grad":82},{"id":"#5-44 UNF","nenn_d_mm":3.175,"tpi":44,"steigung_mm":0.577,"kernloch_mm":2.64,"bohrer":"#37","durchgang_fein_mm":3.57,"durchgang_mittel_mm":3.97,"durchgang_grob_mm":4.37,"senkung_zyl_d_mm":6.35,"senkung_zyl_t_mm":3.18,"senkung_senk_d_mm":6.4,"senkung_winkel_grad":82},{"id":"#6-40 UNF","nenn_d_mm":3.505,"tpi":40,"steigung_mm":0.635,"kernloch_mm":2.87,"bohrer":"#33","durchgang_fein_mm":3.91,"durchgang_mittel_mm":4.32,"durchgang_grob_mm":4.7,"senkung_zyl_d_mm":7.14,"senkung_zyl_t_mm":3.51,"senkung_senk_d_mm":7.09,"senkung_winkel_grad":82},{"id":"#8-36 UNF","nenn_d_mm":4.166,"tpi":36,"steigung_mm":0.706,"kernloch_mm":3.45,"bohrer":"#29","durchgang_fein_mm":4.57,"durchgang_mittel_mm":4.98,"durchgang_grob_mm":5.41,"senkung_zyl_d_mm":7.95,"senkung_zyl_t_mm":4.17,"senkung_senk_d_mm":8.43,"senkung_winkel_grad":82},{"id":"#10-32 UNF","nenn_d_mm":4.826,"tpi":32,"steigung_mm":0.794,"kernloch_mm":4.04,"bohrer":"#21","durchgang_fein_mm":5.23,"durchgang_mittel_mm":5.61,"durchgang_grob_mm":6.05,"senkung_zyl_d_mm":9.53,"senkung_zyl_t_mm":4.83,"senkung_senk_d_mm":9.88,"senkung_winkel_grad":82},{"id":"#12-28 UNF","nenn_d_mm":5.486,"tpi":28,"steigung_mm":0.907,"kernloch_mm":4.62,"bohrer":"#14","durchgang_fein_mm":5.61,"durchgang_mittel_mm":5.95,"durchgang_grob_mm":6.35,"senkung_zyl_d_mm":10.31,"senkung_zyl_t_mm":5.49,"senkung_senk_d_mm":11.2,"senkung_winkel_grad":82},{"id":"1/4\"-28 UNF","nenn_d_mm":6.35,"tpi":28,"steigung_mm":0.907,"kernloch_mm":5.41,"bohrer":"#3","durchgang_fein_mm":6.75,"durchgang_mittel_mm":7.14,"durchgang_grob_mm":7.54,"senkung_zyl_d_mm":11.11,"senkung_zyl_t_mm":6.35,"senkung_senk_d_mm":12.8,"senkung_winkel_grad":82},{"id":"5/16\"-24 UNF","nenn_d_mm":7.938,"tpi":24,"steigung_mm":1.058,"kernloch_mm":6.91,"bohrer":"I","durchgang_fein_mm":8.33,"durchgang_mittel_mm":8.73,"durchgang_grob_mm":9.13,"senkung_zyl_d_mm":13.49,"senkung_zyl_t_mm":7.95,"senkung_senk_d_mm":16.0,"senkung_winkel_grad":82},{"id":"3/8\"-24 UNF","nenn_d_mm":9.525,"tpi":24,"steigung_mm":1.058,"kernloch_mm":8.43,"bohrer":"Q","durchgang_fein_mm":9.92,"durchgang_mittel_mm":10.31,"durchgang_grob_mm":10.72,"senkung_zyl_d_mm":15.88,"senkung_zyl_t_mm":9.53,"senkung_senk_d_mm":19.2,"senkung_winkel_grad":82},{"id":"7/16\"-20 UNF","nenn_d_mm":11.113,"tpi":20,"steigung_mm":1.27,"kernloch_mm":9.92,"bohrer":"25/64\"","durchgang_fein_mm":11.51,"durchgang_mittel_mm":11.91,"durchgang_grob_mm":12.3,"senkung_zyl_d_mm":18.26,"senkung_zyl_t_mm":11.11,"senkung_senk_d_mm":22.4,"senkung_winkel_grad":82},{"id":"1/2\"-20 UNF","nenn_d_mm":12.7,"tpi":20,"steigung_mm":1.27,"kernloch_mm":11.51,"bohrer":"29/64\"","durchgang_fein_mm":13.49,"durchgang_mittel_mm":14.29,"durchgang_grob_mm":15.48,"senkung_zyl_d_mm":20.64,"senkung_zyl_t_mm":12.7,"senkung_senk_d_mm":25.6,"senkung_winkel_grad":82}]},{"id":"pipe_g","name":"Rohrgewinde G (Whitworth)","standard_groesse":"G1/4","quelle":"DIN EN ISO 228-1, Kernloch DIN 336, Flachsenkung DIN 3852-2 Form X / ISO 1179-1","groessen":[{"id":"G1/8","nenn_d_mm":9.728,"tpi":28,"steigung_mm":0.907,"kernloch_mm":8.8,"durchgang_fein_mm":10.0,"durchgang_mittel_mm":10.5,"durchgang_grob_mm":11.0,"senkung_zyl_d_mm":15.0,"senkung_zyl_t_mm":1.0,"senkung_senk_d_mm":null,"senkung_winkel_grad":null},{"id":"G1/4","nenn_d_mm":13.157,"tpi":19,"steigung_mm":1.337,"kernloch_mm":11.8,"durchgang_fein_mm":13.5,"durchgang_mittel_mm":14.0,"durchgang_grob_mm":14.5,"senkung_zyl_d_mm":20.0,"senkung_zyl_t_mm":1.5,"senkung_senk_d_mm":null,"senkung_winkel_grad":null},{"id":"G3/8","nenn_d_mm":16.662,"tpi":19,"steigung_mm":1.337,"kernloch_mm":15.25,"durchgang_fein_mm":17.0,"durchgang_mittel_mm":17.5,"durchgang_grob_mm":18.0,"senkung_zyl_d_mm":23.0,"senkung_zyl_t_mm":2.0,"senkung_senk_d_mm":null,"senkung_winkel_grad":null},{"id":"G1/2","nenn_d_mm":20.955,"tpi":14,"steigung_mm":1.814,"kernloch_mm":19.0,"durchgang_fein_mm":21.5,"durchgang_mittel_mm":22.0,"durchgang_grob_mm":23.0,"senkung_zyl_d_mm":28.0,"senkung_zyl_t_mm":2.5,"senkung_senk_d_mm":null,"senkung_winkel_grad":null},{"id":"G3/4","nenn_d_mm":26.441,"tpi":14,"steigung_mm":1.814,"kernloch_mm":24.5,"durchgang_fein_mm":27.0,"durchgang_mittel_mm":28.0,"durchgang_grob_mm":29.0,"senkung_zyl_d_mm":33.0,"senkung_zyl_t_mm":2.5,"senkung_senk_d_mm":null,"senkung_winkel_grad":null},{"id":"G1","nenn_d_mm":33.249,"tpi":11,"steigung_mm":2.309,"kernloch_mm":30.75,"durchgang_fein_mm":34.0,"durchgang_mittel_mm":35.0,"durchgang_grob_mm":36.0,"senkung_zyl_d_mm":41.0,"senkung_zyl_t_mm":2.5,"senkung_senk_d_mm":null,"senkung_winkel_grad":null}]}]};
+const THREAD_NORMS = (THREAD_DATA && THREAD_DATA.normen) || [];
+const THREAD_NORM_OPTIONS = THREAD_NORMS.map((n) => [n.id, n.name]);
+const THREAD_BY_NORM = new Map(THREAD_NORMS.map((n) => [n.id, n]));
+const THREAD_BY_ID = new Map();
+for (const n of THREAD_NORMS) {
+  for (const g of n.groessen || []) THREAD_BY_ID.set(g.id, { ...g, normId: n.id, normName: n.name, quelle: n.quelle });
+}
+const THREAD_GROUPED_OPTIONS = THREAD_NORMS.map((n) => ({ group: n.name, options: (n.groessen || []).map((g) => g.id) }));
+function threadEntry(size) { return THREAD_BY_ID.get(String(size || '')) || null; }
+function threadSizesForNorm(normId) { const n = THREAD_BY_NORM.get(normId); return n ? (n.groessen || []).map((g) => g.id) : SIZES; }
+function threadDefaultSize(normId) { const n = THREAD_BY_NORM.get(normId); return (n && (n.standard_groesse || (n.groessen && n.groessen[0] && n.groessen[0].id))) || 'M3'; }
+function threadHoleDia(te, fit) {
+  if (!te) return 3.4;
+  if (fit === 'fine') return te.durchgang_fein_mm;
+  if (fit === 'coarse') return te.durchgang_grob_mm;
+  if (fit === 'tap') return te.kernloch_mm;
+  return te.durchgang_mittel_mm;
+}
 // Zentrierbohrungen nach DIN 332 Form A (60°-Kegel + Führungsbohrung mit 118°-Bohrspitze)
 const CENTER_DRILLS = {
   A1: { d1: 1.0, d2: 2.12, t1: 1.3 },
@@ -9600,7 +9633,7 @@ function centerHoleMetrics(size) {
 }
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
-    { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
+    { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['countersunk', 'Senkkopf'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']], def: 'countersunk' },
     { k: 'fit', label: 'Loch', type: 'select', options: [['medium', 'Mittel (Standard)'], ['fine', 'Eng (genau)'], ['coarse', 'Weit (mit Spiel)'], ['tap', 'Kernloch für Gewinde']], def: 'medium' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
@@ -16039,7 +16072,19 @@ const UI = (() => {
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const sel = h('select', { id });
-    for (const o of options) { const [v, l] = Array.isArray(o) ? o : [o, o]; const op = h('option', { value: v }, l); if (String(v) === String(value)) op.selected = true; sel.append(op); }
+    const addOpt = (parent, o) => {
+      const [v, l] = Array.isArray(o) ? o : [o, o];
+      const op = h('option', { value: v }, l);
+      if (String(v) === String(value)) op.selected = true;
+      parent.append(op);
+    };
+    for (const o of options) {
+      if (o && typeof o === 'object' && !Array.isArray(o) && Array.isArray(o.options)) {
+        const og = h('optgroup', { label: o.group });
+        for (const sub of o.options) addOpt(og, sub);
+        sel.append(og);
+      } else addOpt(sel, o);
+    }
     sel.addEventListener('change', () => onChange(sel.value));
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
@@ -17060,7 +17105,21 @@ const Panels = (() => {
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
           sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.` }));
-        } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        } else if (def.lib === 'screwHole') {
+          const te = threadEntry(it.p.size);
+          let screwTxt = '';
+          if (te) {
+            const dia = threadHoleDia(te, it.p.fit);
+            const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
+            let headTxt = '';
+            if (it.p.fit !== 'tap') {
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+            }
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+          }
+          sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
@@ -18104,7 +18163,12 @@ const Place = (() => {
     const d = spec.part; const p = spec.params || libDefaults(d);
     if (d.lib === 'holePattern') return [-17, -17, -(p.depth || 10), 17, 17, 0.2];
     if (d.lib === 'zipTie') return [-5, -2, -(p.depth || 10), 5, 2, 0.2];
-    if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
+    if (d.lib === 'screwHole') {
+      const te = typeof threadEntry === 'function' ? threadEntry(p.size) : null;
+      const hd = te ? Math.max(threadHoleDia(te, p.fit), p.head === 'countersunk' ? (te.senkung_senk_d_mm || 0) : p.head === 'counterbore' ? (te.senkung_zyl_d_mm || 0) : 0) : 7;
+      const r = Math.max(2, hd / 2 + 0.5);
+      return [-r, -r, -(p.length || 10), r, r, 0.2];
+    }
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
     if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
@@ -18233,7 +18297,7 @@ const Place = (() => {
     ['insert', 'Gewindeeinsatz'],
     ['nut', 'Mutternfalle'],
   ];
-  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
+  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
   let hw = null;   // laufender Setz-Modus
   const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
   function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
@@ -18273,23 +18337,31 @@ const Place = (() => {
         + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmt(m.d1, 2)}</text>`
         + `<text x="${cx + r2 + 6}" y="${y1}" font-size="10" fill="var(--hole)">60°</text></svg>`;
     }
+    const te = (o.type === 'through' || o.type === 'tap') ? threadEntry(o.size) : null;
     if (o.type === 'through' && o.head === 'countersunk') {
+      const ang = (te && te.senkung_winkel_grad) || 90;
+      const dCsk = te && te.senkung_senk_d_mm;
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 28} ${y0} L${cx - 14} ${y0 + 16} V${yB} H${cx + 14} V${y0 + 16} L${cx + 28} ${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Senk.</text></svg>`;
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} Senk. (${ang}°)</text>`
+        + (dCsk ? `<text x="${cx + 32}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCsk, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'through' && o.head === 'counterbore') {
+      const dCb = te && te.senkung_zyl_d_mm, tCb = te && te.senkung_zyl_t_mm;
+      const headName = te && te.normId === 'pipe_g' ? 'Flach.' : 'Zyl.';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 22} H${cx - 14} V${yB} H${cx + 14} V${y0 + 22} H${cx + 26} V${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Zyl.</text></svg>`;
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} ${headName}</text>`
+        + (dCb ? `<text x="${cx + 30}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCb, 1)}×${fmt(tCb, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'nut') {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 20} H${cx - 13} V${yB} H${cx + 13} V${y0 + 20} H${cx + 26} V${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">Mutter ${o.size}</text></svg>`;
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">Mutter ${esc(o.size)}</text></svg>`;
     }
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
-    const lbl = o.type === 'tap' ? `${o.size} Kernloch` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.`;
+    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
+    const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmt(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmt(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
-      + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${lbl}</text></svg>`;
+      + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
   function holeInfoHTML(o) {
     if (o.type === 'blind') {
@@ -18306,6 +18378,22 @@ const Place = (() => {
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
       return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.`;
+    }
+    if (o.type === 'tap') {
+      const te = threadEntry(o.size);
+      if (!te) return '';
+      const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmt(te.steigung_mm, 2)} mm)` : `Steigung ${fmt(te.steigung_mm, 2)} mm`;
+      const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
+      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+    }
+    if (o.type === 'through') {
+      const te = threadEntry(o.size);
+      if (!te) return '';
+      const dia = threadHoleDia(te, o.fit);
+      let headTxt = '';
+      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
+      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
     return '';
   }
@@ -18357,16 +18445,44 @@ const Place = (() => {
         }
       } else if (o.type === 'center') {
         body.append(UI.selectField({ id: 'hw-size', label: 'Größe (DIN 332 A)', value: o.centerSize, options: CENTER_SIZES, onChange: (v) => { o.centerSize = v; updatePreview(); } }));
-      } else {
-        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
-        if (!sizes.includes(o.size)) o.size = 'M3';
-        body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
+      } else if (o.type === 'through' || o.type === 'tap') {
+        if (!THREAD_BY_NORM.has(o.norm)) o.norm = 'metric';
+        const sizes = threadSizesForNorm(o.norm);
+        if (!sizes.includes(o.size)) o.size = threadDefaultSize(o.norm);
+        if (o.norm === 'pipe_g' && o.head === 'countersunk') o.head = 'none';
+        const nf = UI.selectField({
+          id: 'hw-norm',
+          label: 'Gewindenorm',
+          value: o.norm,
+          options: THREAD_NORM_OPTIONS,
+          onChange: (v) => {
+            o.norm = v;
+            const ns = threadSizesForNorm(v);
+            if (!ns.includes(o.size)) o.size = threadDefaultSize(v);
+            if (v === 'pipe_g' && o.head === 'countersunk') o.head = 'none';
+            draw();
+          },
+        });
+        nf.dataset.help = 'threadStandards';
+        body.append(nf);
+        body.append(UI.selectField({ id: 'hw-size', label: o.norm === 'pipe_g' ? 'Rohrgewinde' : 'Gewinde', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
         if (o.type === 'through') {
           const f = h('div', { class: 'fields' });
-          f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; updatePreview(); } }));
+          const headOpts = o.norm === 'pipe_g'
+            ? [['none', 'ohne Senkung'], ['counterbore', 'Flachsenkung (DIN 3852-2)']]
+            : [['countersunk', o.norm === 'unc' || o.norm === 'unf' ? 'Senkkopf (82°)' : 'Senkkopf (90°)'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']];
+          f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: headOpts, onChange: (v) => { o.head = v; updatePreview(); } }));
           f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; updatePreview(); } }));
           body.append(f);
         }
+        const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), 'Ganz durch den Körper');
+        thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+        body.append(thru);
+        if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
+      } else {
+        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+        if (!sizes.includes(o.size)) o.size = 'M3';
+        body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : 'Gewinde', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
         const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
         thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
         body.append(thru);
@@ -18432,7 +18548,12 @@ const Place = (() => {
       return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
     };
     const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
-    let r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+    const te = (o.type === 'through' || o.type === 'tap') && typeof threadEntry === 'function' ? threadEntry(o.size) : null;
+    let r = te
+      ? (o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm / 2
+        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm / 2
+        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) / 2)
+      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
     if (o.type === 'blind') {
       r = hwNum(o.d, 5) / 2;
       const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);
@@ -25700,7 +25821,7 @@ const Commands = (() => {
     add('sketch-check', 'Skizze prüfen (Lücken und doppelte Linien)', 'target', 'skizze prüfen pruefer lücke lücken offen doppelt reparieren fehler', () => { if (Sketch.active) Sketch.check(); else UI.toast('Öffne zuerst eine Skizze, um sie zu prüfen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('sketch-autodef', 'Skizze fertig bestimmen (Regeln & Maße vorschlagen)', 'lock', 'skizze fertig bestimmen voll bestimmt regeln masse auto', () => { if (Sketch.active) Sketch.autoDefine(); else UI.toast('Öffne zuerst eine Skizze, um sie fertig zu bestimmen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('sketch-free', 'Freie Stellen zeigen (Wo fehlt ein Maß?)', 'unlock', 'skizze freie stellen wackeln freiheit fehlt maß unterbestimmt', () => { if (Sketch.active) Sketch.toggleFreeSpots(); else UI.toast('Öffne zuerst eine Skizze, um freie Stellen zu sehen.', { icon: 'info' }); }, { group: 'Werkzeuge', kbd: 'Umschalt F' });
-    add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
+    add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung feingewinde zoll unc unf rohrgewinde', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('cosmetic-thread', 'Gewinde markieren (kosmetisch)', 'thread', 'gewinde kosmetisch markieren metrisch m3 m4 m5 m6 m8 echt schraube', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'CYLINDRE') Features.threadPop(f, $('#center')); else UI.toast('Klick zuerst eine runde Fläche (Zylinder) an, um dort ein Gewinde zu markieren.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });

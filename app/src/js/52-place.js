@@ -7,7 +7,12 @@ const Place = (() => {
     const d = spec.part; const p = spec.params || libDefaults(d);
     if (d.lib === 'holePattern') return [-17, -17, -(p.depth || 10), 17, 17, 0.2];
     if (d.lib === 'zipTie') return [-5, -2, -(p.depth || 10), 5, 2, 0.2];
-    if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
+    if (d.lib === 'screwHole') {
+      const te = typeof threadEntry === 'function' ? threadEntry(p.size) : null;
+      const hd = te ? Math.max(threadHoleDia(te, p.fit), p.head === 'countersunk' ? (te.senkung_senk_d_mm || 0) : p.head === 'counterbore' ? (te.senkung_zyl_d_mm || 0) : 0) : 7;
+      const r = Math.max(2, hd / 2 + 0.5);
+      return [-r, -r, -(p.length || 10), r, r, 0.2];
+    }
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
     if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
@@ -136,7 +141,7 @@ const Place = (() => {
     ['insert', 'Gewindeeinsatz'],
     ['nut', 'Mutternfalle'],
   ];
-  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
+  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
   let hw = null;   // laufender Setz-Modus
   const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
   function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
@@ -176,23 +181,31 @@ const Place = (() => {
         + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmt(m.d1, 2)}</text>`
         + `<text x="${cx + r2 + 6}" y="${y1}" font-size="10" fill="var(--hole)">60°</text></svg>`;
     }
+    const te = (o.type === 'through' || o.type === 'tap') ? threadEntry(o.size) : null;
     if (o.type === 'through' && o.head === 'countersunk') {
+      const ang = (te && te.senkung_winkel_grad) || 90;
+      const dCsk = te && te.senkung_senk_d_mm;
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 28} ${y0} L${cx - 14} ${y0 + 16} V${yB} H${cx + 14} V${y0 + 16} L${cx + 28} ${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Senk.</text></svg>`;
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} Senk. (${ang}°)</text>`
+        + (dCsk ? `<text x="${cx + 32}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCsk, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'through' && o.head === 'counterbore') {
+      const dCb = te && te.senkung_zyl_d_mm, tCb = te && te.senkung_zyl_t_mm;
+      const headName = te && te.normId === 'pipe_g' ? 'Flach.' : 'Zyl.';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 22} H${cx - 14} V${yB} H${cx + 14} V${y0 + 22} H${cx + 26} V${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Zyl.</text></svg>`;
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} ${headName}</text>`
+        + (dCb ? `<text x="${cx + 30}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCb, 1)}×${fmt(tCb, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'nut') {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 20} H${cx - 13} V${yB} H${cx + 13} V${y0 + 20} H${cx + 26} V${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">Mutter ${o.size}</text></svg>`;
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">Mutter ${esc(o.size)}</text></svg>`;
     }
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
-    const lbl = o.type === 'tap' ? `${o.size} Kernloch` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.`;
+    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
+    const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmt(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmt(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
-      + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${lbl}</text></svg>`;
+      + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
   function holeInfoHTML(o) {
     if (o.type === 'blind') {
@@ -209,6 +222,22 @@ const Place = (() => {
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
       return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.`;
+    }
+    if (o.type === 'tap') {
+      const te = threadEntry(o.size);
+      if (!te) return '';
+      const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmt(te.steigung_mm, 2)} mm)` : `Steigung ${fmt(te.steigung_mm, 2)} mm`;
+      const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
+      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+    }
+    if (o.type === 'through') {
+      const te = threadEntry(o.size);
+      if (!te) return '';
+      const dia = threadHoleDia(te, o.fit);
+      let headTxt = '';
+      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
+      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
     return '';
   }
@@ -260,16 +289,44 @@ const Place = (() => {
         }
       } else if (o.type === 'center') {
         body.append(UI.selectField({ id: 'hw-size', label: 'Größe (DIN 332 A)', value: o.centerSize, options: CENTER_SIZES, onChange: (v) => { o.centerSize = v; updatePreview(); } }));
-      } else {
-        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
-        if (!sizes.includes(o.size)) o.size = 'M3';
-        body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
+      } else if (o.type === 'through' || o.type === 'tap') {
+        if (!THREAD_BY_NORM.has(o.norm)) o.norm = 'metric';
+        const sizes = threadSizesForNorm(o.norm);
+        if (!sizes.includes(o.size)) o.size = threadDefaultSize(o.norm);
+        if (o.norm === 'pipe_g' && o.head === 'countersunk') o.head = 'none';
+        const nf = UI.selectField({
+          id: 'hw-norm',
+          label: 'Gewindenorm',
+          value: o.norm,
+          options: THREAD_NORM_OPTIONS,
+          onChange: (v) => {
+            o.norm = v;
+            const ns = threadSizesForNorm(v);
+            if (!ns.includes(o.size)) o.size = threadDefaultSize(v);
+            if (v === 'pipe_g' && o.head === 'countersunk') o.head = 'none';
+            draw();
+          },
+        });
+        nf.dataset.help = 'threadStandards';
+        body.append(nf);
+        body.append(UI.selectField({ id: 'hw-size', label: o.norm === 'pipe_g' ? 'Rohrgewinde' : 'Gewinde', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
         if (o.type === 'through') {
           const f = h('div', { class: 'fields' });
-          f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; updatePreview(); } }));
+          const headOpts = o.norm === 'pipe_g'
+            ? [['none', 'ohne Senkung'], ['counterbore', 'Flachsenkung (DIN 3852-2)']]
+            : [['countersunk', o.norm === 'unc' || o.norm === 'unf' ? 'Senkkopf (82°)' : 'Senkkopf (90°)'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']];
+          f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: headOpts, onChange: (v) => { o.head = v; updatePreview(); } }));
           f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; updatePreview(); } }));
           body.append(f);
         }
+        const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), 'Ganz durch den Körper');
+        thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+        body.append(thru);
+        if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
+      } else {
+        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+        if (!sizes.includes(o.size)) o.size = 'M3';
+        body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : 'Gewinde', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
         const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
         thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
         body.append(thru);
@@ -335,7 +392,12 @@ const Place = (() => {
       return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
     };
     const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
-    let r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+    const te = (o.type === 'through' || o.type === 'tap') && typeof threadEntry === 'function' ? threadEntry(o.size) : null;
+    let r = te
+      ? (o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm / 2
+        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm / 2
+        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) / 2)
+      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
     if (o.type === 'blind') {
       r = hwNum(o.d, 5) / 2;
       const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);

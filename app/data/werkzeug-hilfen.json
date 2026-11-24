@@ -873,5 +873,10 @@
     "tip": "Verlorene Kante oder Fläche neu wählen",
     "hilfe": "Verliert eine Rundung, Fase, Wandstärke oder Skizze ihre ursprüngliche Kante oder Fläche (etwa weil ein früheres Maß geändert wurde), erscheint im Verlauf ein gelbes Warnzeichen. Mit „Neu wählen“ blendet Tracery die alte Lage gelb gestrichelt ein – ein Klick auf die neue Kante oder Fläche repariert den Bezug, und alles rechnet weiter.",
     "tipp": "Du kannst die Ansicht währenddessen wie gewohnt drehen, um die gewünschte Kante oder Fläche gut anzuklicken."
+  },
+  "threadStandards": {
+    "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
+    "hilfe": "Wählt im Bohrungs-Assistenten die Gewindenorm: Metrisch Regelgewinde (M1.6–M12), Metrisch Feingewinde (z. B. M8×1, M10×1,25 nach DIN 13 / DIN 336), Zoll-Gewinde UNC und UNF (#4 bis 1/2\" nach ASME B1.1 mit 82°-Senkung) oder zylindrisches Rohrgewinde G1/8 bis G1 (ISO 228-1 mit Flachsenkung nach DIN 3852-2).",
+    "tipp": "Für zöllige Kameragehäuse oder US-Bauteile wählst du UNC/UNF; bei Hydraulik-, Pneumatik- oder Schlauchanschlüssen passt Rohrgewinde G."
   }
 }
