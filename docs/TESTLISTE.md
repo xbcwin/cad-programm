@@ -2303,6 +2303,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `exportAmfPly`, `pointCloudImport` und `importCad` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`ply`, `amf`, `xyz`) vollständig ohne JavaScript-Fehler.
 - [ ] **Von Hand**: Im Browser eine farbige PLY-Punktwolke oder ein Mesh aus MeshLab/Blender sowie eine eigene CSV-/XYZ-Messdatei per Ziehen ins Fenster öffnen, Punktgröße und Farbe rechts anpassen und „Als Skizzenpunkte übernehmen“ prüfen.
 
+## Lizenz „Alle Rechte vorbehalten“ und fremde Bausteine (Auto [A-109], PL-02)
+
+- [x] **`LICENSE` & `docs/FREMDE-BAUSTEINE.md`**: `LICENSE` im Hauptordner enthält `© 2026 Nils Kriege`, `Alle Rechte vorbehalten` sowie das Verbot zum Nutzen, Kopieren und Verändern ohne schriftliche Erlaubnis; `docs/FREMDE-BAUSTEINE.md` führt `three.js` (`MIT`), Schrift `Inter` (`SIL Open Font License 1.1`), `replicad` (`MIT`) und `Open CASCADE Technology` (`LGPL-2.1`) samt Abschnitt „Bitte prüfen“ vollständig auf.
+- [x] **„Über Tracery“ in Profi & Einfach**: Zeigt in beiden Stufen die Zeile `© 2026 Nils Kriege – alle Rechte vorbehalten` (ohne Drohnen-/FPV-Begriffe) und den Knopf „Fremde Bausteine“ (`#about-third-party` mit `data-help="thirdPartyLibs"`).
+- [x] **Dialog „Fremde Bausteine“ & Lizenztexte**: Zeigt alle mitgelieferten fremden Bausteine inkl. `three.js` und `Inter` mit Lizenz, Dateien, aufklappbarem Lizenztext (`<details class="tp-text">`) und „Zurück“-Knopf zu „Über Tracery“.
+- [x] **Übersetzung & Hilfetexte**: DE/EN-Schlüsselgleichheit (`texte-de.json` / `texte-en.json`) sowie Hilfeeintrag `thirdPartyLibs` (`werkzeug-hilfen.json` und `HELP`) sind vollständig und ohne JavaScript-Fehler vorhanden.
+- [ ] **Von Hand**: Im Browser Menü `⋯` → „Über Tracery“ im hellen und dunklen Design sowie in „Einfach“ und „Profi“ öffnen, über „Fremde Bausteine“ alle Lizenztexte aufklappen und die englische Übersetzung in den Einstellungen prüfen.
+
 ## Fehler melden
 
 ```

@@ -1,4 +1,5 @@
 // ================= Start der App =================
+const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
 (function boot() {
   let errShown = 0;
   window.addEventListener('error', (e) => { console.error(e.error || e.message); if (Date.now() - errShown > 4000 && /Tracery|app|THREE|replicad/i.test(String(e.filename || '') + String(e.message || '')) === false) { errShown = Date.now(); } });
@@ -59,6 +60,44 @@
   ];
   $('#btn-project').onclick = (e) => UI.menu(e.currentTarget, projectItems(), { alignRight: true });
   const vw = () => (document.documentElement && document.documentElement.clientWidth) || innerWidth;
+  const openThirdPartyDialog = () => {
+    const libs = Array.isArray(THIRD_PARTY_LIBS) ? THIRD_PARTY_LIBS : [];
+    const body = h('div', { id: 'third-party-dialog', class: 'tp-dialog' },
+      h('p', null, T('menu.main.thirdPartyIntro')),
+      h('div', { class: 'tp-list' }, ...libs.map((lib) => h('div', { class: 'tp-card', 'data-lib-id': lib.id },
+        h('div', { class: 'tp-head' },
+          h('b', null, lib.version ? `${lib.name} (${lib.version})` : lib.name),
+          h('span', { class: 'tp-lic' }, lib.license)),
+        h('div', { class: 'tp-desc' }, I18n.lang === 'en' ? (lib.purposeEn || lib.purposeDe) : lib.purposeDe),
+        h('div', { class: 'tp-meta' }, lib.author),
+        h('div', { class: 'tp-meta mono' }, T('menu.main.thirdPartyPaths', { paths: (lib.paths || []).join(', ') })),
+        h('details', { class: 'tp-text' },
+          h('summary', null, T('menu.main.licenseText')),
+          h('pre', { class: 'tp-pre' }, lib.licenseText)))))
+    );
+    UI.modal({
+      title: T('menu.main.thirdParty'),
+      wide: true,
+      body,
+      actions: [
+        { id: 'third-party-back', label: T('menu.main.aboutBack'), run: () => { setTimeout(() => openAboutDialog(), 0); } },
+        { label: T('common.close'), primary: true },
+      ],
+    });
+  };
+  const openAboutDialog = () => UI.modal({
+    title: T('menu.main.about'),
+    body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } },
+      h('p', null, T('menu.main.aboutP1')),
+      h('p', null, T('menu.main.aboutP2')),
+      h('p', null, T('menu.main.aboutP3')),
+      h('p', null, T('menu.main.aboutP4')),
+      h('p', { id: 'about-copyright', class: 'about-copyright' }, T('menu.main.aboutCopyright'))),
+    actions: [
+      { id: 'about-third-party', label: T('menu.main.thirdParty'), help: 'thirdPartyLibs', run: () => { setTimeout(() => openThirdPartyDialog(), 0); } },
+      { label: T('common.close'), primary: true },
+    ],
+  });
   // auf schmalen Bildschirmen ist der Projektname ausgeblendet – dann steht das Projektmenü hier mit drin
   $('#btn-menu').onclick = (e) => UI.menu(e.currentTarget, [
     ...(vw() <= 900 || UI.isTablet() ? [...projectItems(), '-'] : []),
@@ -69,7 +108,7 @@
     { label: T('menu.main.export'), icon: 'export', run: () => Print.exportDialog() },
     { label: T('menu.main.saveImage'), icon: 'image', run: () => Print.imageDialog() },
     '-',
-    { label: T('menu.main.about'), icon: 'info', run: () => UI.modal({ title: T('menu.main.about'), body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, T('menu.main.aboutP1')), h('p', null, T('menu.main.aboutP2')), h('p', null, T('menu.main.aboutP3')), h('p', null, T('menu.main.aboutP4'))), actions: [{ label: T('common.close'), primary: true }] }) },
+    { label: T('menu.main.about'), icon: 'info', run: () => openAboutDialog() },
   ], { alignRight: true });
   const ws = $('#workspace');
   const setPanels = (side) => {
