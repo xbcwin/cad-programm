@@ -14795,6 +14795,279 @@ def t_f11241146(p):
     return [ok1, ok2]
 
 
+def t_a072_zeichnung_modellaenderung(p):
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    # 1. Platte (60 x 40 x 10) mit zwei Bohrungen (Ø8 links, Ø10 rechts)
+    p.empty()
+    p.ev("""
+      App.change('Platte mit 2 Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Platte' }));
+        const h1 = Model.newItem('cylinder', { d: 8, h: 16 }, { name: 'Bohrung8', role: 'hole' });
+        h1.t.x = -12; h1.t.y = 0; h1.t.z = -3;
+        const h2 = Model.newItem('cylinder', { d: 10, h: 16 }, { name: 'Bohrung10', role: 'hole' });
+        h2.t.x = 12; h2.t.y = 0; h2.t.z = -3;
+        d.items.push(h1, h2);
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    # 2. Zeichnung öffnen: manuelles Ø8-Maß auf Bohrung 1 (Draufsicht) + manuelles Längenmaß 60 (Vorderansicht)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(200)
+
+    p.pg.click('#dw-dm-dia'); p.wait(150)
+    dia_pt = p.ev("""
+      const v = Drawing.layout.views.top;
+      const c = v.geo.circles.find(x => x.full && Math.abs(x.r - 4) < 0.15);
+      return c ? [v.ox + (c.c[0] + c.r * Math.SQRT1_2) * v.s, v.oy - (c.c[1] + c.r * Math.SQRT1_2) * v.s] : null;
+    """)
+    sd = sheet_screen(*dia_pt)
+    p.pg.mouse.move(sd[0], sd[1]); p.wait(80)
+    p.pg.mouse.click(sd[0], sd[1]); p.wait(200)
+
+    p.pg.click('#dw-dm-lin'); p.wait(150)
+    lin_pts = p.ev("""
+      const v = Drawing.layout.views.front;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        a: toS([b[0], b[1]]),
+        b: toS([b[2], b[1]]),
+        place: toS([(b[0] + b[2]) * 0.5, b[1] - 18]),
+      };
+    """)
+    for key in ('a', 'b', 'place'):
+        pt = sheet_screen(*lin_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(160)
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    s1 = p.ev("""
+      const dims = Drawing.activeSheet().dims;
+      const dia = dims.find(x => x.type === 'dia');
+      const lin = dims.find(x => x.type === 'lin');
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const diaTxt = dia ? svg.querySelector(`text.dimtext[data-id="${dia.id}"]`)?.textContent : '';
+      const linTxt = lin ? svg.querySelector(`text.dimtext[data-id="${lin.id}"]`)?.textContent : '';
+      return {
+        diaId: dia?.id,
+        linId: lin?.id,
+        diaTxt,
+        linTxt,
+        lostN: Drawing.lostDims().length,
+        hasLostBox: !!document.getElementById('dw-lost-sec'),
+      };
+    """)
+    ok1 = (
+        bool(s1['diaId']) and bool(s1['linId'])
+        and s1['diaTxt'] == 'Ø8' and s1['linTxt'] == '60'
+        and s1['lostN'] == 0 and not s1['hasLostBox']
+    )
+
+    # 3. Zurück ins Modell: Bohrung 1 (Ø8) löschen -> in Zeichnung rot + in Liste „Verlorene Maße“
+    p.pg.click('#tab-model'); p.wait(250)
+    p.ev("""
+      const h1 = App.doc.items.find(x => x.name === 'Bohrung8');
+      if (h1) { App.select([h1.id]); Actions.remove(); }
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(250)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const topCircles = Drawing.layout.views.top.geo.circles.filter(c => c.full).length;
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg.diaId}"]`);
+      const lineEl = svg.querySelector(`polyline.dim[data-id="${arg.diaId}"]`);
+      const txtCol = txtEl ? getComputedStyle(txtEl).fill : '';
+      const lineCol = lineEl ? getComputedStyle(lineEl).stroke : '';
+      const lostSec = document.getElementById('dw-lost-sec');
+      const lostHead = lostSec?.querySelector('.dw-lost-h')?.textContent?.toLowerCase() || '';
+      const lostRow = document.querySelector(`#dw-lost-list .dw-lost-row[data-dim-id="${arg.diaId}"]`);
+      const linEl = svg.querySelector(`text.dimtext[data-id="${arg.linId}"]`);
+      return {
+        topCircles,
+        txtLost: txtEl?.classList.contains('lost') && txtEl?.dataset.lost === '1',
+        lineLost: lineEl?.classList.contains('lost') && lineEl?.dataset.lost === '1',
+        txtCol,
+        lineCol,
+        lostHead,
+        rowTxt: lostRow?.textContent || '',
+        hasRebind: !!lostRow?.querySelector('.dw-lost-rebind'),
+        hasDel: !!lostRow?.querySelector('.dw-lost-del'),
+        lostCount: Drawing.lostDims().length,
+        linOk: linEl?.textContent === '60' && !linEl?.classList.contains('lost'),
+      };
+    """, {'diaId': s1['diaId'], 'linId': s1['linId']})
+    ok2 = (
+        s2['topCircles'] == 1
+        and s2['txtLost'] and s2['lineLost']
+        and '201, 55, 46' in s2['txtCol'] and '201, 55, 46' in s2['lineCol']
+        and 'verlorene maße' in s2['lostHead']
+        and 'Ø8' in s2['rowTxt']
+        and s2['hasRebind'] and s2['hasDel']
+        and s2['lostCount'] == 1
+        and s2['linOk']
+    )
+
+    # Rückgängig bringt Bohrung 1 zurück -> Maß wieder gültig; Redo macht es wieder rot
+    p.ev("App.undo()")
+    warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    s2_undo = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg}"]`);
+      return {
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+        isLost: !!txtEl?.classList.contains('lost'),
+        txt: txtEl?.textContent || '',
+      };
+    """, s1['diaId'])
+    p.ev("App.redo()")
+    warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    s2_redo = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg}"]`);
+      return {
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+        isLost: !!txtEl?.classList.contains('lost'),
+      };
+    """, s1['diaId'])
+    ok3 = (
+        s2_undo['lostN'] == 0 and not s2_undo['hasBox'] and not s2_undo['isLost'] and s2_undo['txt'] == 'Ø8'
+        and s2_redo['lostN'] == 1 and s2_redo['hasBox'] and s2_redo['isLost']
+    )
+
+    # 4. Länge der Platte ändern (60 -> 85 im Modell, dann 85 -> 95 direkt während Zeichnung offen ist)
+    p.pg.click('#tab-model'); p.wait(200)
+    p.ev("App.change('Breite 85', d => { d.items.find(x => x.kind === 'box').p.w = 85; })")
+    warte_rechnen(p, 30)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    s4a = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const autoW = Drawing.activeSheet().dims.find(x => x.auto === 'width');
+      const linEl = svg.querySelector(`text.dimtext[data-id="${arg.linId}"]`);
+      const autoEl = autoW ? svg.querySelector(`text.dimtext[data-id="${autoW.id}"]`) : null;
+      return {
+        linTxt: linEl?.textContent || '',
+        linLost: !!linEl?.classList.contains('lost'),
+        autoTxt: autoEl?.textContent || '',
+        lostCount: Drawing.lostDims().length,
+      };
+    """, {'linId': s1['linId']})
+
+    p.ev("App.change('Breite 95', d => { d.items.find(x => x.kind === 'box').p.w = 95; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    s4b = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const autoW = Drawing.activeSheet().dims.find(x => x.auto === 'width');
+      const linEl = svg.querySelector(`text.dimtext[data-id="${arg.linId}"]`);
+      const autoEl = autoW ? svg.querySelector(`text.dimtext[data-id="${autoW.id}"]`) : null;
+      return {
+        linTxt: linEl?.textContent || '',
+        linLost: !!linEl?.classList.contains('lost'),
+        autoTxt: autoEl?.textContent || '',
+        lostCount: Drawing.lostDims().length,
+      };
+    """, {'linId': s1['linId']})
+    ok4 = (
+        s4a['linTxt'] == '85' and not s4a['linLost'] and s4a['autoTxt'] == '85' and s4a['lostCount'] == 1
+        and s4b['linTxt'] == '95' and not s4b['linLost'] and s4b['autoTxt'] == '95' and s4b['lostCount'] == 1
+    )
+
+    # 5. Verlorenes Maß „Neu zuordnen“ auf Bohrung 2 (Ø10) -> wird gültig (Ø10), Undo zurück, „Löschen“ entfernt es
+    p.pg.click(f'#dw-lost-list .dw-lost-row[data-dim-id="{s1["diaId"]}"] .dw-lost-rebind')
+    p.wait(150)
+    h2_pt = p.ev("""
+      const v = Drawing.layout.views.top;
+      const c = v.geo.circles.find(x => x.full && Math.abs(x.r - 5) < 0.2);
+      return c ? [v.ox + (c.c[0] + c.r * Math.SQRT1_2) * v.s, v.oy - (c.c[1] + c.r * Math.SQRT1_2) * v.s] : null;
+    """)
+    sh2 = sheet_screen(*h2_pt)
+    p.pg.mouse.move(sh2[0], sh2[1]); p.wait(80)
+    p.pg.mouse.click(sh2[0], sh2[1]); p.wait(250)
+
+    s5_rebound = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg}"]`);
+      return {
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+        isLost: !!txtEl?.classList.contains('lost'),
+        txt: txtEl?.textContent || '',
+      };
+    """, s1['diaId'])
+
+    p.ev("App.undo()"); p.wait(250)
+    s5_undo = p.ev("return { lostN: Drawing.lostDims().length, hasBox: !!document.getElementById('dw-lost-sec') }")
+
+    p.pg.click(f'#dw-lost-list .dw-lost-row[data-dim-id="{s1["diaId"]}"] .dw-lost-del')
+    p.wait(200)
+    s5_del = p.ev("""
+      return {
+        exists: Drawing.activeSheet().dims.some(x => x.id === arg),
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+      };
+    """, s1['diaId'])
+    p.ev("App.undo()"); p.wait(200)
+    s5_restore = p.ev("return Drawing.lostDims().length")
+
+    ok5 = (
+        s5_rebound['lostN'] == 0 and not s5_rebound['hasBox'] and not s5_rebound['isLost'] and s5_rebound['txt'] == 'Ø10'
+        and s5_undo['lostN'] == 1 and s5_undo['hasBox']
+        and not s5_del['exists'] and s5_del['lostN'] == 0 and not s5_del['hasBox']
+        and s5_restore == 1
+    )
+
+    # 6. Speichern/Laden, PDF-Export, Befehlssuche & Hilfe
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    after_reload = p.ev("return { lostN: Drawing.lostDims().length, hasBox: !!document.getElementById('dw-lost-sec') }")
+    pdf_info = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        let s = '';
+        for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+        return { head: s.slice(0, 8), has95: s.includes('(95)'), hasRed: s.includes('0.788 0.216 0.180') };
+      });
+    """)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        json: !!(d.drawingLostDims && d.drawingLostDims.tip && d.drawingLostDims.hilfe && d.drawingLostDims.tipp),
+        dom: document.querySelectorAll('[data-help="drawingLostDims"]').length >= 1,
+        cmd: Commands.search('verlorene maße').some(c => c.id === 'drawingLostDims'),
+      }));
+    """)
+    ok6 = (
+        after_reload['lostN'] == 1 and after_reload['hasBox']
+        and pdf_info['head'] == '%PDF-1.4' and pdf_info['has95'] and pdf_info['hasRed']
+        and all(help_ok.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -14969,6 +15242,7 @@ TESTS = [
     ('[A-066] Zeichnung: Mittellinien automatisch (4 Mittelkreuze, 4 Mittellinien, einzeln ausblendbar)', t_a066_mittellinien),
     ('[A-069] Zeichnung: Maß-Stil (Pfeile, Schriftgröße 5, Nachkommastellen) & Hinweislinie (wandert mit Ansicht)', t_a069_mass_stil_hinweislinie),
     ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
+    ('[A-072] Zeichnung merkt Modelländerungen: verlorene Maße rot & in Liste, Längenmaß aktualisiert, neu zuordnen', t_a072_zeichnung_modellaenderung),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

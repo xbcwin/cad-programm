@@ -2019,6 +2019,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **`askDim` verliert keine Ziffern bei verzögertem `rAF(grab)` (`Sketch.askDim` / `onKey`)**: Wird die erste Ziffer über `Sketch.onKey()` an `dimBox._inp` weitergereicht und feuert danach das verzögerte `requestAnimationFrame(grab)`, bleibt `dimBox._typed` erhalten; die nächste Ziffer wird angehängt (`60` statt `0`), löst den erwarteten Konflikt (`#sk-conflict`) aus und lässt sich per „Entfernen“ sauber auflösen.
 - [ ] **Von Hand**: Im Browser bei hoher Szenenlast die Ansicht zügig drehen und loslassen (Schärfe springt nach ~0,2 s zurück) sowie beim Bemaßen (`D`) direkt nach dem Klick schnell eine zweistellige Zahl eintippen.
 
+## Zeichnung merkt Modelländerungen (Auto [A-072], ZE-14)
+
+- [x] **Gelöschte Bohrung → rotes Maß & Liste „Verlorene Maße“**: Wird nach dem Bemaßen einer Ø-8-Bohrung die Bohrung im Modell gelöscht, rechnet sich die Zeichnung automatisch neu; das Maß erhält die SVG-Klasse `.lost` (`rgb(201, 55, 46)` rot) samt `data-lost="1"` und erscheint in `#dw-lost-sec` / `#dw-lost-list` samt „Neu zuordnen“ und „Löschen“; `App.undo()` macht es wieder gültig, `App.redo()` wieder rot.
+- [x] **Längenänderung → Längenmaß zeigt neuen Wert**: Wird die Plattenbreite von `60 mm` auf `85 mm` (und bei geöffneter Zeichnung auf `95 mm`) geändert, aktualisieren sich sowohl das manuelle Längenmaß als auch das automatische Gesamtmaß auf `85` bzw. `95` ohne `.lost`-Markierung, während das Maß der gelöschten Bohrung in „Verlorene Maße“ bleibt.
+- [x] **Neu zuordnen, Löschen, Speichern/Laden, PDF & Hilfe**: „Neu zuordnen“ hängt das verlorene Maß per Klick auf eine zweite Bohrung (`Ø10`) wieder an (Rückgängig stellt den verlorenen Zustand wieder her), „Löschen“ entfernt es sauber; JSON-Roundtrip, PDF-Export, Befehlssuche (`drawingLostDims`) und Hilfetext `drawingLostDims` funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser ein Werkstück mit Fase, Rundung, Bohrung und Längenmaß in der Zeichnung bemaßen, anschließend die Bohrung und Fase im Modell löschen sowie Abmessungen ändern, und die rote Markierung, die Liste „Verlorene Maße“ sowie „Neu zuordnen“ visuell prüfen.
+
 ## Fehler melden
 
 ```
