@@ -6646,6 +6646,53 @@ def t_a017_ebene_winkel_achsen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_f11240028(p):
+    # 1+2: camAnim-Fallback bei blockiertem requestAnimationFrame + Abbruch bei Nutzer-Start
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:30,h:10},{name:'Platte'}); d.items.push(a); })"); warte_rechnen(p)
+    top_idx = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.n && f.n[2]>0.99)")
+    p.ev("Viewer.setView('iso', false)"); p.wait(300)
+    pause_raf = "window.__origRAF=window.requestAnimationFrame; window.__rafQueue=[]; window.requestAnimationFrame=(cb)=>{window.__rafQueue.push(cb); return window.__rafQueue.length;};"
+    resume_raf = "if(window.__origRAF){ window.requestAnimationFrame=window.__origRAF; const q=window.__rafQueue.splice(0); for(const cb of q) window.requestAnimationFrame(cb); }"
+    p.ev(pause_raf)
+    try:
+        p.ev("Viewer.lookAtFace(App.doc.items[0].id, arg, true)", top_idx)
+        p.wait(700)
+        dirv1 = p.ev("const c=Viewer.camera, t=Viewer.controls.target, v=c.position.clone().sub(t).normalize(); return [v.x, v.y, v.z]")
+    finally:
+        p.ev(resume_raf)
+    ok1 = top_idx >= 0 and dirv1[2] > 0.999
+
+    p.ev("Viewer.setView('iso', false)"); p.wait(300)
+    p.ev(pause_raf)
+    try:
+        p.ev("Viewer.lookAtFace(App.doc.items[0].id, arg, true); Viewer.controls.dispatchEvent({type:'start'});", top_idx)
+        p.wait(700)
+        dirv2 = p.ev("const c=Viewer.camera, t=Viewer.controls.target, v=c.position.clone().sub(t).normalize(); return [v.x, v.y, v.z]")
+    finally:
+        p.ev(resume_raf)
+    ok2 = dirv2[2] < 0.7
+
+    # 3: loftPreview wird durch laufende Maus-/Kamera-render()-Aufrufe ohne Kurvenänderung nicht ausgehungert
+    p.ev("Start.newProject(true)"); p.wait(600)
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Unten')
+    skizzenkoerper(p, [{'id': 'c', 'type': 'circle', 'c': [0, 0], 'r': 8}], 40, 'Oben')
+    warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Übergang"]').click(); warte_rechnen(p, 30)
+    p.pg.locator('#loft-rail-edit').click(); p.wait(1000)
+    in_rail = SS(p, "return S.ctx.mode") == 'loftrail'
+    SS(p, "const q=S.ents[0].pts; q[1]=[Math.sign(q[0][0])*25, 20]")
+    p.pg.mouse.move(700, 400)
+    for i in range(8):
+        p.wait(80)
+        p.pg.mouse.move(702 if i % 2 == 0 else 706, 402 if i % 2 == 0 else 406)
+    warte_rechnen(p, 30)
+    pv = p.ev("const r=App.extra.length&&App.results.get('__preview'); return r&&r.data?r.data.bbox:null")
+    ok3 = in_rail and pv is not None and (pv[3] - pv[0]) > 45
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6762,6 +6809,7 @@ TESTS = [
     ('[A-016] Speicher für große Projekte: 15 MB Import sichern & neu laden / Versionen in IndexedDB / Migration aus localStorage / Löschen räumt Blobs auf', t_a016_speicher_gross),
     ('[A-015] Projekt in Ordner speichern: ohne API ausgeblendet / Ordner wählen & Anzeige / 10 s gebündelt / Trennen & Projektwechsel / Hilfe', t_a015_ordner_speichern),
     ('[A-017] Ebene im Winkel und Bezugsachsen: 30° an Quaderkante / Achse durch Zylinder → Kreismuster / Drehen um Bezugsachse / 2 Punkte & senkrecht auf Fläche', t_a017_ebene_winkel_achsen),
+    ('[F-11240028] Volltest-Reparatur: Kamera-Animation bei rAF-Stau / Abbruch bei Nutzer-Start / Übergang-Vorschau ohne Debounce-Stau', t_f11240028),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

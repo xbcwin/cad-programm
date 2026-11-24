@@ -1566,6 +1566,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verwaltung & Hilfetexte**: Umbenennen, Ein-/Ausblenden, Anzeige „Bezug fehlt“ samt Rückgängig, Löschen, Befehle und Hilfetexte (`datumEdgeAngle`, `datumAxis`) geprüft.
 - [ ] **Von Hand**: Interaktives Wählen im 3D-Bild über Kontextleiste („Ebene im Winkel“ an einer Kante, „Achse“ an einem Zylinder) und beim Klick auf die Bezugsachse im Werkzeug „Achse im Bild wählen“ prüfen.
 
+## Volltest-Reparatur (Auto [F-11240028])
+
+- [x] **Kamera-Animation bei blockiertem `requestAnimationFrame`**: `Viewer.lookAtFace` erreicht trotz pausierter `rAF`-Frames per Timer-Fallback (`finishCamAnim`) exakt das Ziel senkrecht auf der Fläche.
+- [x] **Abbruch bei Nutzer-Eingriff**: Löst während einer laufenden Kamera-Animation das `start`-Event der `OrbitControls` aus, wird sowohl `camAnim` als auch der Fallback-Timer sauber abgebrochen.
+- [x] **Übergangs-Vorschau ohne Debounce-Stau**: Wiederholte Mausbewegungen ohne Änderung der Führungskurve setzen den 250-ms-Debounce von `loftPreview` nicht mehr zurück; die bauchige `__preview`-Vorschau wird berechnet.
+- [ ] **Von Hand**: Bei „Blick senkrecht auf die Fläche“ per Rechtsklick und beim Ziehen einer Übergangs-Führungskurve im Browser kurz prüfen, ob die Kamera-Fahrt flüssig wirkt und die Vorschau zügig nachzieht.
+
 ## Fehler melden
 
 ```
