@@ -8400,6 +8400,160 @@ def t_a030_drehen_winkel_flaeche(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- [A-034] Verlauf umsortieren, Ordner, duplizieren (KP-10) ----------
+def t_a034_verlauf_ordner(p):
+    p.empty()
+    # Quader + zwei unabhängige Löcher (links und rechts)
+    p.ev("""App.change('x', d => {
+      const b = Model.newItem('box', {w:40, d:30, h:10}, {name:'Platte'});
+      const h1 = Model.newItem('cylinder', {d:6, h:20}, {name:'Loch links', role:'hole'}); h1.t.x = -10; h1.t.z = -5;
+      const h2 = Model.newItem('cylinder', {d:6, h:20}, {name:'Loch rechts', role:'hole'}); h2.t.x = 10; h2.t.z = -5;
+      d.items.push(b, h1, h2);
+    })"""); warte_rechnen(p); p.wait(300)
+
+    ids = p.ev("return App.doc.items.map(x => x.id)")
+    bid, h1id, h2id = ids[0], ids[1], ids[2]
+    vol = lambda: p.ev("""return Mass.measure().then(r => {
+      const m = r.parts.find(x => x.id === arg); return m ? m.volume : r.volume;
+    })""", bid)
+    v1 = vol()
+
+    # Hilfsfunktion für echtes Drag-and-Drop im Verlauf (inkl. dragover für .drop-bad-Prüfung)
+    def drag_tree(src_id, dst_id, pos='top'):
+        return p.ev("""const src = document.querySelector('#left-body .node[data-id="' + arg.s + '"]');
+          const dst = document.querySelector('#left-body .node[data-id="' + arg.d + '"]');
+          if (!src || !dst) return { ok: false };
+          const r = dst.getBoundingClientRect();
+          const cy = arg.pos === 'top' ? r.top + 3 : arg.pos === 'bottom' ? r.bottom - 3 : r.top + r.height / 2;
+          const dt = new DataTransfer();
+          src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          dst.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientY: cy, dataTransfer: dt }));
+          const cls = [...dst.classList];
+          dst.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, clientY: cy, dataTransfer: dt }));
+          src.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          return { ok: true, cls };""", {'s': src_id, 'd': dst_id, 'pos': pos})
+
+    # 1. Zwei unabhängige Löcher tauschen die Reihenfolge → erlaubt, Ergebnis bleibt gleich
+    d1 = drag_tree(h2id, h1id, 'top')
+    p.wait(400); warte_rechnen(p)
+    order1 = p.ev("return App.doc.items.map(x => x.id)")
+    v2 = vol()
+    # Auch zwei unabhängige Schnitt-Schritte (op: cut) tauschen
+    p.ev("""App.change('x', d => {
+      d.items = [];
+      const b = Model.newItem('box', {w:40, d:30, h:10}, {name:'Grundkörper'});
+      const c1 = Model.newItem('cylinder', {d:6, h:20}, {name:'Schnitt 1'}); c1.t.x = -10; c1.t.z = -5; c1.op = {type:'cut', target:b.id};
+      const c2 = Model.newItem('cylinder', {d:6, h:20}, {name:'Schnitt 2'}); c2.t.x = 10; c2.t.z = -5; c2.op = {type:'cut', target:b.id};
+      d.items.push(b, c1, c2);
+    })"""); warte_rechnen(p); p.wait(300)
+    cids = p.ev("return App.doc.items.map(x => x.id)")
+    vc1 = p.ev("return Mass.measure().then(r => r.volume)")
+    dc = drag_tree(cids[2], cids[1], 'top')
+    p.wait(400); warte_rechnen(p)
+    cids2 = p.ev("return App.doc.items.map(x => x.id)")
+    vc2 = p.ev("return Mass.measure().then(r => r.volume)")
+    ok1 = (
+        d1['ok'] and 'drop-before' in d1['cls'] and 'drop-bad' not in d1['cls']
+        and order1 == [bid, h2id, h1id]
+        and v1 is not None and v2 is not None and abs(v1 - v2) < 0.1
+        and p.ev("return App.errors.length") == 0
+        and dc['ok'] and 'drop-bad' not in dc['cls'] and cids2 == [cids[0], cids[2], cids[1]]
+        and abs(vc1 - vc2) < 0.1 and p.ev("return App.errors.length") == 0
+    )
+
+    # 2. Loch (bzw. abhängigen Schritt) vor seinen Körper ziehen → rot gezeigt (.drop-bad) und abgelehnt
+    # Auch Elternkörper hinter abhängigen Schnitt-Schritt ziehen → rot und abgelehnt
+    d_cut_bad = drag_tree(cids[2], cids[0], 'top')
+    p.wait(300)
+    d_parent_bad = drag_tree(cids[0], cids[2], 'bottom')
+    p.wait(300)
+    cids_after_bad = p.ev("return App.doc.items.map(x => x.id)")
+    # Zurück auf Platte + 2 Löcher und Loch vor Platte ziehen
+    p.ev("""App.change('x', d => {
+      d.items = [];
+      const b = Model.newItem('box', {w:40, d:30, h:10}, {name:'Platte'});
+      const h1 = Model.newItem('cylinder', {d:6, h:20}, {name:'Loch 1', role:'hole'}); h1.t.x = -10; h1.t.z = -5;
+      const h2 = Model.newItem('cylinder', {d:6, h:20}, {name:'Loch 2', role:'hole'}); h2.t.x = 10; h2.t.z = -5;
+      d.items.push(b, h1, h2);
+    })"""); warte_rechnen(p); p.wait(300)
+    ids = p.ev("return App.doc.items.map(x => x.id)")
+    bid, h1id, h2id = ids[0], ids[1], ids[2]
+    d_hole_bad = drag_tree(h1id, bid, 'top')
+    p.wait(300)
+    toasts = ' '.join(p.pg.locator('.toast').all_inner_texts())
+    d_box_bad = drag_tree(bid, h1id, 'bottom')
+    p.wait(300)
+    ids_after_bad = p.ev("return App.doc.items.map(x => x.id)")
+    ok2 = (
+        'drop-before' in d_hole_bad['cls'] and 'drop-bad' in d_hole_bad['cls']
+        and 'drop-after' in d_box_bad['cls'] and 'drop-bad' in d_box_bad['cls']
+        and ids_after_bad == [bid, h1id, h2id]
+        and 'verschoben' in toasts.lower()
+        and 'drop-bad' in d_cut_bad['cls'] and 'drop-bad' in d_parent_bad['cls']
+        and cids_after_bad == cids2
+    )
+
+    # 3. Ordner mit 2 Schritten anlegen und zuklappen (Volumen bleibt gleich)
+    v_before_fld = vol()
+    p.ev("App.select(arg)", [h1id, h2id]); p.wait(300)
+    has_btn = p.pg.locator('#btn-tree-folder').count() == 1
+    p.pg.locator('#btn-tree-folder').click(); p.wait(400); warte_rechnen(p)
+    flds = p.ev("return App.doc.folders || []")
+    fid = flds[0]['id'] if flds else None
+    children_open = p.pg.locator(f'li[data-folder-li="{fid}"] .folder-list .node').count() if fid else 0
+    # Zuklappen per Klick auf Dreieck
+    p.pg.locator(f'button[data-folder-toggle="{fid}"]').click(); p.wait(300)
+    collapsed_flag = p.ev("return App.doc.folders[0].collapsed")
+    children_closed = p.pg.locator(f'li[data-folder-li="{fid}"] .folder-list .node').count()
+    # Wieder aufklappen
+    p.pg.locator(f'button[data-folder-toggle="{fid}"]').click(); p.wait(300)
+    reopened_flag = p.ev("return App.doc.folders[0].collapsed")
+    children_reopen = p.pg.locator(f'li[data-folder-li="{fid}"] .folder-list .node').count()
+    v_after_fld = vol()
+    # Auflösen & Rückgängig prüfen
+    p.ev("Actions.ungroupFolder(arg)", fid); p.wait(300)
+    after_ungroup = p.ev("return (App.doc.folders || []).length")
+    p.ev("App.undo()"); p.wait(300)
+    after_undo_ungroup = p.ev("return (App.doc.folders || []).length")
+    ok3 = (
+        has_btn and len(flds) == 1 and set(flds[0]['ids']) == {h1id, h2id}
+        and p.pg.locator('.folder-node').count() == 1
+        and children_open == 2 and collapsed_flag is True and children_closed == 0
+        and reopened_flag is False and children_reopen == 2
+        and abs(v_before_fld - v_after_fld) < 0.1
+        and after_ungroup == 0 and after_undo_ungroup == 1
+    )
+
+    # 4. Duplizieren → 2 gleiche Schritte (über Rechtsklick-Menü im Verlauf)
+    p.pg.locator(f'#left-body .node[data-id="{h1id}"]').click(button='right'); p.wait(300)
+    has_dup_menu = p.pg.locator('#tm-dup').count() == 1
+    p.pg.locator('#tm-dup').click(); p.wait(500); warte_rechnen(p)
+    items_dup = p.ev("return App.doc.items.map(x => ({id:x.id, name:x.name, kind:x.kind, role:x.role, p:x.p, t:x.t}))")
+    fld_after_dup = p.ev("return App.doc.folders[0].ids")
+    same_holes = [x for x in items_dup if x['name'] == 'Loch 1']
+    p.ev("App.undo()"); p.wait(400); warte_rechnen(p)
+    count_undo_dup = p.ev("return App.doc.items.length")
+    ok4 = (
+        has_dup_menu and len(items_dup) == 4 and len(same_holes) == 2
+        and same_holes[0]['id'] != same_holes[1]['id']
+        and same_holes[0]['kind'] == same_holes[1]['kind']
+        and same_holes[0]['role'] == same_holes[1]['role']
+        and same_holes[0]['p'] == same_holes[1]['p']
+        and abs(same_holes[1]['t']['x'] - same_holes[0]['t']['x'] - 10) < 0.01
+        and len(fld_after_dup) == 3
+        and p.ev("return App.errors.length") == 0
+        and count_undo_dup == 3
+    )
+
+    # 5. Hilfetexte prüfen
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok5 = all(
+        bool((hilfen.get(k) or {}).get('tip') and (hilfen.get(k) or {}).get('hilfe') and (hilfen.get(k) or {}).get('tipp'))
+        for k in ('treeReorder', 'treeFolder', 'treeDuplicate')
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8531,6 +8685,7 @@ TESTS = [
     ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
     ('[A-031] Rippe (KP-06): offene Schale mit diagonaler Rippe / einseitig & Formel / Schräge / Zeitleiste, Stützrippe & Hilfe', t_a031_rippe),
     ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
+    ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

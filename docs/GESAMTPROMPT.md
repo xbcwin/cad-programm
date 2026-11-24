@@ -202,6 +202,7 @@ Leitlinien:
   - Unterdrücken; Fehler rot mit Klartext und Lösungstipp
   - Ein Schritt hinter dem Marker zeigt nur „Marker dahinter“
   - Überfahren eines Schritts zeigt kurz den Stand nach diesem Schritt (`App.peek`)
+  - Verlauf links: Umsortieren per Ziehen mit Abhängigkeitsprüfung (`Model.validateMove`/`validateTopOrder`, rote Markierung `.drop-bad` bei verletzter Reihenfolge), organisatorische Ordner (`doc.folders`, `Model.folderOf`/`cleanFolders`, `Actions.reorder`/`createFolder`/`toggleFolder`/`renameFolder`/`ungroupFolder`/`removeFromFolder`) und direktes Duplizieren je Schritt (`Actions.duplicate`)
 - Protokoll; Rückgängig/Wiederholen (300)
 - Maße-Tabelle mit Formeln, Varianten und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren

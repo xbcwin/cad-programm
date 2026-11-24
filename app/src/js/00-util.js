@@ -1235,6 +1235,21 @@ const HELP = {
   "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
   "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
   "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
+ },
+ "treeReorder": {
+  "tip": "Schritte im Verlauf per Ziehen umsortieren",
+  "hilfe": "Zieh einen Schritt oder einen Ordner im Verlauf an eine neue Stelle, um die Reihenfolge zu ändern. Unabhängige Schritte lassen sich frei tauschen – nicht erlaubte Plätze (etwa ein Loch oder abhängiger Schritt vor seinem Zielkörper) werden rot markiert und beim Loslassen abgelehnt.",
+  "tipp": "Wenn du auf die grüne/rote Linie achtest, siehst du schon beim Ziehen, ob der neue Platz erlaubt ist."
+ },
+ "treeFolder": {
+  "tip": "Mehrere gewählte Schritte in einen auf- und zuklappbaren Ordner legen",
+  "hilfe": "Wähle zwei oder mehr Schritte mit Umschalt + Klick und klick auf „In Ordner“ (oder nutze das Rechtsklick-Menü). Ein Ordner hält den Verlauf links übersichtlich und lässt sich auf- und zuklappen, umbenennen, als Ganzes verschieben und jederzeit wieder auflösen – die 3D-Körper bleiben davon unberührt.",
+  "tipp": "Per Doppelklick auf den Ordnernamen benennst du ihn um; weitere Schritte ziehst du einfach direkt auf den Ordner."
+ },
+ "treeDuplicate": {
+  "tip": "Schritt im Verlauf duplizieren",
+  "hilfe": "Legt direkt hinter dem gewählten Schritt eine exakte Kopie mit denselben Maßen und derselben Rolle an (10 mm versetzt). Steckt der Schritt in einem Ordner, landet die Kopie direkt daneben im selben Ordner.",
+  "tipp": "Du kannst dafür auch das Kopieren-Symbol in der Zeile oder Strg + D nutzen."
  }
 };
 

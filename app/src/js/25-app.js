@@ -45,6 +45,7 @@ const App = (() => {
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     placeNewAtMarker(S.doc, topBefore);
     Model.syncLinks(S.doc);
+    Model.cleanFolders(S.doc);
     const last = S.undo[S.undo.length - 1];
     if (opts.amend) { /* gehört zum letzten Schritt (z. B. nachgeführte Kanten): kein eigener Rückgängig-Schritt */ }
     else if (opts.merge && last && last.merge === opts.merge && Date.now() - last.t < 1500) { last.t = Date.now(); }

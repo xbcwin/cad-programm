@@ -237,6 +237,7 @@ const Commands = (() => {
     add('redo', 'Wiederholen', 'redo', 'vor', () => App.redo(), { group: 'Bearbeiten', kbd: 'Strg Y' });
     add('delete', 'Auswahl löschen', 'trash', 'entfernen weg', () => Actions.remove(), { group: 'Bearbeiten', kbd: 'Entf', needSel: true });
     add('dup', 'Duplizieren', 'copy', 'kopieren kopie', () => Actions.duplicate(), { group: 'Bearbeiten', kbd: 'Strg D', needSel: true });
+    add('tree-folder', 'In Ordner legen', 'folder', 'ordner verlauf schritte zusammenfassen gruppieren', () => Actions.createFolder(), { group: 'Verlauf', needSel: true });
     add('group', 'Gruppieren', 'group', 'verbinden vereinen zusammenfügen kombinieren', () => Actions.group(), { group: 'Bearbeiten', kbd: 'Strg G', needSel: true });
     add('ungroup', 'Gruppe lösen', 'ungroup', 'trennen auflösen', () => Actions.ungroup(), { group: 'Bearbeiten', needSel: true });
     add('hole', 'Zwischen Körper und Loch wechseln', 'hole', 'loch körper umschalten aussparung', () => Actions.toggleRole(), { group: 'Bearbeiten', kbd: 'H', needSel: true });

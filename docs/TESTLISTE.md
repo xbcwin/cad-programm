@@ -1681,6 +1681,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
 
+## Verlauf umsortieren, Ordner, duplizieren (Auto [A-034])
+
+- [x] **Unabhängige Schritte umsortieren**: Zwei unabhängige Löcher sowie zwei unabhängige Schnitt-Formschritte lassen sich im Verlauf per Ziehen vertauschen; das 3D-Volumen bleibt identisch und es entstehen keine Fehler.
+- [x] **Abhängige Reihenfolge rot markiert und abgelehnt**: Das Ziehen eines Lochs vor seinen Körper, eines Körpers hinter sein Loch oder eines Schnitt-Schritts vor seinen Zielkörper markiert die Zielzeile rot (`.drop-bad`), lehnt das Ablegen ab und meldet den Grund.
+- [x] **Ordner anlegen, auf-/zuklappen & auflösen**: Mehrere gewählte Schritte lassen sich über „In Ordner“ (`#btn-tree-folder`) in einen Ordner (`doc.folders`) legen, ohne das 3D-Modell zu verändern; Zuklappen blendet die enthaltenen Schritte im Baum ein/aus, Auflösen und Rückgängig funktionieren.
+- [x] **Duplizieren & Hilfetexte**: „Duplizieren“ im Rechtsklick-Menü des Verlaufs legt eine gleiche Kopie direkt hinter dem Schritt (auch innerhalb eines Ordners) mit Rückgängig an; Hilfetexte (`treeReorder`, `treeFolder`, `treeDuplicate`) sind vorhanden.
+- [ ] **Von Hand**: Im Browser Schritte mit der Maus direkt in einen Ordner hinein- und herausziehen, einen ganzen Ordner verschieben sowie per Doppelklick umbenennen.
+
 ## Fehler melden
 
 ```
