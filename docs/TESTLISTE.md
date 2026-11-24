@@ -2062,6 +2062,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Dialoge**: Die Dialoge Einstellungen (`ViewPrefs.dialog()`), Export (`Print.exportDialog()`) und Tastenkürzel (`Commands.showKeys()`) kommen vollständig über `T()` mit höchstens 5 Ausnahmen im DOM.
 - [ ] **Von Hand**: Test-Modus (`I18n.setTestMode(true)`) im Browser über alle Arbeitsschritte (Skizzen-Assistent, Bohrungs-Assistent, Werkzeugleiste anpassen, Stückliste, Versionen) durchklicken und prüfen, ob alle Hinweise und Tooltips sauber markiert sind.
 
+## Volltest-Reparatur (Auto [F-11241334])
+
+- [x] **Veraltete `mergedInto`-Bezüge beim Löschen**: Nach dem Löschen des Zielkörpers (`Block`) eines Formschritts (`Bolzen`) liefert `App.mergedInto()` sofort `null`; synchrones Neuzeichnen von Verlauf (`Panels.renderLeft()`) und Eigenschaften (`Panels.renderRight()`) noch vor Abschluss von `rebuild()` wirft keinen Seitenfehler und zeigt im rechten Panel den Hinweis für das fehlende Ziel.
+- [x] **Rückgängig & Lösch-Hinweis (`Actions.remove`)**: `App.undo()` stellt den `mergedInto`-Bezug wieder her und `Actions.remove()` zeigt beim Löschen mit abhängigem Teil ohne Seitenfehler den Toast „Daran hingen …“.
+- [ ] **Von Hand**: Im Browser zwei Körper mit Boolesch-Abzug anlegen, den Zielkörper über Verlauf oder Entfernen-Taste löschen und prüfen, dass Verlauf und Eigenschaften sofort sauber ohne Fehlermeldung aktualisieren.
+
 ## Fehler melden
 
 ```

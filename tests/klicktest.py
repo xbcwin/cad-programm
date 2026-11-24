@@ -15944,6 +15944,58 @@ def t_a077_nur_geandertes_rechnen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_f11241334(p):
+    p.empty()
+    ids = p.ev("""return App.change('x', d => {
+      const a = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Block' }); d.items.push(a);
+      const b = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bolzen' }); b.t.z = -5; b.op = { type: 'cut', target: a.id }; d.items.push(b);
+      const c = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Kopie' }); c.link = a.id; c.t.x = 60; d.items.push(c);
+      return [a.id, b.id, c.id];
+    })""")
+    warte_rechnen(p)
+    aid, bid, _cid = ids
+    ok1 = p.ev("return App.mergedInto(arg[1]) === arg[0]", [aid, bid])
+    # Während Block gelöscht wird und das asynchrone rebuild() noch läuft,
+    # dürfen renderLeft() und renderRight() (auch bei gewähltem Bolzen) nicht crashen.
+    p.ev("App.select([arg])", bid)
+    res = p.ev("""const [aid, bid] = arg;
+      let err = null;
+      let mergedAfter = null;
+      App.change('Gelöscht', d => {
+        const i = d.items.findIndex(x => x.id === aid);
+        if (i >= 0) d.items.splice(i, 1);
+      });
+      try {
+        mergedAfter = App.mergedInto(bid);
+        Panels.renderLeft();
+        Panels.renderRight();
+      } catch (e) {
+        err = String(e);
+      }
+      const leftTxt = document.querySelector('#left-body')?.textContent || '';
+      const hintTxt = document.querySelector('#op-sec .hint-box')?.textContent || '';
+      return { err, mergedAfter, hasBolzen: leftTxt.includes('Bolzen'), hasMissingHint: hintTxt === T('panel.op.missingHint') };
+    """, [aid, bid])
+    ok2 = (
+        res['err'] is None
+        and res['mergedAfter'] is None
+        and res['hasBolzen']
+        and res['hasMissingHint']
+        and not p.errs
+    )
+    warte_rechnen(p)
+    p.ev("App.undo()"); warte_rechnen(p)
+    restored = p.ev("return App.mergedInto(arg[1]) === arg[0]", [aid, bid])
+    # Gleiches Szenario über Actions.remove (wie in t_bezuege) samt sofortigem Re-Render vor rebuild()
+    p.ev("App.select([arg[1]])", [aid, bid])
+    p.ev("Actions.remove([arg[0]]); Panels.renderLeft(); Panels.renderRight();", [aid, bid])
+    p.wait(400)
+    warte_rechnen(p)
+    toast_txt = p.pg.locator('.toast').last.inner_text() if p.pg.locator('.toast').count() else ''
+    ok3 = restored and ('Daran hingen' in toast_txt) and not p.errs
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16125,6 +16177,7 @@ TESTS = [
     ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
+    ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
