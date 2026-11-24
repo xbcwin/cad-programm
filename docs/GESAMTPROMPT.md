@@ -93,7 +93,7 @@ Leitlinien:
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
@@ -102,12 +102,12 @@ Leitlinien:
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen, `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
-| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“, Kontextleiste |
+| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“ (sofort bei Auswahl), Kontextleiste |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |
 | `53-views.js` | Schnitt, Röntgen, Explosion, Fokus-Vorschau, Überhänge |
 | `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
-| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten |
+| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten, Re-Entranz-Schutz in `render()` |
 | `56-notes.js` | Notizstift |
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |

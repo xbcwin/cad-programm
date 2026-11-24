@@ -6402,7 +6402,7 @@ const Viewer = (() => {
   const raycaster = new THREE.Raycaster();
   const theme = {};
   let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
-  let camAnim = null, camAnimTimer = null, inLoopCam = false;
+  let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
   const vis = { clip: null, clips: [], capEnabled: true, xray: false };
@@ -6430,7 +6430,7 @@ const Viewer = (() => {
     orthoCam.quaternion.copy(camera.quaternion); orthoCam.up.copy(camera.up);
     orthoCam.updateProjectionMatrix(); orthoCam.updateMatrixWorld();
   }
-  function cam() { if (ortho) { syncOrtho(); return orthoCam; } return camera; }
+  function cam() { if (ortho) { syncOrtho(); return orthoCam; } camera.updateMatrixWorld(); return camera; }
   function setOrtho(on) { ortho = !!on; needsRender = true; listeners.emit('camera'); }
   const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4();
   function boxVisible(box) { const c = cam(); c.updateMatrixWorld(); _pm.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm); return _fr.intersectsBox(box); }
@@ -6717,7 +6717,7 @@ const Viewer = (() => {
     inLoopCam = true;
     const moved = controls.update();
     inLoopCam = false;
-    if (camMoved || moved) listeners.emit('camera');
+    if (camMoved || moved) { camera.updateMatrixWorld(); listeners.emit('camera'); }
     const now = performance.now();
     if (camAnim) lastMotion = now;
     else if (moved) {   // nur echte Bewegung zählt, nicht das lange Ausrollen der Dämpfung
@@ -7432,6 +7432,7 @@ const Viewer = (() => {
     return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, behind: p.z > 1 };
   }
   function pixelSizeAt(point) {
+    syncCamAnim();
     const hgt = container.clientHeight || 1;
     if (ortho) return (2 * orthoHalfH()) / hgt;
     const d = camera.position.distanceTo(point);
@@ -7503,11 +7504,15 @@ const Viewer = (() => {
     if (controls._panOffset) controls._panOffset.set(0, 0, 0);
     if ('_scale' in controls) controls._scale = 1;
   }
+  function scheduleCamEmit() {
+    if (camEmitTimer) return;
+    camEmitTimer = setTimeout(() => { camEmitTimer = null; listeners.emit('camera'); }, 0);
+  }
   function cancelCamAnim() {
     camAnim = null;
     if (camAnimTimer) { clearTimeout(camAnimTimer); camAnimTimer = null; }
   }
-  function finishCamAnim() {
+  function finishCamAnim(deferEmit = false) {
     if (!camAnim) return;
     const a = camAnim;
     cancelCamAnim();
@@ -7518,11 +7523,16 @@ const Viewer = (() => {
     inLoopCam = true;
     controls.update();
     inLoopCam = false;
+    camera.updateMatrixWorld();
     needsRender = true;
-    listeners.emit('camera');
+    if (deferEmit) scheduleCamEmit();
+    else {
+      if (camEmitTimer) { clearTimeout(camEmitTimer); camEmitTimer = null; }
+      listeners.emit('camera');
+    }
   }
   function syncCamAnim() {
-    if (camAnim && performance.now() - camAnim.t0 >= camAnim.dur) finishCamAnim();
+    if (camAnim && performance.now() - camAnim.t0 >= camAnim.dur) finishCamAnim(true);
   }
   function moveCamera(pos, target, up, animate = true) {
     pushCam(false);
@@ -7531,6 +7541,7 @@ const Viewer = (() => {
     if (!animate) {
       camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up);
       inLoopCam = true; controls.update(); inLoopCam = false;
+      camera.updateMatrixWorld();
       needsRender = true; listeners.emit('camera'); return;
     }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
@@ -12645,7 +12656,7 @@ const Panels = (() => {
         const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; unbind(f.item.p.path3d, i); }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
         const BD = it.p.path3d.bind || [];
         // Regel je Stück: Richtung (entlang X/Y/Z) und Länge – wie in einer Skizze, nur im Raum
-        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, V3); });
+        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, Model.vars(doc).v); });
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
         sec.append(fs);
@@ -13131,8 +13142,9 @@ const Panels = (() => {
     App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
-    const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
+    const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
+    App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
@@ -17917,9 +17929,13 @@ const Sketch = (() => {
     const s = Viewer.toScreen(toWorld(uv[0], uv[1])); el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
     return el;
   }
+  let rendering = false, renderAgain = false;
   function render() {
     if (!S) return;
-    clearGroup();
+    if (rendering) { renderAgain = true; return; }
+    rendering = true;
+    try {
+      clearGroup();
     bgDraw();
     const th = Viewer.theme; const ink = th.dark ? '#cfe3df' : '#123b37', acc = th.accent, muted = th.dark ? '#7f8c99' : '#8a96a3';
     // Raster in der Ebene
@@ -17994,8 +18010,9 @@ const Sketch = (() => {
       el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
       $('#overlay').append(el); labels.push(el);
       const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-      const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
-      for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+      const br = el.getBoundingClientRect();
+      const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18; let ly = spx.y;
+      for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
       placed.push([spx.x, ly, lw, lh]);
       el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
@@ -18068,8 +18085,9 @@ const Sketch = (() => {
           const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
           $('#overlay').append(el); labels.push(el);
           const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-          const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
-          for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+          const br = el.getBoundingClientRect();
+          const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18; let ly = spx.y;
+          for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
           placed.push([spx.x, ly, lw, lh]);
           el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
         }
@@ -18241,8 +18259,12 @@ const Sketch = (() => {
       snapMarker(c.kind, w, ps, acc);
       if (c.tip) { const l = label(c.tip, w, 'snaptip'); }
     }
-    if (isLoftLine()) loftPreview();
-    Viewer.requestRender();
+      if (isLoftLine()) loftPreview();
+      Viewer.requestRender();
+    } finally {
+      rendering = false;
+    }
+    if (renderAgain) { renderAgain = false; render(); }
   }
   // Form des Fangpunkts zeigt, was gefangen wurde
   function snapMarker(kind, w, ps, col) {

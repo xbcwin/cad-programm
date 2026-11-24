@@ -1625,6 +1625,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **CFF/OTF-Hinweis & Hilfe**: Eine CFF/OTF-Datei meldet „noch nicht unterstützt“ ohne das Projekt zu verändern; Hilfetext `loadFont` vorhanden.
 - [ ] **Von Hand**: Im Browser eine dekorative TrueType-Schrift vom eigenen Rechner auf einem Schild im Bogen und entlang einer Kurve testen sowie die lesbare Schrift-Auswahl nach „In Kurven umwandeln“ prüfen.
 
+## Volltest-Reparatur (Auto [F-11240211])
+
+- [x] **Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation**: Bei überfälligem `camAnim` während `Sketch.render()`/`Sketch.setTool()` entstehen genau zwei sichtbare, nicht überlappende `.skdim`-Schildchen (sofort und nach dem verzögerten `camera`-Event).
+- [x] **Eigenschaften-Panel sofort bei Auswahl**: Nach `App.select(...)` auf ein 3D-Rohr sind `#p3-ax-0`/`#p3-ax-1` sofort ohne Wartezeit im DOM und schalten zuverlässig auf `perp` um.
+- [ ] **Von Hand**: In einer Skizze mit mehreren Maßen am selben Punkt zügig drehen/zoomen und prüfen, dass sich keine Maß-Schildchen doppeln oder überdecken.
+
 ## Fehler melden
 
 ```

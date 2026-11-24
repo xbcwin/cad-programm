@@ -782,7 +782,7 @@ const Panels = (() => {
         const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; unbind(f.item.p.path3d, i); }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
         const BD = it.p.path3d.bind || [];
         // Regel je Stück: Richtung (entlang X/Y/Z) und Länge – wie in einer Skizze, nur im Raum
-        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, V3); });
+        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, Model.vars(doc).v); });
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
         sec.append(fs);
@@ -1268,8 +1268,9 @@ const Panels = (() => {
     App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
-    const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
+    const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
+    App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }

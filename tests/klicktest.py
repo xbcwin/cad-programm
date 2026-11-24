@@ -7431,6 +7431,53 @@ def t_eigene_schrift(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_f11240211(p):
+    # 1. Schildchen ohne Re-Entranz und mit aktueller Kamera-Matrix bei überfälliger camAnim
+    p.empty()
+    r1 = p.ev("""
+      const origST = window.setTimeout, origRAF = window.requestAnimationFrame;
+      window.setTimeout = (fn, ms, ...a) => (ms >= 400 && ms <= 500) ? 0 : origST(fn, ms, ...a);
+      window.requestAnimationFrame = () => 1;
+      try {
+        Sketch.startOnPlane('XY');
+      } finally {
+        window.setTimeout = origST;
+        window.requestAnimationFrame = origRAF;
+      }
+      const t0 = performance.now();
+      while (performance.now() - t0 < 460) {}
+      const S = Sketch.state;
+      S.ents.push({id:'P',type:'point',a:[0,0]});
+      S.dims.push({id:'d1',e:'P',k:'x',v:0},{id:'d2',e:'P',k:'y',v:0});
+      Sketch.setTool('select');
+      return [...document.querySelectorAll('.skdim')].map(e => {
+        const b = e.getBoundingClientRect();
+        return [b.left, b.top, b.right, b.bottom];
+      });
+    """)
+    p.wait(250)
+    r2 = p.ev("return [...document.querySelectorAll('.skdim')].map(e=>{const b=e.getBoundingClientRect(); return [b.left,b.top,b.right,b.bottom]})")
+    def clean(rs):
+        if len(rs) != 2:
+            return False
+        vis = all(0 < b[0] and b[2] < 1400 and 0 < b[1] and b[3] < 850 for b in rs)
+        no_ov = not (rs[0][0] < rs[1][2] and rs[1][0] < rs[0][2] and rs[0][1] < rs[1][3] and rs[1][1] < rs[0][3])
+        return vis and no_ov
+    ok1 = clean(r1) and clean(r2)
+
+    # 2. Eigenschaften-Panel aktualisiert bei App.select sofort (ohne 16-ms-Debounce-Lücke)
+    p.ev("Sketch.cancel(true)"); p.wait(200)
+    p.ev("App.change('x', d=>{ const it=Model.newItem('sweep',{path3d:{pts:[[0,0,0],[10,0,10],[25,3,12]],smooth:false},shape:'circle',d:3,w:3,h:3,wall:0},{name:'Rohr'}); d.items.push(it); })"); warte_rechnen(p, 30)
+    opts = p.ev("""
+      App.select([App.doc.items[0].id]);
+      return [document.querySelectorAll('#p3-ax-0 option').length, document.querySelectorAll('#p3-ax-1 option').length];
+    """)
+    p.pg.select_option('#p3-ax-1', 'perp'); warte_rechnen(p, 30)
+    pts = p.ev("return Model.path3dPoints(App.doc.items[0].p.path3d, Model.vars(App.doc).v).map(q=>q.map(v=>Math.round(v*1000)/1000))")
+    ok2 = opts == [4, 6] and pts[2] == [16.5, 3, 3.5] and p.ev("return App.errors.length") == 0
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -7555,6 +7602,7 @@ TESTS = [
     ('[A-022] Skizze fertig bestimmen: Rechteck & Kreis / Regeln <2° & <0,05 mm / gestrichelte Vorschau & Abbrechen / Übernehmen & Rückgängig / Einfach & Profi', t_a022_skizze_fertig_bestimmen),
     ('[A-025] Ganze Fläche in die Skizze, mit Versatz: 4 Linien + 1 Kreis / verbunden / Versatz +2 mm (44×34, Ø6) / Versatz −2 mm / folgt Körperänderung & Rückgängig', t_a025_flaeche_uebernehmen),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
+    ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

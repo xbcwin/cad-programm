@@ -2872,9 +2872,13 @@ const Sketch = (() => {
     const s = Viewer.toScreen(toWorld(uv[0], uv[1])); el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
     return el;
   }
+  let rendering = false, renderAgain = false;
   function render() {
     if (!S) return;
-    clearGroup();
+    if (rendering) { renderAgain = true; return; }
+    rendering = true;
+    try {
+      clearGroup();
     bgDraw();
     const th = Viewer.theme; const ink = th.dark ? '#cfe3df' : '#123b37', acc = th.accent, muted = th.dark ? '#7f8c99' : '#8a96a3';
     // Raster in der Ebene
@@ -2949,8 +2953,9 @@ const Sketch = (() => {
       el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
       $('#overlay').append(el); labels.push(el);
       const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-      const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
-      for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+      const br = el.getBoundingClientRect();
+      const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18; let ly = spx.y;
+      for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
       placed.push([spx.x, ly, lw, lh]);
       el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
@@ -3023,8 +3028,9 @@ const Sketch = (() => {
           const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
           $('#overlay').append(el); labels.push(el);
           const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-          const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
-          for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+          const br = el.getBoundingClientRect();
+          const lw = Math.ceil(br.width) || el.offsetWidth || 40, lh = Math.ceil(br.height) || el.offsetHeight || 18; let ly = spx.y;
+          for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 + 1 && Math.abs(q[1] - ly) < (q[3] + lh) / 2 + 1); k++) ly += lh + 3;
           placed.push([spx.x, ly, lw, lh]);
           el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
         }
@@ -3196,8 +3202,12 @@ const Sketch = (() => {
       snapMarker(c.kind, w, ps, acc);
       if (c.tip) { const l = label(c.tip, w, 'snaptip'); }
     }
-    if (isLoftLine()) loftPreview();
-    Viewer.requestRender();
+      if (isLoftLine()) loftPreview();
+      Viewer.requestRender();
+    } finally {
+      rendering = false;
+    }
+    if (renderAgain) { renderAgain = false; render(); }
   }
   // Form des Fangpunkts zeigt, was gefangen wurde
   function snapMarker(kind, w, ps, col) {
