@@ -14674,6 +14674,127 @@ def t_a068_toleranzen_passungen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11241146(p):
+    # 1. Adaptive Auflösung erholt sich auch bei rAF-Stau über zeitkompensierte Dämpfung und Timer-Fallback
+    three(p)
+    p.ev("Viewer.setAdaptive(true, 0)")
+    cx, cy = p.canvas_center()
+    x0, y0 = cx - 300, cy + 200
+    tief = False
+    zurueck = False
+    try:
+        p.pg.mouse.move(x0, y0); p.pg.mouse.down()
+        for i in range(14):
+            p.pg.mouse.move(x0 + i * 12, y0 - i * 4); p.wait(40)
+            tief = tief or p.ev("return Viewer.lowRes")
+        p.ev("""
+          window.__f11241146OrigRaf = window.requestAnimationFrame;
+          window.__f11241146Raf = [];
+          window.requestAnimationFrame = (cb) => {
+            window.__f11241146Raf.push(cb);
+            return window.__f11241146Raf.length;
+          };
+        """)
+        p.pg.mouse.up()
+        for _ in range(16):
+            p.wait(250)
+            zurueck = p.ev("return !Viewer.lowRes && Viewer.pixelRatio === window.devicePixelRatio")
+            if zurueck:
+                break
+    finally:
+        p.ev("""
+          if (window.__f11241146OrigRaf) {
+            const orig = window.__f11241146OrigRaf;
+            const q = (window.__f11241146Raf || []).splice(0);
+            window.requestAnimationFrame = orig;
+            delete window.__f11241146OrigRaf;
+            delete window.__f11241146Raf;
+            for (const cb of q) orig.call(window, cb);
+          }
+          Viewer.setAdaptive(true, 24);
+        """)
+    ok1 = bool(tief and zurueck)
+
+    # 2. askDim behält über onKey() getippte Ziffer, auch wenn requestAnimationFrame(grab) verzögert feuert
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""
+      App.change('x', d => {
+        const it = Model.newItem('extrude', {}, {});
+        it.p = {
+          sketch: {
+            plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+            ents: [{ id: 'R1', type: 'rect', a: [0, 0], b: [40, 30] }],
+            dims: [{ id: 'dw', e: 'R1', k: 'w', v: 40 }, { id: 'dh', e: 'R1', k: 'h', v: 30 }],
+            cons: []
+          },
+          dist: 3, dir: 'normal'
+        };
+        d.items.push(it);
+      });
+    """); p.wait(1000)
+    p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(900)
+    ok2 = False
+    try:
+        p.pg.keyboard.press('d'); p.wait(150)
+        s0 = to_screen(p, 0, 0); s2 = to_screen(p, 40, 30)
+        p.pg.mouse.click(s0[0], s0[1]); p.wait(200)
+        p.ev("""
+          window.__f11241146OrigRaf2 = window.requestAnimationFrame;
+          window.__f11241146Raf2 = [];
+          window.requestAnimationFrame = (cb) => {
+            window.__f11241146Raf2.push(cb);
+            return window.__f11241146Raf2.length;
+          };
+        """)
+        p.pg.mouse.click(s2[0], s2[1]); p.wait(100)
+        p.ev("Viewer.canvas.focus()")
+        p.pg.keyboard.press('6'); p.wait(60)
+        p.ev("""
+          if (window.__f11241146OrigRaf2) {
+            const orig = window.__f11241146OrigRaf2;
+            const q = (window.__f11241146Raf2 || []).splice(0);
+            window.requestAnimationFrame = orig;
+            delete window.__f11241146OrigRaf2;
+            delete window.__f11241146Raf2;
+            for (const cb of q) cb(performance.now());
+          }
+        """)
+        p.pg.keyboard.press('0'); p.wait(60)
+        p.pg.keyboard.press('Enter'); p.wait(450)
+        cf = SS(p, """
+          const rows = [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r => ({
+            id: r.dataset.confId,
+            txt: r.textContent || ''
+          }));
+          return rows;
+        """)
+        neu = next((r for r in cf if r['id'] == '_neu'), None)
+        if {r['id'] for r in cf} == {'dw', 'dh', '_neu'} and neu and '60' in neu['txt']:
+            p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="dh"] .sk-conf-del').click(); p.wait(400)
+            st = SS(p, """
+              const r = E('R1');
+              return {
+                hasBox: !!document.getElementById('sk-conflict'),
+                ok: !!(S.status && S.status.ok),
+                h: Math.abs(r.b[1] - r.a[1])
+              };
+            """)
+            ok2 = bool(not st['hasBox'] and st['ok'] and abs(st['h'] - math.sqrt(60**2 - 40**2)) < 0.05)
+    finally:
+        p.ev("""
+          if (window.__f11241146OrigRaf2) {
+            const orig = window.__f11241146OrigRaf2;
+            const q = (window.__f11241146Raf2 || []).splice(0);
+            window.requestAnimationFrame = orig;
+            delete window.__f11241146OrigRaf2;
+            delete window.__f11241146Raf2;
+            for (const cb of q) orig.call(window, cb);
+          }
+          if (Sketch.active) Sketch.cancel(true);
+        """)
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -14848,6 +14969,7 @@ TESTS = [
     ('[A-066] Zeichnung: Mittellinien automatisch (4 Mittelkreuze, 4 Mittellinien, einzeln ausblendbar)', t_a066_mittellinien),
     ('[A-069] Zeichnung: Maß-Stil (Pfeile, Schriftgröße 5, Nachkommastellen) & Hinweislinie (wandert mit Ansicht)', t_a069_mass_stil_hinweislinie),
     ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
+    ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
