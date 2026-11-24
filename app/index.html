@@ -937,6 +937,25 @@ body.presenting .pat-dot{display:none!important}
 .pat-chip{min-width:28px;height:26px;padding:0 7px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font:600 12px/1 var(--font-mono);cursor:pointer;transition:border-color .12s,background .12s}
 .pat-chip:hover{border-color:var(--accent);color:var(--accent)}
 .pat-chip.skipped{border-style:dashed;border-color:var(--bad);background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+
+/* Nachschlagetabellen unter „Maße“ & Formel-Fehleranzeige (KP-22) */
+.inp .fx.bad{color:var(--bad);font-weight:600}
+.field-err{font-size:11.5px;line-height:1.35;color:var(--bad);margin-top:2px}
+.param-tables{display:grid;gap:8px;margin-top:8px}
+.ptbl{border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:8px;display:grid;gap:6px}
+.ptbl-head{display:flex;align-items:center;gap:6px}
+.ptbl-name{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:4px 7px;font:600 13px/1.2 var(--font);color:var(--ink)}
+.ptbl-name:focus{border-color:var(--accent);outline:none}
+.ptbl-grid{display:grid;gap:4px}
+.ptbl-cols{display:grid;grid-template-columns:1fr 1fr 22px;gap:4px;font-size:11px;font-weight:600;color:var(--muted);padding:0 2px}
+.ptbl-row{display:grid;grid-template-columns:1fr 1fr 22px;gap:4px;align-items:center}
+.ptbl-key,.ptbl-val{width:100%;min-width:0;border:1px solid var(--line);border-radius:5px;background:var(--surface);padding:4px 6px;font-size:12.5px;color:var(--ink)}
+.ptbl-key:focus,.ptbl-val:focus{border-color:var(--accent);outline:none}
+.ptbl-val.invalid{border-color:var(--bad);background:var(--bad-soft)}
+.ptbl-rdel{width:22px;height:24px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:15px;line-height:1;display:inline-grid;place-items:center}
+.ptbl-rdel:hover{background:var(--bad-soft);color:var(--bad)}
+.ptbl-foot{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.ptbl-hint{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 </style>
 <div id="app">
   <header class="topbar">
@@ -1058,13 +1077,39 @@ function storageGet(k) { try { return localStorage.getItem(k); } catch (_) { ret
 function storageSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (_) { return false; } }
 function storageDel(k) { try { localStorage.removeItem(k); } catch (_) {} }
 
-// ---------- Formel-Rechner (für Parameter wie „Breite/2 + 3“) ----------
+// ---------- Formel-Rechner (für Parameter wie „Breite/2 + 3“, wenn, runden, tabelle) ----------
 const Expr = (() => {
-  const FN = {
-    min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt, wurzel: Math.sqrt,
-    round: Math.round, runden: Math.round, floor: Math.floor, ceil: Math.ceil,
-    sin: (d) => Math.sin((d * Math.PI) / 180), cos: (d) => Math.cos((d * Math.PI) / 180), tan: (d) => Math.tan((d * Math.PI) / 180),
+  const unquote = (s) => {
+    const t = String(s ?? '').trim();
+    return ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) && t.length >= 2 ? t.slice(1, -1) : t;
   };
+  function scanTableArgs(src, openIdx) {
+    let p = openIdx + 1, depth = 1, q = null, argStart = p;
+    const rawArgs = [];
+    while (p < src.length) {
+      const ch = src[p];
+      if (q) {
+        if (ch === '\\' && p + 1 < src.length) { p += 2; continue; }
+        if (ch === q) q = null;
+      } else {
+        if (ch === '"' || ch === "'") q = ch;
+        else if (ch === '(') depth++;
+        else if (ch === ')') {
+          depth--;
+          if (depth === 0) {
+            if (src.slice(openIdx + 1, p).trim() !== '' || rawArgs.length) rawArgs.push(src.slice(argStart, p));
+            p++;
+            return { rawArgs, end: p };
+          }
+        } else if (ch === ';' && depth === 1) {
+          rawArgs.push(src.slice(argStart, p));
+          argStart = p + 1;
+        }
+      }
+      p++;
+    }
+    throw new Error('Schließende Klammer ) bei tabelle(…) fehlt.');
+  }
   function tokenize(src) {
     const out = []; let i = 0;
     while (i < src.length) {
@@ -1072,59 +1117,268 @@ const Expr = (() => {
       if (/\s/.test(c)) { i++; continue; }
       if (/[0-9]/.test(c) || ((c === '.' || c === ',') && /[0-9]/.test(src[i + 1] || ''))) {
         let j = i; while (j < src.length && /[0-9.,]/.test(src[j])) j++;
-        const raw = src.slice(i, j).replace(',', '.');
-        if ((raw.match(/\./g) || []).length > 1) throw new Error('Zahl nicht lesbar: ' + src.slice(i, j));
+        const rawOrig = src.slice(i, j), raw = rawOrig.replace(/,/g, '.');
+        if ((raw.match(/\./g) || []).length > 1) {
+          throw new Error(`Zahl nicht lesbar: „${rawOrig}“ – trenne Angaben mit Semikolon ; (z. B. runden(2,345; 1)).`);
+        }
         let v = parseFloat(raw);
+        if (!isFinite(v)) throw new Error(`Zahl nicht lesbar: „${rawOrig}“.`);
         // Einheiten direkt hinter der Zahl: 2 cm, 1 in, 1", 0,5 m, 30° (Ergebnis immer in mm bzw. Grad)
         const um = /^\s*(mm|cm|m|in|zoll|"|°)(?![A-Za-zÄÖÜäöüß_0-9])/i.exec(src.slice(j));
         if (um) { v *= { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 }[um[1].toLowerCase()]; j += um[0].length; }
-        out.push({ t: 'n', v }); i = j; continue;
+        out.push({ t: 'n', v, s: i, e: j }); i = j; continue;
       }
       if (/[A-Za-zÄÖÜäöüß_]/.test(c)) {
         let j = i; while (j < src.length && /[A-Za-zÄÖÜäöüß_0-9]/.test(src[j])) j++;
-        out.push({ t: 'id', v: src.slice(i, j) }); i = j; continue;
+        const id = src.slice(i, j);
+        if (id.toLowerCase() === 'tabelle') {
+          let k = j; while (k < src.length && /\s/.test(src[k])) k++;
+          if (src[k] === '(') {
+            const sc = scanTableArgs(src, k);
+            out.push({ t: 'tcall', rawArgs: sc.rawArgs, s: i, e: sc.end });
+            i = sc.end;
+            continue;
+          }
+        }
+        out.push({ t: 'id', v: id, s: i, e: j }); i = j; continue;
       }
-      if ('+-*/^();'.includes(c)) { out.push({ t: c }); i++; continue; }
-      throw new Error('Unbekanntes Zeichen: ' + c);
+      if (c === '"' || c === "'") {
+        let j = i + 1, val = '';
+        while (j < src.length && src[j] !== c) {
+          if (src[j] === '\\' && j + 1 < src.length) { val += src[j + 1]; j += 2; }
+          else { val += src[j]; j++; }
+        }
+        if (j >= src.length) throw new Error('Anführungszeichen in der Formel nicht geschlossen.');
+        out.push({ t: 'str', v: val, s: i, e: j + 1 }); i = j + 1; continue;
+      }
+      const two = src.slice(i, i + 2);
+      if (two === '<=' || two === '>=' || two === '==' || two === '!=') {
+        out.push({ t: two, s: i, e: i + 2 }); i += 2; continue;
+      }
+      if (c === '=') throw new Error('Für Vergleiche nutze == statt = (z. B. wenn(b == 50; 3; 2)).');
+      if (c === '!') throw new Error('Meintest du != für „ungleich“?');
+      if (c === ',') throw new Error('Trenne mehrere Angaben in Funktionen mit Semikolon ; statt Komma (z. B. runden(2,345; 1)).');
+      if ('+-*/^();<>'.includes(c)) { out.push({ t: c, s: i, e: i + 1 }); i++; continue; }
+      throw new Error(`Unbekanntes Zeichen in der Formel: „${c}“.`);
     }
     return out;
   }
-  function parse(src, vars) {
-    const tk = tokenize(src); let p = 0;
+  const CMPS = new Set(['<', '>', '<=', '>=', '==', '!=']);
+  function normTables(raw) {
+    if (Array.isArray(raw)) return raw.filter((t) => t && t.name);
+    if (raw && typeof raw === 'object') {
+      return Object.entries(raw).map(([name, obj]) => ({
+        name,
+        rows: Array.isArray(obj) ? obj : Object.entries(obj || {}).map(([key, val]) => ({ key, val })),
+      }));
+    }
+    return [];
+  }
+  function roundMode(name, mode, args) {
+    if (args.length < 1 || args.length > 2) throw new Error(`${name} braucht 1 oder 2 Angaben, z. B. ${name}(2,345; 1).`);
+    const x = args[0], dRaw = args.length === 2 ? args[1] : 0;
+    if (Math.abs(dRaw - Math.round(dRaw)) > 1e-9) throw new Error(`Die Nachkommastellen in ${name} müssen eine ganze Zahl sein.`);
+    const d = Math.round(dRaw);
+    if (d < -12 || d > 12) throw new Error(`Die Nachkommastellen in ${name} müssen zwischen -12 und 12 liegen.`);
+    const f = Math.pow(10, d), s = x * f;
+    let c;
+    if (mode === 'round') c = Math.round(s + (s >= 0 ? 1e-12 : -1e-12));
+    else if (mode === 'ceil') c = Math.abs(s - Math.round(s)) < 1e-12 ? Math.round(s) : Math.ceil(s);
+    else c = Math.abs(s - Math.round(s)) < 1e-12 ? Math.round(s) : Math.floor(s);
+    const r = d >= 0 ? Number((c / f).toFixed(d)) : Math.round(c / f);
+    return Object.is(r, -0) ? 0 : r;
+  }
+  function parse(src, vars = {}, tables, depth = 0) {
+    const s = String(src ?? '');
+    if (!s.trim()) throw new Error('Formel ist leer.');
+    const tk = tokenize(s);
+    let p = 0;
     const peek = () => tk[p], next = () => tk[p++];
-    const expect = (t) => { const x = next(); if (!x || x.t !== t) throw new Error('Erwartet: ' + t); };
+    const expect = (t) => { const x = next(); if (!x || x.t !== t) throw new Error(`Erwartet: ${t}`); };
     function primary() {
       const x = next();
-      if (!x) throw new Error('Formel unvollständig');
-      if (x.t === 'n') return x.v;
-      if (x.t === '(') { const v = expr(); expect(')'); return v; }
-      if (x.t === '-') return -factor();
-      if (x.t === '+') return factor();
+      if (!x) throw new Error('Formel unvollständig – es fehlt eine Zahl oder ein Name.');
+      if (x.t === 'n') return { k: 'num', v: x.v };
+      if (x.t === '(') { const v = cmp(); expect(')'); return v; }
+      if (x.t === '-' || x.t === '+') return { k: 'un', op: x.t, a: pow() };
+      if (x.t === 'tcall') return { k: 'tcall', rawArgs: x.rawArgs };
       if (x.t === 'id') {
         const name = x.v;
         if (peek() && peek().t === '(') {
           next(); const args = [];
-          if (peek() && peek().t !== ')') { args.push(expr()); while (peek() && peek().t === ';') { next(); args.push(expr()); } }
+          if (peek() && peek().t !== ')') {
+            args.push(cmp());
+            while (peek() && peek().t === ';') { next(); args.push(cmp()); }
+          }
           expect(')');
-          const f = FN[name.toLowerCase()]; if (!f) throw new Error('Unbekannte Funktion: ' + name);
-          return f(...args);
+          const low = name.toLowerCase();
+          if (low === 'wenn' || low === 'if') {
+            if (args.length !== 3) throw new Error('wenn braucht 3 Angaben: wenn(Bedingung; dann; sonst).');
+            return { k: 'if', c: args[0], a: args[1], b: args[2] };
+          }
+          return { k: 'call', name, args };
         }
-        if (/^pi$/i.test(name)) return Math.PI;
-        const key = Object.keys(vars).find((k) => k.toLowerCase() === name.toLowerCase());
-        if (key === undefined) throw new Error('Unbekannter Name: ' + name);
+        return { k: 'var', name };
+      }
+      throw new Error(`Unerwartetes Zeichen „${x.v ?? x.t}“ in der Formel.`);
+    }
+    function pow() {
+      const v = primary();
+      if (peek() && peek().t === '^') { next(); return { k: 'bin', op: '^', l: v, r: pow() }; }
+      return v;
+    }
+    function mul() {
+      let v = pow();
+      while (peek() && (peek().t === '*' || peek().t === '/')) { const op = next().t; v = { k: 'bin', op, l: v, r: pow() }; }
+      return v;
+    }
+    function add() {
+      let v = mul();
+      while (peek() && (peek().t === '+' || peek().t === '-')) { const op = next().t; v = { k: 'bin', op, l: v, r: mul() }; }
+      return v;
+    }
+    function cmp() {
+      const v = add();
+      if (peek() && CMPS.has(peek().t)) {
+        const op = next().t, r = add();
+        if (peek() && CMPS.has(peek().t)) throw new Error('Vergleiche lassen sich nicht direkt verketten – nutze verschachtelte wenn(…)-Ausdrücke.');
+        return { k: 'bin', op, l: v, r };
+      }
+      return v;
+    }
+    const ast = cmp();
+    if (p < tk.length) throw new Error(`Formel nicht lesbar ab „${tk[p].v ?? tk[p].t}“.`);
+
+    const rawTbls = tables !== undefined ? tables : (vars && vars.__tables) || [];
+    const tblList = normTables(rawTbls);
+
+    function lookupTable(rawArgs) {
+      if (rawArgs.length !== 2) throw new Error('tabelle braucht Name und Schlüssel, z. B. tabelle(Schraube; M5).');
+      const tName = unquote(rawArgs[0]);
+      if (!tName) throw new Error('Tabellenname in tabelle(…) fehlt.');
+      const tbl = tblList.find((tb) => String(tb.name || '').trim().toLowerCase() === tName.toLowerCase());
+      if (!tbl) {
+        if (!tblList.length) throw new Error(`Tabelle „${tName}“ nicht gefunden – leg sie links unter „Maße“ an.`);
+        throw new Error(`Tabelle „${tName}“ nicht gefunden (vorhanden: ${tblList.map((t) => t.name).join(', ')}).`);
+      }
+      const rawKey = String(rawArgs[1] ?? '').trim();
+      if (!rawKey) throw new Error(`Schlüssel in tabelle(${tbl.name}; …) fehlt.`);
+      const isQuoted = ((rawKey.startsWith('"') && rawKey.endsWith('"')) || (rawKey.startsWith("'") && rawKey.endsWith("'"))) && rawKey.length >= 2;
+      const litKey = unquote(rawKey);
+      const rows = Array.isArray(tbl.rows) ? tbl.rows : [];
+      const findRow = (kStr, kNum) => {
+        const ks = String(kStr ?? '').trim(), kl = ks.toLowerCase(), kn = kl.replace(/,/g, '.');
+        let r = rows.find((x) => String(x.key ?? '').trim().toLowerCase() === kl);
+        if (r) return r;
+        r = rows.find((x) => String(x.key ?? '').trim().toLowerCase().replace(/,/g, '.') === kn);
+        if (r) return r;
+        if (kNum != null && isFinite(kNum)) {
+          r = rows.find((x) => { const rn = parseNum(x.key); return isFinite(rn) && Math.abs(rn - kNum) <= 1e-9; });
+          if (r) return r;
+        }
+        return null;
+      };
+      let row = findRow(litKey, parseNum(litKey));
+      if (!row && !isQuoted) {
+        let kv = NaN, okKey = false;
+        try { kv = parse(rawKey, vars, rawTbls, depth + 1); okKey = true; } catch (_) {}
+        if (okKey) {
+          row = findRow(String(kv), kv);
+          if (!row) throw new Error(`Schlüssel „${fmt(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+        }
+      }
+      if (!row) throw new Error(`Schlüssel „${litKey}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+      if (typeof row.val === 'number') {
+        if (!isFinite(row.val)) throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ ist keine gültige Zahl.`);
+        return row.val;
+      }
+      const rv = String(row.val ?? '').trim();
+      if (!rv) throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ fehlt.`);
+      if (depth >= 16) throw new Error(`Tabelle „${tbl.name}“ verweist im Kreis auf sich selbst.`);
+      try {
+        return parse(rv, vars, rawTbls, depth + 1);
+      } catch (e) {
+        throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ ist ungültig: ${e.message}`);
+      }
+    }
+
+    function evalNode(node) {
+      if (node.k === 'num') return node.v;
+      if (node.k === 'un') { const a = evalNode(node.a); return node.op === '-' ? -a : +a; }
+      if (node.k === 'if') {
+        const cv = evalNode(node.c);
+        return Math.abs(cv) > 1e-12 ? evalNode(node.a) : evalNode(node.b);
+      }
+      if (node.k === 'tcall') return lookupTable(node.rawArgs);
+      if (node.k === 'var') {
+        if (/^pi$/i.test(node.name)) return Math.PI;
+        const key = Object.keys(vars || {}).find((k) => k.toLowerCase() === node.name.toLowerCase());
+        if (key === undefined) throw new Error(`Unbekanntes Maß „${node.name}“ – leg es links unter „Maße“ an.`);
         return vars[key];
       }
-      throw new Error('Unerwartet: ' + x.t);
+      if (node.k === 'call') {
+        const args = node.args.map(evalNode);
+        const low = node.name.toLowerCase();
+        if (low === 'runden' || low === 'round') return roundMode(node.name, 'round', args);
+        if (low === 'aufrunden' || low === 'ceil') return roundMode(node.name, 'ceil', args);
+        if (low === 'abrunden' || low === 'floor') return roundMode(node.name, 'floor', args);
+        if (low === 'min' || low === 'max') {
+          if (args.length < 1) throw new Error(`${node.name} braucht mindestens eine Zahl.`);
+          return low === 'min' ? Math.min(...args) : Math.max(...args);
+        }
+        if (low === 'abs') { if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`); return Math.abs(args[0]); }
+        if (low === 'sqrt' || low === 'wurzel') {
+          if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
+          if (args[0] < 0) throw new Error('Wurzel aus einer negativen Zahl ist nicht möglich.');
+          return Math.sqrt(args[0]);
+        }
+        if (low === 'sin' || low === 'cos' || low === 'tan') {
+          if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
+          return Math[low]((args[0] * Math.PI) / 180);
+        }
+        throw new Error(`Unbekannte Funktion „${node.name}“.`);
+      }
+      if (node.k === 'bin') {
+        const l = evalNode(node.l), r = evalNode(node.r), op = node.op;
+        if (op === '+') return l + r;
+        if (op === '-') return l - r;
+        if (op === '*') return l * r;
+        if (op === '/') { if (Math.abs(r) === 0) throw new Error('Division durch 0 ist nicht möglich.'); return l / r; }
+        if (op === '^') return Math.pow(l, r);
+        const tol = 1e-9 * Math.max(1, Math.abs(l), Math.abs(r));
+        if (op === '==') return Math.abs(l - r) <= tol ? 1 : 0;
+        if (op === '!=') return Math.abs(l - r) > tol ? 1 : 0;
+        if (op === '<') return l < r - tol ? 1 : 0;
+        if (op === '>') return l > r + tol ? 1 : 0;
+        if (op === '<=') return l <= r + tol ? 1 : 0;
+        if (op === '>=') return l >= r - tol ? 1 : 0;
+      }
+      throw new Error('Formel nicht lesbar.');
     }
-    function factor() { let v = primary(); while (peek() && peek().t === '^') { next(); v = Math.pow(v, factor()); } return v; }
-    function term() { let v = factor(); while (peek() && (peek().t === '*' || peek().t === '/')) { const o = next().t; const r = factor(); v = o === '*' ? v * r : v / r; } return v; }
-    function expr() { let v = term(); while (peek() && (peek().t === '+' || peek().t === '-')) { const o = next().t; const r = term(); v = o === '+' ? v + r : v - r; } return v; }
-    const v = expr();
-    if (p < tk.length) throw new Error('Formel nicht lesbar');
-    if (!isFinite(v)) throw new Error('Ergebnis ist keine Zahl');
+
+    const v = evalNode(ast);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error('Ergebnis ist keine gültige Zahl.');
     return v;
   }
-  return { eval: parse, names(src) { try { return tokenize(src).filter((t) => t.t === 'id').map((t) => t.v); } catch (_) { return []; } } };
+  function tryEval(src, vars, tables) {
+    try { return { ok: true, value: parse(src, vars, tables) }; }
+    catch (e) { return { ok: false, error: e && e.message ? e.message : 'Formel nicht lesbar.' }; }
+  }
+  function names(src) {
+    try {
+      const out = [];
+      for (const t of tokenize(String(src ?? ''))) {
+        if (t.t === 'id') out.push(t.v);
+        else if (t.t === 'tcall') {
+          out.push('tabelle');
+          if (t.rawArgs[0]) { const tn = unquote(t.rawArgs[0]); if (tn) out.push(tn); }
+          if (t.rawArgs[1]) out.push(...names(t.rawArgs[1]));
+        }
+      }
+      return out;
+    } catch (_) { return []; }
+  }
+  return { eval: parse, tryEval, names };
 })();
 
 // ---------- Einheiten je Projekt (BE-10): Anzeige und Eingabe in mm, cm, m oder Zoll; intern immer mm ----------
@@ -1210,9 +1464,9 @@ const Units = (() => {
       } catch (_) {}
     }
     if (!expr) return { ok: false };
-    const ev = typeof Model !== 'undefined' ? Model.num(s, V || {}, NaN) : (() => { try { return Expr.eval(s, V || {}); } catch (_) { return NaN; } })();
-    if (!isFinite(ev)) return { ok: false };
-    return { ok: true, value: s, num: ev };
+    const res = typeof Model !== 'undefined' && Model.evalInfo ? Model.evalInfo(s, V || {}) : Expr.tryEval(s, V || {});
+    if (!res.ok || !isFinite(res.value)) return { ok: false, error: res.error };
+    return { ok: true, value: s, num: res.value };
   }
   function set(u) {
     if (!DEFS[u] || typeof App === 'undefined' || !App.doc || key() === u) return false;
@@ -2295,6 +2549,11 @@ const HELP = {
   "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
   "hilfe": "Wählt im Bohrungs-Assistenten die Gewindenorm: Metrisch Regelgewinde (M1.6–M12), Metrisch Feingewinde (z. B. M8×1, M10×1,25 nach DIN 13 / DIN 336), Zoll-Gewinde UNC und UNF (#4 bis 1/2\" nach ASME B1.1 mit 82°-Senkung) oder zylindrisches Rohrgewinde G1/8 bis G1 (ISO 228-1 mit Flachsenkung nach DIN 3852-2).",
   "tipp": "Für zöllige Kameragehäuse oder US-Bauteile wählst du UNC/UNF; bei Hydraulik-, Pneumatik- oder Schlauchanschlüssen passt Rohrgewinde G."
+ },
+ "formulaTable": {
+  "tip": "Nachschlagetabelle für Formeln anlegen",
+  "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
+  "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
  }
 };
 
@@ -2911,7 +3170,7 @@ const Model = (() => {
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
-      params: [], items: [], notes: [],
+      params: [], tables: [], items: [], notes: [],
       settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
@@ -3046,14 +3305,21 @@ const Model = (() => {
     it.t = { x: round(pos.x, 6), y: round(pos.y, 6), z: round(pos.z, 6), rx: r(e.x), ry: r(e.y), rz: r(e.z) };
   }
 
-  // ---------- Parameter ----------
+  // ---------- Parameter & Tabellen ----------
   function vars(doc) {
     const v = {}, errors = {};
+    const tables = (doc && Array.isArray(doc.tables)) ? doc.tables : [];
+    Object.defineProperty(v, '__tables', { value: tables, enumerable: false, configurable: true });
     for (const p of doc.params || []) {
-      try { v[p.name] = Expr.eval(String(p.expr), v); }
+      try { v[p.name] = Expr.eval(String(p.expr), v, tables); }
       catch (e) { errors[p.id] = e.message; v[p.name] = 0; }
     }
     return { v, errors };
+  }
+  function evalInfo(val, V) {
+    if (typeof val === 'number') return isFinite(val) ? { ok: true, value: val } : { ok: false, error: 'Ergebnis ist keine gültige Zahl.' };
+    if (val == null || String(val).trim() === '') return { ok: false, error: 'Formel ist leer.' };
+    return Expr.tryEval(String(val), V || {});
   }
   function num(val, V, fallback = 0) {
     if (typeof val === 'number') return isFinite(val) ? val : fallback;
@@ -3755,6 +4021,8 @@ const Model = (() => {
   function migrate(doc) {
     if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Tracery-Projektdatei.');
     doc.params = doc.params || []; doc.items = doc.items || [];
+    if (!Array.isArray(doc.tables)) doc.tables = [];
+    for (const t of doc.tables) { if (!t || typeof t !== 'object') continue; if (!Array.isArray(t.rows)) t.rows = []; }
     doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' }, doc.settings || {});
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
@@ -4059,7 +4327,7 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 14-ttf.js ----
@@ -5717,7 +5985,8 @@ const Solver = (() => {
     const names = new Set();
     for (const d of sketch.dims || []) if (typeof d.v === 'string') for (const n of Expr.names(d.v)) names.add(n);
     const vv = [...names].map((n) => { const k = Object.keys(V || {}).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? V[k] : null; });
-    const key = JSON.stringify([sketch.ents, sketch.dims || [], sketch.cons || [], vv]);
+    const tbls = V && V.__tables ? V.__tables : null;
+    const key = JSON.stringify([sketch.ents, sketch.dims || [], sketch.cons || [], vv, tbls]);
     if (memo.has(key)) { const r = memo.get(key); memo.delete(key); memo.set(key, r); return r; }
     const r = solve(sketch, V);
     memo.set(key, r); if (memo.size > 60) memo.delete(memo.keys().next().value);
@@ -16390,29 +16659,38 @@ const UI = (() => {
     const dispVal = typeof value === 'number' ? (isLen ? Units.fmtInput(value) : fmt(value, 3)) : (value ?? '');
     const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
     box.append(inp);
+    let badErr = null;
     if (isE) {
-      const ev = Model.num(value, V, NaN);
-      const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
-      const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
-      const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
-      box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+      const res = Expr.tryEval(value, V);
+      if (res.ok) {
+        const ev = res.value;
+        const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
+        const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
+        const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
+        box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+      } else {
+        badErr = res.error;
+        box.classList.add('invalid');
+        box.append(h('span', { class: 'fx bad', title: res.error }, '! Fehler'));
+      }
     } else if (dispUnit) box.append(h('span', { class: 'unit' }, dispUnit));
     wrap.append(box);
+    if (badErr) wrap.append(h('div', { class: 'field-err' }, badErr));
     let orig = inp.value, lastBad = null;
     const commit = () => {
       const raw = inp.value.trim();
-      if (raw === orig) { box.classList.remove('invalid'); lastBad = null; return; }
+      if (raw === orig) { if (!badErr) box.classList.remove('invalid'); lastBad = null; return; }
       let val;
       if (isLen) {
         const p = Units.parseLen(raw, Model.vars(App.doc).v, { expr });
-        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“ – prüf die Schreibweise oder den Namen.'), { kind: 'bad' }); lastBad = raw; return; }
         val = p.value;
       } else {
         val = parseNum(raw);
         if (isNaN(val)) {
           if (!expr) { box.classList.add('invalid'); return; }
-          const vv = Model.num(raw, Model.vars(App.doc).v, NaN);
-          if (isNaN(vv)) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+          const res = Expr.tryEval(raw, Model.vars(App.doc).v);
+          if (!res.ok) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); lastBad = raw; return; }
           val = raw;
         }
       }
@@ -17101,6 +17379,103 @@ const Panels = (() => {
     const csvIn = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-in', 'data-help': 'paramsCsv' }); csvIn.innerHTML = icon('folder') + 'CSV laden';
     csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); };
     wrap.append(h('div', { class: 'btn-row' }, csvOut, csvIn));
+    // Kleine Nachschlagetabellen (KP-22): zwei Spalten Schlüssel & Wert für tabelle(Name; Schlüssel)
+    const tblSec = h('div', { class: 'section param-tables', id: 'param-tables-sec' }, h('div', { class: 'section-h' }, 'Tabellen'));
+    const tbls = App.doc.tables || [];
+    if (!tbls.length) {
+      tblSec.append(h('div', { class: 'hint-box', html: 'Kleine Nachschlagetabellen mit zwei Spalten (Schlüssel und Wert) – nutzbar in Formeln wie <b>tabelle(Schraube; M5)</b>.' }));
+    }
+    for (const tb of tbls) {
+      const card = h('div', { class: 'ptbl', dataset: { tableId: tb.id, tableName: tb.name } });
+      const head = h('div', { class: 'ptbl-head' });
+      const tNameIn = h('input', { id: 'ptn-' + tb.id, class: 'ptbl-name', value: tb.name, 'aria-label': 'Tabellenname', spellcheck: 'false' });
+      tNameIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') tNameIn.blur(); if (e.key === 'Escape') { tNameIn.value = tb.name; tNameIn.blur(); } });
+      tNameIn.addEventListener('change', (e) => {
+        const nv = e.target.value.trim().replace(/\s+/g, '_');
+        if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nv)) { UI.toast('Tabellennamen dürfen nur Buchstaben, Ziffern und _ enthalten und nicht mit einer Ziffer beginnen.', { kind: 'bad' }); e.target.value = tb.name; return; }
+        renameTable(tb.id, nv);
+      });
+      const tDel = h('button', { type: 'button', class: 'btn ghost small danger ptbl-del', 'data-tip': 'Tabelle entfernen', 'aria-label': 'Tabelle entfernen' });
+      tDel.innerHTML = icon('trash');
+      tDel.onclick = () => removeTable(tb.id);
+      head.append(tNameIn, tDel);
+      card.append(head);
+      const grid = h('div', { class: 'ptbl-grid' }, h('div', { class: 'ptbl-cols' }, h('span', null, 'Schlüssel'), h('span', null, 'Wert'), h('span', null)));
+      for (const r of tb.rows || []) {
+        const rowEl = h('div', { class: 'ptbl-row', dataset: { rowId: r.id } });
+        const kIn = h('input', { id: 'ptk-' + r.id, class: 'ptbl-key', value: r.key ?? '', placeholder: 'z. B. M5', 'aria-label': 'Schlüssel', spellcheck: 'false' });
+        kIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') kIn.blur(); if (e.key === 'Escape') { kIn.value = r.key ?? ''; kIn.blur(); } });
+        kIn.addEventListener('change', () => {
+          const nk = kIn.value.trim();
+          if (!nk) { UI.toast('Bitte einen Schlüssel für die Zeile angeben.', { kind: 'bad' }); kIn.value = r.key ?? ''; return; }
+          if (nk === r.key) return;
+          App.change('Tabellenschlüssel geändert', (doc) => {
+            const t = (doc.tables || []).find((x) => x.id === tb.id);
+            const row = t && (t.rows || []).find((x) => x.id === r.id);
+            if (!row) return false;
+            row.key = nk;
+          });
+        });
+        const valStr = typeof r.val === 'number' ? fmt(r.val, 6) : (r.val ?? '');
+        const vIn = h('input', { id: 'ptv-' + r.id, class: 'ptbl-val mono', value: valStr, placeholder: 'Wert', 'aria-label': 'Wert', spellcheck: 'false' });
+        vIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') vIn.blur(); if (e.key === 'Escape') { vIn.value = valStr; vIn.classList.remove('invalid'); vIn.blur(); } });
+        vIn.addEventListener('change', () => {
+          const raw = vIn.value.trim();
+          if (!raw) { vIn.classList.add('invalid'); UI.toast('Bitte eine Zahl oder Formel eingeben.', { kind: 'bad' }); return; }
+          const n = parseNum(raw);
+          let nextVal = raw;
+          if (!isNaN(n)) nextVal = n;
+          else {
+            const res = Expr.tryEval(raw, Model.vars(App.doc).v, App.doc.tables || []);
+            if (!res.ok) { vIn.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); return; }
+          }
+          vIn.classList.remove('invalid');
+          if (String(nextVal) === String(r.val)) return;
+          App.change('Tabellenwert geändert', (doc) => {
+            const t = (doc.tables || []).find((x) => x.id === tb.id);
+            const row = t && (t.rows || []).find((x) => x.id === r.id);
+            if (!row) return false;
+            row.val = nextVal;
+          }, { merge: 'tbl:' + r.id });
+        });
+        const rDel = h('button', { type: 'button', class: 'ptbl-rdel', 'data-tip': 'Zeile entfernen', 'aria-label': 'Zeile entfernen' }, '×');
+        rDel.onclick = () => App.change('Tabellenzeile entfernt', (doc) => {
+          const t = (doc.tables || []).find((x) => x.id === tb.id);
+          if (!t) return false;
+          t.rows = (t.rows || []).filter((x) => x.id !== r.id);
+        });
+        rowEl.append(kIn, vIn, rDel);
+        grid.append(rowEl);
+      }
+      card.append(grid);
+      const foot = h('div', { class: 'ptbl-foot' });
+      const addRow = h('button', { type: 'button', class: 'btn ghost small ptbl-addrow', id: 'ptadd-' + tb.id });
+      addRow.innerHTML = icon('plus') + 'Zeile';
+      addRow.onclick = () => App.change('Tabellenzeile hinzugefügt', (doc) => {
+        const t = (doc.tables || []).find((x) => x.id === tb.id);
+        if (!t) return false;
+        t.rows = t.rows || [];
+        let k = 'Neu', idx = 1;
+        while (t.rows.some((x) => String(x.key).toLowerCase() === k.toLowerCase())) { idx++; k = 'Neu' + idx; }
+        t.rows.push({ id: uid('tr'), key: k, val: 10 });
+      });
+      const sampleKey = (tb.rows && tb.rows[0] && tb.rows[0].key) ? tb.rows[0].key : 'Schlüssel';
+      foot.append(addRow, h('span', { class: 'ptbl-hint mono', title: `Formel: tabelle(${tb.name}; ${sampleKey})` }, `tabelle(${tb.name}; ${sampleKey})`));
+      card.append(foot);
+      tblSec.append(card);
+    }
+    const addTbl = h('button', { type: 'button', class: 'btn small', id: 'par-table-add', 'data-help': 'formulaTable' });
+    addTbl.innerHTML = icon('plus') + 'Tabelle hinzufügen';
+    addTbl.onclick = () => {
+      let n = 1;
+      while ((App.doc.tables || []).some((x) => x.name.toLowerCase() === ('tabelle' + n))) n++;
+      App.change('Tabelle hinzugefügt', (doc) => {
+        doc.tables = doc.tables || [];
+        doc.tables.push({ id: uid('tb'), name: 'Tabelle' + n, rows: [{ id: uid('tr'), key: 'A', val: 10 }, { id: uid('tr'), key: 'B', val: 20 }] });
+      });
+    };
+    tblSec.append(h('div', { class: 'btn-row' }, addTbl));
+    wrap.append(tblSec);
     body.append(wrap);
   }
   function paramsCSV() {
@@ -17134,7 +17509,7 @@ const Panels = (() => {
   // Fenster mit Schreibweise und 12 Beispielen zum Ausprobieren
   function formulaHelp() {
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
-    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Klammern, <b>pi</b> und die Funktionen <b>min, max, abs, wurzel, runden, floor, ceil, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
+    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Vergleiche <b>&lt; &gt; &lt;= &gt;= == !=</b>, Klammern, <b>pi</b> und die Funktionen <b>wenn(Bedingung; dann; sonst)</b>, <b>runden(x; Stellen)</b>, <b>aufrunden</b>, <b>abrunden</b>, <b>tabelle(Name; Schlüssel)</b>, <b>min, max, abs, wurzel, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
     const demo = Object.entries(FORMULA_DEMO).map(([k, x]) => `${k} = ${x}`).join(', ');
     box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px' } }, 'Die Ergebnisse gelten für ' + demo + '.'));
     const list = h('div', { class: 'formula-list' });
@@ -17151,14 +17526,32 @@ const Panels = (() => {
     if (missing.length) actions.unshift({ label: 'Beispiel-Maße anlegen', run: () => { App.change('Beispiel-Maße angelegt', (doc) => { for (const k of missing) doc.params.push({ id: uid('m'), name: k, expr: FORMULA_DEMO[k] }); }); UI.toast(missing.length + ' Maße angelegt – jetzt kannst du die Formeln überall eintippen.', { icon: 'check' }); } });
     UI.modal({ title: 'Formel-Beispiele', body: box, actions });
   }
-  // ersetzt einen Maßnamen überall (Maße, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
+  // ersetzt einen Maßnamen überall (Maße, Tabellen, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
   function replaceName(doc, old, repl) {
     const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß_0-9])' + old.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(?![A-Za-zÄÖÜäöüß_0-9])', 'gi');
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
+  }
+  function replaceTableName(doc, old, repl) {
+    const re = new RegExp('(tabelle\\s*\\(\\s*["\']?)' + old.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(["\']?\\s*;)', 'gi');
+    const fix = (s) => typeof s === 'string' ? s.replace(re, (_, a, b) => a + repl + b) : s;
+    for (const q of doc.params || []) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+  }
+  function renameTable(id, nv) {
+    const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb || tb.name === nv) return;
+    if ((App.doc.tables || []).some((x) => x.id !== id && x.name.toLowerCase() === nv.toLowerCase())) { UI.toast('Eine Tabelle mit diesem Namen gibt es schon.', { kind: 'bad' }); renderLeft(); return; }
+    const old = tb.name;
+    App.change('Tabelle umbenannt', (doc) => { const t = (doc.tables || []).find((x) => x.id === id); if (!t) return false; t.name = nv; replaceTableName(doc, old, nv); });
+  }
+  function removeTable(id) {
+    const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb) return;
+    App.change('Tabelle entfernt', (doc) => { doc.tables = (doc.tables || []).filter((x) => x.id !== id); });
   }
   function renameParam(id, nv) {
     const p = App.doc.params.find((x) => x.id === id); if (!p || p.name === nv) return;
@@ -21311,11 +21704,12 @@ const Sketch = (() => {
       let v;
       if (isLen) {
         const p = Units.parseLen(raw, vars(), { expr: true });
-        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.'), { kind: 'bad' }); return; }
         v = p.value;
       } else {
         const n = parseNum(raw); v = isNaN(n) ? raw : n;
-        if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+        const res = typeof v === 'number' ? { ok: isFinite(v) } : Expr.tryEval(v, vars());
+        if (!res.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + (res.error || '„' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.'), { kind: 'bad' }); return; }
       }
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
@@ -31448,11 +31842,11 @@ ${AI.modelText()}`;
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix };
+  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr };
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units, Expr }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

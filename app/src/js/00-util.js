@@ -50,13 +50,39 @@ function storageGet(k) { try { return localStorage.getItem(k); } catch (_) { ret
 function storageSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (_) { return false; } }
 function storageDel(k) { try { localStorage.removeItem(k); } catch (_) {} }
 
-// ---------- Formel-Rechner (für Parameter wie „Breite/2 + 3“) ----------
+// ---------- Formel-Rechner (für Parameter wie „Breite/2 + 3“, wenn, runden, tabelle) ----------
 const Expr = (() => {
-  const FN = {
-    min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt, wurzel: Math.sqrt,
-    round: Math.round, runden: Math.round, floor: Math.floor, ceil: Math.ceil,
-    sin: (d) => Math.sin((d * Math.PI) / 180), cos: (d) => Math.cos((d * Math.PI) / 180), tan: (d) => Math.tan((d * Math.PI) / 180),
+  const unquote = (s) => {
+    const t = String(s ?? '').trim();
+    return ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) && t.length >= 2 ? t.slice(1, -1) : t;
   };
+  function scanTableArgs(src, openIdx) {
+    let p = openIdx + 1, depth = 1, q = null, argStart = p;
+    const rawArgs = [];
+    while (p < src.length) {
+      const ch = src[p];
+      if (q) {
+        if (ch === '\\' && p + 1 < src.length) { p += 2; continue; }
+        if (ch === q) q = null;
+      } else {
+        if (ch === '"' || ch === "'") q = ch;
+        else if (ch === '(') depth++;
+        else if (ch === ')') {
+          depth--;
+          if (depth === 0) {
+            if (src.slice(openIdx + 1, p).trim() !== '' || rawArgs.length) rawArgs.push(src.slice(argStart, p));
+            p++;
+            return { rawArgs, end: p };
+          }
+        } else if (ch === ';' && depth === 1) {
+          rawArgs.push(src.slice(argStart, p));
+          argStart = p + 1;
+        }
+      }
+      p++;
+    }
+    throw new Error('Schließende Klammer ) bei tabelle(…) fehlt.');
+  }
   function tokenize(src) {
     const out = []; let i = 0;
     while (i < src.length) {
@@ -64,59 +90,268 @@ const Expr = (() => {
       if (/\s/.test(c)) { i++; continue; }
       if (/[0-9]/.test(c) || ((c === '.' || c === ',') && /[0-9]/.test(src[i + 1] || ''))) {
         let j = i; while (j < src.length && /[0-9.,]/.test(src[j])) j++;
-        const raw = src.slice(i, j).replace(',', '.');
-        if ((raw.match(/\./g) || []).length > 1) throw new Error('Zahl nicht lesbar: ' + src.slice(i, j));
+        const rawOrig = src.slice(i, j), raw = rawOrig.replace(/,/g, '.');
+        if ((raw.match(/\./g) || []).length > 1) {
+          throw new Error(`Zahl nicht lesbar: „${rawOrig}“ – trenne Angaben mit Semikolon ; (z. B. runden(2,345; 1)).`);
+        }
         let v = parseFloat(raw);
+        if (!isFinite(v)) throw new Error(`Zahl nicht lesbar: „${rawOrig}“.`);
         // Einheiten direkt hinter der Zahl: 2 cm, 1 in, 1", 0,5 m, 30° (Ergebnis immer in mm bzw. Grad)
         const um = /^\s*(mm|cm|m|in|zoll|"|°)(?![A-Za-zÄÖÜäöüß_0-9])/i.exec(src.slice(j));
         if (um) { v *= { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 }[um[1].toLowerCase()]; j += um[0].length; }
-        out.push({ t: 'n', v }); i = j; continue;
+        out.push({ t: 'n', v, s: i, e: j }); i = j; continue;
       }
       if (/[A-Za-zÄÖÜäöüß_]/.test(c)) {
         let j = i; while (j < src.length && /[A-Za-zÄÖÜäöüß_0-9]/.test(src[j])) j++;
-        out.push({ t: 'id', v: src.slice(i, j) }); i = j; continue;
+        const id = src.slice(i, j);
+        if (id.toLowerCase() === 'tabelle') {
+          let k = j; while (k < src.length && /\s/.test(src[k])) k++;
+          if (src[k] === '(') {
+            const sc = scanTableArgs(src, k);
+            out.push({ t: 'tcall', rawArgs: sc.rawArgs, s: i, e: sc.end });
+            i = sc.end;
+            continue;
+          }
+        }
+        out.push({ t: 'id', v: id, s: i, e: j }); i = j; continue;
       }
-      if ('+-*/^();'.includes(c)) { out.push({ t: c }); i++; continue; }
-      throw new Error('Unbekanntes Zeichen: ' + c);
+      if (c === '"' || c === "'") {
+        let j = i + 1, val = '';
+        while (j < src.length && src[j] !== c) {
+          if (src[j] === '\\' && j + 1 < src.length) { val += src[j + 1]; j += 2; }
+          else { val += src[j]; j++; }
+        }
+        if (j >= src.length) throw new Error('Anführungszeichen in der Formel nicht geschlossen.');
+        out.push({ t: 'str', v: val, s: i, e: j + 1 }); i = j + 1; continue;
+      }
+      const two = src.slice(i, i + 2);
+      if (two === '<=' || two === '>=' || two === '==' || two === '!=') {
+        out.push({ t: two, s: i, e: i + 2 }); i += 2; continue;
+      }
+      if (c === '=') throw new Error('Für Vergleiche nutze == statt = (z. B. wenn(b == 50; 3; 2)).');
+      if (c === '!') throw new Error('Meintest du != für „ungleich“?');
+      if (c === ',') throw new Error('Trenne mehrere Angaben in Funktionen mit Semikolon ; statt Komma (z. B. runden(2,345; 1)).');
+      if ('+-*/^();<>'.includes(c)) { out.push({ t: c, s: i, e: i + 1 }); i++; continue; }
+      throw new Error(`Unbekanntes Zeichen in der Formel: „${c}“.`);
     }
     return out;
   }
-  function parse(src, vars) {
-    const tk = tokenize(src); let p = 0;
+  const CMPS = new Set(['<', '>', '<=', '>=', '==', '!=']);
+  function normTables(raw) {
+    if (Array.isArray(raw)) return raw.filter((t) => t && t.name);
+    if (raw && typeof raw === 'object') {
+      return Object.entries(raw).map(([name, obj]) => ({
+        name,
+        rows: Array.isArray(obj) ? obj : Object.entries(obj || {}).map(([key, val]) => ({ key, val })),
+      }));
+    }
+    return [];
+  }
+  function roundMode(name, mode, args) {
+    if (args.length < 1 || args.length > 2) throw new Error(`${name} braucht 1 oder 2 Angaben, z. B. ${name}(2,345; 1).`);
+    const x = args[0], dRaw = args.length === 2 ? args[1] : 0;
+    if (Math.abs(dRaw - Math.round(dRaw)) > 1e-9) throw new Error(`Die Nachkommastellen in ${name} müssen eine ganze Zahl sein.`);
+    const d = Math.round(dRaw);
+    if (d < -12 || d > 12) throw new Error(`Die Nachkommastellen in ${name} müssen zwischen -12 und 12 liegen.`);
+    const f = Math.pow(10, d), s = x * f;
+    let c;
+    if (mode === 'round') c = Math.round(s + (s >= 0 ? 1e-12 : -1e-12));
+    else if (mode === 'ceil') c = Math.abs(s - Math.round(s)) < 1e-12 ? Math.round(s) : Math.ceil(s);
+    else c = Math.abs(s - Math.round(s)) < 1e-12 ? Math.round(s) : Math.floor(s);
+    const r = d >= 0 ? Number((c / f).toFixed(d)) : Math.round(c / f);
+    return Object.is(r, -0) ? 0 : r;
+  }
+  function parse(src, vars = {}, tables, depth = 0) {
+    const s = String(src ?? '');
+    if (!s.trim()) throw new Error('Formel ist leer.');
+    const tk = tokenize(s);
+    let p = 0;
     const peek = () => tk[p], next = () => tk[p++];
-    const expect = (t) => { const x = next(); if (!x || x.t !== t) throw new Error('Erwartet: ' + t); };
+    const expect = (t) => { const x = next(); if (!x || x.t !== t) throw new Error(`Erwartet: ${t}`); };
     function primary() {
       const x = next();
-      if (!x) throw new Error('Formel unvollständig');
-      if (x.t === 'n') return x.v;
-      if (x.t === '(') { const v = expr(); expect(')'); return v; }
-      if (x.t === '-') return -factor();
-      if (x.t === '+') return factor();
+      if (!x) throw new Error('Formel unvollständig – es fehlt eine Zahl oder ein Name.');
+      if (x.t === 'n') return { k: 'num', v: x.v };
+      if (x.t === '(') { const v = cmp(); expect(')'); return v; }
+      if (x.t === '-' || x.t === '+') return { k: 'un', op: x.t, a: pow() };
+      if (x.t === 'tcall') return { k: 'tcall', rawArgs: x.rawArgs };
       if (x.t === 'id') {
         const name = x.v;
         if (peek() && peek().t === '(') {
           next(); const args = [];
-          if (peek() && peek().t !== ')') { args.push(expr()); while (peek() && peek().t === ';') { next(); args.push(expr()); } }
+          if (peek() && peek().t !== ')') {
+            args.push(cmp());
+            while (peek() && peek().t === ';') { next(); args.push(cmp()); }
+          }
           expect(')');
-          const f = FN[name.toLowerCase()]; if (!f) throw new Error('Unbekannte Funktion: ' + name);
-          return f(...args);
+          const low = name.toLowerCase();
+          if (low === 'wenn' || low === 'if') {
+            if (args.length !== 3) throw new Error('wenn braucht 3 Angaben: wenn(Bedingung; dann; sonst).');
+            return { k: 'if', c: args[0], a: args[1], b: args[2] };
+          }
+          return { k: 'call', name, args };
         }
-        if (/^pi$/i.test(name)) return Math.PI;
-        const key = Object.keys(vars).find((k) => k.toLowerCase() === name.toLowerCase());
-        if (key === undefined) throw new Error('Unbekannter Name: ' + name);
+        return { k: 'var', name };
+      }
+      throw new Error(`Unerwartetes Zeichen „${x.v ?? x.t}“ in der Formel.`);
+    }
+    function pow() {
+      const v = primary();
+      if (peek() && peek().t === '^') { next(); return { k: 'bin', op: '^', l: v, r: pow() }; }
+      return v;
+    }
+    function mul() {
+      let v = pow();
+      while (peek() && (peek().t === '*' || peek().t === '/')) { const op = next().t; v = { k: 'bin', op, l: v, r: pow() }; }
+      return v;
+    }
+    function add() {
+      let v = mul();
+      while (peek() && (peek().t === '+' || peek().t === '-')) { const op = next().t; v = { k: 'bin', op, l: v, r: mul() }; }
+      return v;
+    }
+    function cmp() {
+      const v = add();
+      if (peek() && CMPS.has(peek().t)) {
+        const op = next().t, r = add();
+        if (peek() && CMPS.has(peek().t)) throw new Error('Vergleiche lassen sich nicht direkt verketten – nutze verschachtelte wenn(…)-Ausdrücke.');
+        return { k: 'bin', op, l: v, r };
+      }
+      return v;
+    }
+    const ast = cmp();
+    if (p < tk.length) throw new Error(`Formel nicht lesbar ab „${tk[p].v ?? tk[p].t}“.`);
+
+    const rawTbls = tables !== undefined ? tables : (vars && vars.__tables) || [];
+    const tblList = normTables(rawTbls);
+
+    function lookupTable(rawArgs) {
+      if (rawArgs.length !== 2) throw new Error('tabelle braucht Name und Schlüssel, z. B. tabelle(Schraube; M5).');
+      const tName = unquote(rawArgs[0]);
+      if (!tName) throw new Error('Tabellenname in tabelle(…) fehlt.');
+      const tbl = tblList.find((tb) => String(tb.name || '').trim().toLowerCase() === tName.toLowerCase());
+      if (!tbl) {
+        if (!tblList.length) throw new Error(`Tabelle „${tName}“ nicht gefunden – leg sie links unter „Maße“ an.`);
+        throw new Error(`Tabelle „${tName}“ nicht gefunden (vorhanden: ${tblList.map((t) => t.name).join(', ')}).`);
+      }
+      const rawKey = String(rawArgs[1] ?? '').trim();
+      if (!rawKey) throw new Error(`Schlüssel in tabelle(${tbl.name}; …) fehlt.`);
+      const isQuoted = ((rawKey.startsWith('"') && rawKey.endsWith('"')) || (rawKey.startsWith("'") && rawKey.endsWith("'"))) && rawKey.length >= 2;
+      const litKey = unquote(rawKey);
+      const rows = Array.isArray(tbl.rows) ? tbl.rows : [];
+      const findRow = (kStr, kNum) => {
+        const ks = String(kStr ?? '').trim(), kl = ks.toLowerCase(), kn = kl.replace(/,/g, '.');
+        let r = rows.find((x) => String(x.key ?? '').trim().toLowerCase() === kl);
+        if (r) return r;
+        r = rows.find((x) => String(x.key ?? '').trim().toLowerCase().replace(/,/g, '.') === kn);
+        if (r) return r;
+        if (kNum != null && isFinite(kNum)) {
+          r = rows.find((x) => { const rn = parseNum(x.key); return isFinite(rn) && Math.abs(rn - kNum) <= 1e-9; });
+          if (r) return r;
+        }
+        return null;
+      };
+      let row = findRow(litKey, parseNum(litKey));
+      if (!row && !isQuoted) {
+        let kv = NaN, okKey = false;
+        try { kv = parse(rawKey, vars, rawTbls, depth + 1); okKey = true; } catch (_) {}
+        if (okKey) {
+          row = findRow(String(kv), kv);
+          if (!row) throw new Error(`Schlüssel „${fmt(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+        }
+      }
+      if (!row) throw new Error(`Schlüssel „${litKey}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+      if (typeof row.val === 'number') {
+        if (!isFinite(row.val)) throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ ist keine gültige Zahl.`);
+        return row.val;
+      }
+      const rv = String(row.val ?? '').trim();
+      if (!rv) throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ fehlt.`);
+      if (depth >= 16) throw new Error(`Tabelle „${tbl.name}“ verweist im Kreis auf sich selbst.`);
+      try {
+        return parse(rv, vars, rawTbls, depth + 1);
+      } catch (e) {
+        throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ ist ungültig: ${e.message}`);
+      }
+    }
+
+    function evalNode(node) {
+      if (node.k === 'num') return node.v;
+      if (node.k === 'un') { const a = evalNode(node.a); return node.op === '-' ? -a : +a; }
+      if (node.k === 'if') {
+        const cv = evalNode(node.c);
+        return Math.abs(cv) > 1e-12 ? evalNode(node.a) : evalNode(node.b);
+      }
+      if (node.k === 'tcall') return lookupTable(node.rawArgs);
+      if (node.k === 'var') {
+        if (/^pi$/i.test(node.name)) return Math.PI;
+        const key = Object.keys(vars || {}).find((k) => k.toLowerCase() === node.name.toLowerCase());
+        if (key === undefined) throw new Error(`Unbekanntes Maß „${node.name}“ – leg es links unter „Maße“ an.`);
         return vars[key];
       }
-      throw new Error('Unerwartet: ' + x.t);
+      if (node.k === 'call') {
+        const args = node.args.map(evalNode);
+        const low = node.name.toLowerCase();
+        if (low === 'runden' || low === 'round') return roundMode(node.name, 'round', args);
+        if (low === 'aufrunden' || low === 'ceil') return roundMode(node.name, 'ceil', args);
+        if (low === 'abrunden' || low === 'floor') return roundMode(node.name, 'floor', args);
+        if (low === 'min' || low === 'max') {
+          if (args.length < 1) throw new Error(`${node.name} braucht mindestens eine Zahl.`);
+          return low === 'min' ? Math.min(...args) : Math.max(...args);
+        }
+        if (low === 'abs') { if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`); return Math.abs(args[0]); }
+        if (low === 'sqrt' || low === 'wurzel') {
+          if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
+          if (args[0] < 0) throw new Error('Wurzel aus einer negativen Zahl ist nicht möglich.');
+          return Math.sqrt(args[0]);
+        }
+        if (low === 'sin' || low === 'cos' || low === 'tan') {
+          if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
+          return Math[low]((args[0] * Math.PI) / 180);
+        }
+        throw new Error(`Unbekannte Funktion „${node.name}“.`);
+      }
+      if (node.k === 'bin') {
+        const l = evalNode(node.l), r = evalNode(node.r), op = node.op;
+        if (op === '+') return l + r;
+        if (op === '-') return l - r;
+        if (op === '*') return l * r;
+        if (op === '/') { if (Math.abs(r) === 0) throw new Error('Division durch 0 ist nicht möglich.'); return l / r; }
+        if (op === '^') return Math.pow(l, r);
+        const tol = 1e-9 * Math.max(1, Math.abs(l), Math.abs(r));
+        if (op === '==') return Math.abs(l - r) <= tol ? 1 : 0;
+        if (op === '!=') return Math.abs(l - r) > tol ? 1 : 0;
+        if (op === '<') return l < r - tol ? 1 : 0;
+        if (op === '>') return l > r + tol ? 1 : 0;
+        if (op === '<=') return l <= r + tol ? 1 : 0;
+        if (op === '>=') return l >= r - tol ? 1 : 0;
+      }
+      throw new Error('Formel nicht lesbar.');
     }
-    function factor() { let v = primary(); while (peek() && peek().t === '^') { next(); v = Math.pow(v, factor()); } return v; }
-    function term() { let v = factor(); while (peek() && (peek().t === '*' || peek().t === '/')) { const o = next().t; const r = factor(); v = o === '*' ? v * r : v / r; } return v; }
-    function expr() { let v = term(); while (peek() && (peek().t === '+' || peek().t === '-')) { const o = next().t; const r = term(); v = o === '+' ? v + r : v - r; } return v; }
-    const v = expr();
-    if (p < tk.length) throw new Error('Formel nicht lesbar');
-    if (!isFinite(v)) throw new Error('Ergebnis ist keine Zahl');
+
+    const v = evalNode(ast);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error('Ergebnis ist keine gültige Zahl.');
     return v;
   }
-  return { eval: parse, names(src) { try { return tokenize(src).filter((t) => t.t === 'id').map((t) => t.v); } catch (_) { return []; } } };
+  function tryEval(src, vars, tables) {
+    try { return { ok: true, value: parse(src, vars, tables) }; }
+    catch (e) { return { ok: false, error: e && e.message ? e.message : 'Formel nicht lesbar.' }; }
+  }
+  function names(src) {
+    try {
+      const out = [];
+      for (const t of tokenize(String(src ?? ''))) {
+        if (t.t === 'id') out.push(t.v);
+        else if (t.t === 'tcall') {
+          out.push('tabelle');
+          if (t.rawArgs[0]) { const tn = unquote(t.rawArgs[0]); if (tn) out.push(tn); }
+          if (t.rawArgs[1]) out.push(...names(t.rawArgs[1]));
+        }
+      }
+      return out;
+    } catch (_) { return []; }
+  }
+  return { eval: parse, tryEval, names };
 })();
 
 // ---------- Einheiten je Projekt (BE-10): Anzeige und Eingabe in mm, cm, m oder Zoll; intern immer mm ----------
@@ -202,9 +437,9 @@ const Units = (() => {
       } catch (_) {}
     }
     if (!expr) return { ok: false };
-    const ev = typeof Model !== 'undefined' ? Model.num(s, V || {}, NaN) : (() => { try { return Expr.eval(s, V || {}); } catch (_) { return NaN; } })();
-    if (!isFinite(ev)) return { ok: false };
-    return { ok: true, value: s, num: ev };
+    const res = typeof Model !== 'undefined' && Model.evalInfo ? Model.evalInfo(s, V || {}) : Expr.tryEval(s, V || {});
+    if (!res.ok || !isFinite(res.value)) return { ok: false, error: res.error };
+    return { ok: true, value: s, num: res.value };
   }
   function set(u) {
     if (!DEFS[u] || typeof App === 'undefined' || !App.doc || key() === u) return false;
@@ -1287,6 +1522,11 @@ const HELP = {
   "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
   "hilfe": "Wählt im Bohrungs-Assistenten die Gewindenorm: Metrisch Regelgewinde (M1.6–M12), Metrisch Feingewinde (z. B. M8×1, M10×1,25 nach DIN 13 / DIN 336), Zoll-Gewinde UNC und UNF (#4 bis 1/2\" nach ASME B1.1 mit 82°-Senkung) oder zylindrisches Rohrgewinde G1/8 bis G1 (ISO 228-1 mit Flachsenkung nach DIN 3852-2).",
   "tipp": "Für zöllige Kameragehäuse oder US-Bauteile wählst du UNC/UNF; bei Hydraulik-, Pneumatik- oder Schlauchanschlüssen passt Rohrgewinde G."
+ },
+ "formulaTable": {
+  "tip": "Nachschlagetabelle für Formeln anlegen",
+  "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
+  "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
  }
 };
 

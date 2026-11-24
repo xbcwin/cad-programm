@@ -1089,11 +1089,12 @@ const Sketch = (() => {
       let v;
       if (isLen) {
         const p = Units.parseLen(raw, vars(), { expr: true });
-        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.'), { kind: 'bad' }); return; }
         v = p.value;
       } else {
         const n = parseNum(raw); v = isNaN(n) ? raw : n;
-        if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+        const res = typeof v === 'number' ? { ok: isFinite(v) } : Expr.tryEval(v, vars());
+        if (!res.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + (res.error || '„' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.'), { kind: 'bad' }); return; }
       }
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };

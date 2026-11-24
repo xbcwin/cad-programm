@@ -54,7 +54,7 @@ const Model = (() => {
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
-      params: [], items: [], notes: [],
+      params: [], tables: [], items: [], notes: [],
       settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
@@ -189,14 +189,21 @@ const Model = (() => {
     it.t = { x: round(pos.x, 6), y: round(pos.y, 6), z: round(pos.z, 6), rx: r(e.x), ry: r(e.y), rz: r(e.z) };
   }
 
-  // ---------- Parameter ----------
+  // ---------- Parameter & Tabellen ----------
   function vars(doc) {
     const v = {}, errors = {};
+    const tables = (doc && Array.isArray(doc.tables)) ? doc.tables : [];
+    Object.defineProperty(v, '__tables', { value: tables, enumerable: false, configurable: true });
     for (const p of doc.params || []) {
-      try { v[p.name] = Expr.eval(String(p.expr), v); }
+      try { v[p.name] = Expr.eval(String(p.expr), v, tables); }
       catch (e) { errors[p.id] = e.message; v[p.name] = 0; }
     }
     return { v, errors };
+  }
+  function evalInfo(val, V) {
+    if (typeof val === 'number') return isFinite(val) ? { ok: true, value: val } : { ok: false, error: 'Ergebnis ist keine gültige Zahl.' };
+    if (val == null || String(val).trim() === '') return { ok: false, error: 'Formel ist leer.' };
+    return Expr.tryEval(String(val), V || {});
   }
   function num(val, V, fallback = 0) {
     if (typeof val === 'number') return isFinite(val) ? val : fallback;
@@ -898,6 +905,8 @@ const Model = (() => {
   function migrate(doc) {
     if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Tracery-Projektdatei.');
     doc.params = doc.params || []; doc.items = doc.items || [];
+    if (!Array.isArray(doc.tables)) doc.tables = [];
+    for (const t of doc.tables) { if (!t || typeof t !== 'object') continue; if (!Array.isArray(t.rows)) t.rows = []; }
     doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' }, doc.settings || {});
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
@@ -1202,6 +1211,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
