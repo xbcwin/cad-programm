@@ -2412,5 +2412,20 @@
   "asm.groundedCannotMove": "„{name}“ ist festgesetzt und kann nicht bewegt werden.",
   "asm.groundedJointErr": "„{name}“ ist festgesetzt und kann durch eine Verbindung nicht bewegt werden.",
   "asm.groundedLockedHint": "Dieses Teil ist festgesetzt und bleibt an seiner Stelle.",
-  "asm.selectPartToGround": "Wähle zuerst ein Teil aus, das festgesetzt oder gelöst werden soll."
+  "asm.selectPartToGround": "Wähle zuerst ein Teil aus, das festgesetzt oder gelöst werden soll.",
+  "ctx.mateAngle": "Winkel (Flächen oder Kanten)",
+  "ctx.mateCenter": "Mittig (zwischen zwei Flächen)",
+  "joint.angleKind": "Winkel",
+  "joint.centerKind": "mittig",
+  "joint.angleLabel": "Winkel",
+  "joint.angleFlip": "Winkel umkehren",
+  "joint.angleStep1": "Winkel: 1. ebene Fläche oder gerade Kante am ersten Teil klicken (bleibt stehen).",
+  "joint.angleStep2": "Winkel: 2. Fläche oder Kante am zweiten Teil klicken (richtet sich zu „{name}“ aus).",
+  "joint.centerStep1": "Mittig (1/3): 1. Wandfläche der Nut am festen Teil klicken.",
+  "joint.centerStep2": "Mittig (2/3): parallele Gegenfläche am selben Teil klicken.",
+  "joint.centerStep3Body": "Mittig (3/3): Teil klicken, das mittig zwischen den beiden Flächen sitzen soll.",
+  "joint.centerStep3Face": "Mittig (3/4): 1. Außenfläche am beweglichen Teil klicken.",
+  "joint.centerStep4Face": "Mittig (4/4): parallele Gegenfläche am selben beweglichen Teil klicken.",
+  "joint.repickAngleBtn": "Flächen / Kanten neu wählen",
+  "joint.repickCenterBtn": "Flächen neu wählen"
 }

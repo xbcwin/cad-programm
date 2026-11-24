@@ -1,4 +1,4 @@
-// ================= Gelenke & Verbindungen: fest (starr), Drehen, Schieben, Zylindrisch, Eben =================
+// ================= Gelenke & Verbindungen: fest (starr), Drehen, Schieben, Zylindrisch, Eben, Winkel, Mittig =================
 // Ein Gelenk / eine Verbindung ist kein Schritt der Zeitleiste: Es setzt die Lage des beweglichen Teils (doc.joints).
 // Mehrere Verbindungen und Gelenke bilden eine Kette: Bewegt sich ein vorderes Teil, wandern alle Teile und Gelenkachsen dahinter mit.
 // home = Lage des beweglichen Teils in der Nullstellung; ao/ad (und au bei eben) in Weltkoordinaten.
@@ -7,11 +7,14 @@ const Joints = (() => {
   const allOf = (id, doc = App.doc) => list(doc).filter((j) => j.a === id || j.b === id);
   const of = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || list(doc).find((j) => j.a === id) || null;
   const drivingOf = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || null;
-  const kindOf = (j) => (j && (j.kind === 'fixed' || j.kind === 'slide' || j.kind === 'cyl' || j.kind === 'planar') ? j.kind : 'rot');
+  const kindOf = (j) => (j && (j.kind === 'fixed' || j.kind === 'slide' || j.kind === 'cyl' || j.kind === 'planar' || j.kind === 'angle' || j.kind === 'center') ? j.kind : 'rot');
   const fixed = (j) => kindOf(j) === 'fixed';
   const slide = (j) => kindOf(j) === 'slide';
   const isCyl = (j) => kindOf(j) === 'cyl';
   const isPlanar = (j) => kindOf(j) === 'planar';
+  const isAngle = (j) => kindOf(j) === 'angle';
+  const isCenter = (j) => kindOf(j) === 'center';
+  const isConstraint = (j) => fixed(j) || isAngle(j) || isCenter(j);
   const isFixedPart = (id, doc = App.doc) => list(doc).some((j) => j.kind === 'fixed' && j.b === id);
   const fixedJointOf = (id, doc = App.doc) => list(doc).find((j) => j.kind === 'fixed' && j.b === id) || null;
   const r6 = (arr) => arr.map((v) => round(v, 6));
@@ -289,8 +292,12 @@ const Joints = (() => {
       k.ad = r9(new THREE.Vector3(...k.ad).transformDirection(D).normalize().toArray());
       if (Array.isArray(k.au)) k.au = r9(new THREE.Vector3(...k.au).transformDirection(D).normalize().toArray());
       if (carried) continue;
-      if (fixed(k)) {
-        const sol = solveFixedPose(doc, k);
+      if (isConstraint(k)) {
+        if (isAngle(k) || isCenter(k)) {
+          const kbCur = kb && !carried ? conj(doc, k.b, D).multiply(Model.localMatrix(kb)) : null;
+          if (kb && kbCur) Model.setFromMatrix(kb, kbCur);
+        }
+        const sol = solveConstraintPose(doc, k);
         if (sol && kb) {
           const Lb = Model.parentWorld(doc, k.b).invert().multiply(sol.WbNew);
           Model.setFromMatrix(kb, Lb);
@@ -351,8 +358,196 @@ const Joints = (() => {
     return { WbNew, ao: cAw, ad: new THREE.Vector3(0, 0, 1) };
   }
 
+  // ---------- Winkel-Verbindung & Mittig-Verbindung (BG-07) ----------
+  function evalAngleDeg(val, doc = App.doc) {
+    if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+    if (typeof val === 'string') {
+      const s = val.trim();
+      if (!s) return 0;
+      const num = parseNum(s);
+      if (!isNaN(num)) return num;
+      const V = Model.vars(doc).v;
+      const res = Expr.tryEval(s, V);
+      if (res && res.ok && Number.isFinite(res.value)) return res.value;
+    }
+    return 0;
+  }
+
+  function rotBetweenWithAxis(from, to, fallbackAxis) {
+    const a = from.clone().normalize(), b = to.clone().normalize();
+    const dot = a.dot(b);
+    if (dot > 1 - 1e-10) return new THREE.Quaternion();
+    if (dot < -1 + 1e-9) {
+      if (fallbackAxis && fallbackAxis.lengthSq() > 1e-10) {
+        const ax = fallbackAxis.clone().addScaledVector(a, -fallbackAxis.dot(a));
+        if (ax.lengthSq() > 1e-10) return new THREE.Quaternion().setFromAxisAngle(ax.normalize(), Math.PI);
+      }
+      const ref = Math.abs(a.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const ax = new THREE.Vector3().crossVectors(a, ref).normalize();
+      return new THREE.Quaternion().setFromAxisAngle(ax, Math.PI);
+    }
+    return new THREE.Quaternion().setFromUnitVectors(a, b);
+  }
+
+  function defaultHingeAxis(uA) {
+    const ref = Math.abs(uA.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+    const k = ref.clone().addScaledVector(uA, -ref.dot(uA));
+    if (k.lengthSq() < 1e-9) return canonicalX(uA.toArray());
+    return k.normalize();
+  }
+
+  function solveAnglePose(doc, j) {
+    const A = top(j.a, doc), B = top(j.b, doc);
+    if (!A || !B || !j.refA || !j.refB) return null;
+    const Wa = Model.worldMatrix(doc, A.id);
+    const Wb = Model.worldMatrix(doc, B.id);
+    const dAl = new THREE.Vector3(...(j.refA.kind === 'edge' ? j.refA.d : j.refA.n)).normalize();
+    const dBl = new THREE.Vector3(...(j.refB.kind === 'edge' ? j.refB.d : j.refB.n)).normalize();
+    const uA = dAl.clone().transformDirection(Wa).normalize();
+    const uB = dBl.clone().transformDirection(Wb).normalize();
+    let kW = j.axisA ? new THREE.Vector3(...j.axisA).transformDirection(Wa) : defaultHingeAxis(uA);
+    kW.addScaledVector(uA, -kW.dot(uA));
+    if (kW.lengthSq() < 1e-9) kW = defaultHingeAxis(uA);
+    kW.normalize();
+    const deg = evalAngleDeg(j.angle, doc);
+    const isMixed = j.refA.kind !== j.refB.kind;
+    const rotDeg = isMixed ? (j.flip ? -(90 - deg) : (90 - deg)) : (j.flip ? -deg : deg);
+    const baseA = uA.clone().multiplyScalar(j.alignSign < 0 ? -1 : 1);
+    const t = baseA.clone().applyAxisAngle(kW, (rotDeg * Math.PI) / 180).normalize();
+    const pB = new THREE.Vector3(...j.refB.c).applyMatrix4(Wb);
+    const Q = rotBetweenWithAxis(uB, t, kW);
+    const R = new THREE.Matrix4().makeRotationFromQuaternion(Q);
+    const WbNew = new THREE.Matrix4()
+      .makeTranslation(pB.x, pB.y, pB.z)
+      .multiply(R)
+      .multiply(new THREE.Matrix4().makeTranslation(-pB.x, -pB.y, -pB.z))
+      .multiply(Wb);
+    return { WbNew, ao: pB, ad: kW };
+  }
+
+  function measureAngle(jid, doc = App.doc) {
+    const j = typeof jid === 'object' ? jid : list(doc).find((x) => x.id === jid);
+    if (!j || !isAngle(j) || !j.refA || !j.refB) return 0;
+    const Wa = Model.worldMatrix(doc, j.a), Wb = Model.worldMatrix(doc, j.b);
+    const dAl = new THREE.Vector3(...(j.refA.kind === 'edge' ? j.refA.d : j.refA.n)).normalize();
+    const dBl = new THREE.Vector3(...(j.refB.kind === 'edge' ? j.refB.d : j.refB.n)).normalize();
+    const uA = dAl.transformDirection(Wa).normalize();
+    const uB = dBl.transformDirection(Wb).normalize();
+    const cs = clamp(Math.abs(uA.dot(uB)), 0, 1);
+    const rad = j.refA.kind !== j.refB.kind ? Math.asin(cs) : Math.acos(cs);
+    return round((rad * 180) / Math.PI, 4);
+  }
+
+  function partExtentAlong(doc, itemId, worldDir) {
+    const d = worldDir.clone().normalize();
+    const W = Model.worldMatrix(doc, itemId);
+    const res = App.results.get(itemId);
+    const pos = res && res.data && res.data.pos;
+    if (pos && pos.length >= 3) {
+      const e = W.elements;
+      const nx = d.x * e[0] + d.y * e[1] + d.z * e[2];
+      const ny = d.x * e[4] + d.y * e[5] + d.z * e[6];
+      const nz = d.x * e[8] + d.y * e[9] + d.z * e[10];
+      const nt = d.x * e[12] + d.y * e[13] + d.z * e[14];
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < pos.length; i += 3) {
+        const s = nx * pos[i] + ny * pos[i + 1] + nz * pos[i + 2] + nt;
+        if (s < min) min = s;
+        if (s > max) max = s;
+      }
+      if (isFinite(min) && isFinite(max)) return { min, max, mid: (min + max) / 2, width: max - min };
+    }
+    const b = (res && res.data && res.data.bbox) || App.localBox(itemId);
+    if (!b) return null;
+    let min = Infinity, max = -Infinity;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < 8; i++) {
+      v.set(i & 1 ? b[3] : b[0], i & 2 ? b[4] : b[1], i & 4 ? b[5] : b[2]).applyMatrix4(W);
+      const s = v.dot(d);
+      if (s < min) min = s;
+      if (s > max) max = s;
+    }
+    return { min, max, mid: (min + max) / 2, width: max - min };
+  }
+
+  function solveCenterPose(doc, j) {
+    const A = top(j.a, doc), B = top(j.b, doc);
+    if (!A || !B || !j.refA1 || !j.refA2) return null;
+    const Wa = Model.worldMatrix(doc, A.id);
+    const Wb = Model.worldMatrix(doc, B.id);
+    const c1w = new THREE.Vector3(...j.refA1.c).applyMatrix4(Wa);
+    const n1w = new THREE.Vector3(...j.refA1.n).transformDirection(Wa).normalize();
+    const c2w = new THREE.Vector3(...j.refA2.c).applyMatrix4(Wa);
+    const sMidA = (c1w.dot(n1w) + c2w.dot(n1w)) / 2;
+    const pMidA = c1w.clone().add(c2w).multiplyScalar(0.5);
+
+    if (j.bMode === 'faces' && j.refB1 && j.refB2) {
+      const nB1w = new THREE.Vector3(...j.refB1.n).transformDirection(Wb).normalize();
+      const targetN = nB1w.dot(n1w) < 0 ? n1w.clone().negate() : n1w.clone();
+      let cB1w = new THREE.Vector3(...j.refB1.c).applyMatrix4(Wb);
+      let cB2w = new THREE.Vector3(...j.refB2.c).applyMatrix4(Wb);
+      const pMidB = cB1w.clone().add(cB2w).multiplyScalar(0.5);
+      let WbWork = Wb.clone();
+      if (nB1w.dot(targetN) < 1 - 1e-9) {
+        const Q = rotBetween(nB1w, targetN);
+        const R = new THREE.Matrix4().makeRotationFromQuaternion(Q);
+        const Mrot = new THREE.Matrix4()
+          .makeTranslation(pMidB.x, pMidB.y, pMidB.z)
+          .multiply(R)
+          .multiply(new THREE.Matrix4().makeTranslation(-pMidB.x, -pMidB.y, -pMidB.z));
+        WbWork = Mrot.multiply(WbWork);
+        cB1w = new THREE.Vector3(...j.refB1.c).applyMatrix4(WbWork);
+        cB2w = new THREE.Vector3(...j.refB2.c).applyMatrix4(WbWork);
+      }
+      const sMidB = (cB1w.dot(n1w) + cB2w.dot(n1w)) / 2;
+      const delta = sMidA - sMidB;
+      const WbNew = new THREE.Matrix4().makeTranslation(n1w.x * delta, n1w.y * delta, n1w.z * delta).multiply(WbWork);
+      return { WbNew, ao: pMidA, ad: n1w };
+    }
+
+    const ext = partExtentAlong(doc, B.id, n1w);
+    if (!ext) return null;
+    const delta = sMidA - ext.mid;
+    const WbNew = new THREE.Matrix4().makeTranslation(n1w.x * delta, n1w.y * delta, n1w.z * delta).multiply(Wb);
+    return { WbNew, ao: pMidA, ad: n1w };
+  }
+
+  function centerMetrics(jid, doc = App.doc) {
+    const j = typeof jid === 'object' ? jid : list(doc).find((x) => x.id === jid);
+    if (!j || !isCenter(j) || !j.refA1 || !j.refA2) return null;
+    const Wa = Model.worldMatrix(doc, j.a), Wb = Model.worldMatrix(doc, j.b);
+    const c1w = new THREE.Vector3(...j.refA1.c).applyMatrix4(Wa);
+    const n1w = new THREE.Vector3(...j.refA1.n).transformDirection(Wa).normalize();
+    const c2w = new THREE.Vector3(...j.refA2.c).applyMatrix4(Wa);
+    const s1 = c1w.dot(n1w), s2 = c2w.dot(n1w);
+    const loA = Math.min(s1, s2), hiA = Math.max(s1, s2);
+    let loB, hiB;
+    if (j.bMode === 'faces' && j.refB1 && j.refB2) {
+      const sb1 = new THREE.Vector3(...j.refB1.c).applyMatrix4(Wb).dot(n1w);
+      const sb2 = new THREE.Vector3(...j.refB2.c).applyMatrix4(Wb).dot(n1w);
+      loB = Math.min(sb1, sb2); hiB = Math.max(sb1, sb2);
+    } else {
+      const ext = partExtentAlong(doc, j.b, n1w);
+      if (!ext) return null;
+      loB = ext.min; hiB = ext.max;
+    }
+    return {
+      widthA: round(hiA - loA, 4),
+      widthB: round(hiB - loB, 4),
+      gapLeft: round(loB - loA, 4),
+      gapRight: round(hiA - hiB, 4),
+    };
+  }
+
+  function solveConstraintPose(doc, j) {
+    if (fixed(j)) return solveFixedPose(doc, j);
+    if (isAngle(j)) return solveAnglePose(doc, j);
+    if (isCenter(j)) return solveCenterPose(doc, j);
+    return null;
+  }
+
   function fixedOrder(doc) {
-    const fjs = list(doc).filter(fixed);
+    const fjs = list(doc).filter(isConstraint);
     if (!fjs.length) return [];
     const targets = new Set(fjs.map((j) => j.b));
     const byA = new Map();
@@ -380,7 +575,7 @@ const Joints = (() => {
       const B = top(j.b, doc);
       if (!B || B.locked) continue;
       const WbOld = Model.worldMatrix(doc, B.id);
-      const sol = solveFixedPose(doc, j);
+      const sol = solveConstraintPose(doc, j);
       if (!sol) continue;
       const Pb = Model.parentWorld(doc, B.id);
       const LbNew = Pb.clone().invert().multiply(sol.WbNew);
@@ -392,8 +587,8 @@ const Joints = (() => {
         j.ad = r9(sol.ad.toArray());
         changed = true;
         if (opts.live && isTop(B.id, doc)) Viewer.updateNode(B.id, { matrix: Model.localMatrix(B) });
-        const hasNonFixedChild = list(doc).some((k) => k.a === B.id && !fixed(k));
-        if (hasNonFixedChild) {
+        const hasNonConstraintChild = list(doc).some((k) => k.a === B.id && !isConstraint(k));
+        if (hasNonConstraintChild) {
           const D = sol.WbNew.clone().multiply(WbOld.clone().invert());
           moveChain(doc, B.id, D, opts);
         }
@@ -480,30 +675,129 @@ const Joints = (() => {
     return { idx: best, c: r6(f.c), n: r9(f.n), tid: f.tid || ref.tid || null, frac: fracOf(f.c, bbox) };
   }
 
+  function resolveOrientRef(spec, doc = App.doc) {
+    if (!spec || !spec.id) return null;
+    const res = App.results.get(spec.id);
+    const data = res && res.data;
+    const bbox = data && data.bbox;
+    const isEdge = spec.kind === 'edge' || (spec.kind !== 'face' && spec.edgeIdx != null);
+    if (isEdge) {
+      const idx = spec.edgeIdx != null ? spec.edgeIdx : (spec.idx != null ? spec.idx : null);
+      const g = (idx != null && data && data.edges && data.edges[idx]) || spec.info || null;
+      if (g && g.t && g.t !== 'LINE') return null;
+      let cv, dv;
+      if (g && Array.isArray(g.a) && Array.isArray(g.b)) {
+        const va = new THREE.Vector3(...g.a), vb = new THREE.Vector3(...g.b);
+        cv = va.clone().add(vb).multiplyScalar(0.5);
+        dv = vb.clone().sub(va);
+      } else if (spec.c && spec.d) {
+        cv = new THREE.Vector3(...spec.c);
+        dv = new THREE.Vector3(...spec.d);
+      } else return null;
+      if (dv.lengthSq() < 1e-12) return null;
+      if (spec.world) {
+        const invW = Model.worldMatrix(doc, spec.id).invert();
+        cv.applyMatrix4(invW);
+        dv.transformDirection(invW);
+      }
+      dv.normalize();
+      const cArr = r6(cv.toArray());
+      return {
+        kind: 'edge',
+        c: cArr,
+        d: r9(dv.toArray()),
+        tid: (g && g.tid) || spec.tid || null,
+        idx,
+        frac: fracOf(cArr, bbox),
+      };
+    }
+    const idx = spec.faceIdx != null ? spec.faceIdx : (spec.idx != null ? spec.idx : null);
+    const fi = (idx != null && data && data.faces && data.faces[idx]) || spec.info || null;
+    if (fi && fi.t && fi.t !== 'PLANE') return null;
+    return resolveRef({ ...spec, kind: 'face' }, doc);
+  }
+
+  function matchEdgeRef(itemId, ref) {
+    if (!ref || ref.kind !== 'edge') return null;
+    const res = App.results.get(itemId);
+    const data = res && res.data;
+    const edges = data && data.edges;
+    if (!edges || !edges.length) return null;
+    const bbox = data.bbox;
+    const rd = new THREE.Vector3(...ref.d).normalize();
+    const buildOut = (idx, e) => {
+      const va = new THREE.Vector3(...e.a), vb = new THREE.Vector3(...e.b);
+      const mid = va.clone().add(vb).multiplyScalar(0.5);
+      const dir = vb.clone().sub(va).normalize();
+      if (dir.dot(rd) < 0) dir.negate();
+      const mArr = r6(mid.toArray());
+      return { idx, c: mArr, d: r9(dir.toArray()), tid: e.tid || ref.tid || null, frac: fracOf(mArr, bbox) };
+    };
+    if (ref.tid) {
+      const byTid = edges.findIndex((e) => e && e.t === 'LINE' && e.tid === ref.tid && e.a && e.b);
+      if (byTid >= 0) return buildOut(byTid, edges[byTid]);
+    }
+    let best = -1, bestScore = Infinity;
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      if (!e || e.t !== 'LINE' || !e.a || !e.b) continue;
+      const dir = new THREE.Vector3(...e.b).sub(new THREE.Vector3(...e.a));
+      if (dir.lengthSq() < 1e-12) continue;
+      dir.normalize();
+      if (Math.abs(dir.dot(rd)) < 0.995) continue;
+      const mc = [(e.a[0] + e.b[0]) * 0.5, (e.a[1] + e.b[1]) * 0.5, (e.a[2] + e.b[2]) * 0.5];
+      let score = Math.hypot(mc[0] - ref.c[0], mc[1] - ref.c[1], mc[2] - ref.c[2]);
+      if (ref.frac && bbox) {
+        const ff = fracOf(mc, bbox);
+        const fDist = Math.hypot(ff[0] - ref.frac[0], ff[1] - ref.frac[1], ff[2] - ref.frac[2]);
+        score = fDist * 100 + score * 1e-3;
+      }
+      if (score < bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) return null;
+    return buildOut(best, edges[best]);
+  }
+
   let relinking = false;
   function relinkFixed() {
     if (relinking || !App.doc) return;
-    const fjs = list().filter(fixed);
+    const fjs = list().filter(isConstraint);
     if (!fjs.length) return;
     const refUpdates = [];
     let needSync = false;
+    const queueFace = (jid, side, itemId, ref) => {
+      const m = matchFaceRef(itemId, ref);
+      if (!m) return;
+      const dc = Math.hypot(m.c[0] - ref.c[0], m.c[1] - ref.c[1], m.c[2] - ref.c[2]);
+      const dn = Math.hypot(m.n[0] - ref.n[0], m.n[1] - ref.n[1], m.n[2] - ref.n[2]);
+      if (dc > 1e-4 || dn > 1e-4 || (m.tid && m.tid !== ref.tid)) refUpdates.push({ jid, side, kind: 'face', m });
+    };
+    const queueEdge = (jid, side, itemId, ref) => {
+      const m = matchEdgeRef(itemId, ref);
+      if (!m) return;
+      const dc = Math.hypot(m.c[0] - ref.c[0], m.c[1] - ref.c[1], m.c[2] - ref.c[2]);
+      const dd = Math.hypot(m.d[0] - ref.d[0], m.d[1] - ref.d[1], m.d[2] - ref.d[2]);
+      if (dc > 1e-4 || dd > 1e-4 || (m.tid && m.tid !== ref.tid)) refUpdates.push({ jid, side, kind: 'edge', m });
+    };
     for (const j of fjs) {
-      if (j.mode === 'face') {
-        const mA = matchFaceRef(j.a, j.refA);
-        if (mA) {
-          const dc = Math.hypot(mA.c[0] - j.refA.c[0], mA.c[1] - j.refA.c[1], mA.c[2] - j.refA.c[2]);
-          const dn = Math.hypot(mA.n[0] - j.refA.n[0], mA.n[1] - j.refA.n[1], mA.n[2] - j.refA.n[2]);
-          if (dc > 1e-4 || dn > 1e-4 || (mA.tid && mA.tid !== j.refA.tid)) refUpdates.push({ jid: j.id, side: 'refA', m: mA });
-        }
-        const mB = matchFaceRef(j.b, j.refB);
-        if (mB) {
-          const dc = Math.hypot(mB.c[0] - j.refB.c[0], mB.c[1] - j.refB.c[1], mB.c[2] - j.refB.c[2]);
-          const dn = Math.hypot(mB.n[0] - j.refB.n[0], mB.n[1] - j.refB.n[1], mB.n[2] - j.refB.n[2]);
-          if (dc > 1e-4 || dn > 1e-4 || (mB.tid && mB.tid !== j.refB.tid)) refUpdates.push({ jid: j.id, side: 'refB', m: mB });
+      if (fixed(j) && j.mode === 'face') {
+        queueFace(j.id, 'refA', j.a, j.refA);
+        queueFace(j.id, 'refB', j.b, j.refB);
+      } else if (isAngle(j)) {
+        if (j.refA && j.refA.kind === 'face') queueFace(j.id, 'refA', j.a, j.refA);
+        else if (j.refA && j.refA.kind === 'edge') queueEdge(j.id, 'refA', j.a, j.refA);
+        if (j.refB && j.refB.kind === 'face') queueFace(j.id, 'refB', j.b, j.refB);
+        else if (j.refB && j.refB.kind === 'edge') queueEdge(j.id, 'refB', j.b, j.refB);
+      } else if (isCenter(j)) {
+        if (j.refA1) queueFace(j.id, 'refA1', j.a, j.refA1);
+        if (j.refA2) queueFace(j.id, 'refA2', j.a, j.refA2);
+        if (j.bMode === 'faces') {
+          if (j.refB1) queueFace(j.id, 'refB1', j.b, j.refB1);
+          if (j.refB2) queueFace(j.id, 'refB2', j.b, j.refB2);
         }
       }
       const B = top(j.b);
-      const sol = solveFixedPose(App.doc, j);
+      const sol = solveConstraintPose(App.doc, j);
       if (B && !B.locked && sol) {
         const LbNew = Model.parentWorld(App.doc, B.id).invert().multiply(sol.WbNew);
         if (maxMatDiff(LbNew, Model.localMatrix(B)) > 1e-4) needSync = true;
@@ -517,12 +811,16 @@ const Joints = (() => {
           const j = list(doc).find((x) => x.id === u.jid);
           if (!j || !j[u.side]) continue;
           const prev = j[u.side];
-          const nVec = new THREE.Vector3(...u.m.n).normalize();
-          let xVec = prev.x ? new THREE.Vector3(...prev.x) : canonicalX(u.m.n);
-          xVec.addScaledVector(nVec, -xVec.dot(nVec));
-          if (xVec.lengthSq() < 1e-9) xVec = canonicalX(u.m.n);
-          xVec.normalize();
-          j[u.side] = { ...prev, c: u.m.c, n: u.m.n, x: r9(xVec.toArray()), tid: u.m.tid, idx: u.m.idx, frac: u.m.frac };
+          if (u.kind === 'edge') {
+            j[u.side] = { ...prev, c: u.m.c, d: u.m.d, tid: u.m.tid, idx: u.m.idx, frac: u.m.frac };
+          } else {
+            const nVec = new THREE.Vector3(...u.m.n).normalize();
+            let xVec = prev.x ? new THREE.Vector3(...prev.x) : canonicalX(u.m.n);
+            xVec.addScaledVector(nVec, -xVec.dot(nVec));
+            if (xVec.lengthSq() < 1e-9) xVec = canonicalX(u.m.n);
+            xVec.normalize();
+            j[u.side] = { ...prev, c: u.m.c, n: u.m.n, x: r9(xVec.toArray()), tid: u.m.tid, idx: u.m.idx, frac: u.m.frac };
+          }
         }
         syncFixed(doc);
       }, { amend: true });
@@ -605,6 +903,208 @@ const Joints = (() => {
     const j = list().find((x) => x.id === jid);
     if (!j || !fixed(j)) return false;
     return updateFixed(jid, { flip: !j.flip }, { label: 'Verbindung umgedreht' });
+  }
+
+  function parseAngleInput(val, doc = App.doc) {
+    if (typeof val === 'number') return Number.isFinite(val) ? round(val, 4) : 0;
+    if (typeof val === 'string') {
+      const s = val.trim();
+      if (!s) return 0;
+      const num = parseNum(s);
+      if (!isNaN(num)) return round(num, 4);
+      if (Model.isExpr(s)) {
+        const r = Expr.tryEval(s, Model.vars(doc).v);
+        if (r && r.ok && Number.isFinite(r.value)) return s;
+      }
+    }
+    return 0;
+  }
+
+  function addAngle(aSpec, bSpec, opts = {}) {
+    if (!aSpec || !bSpec) return { ok: false, msg: 'Bitte zwei Flächen oder Kanten wählen.' };
+    const A = top(aSpec.id), B = top(bSpec.id);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile für die Winkel-Verbindung.' };
+    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung gehalten.` };
+    const refA = resolveOrientRef(aSpec, App.doc), refB = resolveOrientRef(bSpec, App.doc);
+    if (!refA || !refB) return { ok: false, msg: 'Für „Winkel“ werden ebene Flächen oder gerade Kanten benötigt.' };
+
+    const Wa = Model.worldMatrix(App.doc, A.id), Wb = Model.worldMatrix(App.doc, B.id);
+    const uA = new THREE.Vector3(...(refA.kind === 'edge' ? refA.d : refA.n)).transformDirection(Wa).normalize();
+    const uB = new THREE.Vector3(...(refB.kind === 'edge' ? refB.d : refB.n)).transformDirection(Wb).normalize();
+    const alignSign = refA.kind === refB.kind && uA.dot(uB) < -1e-4 ? -1 : 1;
+    let k0;
+    if (Array.isArray(opts.axis) && opts.axis.length === 3) {
+      k0 = new THREE.Vector3(...opts.axis);
+      k0.addScaledVector(uA, -k0.dot(uA));
+      if (k0.lengthSq() < 1e-9) k0 = defaultHingeAxis(uA);
+      else k0.normalize();
+    } else {
+      const vA = uA.clone().multiplyScalar(alignSign);
+      const cr = new THREE.Vector3().crossVectors(vA, uB);
+      k0 = cr.lengthSq() > 1e-8 ? cr.normalize() : defaultHingeAxis(uA);
+    }
+    const axisA = r9(k0.clone().transformDirection(Wa.clone().invert()).normalize().toArray());
+    const angleVal = opts.angle == null ? 30 : parseAngleInput(opts.angle, App.doc);
+
+    let jid = null;
+    App.change('Winkel-Verbindung angelegt', (doc) => {
+      const b = top(B.id, doc); if (!b || b.locked) return false;
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      const idx = doc.joints.length + 1;
+      doc.joints.push({
+        id: jid,
+        kind: 'angle',
+        name: opts.name || `Winkel ${idx}`,
+        a: A.id,
+        b: B.id,
+        refA,
+        refB,
+        axisA,
+        alignSign,
+        angle: angleVal,
+        flip: !!opts.flip,
+        ao: [0, 0, 0],
+        ad: [0, 0, 1],
+        home: r9(Model.localMatrix(b).toArray()),
+        ang: 0,
+        min: 0,
+        max: 0,
+      });
+      syncFixed(doc);
+    });
+    if (jid) drawSelectedJoint();
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Winkel-Verbindung ließ sich nicht anlegen.' };
+  }
+
+  function updateAngle(jid, patch, opts = {}) {
+    const label = opts.label || ('flip' in patch ? 'Winkel umgekehrt' : 'name' in patch ? 'Verbindung umbenannt' : 'Winkel geändert');
+    const changeOpts = opts.merge ? { merge: opts.merge } : {};
+    const ok = App.change(label, (doc) => {
+      const j = list(doc).find((x) => x.id === jid);
+      if (!j || !isAngle(j)) return false;
+      if ('name' in patch) j.name = String(patch.name || '').trim() || j.name;
+      if ('angle' in patch) j.angle = parseAngleInput(patch.angle, doc);
+      if ('flip' in patch) j.flip = !!patch.flip;
+      if ('refA' in patch) j.refA = patch.refA;
+      if ('refB' in patch) j.refB = patch.refB;
+      if ('axisA' in patch) j.axisA = patch.axisA;
+      if ('alignSign' in patch) j.alignSign = patch.alignSign;
+      if ('a' in patch) j.a = patch.a;
+      if ('b' in patch) j.b = patch.b;
+      syncFixed(doc);
+    }, changeOpts);
+    drawSelectedJoint();
+    return ok;
+  }
+
+  function flipAngle(jid) {
+    const j = list().find((x) => x.id === jid);
+    if (!j || !isAngle(j)) return false;
+    return updateAngle(jid, { flip: !j.flip }, { label: 'Winkel umgekehrt' });
+  }
+
+  function validateParallelFacePair(spec1, spec2, label = 'Teil') {
+    const r1 = resolveRef({ ...spec1, kind: 'face' }, App.doc);
+    const r2 = resolveRef({ ...spec2, kind: 'face' }, App.doc);
+    if (!r1 || !r2) return { ok: false, msg: 'Bitte zwei ebene Flächen wählen.' };
+    const W = Model.worldMatrix(App.doc, spec1.id);
+    const n1 = new THREE.Vector3(...r1.n).transformDirection(W).normalize();
+    const n2 = new THREE.Vector3(...r2.n).transformDirection(W).normalize();
+    if (Math.abs(n1.dot(n2)) < 0.995) return { ok: false, msg: `Die beiden Flächen an ${label} müssen parallel sein.` };
+    const c1 = new THREE.Vector3(...r1.c).applyMatrix4(W);
+    const c2 = new THREE.Vector3(...r2.c).applyMatrix4(W);
+    if (Math.abs(c2.sub(c1).dot(n1)) < 1e-4) return { ok: false, msg: `Die beiden Flächen an ${label} dürfen nicht in derselben Ebene liegen.` };
+    return { ok: true, ref1: r1, ref2: r2 };
+  }
+
+  function addCenter(aFace1, aFace2, bSpec, bFace2OrOpts, maybeOpts) {
+    if (!aFace1 || !aFace2 || !bSpec) return { ok: false, msg: 'Für „Mittig“ werden zwei parallele Flächen und ein zweites Teil benötigt.' };
+    let bMode = 'body', bSpec1 = null, bSpec2 = null, bId = null, opts = {};
+    if (Array.isArray(bSpec)) {
+      bMode = 'faces';
+      [bSpec1, bSpec2] = bSpec;
+      opts = (bFace2OrOpts && typeof bFace2OrOpts === 'object') ? bFace2OrOpts : {};
+    } else if (bFace2OrOpts && typeof bFace2OrOpts === 'object' && (bFace2OrOpts.id != null || bFace2OrOpts.faceIdx != null)) {
+      bMode = 'faces';
+      bSpec1 = bSpec;
+      bSpec2 = bFace2OrOpts;
+      opts = maybeOpts || {};
+    } else {
+      opts = (bFace2OrOpts && typeof bFace2OrOpts === 'object') ? bFace2OrOpts : {};
+      bId = typeof bSpec === 'string' ? bSpec : bSpec.id;
+    }
+    const A = top(aFace1.id), A2 = top(aFace2.id);
+    if (!A || !A2 || A.id !== A2.id) return { ok: false, msg: 'Die beiden ersten Flächen müssen zum selben festen Teil gehören.' };
+    const pairA = validateParallelFacePair(aFace1, aFace2, `„${Model.label(A)}“`);
+    if (!pairA.ok) return pairA;
+
+    let refB1 = null, refB2 = null;
+    if (bMode === 'faces') {
+      if (!bSpec1 || !bSpec2 || !bSpec1.id || bSpec1.id !== bSpec2.id) return { ok: false, msg: 'Wähle zwei parallele Flächen am zweiten (beweglichen) Teil.' };
+      bId = bSpec1.id;
+      const Bchk = top(bId);
+      if (!Bchk) return { ok: false, msg: 'Das zweite Teil wurde nicht gefunden.' };
+      const pairB = validateParallelFacePair(bSpec1, bSpec2, `„${Model.label(Bchk)}“`);
+      if (!pairB.ok) return pairB;
+      refB1 = pairB.ref1; refB2 = pairB.ref2;
+    }
+    const B = top(bId);
+    if (!B || A.id === B.id) return { ok: false, msg: 'Wähle als zu zentrierendes Teil einen anderen Körper.' };
+    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung gehalten.` };
+
+    let jid = null;
+    App.change('Verbindung „Mittig“ angelegt', (doc) => {
+      const b = top(B.id, doc); if (!b || b.locked) return false;
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      const idx = doc.joints.length + 1;
+      doc.joints.push({
+        id: jid,
+        kind: 'center',
+        name: opts.name || `Mittig ${idx}`,
+        a: A.id,
+        b: B.id,
+        bMode,
+        refA1: pairA.ref1,
+        refA2: pairA.ref2,
+        ...(bMode === 'faces' ? { refB1, refB2 } : {}),
+        ao: [0, 0, 0],
+        ad: [0, 0, 1],
+        home: r9(Model.localMatrix(b).toArray()),
+        ang: 0,
+        min: 0,
+        max: 0,
+      });
+      syncFixed(doc);
+    });
+    if (jid) drawSelectedJoint();
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Verbindung „Mittig“ ließ sich nicht anlegen.' };
+  }
+
+  function updateCenter(jid, patch, opts = {}) {
+    const label = opts.label || ('name' in patch ? 'Verbindung umbenannt' : 'Verbindung geändert');
+    const ok = App.change(label, (doc) => {
+      const j = list(doc).find((x) => x.id === jid);
+      if (!j || !isCenter(j)) return false;
+      if ('name' in patch) j.name = String(patch.name || '').trim() || j.name;
+      if ('bMode' in patch) j.bMode = patch.bMode;
+      if ('refA1' in patch) j.refA1 = patch.refA1;
+      if ('refA2' in patch) j.refA2 = patch.refA2;
+      if ('refB1' in patch) { if (patch.refB1) j.refB1 = patch.refB1; else delete j.refB1; }
+      if ('refB2' in patch) { if (patch.refB2) j.refB2 = patch.refB2; else delete j.refB2; }
+      if ('a' in patch) j.a = patch.a;
+      if ('b' in patch) j.b = patch.b;
+      syncFixed(doc);
+    });
+    drawSelectedJoint();
+    return ok;
   }
 
 
@@ -923,7 +1423,7 @@ const Joints = (() => {
     Viewer.highlightEdge(null, null);
     cv.style.cursor = '';
     UI.hint(null);
-    if (ps.isFixed) {
+    if (ps.isFixed || ps.restoreVisuals) {
       App.refreshSelectionVisuals();
       Handles.rebuild();
     }
@@ -1146,6 +1646,313 @@ const Joints = (() => {
     return true;
   }
 
+  function pickOrientAt(cx, cy, mode = 'auto') {
+    const hit = Viewer.pick(cx, cy, { edgePx: mode === 'face' ? 0 : 10, noEdges: mode === 'face', solidsOnly: true });
+    if (!hit || !hit.node) return null;
+    const M = hit.node.obj.matrixWorld;
+    if (mode !== 'face' && hit.edgeIdx != null) {
+      const g = hit.node.data.edges && hit.node.data.edges[hit.edgeIdx];
+      if (g && g.t === 'LINE' && Array.isArray(g.a) && Array.isArray(g.b)) {
+        const mid = new THREE.Vector3((g.a[0] + g.b[0]) * 0.5, (g.a[1] + g.b[1]) * 0.5, (g.a[2] + g.b[2]) * 0.5).applyMatrix4(M);
+        return { kind: 'edge', id: hit.id, edgeIdx: hit.edgeIdx, info: g, worldP: r6(mid.toArray()) };
+      }
+    }
+    if (mode !== 'edge' && hit.faceIdx >= 0) {
+      const f = hit.node.data.faces && hit.node.data.faces[hit.faceIdx];
+      if (f && f.t === 'PLANE' && Array.isArray(f.n) && Array.isArray(f.c)) {
+        return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx, info: f, worldP: r6(new THREE.Vector3(...f.c).applyMatrix4(M).toArray()) };
+      }
+    }
+    return null;
+  }
+
+  function startAngle(firstRef = null, replaceJid = null) {
+    stopPlay();
+    if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
+    if (typeof Notes !== 'undefined' && Notes.active) Notes.stop();
+    stopPick();
+    const solids = Model.activeItems(App.doc).filter((x) => !x.hidden && x.role !== 'hole');
+    if (solids.length < 2) {
+      UI.toast('Für „Verbindung: Winkel“ brauchst du mindestens zwei sichtbare Körper.', { icon: 'info' });
+      return false;
+    }
+    const existing = replaceJid ? list().find((x) => x.id === replaceJid) : null;
+    let pick1 = firstRef ? resolveOrientRef(firstRef) : null;
+    if (pick1) pick1 = { ...firstRef, ...pick1 };
+    let curAngle = existing ? existing.angle : '30';
+    App.clearSelection();
+    Handles.clear();
+
+    const syncAnglePickVis = () => {
+      clearPickVis();
+      Viewer.highlightEdge(null, null);
+      if (!pickState) return;
+      if (pickState.pick1) {
+        if (pickState.pick1.kind === 'face' && pickState.pick1.faceIdx != null) Viewer.highlightFace('sel', pickState.pick1.id, pickState.pick1.faceIdx);
+        else if (pickState.pick1.worldP) addPickDot(new THREE.Vector3(...pickState.pick1.worldP), '#f08c00');
+      }
+      if (pickState.hover) {
+        if (pickState.hover.kind === 'edge' && pickState.hover.edgeIdx != null) Viewer.highlightEdge(pickState.hover.id, pickState.hover.edgeIdx);
+        else if (pickState.hover.kind === 'face' && pickState.hover.faceIdx != null) Viewer.highlightFace('hover', pickState.hover.id, pickState.hover.faceIdx);
+      }
+      Viewer.requestRender();
+    };
+    const updateAngleBar = () => {
+      if (!pickBar || !pickState) return;
+      const msg = pickBar.querySelector('#jp-msg');
+      const name1 = pickState.pick1 ? Model.label(top(pickState.pick1.id) || { name: 'Teil 1' }) : '';
+      const txt = pickState.pick1 ? T('joint.angleStep2', { name: name1 }) : T('joint.angleStep1');
+      if (msg) msg.textContent = txt;
+      for (const m of ['auto', 'face', 'edge']) {
+        const b = pickBar.querySelector('#jp-mode-' + m);
+        if (b) b.setAttribute('aria-pressed', String(pickState.mode === m));
+      }
+      UI.hint(`<b>${esc(txt)}</b> <b>Esc</b> bricht ab.`);
+    };
+    const showAngleBar = () => {
+      hidePickBar();
+      pickBar = h('div', { class: 'sketchbar measurebar', id: 'joint-pick-bar' });
+      const msg = h('span', { class: 'm-cur', id: 'jp-msg' });
+      const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Auswahlart' });
+      for (const [m, lbl] of [['auto', 'Auto'], ['face', 'Fläche'], ['edge', 'Kante']]) {
+        const b = h('button', { type: 'button', id: 'jp-mode-' + m, 'aria-pressed': String(pickState.mode === m) }, lbl);
+        b.onclick = () => { if (!pickState) return; pickState.mode = m; updateAngleBar(); };
+        seg.append(b);
+      }
+      const angWrap = h('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px' } }, T('joint.angleLabel') + ':');
+      const angInp = h('input', {
+        id: 'jp-angle', type: 'text', value: String(curAngle),
+        style: { width: '68px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' },
+        'aria-label': T('joint.angleLabel'),
+      });
+      angInp.addEventListener('input', () => { curAngle = angInp.value; });
+      angInp.addEventListener('keydown', (e) => { e.stopPropagation(); });
+      angWrap.append(angInp, h('span', null, '°'));
+      const cancelBtn = h('button', { type: 'button', class: 'tool', id: 'jp-cancel', 'data-kbd': 'Esc' });
+      cancelBtn.innerHTML = icon('close') + `<span>${esc(T('common.cancel'))}</span>`;
+      cancelBtn.onclick = () => stopPick();
+      pickBar.append(msg, seg, angWrap, cancelBtn);
+      $('#overlay').append(pickBar);
+      updateAngleBar();
+    };
+
+    const down = (e) => {
+      if (e.button !== 0 || !pickState) return;
+      e.preventDefault(); e.stopPropagation();
+      const ent = pickOrientAt(e.clientX, e.clientY, pickState.mode);
+      if (!ent) {
+        UI.toast('Klick auf eine ebene Fläche oder eine gerade Kante.', { icon: 'info' });
+        return;
+      }
+      if (!top(ent.id)) return;
+      if (!pickState.pick1) {
+        pickState.pick1 = ent;
+        pickState.hover = null;
+        syncAnglePickVis();
+        updateAngleBar();
+        return;
+      }
+      const p1 = pickState.pick1;
+      if (p1.id === ent.id) {
+        UI.toast('Wähle eine Fläche oder Kante an einem anderen Teil.', { icon: 'info' });
+        return;
+      }
+      const repId = pickState.replaceJid;
+      if (repId) {
+        const refA = resolveOrientRef(p1, App.doc), refB = resolveOrientRef(ent, App.doc);
+        if (!refA || !refB) return;
+        const Wa = Model.worldMatrix(App.doc, p1.id), Wb = Model.worldMatrix(App.doc, ent.id);
+        const uA = new THREE.Vector3(...(refA.kind === 'edge' ? refA.d : refA.n)).transformDirection(Wa).normalize();
+        const uB = new THREE.Vector3(...(refB.kind === 'edge' ? refB.d : refB.n)).transformDirection(Wb).normalize();
+        const alignSign = refA.kind === refB.kind && uA.dot(uB) < -1e-4 ? -1 : 1;
+        const vA = uA.clone().multiplyScalar(alignSign);
+        const cr = new THREE.Vector3().crossVectors(vA, uB);
+        const k0 = cr.lengthSq() > 1e-8 ? cr.normalize() : defaultHingeAxis(uA);
+        const axisA = r9(k0.clone().transformDirection(Wa.clone().invert()).normalize().toArray());
+        stopPick();
+        updateAngle(repId, { a: p1.id, b: ent.id, refA, refB, axisA, alignSign, angle: curAngle }, { label: 'Winkel-Bezüge geändert' });
+        select(repId);
+        UI.toast('Winkel-Verbindung aktualisiert.', { icon: 'check' });
+        return;
+      }
+      const res = addAngle(p1, ent, { angle: curAngle });
+      if (!res.ok) {
+        UI.toast(res.msg || 'Winkel-Verbindung konnte nicht angelegt werden.', { kind: 'bad' });
+        return;
+      }
+      stopPick();
+      select(res.id);
+      UI.toast(`Winkel angelegt: ${fmtAngleU(evalAngleDeg(curAngle))} zwischen „${Model.label(top(p1.id))}“ und „${Model.label(top(ent.id))}“.`, { icon: 'check', ms: 3400 });
+    };
+    const move = (e) => {
+      if (!pickState) return;
+      pickState.hover = pickOrientAt(e.clientX, e.clientY, pickState.mode);
+      syncAnglePickVis();
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { mode: 'auto', pick1, hover: null, replaceJid, down, move, key, moveCapture: true, restoreVisuals: true };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move, true);
+    window.addEventListener('keydown', key, true);
+    showAngleBar();
+    syncAnglePickVis();
+    return true;
+  }
+
+  function startCenter(replaceJid = null) {
+    stopPlay();
+    if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
+    if (typeof Notes !== 'undefined' && Notes.active) Notes.stop();
+    stopPick();
+    const solids = Model.activeItems(App.doc).filter((x) => !x.hidden && x.role !== 'hole');
+    if (solids.length < 2) {
+      UI.toast('Für „Verbindung: Mittig“ brauchst du mindestens zwei sichtbare Körper.', { icon: 'info' });
+      return false;
+    }
+    App.clearSelection();
+    Handles.clear();
+
+    const syncCenterVis = () => {
+      clearPickVis();
+      if (!pickState) return;
+      for (const p of pickState.picks) {
+        if (p.worldP) addPickDot(new THREE.Vector3(...p.worldP), '#f08c00');
+      }
+      if (pickState.picks.length) {
+        const lastP = pickState.picks[pickState.picks.length - 1];
+        if (lastP.faceIdx != null) Viewer.highlightFace('sel', lastP.id, lastP.faceIdx);
+      }
+      if (pickState.hover && pickState.hover.faceIdx != null) {
+        Viewer.highlightFace('hover', pickState.hover.id, pickState.hover.faceIdx);
+      }
+      Viewer.requestRender();
+    };
+    const updateCenterBar = () => {
+      if (!pickBar || !pickState) return;
+      const n = pickState.picks.length;
+      const txt = n === 0 ? T('joint.centerStep1')
+        : n === 1 ? T('joint.centerStep2')
+          : pickState.bMode === 'body' ? T('joint.centerStep3Body')
+            : n === 2 ? T('joint.centerStep3Face') : T('joint.centerStep4Face');
+      const msg = pickBar.querySelector('#jp-msg');
+      if (msg) msg.textContent = txt;
+      for (const m of ['body', 'faces']) {
+        const b = pickBar.querySelector('#jp-cmode-' + m);
+        if (b) b.setAttribute('aria-pressed', String(pickState.bMode === m));
+      }
+      UI.hint(`<b>${esc(txt)}</b> <b>Esc</b> bricht ab.`);
+    };
+    const showCenterBar = () => {
+      hidePickBar();
+      pickBar = h('div', { class: 'sketchbar measurebar', id: 'joint-pick-bar' });
+      const msg = h('span', { class: 'm-cur', id: 'jp-msg' });
+      const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Ausrichtung' });
+      for (const [m, lbl] of [['body', 'Ganzes Teil'], ['faces', '2 Flächen']]) {
+        const b = h('button', { type: 'button', id: 'jp-cmode-' + m, 'aria-pressed': String(pickState.bMode === m) }, lbl);
+        b.onclick = () => {
+          if (!pickState) return;
+          pickState.bMode = m;
+          if (m === 'body' && pickState.picks.length > 2) pickState.picks = pickState.picks.slice(0, 2);
+          updateCenterBar();
+        };
+        seg.append(b);
+      }
+      const cancelBtn = h('button', { type: 'button', class: 'tool', id: 'jp-cancel', 'data-kbd': 'Esc' });
+      cancelBtn.innerHTML = icon('close') + `<span>${esc(T('common.cancel'))}</span>`;
+      cancelBtn.onclick = () => stopPick();
+      pickBar.append(msg, seg, cancelBtn);
+      $('#overlay').append(pickBar);
+      updateCenterBar();
+    };
+
+    const down = (e) => {
+      if (e.button !== 0 || !pickState) return;
+      e.preventDefault(); e.stopPropagation();
+      const picks = pickState.picks;
+      if (picks.length === 2 && pickState.bMode === 'body') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        if (!hit || !top(hit.id)) { UI.toast('Klick auf das Teil, das mittig sitzen soll.', { icon: 'info' }); return; }
+        if (hit.id === picks[0].id) { UI.toast('Wähle einen anderen Körper als das feste Teil.', { icon: 'info' }); return; }
+        if (pickState.replaceJid) {
+          const pairA = validateParallelFacePair(picks[0], picks[1], `„${Model.label(top(picks[0].id))}“`);
+          if (!pairA.ok) { UI.toast(pairA.msg, { icon: 'info' }); return; }
+          const repId = pickState.replaceJid;
+          stopPick();
+          updateCenter(repId, { a: picks[0].id, b: hit.id, bMode: 'body', refA1: pairA.ref1, refA2: pairA.ref2, refB1: null, refB2: null }, { label: 'Bezüge geändert' });
+          select(repId);
+          UI.toast('Verbindung „Mittig“ aktualisiert.', { icon: 'check' });
+          return;
+        }
+        const res = addCenter(picks[0], picks[1], { id: hit.id });
+        if (!res.ok) { UI.toast(res.msg, { kind: 'bad' }); return; }
+        stopPick();
+        select(res.id);
+        UI.toast(`„${Model.label(top(hit.id))}“ sitzt jetzt mittig.`, { icon: 'check', ms: 3400 });
+        return;
+      }
+
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const pl = planarHitOf(hit);
+      if (!pl || !top(pl.id)) { UI.toast('Klick auf eine ebene Fläche eines Körpers.', { icon: 'info' }); return; }
+      const ent = { id: pl.id, faceIdx: pl.faceIdx, info: hit.node.data.faces[hit.faceIdx], worldP: r6(pl.p.toArray()) };
+      if (picks.length === 0) {
+        picks.push(ent);
+      } else if (picks.length === 1) {
+        if (ent.id !== picks[0].id) { UI.toast('Wähle die parallele Gegenfläche am selben ersten Teil.', { icon: 'info' }); return; }
+        const chk = validateParallelFacePair(picks[0], ent, `„${Model.label(top(ent.id))}“`);
+        if (!chk.ok) { UI.toast(chk.msg, { icon: 'info' }); return; }
+        picks.push(ent);
+      } else if (picks.length === 2) {
+        if (ent.id === picks[0].id) { UI.toast('Wähle jetzt eine Fläche am anderen (beweglichen) Teil.', { icon: 'info' }); return; }
+        picks.push(ent);
+      } else if (picks.length === 3) {
+        if (ent.id !== picks[2].id) { UI.toast('Wähle die parallele Gegenfläche am selben zweiten Teil.', { icon: 'info' }); return; }
+        const chk = validateParallelFacePair(picks[2], ent, `„${Model.label(top(ent.id))}“`);
+        if (!chk.ok) { UI.toast(chk.msg, { icon: 'info' }); return; }
+        if (pickState.replaceJid) {
+          const pairA = validateParallelFacePair(picks[0], picks[1], `„${Model.label(top(picks[0].id))}“`);
+          if (!pairA.ok) { UI.toast(pairA.msg, { icon: 'info' }); return; }
+          const repId = pickState.replaceJid;
+          stopPick();
+          updateCenter(repId, { a: picks[0].id, b: ent.id, bMode: 'faces', refA1: pairA.ref1, refA2: pairA.ref2, refB1: chk.ref1, refB2: chk.ref2 }, { label: 'Bezüge geändert' });
+          select(repId);
+          UI.toast('Verbindung „Mittig“ aktualisiert.', { icon: 'check' });
+          return;
+        }
+        const res = addCenter(picks[0], picks[1], [picks[2], ent]);
+        if (!res.ok) { UI.toast(res.msg, { kind: 'bad' }); return; }
+        stopPick();
+        select(res.id);
+        UI.toast(`„${Model.label(top(ent.id))}“ sitzt jetzt mittig.`, { icon: 'check', ms: 3400 });
+        return;
+      }
+      pickState.hover = null;
+      syncCenterVis();
+      updateCenterBar();
+    };
+    const move = (e) => {
+      if (!pickState) return;
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      if (pickState.picks.length === 2 && pickState.bMode === 'body') {
+        pickState.hover = hit && hit.faceIdx >= 0 && hit.id !== pickState.picks[0].id ? { id: hit.id, faceIdx: hit.faceIdx } : null;
+      } else {
+        const pl = planarHitOf(hit);
+        pickState.hover = pl ? { id: pl.id, faceIdx: pl.faceIdx } : null;
+      }
+      syncCenterVis();
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { bMode: 'body', picks: [], hover: null, replaceJid, down, move, key, moveCapture: true, restoreVisuals: true };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move, true);
+    window.addEventListener('keydown', key, true);
+    showCenterBar();
+    syncCenterVis();
+    return true;
+  }
+
   // ---------- Freiheitsgrade setzen, Umkehren, Lage einhalten ----------
   function clampState(j, st) {
     const k = kindOf(j);
@@ -1178,7 +1985,7 @@ const Joints = (() => {
     if (curB && curB.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(curB) }), { icon: 'lock' }); return false; }
     const label = patch && Object.keys(patch).length === 1 && 'ang' in patch ? 'Gelenk bewegt' : 'Verbindung bewegt';
     App.change(label, (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
@@ -1195,7 +2002,7 @@ const Joints = (() => {
   function setKind(jid, kind) {
     const k = kind === 'slide' || kind === 'cyl' || kind === 'planar' ? kind : 'rot';
     App.change('Verbindungs-Art', (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
@@ -1231,7 +2038,7 @@ const Joints = (() => {
     const pair = { min: ['min', 'max', 360], max: ['min', 'max', 360], minPos: ['minPos', 'maxPos', 10000], maxPos: ['minPos', 'maxPos', 10000], minU: ['minU', 'maxU', 10000], maxU: ['minU', 'maxU', 10000], minV: ['minV', 'maxV', 10000], maxV: ['minV', 'maxV', 10000] }[k];
     if (!pair) return;
     App.change('Verbindungs-Bereich', (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
       const lim = pair[2];
       j[k] = round(clamp(Number(v) || 0, -lim, lim), 2);
       if (j[pair[0]] > j[pair[1]]) [j[pair[0]], j[pair[1]]] = [j[pair[1]], j[pair[0]]];
@@ -1279,12 +2086,28 @@ const Joints = (() => {
     return deg;
   }
 
-  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'cyl'/'planar' projizieren
+  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'cyl'/'planar'/'angle'/'center' projizieren
   function constrain(doc, itemId) {
     const j = drivingOf(itemId, doc);
-    if (!j || (j.kind !== 'cyl' && j.kind !== 'planar')) return false;
+    if (!j || (j.kind !== 'cyl' && j.kind !== 'planar' && j.kind !== 'angle' && j.kind !== 'center')) return false;
     const b = top(j.b, doc);
     if (!b || b.locked) return false;
+    if (j.kind === 'angle' || j.kind === 'center') {
+      const WbOld = Model.worldMatrix(doc, j.b);
+      const sol = solveConstraintPose(doc, j);
+      if (!sol) return false;
+      const LbNew = Model.parentWorld(doc, j.b).invert().multiply(sol.WbNew);
+      const LbOld = Model.localMatrix(b);
+      if (maxMatDiff(LbNew, LbOld) > 1e-5) {
+        Model.setFromMatrix(b, LbNew);
+        j.home = r9(Model.localMatrix(b).toArray());
+        j.ao = r6(sol.ao.toArray());
+        j.ad = r9(sol.ad.toArray());
+        moveChain(doc, j.b, sol.WbNew.clone().multiply(WbOld.clone().invert()));
+        return true;
+      }
+      return false;
+    }
     const prev = stateOf(j);
     const W_cur = Model.worldMatrix(doc, j.b);
     const W_home = Model.parentWorld(doc, j.b).multiply(new THREE.Matrix4().fromArray(j.home));
@@ -1337,7 +2160,7 @@ const Joints = (() => {
 
   // Live-Ziehen in der 3D-Ansicht (ohne eigenes App.change – Interact.onUp speichert den Rückgängig-Schritt)
   function applyDrag(jid, patch) {
-    const j = list(App.doc).find((x) => x.id === jid); if (!j || fixed(j)) return null;
+    const j = list(App.doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return null;
     const b = top(j.b, App.doc); if (!b || b.locked) return null;
     const prev = stateOf(j);
     const k = kindOf(j);
@@ -1396,10 +2219,10 @@ const Joints = (() => {
 
   function remove(jid) {
     const cur = list().find((x) => x.id === jid);
-    const wasFixed = fixed(cur);
-    App.change(wasFixed ? 'Verbindung gelöst' : 'Gelenk gelöst', (doc) => { doc.joints = list(doc).filter((x) => x.id !== jid); });
+    const wasConn = isConstraint(cur);
+    App.change(wasConn ? 'Verbindung gelöst' : 'Gelenk gelöst', (doc) => { doc.joints = list(doc).filter((x) => x.id !== jid); });
     if (selJoint === jid) { selJoint = null; clearSelVis(); Panels.renderRight(); Panels.renderLeft(); }
-    UI.toast(wasFixed ? 'Verbindung gelöst – das Teil lässt sich wieder frei bewegen.' : 'Verbindung gelöst – das Teil bleibt, wo es gerade ist.', { icon: 'check' });
+    UI.toast(wasConn ? 'Verbindung gelöst – das Teil lässt sich wieder frei bewegen.' : 'Verbindung gelöst – das Teil bleibt, wo es gerade ist.', { icon: 'check' });
   }
 
   // ---------- Bewegung prüfen (Durchdringung) ----------
@@ -1421,7 +2244,7 @@ const Joints = (() => {
     return { key: 'ang', lo: j.min, hi: j.max, len: false };
   }
   async function check(jid, step) {
-    const j = list().find((x) => x.id === jid); if (!j || fixed(j)) return null;
+    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j)) return null;
     const sw = sweepMeta(j);
     step = step || (sw.len ? Math.max(0.5, round((sw.hi - sw.lo) / 40, 1)) : 5);
     const A = top(j.a), B = top(j.b); if (!A || !B) return null;
@@ -1480,7 +2303,7 @@ const Joints = (() => {
   }
   function setStops(jid, lo, hi) {
     App.change('Gelenk-Anschlag', (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
       const a = round(Math.min(lo, hi), 2), b = round(Math.max(lo, hi), 2);
       const sw = sweepMeta(j);
       if (sw.key === 'pos') { j.minPos = a; j.maxPos = b; j.stopsLocked = true; }
@@ -1557,7 +2380,7 @@ const Joints = (() => {
   }
   function play(jid, btn) {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
-    const j = list().find((x) => x.id === jid); if (!j || fixed(j)) return;
+    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j)) return;
     const B = top(j.b); if (!B) return;
     if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return; }
     if (!isTop(B.id) || downstream(App.doc, j.b, { stopAtLocked: true }).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
@@ -1674,6 +2497,60 @@ const Joints = (() => {
       box.append(r1, h('div', { class: 'btn-row' }, del));
       return box;
     }
+    if (isAngle(j)) {
+      const refKindLbl = (r) => (r && r.kind === 'edge' ? 'Kante' : 'Fläche');
+      const curMeas = measureAngle(j.id);
+      box.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> (${refKindLbl(j.refB)}) im Winkel zu <b>${esc(Model.label(A))}</b> (${refKindLbl(j.refA)}) · gemessen: <b class="mono">${esc(fmtAngleU(curMeas))}</b>.` }));
+      const fl = h('div', { class: 'fields' });
+      fl.append(UI.numField({ id: 'jt-angle' + sfx, label: T('joint.angleLabel'), value: j.angle ?? 0, unit: '°', expr: true, onCommit: (v) => updateAngle(j.id, { angle: v }, { merge: 'jang:' + j.id }) }));
+      box.append(fl);
+      const r1 = h('div', { class: 'btn-row' });
+      const fb = h('button', { type: 'button', class: 'btn' + (j.flip ? ' primary' : ''), id: 'jt-flip' + sfx, 'aria-pressed': String(!!j.flip) });
+      fb.innerHTML = icon('mirror') + esc(T('joint.angleFlip'));
+      fb.onclick = () => flipAngle(j.id);
+      r1.append(fb);
+      if (opts.full) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'jt-repick' + sfx });
+        rb.innerHTML = icon('cursor') + esc(T('joint.repickAngleBtn'));
+        rb.onclick = () => startAngle(null, j.id);
+        r1.append(rb);
+      } else {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'jt-open' + sfx });
+        eb.innerHTML = icon('edit') + 'Bearbeiten';
+        eb.onclick = () => select(j.id);
+        r1.append(eb);
+      }
+      const del = h('button', { type: 'button', class: 'btn danger', id: 'jt-del' + sfx });
+      del.innerHTML = icon('ungroup') + esc(T('joint.removeBtn'));
+      del.onclick = () => remove(j.id);
+      box.append(r1, h('div', { class: 'btn-row' }, del));
+      return box;
+    }
+    if (isCenter(j)) {
+      const m = centerMetrics(j.id);
+      const infoTxt = m
+        ? ` Nutbreite <b class="mono">${esc(Units.fmtLenU(m.widthA, 2))}</b> · Abstand links <b class="mono">${esc(Units.fmtLenU(m.gapLeft, 2))}</b>, rechts <b class="mono">${esc(Units.fmtLenU(m.gapRight, 2))}</b>.`
+        : '';
+      box.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> sitzt mittig zwischen zwei Flächen von <b>${esc(Model.label(A))}</b>.${infoTxt}` }));
+      const r1 = h('div', { class: 'btn-row' });
+      if (opts.full) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'jt-repick' + sfx });
+        rb.innerHTML = icon('cursor') + esc(T('joint.repickCenterBtn'));
+        rb.onclick = () => startCenter(j.id);
+        r1.append(rb);
+      } else {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'jt-open' + sfx });
+        eb.innerHTML = icon('edit') + 'Bearbeiten';
+        eb.onclick = () => select(j.id);
+        r1.append(eb);
+      }
+      const del = h('button', { type: 'button', class: 'btn danger', id: 'jt-del' + sfx });
+      del.innerHTML = icon('ungroup') + esc(T('joint.removeBtn'));
+      del.onclick = () => remove(j.id);
+      r1.append(del);
+      box.append(r1);
+      return box;
+    }
     const k = kindOf(j);
     const down = downstream(App.doc, j.b).map((d) => top(d.b)).filter(Boolean);
       const moveTxt = down.length ? ` (${down.map((x) => '„' + esc(Model.label(x)) + '“').join(', ')} ${down.length === 1 ? 'bewegt sich' : 'bewegen sich'} mit)` : '';
@@ -1767,8 +2644,11 @@ const Joints = (() => {
     const sec = h('div', { class: 'datum-tree joint-tree', id: 'joint-tree', 'data-help': 'fixedJoint' }, h('div', { class: 'section-h' }, T('joint.treeHeading')));
     for (const j of js) {
       const row = h('div', { class: 'tree-row joint-row' + (j.id === selJoint ? ' sel' : ''), 'data-joint': j.id });
-      const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(fixed(j) ? 'lock' : 'hinge');
-      const subTxt = fixed(j) ? (j.flip ? `${T('joint.fixedKind')} · ↺` : T('joint.fixedKind')) : isCyl(j) ? 'Zylindrisch' : isPlanar(j) ? 'Eben' : (slide(j) ? 'Schieben' : 'Drehen');
+      const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(fixed(j) ? 'lock' : isAngle(j) ? 'rotate' : isCenter(j) ? 'cSymmetric' : 'hinge');
+      const subTxt = fixed(j) ? (j.flip ? `${T('joint.fixedKind')} · ↺` : T('joint.fixedKind'))
+        : isAngle(j) ? `${fmtAngleU(evalAngleDeg(j.angle))}${j.flip ? ' · ↺' : ''}`
+        : isCenter(j) ? T('joint.centerKind')
+        : isCyl(j) ? 'Zylindrisch' : isPlanar(j) ? 'Eben' : (slide(j) ? 'Schieben' : 'Drehen');
       const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
       del.innerHTML = icon('trash');
       del.onclick = (e) => { e.stopPropagation(); remove(j.id); };
@@ -1779,6 +2659,7 @@ const Joints = (() => {
         UI.menu(row, [
           { icon: 'edit', label: 'Bearbeiten', run: () => select(j.id) },
           ...(fixed(j) ? [{ icon: 'mirror', label: T('joint.fixedFlip'), run: () => flipFixed(j.id) }] : []),
+          ...(isAngle(j) ? [{ icon: 'mirror', label: T('joint.angleFlip'), run: () => flipAngle(j.id) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), jointLabel(j), T('common.rename')); if (n && n.trim()) App.change('Verbindung umbenannt', (doc) => { const x = list(doc).find((y) => y.id === j.id); if (x) x.name = n.trim(); }); } },
           '-',
           { icon: 'trash', label: T('common.delete'), run: () => remove(j.id) },
@@ -1794,7 +2675,7 @@ const Joints = (() => {
     if (!j) return false;
     const A = top(j.a), B = top(j.b);
     if (!A || !B) return false;
-    const w = h('div', { class: 'props', id: 'joint-edit-panel', 'data-help': fixed(j) ? 'fixedJoint' : null });
+    const w = h('div', { class: 'props', id: 'joint-edit-panel', 'data-help': fixed(j) ? 'fixedJoint' : isAngle(j) ? 'mateAngle' : isCenter(j) ? 'mateCenter' : null });
     const nm = h('input', { id: 'jt-name', value: jointLabel(j), 'aria-label': T('common.name') });
     nm.addEventListener('change', () => {
       const v = nm.value.trim();
@@ -1818,7 +2699,7 @@ const Joints = (() => {
   function panel(it) {
     const js = allOf(it.id).filter((j) => top(j.a) && top(j.b));
     if (!js.length) return null;
-    const anyConn = js.some((j) => fixed(j) || isCyl(j) || isPlanar(j));
+    const anyConn = js.some((j) => isConstraint(j) || isCyl(j) || isPlanar(j));
     const title = js.length > 1 ? (anyConn ? `Verbindungen (${js.length})` : `Gelenke (${js.length})`) : (anyConn ? 'Verbindung' : 'Gelenk');
     const sec = h('div', { class: 'section', id: 'joint-sec' }, h('div', { class: 'section-h' }, title));
     js.forEach((j, idx) => {
@@ -1861,12 +2742,22 @@ const Joints = (() => {
     startFixed,
     startCylindrical,
     startPlanar,
+    startAngle,
+    startCenter,
     stopPick,
     add,
     addFixed,
     updateFixed,
     flipFixed,
     syncFixed,
+    addAngle,
+    updateAngle,
+    flipAngle,
+    measureAngle,
+    evalAngleDeg,
+    addCenter,
+    updateCenter,
+    centerMetrics,
     addCylindrical,
     addPlanar,
     setAngle,

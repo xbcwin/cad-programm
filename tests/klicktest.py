@@ -18024,6 +18024,251 @@ def t_f11241523(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- [A-089] Verbindungen mit Winkel und mittig (BG-07) ----------
+def t_a089_verbindungen_winkel_mittig(p):
+    # 1. Winkel 30° zwischen zwei Flächen + Kontextleiste + Messen + Ändern + Umkehren
+    p.empty()
+    ids = p.ev("""
+      App.change('Zwei Quader', (d) => {
+        const a = Model.newItem('box', { w: 30, d: 20, h: 10 }, { name: 'Quader A' });
+        const b = Model.newItem('box', { w: 25, d: 20, h: 8 }, { name: 'Quader B' });
+        b.t.x = 35;
+        d.items.push(a, b);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    p.ev("App.select(arg)", ids)
+    p.wait(350)
+    mate_btn = p.pg.locator('.ctxbar button[aria-label="Verbindung"]')
+    has_mate_btn = mate_btn.count() == 1
+    menu_ok = False
+    if has_mate_btn:
+        mate_btn.click()
+        p.wait(200)
+        menu_txt = p.pg.locator('.menu').inner_text()
+        menu_ok = 'Winkel' in menu_txt and 'Mittig' in menu_txt
+        p.ev("document.querySelector('.menu')?.remove()")
+
+    ang_res = p.ev("""
+      const [aid, bid] = arg;
+      const af = (App.results.get(aid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const r = Joints.addAngle({ id: aid, faceIdx: af }, { id: bid, faceIdx: bf }, { angle: 30 });
+      return { r, af, bf };
+    """, ids)
+    warte_rechnen(p, 25)
+
+    def face_angle_deg():
+        return p.ev("""
+          const { aid, bid, af, bf, jid } = arg;
+          const a = Joints.planarFaceOf({ id: aid, faceIdx: af });
+          const b = Joints.planarFaceOf({ id: bid, faceIdx: bf });
+          const deg = (Math.acos(Math.min(1, Math.max(0, Math.abs(a.n.dot(b.n))))) * 180) / Math.PI;
+          return { deg, meas: Joints.measureAngle(jid), aP: a.p.toArray(), bP: b.p.toArray() };
+        """, {'aid': ids[0], 'bid': ids[1], 'af': ang_res['af'], 'bf': ang_res['bf'], 'jid': ang_res['r'].get('id')})
+
+    m30 = face_angle_deg()
+
+    # Mit dem Messen-Werkzeug beide Flächen anklicken -> 30°
+    p.ev("Measure.start(); const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(18, -55, 65), c.clone().set(18, 0, 10), null, false); Viewer.renderNow();")
+    p.wait(250)
+    sa = world_screen(p, m30['aP'][0], m30['aP'][1], m30['aP'][2])
+    sb = world_screen(p, m30['bP'][0], m30['bP'][1], m30['bP'][2])
+    p.pg.mouse.click(sa[0], sa[1])
+    p.wait(200)
+    p.pg.mouse.click(sb[0], sb[1])
+    p.wait(250)
+    meas_txt = p.ev("const t = document.querySelector('#measure-cur')?.textContent || ''; Measure.stop(); return t;")
+
+    # Im Panel rechts auf 45° ändern & umkehren
+    p.ev("App.select([arg])", ids[1])
+    p.wait(300)
+    field(p, '#jt-angle', 45)
+    warte_rechnen(p, 20)
+    m45 = face_angle_deg()
+    p.pg.locator('#jt-flip').click()
+    warte_rechnen(p, 20)
+    m45_flip = face_angle_deg()
+    flipped = p.ev("return !!App.doc.joints[0]?.flip")
+    ok1 = (
+        has_mate_btn and menu_ok
+        and ang_res['r'].get('ok') is True
+        and abs(m30['deg'] - 30.0) < 0.02
+        and abs(m30['meas'] - 30.0) < 0.02
+        and '30' in meas_txt and '°' in meas_txt
+        and abs(m45['deg'] - 45.0) < 0.02
+        and flipped and abs(m45_flip['deg'] - 45.0) < 0.02
+    )
+
+    # 2. Winkel als Formel (Neigung = 30 -> 60) + Winkel zwischen zwei geraden Kanten
+    p.ev("""App.change('Maß Neigung', d => {
+      d.params = d.params || [];
+      d.params.push({ id: 'p_neigung', name: 'Neigung', expr: '30' });
+    });""")
+    p.wait(250)
+    p.ev("App.select([arg])", ids[1])
+    p.wait(250)
+    field(p, '#jt-angle', 'Neigung')
+    warte_rechnen(p, 20)
+    fx_txt = p.ev("return { expr: App.doc.joints[0]?.angle, fx: document.querySelector('#jt-angle')?.parentElement?.querySelector('.fx')?.textContent || '' }")
+    mf30 = face_angle_deg()
+    p.ev("""App.change('Neigung 60', d => {
+      const pr = (d.params || []).find(p => p.name === 'Neigung');
+      if (pr) pr.expr = '60';
+    });""")
+    warte_rechnen(p, 20)
+    mf60 = face_angle_deg()
+
+    p.ev("""App.change('Quader C', d => {
+      const c = Model.newItem('box', { w: 20, d: 20, h: 8 }, { name: 'Quader C' });
+      c.t.x = -35;
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    edge_deg = p.ev("""
+      const aid = App.doc.items[0].id, cid = App.doc.items[2].id;
+      const ae = (App.results.get(aid)?.data?.edges || []).findIndex(e => e && e.t === 'LINE' && Math.abs(e.a[0] - e.b[0]) > 5);
+      const ce = (App.results.get(cid)?.data?.edges || []).findIndex(e => e && e.t === 'LINE' && Math.abs(e.a[0] - e.b[0]) > 5);
+      const r = Joints.addAngle({ id: aid, edgeIdx: ae }, { id: cid, edgeIdx: ce }, { angle: 30 });
+      const V3 = window.__masswerk.THREE.Vector3;
+      const Wa = Model.worldMatrix(App.doc, aid), Wc = Model.worldMatrix(App.doc, cid);
+      const ea = App.results.get(aid).data.edges[ae], ec = App.results.get(cid).data.edges[ce];
+      const da = new V3(ea.b[0]-ea.a[0], ea.b[1]-ea.a[1], ea.b[2]-ea.a[2]).transformDirection(Wa).normalize();
+      const dc = new V3(ec.b[0]-ec.a[0], ec.b[1]-ec.a[1], ec.b[2]-ec.a[2]).transformDirection(Wc).normalize();
+      return { ok: r.ok, deg: (Math.acos(Math.min(1, Math.abs(da.dot(dc)))) * 180) / Math.PI };
+    """)
+    warte_rechnen(p, 20)
+    ok2 = (
+        fx_txt['expr'] == 'Neigung' and '30' in fx_txt['fx']
+        and abs(mf30['deg'] - 30.0) < 0.02
+        and abs(mf60['deg'] - 60.0) < 0.02
+        and edge_deg['ok'] is True and abs(edge_deg['deg'] - 30.0) < 0.02
+    )
+
+    # 3. Quader mittig in Nut 20 mm -> links und rechts gleicher Abstand (6 mm)
+    p.ev("Start.openNewTab(Model.newDoc('Mittig-Test'))")
+    p.wait(400)
+    cids = p.ev("""
+      App.change('Nutblock und Quader', (d) => {
+        const g = Model.newItem('group', {}, { name: 'Nutblock' });
+        const base = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Block' });
+        const slot = Model.newItem('box', { w: 20, d: 32, h: 12 }, { role: 'hole', name: 'Nut' });
+        slot.t.x = 4; slot.t.z = 8;
+        g.children.push(base, slot);
+        const block = Model.newItem('box', { w: 8, d: 14, h: 10 }, { name: 'Einleger' });
+        block.t.x = 40; block.t.z = 10;
+        d.items.push(g, block);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    cres = p.ev("""
+      const [aid, bid] = arg;
+      const faces = App.results.get(aid)?.data?.faces || [];
+      const fL = faces.findIndex(f => f && f.t === 'PLANE' && Math.abs(f.n[0]) > 0.9 && Math.abs(f.c[0] - (-6)) < 0.2);
+      const fR = faces.findIndex(f => f && f.t === 'PLANE' && Math.abs(f.n[0]) > 0.9 && Math.abs(f.c[0] - 14) < 0.2);
+      const r = Joints.addCenter({ id: aid, faceIdx: fL }, { id: aid, faceIdx: fR }, { id: bid });
+      return { r, fL, fR };
+    """, cids)
+    warte_rechnen(p, 25)
+
+    def center_gaps(ax=0):
+        return p.ev("""
+          const { bid, jid, ax } = arg;
+          const bb = Actions.worldBox(bid);
+          const left = bb.min.x - (-6 + ax);
+          const right = (14 + ax) - bb.max.x;
+          return {
+            left, right,
+            minY: bb.min.y,
+            met: Joints.centerMetrics(jid),
+          };
+        """, {'bid': cids[1], 'jid': cres['r'].get('id'), 'ax': ax})
+
+    g0 = center_gaps(0)
+    ok3 = (
+        cres['r'].get('ok') is True
+        and abs(g0['left'] - 6.0) < 0.02
+        and abs(g0['right'] - 6.0) < 0.02
+        and abs(g0['left'] - g0['right']) < 0.01
+        and g0['met'] is not None
+        and abs(g0['met']['widthA'] - 20.0) < 0.02
+        and abs(g0['met']['gapLeft'] - g0['met']['gapRight']) < 0.01
+    )
+
+    # 4. Mittig hält gegen Quer-Verschieben (#t-x), lässt Längs-Verschieben (#t-y) zu, folgt Nutblock & 2-Flächen-Modus
+    p.ev("App.select([arg])", cids[1])
+    p.wait(300)
+    cur_x = p.ev("return Model.find(App.doc, arg).item.t.x", cids[1])
+    field(p, '#t-x', round(cur_x + 15, 2))
+    cur_y = p.ev("return Model.find(App.doc, arg).item.t.y", cids[1])
+    field(p, '#t-y', round(cur_y + 5, 2))
+    warte_rechnen(p, 20)
+    g1 = center_gaps(0)
+
+    p.ev("App.change('Nutblock verschoben', d => { d.items[0].t.x = 10; });")
+    warte_rechnen(p, 20)
+    g2 = center_gaps(10)
+
+    p.ev("""App.change('Schiefer Klotz', d => {
+      const c = Model.newItem('box', { w: 6, d: 10, h: 8 }, { name: 'Klotz C' });
+      c.t.x = -35; c.t.z = 10; c.t.rz = 25;
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    c2_res = p.ev("""
+      const aid = App.doc.items[0].id, cid = App.doc.items[2].id;
+      const cf = App.results.get(cid)?.data?.faces || [];
+      const cf1 = cf.findIndex(f => f && f.t === 'PLANE' && f.n[0] < -0.9);
+      const cf2 = cf.findIndex(f => f && f.t === 'PLANE' && f.n[0] > 0.9);
+      const r = Joints.addCenter({ id: aid, faceIdx: arg.fL }, { id: aid, faceIdx: arg.fR }, [{ id: cid, faceIdx: cf1 }, { id: cid, faceIdx: cf2 }]);
+      return { r, met: r.ok ? Joints.centerMetrics(r.id) : null };
+    """, {'fL': cres['fL'], 'fR': cres['fR']})
+    warte_rechnen(p, 20)
+    ok4 = (
+        abs(g1['left'] - 6.0) < 0.02 and abs(g1['right'] - 6.0) < 0.02
+        and abs(g1['minY'] - (g0['minY'] + 5.0)) < 0.02
+        and abs(g2['left'] - 6.0) < 0.02 and abs(g2['right'] - 6.0) < 0.02
+        and c2_res['r'].get('ok') is True
+        and abs(c2_res['met']['widthB'] - 6.0) < 0.02
+        and abs(c2_res['met']['gapLeft'] - 7.0) < 0.02
+        and abs(c2_res['met']['gapRight'] - 7.0) < 0.02
+    )
+
+    # 5. Verlauf, Bearbeiten, Löschen, Rückgängig, Befehlssuche, Hilfen & keine Seitenfehler
+    p.ev("App.clearSelection();")
+    p.wait(200)
+    cnt0 = p.pg.locator('#joint-tree .joint-row').count()
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    has_panel = p.pg.locator('#joint-edit-panel').count() == 1 and p.pg.locator('#jt-del').count() == 1
+    p.pg.locator('#jt-del').click()
+    p.wait(350)
+    cnt1 = p.pg.locator('#joint-tree .joint-row').count()
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    cnt2 = p.pg.locator('#joint-tree .joint-row').count()
+    g_undo = center_gaps(10)
+
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      cmdAngle: Commands.search('winkel').some(c => c.id === 'mate-angle'),
+      cmdCenter: Commands.search('mittig').some(c => c.id === 'mate-center'),
+      helpAngle: !!(d.mateAngle && d.mateAngle.tip && d.mateAngle.hilfe && d.mateAngle.tipp),
+      helpCenter: !!(d.mateCenter && d.mateCenter.tip && d.mateCenter.hilfe && d.mateCenter.tipp),
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = (
+        cnt0 == 2 and has_panel and cnt1 == 1 and cnt2 == 2
+        and abs(g_undo['left'] - g_undo['right']) < 0.01
+        and all(meta.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -18217,6 +18462,7 @@ TESTS = [
     ('[A-085] Verbindung „fest“: Flächen/Punkte, bündig, umdrehen, gesperrt, Verlauf', t_a085_verbindung_fest),
     ('[A-084] Unterbaugruppen & Teil festsetzen: gemeinsam verschieben, fixiert, Schloss', t_a084_unterbaugruppe_festsetzen),
     ('[F-11241523] Volltest-Reparatur: Griff-Schilder bei Frontansicht & Alt/Rechtsklick / Skizze ohne 3D-Ansichtsleiste / Zeitleiste sofort bei Bauteil-Wechsel', t_f11241523),
+    ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

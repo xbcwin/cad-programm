@@ -2145,6 +2145,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Lösen, Rückgängig, Suche & Hilfe**: „Festsetzen lösen“ gibt das Teil wieder frei, `Strg+Z` stellt den Zustand wieder her, und Befehlssuche sowie Hilfetexte (`subAssembly`, `groundPart`) sind vorhanden.
 - [ ] **Von Hand**: Im Browser eine Unterbaugruppe mit mehreren Teilen einsetzen, im 3D-Bild mit der Maus verschieben, ein Grundteil per Rechtsklick festsetzen und danach mit einem weiteren Teil per „Verbinden: fest“ verknüpfen.
 
+## Verbindungen mit Winkel und mittig (Auto [A-089], BG-07)
+
+- [x] **Winkel 30° zwischen zwei Flächen & Messen**: Zwei Quader über Kontextleiste → „Verbindung“ → „Winkel“ auf `30°` ausrichten; `Joints.measureAngle`, Normalen-Winkel und das Werkzeug „Messen“ zwischen beiden Flächen liefern exakt `30°`. Ändern über `#jt-angle` auf `45°` und „Winkel umkehren“ (`#jt-flip`) richten den zweiten Quader nach.
+- [x] **Formel-Winkel & Kante-an-Kante**: Ein Maß `Neigung = 30` in `#jt-angle` legt die Formel ab (`.fx`-Vorschau `30`), und das Ändern des Maßes auf `60` dreht das verbundene Teil automatisch auf `60°`; zwei gerade Kanten richten sich auf `30°` aus.
+- [x] **Quader mittig in 20-mm-Nut**: Ein schmaler Quader (`8 mm`) wird mittig zwischen die beiden Seitenwände einer `20 mm` breiten Nut gesetzt; links und rechts ergibt sich exakt derselbe Abstand (`6,00 mm`), der auch beim Verschieben entlang/quer zur Nut, beim Verschieben des Nut-Blocks und im 2-Flächen-Modus (`bMode: 'faces'`) erhalten bleibt.
+- [x] **Verlauf, Löschen, Rückgängig, Suche & Hilfe**: Verbindungen erscheinen im Verlauf unter `#joint-tree`, lassen sich rechts bearbeiten, per `#jt-del` lösen und per `Strg+Z` wiederherstellen; Befehlssuche (`mate-angle`, `mate-center`) und Hilfetexte (`mateAngle`, `mateCenter`) sind ohne Seitenfehler vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Körper über „Verbindung“ → „Winkel“ (Fläche/Kante) bzw. „Mittig“ (Nutwand 1, Nutwand 2, Teil) durch Anklicken im 3D-Bild verbinden und im Panel rechts Winkel/Formel sowie die angezeigten Nutabstände prüfen.
+
 ## Fehler melden
 
 ```
