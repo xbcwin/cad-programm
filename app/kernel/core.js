@@ -634,14 +634,164 @@ export function createKernel(R, oc) {
       return { shape, resolved: { dist: Math.round(resolvedDist * 1e6) / 1e6, targetId: best.C.id } };
     } finally { safeDelete(best.solid); }
   }
+  function loopPts3D(loop, M) {
+    if (loop.circle) {
+      const { c, r } = loop.circle, pts = [];
+      for (let i = 0; i < 32; i++) {
+        const a = (i / 32) * Math.PI * 2;
+        pts.push(M.P([c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r]));
+      }
+      return pts;
+    }
+    if (loop.ellipse) {
+      const E = loop.ellipse, pts = [], cr = Math.cos(E.rot || 0), sr = Math.sin(E.rot || 0);
+      for (let i = 0; i < 32; i++) {
+        const a = (i / 32) * Math.PI * 2;
+        const lx = Math.cos(a) * E.rx, ly = Math.sin(a) * E.ry;
+        pts.push(M.P([E.c[0] + lx * cr - ly * sr, E.c[1] + lx * sr + ly * cr]));
+      }
+      return pts;
+    }
+    const pts = [];
+    const bz = (s) => { const o = []; for (let i = 0; i <= 8; i++) { const t = i / 8, u = 1 - t; o.push([0, 1].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k])); } return o; };
+    for (const s of loop.segs || []) {
+      const sp = s.t === 'arc' ? arcSample(s.a, s.m, s.b, 12) : s.t === 'bez' ? bz(s) : [s.a, [(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2], s.b];
+      for (const q of sp) pts.push(M.P(q));
+    }
+    return pts;
+  }
+  function buildRevolveToFace(regs, M, c, de, fo, fn) {
+    const fnn = norm(fn), dn = norm(de);
+    const solids = [];
+    const normPos = (a) => { const T = Math.PI * 2; let x = ((a % T) + T) % T; if (x < 1e-3) x = T; return x; };
+    for (const rg of regs) {
+      const pts = loopPts3D(rg.outer, M);
+      if (pts.length < 3) throw new Error('Die Skizze hat keine gültige Fläche zum Drehen.');
+      const sVals = pts.map((P) => dot(sub(P, fo), fnn));
+      const sMin = Math.min(...sVals), sMax = Math.max(...sVals);
+      if (sMax > 1e-3 && sMin < -1e-3) throw new Error('Die gewählte Fläche schneidet bereits die Skizze.');
+      if (Math.max(Math.abs(sMax), Math.abs(sMin)) < 1e-4) throw new Error('Skizze und Zielfläche liegen in derselben Ebene.');
+      const nKeep = sMax + sMin >= 0 ? fnn : mul(fnn, -1);
+      let minFirst = Infinity, maxFirst = 0, minSecond = Infinity;
+      let probe = null;
+      for (const P of pts) {
+        const v = sub(P, c), h = dot(v, dn), u = sub(v, mul(dn, h)), rLen = len(u);
+        if (rLen < 1e-5) continue;
+        const w = cross(dn, u);
+        const A = dot(u, nKeep), B = dot(w, nKeep), C = dot(sub(add(c, mul(dn, h)), fo), nKeep), Mab = Math.hypot(A, B);
+        if (Mab < 1e-7 || Math.abs(C) > Mab + 1e-4) throw new Error('Die gewählte Fläche wird beim Drehen nicht vollständig erreicht.');
+        const s0 = A + C;
+        if (Math.abs(s0) < 1e-4 && B < -1e-6) throw new Error('Die Skizze liegt an der Zielfläche – dreh die Richtung um.');
+        const phi = Math.atan2(B, A), alpha = Math.acos(Math.max(-1, Math.min(1, -C / Mab)));
+        const t1 = normPos(phi + alpha), t2 = normPos(phi - alpha);
+        const tFirst = Math.min(t1, t2), tSecond = Math.max(t1, t2);
+        if (tFirst < minFirst) minFirst = tFirst;
+        if (tFirst > maxFirst) maxFirst = tFirst;
+        if (tSecond < minSecond) minSecond = tSecond;
+        if (!probe) probe = { h, u, w };
+      }
+      if (!probe) throw new Error('Das Profil liegt komplett auf der Drehachse.');
+      const degMin = (minFirst * 180) / Math.PI, degMax = (maxFirst * 180) / Math.PI, degSec = (minSecond * 180) / Math.PI;
+      const f0 = regionFace(rg, M);
+      if (degMax - degMin < 0.05) {
+        const s = R.revolution(f0, c, dn, Math.max(0.1, Math.min(360, degMax)));
+        safeDelete(f0);
+        solids.push(s);
+      } else {
+        const gap = degSec > degMax + 0.2 ? Math.min(5, (degSec - degMax) * 0.4) : 2;
+        const degOver = Math.min(359, degMax + Math.max(0.2, gap));
+        const rev = R.revolution(f0, c, dn, degOver);
+        safeDelete(f0);
+        const bb = bboxOf(rev), ctr = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2];
+        const L = Math.max(50, Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 4);
+        const foProj = sub(ctr, mul(nKeep, dot(sub(ctr, fo), nKeep)));
+        const ref = Math.abs(nKeep[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+        const fx = norm(cross(ref, nKeep)), fy = cross(nKeep, fx);
+        const mat = [fx[0], fx[1], fx[2], 0, fy[0], fy[1], fy[2], 0, nKeep[0], nKeep[1], nKeep[2], 0, foProj[0], foProj[1], foProj[2], 1];
+        const b0 = R.makeBox([-L, -L, 0], [L, L, L]);
+        const halfBox = applyMatrix(b0, mat);
+        safeDelete(b0);
+        let trimmed = rev.intersect(halfBox);
+        safeDelete(rev); safeDelete(halfBox);
+        const parts = trimmed.solids;
+        if (parts && parts.length > 1) {
+          const tp = minFirst * 0.5;
+          const pProbe = add(add(c, mul(dn, probe.h)), add(mul(probe.u, Math.cos(tp)), mul(probe.w, Math.sin(tp))));
+          let best = parts[0], bestD = Infinity;
+          for (const sol of parts) {
+            const sb = bboxOf(sol);
+            const dx = Math.max(sb[0] - pProbe[0], 0, pProbe[0] - sb[3]);
+            const dy = Math.max(sb[1] - pProbe[1], 0, pProbe[1] - sb[4]);
+            const dz = Math.max(sb[2] - pProbe[2], 0, pProbe[2] - sb[5]);
+            const dd = Math.hypot(dx, dy, dz);
+            if (dd < bestD) { bestD = dd; best = sol; }
+          }
+          for (const sol of parts) if (sol !== best) safeDelete(sol);
+          const kept = best.clone();
+          safeDelete(trimmed);
+          trimmed = kept;
+        }
+        solids.push(trimmed);
+      }
+    }
+    return fuseAll(solids);
+  }
   function buildRevolve(p) {
     const M = planeMap(p.plane);
     const ax = p.axis || { a: [0, 0], b: [0, 1] };
     const c = p.axis3d && Array.isArray(p.axis3d.o) ? p.axis3d.o.map(Number) : M.P(ax.a);
     const d = p.axis3d && Array.isArray(p.axis3d.d) ? norm(p.axis3d.d.map(Number)) : norm(sub(M.P(ax.b), c));
-    const angle = Math.max(1, Math.min(360, num(p.angle, 360)));
-    const solids = (p.regions || []).map((rg) => R.revolution(regionFace(rg, M), c, d, angle));
-    if (!solids.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    const regs = p.regions || [];
+    if (!regs.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    const dir = p.dir || 'normal';
+    if (dir === 'toFace') {
+      if (!p.toFace || !Array.isArray(p.toFace.o) || !Array.isArray(p.toFace.fn)) {
+        throw new Error('Bitte wähle eine Fläche oder Ebene für „Bis zu gewählter Fläche“.');
+      }
+      const de = p.toFaceFlip ? mul(d, -1) : d;
+      return buildRevolveToFace(regs, M, c, de, p.toFace.o.map(Number), norm(p.toFace.fn.map(Number)));
+    }
+    const solids = [];
+    for (const rg of regs) {
+      const f0 = regionFace(rg, M);
+      if (dir === 'reverse') {
+        const angle = Math.max(0.1, Math.min(360, num(p.angle, 360)));
+        solids.push(R.revolution(f0, c, mul(d, -1), angle));
+        safeDelete(f0);
+      } else if (dir === 'both') {
+        const angle = Math.max(0.1, Math.min(360, num(p.angle, 360)));
+        if (angle >= 360 - 1e-6) {
+          solids.push(R.revolution(f0, c, d, 360));
+          safeDelete(f0);
+        } else {
+          const f1 = f0.rotate(-angle / 2, c, d);
+          safeDelete(f0);
+          solids.push(R.revolution(f1, c, d, angle));
+          safeDelete(f1);
+        }
+      } else if (dir === 'two') {
+        const a1 = Math.max(0, Math.min(360, num(p.angle, 90)));
+        const a2 = Math.max(0, Math.min(360, num(p.angle2, a1)));
+        const tot = Math.min(360, a1 + a2);
+        if (tot < 0.1) { safeDelete(f0); throw new Error('Der Drehwinkel muss größer als 0° sein.'); }
+        if (tot >= 360 - 1e-6) {
+          solids.push(R.revolution(f0, c, d, 360));
+          safeDelete(f0);
+        } else if (a2 > 1e-6) {
+          const f1 = f0.rotate(-a2, c, d);
+          safeDelete(f0);
+          solids.push(R.revolution(f1, c, d, tot));
+          safeDelete(f1);
+        } else {
+          solids.push(R.revolution(f0, c, d, a1));
+          safeDelete(f0);
+        }
+      } else {
+        const angle = Math.max(0.1, Math.min(360, num(p.angle, 360)));
+        solids.push(R.revolution(f0, c, d, angle));
+        safeDelete(f0);
+      }
+    }
     return fuseAll(solids);
   }
 
@@ -2161,27 +2311,54 @@ export function createKernel(R, oc) {
   }
 
   // q: Feinheit beim Export – 1 = normal, kleiner = feiner (0.4 = fein, 0.15 = sehr fein), größer = gröber
-  function exportMeshes(scene, fine = true, q = 1) {
+  function exportMeshes(scene, fine = true, q = 1, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const objs = [];
     const f = Math.max(0.05, Math.min(4, +q || 1));
+    const useTr = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
     for (const s of solids) {
       const b = bboxOf(s.shape);
       const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
       const m = s.shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
-      objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), normals: new Float32Array(m.normals), triangles: new Uint32Array(m.triangles) });
+      const verts = new Float32Array(m.vertices), norms = new Float32Array(m.normals);
+      if (useTr) {
+        const m0 = originMat;
+        for (let i = 0; i < verts.length; i += 3) {
+          const x = verts[i], y = verts[i + 1], z = verts[i + 2];
+          verts[i] = m0[0] * x + m0[4] * y + m0[8] * z + m0[12];
+          verts[i + 1] = m0[1] * x + m0[5] * y + m0[9] * z + m0[13];
+          verts[i + 2] = m0[2] * x + m0[6] * y + m0[10] * z + m0[14];
+        }
+        for (let i = 0; i < norms.length; i += 3) {
+          const x = norms[i], y = norms[i + 1], z = norms[i + 2];
+          let nx = m0[0] * x + m0[4] * y + m0[8] * z;
+          let ny = m0[1] * x + m0[5] * y + m0[9] * z;
+          let nz = m0[2] * x + m0[6] * y + m0[10] * z;
+          const l = Math.hypot(nx, ny, nz);
+          if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
+          norms[i] = nx; norms[i + 1] = ny; norms[i + 2] = nz;
+        }
+      }
+      objs.push({ id: s.id, name: s.name, color: s.color, vertices: verts, normals: norms, triangles: new Uint32Array(m.triangles) });
       s.shape.delete();
     }
     return { objects: objs, errors };
   }
-  function exportSTEP(scene, only) {
+  function exportSTEP(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
     let solids = evaluateShapes(scene, errors);
     if (only && only.length) { const keep = new Set(only); for (const s of solids) if (!keep.has(s.id)) s.shape.delete(); solids = solids.filter((s) => keep.has(s.id)); }
     if (!solids.length) throw new Error('Es gibt nichts zu exportieren.');
+    if (Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat)) {
+      for (const s of solids) {
+        const tr = applyMatrix(s.shape, originMat);
+        s.shape.delete();
+        s.shape = tr;
+      }
+    }
     const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
     return comp.blobSTEP();
   }

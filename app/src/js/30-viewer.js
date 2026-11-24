@@ -9,7 +9,7 @@ const Viewer = (() => {
   const raycaster = new THREE.Raycaster();
   const theme = {};
   let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
-  let camAnim = null, camAnimTimer = null, inLoopCam = false;
+  let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
   const vis = { clip: null, clips: [], capEnabled: true, xray: false };
@@ -37,7 +37,7 @@ const Viewer = (() => {
     orthoCam.quaternion.copy(camera.quaternion); orthoCam.up.copy(camera.up);
     orthoCam.updateProjectionMatrix(); orthoCam.updateMatrixWorld();
   }
-  function cam() { if (ortho) { syncOrtho(); return orthoCam; } return camera; }
+  function cam() { if (ortho) { syncOrtho(); return orthoCam; } camera.updateMatrixWorld(); return camera; }
   function setOrtho(on) { ortho = !!on; needsRender = true; listeners.emit('camera'); }
   const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4();
   function boxVisible(box) { const c = cam(); c.updateMatrixWorld(); _pm.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm); return _fr.intersectsBox(box); }
@@ -324,7 +324,7 @@ const Viewer = (() => {
     inLoopCam = true;
     const moved = controls.update();
     inLoopCam = false;
-    if (camMoved || moved) listeners.emit('camera');
+    if (camMoved || moved) { camera.updateMatrixWorld(); listeners.emit('camera'); }
     const now = performance.now();
     if (camAnim) lastMotion = now;
     else if (moved) {   // nur echte Bewegung zählt, nicht das lange Ausrollen der Dämpfung
@@ -1039,6 +1039,7 @@ const Viewer = (() => {
     return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, behind: p.z > 1 };
   }
   function pixelSizeAt(point) {
+    syncCamAnim();
     const hgt = container.clientHeight || 1;
     if (ortho) return (2 * orthoHalfH()) / hgt;
     const d = camera.position.distanceTo(point);
@@ -1110,11 +1111,15 @@ const Viewer = (() => {
     if (controls._panOffset) controls._panOffset.set(0, 0, 0);
     if ('_scale' in controls) controls._scale = 1;
   }
+  function scheduleCamEmit() {
+    if (camEmitTimer) return;
+    camEmitTimer = setTimeout(() => { camEmitTimer = null; listeners.emit('camera'); }, 0);
+  }
   function cancelCamAnim() {
     camAnim = null;
     if (camAnimTimer) { clearTimeout(camAnimTimer); camAnimTimer = null; }
   }
-  function finishCamAnim() {
+  function finishCamAnim(deferEmit = false) {
     if (!camAnim) return;
     const a = camAnim;
     cancelCamAnim();
@@ -1125,11 +1130,16 @@ const Viewer = (() => {
     inLoopCam = true;
     controls.update();
     inLoopCam = false;
+    camera.updateMatrixWorld();
     needsRender = true;
-    listeners.emit('camera');
+    if (deferEmit) scheduleCamEmit();
+    else {
+      if (camEmitTimer) { clearTimeout(camEmitTimer); camEmitTimer = null; }
+      listeners.emit('camera');
+    }
   }
   function syncCamAnim() {
-    if (camAnim && performance.now() - camAnim.t0 >= camAnim.dur) finishCamAnim();
+    if (camAnim && performance.now() - camAnim.t0 >= camAnim.dur) finishCamAnim(true);
   }
   function moveCamera(pos, target, up, animate = true) {
     pushCam(false);
@@ -1138,6 +1148,7 @@ const Viewer = (() => {
     if (!animate) {
       camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up);
       inLoopCam = true; controls.update(); inLoopCam = false;
+      camera.updateMatrixWorld();
       needsRender = true; listeners.emit('camera'); return;
     }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };

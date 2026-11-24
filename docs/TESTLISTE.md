@@ -1649,6 +1649,30 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Formschritt mit Modus, schräge Fläche, Rückgängig & Hilfe**: Vereinigen (`join`) und Abziehen (`cut`) mit `toNext`, schräge Zielfläche (gedrehter Quader), Wechsel zurück zu fester Höhe mit Rückgängig sowie Hilfetext `extrudeToFace` geprüft.
 - [ ] **Von Hand**: Interaktives Überfahren und Anklicken einer gekrümmten Fläche (Zylinder/Kugel) und einer Bezugsebene beim „Bis zu gewählter Fläche“-Hochziehen prüfen.
 
+## Volltest-Reparatur (Auto [F-11240211])
+
+- [x] **Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation**: Bei überfälligem `camAnim` während `Sketch.render()`/`Sketch.setTool()` entstehen genau zwei sichtbare, nicht überlappende `.skdim`-Schildchen (sofort und nach dem verzögerten `camera`-Event).
+- [x] **Eigenschaften-Panel sofort bei Auswahl**: Nach `App.select(...)` auf ein 3D-Rohr sind `#p3-ax-0`/`#p3-ax-1` sofort ohne Wartezeit im DOM und schalten zuverlässig auf `perp` um.
+- [ ] **Von Hand**: In einer Skizze mit mehreren Maßen am selben Punkt zügig drehen/zoomen und prüfen, dass sich keine Maß-Schildchen doppeln oder überdecken.
+
+## Bezugspunkte und eigenes Koordinatensystem (Auto [A-028])
+
+- [x] **Bezugspunkt Kantenmitte (BZ-08)**: Auf einer 40-mm-Kante liegt der Bezugspunkt bei 20 mm (Abstand 20 mm zu beiden Enden), erscheint in `#point-tree`, wandert bei Verbreiterung auf 60 mm auf 30 mm mit und lässt sich ausblenden, löschen und per Rückgängig wiederherstellen.
+- [x] **Flächenmitte & auf Kurve bei x % (BZ-08)**: Flächenmitte der Oberseite stimmt exakt; Prozent-Punkt (25 % → 10 mm, über `#point-percent` auf 75 % → 30 mm) und Punkt auf einer Kreiskante bei 50 % liegen exakt auf der Kante.
+- [x] **Schnittpunkt Kante / Ebene (BZ-08)**: Schnittpunkt einer senkrechten Kante mit Bezugsebene (`z = 12` → `z = 16` nach Änderung) sowie mit der ebenen Fläche eines zweiten Körpers stimmt; parallele Kanten werden abgelehnt.
+- [x] **Eigenes Koordinatensystem (BZ-09)**: Rechtshändiges Koordinatensystem (`det = +1`) an Ecke mit X/Y-Achsen an Kanten (inkl. gedrehtem KS), wandert beim Verschieben des Körpers mit, kehrt Achsen über `#csys-flip-x` rechtshändig um und steht in `Model.dependencies`.
+- [x] **Export ab eigenem Nullpunkt (STEP, STL, 3MF)**: Auswahl im Export-Dialog (`#ex-csys`) liefert STL-, 3MF- und wieder eingelesene STEP-Dateien mit Hüllmaßen ab `(0 | 0 | 0)` bis `(40 | 30 | 10)` bzw. `(30 | 40 | 10)` im gedrehten Koordinatensystem; Hilfetexte (`datumPoint`, `datumCsys`) und Befehle sind vorhanden.
+- [ ] **Von Hand**: Interaktives Setzen von Bezugspunkten und Koordinatensystem im 3D-Bild über die Skizzen-/Bezugsdialoge und Kontextleiste testen sowie die exportierte STEP-/3MF-Datei in einem Slicer oder CAD-Programm öffnen.
+
+## Drehen mit Winkel und bis Fläche (Auto [A-030])
+
+- [x] **90°-Drehung**: Rechteck neben der Y-Achse um 90° gedreht ergibt exakt ein Viertel des vollen 360°-Volumens (±1 %).
+- [x] **Symmetrisch 2×45°**: Modus `both` mit 90° Gesamtwinkel ergibt dasselbe Viertel-Volumen (±1 %) symmetrisch zu beiden Seiten der Skizze.
+- [x] **Beidseitig verschieden & Umgekehrt**: Modus `two` (`45°/45°` und `60°/30°`) sowie `reverse` (`90°`) erzeugen das erwartete Volumen und die erwartete Lage.
+- [x] **Bis zu gewählter Fläche & Nachführen**: Drehen bis zu einer ebenen Körperfläche (radial und versetzt) sowie bis zu einer 60°-Bezugsebene trifft exakt; Richtungsumkehr und automatisches Nachführen beim Verschieben des Zielkörpers funktionieren.
+- [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
+
 ## Fehler melden
 
 ```

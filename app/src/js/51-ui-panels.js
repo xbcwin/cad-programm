@@ -171,6 +171,8 @@ const Panels = (() => {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
       const ds = Datums.treeSection(); if (ds) body.append(ds);
       const as = Datums.axisTreeSection(); if (as) body.append(as);
+      const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
+      const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
     }
@@ -266,6 +268,8 @@ const Panels = (() => {
     body.append(ul);
     const ds = Datums.treeSection(); if (ds) body.append(ds);
     const as = Datums.axisTreeSection(); if (as) body.append(as);
+    const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
+    const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
@@ -462,6 +466,8 @@ const Panels = (() => {
     const items = App.selectedItems();
     if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
     if (!items.length && Datums.selectedAxis && Datums.findAxis(Datums.selectedAxis)) { $('#right-title').textContent = 'Bezugsachse'; Datums.renderAxisPanel(body); return; }
+    if (!items.length && Datums.selectedPoint && Datums.findPoint(Datums.selectedPoint)) { $('#right-title').textContent = 'Bezugspunkt'; Datums.renderPointPanel(body); return; }
+    if (!items.length && Datums.selectedCsys && Datums.findCsys(Datums.selectedCsys)) { $('#right-title').textContent = 'Koordinatensystem'; Datums.renderCsysPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = 'Messung'; Measure.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
@@ -672,8 +678,8 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen' };
-        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis ? null : x.from));
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
       }
@@ -783,7 +789,57 @@ const Panels = (() => {
           fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
         }
       } else {
-        fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
+        const dir = it.p.dir || 'normal';
+        const dirSel = UI.selectField({
+          id: 'p-rev-dir', label: 'Richtung', value: dir,
+          options: [['normal', 'Eine Richtung'], ['reverse', 'Umgekehrt'], ['both', 'Symmetrisch (beidseitig gleich)'], ['two', 'Beidseitig verschieden'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            App.change('Drehrichtung geändert', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              T.p.dir = v;
+              if (v === 'two' && T.p.angle2 == null) {
+                const cur = Model.num(T.p.angle, Model.vars(doc).v, 360);
+                if (cur >= 359) { T.p.angle = 90; T.p.angle2 = 90; }
+                else T.p.angle2 = T.p.angle;
+              }
+            });
+            if (v === 'toFace' && !it.p.toFace) Features.pickRevolveFace(it.id);
+          },
+        });
+        dirSel.setAttribute('data-help', 'revolveOptions');
+        fl.append(dirSel);
+        if (dir !== 'toFace') {
+          const angLbl = dir === 'both' ? 'Gesamtwinkel' : dir === 'two' ? 'Winkel Seite 1' : 'Winkel';
+          const minA = dir === 'two' ? 0 : 0.1;
+          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
+          if (dir === 'both') {
+            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(Model.num(it.p.angle, V, 360) / 2, 1)}°`)));
+          }
+          if (dir === 'two') {
+            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
+          }
+        } else {
+          const tf = it.p.toFace;
+          const fr = tf && !tf.lost ? Model.revolveFrame(it.p, V) : null;
+          const hitDeg = fr ? Model.revolveHitAngle(fr, tf.o, tf.fn, !!it.p.toFaceFlip) : null;
+          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmt(hitDeg, 1)}°)` : ''}`;
+          fl.append(h('div', { class: 'mini-row', id: 'p-rev-face-info', style: tf && tf.lost ? { color: 'var(--bad)' } : null }, h('span', { class: 'grow' }, infoTxt)));
+          const pb = h('button', { type: 'button', class: 'btn', id: 'p-rev-face-pick' }); pb.innerHTML = icon('cursor') + (tf ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+          pb.onclick = () => Features.pickRevolveFace(it.id);
+          fl.append(pb);
+          const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
+          if (dats.length) {
+            fl.append(UI.selectField({
+              id: 'p-rev-face-datum', label: 'Bezugsebene als Ziel',
+              value: tf && tf.kind === 'datum' ? tf.datumId : '',
+              options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
+              onChange: (v) => { if (v) Features.setRevolveToFace(it.id, { datumId: v }); },
+            }));
+          }
+          const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'p-rev-face-flip', checked: !!it.p.toFaceFlip }), 'Andere Richtung');
+          flp.querySelector('input').onchange = (e) => App.change('Drehrichtung umgekehrt', (doc) => { const T = Model.find(doc, it.id).item; T.p.toFaceFlip = e.target.checked; });
+          fl.append(flp);
+        }
         const axList = typeof Datums !== 'undefined' ? Datums.axes() : [];
         if (axList.length || it.p.axisId) {
           const opts = [['sketch', 'Achse aus der Skizze'], ...axList.filter((a) => a.axis).map((a) => ['da:' + a.id, 'Bezugsachse „' + a.name + '“'])];
@@ -830,7 +886,7 @@ const Panels = (() => {
         const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; unbind(f.item.p.path3d, i); }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
         const BD = it.p.path3d.bind || [];
         // Regel je Stück: Richtung (entlang X/Y/Z) und Länge – wie in einer Skizze, nur im Raum
-        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, V3); });
+        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, Model.vars(doc).v); });
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
         sec.append(fs);
@@ -1175,6 +1231,8 @@ const Panels = (() => {
         }
         const nb = b('originPlanes', T('ctx.planeNormal'), () => Datums.addNormalToCurve(App.edges[0], 'mid'), 'pro', T('ctx.planeNormalTip'));
         nb.dataset.help = 'datumNormalCurve';
+        const pb = b('point', T('ctx.pointEdgeMid'), () => Datums.addPointEdgeMid(App.edges[0]), 'pro', T('ctx.pointEdgeMidTip'));
+        pb.dataset.help = 'datumPoint';
       } else if (App.edges.length === 2 && eds.length === 2 && eds[0].t === 'LINE' && eds[1].t === 'LINE') {
         const tb = b('originPlanes', T('ctx.planeTwoEdges'), () => Datums.addTwoEdges(App.edges[0], App.edges[1]), 'pro', T('ctx.planeTwoEdgesTip'));
         tb.dataset.help = 'datumTwoEdges';
@@ -1189,6 +1247,8 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
       b('section', T('ctx.sectionHere'), () => Views.section(true, { face }), '', T('ctx.sectionHereTip'), true);
       if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);
+      const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
+      pf.dataset.help = 'datumPoint';
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
@@ -1208,6 +1268,8 @@ const Panels = (() => {
         tb.dataset.help = 'datumTangent';
       }
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
+      const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
+      pf.dataset.help = 'datumPoint';
       sep();
     }
     if (items.length === 1) {
@@ -1327,8 +1389,9 @@ const Panels = (() => {
     App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
-    const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
+    const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
+    App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }

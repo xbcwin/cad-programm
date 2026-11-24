@@ -28,8 +28,8 @@ self.onmessage = async (ev) => {
     if (cmd === 'init') result = await init(args.wasm);
     else if (!kernel) throw new Error('Der CAD-Kern ist noch nicht bereit.');
     else if (cmd === 'evaluate') result = kernel.evaluate(args.scene, args.known);
-    else if (cmd === 'exportMeshes') result = kernel.exportMeshes(args.scene, args.fine, args.q);
-    else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene, args.only).arrayBuffer() };
+    else if (cmd === 'exportMeshes') result = kernel.exportMeshes(args.scene, args.fine, args.q, args.originMat);
+    else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene, args.only, args.originMat).arrayBuffer() };
     else if (cmd === 'measure') result = kernel.measure(args.scene);
     else if (cmd === 'distance') result = kernel.minDistance(args.scene, args.ids);
     else if (cmd === 'project') result = kernel.project(args.scene, args.views);

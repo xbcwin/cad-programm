@@ -221,6 +221,148 @@ const Features = (() => {
     route.inv = W.clone().invert();
     return true;
   }
+  function pickDatumPlaneAt(cx, cy) {
+    const g = Viewer.groups && Viewer.groups.datums;
+    if (!g || !g.children.length || typeof Datums === 'undefined') return null;
+    const rc = Viewer.setRay(cx, cy);
+    const hits = rc.intersectObjects(g.children, true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o && !o.userData.datum && o !== g) o = o.parent;
+      if (o && o.userData.datum) {
+        const d = Datums.find(o.userData.datum);
+        if (d && d.plane) return { datum: d, point: h.point ? h.point.clone() : null };
+      }
+    }
+    return null;
+  }
+  function setRevolveToFace(itemId, target) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'revolve' || !target) return false;
+    const r6 = (a) => a.map((v) => round(v, 6));
+    let oW, nW, pickW = null, meta = null;
+    if (target.datumId) {
+      const d = typeof Datums !== 'undefined' ? Datums.find(target.datumId) : null;
+      if (!d || !d.plane) return false;
+      oW = new THREE.Vector3(...d.plane.o);
+      nW = new THREE.Vector3(...d.plane.n).normalize();
+      pickW = oW.clone();
+      meta = { kind: 'datum', datumId: d.id, name: d.name };
+    } else if (target.id) {
+      const info = target.info || (target.idx != null && App.results.get(target.id)?.data?.faces?.[target.idx]);
+      if (!info || info.t !== 'PLANE' || !info.n) return false;
+      const W = Model.worldMatrix(App.doc, target.id);
+      oW = new THREE.Vector3(...info.c).applyMatrix4(W);
+      nW = new THREE.Vector3(...info.n).transformDirection(W).normalize();
+      pickW = Array.isArray(target.point) ? new THREE.Vector3(...target.point) : oW.clone();
+      const tgt = Model.find(App.doc, target.id);
+      meta = { kind: 'face', targetId: target.id, c: r6(info.c), n: r6(info.n), name: tgt ? Model.label(tgt.item) : 'Fläche' };
+    } else return false;
+    const inv = Model.worldMatrix(App.doc, itemId).invert();
+    const oL = oW.clone().applyMatrix4(inv).toArray();
+    const nL = nW.clone().transformDirection(inv).normalize().toArray();
+    const pickL = pickW.clone().applyMatrix4(inv).toArray();
+    const frame = Model.revolveFrame(f.item.p, Model.vars(App.doc).v);
+    const flip = Model.revolveAutoFlip(frame, oL, nL, pickL);
+    App.change('Bis zu gewählter Fläche', (doc) => {
+      const fn = Model.find(doc, itemId); if (!fn || fn.item.kind !== 'revolve') return false;
+      fn.item.p.dir = 'toFace';
+      fn.item.p.toFace = { ...meta, o: r6(oL), fn: r6(nL) };
+      fn.item.p.toFaceFlip = !!flip;
+    });
+    return true;
+  }
+  function pickRevolveFace(itemId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (hit && hit.id !== itemId && hit.faceIdx >= 0) {
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (fi && fi.t === 'PLANE' && fi.n) {
+          stopPick();
+          setRevolveToFace(itemId, { id: hit.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null });
+          UI.toast('Zielfläche gesetzt.', { icon: 'check' });
+          return;
+        }
+      }
+      const dp = pickDatumPlaneAt(e.clientX, e.clientY);
+      if (dp) {
+        stopPick();
+        setRevolveToFace(itemId, { datumId: dp.datum.id });
+        UI.toast(`Bezugsebene „${dp.datum.name}“ als Ziel gesetzt.`, { icon: 'check' });
+        return;
+      }
+      UI.toast('Bitte wähle eine ebene Fläche eines anderen Körpers oder eine Bezugsebene.', { icon: 'info' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint('<b>Zielfläche wählen:</b> Klick auf eine ebene Fläche eines Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  let revRelinkRounds = 0;
+  function relinkRevolveFaces() {
+    if (!App.doc) return;
+    const vDiff = (a, b) => (!Array.isArray(a) || !Array.isArray(b) || a.length < 3 || b.length < 3) ? Infinity : Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const r6 = (a) => a.map((v) => round(v, 6));
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      if (it.kind !== 'revolve' || !it.p || it.p.dir !== 'toFace' || !it.p.toFace) return;
+      const tf = it.p.toFace;
+      const inv = Model.worldMatrix(App.doc, it.id).invert();
+      if (tf.kind === 'datum') {
+        const d = typeof Datums !== 'undefined' ? Datums.find(tf.datumId) : null;
+        if (!d || !d.plane) { if (!tf.lost) jobs.push({ id: it.id, lost: true }); return; }
+        const oL = r6(new THREE.Vector3(...d.plane.o).applyMatrix4(inv).toArray());
+        const nL = r6(new THREE.Vector3(...d.plane.n).transformDirection(inv).normalize().toArray());
+        if (vDiff(oL, tf.o) > 1e-5 || vDiff(nL, tf.fn) > 1e-5 || tf.lost || tf.name !== d.name) {
+          jobs.push({ id: it.id, o: oL, fn: nL, name: d.name, lost: false });
+        }
+      } else if (tf.kind === 'face' && tf.targetId) {
+        const rId = App.results.has(tf.targetId) ? tf.targetId : (App.mergedInto(tf.targetId) || tf.targetId);
+        const r = App.results.get(rId), tgt = Model.find(App.doc, tf.targetId);
+        if (r && r.data && tgt) {
+          const nRef = new THREE.Vector3(...(tf.n || [0, 0, 1])), cRef = new THREE.Vector3(...(tf.c || [0, 0, 0]));
+          let best = null;
+          for (const fc of r.data.faces || []) {
+            if (fc.t !== 'PLANE' || !fc.n) continue;
+            if (new THREE.Vector3(...fc.n).dot(nRef) < 0.999) continue;
+            const dd = new THREE.Vector3(...fc.c).distanceTo(cRef);
+            if (!best || dd < best.dd) best = { fc, dd };
+          }
+          if (best) {
+            const W = Model.worldMatrix(App.doc, rId);
+            const oW = new THREE.Vector3(...best.fc.c).applyMatrix4(W);
+            const nW = new THREE.Vector3(...best.fc.n).transformDirection(W).normalize();
+            const oL = r6(oW.applyMatrix4(inv).toArray());
+            const nL = r6(nW.transformDirection(inv).normalize().toArray());
+            const nm = Model.label(tgt.item);
+            if (vDiff(oL, tf.o) > 1e-5 || vDiff(nL, tf.fn) > 1e-5 || tf.lost || tf.name !== nm) {
+              jobs.push({ id: it.id, o: oL, fn: nL, c: r6(best.fc.c), n: r6(best.fc.n), name: nm, lost: false });
+            }
+          } else if (!tf.lost) jobs.push({ id: it.id, lost: true });
+        } else if (!tgt && !tf.lost) jobs.push({ id: it.id, lost: true });
+      }
+    });
+    if (!jobs.length) { revRelinkRounds = 0; return; }
+    if (++revRelinkRounds > 3) { revRelinkRounds = 0; return; }
+    App.change('Zielfläche nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id); if (!f || !f.item.p || !f.item.p.toFace) continue;
+        const tf = f.item.p.toFace;
+        if (j.lost) tf.lost = true;
+        else {
+          delete tf.lost;
+          tf.o = j.o; tf.fn = j.fn;
+          if (j.c) tf.c = j.c; if (j.n) tf.n = j.n;
+          if (j.name) tf.name = j.name;
+        }
+      }
+    }, { amend: true });
+  }
+  App.on('results', relinkRevolveFaces);
   // Achse im Bild wählen; cb bekommt { o, d, what, axisId? } in Weltkoordinaten
   function pickAxisThen(cb, hint) {
     stopPick();
@@ -762,5 +904,5 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: p.copy ? 'Erzeugt eine versetzte oder gedrehte <b>Kopie</b>. Ändert sich der Zielkörper, wandert die Kopie mit.' : 'Versetzt den Zielkörper als Schritt im Verlauf. Unterdrückst du diesen Schritt oder rollst den Marker davor, springt der Körper zurück.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

@@ -93,21 +93,21 @@ Leitlinien:
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera |
-| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff), Maus-Bedienung |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
+| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
-| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`) |
+| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen, `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
-| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“, Kontextleiste |
+| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“ (sofort bei Auswahl), Kontextleiste |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |
 | `53-views.js` | Schnitt, Röntgen, Explosion, Fokus-Vorschau, Überhänge |
 | `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
-| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten |
+| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten, Re-Entranz-Schutz in `render()` |
 | `56-notes.js` | Notizstift |
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
@@ -136,7 +136,7 @@ Leitlinien:
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
-  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve`, `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
+  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
   - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt`:
@@ -189,7 +189,7 @@ Leitlinien:
 - Teil dahinter: `Viewer.pickAll(cx, cy)` (alle Treffer, vorne zuerst); Alt + Klick → `Interact.selectBehind`; Rechtsklick-Einträge `cm-behind-N`
 - Bedienung: Rechtsklick-Menü im Bild (`Interact.contextMenu`, Rechtsklick ohne Ziehen), Rahmen-Auswahl mit Umschalt + Ziehen im Leeren (`Interact.bandSelect`), `Commands.exec` merkt Befehle (`Commands.last`, `recent`, Leertaste = `Commands.repeat`), `Actions.hideSelected`/`showAll`/`invertSelection`
 - Anzeige: `ViewPrefs.display` ('edges' | 'shaded' | 'wire' | 'hidden'), `it.opacity` (nur Anzeige), `Viewer.lookAtFace(id, faceIdx)`, `doc.views = [{id, name, p, t, up, ortho}]` mit `Views.saveView`/`goView`
-- Bezugsebenen & -achsen (`46-datums.js`, `Datums`): `doc.datums = [{id, name, base, plane, hidden}]`, `base.type` 'origin' (plane, dist, tilt) | 'face' (id, n, c, dist; `relink` nach jedem Rechnen, `lost`) | 'edgeAngle' (edgeId, faceId, angle) | 'tangent' (id, u0, angle, flip) | 'normalToCurve' (edgeId, edge, posMode, percent, flip) | 'edgePoint' (edgeId, edge, p, pBind, flip) | 'twoEdges' (e1, e2, flip) | 'fixed'; `doc.axes = [{id, name, base, axis:{o,d}, hidden}]` ('twoPoints' | 'roundFace' | 'roundEdge' | 'faceNormal' | 'fixed'); Bild in `Viewer.groups.datums`; `Sketch.startOnPlaneObj(plane)`, `Sketch.startPlanePick(kind, onPlane)`, nutzbar für Kreismuster (`axisId`) und Drehen (`axis3d`)
+- Bezugsebenen, -achsen, -punkte & Koordinatensysteme (`46-datums.js`, `Datums`): `doc.datums = [{id, name, base, plane, hidden}]`, `base.type` 'origin' (plane, dist, tilt) | 'face' (id, n, c, dist; `relink` nach jedem Rechnen, `lost`) | 'edgeAngle' (edgeId, faceId, angle) | 'tangent' (id, u0, angle, flip) | 'normalToCurve' (edgeId, edge, posMode, percent, flip) | 'edgePoint' (edgeId, edge, p, pBind, flip) | 'twoEdges' (e1, e2, flip) | 'fixed'; `doc.axes = [{id, name, base, axis:{o,d}, hidden}]` ('twoPoints' | 'roundFace' | 'roundEdge' | 'faceNormal' | 'fixed'); `doc.points = [{id, name, base, point:[x,y,z], hidden}]` ('edgeMid' | 'faceCenter' | 'edgePlaneIntersect' | 'curvePercent' | 'fixed'); `doc.csys = [{id, name, base, csys:{o,x,y,z}, hidden}]` ('pointEdges' | 'fixed', `csysExportMatrix` als Nullpunkt im Export für STEP/STL/3MF/OBJ/GLB via `#ex-csys`); Bild in `Viewer.groups.datums`; `Sketch.startOnPlaneObj(plane)`, `Sketch.startPlanePick(kind, onPlane)`, nutzbar für Kreismuster (`axisId`) und Drehen (`axis3d`)
 - Farbe je Fläche: `it.faceColors = [{n, c, col}]` (Flächen-Lage im Teil), im Bild als Vertex-Farben (`applyFaceColors`, `Viewer.faceIndexOf`). Text in Kurven: `Sketch.textToCurves(id)`
 - Normteile: Bauteile `stdScrew` (size, head 'zyl'|'senk', length), `stdNut`, `stdWasher` (Kern: `NORM`-Tabelle + `SCREW` in `core.js`); LIB-Einträge mit `mat` setzen den Werkstoff beim Anlegen (`Model.newItem`). KI-Aktion `verrechnen` (ids, modus, ziel)
 - Längen: Leisten-Schild `#sel-val` (Kantenlänge aus `edges[i].l`, Summe bei mehreren, Ø bei Kreiskante und runder Fläche `faces[i].r`); `Measure.copyText`/`copyValue` kopieren den Wert; Mess-Schilder `.dimlabel.mlabel` sind anklickbar; Messen kennt `kind: 'round'` (CYLINDRE/SPHERE)

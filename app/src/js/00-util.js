@@ -1214,6 +1214,21 @@ const HELP = {
   "tip": "Bis zur nächsten Fläche oder bis zu einer angeklickten Fläche hochziehen",
   "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
   "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
+ },
+ "datumPoint": {
+  "tip": "Bezugspunkt als eigenen Schritt anlegen",
+  "hilfe": "Setzt einen Bezugspunkt an einer Kantenmitte, Flächenmitte, am Schnittpunkt zwischen Kante und Ebene oder bei einem Prozentwert entlang einer Kurve. Der Punkt wandert automatisch mit, wenn sich der Körper ändert.",
+  "tipp": "Du kannst jeden Bezugspunkt als Ursprung für ein eigenes Koordinatensystem, eine Bezugsebene oder eine Bezugsachse verwenden."
+ },
+ "datumCsys": {
+  "tip": "Eigenes Koordinatensystem anlegen und als Export-Nullpunkt wählen",
+  "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
+  "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
+ },
+ "revolveOptions": {
+  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
+  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
+  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
  }
 };
 

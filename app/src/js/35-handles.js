@@ -80,6 +80,48 @@ const Handles = (() => {
       const dist = Model.num(it.p.dist, Model.vars(App.doc).v, 10);
       const top = o.clone().addScaledVector(n, dirSign * (it.p.dir === 'both' ? dist / 2 : dist));
       defs.push({ ax: 'n', dir: n.clone().multiplyScalar(dirSign).toArray(), p: top.toArray(), param: 'dist', extrude: true });
+    } else if (it.kind === 'revolve' && it.p && it.p.sketch) {
+      const dir = it.p.dir || 'normal', V = Model.vars(App.doc).v;
+      const a1 = Model.num(it.p.angle, V, 360), a2 = dir === 'two' ? Model.num(it.p.angle2, V, a1) : 0;
+      const tot = dir === 'two' ? a1 + a2 : a1;
+      if (dir !== 'toFace' && tot < 359.99) {
+        const fr = Model.revolveFrame(it.p, V);
+        if (fr) {
+          const wC = new THREE.Vector3(...fr.arcC).applyMatrix4(W);
+          const wAx = new THREE.Vector3(...fr.d).transformDirection(W).normalize();
+          const wU = new THREE.Vector3(...fr.u0).transformDirection(W).normalize();
+          const wW = new THREE.Vector3(...fr.w0).transformDirection(W).normalize();
+          const arcR = Math.max(6, fr.rMax * 1.12);
+          const [deg0, deg1] = dir === 'reverse' ? [-a1, 0] : dir === 'both' ? [-a1 / 2, a1 / 2] : dir === 'two' ? [-a2, a1] : [0, a1];
+          const arcPts = [];
+          for (let i = 0; i <= 48; i++) {
+            const th = ((deg0 + ((deg1 - deg0) * i) / 48) * Math.PI) / 180;
+            arcPts.push(wC.clone().addScaledVector(wU, Math.cos(th) * arcR).addScaledVector(wW, Math.sin(th) * arcR));
+          }
+          const arcLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPts), new THREE.LineDashedMaterial({ color: new THREE.Color('#f08c00'), dashSize: 2, gapSize: 1.5, depthTest: false, transparent: true, opacity: 0.9 }));
+          arcLine.computeLineDistances(); arcLine.renderOrder = 29;
+          group.add(arcLine); items.push(arcLine);
+          const revDefs = dir === 'reverse'
+            ? [{ angDeg: -a1, param: 'angle', sign: -1, factor: 1, val: a1 }]
+            : dir === 'both'
+              ? [{ angDeg: a1 / 2, param: 'angle', sign: 1, factor: 2, val: a1 }]
+              : dir === 'two'
+                ? [{ angDeg: a1, param: 'angle', sign: 1, factor: 1, val: a1 }, { angDeg: -a2, param: 'angle2', sign: -1, factor: 1, val: a2 }]
+                : [{ angDeg: a1, param: 'angle', sign: 1, factor: 1, val: a1 }];
+          for (const d of revDefs) {
+            const th = (d.angDeg * Math.PI) / 180;
+            const radOut = wU.clone().multiplyScalar(Math.cos(th)).addScaledVector(wW, Math.sin(th)).normalize();
+            const tan = wU.clone().multiplyScalar(-Math.sin(th)).addScaledVector(wW, Math.cos(th)).multiplyScalar(d.sign).normalize();
+            const hm = handleMesh('lift');
+            hm.material.color.set('#f08c00');
+            hm.position.copy(wC).addScaledVector(radOut, arcR);
+            hm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+            hm.userData = { kind: 'revAngle', param: d.param, sign: d.sign, factor: d.factor, center: wC.clone(), axis: wAx.clone(), u0: wU.clone(), w0: wW.clone(), rad: arcR, wdir: radOut.clone() };
+            group.add(hm); items.push(hm);
+            addAngleLabel(hm, d.val, d.factor);
+          }
+        }
+      }
     }
     for (const d of defs) {
       const m = handleMesh('size');
@@ -165,6 +207,38 @@ const Handles = (() => {
     overlayEl.append(el);
     labels.push({ el, handle });
   }
+  function addAngleLabel(handle, value, factor = 1) {
+    const txt = factor === 2 ? `${fmt(value, 1)}° (2×${fmt(value / 2, 1)}°)` : `${fmt(value, 1)}°`;
+    const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    el.addEventListener('click', (e) => { e.stopPropagation(); editAngleLabel(el, handle); });
+    overlayEl.append(el);
+    labels.push({ el, handle });
+  }
+  function editAngleLabel(el, handle) {
+    if (el.classList.contains('editing')) return;
+    const c = current(); if (!c) return;
+    const k = handle.userData.param, raw = c.it.p[k];
+    el.classList.add('editing'); el.textContent = '';
+    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? fmt(raw, 2) : String(raw ?? ''), 'aria-label': 'Drehwinkel' });
+    el.append(inp); inp.focus(); inp.select();
+    let finished = false;
+    const done = (ok) => {
+      if (finished) return; finished = true;
+      if (ok) {
+        const t = inp.value.trim(), V = Model.vars(App.doc).v, n = parseNum(t);
+        const v = isNaN(n) ? Model.num(t, V, NaN) : n;
+        if (!isNaN(v) && v > 0 && v <= 360) {
+          const maxA = c.it.p.dir === 'two' ? Math.max(0.1, 360 - Model.num(c.it.p[k === 'angle' ? 'angle2' : 'angle'], V, 0)) : 360;
+          const val = isNaN(n) ? t : round(clamp(v, 0.1, maxA), 3);
+          App.change('Drehwinkel geändert', (doc) => { const f = Model.find(doc, c.it.id); if (f) f.item.p[k] = val; });
+        } else UI.toast('Bitte einen Winkel zwischen 0,1° und 360° eingeben.', { kind: 'bad' });
+      }
+      rebuild();
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') { e.preventDefault(); done(false); } e.stopPropagation(); });
+    inp.addEventListener('blur', () => done(true), { once: true });
+  }
   function addSegLabel(handle, len, rule, id) {
     const i = handle.userData.seg;
     const lenTxt = Units.key() === 'mm' ? fmt(len, 1) : Units.fmtLenU(len, 1);
@@ -220,7 +294,7 @@ const Handles = (() => {
     for (const m of items) {
       if (!m.isMesh) continue;
       const ps = Viewer.pixelSizeAt(m.position);
-      const s = m.userData.kind === 'size' ? 11 * ps : m.userData.kind === 'lift' ? 13 * ps : 12 * ps;
+      const s = m.userData.kind === 'size' ? 11 * ps : (m.userData.kind === 'lift' || m.userData.kind === 'revAngle') ? 13 * ps : 12 * ps;
       m.scale.setScalar(s);
       if (m.userData.kind === 'lift') m.position.copy(m.userData.base).add(new THREE.Vector3(0, 0, 26 * ps));
       if (m.userData.kind === 'fillet') { m.scale.setScalar(13 * ps); m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, -16 * ps); }
@@ -246,7 +320,11 @@ const Handles = (() => {
     return hits.length ? hits[0].object : null;
   }
   function hover(obj) {
-    for (const m of items) if (m.isMesh && m.userData.kind === 'size') m.material.color.set(m === obj ? Viewer.theme.accent : 0xffffff);
+    for (const m of items) {
+      if (!m.isMesh) continue;
+      if (m.userData.kind === 'size') m.material.color.set(m === obj ? Viewer.theme.accent : 0xffffff);
+      else if (m.userData.kind === 'revAngle') m.material.color.set(m === obj ? '#ffb020' : '#f08c00');
+    }
     Viewer.requestRender();
   }
   // Maß setzen und Position so anpassen, dass die Gegenseite stehen bleibt
@@ -314,6 +392,24 @@ const Handles = (() => {
       state.L0 = Model.localMatrix(c.it).clone();
       state.PW = Model.parentWorld(App.doc, c.it.id);
       state.W0 = Model.worldMatrix(App.doc, c.it.id);
+    } else if (ud.kind === 'revAngle') {
+      Object.assign(state, { center: ud.center.clone(), axis: ud.axis.clone(), u0: ud.u0.clone(), w0: ud.w0.clone(), rad: ud.rad, param: ud.param, sign: ud.sign, factor: ud.factor });
+      state.v0 = Model.num(c.it.p[ud.param], V, 90);
+      const rayDir = Viewer.setRay(ev.clientX, ev.clientY).ray.direction;
+      const p = Math.abs(rayDir.dot(state.axis)) > 0.05 ? Viewer.rayPlane(ev.clientX, ev.clientY, state.center, state.axis) : null;
+      if (p) {
+        const rel = p.clone().sub(state.center);
+        state.a0 = Math.atan2(rel.dot(state.w0), rel.dot(state.u0));
+        state.lastA = state.a0; state.cum = 0; state.useScreen = false;
+      } else {
+        state.useScreen = true;
+        const th0 = (state.v0 / ud.factor) * ud.sign * Math.PI / 180;
+        const tan = ud.u0.clone().multiplyScalar(-Math.sin(th0)).addScaledVector(ud.w0, Math.cos(th0)).multiplyScalar(ud.sign).normalize();
+        const s0 = Viewer.toScreen(handle.position), s1 = Viewer.toScreen(handle.position.clone().add(tan));
+        let tx = s1.x - s0.x, ty = s1.y - s0.y; const tl = Math.hypot(tx, ty);
+        if (tl > 1e-4) { tx /= tl; ty /= tl; } else { tx = 1; ty = 0; }
+        state.screenTan = [tx, ty];
+      }
     }
     return true;
   }
@@ -366,6 +462,37 @@ const Handles = (() => {
       Model.setFromMatrix(c.it, Ln);
       showLive(handle, deg, 'Drehung', '°');
       App.emit('doc'); liveRebuild();
+    } else if (state.kind === 'revAngle') {
+      let degDelta = 0;
+      if (!state.useScreen) {
+        const p = Viewer.rayPlane(ev.clientX, ev.clientY, state.center, state.axis);
+        if (p) {
+          const rel = p.clone().sub(state.center);
+          const a = Math.atan2(rel.dot(state.w0), rel.dot(state.u0));
+          let dA = a - state.lastA;
+          while (dA > Math.PI) dA -= Math.PI * 2;
+          while (dA < -Math.PI) dA += Math.PI * 2;
+          state.lastA = a; state.cum += dA;
+          degDelta = (state.cum * 180 / Math.PI) * state.sign * state.factor;
+        }
+      } else {
+        degDelta = ((ev.clientX - state.sx) * state.screenTan[0] + (ev.clientY - state.sy) * state.screenTan[1]) * 0.8;
+      }
+      const step = ev.shiftKey ? 1 : 5;
+      const other = c.it.p.dir === 'two' ? Model.num(c.it.p[state.param === 'angle' ? 'angle2' : 'angle'], Model.vars(App.doc).v, 0) : 0;
+      const maxA = Math.max(1, 360 - other);
+      const val = clamp(Math.round((state.v0 + degDelta) / step) * step, 1, maxA);
+      c.it.p[state.param] = round(val, 2);
+      const th = ((val / state.factor) * state.sign * Math.PI) / 180;
+      const radOut = state.u0.clone().multiplyScalar(Math.cos(th)).addScaledVector(state.w0, Math.sin(th)).normalize();
+      const tan = state.u0.clone().multiplyScalar(-Math.sin(th)).addScaledVector(state.w0, Math.cos(th)).multiplyScalar(state.sign).normalize();
+      handle.position.copy(state.center).addScaledVector(radOut, state.rad);
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+      handle.userData.wdir = radOut;
+      placeLabels();
+      showLive(handle, val, state.factor === 2 ? 'Gesamtwinkel' : 'Winkel', '°');
+      App.emit('doc'); liveRebuild();
+      return;
     }
     // Knotenmatrix direkt nachführen (flüssig)
     const top = App.doc.items.find((x) => x.id === c.it.id);
@@ -394,7 +521,7 @@ const Handles = (() => {
       if (fin) { fin.r = 0.5; if (st.r !== 0.5) Actions.setFinish(st.tid, st.finId, { r: st.r }); else App.rebuild(); }
       App.select([st.tid]); rebuild(); return;
     }
-    const label = st.kind === 'size' ? 'Größe geändert' : st.kind === 'lift' ? 'Angehoben' : 'Gedreht';
+    const label = st.kind === 'size' ? 'Größe geändert' : st.kind === 'lift' ? 'Angehoben' : st.kind === 'revAngle' ? 'Drehwinkel geändert' : 'Gedreht';
     if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); }
     rebuild();
   }
@@ -415,6 +542,12 @@ const Handles = (() => {
         const T1 = new THREE.Matrix4().makeTranslation(st.center.x, st.center.y, st.center.z), T2 = new THREE.Matrix4().makeTranslation(-st.center.x, -st.center.y, -st.center.z);
         Model.setFromMatrix(c.it, st.PW.clone().invert().multiply(T1.multiply(R).multiply(T2).multiply(st.W0))); fin();
       } };
+    }
+    if (st.kind === 'revAngle') {
+      const V = Model.vars(App.doc).v, cur = Model.num(c.it.p[ud.param], V, st.v0);
+      const other = c.it.p.dir === 'two' ? Model.num(c.it.p[ud.param === 'angle' ? 'angle2' : 'angle'], V, 0) : 0;
+      const maxA = Math.max(0.1, 360 - other);
+      return { fields: [{ label: ud.factor === 2 ? 'Gesamtwinkel' : 'Winkel', value: cur, unit: '°' }], apply: ([v]) => { c.it.p[ud.param] = round(clamp(v, 0.1, maxA), 3); fin(); } };
     }
     return null;
   }
@@ -501,7 +634,7 @@ const Interact = (() => {
     hoverTimer = requestAnimationFrame(() => {
       const hnd = Handles.hitHandle(e.clientX, e.clientY);
       Handles.hover(hnd);
-      if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
+      if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' || hnd.userData.kind === 'revAngle' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
       const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
       if (hit && hit.edgeIdx != null) { Viewer.highlightEdge(hit.id, hit.edgeIdx); Viewer.highlightFace('hover', null, null); }
       else if (hit) { Viewer.highlightEdge(null, null); Viewer.highlightFace('hover', hit.id, hit.faceIdx); }

@@ -423,6 +423,8 @@ const Measure = (() => {
       App.clearSelection();
       if (typeof Datums !== 'undefined' && Datums.selected) Datums.select(null);
       if (typeof Datums !== 'undefined' && Datums.selectedAxis) Datums.selectAxis(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedPoint) Datums.selectPoint(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
   }
