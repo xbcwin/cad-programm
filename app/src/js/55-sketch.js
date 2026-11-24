@@ -53,6 +53,7 @@ const Sketch = (() => {
   const hintFor = (id) => {
     if (!id) return null;
     if (id.startsWith('c:')) { const k = id.slice(2); return `<b>${cname(k)}:</b> ${chint(k)}`; }
+    if (id === 'spline' && S && S.splineMode === 'cv' && !isSimpleMode()) return T('sk.hint.splineCV');
     if (id === 'stretch' && S && S.stretch && S.stretch.sel && S.stretch.sel.pointCount > 0) {
       const n = S.stretch.sel.pointCount;
       return T('sk.hint.stretchReady', { n, unit: T(n === 1 ? 'sk.panel.stretchPtOne' : 'sk.panel.stretchPtMany') });
@@ -373,7 +374,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0 };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0 };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -447,9 +448,18 @@ const Sketch = (() => {
     if (uniq.length) S.selCon = null;
     if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel');
   }
-  function clearSel() { if (!S) return; S.sels = []; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
+  function clearSel() { if (!S) return; S.sels = []; S.selHandle = null; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   const isSimpleMode = () => typeof ViewPrefs !== 'undefined' && ViewPrefs.level === 'simple';
+  function setSplineMode(mode) {
+    if (!S || S.step) return false;
+    if (mode === 'cv' && isSimpleMode()) return false;
+    S.splineMode = mode === 'cv' ? 'cv' : 'fit';
+    S.draft = null;
+    if (S.tool === 'spline') UI.hint(hintFor('spline'));
+    render(); Panels.renderRight();
+    return true;
+  }
   function setDimMode(mode) {
     if (!S || !['auto', 'arcLen', 'ang3', 'ord'].includes(mode)) return false;
     if (mode === 'ord' && isSimpleMode()) return false;
@@ -508,7 +518,8 @@ const Sketch = (() => {
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
     S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; hideEntry(); hideDimBox();
     if (isSimpleMode() && S.dimMode === 'ord') S.dimMode = 'auto';
-    S.mir = null; S.liveMirPick = false; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
+    if (isSimpleMode() && S.splineMode === 'cv') S.splineMode = 'fit';
+    S.mir = null; S.liveMirPick = false; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.hoverHandle = null; S.autoDef = null;
     if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
     Viewer.highlightFace('hover', null, null);
     if (id !== 'select') clearSel();
@@ -720,7 +731,7 @@ const Sketch = (() => {
   }
   let entList = null;
   const ent = (id) => (entList || S.ents).find((x) => x.id === id);
-  const isAngDim = (k) => k === 'ang' || k === 'angLL' || k === 'ang3';
+  const isAngDim = (k) => k === 'ang' || k === 'angLL' || k === 'ang3' || /^hAng\d+$/.test(k);
   const dimSpecOf = (dm) => (dm.refs ? { k: dm.k, refs: dm.refs, ...(dm.k === 'distCC' ? { cm: dm.cm || 'center' } : {}), ...(dm.k === 'ord' ? { ...(dm.sg != null ? { sg: dm.sg } : {}), ...(dm.axis ? { axis: dm.axis } : {}) } : {}) } : { e: dm.e, k: dm.k });
   const sameRefs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const samePairRefs = (a, b) => !!a && !!b && a.length === 2 && b.length === 2 && ((sameRefs(a[0], b[0]) && sameRefs(a[1], b[1])) || (sameRefs(a[0], b[1]) && sameRefs(a[1], b[0])));
@@ -754,16 +765,25 @@ const Sketch = (() => {
     if (guardLocked()) return false;
     if (sp.e && !ent(sp.e)) return false;
     const n = Model.num(v, vars(), NaN);
-    const signed = sp.k === 'ang' || sp.k === 'x' || sp.k === 'y' || sp.k === 'ord';
+    const signed = sp.k === 'ang' || sp.k === 'x' || sp.k === 'y' || sp.k === 'ord' || /^hAng\d+$/.test(sp.k);
     const zeroOk = sp.k === 'dist' || sp.k === 'distPL' || sp.k === 'distCC' || sp.k === 'angLL' || sp.k === 'ang3';
     if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || ((sp.k === 'angLL' || sp.k === 'ang3') && n > 180)) { UI.toast(T('sk.toast.badVal', { v }), { kind: 'bad' }); return false; }
     if (typeof v === 'string' && !Expr.names(v).length) v = round(n, 4);   // reine Rechnung wie 10*3 → 30
+    let testEnts = S.ents, hmEn = null, hmIdx = -1, hmKind = null;
+    const hm = sp.e ? /^h(Ang|Len)(\d+)$/.exec(sp.k) : null;
+    if (hm) {
+      hmEn = ent(sp.e); hmIdx = +hm[2]; hmKind = hm[1];
+      if (!hmEn || hmEn.type !== 'spline' || hmEn.mode === 'cv' || hmIdx < 0 || hmIdx >= (hmEn.pts || []).length) return false;
+      testEnts = deepClone(S.ents);
+      const ten = testEnts.find((x) => x.id === hmEn.id);
+      ensureSplineHandle(ten, hmIdx, hmKind === 'Ang' ? n : null, hmKind === 'Len' ? n : null);
+    }
     if (sp.k !== 'n') {
       const others = S.dims.filter((d) => !specMatch(d, sp));
       const candDim = sp.e ? { id: '_neu', e: sp.e, k: sp.k, v } : { id: '_neu', k: sp.k, refs: sp.refs, v, ...(sp.k === 'distCC' ? { cm: sp.cm || 'center' } : {}), ...(sp.k === 'ord' ? { ...(sp.sg != null ? { sg: sp.sg } : {}), ...(sp.axis ? { axis: sp.axis } : {}) } : {}) };
-      const tr = Solver.trial({ ents: S.ents, cons: S.cons, dims: [...others, candDim], dimsBefore: others }, vars());
+      const tr = Solver.trial({ ents: testEnts, cons: S.cons, dims: [...others, candDim], dimsBefore: others }, vars());
       if (!tr.ok) {
-        recordConflict({ kind: 'dim', sp, v, raw: candDim }, { ents: S.ents, cons: S.cons, dims: [...others, candDim] }, '_neu');
+        recordConflict({ kind: 'dim', sp, v, raw: candDim }, { ents: testEnts, cons: S.cons, dims: [...others, candDim] }, '_neu');
         render(); Panels.renderRight();
         UI.toast(T('sk.toast.dimConflict', { title: ERRORS.sketchOverConstrained.titel, sol: ERRORS.sketchOverConstrained.loesung }), { kind: 'bad', ms: 7000, action: { label: T('sk.toast.onlyReadBtn'), run: () => { clearConflict(); setRefDim(sp); } } }); return false;
       }
@@ -775,7 +795,12 @@ const Sketch = (() => {
         return true;
       }
     }
-    pushUndo(); putDimSpec(sp, v); reapply(); render(); Panels.renderRight();
+    pushUndo();
+    if (hmEn) {
+      ensureSplineHandle(hmEn, hmIdx, hmKind === 'Ang' ? n : null, hmKind === 'Len' ? n : null);
+      S.selHandle = { e: hmEn.id, i: hmIdx };
+    }
+    putDimSpec(sp, v); reapply(); render(); Panels.renderRight();
     return true;
   }
   function setDim(eid, k, v) { return setDimSpec({ e: eid, k }, v); }
@@ -966,6 +991,7 @@ const Sketch = (() => {
     for (const e of S.ents) {
       for (const k of ['a', 'b', 'm', 'c']) if (Array.isArray(e[k])) P(e[k]);
       for (const k of ['pts', 'onP']) if (Array.isArray(e[k])) e[k].forEach(P);
+      if (Array.isArray(e.handles)) e.handles.forEach((h) => { if (Array.isArray(h)) P(h); });
       for (const k of ['r', 'rx', 'ry', 'bend', 'os', 'sp'].concat(e.type === 'text' ? ['h'] : [])) if (typeof e[k] === 'number') e[k] = round(e[k] * f, 4);
     }
     for (const d of S.dims) { if (isAngDim(d.k) || d.k === 'n') continue; d.v = typeof d.v === 'number' ? round(d.v * f, 4) : `(${d.v})*${fs}`; }
@@ -1256,7 +1282,11 @@ const Sketch = (() => {
   // kleines Eingabefeld direkt im Bild
   let dimBox = null;
   function hideDimBox() { if (dimBox) { dimBox.remove(); dimBox = null; } }
-  const DIMLABEL = (k) => SK.DIMNAME[k] || { dist: T('sk.dim.dist'), distPL: T('sk.dim.distPL'), distCC: T('sk.dim.distCC'), angLL: T('sk.dim.angLL'), ang3: T('sk.dim.ang3'), r: T('sk.dim.r'), arcLen: T('sk.dim.arcLen'), ord: T('sk.dim.ord') }[k] || T('sk.dim.fallback');
+  const DIMLABEL = (k) => {
+    const ha = /^hAng(\d+)$/.exec(k); if (ha) return T('sk.dim.hAng', { n: +ha[1] + 1 });
+    const hl = /^hLen(\d+)$/.exec(k); if (hl) return T('sk.dim.hLen', { n: +hl[1] + 1 });
+    return SK.DIMNAME[k] || { dist: T('sk.dim.dist'), distPL: T('sk.dim.distPL'), distCC: T('sk.dim.distCC'), angLL: T('sk.dim.angLL'), ang3: T('sk.dim.ang3'), r: T('sk.dim.r'), arcLen: T('sk.dim.arcLen'), ord: T('sk.dim.ord') }[k] || T('sk.dim.fallback');
+  };
   const dimLabelOf = (dm) => (dm && dm.k === 'distCC' ? T(dm.cm === 'min' ? 'sk.dim.distCCMin' : dm.cm === 'max' ? 'sk.dim.distCCMax' : 'sk.dim.distCCCenter') : DIMLABEL(dm ? dm.k : ''));
   function askDim(sp, clientX, clientY) {
     if (guardLocked()) return;
@@ -1293,6 +1323,17 @@ const Sketch = (() => {
         const ab = h('button', { type: 'button', class: 'dimlock', id: 'dim-arc-toggle', 'data-tip': T(sp.k === 'r' ? 'sk.dimBox.toArcLen' : 'sk.dimBox.toRadius'), 'aria-label': T(sp.k === 'r' ? 'sk.dimBox.toArcLen' : 'sk.dimBox.toRadius') }, sp.k === 'r' ? '⌒' : 'R');
         ab.onclick = () => askDim({ e: sp.e, k: nk }, clientX, clientY);
         dimBox.append(ab);
+      }
+    }
+    if (sp.e && /^h(Ang|Len)(\d+)$/.test(sp.k)) {
+      const hm = /^h(Ang|Len)(\d+)$/.exec(sp.k);
+      const en = ent(sp.e);
+      if (en && en.type === 'spline' && en.mode !== 'cv') {
+        const nk = (hm[1] === 'Ang' ? 'hLen' : 'hAng') + hm[2];
+        const tipKey = hm[1] === 'Ang' ? 'sk.dimBox.toHandleLen' : 'sk.dimBox.toHandleAng';
+        const hb = h('button', { type: 'button', class: 'dimlock', id: 'dim-handle-toggle', 'data-tip': T(tipKey), 'aria-label': T(tipKey) }, hm[1] === 'Ang' ? '↔' : '°');
+        hb.onclick = () => askDim({ e: sp.e, k: nk }, clientX, clientY);
+        dimBox.append(hb);
       }
     }
     if (sp.k !== 'n' && !(cur && cur.ref)) {
@@ -1345,8 +1386,113 @@ const Sketch = (() => {
   function finishSpline(closed) {
     const d = S.draft; S.draft = null; hideEntry();
     if (!d || !d.pts || d.pts.length < (closed ? 3 : 2)) { render(); return; }
-    addEnt({ type: 'spline', pts: d.pts.map((q) => q.slice()), closed: !!closed });
+    const mode = !isSimpleMode() && S.splineMode === 'cv' ? 'cv' : null;
+    addEnt({ type: 'spline', pts: d.pts.map((q) => q.slice()), closed: !!closed, ...(mode ? { mode } : {}) });
     reapply(); render(); Panels.renderRight();
+  }
+  function ensureSplineHandle(e, i, targetAngDeg, targetLen) {
+    if (!e || e.type !== 'spline' || e.mode === 'cv' || i < 0 || i >= (e.pts || []).length) return null;
+    if (!Array.isArray(e.handles)) e.handles = [];
+    if (!Array.isArray(e.handles[i])) {
+      const nat = SK.splineHandle(e, i) || [10, 0];
+      let L = Math.max(0.5, Math.hypot(nat[0], nat[1]) || 10);
+      let vx = Math.hypot(nat[0], nat[1]) >= 0.5 ? nat[0] : 10, vy = Math.hypot(nat[0], nat[1]) >= 0.5 ? nat[1] : 0;
+      if (targetLen != null && targetLen > 0) {
+        const curL = Math.hypot(vx, vy) || 1;
+        vx = (vx / curL) * targetLen; vy = (vy / curL) * targetLen; L = targetLen;
+      }
+      if (targetAngDeg != null) {
+        const rad = (targetAngDeg * Math.PI) / 180;
+        vx = Math.cos(rad) * L; vy = Math.sin(rad) * L;
+      }
+      e.handles[i] = [round(vx, 4), round(vy, 4)];
+    } else if (targetAngDeg != null) {
+      const curAng = (Math.atan2(e.handles[i][1], e.handles[i][0]) * 180) / Math.PI;
+      const diff = Math.abs(((curAng - targetAngDeg + 540) % 360) - 180);
+      if (diff > 170) {
+        const rad = ((targetAngDeg + 15) * Math.PI) / 180;
+        const curL = Math.max(0.5, Math.hypot(e.handles[i][0], e.handles[i][1]));
+        e.handles[i] = [round(Math.cos(rad) * curL, 4), round(Math.sin(rad) * curL, 4)];
+      }
+    }
+    return e.handles[i];
+  }
+  function setSplineHandle(id, idx, val, opts = {}) {
+    if (!S || S.step || guardLocked()) return false;
+    const e = ent(id);
+    if (!e || e.type !== 'spline' || e.mode === 'cv' || idx < 0 || idx >= (e.pts || []).length) return false;
+    let dx, dy;
+    if (Array.isArray(val) && val.length >= 2) {
+      dx = +val[0]; dy = +val[1];
+    } else if (val && typeof val === 'object') {
+      const cur = SK.splineHandle(e, idx) || [10, 0];
+      const ang = val.ang != null ? (+val.ang * Math.PI) / 180 : Math.atan2(cur[1], cur[0]);
+      const len = val.len != null ? +val.len : Math.hypot(cur[0], cur[1]);
+      dx = Math.cos(ang) * len; dy = Math.sin(ang) * len;
+    } else return false;
+    if (!isFinite(dx) || !isFinite(dy) || Math.hypot(dx, dy) < 0.1) return false;
+    pushUndo();
+    if (!Array.isArray(e.handles)) e.handles = [];
+    e.handles[idx] = [round(dx, 4), round(dy, 4)];
+    S.selHandle = { e: id, i: idx };
+    if (opts.dimAng && val && val.ang != null) putDim(id, 'hAng' + idx, +val.ang);
+    if (opts.dimLen && val && val.len != null) putDim(id, 'hLen' + idx, +val.len);
+    reapply(); render(); Panels.renderRight();
+    return true;
+  }
+  function resetSplineHandle(id, idx) {
+    if (!S || S.step || guardLocked()) return false;
+    const e = ent(id);
+    if (!e || e.type !== 'spline' || idx < 0 || idx >= (e.pts || []).length) return false;
+    pushUndo();
+    if (Array.isArray(e.handles)) {
+      e.handles[idx] = null;
+      if (!e.handles.some((h) => Array.isArray(h))) delete e.handles;
+    }
+    S.dims = S.dims.filter((d) => !(d.e === id && (d.k === 'hAng' + idx || d.k === 'hLen' + idx)));
+    S.cons = S.cons.filter((c) => !conRefs(c).some((r) => r && r.e === id && (r.p === 'h' + idx || r.handle === idx)));
+    reapply(); render(); Panels.renderRight();
+    return true;
+  }
+  function selectSplineHandle(id, idx) {
+    if (!S || S.step) return false;
+    const e = ent(id);
+    if (!e || e.type !== 'spline' || e.mode === 'cv' || idx < 0 || idx >= (e.pts || []).length) return false;
+    setSel([id]); S.selHandle = { e: id, i: idx }; render(); Panels.renderRight();
+    return true;
+  }
+  function hitSplineHandle(uv, opts = {}) {
+    if (!S || S.step || isSimpleMode()) return null;
+    const tol = opts.tol || pxSize() * 10;
+    const selSet = new Set(selectedIds());
+    let best = null, bd = tol;
+    for (const en of S.ents) {
+      if (en.type !== 'spline' || en.mode === 'cv' || !en.pts || en.pts.length < 2) continue;
+      const hasCustom = Array.isArray(en.handles) && en.handles.some((h) => Array.isArray(h));
+      if (!opts.all && !selSet.has(en.id) && !hasCustom) continue;
+      for (let i = 0; i < en.pts.length; i++) {
+        const p = en.pts[i], hv = SK.splineHandle(en, i);
+        if (!hv || Math.hypot(hv[0], hv[1]) < 1e-6) continue;
+        const tPlus = [p[0] + hv[0], p[1] + hv[1]];
+        const dp = SK.d2(tPlus, uv);
+        if (dp < bd) { bd = dp; best = { ent: en, i, sign: 1, tip: tPlus, dist: dp }; }
+        if (i > 0 || en.closed) {
+          const tMinus = [p[0] - hv[0], p[1] - hv[1]];
+          const dm = SK.d2(tMinus, uv);
+          if (dm < bd) { bd = dm; best = { ent: en, i, sign: -1, tip: tMinus, dist: dm }; }
+        }
+        if (opts.allowLine && SK.d2(uv, p) > tol * 0.7) {
+          const dlp = segDist(uv, p, tPlus);
+          if (dlp < bd) { bd = dlp; best = { ent: en, i, sign: 1, tip: tPlus, dist: dlp }; }
+          if (i > 0 || en.closed) {
+            const tMinus = [p[0] - hv[0], p[1] - hv[1]];
+            const dlm = segDist(uv, p, tMinus);
+            if (dlm < bd) { bd = dlm; best = { ent: en, i, sign: -1, tip: tMinus, dist: dlm }; }
+          }
+        }
+      }
+    }
+    return best;
   }
   // ---------- Hilfslinien ----------
   function syncConBtn() {
@@ -2249,6 +2395,16 @@ const Sketch = (() => {
         }
         return null;
       };
+      if (dmMode === 'auto' && !isSimpleMode() && !S.dimFirst) {
+        const hh = hitSplineHandle(uv0, { all: true, allowLine: true });
+        if (hh) {
+          e.preventDefault();
+          setSel([hh.ent.id]); S.selHandle = { e: hh.ent.id, i: hh.i };
+          render(); Panels.renderRight();
+          askDim({ e: hh.ent.id, k: 'hAng' + hh.i }, e.clientX, e.clientY);
+          return;
+        }
+      }
       const pk = pickAt(uv0);
       if (!pk) { S.dimFirst = null; UI.toast('Klick genau auf eine Linie, einen Kreis oder einen Punkt.', { icon: 'info', ms: 1800 }); render(); return; }
       const f = S.dimFirst;
@@ -2290,12 +2446,21 @@ const Sketch = (() => {
         try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
         return;
       }
-      // Endpunkt ziehen? (alle Linien, die sich dort treffen, gehen mit)
+      // Endpunkt oder Tangenten-Griff ziehen? (alle Linien, die sich dort treffen, gehen mit)
       const endHit = [];
+      let minEndDist = Infinity;
       if (!e.shiftKey) {
         for (const en of S.ents) {
-          if (en.type === 'line' || en.type === 'arc') { for (const k of ['a', 'b']) if (SK.d2(en[k], uv0) < tol) endHit.push([en, k]); }
-          else if (en.type === 'spline') en.pts.forEach((q, i) => { if (SK.d2(q, uv0) < tol) endHit.push([en, 'p' + i + '_']); });
+          if (en.type === 'line' || en.type === 'arc') { for (const k of ['a', 'b']) { const dd = SK.d2(en[k], uv0); if (dd < tol) { endHit.push([en, k]); minEndDist = Math.min(minEndDist, dd); } } }
+          else if (en.type === 'spline') en.pts.forEach((q, i) => { const dd = SK.d2(q, uv0); if (dd < tol) { endHit.push([en, 'p' + i + '_']); minEndDist = Math.min(minEndDist, dd); } });
+        }
+        const hh = hitSplineHandle(uv0, { tol: Math.max(tol, pxSize() * 11) });
+        if (hh && (!endHit.length || hh.dist < minEndDist)) {
+          pushUndo();
+          setSel([hh.ent.id]); S.selHandle = { e: hh.ent.id, i: hh.i }; S.selCon = null;
+          S.drag = { handle: { e: hh.ent.id, i: hh.i, sign: hh.sign, initVec: SK.splineHandle(hh.ent, hh.i), activated: Array.isArray(hh.ent.handles) && Array.isArray(hh.ent.handles[hh.i]) }, start: uv0 };
+          render(); Panels.renderRight();
+          return;
         }
       }
       if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; S.selCon = null; return; }
@@ -3433,6 +3598,33 @@ const Sketch = (() => {
     }
     if (S.drag) {
       if (S.locked) { S.drag = null; S.dragPins = null; return; }
+      if (S.drag.handle) {
+        const dh = S.drag.handle;
+        const en = ent(dh.e);
+        if (!en || !en.pts || !en.pts[dh.i]) { S.drag = null; S.dragPins = null; return; }
+        if (!dh.activated) {
+          if (!Array.isArray(en.handles)) en.handles = [];
+          en.handles[dh.i] = dh.initVec.slice();
+          dh.activated = true;
+        }
+        const p = en.pts[dh.i];
+        let dx = dh.sign * (uv0[0] - p[0]), dy = dh.sign * (uv0[1] - p[1]);
+        const len = Math.hypot(dx, dy);
+        if (len < 0.5) {
+          const u = dh.initVec, ul = Math.hypot(u[0], u[1]) || 1;
+          dx = (u[0] / ul) * 0.5; dy = (u[1] / ul) * 0.5;
+        } else if (angleSnapOn && !e.shiftKey && !e.altKey) {
+          const ang = Math.atan2(dy, dx), step = Math.PI / 12;
+          const snapped = Math.round(ang / step) * step;
+          if (Math.abs(ang - snapped) < (2.5 * Math.PI) / 180) {
+            dx = Math.cos(snapped) * len;
+            dy = Math.sin(snapped) * len;
+          }
+        }
+        S.dragPins = [[en.id, 'h' + dh.i + '_0', round(dx, 4)], [en.id, 'h' + dh.i + '_1', round(dy, 4)]];
+        S.dragged = true;
+        dragFrame(); return;
+      }
       const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, noLot: true, exclude: S.drag.move ? [S.drag.move] : S.drag.points.map(([en]) => en.id) });
       // Wunschlage festhalten, der Löser bewegt den Rest – Maße und Regeln gehen vor
       const pins = [];
@@ -3469,7 +3661,11 @@ const Sketch = (() => {
       }
       S.cursor = null; render(); return;
     }
-    if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' && S.tool !== 'c:curvature' && !(S.tool === 'dim' && S.dimMode === 'arcLen') }); S.cursor = null; render(); return; }
+    if (S.tool === 'dim' || S.tool.startsWith('c:')) {
+      S.hoverHandle = (S.tool === 'dim' && !isSimpleMode() && (S.dimMode || 'auto') === 'auto' && !S.dimFirst) ? hitSplineHandle(uv0, { all: true, allowLine: true }) : null;
+      S.hoverPick = S.hoverHandle ? null : pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' && S.tool !== 'c:curvature' && !(S.tool === 'dim' && S.dimMode === 'arcLen') });
+      S.cursor = null; render(); return;
+    }
     if (S.tool === 'select') { S.cursor = null; if (isLoftLine()) loftPreview(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
@@ -3841,6 +4037,45 @@ const Sketch = (() => {
           lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 });
         }
         if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
+        if (e.type === 'spline' && e.mode === 'cv' && e.pts && e.pts.length >= 2 && !S.step) {
+          const ps = pxSize();
+          const poly = e.closed ? [...e.pts, e.pts[0]] : e.pts;
+          lineObj(poly, sel ? acc : muted, sel ? 1.5 : 1.1, { dashed: true, dash: 2.2, gap: 1.8, opacity: sel ? 0.85 : 0.45, order: 24 });
+          const r = ps * (sel ? 3.8 : 2.6);
+          for (const q of e.pts) {
+            const sq = [[q[0] - r, q[1] - r], [q[0] + r, q[1] - r], [q[0] + r, q[1] + r], [q[0] - r, q[1] + r], [q[0] - r, q[1] - r]];
+            lineObj(sq, sel ? acc : muted, sel ? 2 : 1.4, { opacity: sel ? 0.95 : 0.65, order: 26 });
+          }
+        }
+        if (e.type === 'spline' && e.mode !== 'cv' && !isSimpleMode() && e.pts && e.pts.length >= 2 && !S.step) {
+          const ps = pxSize();
+          const hasCustom = Array.isArray(e.handles) && e.handles.some((h) => Array.isArray(h));
+          if (sel) for (const q of e.pts) ring(q, ps * 3, acc, 1.8);
+          if (sel || S.tool === 'dim' || hasCustom) {
+            for (let i = 0; i < e.pts.length; i++) {
+              const custom = Array.isArray(e.handles) && Array.isArray(e.handles[i]);
+              if (!sel && S.tool !== 'dim' && !custom) continue;
+              const p = e.pts[i], hv = SK.splineHandle(e, i);
+              if (!hv || Math.hypot(hv[0], hv[1]) < 1e-6) continue;
+              const isSelH = S.selHandle && S.selHandle.e === e.id && S.selHandle.i === i;
+              const isHovH = S.hoverHandle && S.hoverHandle.ent && S.hoverHandle.ent.id === e.id && S.hoverHandle.i === i;
+              const hCol = (isSelH || isHovH) ? '#e8833a' : custom ? '#e8833a' : acc;
+              const hOp = (isSelH || isHovH || custom) ? 0.95 : 0.65;
+              const tPlus = [p[0] + hv[0], p[1] + hv[1]];
+              const hasMinus = i > 0 || !!e.closed;
+              const tMinus = hasMinus ? [p[0] - hv[0], p[1] - hv[1]] : null;
+              lineObj(hasMinus ? [tMinus, tPlus] : [p, tPlus], hCol, isSelH || isHovH ? 2.4 : custom ? 1.8 : 1.3, { opacity: hOp, order: 27 });
+              const r = ps * (isSelH || isHovH ? 4.8 : 3.8);
+              const dm = [[tPlus[0], tPlus[1] - r], [tPlus[0] + r, tPlus[1]], [tPlus[0], tPlus[1] + r], [tPlus[0] - r, tPlus[1]], [tPlus[0], tPlus[1] - r]];
+              lineObj(dm, hCol, isSelH || isHovH ? 2.4 : 1.8, { opacity: hOp, order: 28 });
+              if (custom || isSelH) ring(tPlus, ps * 2, hCol, 1.6);
+              if (tMinus) ring(tMinus, ps * (isSelH || isHovH ? 3.8 : 3.1), hCol, 1.6);
+              if (S.drag && S.drag.handle && S.drag.handle.e === e.id && S.drag.handle.i === i && S.dragged) {
+                label(`${fmtAngleU((Math.atan2(hv[1], hv[0]) * 180) / Math.PI)} · ${Units.fmtLenU(Math.hypot(hv[0], hv[1]), 1)}`, tPlus);
+              }
+            }
+          }
+        }
       }
       // Krümmungskamm (SK-34, nur Profi): Zähne zeigen nach außen (-K) mit gemeinsamem Maßstab über alle Kurven
       S.curvCombCount = 0;
@@ -4297,7 +4532,9 @@ const Sketch = (() => {
     // Spline-Entwurf
     if (d && S.tool === 'spline' && d.pts && !S.step) {
       const pts = cur ? [...d.pts, cur] : d.pts;
-      if (pts.length >= 2) lineObj(SK.segPoints({ t: 'spline', pts, closed: false }), acc, 2.2);
+      const isCV = !isSimpleMode() && S.splineMode === 'cv';
+      if (isCV && pts.length >= 2) lineObj(pts, muted, 1.3, { dashed: true, dash: 2.2, gap: 1.8, opacity: 0.75 });
+      if (pts.length >= 2) lineObj(SK.segPoints({ t: 'spline', pts, closed: false, ...(isCV ? { mode: 'cv' } : {}) }), acc, 2.2);
       for (const q of d.pts) ring(q, pxSize() * 3.5, acc, 1.8);
       if (d.pts.length >= 3) ring(d.pts[0], pxSize() * 6, acc, 1.2);
     }
@@ -4545,6 +4782,23 @@ const Sketch = (() => {
       if (k === 'n') return { p: en.c.slice() };
       const q = Math.SQRT1_2 * en.r + px * 12; return { p: [en.c[0] + q, en.c[1] + q] };
     }
+    if (en.type === 'spline' && en.mode !== 'cv') {
+      const hm = /^h(Ang|Len)(\d+)$/.exec(k);
+      if (hm) {
+        const hi = +hm[2], p = en.pts && en.pts[hi], hv = p ? SK.splineHandle(en, hi) : null;
+        if (!p || !hv) return null;
+        const L = Math.hypot(hv[0], hv[1]) || 10, ang = Math.atan2(hv[1], hv[0]);
+        if (hm[1] === 'Ang') {
+          const ra = clamp(L * 0.65, px * 16, Math.max(px * 18, Math.min(L * 0.85, px * 38)));
+          const arcPts = [];
+          for (let j = 0; j <= 16; j++) { const t = (ang * j) / 16; arcPts.push([p[0] + Math.cos(t) * ra, p[1] + Math.sin(t) * ra]); }
+          const rt = ra + px * 14;
+          return { p: [p[0] + Math.cos(ang / 2) * rt, p[1] + Math.sin(ang / 2) * rt], lines: [arcPts, [p, [p[0] + ra * 1.15, p[1]]], [p, [p[0] + hv[0], p[1] + hv[1]]]] };
+        }
+        const nx = -hv[1] / L, ny = hv[0] / L, mid = [p[0] + hv[0] / 2, p[1] + hv[1] / 2];
+        return { p: [mid[0] + nx * px * 14, mid[1] + ny * px * 14], line: [p, [p[0] + hv[0], p[1] + hv[1]]] };
+      }
+    }
     return null;
   }
   Viewer.on('camera', () => { if (S) { render(); placeEntry(); } });
@@ -4757,6 +5011,10 @@ const Sketch = (() => {
       return fp.xy;
     }
     if (e.type === 'arc' && fp.p === 'm' && e.m) return e.m;
+    if (fp.kind === 'handle' && e.type === 'spline' && /^h(\d+)$/.test(fp.p)) {
+      const i = +fp.p.slice(1), p = e.pts && e.pts[i], hv = e.handles && e.handles[i];
+      if (p && hv) return [p[0] + hv[0], p[1] + hv[1]];
+    }
     return refXY({ e: fp.eid, p: fp.p }) || fp.xy;
   }
   function pickWiggleVectors(varIndices, amp) {
@@ -5212,6 +5470,46 @@ const Sketch = (() => {
         if (SK.arcInfo(sel.a, sel.m, sel.b)) f.append(dimField('r', T('sk.dim.r'), 'mm', { min: 0.01 }), dimField('arcLen', T('sk.dim.arcLen'), 'mm', { min: 0.01 }));
       }
       w.append(f);
+      if (sel.type === 'spline') {
+        if (!isSimpleMode()) {
+          const mf = UI.selectField({
+            id: 'se-sp-mode', label: T('common.kind'), value: sel.mode === 'cv' ? 'cv' : 'fit',
+            options: [['fit', T('sk.panel.splineFit')], ['cv', T('sk.panel.splineCV')]],
+            onChange: (v) => upd((e) => {
+              if (v === 'cv') {
+                e.mode = 'cv'; delete e.handles; S.selHandle = null;
+                S.dims = S.dims.filter((d) => !(d.e === e.id && /^h(Ang|Len)\d+$/.test(d.k)));
+                S.cons = S.cons.filter((c) => !conRefs(c).some((r) => r && r.e === e.id && (/^h\d+$/.test(r.p || '') || r.handle != null)));
+              } else delete e.mode;
+            }),
+          });
+          mf.dataset.help = 'splineControl';
+          w.append(mf);
+        }
+        if (sel.pts && sel.pts.length >= 3) {
+          const cl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'se-sp-closed', checked: !!sel.closed }), T('sk.panel.splineClosed'));
+          cl.querySelector('input').onchange = (ev) => upd((e) => { e.closed = ev.target.checked; });
+          w.append(cl);
+        }
+        if (sel.mode !== 'cv' && !isSimpleMode() && sel.pts && sel.pts.length >= 2) {
+          const hi = (S.selHandle && S.selHandle.e === sel.id && S.selHandle.i >= 0 && S.selHandle.i < sel.pts.length) ? S.selHandle.i : 0;
+          const sec = h('div', { class: 'section', id: 'se-spline-handles', 'data-help': 'splineHandles' }, h('div', { class: 'section-h' }, T('sk.panel.splineHandlesHead')));
+          const ptOpts = sel.pts.map((_, idx) => [
+            String(idx),
+            !sel.closed && idx === 0 ? T('sk.panel.handleStart', { n: 1 }) : !sel.closed && idx === sel.pts.length - 1 ? T('sk.panel.handleEnd', { n: idx + 1 }) : T('sk.panel.handlePoint', { n: idx + 1 }),
+          ]);
+          sec.append(UI.selectField({ id: 'se-sh-pt', label: T('sk.tool.point'), value: String(hi), options: ptOpts, onChange: (v) => selectSplineHandle(sel.id, +v) }));
+          const hf = h('div', { class: 'fields' });
+          hf.append(dimField('hAng' + hi, T('sk.panel.handleAngle'), '°'), dimField('hLen' + hi, T('sk.panel.handleStrength'), 'mm', { min: 0.1 }));
+          sec.append(hf);
+          const isCustom = Array.isArray(sel.handles) && Array.isArray(sel.handles[hi]);
+          const rb = h('button', { type: 'button', class: 'btn', id: 'se-sh-reset' }, T('sk.panel.handleReset'));
+          rb.disabled = !isCustom;
+          rb.onclick = () => resetSplineHandle(sel.id, hi);
+          sec.append(h('div', { class: 'btn-row' }, rb), h('div', { class: 'hint-box', html: T('sk.panel.splineHandlesHint') }));
+          w.append(sec);
+        }
+      }
       if (sel.type === 'ellarc') {
         const fb = h('button', { type: 'button', class: 'btn', id: 'se-ellarc-flip' });
         fb.innerHTML = icon('rotate') + esc(T('sk.panel.ellArcFlip'));
@@ -5420,6 +5718,11 @@ const Sketch = (() => {
       if (S.tool === 'poly') w.append(UI.selectField({ id: 'po-mode', label: T('sk.panel.polyMeasure'), value: S.polyFlats ? 'flats' : 'corners', options: [['corners', T('sk.panel.polyCorners')], ['flats', T('sk.panel.polyFlats')]], onChange: (v) => { S.polyFlats = v === 'flats'; } }));
       if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: T('sk.panel.corners'), value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
       if (S.tool === 'ellarc') w.append(UI.selectField({ id: 'ea-dir', label: T('sk.panel.ellArcDir'), value: S.ellArcCW ? 'cw' : 'ccw', options: [['ccw', T('sk.panel.ellArcCCW')], ['cw', T('sk.panel.ellArcCW')]], onChange: (v) => { S.ellArcCW = v === 'cw'; render(); } }));
+      if (S.tool === 'spline' && !isSimpleMode()) {
+        const sm = UI.selectField({ id: 'sp-mode', label: T('sk.tool.spline'), value: S.splineMode || 'fit', options: [['fit', T('sk.panel.splineFit')], ['cv', T('sk.panel.splineCV')]], onChange: (v) => setSplineMode(v) });
+        sm.dataset.help = 'splineControl';
+        w.append(sm);
+      }
       if (S.tool === 'patrect' || S.tool === 'patcirc') {
         const P = S.pat; const f2 = h('div', { class: 'fields' });
         const fld = (id, label, key, unit, opts = {}) => f2.append(UI.numField({ id, label, value: P[key], unit, expr: false, min: opts.min, int: opts.int, onCommit: (v) => { P[key] = v; render(); } }));
@@ -6565,6 +6868,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
