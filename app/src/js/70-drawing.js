@@ -781,6 +781,7 @@ const Drawing = (() => {
     try {
       await ensureProjections();
     } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
+    if (App.mode !== 'drawing') return;
     render();
     Panels.renderRight({ preserveFocus: true });
     const curLost = layout ? lostDims(dwg()) : [];
@@ -6217,7 +6218,7 @@ const Drawing = (() => {
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   App.on('docLoaded', () => { lastLostKey = ''; });
-  const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
+  const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
     open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,

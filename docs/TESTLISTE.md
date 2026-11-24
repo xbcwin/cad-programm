@@ -2227,6 +2227,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Drehachse markieren (`e.revAxis`)**: Linie mit `#se-rev-axis` als Drehachse markiert (ohne Warnung zu offenen Enden); „Fertig“ öffnet „Drehen“ direkt mit dieser Linie (`axisEnt`), der entstandene Drehkörper dreht um `x = 5` mit dem exakten Volumen.
 - [ ] **Von Hand**: Im Browser zwei Kreise zwischen Mitte, kleinstem und größtem Abstand umschalten, die gesperrte Skizze am Schloss sperren/entsperren und eine markierte Drehachse beim Drehen optisch prüfen.
 
+## Volltest-Reparatur (Auto [F-11241932])
+
+- [x] **Fokussiertes Toleranzfeld überlebt verzögerten doc-Refresh**: Quader `50×40×12` in der Zeichnung, Maß `50` gewählt, auf `dev` umgeschaltet und während `350 ms` Wartezeit in `#dw-tol-upper` (`'0,25'`) fokussiert geblieben → Eingabefeld-DOM-Knoten und Wert `'0,25'` bleiben über den 150-ms-`refreshSoonDoc`-Timer erhalten (`t_f11241932`).
+- [x] **Eingabe übernehmen & Undo-Refresh ohne Fokus**: `Enter` übernimmt `+0,25` exakt ins SVG und Datenmodell (`Drawing.getDimTol`), `App.undo()` nach Fokusverlust aktualisiert SVG (`+0,05`) und Panel (`'0,05'`) ohne Fehler (`t_f11241932`, `t_a068_toleranzen_passungen`).
+- [ ] **Von Hand**: In der Zeichnung an einem Maß zwischen verschiedenen Toleranzarten wechseln und direkt zügig Werte in oberes/unteres Abmaß eintippen, ohne dass beim Tippen der Fokus oder Text verloren geht.
+
 ## Fehler melden
 
 ```

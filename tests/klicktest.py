@@ -20212,6 +20212,82 @@ def t_a096_kreisrand_sperren_drehachse(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_f11241932(p):
+    # 1. Fokussiertes Toleranz-Eingabefeld im Zeichnungs-Panel überlebt verzögerten doc-Refresh (refreshSoonDoc)
+    p.empty()
+    p.ev("""
+      App.change('Quader für Zeichnung-Toleranztest', d => {
+        d.items.push(Model.newItem('box', { w: 50, d: 40, h: 12 }, { name: 'Platte' }));
+      });
+    """)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    dim_id = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const el = [...svg.querySelectorAll('text.dimtext')].find(t => (t.textContent || '').trim() === '50');
+      return el ? el.dataset.id : null;
+    """)
+    if not dim_id:
+        return [False, False, False]
+
+    p.ev("Drawing.select(arg)", dim_id)
+    p.wait(100)
+    p.pg.select_option('#dw-tol-mode', 'dev')
+    p.wait(40)
+    p.pg.focus('#dw-tol-upper')
+    p.ev("window.__f11241932Inp = document.getElementById('dw-tol-upper');")
+    p.pg.fill('#dw-tol-upper', '0,25')
+    p.wait(350)
+
+    kept = p.ev("""
+      const el = document.activeElement;
+      const same = !!el && el === window.__f11241932Inp;
+      delete window.__f11241932Inp;
+      return {
+        same,
+        id: el ? el.id : null,
+        val: el ? el.value : null,
+      };
+    """)
+    ok1 = bool(kept['same'] and kept['id'] == 'dw-tol-upper' and kept['val'] == '0,25')
+
+    # 2. Enter übernimmt das eingegebene Maß trotzdem exakt in Zeichnung und Datenmodell
+    p.pg.press('#dw-tol-upper', 'Enter')
+    p.wait(250)
+    after_enter = p.ev("""
+      const id = arg;
+      return {
+        texts: [...document.querySelectorAll(`#sheet svg text[data-id='${id}']`)].map(t => t.textContent),
+        tol: Drawing.getDimTol(id),
+      };
+    """, dim_id)
+    ok2 = bool('+0,25' in after_enter['texts'] and after_enter['tol'] and after_enter['tol'].get('upper') == 0.25)
+
+    # 3. Ohne Fokus aktualisiert App.undo() über refreshSoonDoc sowohl SVG als auch rechtes Panel normal
+    p.ev("if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); App.undo();")
+    p.wait(350)
+    p.ev("return Drawing.waitReady()")
+    after_undo = p.ev("""
+      const id = arg;
+      const inp = document.getElementById('dw-tol-upper');
+      return {
+        texts: [...document.querySelectorAll(`#sheet svg text[data-id='${id}']`)].map(t => t.textContent),
+        val: inp ? inp.value : null,
+      };
+    """, dim_id)
+    ok3 = bool(
+        after_undo['val'] == '0,05'
+        and '+0,25' not in after_undo['texts']
+        and '+0,05' in after_undo['texts']
+        and not p.errs
+    )
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20416,6 +20492,7 @@ TESTS = [
     ('[A-093] Eigenschaften je Teil: Teilenummer, Beschreibung, Lieferant, Preis in Stückliste & CSV', t_a093_eigenschaften_je_teil),
     ('[A-095] Koordinatenmaße (Profi), Bogenlänge & Winkel über drei Punkte (SK-27, SK-28)', t_a095_koordinaten_bogen_winkel3),
     ('[A-096] Maß zwischen Kreisrändern, Skizze sperren & Drehachse markieren (SK-29, SK-54, SK-55)', t_a096_kreisrand_sperren_drehachse),
+    ('[F-11241932] Volltest-Reparatur: Zeichnung-Panel schützt fokussiertes Toleranzfeld bei verzögertem doc-Refresh', t_f11241932),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
