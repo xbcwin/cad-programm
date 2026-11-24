@@ -11306,6 +11306,208 @@ def t_a050_genauigkeit(p):
         p.ev("if (window.__M && window.__M.ViewPrefs) ViewPrefs.set({ decimals: 2, angleDecimals: 1 })")
 
 
+def t_a055_sparsames_rueckgaengig(p):
+    p.empty()
+    try:
+        # 1. Großes Projekt anlegen (> 250 KB JSON, schnelle Neuberechnung durch unterdrückte/ausgeblendete Skizzen)
+        p.ev("""
+          App.change('Großprojekt anlegen', (doc) => {
+            doc.params.push({ id: 'par_w', name: 'Breite', expr: '40' });
+            doc.params.push({ id: 'par_h', name: 'Hoehe', expr: '20' });
+            doc.tables.push({ id: 'tbl_1', name: 'Norm', rows: [{ id: 'tr_1', key: 'A', val: '10' }, { id: 'tr_2', key: 'B', val: '20' }] });
+            doc.notes.push({ id: 'n_1', text: 'Notiz 1', pts: [[0,0,0],[10,0,0]] });
+            const box = Model.newItem('box', { w: 'Breite', d: 'Hoehe', h: 10 }, { name: 'Basisblock' });
+            box.finishes.push({ id: 'fin_1', type: 'fillet', r: 1, edges: 'all' });
+            doc.items.push(box);
+            for (let s = 0; s < 8; s++) {
+              const ents = [], dims = [], cons = [];
+              for (let i = 0; i < 350; i++) {
+                const eid = 'e_' + s + '_' + i;
+                ents.push({ id: eid, type: 'line', a: [i * 2, 0], b: [i * 2 + 1.5, (i % 7) + 1] });
+                if (i < 120) dims.push({ id: 'dm_' + s + '_' + i, type: 'len', e: eid, v: 2.5 });
+                if (i > 0 && i < 120) cons.push({ id: 'cn_' + s + '_' + i, type: 'coincident', refs: [{ e: 'e_' + s + '_' + (i - 1), p: 'b' }, { e: eid, p: 'a' }] });
+              }
+              const sk = Model.newItem('extrude', {
+                dist: 5,
+                sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents, dims, cons },
+              }, { name: 'Skizze ' + s });
+              sk.suppressed = true;
+              sk.hidden = true;
+              sk.customMeta = { a: 1, b: 2, c: 3, d: 4 };
+              doc.items.push(sk);
+            }
+          });
+          // Ausgangszustand sauber ohne Verlauf starten
+          App.setDoc(JSON.parse(App.snapshot()), { fit: false, noAutosave: true });
+        """)
+        warte_rechnen(p)
+
+        snap0 = p.ev("return App.snapshot()")
+        snap0_len = len(snap0)
+
+        # 2. 200 vielfältige Änderungen ausführen (Skalare, Key löschen/einfügen, ID-Arrays verschieben/einfügen/löschen, Nicht-ID-Arrays, pushUndo, merge, amend, squash)
+        stats_200 = p.ev("""
+          for (let k = 0; k < 200; k++) {
+            const mod = k % 10;
+            if (mod === 0) {
+              App.change('Breite ' + k, (doc) => {
+                const b = doc.items.find((x) => x.kind === 'box');
+                b.p.w = String(40 + (k % 15));
+              });
+            } else if (mod === 1) {
+              App.change('Verschieben ' + k, (doc) => {
+                const b = doc.items.find((x) => x.kind === 'box');
+                b.t.x = (k % 9) * 1.5;
+              });
+            } else if (mod === 2) {
+              App.change('Skizzenlinie ' + k, (doc) => {
+                const sks = doc.items.filter((x) => x.kind === 'extrude');
+                const sk = sks[k % sks.length].p.sketch;
+                sk.ents[k % sk.ents.length].b[1] = Math.round((2 + (k % 11) * 0.25) * 1000) / 1000;
+              });
+            } else if (mod === 3) {
+              App.change('Schlüssel entfernen/setzen ' + k, (doc) => {
+                const sks = doc.items.filter((x) => x.kind === 'extrude');
+                const it = sks[k % sks.length];
+                if (it.customMeta && 'b' in it.customMeta) delete it.customMeta.b;
+                else if (it.customMeta) it.customMeta = { a: 1, b: 2, c: 3, d: 4, extra: k };
+              });
+            } else if (mod === 4) {
+              App.change('Teil einfügen/löschen ' + k, (doc) => {
+                const tid = 'tmp_' + Math.floor(k / 20);
+                const idx = doc.items.findIndex((x) => x.id === tid);
+                if (idx >= 0) doc.items.splice(idx, 1);
+                else {
+                  const nb = Model.newItem('box', { w: 5, d: 5, h: 5 }, { name: 'Temp ' + k });
+                  nb.id = tid; nb.suppressed = true;
+                  doc.items.splice(2, 0, nb);
+                }
+              });
+            } else if (mod === 5) {
+              App.change('Reihenfolge ' + k, (doc) => {
+                if (doc.items.length > 4) {
+                  const mv = doc.items.splice(doc.items.length - 1, 1)[0];
+                  doc.items.splice(1, 0, mv);
+                }
+              });
+            } else if (mod === 6) {
+              const before = App.snapshot();
+              App.doc.notes[0].pts.push([k, k % 5, 0]);
+              App.pushUndo('Notizpunkt ' + k, before);
+              App.touched(true);
+            } else if (mod === 7) {
+              // Merge-Test: 2 schnelle Edits mit selbem Schlüssel → genau 1 Schritt
+              App.change('Merge ' + k, (doc) => { doc.params[0].expr = String(41 + (k % 7)); }, { merge: 'm_' + k });
+              App.change('Merge ' + k, (doc) => { doc.params[0].expr = String(42 + (k % 7)); }, { merge: 'm_' + k });
+            } else if (mod === 8) {
+              // Amend-Test: 1 normaler Schritt + amend darauf → genau 1 Schritt
+              App.change('Basis + Amend ' + k, (doc) => { doc.items[0].name = 'Block ' + k; });
+              App.change('Amend ' + k, (doc) => { doc.items[0].color = '#3b82f6'; }, { amend: true });
+            } else {
+              // Squash-Test: 2 Schritte zu 1 zusammenfassen → genau 1 Schritt
+              const d0 = App.undoStack.length;
+              App.change('Sq1 ' + k, (doc) => { doc.tables[0].rows[0].val = String(10 + k); });
+              App.change('Sq2 ' + k, (doc) => { doc.tables[0].rows[1].val = String(20 + k); });
+              App.squash(d0, 'Squash ' + k);
+            }
+          }
+          const st = App.historyStats();
+          const rawStackChars = JSON.stringify(App.undoStack).length;
+          const allPatchOps = App.undoStack.every((s) => Array.isArray(s.ops) && !('before' in s));
+          return { st, rawStackChars, allPatchOps };
+        """)
+        warte_rechnen(p)
+
+        snap200 = p.ev("return App.snapshot()")
+        st = stats_200['st']
+        copies_200_bytes = 200 * snap0_len
+        ok1 = (
+            snap0_len >= 200000
+            and st['undoCount'] == 200
+            and st['redoCount'] == 0
+            and stats_200['allPatchOps'] is True
+            and st['totalBytes'] < copies_200_bytes * 0.05
+            and stats_200['rawStackChars'] < copies_200_bytes * 0.05
+        )
+
+        # 3. 200× Rückgängig → exakt der Anfangszustand (Byte-für-Byte)
+        after_undo = p.ev("""
+          for (let i = 0; i < 200; i++) App.undo(true);
+          return { snap: App.snapshot(), st: App.historyStats() };
+        """)
+        warte_rechnen(p)
+        ok2 = (
+            after_undo['st']['undoCount'] == 0
+            and after_undo['st']['redoCount'] == 200
+            and after_undo['snap'] == snap0
+        )
+
+        # 4. 200× Wiederholen → exakt der Endzustand, und undoTo(0) → wieder Anfangszustand
+        after_redo = p.ev("""
+          for (let i = 0; i < 200; i++) App.redo(true);
+          const midSnap = App.snapshot();
+          const midSt = App.historyStats();
+          App.undoTo(0);
+          return { midSnap, midSt, backSnap: App.snapshot(), backSt: App.historyStats() };
+        """)
+        warte_rechnen(p)
+        ok3 = (
+            after_redo['midSt']['undoCount'] == 200
+            and after_redo['midSt']['redoCount'] == 0
+            and after_redo['midSnap'] == snap200
+            and after_redo['backSt']['undoCount'] == 0
+            and after_redo['backSt']['redoCount'] == 200
+            and after_redo['backSnap'] == snap0
+        )
+
+        # 5. Speicher-Begrenzung statt 300-Schritte-Limit prüfen (> 300 kleine Schritte bleiben erhalten; enges Speicherlimit wirft älteste ab)
+        mem_res = p.ev("""
+          App.setDoc(Model.newDoc('Limit-Test'), { fit: false, noAutosave: true });
+          for (let i = 0; i < 320; i++) {
+            App.change('Klein ' + i, (doc) => { doc.name = 'P_' + i; });
+          }
+          const count320 = App.undoStack.length;
+          App.setDoc(Model.newDoc('Mem-Limit'), { fit: false, noAutosave: true });
+          App.setHistoryLimit(20 * 1024);
+          const snaps = [];
+          for (let i = 0; i < 30; i++) {
+            snaps.push(App.snapshot());
+            App.change('Groß ' + i, (doc) => {
+              doc.notes = [{ id: 'big_' + i, text: ('X_' + i + '_').repeat(400) }];
+            });
+          }
+          const stLim = App.historyStats();
+          const kept = stLim.undoCount;
+          const expectedOldest = snaps[snaps.length - kept];
+          while (App.undoStack.length) App.undo(true);
+          const restoredOldest = App.snapshot();
+          App.setHistoryLimit(32 * 1024 * 1024);
+          return { count320, stLim, kept, exactOldest: restoredOldest === expectedOldest };
+        """)
+        ok4 = (
+            mem_res['count320'] == 320
+            and mem_res['kept'] < 30
+            and mem_res['kept'] >= 1
+            and mem_res['stLim']['totalBytes'] <= 20 * 1024
+            and mem_res['exactOldest'] is True
+        )
+
+        # 6. UI-Knöpfe #btn-undo und #btn-redo im Browser prüfen
+        p.ev("App.setDoc(Model.newDoc('UI-Test'), { fit: false, noAutosave: true });"); warte_rechnen(p)
+        p.ev("Actions.addPrimitive('box')"); warte_rechnen(p)
+        p.ev("App.change('Quader breiter', (doc) => { doc.items[0].p.w = 55; });"); warte_rechnen(p)
+        w_before = p.ev("return App.doc.items[0].p.w")
+        p.pg.click('#btn-undo'); p.wait(400); warte_rechnen(p)
+        w_undo = p.ev("return App.doc.items[0].p.w")
+        p.pg.click('#btn-redo'); p.wait(400); warte_rechnen(p)
+        w_redo = p.ev("return App.doc.items[0].p.w")
+        ok5 = (w_before == 55 and w_undo == 20 and w_redo == 55)
+
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("if (window.__M && window.__M.App && App.setHistoryLimit) App.setHistoryLimit(32 * 1024 * 1024);")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -11461,6 +11663,7 @@ TESTS = [
     ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
     ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
     ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
+    ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
