@@ -17276,6 +17276,222 @@ def t_a083_bauteil_im_tab(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-086] Verbindungen zylindrisch und eben (BG-06) ----------
+def t_a086_verbindungen_zyl_eben(p):
+    # 1. Zylindrisch: Platte mit Bohrung und gekippter, versetzter Bolzen
+    p.empty()
+    ids = p.ev("""
+      App.change('Platte und Bolzen', (d) => {
+        const g = Model.newItem('group', {}, { name: 'Platte' });
+        const box = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Grundplatte' });
+        const hole = Model.newItem('cylinder', { d: 10, h: 20 }, { role: 'hole', name: 'Bohrung' });
+        hole.t.x = 8; hole.t.y = -5; hole.t.z = -5;
+        g.children.push(box, hole);
+        const bolt = Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bolzen' });
+        bolt.t.x = 35; bolt.t.y = 20; bolt.t.z = 0;
+        bolt.t.rx = 40; bolt.t.ry = 25; bolt.t.rz = 15;
+        d.items.push(g, bolt);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    # Kontextleiste zeigt sowohl „Gelenk“ als auch „Verbindung“ mit Zylindrisch & Eben
+    p.ev("App.select(arg)", ids)
+    p.wait(400)
+    has_joint_btn = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count() == 1
+    mate_btn = p.pg.locator('.ctxbar button[aria-label="Verbindung"]')
+    has_mate_btn = mate_btn.count() == 1
+    menu_ok = False
+    if has_mate_btn:
+        mate_btn.click()
+        p.wait(200)
+        menu_txt = p.pg.locator('.menu').inner_text()
+        menu_ok = 'Zylindrisch' in menu_txt and 'Eben' in menu_txt
+        p.ev("document.querySelector('.menu')?.remove()")
+
+    # Bohrungsfläche und Bolzenmantel zylindrisch verbinden
+    cyl_res = p.ev("""
+      const [pid, bid] = arg;
+      const pf = (App.results.get(pid)?.data?.faces || []).findIndex(f => f && f.t === 'CYLINDRE');
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'CYLINDRE');
+      const r = Joints.addCylindrical({ id: pid, faceIdx: pf }, { id: bid, faceIdx: bf });
+      return { r, pf, bf };
+    """, ids)
+    warte_rechnen(p, 25)
+
+    def cyl_metrics():
+        return p.ev("""
+          const { pid, bid, pf, bf } = arg;
+          const a = Joints.cylAxisOf({ id: pid, faceIdx: pf });
+          const b = Joints.cylAxisOf({ id: bid, faceIdx: bf });
+          const dot = Math.abs(a.d.dot(b.d));
+          const diff = b.o.clone().sub(a.o);
+          const along = diff.dot(a.d);
+          const perp = diff.clone().addScaledVector(a.d, -along).length();
+          return { dot, perp, along };
+        """, {'pid': ids[0], 'bid': ids[1], 'pf': cyl_res['pf'], 'bf': cyl_res['bf']})
+
+    m0 = cyl_metrics()
+    ok1 = (
+        has_joint_btn and has_mate_btn and menu_ok
+        and cyl_res['r']['ok'] is True
+        and m0['dot'] > 0.99999
+        and m0['perp'] < 0.01
+    )
+
+    # 2. Zylindrisch: Drehen, Schieben, seitliches Verschieben wird auf Achse gehalten, Richtung umkehren
+    p.ev("App.select([arg])", ids[1])
+    p.wait(350)
+    kind_val = p.ev("return document.querySelector('#jt-kind')?.value")
+    field(p, '#jt-ang', 75)
+    field(p, '#jt-pos', 10)
+    warte_rechnen(p, 20)
+    m1 = cyl_metrics()
+    # Seitliches Verschieben über Lage-Feld X darf Achse nicht verlassen
+    cur_tx = p.ev("return Model.find(App.doc, arg).item.t.x", ids[1])
+    field(p, '#t-x', round(cur_tx + 15, 2))
+    warte_rechnen(p, 20)
+    m2 = cyl_metrics()
+    # Richtung umkehren
+    p.pg.locator('#jt-flip').click()
+    warte_rechnen(p, 20)
+    m3 = cyl_metrics()
+    flipped = p.ev("return !!App.doc.joints[0]?.flip")
+    ok2 = (
+        kind_val == 'cyl'
+        and abs(abs(m1['along'] - m0['along']) - 10.0) < 0.05
+        and m1['dot'] > 0.99999 and m1['perp'] < 0.01
+        and m2['dot'] > 0.99999 and m2['perp'] < 0.01
+        and flipped and m3['dot'] > 0.99999 and m3['perp'] < 0.01
+    )
+
+    # 3. Zylindrisch: Bewegung abspielen bewegt Bild und ändert Projekt nicht
+    rev_cyl = p.ev("return App.revision")
+    p.pg.locator('#jt-play').click()
+    p.wait(450)
+    mid_cyl = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.some((v,i)=>Math.abs(v-m.elements[i])>1e-3)]")
+    for _ in range(25):
+        p.wait(400)
+        if not p.ev("return !!Joints.playing"):
+            break
+    end_cyl = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.every((v,i)=>Math.abs(v-m.elements[i])<1e-6), App.revision===arg]", rev_cyl)
+    ok3 = mid_cyl == [True, True] and end_cyl == [False, True, True]
+
+    # 4. Eben: Schräge Platte (rx=20°) + versetzter Block -> Fläche auf Fläche, Abstand bleibt nach Verschieben 0
+    p.ev("Start.openNewTab(Model.newDoc('Eben-Test'))")
+    p.wait(400)
+    pids = p.ev("""
+      App.change('Platte und Gleitblock', (d) => {
+        const plate = Model.newItem('box', { w: 50, d: 50, h: 10 }, { name: 'Grundplatte' });
+        plate.t.rx = 20;
+        const block = Model.newItem('box', { w: 16, d: 16, h: 10 }, { name: 'Gleitblock' });
+        block.t.x = 28; block.t.y = 12; block.t.z = 30; block.t.ry = 15;
+        d.items.push(plate, block);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    pl_res = p.ev("""
+      const [aid, bid] = arg;
+      const af = (App.results.get(aid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] < -0.9);
+      const r = Joints.addPlanar({ id: aid, faceIdx: af }, { id: bid, faceIdx: bf });
+      return { r, af, bf };
+    """, pids)
+    warte_rechnen(p, 25)
+
+    def planar_metrics():
+        return p.ev("""
+          const { aid, bid, af, bf } = arg;
+          const a = Joints.planarFaceOf({ id: aid, faceIdx: af });
+          const b = Joints.planarFaceOf({ id: bid, faceIdx: bf });
+          const dist = Math.abs(b.p.clone().sub(a.p).dot(a.n));
+          const dot = a.n.dot(b.n);
+          return { dist, dot, p: b.p.toArray() };
+        """, {'aid': pids[0], 'bid': pids[1], 'af': pl_res['af'], 'bf': pl_res['bf']})
+
+    pm0 = planar_metrics()
+    p.ev("App.select([arg])", pids[1])
+    p.wait(350)
+    field(p, '#jt-u', 12)
+    field(p, '#jt-v', -8)
+    field(p, '#jt-ang', 45)
+    warte_rechnen(p, 20)
+    pm1 = planar_metrics()
+    shift_uv = math.sqrt(sum((pm1['p'][k] - pm0['p'][k]) ** 2 for k in range(3)))
+
+    # Verschieben über Lage-Feld Z (+20 mm senkrecht/schräg aus der Ebene heraus) und X (+10 mm): Abstand bleibt 0
+    cur_z = p.ev("return Model.find(App.doc, arg).item.t.z", pids[1])
+    field(p, '#t-z', round(cur_z + 20, 2))
+    cur_x = p.ev("return Model.find(App.doc, arg).item.t.x", pids[1])
+    field(p, '#t-x', round(cur_x + 10, 2))
+    warte_rechnen(p, 20)
+    pm2 = planar_metrics()
+
+    # Ziehen mit der Maus in der 3D-Ansicht: Teil gleitet in der Ebene, Abstand bleibt 0
+    sc_b = p.ev("const b=Actions.worldBox(arg); const c=b.min.clone().add(b.max).multiplyScalar(0.5); return Viewer.toScreen(c);", pids[1])
+    rc_c = p.pg.locator('canvas').first.bounding_box()
+    sx, sy = rc_c['x'] + sc_b['x'], rc_c['y'] + sc_b['y']
+    p.pg.mouse.move(sx, sy)
+    p.pg.mouse.down()
+    p.pg.mouse.move(sx + 45, sy - 30, steps=6)
+    p.pg.mouse.up()
+    warte_rechnen(p, 20)
+    pm3 = planar_metrics()
+    moved_drag = math.sqrt(sum((pm3['p'][k] - pm2['p'][k]) ** 2 for k in range(3))) > 1.0
+
+    ok4 = (
+        pl_res['r']['ok'] is True
+        and pm0['dist'] < 0.01 and pm0['dot'] < -0.99999
+        and abs(shift_uv - math.hypot(12, -8)) < 0.1
+        and pm1['dist'] < 0.01 and pm1['dot'] < -0.99999
+        and pm2['dist'] < 0.01 and pm2['dot'] < -0.99999
+        and moved_drag and pm3['dist'] < 0.01 and pm3['dot'] < -0.99999
+    )
+
+    # 5. Eben: Abspielen (bleibt auf Ebene), Rückgängig, Befehle & Hilfetexte
+    rev_pl = p.ev("return App.revision")
+    p.pg.locator('#jt-play').click()
+    p.wait(450)
+    mid_pl = p.ev("""
+      const it = App.doc.items[1], n = Viewer.nodes.get(it.id), m = Model.localMatrix(it);
+      const a = Joints.planarFaceOf({ id: App.doc.items[0].id, faceIdx: arg.af });
+      const b0 = Joints.planarFaceOf({ id: it.id, faceIdx: arg.bf });
+      // b0.p über aktuelle Animations-Matrix vs. gespeicherte Matrix transformieren
+      const bLocal = b0.p.clone().applyMatrix4(m.clone().invert()).applyMatrix4(n.base);
+      const dist = Math.abs(bLocal.sub(a.p).dot(a.n));
+      return { playing: !!Joints.playing, moved: n.base.elements.some((v,i)=>Math.abs(v-m.elements[i])>1e-3), dist };
+    """, {'af': pl_res['af'], 'bf': pl_res['bf']})
+    for _ in range(25):
+        p.wait(400)
+        if not p.ev("return !!Joints.playing"):
+            break
+    end_pl = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.every((v,i)=>Math.abs(v-m.elements[i])<1e-6), App.revision===arg]", rev_pl)
+
+    # Rückgängig des Maus-Ziehens hält weiterhin Abstand 0
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    pm_undo = planar_metrics()
+
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      cmdCyl: Commands.search('zylindrisch').some(c => c.id === 'mate-cyl'),
+      cmdPlanar: Commands.search('fläche auf fläche').some(c => c.id === 'mate-planar'),
+      helpCyl: !!(d.mateCyl && d.mateCyl.tip && d.mateCyl.hilfe && d.mateCyl.tipp),
+      helpPlanar: !!(d.matePlanar && d.matePlanar.tip && d.matePlanar.hilfe && d.matePlanar.tipp),
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = (
+        mid_pl['playing'] and mid_pl['moved'] and mid_pl['dist'] < 0.01
+        and end_pl == [False, True, True]
+        and pm_undo['dist'] < 0.01
+        and all(meta.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -17465,6 +17681,7 @@ TESTS = [
     ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
     ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('[A-083] Baugruppe: Bauteil im Tab öffnen, Länge 40 → 60 & aktualisieren', t_a083_bauteil_im_tab),
+    ('[A-086] Verbindungen: zylindrisch (Welle in Bohrung) & eben (Fläche auf Fläche) mit Abspielen', t_a086_verbindungen_zyl_eben),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

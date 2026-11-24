@@ -1922,7 +1922,7 @@ const Panels = (() => {
     // Lage
     if (!isMergedStep && it.kind !== 'transform') {
       const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.pos.title')));
-      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
+      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; Joints.constrain(doc, it.id); }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
       for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
       const fr = h('div', { class: 'fields three' });
@@ -2332,7 +2332,16 @@ const Panels = (() => {
       if (!hasRef) b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
       if (!hasRef && items.every((x) => x.list === items[0].list && Features.canMirrorStep(x.item, x.parent))) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep(items.map((x) => x.item.id)), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
-      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
+      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) {
+        b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
+        b('axes', T('ctx.mate'), (e) => UI.menu(e.currentTarget, [
+          { label: T('ctx.mateCyl'), icon: 'axes', help: 'mateCyl', run: () => Joints.startCylindrical() },
+          { label: T('ctx.matePlanar'), icon: 'planeXY', help: 'matePlanar', run: () => Joints.startPlanar() },
+          '-',
+          { label: T('ctx.mateRot'), icon: 'hinge', run: () => Joints.start('rot') },
+          { label: T('ctx.mateSlide'), icon: 'moveStep', run: () => Joints.start('slide') },
+        ]), '', T('ctx.mateTip'), true).dataset.help = 'mateCyl';
+      }
       if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
       if (!hasRef) b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
       b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', T('ctx.alignTip'));

@@ -2368,5 +2368,11 @@
   "asm.insertEmpty": "Noch keine gespeicherten Bauteile gefunden.",
   "asm.openBadge": "offener Tab",
   "asm.selectPartFirst": "Wähle zuerst ein Bauteil in der Baugruppe aus.",
-  "asm.tabKindTip": "Baugruppe (enthält Bauteile)"
+  "asm.tabKindTip": "Baugruppe (enthält Bauteile)",
+  "ctx.mate": "Verbindung",
+  "ctx.mateTip": "Teile über Flächen oder Achsen beweglich verbinden (Zylindrisch, Eben, Drehen, Schieben)",
+  "ctx.mateCyl": "Zylindrisch (Welle in Bohrung)",
+  "ctx.matePlanar": "Eben (Fläche auf Fläche)",
+  "ctx.mateRot": "Drehgelenk",
+  "ctx.mateSlide": "Schiebegelenk"
 }

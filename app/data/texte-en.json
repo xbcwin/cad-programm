@@ -2368,5 +2368,11 @@
   "asm.insertEmpty": "No saved parts found yet.",
   "asm.openBadge": "open tab",
   "asm.selectPartFirst": "Select a part in the assembly first.",
-  "asm.tabKindTip": "Assembly (contains parts)"
+  "asm.tabKindTip": "Assembly (contains parts)",
+  "ctx.mate": "Mate",
+  "ctx.mateTip": "Connect parts movably via faces or axes (Cylindrical, Planar, Revolute, Slider)",
+  "ctx.mateCyl": "Cylindrical (shaft in bore)",
+  "ctx.matePlanar": "Planar (face on face)",
+  "ctx.mateRot": "Revolute joint",
+  "ctx.mateSlide": "Slider joint"
 }

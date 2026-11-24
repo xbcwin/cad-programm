@@ -458,6 +458,7 @@ const Handles = (() => {
       const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
       const dz = snap(s - state.s0);
       c.it.t = { ...state.t0, z: round(state.t0.z + dz, 4) };
+      Joints.constrain(App.doc, c.it.id);
       showLive(handle, c.it.t.z, 'Höhe über Fläche');
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'rot') {
@@ -472,6 +473,7 @@ const Handles = (() => {
       const Wn = T1.multiply(R).multiply(T2).multiply(state.W0);
       const Ln = state.PW.clone().invert().multiply(Wn);
       Model.setFromMatrix(c.it, Ln);
+      Joints.constrain(App.doc, c.it.id);
       showLive(handle, deg, 'Drehung', '°');
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'revAngle') {
@@ -508,7 +510,13 @@ const Handles = (() => {
     }
     // Knotenmatrix direkt nachführen (flüssig)
     const top = App.doc.items.find((x) => x.id === c.it.id);
-    if (top) Viewer.updateNode(top.id, { matrix: Model.localMatrix(top) });
+    if (top) {
+      Viewer.updateNode(top.id, { matrix: Model.localMatrix(top) });
+      for (const d of Joints.downstream(App.doc, top.id)) {
+        const db = App.doc.items.find((x) => x.id === d.b);
+        if (db) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
+      }
+    }
   }
   let liveEl = null;
   function showLive(handle, v, label, unit = '') {
@@ -589,7 +597,7 @@ const Interact = (() => {
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking; }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Joints.picking && !Sketch.picking && !Datums.picking && !RefFix.picking; }
   function onDown(e) {
     if (e.pointerType === 'touch') {
       activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -698,7 +706,21 @@ const Interact = (() => {
     if (!App.sel.includes(top.id)) App.select([top.id]);
     const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && !isStepMod(x));
     const planeZ = hit.point.z;
-    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)) };
+    let joint = null;
+    if (ids.length === 1) {
+      const mj = Joints.drivingOf(ids[0].id);
+      if (mj && (mj.kind === 'cyl' || mj.kind === 'planar')) {
+        const frame = Joints.frameOf(mj), st0 = Joints.stateOf(mj);
+        if (mj.kind === 'planar') {
+          const p0 = Viewer.rayPlane(e.clientX, e.clientY, frame.o, frame.n) || hit.point.clone();
+          joint = { id: mj.id, kind: 'planar', frame, st0, p0 };
+        } else {
+          const s0 = Joints.projectAxisRay(frame.o, frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
+          joint = { id: mj.id, kind: 'cyl', frame, st0, s0 };
+        }
+      }
+    }
+    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)), joint };
     Viewer.canvas.style.cursor = 'grabbing';
     Viewer.clearHover();
   }
@@ -706,9 +728,36 @@ const Interact = (() => {
   let moveLabel = null;
   function doMove(e) {
     if (moving.child) return doMoveChild(e);
+    const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
+    const r = Viewer.canvas.getBoundingClientRect();
+    const uSuf = Units.key() !== 'mm' ? ' ' + Units.label() : '';
+    if (moving.joint) {
+      const j = moving.joint;
+      let txt = '';
+      if (j.kind === 'planar') {
+        const p = Viewer.rayPlane(e.clientX, e.clientY, j.frame.o, j.frame.n);
+        if (!p) return;
+        const d = p.clone().sub(j.p0);
+        let du = d.dot(j.frame.u), dv = d.dot(j.frame.v);
+        if (grid) { du = Math.round(du / grid) * grid; dv = Math.round(dv / grid) * grid; }
+        if (e.altKey) { if (Math.abs(du) > Math.abs(dv)) dv = 0; else du = 0; }
+        const st = Joints.applyDrag(j.id, { u: j.st0.u + du, v: j.st0.v + dv });
+        if (st) txt = `U ${Units.fmtLen(st.u, 2)}  V ${Units.fmtLen(st.v, 2)}${uSuf}`;
+      } else {
+        const s = Joints.projectAxisRay(j.frame.o, j.frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
+        let ds = s - j.s0;
+        if (grid) ds = Math.round(ds / grid) * grid;
+        const st = Joints.applyDrag(j.id, { pos: j.st0.pos + ds });
+        if (st) txt = `Weg ${Units.fmtLen(st.pos, 2)}${uSuf}`;
+      }
+      if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
+      moveLabel.textContent = txt;
+      moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 30 + 'px';
+      App.emit('doc'); Handles.rebuild(); liveRebuild();
+      return;
+    }
     const p = Viewer.rayPlane(e.clientX, e.clientY, new THREE.Vector3(0, 0, moving.planeZ), new THREE.Vector3(0, 0, 1));
     if (!p) return;
-    const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
     let dx = p.x - moving.start.x, dy = p.y - moving.start.y;
     if (grid) { dx = Math.round(dx / grid) * grid; dy = Math.round(dy / grid) * grid; }
     if (e.altKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
@@ -717,10 +766,15 @@ const Interact = (() => {
     for (const it of moving.ids) {
       const t0 = moving.t0.get(it.id);
       it.t = { ...t0, x: round(t0.x + dx, 4), y: round(t0.y + dy, 4) };
+      if (Joints.constrain(App.doc, it.id)) {
+        for (const d of Joints.downstream(App.doc, it.id)) {
+          const db = App.doc.items.find((x) => x.id === d.b);
+          if (db) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
+        }
+      }
       Viewer.updateNode(it.id, { matrix: Model.localMatrix(it) });
     }
     if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
-    const r = Viewer.canvas.getBoundingClientRect();
     let gapTxt = '';
     if (moving.box0 && !moving.box0.isEmpty()) {
       const lo = [moving.box0.min.x + dx, moving.box0.min.y + dy], hi = [moving.box0.max.x + dx, moving.box0.max.y + dy];
@@ -734,7 +788,6 @@ const Interact = (() => {
       const parts = []; if (isFinite(gx)) parts.push('↔ ' + Units.fmtLen(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + Units.fmtLen(gy, 2));
       if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
     }
-    const uSuf = Units.key() !== 'mm' ? ' ' + Units.label() : '';
     moveLabel.textContent = `X ${Units.fmtLen(dx, 2)}  Y ${Units.fmtLen(dy, 2)}${uSuf}` + gapTxt;
     moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
@@ -759,6 +812,7 @@ const Interact = (() => {
     const pq = new THREE.Quaternion(); m.PW.decompose(new THREE.Vector3(), pq, new THREE.Vector3());
     const dP = dW2.applyQuaternion(pq.invert());
     m.child.t = { ...m.t0, x: round(m.t0.x + dP.x, 4), y: round(m.t0.y + dP.y, 4), z: round(m.t0.z + dP.z, 4) };
+    Joints.constrain(App.doc, m.child.id);
     App.emit('doc'); Handles.rebuild(); liveRebuildChild();
   }
   const liveRebuildChild = throttle(() => { App.rebuild(); App.refreshSelectionVisuals(); }, 120);
