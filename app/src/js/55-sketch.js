@@ -2,99 +2,59 @@
 const Sketch = (() => {
   let S = null;
   const TOOLS = [
-    { id: 'select', icon: 'cursor', label: 'Auswahl', key: 'V', tip: 'Auswählen und Punkte verschieben' },
-    { id: 'line', icon: 'line', label: 'Linie', key: 'L', tip: 'Linienzug zeichnen – am Startpunkt schließen' },
-    { id: 'rect', icon: 'rect', label: 'Rechteck', key: 'R', tip: 'Rechteck von Ecke zu Ecke' },
-    { id: 'circle', icon: 'circle', label: 'Kreis', key: 'C', tip: 'Kreis vom Mittelpunkt aus' },
-    { id: 'ellipse', icon: 'ellipse', label: 'Ellipse', key: 'E', tip: 'Ellipse: Mitte, erste Achse, dann zweite Achse' },
-    { id: 'arc', icon: 'arc', label: 'Bogen', key: 'A', tip: 'Bogen: Start, Ende, dann Wölbung' },
-    { id: 'slot', icon: 'slot', label: 'Langloch', key: 'G', tip: 'Langloch: zwei Mittelpunkte, dann Breite' },
-    { id: 'poly', icon: 'polygon', label: 'Vieleck', key: 'P', tip: 'Regelmäßiges Vieleck vom Mittelpunkt aus' },
-    { id: 'point', icon: 'point', label: 'Punkt', key: 'O', tip: 'Einzelner Punkt – z. B. als Mitte für Bohrungen oder als Bezug für Maße' },
-    { id: 'tpl', icon: 'chip', label: 'Schablone', key: 'J', tip: 'Fertige Umrisse: Pin-Raster, Lüftungsgitter, Chips (QFP, QFN, BGA, SOIC, DIP), USB-C-Ausschnitte, Befestigungslöcher' },
-    { id: 'text', icon: 'text', label: 'Text', key: 'B', tip: 'Schrift als Umriss – zum Prägen oder Ausschneiden' },
-    { id: 'spline', icon: 'spline', label: 'Spline', key: 'S', tip: 'Spline: weiche Kurve durch Punkte – Enter beendet' },
-    { id: 'corner', icon: 'fillet', label: 'Ecke runden', key: 'K', tip: 'Ecke zwischen zwei Linien runden oder fasen – auch an Rechteck und Vieleck', sep: true },
-    { id: 'trim', icon: 'trim', label: 'Trimmen', key: 'T', tip: 'Überstehende Stücke wegschneiden' },
-    { id: 'extend', icon: 'extend', label: 'Verlängern', key: 'U', tip: 'Linie bis zur nächsten Kante verlängern' },
-    { id: 'splitl', icon: 'splitLine', label: 'Teilen', key: 'Y', tip: 'Linie oder Bogen an einem Punkt in zwei Stücke teilen' },
-    { id: 'offset', icon: 'offset2d', label: 'Versatz', key: 'F', tip: 'Parallele Kopie im Abstand – bleibt per Regel verbunden' },
-    { id: 'wall', icon: 'wall2d', label: 'Wand', key: 'N', tip: 'Aus einer offenen Linie eine Wand mit Dicke machen – z. B. Rippen und Stege' },
-    { id: 'project', icon: 'projectEdge', label: 'Kante', key: 'Z', tip: 'Kante oder mit Umschalt + Klick eine ganze ebene Fläche (auch mit Versatz) in die Skizze holen' },
-    { id: 'mirror', icon: 'mirror', label: 'Spiegeln', key: 'M', tip: 'An einer Linie spiegeln – legt Symmetrie-Regeln an' },
-    { id: 'patrect', icon: 'patternRect', label: 'Rechteckmuster', key: 'Q', tip: 'Elemente in Reihen und Spalten vervielfachen' },
-    { id: 'patcirc', icon: 'patternCirc', label: 'Kreismuster', key: 'W', tip: 'Elemente im Kreis vervielfachen' },
-    { id: 'xmove', icon: 'arrowR', label: 'Verschieben', key: 'H', tip: 'Elemente um einen genauen Abstand verschieben oder um einen Punkt drehen – auch als Kopie' },
-    { id: 'dim', icon: 'dim', label: 'Maß', key: 'D', tip: 'Maß festlegen – auch als Formel wie breite/2', sep: true },
-    { id: 'bg', icon: 'image', label: 'Bild-Vorlage', key: 'I', tip: 'Foto oder Zeichnung hinterlegen und auf echte Größe bringen – zum Nachzeichnen' },
+    { id: 'select', icon: 'cursor', get label() { return T('sk.tool.select'); }, key: 'V', get tip() { return T('sk.toolTip.select'); } },
+    { id: 'line', icon: 'line', get label() { return T('sk.tool.line'); }, key: 'L', get tip() { return T('sk.toolTip.line'); } },
+    { id: 'rect', icon: 'rect', get label() { return T('sk.tool.rect'); }, key: 'R', get tip() { return T('sk.toolTip.rect'); } },
+    { id: 'circle', icon: 'circle', get label() { return T('sk.tool.circle'); }, key: 'C', get tip() { return T('sk.toolTip.circle'); } },
+    { id: 'ellipse', icon: 'ellipse', get label() { return T('sk.tool.ellipse'); }, key: 'E', get tip() { return T('sk.toolTip.ellipse'); } },
+    { id: 'arc', icon: 'arc', get label() { return T('sk.tool.arc'); }, key: 'A', get tip() { return T('sk.toolTip.arc'); } },
+    { id: 'slot', icon: 'slot', get label() { return T('sk.tool.slot'); }, key: 'G', get tip() { return T('sk.toolTip.slot'); } },
+    { id: 'poly', icon: 'polygon', get label() { return T('sk.tool.poly'); }, key: 'P', get tip() { return T('sk.toolTip.poly'); } },
+    { id: 'point', icon: 'point', get label() { return T('sk.tool.point'); }, key: 'O', get tip() { return T('sk.toolTip.point'); } },
+    { id: 'tpl', icon: 'chip', get label() { return T('sk.tool.tpl'); }, key: 'J', get tip() { return T('sk.toolTip.tpl'); } },
+    { id: 'text', icon: 'text', get label() { return T('sk.tool.text'); }, key: 'B', get tip() { return T('sk.toolTip.text'); } },
+    { id: 'spline', icon: 'spline', get label() { return T('sk.tool.spline'); }, key: 'S', get tip() { return T('sk.toolTip.spline'); } },
+    { id: 'corner', icon: 'fillet', get label() { return T('sk.tool.corner'); }, key: 'K', get tip() { return T('sk.toolTip.corner'); }, sep: true },
+    { id: 'trim', icon: 'trim', get label() { return T('sk.tool.trim'); }, key: 'T', get tip() { return T('sk.toolTip.trim'); } },
+    { id: 'extend', icon: 'extend', get label() { return T('sk.tool.extend'); }, key: 'U', get tip() { return T('sk.toolTip.extend'); } },
+    { id: 'splitl', icon: 'splitLine', get label() { return T('sk.tool.splitl'); }, key: 'Y', get tip() { return T('sk.toolTip.splitl'); } },
+    { id: 'offset', icon: 'offset2d', get label() { return T('sk.tool.offset'); }, key: 'F', get tip() { return T('sk.toolTip.offset'); } },
+    { id: 'wall', icon: 'wall2d', get label() { return T('sk.tool.wall'); }, key: 'N', get tip() { return T('sk.toolTip.wall'); } },
+    { id: 'project', icon: 'projectEdge', get label() { return T('sk.tool.project'); }, key: 'Z', get tip() { return T('sk.toolTip.project'); } },
+    { id: 'mirror', icon: 'mirror', get label() { return T('sk.tool.mirror'); }, key: 'M', get tip() { return T('sk.toolTip.mirror'); } },
+    { id: 'patrect', icon: 'patternRect', get label() { return T('sk.tool.patrect'); }, key: 'Q', get tip() { return T('sk.toolTip.patrect'); } },
+    { id: 'patcirc', icon: 'patternCirc', get label() { return T('sk.tool.patcirc'); }, key: 'W', get tip() { return T('sk.toolTip.patcirc'); } },
+    { id: 'xmove', icon: 'arrowR', get label() { return T('sk.tool.xmove'); }, key: 'H', get tip() { return T('sk.toolTip.xmove'); } },
+    { id: 'dim', icon: 'dim', get label() { return T('sk.tool.dim'); }, key: 'D', get tip() { return T('sk.toolTip.dim'); }, sep: true },
+    { id: 'bg', icon: 'image', get label() { return T('sk.tool.bg'); }, key: 'I', get tip() { return T('sk.toolTip.bg'); } },
   ];
   const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
-  const HINTS = {
-    select: 'Element anklicken oder im Leeren einen <b>Rahmen</b> ziehen (links→rechts: ganz drin · rechts→links: berührt · <b>Umschalt</b> fügt hinzu). Endpunkte lassen sich ziehen. <b>Entf</b> löscht, <b>H</b> verschiebt.',
-    line: 'Klick setzt Punkte (rastet in <b>15°</b>-Schritten und runden Längen ein · <b>Umschalt</b> frei). <b>A</b> wechselt zwischen Linie und tangentialem Bogen. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
-    rect: 'Erste Ecke klicken, dann die zweite. Oder Zahlen tippen: Breite <b>Tab</b> Höhe.',
-    circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
-    bg: 'Lade ein Foto oder eine Zeichnung als Vorlage. Mit <b>Maßstab festlegen</b> klickst du zwei Punkte an, deren Abstand du kennst – dann stimmt die Größe. Ziehen verschiebt das Bild.',
-    bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
-    splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
-    extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
-    project: 'Klick auf eine <b>Kante</b> holt sie verbunden in die Skizze. <b>Umschalt + Klick</b> auf eine ebene Fläche übernimmt alle Randkanten (außen und Löcher) auf einmal – rechts mit <b>Versatz</b> (+ außen / − innen). Klick ohne Umschalt auf eine Fläche holt den Schnitt.',
-    wall: 'Dicke rechts einstellen, dann eine offene Linie, einen Bogen oder eine Spline anklicken – daraus wird eine geschlossene Wand zum Hochziehen. Die Linie bleibt als Hilfslinie in der Mitte.',
-    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
-    tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
-    text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
-    ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
-    arc: 'Startpunkt, Endpunkt, dann die Wölbung klicken.',
-    slot: 'Ersten und zweiten Mittelpunkt klicken, dann die Breite.',
-    poly: 'Mittelpunkt klicken, dann Größe. Anzahl der Ecken rechts einstellen.',
-    spline: 'Klick setzt die Punkte, durch die die Kurve läuft. Am ersten Punkt schließen, auf den letzten Punkt doppelklicken oder <b>Enter</b> zum Beenden.',
-    corner: 'Fahr an eine <b>Ecke</b>, an der sich zwei Linien treffen – Rechteck und Vieleck gehen auch. <b>Klick</b> rundet sie mit dem Radius rechts. Fase statt Rundung stellst du rechts um.',
-    trim: 'Fahr über ein Stück zwischen zwei Schnittpunkten – es leuchtet rot. <b>Klick</b> schneidet es weg, mit gedrückter Maustaste kannst du <b>wischen</b>.',
-    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Rechts kannst du <b>Anzahl</b>, <b>Beidseitig</b> und <b>Ecken</b> (spitz/rund) wählen. Dann Maus auf eine Seite bewegen und klicken – oder den Abstand tippen und <b>Enter</b>.',
-    mirror: 'Erst die <b>Spiegellinie</b> anklicken (eine Linie, auch eine Hilfslinie), dann die Elemente, die gespiegelt werden sollen. <b>Enter</b> spiegelt alles.',
-    patrect: 'Klick die Elemente an, die vervielfacht werden sollen. Anzahl und Abstand stellst du rechts ein, dann <b>Enter</b>.',
-    patcirc: 'Klick die Elemente an, die im Kreis vervielfacht werden sollen. Anzahl, Winkel und Mittelpunkt stellst du rechts ein, dann <b>Enter</b>.',
-    xmove: 'Klick die Elemente an, die verschoben oder gedreht werden sollen. Abstand oder Winkel stellst du rechts ein, dann <b>Enter</b>. Mit „Als Kopie“ bleibt das Original stehen.',
-    dim: 'Klick auf eine Linie, eine Rechteck-Seite, einen Kreis oder Bogen und tipp das Maß ein – auch eine Formel wie <b>breite/2</b>. Für einen <b>Abstand</b> klickst du zwei Punkte an (oder Punkt und Linie), für einen <b>Winkel</b> zwei Linien.',
-  };
   // Bedingungen (Regeln): zweite Leiste unter den Zeichenwerkzeugen
   const CTOOLS = [
-    { id: 'horizontal', icon: 'cHoriz', label: 'Waagerecht', help: 'cHoriz' },
-    { id: 'vertical', icon: 'cVert', label: 'Senkrecht', help: 'cVert' },
-    { id: 'parallel', icon: 'cParallel', label: 'Parallel', help: 'cParallel' },
-    { id: 'perpendicular', icon: 'cPerp', label: 'Rechtwinklig', help: 'cPerp' },
-    { id: 'collinear', icon: 'cCollinear', label: 'Auf einer Linie', help: 'cCollinear' },
-    { id: 'tangent', icon: 'cTangent', label: 'Tangential', help: 'cTangent' },
-    { id: 'equal', icon: 'cEqual', label: 'Gleich', help: 'cEqual' },
-    { id: 'symmetric', icon: 'cSymmetric', label: 'Symmetrisch', help: 'cSymmetric' },
-    { id: 'coincident', icon: 'cCoincident', label: 'Deckungsgleich', help: 'cCoincident' },
-    { id: 'midpoint', icon: 'cMid', label: 'Mittig', help: 'cMid' },
-    { id: 'concentric', icon: 'cConcentric', label: 'Konzentrisch', help: 'cConcentric' },
-    { id: 'fix', icon: 'cFix', label: 'Fixieren', help: 'cFix' },
-    { id: 'project', icon: 'project', label: 'Kante übernehmen', help: 'project' },
+    { id: 'horizontal', icon: 'cHoriz', get label() { return T('sk.con.horizontal'); }, help: 'cHoriz' },
+    { id: 'vertical', icon: 'cVert', get label() { return T('sk.con.vertical'); }, help: 'cVert' },
+    { id: 'parallel', icon: 'cParallel', get label() { return T('sk.con.parallel'); }, help: 'cParallel' },
+    { id: 'perpendicular', icon: 'cPerp', get label() { return T('sk.con.perpendicular'); }, help: 'cPerp' },
+    { id: 'collinear', icon: 'cCollinear', get label() { return T('sk.con.collinear'); }, help: 'cCollinear' },
+    { id: 'tangent', icon: 'cTangent', get label() { return T('sk.con.tangent'); }, help: 'cTangent' },
+    { id: 'equal', icon: 'cEqual', get label() { return T('sk.con.equal'); }, help: 'cEqual' },
+    { id: 'symmetric', icon: 'cSymmetric', get label() { return T('sk.con.symmetric'); }, help: 'cSymmetric' },
+    { id: 'coincident', icon: 'cCoincident', get label() { return T('sk.con.coincident'); }, help: 'cCoincident' },
+    { id: 'midpoint', icon: 'cMid', get label() { return T('sk.con.midpoint'); }, help: 'cMid' },
+    { id: 'concentric', icon: 'cConcentric', get label() { return T('sk.con.concentric'); }, help: 'cConcentric' },
+    { id: 'fix', icon: 'cFix', get label() { return T('sk.con.fix'); }, help: 'cFix' },
+    { id: 'project', icon: 'project', get label() { return T('sk.con.project'); }, help: 'project' },
   ];
-  const CNAME = Object.fromEntries(CTOOLS.map((t) => [t.id, t.label]));
+  const cname = (id) => T('sk.con.' + id);
+  const chint = (id) => T('sk.chint.' + id);
+  const hintFor = (id) => {
+    if (!id) return null;
+    if (id.startsWith('c:')) { const k = id.slice(2); return `<b>${cname(k)}:</b> ${chint(k)}`; }
+    return T('sk.hint.' + id);
+  };
   const CICON = Object.fromEntries(CTOOLS.map((t) => [t.id, t.icon]));
   // Regeln, die Werkzeuge selbst anlegen (nicht in der Regel-Leiste)
-  CNAME.xform = 'Muster'; CICON.xform = 'patternRect'; CNAME.offset = 'Versatz'; CICON.offset = 'offset2d';
-  const CHINTS = {
-    horizontal: 'Klick eine Linie an – oder zwei Punkte, die auf gleicher Höhe liegen sollen.',
-    vertical: 'Klick eine Linie an – oder zwei Punkte, die genau übereinander liegen sollen.',
-    parallel: 'Klick zwei Linien an, die parallel laufen sollen.',
-    perpendicular: 'Klick zwei Linien an, die einen rechten Winkel bilden sollen.',
-    collinear: 'Klick zwei Linien an, die auf derselben Geraden liegen sollen – wie zwei Stücke einer unterbrochenen Kante.',
-    tangent: 'Klick eine Linie und einen Kreis oder Bogen an – oder zwei Kreise, die sich berühren sollen.',
-    equal: 'Klick zwei Linien (gleich lang) oder zwei Kreise (gleich groß) an.',
-    symmetric: 'Klick zwei Punkte oder zwei Kreise an, dann die Linie, an der gespiegelt wird.',
-    coincident: 'Klick zwei Punkte an – oder einen Punkt und dann die Linie oder den Kreis, auf dem er liegen soll.',
-    fix: 'Klick ein Element oder einen Punkt an, das sich nicht mehr bewegen soll.',
-    midpoint: 'Klick einen Punkt (oder Kreis) an, dann die Linie, auf deren Mitte er liegen soll.',
-    concentric: 'Klick zwei Kreise, Bögen oder Ellipsen an – sie bekommen denselben Mittelpunkt.',
-    project: 'Klick eine gestrichelte Kante der Fläche an – sie wird zu einer festen Linie deiner Skizze.',
-  };
-  for (const k in CHINTS) HINTS['c:' + k] = '<b>' + CNAME[k] + ':</b> ' + CHINTS[k];
-  CHINTS.xform = 'Die Kopie folgt ihrem Original: Ändert sich das Original, wandert die Kopie mit. Den Abstand bzw. Winkel kannst du hier ändern.';
-  CHINTS.offset = 'Die Kopie bleibt im festen Abstand zum Original. Ändert sich das Original, wandert die Kopie mit. Den Abstand kannst du hier ändern.';
+  CICON.xform = 'patternRect'; CICON.offset = 'offset2d';
   // ---------- Start ----------
   function chooseAndStart(opts = {}) {
     Panels.closeFlyout();
@@ -102,27 +62,27 @@ const Sketch = (() => {
     if (face && face.info.t === 'PLANE') { startOnFace(face, opts); return; }
     const btn = $('#t-sketch');
     const box = h('div', { style: { display: 'grid', gap: '10px' } });
-    box.append(h('b', null, 'Wo möchtest du zeichnen?'));
-    box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Tipp: Klick eine flache Fläche eines Körpers an und wähle „Skizze hierauf“, um direkt darauf zu zeichnen.'));
+    box.append(h('b', null, T('sk.start.where')));
+    box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, T('sk.start.tip')));
     const row = h('div', { class: 'btn-row' });
     let off = 0;
     const mk = (label, pl) => { const b = h('button', { type: 'button', class: 'btn' }, label); b.onclick = () => { UI.closePop(); startOnPlane(pl, off, opts); }; return b; };
-    row.append(mk('Auf der Arbeitsfläche', 'XY'), mk('Stehend (vorne)', 'XZ'), mk('Stehend (seitlich)', 'YZ'));
-    box.append(UI.numField({ id: 'sk-off', label: 'Abstand vom Nullpunkt (Ebene verschieben)', value: 0, unit: 'mm', expr: false, onCommit: (v) => { off = v; } }));
+    row.append(mk(T('sk.start.xy'), 'XY'), mk(T('sk.start.xz'), 'XZ'), mk(T('sk.start.yz'), 'YZ'));
+    box.append(UI.numField({ id: 'sk-off', label: T('sk.start.offset'), value: 0, unit: 'mm', expr: false, onCommit: (v) => { off = v; } }));
     box.append(row);
     // Konstruktionsebenen an Körpern
     const row2 = h('div', { class: 'btn-row' });
     const pk = (id, label, kind) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); startPlanePick(kind, opts.ribMode ? (pl) => startOnPlaneObj(pl, opts) : undefined); }; return b; };
-    row2.append(pk('sk-mid', 'Mittig zwischen zwei Flächen', 'mid'), pk('sk-3p', 'Durch drei Punkte', '3p'));
+    row2.append(pk('sk-mid', T('sk.start.mid'), 'mid'), pk('sk-3p', T('sk.start.p3'), '3p'));
     box.append(row2);
     // eigene Bezugsebenen des Projekts
     const ds = Datums.list().filter((d) => !d.hidden);
     const row3 = h('div', { class: 'btn-row' });
     for (const d of ds) { const b = h('button', { type: 'button', class: 'btn', 'data-datum': d.id }, d.name); b.onclick = () => { UI.closePop(); Datums.sketchOn(d.id); }; row3.append(b); }
-    const nb = h('button', { type: 'button', class: 'btn ghost', id: 'sk-datum' }); nb.innerHTML = icon('plus') + 'Neue Bezugsebene …'; nb.onclick = () => { UI.closePop(); Datums.dialog(btn); };
-    const na = h('button', { type: 'button', class: 'btn ghost', id: 'sk-axis', 'data-help': 'datumAxis' }); na.innerHTML = icon('axes') + 'Neue Bezugsachse …'; na.onclick = () => { UI.closePop(); Datums.axisDialog(btn); };
-    const np = h('button', { type: 'button', class: 'btn ghost', id: 'sk-point', 'data-help': 'datumPoint' }); np.innerHTML = icon('point') + 'Neuer Bezugspunkt …'; np.onclick = () => { UI.closePop(); Datums.pointDialog(btn); };
-    const nc = h('button', { type: 'button', class: 'btn ghost', id: 'sk-csys', 'data-help': 'datumCsys' }); nc.innerHTML = icon('axes') + 'Koordinatensystem …'; nc.onclick = () => { UI.closePop(); Datums.csysDialog(btn); };
+    const nb = h('button', { type: 'button', class: 'btn ghost', id: 'sk-datum' }); nb.innerHTML = icon('plus') + esc(T('sk.start.newDatum')); nb.onclick = () => { UI.closePop(); Datums.dialog(btn); };
+    const na = h('button', { type: 'button', class: 'btn ghost', id: 'sk-axis', 'data-help': 'datumAxis' }); na.innerHTML = icon('axes') + esc(T('sk.start.newAxis')); na.onclick = () => { UI.closePop(); Datums.axisDialog(btn); };
+    const np = h('button', { type: 'button', class: 'btn ghost', id: 'sk-point', 'data-help': 'datumPoint' }); np.innerHTML = icon('point') + esc(T('sk.start.newPoint')); np.onclick = () => { UI.closePop(); Datums.pointDialog(btn); };
+    const nc = h('button', { type: 'button', class: 'btn ghost', id: 'sk-csys', 'data-help': 'datumCsys' }); nc.innerHTML = icon('axes') + esc(T('sk.start.newCsys')); nc.onclick = () => { UI.closePop(); Datums.csysDialog(btn); };
     row3.append(nb, na, np, nc); box.append(row3);
     UI.pop(btn, box);
   }
@@ -148,15 +108,15 @@ const Sketch = (() => {
   function startPlanePick(kind, onPlane) {
     stopPlanePick(); if (S) cancel();
     const need = kind === 'mid' ? 2 : 3, got = [], marks = [];
-    const hint = () => UI.hint(kind === 'mid' ? `<b>Mittelebene:</b> Klick ${got.length ? 'die zweite' : 'die erste'} flache Fläche (beide parallel). <b>Esc</b> bricht ab.` : `<b>Ebene durch drei Punkte:</b> Klick Punkt ${got.length + 1} von 3 auf einem Körper – Ecken und Kantenmitten rasten ein. <b>Esc</b> bricht ab.`);
+    const hint = () => UI.hint(kind === 'mid' ? T('sk.start.pickMidHint', { which: T(got.length ? 'sk.start.pickMidSecond' : 'sk.start.pickMidFirst') }) : T('sk.start.pick3pHint', { n: got.length + 1 }));
     const down = (e) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: kind === 'mid', solidsOnly: true });
-      if (!hit) { UI.toast(kind === 'mid' ? 'Klick eine flache Fläche eines Körpers.' : 'Klick auf einen Körper.', { icon: 'info', ms: 1600 }); return; }
+      if (!hit) { UI.toast(T(kind === 'mid' ? 'sk.start.pickMidClick' : 'sk.start.pickBodyClick'), { icon: 'info', ms: 1600 }); return; }
       if (kind === 'mid') {
         const r = App.results.get(hit.id), info = r && r.data && r.data.faces[hit.faceIdx];
-        if (!info || info.t !== 'PLANE' || !info.n) { UI.toast('Klick eine flache Fläche.', { icon: 'info', ms: 1600 }); return; }
+        if (!info || info.t !== 'PLANE' || !info.n) { UI.toast(T('sk.start.pickFlatClick'), { icon: 'info', ms: 1600 }); return; }
         const W = Model.worldMatrix(App.doc, hit.id), fr = Actions.faceFrame(info);
         got.push({ c: new THREE.Vector3(...info.c).applyMatrix4(W), n: new THREE.Vector3(...info.n).transformDirection(W).normalize(), x: new THREE.Vector3(...fr.x).transformDirection(W).normalize() });
         Viewer.highlightFace('sel', hit.id, hit.faceIdx);
@@ -169,10 +129,10 @@ const Sketch = (() => {
       if (got.length < need) { hint(); return; }
       const pl = kind === 'mid' ? midPlane(got) : plane3(got);
       stopPlanePick();
-      if (!pl) { UI.toast(kind === 'mid' ? 'Die beiden Flächen sind nicht parallel – eine Mittelebene gibt es nur zwischen parallelen Flächen.' : 'Die drei Punkte liegen auf einer Linie – sie spannen keine Ebene auf.', { kind: 'bad' }); return; }
+      if (!pl) { UI.toast(T(kind === 'mid' ? 'sk.start.pickMidFail' : 'sk.start.pick3pFail'), { kind: 'bad' }); return; }
       if (onPlane) { onPlane(pl); return; }
       begin({ plane: pl, W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null } });
-      UI.toast(kind === 'mid' ? 'Skizze auf der Mittelebene – genau zwischen den beiden Flächen.' : 'Skizze auf der Ebene durch die drei Punkte.', { icon: 'check' });
+      UI.toast(T(kind === 'mid' ? 'sk.start.pickMidOk' : 'sk.start.pick3pOk'), { icon: 'check' });
     };
     const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPlanePick(); } };
     planePick = { down, key, marks };
@@ -419,37 +379,37 @@ const Sketch = (() => {
     if (!skipDraw) showBar();
     App.emit('mode');
     Panels.renderRight(); Panels.renderCtx(); Handles.clear();
-    UI.hint(HINTS[S.tool]);
+    UI.hint(hintFor(S.tool));
     render();
   }
   // ---------- Leiste ----------
   let bar = null;
   function showBar() {
     hideBar();
-    bar = h('div', { class: 'sketchbar', role: 'toolbar', 'aria-label': 'Skizzenwerkzeuge' });
-    bar.append(h('span', { class: 'title' }, 'Skizze'));
+    bar = h('div', { class: 'sketchbar', role: 'toolbar', 'aria-label': T('sk.bar.aria') });
+    bar.append(h('span', { class: 'title' }, T('sk.bar.title')));
     const vsep = () => h('span', { class: 'vsep', style: { width: '1px', alignSelf: 'stretch', background: 'var(--line)', margin: '4px 4px' } });
     for (const t of TOOLS) {
       if (t.sep) bar.append(vsep());
       const hk = HELPKEY[t.id] || t.id;
       const b = h('button', { type: 'button', class: 'tool' + (S.tool === t.id ? ' active' : ''), 'data-tip': t.tip, 'data-kbd': t.key, 'aria-label': t.label, dataset: { tool: t.id, help: hk } });
-      b.innerHTML = icon(t.icon) + `<span>${t.label}</span>`;
+      b.innerHTML = icon(t.icon) + `<span>${esc(t.label)}</span>`;
       b.onclick = () => setTool(t.id);
       bar.append(b);
     }
-    const cb = h('button', { type: 'button', class: 'tool conmode' + (S.construction ? ' active' : ''), 'aria-pressed': S.construction ? 'true' : 'false', 'data-tip': 'Hilfslinie: neue Elemente als Hilfslinien zeichnen – oder das gewählte Element umwandeln', 'data-kbd': 'X', 'aria-label': 'Hilfslinie', dataset: { help: 'construct2d' } });
-    cb.innerHTML = icon('construct') + '<span>Hilfslinie</span>'; cb.onclick = () => toggleConstruction();
+    const cb = h('button', { type: 'button', class: 'tool conmode' + (S.construction ? ' active' : ''), 'aria-pressed': S.construction ? 'true' : 'false', 'data-tip': T('sk.bar.conTip'), 'data-kbd': 'X', 'aria-label': T('sk.bar.con'), dataset: { help: 'construct2d' } });
+    cb.innerHTML = icon('construct') + `<span>${esc(T('sk.bar.con'))}</span>`; cb.onclick = () => toggleConstruction();
     bar.append(vsep(), cb, vsep());
-    const un = h('button', { type: 'button', class: 'tool', 'data-tip': 'Rückgängig', 'data-kbd': 'Strg Z', 'aria-label': 'Rückgängig' }); un.innerHTML = icon('undo'); un.onclick = () => sketchUndo();
-    const cn = h('button', { type: 'button', class: 'tool', 'data-tip': 'Skizze verwerfen (Abbrechen)', 'aria-label': 'Abbrechen' }); cn.innerHTML = icon('close'); cn.onclick = () => cancel();
-    const ok = h('button', { type: 'button', class: 'tool primary', 'data-tip': 'Skizze fertig – weiter zum Hochziehen', 'data-kbd': 'Enter' }); ok.innerHTML = icon('check') + '<span>Fertig</span>'; ok.onclick = () => done();
+    const un = h('button', { type: 'button', class: 'tool', 'data-tip': T('topbar.undo'), 'data-kbd': 'Strg Z', 'aria-label': T('topbar.undo') }); un.innerHTML = icon('undo'); un.onclick = () => sketchUndo();
+    const cn = h('button', { type: 'button', class: 'tool', 'data-tip': T('sk.bar.cancelTip'), 'aria-label': T('common.cancel') }); cn.innerHTML = icon('close'); cn.onclick = () => cancel();
+    const ok = h('button', { type: 'button', class: 'tool primary', 'data-tip': T('sk.bar.doneTip'), 'data-kbd': 'Enter' }); ok.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`; ok.onclick = () => done();
     bar.append(un, cn, ok);
     bars = h('div', { class: 'skbars' });
     bars.append(bar);
     $('#overlay').append(bars);
     // zweite Leiste: Regeln
-    cbar = h('div', { class: 'consbar vert', role: 'toolbar', 'aria-label': 'Regeln', 'aria-orientation': 'vertical' });
-    cbar.append(h('span', { class: 'title' }, 'Regeln'));
+    cbar = h('div', { class: 'consbar vert', role: 'toolbar', 'aria-label': T('sk.bar.rulesAria'), 'aria-orientation': 'vertical' });
+    cbar.append(h('span', { class: 'title' }, T('sk.bar.rulesTitle')));
     for (const t of CTOOLS) {
       if (t.id === 'project' && !S.refs.length) continue;
       const b = h('button', { type: 'button', class: 'tool' + (S.tool === 'c:' + t.id ? ' active' : ''), 'data-tip': t.label, 'aria-label': t.label, dataset: { tool: 'c:' + t.id, help: t.help } });
@@ -486,7 +446,7 @@ const Sketch = (() => {
     if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     if (id === 'text') ensureSketchFonts(S.txt.font || 'inter');
-    UI.hint(HINTS[id]); Panels.renderRight(); render();
+    UI.hint(hintFor(id)); Panels.renderRight(); render();
   }
   // ---------- Umrechnung ----------
   function toWorld(u, v) { return S.F.o.clone().addScaledVector(S.F.x, u).addScaledVector(S.F.y, v); }
@@ -495,12 +455,13 @@ const Sketch = (() => {
   function pxSize() { return Viewer.pixelSizeAt(S.F.o); }
   // ---------- Einrasten (Fangen) ----------
   // Jede Art von Fangpunkt lässt sich rechts ausschalten; mit gedrückter Alt-Taste wird gar nicht gefangen.
-  const SNAPNAMES = { end: 'Endpunkt', mid: 'Mitte', center: 'Mittelpunkt', quad: 'Kreispunkt', origin: 'Ursprung', cross: 'Schnittpunkt', curve: 'Auf Linie', perp: 'Lot', tangent: 'Tangente' };
+  const SNAPNAMES = { get end() { return 'Endpunkt'; }, get mid() { return 'Mitte'; }, get center() { return 'Mittelpunkt'; }, get quad() { return 'Kreispunkt'; }, get origin() { return 'Ursprung'; }, get cross() { return 'Schnittpunkt'; }, get curve() { return 'Auf Linie'; }, get perp() { return 'Lot'; }, get tangent() { return 'Tangente'; } };
   const SNAPGROUP = { end: 'end', origin: 'end', mid: 'mid', center: 'center', quad: 'quad', cross: 'cross', curve: 'curve', perp: 'perp', tangent: 'tangent' };
   // kleiner Wert = stärker (wird zum Abstand addiert): Ecken und Schnittpunkte vor Mitten vor „irgendwo auf der Linie“
   const SNAPRANK = { end: 0, origin: 0, center: 0, cross: 0, mid: 0.25, perp: 0.35, tangent: 0.35, quad: 0.5, curve: 0.9 };
-  const SNAPLIST = [['end', 'Endpunkte'], ['mid', 'Mitten'], ['center', 'Mittelpunkte'], ['quad', 'Kreispunkte'], ['cross', 'Schnittpunkte'], ['curve', 'Auf Linien und Kurven'], ['perp', 'Lot (rechtwinklig)'], ['tangent', 'Tangenten an Kreise'], ['align', 'Ausrichtung zu anderen Punkten'], ['grid', 'Raster']];
-  function defaultSnapSet() { const o = {}; for (const [k] of SNAPLIST) o[k] = true; return o; }
+  const SNAP_KEYS = ['end', 'mid', 'center', 'quad', 'cross', 'curve', 'perp', 'tangent', 'align', 'grid'];
+  const snapList = () => SNAP_KEYS.map((k) => [k, T('sk.snap.' + k)]);
+  function defaultSnapSet() { const o = {}; for (const k of SNAP_KEYS) o[k] = true; return o; }
   const ANGLE_SNAP_KEY = 'tracery.angleSnap';
   function loadAngleSnap() {
     const raw = storageGet(ANGLE_SNAP_KEY);
@@ -674,7 +635,7 @@ const Sketch = (() => {
   function setRefDim(sp, quiet = false) {
     if (sp.e && !ent(sp.e)) return false;
     pushUndo(); putDimSpec(sp, round(measureSpec(sp), 4), true); reapply(); render(); Panels.renderRight();
-    if (!quiet) UI.toast('Maß zum Ablesen – es steht in Klammern und ändert sich mit, legt aber nichts fest.', { icon: 'info', ms: 4500 });
+    if (!quiet) UI.toast(T('sk.toast.refDim'), { icon: 'info', ms: 4500 });
     return true;
   }
   function putDim(eid, k, v) { putDimSpec({ e: eid, k }, v); }
@@ -684,7 +645,7 @@ const Sketch = (() => {
     const n = Model.num(v, vars(), NaN);
     const signed = sp.k === 'ang' || sp.k === 'x' || sp.k === 'y';
     const zeroOk = sp.k === 'dist' || sp.k === 'distPL' || sp.k === 'angLL';
-    if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || (sp.k === 'angLL' && n > 180)) { UI.toast('Dieser Wert passt hier nicht: ' + v, { kind: 'bad' }); return false; }
+    if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || (sp.k === 'angLL' && n > 180)) { UI.toast(T('sk.toast.badVal', { v }), { kind: 'bad' }); return false; }
     if (typeof v === 'string' && !Expr.names(v).length) v = round(n, 4);   // reine Rechnung wie 10*3 → 30
     if (sp.k !== 'n') {
       const others = S.dims.filter((d) => !specMatch(d, sp));
@@ -693,13 +654,13 @@ const Sketch = (() => {
       if (!tr.ok) {
         recordConflict({ kind: 'dim', sp, v, raw: candDim }, { ents: S.ents, cons: S.cons, dims: [...others, candDim] }, '_neu');
         render(); Panels.renderRight();
-        UI.toast(ERRORS.sketchOverConstrained.titel + ': Dieses Maß widerspricht den anderen Regeln. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 7000, action: { label: 'Nur ablesen', run: () => { clearConflict(); setRefDim(sp); } } }); return false;
+        UI.toast(T('sk.toast.dimConflict', { title: ERRORS.sketchOverConstrained.titel, sol: ERRORS.sketchOverConstrained.loesung }), { kind: 'bad', ms: 7000, action: { label: T('sk.toast.onlyReadBtn'), run: () => { clearConflict(); setRefDim(sp); } } }); return false;
       }
       if (tr.redundant) {
         // schon bestimmt: als Maß zum Ablesen zeigen statt nichts zu tun
-        const had = dimFind(sp); if (had && had.ref) { UI.toast('Das liegt schon fest – das Maß bleibt zum Ablesen in Klammern.', { icon: 'info', ms: 4500 }); return false; }
+        const had = dimFind(sp); if (had && had.ref) { UI.toast(T('sk.toast.dimAlreadyRef'), { icon: 'info', ms: 4500 }); return false; }
         setRefDim(sp, true);
-        UI.toast('Das liegt schon fest – andere Maße oder Regeln bestimmen diesen Wert. Es steht jetzt in Klammern zum Ablesen.', { icon: 'info', ms: 5000 });
+        UI.toast(T('sk.toast.dimBecameRef'), { icon: 'info', ms: 5000 });
         return true;
       }
     }
@@ -730,7 +691,7 @@ const Sketch = (() => {
   async function loadFontFile(file, targetEntId = null) {
     if (!file) return null;
     if (file.size > 15e6) {
-      UI.toast('Die Schriftdatei ist zu groß (über 15 MB).', { kind: 'bad' });
+      UI.toast(T('sk.toast.fontTooBig'), { kind: 'bad' });
       return null;
     }
     let bytes, parsed;
@@ -738,7 +699,7 @@ const Sketch = (() => {
       bytes = new Uint8Array(await file.arrayBuffer());
       parsed = TTF.parse(bytes, { fallbackName: String(file.name || '').replace(/\.(ttf|otf|woff2?|ttc)$/i, '') });
     } catch (e) {
-      UI.toast((e && e.message) || 'Die Schriftdatei konnte nicht gelesen werden.', { kind: 'bad', ms: 6500 });
+      UI.toast((e && e.message) || T('sk.toast.fontUnreadable'), { kind: 'bad', ms: 6500 });
       return null;
     }
     const b64 = Store.bytesToBase64(bytes);
@@ -747,7 +708,7 @@ const Sketch = (() => {
     if (existing) {
       id = existing.id;
       SK.syncFonts(App.doc.fonts);
-      UI.toast(`„${existing.name}“ ist schon im Projekt und wurde ausgewählt.`, { icon: 'info', ms: 3500 });
+      UI.toast(T('sk.toast.fontExists', { name: existing.name }), { icon: 'info', ms: 3500 });
     } else {
       const base = parsed.name || 'Eigene Schrift';
       const used = new Set([...Object.values(SK.FONTNAMES), ...(App.doc.fonts || []).map((f) => f && f.name)]);
@@ -758,7 +719,7 @@ const Sketch = (() => {
         if (!Array.isArray(doc.fonts)) doc.fonts = [];
         doc.fonts.push({ id, name, file: file.name || name + '.ttf', data: b64 });
       });
-      UI.toast(`Schrift „${name}“ geladen und im Projekt gespeichert.` + (parsed.hasKern ? ' Unterschneidung aktiv.' : ''), { icon: 'check', ms: 4500 });
+      UI.toast(T('sk.toast.fontLoaded', { name, kern: parsed.hasKern ? T('sk.toast.fontKern') : '' }), { icon: 'check', ms: 4500 });
     }
     if (S) {
       S.txt.font = id;
@@ -781,12 +742,12 @@ const Sketch = (() => {
   function textToCurves(id) {
     const e = S && S.ents.find((x) => x.id === id && x.type === 'text'); if (!e) return 0;
     const ents = curvesOfContours(SK.textContours(e));
-    if (!ents.length) { UI.toast('Der Text hat keine Buchstaben zum Umwandeln.', { kind: 'bad' }); return 0; }
+    if (!ents.length) { UI.toast(T('sk.toast.textNoLetters'), { kind: 'bad' }); return 0; }
     pushUndo();
     S.ents.splice(S.ents.indexOf(e), 1, ...ents);
     S.dims = S.dims.filter((d) => d.e !== id); S.cons = S.cons.filter((c) => !(c.refs || []).includes(id) && c.e !== id);
     clearSel(); reapply(); render(); Panels.renderRight();
-    UI.toast(`Text in ${ents.length} Kurven umgewandelt – jetzt kannst du Buchstaben trimmen, versetzen oder einzeln ändern.`, { icon: 'check', ms: 3200 });
+    UI.toast(T('sk.toast.textConverted', { n: ents.length }), { icon: 'check', ms: 3200 });
     return ents.length;
   }
   // Fertige Elemente (z. B. aus einer DXF oder SVG) in die offene Skizze legen – ein Rückgängig-Schritt
@@ -795,20 +756,20 @@ const Sketch = (() => {
   const CLIPCONS = new Set(['horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'equal', 'symmetric', 'coincident', 'midpoint', 'concentric']);
   function copySel() {
     const ids = (S.patSel && S.patSel.length ? S.patSel : selectedIds()).filter((id) => ent(id));
-    if (!ids.length) { UI.toast('Wähl zuerst etwas aus – mit Rahmen oder „Verschieben“ (H) auch mehrere Elemente.', { icon: 'info' }); return 0; }
+    if (!ids.length) { UI.toast(T('sk.toast.copyEmpty'), { icon: 'info' }); return 0; }
     const set = new Set(ids), inSet = (r) => !r || r.e === 'origin' || set.has(r.e);
     const ents = ids.map((id) => { const e = deepClone(ent(id)); delete e.link; return e; });
     const cons = S.cons.filter((c) => CLIPCONS.has(c.type) && (c.refs || []).length && c.refs.every(inSet) && c.refs.some((r) => r && set.has(r.e))).map(deepClone);
     const dims = S.dims.filter((d) => (d.e ? set.has(d.e) && d.k !== 'x' && d.k !== 'y' : (d.refs || []).length && d.refs.every((r) => r && set.has(r.e)))).map(deepClone);
     clip = { ents, cons, dims };
     try { localStorage.setItem('tracery.sketchClip', JSON.stringify(clip)); } catch (_) {}
-    UI.toast(`${ents.length} ${ents.length === 1 ? 'Element' : 'Elemente'} kopiert – mit Strg V einfügen, auch in einer anderen Skizze.`, { icon: 'copy' });
+    UI.toast(T('sk.toast.copied', { n: ents.length, unit: T(ents.length === 1 ? 'sk.toast.elOne' : 'sk.toast.elMany') }), { icon: 'copy' });
     return ents.length;
   }
   function pasteClip() {
     let c = clip;
     if (!c) { try { c = JSON.parse(localStorage.getItem('tracery.sketchClip') || 'null'); } catch (_) { c = null; } }
-    if (!c || !c.ents || !c.ents.length) { UI.toast('Noch nichts kopiert – wähl Elemente und drück Strg C.', { icon: 'info' }); return 0; }
+    if (!c || !c.ents || !c.ents.length) { UI.toast(T('sk.toast.pasteEmpty'), { icon: 'info' }); return 0; }
     pushUndo();
     const map = new Map(); for (const e of c.ents) map.set(e.id, uid('e'));
     const re = (r) => (r && r.e && map.has(r.e) ? { ...r, e: map.get(r.e) } : r);
@@ -825,7 +786,7 @@ const Sketch = (() => {
     // gleich zum Verschieben bereit
     setTool('xmove'); S.patSel = ents.map((e) => e.id); S.xm.mode = 'move'; S.xm.copy = false;
     reapply(); render(); Panels.renderRight();
-    UI.toast(`${ents.length} ${ents.length === 1 ? 'Element' : 'Elemente'} eingefügt${hit ? ' (daneben)' : ''} – Abstand rechts eintragen und Enter, um sie genau zu setzen.`, { icon: 'check', ms: 5000 });
+    UI.toast(T('sk.toast.pasted', { n: ents.length, unit: T(ents.length === 1 ? 'sk.toast.elOne' : 'sk.toast.elMany'), beside: hit ? T('sk.toast.pastedBeside') : '' }), { icon: 'check', ms: 5000 });
     return ents.length;
   }
   function insertEnts(list) {
@@ -895,7 +856,7 @@ const Sketch = (() => {
       dropped += ids.size + dids.size;
       r = reapply();
     }
-    if (dropped) UI.toast(dropped + (dropped === 1 ? ' Regel oder Maß wurde' : ' Regeln oder Maße wurden') + ' entfernt, weil sie nach der Änderung nicht mehr aufgingen.', { icon: 'info', ms: 5000 });
+    if (dropped) UI.toast(dropped === 1 ? T('sk.toast.droppedOne') : T('sk.toast.droppedMany', { n: dropped }), { icon: 'info', ms: 5000 });
     return dropped;
   }
   function removeCons(id) { pushUndo(); S.cons = S.cons.filter((c) => c.id !== id); if (S.selCon === id) S.selCon = null; reapply(); render(); Panels.renderRight(); }
@@ -1001,7 +962,7 @@ const Sketch = (() => {
     const t = S.tool.slice(2);
     if (t === 'project') {
       const p2 = pickAt(mouseUV(e), { points: false, refs: true });
-      if (!p2 || p2.kind !== 'refent') { UI.toast(CHINTS.project, { icon: 'info' }); return; }
+      if (!p2 || p2.kind !== 'refent') { UI.toast(chint('project'), { icon: 'info' }); return; }
       const copy = deepClone(p2.ent); copy.id = uid('e'); delete copy.con;
       pushUndo(); S.ents.push(copy);
       const at = {}; for (const k of Solver.varsOf(copy) || []) at[k] = Solver.getK(copy, k);
@@ -1014,7 +975,7 @@ const Sketch = (() => {
     const P = S.picks, n = P.length, last = P[n - 1];
     const isPt = (x) => x.kind === 'point';
     const asPoint = (x) => (isPt(x) ? x.ref : x.ent && (x.ent.type === 'circle' || x.ent.type === 'arc' || x.ent.type === 'poly' || x.ent.type === 'ellipse') ? { e: x.ent.id, p: 'c' } : null);
-    const fail = () => { UI.toast(CHINTS[t], { icon: 'info' }); S.picks = []; render(); };
+    const fail = () => { UI.toast(chint(t), { icon: 'info' }); S.picks = []; render(); };
     const wait = () => { render(); };
     let c = null;
     if (t === 'horizontal' || t === 'vertical') {
@@ -1065,7 +1026,7 @@ const Sketch = (() => {
   // kleines Eingabefeld direkt im Bild
   let dimBox = null;
   function hideDimBox() { if (dimBox) { dimBox.remove(); dimBox = null; } }
-  const DIMLABEL = (k) => SK.DIMNAME[k] || { dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel', r: 'Radius' }[k] || 'Maß';
+  const DIMLABEL = (k) => SK.DIMNAME[k] || { dist: T('sk.dim.dist'), distPL: T('sk.dim.distPL'), angLL: T('sk.dim.angLL'), r: T('sk.dim.r') }[k] || T('sk.dim.fallback');
   function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
     const cur = dimFind(sp);
@@ -1080,12 +1041,12 @@ const Sketch = (() => {
     dimBox.append(h('label', null, lbl, inp));
     if (sp.k !== 'n' && !(cur && cur.ref)) {
       // Knopf „( )“: nur ablesen statt festlegen
-      const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': 'Nur ablesen – das Maß zeigt den Wert, legt aber nichts fest', 'aria-label': 'Nur ablesen' }, '( )');
+      const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': T('sk.dimBox.refTip'), 'aria-label': T('sk.dimBox.refAria') }, '( )');
       rb.onclick = () => { hideDimBox(); if (cur) { pushUndo(); cur.ref = true; cur.v = round(measureSpec(sp), 6); reapply(); render(); Panels.renderRight(); } else setRefDim(sp); };
       dimBox.append(rb);
     }
     if (cur) {
-      const del = h('button', { type: 'button', class: 'dimlock', 'data-tip': 'Maß löschen', 'aria-label': 'Maß löschen' }); del.innerHTML = icon('trash');
+      const del = h('button', { type: 'button', class: 'dimlock', 'data-tip': T('sk.dimBox.delTip'), 'aria-label': T('sk.dimBox.delTip') }); del.innerHTML = icon('trash');
       del.onclick = () => { hideDimBox(); removeDimSpec(sp); };
       dimBox.append(del);
     }
@@ -1099,17 +1060,17 @@ const Sketch = (() => {
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
         const now = round(measureSpec(sp), 6);
         App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: now }); });
-        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now) : isAng ? fmtAngleU(now) : fmt(now)} – zu finden links unter „Maße“.`, { icon: 'check' });
+        UI.toast(T('sk.dimBox.newParamToast', { raw, val: isLen ? Units.fmtLenU(now) : isAng ? fmtAngleU(now) : fmt(now) }), { icon: 'check' });
       }
       let v;
       if (isLen) {
         const p = Units.parseLen(raw, vars(), { expr: true });
-        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.'), { kind: 'bad' }); return; }
+        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast(T('sk.dimBox.calcErr', { err: p.error || `„${raw}“` }), { kind: 'bad' }); return; }
         v = p.value;
       } else {
         const n = parseNum(raw); v = isNaN(n) ? raw : n;
         const res = typeof v === 'number' ? { ok: isFinite(v) } : Expr.tryEval(v, vars());
-        if (!res.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + (res.error || '„' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.'), { kind: 'bad' }); return; }
+        if (!res.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast(T('sk.dimBox.calcErr', { err: res.error || `„${raw}“` }), { kind: 'bad' }); return; }
       }
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
@@ -1146,14 +1107,14 @@ const Sketch = (() => {
       reapply(); render(); Panels.renderRight();
       UI.toast(
         allCon
-          ? (ids.length === 1 ? 'Wieder eine normale Linie.' : `${ids.length} Elemente wieder normal.`)
-          : (ids.length === 1 ? 'Jetzt eine Hilfslinie (zählt nicht zur Fläche).' : `${ids.length} Elemente jetzt als Hilfslinien (zählen nicht zur Fläche).`),
+          ? (ids.length === 1 ? T('sk.toast.conOneNormal') : T('sk.toast.conManyNormal', { n: ids.length }))
+          : (ids.length === 1 ? T('sk.toast.conOneOn') : T('sk.toast.conManyOn', { n: ids.length })),
         { icon: 'info', ms: 2200 }
       );
       return;
     }
     S.construction = !S.construction; syncConBtn();
-    UI.toast(S.construction ? 'Neue Elemente werden Hilfslinien.' : 'Neue Elemente sind wieder normale Linien.', { icon: 'info', ms: 2200 });
+    UI.toast(S.construction ? T('sk.toast.conModeOn') : T('sk.toast.conModeOff'), { icon: 'info', ms: 2200 });
   }
   // ---------- Trimmen ----------
   const tolPx = () => pxSize() * 9;
@@ -1302,14 +1263,14 @@ const Sketch = (() => {
     const A = ent(S.meetFirst.id), B = hit, ua = S.meetFirst.uv; S.meetFirst = null;
     const da = [A.b[0] - A.a[0], A.b[1] - A.a[1]], db = [B.b[0] - B.a[0], B.b[1] - B.a[1]];
     const den = da[0] * db[1] - da[1] * db[0];
-    if (Math.abs(den) < 1e-9 * (Math.hypot(...da) * Math.hypot(...db) + 1e-12)) { UI.toast('Die beiden Linien sind parallel – sie treffen sich nie.', { icon: 'info' }); UI.hint(HINTS.corner); render(); return false; }
+    if (Math.abs(den) < 1e-9 * (Math.hypot(...da) * Math.hypot(...db) + 1e-12)) { UI.toast('Die beiden Linien sind parallel – sie treffen sich nie.', { icon: 'info' }); UI.hint(hintFor('corner')); render(); return false; }
     const t = ((B.a[0] - A.a[0]) * db[1] - (B.a[1] - A.a[1]) * db[0]) / den;
     const I = [round(A.a[0] + da[0] * t, 4), round(A.a[1] + da[1] * t, 4)];
     const param = (L, d, p) => ((p[0] - L.a[0]) * d[0] + (p[1] - L.a[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1]);
     const endOf = (L, d, click) => (param(L, d, click) < param(L, d, I) ? 'b' : 'a');
     const ka = endOf(A, da, ua), kb = endOf(B, db, uv);
     const other = (L, k) => L[k === 'a' ? 'b' : 'a'];
-    if (SK.d2(other(A, ka), I) < 1e-6 || SK.d2(other(B, kb), I) < 1e-6) { UI.toast('Dann bliebe von einer Linie nichts übrig – klick auf den Teil, der stehen bleiben soll.', { icon: 'info' }); UI.hint(HINTS.corner); render(); return false; }
+    if (SK.d2(other(A, ka), I) < 1e-6 || SK.d2(other(B, kb), I) < 1e-6) { UI.toast('Dann bliebe von einer Linie nichts übrig – klick auf den Teil, der stehen bleiben soll.', { icon: 'info' }); UI.hint(hintFor('corner')); render(); return false; }
     pushUndo();
     // Enden, die an anderen Elementen hingen, lösen sich; Längen-Maße passen nicht mehr
     const at = (r, L, k) => r && r.e === L.id && r.p === k;
@@ -1318,7 +1279,7 @@ const Sketch = (() => {
     A[ka] = I.slice(); B[kb] = I.slice();
     const nc = { id: uid('k'), type: 'coincident', refs: [{ e: A.id, p: ka }, { e: B.id, p: kb }] };
     S.cons.push(nc); sanitize([nc.id]);
-    UI.hint(HINTS.corner); reapply(); render(); Panels.renderRight();
+    UI.hint(hintFor('corner')); reapply(); render(); Panels.renderRight();
     return true;
   }
   function cornerLines(p) {
@@ -1526,7 +1487,7 @@ const Sketch = (() => {
     S.cons.push(...allCons);
     S.draft = null; hideEntry(); clearSel();
     sanitize(allCons.map((c) => c.id));
-    UI.hint(HINTS.offset); render(); Panels.renderRight();
+    UI.hint(hintFor('offset')); render(); Panels.renderRight();
     if (plan.skipped > 0) UI.toast(`${plan.copies.length} von ${plan.total} Versätzen erstellt – die übrigen waren zu eng.`, { icon: 'info', ms: 3500 });
     if (plan.copies.some((cp) => cp.items.some((x) => x.src && x.src.type === 'ellipse'))) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
     return true;
@@ -1590,7 +1551,7 @@ const Sketch = (() => {
     S.cons.push(...newCons);
     S.mir = null; clearSel();
     sanitize(newCons.map((c) => c.id));
-    UI.hint(HINTS.mirror); render(); Panels.renderRight();
+    UI.hint(hintFor('mirror')); render(); Panels.renderRight();
     return n;
   }
   // ---------- Muster ----------
@@ -1600,7 +1561,7 @@ const Sketch = (() => {
       const pk = pickAt(uv);
       if (!pk || pk.kind !== 'point') { UI.toast('Klick genau auf einen Punkt: Ecke, Mittelpunkt oder den Nullpunkt.', { icon: 'info' }); return; }
       S.patCenter = { ref: pk.ref, xy: pk.xy.slice() }; S.patPick = false;
-      UI.hint(HINTS.patcirc); render(); Panels.renderRight(); return;
+      UI.hint(hintFor('patcirc')); render(); Panels.renderRight(); return;
     }
     const hit = SK.hit(S.ents, uv, tolPx()); if (!hit) return;
     const now = performance.now(), dbl = lastPatClick && lastPatClick.id === hit.id && now - lastPatClick.t < 400;
@@ -1708,7 +1669,7 @@ const Sketch = (() => {
     S.patSel = []; clearSel();
     sanitize(newCons.map((c) => c.id));
     if (o.select && newCons.length) S.selCon = newCons[0].id;
-    UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
     return made;
   }
   // Ein Muster als Ganzes ändern: alte Kopien weg, mit den neuen Einstellungen neu anlegen (ein Rückgängig-Schritt)
@@ -1727,7 +1688,7 @@ const Sketch = (() => {
     S.patCenter = pm.kind === 'circ' && pm.center && pm.center.e !== 'origin' ? { ref: pm.center, xy: refXY(pm.center) || pm.cxy } : null;
     const made = createPattern({ noUndo: true, pg, select: true });
     S.tool = keep.tool; S.pat = keep.pat; S.patSel = keep.patSel; S.patCenter = keep.patCenter;
-    UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
     if (!made) UI.toast('Mit dieser Anzahl bleibt nur das Original – das Muster ist aufgelöst.', { icon: 'info' });
     return true;
   }
@@ -1756,7 +1717,7 @@ const Sketch = (() => {
       const k = dimKeyAt(pk.ent, uv0);
       if (!k) { S.dimFirst = null; UI.toast('Dafür gibt es noch kein Maß.', { icon: 'info' }); return; }
       setSel([pk.ent.id]); S.dimFirst = pk.kind === 'line' ? pk : null;
-      UI.hint(HINTS.dim); render(); Panels.renderRight();
+      UI.hint(hintFor('dim')); render(); Panels.renderRight();
       e.preventDefault();
       askDim({ e: pk.ent.id, k }, e.clientX, e.clientY); return;
     }
@@ -1979,7 +1940,7 @@ const Sketch = (() => {
     if (!C) { UI.toast('Klick einen Kreis oder Bogen an.', { icon: 'info', ms: 2000 }); return; }
     if (!S.tanFirst || S.tanFirst.id === hit.id || !ent(S.tanFirst.id)) { S.tanFirst = { id: hit.id, uv: uv.slice() }; UI.hint('<b>Tangente:</b> Jetzt den zweiten Kreis oder Bogen anklicken – auf der Seite, an der die Linie entlanglaufen soll.'); render(); return; }
     const A = ent(S.tanFirst.id), g = tan2Geom(circOf(A), S.tanFirst.uv, C, uv);
-    const first = S.tanFirst; S.tanFirst = null; UI.hint(HINTS.line);
+    const first = S.tanFirst; S.tanFirst = null; UI.hint(hintFor('line'));
     if (!g) { UI.toast('Ein Kreis liegt im anderen – da gibt es keine Tangente.', { icon: 'info' }); render(); return; }
     const en = addEnt({ type: 'line', a: g.a, b: g.b });
     const nc = [{ id: uid('k'), type: 'tangent', refs: [{ e: en.id }, { e: first.id }] }, { id: uid('k'), type: 'tangent', refs: [{ e: en.id }, { e: hit.id }] }];
@@ -2747,8 +2708,8 @@ const Sketch = (() => {
   const LINE_ARC_HINT = '<b>Tangentialer Bogen:</b> Endpunkt klicken – der Bogen schließt ohne Knick an. <b>A</b> schaltet zurück auf Linie, <b>Enter</b> beendet.';
   function updateLineHint() {
     if (!S || S.tool !== 'line') return;
-    if (S.lineMode === 'tan2') { UI.hint('<b>Tangente:</b> Klick den ersten Kreis oder Bogen an.'); return; }
-    UI.hint(S.draft && S.draft.arc ? LINE_ARC_HINT : HINTS.line);
+    if (S.lineMode === 'tan2') { UI.hint(T('sk.panel.lineTan2Hint')); return; }
+    UI.hint(S.draft && S.draft.arc ? LINE_ARC_HINT : hintFor('line'));
   }
   function toggleLineArc() {
     if (!S || S.tool !== 'line' || S.lineMode === 'tan2' || !S.draft) return false;
@@ -3093,11 +3054,11 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.autoDef) { cancelAutoDefine(); return true; }
     if (e.key === 'Enter' && S.autoDef) { applyAutoDefine(); return true; }
     if (e.key === 'Escape' && S.band) { clearBand(); return true; }
-    if (e.key === 'Escape' && S.mir) { S.mir = null; UI.hint(HINTS.mirror); render(); return true; }
-    if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(HINTS[S.tool]); render(); Panels.renderRight(); return true; }
+    if (e.key === 'Escape' && S.mir) { S.mir = null; UI.hint(hintFor('mirror')); render(); return true; }
+    if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
-    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(HINTS[S.tool]); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
+    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(hintFor(S.tool)); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
     if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc') && S.patSel.length) { createPattern(); return true; }
@@ -3297,7 +3258,7 @@ const Sketch = (() => {
             const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
             const n = slots.get(key) || 0; slots.set(key, n + 1);
             const spx = Viewer.toScreen(toWorld(a[0], a[1]));
-            const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : '') + (confFocusId === c.id ? ' conf-focus' : ''), 'data-tip': (CNAME[c.type] || 'Regel') + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
+            const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : '') + (confFocusId === c.id ? ' conf-focus' : ''), 'data-tip': (cname(c.type) || T('sk.bar.rulesTitle')) + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
             el.innerHTML = icon(CICON[c.type] || 'info');
             const lx = spx.x + n * 19, lw = 18, lh = 18;
             let ly = spx.y;
@@ -3380,7 +3341,7 @@ const Sketch = (() => {
               const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
               const n = slots.get(key) || 0; slots.set(key, n + 1);
               const spx = Viewer.toScreen(toWorld(a[0], a[1]));
-              const el = h('div', { class: 'skcon prop', 'data-tip': 'Vorschlag: ' + (CNAME[c.type] || c.type), dataset: { propCon: c.id, type: c.type } });
+              const el = h('div', { class: 'skcon prop', 'data-tip': 'Vorschlag: ' + (cname(c.type) || c.type), dataset: { propCon: c.id, type: c.type } });
               el.innerHTML = icon(CICON[c.type] || 'info');
               el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
               $('#overlay').append(el); labels.push(el);
@@ -3767,7 +3728,7 @@ const Sketch = (() => {
   }
   function cancelAutoDefine() {
     if (!S || !S.autoDef) return false;
-    S.autoDef = null; UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    S.autoDef = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
     return true;
   }
   function applyAutoDefine() {
@@ -3813,7 +3774,7 @@ const Sketch = (() => {
       }
     }
     if (snapped) r = reapply();
-    UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
     const parts = [];
     if (prop.cons.length) parts.push(`${prop.cons.length} ${prop.cons.length === 1 ? 'Regel' : 'Regeln'}`);
     if (prop.dims.length) parts.push(`${prop.dims.length} ${prop.dims.length === 1 ? 'Maß' : 'Maße'}`);
@@ -3937,7 +3898,7 @@ const Sketch = (() => {
     if (!S.freeMode) stopWiggle(true);
     syncFreePulse();
     if (!S.step) {
-      UI.hint(S.freeMode ? '<b>Freie Stellen:</b> Orange Punkte und Linien sind noch beweglich. Klick auf einen Punkt, um ihn wackeln zu lassen. <b>Umschalt F</b> schaltet wieder aus.' : HINTS[S.tool]);
+      UI.hint(S.freeMode ? '<b>Freie Stellen:</b> Orange Punkte und Linien sind noch beweglich. Klick auf einen Punkt, um ihn wackeln zu lassen. <b>Umschalt F</b> schaltet wieder aus.' : hintFor(S.tool));
     }
     render(); Panels.renderRight();
     return S.freeMode;
@@ -3945,7 +3906,7 @@ const Sketch = (() => {
   function toggleFreeSpots() { return S ? setFreeMode(!S.freeMode) : false; }
 
   // ---------- Widerspruch erklären & auflösen (SK-08) ----------
-  const ENT_TITLES = { line: 'Linie', rect: 'Rechteck', circle: 'Kreis', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', ellipse: 'Ellipse', text: 'Text', point: 'Punkt', spline: 'Spline' };
+  const ENT_TITLES = { get line() { return T('sk.panel.ent.line'); }, get rect() { return T('sk.panel.ent.rect'); }, get circle() { return T('sk.panel.ent.circle'); }, get arc() { return T('sk.panel.ent.arc'); }, get slot() { return T('sk.panel.ent.slot'); }, get poly() { return T('sk.panel.ent.poly'); }, get ellipse() { return T('sk.panel.ent.ellipse'); }, get text() { return T('sk.panel.ent.text'); }, get point() { return T('sk.panel.ent.point'); }, get spline() { return T('sk.panel.ent.spline'); } };
   function entName(id, list = S && S.ents) {
     if (id === 'origin') return 'Ursprung';
     const arr = list || [];
@@ -3974,7 +3935,7 @@ const Sketch = (() => {
       const nm = r && r.e ? entName(r.e, entsList) : null;
       if (nm && !names.includes(nm)) names.push(nm);
     }
-    return { label: 'Regel: ' + (CNAME[c.type] || c.type), sub: names.join(' · ') || 'Bedingung' };
+    return { label: T('sk.panel.conTitle', { name: cname(c.type) || c.type }), sub: names.join(' · ') || 'Bedingung' };
   }
   function recordConflict(pending, testSketch, keepId) {
     if (!S) return null;
@@ -4067,15 +4028,15 @@ const Sketch = (() => {
   function renderPanel(body) {
     if (!S) return;
     const w = h('div', { class: 'props' });
-    if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: '<b>Kurve für das Muster</b> – die Kopien laufen sie vom Anfang bis zum Ende ab. Der Punkt markiert das Original: Am Ende der Kurve, das ihm näher liegt, geht es los. Ein Kreis oder ein geschlossener Umriss verteilt die Kopien rundherum.' }));
-    if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: '<b>Führungskurve für den Übergang</b> – sie gibt die Seitenlinie vor: Zwischen den Umrissen wird der Übergang in dieser Richtung so weit, dass er die Kurve berührt. Die Umrisse selbst bleiben, wie sie sind. Sie sollte vom ersten bis zum letzten Umriss laufen.' }));
-    if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: '<b>Zweite Führungskurve</b> – sie steht quer zur ersten und gibt die Breite in der anderen Richtung vor (z. B. von oben gesehen, wenn die erste von der Seite kommt). Der Übergang folgt beiden, die Umrisse bleiben gleich.' }));
-    if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: '<b>Mittellinie für den Übergang</b> – die Umrisse bleiben, wo sie sind (die dünnen Hilfskanten zeigen sie), und die Fläche dazwischen folgt der Linie. Sie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen. Zieh die Punkte der Kurve oder zeichne eine neue Linie, einen Bogen oder eine Spline.' }));
-    if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
+    if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: T('sk.panel.patPathHint') }));
+    if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: T('sk.panel.loftRailHint') }));
+    if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: T('sk.panel.loftRail2Hint') }));
+    if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: T('sk.panel.loftPathHint') }));
+    if (S.step) { w.append(h('div', { class: 'hint-box', html: T(S.step.revolve ? 'sk.panel.stepRevHint' : 'sk.panel.stepExtHint') })); body.append(w); return; }
     const buildFreeBtn = () => {
       const dof = S.status && S.status.dof != null ? S.status.dof : 0;
       const fb = h('button', { type: 'button', class: 'btn sk-free-btn' + (S.freeMode ? ' active' : ''), id: 'sk-free', 'aria-pressed': S.freeMode ? 'true' : 'false', 'data-help': 'sketchFreeSpots', 'data-kbd': 'Umschalt F' });
-      fb.innerHTML = icon('unlock') + `<span>Freie Stellen</span><span class="sk-free-count" id="sk-free-count">${dof}</span>`;
+      fb.innerHTML = icon('unlock') + `<span>${esc(T('sk.panel.freeSpots'))}</span><span class="sk-free-count" id="sk-free-count">${dof}</span>`;
       fb.onclick = () => toggleFreeSpots();
       return fb;
     };
@@ -4083,33 +4044,33 @@ const Sketch = (() => {
       if (!S.freeMode) return;
       const dof = S.status && S.status.dof != null ? S.status.dof : 0;
       const pts = S.status && S.status.freePoints ? S.status.freePoints.length : 0;
-      w.append(h('div', { class: 'hint-box sk-free-info', id: 'sk-free-info', html: dof ? `<b>${dof} fehlende ${dof === 1 ? 'Angabe' : 'Angaben'}</b> (${pts} bewegliche ${pts === 1 ? 'Stelle' : 'Stellen'}). Klick auf einen orangen Punkt, damit er kurz wackelt.` : '<b>Alles voll bestimmt</b> – keine beweglichen Stellen mehr.' }));
+      w.append(h('div', { class: 'hint-box sk-free-info', id: 'sk-free-info', html: dof ? T('sk.panel.freeInfo', { dof, dofWord: T(dof === 1 ? 'sk.panel.angabeOne' : 'sk.panel.angabeMany'), pts, ptsWord: T(pts === 1 ? 'sk.panel.stelleOne' : 'sk.panel.stelleMany') }) : T('sk.panel.freeInfoNone') }));
     };
     if (!isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit() && S.conflict && S.conflict.items.length) {
       const cf = S.conflict;
       const box = h('div', { class: 'err-box sk-conflict-box', id: 'sk-conflict' });
       const head = h('div', { class: 'sk-conf-head' }, h('b', null, ERRORS.sketchOverConstrained.titel));
       if (cf.pending) {
-        const cl = h('button', { type: 'button', class: 'btn ghost small', id: 'sk-conf-close', 'aria-label': 'Meldung schließen', 'data-tip': 'Verwerfen' });
+        const cl = h('button', { type: 'button', class: 'btn ghost small', id: 'sk-conf-close', 'aria-label': T('sk.panel.confCloseAria'), 'data-tip': T('sk.panel.confCloseTip') });
         cl.innerHTML = icon('close'); cl.onclick = () => clearConflict();
         head.append(cl);
       }
-      box.append(head, h('span', { style: { fontSize: '12.5px' } }, 'Beteiligte Regeln und Maße – klick zum Hervorheben oder entferne eines davon:'));
+      box.append(head, h('span', { style: { fontSize: '12.5px' } }, T('sk.panel.confIntro')));
       const list = h('div', { class: 'sk-conf-list' });
       for (const it of cf.items) {
         const row = h('div', { class: 'sk-conf-row' + (cf.focusId === it.id ? ' active' : ''), dataset: { confId: it.id, confKind: it.kind } });
         const pick = h('button', { type: 'button', class: 'sk-conf-pick' });
         pick.innerHTML = icon(it.kind === 'dim' ? 'dim' : (CICON[it.raw && it.raw.type] || 'info'));
-        pick.append(h('span', { class: 'sk-conf-txt' }, h('b', null, it.label), h('small', null, it.sub + (it.pending ? ' · neu' : ''))));
+        pick.append(h('span', { class: 'sk-conf-txt' }, h('b', null, it.label), h('small', null, it.sub + (it.pending ? T('sk.panel.confNew') : ''))));
         pick.onclick = () => focusConflictItem(it.id);
-        const del = h('button', { type: 'button', class: 'btn small danger sk-conf-del' }, 'Entfernen');
+        const del = h('button', { type: 'button', class: 'btn small danger sk-conf-del' }, T('common.remove'));
         del.onclick = () => removeConflictItem(it.kind, it.id);
         row.append(pick, del);
         list.append(row);
       }
       box.append(list);
       if (cf.pending && cf.pending.kind === 'dim') {
-        const rb = h('button', { type: 'button', class: 'btn small', id: 'sk-conf-ref' }, 'Nur ablesen ( )');
+        const rb = h('button', { type: 'button', class: 'btn small', id: 'sk-conf-ref' }, T('sk.panel.confRefOnly'));
         rb.onclick = () => { const sp = cf.pending.sp; clearConflict(); setRefDim(sp); };
         box.append(h('div', { class: 'btn-row' }, rb));
       }
@@ -4119,56 +4080,56 @@ const Sketch = (() => {
     const sel = sels.length === 1 ? ent(sels[0]) : null;
     const selCon = S.selCon && S.cons.find((c) => c.id === S.selCon);
     if (selCon) {
-      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, 'Regel: ' + (CNAME[selCon.type] || selCon.type))));
-      w.append(h('div', { class: 'hint-box', html: CHINTS[selCon.type] || '' }));
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, T('sk.panel.conTitle', { name: cname(selCon.type) || selCon.type }))));
+      w.append(h('div', { class: 'hint-box', html: chint(selCon.type) || '' }));
       const editNum = (id, label, unit, key) => w.append(UI.numField({ id, label, value: selCon[key], unit, onCommit: (v) => {
         const old = selCon[key]; selCon[key] = v;
         const r = reapply();
-        if (r && !r.ok) { selCon[key] = old; reapply(); UI.toast('Dieser Wert widerspricht den anderen Regeln.', { kind: 'bad' }); }
+        if (r && !r.ok) { selCon[key] = old; reapply(); UI.toast(T('sk.panel.conBadVal'), { kind: 'bad' }); }
         else { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons.map((c) => (c === selCon ? { ...c, [key]: old } : c)) })); }
         render(); Panels.renderRight();
       } }));
       if (selCon.type === 'offset') {
         // Versatz einer ganzen Kette: alle Stücke, die zusammen entstanden sind, bekommen denselben Abstand
         const grp = selCon.og ? S.cons.filter((c) => c.type === 'offset' && c.og === selCon.og) : [selCon];
-        w.append(UI.numField({ id: 'co-v', label: grp.length > 1 ? `Abstand (alle ${grp.length} Stücke)` : 'Abstand', value: selCon.v, unit: 'mm', onCommit: (v) => {
+        w.append(UI.numField({ id: 'co-v', label: grp.length > 1 ? T('sk.panel.offsetAll', { n: grp.length }) : T('sk.dim.dist'), value: selCon.v, unit: 'mm', onCommit: (v) => {
           const old = grp.map((c) => c.v); grp.forEach((c) => { c.v = v; });
           // die Originale möglichst stehen lassen – die Kopien wandern
           const pins = []; for (const c of grp) { const src = ent(c.refs[0].e); if (src) for (const k of Solver.varsOf(src) || []) pins.push([src.id, k, Solver.getK(src, k)]); }
           const r = reapply({ pins });
-          if (r && !r.ok) { grp.forEach((c, i) => { c.v = old[i]; }); reapply(); UI.toast('Dieser Wert widerspricht den anderen Regeln.', { kind: 'bad' }); }
+          if (r && !r.ok) { grp.forEach((c, i) => { c.v = old[i]; }); reapply(); UI.toast(T('sk.panel.conBadVal'), { kind: 'bad' }); }
           else S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons.map((c) => { const i = grp.indexOf(c); return i >= 0 ? { ...c, v: old[i] } : c; }) }));
           render(); Panels.renderRight();
         } }));
-        if (grp.length > 1) w.append(h('div', { class: 'hint-box', id: 'co-v-all', html: `Dieser Versatz gehört zu einer Kette aus <b>${grp.length} Stücken</b> – der Abstand gilt für alle zusammen.` }));
+        if (grp.length > 1) w.append(h('div', { class: 'hint-box', id: 'co-v-all', html: T('sk.panel.offsetChainHint', { n: grp.length }) }));
       }
-      if (selCon.type === 'xform' && selCon.mode === 'rot') editNum('co-ang', 'Winkel', '°', 'ang');
-      if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', 'Versatz X', 'mm', 'dx'); editNum('co-dy', 'Versatz Y', 'mm', 'dy'); }
+      if (selCon.type === 'xform' && selCon.mode === 'rot') editNum('co-ang', T('sk.dim.angLL'), '°', 'ang');
+      if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', T('sk.panel.xformX'), 'mm', 'dx'); editNum('co-dy', T('sk.panel.xformY'), 'mm', 'dy'); }
       if (selCon.type === 'xform' && selCon.pg && selCon.pm) {
         // ganzes Muster: Anzahl und Abstand für alle Kopien zusammen
         const pm = selCon.pm, Q = pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, dx: pm.dx, ny: pm.ny, dy: pm.dy };
-        const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ganzes Muster'));
+        const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('sk.panel.wholePattern')));
         const fm = h('div', { class: 'fields' });
         const fld = (id, label, key, unit, o2 = {}) => fm.append(UI.numField({ id, label, value: Q[key], unit, expr: false, min: o2.min, int: o2.int, onCommit: (v) => { Q[key] = v; } }));
-        if (pm.kind === 'circ') { fld('pg-n', 'Anzahl', 'n', '', { min: 1, int: true }); fld('pg-ang', 'Winkel gesamt', 'ang', '°'); }
-        else { fld('pg-nx', 'Anzahl in X', 'nx', '', { min: 1, int: true }); fld('pg-dx', 'Abstand in X', 'dx', 'mm'); fld('pg-ny', 'Anzahl in Y', 'ny', '', { min: 1, int: true }); fld('pg-dy', 'Abstand in Y', 'dy', 'mm'); }
-        const ap = h('button', { type: 'button', class: 'btn primary', id: 'pg-apply' }); ap.innerHTML = icon('check') + 'Muster ändern';
+        if (pm.kind === 'circ') { fld('pg-n', T('common.count'), 'n', '', { min: 1, int: true }); fld('pg-ang', T('sk.panel.totalAngle'), 'ang', '°'); }
+        else { fld('pg-nx', T('sk.panel.nx'), 'nx', '', { min: 1, int: true }); fld('pg-dx', T('sk.panel.dx'), 'dx', 'mm'); fld('pg-ny', T('sk.panel.ny'), 'ny', '', { min: 1, int: true }); fld('pg-dy', T('sk.panel.dy'), 'dy', 'mm'); }
+        const ap = h('button', { type: 'button', class: 'btn primary', id: 'pg-apply' }); ap.innerHTML = icon('check') + esc(T('sk.panel.patApply'));
         ap.onclick = () => regenPattern(selCon.pg, Q);
-        sec.append(fm, h('div', { class: 'btn-row' }, ap), h('div', { class: 'hint-box', html: 'Ändert alle Kopien dieses Musters zusammen – die Anzahl zählt das Original mit.' }));
+        sec.append(fm, h('div', { class: 'btn-row' }, ap), h('div', { class: 'hint-box', html: T('sk.panel.patHint') }));
         w.append(sec);
       }
-      const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Regel löschen';
+      const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + esc(T('sk.panel.delCon'));
       del.onclick = () => removeCons(selCon.id);
       w.append(h('div', { class: 'btn-row' }, del));
       body.append(w); return;
     }
     if (sel) {
-      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { point: 'Punkt', text: 'Text', line: 'Linie', rect: 'Rechteck', circle: 'Kreis', ellipse: 'Ellipse', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', spline: 'Spline' }[sel.type])));
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, T('sk.panel.ent.' + sel.type))));
       if (sel.link) {
         const src = Model.find(App.doc, sel.link.id);
-        const ub = h('button', { type: 'button', class: 'btn', id: 'link-off' }); ub.innerHTML = icon('ungroup') + 'Verbindung lösen';
+        const ub = h('button', { type: 'button', class: 'btn', id: 'link-off' }); ub.innerHTML = icon('ungroup') + esc(T('sk.panel.unlink'));
         ub.onclick = () => { pushUndo(); delete sel.link; render(); Panels.renderRight(); };
-        w.append(h('div', { class: 'ok-box', id: 'link-info', html: `<b>Verbunden</b> mit einer Kante von „${esc(src ? Model.label(src.item) : 'einem Körper')}“${sel.link.off ? ` (Versatz ${sel.link.off > 0 ? '+' : ''}${Units.fmtLenU(sel.link.off, 2)})` : ''} – wandert mit, wenn sich der Körper ändert.` }), h('div', { class: 'btn-row' }, ub));
+        w.append(h('div', { class: 'ok-box', id: 'link-info', html: T('sk.panel.linkInfo', { name: esc(src ? Model.label(src.item) : T('sk.panel.linkSomeBody')), off: sel.link.off ? T('sk.panel.linkOff', { v: (sel.link.off > 0 ? '+' : '') + Units.fmtLenU(sel.link.off, 2) }) : '' }) }), h('div', { class: 'btn-row' }, ub));
       }
       const upd = (fn) => { pushUndo(); fn(sel); reapply(); render(); Panels.renderRight(); };
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
@@ -4177,56 +4138,56 @@ const Sketch = (() => {
         const fld = UI.numField({ id: 'se-' + k, label, value: dm && !dm.ref ? dm.v : round(SK.measure(sel, k), 6), unit, min: opts.min, int: opts.int, onCommit: (v) => setDim(sel.id, k, v) });
         const box = fld.querySelector('.inp');
         if (dm && dm.ref) {
-          const lk = h('button', { type: 'button', class: 'dimlock refmark', 'data-tip': 'Maß zum Ablesen – legt nichts fest. Klicken entfernt es.', 'aria-label': label + ': Maß zum Ablesen entfernen' }, '( )');
+          const lk = h('button', { type: 'button', class: 'dimlock refmark', 'data-tip': T('sk.panel.refDimTip'), 'aria-label': T('sk.panel.refDimAria', { label }) }, '( )');
           lk.onclick = () => removeDim(sel.id, k);
           box.append(lk);
         } else if (dm) {
           fld.classList.add('dimmed');
           const bad = isNaN(Model.num(dm.v, vars(), NaN));
           if (bad) box.classList.add('invalid');
-          const lk = h('button', { type: 'button', class: 'dimlock', 'data-tip': 'Festes Maß – klicken zum Lösen', 'aria-label': label + ' lösen' }); lk.innerHTML = icon('lock');
+          const lk = h('button', { type: 'button', class: 'dimlock', 'data-tip': T('sk.panel.dimLockTip'), 'aria-label': T('sk.panel.dimLockAria', { label }) }); lk.innerHTML = icon('lock');
           lk.onclick = () => removeDim(sel.id, k);
           box.append(lk);
         }
         return fld;
       };
       const f = h('div', { class: 'fields' });
-      if (sel.type === 'line') { f.append(dimField('len', 'Länge', 'mm', { min: 0.01 }), dimField('ang', 'Winkel', '°')); }
-      else if (sel.type === 'rect') { f.append(dimField('w', 'Breite', 'mm', { min: 0.01 }), dimField('h', 'Höhe', 'mm', { min: 0.01 })); }
-      else if (sel.type === 'circle') { f.append(dimField('d', 'Durchmesser', 'mm', { min: 0.01 })); }
+      if (sel.type === 'line') { f.append(dimField('len', T('common.length'), 'mm', { min: 0.01 }), dimField('ang', T('common.angle'), '°')); }
+      else if (sel.type === 'rect') { f.append(dimField('w', T('param.w'), 'mm', { min: 0.01 }), dimField('h', T('param.h'), 'mm', { min: 0.01 })); }
+      else if (sel.type === 'circle') { f.append(dimField('d', T('param.dia'), 'mm', { min: 0.01 })); }
       else if (sel.type === 'text') {
-        w.append(UI.textField({ id: 'se-s', label: 'Text', value: sel.s, onCommit: (v) => { if (!v.trim()) { UI.toast('Ein leerer Text geht nicht – lösch das Element stattdessen.', { icon: 'info' }); Panels.renderRight(); return; } upd((e) => { e.s = v; }); } }));
-        f.append(dimField('h', 'Höhe (Großbuchstaben)', 'mm', { min: 0.1 }));
+        w.append(UI.textField({ id: 'se-s', label: T('sk.tool.text'), value: sel.s, onCommit: (v) => { if (!v.trim()) { UI.toast(T('sk.panel.emptyTextToast'), { icon: 'info' }); Panels.renderRight(); return; } upd((e) => { e.s = v; }); } }));
+        f.append(dimField('h', T('sk.panel.textHeight'), 'mm', { min: 0.1 }));
         const fontVal = SK.FONTNAMES[sel.font] ? sel.font : 'inter';
-        f.append(UI.selectField({ id: 'se-font', label: 'Schrift', value: fontVal, options: Object.entries(SK.FONTNAMES), onChange: (v) => { upd((e) => { e.font = v; }); ensureSketchFonts(v); } }));
-        const lf = h('button', { type: 'button', class: 'btn', id: 'se-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + 'Schrift laden …';
+        f.append(UI.selectField({ id: 'se-font', label: T('sk.panel.font'), value: fontVal, options: Object.entries(SK.FONTNAMES), onChange: (v) => { upd((e) => { e.font = v; }); ensureSketchFonts(v); } }));
+        const lf = h('button', { type: 'button', class: 'btn', id: 'se-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + esc(T('sk.panel.loadFont'));
         lf.onclick = () => pickFont(sel.id);
         f.append(h('div', { class: 'btn-row' }, lf));
-        f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
-        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
-        f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
+        f.append(UI.selectField({ id: 'se-align', label: T('sk.panel.align'), value: sel.align || 'l', options: [['l', T('sk.panel.alignL')], ['m', T('sk.panel.alignM')], ['r', T('sk.panel.alignR')]], onChange: (v) => upd((e) => { e.align = v; }) }));
+        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: T('ctx.rotate'), value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(UI.numField({ id: 'se-sp', label: T('sk.panel.charSpacing'), value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
         // entlang einer offenen Kurve der Skizze (Linie, Bogen, Spline)
         const curves = S.ents.filter((x) => x.type === 'line' || x.type === 'arc' || (x.type === 'spline' && !x.closed));
         if (curves.length || sel.on) {
-          const nm = { line: 'Linie', arc: 'Bogen', spline: 'Spline' };
-          f.append(UI.selectField({ id: 'se-on', label: 'Entlang', value: sel.on || '', options: [['', 'Gerade'], ...curves.map((c, i) => [c.id, `${nm[c.type]} ${i + 1}${c.con ? ' (Hilfslinie)' : ''}`])], onChange: (v) => upd((e) => {
+          const nm = { line: T('sk.panel.ent.line'), arc: T('sk.panel.ent.arc'), spline: T('sk.panel.ent.spline') };
+          f.append(UI.selectField({ id: 'se-on', label: T('sk.panel.along'), value: sel.on || '', options: [['', T('sk.panel.straight')], ...curves.map((c, i) => [c.id, `${nm[c.type]} ${i + 1}${c.con ? T('sk.panel.conSuffix') : ''}`])], onChange: (v) => upd((e) => {
             if (v) { const c = S.ents.find((x) => x.id === v), pts = c && SK.textPathPts(c, false); if (!pts) return; e.on = v; e.onP = pts; e.align = 'm'; delete e.bend; }
             else { delete e.on; delete e.onP; delete e.os; delete e.flip; }
           }) }));
           if (sel.on) {
-            f.append(UI.numField({ id: 'se-os', label: 'Verschieben entlang', value: sel.os || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-9) delete e.os; else e.os = v; }) }));
-            const fb = h('button', { type: 'button', class: 'btn', id: 'se-flip' }); fb.innerHTML = icon('mirror') + 'Andere Seite';
+            f.append(UI.numField({ id: 'se-os', label: T('sk.panel.moveAlong'), value: sel.os || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-9) delete e.os; else e.os = v; }) }));
+            const fb = h('button', { type: 'button', class: 'btn', id: 'se-flip' }); fb.innerHTML = icon('mirror') + esc(T('sk.panel.otherSide'));
             fb.onclick = () => upd((e) => { e.flip = !e.flip; if (!e.flip) delete e.flip; const c = S.ents.find((x) => x.id === e.on); const pts = c && SK.textPathPts(c, e.flip); if (pts) e.onP = pts; });
             f.append(h('div', { class: 'btn-row' }, fb));
             const cv = S.ents.find((x) => x.id === sel.on);
-            if (cv && !cv.con) w.append(h('div', { class: 'hint-box', id: 'se-on-hint', html: 'Tipp: Mach die Kurve zur <b>Hilfslinie</b> (Kurve anklicken → „Hilfslinie“) – dann zählt sie nicht zur Fläche und die Buchstaben stehen frei.' }));
+            if (cv && !cv.con) w.append(h('div', { class: 'hint-box', id: 'se-on-hint', html: T('sk.panel.textAlongConHint') }));
           }
         }
-        if (!sel.on) f.append(UI.numField({ id: 'se-bend', label: 'Bogen-Radius', value: sel.bend || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-6) delete e.bend; else e.bend = v; }) }));
+        if (!sel.on) f.append(UI.numField({ id: 'se-bend', label: T('sk.panel.bendRadius'), value: sel.bend || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-6) delete e.bend; else e.bend = v; }) }));
         // An Kreis oder Bogen legen: die Grundlinie läuft auf dem nächsten Kreis, Mitte des Texts dort, wo er gerade steht
         const rounds = S.ents.filter((x) => x.type === 'circle' || x.type === 'arc');
         if (rounds.length && !sel.on) {
-          const ob = h('button', { type: 'button', class: 'btn', id: 'se-oncircle' }); ob.innerHTML = icon('circle') + 'An Kreis legen';
+          const ob = h('button', { type: 'button', class: 'btn', id: 'se-oncircle' }); ob.innerHTML = icon('circle') + esc(T('sk.panel.onCircle'));
           ob.onclick = () => upd((e) => {
             const tb = e.align === 'm' ? null : SK.textBox(e), p0 = tb ? tb.c : e.a;   // Mitte der Grundlinie (bei „Mitte“ der Ankerpunkt)
             let best = null;
@@ -4238,35 +4199,35 @@ const Sketch = (() => {
           });
           f.append(h('div', { class: 'btn-row' }, ob));
         }
-        const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, `${Units.fmtLen(tb.w, 2)} × ${Units.fmtLen(tb.h, 2)} ${Units.label()}`)));
-        const cb = h('button', { type: 'button', class: 'btn', id: 'se-text-curves', 'data-help': 'textCurves' }); cb.innerHTML = icon('spline') + 'In Kurven umwandeln';
+        const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('common.size')), h('b', { class: 'mono' }, `${Units.fmtLen(tb.w, 2)} × ${Units.fmtLen(tb.h, 2)} ${Units.label()}`)));
+        const cb = h('button', { type: 'button', class: 'btn', id: 'se-text-curves', 'data-help': 'textCurves' }); cb.innerHTML = icon('spline') + esc(T('sk.panel.toCurves'));
         cb.onclick = () => textToCurves(sel.id);
         w.append(h('div', { class: 'btn-row' }, cb));
       }
       else if (sel.type === 'ellipse') {
-        f.append(dimField('w', 'Breite (Achse 1)', 'mm', { min: 0.01 }), dimField('h', 'Höhe (Achse 2)', 'mm', { min: 0.01 }));
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(dimField('w', T('sk.panel.axis1Width'), 'mm', { min: 0.01 }), dimField('h', T('sk.panel.axis2Height'), 'mm', { min: 0.01 }));
+        f.append(UI.numField({ id: 'se-rot', label: T('ctx.rotate'), value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
       else if (sel.type === 'poly') {
-        f.append(dimField('d', 'Durchmesser', 'mm', { min: 0.01 }), dimField('n', 'Ecken', '', { min: 3, int: true }));
+        f.append(dimField('d', T('param.dia'), 'mm', { min: 0.01 }), dimField('n', T('sk.panel.corners'), '', { min: 3, int: true }));
         // Drehung: 0° = eine Ecke zeigt nach oben
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(UI.numField({ id: 'se-rot', label: T('ctx.rotate'), value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
-      else if (sel.type === 'slot') { f.append(dimField('len', 'Länge (Mitte–Mitte)', 'mm', { min: 0.01 }), dimField('w', 'Breite', 'mm', { min: 0.01 })); }
+      else if (sel.type === 'slot') { f.append(dimField('len', T('sk.panel.slotLenMM'), 'mm', { min: 0.01 }), dimField('w', T('param.w'), 'mm', { min: 0.01 })); }
       else if (sel.type === 'arc') {
         // Radius als Feld: Eintippen legt ihn fest (gilt über „Gleich“ auch für verbundene Bögen)
-        if (SK.arcInfo(sel.a, sel.m, sel.b)) f.append(dimField('r', 'Radius', 'mm', { min: 0.01 }));
+        if (SK.arcInfo(sel.a, sel.m, sel.b)) f.append(dimField('r', T('sk.dim.r'), 'mm', { min: 0.01 }));
       }
       w.append(f);
       if (sel.type === 'poly') {
-        const nn = Math.max(3, Math.round(sel.n || 6)), bt = (id, ic, label, rot) => { const b = h('button', { type: 'button', class: 'btn', id }); b.innerHTML = icon(ic) + label; b.onclick = () => upd((e) => { e.rot = rot; }); return b; };
-        w.append(h('div', { class: 'btn-row' }, bt('se-poly-corner', 'polygon', 'Ecke oben', 0), bt('se-poly-flat', 'rect', 'Fläche oben', Math.PI / nn)));
+        const nn = Math.max(3, Math.round(sel.n || 6)), bt = (id, ic, label, rot) => { const b = h('button', { type: 'button', class: 'btn', id }); b.innerHTML = icon(ic) + esc(label); b.onclick = () => upd((e) => { e.rot = rot; }); return b; };
+        w.append(h('div', { class: 'btn-row' }, bt('se-poly-corner', 'polygon', T('sk.panel.polyCornerTop'), 0), bt('se-poly-flat', 'rect', T('sk.panel.polyFlatTop'), Math.PI / nn)));
       }
       const fp = h('div', { class: 'fields' });
-      const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? 'Mitte' : sel.type === 'point' ? 'Punkt' : 'Start';
-      fp.append(dimField('x', ak + ' X'), dimField('y', ak + ' Y'));
+      const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? T('sk.panel.anchorCenter') : sel.type === 'point' ? T('sk.panel.anchorPoint') : T('sk.panel.anchorStart');
+      fp.append(dimField('x', T('sk.panel.anchorX', { ak })), dimField('y', T('sk.panel.anchorY', { ak })));
       w.append(fp);
-      if (S.dims.some((d) => d.e === sel.id)) w.append(h('div', { class: 'hint-box', html: 'Werte mit <b>Schloss</b> sind fest und bleiben beim Ziehen erhalten. Formeln wie <b>breite/2</b> rechnen mit den Namen aus „Maße“.' }));
+      if (S.dims.some((d) => d.e === sel.id)) w.append(h('div', { class: 'hint-box', html: T('sk.panel.lockHint') }));
       // Regeln an diesem Element
       const mine = S.cons.filter((c) => conRefs(c).some((r) => r && r.e === sel.id));
       if (mine.length) {
@@ -4274,29 +4235,29 @@ const Sketch = (() => {
         for (const c of mine) {
           const row = h('div', { class: 'mini-row' });
           const ic = h('span', { class: 'con-ic' }); ic.innerHTML = icon(CICON[c.type] || 'info');
-          const x = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': 'Regel löschen', 'aria-label': 'Regel löschen' }); x.innerHTML = icon('close'); x.onclick = () => removeCons(c.id);
-          row.append(ic, h('span', { class: 'grow' }, CNAME[c.type] || c.type), x); list.append(row);
+          const x = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': T('sk.panel.delCon'), 'aria-label': T('sk.panel.delCon') }); x.innerHTML = icon('close'); x.onclick = () => removeCons(c.id);
+          row.append(ic, h('span', { class: 'grow' }, cname(c.type) || c.type), x); list.append(row);
         }
-        w.append(h('div', { class: 'section-h' }, 'Regeln'), list);
+        w.append(h('div', { class: 'section-h' }, T('sk.panel.rulesHead')), list);
       }
       const isFree = !S.status || !S.status.freeEnts || S.status.freeEnts.has(sel.id);
-      w.append(h('div', { class: isFree ? 'hint-box' : 'ok-box', html: isFree ? 'Dieses Element ist noch <b>beweglich</b> (blau).' : 'Dieses Element liegt <b>fest</b> – Maße und Regeln bestimmen es ganz.' }));
+      w.append(h('div', { class: isFree ? 'hint-box' : 'ok-box', html: T(isFree ? 'sk.panel.entFree' : 'sk.panel.entFixed') }));
       w.append(h('div', { class: 'btn-row' }, buildFreeBtn()));
       appendFreeInfo();
-      const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'se-con', checked: !!sel.con }), 'Hilfslinie (zählt nicht zur Fläche)');
+      const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'se-con', checked: !!sel.con }), T('sk.panel.conCheck'));
       con.querySelector('input').onchange = (e) => upd((x) => { x.con = e.target.checked; });
       w.append(con);
-      const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Löschen';
+      const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + esc(T('common.delete'));
       del.onclick = () => deleteEnt(sel.id);
       w.append(h('div', { class: 'btn-row' }, del));
     } else if (sels.length > 1) {
-      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' }, id: 'sk-sel-count' }, `${sels.length} Elemente gewählt`)));
-      w.append(h('div', { class: 'hint-box', html: 'Mit <b>Verschieben</b> (H) bewegst oder drehst du die Auswahl, <b>Strg C</b> kopiert sie, <b>X</b> schaltet Hilfslinien um und <b>Entf</b> löscht sie. <b>Umschalt + Rahmen</b> fügt weitere Elemente hinzu.' }));
-      const mv = h('button', { type: 'button', class: 'btn primary', id: 'sk-sel-move' }); mv.innerHTML = icon('arrowR') + 'Verschieben / Drehen';
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' }, id: 'sk-sel-count' }, T('sk.panel.multiSelCount', { n: sels.length }))));
+      w.append(h('div', { class: 'hint-box', html: T('sk.panel.multiSelHint') }));
+      const mv = h('button', { type: 'button', class: 'btn primary', id: 'sk-sel-move' }); mv.innerHTML = icon('arrowR') + esc(T('sk.panel.moveOrRotate'));
       mv.onclick = () => setTool('xmove');
-      const cn = h('button', { type: 'button', class: 'btn', id: 'sk-sel-con' }); cn.innerHTML = icon('construct') + 'Hilfslinie';
+      const cn = h('button', { type: 'button', class: 'btn', id: 'sk-sel-con' }); cn.innerHTML = icon('construct') + esc(T('sk.bar.con'));
       cn.onclick = () => toggleConstruction();
-      const del = h('button', { type: 'button', class: 'btn danger', id: 'sk-sel-del' }); del.innerHTML = icon('trash') + 'Löschen';
+      const del = h('button', { type: 'button', class: 'btn danger', id: 'sk-sel-del' }); del.innerHTML = icon('trash') + esc(T('common.delete'));
       del.onclick = () => deleteEnts(sels);
       w.append(h('div', { class: 'btn-row' }, mv), h('div', { class: 'btn-row' }, cn, del));
     } else {
@@ -4304,169 +4265,169 @@ const Sketch = (() => {
       const st = S.status;
       if (st && S.ents.length) {
         if (!st.ok && !(S.conflict && S.conflict.items.length)) w.append(h('div', { class: 'err-box', html: '<b>' + ERRORS.sketchOverConstrained.titel + '</b><br>' + ERRORS.sketchOverConstrained.erklaerung + ' ' + ERRORS.sketchOverConstrained.loesung }));
-        else if (st.ok && st.dof === 0) w.append(h('div', { class: 'ok-box', html: '<b>Voll bestimmt</b> – alles liegt fest. Dunkle Linien können nicht mehr verrutschen.' }));
-        else if (st.ok) w.append(h('div', { class: 'hint-box', html: `<b>Noch ${st.dof} ${st.dof === 1 ? 'Freiheit' : 'Freiheiten'}</b> – <span style="color:${Viewer.theme.dark ? '#5aa9ff' : '#1c6fd1'};font-weight:600">blaue</span> Teile lassen sich noch verschieben. Mit Maßen und Regeln legst du sie fest.` }));
+        else if (st.ok && st.dof === 0) w.append(h('div', { class: 'ok-box', html: T('sk.panel.fullyDefined') }));
+        else if (st.ok) w.append(h('div', { class: 'hint-box', html: T('sk.panel.dofLeft', { dof: st.dof, word: T(st.dof === 1 ? 'sk.panel.dofOne' : 'sk.panel.dofMany'), col: Viewer.theme.dark ? '#5aa9ff' : '#1c6fd1' }) }));
       }
       if (!isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit()) {
         if (S.autoDef) {
           const ad = S.autoDef;
           const box = h('div', { class: 'sk-autodef-box', id: 'sk-autodef-box' });
           const headParts = [];
-          if (ad.cons.length) headParts.push(`${ad.cons.length} ${ad.cons.length === 1 ? 'Regel' : 'Regeln'}`);
-          if (ad.dims.length) headParts.push(`${ad.dims.length} ${ad.dims.length === 1 ? 'Maß' : 'Maße'}`);
-          box.append(h('div', { class: 'sk-autodef-head' }, h('b', null, 'Vorschlag: ' + headParts.join(', '))));
+          if (ad.cons.length) headParts.push(ad.cons.length === 1 ? T('sk.panel.adRuleOne') : T('sk.panel.adRuleMany', { n: ad.cons.length }));
+          if (ad.dims.length) headParts.push(ad.dims.length === 1 ? T('sk.panel.adDimOne') : T('sk.panel.adDimMany', { n: ad.dims.length }));
+          box.append(h('div', { class: 'sk-autodef-head' }, h('b', null, T('sk.panel.adProposal', { parts: headParts.join(', ') }))));
           const list = h('div', { class: 'sk-autodef-list' });
           const cc = new Map();
           for (const c of ad.cons) cc.set(c.type, (cc.get(c.type) || 0) + 1);
           const dc = new Map();
           for (const d of ad.dims) {
-            const grp = d.k === 'x' || d.k === 'y' ? 'Lage zum Ursprung' : d.k === 'd' || d.k === 'r' ? 'Durchmesser/Radien' : d.k === 'ang' ? 'Winkel' : 'Längen/Größen';
+            const grp = d.k === 'x' || d.k === 'y' ? T('sk.panel.adGrpPos') : d.k === 'd' || d.k === 'r' ? T('sk.panel.adGrpDia') : d.k === 'ang' ? T('sk.panel.adGrpAng') : T('sk.panel.adGrpLen');
             dc.set(grp, (dc.get(grp) || 0) + 1);
           }
-          for (const [t, n] of cc) list.append(h('span', null, `${n}× ${CNAME[t] || t}`));
+          for (const [t, n] of cc) list.append(h('span', null, `${n}× ${cname(t) || t}`));
           for (const [g, n] of dc) list.append(h('span', null, `${n}× ${g}`));
-          if (ad.dofAfter === 0) list.append(h('span', { style: { color: 'var(--ok)', fontWeight: '600' } }, 'Danach ist die Skizze voll bestimmt.'));
-          box.append(list, h('div', { class: 'hint-box' }, 'Vorschläge erscheinen gestrichelt im Bild.'));
-          const ap = h('button', { type: 'button', class: 'btn primary', id: 'sk-autodef-apply' }); ap.innerHTML = icon('check') + 'Übernehmen'; ap.onclick = () => applyAutoDefine();
-          const ca = h('button', { type: 'button', class: 'btn', id: 'sk-autodef-cancel' }); ca.innerHTML = icon('close') + 'Abbrechen'; ca.onclick = () => cancelAutoDefine();
+          if (ad.dofAfter === 0) list.append(h('span', { style: { color: 'var(--ok)', fontWeight: '600' } }, T('sk.panel.adDoneMsg')));
+          box.append(list, h('div', { class: 'hint-box' }, T('sk.panel.adDashedHint')));
+          const ap = h('button', { type: 'button', class: 'btn primary', id: 'sk-autodef-apply' }); ap.innerHTML = icon('check') + esc(T('common.apply')); ap.onclick = () => applyAutoDefine();
+          const ca = h('button', { type: 'button', class: 'btn', id: 'sk-autodef-cancel' }); ca.innerHTML = icon('close') + esc(T('common.cancel')); ca.onclick = () => cancelAutoDefine();
           box.append(h('div', { class: 'btn-row' }, ap, ca));
           w.append(box, h('div', { class: 'btn-row' }, buildFreeBtn()));
         } else {
           const adBtn = h('button', { type: 'button', class: 'btn', id: 'sk-autodef', 'data-help': 'sketchAutoDefine' });
-          adBtn.innerHTML = icon('lock') + 'Fertig bestimmen';
+          adBtn.innerHTML = icon('lock') + esc(T('sk.panel.autoDefBtn'));
           adBtn.onclick = () => proposeAutoDefine();
           w.append(h('div', { class: 'btn-row' }, adBtn, buildFreeBtn()));
         }
         appendFreeInfo();
       }
-      w.append(h('div', { class: 'hint-box', html: HINTS[S.tool] }));
+      w.append(h('div', { class: 'hint-box', html: hintFor(S.tool) }));
       if (S.tool === 'corner') {
         const C = S.corner;
-        const opts = [['fillet', 'Rundung'], ['chamfer', 'Fase'], ['meet', 'Ecke bilden']];
-        const onMode = (v) => { C.mode = v; S.meetFirst = null; S.cornerHover = null; UI.hint(v === 'meet' ? '<b>Ecke bilden:</b> Klick zwei Linien an – sie wachsen oder schrumpfen bis zu ihrem Schnittpunkt. Der angeklickte Teil jeder Linie bleibt stehen.' : HINTS.corner); Panels.renderRight(); render(); };
-        w.append(UI.segmented ? UI.segmented({ id: 'cn-mode', value: C.mode, options: opts, onChange: onMode }) : UI.selectField({ id: 'cn-mode', label: 'Art', value: C.mode, options: opts, onChange: onMode }));
+        const opts = [['fillet', T('sk.panel.cornerFillet')], ['chamfer', T('sk.panel.cornerChamfer')], ['meet', T('sk.panel.cornerMeet')]];
+        const onMode = (v) => { C.mode = v; S.meetFirst = null; S.cornerHover = null; UI.hint(v === 'meet' ? T('sk.panel.cornerMeetHint') : hintFor('corner')); Panels.renderRight(); render(); };
+        w.append(UI.segmented ? UI.segmented({ id: 'cn-mode', value: C.mode, options: opts, onChange: onMode }) : UI.selectField({ id: 'cn-mode', label: T('common.kind'), value: C.mode, options: opts, onChange: onMode }));
         if (C.mode !== 'meet') {
-          w.append(UI.numField({ id: 'cn-r', label: C.mode === 'fillet' ? 'Radius' : 'Abstand', value: C.r, unit: 'mm', expr: false, min: 0.01, onCommit: (v) => { if (v > 0) C.r = v; render(); } }));
-          const ab = h('button', { type: 'button', class: 'btn', id: 'cn-all' }); ab.innerHTML = icon('fillet') + 'Alle Ecken auf einmal'; ab.onclick = () => cornerAll(); w.append(h('div', { class: 'btn-row' }, ab));
+          w.append(UI.numField({ id: 'cn-r', label: C.mode === 'fillet' ? T('sk.dim.r') : T('sk.dim.dist'), value: C.r, unit: 'mm', expr: false, min: 0.01, onCommit: (v) => { if (v > 0) C.r = v; render(); } }));
+          const ab = h('button', { type: 'button', class: 'btn', id: 'cn-all' }); ab.innerHTML = icon('fillet') + esc(T('sk.panel.cornerAll')); ab.onclick = () => cornerAll(); w.append(h('div', { class: 'btn-row' }, ab));
         }
       }
       if (S.tool === 'bg' || S.tool === 'bgcal') {
         const B = S.bg;
-        const lb = h('button', { type: 'button', class: 'btn' + (B ? '' : ' primary'), id: 'bg-load' }); lb.innerHTML = icon('image') + (B ? 'Anderes Bild …' : 'Bild laden …'); lb.onclick = bgLoad;
+        const lb = h('button', { type: 'button', class: 'btn' + (B ? '' : ' primary'), id: 'bg-load' }); lb.innerHTML = icon('image') + esc(T(B ? 'sk.panel.bgOther' : 'sk.panel.bgLoad')); lb.onclick = bgLoad;
         w.append(h('div', { class: 'btn-row' }, lb));
         if (B) {
-          const cal = h('button', { type: 'button', class: 'btn' + (S.tool === 'bgcal' ? ' primary' : ''), id: 'bg-cal' }, S.tool === 'bgcal' ? 'Zwei Punkte anklicken …' : 'Maßstab festlegen');
+          const cal = h('button', { type: 'button', class: 'btn' + (S.tool === 'bgcal' ? ' primary' : ''), id: 'bg-cal' }, T(S.tool === 'bgcal' ? 'sk.panel.bgCalPick' : 'sk.panel.bgCalBtn'));
           cal.onclick = () => { S.bgCal = null; setTool(S.tool === 'bgcal' ? 'bg' : 'bgcal'); };
           w.append(h('div', { class: 'btn-row' }, cal));
           const f4 = h('div', { class: 'fields' });
-          f4.append(UI.numField({ id: 'bg-w', label: 'Breite', value: B.w, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) { B.w = v; render(); } } }));
-          f4.append(UI.numField({ id: 'bg-op', label: 'Deckkraft', value: Math.round((B.op ?? 0.5) * 100), unit: '%', expr: false, min: 5, int: true, onCommit: (v) => { B.op = clamp(v, 5, 100) / 100; render(); } }));
+          f4.append(UI.numField({ id: 'bg-w', label: T('param.w'), value: B.w, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) { B.w = v; render(); } } }));
+          f4.append(UI.numField({ id: 'bg-op', label: T('sk.panel.bgOpacity'), value: Math.round((B.op ?? 0.5) * 100), unit: '%', expr: false, min: 5, int: true, onCommit: (v) => { B.op = clamp(v, 5, 100) / 100; render(); } }));
           w.append(f4);
-          const hide = h('button', { type: 'button', class: 'btn', id: 'bg-hide' }, B.hide ? 'Einblenden' : 'Ausblenden'); hide.onclick = () => { B.hide = !B.hide; render(); Panels.renderRight(); };
-          const del = h('button', { type: 'button', class: 'btn danger', id: 'bg-del' }); del.innerHTML = icon('trash') + 'Entfernen'; del.onclick = () => { S.bg = null; render(); Panels.renderRight(); };
+          const hide = h('button', { type: 'button', class: 'btn', id: 'bg-hide' }, T(B.hide ? 'panel.tree.show' : 'common.hide')); hide.onclick = () => { B.hide = !B.hide; render(); Panels.renderRight(); };
+          const del = h('button', { type: 'button', class: 'btn danger', id: 'bg-del' }); del.innerHTML = icon('trash') + esc(T('common.remove')); del.onclick = () => { S.bg = null; render(); Panels.renderRight(); };
           w.append(h('div', { class: 'btn-row' }, hide, del));
-          w.append(h('div', { class: 'hint-box', html: 'Das Bild ist nur eine Vorlage zum Nachzeichnen. Es wird mit der Skizze gespeichert, kommt aber nicht in den Körper oder den Export.' }));
+          w.append(h('div', { class: 'hint-box', html: T('sk.panel.bgHint') }));
         }
       }
       if (S.tool === 'wall') {
         const fw = h('div', { class: 'fields' });
-        fw.append(UI.numField({ id: 'wall-t', label: 'Wandstärke', value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
+        fw.append(UI.numField({ id: 'wall-t', label: T('param.wall'), value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
         w.append(fw);
       }
       if (S.tool === 'project') {
         const fp = h('div', { class: 'fields' });
-        fp.append(UI.numField({ id: 'proj-off', label: 'Versatz (+ außen / − innen)', value: S.projOff || 0, unit: 'mm', expr: false, onCommit: (v) => { S.projOff = isFinite(v) ? v : 0; } }));
+        fp.append(UI.numField({ id: 'proj-off', label: T('sk.panel.projOffLabel'), value: S.projOff || 0, unit: 'mm', expr: false, onCommit: (v) => { S.projOff = isFinite(v) ? v : 0; } }));
         w.append(fp);
       }
       if (S.tool === 'offset') {
         const O = S.off;
         const fo = h('div', { class: 'fields' });
-        fo.append(UI.numField({ id: 'off-n', label: 'Anzahl', value: O.count, unit: '', expr: false, min: 1, int: true, onCommit: (v) => { O.count = clamp(Math.round(v), 1, 20); render(); } }));
-        fo.append(UI.selectField({ id: 'off-corner', label: 'Ecken', value: O.corners, options: [['sharp', 'Spitz'], ['round', 'Rund']], onChange: (v) => { O.corners = v; const el = $('#off-corner'); if (el) el.blur(); render(); } }));
+        fo.append(UI.numField({ id: 'off-n', label: T('common.count'), value: O.count, unit: '', expr: false, min: 1, int: true, onCommit: (v) => { O.count = clamp(Math.round(v), 1, 20); render(); } }));
+        fo.append(UI.selectField({ id: 'off-corner', label: T('sk.panel.corners'), value: O.corners, options: [['sharp', T('sk.panel.offSharp')], ['round', T('sk.panel.offRound')]], onChange: (v) => { O.corners = v; const el = $('#off-corner'); if (el) el.blur(); render(); } }));
         w.append(fo);
-        const bt = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'off-both', checked: !!O.both }), 'Beidseitig (innen und außen)');
+        const bt = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'off-both', checked: !!O.both }), T('sk.panel.offBoth'));
         bt.querySelector('input').onchange = (e) => { O.both = e.target.checked; e.target.blur(); render(); };
         w.append(bt);
       }
       if (S.tool === 'tpl') {
-        const T = S.tpl;
-        w.append(UI.selectField({ id: 'tp-type', label: 'Schablone', value: T.type, options: Object.entries(SKO.TEMPLATES).map(([k, v]) => [k, v.name]), onChange: (v) => { T.type = v; T.p = { ...SKO.TEMPLATES[v].p }; Panels.renderRight(); render(); } }));
+        const tp = S.tpl;
+        w.append(UI.selectField({ id: 'tp-type', label: T('sk.panel.tplLabel'), value: tp.type, options: Object.entries(SKO.TEMPLATES).map(([k, v]) => [k, v.name]), onChange: (v) => { tp.type = v; tp.p = { ...SKO.TEMPLATES[v].p }; Panels.renderRight(); render(); } }));
         const f6 = h('div', { class: 'fields' });
-        for (const k of Object.keys(SKO.TEMPLATES[T.type].p)) {
+        for (const k of Object.keys(SKO.TEMPLATES[tp.type].p)) {
           const isInt = ['nx', 'ny', 'n'].includes(k);
-          f6.append(UI.numField({ id: 'tp-' + k, label: SKO.TPLNAMES[k] || k, value: T.p[k], unit: isInt ? '' : 'mm', expr: false, int: isInt, min: isInt ? 1 : 0, onCommit: (v) => { T.p[k] = v; render(); } }));
+          f6.append(UI.numField({ id: 'tp-' + k, label: SKO.TPLNAMES[k] || k, value: tp.p[k], unit: isInt ? '' : 'mm', expr: false, int: isInt, min: isInt ? 1 : 0, onCommit: (v) => { tp.p[k] = v; render(); } }));
         }
-        const note = SKO.TEMPLATES[T.type].note;
+        const note = SKO.TEMPLATES[tp.type].note;
         w.append(f6);
         if (note) w.append(h('div', { class: 'hint-box', id: 'tp-note' }, note));
-        w.append(h('div', { class: 'hint-box', html: 'Die Werte sind übliche Standardmaße – prüf sie mit dem Datenblatt deines Bauteils. Danach sind es normale Linien, Bögen, Rechtecke und Kreise, die du einzeln ändern kannst.' }));
+        w.append(h('div', { class: 'hint-box', html: T('sk.panel.tplHint') }));
       }
       if (S.tool === 'text') {
-        const T = S.txt;
-        if (!SK.FONTNAMES[T.font]) T.font = 'inter';
-        w.append(UI.textField({ id: 'tx-s', label: 'Text', value: T.s, live: true, onCommit: (v) => { T.s = v; } }));
+        const tx = S.txt;
+        if (!SK.FONTNAMES[tx.font]) tx.font = 'inter';
+        w.append(UI.textField({ id: 'tx-s', label: T('sk.tool.text'), value: tx.s, live: true, onCommit: (v) => { tx.s = v; } }));
         const f3 = h('div', { class: 'fields' });
-        f3.append(UI.numField({ id: 'tx-h', label: 'Höhe (Großbuchstaben)', value: T.h, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) T.h = v; } }));
-        f3.append(UI.selectField({ id: 'tx-font', label: 'Schrift', value: T.font, options: Object.entries(SK.FONTNAMES), onChange: (v) => { T.font = v; ensureSketchFonts(v); } }));
-        f3.append(UI.selectField({ id: 'tx-align', label: 'Ausrichtung', value: T.align, options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => { T.align = v; } }));
-        const lf = h('button', { type: 'button', class: 'btn', id: 'tx-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + 'Schrift laden …';
+        f3.append(UI.numField({ id: 'tx-h', label: T('sk.panel.textHeight'), value: tx.h, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) tx.h = v; } }));
+        f3.append(UI.selectField({ id: 'tx-font', label: T('sk.panel.font'), value: tx.font, options: Object.entries(SK.FONTNAMES), onChange: (v) => { tx.font = v; ensureSketchFonts(v); } }));
+        f3.append(UI.selectField({ id: 'tx-align', label: T('sk.panel.align'), value: tx.align, options: [['l', T('sk.panel.alignL')], ['m', T('sk.panel.alignM')], ['r', T('sk.panel.alignR')]], onChange: (v) => { tx.align = v; } }));
+        const lf = h('button', { type: 'button', class: 'btn', id: 'tx-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + esc(T('sk.panel.loadFont'));
         lf.onclick = () => pickFont(null);
         w.append(f3, h('div', { class: 'btn-row' }, lf));
-        if (SK.isFontLoaded && !SK.isFontLoaded(T.font)) w.append(h('div', { class: 'hint-box', id: 'tx-font-loading' }, 'Schrift wird geladen …'));
+        if (SK.isFontLoaded && !SK.isFontLoaded(tx.font)) w.append(h('div', { class: 'hint-box', id: 'tx-font-loading' }, T('sk.panel.fontLoading')));
       }
-      if (S.tool === 'slot') w.append(UI.selectField({ id: 'sl-mode', label: 'Langloch', value: S.slotArc ? 'arc' : S.slotTotal ? 'total' : 'line', options: [['line', 'Gerade, von Mitte zu Mitte'], ['total', 'Gerade, über die Gesamtlänge'], ['arc', 'Gebogen (um eine Mitte)']], onChange: (v) => { S.slotArc = v === 'arc'; S.slotTotal = v === 'total'; S.draft = null; render(); UI.hint(S.slotArc ? 'Gebogenes Langloch: Mitte klicken, dann Anfang, dann Ende (gegen den Uhrzeigersinn), zum Schluss die Breite.' : HINTS.slot); } }));
-      if (S.tool === 'circle') w.append(UI.selectField({ id: 'ci-mode', label: 'Kreis', value: S.circMode || 'center', options: [['center', 'Mitte und Größe'], ['2p', 'Zwei Punkte (Durchmesser)'], ['3p', 'Drei Punkte']], onChange: (v) => { S.circMode = v; S.draft = null; render(); } }));
-      if (S.tool === 'arc') w.append(UI.selectField({ id: 'ar-mode', label: 'Bogen', value: S.arcMode || '3p', options: [['3p', 'Start, Ende, Wölbung'], ['center', 'Mitte, Start, Ende'], ['tan', 'Tangential an Linie oder Bogen']], onChange: (v) => { S.arcMode = v; S.draft = null; render(); } }));
-      if (S.tool === 'line') w.append(UI.selectField({ id: 'ln-mode', label: 'Linie', value: S.lineMode || 'line', options: [['line', 'Linienzug'], ['tan2', 'Tangente an zwei Kreise']], onChange: (v) => { S.lineMode = v; S.draft = null; S.tanFirst = null; UI.hint(v === 'tan2' ? '<b>Tangente:</b> Klick den ersten Kreis oder Bogen an.' : HINTS.line); render(); } }));
-      if (S.tool === 'rect') w.append(UI.numField({ id: 'rk-r', label: 'Ecken-Radius (0 = eckig)', value: S.rectR || 0, unit: 'mm', expr: false, min: 0, onCommit: (v) => { S.rectR = v > 0 ? v : 0; } }));
-      if (S.tool === 'rect') w.append(UI.selectField({ id: 'rk-mode', label: 'Aufziehen', value: S.rect3 ? 'r3' : S.rectMid ? 'mid' : 'corner', options: [['corner', 'Von Ecke zu Ecke'], ['mid', 'Von der Mitte aus'], ['r3', 'Gedreht: Kante, dann Höhe']], onChange: (v) => { S.rectMid = v === 'mid'; S.rect3 = v === 'r3'; if (S.draft) S.draft = null; render(); } }));
-      if (S.tool === 'poly') w.append(UI.selectField({ id: 'po-mode', label: 'Getipptes Maß', value: S.polyFlats ? 'flats' : 'corners', options: [['corners', 'Über die Ecken (Umkreis)'], ['flats', 'Über die Flächen (Schlüsselweite)']], onChange: (v) => { S.polyFlats = v === 'flats'; } }));
-      if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: 'Ecken', value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
+      if (S.tool === 'slot') w.append(UI.selectField({ id: 'sl-mode', label: T('sk.tool.slot'), value: S.slotArc ? 'arc' : S.slotTotal ? 'total' : 'line', options: [['line', T('sk.panel.slotModeLine')], ['total', T('sk.panel.slotModeTotal')], ['arc', T('sk.panel.slotModeArc')]], onChange: (v) => { S.slotArc = v === 'arc'; S.slotTotal = v === 'total'; S.draft = null; render(); UI.hint(S.slotArc ? T('sk.panel.slotArcHint') : hintFor('slot')); } }));
+      if (S.tool === 'circle') w.append(UI.selectField({ id: 'ci-mode', label: T('sk.tool.circle'), value: S.circMode || 'center', options: [['center', T('sk.panel.circCenter')], ['2p', T('sk.panel.circ2p')], ['3p', T('sk.panel.circ3p')]], onChange: (v) => { S.circMode = v; S.draft = null; render(); } }));
+      if (S.tool === 'arc') w.append(UI.selectField({ id: 'ar-mode', label: T('sk.tool.arc'), value: S.arcMode || '3p', options: [['3p', T('sk.panel.arc3p')], ['center', T('sk.panel.arcCenter')], ['tan', T('sk.panel.arcTan')]], onChange: (v) => { S.arcMode = v; S.draft = null; render(); } }));
+      if (S.tool === 'line') w.append(UI.selectField({ id: 'ln-mode', label: T('sk.tool.line'), value: S.lineMode || 'line', options: [['line', T('sk.panel.linePoly')], ['tan2', T('sk.panel.lineTan2')]], onChange: (v) => { S.lineMode = v; S.draft = null; S.tanFirst = null; UI.hint(v === 'tan2' ? T('sk.panel.lineTan2Hint') : hintFor('line')); render(); } }));
+      if (S.tool === 'rect') w.append(UI.numField({ id: 'rk-r', label: T('sk.panel.rectR'), value: S.rectR || 0, unit: 'mm', expr: false, min: 0, onCommit: (v) => { S.rectR = v > 0 ? v : 0; } }));
+      if (S.tool === 'rect') w.append(UI.selectField({ id: 'rk-mode', label: T('sk.panel.rectPull'), value: S.rect3 ? 'r3' : S.rectMid ? 'mid' : 'corner', options: [['corner', T('sk.panel.rectCorner')], ['mid', T('sk.panel.rectMid')], ['r3', T('sk.panel.rect3p')]], onChange: (v) => { S.rectMid = v === 'mid'; S.rect3 = v === 'r3'; if (S.draft) S.draft = null; render(); } }));
+      if (S.tool === 'poly') w.append(UI.selectField({ id: 'po-mode', label: T('sk.panel.polyMeasure'), value: S.polyFlats ? 'flats' : 'corners', options: [['corners', T('sk.panel.polyCorners')], ['flats', T('sk.panel.polyFlats')]], onChange: (v) => { S.polyFlats = v === 'flats'; } }));
+      if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: T('sk.panel.corners'), value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
       if (S.tool === 'patrect' || S.tool === 'patcirc') {
         const P = S.pat; const f2 = h('div', { class: 'fields' });
         const fld = (id, label, key, unit, opts = {}) => f2.append(UI.numField({ id, label, value: P[key], unit, expr: false, min: opts.min, int: opts.int, onCommit: (v) => { P[key] = v; render(); } }));
-        if (S.tool === 'patrect') { fld('pt-nx', 'Anzahl in X', 'nx', '', { min: 1, int: true }); fld('pt-dx', 'Abstand in X', 'dx', 'mm'); fld('pt-ny', 'Anzahl in Y', 'ny', '', { min: 1, int: true }); fld('pt-dy', 'Abstand in Y', 'dy', 'mm'); }
-        else { fld('pt-n', 'Anzahl', 'n', '', { min: 2, int: true }); fld('pt-ang', 'Winkel gesamt', 'ang', '°'); }
+        if (S.tool === 'patrect') { fld('pt-nx', T('sk.panel.nx'), 'nx', '', { min: 1, int: true }); fld('pt-dx', T('sk.panel.dx'), 'dx', 'mm'); fld('pt-ny', T('sk.panel.ny'), 'ny', '', { min: 1, int: true }); fld('pt-dy', T('sk.panel.dy'), 'dy', 'mm'); }
+        else { fld('pt-n', T('common.count'), 'n', '', { min: 2, int: true }); fld('pt-ang', T('sk.panel.totalAngle'), 'ang', '°'); }
         w.append(f2);
         if (S.tool === 'patcirc') {
-          const cb = h('button', { type: 'button', class: 'btn' + (S.patPick ? ' primary' : ''), id: 'pt-center' }, S.patPick ? 'Klick einen Punkt …' : 'Mittelpunkt wählen');
-          cb.onclick = () => { S.patPick = !S.patPick; UI.hint(S.patPick ? 'Klick den Punkt an, um den gedreht wird.' : HINTS.patcirc); Panels.renderRight(); render(); };
-          w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Mitte: ' + (S.patCenter ? 'gewählter Punkt' : 'Nullpunkt'))), h('div', { class: 'btn-row' }, cb));
+          const cb = h('button', { type: 'button', class: 'btn' + (S.patPick ? ' primary' : ''), id: 'pt-center' }, T(S.patPick ? 'sk.panel.pickPtWait' : 'sk.panel.pickCenter'));
+          cb.onclick = () => { S.patPick = !S.patPick; UI.hint(S.patPick ? T('sk.panel.pickCenterHint') : hintFor('patcirc')); Panels.renderRight(); render(); };
+          w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('sk.panel.centerPrefix') + T(S.patCenter ? 'sk.panel.centerPicked' : 'sk.panel.centerOrigin'))), h('div', { class: 'btn-row' }, cb));
         }
-        const ok = h('button', { type: 'button', class: 'btn primary', id: 'pt-make' }, `Muster anlegen (${S.patSel.length} gewählt)`);
+        const ok = h('button', { type: 'button', class: 'btn primary', id: 'pt-make' }, T('sk.panel.makePattern', { n: S.patSel.length }));
         ok.disabled = !S.patSel.length; ok.onclick = () => createPattern();
         w.append(h('div', { class: 'btn-row' }, ok));
       }
       if (S.tool === 'xmove') {
         const X = S.xm; const f2 = h('div', { class: 'fields' });
-        w.append(UI.selectField({ id: 'xm-mode', label: 'Art', value: X.mode, options: [['move', 'Verschieben um X / Y'], ['rot', 'Drehen um einen Punkt']], onChange: (v) => { X.mode = v; render(); Panels.renderRight(); } }));
+        w.append(UI.selectField({ id: 'xm-mode', label: T('common.kind'), value: X.mode, options: [['move', T('sk.panel.xformMove')], ['rot', T('sk.panel.xformRot')]], onChange: (v) => { X.mode = v; render(); Panels.renderRight(); } }));
         const fld = (id, label, key, unit) => f2.append(UI.numField({ id, label, value: X[key], unit, expr: false, onCommit: (v) => { X[key] = v; render(); } }));
-        if (X.mode === 'rot') fld('xm-ang', 'Winkel (gegen den Uhrzeigersinn)', 'ang', '°'); else { fld('xm-dx', 'Abstand X', 'dx', 'mm'); fld('xm-dy', 'Abstand Y', 'dy', 'mm'); }
+        if (X.mode === 'rot') fld('xm-ang', T('sk.panel.angCCW'), 'ang', '°'); else { fld('xm-dx', T('sk.panel.dx'), 'dx', 'mm'); fld('xm-dy', T('sk.panel.dy'), 'dy', 'mm'); }
         w.append(f2);
         if (X.mode === 'rot') {
-          const cb = h('button', { type: 'button', class: 'btn' + (S.patPick ? ' primary' : ''), id: 'xm-center' }, S.patPick ? 'Klick einen Punkt …' : 'Drehpunkt wählen');
-          cb.onclick = () => { S.patPick = !S.patPick; UI.hint(S.patPick ? 'Klick den Punkt an, um den gedreht wird.' : HINTS.xmove); Panels.renderRight(); render(); };
-          w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Drehpunkt: ' + (S.patCenter ? 'gewählter Punkt' : 'Mitte der Auswahl'))), h('div', { class: 'btn-row' }, cb));
+          const cb = h('button', { type: 'button', class: 'btn' + (S.patPick ? ' primary' : ''), id: 'xm-center' }, T(S.patPick ? 'sk.panel.pickPtWait' : 'sk.panel.pickPivot'));
+          cb.onclick = () => { S.patPick = !S.patPick; UI.hint(S.patPick ? T('sk.panel.pickCenterHint') : hintFor('xmove')); Panels.renderRight(); render(); };
+          w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('sk.panel.pivotPrefix') + T(S.patCenter ? 'sk.panel.centerPicked' : 'sk.panel.pivotSelCenter'))), h('div', { class: 'btn-row' }, cb));
         }
-        w.append(h('label', { class: 'check' }, (() => { const c = h('input', { type: 'checkbox', id: 'xm-copy', checked: X.copy }); c.onchange = () => { X.copy = c.checked; Panels.renderRight(); }; return c; })(), 'Als Kopie (Original bleibt stehen)'));
-        const ok = h('button', { type: 'button', class: 'btn primary', id: 'xm-make' }, `${X.copy ? 'Kopieren' : X.mode === 'rot' ? 'Drehen' : 'Verschieben'} (${S.patSel.length} gewählt)`);
+        w.append(h('label', { class: 'check' }, (() => { const c = h('input', { type: 'checkbox', id: 'xm-copy', checked: X.copy }); c.onchange = () => { X.copy = c.checked; Panels.renderRight(); }; return c; })(), T('sk.panel.asCopy')));
+        const ok = h('button', { type: 'button', class: 'btn primary', id: 'xm-make' }, T('sk.panel.xmoveAct', { act: T(X.copy ? 'sk.panel.doCopy' : X.mode === 'rot' ? 'sk.panel.doRotate' : 'sk.panel.doMove'), n: S.patSel.length }));
         ok.disabled = !S.patSel.length; ok.onclick = () => applyXmove();
         w.append(h('div', { class: 'btn-row' }, ok));
       }
       if (S.tool === 'mirror' && !S.mir) {
         const mk = (lab, id, dir) => { const b = h('button', { type: 'button', class: 'btn', id }, lab); b.onclick = () => mirrorAxis(dir); return b; };
-        w.append(h('div', { class: 'btn-row' }, mk('An der X-Achse', 'mir-x', 'x'), mk('An der Y-Achse', 'mir-y', 'y')));
+        w.append(h('div', { class: 'btn-row' }, mk(T('sk.panel.mirX'), 'mir-x', 'x'), mk(T('sk.panel.mirY'), 'mir-y', 'y')));
       }
       if (S.tool === 'mirror' && S.mir) {
-        const ok = h('button', { type: 'button', class: 'btn primary', id: 'mir-make' }, S.mir.sel.length ? `${S.mir.sel.length} Elemente spiegeln` : 'Alles spiegeln');
+        const ok = h('button', { type: 'button', class: 'btn primary', id: 'mir-make' }, S.mir.sel.length ? T('sk.panel.mirSel', { n: S.mir.sel.length }) : T('sk.panel.mirAll'));
         ok.onclick = () => mirrorAll(); w.append(h('div', { class: 'btn-row' }, ok));
       }
-      const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sk-con', checked: S.construction }), 'Als Hilfslinien zeichnen');
+      const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sk-con', checked: S.construction }), T('sk.panel.drawCon'));
       con.querySelector('input').onchange = (e) => { S.construction = e.target.checked; syncConBtn(); };
       w.append(con);
       const angSnap = h('label', { class: 'check', 'data-help': 'angleSnap' },
         h('input', { type: 'checkbox', id: 'sk-angle-snap', checked: angleSnapOn }),
-        'Winkelfang (15° und runde Längen)'
+        T('sk.panel.angleSnap')
       );
       angSnap.querySelector('input').onchange = (e) => { setAngleSnap(e.target.checked); };
       w.append(angSnap);
@@ -4474,62 +4435,62 @@ const Sketch = (() => {
       const bb = S.tool === 'select' && S.ctx.mode !== 'pushpull' ? SK.bounds(S.ents.filter((e) => !e.con)) : null;
       if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
         const W = bb[2] - bb[0], H = bb[3] - bb[1], fz = h('div', { class: 'fields' });
-        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, `${Units.fmtLen(W, 2)} × ${Units.fmtLen(H, 2)} ${Units.label()}`)));
+        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, T('sk.panel.skSize')), h('b', { class: 'mono' }, `${Units.fmtLen(W, 2)} × ${Units.fmtLen(H, 2)} ${Units.label()}`)));
         // Fläche und Umfang aller geschlossenen Flächen (Löcher abgezogen, Lochränder zählen zum Umfang)
         const regs = SK.regions(S.ents);
         if (regs.length) {
           const per = (poly) => poly.reduce((s, q, i) => s + Math.hypot(q[0] - poly[(i + 1) % poly.length][0], q[1] - poly[(i + 1) % poly.length][1]), 0);
           const A = regs.reduce((s, r) => s + r.area, 0), U = regs.reduce((s, r) => s + per(r.outer.poly) + r.holes.reduce((t, hh) => t + per(hh.poly), 0), 0);
-          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, `${Units.fmtAreaU(A, 2)} · ${Units.fmtLenU(U, 2)}`)));
+          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? T('sk.panel.areaPerimOne') : T('sk.panel.areaPerimMany', { n: regs.length })), h('b', { class: 'mono' }, `${Units.fmtAreaU(A, 2)} · ${Units.fmtLenU(U, 2)}`)));
         }
-        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmtFixed(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
-        fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 6), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
-        fz.append(UI.numField({ id: 'sk-scale-f', label: 'oder Faktor', value: 100, unit: '%', expr: false, min: 0.1, onCommit: (v) => go(v / 100) }));
+        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast(T('sk.panel.scaleBad'), { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(T('sk.panel.scaleDone', { pct: fmtFixed(fac * 100, 1) }), { icon: 'check' }); };
+        fz.append(UI.numField({ id: 'sk-scale-w', label: T('sk.panel.scaleWidth'), value: round(W, 6), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
+        fz.append(UI.numField({ id: 'sk-scale-f', label: T('sk.panel.scaleFactor'), value: 100, unit: '%', expr: false, min: 0.1, onCommit: (v) => go(v / 100) }));
         w.append(fz);
       }
-      const sn = h('details', { class: 'snapset' }, h('summary', null, 'Fangen'));
+      const sn = h('details', { class: 'snapset' }, h('summary', null, T('sk.panel.snapTitle')));
       sn.open = !!S.snapOpen; sn.addEventListener('toggle', () => { S.snapOpen = sn.open; });
-      for (const [k, lab] of SNAPLIST) {
+      for (const [k, lab] of snapList()) {
         const cbx = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'snap-' + k, checked: S.snapSet[k] !== false }), lab);
         cbx.querySelector('input').onchange = (e) => { S.snapSet[k] = e.target.checked; };
         sn.append(cbx);
       }
-      sn.append(h('div', { class: 'hint-box', html: 'Mit gedrückter <b>Alt</b>-Taste wird gar nicht gefangen. <b>Umschalt</b> schaltet Winkelfang und runde Längen kurz ab.' }));
+      sn.append(h('div', { class: 'hint-box', html: T('sk.panel.snapHint') }));
       w.append(sn);
       if (S.ctx.mode !== 'pushpull') {
-        const pe = h('details', { class: 'snapset', id: 'sk-plane' }, h('summary', null, 'Ebene verschieben / neigen'));
+        const pe = h('details', { class: 'snapset', id: 'sk-plane' }, h('summary', null, T('sk.panel.planeTitle')));
         pe.open = !!(S.planeOpen || S.pOff || S.pTilt); pe.addEventListener('toggle', () => { S.planeOpen = pe.open; });
         const f5 = h('div', { class: 'fields' });
-        f5.append(UI.numField({ id: 'pl-off', label: 'Abstand', value: S.pOff || 0, unit: 'mm', expr: false, onCommit: (v) => { S.pOff = v; applyPlane(false); } }));
-        f5.append(UI.numField({ id: 'pl-tilt', label: 'Neigung', value: S.pTilt || 0, unit: '°', expr: false, onCommit: (v) => { S.pTilt = clamp(v, -89, 89); applyPlane(true); Panels.renderRight(); } }));
-        pe.append(f5, h('div', { class: 'hint-box', html: 'Verschiebt die Zeichenebene entlang ihrer Richtung oder kippt sie um ihre X-Achse – z. B. für einen Kamerahalter mit 30° Neigung.' }));
+        f5.append(UI.numField({ id: 'pl-off', label: T('sk.dim.dist'), value: S.pOff || 0, unit: 'mm', expr: false, onCommit: (v) => { S.pOff = v; applyPlane(false); } }));
+        f5.append(UI.numField({ id: 'pl-tilt', label: T('sk.panel.planeTilt'), value: S.pTilt || 0, unit: '°', expr: false, onCommit: (v) => { S.pTilt = clamp(v, -89, 89); applyPlane(true); Panels.renderRight(); } }));
+        pe.append(f5, h('div', { class: 'hint-box', html: T('sk.panel.planeHint') }));
         w.append(pe);
       }
       const regs = SK.regions(S.ents);
-      if (S.ctx.mode === 'patpath' || isPathEdit()) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Teile auf der Kurve (mit Original)'), h('b', { class: 'mono', id: 'path-count' }, String(S.pathCount || 0))));
-      else if (isLoftLine()) { if (!SK.chains(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Noch keine offene Linie – die Mittellinie braucht einen Anfang und ein Ende.')); }
+      if (S.ctx.mode === 'patpath' || isPathEdit()) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('sk.panel.pathCount')), h('b', { class: 'mono', id: 'path-count' }, String(S.pathCount || 0))));
+      else if (isLoftLine()) { if (!SK.chains(S.ents).length) w.append(h('div', { class: 'err-box' }, T('sk.panel.loftNoLine'))); }
       else {
-        w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Geschlossene Flächen'), h('b', { class: 'mono' }, String(regs.length))));
-        if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Rot markierte Enden sind noch offen. Verbinde sie, damit eine Fläche entsteht.'));
+        w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('sk.panel.closedRegions')), h('b', { class: 'mono' }, String(regs.length))));
+        if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, T('sk.panel.openEndsWarn')));
         // Skizzen-Prüfer (SK-09)
         const chkBtn = h('button', { type: 'button', class: 'btn', id: 'sk-check', 'data-help': 'sketchCheck' });
-        chkBtn.innerHTML = icon('target') + 'Skizze prüfen';
+        chkBtn.innerHTML = icon('target') + esc(T('sk.panel.checkBtn'));
         chkBtn.onclick = () => runCheck();
         w.append(h('div', { class: 'btn-row' }, chkBtn));
         if (S.check) {
           const box = h('div', { class: 'sk-check-box', id: 'sk-check-res' });
           if (!S.ents.length) {
-            box.append(h('div', { class: 'hint-box' }, 'Die Skizze ist noch leer – zeichne zuerst etwas.'));
+            box.append(h('div', { class: 'hint-box' }, T('sk.panel.checkEmpty')));
           } else if (!S.check.issues.length) {
-            box.append(h('div', { class: 'ok-box', id: 'sk-check-ok', html: '<b>Alles in Ordnung</b> – keine offenen Enden, keine doppelten Linien, keine winzigen Lücken.' }));
+            box.append(h('div', { class: 'ok-box', id: 'sk-check-ok', html: T('sk.panel.checkOk') }));
           } else {
-            const closeBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'sk-check-close', 'aria-label': 'Prüfung ausblenden', 'data-tip': 'Prüfung ausblenden' });
+            const closeBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'sk-check-close', 'aria-label': T('sk.panel.checkHide'), 'data-tip': T('sk.panel.checkHide') });
             closeBtn.innerHTML = icon('close');
             closeBtn.onclick = () => { S.check = null; S.checkFocus = null; render(); Panels.renderRight(); };
-            box.append(h('div', { class: 'sk-check-head' }, h('b', null, `${S.check.issues.length} ${S.check.issues.length === 1 ? 'Stelle gefunden' : 'Stellen gefunden'}`), closeBtn));
+            box.append(h('div', { class: 'sk-check-head' }, h('b', null, S.check.issues.length === 1 ? T('sk.panel.checkFoundOne') : T('sk.panel.checkFoundMany', { n: S.check.issues.length })), closeBtn));
             if (S.check.fixable > 0) {
               const repBtn = h('button', { type: 'button', class: 'btn primary', id: 'sk-repair', 'data-help': 'sketchRepair' });
-              repBtn.innerHTML = icon('check') + 'Alles reparieren';
+              repBtn.innerHTML = icon('check') + esc(T('sk.panel.repairAll'));
               repBtn.onclick = () => repairCheck();
               box.append(h('div', { class: 'btn-row' }, repBtn));
             }
@@ -4537,15 +4498,15 @@ const Sketch = (() => {
             S.check.issues.forEach((it, idx) => {
               const cls = 'chk-row sk-chk-item ' + (it.kind === 'dup' ? 'warn' : 'bad') + (S.checkFocus === idx ? ' active' : '');
               const title = it.kind === 'gap'
-                ? `Winzige Lücke (${Units.fmtLenFixedU(it.dist, 3)})`
+                ? T('sk.panel.chkGap', { v: Units.fmtLenFixedU(it.dist, 3) })
                 : it.kind === 'dup'
-                  ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
-                  : 'Offenes Ende';
+                  ? (it.partial ? T('sk.panel.chkOverlap') : T({ line: 'sk.panel.chkDupLine', arc: 'sk.panel.chkDupArc', circle: 'sk.panel.chkDupCircle', rect: 'sk.panel.chkDupRect' }[it.sub] || 'sk.panel.chkDupOther'))
+                  : T('sk.panel.chkOpenEnd');
               const sub = it.kind === 'gap'
-                ? `Bei ${Units.fmtLen(it.p[0], 1)} / ${Units.fmtLenU(it.p[1], 1)} – wird mit Deckungsgleich geschlossen`
+                ? T('sk.panel.chkGapSub', { x: Units.fmtLen(it.p[0], 1), y: Units.fmtLenU(it.p[1], 1) })
                 : it.kind === 'dup'
-                  ? (it.partial ? `Überlappt um ${Units.fmtLenU(it.len, 1)} – wird zusammengeführt` : `Liegt direkt auf einem anderen Element${it.len ? ` (${Units.fmtLenU(it.len, 1)})` : ''}`)
-                  : `Bei ${Units.fmtLen(it.p[0], 1)} / ${Units.fmtLenU(it.p[1], 1)} – mit anderer Linie verbinden`;
+                  ? (it.partial ? T('sk.panel.chkOverlapSub', { v: Units.fmtLenU(it.len, 1) }) : T('sk.panel.chkDupSub', { len: it.len ? ` (${Units.fmtLenU(it.len, 1)})` : '' }))
+                  : T('sk.panel.chkOpenSub', { x: Units.fmtLen(it.p[0], 1), y: Units.fmtLenU(it.p[1], 1) });
               const row = h('button', { type: 'button', class: cls, dataset: { idx: String(idx), kind: it.kind } },
                 h('span', { class: 'chk-dot' }, '!'),
                 h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub))
@@ -4555,21 +4516,21 @@ const Sketch = (() => {
             });
             box.append(list);
             if (S.check.fixable > 0 && S.check.opens.length > 0) {
-              box.append(h('div', { class: 'hint-box' }, '„Alles reparieren“ schließt winzige Lücken (< 0,05 mm) mit Deckungsgleich und löscht doppelte Linien. Größere offene Enden verbindest du von Hand.'));
+              box.append(h('div', { class: 'hint-box' }, T('sk.panel.chkRepairHint')));
             }
           }
           w.append(box);
         }
         if (S.dims.length && S.tool === 'select' && !S.sel) {
           // Alle Maße der Skizze als Tabelle (SK-53): Wert oder Formel direkt ändern
-          const TN = { line: 'Linie', rect: 'Rechteck', circle: 'Kreis', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', ellipse: 'Ellipse', text: 'Text', point: 'Punkt', spline: 'Spline' };
-          const tbl = h('details', { class: 'section dim-table', id: 'dim-table', 'data-help': 'dimTable' }, h('summary', { class: 'section-h' }, `Alle Maße (${S.dims.length})`));
+          const TN = { line: T('sk.panel.ent.line'), rect: T('sk.panel.ent.rect'), circle: T('sk.panel.ent.circle'), arc: T('sk.panel.ent.arc'), slot: T('sk.panel.ent.slot'), poly: T('sk.panel.ent.poly'), ellipse: T('sk.panel.ent.ellipse'), text: T('sk.panel.ent.text'), point: T('sk.panel.ent.point'), spline: T('sk.panel.ent.spline') };
+          const tbl = h('details', { class: 'section dim-table', id: 'dim-table', 'data-help': 'dimTable' }, h('summary', { class: 'section-h' }, T('sk.panel.allDims', { n: S.dims.length })));
           const unitOf = (k) => (k === 'ang' || k === 'angLL' ? '°' : k === 'n' ? '' : 'mm');
           S.dims.forEach((d, i) => {
             const sp = d.refs ? { k: d.k, refs: d.refs } : { e: d.e, k: d.k };
             const e = d.e ? ent(d.e) : null;
             const nr = e ? S.ents.filter((x) => x.type === e.type).indexOf(e) + 1 : 0;
-            const what = (DIMLABEL(d.k) + (e ? ` · ${TN[e.type] || e.type} ${nr}` : '')) + (d.ref ? ' (ablesen)' : '');
+            const what = (DIMLABEL(d.k) + (e ? ` · ${TN[e.type] || e.type} ${nr}` : '')) + (d.ref ? T('sk.panel.dimReadSuffix') : '');
             const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 6) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
             f.addEventListener('mouseenter', () => { if (e && S.hoverDim !== e.id) { S.hoverDim = e.id; S.hoverEnt = e.id; render(); } });
             tbl.append(f);
@@ -4580,14 +4541,14 @@ const Sketch = (() => {
         }
         if (S.ents.length && S.tool === 'select' && !S.sel) {
           // Skizze als 2D-Datei für Laser, Plotter oder Grafikprogramm (SK-23)
-          const nm = () => (S.ctx.mode === 'edit' ? Model.label((Model.find(App.doc, S.ctx.editId) || { item: {} }).item) : 'Skizze');
-          const bd = h('button', { type: 'button', class: 'btn', id: 'sk-dxf', 'data-help': 'sketchExport' }, 'Als DXF speichern'); bd.onclick = () => Print.save2D(S.ents, nm(), 'dxf');
-          const bs = h('button', { type: 'button', class: 'btn', id: 'sk-svg', 'data-help': 'sketchExport' }, 'Als SVG speichern'); bs.onclick = () => Print.save2D(S.ents, nm(), 'svg');
+          const nm = () => (S.ctx.mode === 'edit' ? Model.label((Model.find(App.doc, S.ctx.editId) || { item: {} }).item) : T('sk.bar.title'));
+          const bd = h('button', { type: 'button', class: 'btn', id: 'sk-dxf', 'data-help': 'sketchExport' }, T('sk.panel.saveDxf')); bd.onclick = () => Print.save2D(S.ents, nm(), 'dxf');
+          const bs = h('button', { type: 'button', class: 'btn', id: 'sk-svg', 'data-help': 'sketchExport' }, T('sk.panel.saveSvg')); bs.onclick = () => Print.save2D(S.ents, nm(), 'svg');
           w.append(h('div', { class: 'btn-row' }, bd, bs));
         }
       }
     }
-    w.append(h('div', { class: 'hint-box', html: 'Ansicht verschieben: <b>rechte Maustaste</b> · Zoomen: <b>Mausrad</b> · Genauer: <b>Umschalt</b> halten' }));
+    w.append(h('div', { class: 'hint-box', html: T('sk.panel.navHint') }));
     body.append(w);
   }
 
@@ -4604,7 +4565,7 @@ const Sketch = (() => {
         if (S === sess) { reapply(); render(); done(true); }
       }).catch((e) => {
         donePending = false;
-        UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' });
+        UI.toast((e && e.message) || T('sk.toast.fontErr'), { kind: 'bad' });
       });
       return;
     }
@@ -4613,13 +4574,13 @@ const Sketch = (() => {
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
     if (isLoftLine()) {
       const rk = railKey(), nm = rk === 'rail2' ? 'zweiten Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie';
-      if (!SK.chains(S.ents).length) { UI.toast(`Die ${rk === 'rail2' ? 'zweite Führungskurve' : nm} braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.`, { kind: 'bad', icon: 'info' }); return; }
+      if (!SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneNeedOpen', { what: rk === 'rail2' ? 'zweite Führungskurve' : nm }), { kind: 'bad', icon: 'info' }); return; }
       const id = S.ctx.id, sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons };
       App.extra = []; finishSession();
       App.change(rk === 'rail2' ? 'Zweite Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie', (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rk) { f.item.p[rk] = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; delete f.item.p.rail2; } });
-      App.select([id]); UI.toast(`Der Übergang folgt jetzt der ${nm}.`, { icon: 'check' }); return;
+      App.select([id]); UI.toast(T('sk.toast.doneLoftFollow', { what: nm }), { icon: 'check' }); return;
     }
-    if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast('Zeichne zuerst eine Kurve: eine Linie, einen Bogen, eine Spline oder einen Kreis.', { kind: 'bad', icon: 'info' }); return; }
+    if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast(T('sk.toast.donePathEmpty'), { kind: 'bad', icon: 'info' }); return; }
     if (S.ctx.mode === 'patpath') {
       const sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons }, ids = S.ctx.ids;
       finishSession(); Features.pathFromSketch(ids, sk); return;
@@ -4628,15 +4589,15 @@ const Sketch = (() => {
       const editIt = (Model.find(App.doc, S.ctx.editId) || {}).item;
       const isThinEdit = editKind === 'extrude' && editIt && editIt.p && editIt.p.thin;
       if (!pathMode) {
-        if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast('Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.', { kind: 'bad' }); return; }
-        if (editKind === 'rib' && !SK.chains(S.ents).length) { UI.toast('Die Rippe braucht mindestens eine offene Linie, einen Bogen oder eine Kurve.', { kind: 'bad' }); return; }
+        if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneSweepNeed'), { kind: 'bad' }); return; }
+        if (editKind === 'rib' && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneRibNeed'), { kind: 'bad' }); return; }
         if (editKind === 'wrap') {
           const wMode = editIt && editIt.p && editIt.p.mode;
-          if (wMode === 'line' && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für Wickeln als Linie braucht die Skizze eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
-          if (wMode !== 'line' && !regs.length) { UI.toast('Wickeln als Prägung braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+          if (wMode === 'line' && !regs.length && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneWrapLineNeed'), { kind: 'bad' }); return; }
+          if (wMode !== 'line' && !regs.length) { UI.toast(T('sk.toast.doneWrapNeed'), { kind: 'bad' }); return; }
         }
-        if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für eine dünne Wand braucht die Skizze mindestens eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
-        if (editKind !== 'sweep' && editKind !== 'rib' && editKind !== 'wrap' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+        if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneThinNeed'), { kind: 'bad' }); return; }
+        if (editKind !== 'sweep' && editKind !== 'rib' && editKind !== 'wrap' && !isThinEdit && !regs.length) { UI.toast(T('sk.toast.doneClosedNeed'), { kind: 'bad' }); return; }
       }
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
@@ -4645,17 +4606,17 @@ const Sketch = (() => {
     // nur Punkte auf einer Körperfläche: an jedem Punkt eine Bohrung (Bohrungs-Assistent)
     const pts = S.ents.filter((e) => e.type === 'point' && !e.con);
     if (!regs.length && pts.length && !SK.chains(S.ents).length) {
-      if (!S.ctx.targetId) { UI.toast('Punkte werden zu Bohrungen, wenn die Skizze auf einer Körperfläche liegt – starte sie mit Doppelklick auf die Fläche.', { kind: 'bad', icon: 'info' }); return; }
+      if (!S.ctx.targetId) { UI.toast(T('sk.toast.donePointsNeedFace'), { kind: 'bad', icon: 'info' }); return; }
       const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
       finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
     if (S.ctx.embossMode) {
-      if (!regs.length) { UI.toast('Für Prägen braucht die Skizze mindestens eine geschlossene Fläche (z. B. Text, Kreis oder Rechteck).', { kind: 'bad', icon: 'info' }); return; }
+      if (!regs.length) { UI.toast(T('sk.toast.doneEmbossNeed'), { kind: 'bad', icon: 'info' }); return; }
       extrudeStep({ dist: 1, dir: 'normal', emboss: true });
       return;
     }
     if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: !S.ctx.ribMode && !S.ctx.wrapCtx, rib: !!S.ctx.ribMode, wrap: !!S.ctx.wrapCtx, wrapMode: 'line' }); return; }
-    if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
+    if (!regs.length) { UI.toast(T(S.ents.length ? 'sk.toast.doneNoRegion' : 'sk.toast.doneEmpty'), { kind: 'bad', icon: 'info' }); return; }
     extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', wrap: !!S.ctx.wrapCtx, wrapMode: 'emboss' });
   }
   let stepBox = null, arrow = null;
@@ -4712,44 +4673,44 @@ const Sketch = (() => {
     const err = App.errorsFor('__preview')[0];
     box.className = err ? 'err-box' : 'hint-box';
     if (err) { box.textContent = err.message; return; }
-    if (st.extent === 'toFace' && !st.toFace) { box.textContent = 'Klick im 3D-Bild auf die Zielfläche oder eine Bezugsebene.'; return; }
+    if (st.extent === 'toFace' && !st.toFace) { box.textContent = T('sk.step.extPickHint'); return; }
     const tgt = st.extent === 'toFace' && st.toFace && st.toFace.label ? ` (${st.toFace.label})` : '';
-    box.textContent = rd != null ? `Berechnete Höhe: ${Units.fmtLenU(rd, 2)}${tgt}` : 'Berechnet die Höhe bis zur Zielfläche …';
+    box.textContent = rd != null ? T('sk.step.extCalcInfo', { v: Units.fmtLenU(rd, 2), tgt }) : T('sk.step.extCalcWait');
   }
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
     const ribTargets = typeof Features !== 'undefined' && Features.ribTargets ? Features.ribTargets() : [];
     const cylTargets = typeof Features !== 'undefined' && Features.cylTargets ? Features.cylTargets() : [];
-    UI.hint(st.pickingFace ? '<b>Zielfläche wählen:</b> Klick auf die gewünschte Fläche oder Bezugsebene im Bild. <b>Esc</b> bricht ab.' : st.wrap ? 'Wickelt die Skizze ohne Verzerrung um den gewählten <b>Zylinder</b> – erhaben, vertieft oder als Linie.' : st.emboss ? 'Projiziert deine Skizze auf die gewählte Fläche (auch Zylinder oder Kugel) – <b>Erhaben</b> oder <b>Vertieft</b>.' : st.rib ? 'Verlängert deine offene Linie mit <b>Dicke</b> bis zu den Wänden und vereinigt sie mit dem Körper.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
-    stepBox.append(h('h3', null, st.wrap ? 'Wickeln um Zylinder' : st.emboss ? 'Prägen' : st.rib ? 'Rippe' : st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
+    UI.hint(T(st.pickingFace ? 'sk.step.pickFaceHint' : st.wrap ? 'sk.step.wrapHint' : st.emboss ? 'sk.step.embossHint' : st.rib ? 'sk.step.ribHint' : st.sweep ? 'sk.step.sweepHint' : st.revolve ? 'sk.step.revHint' : st.thin ? 'sk.step.thinHint' : 'sk.step.extHint'));
+    stepBox.append(h('h3', null, T(st.wrap ? 'sk.step.titleWrap' : st.emboss ? 'kind.emboss' : st.rib ? 'kind.rib' : st.sweep ? 'kind.sweep' : st.revolve ? 'sk.step.titleRevolve' : st.dir === 'reverse' ? 'sk.step.titlePush' : st.thin ? 'sk.step.titleThin' : 'sk.step.titleExtrude')));
     const seg = h('div', { class: 'role-switch' });
     if (st.openOnly) {
-      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib && !st.wrap ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.rib = false; st.wrap = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib && !st.wrap ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; st.rib = false; st.wrap = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + 'Rippe'; c.onclick = () => { st.rib = true; st.sweep = false; st.wrap = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib && !st.wrap ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + esc(T('sk.step.titleThin')); a.onclick = () => { st.sweep = false; st.rib = false; st.wrap = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib && !st.wrap ? 'true' : 'false' }); b.innerHTML = icon('sweep') + esc(T('kind.sweep')); b.onclick = () => { st.sweep = true; st.rib = false; st.wrap = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + esc(T('kind.rib')); c.onclick = () => { st.rib = true; st.sweep = false; st.wrap = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b, c);
       if (cylTargets.length) {
-        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + 'Wickeln'; wBtn.onclick = () => { st.wrap = true; st.wrapMode = 'line'; st.rib = false; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + esc(T('kind.wrap')); wBtn.onclick = () => { st.wrap = true; st.wrapMode = 'line'; st.rib = false; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(wBtn);
       }
       stepBox.append(seg);
     } else if (!st.fromPushPull) {
-      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve && !st.wrap && !st.emboss ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; st.wrap = false; st.emboss = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', 'aria-pressed': st.revolve && !st.wrap && !st.emboss ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; st.wrap = false; st.emboss = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve && !st.wrap && !st.emboss ? 'true' : 'false' }); a.innerHTML = icon('lift') + esc(T('sk.step.titleExtrude')); a.onclick = () => { st.revolve = false; st.wrap = false; st.emboss = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve && !st.wrap && !st.emboss ? 'true' : 'false' }); b.innerHTML = icon('rotate') + esc(T('sk.step.titleRevolve')); b.onclick = () => { st.revolve = true; st.wrap = false; st.emboss = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b);
       if (st.emboss || ribTargets.length) {
-        const c = h('button', { type: 'button', id: 'st-mode-emboss', 'data-help': 'emboss', 'aria-pressed': st.emboss ? 'true' : 'false' }); c.innerHTML = icon('emboss') + 'Prägen'; c.onclick = () => { st.emboss = true; st.wrap = false; st.revolve = false; st.pickingFace = !st.embossFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const c = h('button', { type: 'button', id: 'st-mode-emboss', 'data-help': 'emboss', 'aria-pressed': st.emboss ? 'true' : 'false' }); c.innerHTML = icon('emboss') + esc(T('kind.emboss')); c.onclick = () => { st.emboss = true; st.wrap = false; st.revolve = false; st.pickingFace = !st.embossFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(c);
       }
       if (cylTargets.length) {
-        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + 'Wickeln'; wBtn.onclick = () => { st.wrap = true; st.emboss = false; st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + esc(T('kind.wrap')); wBtn.onclick = () => { st.wrap = true; st.emboss = false; st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(wBtn);
       }
       stepBox.append(seg);
     }
     if (st.wrap) {
       if (!cylTargets.length) {
-        stepBox.append(h('div', { class: 'hint-box' }, 'Für „Wickeln“ braucht es zuerst einen Körper mit einer Zylinderfläche.'));
+        stepBox.append(h('div', { class: 'hint-box' }, T('sk.step.wrapNeedCyl')));
       } else {
         if (!st.wrapTarget || !cylTargets.some((x) => x.id === st.wrapTarget)) {
           st.wrapTarget = cylTargets[cylTargets.length - 1].id;
@@ -4757,7 +4718,7 @@ const Sketch = (() => {
           st.wrapFace = cf ? Features.wrapTangentPlane(st.wrapTarget, cf.info, null).faceSpec : null;
         }
         stepBox.append(UI.selectField({
-          id: 'st-wrap-target', label: 'Zylinder-Körper', value: st.wrapTarget,
+          id: 'st-wrap-target', label: T('sk.step.wrapBody'), value: st.wrapTarget,
           options: cylTargets.map((x) => [x.id, Model.label(x)]),
           onChange: (v) => {
             st.wrapTarget = v;
@@ -4766,64 +4727,64 @@ const Sketch = (() => {
             renderStep(); updatePreview();
           },
         }));
-        const modeOpts = st.openOnly ? [['line', 'Linie für weitere Schritte']] : [['emboss', 'Prägung erhaben (+)'], ['deboss', 'Prägung vertieft (−)'], ['line', 'Linie für weitere Schritte']];
+        const modeOpts = st.openOnly ? [['line', T('sk.step.wrapLine')]] : [['emboss', T('sk.step.wrapEmboss')], ['deboss', T('sk.step.wrapDeboss')], ['line', T('sk.step.wrapLine')]];
         if (st.openOnly) st.wrapMode = 'line';
-        stepBox.append(UI.selectField({ id: 'st-wrap-mode', label: 'Art', value: st.wrapMode || 'emboss', options: modeOpts, onChange: (v) => { st.wrapMode = v; renderStep(); updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-wrap-mode', label: T('common.kind'), value: st.wrapMode || 'emboss', options: modeOpts, onChange: (v) => { st.wrapMode = v; renderStep(); updatePreview(); } }));
         if (st.wrapMode !== 'line') {
-          stepBox.append(UI.numField({ id: 'st-wrap-depth', label: st.wrapMode === 'deboss' ? 'Tiefe' : 'Höhe', value: st.wrapDepth ?? 2, min: 0.05, onCommit: (v) => { st.wrapDepth = v; updatePreview(); } }));
+          stepBox.append(UI.numField({ id: 'st-wrap-depth', label: st.wrapMode === 'deboss' ? T('param.d') : T('param.h'), value: st.wrapDepth ?? 2, min: 0.05, onCommit: (v) => { st.wrapDepth = v; updatePreview(); } }));
         }
-        stepBox.append(UI.numField({ id: 'st-wrap-angle', label: 'Startwinkel', value: st.wrapAngle ?? 0, unit: '°', onCommit: (v) => { st.wrapAngle = v; updatePreview(); } }));
-        stepBox.append(UI.numField({ id: 'st-wrap-shift', label: 'Axial verschieben', value: st.wrapShiftY ?? 0, onCommit: (v) => { st.wrapShiftY = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-wrap-angle', label: T('sk.step.wrapStartAng'), value: st.wrapAngle ?? 0, unit: '°', onCommit: (v) => { st.wrapAngle = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-wrap-shift', label: T('sk.step.wrapShift'), value: st.wrapShiftY ?? 0, onCommit: (v) => { st.wrapShiftY = v; updatePreview(); } }));
         const tmpW = stepItem();
         const aInfo = Model.wrapAngleInfo ? Model.wrapAngleInfo(tmpW, Model.vars(App.doc).v) : null;
         if (aInfo) {
           stepBox.append(h('div', { class: 'mini-row', id: 'st-wrap-info' },
-            h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
+            h('span', { class: 'grow' }, T('sk.step.wrapCircAng', { d: Units.fmtLenU(aInfo.radius * 2, 1) })),
             h('b', { class: 'mono' }, fmtAngleU(aInfo.deg))));
         }
       }
     } else if (st.emboss) {
       const msw = h('div', { class: 'role-switch' });
-      const m1 = h('button', { type: 'button', id: 'st-emb-emboss', 'aria-pressed': st.embossMode !== 'deboss' ? 'true' : 'false' }, 'Erhaben');
+      const m1 = h('button', { type: 'button', id: 'st-emb-emboss', 'aria-pressed': st.embossMode !== 'deboss' ? 'true' : 'false' }, T('sk.step.embossRaised'));
       m1.onclick = () => { st.embossMode = 'emboss'; renderStep(); updatePreview(); };
-      const m2 = h('button', { type: 'button', id: 'st-emb-deboss', 'aria-pressed': st.embossMode === 'deboss' ? 'true' : 'false' }, 'Vertieft');
+      const m2 = h('button', { type: 'button', id: 'st-emb-deboss', 'aria-pressed': st.embossMode === 'deboss' ? 'true' : 'false' }, T('sk.step.embossRecessed'));
       m2.onclick = () => { st.embossMode = 'deboss'; renderStep(); updatePreview(); };
       msw.append(m1, m2);
       stepBox.append(msw);
-      stepBox.append(UI.numField({ id: 'st-emb-h', label: 'Höhe', value: st.embossHeight ?? 1, min: 0.1, unit: 'mm', onCommit: (v) => { st.embossHeight = v; updatePreview(); } }));
+      stepBox.append(UI.numField({ id: 'st-emb-h', label: T('param.h'), value: st.embossHeight ?? 1, min: 0.1, unit: 'mm', onCommit: (v) => { st.embossHeight = v; updatePreview(); } }));
       const tgt = st.embossTarget ? Model.find(App.doc, st.embossTarget) : null;
-      stepBox.append(h('div', { class: 'mini-row', id: 'st-emb-face-info' }, h('span', { class: 'grow' }, st.embossFace && tgt ? `Fläche an „${Model.label(tgt.item)}“` : 'Noch keine Zielfläche gewählt')));
+      stepBox.append(h('div', { class: 'mini-row', id: 'st-emb-face-info' }, h('span', { class: 'grow' }, st.embossFace && tgt ? T('sk.step.embossFaceInfo', { name: Model.label(tgt.item) }) : T('sk.step.noTargetFace'))));
       const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' accent' : ''), id: 'st-emb-pick' });
-      pb.innerHTML = icon('cursor') + (st.pickingFace ? 'Fläche im Bild anklicken …' : st.embossFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+      pb.innerHTML = icon('cursor') + esc(T(st.pickingFace ? 'sk.step.pickFaceClick' : st.embossFace ? 'panel.ext.pickOtherFace' : 'panel.ext.pickFace'));
       pb.onclick = () => { st.pickingFace = !st.pickingFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); };
       stepBox.append(pb);
-      const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-emb-flip', checked: !!st.embossFlip }), 'Andere Seite');
+      const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-emb-flip', checked: !!st.embossFlip }), T('sk.panel.otherSide'));
       flp.querySelector('input').onchange = (e) => { st.embossFlip = e.target.checked; updatePreview(); };
       stepBox.append(flp);
     } else if (st.rib) {
       if (!ribTargets.length) {
-        stepBox.append(h('div', { class: 'hint-box' }, 'Für eine Rippe braucht es zuerst einen Körper im Projekt.'));
+        stepBox.append(h('div', { class: 'hint-box' }, T('sk.step.ribNeedBody')));
       } else {
         if (!st.ribTarget || !ribTargets.some((x) => x.id === st.ribTarget)) st.ribTarget = ribTargets[ribTargets.length - 1].id;
-        stepBox.append(UI.selectField({ id: 'st-rib-target', label: 'Zielkörper', value: st.ribTarget, options: ribTargets.map((x) => [x.id, Model.label(x)]), onChange: (v) => { st.ribTarget = v; updatePreview(); } }));
-        stepBox.append(UI.numField({ id: 'st-rib-t', label: 'Dicke', value: st.ribThickness, min: 0.1, onCommit: (v) => { st.ribThickness = v; updatePreview(); } }));
-        stepBox.append(UI.selectField({ id: 'st-rib-side', label: 'Lage zur Linie', value: st.ribSide || 'center', options: [['center', 'Mittig'], ['side1', 'Einseitig (Seite 1)'], ['side2', 'Einseitig (Seite 2)']], onChange: (v) => { st.ribSide = v; updatePreview(); } }));
-        stepBox.append(UI.selectField({ id: 'st-rib-dir', label: 'Richtung', value: st.ribDir || 'normal', options: [['normal', 'Senkrecht zur Skizze (Steg)'], ['parallel', 'In der Skizzenebene (Stütze)']], onChange: (v) => { st.ribDir = v; updatePreview(); } }));
-        stepBox.append(UI.numField({ id: 'st-rib-draft', label: 'Schräge (optional)', value: st.ribDraft ?? 0, unit: '°', min: 0, onCommit: (v) => { st.ribDraft = v; updatePreview(); } }));
-        stepBox.append(UI.numField({ id: 'st-rib-depth', label: 'Tiefe (0 = bis zur Wand)', value: st.ribDepth ?? 0, min: 0, onCommit: (v) => { st.ribDepth = v; updatePreview(); } }));
-        const fl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-rib-flip', checked: !!st.ribFlip }), 'Richtung umkehren');
+        stepBox.append(UI.selectField({ id: 'st-rib-target', label: T('ctx.targetBody'), value: st.ribTarget, options: ribTargets.map((x) => [x.id, Model.label(x)]), onChange: (v) => { st.ribTarget = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-rib-t', label: T('common.thickness'), value: st.ribThickness, min: 0.1, onCommit: (v) => { st.ribThickness = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-rib-side', label: T('sk.step.ribSide'), value: st.ribSide || 'center', options: [['center', T('panel.ext.wallCenter')], ['side1', T('sk.step.ribSide1')], ['side2', T('sk.step.ribSide2')]], onChange: (v) => { st.ribSide = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-rib-dir', label: T('panel.gap.dir'), value: st.ribDir || 'normal', options: [['normal', T('sk.step.ribDirNormal')], ['parallel', T('sk.step.ribDirPar')]], onChange: (v) => { st.ribDir = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-rib-draft', label: T('sk.step.ribDraft'), value: st.ribDraft ?? 0, unit: '°', min: 0, onCommit: (v) => { st.ribDraft = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-rib-depth', label: T('sk.step.ribDepth'), value: st.ribDepth ?? 0, min: 0, onCommit: (v) => { st.ribDepth = v; updatePreview(); } }));
+        const fl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-rib-flip', checked: !!st.ribFlip }), T('sk.step.ribFlip'));
         fl.querySelector('input').onchange = (e) => { st.ribFlip = e.target.checked; updatePreview(); };
         stepBox.append(fl);
       }
     } else if (st.sweep) {
-      stepBox.append(h('p', null, 'Zieht ein Rohr Ø 6 mm entlang des offenen Pfads. Form, Größe und Wand kannst du danach rechts einstellen.'));
+      stepBox.append(h('p', null, T('sk.step.sweepDesc')));
     } else if (!st.revolve) {
       const ext = st.extent === 'toNext' || st.extent === 'toFace' ? st.extent : 'dist';
       const exF = UI.selectField({
         id: 'st-extent',
-        label: 'Bis',
+        label: T('panel.ext.to'),
         value: ext,
-        options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+        options: [['dist', T('panel.ext.dist')], ['toNext', T('panel.ext.toNext')], ['toFace', T('panel.ext.toFace')]],
         onChange: (v) => {
           st.extent = v;
           if (v === 'dist') {
@@ -4843,15 +4804,15 @@ const Sketch = (() => {
       exF.setAttribute('data-help', 'extrudeToFace');
       stepBox.append(exF);
       if (ext === 'dist') {
-        stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-dist', label: T('param.h'), value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
       }
       const dirOpts = ext === 'dist'
-        ? [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']]
-        : [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten']];
-      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir === 'both' && ext !== 'dist' ? 'normal' : st.dir, options: dirOpts, onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+        ? [['normal', T(S.ctx.targetId ? 'sk.step.dirOutBody' : 'sk.step.dirUp')], ['reverse', T(S.ctx.targetId ? 'sk.step.dirInHole' : 'sk.step.dirDown')], ['both', T('sk.step.dirBoth')]]
+        : [['normal', T(S.ctx.targetId ? 'sk.step.dirOutBody' : 'sk.step.dirUp')], ['reverse', T(S.ctx.targetId ? 'sk.step.dirInHole' : 'sk.step.dirDown')]];
+      stepBox.append(UI.selectField({ id: 'st-dir', label: T('panel.gap.dir'), value: st.dir === 'both' && ext !== 'dist' ? 'normal' : st.dir, options: dirOpts, onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
       if (ext === 'toFace') {
         const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-pick-face' });
-        pb.innerHTML = icon('pointer') + (st.pickingFace ? 'Klick auf eine Fläche …' : st.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.innerHTML = icon('pointer') + esc(T(st.pickingFace ? 'sk.step.clickFaceWait' : st.toFace ? 'panel.ext.pickOtherFace' : 'panel.ext.pickFace'));
         pb.onclick = () => {
           st.pickingFace = !st.pickingFace;
           Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : '';
@@ -4865,28 +4826,28 @@ const Sketch = (() => {
         updateStepExtInfo();
       }
       if (!st.openOnly && !st.fromPushPull) {
-        const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), 'Dünne Wand');
+        const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), T('sk.step.titleThin'));
         tl.querySelector('input').onchange = (e) => { st.thin = e.target.checked; renderStep(); updatePreview(); };
         stepBox.append(tl);
       }
       if (st.thin) {
-        stepBox.append(UI.numField({ id: 'st-wall', label: 'Wandstärke', value: st.wall, min: 0.1, onCommit: (v) => { st.wall = v; updatePreview(); } }));
-        stepBox.append(UI.selectField({ id: 'st-wall-side', label: 'Wand-Lage', value: st.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => { st.wallSide = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-wall', label: T('param.wall'), value: st.wall, min: 0.1, onCommit: (v) => { st.wall = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-wall-side', label: T('panel.ext.wallSide'), value: st.wallSide || 'center', options: [['center', T('panel.ext.wallCenter')], ['in', T('panel.ext.wallIn')], ['out', T('panel.ext.wallOut')]], onChange: (v) => { st.wallSide = v; updatePreview(); } }));
       }
     } else {
       const sel = S.ents.find((x) => x.id === S.sel && x.type === 'line');
-      const opts = [['y', 'Um die senkrechte Achse'], ['x', 'Um die waagerechte Achse']];
-      if (S.ents.some((x) => x.type === 'line')) opts.push(['line', 'Um eine Linie der Skizze']);
-      if (typeof Datums !== 'undefined') for (const da of Datums.axes()) if (da.axis) opts.push(['da:' + da.id, 'Bezugsachse „' + da.name + '“']);
-      stepBox.append(UI.selectField({ id: 'st-axis', label: 'Achse', value: st.axis, options: opts, onChange: (v) => { st.axis = v; if (v === 'line') { const l = S.ents.find((x) => x.type === 'line' && x.con) || S.ents.find((x) => x.type === 'line'); st.axisLine = l ? l.id : null; } updatePreview(); renderStep(); } }));
+      const opts = [['y', T('sk.step.revAxisY')], ['x', T('sk.step.revAxisX')]];
+      if (S.ents.some((x) => x.type === 'line')) opts.push(['line', T('sk.step.revAxisLine')]);
+      if (typeof Datums !== 'undefined') for (const da of Datums.axes()) if (da.axis) opts.push(['da:' + da.id, T('panel.rev.axisDatum', { name: da.name })]);
+      stepBox.append(UI.selectField({ id: 'st-axis', label: T('sk.step.revAxis'), value: st.axis, options: opts, onChange: (v) => { st.axis = v; if (v === 'line') { const l = S.ents.find((x) => x.type === 'line' && x.con) || S.ents.find((x) => x.type === 'line'); st.axisLine = l ? l.id : null; } updatePreview(); renderStep(); } }));
       if (st.axis === 'line') {
         const lines = S.ents.filter((x) => x.type === 'line');
-        stepBox.append(UI.selectField({ id: 'st-line', label: 'Linie', value: st.axisLine, options: lines.map((l, i) => [l.id, `Linie ${i + 1} (${Units.fmtLenU(SK.d2(l.a, l.b), 1)})${l.con ? ' – Hilfslinie' : ''}`]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-line', label: T('sk.panel.ent.line'), value: st.axisLine, options: lines.map((l, i) => [l.id, T('sk.step.revLineItem', { n: i + 1, len: Units.fmtLenU(SK.d2(l.a, l.b), 1), con: l.con ? T('sk.step.revLineCon') : '' })]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
       }
       const rdir = st.revDir || 'normal';
       const rdirSel = UI.selectField({
-        id: 'st-rev-dir', label: 'Richtung', value: rdir,
-        options: [['normal', 'Eine Richtung'], ['reverse', 'Umgekehrt'], ['both', 'Symmetrisch (beidseitig gleich)'], ['two', 'Beidseitig verschieden'], ['toFace', 'Bis zu gewählter Fläche']],
+        id: 'st-rev-dir', label: T('panel.gap.dir'), value: rdir,
+        options: [['normal', T('panel.rev.dirNormal')], ['reverse', T('panel.rev.dirReverse')], ['both', T('panel.rev.dirBoth')], ['two', T('panel.rev.dirTwo')], ['toFace', T('panel.rev.dirToFace')]],
         onChange: (v) => {
           st.revDir = v;
           if (v === 'two' && st.angle >= 359) { st.angle = 90; st.angle2 = 90; }
@@ -4898,23 +4859,23 @@ const Sketch = (() => {
       rdirSel.setAttribute('data-help', 'revolveOptions');
       stepBox.append(rdirSel);
       if (rdir !== 'toFace') {
-        const angLbl = rdir === 'both' ? 'Gesamtwinkel' : rdir === 'two' ? 'Winkel Seite 1' : 'Winkel';
+        const angLbl = rdir === 'both' ? T('panel.rev.totalAngle') : rdir === 'two' ? T('panel.rev.angle1') : T('common.angle');
         const minA = rdir === 'two' ? 0 : 0.1;
         stepBox.append(UI.numField({ id: 'st-angle', label: angLbl, value: st.angle, unit: '°', min: minA, onCommit: (v) => { st.angle = clamp(v, minA, 360); renderStep(); updatePreview(); } }));
-        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(st.angle / 2)}`)));
-        if (rdir === 'two') stepBox.append(UI.numField({ id: 'st-angle2', label: 'Winkel Seite 2', value: st.angle2, unit: '°', min: 0, onCommit: (v) => { st.angle2 = clamp(v, 0, 360); updatePreview(); } }));
+        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, T('panel.rev.sym')), h('b', { class: 'mono' }, T('panel.rev.perSide', { v: fmtAngleU(st.angle / 2) }))));
+        if (rdir === 'two') stepBox.append(UI.numField({ id: 'st-angle2', label: T('panel.rev.angle2'), value: st.angle2, unit: '°', min: 0, onCommit: (v) => { st.angle2 = clamp(v, 0, 360); updatePreview(); } }));
       } else {
-        stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.revToFace ? `${st.revToFace.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${st.revToFace.name || 'Fläche'}“` : 'Noch keine Fläche gewählt')));
+        stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.revToFace ? T('panel.rev.faceTarget', { kind: T(st.revToFace.kind === 'datum' ? 'panel.rev.datumKind' : 'panel.rev.faceKind'), name: st.revToFace.name || T('panel.rev.faceKind'), deg: '' }) : T('panel.rev.noFace'))));
         const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-rev-face-pick' });
-        pb.innerHTML = icon('cursor') + (st.pickingFace ? 'Fläche im Bild anklicken …' : st.revToFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.innerHTML = icon('cursor') + esc(T(st.pickingFace ? 'sk.step.pickFaceClick' : st.revToFace ? 'panel.ext.pickOtherFace' : 'panel.ext.pickFace'));
         pb.onclick = () => { st.pickingFace = !st.pickingFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); };
         stepBox.append(pb);
         const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
         if (dats.length) {
           stepBox.append(UI.selectField({
-            id: 'st-rev-face-datum', label: 'Bezugsebene als Ziel',
+            id: 'st-rev-face-datum', label: T('panel.rev.datumGoal'),
             value: st.revToFace && st.revToFace.kind === 'datum' ? st.revToFace.datumId : '',
-            options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
+            options: [['', T('panel.rev.chooseDatum')], ...dats.map((d) => [d.id, d.name])],
             onChange: (v) => {
               const d = v ? Datums.find(v) : null; if (!d || !d.plane) return;
               const inv = S.W.clone().invert(), r6 = (a) => a.map((x) => round(x, 6));
@@ -4928,19 +4889,19 @@ const Sketch = (() => {
             },
           }));
         }
-        const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-rev-face-flip', checked: !!st.toFaceFlip }), 'Andere Richtung');
+        const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-rev-face-flip', checked: !!st.toFaceFlip }), T('panel.rev.otherDir'));
         flp.querySelector('input').onchange = (e) => { st.toFaceFlip = e.target.checked; updatePreview(); };
         stepBox.append(flp);
-        if (st.pickingFace) UI.hint('<b>Zielfläche wählen:</b> Klick auf eine ebene Fläche eines Körpers oder eine Bezugsebene.');
+        if (st.pickingFace) UI.hint(T('sk.step.revPickHint'));
       }
     }
     if (!st.sweep && !st.rib && !st.wrap && !st.emboss) {
       const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
-      stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
+      stepBox.append(h('p', null, T(hole ? 'sk.step.resHole' : S.ctx.targetId ? 'sk.step.resJoin' : 'sk.step.resNew')));
     }
     const row = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } });
-    const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? 'Abbrechen' : icon('undo') + 'Skizze'; back.dataset.tip = st.fromPushPull ? '' : 'Zurück zur Skizze'; back.onclick = () => stepBack();
-    const ok = h('button', { type: 'button', class: 'btn primary', disabled: (st.rib && !ribTargets.length) || (st.wrap && !cylTargets.length) || (st.emboss && (!st.embossTarget || !st.embossFace)) }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
+    const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? esc(T('common.cancel')) : icon('undo') + esc(T('sk.bar.title')); back.dataset.tip = st.fromPushPull ? '' : T('sk.step.backTip'); back.onclick = () => stepBack();
+    const ok = h('button', { type: 'button', class: 'btn primary', disabled: (st.rib && !ribTargets.length) || (st.wrap && !cylTargets.length) || (st.emboss && (!st.embossTarget || !st.embossFace)) }); ok.innerHTML = icon('check') + esc(T('common.done')); ok.onclick = () => stepOK();
     row.append(back, ok); stepBox.append(row);
   }
   function stepItem() {
@@ -5071,7 +5032,7 @@ const Sketch = (() => {
     if (L < 6) { dx = 0; dy = -1; } else { dx /= L; dy /= L; }
     const ang = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
     // Pfeil im Bildschirm: zeigt immer in Zugrichtung, gut greifbar
-    arrow = h('div', { class: 'pull-arrow', role: 'slider', 'aria-label': 'Höhe ziehen', 'data-tip': 'Ziehen ändert die Höhe' });
+    arrow = h('div', { class: 'pull-arrow', role: 'slider', 'aria-label': T('sk.step.arrowAria'), 'data-tip': T('sk.step.arrowTip') });
     arrow.innerHTML = '<svg viewBox="0 0 30 58" aria-hidden="true"><circle cx="15" cy="50" r="5.5" class="pa-base"/><path d="M15 46V20" class="pa-shaft"/><path d="M15 3 26 21H4z" class="pa-head"/></svg>';
     arrow.style.left = a.x + 'px'; arrow.style.top = a.y + 'px';
     arrow.style.transform = `translate(-50%, -86%) rotate(${ang}deg)`;
@@ -5112,7 +5073,7 @@ const Sketch = (() => {
         Viewer.highlightFace('hover', null, null);
         renderStep(); updatePreview();
       } else {
-        UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' });
+        UI.toast(T('sk.toast.stepPickBodyFace'), { icon: 'info' });
       }
       return;
     }
@@ -5130,7 +5091,7 @@ const Sketch = (() => {
         const pickW = hit.point ? hit.point.clone() : oW.clone();
         const oL = oW.applyMatrix4(inv).toArray(), nL = nW.transformDirection(inv).normalize().toArray(), pickL = pickW.applyMatrix4(inv).toArray();
         const tgt = Model.find(App.doc, hit.id);
-        S.step.revToFace = { kind: 'face', targetId: hit.id, c: r6(fi.c), n: r6(fi.n), o: r6(oL), fn: r6(nL), name: tgt ? Model.label(tgt.item) : 'Fläche' };
+        S.step.revToFace = { kind: 'face', targetId: hit.id, c: r6(fi.c), n: r6(fi.n), o: r6(oL), fn: r6(nL), name: tgt ? Model.label(tgt.item) : T('panel.rev.faceKind') };
         const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
         S.step.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, pickL);
         S.step.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
@@ -5148,13 +5109,13 @@ const Sketch = (() => {
         renderStep(); updatePreview();
         return;
       }
-      UI.toast('Bitte wähle eine ebene Fläche eines Körpers oder eine Bezugsebene.', { icon: 'info' });
+      UI.toast(T('sk.toast.stepPickPlaneOrDatum'), { icon: 'info' });
       return;
     }
     if (S.step.pickingFace) {
       e.preventDefault(); e.stopPropagation();
       const ref = Features.pickTargetFaceAt(e.clientX, e.clientY, new Set(['__preview']));
-      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      if (!ref) { UI.toast(T('sk.toast.stepPickTargetOrDatum'), { icon: 'info' }); return; }
       S.step.toFace = ref;
       S.step.pickingFace = false;
       Viewer.canvas.style.cursor = '';
@@ -5168,7 +5129,7 @@ const Sketch = (() => {
     const r = SK.regionAt(SK.regions(S.ents), uv);
     if (r) {
       const st = S.step; const i = st.sel.indexOf(r.key);
-      if (i >= 0) { if (st.sel.length > 1) st.sel.splice(i, 1); else UI.toast('Mindestens eine Fläche muss gewählt bleiben.', { icon: 'info' }); }
+      if (i >= 0) { if (st.sel.length > 1) st.sel.splice(i, 1); else UI.toast(T('sk.toast.stepNeedOneRegion'), { icon: 'info' }); }
       else st.sel.push(r.key);
       render(); updatePreview();
     }
@@ -5203,13 +5164,13 @@ const Sketch = (() => {
     S.step = null; App.extra = []; App.rebuild();
     if (stepBox) { stepBox.remove(); stepBox = null; }
     { const b = SK.bounds([...S.ents, ...S.refs]); const size = b ? Math.max(40, Math.max(b[2] - b[0], b[3] - b[1]) * 0.75) : 70; const c2 = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0]; Viewer.lookAtPlane(toWorld(c2[0], c2[1]).toArray(), S.F.n.toArray(), S.F.x.toArray(), size); }
-    placeArrow(); showBar(); Panels.renderRight(); UI.hint(HINTS[S.tool]); render();
+    placeArrow(); showBar(); Panels.renderRight(); UI.hint(hintFor(S.tool)); render();
   }
   function stepOK() {
-    if (S.step && S.step.rib && !S.step.ribTarget) { UI.toast('Für eine Rippe braucht es zuerst einen Zielkörper.', { kind: 'bad' }); return; }
-    if (S.step && S.step.wrap && !S.step.wrapTarget) { UI.toast('Für „Wickeln“ braucht es zuerst einen Zylinder-Körper.', { kind: 'bad' }); return; }
-    if (S.step && S.step.emboss && (!S.step.embossTarget || !S.step.embossFace)) { UI.toast('Wähle zuerst eine Zielfläche für das Prägen.', { kind: 'bad' }); return; }
-    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib && !S.step.wrap && !S.step.emboss) { UI.toast('Klick zuerst eine Zielfläche im Bild an.', { icon: 'info' }); return; }
+    if (S.step && S.step.rib && !S.step.ribTarget) { UI.toast(T('sk.toast.stepNeedRibTarget'), { kind: 'bad' }); return; }
+    if (S.step && S.step.wrap && !S.step.wrapTarget) { UI.toast(T('sk.toast.stepNeedWrapTarget'), { kind: 'bad' }); return; }
+    if (S.step && S.step.emboss && (!S.step.embossTarget || !S.step.embossFace)) { UI.toast(T('sk.toast.stepNeedEmbossFace'), { kind: 'bad' }); return; }
+    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib && !S.step.wrap && !S.step.emboss) { UI.toast(T('sk.toast.stepNeedTargetFace'), { icon: 'info' }); return; }
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
@@ -5223,14 +5184,14 @@ const Sketch = (() => {
     App.select([top ? top.id : it.id]);
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
-    UI.toast(it.kind === 'wrap' ? 'Skizze um den Zylinder gewickelt. Art, Tiefe und Winkel kannst du rechts jederzeit ändern.' : it.kind === 'emboss' ? 'Auf Fläche geprägt. Art und Höhe kannst du rechts jederzeit ändern.' : it.kind === 'rib' ? 'Rippe erstellt und mit dem Körper vereinigt. Dicke, Lage und Schräge kannst du rechts jederzeit ändern.' : it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
+    UI.toast(T(it.kind === 'wrap' ? 'sk.toast.stepWrapOk' : it.kind === 'emboss' ? 'sk.toast.stepEmbossOk' : it.kind === 'rib' ? 'sk.toast.stepRibOk' : it.kind === 'sweep' ? 'sk.toast.stepSweepOk' : it.role === 'hole' ? 'sk.toast.stepHoleOk' : 'sk.toast.stepDoneOk'), { icon: 'check' });
   }
   // ---------- Beenden ----------
   function cancel(silent) {
     if (!S) return;
     App.extra = []; App.rebuild();
     finishSession();
-    if (!silent) UI.toast('Skizze verworfen.', { icon: 'close', ms: 1800 });
+    if (!silent) UI.toast(T('sk.toast.cancelled'), { icon: 'close', ms: 1800 });
   }
   function finishSession() {
     if (!S) return;
@@ -5275,6 +5236,13 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  function refreshUI() {
+    if (!S) return;
+    if (S.step) { renderStep(); return; }
+    showBar();
+    UI.hint(hintFor(S.tool));
+    Panels.renderRight();
+  }
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

@@ -15262,6 +15262,144 @@ def t_a071_zeichnung_dxf_png(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a074_uebersetzbare_oberflaeche_2(p):
+    # 1. Test-Modus: Markierung um alle Sammlungstexte, HTML-Schlüssel, Unbekannte unberührt, sauber aus
+    p.empty()
+    tm = p.ev("""
+      I18n.setTestMode(true);
+      const a = T('tool.body');
+      const b = T('ctx.edgesCount', { n: 2 });
+      const c = T('unbekannt.a074');
+      I18n.setTestMode(false);
+      const d = T('tool.body');
+      return { a, b, c, d };
+    """)
+    ok1 = (
+        tm['a'] == '⟦Körper⟧'
+        and tm['b'] == '⟦2 Kanten⟧'
+        and tm['c'] == 'unbekannt.a074'
+        and tm['d'] == 'Körper'
+    )
+
+    SCAN_JS = """
+      const root = document.body;
+      const techRe = /^(?:Tracery|OpenCascade|replicad|three\\.js|LGPL|MIT|CAD|CNC|DPI|PDF|PNG|SVG|DXF|STEP|IGES|BREP|STL|3MF|OBJ|GLB|MTL|CSV|ZIP|PLA|PETG|ABS|ASA|TPU|PA|PC|PMMA|H7|g6|ISO|DIN|UNC|R12|XY|XZ|YZ|X|Y|Z|mm|cm|m|in|px|ms|KB|MB|GB|g|kg|Esc|Tab|Enter|Shift|Alt|Ctrl|Del|Strg|Entf|Umschalt|F[1-9]|F1[0-2]|M\\d+(?:×[\\d.,]+)?|A[0-4]|Ø\\d*|\\d+[A-Za-z]?)$/i;
+      const bad = [];
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = w.nextNode())) {
+        const el = node.parentElement;
+        if (!el) continue;
+        const tag = el.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || el.closest('svg, canvas, .sr-only')) continue;
+        // Prüfen, ob Element tatsächlich sichtbar ist
+        let cur = el, hidden = false;
+        while (cur && cur !== document.body) {
+          if (cur.hasAttribute('hidden') || cur.classList.contains('hidden')) { hidden = true; break; }
+          const cs = getComputedStyle(cur);
+          if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) { hidden = true; break; }
+          cur = cur.parentElement;
+        }
+        if (hidden) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        const csEl = getComputedStyle(el);
+        if (csEl.fontSize === '0px') continue;
+        // Markierte Segmente ⟦...⟧ entfernen; übrig bleiben nur unübersetzte Texte
+        const raw = (node.textContent || '').trim();
+        if (!raw) continue;
+        const stripped = raw.replace(/⟦[\\s\\S]*?⟧/g, ' ').trim();
+        if (!stripped) continue;
+        // Wörter mit mindestens 2 Buchstaben suchen, technische Kürzel/Einheiten ignorieren
+        const words = stripped.match(/[A-Za-zÄÖÜäöüß]{2,}/g) || [];
+        const rest = words.filter(wd => !techRe.test(wd));
+        if (rest.length) {
+          bad.push({ tag: el.id ? '#' + el.id : el.className || tag, raw: stripped.slice(0, 80), words: rest });
+        }
+      }
+      return bad;
+    """
+
+    try:
+        p.ev("I18n.setTestMode(true);")
+        p.wait(300)
+
+        # 2. Startseite (offen)
+        p.ev("Start.show()"); p.wait(300)
+        bad_start = p.ev(SCAN_JS)
+        p.ev("Start.hide()"); p.wait(200)
+        ok2 = len(bad_start) <= 5
+
+        # 3. 3D-Modell (Profi & Einfach) mit gewähltem Quader → Panel rechts, Statusleiste, Kontextleiste, Werkzeuge
+        p.ev("ViewPrefs.setLevel('pro'); Actions.addPrimitive('box')")
+        warte_rechnen(p, 20)
+        p.wait(300)
+        bad_pro = p.ev(SCAN_JS)
+
+        p.ev("ViewPrefs.setLevel('simple');")
+        p.wait(300)
+        bad_simple = p.ev(SCAN_JS)
+        ok3 = len(bad_pro) <= 5 and len(bad_simple) <= 5
+
+        # 4. Offene Skizze (Profi & Einfach) mit Rechteck
+        p.ev("ViewPrefs.setLevel('pro'); App.clearSelection(); Sketch.startOnPlane('XY');")
+        p.wait(800)
+        SS(p, "S.ents.push({ id: 'R1', type: 'rect', a: [0, 0], b: [30, 20] }); S.sel = ['R1']; Sketch.render(); Panels.renderRight();")
+        p.wait(300)
+        bad_sk_pro = p.ev(SCAN_JS)
+
+        p.ev("ViewPrefs.setLevel('simple');")
+        p.wait(300)
+        bad_sk_simple = p.ev(SCAN_JS)
+        p.ev("Sketch.cancel(true); ViewPrefs.setLevel('pro');")
+        p.wait(250)
+        ok4 = len(bad_sk_pro) <= 5 and len(bad_sk_simple) <= 5
+
+        # 5. Zeichnung + Dialoge (Einstellungen, Export, Tastenkürzel)
+        p.ev("Commands.setMode('drawing');")
+        warte_rechnen(p, 20)
+        p.wait(350)
+        bad_draw = p.ev(SCAN_JS)
+        p.ev("Commands.setMode('model');")
+        p.wait(250)
+
+        p.ev("ViewPrefs.dialog();")
+        p.wait(300)
+        bad_dlg_prefs = p.ev(SCAN_JS)
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        p.ev("Print.exportDialog();")
+        p.wait(300)
+        bad_dlg_exp = p.ev(SCAN_JS)
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        p.ev("Commands.showKeys();")
+        p.wait(300)
+        bad_dlg_keys = p.ev(SCAN_JS)
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        ok5 = (
+            len(bad_draw) <= 5
+            and len(bad_dlg_prefs) <= 5
+            and len(bad_dlg_exp) <= 5
+            and len(bad_dlg_keys) <= 5
+        )
+        if not (ok1 and ok2 and ok3 and ok4 and ok5):
+            print('A-074 SCAN DETAILS:', {
+                'start': bad_start, 'pro': bad_pro, 'simple': bad_simple,
+                'sk_pro': bad_sk_pro, 'sk_simple': bad_sk_simple,
+                'draw': bad_draw, 'prefs': bad_dlg_prefs,
+                'export': bad_dlg_exp, 'keys': bad_dlg_keys,
+            })
+    finally:
+        p.ev("try { while (document.querySelector('.modal-backdrop, .modal')) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch(_){}")
+        p.ev("try { if (Sketch.active) Sketch.cancel(true); if (App.mode !== 'model') Commands.setMode('model'); } catch(_){}")
+        p.ev("I18n.setTestMode(false); ViewPrefs.setLevel('pro');")
+        p.wait(200)
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- [A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12) ----------
 def t_a070_positionsnummern_stueckliste(p):
     # 1. 3 verschiedene Teile, eines zweimal (4 Körper gesamt) → Tabelle mit 3 Zeilen (Menge 2 beim doppelten) & 3 Positionsnummern im Bild
@@ -15927,6 +16065,155 @@ def t_a075_projekt_tabs(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-077] Große Modelle, Schritt 1: nur neu rechnen, was sich geändert hat (PL-04) ----------
+def t_a077_nur_geandertes_rechnen(p):
+    p.empty()
+    p.ev("""
+    App.change('3 Körper anlegen', (d) => {
+      const b1 = Model.newItem('box', { w: 20, d: 20, h: 15 }, { name: 'Klotz 1' });
+      b1.t.x = -40;
+      const b2 = Model.newItem('cylinder', { d: 18, h: 25 }, { name: 'Zylinder 2' });
+      b2.t.x = 0;
+      const sk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [
+          { id: 'r1', type: 'rect', a: [-10, -7.5], b: [10, 7.5] },
+        ],
+        dims: [],
+        cons: [],
+      };
+      const b3 = Model.newItem('extrude', { sketch: sk, dist: 10, dir: 'normal' }, { name: 'Skizzenkörper 3' });
+      b3.t.x = 40;
+      d.items.push(b1, b2, b3);
+    });
+    """)
+    warte_rechnen(p)
+    ids = p.ev("return App.doc.items.map(x => x.id)")
+    id1, id2, id3 = ids
+    st1 = p.ev("return Kernel.stats()")
+    fp1_before = p.ev("return [App.stepFingerprint(arg[0]), App.stepFingerprint(arg[1]), App.stepFingerprint(arg[2])]", ids)
+    bb1 = p.ev("return arg.map(id => App.results.get(id).data.bbox)", ids)
+    ok1 = (
+        len(ids) == 3
+        and st1['buildsByItem'].get(id1) == 1
+        and st1['buildsByItem'].get(id2) == 1
+        and st1['buildsByItem'].get(id3) == 1
+        and all(bool(x) for x in fp1_before)
+        and len(set(fp1_before)) == 3
+        and abs((bb1[0][5] - bb1[0][2]) - 15) < 0.1
+        and abs((bb1[1][5] - bb1[1][2]) - 25) < 0.1
+        and abs((bb1[2][5] - bb1[2][2]) - 10) < 0.1
+    )
+
+    # Maß direkt an Körper 3 ändern → Körper 1 & 2 dürfen nicht neu gerechnet werden
+    p.ev("App.change('Höhe Körper 3 auf 35', d => { d.items[2].p.dist = 35; })")
+    warte_rechnen(p)
+    st2 = p.ev("return Kernel.stats()")
+    fp2 = p.ev("return [App.stepFingerprint(arg[0]), App.stepFingerprint(arg[1]), App.stepFingerprint(arg[2])]", ids)
+    bb2 = p.ev("return arg.map(id => App.results.get(id).data.bbox)", ids)
+    ok2 = (
+        st2['buildsByItem'].get(id1) == 1
+        and st2['buildsByItem'].get(id2) == 1
+        and st2['buildsByItem'].get(id3) == 2
+        and set(st2['lastEval']['rebuilt']) == {id3}
+        and set(st2['lastEval']['cached']) == {id1, id2}
+        and fp2[0] == fp1_before[0]
+        and fp2[1] == fp1_before[1]
+        and fp2[2] != fp1_before[2]
+        and abs((bb2[0][5] - bb2[0][2]) - 15) < 0.1
+        and abs((bb2[1][5] - bb2[1][2]) - 25) < 0.1
+        and abs((bb2[2][5] - bb2[2][2]) - 35) < 0.1
+    )
+
+    # Parameter-Formel an Körper 3 anbinden und Parameter ändern + Zeitleiste prüfen
+    p.ev("""
+    App.change('Parameter Hoehe3', d => {
+      d.params.push({ id: 'par_hoehe3', name: 'Hoehe3', expr: '50' });
+      d.items[2].p.dist = 'Hoehe3';
+    });
+    """)
+    warte_rechnen(p)
+    p.ev("App.change('Hoehe3 auf 65', d => { d.params[0].expr = '65'; })")
+    warte_rechnen(p)
+    st3 = p.ev("return Kernel.stats()")
+    bb3_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    p.wait(200)
+    chips = p.ev("""
+    return [...document.querySelectorAll('.tl-chip')].map(el => ({
+      cache: el.dataset.cache || '',
+      fp: el.dataset.fp || '',
+      tip: el.dataset.tip || '',
+    }));
+    """)
+    ok3 = (
+        st3['buildsByItem'].get(id1) == 1
+        and st3['buildsByItem'].get(id2) == 1
+        and st3['buildsByItem'].get(id3) == 4
+        and abs(bb3_h - 65) < 0.1
+        and len(chips) == 3
+        and chips[0]['cache'] == 'hit' and 'aus Speicher' in chips[0]['tip']
+        and chips[1]['cache'] == 'hit' and 'aus Speicher' in chips[1]['tip']
+        and chips[2]['cache'] == 'rebuilt' and 'neu gerechnet' in chips[2]['tip']
+        and all(bool(c['fp']) for c in chips)
+    )
+
+    # Abhängiger Schritt 4 (Boolesch-Abzug auf Körper 3): bei Änderung an Körper 3 rechnen 3 & 4 neu, 1 & 2 nicht
+    p.ev("""
+    App.change('Schnittkörper 4', d => {
+      const c4 = Model.newItem('box', { w: 6, d: 6, h: 100 }, { name: 'Lochklotz 4' });
+      c4.t.x = 40;
+      c4.t.z = -5;
+      c4.op = { type: 'cut', target: d.items[2].id };
+      d.items.push(c4);
+    });
+    """)
+    warte_rechnen(p)
+    id4 = p.ev("return App.doc.items[3].id")
+    st4_before = p.ev("return Kernel.stats()")
+    p.ev("App.change('Hoehe3 auf 80', d => { d.params[0].expr = '80'; })")
+    warte_rechnen(p)
+    st4_after = p.ev("return Kernel.stats()")
+    bb4_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    vol3 = p.ev("return Mass.measure().then(r => (r.parts || []).find(x => x.id === arg).volume)", id3)
+    ok4 = (
+        st4_after['buildsByItem'].get(id1) == 1
+        and st4_after['buildsByItem'].get(id2) == 1
+        and st4_after['buildsByItem'].get(id3) == st4_before['buildsByItem'].get(id3) + 1
+        and st4_after['buildsByItem'].get(id4) == st4_before['buildsByItem'].get(id4) + 1
+        and abs(bb4_h - 80) < 0.1
+        and abs(vol3 - (20 * 15 * 80 - 6 * 6 * 80)) < 5
+    )
+
+    # Rückgängig nutzt gespeichertes Ergebnis ohne Neuberechnung
+    reb_before_undo = st4_after['totalRebuilds']
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    st5 = p.ev("return Kernel.stats()")
+    bb5_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    ok5 = (
+        st5['totalRebuilds'] == reb_before_undo
+        and st5['lastEval']['rebuilt'] == []
+        and abs(bb5_h - 65) < 0.1
+    )
+
+    # Zeitleisten-Marker zurückrollen und wieder vorrollen ohne Neuberechnung
+    p.ev("Timeline.setMarker(2)")
+    for _ in range(30):
+        p.wait(250)
+        if p.ev("return !App.busy && App.results.size === 2"):
+            break
+    p.ev("Timeline.setMarker(4)")
+    warte_rechnen(p)
+    st6 = p.ev("return Kernel.stats()")
+    bb6_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    ok6 = (
+        st6['totalRebuilds'] == reb_before_undo
+        and st6['lastEval']['rebuilt'] == []
+        and abs(bb6_h - 65) < 0.1
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16104,9 +16391,11 @@ TESTS = [
     ('[A-072] Zeichnung merkt Modelländerungen: verlorene Maße rot & in Liste, Längenmaß aktualisiert, neu zuordnen', t_a072_zeichnung_modellaenderung),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
+    ('[A-074] Übersetzbare Oberfläche, Schritt 2: Test-Modus & vollständige DOM-Abdeckung', t_a074_uebersetzbare_oberflaeche_2),
     ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
     ('[A-076] Kopieren zwischen Projekten: Quader mit Bohrung in Tab 1 → Tab 2 (Volumen, Farbe, Werkstoff, Schritte, feste Form, Rückgängig)', t_a076_kopieren_projekte),
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
+    ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

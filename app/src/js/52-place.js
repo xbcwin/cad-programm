@@ -353,8 +353,8 @@ const Place = (() => {
       }
       if (o.type !== 'center') {
         const pff = UI.selectField({
-          id: 'hw-print-fit', label: 'Druck-Passung', value: o.printFit || '',
-          options: PRINT_FIT_HOLE_OPTIONS,
+          id: 'hw-print-fit', label: T('printFit.label'), value: o.printFit || '',
+          options: printFitHoleOptions,
           onChange: (v) => { o.printFit = v; updatePreview(); },
         });
         pff.dataset.help = 'printFit';

@@ -368,13 +368,13 @@ const Expr = (() => {
 // ---------- Einheiten je Projekt (BE-10): Anzeige und Eingabe in mm, cm, m oder Zoll; intern immer mm ----------
 const Units = (() => {
   const DEFS = {
-    mm: { k: 'mm', label: 'mm', name: 'Millimeter (mm)', fac: 1, dec: 2, inputDec: 3, step: 1, shiftStep: 10, areaLabel: 'mm²', areaFac: 1, volLabel: 'cm³', volFac: 1000 },
-    cm: { k: 'cm', label: 'cm', name: 'Zentimeter (cm)', fac: 10, dec: 2, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'cm²', areaFac: 100, volLabel: 'cm³', volFac: 1000 },
-    m:  { k: 'm',  label: 'm',  name: 'Meter (m)',       fac: 1000, dec: 3, inputDec: 5, step: 0.01, shiftStep: 0.1, areaLabel: 'm²', areaFac: 1e6, volLabel: 'm³', volFac: 1e9 },
-    in: { k: 'in', label: 'in', name: 'Zoll (in)',       fac: 25.4, dec: 3, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'in²', areaFac: 645.16, volLabel: 'in³', volFac: 16387.064 },
+    mm: { k: 'mm', label: 'mm', get name() { return typeof T === 'function' ? T('unit.mm') : 'Millimeter (mm)'; }, fac: 1, dec: 2, inputDec: 3, step: 1, shiftStep: 10, areaLabel: 'mm²', areaFac: 1, volLabel: 'cm³', volFac: 1000 },
+    cm: { k: 'cm', label: 'cm', get name() { return typeof T === 'function' ? T('unit.cm') : 'Zentimeter (cm)'; }, fac: 10, dec: 2, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'cm²', areaFac: 100, volLabel: 'cm³', volFac: 1000 },
+    m:  { k: 'm',  label: 'm',  get name() { return typeof T === 'function' ? T('unit.m')  : 'Meter (m)'; },       fac: 1000, dec: 3, inputDec: 5, step: 0.01, shiftStep: 0.1, areaLabel: 'm²', areaFac: 1e6, volLabel: 'm³', volFac: 1e9 },
+    in: { k: 'in', label: 'in', get name() { return typeof T === 'function' ? T('unit.in') : 'Zoll (in)'; },       fac: 25.4, dec: 3, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'in²', areaFac: 645.16, volLabel: 'in³', volFac: 16387.064 },
   };
   const ORDER = ['mm', 'cm', 'm', 'in'];
-  const OPTIONS = ORDER.map((k) => [k, DEFS[k].name]);
+  const getOptions = () => ORDER.map((k) => [k, DEFS[k].name]);
   const curDoc = (doc) => doc || (typeof App !== 'undefined' ? App.doc : null);
   function key(doc) {
     const d = curDoc(doc);
@@ -465,7 +465,7 @@ const Units = (() => {
     App.change('Einheit: ' + DEFS[u].name, (doc) => { doc.settings = doc.settings || {}; doc.settings.unit = u; });
     return true;
   }
-  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtLenFixed, fmtLenFixedU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
+  return { DEFS, ORDER, get OPTIONS() { return getOptions(); }, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtLenFixed, fmtLenFixedU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
 })();
 
 // ---------- Symbole ----------

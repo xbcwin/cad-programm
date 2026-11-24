@@ -180,29 +180,29 @@ const Mass = (() => {
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
-    const body = h('div', { class: 'vcmp', id: 'bom', style: { overflowX: 'auto' } }, h('div', { class: 'hint-box' }, 'Rechne …'));
+    const body = h('div', { class: 'vcmp', id: 'bom', style: { overflowX: 'auto' } }, h('div', { class: 'hint-box' }, T('dlg.bom.loading')));
     let B = null;
-    UI.modal({ title: 'Stückliste', body, wide: true, actions: [
-      { label: 'Als Tabelle speichern (CSV)', run: () => { if (B) Print.save(Print.safeName(App.doc.name) + ' Stückliste.csv', bomCSV(B, App.doc.name)); return false; } },
-      { label: 'Schließen', primary: true }] });
+    UI.modal({ title: T('dlg.bom.title'), body, wide: true, actions: [
+      { label: T('dlg.bom.saveCsv'), run: () => { if (B) Print.save(Print.safeName(App.doc.name) + ' Stückliste.csv', bomCSV(B, App.doc.name)); return false; } },
+      { label: T('common.close'), primary: true }] });
     B = await bom(); body.innerHTML = '';
-    if (!B || !B.rows.length) { body.append(h('div', { class: 'hint-box' }, 'Noch keine Teile im Projekt.')); return; }
-    const tb = h('table', { class: 'vtable' }, h('tr', null, ...['Teil', 'Anzahl', 'Art', 'Größe', 'je Stück', 'gesamt'].map((t) => h('th', null, t))));
+    if (!B || !B.rows.length) { body.append(h('div', { class: 'hint-box' }, T('dlg.bom.empty'))); return; }
+    const tb = h('table', { class: 'vtable' }, h('tr', null, ...[T('dlg.bom.colPart'), T('dlg.bom.colCount'), T('dlg.bom.colKind'), T('dlg.bom.colSize'), T('dlg.bom.colEach'), T('dlg.bom.colTotal')].map((t) => h('th', null, t))));
     for (const x of B.rows) {
       const sz = x.dims ? `${Units.fmtLen(x.dims[0], 1)} × ${Units.fmtLen(x.dims[1], 1)} × ${Units.fmtLen(x.dims[2], 1)} ${Units.label()}` : '–';
-      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, sz), h('td', { class: 'mono' }, x.missing ? 'fehlt' : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
+      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, sz), h('td', { class: 'mono' }, x.missing ? T('dlg.bom.missing') : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
       tr.onclick = () => App.select(x.ids);
       tb.append(tr);
     }
-    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
+    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, T('dlg.bom.sum'))), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
     body.append(tb);
     if (B.screws.length) {
-      const ts = h('table', { class: 'vtable', id: 'bom-screws', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Schrauben und Kleinteile'), h('th', null, 'Anzahl')));
+      const ts = h('table', { class: 'vtable', id: 'bom-screws', style: { marginTop: '14px' } }, h('tr', null, h('th', null, T('dlg.bom.screwsCol')), h('th', null, T('dlg.bom.colCount'))));
       for (const x of B.screws) ts.append(h('tr', null, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n))));
-      body.append(ts, h('div', { class: 'hint-box' }, 'Gezählt aus Schraubenlöchern, Lochbildern (je vier), Mutternfallen und Gewindeeinsätzen – Löcher auf derselben Achse zählen als eine Schraube. Die Länge der Schrauben misst du am besten am Modell nach; ihr Gewicht ist in der Summe nicht enthalten.'));
+      body.append(ts, h('div', { class: 'hint-box' }, T('dlg.bom.screwsHint')));
     }
     if (B.threads && B.threads.length) {
-      const tt = h('table', { class: 'vtable', id: 'bom-threads', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Markierte Gewinde'), h('th', null, 'Teil'), h('th', null, 'Anzahl')));
+      const tt = h('table', { class: 'vtable', id: 'bom-threads', style: { marginTop: '14px' } }, h('tr', null, h('th', null, T('dlg.bom.threadsCol')), h('th', null, T('dlg.bom.colPart')), h('th', null, T('dlg.bom.colCount'))));
       for (const x of B.threads) {
         const tr = h('tr', { style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', null, x.part), h('td', { class: 'mono' }, String(x.n)));
         tr.onclick = () => App.select(x.ids);
@@ -211,8 +211,8 @@ const Mass = (() => {
       body.append(tt);
     }
     const filLen = (m) => Units.key() === 'in' ? `${fmtFixed((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmtFixed(m * 100, 1)} cm` : `${fmtFixed(m, 1)} m`;
-    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
-    body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
+    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: T('dlg.bom.filamentHtml', { list: B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') }) }));
+    body.append(h('div', { class: 'hint-box', html: T('dlg.bom.hintHtml', { missing: B.rows.some((x) => x.missing) ? T('dlg.bom.missingSuffix') : '' }) }));
   }
   return { stability, hull2, init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, matOf, get materials() { return MATERIALS; }, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();

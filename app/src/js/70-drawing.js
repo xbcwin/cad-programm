@@ -5,29 +5,29 @@ const Drawing = (() => {
   const SCALES = [20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
   const DETAIL_SCALES = [1, 2, 2.5, 3, 4, 5, 10, 20];
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
-  const VIEW_NAMES = { front: 'Vorderansicht', top: 'Draufsicht', left: 'Seitenansicht' };
+  const VIEW_NAMES = { get front() { return T('draw.view.front'); }, get top() { return T('draw.view.top'); }, get left() { return T('draw.view.left'); } };
   const DIM_ARROWS = [
-    { key: 'filled', label: 'Pfeil gefüllt' },
-    { key: 'open', label: 'Pfeil offen' },
-    { key: 'slash', label: 'Schrägstrich (45°)' },
-    { key: 'dot', label: 'Punkt' },
+    { key: 'filled', get label() { return T('draw.arrow.filled'); } },
+    { key: 'open', get label() { return T('draw.arrow.open'); } },
+    { key: 'slash', get label() { return T('draw.arrow.slash'); } },
+    { key: 'dot', get label() { return T('draw.arrow.dot'); } },
   ];
   const DIM_FONT_SIZES = [2.5, 3.5, 5, 7, 10];
   const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null };
   const NOTE_TIPS = [
-    { key: 'auto', label: 'Automatisch (Kante = Pfeil, Fläche = Punkt)' },
-    { key: 'arrow', label: 'Pfeil' },
-    { key: 'dot', label: 'Punkt' },
+    { key: 'auto', get label() { return T('draw.noteTip.auto'); } },
+    { key: 'arrow', get label() { return T('draw.noteTip.arrow'); } },
+    { key: 'dot', get label() { return T('draw.noteTip.dot'); } },
   ];
   const ISO286_DATA = /*JSON:iso286.json*/null;
   const DIM_MODES = [
-    { key: 'lin', label: 'Abstand', short: 'Abstand', hint: '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.' },
-    { key: 'chain', label: 'Kettenmaß', short: 'Kettenmaß', hint: '<b>Kettenmaß:</b> Startpunkt, zweiten Punkt und Maßlinie anklicken, dann weitere Punkte der Kette anklicken. <b>Enter</b> schließt die Kette ab, <b>Esc</b> beendet.' },
-    { key: 'base', label: 'Bezugsmaß', short: 'Bezugsmaß', hint: '<b>Bezugsmaß:</b> Bezugskante oder -punkt anklicken, erstes Ziel und Maßlinie platzieren, dann weitere Ziele anklicken. <b>Enter</b> schließt ab, <b>Esc</b> beendet.' },
-    { key: 'ang', label: 'Winkel', short: 'Winkel', hint: '<b>Winkelmaß:</b> Zwei Kanten im Winkel zueinander anklicken, dann den Winkelbogen platzieren. <b>Esc</b> beendet.' },
-    { key: 'rad', label: 'Radius (R)', short: 'Radius (R)', hint: '<b>Radius:</b> Auf eine Rundung oder einen Kreisbogen klicken, um R anzuzeigen. <b>Esc</b> beendet.' },
-    { key: 'dia', label: 'Durchmesser (Ø)', short: 'Durchmesser (Ø)', hint: '<b>Durchmesser:</b> Auf eine Bohrung oder einen Kreis klicken, um Ø anzuzeigen. <b>Esc</b> beendet.' },
-    { key: 'chamfer', label: 'Fase (1×45°)', short: 'Fase (1×45°)', hint: '<b>Fase:</b> Auf eine abgeschrägte Fasen-Kante klicken, um Abstand × Winkel anzuzeigen. <b>Esc</b> beendet.' },
+    { key: 'lin', get label() { return T('draw.dimMode.lin'); }, get short() { return T('draw.dimMode.lin'); }, get hint() { return T('draw.dimHint.lin'); } },
+    { key: 'chain', get label() { return T('draw.dimMode.chain'); }, get short() { return T('draw.dimMode.chain'); }, get hint() { return T('draw.dimHint.chain'); } },
+    { key: 'base', get label() { return T('draw.dimMode.base'); }, get short() { return T('draw.dimMode.base'); }, get hint() { return T('draw.dimHint.base'); } },
+    { key: 'ang', get label() { return T('draw.dimMode.ang'); }, get short() { return T('draw.dimMode.ang'); }, get hint() { return T('draw.dimHint.ang'); } },
+    { key: 'rad', get label() { return T('draw.dimMode.rad'); }, get short() { return T('draw.dimMode.rad'); }, get hint() { return T('draw.dimHint.rad'); } },
+    { key: 'dia', get label() { return T('draw.dimMode.dia'); }, get short() { return T('draw.dimMode.dia'); }, get hint() { return T('draw.dimHint.dia'); } },
+    { key: 'chamfer', get label() { return T('draw.dimMode.chamfer'); }, get short() { return T('draw.dimMode.chamfer'); }, get hint() { return T('draw.dimHint.chamfer'); } },
   ];
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, projSceneKey = null, loadingProjPromise = null, projId = 0;
@@ -351,7 +351,7 @@ const Drawing = (() => {
     const target = st.sheets.find((x) => x.id === id) || dwg();
     if (!target) return false;
     let val = newName;
-    if (val === undefined) val = await UI.prompt('Blatt umbenennen', 'Blattname', target.name, 'Umbenennen');
+    if (val === undefined) val = await UI.prompt(T('draw.sheetRenameTitle'), T('draw.sheetNameLabel'), target.name, T('common.rename'));
     const clean = String(val || '').trim();
     if (!clean || clean === target.name) return false;
     App.change('Blatt umbenannt', () => {
@@ -364,7 +364,7 @@ const Drawing = (() => {
   }
   function removeSheet(id) {
     const list = sheets();
-    if (list.length <= 1) { UI.toast('Mindestens ein Blatt muss bleiben.', { icon: 'info' }); return false; }
+    if (list.length <= 1) { UI.toast(T('draw.sheetMinToast'), { icon: 'info' }); return false; }
     const target = list.find((x) => x.id === id) || dwg();
     if (!target) return false;
     const removedName = target.name;
@@ -379,7 +379,7 @@ const Drawing = (() => {
     fitZoom(true);
     refresh();
     Panels.renderRight();
-    UI.toast(`„${removedName}“ entfernt.`, { icon: 'info' });
+    UI.toast(T('draw.sheetRemovedToast', { name: removedName }), { icon: 'info' });
     return true;
   }
   // ---------- Öffnen ----------
@@ -389,11 +389,11 @@ const Drawing = (() => {
     holder = h('div', { class: 'sheet-holder' });
     wrap.append(holder); el.append(wrap);
     const zb = h('div', { class: 'zoom-btns' });
-    const b1 = h('button', { type: 'button', 'aria-label': 'Verkleinern', 'data-tip': 'Verkleinern' }); b1.innerHTML = icon('zoomOut'); b1.onclick = () => setZoom(zoom / 1.25);
-    const b2 = h('button', { type: 'button', 'aria-label': 'Ganzes Blatt', 'data-tip': 'Ganzes Blatt zeigen' }); b2.innerHTML = icon('fit'); b2.onclick = () => fitZoom();
-    const b3 = h('button', { type: 'button', 'aria-label': 'Vergrößern', 'data-tip': 'Vergrößern' }); b3.innerHTML = icon('zoomIn'); b3.onclick = () => setZoom(zoom * 1.25);
+    const b1 = h('button', { type: 'button', 'aria-label': T('draw.zoomOut'), 'data-tip': T('draw.zoomOut') }); b1.innerHTML = icon('zoomOut'); b1.onclick = () => setZoom(zoom / 1.25);
+    const b2 = h('button', { type: 'button', 'aria-label': T('draw.zoomFit'), 'data-tip': T('draw.zoomFitTip') }); b2.innerHTML = icon('fit'); b2.onclick = () => fitZoom();
+    const b3 = h('button', { type: 'button', 'aria-label': T('draw.zoomIn'), 'data-tip': T('draw.zoomIn') }); b3.innerHTML = icon('zoomIn'); b3.onclick = () => setZoom(zoom * 1.25);
     zb.append(b1, b2, b3); el.append(zb);
-    tabsBar = h('div', { class: 'sheet-tabs', id: 'sheet-tabs', role: 'tablist', 'aria-label': 'Zeichnungsblätter', 'data-help': 'drawingSheets' });
+    tabsBar = h('div', { class: 'sheet-tabs', id: 'sheet-tabs', role: 'tablist', 'aria-label': T('draw.sheetsAria'), 'data-help': 'drawingSheets' });
     el.append(tabsBar);
     wrap.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.metaKey && !e.altKey) return; e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)); }, { passive: false });
     wrap.addEventListener('pointerup', onUp);
@@ -425,14 +425,14 @@ const Drawing = (() => {
       tab.append(nm, fmt);
       if (proj) {
         const nLost = lostDims(s).length;
-        if (nLost > 0) tab.append(h('span', { class: 'st-lost', title: `${nLost} ${nLost === 1 ? 'verlorenes Maß' : 'verlorene Maße'}` }, String(nLost)));
+        if (nLost > 0) tab.append(h('span', { class: 'st-lost', title: T(nLost === 1 ? 'draw.tabs.lostOne' : 'draw.tabs.lostMany', { n: nLost }) }, String(nLost)));
       }
-      const ren = h('button', { type: 'button', class: 'st-act st-ren', 'aria-label': 'Blatt umbenennen', 'data-tip': 'Blatt umbenennen' });
+      const ren = h('button', { type: 'button', class: 'st-act st-ren', 'aria-label': T('draw.tabs.renameAria'), 'data-tip': T('draw.tabs.renameAria') });
       ren.innerHTML = icon('edit');
       ren.onclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
       tab.append(ren);
       if (list.length > 1) {
-        const del = h('button', { type: 'button', class: 'st-act st-del', 'aria-label': 'Blatt löschen', 'data-tip': 'Blatt löschen' });
+        const del = h('button', { type: 'button', class: 'st-act st-del', 'aria-label': T('draw.tabs.deleteAria'), 'data-tip': T('draw.tabs.deleteAria') });
         del.innerHTML = icon('close');
         del.onclick = (e) => { e.stopPropagation(); removeSheet(s.id); };
         tab.append(del);
@@ -442,10 +442,10 @@ const Drawing = (() => {
       tab.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         UI.menu(tab, [
-          { label: 'Umbenennen …', icon: 'edit', run: () => renameSheet(s.id) },
-          { label: 'Duplizieren', icon: 'copy', run: () => duplicateSheet(s.id) },
+          { label: T('draw.tabs.renameMenu'), icon: 'edit', run: () => renameSheet(s.id) },
+          { label: T('draw.tabs.dupMenu'), icon: 'copy', run: () => duplicateSheet(s.id) },
           '-',
-          { label: 'Blatt löschen', icon: 'trash', disabled: list.length <= 1, run: () => removeSheet(s.id) },
+          { label: T('draw.tabs.deleteAria'), icon: 'trash', disabled: list.length <= 1, run: () => removeSheet(s.id) },
         ]);
       });
       tabsBar.append(tab);
@@ -455,10 +455,10 @@ const Drawing = (() => {
       class: 'sheet-tab-add',
       id: 'dw-add-sheet',
       'data-help': 'drawingSheets',
-      'aria-label': 'Blatt hinzufügen',
-      'data-tip': 'Neues Blatt hinzufügen',
+      'aria-label': T('draw.tabs.addAria'),
+      'data-tip': T('draw.tabs.addTip'),
     });
-    addBtn.innerHTML = icon('plus') + '<span>Blatt</span>';
+    addBtn.innerHTML = icon('plus') + `<span>${esc(T('draw.tabs.addLabel'))}</span>`;
     addBtn.onclick = () => addSheet();
     tabsBar.append(addBtn);
   }
@@ -474,13 +474,13 @@ const Drawing = (() => {
   }
   function viewLabel(vName, sh = dwg()) {
     if (VIEW_NAMES[vName]) return VIEW_NAMES[vName];
-    if (vName === 'iso') return 'Isometrie';
+    if (vName === 'iso') return T('draw.view.iso');
     if (String(vName).startsWith('sec_')) {
       const sec = (sh.sections || []).find((x) => 'sec_' + x.id === vName);
-      return sec ? `Schnitt ${sec.label}–${sec.label}` : 'Schnitt';
+      return sec ? T('draw.view.sectionNamed', { a: sec.label, b: sec.label }) : T('draw.view.section');
     }
     const det = (sh.details || []).find((x) => x.id === vName);
-    if (det) return `Detail ${det.label}`;
+    if (det) return T('draw.view.detailNamed', { lbl: det.label });
     const ev = (sh.extraViews || []).find((v) => v.id === vName);
     return ev ? ev.name : vName;
   }
@@ -2924,7 +2924,7 @@ const Drawing = (() => {
     renderTabs();
   }
   function titleBlock(sh, lay, idx, total, lines, texts) {
-    const { frame, tb } = lay; const T = sh.title || {};
+    const { frame, tb } = lay; const tbT = sh.title || {};
     const x1 = frame.x + frame.w, y1 = frame.y + frame.h, x0 = x1 - tb.w, y0 = y1 - tb.h;
     lines.push({ rect: [x0, y0, tb.w, tb.h], cls: 'frame' });
     // links: 4 Zeilen × 2 Spalten (Blatt + Format geteilt) · Mitte: Benennung · rechts: Projektionssymbol
@@ -2935,18 +2935,18 @@ const Drawing = (() => {
     lines.push({ pts: [[cC, y0 + 24], [cD, y0 + 24]], cls: 'thin' }, { pts: [[cD, y0 + 20], [x1, y0 + 20]], cls: 'thin' });
     const lab = (x, y, t) => texts.push({ x: x + 1.2, y: y + 2.6, t, size: 1.9, anchor: 'start', cls: 'lab' });
     const val = (x, y, t, w, size = 3) => { const s = fitSize(t || '', w - 2.6, size, 1.8); texts.push({ x: x + 1.5, y: y + 6.6, t: clipText(t || '', w - 2.6, s), size: s, anchor: 'start', cls: 'val' }); };
-    lab(cA, rows[0], 'Gezeichnet'); val(cA, rows[0], T.name, 32, 2.8);
-    lab(cB, rows[0], 'Datum'); val(cB, rows[0], T.datum, 40, 2.8);
-    lab(cA, rows[1], 'Werkstoff'); val(cA, rows[1], T.werkstoff, 32, 2.8);
-    lab(cB, rows[1], 'Maßstab'); val(cB, rows[1], scaleText(lay.s), 40, 3.2);
-    lab(cA, rows[2], 'Firma / Schule'); val(cA, rows[2], T.firma, 32, 2.6);
-    lab(cB, rows[2], 'Blatt'); val(cB, rows[2], T.blatt ? T.blatt : `${idx + 1}/${total}`, 22, 2.8);
-    lab(cB2, rows[2], 'Format'); val(cB2, rows[2], sh.sheet, 18, 2.8);
-    lab(cA, rows[3], 'Zeichnungsnummer'); val(cA, rows[3], T.nummer, 32, 2.8);
-    lab(cB, rows[3], 'Allgemeintoleranz'); val(cB, rows[3], 'ISO 2768-m', 40, 2.6);
+    lab(cA, rows[0], T('draw.tb.drawn')); val(cA, rows[0], tbT.name, 32, 2.8);
+    lab(cB, rows[0], T('draw.tb.date')); val(cB, rows[0], tbT.datum, 40, 2.8);
+    lab(cA, rows[1], T('draw.tb.material')); val(cA, rows[1], tbT.werkstoff, 32, 2.8);
+    lab(cB, rows[1], T('draw.tb.scale')); val(cB, rows[1], scaleText(lay.s), 40, 3.2);
+    lab(cA, rows[2], T('draw.tb.company')); val(cA, rows[2], tbT.firma, 32, 2.6);
+    lab(cB, rows[2], T('draw.tb.sheet')); val(cB, rows[2], tbT.blatt ? tbT.blatt : `${idx + 1}/${total}`, 22, 2.8);
+    lab(cB2, rows[2], T('draw.tb.format')); val(cB2, rows[2], sh.sheet, 18, 2.8);
+    lab(cA, rows[3], T('draw.tb.dwgNo')); val(cA, rows[3], tbT.nummer, 32, 2.8);
+    lab(cB, rows[3], T('draw.tb.genTol')); val(cB, rows[3], 'ISO 2768-m', 40, 2.6);
     // Benennung, bei Bedarf zweizeilig
-    lab(cC, rows[0], 'Benennung');
-    const title = String(T.titel || App.doc.name || '');
+    lab(cC, rows[0], T('draw.tb.title'));
+    const title = String(tbT.titel || App.doc.name || '');
     const tw = cD - cC - 3;
     let ts = fitSize(title, tw, 6, 3.4);
     if (textW(title, ts) > tw) {
@@ -2956,9 +2956,9 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(`Erstellt mit Tracery · ${sh.name} · Maße in ${Units.label()}`, tw, 2), size: 2, anchor: 'start', cls: 'lab' });
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: Units.label() }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
     // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
-    lab(cD, rows[0], 'Projektion');
+    lab(cD, rows[0], T('draw.tb.projection'));
     const sx = cD + 4.5, cy = y0 + 11.5;
     lines.push({ pts: [[sx, cy - 1.6], [sx + 10, cy - 3], [sx + 10, cy + 3], [sx, cy + 1.6], [sx, cy - 1.6]], cls: 'thin' });
     lines.push({ pts: [[sx - 1.5, cy], [sx + 11.5, cy]], cls: 'ctr' });
@@ -2966,7 +2966,7 @@ const Drawing = (() => {
     lines.push({ circle: [ccx, cy, 1.6], cls: 'thin' }, { circle: [ccx, cy, 3], cls: 'thin' });
     lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
     texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2', size: 2, anchor: 'start', cls: 'lab' });
-    texts.push({ x: cD + 1.2, y: y0 + 30.4, t: 'Methode 1', size: 2.5, anchor: 'start', cls: 'val' });
+    texts.push({ x: cD + 1.2, y: y0 + 30.4, t: T('draw.tb.method1'), size: 2.5, anchor: 'start', cls: 'val' });
   }
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
   // Die Standardschrift im PDF kennt nur Latin-1: typografische Zeichen ersetzen
@@ -4886,11 +4886,11 @@ const Drawing = (() => {
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
       t === 'dim' ? dimHint(dimMode)
-        : t === 'detail' ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
-          : t === 'section' ? '<b>Schnittansicht:</b> Schnittlinie A–A durch eine Ansicht ziehen oder zwei Punkte anklicken (<b>Umschalt</b> = waagerecht/senkrecht, <b>Alt</b> = frei). <b>Esc</b> beendet.'
-            : t === 'note' ? '<b>Hinweislinie:</b> Kante (Pfeil) oder Fläche (Punkt) anklicken, dann die Textstelle wählen. <b>Esc</b> beendet.'
-              : t === 'balloon' ? '<b>Positionsnummer:</b> Teil oder Kante in einer Ansicht anklicken, dann den Positionskreis absetzen. <b>Esc</b> beendet.'
-                : t && t.startsWith('free-') ? HINTS2[t] : null
+        : t === 'detail' ? T('draw.hint.detail')
+          : t === 'section' ? T('draw.hint.section')
+            : t === 'note' ? T('draw.hint.note')
+              : t === 'balloon' ? T('draw.hint.balloon')
+                : t && t.startsWith('free-') ? freeHint(t) : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
   }
@@ -4900,10 +4900,10 @@ const Drawing = (() => {
       d.dims = d.dims.filter((x) => !x.auto);
       d.dims.push({ id: uid('d'), auto: 'width', view: 'front' }, { id: uid('d'), auto: 'height', view: 'front' }, { id: uid('d'), auto: 'depth', view: 'left' }, { id: uid('d'), auto: 'circles', view: 'top' });
     });
-    render(); UI.toast('Gesamtmaße und Bohrungen sind bemaßt.', { icon: 'dim' });
+    render(); UI.toast(T('draw.autoDimsToast'), { icon: 'dim' });
   }
   // ---------- Freies Zeichnen (2D) ----------
-  const HINTS2 = { 'free-line': '<b>Linie:</b> Punkte anklicken, <b>Esc</b> beendet.', 'free-rect': '<b>Rechteck:</b> Zwei Ecken anklicken.', 'free-circle': '<b>Kreis:</b> Mittelpunkt, dann Größe anklicken.', 'free-text': '<b>Text:</b> Stelle anklicken und Text eingeben.' };
+  const freeHint = (t) => T('draw.freeHint.' + String(t || '').slice(5));
   function freeView() {
     return layout.views.free || { s: 1, ox: 0, oy: layout.H, geo: { box: [0, 0, 0, 0], points: [], circles: [] } };
   }
@@ -4945,12 +4945,12 @@ const Drawing = (() => {
     render();
   }
   async function addFreeText(q) {
-    const t = await UI.prompt('Text einfügen', 'Text', '', 'Einfügen');
+    const t = await UI.prompt(T('draw.addTextTitle'), T('menu.draw.text'), '', T('draw.panel.addBtn'));
     if (t && t.trim()) addFree({ type: 'text', p: q, text: t.trim(), size: 3.5 });
   }
   async function editFreeText(id) {
     const f = dwg().free.find((x) => x.id === id && x.type === 'text'); if (!f) return;
-    const t = await UI.prompt('Text ändern', 'Text', f.text, 'Ändern');
+    const t = await UI.prompt(T('draw.editTextTitle'), T('menu.draw.text'), f.text, T('draw.panel.changeBtn'));
     if (t != null) App.change('Text geändert', () => { const g = dwg().free.find((x) => x.id === id); if (g) g.text = t; });
     render();
   }
@@ -5406,12 +5406,12 @@ const Drawing = (() => {
   const PNG_MIN_DIM = 200;
   const PNG_MAX_DIM = 8192;
   const PNG_PRESETS = [
-    { key: '1600', label: 'Bildschirm (1600 px breit)' },
-    { key: '2400', label: 'Präsentation (2400 px breit)' },
-    { key: '3840', label: 'Sehr scharf / 4K (3840 px breit)' },
-    { key: 'dpi150', label: 'Druck 150 DPI' },
-    { key: 'dpi300', label: 'Druck 300 DPI' },
-    { key: 'custom', label: 'Eigene Breite' },
+    { key: '1600', get label() { return T('draw.png.p1600'); } },
+    { key: '2400', get label() { return T('draw.png.p2400'); } },
+    { key: '3840', get label() { return T('draw.png.p3840'); } },
+    { key: 'dpi150', get label() { return T('draw.png.dpi150'); } },
+    { key: 'dpi300', get label() { return T('draw.png.dpi300'); } },
+    { key: 'custom', get label() { return T('draw.png.custom'); } },
   ];
   function pngDimensions(opts = {}, sh = dwg()) {
     const [W, H] = sheetSize(sh);
@@ -5488,7 +5488,7 @@ const Drawing = (() => {
       return res;
     } catch (e) {
       tst.remove();
-      UI.toast('PNG hat nicht geklappt: ' + e.message, { kind: 'bad' });
+      UI.toast(T('draw.png.err', { msg: e.message }), { kind: 'bad' });
       return null;
     }
   }
@@ -5504,12 +5504,12 @@ const Drawing = (() => {
     const infoEl = h('div', { class: 'mini-row', id: 'dw-png-info', style: { color: 'var(--muted)', fontSize: '12.5px' } });
     const widthInp = h('input', { id: 'dw-png-width', type: 'number', min: String(PNG_MIN_DIM), max: String(PNG_MAX_DIM), step: '10', value: String(st.width), autocomplete: 'off' });
     const widthFld = h('div', { class: 'field' },
-      h('label', { for: 'dw-png-width' }, 'Breite in Pixeln'),
+      h('label', { for: 'dw-png-width' }, T('draw.png.widthPx')),
       h('div', { class: 'inp' }, widthInp, h('span', { class: 'unit' }, 'px'))
     );
     const presetFld = UI.selectField({
       id: 'dw-png-preset',
-      label: 'Auflösung',
+      label: T('draw.png.resolution'),
       value: st.preset,
       options: presetOpts,
       onChange: (v) => {
@@ -5524,8 +5524,8 @@ const Drawing = (() => {
     const presetSel = presetFld.querySelector('select');
     const updateInfo = () => {
       const d = pngDimensions({ width: st.width }, sh);
-      const orientTxt = sh.orient === 'portrait' ? 'hoch' : 'quer';
-      infoEl.textContent = `Ergebnis: ${d.width} × ${d.height} Pixel · ${sh.sheet} ${orientTxt}${d.clamped ? ` (begrenzt auf max. ${PNG_MAX_DIM} px)` : ''}`;
+      const orientTxt = T(sh.orient === 'portrait' ? 'menu.draw.portrait' : 'menu.draw.landscape').toLowerCase();
+      infoEl.textContent = T('draw.png.info', { w: d.width, h: d.height, sheet: sh.sheet, orient: orientTxt, clamped: d.clamped ? T('draw.png.clamped', { max: PNG_MAX_DIM }) : '' });
     };
     const onWidthInput = () => {
       const n = Math.round(Number(widthInp.value));
@@ -5542,7 +5542,7 @@ const Drawing = (() => {
       updateInfo();
     });
     widthInp.addEventListener('keydown', (e) => e.stopPropagation());
-    const transChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-png-transparent' }), 'Durchsichtiger Hintergrund (ohne weißes Papier)');
+    const transChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-png-transparent' }), T('draw.png.transparent'));
     transChk.querySelector('input').onchange = (e) => { st.transparent = e.target.checked; };
     updateInfo();
     body.append(
@@ -5550,14 +5550,14 @@ const Drawing = (() => {
       widthFld,
       infoEl,
       transChk,
-      h('div', { class: 'hint-box' }, 'Die Höhe passt sich automatisch dem Blattformat an. Empfohlen: 2400 px für Dokumente oder 300 DPI für den Ausdruck.')
+      h('div', { class: 'hint-box' }, T('draw.png.hint'))
     );
     UI.modal({
-      title: 'Zeichnung als PNG speichern',
+      title: T('draw.png.dialogTitle'),
       body,
       actions: [
-        { label: 'Abbrechen' },
-        { id: 'dw-png-save', label: 'Als PNG speichern', primary: true, run: () => { exportPNG({ width: st.width, transparent: st.transparent }); } },
+        { label: T('common.cancel') },
+        { id: 'dw-png-save', label: T('draw.png.saveBtn'), primary: true, run: () => { exportPNG({ width: st.width, transparent: st.transparent }); } },
       ],
     });
   }
@@ -5605,7 +5605,7 @@ const Drawing = (() => {
     if (lostList.length) {
       const dsLost = sheetDimStyle(d);
       const lostSec = h('div', { class: 'section dw-lost-sec', id: 'dw-lost-sec', 'data-help': 'drawingLostDims' });
-      lostSec.append(h('div', { class: 'section-h dw-lost-h' }, `Verlorene Maße (${lostList.length})`));
+      lostSec.append(h('div', { class: 'section-h dw-lost-h' }, T('draw.panel.lostHeading', { n: lostList.length })));
       const lWrap = h('div', { class: 'dw-lost-list', id: 'dw-lost-list' });
       for (const ld of lostList) {
         const isRebinding = tool === 'dim' && toolState && toolState.rebindId === ld.id;
@@ -5618,14 +5618,14 @@ const Drawing = (() => {
             h('span', { class: 'dw-lost-val' }, dimSummaryLabel(ld, dsLost)),
             h('span', { class: 'dw-lost-view' }, viewLabel(ld.view, d)),
           ),
-          h('div', { class: 'dw-lost-reason' }, ld.lostReason || 'Kante fehlt'),
+          h('div', { class: 'dw-lost-reason' }, ld.lostReason || T('draw.panel.lostEdgeMissing')),
         );
         const acts = h('div', { class: 'dw-lost-acts' });
         const bRebind = h('button', {
           type: 'button',
           class: 'btn dw-lost-rebind' + (isRebinding ? ' active' : ''),
           'data-dim-id': ld.id,
-        }, isRebinding ? 'Abbrechen' : 'Neu zuordnen');
+        }, T(isRebinding ? 'common.cancel' : 'draw.panel.lostRebind'));
         bRebind.onclick = (e) => {
           e.stopPropagation();
           if (isRebinding) setTool(null);
@@ -5635,7 +5635,7 @@ const Drawing = (() => {
           type: 'button',
           class: 'btn danger dw-lost-del',
           'data-dim-id': ld.id,
-        }, 'Löschen');
+        }, T('common.delete'));
         bDel.onclick = (e) => { e.stopPropagation(); removeDim(ld.id); };
         acts.append(bRebind, bDel);
         row.append(acts);
@@ -5644,18 +5644,18 @@ const Drawing = (() => {
       }
       lostSec.append(lWrap);
       if (lostList.length > 1) {
-        const bDelAll = h('button', { type: 'button', class: 'btn danger', id: 'dw-lost-del-all', style: { marginTop: '6px', width: '100%' } }, 'Alle verlorenen Maße löschen');
+        const bDelAll = h('button', { type: 'button', class: 'btn danger', id: 'dw-lost-del-all', style: { marginTop: '6px', width: '100%' } }, T('draw.panel.lostDelAll'));
         bDelAll.onclick = () => removeLostDims();
         lostSec.append(bDelAll);
       }
       w.append(lostSec);
     }
-    const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, 'Ansichten'));
+    const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     const bIso = h('button', { type: 'button', class: 'btn', id: 'dw-add-iso', 'data-help': 'drawingViews' });
-    bIso.innerHTML = icon('plus') + 'Isometrie';
+    bIso.innerHTML = icon('plus') + esc(T('draw.panel.addIso'));
     bIso.onclick = () => addView('iso');
     const bFree = h('button', { type: 'button', class: 'btn', id: 'dw-add-free', 'data-help': 'drawingViews' });
-    bFree.innerHTML = icon('eye') + '3D-Ansicht';
+    bFree.innerHTML = icon('eye') + esc(T('draw.panel.addFree'));
     bFree.onclick = () => addView('free');
     vSec.append(h('div', { class: 'btn-row' }, bIso, bFree));
     const avList = activeViews(d);
@@ -5670,7 +5670,7 @@ const Drawing = (() => {
         const row = h('div', { class: 'dw-view-row' + (isAct ? ' active' : ''), 'data-view-id': av.id });
         row.append(h('span', { class: 'dw-view-name' }, av.name), h('span', { class: 'dw-view-badge' }, scLbl));
         if (av.removable) {
-          const del = h('button', { type: 'button', class: 'dw-view-del', 'aria-label': 'Ansicht entfernen', 'data-tip': 'Ansicht entfernen' });
+          const del = h('button', { type: 'button', class: 'dw-view-del', 'aria-label': T('draw.panel.delView'), 'data-tip': T('draw.panel.delView') });
           del.innerHTML = icon('close');
           del.onclick = (e) => { e.stopPropagation(); removeView(av.id); };
           row.append(del);
@@ -5682,7 +5682,7 @@ const Drawing = (() => {
       const curMeta = avList.find((x) => x.id === curKey);
       const curOpts = viewOpts(d, curKey);
       const vp = h('div', { class: 'dw-view-props', id: 'dw-view-props', 'data-help': 'drawingViewProps' });
-      vp.append(h('div', { class: 'dw-view-props-h' }, 'Ansicht: ' + (curMeta ? curMeta.name : curKey)));
+      vp.append(h('div', { class: 'dw-view-props-h' }, T('draw.panel.viewHeading', { name: curMeta ? curMeta.name : curKey })));
       const sheetScaleLbl = `${T('menu.draw.scaleSheet')} (${layout ? scaleText(layout.s) : '–'})`;
       vp.append(UI.selectField({
         id: 'dw-v-scale',
@@ -5698,7 +5698,7 @@ const Drawing = (() => {
       }
       if (curMeta && curMeta.kind === 'free') {
         const recam = h('button', { type: 'button', class: 'btn', id: 'dw-v-recam' });
-        recam.innerHTML = icon('eye') + 'Aktuelle 3D-Ansicht übernehmen';
+        recam.innerHTML = icon('eye') + esc(T('draw.panel.recam'));
         recam.onclick = () => updateFreeViewCamera(curKey);
         vp.append(recam);
       }
@@ -5706,30 +5706,30 @@ const Drawing = (() => {
     }
     w.append(vSec);
 
-    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Schriftfeld'));
+    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.titleBlock')));
     const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); f.querySelector('input').addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); f.querySelector('input').addEventListener('keydown', (e) => e.stopPropagation()); return f; };
-    sec.append(tf('titel', 'Benennung', App.doc.name), h('div', { class: 'fields' }, tf('nummer', 'Zeichnungsnummer'), tf('blatt', 'Blatt', `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', 'Gezeichnet von'), tf('datum', 'Datum')), h('div', { class: 'fields' }, tf('werkstoff', 'Werkstoff'), tf('firma', 'Firma / Schule')));
+    sec.append(tf('titel', T('draw.tb.title'), App.doc.name), h('div', { class: 'fields' }, tf('nummer', T('draw.tb.dwgNo')), tf('blatt', T('draw.tb.sheet'), `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', T('draw.panel.drawnBy')), tf('datum', T('draw.tb.date'))), h('div', { class: 'fields' }, tf('werkstoff', T('draw.tb.material')), tf('firma', T('draw.tb.company'))));
     w.append(sec);
-    const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Blatt'));
+    const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.sheetHeading')));
     info.append(h('div', { class: 'mini-list' },
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Blattname'), h('b', null, d.name)),
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Blatt'), h('b', { class: 'mono' }, `${idx + 1} / ${all.length}`)),
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Maßstab'), h('b', { class: 'mono', id: 'dw-scale-val' }, layout ? scaleText(layout.s) : '–')),
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Maße'), h('b', { class: 'mono' }, String(layout ? autoDimList(d, layout).length : d.dims.length)))));
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.sheetNameLabel')), h('b', null, d.name)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.tb.sheet')), h('b', { class: 'mono' }, `${idx + 1} / ${all.length}`)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.tb.scale')), h('b', { class: 'mono', id: 'dw-scale-val' }, layout ? scaleText(layout.s) : '–')),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.panel.dimsCount')), h('b', { class: 'mono' }, String(layout ? autoDimList(d, layout).length : d.dims.length)))));
     const flds = h('div', { class: 'fields', 'data-help': 'drawingFormat' });
     flds.append(UI.selectField({ id: 'dw-panel-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: sheetOptions(), onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); renderTabs(); } }));
     flds.append(UI.selectField({ id: 'dw-panel-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); renderTabs(); } }));
     info.append(flds);
-    const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
-    const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + 'Neues Blatt'; bAdd.onclick = () => addSheet();
+    const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + esc(T('draw.panel.sheetAndViews')); b.onclick = (e) => sheetMenu(e.currentTarget);
+    const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + esc(T('draw.panel.newSheet')); bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd));
     if (d.viewPos && Object.keys(d.viewPos).length) {
-      const bResetV = h('button', { type: 'button', class: 'btn', id: 'dw-reset-views', style: { marginTop: '6px' } }, 'Ansichten-Lage zurücksetzen');
+      const bResetV = h('button', { type: 'button', class: 'btn', id: 'dw-reset-views', style: { marginTop: '6px' } }, T('draw.panel.resetViews'));
       bResetV.onclick = () => resetViewPos();
       info.append(bResetV);
     }
     w.append(info);
-    const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, 'Bemaßung'));
+    const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, T('draw.panel.dimSec')));
     const dimGrid = h('div', { class: 'dw-dim-grid' });
     for (const m of DIM_MODES) {
       const act = tool === 'dim' && dimMode === m.key;
@@ -5745,41 +5745,41 @@ const Drawing = (() => {
     }
     dimSec.append(dimGrid);
     if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
-      const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, 'Abschließen (Enter)');
+      const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, T('draw.panel.finishChain'));
       fin.onclick = () => { toolState = { stage: 0 }; render(); Panels.renderRight(); };
       dimSec.append(fin);
     }
     w.append(dimSec);
     // Maß-Stil je Blatt (ZE-10)
     const ds = sheetDimStyle(d);
-    const styleSec = h('div', { class: 'section', id: 'dw-dimstyle-sec', 'data-help': 'drawingDimStyle' }, h('div', { class: 'section-h' }, 'Maß-Stil'));
+    const styleSec = h('div', { class: 'section', id: 'dw-dimstyle-sec', 'data-help': 'drawingDimStyle' }, h('div', { class: 'section-h' }, T('draw.panel.dimStyleSec')));
     const fsList = DIM_FONT_SIZES.includes(ds.fontSize) ? DIM_FONT_SIZES : [...DIM_FONT_SIZES, ds.fontSize].sort((a, b) => a - b);
     const decVal = ds.decimals == null ? 'auto' : String(ds.decimals);
     const decOpts = [
-      ['auto', 'Wie Einstellung'],
-      ['0', '0 Stellen (12)'],
-      ['1', '1 Stelle (12,3)'],
-      ['2', '2 Stellen (12,35)'],
-      ['3', '3 Stellen (12,346)'],
-      ['4', '4 Stellen (12,3456)'],
+      ['auto', T('draw.panel.decAuto')],
+      ['0', T('draw.panel.dec0')],
+      ['1', T('draw.panel.dec1')],
+      ['2', T('draw.panel.dec2')],
+      ['3', T('draw.panel.dec3')],
+      ['4', T('draw.panel.dec4')],
     ];
     styleSec.append(
-      UI.selectField({ id: 'dw-style-arrow', label: 'Pfeilart', value: ds.arrow, options: DIM_ARROWS.map((a) => [a.key, a.label]), onChange: (v) => setDimStyle({ arrow: v }) }),
+      UI.selectField({ id: 'dw-style-arrow', label: T('draw.panel.arrow'), value: ds.arrow, options: DIM_ARROWS.map((a) => [a.key, a.label]), onChange: (v) => setDimStyle({ arrow: v }) }),
       h('div', { class: 'fields' },
-        UI.selectField({ id: 'dw-style-size', label: 'Schriftgröße', value: String(ds.fontSize), options: fsList.map((s) => [String(s), fmtFixed(s, 1) + ' mm']), onChange: (v) => setDimStyle({ fontSize: +v || 3.5 }) }),
-        UI.selectField({ id: 'dw-style-dec', label: 'Nachkommastellen', value: decVal, options: decOpts, onChange: (v) => setDimStyle({ decimals: v === 'auto' ? null : +v }) }),
+        UI.selectField({ id: 'dw-style-size', label: T('draw.panel.fontSize'), value: String(ds.fontSize), options: fsList.map((s) => [String(s), fmtFixed(s, 1) + ' mm']), onChange: (v) => setDimStyle({ fontSize: +v || 3.5 }) }),
+        UI.selectField({ id: 'dw-style-dec', label: T('draw.panel.decimals'), value: decVal, options: decOpts, onChange: (v) => setDimStyle({ decimals: v === 'auto' ? null : +v }) }),
       ),
     );
     w.append(styleSec);
     // Hinweislinien / Notizen (ZE-11)
-    const noteSec = h('div', { class: 'section', id: 'dw-notes-sec', 'data-help': 'drawingLeader' }, h('div', { class: 'section-h' }, 'Hinweislinien'));
+    const noteSec = h('div', { class: 'section', id: 'dw-notes-sec', 'data-help': 'drawingLeader' }, h('div', { class: 'section-h' }, T('draw.panel.leadersSec')));
     const bNote = h('button', { type: 'button', class: 'btn' + (tool === 'note' ? ' active' : ''), id: 'dw-add-note', 'data-help': 'drawingLeader' });
-    bNote.innerHTML = icon('noteText') + (tool === 'note' ? 'Hinweislinie aktiv' : 'Hinweislinie setzen');
+    bNote.innerHTML = icon('noteText') + esc(T(tool === 'note' ? 'draw.panel.leaderActive' : 'draw.panel.leaderAdd'));
     bNote.onclick = () => tool_('note');
     noteSec.append(bNote);
     if (tool === 'note') {
-      const tipFld = UI.selectField({ id: 'dw-note-new-tip', label: 'Spitze', value: noteDraft.tip, options: NOTE_TIPS.map((x) => [x.key, x.label]), onChange: (v) => { noteDraft.tip = v; render(); } });
-      const txtFld = UI.textField({ id: 'dw-note-new-text', label: 'Text', value: noteDraft.text, live: true, placeholder: 'Leer = beim Absetzen fragen', onCommit: (v) => { noteDraft.text = v; render(); } });
+      const tipFld = UI.selectField({ id: 'dw-note-new-tip', label: T('draw.panel.tip'), value: noteDraft.tip, options: NOTE_TIPS.map((x) => [x.key, x.label]), onChange: (v) => { noteDraft.tip = v; render(); } });
+      const txtFld = UI.textField({ id: 'dw-note-new-text', label: T('menu.draw.text'), value: noteDraft.text, live: true, placeholder: T('draw.panel.notePh'), onCommit: (v) => { noteDraft.text = v; render(); } });
       noteSec.append(tipFld, txtFld);
     }
     const noteList = d.notes || [];
@@ -5793,8 +5793,8 @@ const Drawing = (() => {
         });
         const badge = h('b', { class: 'mono' }, n.tip === 'dot' ? '●' : '→');
         const txt = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, n.text.replace(/\s+/g, ' '));
-        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, n.view ? viewLabel(n.view, d) : 'Blatt');
-        const db = h('button', { type: 'button', class: 'btn danger note-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': 'Hinweislinie löschen' });
+        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, n.view ? viewLabel(n.view, d) : T('draw.tb.sheet'));
+        const db = h('button', { type: 'button', class: 'btn danger note-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.leaderDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = (e) => { e.stopPropagation(); removeNote(n.id); };
         row.append(badge, txt, vw, db);
@@ -5805,29 +5805,29 @@ const Drawing = (() => {
     }
     w.append(noteSec);
     // Positionsnummern & Stückliste auf dem Blatt (ZE-12)
-    const bomSec = h('div', { class: 'section', id: 'dw-bom-sec', 'data-help': 'drawingBom' }, h('div', { class: 'section-h' }, 'Stückliste & Positionsnummern'));
+    const bomSec = h('div', { class: 'section', id: 'dw-bom-sec', 'data-help': 'drawingBom' }, h('div', { class: 'section-h' }, T('draw.panel.bomSec')));
     const bomShow = !!(d.bomTable && d.bomTable.show);
-    const bomChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-bom-show', checked: bomShow }), 'Stückliste auf dem Blatt zeigen');
+    const bomChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-bom-show', checked: bomShow }), T('draw.panel.bomShow'));
     bomChk.querySelector('input').onchange = (e) => setBomTable(e.target.checked);
     bomSec.append(bomChk);
-    const viewOptsBal = [['auto', 'Automatisch (beste Ansicht)'], ...avList.map((av) => [av.id, av.name])];
+    const viewOptsBal = [['auto', T('draw.panel.balloonViewAuto')], ...avList.map((av) => [av.id, av.name])];
     if (!viewOptsBal.some(([k]) => k === balloonViewPref)) balloonViewPref = 'auto';
     bomSec.append(UI.selectField({
       id: 'dw-balloon-view',
-      label: 'Ansicht für Positionsnummern',
+      label: T('draw.panel.balloonView'),
       value: balloonViewPref,
       options: viewOptsBal,
       onChange: (v) => { balloonViewPref = v; },
     }));
     const bAutoBal = h('button', { type: 'button', class: 'btn', id: 'dw-balloons-auto', 'data-help': 'drawingBalloons' });
-    bAutoBal.innerHTML = icon('list') + 'Positionsnummern automatisch';
+    bAutoBal.innerHTML = icon('list') + esc(T('draw.panel.balloonsAuto'));
     bAutoBal.onclick = () => autoBalloons({ view: balloonViewPref === 'auto' ? null : balloonViewPref });
     const bAddBal = h('button', { type: 'button', class: 'btn' + (tool === 'balloon' ? ' active' : ''), id: 'dw-balloon-add', 'data-help': 'drawingBalloons' });
-    bAddBal.innerHTML = icon('plus') + (tool === 'balloon' ? 'Setzen aktiv' : 'Einzeln setzen');
+    bAddBal.innerHTML = icon('plus') + esc(T(tool === 'balloon' ? 'draw.panel.balloonActive' : 'draw.panel.balloonAdd'));
     bAddBal.onclick = () => tool_('balloon');
     bomSec.append(h('div', { class: 'btn-row' }, bAutoBal, bAddBal));
     if (d.bomTable && Array.isArray(d.bomTable.pos)) {
-      const bResetBom = h('button', { type: 'button', class: 'btn', id: 'dw-bom-reset-pos', style: { marginTop: '6px' } }, 'Stücklisten-Lage zurücksetzen');
+      const bResetBom = h('button', { type: 'button', class: 'btn', id: 'dw-bom-reset-pos', style: { marginTop: '6px' } }, T('draw.panel.bomResetPos'));
       bResetBom.onclick = () => resetBomTablePos();
       bomSec.append(bResetBom);
     }
@@ -5855,9 +5855,9 @@ const Drawing = (() => {
           style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === bl.id ? 'var(--accent-soft)' : '' },
         });
         const badge = h('b', { class: 'mono' }, `(${bPos})`);
-        const nm = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, matchRow ? matchRow.name : `Pos. ${bPos}`);
-        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, bl.view ? viewLabel(bl.view, d) : 'Blatt');
-        const db = h('button', { type: 'button', class: 'btn danger balloon-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': 'Positionsnummer löschen' });
+        const nm = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, matchRow ? matchRow.name : T('draw.panel.posShort', { pos: bPos }));
+        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, bl.view ? viewLabel(bl.view, d) : T('draw.tb.sheet'));
+        const db = h('button', { type: 'button', class: 'btn danger balloon-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.balloonDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = (e) => { e.stopPropagation(); removeBalloon(bl.id); };
         row.append(badge, nm, vw, db);
@@ -5868,22 +5868,22 @@ const Drawing = (() => {
     }
     w.append(bomSec);
     const secs = d.sections || [];
-    const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, 'Schnittansichten'));
+    const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, T('draw.panel.sectionsSec')));
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
-    bSec.innerHTML = icon('section') + 'Schnittlinie ziehen';
+    bSec.innerHTML = icon('section') + esc(T('draw.panel.drawSection'));
     bSec.onclick = () => tool_('section');
     secBox.append(bSec);
     if (secs.length) {
       const lst = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
-      const pName = { front: 'Vorne', top: 'Oben', left: 'Links' };
+      const pName = { front: T('draw.panel.pFront'), top: T('draw.panel.pTop'), left: T('draw.panel.pLeft') };
       for (const sec of secs) {
         const row = h('div', { class: 'mini-row sec-row', 'data-sec-id': sec.id });
-        const lbl = h('span', { class: 'grow' }, `Schnitt ${sec.label}–${sec.label} (${pName[sec.parent] || sec.parent})`);
+        const lbl = h('span', { class: 'grow' }, T('draw.panel.secRow', { a: sec.label, b: sec.label, parent: pName[sec.parent] || sec.parent }));
         lbl.style.cursor = 'pointer';
         lbl.onclick = () => { selDim = sec.id; render(); Panels.renderRight(); };
-        const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': 'Blickrichtung der Pfeile umkehren' }, 'Richtung');
+        const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secFlipTip') }, T('draw.panel.secFlipShort'));
         fb.onclick = () => flipSection(sec.id);
-        const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': 'Schnittansicht löschen' });
+        const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = () => removeSection(sec.id);
         row.append(lbl, fb, db);
@@ -5893,13 +5893,13 @@ const Drawing = (() => {
     }
     w.append(secBox);
     // Detailansichten (ZE-03)
-    const detSec = h('div', { class: 'section', 'data-help': 'drawingDetail' }, h('div', { class: 'section-h' }, 'Detailansichten'));
+    const detSec = h('div', { class: 'section', 'data-help': 'drawingDetail' }, h('div', { class: 'section-h' }, T('draw.panel.detailsSec')));
     if (tool === 'detail') {
       const box = h('div', { class: 'fields' });
-      const lblField = UI.textField({ id: 'dw-det-new-label', label: 'Buchstabe', value: detailDraft.label, onCommit: (v) => { detailDraft.label = cleanDetailLabel(v, detailDraft.label); render(); } });
+      const lblField = UI.textField({ id: 'dw-det-new-label', label: T('draw.panel.letter'), value: detailDraft.label, onCommit: (v) => { detailDraft.label = cleanDetailLabel(v, detailDraft.label); render(); } });
       lblField.querySelector('input').maxLength = 2;
       const scOpts = DETAIL_SCALES.includes(detailDraft.scale) ? DETAIL_SCALES : [...DETAIL_SCALES, detailDraft.scale].sort((a, b) => a - b);
-      const scField = UI.selectField({ id: 'dw-det-new-scale', label: 'Maßstab', value: String(detailDraft.scale), options: scOpts.map((s) => [String(s), scaleText(s)]), onChange: (v) => { detailDraft.scale = +v || 2; render(); } });
+      const scField = UI.selectField({ id: 'dw-det-new-scale', label: T('draw.tb.scale'), value: String(detailDraft.scale), options: scOpts.map((s) => [String(s), scaleText(s)]), onChange: (v) => { detailDraft.scale = +v || 2; render(); } });
       box.append(lblField, scField);
       detSec.append(box);
     }
@@ -5917,13 +5917,13 @@ const Drawing = (() => {
       detSec.append(ml);
     }
     const bDet = h('button', { type: 'button', class: 'btn' + (tool === 'detail' ? ' active' : ''), id: 'dw-add-detail', 'data-help': 'drawingDetail' });
-    bDet.innerHTML = icon('zoomIn') + (tool === 'detail' ? 'Detail-Werkzeug aktiv' : 'Detailansicht (Kreis)');
+    bDet.innerHTML = icon('zoomIn') + esc(T(tool === 'detail' ? 'draw.panel.detailActive' : 'draw.panel.detailAdd'));
     bDet.onclick = () => tool_('detail');
     detSec.append(h('div', { class: 'btn-row' }, bDet));
     w.append(detSec);
     // Mittellinien & Mittelkreuze (ZE-06)
-    const ctrSec = h('div', { class: 'section', id: 'dw-centers-sec', 'data-help': 'drawingCenters' }, h('div', { class: 'section-h' }, 'Mittellinien'));
-    const ctrToggle = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-panel-centers', checked: !!d.centers }), 'Mittellinien automatisch');
+    const ctrSec = h('div', { class: 'section', id: 'dw-centers-sec', 'data-help': 'drawingCenters' }, h('div', { class: 'section-h' }, T('menu.draw.centers')));
+    const ctrToggle = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-panel-centers', checked: !!d.centers }), T('draw.panel.centersAuto'));
     ctrToggle.querySelector('input').onchange = (e) => setCenters(e.target.checked);
     ctrSec.append(ctrToggle);
     const allCtrs = allCenters();
@@ -5931,21 +5931,21 @@ const Drawing = (() => {
     const visCrossN = visCtrs.filter((c) => c.type === 'cross').length;
     const visLineN = visCtrs.filter((c) => c.type === 'line').length;
     const hiddenN = allCtrs.filter((c) => c.hidden).length || (d.hiddenCenters || []).length;
-    const sumParts = [`${visCrossN} ${visCrossN === 1 ? 'Mittelkreuz' : 'Mittelkreuze'}`, `${visLineN} ${visLineN === 1 ? 'Mittellinie' : 'Mittellinien'}`];
-    if (d.centers && hiddenN > 0) sumParts.push(`${hiddenN} ausgeblendet`);
+    const sumParts = [visCrossN === 1 ? T('draw.panel.crossOne') : T('draw.panel.crossMany', { n: visCrossN }), visLineN === 1 ? T('draw.panel.lineOne') : T('draw.panel.lineMany', { n: visLineN })];
+    if (d.centers && hiddenN > 0) sumParts.push(T('draw.panel.hiddenSuffix', { n: hiddenN }));
     ctrSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row', id: 'dw-centers-summary' }, h('span', { class: 'grow' }, sumParts.join(' · ')))));
     if ((d.hiddenCenters || []).length > 0 || !d.centers) {
       const bShowAll = h('button', { type: 'button', class: 'btn', id: 'dw-centers-show-all' });
-      bShowAll.innerHTML = icon('eye') + ((d.hiddenCenters || []).length ? `Alle einblenden (${(d.hiddenCenters || []).length})` : 'Alle einblenden');
+      bShowAll.innerHTML = icon('eye') + esc((d.hiddenCenters || []).length ? T('draw.panel.showAllCount', { n: (d.hiddenCenters || []).length }) : T('draw.panel.showAll'));
       bShowAll.onclick = () => showAllCenters();
       ctrSec.append(h('div', { class: 'btn-row' }, bShowAll));
     }
     if (allCtrs.length) {
-      const detCtrs = h('details', { id: 'dw-centers-list', ...(centersListOpen ? { open: true } : {}) }, h('summary', null, `Einzeln ein-/ausblenden (${allCtrs.length})`));
+      const detCtrs = h('details', { id: 'dw-centers-list', ...(centersListOpen ? { open: true } : {}) }, h('summary', null, T('draw.panel.toggleCenters', { n: allCtrs.length })));
       detCtrs.addEventListener('toggle', () => { centersListOpen = detCtrs.open; });
       const cl = h('div', { class: 'mini-list' });
       for (const c of allCtrs) {
-        const lbl = `${viewLabel(c.view, d)} · ${c.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie'} Ø${fmtDim(c.r * 2)}`;
+        const lbl = `${viewLabel(c.view, d)} · ${T(c.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName')} Ø${fmtDim(c.r * 2)}`;
         const row = h('div', {
           class: 'mini-row ctr-row',
           'data-ctr-id': c.id,
@@ -5957,7 +5957,7 @@ const Drawing = (() => {
           type: 'button',
           class: 'btn ctr-toggle',
           'aria-pressed': String(!c.hidden),
-          'data-tip': c.hidden ? 'Einblenden' : 'Ausblenden',
+          'data-tip': T(c.hidden ? 'panel.tree.show' : 'common.hide'),
           style: { padding: '2px 6px' },
         });
         tb.innerHTML = icon(c.hidden ? 'eyeOff' : 'eye');
@@ -5979,15 +5979,15 @@ const Drawing = (() => {
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
       const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
       const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selBalloon ? `Positionsnummer ${resolveBalloonPos(selBalloon, bomData)}` : isBomSel ? 'Stückliste auf dem Blatt' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : selResolved ? `Maß ${dimSummaryLabel(selResolved, sheetDimStyle(d))}` : 'Auswahl'));
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
       if (selBalloon) {
         const curPos = resolveBalloonPos(selBalloon, bomData);
         const posOpts = bomRowsList.length
           ? bomRowsList.map((r) => [String(r.pos), `${r.pos} · ${r.name} (${r.n}×)`])
-          : [[String(curPos), `Pos. ${curPos}`]];
+          : [[String(curPos), T('draw.panel.posShort', { pos: curPos })]];
         selSec.append(UI.selectField({
           id: 'dw-bl-pos',
-          label: 'Stücklisten-Position',
+          label: T('draw.panel.bomPosLabel'),
           value: String(curPos),
           options: posOpts,
           onChange: (v) => {
@@ -5998,29 +5998,29 @@ const Drawing = (() => {
         }));
         selSec.append(UI.selectField({
           id: 'dw-bl-tip',
-          label: 'Spitze',
+          label: T('draw.panel.tip'),
           value: selBalloon.tip === 'arrow' ? 'arrow' : 'dot',
-          options: [['dot', 'Punkt (Fläche)'], ['arrow', 'Pfeil (Kante)']],
+          options: [['dot', T('draw.panel.balloonTipDot')], ['arrow', T('draw.panel.balloonTipArrow')]],
           onChange: (v) => updateBalloon(selBalloon.id, { tip: v }),
         }));
       }
       if (isBomSel) {
-        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Positionen'), h('b', { class: 'mono' }, String(bomRowsList.length)))));
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.panel.bomPositions')), h('b', { class: 'mono' }, String(bomRowsList.length)))));
       }
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
-        const lFld = UI.textField({ id: 'dw-det-label', label: 'Buchstabe', value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
+        const lFld = UI.textField({ id: 'dw-det-label', label: T('draw.panel.letter'), value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
         lFld.querySelector('input').maxLength = 2;
         const scOpts = DETAIL_SCALES.includes(selDet.scale) ? DETAIL_SCALES : [...DETAIL_SCALES, selDet.scale].sort((a, b) => a - b);
-        const sFld = UI.selectField({ id: 'dw-det-scale', label: 'Maßstab', value: String(selDet.scale), options: scOpts.map((s) => [String(s), scaleText(s)]), onChange: (v) => updateDetail(selDet.id, { scale: +v || 2 }) });
-        const rFld = UI.numField({ id: 'dw-det-r', label: 'Kreis-Radius', unit: 'len', value: selDet.r, min: 0.5, step: 1, onCommit: (v) => { if (v > 0.2) updateDetail(selDet.id, { r: v }); } });
+        const sFld = UI.selectField({ id: 'dw-det-scale', label: T('draw.tb.scale'), value: String(selDet.scale), options: scOpts.map((s) => [String(s), scaleText(s)]), onChange: (v) => updateDetail(selDet.id, { scale: +v || 2 }) });
+        const rFld = UI.numField({ id: 'dw-det-r', label: T('draw.panel.detRadius'), unit: 'len', value: selDet.r, min: 0.5, step: 1, onCommit: (v) => { if (v > 0.2) updateDetail(selDet.id, { r: v }); } });
         fDet.append(lFld, sFld);
         selSec.append(fDet, rFld);
       }
       if (selNote) {
-        const kindTxt = selNote.targetKind === 'edge' ? 'Kante' : selNote.targetKind === 'face' ? 'Fläche' : 'Frei';
-        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, selNote.view ? viewLabel(selNote.view, d) : 'Frei auf dem Blatt'), h('b', null, kindTxt))));
-        selSec.append(UI.selectField({ id: 'dw-note-tip', label: 'Spitze', value: selNote.tip, options: [['arrow', 'Pfeil'], ['dot', 'Punkt']], onChange: (v) => updateNote(selNote.id, { tip: v }) }));
+        const kindTxt = T(selNote.targetKind === 'edge' ? 'draw.panel.kindEdge' : selNote.targetKind === 'face' ? 'draw.panel.kindFace' : 'draw.panel.kindFree');
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, selNote.view ? viewLabel(selNote.view, d) : T('draw.panel.freeOnSheet')), h('b', null, kindTxt))));
+        selSec.append(UI.selectField({ id: 'dw-note-tip', label: T('draw.panel.tip'), value: selNote.tip, options: [['arrow', T('draw.noteTip.arrow')], ['dot', T('draw.noteTip.dot')]], onChange: (v) => updateNote(selNote.id, { tip: v }) }));
         const ta = h('textarea', {
           id: 'dw-note-text',
           rows: '2',
@@ -6029,7 +6029,7 @@ const Drawing = (() => {
         ta.value = selNote.text || '';
         ta.addEventListener('keydown', (e) => e.stopPropagation());
         ta.addEventListener('change', () => updateNote(selNote.id, { text: ta.value }));
-        selSec.append(h('div', { class: 'field' }, h('label', { for: 'dw-note-text' }, 'Notiz-Text'), ta));
+        selSec.append(h('div', { class: 'field' }, h('label', { for: 'dw-note-text' }, T('draw.panel.noteText')), ta));
       }
       if (selCtr) {
         selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, viewLabel(selCtr.view, d)), h('b', { class: 'mono' }, `Ø${fmtDim(selCtr.r * 2)}`))));
@@ -6049,14 +6049,14 @@ const Drawing = (() => {
         };
         tolBox.append(UI.selectField({
           id: 'dw-tol-mode',
-          label: 'Toleranz',
+          label: T('draw.panel.tolLabel'),
           value: curMode,
           options: [
-            ['none', 'Keine (Allgemeintoleranz)'],
-            ['sym', 'Symmetrisch (±)'],
-            ['dev', 'Abmaße (oben / unten)'],
-            ['limits', 'Grenzmaße (min / max)'],
-            ['fit', 'ISO-Passung (H7, g6 …)'],
+            ['none', T('draw.panel.tolNone')],
+            ['sym', T('draw.panel.tolSym')],
+            ['dev', T('draw.panel.tolDev')],
+            ['limits', T('draw.panel.tolLimits')],
+            ['fit', T('draw.panel.tolFit')],
           ],
           onChange: (m) => {
             if (m === 'none') setDimTol(selDimInfo.dim.id, null);
@@ -6068,7 +6068,7 @@ const Drawing = (() => {
         if (curMode === 'sym') {
           tolBox.append(tolNumField({
             id: 'dw-tol-sym',
-            label: 'Toleranz ±',
+            label: T('draw.panel.tolSymField'),
             value: curTol.sym ?? 0.1,
             min: 0,
             onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'sym', sym: Math.abs(v) }),
@@ -6078,13 +6078,13 @@ const Drawing = (() => {
           fRow.append(
             tolNumField({
               id: 'dw-tol-upper',
-              label: 'Oberes Abmaß',
+              label: T('draw.panel.tolUpper'),
               value: curTol.upper ?? 0,
               onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'dev', upper: v, lower: curTol.lower ?? 0 }),
             }),
             tolNumField({
               id: 'dw-tol-lower',
-              label: 'Unteres Abmaß',
+              label: T('draw.panel.tolLower'),
               value: curTol.lower ?? 0,
               onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'dev', upper: curTol.upper ?? 0, lower: v }),
             })
@@ -6095,13 +6095,13 @@ const Drawing = (() => {
           fRow.append(
             tolNumField({
               id: 'dw-tol-max',
-              label: 'Höchstmaß',
+              label: T('draw.panel.tolMax'),
               value: selDimInfo.nominalMm + (curTol.upper ?? 0),
               onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'limits', upper: v - selDimInfo.nominalMm, lower: curTol.lower ?? 0 }),
             }),
             tolNumField({
               id: 'dw-tol-min',
-              label: 'Mindestmaß',
+              label: T('draw.panel.tolMin'),
               value: selDimInfo.nominalMm + (curTol.lower ?? 0),
               onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'limits', upper: curTol.upper ?? 0, lower: v - selDimInfo.nominalMm }),
             })
@@ -6113,24 +6113,24 @@ const Drawing = (() => {
           const shaftOpts = Object.entries(classes).filter(([, v]) => v.art === 'welle').map(([k]) => [k, k]);
           const fitSel = UI.selectField({
             id: 'dw-tol-fit',
-            label: 'Passung (ISO 286)',
+            label: T('draw.panel.fitLabel'),
             value: curTol.fit || 'H7',
             options: [
-              { group: 'Bohrung (ISO 286)', options: holeOpts },
-              { group: 'Welle (ISO 286)', options: shaftOpts },
+              { group: T('draw.panel.fitHoleGroup'), options: holeOpts },
+              { group: T('draw.panel.fitShaftGroup'), options: shaftOpts },
             ],
             onChange: (v) => setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: v, fitShow: curTol.fitShow || 'both' }),
           });
           fitSel.dataset.help = 'drawingFit';
           const showSel = UI.selectField({
             id: 'dw-tol-fit-show',
-            label: 'Anzeige',
+            label: T('draw.panel.fitShowLabel'),
             value: curTol.fitShow || 'both',
             options: [
-              ['both', 'Kurzzeichen + Abmaße'],
-              ['code', 'Nur Kurzzeichen'],
-              ['dev', 'Nur Abmaße'],
-              ['limits', 'Grenzmaße (min / max)'],
+              ['both', T('draw.panel.fitShowBoth')],
+              ['code', T('draw.panel.fitShowCode')],
+              ['dev', T('draw.panel.fitShowDev')],
+              ['limits', T('draw.panel.fitShowLimits')],
             ],
             onChange: (v) => setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: curTol.fit || 'H7', fitShow: v }),
           });
@@ -6139,80 +6139,87 @@ const Drawing = (() => {
         const tolInfo = resolveDimTol(selDimInfo.dim, selDimInfo.nominalMm);
         if (tolInfo) {
           if (tolInfo.outOfRange) {
-            tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: `<b>${esc(tolInfo.code)}</b>: Nennmaß liegt außerhalb der ISO-286-Tabelle (0–500 mm).` }));
+            tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: T('draw.panel.tolOutOfRange', { code: esc(tolInfo.code) }) }));
           } else {
             const fitDec = tolInfo.mode === 'fit' ? ((!Number.isInteger(tolInfo.upperUm) || !Number.isInteger(tolInfo.lowerUm)) ? 4 : 3) : 0;
             const dev = fmtDevPair(tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
             const lim = fmtLimitsPair(selDimInfo.nominalMm, tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
             const linesHtml = [];
             if (tolInfo.mode === 'fit') {
-              const kindTxt = tolInfo.kind === 'bohrung' ? 'Bohrung' : 'Welle';
-              linesHtml.push(`<b>${esc(tolInfo.code)} (${kindTxt})</b> · Bereich &gt;${tolInfo.rangeMin} bis ${tolInfo.rangeMax} mm`);
+              const kindTxt = T(tolInfo.kind === 'bohrung' ? 'draw.panel.fitKindHole' : 'draw.panel.fitKindShaft');
+              linesHtml.push(T('draw.panel.fitHead', { code: esc(tolInfo.code), kind: kindTxt, min: tolInfo.rangeMin, max: tolInfo.rangeMax }));
               const umU = tolInfo.upperUm === 0 ? '0' : (tolInfo.upperUm > 0 ? '+' : '\u2212') + String(Math.abs(tolInfo.upperUm)).replace('.', ',');
               const umL = tolInfo.lowerUm === 0 ? '0' : (tolInfo.lowerUm > 0 ? '+' : '\u2212') + String(Math.abs(tolInfo.lowerUm)).replace('.', ',');
-              linesHtml.push(`Abmaße: <b>${esc(dev.upStr)} / ${esc(dev.loStr)} ${esc(Units.label())}</b> (${umU} / ${umL} µm)`);
+              linesHtml.push(T('draw.panel.fitDevsUm', { up: esc(dev.upStr), lo: esc(dev.loStr), u: esc(Units.label()), umU, umL }));
             } else {
-              linesHtml.push(`Abmaße: <b>${esc(dev.upStr)} / ${esc(dev.loStr)} ${esc(Units.label())}</b>`);
+              linesHtml.push(T('draw.panel.tolDevs', { up: esc(dev.upStr), lo: esc(dev.loStr), u: esc(Units.label()) }));
             }
-            linesHtml.push(`Grenzmaße: <b>${esc(lim.minStr)} – ${esc(lim.maxStr)} ${esc(Units.label())}</b>`);
+            linesHtml.push(T('draw.panel.tolLimitsLine', { min: esc(lim.minStr), max: esc(lim.maxStr), u: esc(Units.label()) }));
             if (tolInfo.mode === 'fit' && tolInfo.hint) linesHtml.push(`<span style="color:var(--muted)">${esc(tolInfo.hint)}</span>`);
-            if (tolInfo.mode === 'fit' && tolInfo.norm) linesHtml.push(`<span style="color:var(--muted)">Quelle: ${esc(tolInfo.norm)}</span>`);
+            if (tolInfo.mode === 'fit' && tolInfo.norm) linesHtml.push(`<span style="color:var(--muted)">${T('draw.panel.tolSrc', { src: esc(tolInfo.norm) })}</span>`);
             tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: linesHtml.join('<br>') }));
           }
         }
         selSec.append(tolBox);
       }
       if (selResolved && selResolved.lost) {
-        selSec.append(h('div', { class: 'hint-box', id: 'dw-dim-lost-hint', html: `<b>Bezug verloren:</b> ${esc(selResolved.lostReason || 'Die zugehörige Kante oder Bohrung gibt es im Modell nicht mehr.')}` }));
+        selSec.append(h('div', { class: 'hint-box', id: 'dw-dim-lost-hint', html: T('draw.panel.lostRefHint', { reason: esc(selResolved.lostReason || T('draw.panel.lostDefaultReason')) }) }));
       }
       const row = h('div', { class: 'btn-row' });
       if (selResolved && selResolved.lost && !selResolved.auto) {
         const isRb = tool === 'dim' && toolState && toolState.rebindId === selResolved.id;
-        const rb = h('button', { type: 'button', class: 'btn' + (isRb ? ' active' : ''), id: 'dw-dim-rebind' }, isRb ? 'Abbrechen' : 'Neu zuordnen');
+        const rb = h('button', { type: 'button', class: 'btn' + (isRb ? ' active' : ''), id: 'dw-dim-rebind' }, T(isRb ? 'common.cancel' : 'draw.panel.lostRebind'));
         rb.onclick = () => { if (isRb) setTool(null); else startRebind(selResolved.id); };
         row.append(rb);
       }
       if (isSec) {
-        const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, 'Blickrichtung umkehren');
+        const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, T('draw.panel.secFlipBtn'));
         fl.onclick = () => flipSection(selDim);
         row.append(fl);
       }
       if (selD && selD.type === 'ang') {
-        const sup = h('button', { type: 'button', class: 'btn', id: 'dw-dim-supp' }, 'Gegenwinkel (180° − α)');
+        const sup = h('button', { type: 'button', class: 'btn', id: 'dw-dim-supp' }, T('draw.panel.dimSuppBtn'));
         sup.onclick = () => flipAngleDim(selDim);
         row.append(sup);
       }
       if (selCtr) {
         const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ctr-hide' });
-        hb.innerHTML = icon('eyeOff') + 'Ausblenden';
+        hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
         hb.onclick = () => hideCenter(selCtr.id);
         row.append(hb);
       } else if (isBomSel) {
         if (d.bomTable && Array.isArray(d.bomTable.pos)) {
-          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-sel-reset' }, 'Lage zurücksetzen');
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-sel-reset' }, T('draw.panel.bomPosReset'));
           rb.onclick = () => resetBomTablePos();
           row.append(rb);
         }
         const hb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-hide' });
-        hb.innerHTML = icon('eyeOff') + 'Ausblenden';
+        hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
         hb.onclick = () => setBomTable(false);
         row.append(hb);
       } else {
-        const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
+        const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + esc(T('draw.panel.delSelBtn')); del.onclick = () => removeSel();
         row.append(del);
       }
       selSec.append(row);
       w.append(selSec);
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben (Ansichten lassen sich per Ziehen verschieben). Wähle eine Ansicht auf dem Blatt oder in der Liste, um Maßstab, Kanten oder Schattierung einzustellen. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab, mit <b>Hinweislinie (N)</b> setzt du Notizen an Kanten oder Flächen. Klick ein <b>Maß</b> an für Toleranzen (±, Abmaße, Grenzmaße) oder ISO-286-Passungen (H7, g6 …) – oder wähle Maß, Schnitt, Detail, Hinweislinie oder Mittellinie und drück <b>Entf</b> zum Löschen bzw. Ausblenden.' }));
+    w.append(h('div', { class: 'hint-box', html: T('draw.panel.helpHintHtml') }));
     body.append(w);
+  }
+  function refreshUI() {
+    if (App.mode !== 'drawing') return;
+    renderTabs();
+    render();
+    Panels.renderTools();
+    Panels.renderRight();
   }
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   App.on('docLoaded', () => { lastLostKey = ''; });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
-    open, close, refresh, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera,
     get selectedView() { return currentViewKey(); },

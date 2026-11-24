@@ -27,7 +27,10 @@ self.onmessage = async (ev) => {
     let result;
     if (cmd === 'init') result = await init(args.wasm);
     else if (!kernel) throw new Error('Der CAD-Kern ist noch nicht bereit.');
-    else if (cmd === 'evaluate') result = kernel.evaluate(args.scene, args.known);
+    else if (cmd === 'evaluate') result = kernel.evaluate(args.scene, args.known, args.opts);
+    else if (cmd === 'stats') result = kernel.getStats();
+    else if (cmd === 'resetStats') result = kernel.resetStats();
+    else if (cmd === 'clearCache') result = kernel.clearCache();
     else if (cmd === 'exportMeshes') result = kernel.exportMeshes(args.scene, args.fine, args.q, args.originMat, args.holeComp);
     else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene, args.only, args.originMat).arrayBuffer() };
     else if (cmd === 'exportIGES') result = { data: await kernel.exportIGES(args.scene, args.only, args.originMat).arrayBuffer() };

@@ -436,22 +436,22 @@ const Print = (() => {
   function checks() {
     const out = [];
     const st = stats();
-    if (!st) { out.push({ s: 'none', t: 'Noch leer', d: 'Füge einen Körper hinzu oder starte eine Skizze.' }); return out; }
+    if (!st) { out.push({ s: 'none', t: T('ampel.emptyTitle'), d: T('ampel.emptyDesc') }); return out; }
     const errs = App.errors.length;
-    if (errs) out.push({ s: 'warn', t: errs === 1 ? 'Ein Schritt hat ein Problem' : errs + ' Schritte haben Probleme', d: App.errors[0].message });
+    if (errs) out.push({ s: 'warn', t: errs === 1 ? T('ampel.errOne') : T('ampel.errMany', { n: errs }), d: App.errors[0].message });
     const pb = App.doc.settings && App.doc.settings.printBed;
     const fit = fitCheck(pb, st);
     if (!fit.fits) {
-      out.push({ s: 'warn', t: 'Passt nicht auf den Drucker', d: fit.summary, fit });
+      out.push({ s: 'warn', t: T('ampel.bedWarn'), d: fit.summary, fit });
     }
     const wallNodes = printableWallNodes();
     const totalTris = wallNodes.reduce((s, n) => s + ((n.data && n.data.triangles && n.data.triangles.length) || 0) / 3, 0);
     if (wallNodes.length && totalTris <= 25000) {
       const nw = nozzleWallCheck();
-      if (nw.warn) out.push({ s: 'warn', t: 'Wand zu dünn für die Düse', d: nw.summary, nozzleWall: nw });
+      if (nw.warn) out.push({ s: 'warn', t: T('ampel.wallWarn'), d: nw.summary, nozzleWall: nw });
     }
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
-    if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
+    if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: T('ampel.okDesc', { n: bodies }) });
     return out;
   }
   function updateAmpel() {
@@ -460,33 +460,33 @@ const Print = (() => {
     const el = $('#ampel'); el.className = 'ampel ' + worst;
     const main = cs.find((c) => c.s === worst) || cs[0];
     el.querySelector('.t').textContent = main ? main.t : '';
-    el.setAttribute('data-tip', 'Modell-Status');
+    el.setAttribute('data-tip', T('ampel.title'));
     const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
     if (pb && pb.enabled) Viewer.setPrintBed({ ...pb, warn: !fitCheck(pb).fits });
   }
   function openAmpel(anchor) {
     const cs = checks();
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
-    box.append(h('div', { class: 'section-h' }, 'Modell-Status'));
+    box.append(h('div', { class: 'section-h' }, T('ampel.title')));
     const list = h('div', { class: 'check-list' });
     for (const c of cs) {
       const row = h('div', { class: 'check-row ' + c.s });
       const stI = h('span', { class: 'st' }); stI.innerHTML = icon(c.s === 'ok' ? 'check' : c.s === 'warn' ? 'warn' : c.s === 'none' ? 'info' : 'close');
       const infoCol = h('div', { class: 'grow' }, h('b', null, c.t), h('small', null, c.d));
       if (c.fit && c.fit.suggestion && c.fit.suggestion.canFit) {
-        const rb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'So drehen');
+        const rb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, T('ampel.rotateBtn'));
         rb.onclick = () => { UI.closePop(); applyRotationSuggestion(c.fit.suggestion); };
         infoCol.append(rb);
       }
       if (c.nozzleWall) {
-        const wb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        const wb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, T('ampel.showSpotsBtn'));
         wb.onclick = () => { UI.closePop(); Views.thin(true, { limit: c.nozzleWall.minWall }); };
         infoCol.append(wb);
       }
       row.append(stI, infoCol); list.append(row);
     }
     box.append(list);
-    const ex = h('button', { type: 'button', class: 'btn primary' }); ex.innerHTML = icon('export') + 'Exportieren';
+    const ex = h('button', { type: 'button', class: 'btn primary' }); ex.innerHTML = icon('export') + esc(T('tool.export'));
     ex.onclick = () => { UI.closePop(); exportDialog(); };
     box.append(ex);
     UI.pop(anchor, box, { up: true, alignRight: true });
@@ -803,29 +803,29 @@ const Print = (() => {
     }
   }
   function exportDialog(preset = {}) {
-    if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
+    if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast(T('dlg.export.nothing'), { icon: 'info' }); return; }
     const plates = Plates.candidates();
     const csysAll = typeof Datums !== 'undefined' ? Datums.csysList().filter((c) => c.csys) : [];
     const initCsys = preset.csysId && csysAll.some((c) => c.id === preset.csysId) ? preset.csysId : '';
     const initHc = holeComp();
     const opts = { step: true, iges: false, brep: false, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys, holeComp: initHc };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
-    body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
+    body.append(h('p', null, T('dlg.export.intro')));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
-    const stepRow = mk('step', 'STEP', 'Exakte Geometrie mit Teilenamen, Farben und Gruppen – für Fusion, FreeCAD, SolidWorks und Fertiger'); stepRow.setAttribute('data-help', 'exportStep');
-    const igesRow = mk('iges', 'IGES (.igs)', 'Exakte Flächen und Körper – für ältere CAD- und CAM-Programme'); igesRow.setAttribute('data-help', 'exportIgesBrep');
-    const brepRow = mk('brep', 'BREP (.brep)', 'Eigenes Format des OpenCascade-Kerns – verlustfrei für FreeCAD und Tracery'); brepRow.setAttribute('data-help', 'exportIgesBrep');
-    const objRow = mk('obj', 'OBJ (+ MTL)', 'Dreiecksnetz mit Farben – für Blender, Rendering und viele 3D-Programme'); objRow.setAttribute('data-help', 'exportObjGlb');
-    const glbRow = mk('glb', 'GLB (glTF)', '3D-Datei mit Material-Aussehen und Teilenamen – für Web, Blender und Vorschau'); glbRow.setAttribute('data-help', 'exportObjGlb');
-    body.append(stepRow, igesRow, brepRow, mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'), objRow, glbRow);
+    const stepRow = mk('step', T('dlg.export.step'), T('dlg.export.stepSub')); stepRow.setAttribute('data-help', 'exportStep');
+    const igesRow = mk('iges', T('dlg.export.iges'), T('dlg.export.igesSub')); igesRow.setAttribute('data-help', 'exportIgesBrep');
+    const brepRow = mk('brep', T('dlg.export.brep'), T('dlg.export.brepSub')); brepRow.setAttribute('data-help', 'exportIgesBrep');
+    const objRow = mk('obj', T('dlg.export.obj'), T('dlg.export.objSub')); objRow.setAttribute('data-help', 'exportObjGlb');
+    const glbRow = mk('glb', T('dlg.export.glb'), T('dlg.export.glbSub')); glbRow.setAttribute('data-help', 'exportObjGlb');
+    body.append(stepRow, igesRow, brepRow, mk('stl', T('dlg.export.stl'), T('dlg.export.stlSub')), mk('mf', T('dlg.export.mf'), T('dlg.export.mfSub')), objRow, glbRow);
     // Was kommt in die Dateien? (IO-07)
     const selTops = exportSelection();
-    if (selTops.length) { opts.onlySel = false; const l = mk('onlySel', `Nur die Auswahl (${selTops.length} ${selTops.length === 1 ? 'Teil' : 'Teile'})`, 'Alles andere bleibt draußen – Löcher und Formschritte an den gewählten Teilen zählen mit'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
+    if (selTops.length) { opts.onlySel = false; const l = mk('onlySel', T('dlg.export.onlySel', { n: selTops.length, unit: selTops.length === 1 ? T('dlg.export.partOne') : T('dlg.export.partMany') }), T('dlg.export.onlySelSub')); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // Netz-Einstellungen (IO-08)
     opts.q = 1; opts.stlText = false;
-    const qs = UI.selectField({ id: 'ex-q', label: 'Feinheit der Netze (STL, 3MF, OBJ, GLB)', value: '1', options: [['3', 'Grob – kleine Dateien'], ['1', 'Normal'], ['0.4', 'Fein'], ['0.15', 'Sehr fein – große Dateien']], onChange: (v) => { opts.q = +v; } });
+    const qs = UI.selectField({ id: 'ex-q', label: T('dlg.export.meshQuality'), value: '1', options: [['3', T('dlg.export.qCoarse')], ['1', T('dlg.export.qNormal')], ['0.4', T('dlg.export.qFine')], ['0.15', T('dlg.export.qUltra')]], onChange: (v) => { opts.q = +v; } });
     qs.setAttribute('data-help', 'exportSettings');
-    const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
+    const st = UI.selectField({ id: 'ex-stlfmt', label: T('dlg.export.stlFmt'), value: 'bin', options: [['bin', T('dlg.export.stlBin')], ['txt', T('dlg.export.stlTxt')]], onChange: (v) => { opts.stlText = v === 'txt'; } });
     st.setAttribute('data-help', 'exportSettings');
     body.append(h('div', { class: 'fields' }, qs, st));
     // Loch-Ausgleich für den 3D-Druck (DR-02, nur STL & 3MF)
@@ -833,19 +833,19 @@ const Print = (() => {
     if (initHc > 0 && !hcChoices.some((v) => Math.abs(v - initHc) < 1e-4)) hcChoices.push(initHc);
     hcChoices.sort((a, b) => a - b);
     const hcWrap = h('div', { 'data-help': 'holeComp' },
-      UI.selectField({ id: 'ex-hole-comp', label: 'Loch-Ausgleich (nur STL / 3MF)', value: String(initHc), options: hcChoices.map((v) => [String(v), v === 0 ? 'Aus (0 mm)' : `+${fmt(v, 2)} mm`]), onChange: (v) => { opts.holeComp = +v; } }),
-      h('small', { style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, 'Vergrößert runde innere Löcher nur in den 3D-Druck-Dateien (STL/3MF) – das Modell und STEP bleiben exakt.'),
+      UI.selectField({ id: 'ex-hole-comp', label: T('dlg.export.holeComp'), value: String(initHc), options: hcChoices.map((v) => [String(v), v === 0 ? T('panel.proj.holeCompOff') : `+${fmt(v, 2)} mm`]), onChange: (v) => { opts.holeComp = +v; } }),
+      h('small', { style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, T('dlg.export.holeCompHint')),
     );
     body.append(hcWrap);
     if (csysAll.length) {
-      const cf = UI.selectField({ id: 'ex-csys', label: 'Nullpunkt (Koordinatensystem)', value: opts.csysId, options: [['', 'Welt-Ursprung (0 | 0 | 0)'], ...csysAll.map((c) => [c.id, c.name])], onChange: (v) => { opts.csysId = v; } });
+      const cf = UI.selectField({ id: 'ex-csys', label: T('dlg.export.csys'), value: opts.csysId, options: [['', T('dlg.export.worldOrigin')], ...csysAll.map((c) => [c.id, c.name])], onChange: (v) => { opts.csysId = v; } });
       cf.setAttribute('data-help', 'datumCsys');
       body.append(cf);
     }
-    { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF, OBJ, GLB)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
+    { const l = mk('each', T('dlg.export.each'), T('dlg.export.eachSub')); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
-      const d = mk('dxf', 'Platten als DXF (für die Fräse)', 'Draufsicht in Originalgröße, eine Datei pro Platte – die Dicke steht im Dateinamen');
+      const d = mk('dxf', T('dlg.export.dxf'), T('dlg.export.dxfSub'));
       d.setAttribute('data-help', 'plateDxf');
       const pl = h('div', { class: 'dxf-plates', style: { display: 'grid', gap: '4px', margin: '-4px 0 0 28px' } });
       for (const p of plates) { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', 'data-plate': p.id, checked: true }), `${p.name} · ${Units.fmtLenU(p.t)}`); l.querySelector('input').onchange = (e) => { opts.plates = e.target.checked ? [...new Set([...opts.plates, p.id])] : opts.plates.filter((x) => x !== p.id); }; pl.append(l); }
@@ -854,32 +854,32 @@ const Print = (() => {
     }
     const cs = checks().filter((c) => c.s === 'warn' || c.s === 'bad');
     if (cs.length) {
-      const warnBox = h('div', { class: 'hint-box warn', id: 'ex-warn-box' }, h('div', { html: '<b>Hinweis:</b> ' + esc(cs[0].t) + ' – ' + esc(cs[0].d) }));
+      const warnBox = h('div', { class: 'hint-box warn', id: 'ex-warn-box' }, h('div', { html: T('dlg.export.warnHtml', { t: esc(cs[0].t), d: esc(cs[0].d) }) }));
       if (cs[0].fit && cs[0].fit.suggestion && cs[0].fit.suggestion.canFit) {
-        const rb = h('button', { type: 'button', class: 'btn', id: 'ex-bed-rotate', style: { marginTop: '6px' } }, 'So drehen');
+        const rb = h('button', { type: 'button', class: 'btn', id: 'ex-bed-rotate', style: { marginTop: '6px' } }, T('ampel.rotateBtn'));
         rb.onclick = () => { UI.closeModal(); applyRotationSuggestion(cs[0].fit.suggestion); };
         warnBox.append(rb);
       }
       if (cs[0].nozzleWall) {
-        const wb = h('button', { type: 'button', class: 'btn', id: 'ex-nozzle-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        const wb = h('button', { type: 'button', class: 'btn', id: 'ex-nozzle-show', style: { marginTop: '6px' } }, T('ampel.showSpotsBtn'));
         wb.onclick = () => { UI.closeModal(); Views.thin(true, { limit: cs[0].nozzleWall.minWall }); };
         warnBox.append(wb);
       }
       body.append(warnBox);
     }
-    UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
+    UI.modal({ title: T('dlg.export.title'), body, actions: [{ label: T('common.cancel') }, { label: T('dlg.export.saveZip'), primary: true, run: () => { runExport(opts); } }] });
   }
   // Bild speichern (PNG) – in Bildschirm- oder Druckgröße, auf Wunsch mit durchsichtigem Hintergrund
   function imageDialog() {
     const vp = $('#viewport').getBoundingClientRect();
-    const sizes = [['screen', `Wie der Bildschirm (${Math.round(vp.width * 2)} × ${Math.round(vp.height * 2)})`], ['1920', 'Full HD (1920 × 1080)'], ['3840', '4K (3840 × 2160)'], ['sq', 'Quadrat (2000 × 2000)']];
+    const sizes = [['screen', T('dlg.image.screen', { w: Math.round(vp.width * 2), h: Math.round(vp.height * 2) })], ['1920', T('dlg.image.fhd')], ['3840', T('dlg.image.uhd')], ['sq', T('dlg.image.sq')]];
     const st = { size: 'screen', transparent: false };
     const body = h('div', { style: { display: 'grid', gap: '12px', minWidth: 'min(380px, 80vw)' } });
-    body.append(UI.selectField({ id: 'img-size', label: 'Größe', value: st.size, options: sizes, onChange: (v) => { st.size = v; } }));
-    const t = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'img-transparent' }), 'Durchsichtiger Hintergrund (für Präsentationen und Webseiten)');
+    body.append(UI.selectField({ id: 'img-size', label: T('common.size'), value: st.size, options: sizes, onChange: (v) => { st.size = v; } }));
+    const t = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'img-transparent' }), T('dlg.image.transparent'));
     t.querySelector('input').onchange = (e) => { st.transparent = e.target.checked; };
-    body.append(t, h('div', { class: 'hint-box' }, 'Das Bild zeigt den aktuellen Blickwinkel ohne Raster und Achsen. Im Studio-Look mit Werkstoff, Licht und Schatten (Ansicht → unten im Menü).'));
-    UI.modal({ title: 'Bild speichern', body, actions: [{ label: 'Abbrechen' }, { label: 'Als PNG speichern', primary: true, run: () => { saveImage(st); } }] });
+    body.append(t, h('div', { class: 'hint-box' }, T('dlg.image.hint')));
+    UI.modal({ title: T('dlg.image.title'), body, actions: [{ label: T('common.cancel') }, { label: T('dlg.image.saveBtn'), primary: true, run: () => { saveImage(st); } }] });
   }
   function imageSize(size) {
     const vp = $('#viewport').getBoundingClientRect();
@@ -975,13 +975,13 @@ const Print = (() => {
   function turntableDialog() {
     const st = { sec: 6 };
     const body = h('div', { style: { display: 'grid', gap: '12px', minWidth: 'min(380px, 80vw)' } });
-    body.append(UI.selectField({ id: 'tt-sec', label: 'Länge', value: '6', options: [['4', '4 Sekunden'], ['6', '6 Sekunden'], ['10', '10 Sekunden'], ['15', '15 Sekunden']], onChange: (v) => { st.sec = +v; } }));
-    body.append(h('div', { class: 'hint-box' }, 'Das Modell dreht sich einmal ganz herum, so wie du es gerade siehst – am schönsten im Studio-Look. Während der Aufnahme bitte nicht ins Bild klicken.'));
-    if (!videoType()) body.append(h('div', { class: 'err-box' }, 'Dieser Browser kann keine Videos aufnehmen. Chrome, Edge und Firefox können es.'));
-    UI.modal({ title: 'Drehteller-Video', body, actions: [{ label: 'Abbrechen' }, { label: 'Aufnehmen', primary: true, run: () => { turntable({ seconds: st.sec }); } }] });
+    body.append(UI.selectField({ id: 'tt-sec', label: T('dlg.tt.length'), value: '6', options: [['4', T('dlg.tt.sec', { n: 4 })], ['6', T('dlg.tt.sec', { n: 6 })], ['10', T('dlg.tt.sec', { n: 10 })], ['15', T('dlg.tt.sec', { n: 15 })]], onChange: (v) => { st.sec = +v; } }));
+    body.append(h('div', { class: 'hint-box' }, T('dlg.tt.hint')));
+    if (!videoType()) body.append(h('div', { class: 'err-box' }, T('dlg.tt.unsupported')));
+    UI.modal({ title: T('dlg.tt.title'), body, actions: [{ label: T('common.cancel') }, { label: T('dlg.tt.recordBtn'), primary: true, run: () => { turntable({ seconds: st.sec }); } }] });
   }
   async function turntable({ seconds = 6, fps = 30, save: doSave = true } = {}) {
-    const type = videoType(); if (!type) { UI.toast('Dieser Browser kann keine Videos aufnehmen.', { kind: 'bad' }); return null; }
+    const type = videoType(); if (!type) { UI.toast(T('dlg.tt.unsupported'), { kind: 'bad' }); return null; }
     const cv = Viewer.canvas, stream = cv.captureStream(fps), chunks = [];
     const track = stream.getVideoTracks()[0];
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
@@ -989,7 +989,7 @@ const Print = (() => {
     const cam0 = Viewer.saveCamera(), tg = Viewer.controls.target.clone();
     const dx0 = cam0.p.x - tg.x, dy0 = cam0.p.y - tg.y;
     App.clearSelection(); Handles.clear();
-    const tst = UI.toast('Aufnahme läuft …', { icon: 'play', ms: seconds * 1000 + 3000 });
+    const tst = UI.toast(T('dlg.tt.recording'), { icon: 'play', ms: seconds * 1000 + 3000 });
     const done = new Promise((res) => { rec.onstop = res; rec.onerror = res; });
     rec.start(250);
     const dur = Math.max(100, seconds * 1000);
@@ -1022,8 +1022,8 @@ const Print = (() => {
   }
   let lastExport = null, lastTris = 0, lastHoleComp = null;
   async function runExport(opts) {
-    if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !opts.iges && !opts.brep && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
-    const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
+    if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !opts.iges && !opts.brep && !(opts.dxf && opts.plates.length)) { UI.toast(T('dlg.export.needFmt'), { kind: 'bad' }); return; }
+    const tst = UI.toast(T('dlg.export.building'), { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
       const only = opts.onlySel ? exportSelection() : null;
