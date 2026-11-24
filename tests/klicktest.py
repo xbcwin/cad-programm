@@ -10441,6 +10441,58 @@ endsolid spitze
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11240651(p):
+    # 1: Übergang-Führungskurve löst Vorschau auch im Auswahl-Werkzeug ('select') aus
+    p.empty()
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Unten')
+    skizzenkoerper(p, [{'id': 'c', 'type': 'circle', 'c': [0, 0], 'r': 8}], 40, 'Oben')
+    warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Übergang"]').click(); warte_rechnen(p, 30)
+    p.pg.locator('#loft-rail-edit').click(); p.wait(1000)
+    st = SS(p, "return [S.ctx.mode, S.tool]")
+    SS(p, "const q=S.ents[0].pts; q[1]=[Math.sign(q[0][0])*25, 20]")
+    p.pg.mouse.move(700, 400); p.pg.mouse.move(705, 405); p.wait(600); warte_rechnen(p, 30)
+    pv = p.ev("const r=App.extra.length&&App.results.get('__preview'); return r&&r.data?r.data.bbox:null")
+    ok1 = st == ['loftrail', 'select'] and pv is not None and (pv[3] - pv[0]) > 45
+    p.ev("Sketch.cancel(true)"); p.wait(300)
+
+    # 2: Explosion mit Gruppen bei blockiertem requestAnimationFrame (Timer-Fallback)
+    p.ev("Start.newProject(true)"); p.wait(600)
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('group',{}); g.name='Baugruppe';
+      for (let i=0;i<3;i++){ const b=Model.newItem('box',{w:20,d:20,h:6}); b.t.x=i*20; b.name='Teil '+(i+1); g.children.push(b); }
+      d.items.push(g);
+      const e=Model.newItem('box',{w:10,d:10,h:10},{name:'Extra'}); e.t.x=-40; d.items.push(e);
+    })"""); warte_rechnen(p, 30)
+    pause_raf = "window.__origRAF=window.requestAnimationFrame; window.__rafQueue=[]; window.requestAnimationFrame=(cb)=>{window.__rafQueue.push(cb); return window.__rafQueue.length;};"
+    resume_raf = "if(window.__origRAF){ window.requestAnimationFrame=window.__origRAF; const q=window.__rafQueue.splice(0); for(const cb of q) window.requestAnimationFrame(cb); }"
+    p.ev(pause_raf)
+    try:
+        p.ev("Views.explode(true)"); p.wait(700)
+        ex_open = p.ev("return [Views.explodeAmount, !!(document.querySelector('#ex-groups') && !document.querySelector('#ex-groups').closest('.vb-row').hidden)]")
+        p.ev("document.querySelector('#ex-groups').click()"); p.wait(400); warte_rechnen(p, 30)
+        ex_split = p.ev("return [Views.explodeGroups, App.extra.length]")
+        p.ev("Views.explode(false)"); p.wait(700); warte_rechnen(p, 30)
+        ex_closed = p.ev("return [Views.explodeAmount, Views.explodeGroups, App.extra.length, document.querySelector('#ex-groups')===null]")
+    finally:
+        p.ev(resume_raf)
+    ok2 = ex_open[0] > 0.55 and ex_open[1] and ex_split == [True, 3] and ex_closed == [0, False, 0, True]
+
+    # 3: Regler bricht laufenden Explosion-Timer bei rAF-Stau sauber ab
+    p.ev(pause_raf)
+    try:
+        p.ev("Views.explode(true)"); p.wait(100)
+        p.ev("const r=document.querySelector('#ex-range'); r.value='25'; r.dispatchEvent(new Event('input', {bubbles:true}));")
+        p.wait(600)
+        ex_slider = p.ev("return Views.explodeAmount")
+    finally:
+        p.ev(resume_raf)
+        p.ev("Views.reset()")
+    ok3 = abs(ex_slider - 0.25) < 0.03
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -10589,6 +10641,7 @@ TESTS = [
     ('[A-043] Wickeln um Zylinder (KP-34): Rechteck 31,4 mm auf Ø20 → 180° ± 2° / vertieft, Winkel & Ø40 / Linie & Entlang Pfad / Verlauf & Hilfe', t_a043_wickeln_zylinder),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
+    ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

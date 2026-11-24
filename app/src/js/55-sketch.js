@@ -2779,7 +2779,7 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
-    if (S.tool === 'select') { S.cursor = null; return; }
+    if (S.tool === 'select') { S.cursor = null; if (isLoftLine()) loftPreview(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
     } else {

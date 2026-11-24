@@ -106,7 +106,7 @@ Leitlinien:
 | `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“ (sofort bei Auswahl), Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |
-| `53-views.js` | Schnitt, Röntgen, Explosion, Fokus-Vorschau, Überhänge |
+| `53-views.js` | Schnitt, Röntgen, Explosion (`animateTo` mit Timer-Fallback bei rAF-Stau), Fokus-Vorschau, Überhänge |
 | `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
 | `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten, Re-Entranz-Schutz in `render()` |
 | `56-notes.js` | Notizstift |
@@ -157,7 +157,7 @@ Leitlinien:
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
 - **Übergang mit Mittellinie:** `loft.p.path` = Skizze mit offenem Zug (Kern: Pipe-Shell mit mehreren Schnitten).
-- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`; `loftPreview` in `55-sketch.js` verzögert nur bei geänderter Kurve neu, damit Kamera-/Maus-`render()`-Aufrufe die Vorschau nicht aushungern.
+- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`; `loftPreview` in `55-sketch.js` wird von `onMove` auch im Auswahl-Werkzeug (`select`) angestoßen und verzögert nur bei geänderter Kurve neu, damit Kamera-/Maus-`render()`-Aufrufe die Vorschau nicht aushungern.
 - **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth, rules: [{ax:'x'|'y'|'z'|'perp'|'par', len}|null, …], bind: [{id, lp}|null, …] (Punkt hängt an Körper id, lp = Lage im Körper)}` statt `p.sketch`; `Model.path3dPoints` rechnet die Lage mit Regeln.
 - **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
 

@@ -1815,6 +1815,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **DXF/SVG per Drop & unbekannte Datei**: Drop einer SVG im Modellmodus legt einen Skizzenkörper an; in einer offenen Skizze zeigt der Rahmen den Skizzen-Hinweis und ein DXF-Drop fügt den Kreis direkt in die Skizze ein; eine unbekannte `.txt`-Datei meldet einen Fehler ohne Änderung am Modell.
 - [ ] **Von Hand**: Im Finder/Explorer echte Projekt-, STEP-, OBJ-, 3MF- und SVG-Dateien direkt über die Startseite, über den 3D-Bereich und über eine offene Skizze ziehen und prüfen, ob der Rahmen flüssig ein- und ausblendet.
 
+## Volltest-Reparatur (Auto [F-11240651])
+
+- [x] **Übergang-Vorschau im Auswahl-Werkzeug**: `Sketch.onMove` löst `loftPreview()` auch bei `S.tool === 'select'` aus (`loftpath`, `loftrail`, `loftrail2`), ohne das `render()`-Aussetzen für normale Auswahl-Mausbewegungen aufzugeben; die Vorschau biegt und wölbt sich sofort.
+- [x] **Explosion in Gruppen bei rAF-Stau**: `Views.animateTo()` nutzt neben `requestAnimationFrame` einen `setTimeout`-Fallback (`st.exTimer`), sodass Auseinanderrücken, `#ex-groups` und Zusammensetzen samt `setGroups(false)` auch bei blockiertem `requestAnimationFrame` innerhalb der Animationszeit abschließen.
+- [x] **Sauberer Abbruch über Regler & `Views.reset()`**: `stopExAnim()` bricht sowohl `st.exAnim` als auch `st.exTimer` ab, sodass manuelles Ziehen an `#ex-range` den Zustand exakt beibehält.
+- [ ] **Von Hand**: Im Browser bei einem Übergang eine Führungs- oder Mittellinie ziehen und prüfen, dass die Vorschau mitgeht, sowie bei einer Baugruppe „Explosion“ mit „Gruppen auch zerlegen“ öffnen, am Regler schieben und wieder zusammensetzen.
+
 ## Fehler melden
 
 ```
