@@ -1341,6 +1341,14 @@ export function createKernel(R, oc) {
     return shape;
   }
 
+  let stepReaderCache = null;
+  function clearStepReaderCache() {
+    if (stepReaderCache && stepReaderCache.reader) {
+      try { stepReaderCache.reader.delete(); } catch (_) {}
+    }
+    stepReaderCache = null;
+  }
+
   // Importierte STEP-, IGES-, BREP- oder STL-Datei (binär per blobId/bytes oder Base64)
   function buildImport(p) {
     let bytes = p.bytes ? (p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) : (p.blobId ? importBlobs.get(p.blobId) : null);
@@ -1348,6 +1356,7 @@ export function createKernel(R, oc) {
       const bin = atob(p.data); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     }
     if (!bytes || !bytes.byteLength) throw new Error('Die importierte Datei ist leer.');
+    if (p.blobId && bytes) importBlobs.set(p.blobId, bytes);
     let shape = null;
     if (p.fmt === 'brep') {
       const txt = new TextDecoder('utf-8').decode(bytes);
@@ -1357,26 +1366,85 @@ export function createKernel(R, oc) {
     } else if (p.fmt === 'iges') {
       const txt = new TextDecoder('utf-8').decode(bytes);
       shape = parseIGESToShape(txt);
+    } else if (p.fmt === 'stl') {
+      const fn = 'imp_' + Math.random().toString(36).slice(2);
+      oc.FS.writeFile('/' + fn, bytes);
+      try {
+        const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
+        if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
+        const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
+        const ms = new oc.BRepBuilderAPI_MakeSolid();
+        try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
+        reader.delete(); up.delete(); ms.delete();
+      } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    } else if (p.stepEntity != null) {
+      const bKey = p.blobId || hashBytes(bytes);
+      let entry = stepReaderCache && stepReaderCache.key === bKey ? stepReaderCache : null;
+      let tempReader = false;
+      if (!entry) {
+        clearStepReaderCache();
+        const fn = 'imp_' + Math.random().toString(36).slice(2) + '.step';
+        oc.FS.writeFile('/' + fn, bytes);
+        const reader = new oc.STEPControl_Reader();
+        try {
+          const st = reader.ReadFile(fn);
+          const doneVal = oc.IFSelect_ReturnStatus && oc.IFSelect_ReturnStatus.IFSelect_RetDone ? oc.IFSelect_ReturnStatus.IFSelect_RetDone.value : null;
+          if (!st || (doneVal != null && st.value != null && st.value !== doneVal)) {
+            reader.delete();
+            throw new Error('Die STEP-Datei ließ sich nicht lesen.');
+          }
+        } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+        const idMap = new Map();
+        const mdl = reader.StepModel();
+        if (mdl) {
+          const nEnt = mdl.NbEntities();
+          for (let i = 1; i <= nEnt; i++) {
+            const ent = mdl.Value(i);
+            const sid = mdl.IdentLabel(ent);
+            if (sid > 0) idMap.set(sid, i);
+            safeDelete(ent);
+          }
+          safeDelete(mdl);
+        }
+        entry = { key: bKey, reader, idMap };
+        if (bytes.byteLength <= 8e6) stepReaderCache = entry;
+        else tempReader = true;
+      }
+      try {
+        entry.reader.ClearShapes();
+        const idx = entry.idMap.get(p.stepEntity);
+        if (idx != null && entry.reader.TransferOne(idx) && entry.reader.NbShapes() > 0) {
+          shape = R.cast(entry.reader.OneShape());
+        } else {
+          entry.reader.ClearShapes();
+          entry.reader.TransferRoots();
+          shape = R.cast(entry.reader.OneShape());
+        }
+      } finally {
+        if (tempReader) safeDelete(entry.reader);
+      }
     } else {
       const fn = 'imp_' + Math.random().toString(36).slice(2);
       oc.FS.writeFile('/' + fn, bytes);
       try {
-        if (p.fmt === 'stl') {
-          const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
-          if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
-          const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
-          const ms = new oc.BRepBuilderAPI_MakeSolid();
-          try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
-          reader.delete(); up.delete(); ms.delete();
-        } else {
-          const reader = new oc.STEPControl_Reader();
-          if (!reader.ReadFile(fn)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
-          reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
-        }
+        const reader = new oc.STEPControl_Reader();
+        const st = reader.ReadFile(fn);
+        const doneVal = oc.IFSelect_ReturnStatus && oc.IFSelect_ReturnStatus.IFSelect_RetDone ? oc.IFSelect_ReturnStatus.IFSelect_RetDone.value : null;
+        if (!st || (doneVal != null && st.value != null && st.value !== doneVal)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
+        reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
       } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
     }
+    if (shape && Array.isArray(p.stepMat) && p.stepMat.length === 16 && !isIdentity(p.stepMat)) {
+      const tr = applyMatrix(shape, p.stepMat);
+      safeDelete(shape);
+      shape = tr;
+    }
     const s = num(p.scale, 1);
-    if (shape && Math.abs(s - 1) > 1e-9) shape = shape.scale(s, [0, 0, 0]);
+    if (shape && Math.abs(s - 1) > 1e-9) {
+      const sc = shape.scale(s, [0, 0, 0]);
+      safeDelete(shape);
+      shape = sc;
+    }
     return shape;
   }
 
@@ -2196,6 +2264,8 @@ export function createKernel(R, oc) {
     let p = it.p;
     if (it.kind === 'import' && p && (p.blobId || p.bytes)) {
       p = { fmt: p.fmt, scale: p.scale, blobId: p.blobId || hashBytes(p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) };
+      if (it.p.stepEntity != null) p.stepEntity = it.p.stepEntity;
+      if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) p.stepMat = it.p.stepMat.map((v) => Math.round(v * 1e6) / 1e6);
     }
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
@@ -2273,6 +2343,8 @@ export function createKernel(R, oc) {
             // Schnittmenge: nur, was in allen Körpern liegt
             shape = solids[0];
             for (let i = 1; i < solids.length; i++) { const nx = shape.intersect(solids[i]); safeDelete(shape); safeDelete(solids[i]); shape = nx; }
+          } else if (it.p && it.p.assembly) {
+            shape = solids.length === 1 ? solids[0] : R.makeCompound(solids);
           } else shape = fuseAll(solids, true);
           if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
         } else if (holes.length) shape = fuseAll(holes, true);
@@ -3911,20 +3983,24 @@ export function createKernel(R, oc) {
     const addT = (id, t0) => { if (!times) return; const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
     const anyDyn = tops.some(hasDynamicExtent);
     if (!anyDyn) {
-      const evald = tops.map((it) => {
-        const t0 = now();
-        const r = evalItem(it, errors);
-        let wb = null;
-        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
-        addT(it.id, t0);
-        return { it, ...r, wb };
-      });
-      const tOps = now();
-      const resolved = {};
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved);
-      if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved };
+      try {
+        const evald = tops.map((it) => {
+          const t0 = now();
+          const r = evalItem(it, errors);
+          let wb = null;
+          if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+          addT(it.id, t0);
+          return { it, ...r, wb };
+        });
+        const tOps = now();
+        const resolved = {};
+        const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved);
+        if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
+        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+        return { evald, consumed, resolved, opsModified: new Set(bodies.keys()) };
+      } finally {
+        clearStepReaderCache();
+      }
     }
 
     // Zwei-Pass-Auswertung: Pass 1 liefert alle festen Körper samt versetzten/verrechneten Zielen,
@@ -3997,10 +4073,50 @@ export function createKernel(R, oc) {
       const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
       for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved: ctx.resolved };
+      return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
     } finally {
       for (const x of pool) safeDelete(x.worldShape);
+      clearStepReaderCache();
     }
+  }
+  function collectGroupBodyHints(it, parentM = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], out = []) {
+    for (const c of it.children || []) {
+      if (!c || c.hidden || c.role === 'hole' || c.kind === 'mirrorStep') continue;
+      const cm = matMul(parentM, c.m);
+      if (c.kind === 'group' && !(c.p && c.p.op)) {
+        collectGroupBodyHints(c, cm, out);
+        continue;
+      }
+      const sh = cacheGet(defKey(c));
+      if (!sh) continue;
+      const col = c.color || it.color || '#2f9e91';
+      const nm = c.name || 'Teil';
+      const parts = sortedSolids(sh);
+      if (parts.length > 1) {
+        const meta = matchBodiesLocal(c.bodies, parts);
+        for (let bi = 0; bi < parts.length; bi++) {
+          const mb = meta[bi];
+          const wb = bboxTransform(parts[bi].bbox, cm);
+          out.push({ c: [(wb[0] + wb[3]) / 2, (wb[1] + wb[4]) / 2, (wb[2] + wb[5]) / 2], name: (mb && mb.name) || nm, color: (mb && mb.color) || col });
+          safeDelete(parts[bi].shape);
+        }
+      } else {
+        for (const p of parts) safeDelete(p.shape);
+        const wb = bboxTransform(bboxCached(defKey(c), sh), cm);
+        out.push({ c: [(wb[0] + wb[3]) / 2, (wb[1] + wb[4]) / 2, (wb[2] + wb[5]) / 2], name: nm, color: col });
+      }
+    }
+    return out;
+  }
+  function applyGroupBodyHints(it, bodies) {
+    if (!it || it.kind !== 'group' || (it.p && it.p.op) || (it.finishes && it.finishes.length) || !Array.isArray(bodies) || bodies.length < 2) return bodies;
+    const hints = collectGroupBodyHints(it);
+    if (hints.length < 2) return bodies;
+    const hasDiffColors = new Set(hints.map((h) => String(h.color || '').toLowerCase())).size > 1;
+    const isAsm = !!(it.p && it.p.assembly);
+    if (!isAsm && !hasDiffColors) return bodies;
+    const matched = matchBodiesLocal(hints, bodies);
+    return bodies.map((b, bi) => (matched[bi] ? { ...b, name: matched[bi].name, color: matched[bi].color } : b));
   }
   function evaluate(scene, known = {}) {
     gen++;
@@ -4041,15 +4157,26 @@ export function createKernel(R, oc) {
           }
         }
       }
-      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) }); continue; }
       const mk = resultKey + '|' + Q.level;
+      if (known[it.id] === resultKey) {
+        const cachedPayload = meshCache.get(mk);
+        const sameNode = { id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) };
+        if (it.kind === 'group' && cachedPayload && cachedPayload.bodies && cachedPayload.bodies.length >= 2) {
+          const hinted = applyGroupBodyHints(it, cachedPayload.bodies);
+          if (hinted !== cachedPayload.bodies) sameNode.bodies = hinted;
+        }
+        nodes.push(sameNode);
+        continue;
+      }
       let payload = meshCache.get(mk);
       if (!payload) {
         const tm = now();
         try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
-      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...clonePayload(payload) });
+      const out = clonePayload(payload);
+      if (out.bodies && out.bodies.length >= 2) out.bodies = applyGroupBodyHints(it, out.bodies);
+      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...out });
     }
     gc();
     return { nodes, errors, times, resolved };
@@ -4238,6 +4365,22 @@ export function createKernel(R, oc) {
       s.shape.delete();
     }
     return { objects: objs, errors };
+  }
+  function srgbToLinear(c) {
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function hexToLinearRGBA(hex, alpha = 1) {
+    let s = String(hex || '#2f9e91').trim();
+    if (s.startsWith('#')) s = s.slice(1);
+    if (s.length === 3) s = s.replace(/([0-9a-f])/gi, '$1$1');
+    let r = 0x2f, g = 0x9e, b = 0x91;
+    if (/^[0-9a-f]{6}$/i.test(s)) {
+      r = parseInt(s.slice(0, 2), 16);
+      g = parseInt(s.slice(2, 4), 16);
+      b = parseInt(s.slice(4, 6), 16);
+    }
+    const a = Math.max(0.05, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
+    return new oc.Quantity_ColorRGBA(srgbToLinear(r / 255), srgbToLinear(g / 255), srgbToLinear(b / 255), a);
   }
   function makeArr1P2(pts) {
     const a = new oc.NCollection_Array1_gp_Pnt2d(1, pts.length);
@@ -5095,6 +5238,239 @@ export function createKernel(R, oc) {
     if (Math.abs(unitScale - 1) > 1e-9) shape = shape.scale(unitScale, [0, 0, 0]);
     return shape;
   }
+  function exportSTEP(scene, only, originMat = null) {
+    ingestBlobs(scene);
+    const errors = [];
+    const { evald, consumed, opsModified } = evalSceneCore(scene, errors);
+    const keep = only && only.length ? new Set(only) : null;
+    const useOrigin = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
+    const applyOrigin = (shape) => {
+      if (!useOrigin || !shape) return shape;
+      const tr = applyMatrix(shape, originMat);
+      safeDelete(shape);
+      return tr;
+    };
+    const topHoles = evald
+      .filter((e) => e.it.role === 'hole' && e.shape)
+      .map((h) => ({ shape: applyMatrix(h.shape, h.it.m), wb: h.wb }));
+    const ownedShapes = [];
+    for (const h of topHoles) ownedShapes.push(h.shape);
+
+    const cutHoles = (worldShape, holeList) => {
+      if (!worldShape || !holeList || !holeList.length) return worldShape;
+      const wb = bboxOf(worldShape);
+      const cutters = holeList.filter((h) => h.shape && h.wb && bboxHit(h.wb, wb));
+      if (!cutters.length) return worldShape;
+      try {
+        const tool = fuseAll(cutters.map((h) => h.shape.clone()), true);
+        const cut = worldShape.cut(tool);
+        safeDelete(tool);
+        safeDelete(worldShape);
+        return cut;
+      } catch (_) {
+        return worldShape;
+      }
+    };
+    const canDecomposeGroup = (it, isTop) => {
+      if (!it || it.kind !== 'group') return false;
+      if (isTop && opsModified && opsModified.has(it.id)) return false;
+      if (it.p && it.p.op) return false;
+      if (it.finishes && it.finishes.length) return false;
+      if (it.mir && it.mir.some((s) => s < 0)) return false;
+      if (it.bodies && it.bodies.some((b) => b && b.hidden)) return false;
+      const kids = (it.children || []).filter((c) => !c.hidden);
+      const solidKids = kids.filter((c) => c.role !== 'hole' && c.kind !== 'mirrorStep');
+      if (!solidKids.length) return false;
+      return solidKids.length >= 2 || solidKids.some((c) => c.kind === 'group') || !!(it.p && it.p.assembly) || !!it.comp;
+    };
+    const buildGroupExport = (it, parentM, inheritedHoles) => {
+      const worldM = parentM ? matMul(parentM, it.m) : it.m;
+      const kids = (it.children || []).filter((c) => !c.hidden);
+      const solidKids = kids.filter((c) => c.role !== 'hole' && c.kind !== 'mirrorStep');
+      const holeKids = kids.filter((c) => c.role === 'hole');
+      const localHoles = [];
+      for (const h of holeKids) {
+        const r = evalItem(h, errors);
+        if (!r.shape) continue;
+        const hm = matMul(worldM, h.m);
+        const hs = applyMatrix(r.shape, hm);
+        ownedShapes.push(hs);
+        localHoles.push({ shape: hs, wb: bboxOf(hs) });
+      }
+      const allHoles = localHoles.length ? inheritedHoles.concat(localHoles) : inheritedHoles;
+      const children = [];
+      for (const c of solidKids) {
+        if (canDecomposeGroup(c, false)) {
+          const sub = buildGroupExport(c, worldM, allHoles);
+          if (sub && sub.children.length) children.push(sub);
+          continue;
+        }
+        const r = evalItem(c, errors);
+        if (!r.shape) continue;
+        const cm = matMul(worldM, c.m);
+        let sh = applyMatrix(r.shape, cm);
+        sh = cutHoles(sh, allHoles);
+        sh = applyOrigin(sh);
+        ownedShapes.push(sh);
+        children.push({
+          type: 'part',
+          name: c.name || 'Teil',
+          color: c.color || it.color || '#2f9e91',
+          alpha: c.opacity != null ? c.opacity : 1,
+          shape: sh,
+        });
+      }
+      return { type: 'assembly', itemId: it.id, name: it.name || 'Gruppe', children };
+    };
+
+    const roots = [];
+    const byItemId = new Map();
+    for (const e of evald) {
+      const it = e.it;
+      if (it.role === 'hole' || consumed.has(it.id) || !e.shape) continue;
+      if (keep && !keep.has(it.id)) continue;
+      let node = null;
+      if (canDecomposeGroup(it, true)) {
+        const grp = buildGroupExport(it, null, topHoles);
+        if (grp.children.length) node = grp;
+      }
+      if (!node) {
+        let world = applyMatrix(e.shape, it.m);
+        world = cutHoles(world, topHoles);
+        const hasBodyMeta = Array.isArray(it.bodies) && it.bodies.some((b) => b && (b.hidden || b.name || b.color));
+        if (hasBodyMeta) {
+          const parts = sortedSolids(world, matInvRigid(it.m));
+          if (parts.length > 1) {
+            const meta = matchBodiesLocal(it.bodies, parts);
+            const subParts = [];
+            for (let bi = 0; bi < parts.length; bi++) {
+              const mb = meta[bi];
+              if (mb && mb.hidden) { safeDelete(parts[bi].shape); continue; }
+              let ps = applyOrigin(parts[bi].shape);
+              ownedShapes.push(ps);
+              subParts.push({
+                type: 'part',
+                name: (mb && mb.name) ? mb.name : ((it.name || 'Körper') + ' – Körper ' + (bi + 1)),
+                color: (mb && mb.color) ? mb.color : (it.color || '#2f9e91'),
+                alpha: it.opacity != null ? it.opacity : 1,
+                shape: ps,
+              });
+            }
+            safeDelete(world);
+            if (!subParts.length) continue;
+            if (it.bodies.some((b) => b && (b.name || b.color))) {
+              node = { type: 'assembly', itemId: it.id, name: it.name || 'Teil', children: subParts };
+            } else {
+              const combined = subParts.length === 1 ? subParts[0].shape : R.makeCompound(subParts.map((sp) => sp.shape));
+              if (subParts.length > 1) ownedShapes.push(combined);
+              node = { type: 'part', itemId: it.id, name: it.name || 'Teil', color: it.color || '#2f9e91', alpha: it.opacity != null ? it.opacity : 1, shape: combined };
+            }
+          } else {
+            for (const p of parts) safeDelete(p.shape);
+          }
+        }
+        if (!node) {
+          world = applyOrigin(world);
+          ownedShapes.push(world);
+          node = { type: 'part', itemId: it.id, name: it.name || 'Teil', color: it.color || '#2f9e91', alpha: it.opacity != null ? it.opacity : 1, shape: world };
+        }
+      }
+      roots.push(node);
+      if (node.itemId) byItemId.set(node.itemId, node);
+    }
+    if (!roots.length) {
+      for (const s of ownedShapes) safeDelete(s);
+      throw new Error('Es gibt nichts zu exportieren.');
+    }
+
+    // Ordner auf oberster Ebene als Baugruppen zusammenfassen
+    let finalRoots = roots;
+    if (Array.isArray(scene.folders) && scene.folders.length) {
+      const folderOfNode = new Map();
+      for (const fld of scene.folders) {
+        const mems = (fld.ids || []).map((id) => byItemId.get(id)).filter(Boolean);
+        if (!mems.length) continue;
+        for (const m of mems) folderOfNode.set(m, fld);
+      }
+      const emittedFolders = new Set();
+      finalRoots = [];
+      for (const node of roots) {
+        const fld = folderOfNode.get(node);
+        if (!fld) { finalRoots.push(node); continue; }
+        if (emittedFolders.has(fld.id)) continue;
+        emittedFolders.add(fld.id);
+        const children = (fld.ids || []).map((id) => byItemId.get(id)).filter(Boolean);
+        finalRoots.push({ type: 'assembly', name: fld.name || 'Ordner', children });
+      }
+    }
+
+    const wrapStr = (s) => new oc.TCollection_ExtendedString(String(s || ''), true);
+    const toRelease = [];
+    const track = (x) => { if (x) toRelease.push(x); return x; };
+    const fn = 'export_' + Math.random().toString(36).slice(2) + '.step';
+    try {
+      const docStr = track(wrapStr('XmlOcaf'));
+      const doc = track(new oc.TDocStd_Document(docStr));
+      oc.XCAFDoc_ShapeTool.SetAutoNaming(false);
+      const mainLabel = track(doc.Main());
+      const st = track(oc.XCAFDoc_DocumentTool.ShapeTool(mainLabel));
+      const ct = track(oc.XCAFDoc_DocumentTool.ColorTool(mainLabel));
+      const idLoc = track(new oc.TopLoc_Location());
+      const surfType = oc.XCAFDoc_ColorType.XCAFDoc_ColorSurf;
+
+      const addNode = (node, parentLabel) => {
+        if (node.type === 'assembly') {
+          const asmL = track(st.NewShape());
+          const nStr = track(wrapStr(node.name || 'Gruppe'));
+          oc.TDataStd_Name.Set(asmL, nStr);
+          for (const ch of node.children || []) addNode(ch, asmL);
+          if (parentLabel) {
+            const compL = track(st.AddComponent(parentLabel, asmL, idLoc));
+            const cnStr = track(wrapStr(node.name || 'Gruppe'));
+            oc.TDataStd_Name.Set(compL, cnStr);
+          }
+          return asmL;
+        }
+        const lbl = track(st.NewShape());
+        st.SetShape(lbl, node.shape.wrapped);
+        const nStr = track(wrapStr(node.name || 'Teil'));
+        oc.TDataStd_Name.Set(lbl, nStr);
+        const rgba = track(hexToLinearRGBA(node.color, node.alpha));
+        ct.SetColor(lbl, rgba, surfType);
+        if (parentLabel) {
+          const compL = track(st.AddComponent(parentLabel, lbl, idLoc));
+          const cnStr = track(wrapStr(node.name || 'Teil'));
+          oc.TDataStd_Name.Set(compL, cnStr);
+        }
+        return lbl;
+      };
+
+      for (const r of finalRoots) addNode(r, null);
+      st.UpdateAssemblies();
+
+      const dummy = track(new oc.STEPCAFControl_Writer());
+      oc.Interface_Static.SetCVal('xstep.cascade.unit', 'MM');
+      oc.Interface_Static.SetCVal('write.step.unit', 'MM');
+      const session = track(new oc.XSControl_WorkSession());
+      const writer = track(new oc.STEPCAFControl_Writer(session, false));
+      writer.SetColorMode(true);
+      writer.SetLayerMode(true);
+      writer.SetNameMode(true);
+      oc.Interface_Static.SetIVal('write.surfacecurve.mode', 1);
+      oc.Interface_Static.SetIVal('write.precision.mode', 0);
+      oc.Interface_Static.SetIVal('write.step.assembly', 2);
+      oc.Interface_Static.SetIVal('write.step.schema', 5);
+      const progress = track(new oc.Message_ProgressRange());
+      const ok = writer.Perform(doc, fn, progress);
+      if (!ok) throw new Error('Die STEP-Datei konnte nicht geschrieben werden.');
+      const file = oc.FS.readFile('/' + fn);
+      return new Blob([file], { type: 'application/STEP' });
+    } finally {
+      try { oc.FS.unlink('/' + fn); } catch (_) {}
+      for (let i = toRelease.length - 1; i >= 0; i--) safeDelete(toRelease[i]);
+      for (const s of ownedShapes) safeDelete(s);
+    }
+  }
   function collectExportShape(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
@@ -5135,10 +5511,6 @@ export function createKernel(R, oc) {
   function freeExportShape({ comp, solids }) {
     if (solids.length > 1) safeDelete(comp);
     for (const s of solids) safeDelete(s.shape);
-  }
-  function exportSTEP(scene, only, originMat = null) {
-    const ex = collectExportShape(scene, only, originMat);
-    try { return ex.comp.blobSTEP(); } finally { freeExportShape(ex); }
   }
   function exportIGES(scene, only, originMat = null) {
     const ex = collectExportShape(scene, only, originMat);
@@ -5637,5 +6009,421 @@ export function createKernel(R, oc) {
     issues.sort((a, b) => (order[a.kind] - order[b.kind]) || ((a.length || 0) - (b.length || 0)));
     return { issues, checkedCount: targets.length, minEdge, truncated, errors };
   }
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, _cache: cache };
+  // ---------- Import prüfen & heilen (IO-10: BRepCheck, ShapeFix, Nähen mit Toleranz) ----------
+  function uniqueShapes(raw, shapeEnum) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(raw, shapeEnum, TA.TopAbs_SHAPE);
+    const buckets = new Map(), out = [];
+    try {
+      while (ex.More()) {
+        const it = ex.Current();
+        const hc = oc.ReplicadShapeHasher.HashCode(it, HMAX);
+        let b = buckets.get(hc);
+        if (!b) { b = []; buckets.set(hc, b); }
+        if (!b.some((x) => x.IsSame(it))) { b.push(it); out.push(it); }
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    return out;
+  }
+
+  function signedVolumeOf(raw) {
+    let props = null;
+    try {
+      props = new oc.GProp_GProps();
+      oc.BRepGProp.VolumeProperties(raw, props, false, false, false);
+      const m = props.Mass();
+      return Number.isFinite(m) ? m : 0;
+    } catch (_) { return 0; } finally { if (props) try { props.delete(); } catch (_) {} }
+  }
+
+  // Prüft innerhalb jeder Hülle über gemeinsame Kanten, ob Flächen umgekehrt orientiert sind,
+  // sowie bei Volumenkörpern auf negatives Vorzeichenvolumen.
+  function countInvertedFaces(raw) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ORI = oc.TopAbs_Orientation;
+    let flippedInShell = 0;
+    const shells = uniqueShapes(raw, TA.TopAbs_SHELL);
+    const groups = shells.length ? shells : [raw];
+    for (const grp of groups) {
+      const faces = uniqueShapes(grp, TA.TopAbs_FACE);
+      if (faces.length < 2) continue;
+      const edgeMap = new Map();
+      for (let fi = 0; fi < faces.length; fi++) {
+        const exE = new oc.TopExp_Explorer(faces[fi], TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+        try {
+          while (exE.More()) {
+            const ed = oc.TopoDS.Edge(exE.Current());
+            let degen = false;
+            try { degen = oc.BRep_Tool.Degenerated(ed); } catch (_) {}
+            if (!degen) {
+              const ori = ed.Orientation();
+              if (ori !== ORI.TopAbs_INTERNAL && ori !== ORI.TopAbs_EXTERNAL) {
+                const hc = oc.ReplicadShapeHasher.HashCode(ed, HMAX);
+                let arr = edgeMap.get(hc);
+                if (!arr) { arr = []; edgeMap.set(hc, arr); }
+                let entry = arr.find((x) => x.edge.IsSame(ed));
+                if (!entry) { entry = { edge: ed, uses: [] }; arr.push(entry); }
+                entry.uses.push({ fi, fwd: ori === ORI.TopAbs_FORWARD });
+              }
+            }
+            exE.Next();
+          }
+        } finally { exE.delete(); }
+      }
+      const adj = Array.from({ length: faces.length }, () => []);
+      for (const arr of edgeMap.values()) {
+        for (const e of arr) {
+          if (e.uses.length !== 2) continue;
+          const a = e.uses[0], b = e.uses[1];
+          if (a.fi === b.fi) continue;
+          const consistent = a.fwd !== b.fwd;
+          adj[a.fi].push([b.fi, consistent]);
+          adj[b.fi].push([a.fi, consistent]);
+        }
+      }
+      const color = new Int8Array(faces.length).fill(-1);
+      for (let i = 0; i < faces.length; i++) {
+        if (color[i] !== -1) continue;
+        color[i] = 0;
+        const q = [i];
+        let c0 = 1, c1 = 0, conflict = 0;
+        for (let qi = 0; qi < q.length; qi++) {
+          const u = q[qi];
+          for (const [v, cons] of adj[u]) {
+            const want = color[u] ^ (cons ? 0 : 1);
+            if (color[v] === -1) {
+              color[v] = want;
+              if (want === 0) c0++; else c1++;
+              q.push(v);
+            } else if (color[v] !== want) {
+              conflict++;
+            }
+          }
+        }
+        flippedInShell += conflict > 0 ? Math.max(1, Math.min(c0, c1)) : Math.min(c0, c1);
+      }
+    }
+    let negativeSolidFaces = 0;
+    const solids = uniqueShapes(raw, TA.TopAbs_SOLID);
+    for (const so of solids) {
+      if (signedVolumeOf(so) < -1e-6) {
+        negativeSolidFaces += Math.max(1, uniqueShapes(so, TA.TopAbs_FACE).length);
+      }
+    }
+    return Math.max(flippedInShell, negativeSolidFaces);
+  }
+
+  function inspectImportShape(raw, gapTol = 0.5) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const faces = uniqueShapes(raw, TA.TopAbs_FACE);
+    const edges = uniqueShapes(raw, TA.TopAbs_EDGE);
+    const shells = uniqueShapes(raw, TA.TopAbs_SHELL);
+    const solids = uniqueShapes(raw, TA.TopAbs_SOLID);
+    let brepValid = true, invalidCount = 0;
+    let ana = null;
+    try {
+      ana = new oc.BRepCheck_Analyzer(raw, true);
+      brepValid = Boolean(ana.IsValid());
+      for (const list of [faces, edges, shells, solids]) {
+        for (const sub of list) {
+          try { if (!ana.IsValid(sub)) invalidCount++; } catch (_) {}
+        }
+      }
+      const wires = uniqueShapes(raw, TA.TopAbs_WIRE);
+      for (const w of wires) {
+        try { if (!ana.IsValid(w)) invalidCount++; } catch (_) {}
+      }
+      if (!brepValid && invalidCount === 0) invalidCount = 1;
+    } catch (_) {
+      brepValid = false;
+      invalidCount = Math.max(1, invalidCount);
+    } finally { if (ana) try { ana.delete(); } catch (_) {} }
+
+    let openEdges = 0, gaps = 0, multipleEdges = 0, degenerated = 0;
+    let sewTight = null, sewGap = null;
+    try {
+      sewTight = new oc.BRepBuilderAPI_Sewing(1e-5, true, true, true, false);
+      sewTight.Load(raw);
+      sewTight.Perform();
+      openEdges = sewTight.NbFreeEdges();
+      multipleEdges = sewTight.NbMultipleEdges();
+      degenerated = sewTight.NbDegeneratedShapes();
+      if (openEdges > 0) {
+        const gTol = Math.max(num(gapTol, 0.5), 0.05);
+        sewGap = new oc.BRepBuilderAPI_Sewing(gTol, true, true, true, false);
+        sewGap.Load(raw);
+        sewGap.Perform();
+        const freeWide = sewGap.NbFreeEdges();
+        const closedBySew = Math.max(0, openEdges - freeWide);
+        if (closedBySew > 0) gaps = Math.max(1, Math.round(closedBySew / 2));
+      }
+    } catch (_) {} finally {
+      if (sewTight) try { sewTight.delete(); } catch (_) {}
+      if (sewGap) try { sewGap.delete(); } catch (_) {}
+    }
+
+    let invertedFaces = 0;
+    try { invertedFaces = countInvertedFaces(raw); } catch (_) {}
+    const openShell = (shells.length > 0 && solids.length === 0) || (faces.length > 0 && openEdges > 0);
+    const hasIssues = !brepValid || invalidCount > 0 || openEdges > 0 || gaps > 0
+      || invertedFaces > 0 || multipleEdges > 0 || degenerated > 0 || openShell;
+
+    return {
+      ok: true,
+      brepValid,
+      hasIssues,
+      faces: faces.length,
+      edges: edges.length,
+      shells: shells.length,
+      solids: solids.length,
+      openEdges,
+      gaps,
+      invertedFaces,
+      invalidCount,
+      multipleEdges,
+      degenerated,
+      openShell,
+    };
+  }
+
+  function checkImport(p, opts = {}) {
+    ingestBlobs(opts.scene || { items: [] });
+    let shape = null;
+    try {
+      shape = buildImport(p);
+      if (!shape || !shape.wrapped) return { ok: false, error: 'Keine Geometrie im Import gefunden.' };
+      return inspectImportShape(shape.wrapped, num(opts.gapTol, 0.5));
+    } catch (err) {
+      return { ok: false, error: friendlyError(err) };
+    } finally {
+      safeDelete(shape);
+    }
+  }
+
+  function edgeEndpoints(edge) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(edge, TA.TopAbs_VERTEX, TA.TopAbs_SHAPE);
+    const pts = [];
+    try {
+      while (ex.More()) {
+        const v = oc.TopoDS.Vertex(ex.Current());
+        const p = oc.BRep_Tool.Pnt(v);
+        pts.push([p.X(), p.Y(), p.Z()]);
+        p.delete();
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    if (!pts.length) return null;
+    if (pts.length === 1) return { start: pts[0], end: pts[0], closed: true };
+    const a = pts[0], b = pts[pts.length - 1];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    return { start: a, end: b, closed: d < 1e-6 };
+  }
+
+  function groupFreeEdgeLoops(edges, tol) {
+    const eps = Math.max(tol * 2, 0.05);
+    const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const items = edges.map((e, idx) => ({ idx, edge: e, ep: edgeEndpoints(e), used: false })).filter((x) => x.ep);
+    const loops = [];
+    for (const it of items) {
+      if (it.used) continue;
+      if (it.ep.closed) { it.used = true; loops.push([it.edge]); continue; }
+      it.used = true;
+      const chain = [it.edge];
+      const loopStart = it.ep.start;
+      let curEnd = it.ep.end;
+      let closed = false;
+      for (let step = 0; step < items.length; step++) {
+        if (chain.length >= 2 && dist(curEnd, loopStart) <= eps) { closed = true; break; }
+        let best = null, bestD = eps, flip = false;
+        for (const cand of items) {
+          if (cand.used || cand.ep.closed) continue;
+          const d1 = dist(curEnd, cand.ep.start);
+          if (d1 < bestD) { bestD = d1; best = cand; flip = false; }
+          const d2 = dist(curEnd, cand.ep.end);
+          if (d2 < bestD) { bestD = d2; best = cand; flip = true; }
+        }
+        if (!best) break;
+        best.used = true;
+        chain.push(best.edge);
+        curEnd = flip ? best.ep.start : best.ep.end;
+      }
+      if (closed || (chain.length >= 2 && dist(curEnd, loopStart) <= eps)) loops.push(chain);
+    }
+    return loops;
+  }
+
+  function healImport(p, opts = {}) {
+    const tol = Math.max(1e-5, Math.min(10, num(opts.tol, 0.1)));
+    const capOpen = opts.capOpen !== false;
+    let shape = null;
+    const toDelete = [];
+    try {
+      shape = buildImport(p);
+      if (!shape || !shape.wrapped) return { ok: false, error: 'Keine Geometrie im Import gefunden.' };
+      const raw = shape.wrapped;
+      const before = inspectImportShape(raw, Math.max(tol, 0.5));
+      const TA = oc.TopAbs_ShapeEnum;
+
+      // Phase A: Einzelflächen mit ShapeFix_Face korrigieren
+      const rawFaces = uniqueShapes(raw, TA.TopAbs_FACE);
+      const fixedFaces = [];
+      for (const f of rawFaces) {
+        let sff = null;
+        try {
+          sff = new oc.ShapeFix_Face(oc.TopoDS.Face(f));
+          sff.SetPrecision(tol);
+          sff.SetMaxTolerance(Math.max(tol * 2, 0.5));
+          sff.FixOrientation();
+          sff.Perform();
+          const nf = sff.Face();
+          fixedFaces.push(nf);
+        } catch (_) {
+          fixedFaces.push(f);
+        } finally { if (sff) try { sff.delete(); } catch (_) {} }
+      }
+
+      // Phase B: Alle Flächen mit gewählter Toleranz nähen
+      const sew = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+      toDelete.push(sew);
+      sew.SetMaxTolerance(Math.max(tol * 2, 0.5));
+      for (const f of fixedFaces) sew.Add(f);
+      sew.Perform();
+      let current = sew.SewedShape();
+      let curFree = sew.NbFreeEdges();
+      let cappedFaces = 0;
+
+      // Phase C: Geschlossene Randkanten-Schleifen mit Flächen schließen
+      if (capOpen && curFree > 0) {
+        const freeEdges = [];
+        for (let i = 1; i <= curFree; i++) freeEdges.push(sew.FreeEdge(i));
+        const loops = groupFreeEdgeLoops(freeEdges, tol);
+        const capFaces = [];
+        for (const chain of loops) {
+          let mw = null, mf = null, fill = null;
+          try {
+            mw = new oc.BRepBuilderAPI_MakeWire();
+            for (const ed of chain) mw.Add(ed);
+            if (!mw.IsDone()) continue;
+            const wire = mw.Wire();
+            let candidate = null;
+            mf = new oc.BRepBuilderAPI_MakeFace(wire, true);
+            if (mf.IsDone()) {
+              candidate = mf.Face();
+            } else if (chain.length >= 2 && chain.length <= 12) {
+              try {
+                fill = new oc.BRepOffsetAPI_MakeFilling(3, 15, 2, false, 0.0001, 0.0001, 0.01, 0.1, 8, 9);
+                for (const ed of chain) fill.Add(ed, oc.GeomAbs_Shape.GeomAbs_C0, true);
+                fill.Build();
+                if (fill.IsDone()) candidate = oc.TopoDS.Face(fill.Shape());
+              } catch (_) {}
+            }
+            if (candidate) {
+              let validCap = true, area = 0;
+              let anaCap = null;
+              try {
+                anaCap = new oc.BRepCheck_Analyzer(candidate, true);
+                validCap = Boolean(anaCap.IsValid());
+                area = R.measureArea(R.cast(candidate));
+              } catch (_) { validCap = false; } finally { if (anaCap) try { anaCap.delete(); } catch (_) {} }
+              if (validCap && area > 1e-6) {
+                let sff2 = null;
+                try {
+                  sff2 = new oc.ShapeFix_Face(candidate);
+                  sff2.SetPrecision(tol);
+                  sff2.FixOrientation();
+                  sff2.Perform();
+                  candidate = sff2.Face();
+                } catch (_) {} finally { if (sff2) try { sff2.delete(); } catch (_) {} }
+                capFaces.push(candidate);
+              }
+            }
+          } catch (_) {} finally {
+            if (mw) try { mw.delete(); } catch (_) {}
+            if (mf) try { mf.delete(); } catch (_) {}
+            if (fill) try { fill.delete(); } catch (_) {}
+          }
+        }
+        if (capFaces.length > 0) {
+          const sew2 = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+          toDelete.push(sew2);
+          sew2.SetMaxTolerance(Math.max(tol * 2, 0.5));
+          sew2.Add(current);
+          for (const cf of capFaces) sew2.Add(cf);
+          sew2.Perform();
+          if (sew2.NbFreeEdges() < curFree) {
+            current = sew2.SewedShape();
+            curFree = sew2.NbFreeEdges();
+            cappedFaces = capFaces.length;
+          }
+        }
+      }
+
+      // Phase D: Geschlossene Hüllen zu Volumenkörpern machen und Orientierung richten
+      const shells = uniqueShapes(current, TA.TopAbs_SHELL);
+      const healedParts = [];
+      for (const sh of shells) {
+        let sewSh = null, ms = null, sfs = null;
+        try {
+          sewSh = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+          sewSh.Load(sh);
+          sewSh.Perform();
+          if (sewSh.NbFreeEdges() === 0) {
+            ms = new oc.BRepBuilderAPI_MakeSolid();
+            ms.Add(oc.TopoDS.Shell(sh));
+            if (ms.IsDone()) {
+              let sol = ms.Solid();
+              try {
+                sfs = new oc.ShapeFix_Solid(sol);
+                sfs.SetPrecision(tol);
+                sfs.SetMaxTolerance(Math.max(tol * 2, 0.5));
+                sfs.Perform();
+                sol = oc.TopoDS.Solid(sfs.Solid());
+              } catch (_) {}
+              if (signedVolumeOf(sol) < -1e-6) {
+                try { oc.BRepLib.OrientClosedSolid(sol); } catch (_) {}
+                if (signedVolumeOf(sol) < -1e-6) sol = oc.TopoDS.Solid(sol.Reversed());
+              }
+              healedParts.push(sol);
+              continue;
+            }
+          }
+          healedParts.push(sh);
+        } catch (_) {
+          healedParts.push(sh);
+        } finally {
+          if (sewSh) try { sewSh.delete(); } catch (_) {}
+          if (ms) try { ms.delete(); } catch (_) {}
+          if (sfs) try { sfs.delete(); } catch (_) {}
+        }
+      }
+
+      let healedRaw = current;
+      let compWrap = null;
+      if (healedParts.length === 1) healedRaw = healedParts[0];
+      else if (healedParts.length > 1) {
+        compWrap = R.makeCompound(healedParts.map((x) => R.cast(x)));
+        healedRaw = compWrap.wrapped;
+      }
+
+      const after = inspectImportShape(healedRaw, Math.max(tol, 0.5));
+      const brepStr = oc.BRepToolsWrapper.Write(healedRaw);
+      const brepBytes = new TextEncoder().encode(brepStr);
+      if (compWrap) safeDelete(compWrap);
+
+      const improved = (after.openEdges < before.openEdges) || (after.gaps < before.gaps)
+        || (after.invertedFaces < before.invertedFaces) || (after.invalidCount < before.invalidCount)
+        || (after.solids > before.solids) || (!before.brepValid && after.brepValid);
+
+      return { ok: true, before, after, tol, cappedFaces, improved, brepBytes };
+    } catch (err) {
+      return { ok: false, error: friendlyError(err) };
+    } finally {
+      for (const x of toDelete) try { x.delete(); } catch (_) {}
+      safeDelete(shape);
+    }
+  }
+
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkImport, healImport, _cache: cache };
 }

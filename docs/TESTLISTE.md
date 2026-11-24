@@ -1781,6 +1781,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abbruch laufender Übergänge**: `Tour.stop()` und `show()` löschen laufende Weiterschalt-Timer (`advTimer`) sauber ohne Zustandsreste auf den Schritt-Definitionen.
 - [ ] **Von Hand**: Im Browser ein Drehteller-Video über „Ansicht → Drehteller-Video …“ herunterladen und abspielen sowie die Einführung „Erste Skizze (5 Minuten)“ einmal komplett durchklicken.
 
+## STEP mit Farben und Namen (Auto [A-045], IO-04)
+
+- [x] **XCAF-STEP-Export mit Gruppe, Namen & Farben**: Gruppe „Gehäuse“ mit „Deckel“ (rot `#d6574c`) und „Boden“ (blau `#3f7fd6`) exportiert als `PRODUCT`-Hierarchie mit `NEXT_ASSEMBLY_USAGE_OCCURRENCE`, `STYLED_ITEM` und exakten `COLOUR_RGB`-Werten.
+- [x] **Import stellt Struktur, Namen, Farben & Volumen wieder her**: Erneutes Laden über `Start.importCAD` erzeugt die Gruppe „Gehäuse“ samt den Kindern „Deckel“ (rot) und „Boden“ (blau) ohne Fehler und mit exaktem Gesamtvolumen (`6000 mm³`) auch bei sich berührenden Flächen.
+- [x] **3D-Farben & Verlauf**: Der 3D-Viewer färbt die Einzelkörper der Baugruppe per Vertex-Farben rot und blau; der Verlauf links zeigt Gruppe und Kinder aufgeklappt mit ihren Farbkacheln.
+- [x] **Roundtrip, Ordner & Parser-Sonderfälle**: Zweiter Export/Import-Roundtrip sowie Export eines Ordners (`doc.folders`) als Baugruppe erhalten Namen, Farben und Struktur; `Start.parseSTEP` dekodiert zudem `DRAUGHTING_PRE_DEFINED_COLOUR` und `\X2\…\X0\`-Umlaute.
+- [x] **Hilfe & Dialog**: Export-Dialog verweist auf `exportStep`; Eintrag in `werkzeug-hilfen.json` ist vollständig (`tip`, `hilfe`, `tipp`).
+- [ ] **Von Hand**: Eine mehrfarbige Baugruppe aus Tracery als STEP exportieren und in FreeCAD oder Fusion öffnen sowie umgekehrt eine fremde STEP-Baugruppe ins Tracery-Fenster ziehen und Namen, Farben und Lage prüfen.
+
 ## Wickeln um Zylinder (Auto [A-043], KP-34)
 
 - [x] **Verzerrungsfreies Wickeln (180° ± 2°)**: Rechteck `31,4 × 8 mm` auf einem Zylinder Ø20 (`emboss`, `+2 mm`) umschließt exakt `179,9°` (`180° ± 2°`) mit Volumen `6835,8 mm³` und `0` Fehlern.
@@ -1814,6 +1823,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Anklickbare Liste & 3D-Hervorhebung**: Klick auf einen Eintrag in `#geom-check-list` setzt `.active`, erzeugt die rote Hervorhebung im 3D-Bild (`GeomCheck.hasHighlight === true`) und schließt sauber über `#gc-close`.
 - [x] **Befehlssuche & Hilfetext**: `Commands.search('Geometrie prüfen')` findet `geom-check`, `HELP.geomCheck` besitzt `tip`, `hilfe` und `tipp`.
 - [ ] **Von Hand**: Im Browser ein importiertes/komplexes Teil über „Prüfen → Geometrie prüfen“ prüfen, verschiedene Einträge anklicken und kontrollieren, ob Kamerafokus und roter Ring/Kante gut sichtbar sind.
+
+## Import prüfen und heilen (Auto [A-047], IO-10)
+
+- [x] **Offenes STEP erkennen & Hinweis zeigen**: Absichtlich offenes STEP (eine Fläche fehlt, `OPEN_SHELL` mit 4 offenen Kanten) wird nach dem Import automatisch per `BRepCheck_Analyzer`/`BRepBuilderAPI_Sewing` geprüft (`hasIssues=true`, `openEdges=4`, `solids=0`) und blendet die Hinweis-Leiste `#import-check-bar` samt „Heilen“-Knopf sowie den Bereich `#import-check-panel` ein.
+- [x] **Heilen mit Vorher/Nachher-Ergebnis & Rückgängig**: Klick auf „Heilen“ schließt die fehlende Fläche, näht zum geschlossenen Volumenkörper (`8000 mm³`), entfernt die Hinweis-Leiste, meldet Vorher/Nachher-Zahlen (`4 → 0`) in Toast und `#import-heal-diff` ohne Fehler und lässt sich mit `App.undo()` wieder zurückrollen.
+- [x] **Lücken & falsch herum liegende Flächen**: `checkImport` und `healImport` erkennen sowohl falsch herum orientierte Einzelflächen bzw. umgestülpte Volumenkörper als auch 0,05-mm-Lücken zwischen Flächen und reparieren sie per `ShapeFix_Face`, `BRepBuilderAPI_Sewing(0.1)` und `ShapeFix_Solid`/`OrientClosedSolid` fehlerfrei.
+- [x] **Gültiger Import & Hilfetexte**: Ein gültiges STEP zeigt keinen Fehler-Hinweis, meldet im Panel „Alles in Ordnung“, und `importCheck`/`importHeal` stehen vollständig in `werkzeug-hilfen.json`.
+- [ ] **Von Hand**: Echte fehlerhafte STEP-/IGES-Dateien aus dem Internet oder anderen CAD-Programmen importieren, unterschiedliche Näh-Toleranzen rechts testen und die geheilte Geometrie per Ansicht/Messen kontrollieren.
 
 ## Fehler melden
 

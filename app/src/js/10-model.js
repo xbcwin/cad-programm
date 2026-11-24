@@ -322,9 +322,26 @@ const Model = (() => {
   const OPS = { join: 'Vereinigen mit', cut: 'Abziehen von', common: 'Schnittmenge mit' };
   // ---------- Für den CAD-Kern ----------
   function matArr(m) { return Array.from(m.elements); }
+  function displayColor(it) {
+    if (!it) return '#2f9e91';
+    if (it.colorSet && it.color) return it.color;
+    if (it.mat && typeof Viewer !== 'undefined' && Viewer.lookOf) {
+      const L = Viewer.lookOf(it.mat);
+      if (L && L.nat && L.col) return L.col;
+    }
+    return it.color || '#2f9e91';
+  }
   function kernelItem(it, V) {
-    const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
-    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, V) : resolveP(it.p, V); }
+    const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m: matArr(localMatrix(it)) };
+    if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
+    if (it.comp) o.comp = true;
+    if (it.kind === 'group') {
+      let kids = it.children || [];
+      if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
+      o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V));
+      if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, V) : resolveP(it.p, V);
+      if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
+    }
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
@@ -335,6 +352,8 @@ const Model = (() => {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
       else if (it.p.data) o.p.data = it.p.data;
+      if (it.p.stepEntity != null) o.p.stepEntity = it.p.stepEntity;
+      if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) o.p.stepMat = it.p.stepMat;
     } else if (it.kind === 'transform') {
       const p = it.p || {};
       o.p = {
@@ -870,7 +889,9 @@ const Model = (() => {
     const { v } = vars(doc); const prev = curV, prevDoc = curDoc; curV = v; curDoc = doc;
     // peek = Vorschau der Zeitleiste: nur die ersten k Schritte rechnen, ohne den Marker zu verschieben
     let act = activeItems(doc); if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
-    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; curDoc = prevDoc; }
+    const out = { items: [...act, ...extra].map((it) => kernelItem(it, v)) };
+    if (doc && Array.isArray(doc.folders) && doc.folders.length) out.folders = doc.folders.map((f) => ({ id: f.id, name: f.name, ids: (f.ids || []).slice() }));
+    try { return out; } finally { curV = prev; curDoc = prevDoc; }
   }
 
   // ---------- Größen ----------
@@ -1332,6 +1353,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -82,6 +82,10 @@ const Kernel = (() => {
   }
   function call(cmd, args = {}, transfer = []) {
     if (args && args.scene && args.scene.items) attachBlobs(args.scene);
+    if (args && args.p && args.p.blobId && !args.p.bytes && !sentBlobs.has(args.p.blobId) && typeof Store !== 'undefined') {
+      const b = Store.getBlobSync(args.p.blobId);
+      if (b) { args.p.bytes = b; sentBlobs.add(args.p.blobId); }
+    }
     return new Promise((resolve, reject) => {
       const id = seq++;
       pending.set(id, { resolve, reject });

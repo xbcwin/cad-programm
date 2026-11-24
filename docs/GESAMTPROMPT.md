@@ -76,7 +76,7 @@ Leitlinien:
   - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
   - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
   - `splitBody`, `applyFinishes` (Rundung, Fase, Entformungsschräge `draft`, Wandstärke `shell`)
-  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08)
+  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
 - Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
 
 **JS-Module (Datei → Aufgabe):**
@@ -113,11 +113,11 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP, IGES, BREP, STL, 3MF, OBJ, DXF, SVG) |
+| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |

@@ -913,5 +913,20 @@
     "tip": "Modell auf kaputte Flächen, winzige Kanten und Selbstschnitte prüfen",
     "hilfe": "Prüfen → „Geometrie prüfen“ untersucht alle sichtbaren Körper mit dem OpenCascade-Kern auf beschädigte oder zusammengefallene Flächen, winzige Kanten unter 0,01 mm (oft durch zwei fast gleiche Maße) sowie sich selbst schneidende Flächen. Ein Klick auf einen Eintrag in der Liste hebt die betroffene Stelle rot im Modell hervor und fährt die Kamera heran.",
     "tipp": "Wenn eine Rundung oder ein Export unerwartet scheitert, deckt die Geometrie-Prüfung winzige Kanten oder kaputte Flächen meist sofort auf."
+  },
+  "importCheck": {
+    "tip": "Importierte Geometrie mit BRepCheck auf Fehler, Lücken und offene Kanten prüfen",
+    "hilfe": "Untersucht das importierte Teil mit dem OpenCascade-Prüfer (BRepCheck) auf offene Kanten, schmale Lücken zwischen Flächen, falsch herum orientierte Flächen sowie auf eine geschlossene Hülle für echte Volumenkörper.",
+    "tipp": "Nach jedem 3D-Import läuft diese Prüfung automatisch und meldet sich oben im Bild, falls etwas repariert werden sollte."
+  },
+  "importHeal": {
+    "tip": "Offene Kanten schließen, Flächen richten und Lücken mit Toleranz vernähen",
+    "hilfe": "Repariert ein fehlerhaftes Import-Teil in mehreren Schritten: Einzelflächen korrigieren (ShapeFix), benachbarte Flächen mit der eingestellten Näh-Toleranz verbinden, einfache offene Löcher schließen und daraus wieder einen geschlossenen Volumenkörper bauen. Danach siehst du die Vorher/Nachher-Zahlen.",
+    "tipp": "Bleiben nach dem Heilen noch Lücken offen, erhöhe rechts beim Teil die Näh-Toleranz etwas (z. B. von 0,1 auf 0,3 mm) und klick erneut auf „Heilen“."
+  },
+  "exportStep": {
+    "tip": "STEP mit Teilenamen, Farben und Baugruppen-Struktur speichern und einlesen",
+    "hilfe": "Schreibt alle sichtbaren Körper als exakte B-Rep-Geometrie nach STEP AP214/AP242 (XCAF). Dabei kommen die Namen, Farben sowie Gruppen und Ordner als echte Baugruppen-Struktur mit – andere CAD-Programme wie Fusion, FreeCAD oder SolidWorks zeigen alles direkt sortiert und gefärbt an. Beim erneuten Öffnen in Tracery entstehen Gruppen, Teile, Namen und Farben wieder genauso.",
+    "tipp": "Wenn Teile eine Gruppe bilden, bleiben beim Export alle darin enthaltenen Einzelteile mit ihren eigenen Namen und Farben erhalten."
   }
 }

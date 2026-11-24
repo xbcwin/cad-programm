@@ -458,9 +458,9 @@ const Viewer = (() => {
     const hiddenBodies = new Set(), bodyColors = new Map();
     for (let bi = 0; bi < eb.length; bi++) {
       const mb = meta[bi];
-      if (!mb) continue;
-      if (mb.hidden) hiddenBodies.add(bi);
-      if (mb.color) bodyColors.set(bi, new THREE.Color(mb.color));
+      if (mb && mb.hidden) hiddenBodies.add(bi);
+      const col = (mb && mb.color) || (eb[bi] && eb[bi].color) || null;
+      if (col) bodyColors.set(bi, new THREE.Color(col));
     }
     n.hiddenBodies = hiddenBodies;
     n.bodyColors = bodyColors;
@@ -744,7 +744,8 @@ const Viewer = (() => {
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
     if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
-    if (info.bodies !== undefined && JSON.stringify(info.bodies) !== JSON.stringify(n.bodies)) { n.bodies = info.bodies; applyBodies(n); restyle = true; fitShadowSoon(); }
+    if (info.bodies !== undefined && (info.forceBodies || JSON.stringify(info.bodies) !== JSON.stringify(n.bodies))) { n.bodies = info.bodies; applyBodies(n); restyle = true; fitShadowSoon(); }
+    else if (info.forceBodies) { applyBodies(n); restyle = true; }
     if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
