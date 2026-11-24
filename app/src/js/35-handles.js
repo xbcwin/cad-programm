@@ -884,6 +884,7 @@ const Interact = (() => {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
       const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib' || it.kind === 'emboss') && it.p && it.p.sketch;
       items = [
+        ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), kbd: 'E', id: 'cm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
         { icon: 'viewOrtho', label: T('menu.ctx.lookAtFace'), id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },
@@ -982,9 +983,10 @@ const Interact = (() => {
     if (!modelActive()) return;
     const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
     if (!hit) return;
-    // Doppelklick auf einen Skizzenkörper: Skizze bearbeiten
+    // Doppelklick auf einen Skizzenkörper: Skizze bearbeiten; in einer Baugruppe: Bauteil im Tab öffnen
     const id = ctxChildAt(hit, e.clientX, e.clientY) || hit.id;
     const f = Model.find(App.doc, id);
+    if (f && typeof Assembly !== 'undefined' && Assembly.canOpenInTab(f.item, App.doc)) { Assembly.openPartTab(f.item.id); return; }
     if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib' || f.item.kind === 'emboss') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
     // Doppelklick auf eine ebene Fläche: gleich darauf zeichnen
     const r = App.results.get(hit.id); const info = r && r.data && r.data.faces && hit.faceIdx >= 0 ? r.data.faces[hit.faceIdx] : null;

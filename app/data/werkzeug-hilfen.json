@@ -1143,5 +1143,10 @@
     "tip": "Seitenleiste ein- und ausklappen",
     "hilfe": "Auf schmalen Bildschirmen und am Tablet lassen sich Verlauf (links) und Eigenschaften (rechts) ein- und ausklappen, damit mehr Platz für die 3D-Ansicht bleibt. Tippe in die 3D-Ansicht oder auf das Schließen-Symbol, um die Leiste wieder einzuklappen.",
     "tipp": "Am Tablet wählt ein Antippen den Körper, und zwei Finger drehen und zoomen die Ansicht."
+  },
+  "assemblyPartTab": {
+    "tip": "Bauteil aus einer Baugruppe im eigenen Tab öffnen und nach dem Speichern aktualisieren",
+    "hilfe": "Mach einen Doppelklick auf ein Teil in der Baugruppe (im 3D-Bild oder links im Verlauf), um das zugehörige Bauteil in einem eigenen Tab zu öffnen. Dort siehst du alle seine eigenen Schritte und Maße. Nach dem Speichern oder beim Zurückwechseln aktualisiert sich die Baugruppe mit allen Kopien dieses Bauteils automatisch.",
+    "tipp": "Oben im Bauteil-Tab erscheint ein Hinweis-Banner mit „Speichern“ und „Zurück zur Baugruppe“ – so wechselst du mit einem Klick zurück."
   }
 }

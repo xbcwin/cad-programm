@@ -279,6 +279,7 @@ const App = (() => {
     return {
       tabId: t.tabId,
       docId: d && d.id,
+      docType: (d && d.docType) || 'part',
       name: (d && d.name) || 'Neues Projekt',
       dirty: rev !== clean,
       active: isAct,
@@ -439,10 +440,45 @@ const App = (() => {
     const target = tabs.find((t) => t.tabId === tabId);
     if (!target) return false;
     if (target.tabId === activeTabId) return true;
+    const prevTabId = activeTabId, prevDoc = S.doc;
     leaveTransientModes();
     if (S.doc) { try { autosave.flush(); } catch (_) {} }
     stashActiveTab();
+    ev.emit('beforeSwitchTab', { fromTabId: prevTabId, toTabId: target.tabId, fromDoc: prevDoc, toDoc: target.doc });
     activateTab(target, { ...opts, isSwitch: true });
+    return true;
+  }
+  function getTabDoc(tabId) {
+    if (!tabId || tabId === activeTabId) return S.doc;
+    const t = tabs.find((x) => x.tabId === tabId);
+    return (t && t.doc) || null;
+  }
+  function updateTabDoc(tabId, fn) {
+    if (typeof fn !== 'function') return false;
+    if (!tabId || tabId === activeTabId) {
+      if (fn(S.doc) !== true) return false;
+      S.revision = nextRev();
+      S.doc.modified = Date.now();
+      Model.useVars(Model.vars(S.doc).v);
+      syncCurrentMeta();
+      ev.emit('doc');
+      ev.emit('tabs');
+      autosave();
+      rebuild();
+      return true;
+    }
+    const tab = tabs.find((x) => x.tabId === tabId);
+    if (!tab || !tab.doc) return false;
+    if (fn(tab.doc) !== true) return false;
+    const wasClean = tab.revision === tab.cleanRev;
+    tab.revision = nextRev();
+    tab.doc.modified = Date.now();
+    if (wasClean) tab.cleanRev = tab.revision;
+    if (typeof Store !== 'undefined' && Store.saveProject) {
+      Store.saveProject(tab.doc, Model.countItems(tab.doc), { keepLast: true });
+      tab.lastSavedRev = tab.revision;
+    }
+    ev.emit('tabs');
     return true;
   }
   async function closeTab(tabId = activeTabId, opts = {}) {
@@ -756,7 +792,7 @@ const App = (() => {
     const rev = S.revision;
     return Store.saveProject(d, count).then((ok) => {
       if (ok && S.doc && S.doc.id === d.id && S.lastSavedRev < rev) S.lastSavedRev = rev;
-      if (ok) { syncCurrentMeta(); syncOpenTabsToStore(); }
+      if (ok) { syncCurrentMeta(); syncOpenTabsToStore(); ev.emit('saved', { doc: d, revision: rev }); }
       return ok;
     });
   }
@@ -1074,7 +1110,7 @@ const App = (() => {
     get tabs() { return tabs.map(tabInfo); },
     get activeTabId() { return activeTabId; },
     markClean,
-    setDoc, openTab, switchTab, closeTab, restoreOpenTabs, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
+    setDoc, openTab, switchTab, closeTab, restoreOpenTabs, getTabDoc, updateTabDoc, saveNow, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
 })();
