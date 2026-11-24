@@ -32,12 +32,14 @@ const Drawing = (() => {
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, projSceneKey = null, loadingProjPromise = null, projId = 0;
   const projSigs = new Map(), shadeCache = new Map();
+  let bomData = null, bomMeasure = null, bomCacheKey = null;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null, selView = null;
   let dimMode = 'lin';
-  let layout = null, dragDetail = null, dragNote = null, dragView = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null;
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let noteDraft = { tip: 'auto', text: '' };
+  let balloonViewPref = 'auto';
   let centersListOpen = false;
   function normDimStyle(raw, tpl = null) {
     const t = (tpl && tpl.dimStyle) || DEFAULT_DIM_STYLE;
@@ -120,6 +122,13 @@ const Drawing = (() => {
       sections: Array.isArray(opts.sections) ? opts.sections : [],
       dimStyle: normDimStyle(opts.dimStyle, tpl),
       notes: Array.isArray(opts.notes) ? opts.notes.map((n) => ({ ...n, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] })) : [],
+      balloons: Array.isArray(opts.balloons) ? opts.balloons.map((b) => ({ ...b, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] })) : [],
+      bomTable: {
+        show: !!(opts.bomTable && opts.bomTable.show),
+        pos: Array.isArray(opts.bomTable && opts.bomTable.pos) && opts.bomTable.pos.length >= 2
+          ? [Number(opts.bomTable.pos[0]) || 0, Number(opts.bomTable.pos[1]) || 0]
+          : null,
+      },
       viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
       title: {
         titel: t0.titel || '',
@@ -151,6 +160,8 @@ const Drawing = (() => {
       sections: raw && Array.isArray(raw.sections) ? raw.sections : undefined,
       dimStyle: raw && raw.dimStyle && typeof raw.dimStyle === 'object' ? raw.dimStyle : undefined,
       notes: raw && Array.isArray(raw.notes) ? raw.notes : undefined,
+      balloons: raw && Array.isArray(raw.balloons) ? raw.balloons : undefined,
+      bomTable: raw && raw.bomTable && typeof raw.bomTable === 'object' ? raw.bomTable : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
@@ -182,6 +193,14 @@ const Drawing = (() => {
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
       if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
       if (cur && !Array.isArray(cur.notes)) cur.notes = [];
+      if (cur && !Array.isArray(cur.balloons)) cur.balloons = [];
+      if (cur && (!cur.bomTable || typeof cur.bomTable !== 'object')) cur.bomTable = { show: false, pos: null };
+      else if (cur) cur.bomTable = {
+        show: !!cur.bomTable.show,
+        pos: Array.isArray(cur.bomTable.pos) && cur.bomTable.pos.length >= 2
+          ? [Number(cur.bomTable.pos[0]) || 0, Number(cur.bomTable.pos[1]) || 0]
+          : null,
+      };
       if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
       if (cur) cur.dimStyle = normDimStyle(cur.dimStyle);
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
@@ -216,8 +235,8 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null; selView = null;
-    dragNote = null; dragView = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -232,8 +251,8 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null; selView = null;
-    dragNote = null; dragView = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -300,6 +319,15 @@ const Drawing = (() => {
       if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
       return { ...n, id: uid('ln'), view, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] };
     });
+    clone.balloons = (clone.balloons || []).map((b) => {
+      let view = detMap.get(b.view) || idMap.get(b.view) || b.view;
+      if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
+      return { ...b, id: uid('bl'), view, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] };
+    });
+    clone.bomTable = {
+      show: !!(src.bomTable && src.bomTable.show),
+      pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
+    };
     const nextVP = {};
     for (const [k, v] of Object.entries(clone.viewPos || {})) {
       if (Array.isArray(v) && v.length >= 2) nextVP[idMap.get(k) || k] = [Number(v[0]) || 0, Number(v[1]) || 0];
@@ -375,7 +403,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -535,6 +563,7 @@ const Drawing = (() => {
       if (s.viewOpts) delete s.viewOpts[key];
       if (s.viewPos) delete s.viewPos[key];
       s.notes = (s.notes || []).filter((n) => n.view !== key);
+      s.balloons = (s.balloons || []).filter((b) => b.view !== key);
     });
     selView = currentViewKey();
     render(); Panels.renderRight();
@@ -616,9 +645,64 @@ const Drawing = (() => {
     }
     return [...map.values()];
   }
+  function computeBomKey(sceneKey) {
+    const d = App.doc;
+    const mat = (d.settings && d.settings.material) || '';
+    const unit = (d.settings && d.settings.unit) || 'mm';
+    const meta = (d.items || []).map((it) => [it.id, it.name || '', it.mat || '', it.massG ?? '', it.role || '', it.suppressed ? 1 : 0, it.hidden ? 1 : 0]);
+    return sceneKey + '|' + mat + '|' + unit + '|' + JSON.stringify(meta);
+  }
+  async function ensureBom(sceneKey) {
+    if (!Model.activeItems(App.doc).length) {
+      bomData = null; bomMeasure = null; bomCacheKey = null;
+      return null;
+    }
+    const bk = computeBomKey(sceneKey);
+    if (bomData && bomCacheKey === bk) return bomData;
+    try {
+      const m = await Mass.measure();
+      const b = await Mass.bom(App.doc);
+      bomMeasure = m || null;
+      bomData = b || null;
+      bomCacheKey = bk;
+    } catch (_) {
+      bomMeasure = null;
+      bomData = null;
+      bomCacheKey = null;
+    }
+    return bomData;
+  }
+  function bomItems(bom = bomData) {
+    return ((bom && bom.rows) || []).map((r, i) => ({
+      pos: i + 1,
+      n: r.n,
+      name: r.name,
+      mat: r.kind,
+      kind: r.kind,
+      g: r.g,
+      buy: !!r.buy,
+      ids: Array.isArray(r.ids) ? r.ids.slice() : [],
+      key: `${r.name}|${r.kind}|${round(r.g, 2)}`,
+    }));
+  }
+  function resolveBalloonPos(bl, bom = bomData) {
+    const rows = bomItems(bom);
+    if (rows.length && bl) {
+      if (bl.itemId) {
+        const hit = rows.find((r) => r.ids.includes(bl.itemId));
+        if (hit) return hit.pos;
+      }
+      if (bl.bomKey) {
+        const hit = rows.find((r) => r.key === bl.bomKey);
+        if (hit) return hit.pos;
+      }
+    }
+    return Math.max(1, Math.round(Number(bl && bl.pos) || 1));
+  }
   async function ensureProjections() {
     if (!Model.activeItems(App.doc).length) {
       proj = null; projRev = App.revision; projSceneKey = null; projSigs.clear(); geoCache.clear(); shadeCache.clear();
+      bomData = null; bomMeasure = null; bomCacheKey = null;
       return;
     }
     if (loadingProjPromise) {
@@ -634,7 +718,11 @@ const Drawing = (() => {
     const missingViews = needFull ? specs : specs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
     const existingSecs = (proj && proj.sections) || {};
     const missingSecs = needFull ? allSecs : allSecs.filter((s) => !existingSecs[s.key]);
-    if (!needFull && !missingViews.length && !missingSecs.length) { projRev = rev; return; }
+    if (!needFull && !missingViews.length && !missingSecs.length) {
+      await ensureBom(sceneKey);
+      projRev = rev;
+      return;
+    }
     loadingProjPromise = (async () => {
       try {
         if (needFull) {
@@ -666,6 +754,7 @@ const Drawing = (() => {
           projRev = rev;
           projId++;
         }
+        await ensureBom(sceneKey);
       } finally {
         loadingProjPromise = null;
       }
@@ -1122,6 +1211,7 @@ const Drawing = (() => {
       d.details = (d.details || []).filter((x) => x.id !== id);
       d.dims = d.dims.filter((x) => x.view !== id);
       d.notes = (d.notes || []).filter((x) => x.view !== id);
+      d.balloons = (d.balloons || []).filter((x) => x.view !== id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -1287,11 +1377,33 @@ const Drawing = (() => {
     }
     return best;
   }
-  function layoutSheet(sh, s, G, extras, secGeos, area) {
+  function bomTableRect(sh = dwg(), frame, tb, bom = bomData) {
+    if (!(sh && sh.bomTable && sh.bomTable.show)) return null;
+    const rows = bomItems(bom);
+    const w = tb.w;
+    const cPos = Math.round(w * (16 / 180) * 10) / 10;
+    const cQty = Math.round(w * (20 / 180) * 10) / 10;
+    const cMat = Math.round(w * (46 / 180) * 10) / 10;
+    const cName = w - cPos - cQty - cMat;
+    const hh = 7.0, rh = 6.2;
+    const h = hh + Math.max(1, rows.length) * rh;
+    let x = frame.x + frame.w - w;
+    let y = Math.max(frame.y, frame.y + frame.h - tb.h - h);
+    if (dragBom && dragBom.curPos) {
+      x = clamp(dragBom.curPos[0], frame.x, frame.x + frame.w - w);
+      y = clamp(dragBom.curPos[1], frame.y, frame.y + frame.h - h);
+    } else if (Array.isArray(sh.bomTable.pos) && sh.bomTable.pos.length >= 2) {
+      x = clamp(Number(sh.bomTable.pos[0]) || 0, frame.x, frame.x + frame.w - w);
+      y = clamp(Number(sh.bomTable.pos[1]) || 0, frame.y, frame.y + frame.h - h);
+    }
+    return { x, y, w, h, hh, rh, cols: [cPos, cQty, cName, cMat], rows };
+  }
+  function layoutSheet(sh, s, G, extras, secGeos, area, bomRect = null) {
     const gap = 22;
     const views = {};
     const occ = [];
     const addOcc = (px, py, vw, vh, pad = 8, padBot = 10) => occ.push([px - pad, py - pad, px + vw + pad, py + vh + padBot]);
+    if (bomRect) occ.push([bomRect.x - 4, bomRect.y - 4, bomRect.x + bomRect.w + 4, bomRect.y + bomRect.h + 4]);
     const hits = (r) => {
       if (r[0] < area.x + 2 || r[1] < area.y + 2 || r[2] > area.x + area.w - 2 || r[3] > area.y + area.h - 2) return true;
       for (const o of occ) if (r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]) return true;
@@ -1348,7 +1460,9 @@ const Drawing = (() => {
       }
       if (extras.length === 1 && G.front && G.left && G.top && !secGeos.length) {
         const rx = x0 + fw + gap, ry = y0 + fh + gap;
-        placeExtra(extras[0], rx, ry, area.x + area.w - rx - 6, area.y + area.h - ry - 10);
+        const rawH = area.y + area.h - ry - 10;
+        const maxH = bomRect ? Math.min(rawH, bomRect.y - ry - 6) : rawH;
+        placeExtra(extras[0], rx, ry, area.x + area.w - rx - 6, maxH > 24 ? maxH : rawH);
       } else if (extras.length) {
         const rx = x0 + totalW + gap;
         const aw = area.x + area.w - rx - 6;
@@ -1415,6 +1529,7 @@ const Drawing = (() => {
     const frame = { x: 20, y: m, w: W - 20 - m, h: H - 2 * m };
     const tb = { w: Math.min(180, frame.w), h: 32 };
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
+    const bomRect = bomTableRect(sh, frame, tb, bomData);
     const G = {
       front: sh.views.front ? viewGeom('front', sh) : null,
       top: sh.views.top ? viewGeom('top', sh) : null,
@@ -1446,20 +1561,20 @@ const Drawing = (() => {
           if (needW(sc) + 24 <= area.w * (1 - extraRoom) && needH(sc) + 24 <= area.h) { s = sc; break; }
         }
       } else s = +sh.scale || 1;
-      views = layoutSheet(sh, s, G, extras, [], area).views;
+      views = layoutSheet(sh, s, G, extras, [], area, bomRect).views;
     } else {
       if (sh.scale === 'auto') {
         s = SCALES[SCALES.length - 1];
         for (const sc of SCALES) {
           if (!main && !secGeos.length) { s = 1; break; }
           if (main && (needW(sc) + 24 > area.w * 0.78 || needH(sc) + 24 > area.h)) continue;
-          const tryLay = layoutSheet(sh, sc, G, extras, secGeos, area);
+          const tryLay = layoutSheet(sh, sc, G, extras, secGeos, area, bomRect);
           if (tryLay.fits) { s = sc; views = tryLay.views; break; }
         }
-        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, extras, secGeos, area).views;
+        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect).views;
       } else {
         s = +sh.scale || 1;
-        views = layoutSheet(sh, s, G, extras, secGeos, area).views;
+        views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect).views;
       }
     }
     const vp = sh.viewPos || {};
@@ -1477,6 +1592,7 @@ const Drawing = (() => {
     // Detailansichten platzieren
     if (Array.isArray(sh.details) && sh.details.length) {
       const occupied = [[frame.x + frame.w - tb.w - 4, frame.y + frame.h - tb.h - 4, tb.w + 4, tb.h + 4]];
+      if (bomRect) occupied.push([bomRect.x - 4, bomRect.y - 4, bomRect.w + 8, bomRect.h + 8]);
       for (const [k, v] of Object.entries(views)) {
         const b = v.geo.box;
         occupied.push([v.ox + b[0] * v.s - 8, v.oy - b[3] * v.s - 8, (b[2] - b[0]) * v.s + 16, (b[3] - b[1]) * v.s + 16]);
@@ -1497,7 +1613,7 @@ const Drawing = (() => {
     }
     // frei Gezeichnetes liegt fest auf dem Papier: Millimeter ab der linken unteren Blattecke, 1:1
     if (G.free) views.free = { geo: G.free, s: 1, ox: 0, oy: H };
-    return { W, H, frame, tb, area, s, views };
+    return { W, H, frame, tb, area, s, views, bomRect };
   }
   const toSheet = (v, p) => [v.ox + p[0] * v.s, v.oy - p[1] * v.s];
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
@@ -2201,6 +2317,76 @@ const Drawing = (() => {
       texts.push({ x: tx, y, t: tLines[i], size: TXT, rot: 0, anchor, id: note.id, view: note.view || undefined, cls: 'leadertext' });
     }
   }
+  function drawBalloon(bl, lines, texts, lay = layout, sh = dwg(), bom = bomData) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (bl.view) {
+      const v = lay.views[bl.view];
+      if (!v) return;
+      A = toSheet(v, bl.anchor);
+    } else {
+      A = [bl.anchor[0], bl.anchor[1]];
+    }
+    const off = (dragBalloon && dragBalloon.id === bl.id && dragBalloon.curOffset) ? dragBalloon.curOffset : (bl.offset || [14, -12]);
+    const C = [A[0] + off[0], A[1] + off[1]];
+    const pos = resolveBalloonPos(bl, bom);
+    const posStr = String(pos);
+    const FS = clamp(st.fontSize * 1.05, 2.8, 7.5);
+    const R = Math.max(clamp(FS * 1.15, 3.6, 8.0), (textW(posStr, FS) + 2.4) / 2);
+    const dx = C[0] - A[0], dy = C[1] - A[1], dist = Math.hypot(dx, dy);
+    const E = dist > R + 0.5 ? [C[0] - (dx / dist) * R, C[1] - (dy / dist) * R] : A;
+    const tipKind = bl.tip === 'arrow' ? 'arrow' : 'dot';
+    if (dist > R + 0.5) {
+      lines.push({ pts: [A, E], cls: 'balloon-line', id: bl.id, view: bl.view || undefined, balloonPos: pos, anchorPt: A });
+    }
+    if (tipKind === 'arrow') {
+      if (dist > 1) arrowHead(lines, A, C, clamp(st.fontSize * 0.82, 2.2, 6.0), true, bl.id, null, 'filled', 'balloon-arrow', bl.view || undefined);
+    } else {
+      lines.push({ circle: [A[0], A[1], Math.max(0.75, FS * 0.22)], cls: 'balloon-dot', id: bl.id, view: bl.view || undefined, balloonPos: pos, anchorPt: A });
+    }
+    lines.push({ circle: [C[0], C[1], R], cls: 'balloon-circle', id: bl.id, view: bl.view || undefined, balloonPos: pos });
+    texts.push({ x: C[0], y: C[1] + FS * 0.35, t: posStr, size: FS, rot: 0, anchor: 'middle', id: bl.id, view: bl.view || undefined, cls: 'balloon-text', balloonPos: pos });
+  }
+  function drawBomTable(sh, lay, lines, texts) {
+    const br = lay && lay.bomRect;
+    if (!br) return;
+    const [cPos, cQty, cName, cMat] = br.cols;
+    const x0 = br.x, y0 = br.y, x1 = x0 + br.w, y1 = y0 + br.h;
+    const cx1 = x0 + cPos, cx2 = cx1 + cQty, cx3 = cx2 + cName;
+    lines.push({ rect: [x0, y0, br.w, br.h], cls: 'bom-bg', id: '__bom__' });
+    lines.push({ rect: [x0, y0, br.w, br.h], cls: 'bom-frame', id: '__bom__' });
+    lines.push({ pts: [[x0, y0 + br.hh], [x1, y0 + br.hh]], cls: 'bom-head-line', id: '__bom__' });
+    lines.push(
+      { pts: [[cx1, y0], [cx1, y1]], cls: 'bom-grid', id: '__bom__' },
+      { pts: [[cx2, y0], [cx2, y1]], cls: 'bom-grid', id: '__bom__' },
+      { pts: [[cx3, y0], [cx3, y1]], cls: 'bom-grid', id: '__bom__' },
+    );
+    const hy = y0 + br.hh * 0.66;
+    texts.push(
+      { x: x0 + cPos / 2, y: hy, t: 'Pos.', size: 2.9, anchor: 'middle', cls: 'bom-th', id: '__bom__' },
+      { x: cx1 + cQty / 2, y: hy, t: 'Menge', size: 2.9, anchor: 'middle', cls: 'bom-th', id: '__bom__' },
+      { x: cx2 + 1.8, y: hy, t: 'Name', size: 2.9, anchor: 'start', cls: 'bom-th', id: '__bom__' },
+      { x: cx3 + 1.8, y: hy, t: 'Werkstoff', size: 2.9, anchor: 'start', cls: 'bom-th', id: '__bom__' },
+    );
+    if (!br.rows.length) {
+      texts.push({ x: x0 + br.w / 2, y: y0 + br.hh + br.rh * 0.66, t: 'Noch keine Teile im Modell', size: 2.6, anchor: 'middle', cls: 'bom-td', id: '__bom__' });
+      return;
+    }
+    for (let i = 0; i < br.rows.length; i++) {
+      const r = br.rows[i];
+      const ry = y0 + br.hh + i * br.rh;
+      if (i > 0) lines.push({ pts: [[x0, ry], [x1, ry]], cls: 'bom-grid', id: '__bom__' });
+      const ty = ry + br.rh * 0.67;
+      const fsN = fitSize(r.name, cName - 3.2, 2.9, 1.8);
+      const fsM = fitSize(r.mat, cMat - 3.2, 2.8, 1.8);
+      texts.push(
+        { x: x0 + cPos / 2, y: ty, t: String(r.pos), size: 2.9, anchor: 'middle', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'pos' },
+        { x: cx1 + cQty / 2, y: ty, t: String(r.n), size: 2.9, anchor: 'middle', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'qty' },
+        { x: cx2 + 1.8, y: ty, t: clipText(r.name, cName - 3.2, fsN), size: fsN, anchor: 'start', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'name' },
+        { x: cx3 + 1.8, y: ty, t: clipText(r.mat, cMat - 3.2, fsM), size: fsM, anchor: 'start', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'mat' },
+      );
+    }
+  }
   function getShadedImage(name, v) {
     if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
     const pv = proj.views[name];
@@ -2325,8 +2511,11 @@ const Drawing = (() => {
     for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay, sh);
     // Notizen mit Hinweislinie
     for (const note of sh.notes || []) drawLeaderNote(note, lines, texts, lay, sh);
-    // Schriftfeld
+    // Positionsnummern
+    for (const bl of sh.balloons || []) drawBalloon(bl, lines, texts, lay, sh, bomData);
+    // Schriftfeld & Stückliste
     titleBlock(sh, lay, idx, total, lines, texts);
+    drawBomTable(sh, lay, lines, texts);
     return { layout: lay, lines, texts, images };
   }
   function render() {
@@ -2344,6 +2533,7 @@ const Drawing = (() => {
     if (tool === 'detail' && toolState) previewDetail(cur.lines, cur.texts);
     if (tool === 'section' && toolState) previewSection(cur.lines, cur.texts);
     if (tool === 'note' && toolState) previewNote(cur.lines, cur.texts);
+    if (tool === 'balloon' && toolState) previewBalloon(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts, cur.images);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
@@ -2401,7 +2591,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -2435,6 +2625,7 @@ const Drawing = (() => {
         if (l.secId) el.dataset.sec = l.secId;
         if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
         if (l.noteTip) el.dataset.tipKind = l.noteTip;
+        if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
         if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
       }
       g.append(el);
@@ -2464,6 +2655,9 @@ const Drawing = (() => {
         if (t.view) el.dataset.view = t.view;
         if (t.secId) el.dataset.sec = t.secId;
         if (t.tolPart) el.dataset.tol = t.tolPart;
+        if (t.balloonPos != null) el.dataset.pos = String(t.balloonPos);
+        if (t.bomRow != null) el.dataset.bomRow = String(t.bomRow);
+        if (t.bomCol) el.dataset.bomCol = t.bomCol;
       }
       el.textContent = t.t;
       g.append(el);
@@ -2811,7 +3005,8 @@ const Drawing = (() => {
     const d = dwg();
     const hasMain = d.viewPos && Object.keys(d.viewPos).length > 0;
     const hasSec = (d.sections || []).some((s) => Array.isArray(s.pos));
-    if (!hasMain && !hasSec && !viewName) return false;
+    const hasBomPos = !viewName && d.bomTable && Array.isArray(d.bomTable.pos);
+    if (!hasMain && !hasSec && !hasBomPos && !viewName) return false;
     App.change('Ansichten zurückgesetzt', () => {
       const sh = dwg();
       if (viewName) {
@@ -2823,6 +3018,7 @@ const Drawing = (() => {
       } else {
         sh.viewPos = {};
         for (const s of sh.sections || []) s.pos = null;
+        if (sh.bomTable) sh.bomTable.pos = null;
       }
     });
     render(); Panels.renderRight();
@@ -3013,6 +3209,431 @@ const Drawing = (() => {
       }, lines, texts, layout, dwg());
     }
   }
+  // ---------- Positionsnummern & Stückliste auf dem Blatt (ZE-12) ----------
+  function viewBasis(viewName, sh = dwg()) {
+    if (!proj) return null;
+    if (String(viewName).startsWith('sec_')) {
+      const sec = (sh.sections || []).find((x) => 'sec_' + x.id === viewName);
+      if (!sec) return null;
+      const sv = proj.sections && proj.sections[secCacheKey(sec)];
+      if (sv && sv.dir && sv.x && sv.y) return { dir: sv.dir, x: sv.x, y: sv.y };
+      const sp = sectionPlaneSpec(sec);
+      return { dir: sp.dir, x: sp.x, y: sp.y };
+    }
+    const det = (sh.details || []).find((x) => x.id === viewName);
+    const key = det ? det.source : viewName;
+    const pv = proj.views && proj.views[key];
+    if (pv && pv.dir && pv.x && pv.y) return { dir: pv.dir, x: pv.x, y: pv.y };
+    if (STD_DIR[key]) {
+      const { dir, x } = STD_DIR[key];
+      return { dir, x, y: vNorm(vCross(dir, x)) };
+    }
+    const ev = (sh.extraViews || []).find((x) => x.id === key);
+    if (ev) return { dir: ev.dir, x: ev.x, y: vNorm(vCross(ev.dir, ev.x)) };
+    return null;
+  }
+  function projectPartInView(part, basis) {
+    if (!part || !part.bbox || !basis) return null;
+    const b = part.bbox;
+    const ex = basis.x, ey = basis.y, d = basis.dir;
+    let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+    let dMin = Infinity, dMax = -Infinity;
+    for (const x of [b[0], b[3]]) for (const y of [b[1], b[4]]) for (const z of [b[2], b[5]]) {
+      const u = x * ex[0] + y * ex[1] + z * ex[2];
+      const v = x * ey[0] + y * ey[1] + z * ey[2];
+      const dp = x * d[0] + y * d[1] + z * d[2];
+      if (u < uMin) uMin = u; if (u > uMax) uMax = u;
+      if (v < vMin) vMin = v; if (v > vMax) vMax = v;
+      if (dp < dMin) dMin = dp; if (dp > dMax) dMax = dp;
+    }
+    const c = Array.isArray(part.com) && part.com.length >= 3
+      ? part.com
+      : [(b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5];
+    const cu = clamp(c[0] * ex[0] + c[1] * ex[1] + c[2] * ex[2], uMin, uMax);
+    const cv = clamp(c[0] * ey[0] + c[1] * ey[1] + c[2] * ey[2], vMin, vMax);
+    return { box2: [uMin, vMin, uMax, vMax], center2: [cu, cv], minDepth: dMin, maxDepth: dMax };
+  }
+  function chooseBalloonView(sh, lay, rows, partsById) {
+    const avail = Object.keys(lay.views || {}).filter((k) => k !== 'free' && lay.views[k] && lay.views[k].geo && lay.views[k].geo.box);
+    if (!avail.length) return null;
+    if (balloonViewPref && balloonViewPref !== 'auto' && avail.includes(balloonViewPref)) return balloonViewPref;
+    const bonus = { front: 3, iso: 2.5, top: 2, left: 1 };
+    let bestKey = avail[0], bestScore = -Infinity;
+    for (const vk of avail) {
+      const v = lay.views[vk];
+      const basis = viewBasis(vk, sh);
+      if (!basis) continue;
+      const pts = [];
+      for (const row of rows) {
+        let chosen = null, bestD = -Infinity;
+        for (const id of row.ids) {
+          const p = partsById.get(id);
+          const pr = projectPartInView(p, basis);
+          if (!pr) continue;
+          if (pr.maxDepth > bestD) { bestD = pr.maxDepth; chosen = pr; }
+        }
+        if (chosen) pts.push(toSheet(v, chosen.center2));
+      }
+      let minDist = pts.length > 1 ? Infinity : 20;
+      let sumDist = 0, cnt = 0;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+          if (d < minDist) minDist = d;
+          sumDist += d; cnt++;
+        }
+      }
+      const avgDist = cnt ? sumDist / cnt : 20;
+      const sc = minDist * 3 + avgDist * 0.25 + (bonus[vk] || (v.is3d ? 2.2 : 0.5));
+      if (sc > bestScore) { bestScore = sc; bestKey = vk; }
+    }
+    return bestKey;
+  }
+  function clampBalloonCenter(cx, cy, R, frame, tb, bomRect) {
+    const xMin = frame.x + R + 3, xMax = frame.x + frame.w - R - 3;
+    const yMin = frame.y + R + 3, yMax = frame.y + frame.h - R - 3;
+    let x = clamp(cx, xMin, xMax), y = clamp(cy, yMin, yMax);
+    const keepOut = (rx0, ry0, rx1, ry1) => {
+      if (x >= rx0 && x <= rx1 && y >= ry0 && y <= ry1) {
+        const upY = ry0 - 1;
+        const leftX = rx0 - 1;
+        if (upY >= yMin && (leftX < xMin || (y - upY) <= (x - leftX))) y = upY;
+        else if (leftX >= xMin) x = leftX;
+      }
+    };
+    const tbx0 = frame.x + frame.w - tb.w - R - 3, tby0 = frame.y + frame.h - tb.h - R - 3;
+    keepOut(tbx0, tby0, frame.x + frame.w, frame.y + frame.h);
+    if (bomRect) {
+      keepOut(bomRect.x - R - 3, bomRect.y - R - 3, bomRect.x + bomRect.w + R + 3, bomRect.y + bomRect.h + R + 3);
+    }
+    return [clamp(x, xMin, xMax), clamp(y, yMin, yMax)];
+  }
+  function pickRowAnchorInView(row, vName, v, basis, partsById, allProjected, chosenAnchors) {
+    const cands = [];
+    for (const id of row.ids) {
+      const part = partsById.get(id);
+      const pr = projectPartInView(part, basis);
+      if (pr) cands.push({ id, pr });
+    }
+    if (!cands.length) {
+      const b = v.geo.box;
+      return { itemId: row.ids[0] || null, anchor: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5], tip: 'dot' };
+    }
+    let bestCand = null, bestScore = -Infinity;
+    for (const cand of cands) {
+      const [u0, v0, u1, v1] = cand.pr.box2;
+      const du = u1 - u0, dv = v1 - v0;
+      const thin = du * v.s < 3.2 || dv * v.s < 3.2;
+      const samplePts = thin
+        ? [[(u0 + u1) * 0.5, v1], [u1, (v0 + v1) * 0.5], [(u0 + u1) * 0.5, v0], [u0, (v0 + v1) * 0.5]]
+        : [cand.pr.center2, ...[0.2, 0.5, 0.8].flatMap((fu) => [0.2, 0.5, 0.8].map((fv) => [u0 + du * fu, v0 + dv * fv]))];
+      for (const pt of samplePts) {
+        const covered = allProjected.some((other) => (
+          !row.ids.includes(other.id)
+          && other.pr.maxDepth > cand.pr.maxDepth + 0.05
+          && pt[0] >= other.pr.box2[0] && pt[0] <= other.pr.box2[2]
+          && pt[1] >= other.pr.box2[1] && pt[1] <= other.pr.box2[3]
+        ));
+        let sep = Infinity;
+        const S = toSheet(v, pt);
+        for (const ca of chosenAnchors) {
+          const d = Math.hypot(S[0] - ca[0], S[1] - ca[1]);
+          if (d < sep) sep = d;
+        }
+        const cx = (u0 + u1) * 0.5, cy = (v0 + v1) * 0.5;
+        const centerDist = Math.hypot(pt[0] - cx, pt[1] - cy);
+        const sc = (covered ? -1000 : 0) + cand.pr.maxDepth * 0.05 + Math.min(sep, 40) * 2 - centerDist * 0.1;
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestCand = { itemId: cand.id, anchor: [pt[0], pt[1]], tip: thin ? 'arrow' : 'dot' };
+        }
+      }
+    }
+    return bestCand;
+  }
+  async function autoBalloons(opts = {}) {
+    await ensureProjections();
+    const sh = dwg();
+    const rows = bomItems(bomData);
+    if (!rows.length) {
+      UI.toast('Noch keine Teile für Positionsnummern vorhanden.', { icon: 'info' });
+      return [];
+    }
+    const showTable = opts.showTable !== false;
+    const simSh = showTable ? { ...sh, bomTable: { ...(sh.bomTable || { pos: null }), show: true } } : sh;
+    const lay = computeLayout(simSh);
+    const partsById = new Map(((bomMeasure && bomMeasure.parts) || []).map((p) => [p.id, p]));
+    const vName = opts.view && lay.views[opts.view] ? opts.view : chooseBalloonView(simSh, lay, rows, partsById);
+    const v = vName && lay.views[vName];
+    if (!v || !v.geo || !v.geo.box) {
+      UI.toast('Keine sichtbare Ansicht für Positionsnummern gefunden.', { icon: 'info' });
+      return [];
+    }
+    const basis = viewBasis(vName, simSh);
+    const allProjected = [];
+    for (const [id, part] of partsById.entries()) {
+      const pr = projectPartInView(part, basis);
+      if (pr) allProjected.push({ id, pr });
+    }
+    const st = sheetDimStyle(sh);
+    const FS = clamp(st.fontSize * 1.05, 2.8, 7.5);
+    const R = clamp(FS * 1.15, 3.6, 8.0);
+    const b = v.geo.box;
+    const vTL = toSheet(v, [b[0], b[3]]), vBR = toSheet(v, [b[2], b[1]]);
+    const vCx = (vTL[0] + vBR[0]) * 0.5, vCy = (vTL[1] + vBR[1]) * 0.5;
+    const chosenAnchors = [];
+    const items = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const pick = pickRowAnchorInView(row, vName, v, basis, partsById, allProjected, chosenAnchors);
+      const A = toSheet(v, pick.anchor);
+      chosenAnchors.push(A);
+      let dx = A[0] - vCx, dy = A[1] - vCy;
+      if (Math.hypot(dx, dy) < 1) {
+        const ang = -Math.PI / 4 + (i * Math.PI * 2) / Math.max(1, rows.length);
+        dx = Math.cos(ang); dy = Math.sin(ang);
+      }
+      const L = Math.hypot(dx, dy) || 1;
+      const ux = dx / L, uy = dy / L;
+      const margin = Math.max(10, R * 2.5);
+      const tX = ux > 1e-6 ? (vBR[0] + margin - A[0]) / ux : ux < -1e-6 ? (vTL[0] - margin - A[0]) / ux : Infinity;
+      const tY = uy > 1e-6 ? (vBR[1] + margin - A[1]) / uy : uy < -1e-6 ? (vTL[1] - margin - A[1]) / uy : Infinity;
+      const tOut = clamp(Math.min(tX, tY), 10, 46);
+      let C = clampBalloonCenter(A[0] + ux * tOut, A[1] + uy * tOut, R, lay.frame, lay.tb, lay.bomRect);
+      items.push({ row, pick, A, C });
+    }
+    const minSep = R * 2.6 + 2;
+    for (let it = 0; it < 18; it++) {
+      let moved = false;
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const dx = items[j].C[0] - items[i].C[0], dy = items[j].C[1] - items[i].C[1];
+          const d = Math.hypot(dx, dy);
+          if (d < minSep) {
+            const push = (minSep - d) * 0.55;
+            const ux = d > 1e-4 ? dx / d : Math.cos((i + 1) * 1.1);
+            const uy = d > 1e-4 ? dy / d : Math.sin((i + 1) * 1.1);
+            items[i].C = clampBalloonCenter(items[i].C[0] - ux * push, items[i].C[1] - uy * push, R, lay.frame, lay.tb, lay.bomRect);
+            items[j].C = clampBalloonCenter(items[j].C[0] + ux * push, items[j].C[1] + uy * push, R, lay.frame, lay.tb, lay.bomRect);
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+    const created = items.map(({ row, pick, A, C }) => ({
+      id: uid('bl'),
+      view: vName,
+      itemId: pick.itemId,
+      bomKey: row.key,
+      pos: row.pos,
+      anchor: [pick.anchor[0], pick.anchor[1]],
+      offset: [round(C[0] - A[0], 2), round(C[1] - A[1], 2)],
+      tip: pick.tip,
+    }));
+    App.change('Positionsnummern gesetzt', () => {
+      const d = dwg();
+      d.balloons = created;
+      if (showTable) d.bomTable = { ...(d.bomTable || { pos: null }), show: true };
+    });
+    selDim = null;
+    tool = null;
+    toolState = null;
+    if (svg) svg.style.cursor = '';
+    UI.hint(null);
+    Panels.renderTools();
+    render();
+    Panels.renderRight();
+    UI.toast(`${created.length} Positionsnummer${created.length === 1 ? '' : 'n'} gesetzt.`, { icon: 'list', ms: 2400 });
+    return created;
+  }
+  function pickBalloonTarget(P) {
+    const name = leaderViewAt(P);
+    const rows = bomItems(bomData);
+    if (!name || !layout || !layout.views[name]) {
+      const r0 = rows[0] || null;
+      return {
+        view: null,
+        anchor: [P[0], P[1]],
+        sheetPt: [P[0], P[1]],
+        itemId: r0 && r0.ids[0] ? r0.ids[0] : null,
+        bomKey: r0 ? r0.key : null,
+        pos: r0 ? r0.pos : 1,
+        autoTip: 'arrow',
+      };
+    }
+    const v = layout.views[name];
+    const q = toView(v, P);
+    const basis = viewBasis(name, dwg());
+    const partsById = new Map(((bomMeasure && bomMeasure.parts) || []).map((p) => [p.id, p]));
+    let hitRow = null, hitItemId = null, bestDepth = -Infinity, bestDist = Infinity;
+    for (const row of rows) {
+      for (const id of row.ids) {
+        const pr = projectPartInView(partsById.get(id), basis);
+        if (!pr) continue;
+        const [u0, v0, u1, v1] = pr.box2;
+        const inside = q[0] >= u0 - 1e-3 && q[0] <= u1 + 1e-3 && q[1] >= v0 - 1e-3 && q[1] <= v1 + 1e-3;
+        if (inside) {
+          if (pr.maxDepth > bestDepth) { bestDepth = pr.maxDepth; hitRow = row; hitItemId = id; bestDist = 0; }
+        } else if (bestDepth === -Infinity) {
+          const dx = q[0] < u0 ? u0 - q[0] : q[0] > u1 ? q[0] - u1 : 0;
+          const dy = q[1] < v0 ? v0 - q[1] : q[1] > v1 ? q[1] - v1 : 0;
+          const d = Math.hypot(dx, dy);
+          if (d < bestDist) { bestDist = d; hitRow = row; hitItemId = id; }
+        }
+      }
+    }
+    const lt = pickLeaderTarget(P);
+    if (!hitRow && rows.length) { hitRow = rows[0]; hitItemId = rows[0].ids[0] || null; }
+    return {
+      view: lt.view || name,
+      anchor: lt.view ? lt.anchor : q,
+      sheetPt: lt.view ? lt.sheetPt : [P[0], P[1]],
+      itemId: hitItemId,
+      bomKey: hitRow ? hitRow.key : null,
+      pos: hitRow ? hitRow.pos : 1,
+      autoTip: lt.targetKind === 'edge' ? 'arrow' : 'dot',
+    };
+  }
+  function addBalloon(opts = {}) {
+    const bl = {
+      id: uid('bl'),
+      view: opts.view || null,
+      itemId: opts.itemId || null,
+      bomKey: opts.bomKey || null,
+      pos: Math.max(1, Math.round(Number(opts.pos) || 1)),
+      anchor: Array.isArray(opts.anchor) ? [Number(opts.anchor[0]) || 0, Number(opts.anchor[1]) || 0] : [0, 0],
+      offset: Array.isArray(opts.offset) ? [Number(opts.offset[0]) || 0, Number(opts.offset[1]) || 0] : [14, -12],
+      tip: opts.tip === 'arrow' ? 'arrow' : 'dot',
+    };
+    App.change('Positionsnummer hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.balloons)) d.balloons = [];
+      d.balloons.push(bl);
+    });
+    selDim = bl.id;
+    render(); Panels.renderRight();
+    return bl;
+  }
+  function updateBalloon(id, patch = {}) {
+    let changed = false;
+    App.change('Positionsnummer geändert', () => {
+      const bl = (dwg().balloons || []).find((x) => x.id === id);
+      if (!bl) return;
+      if (patch.pos != null) {
+        const np = Math.max(1, Math.round(Number(patch.pos) || 1));
+        if (np !== bl.pos) { bl.pos = np; changed = true; }
+      }
+      if ('itemId' in patch && patch.itemId !== bl.itemId) { bl.itemId = patch.itemId; changed = true; }
+      if ('bomKey' in patch && patch.bomKey !== bl.bomKey) { bl.bomKey = patch.bomKey; changed = true; }
+      if (patch.tip === 'arrow' || patch.tip === 'dot') {
+        if (bl.tip !== patch.tip) { bl.tip = patch.tip; changed = true; }
+      }
+      if (Array.isArray(patch.offset) && patch.offset.length >= 2) {
+        bl.offset = [Number(patch.offset[0]) || 0, Number(patch.offset[1]) || 0];
+        changed = true;
+      }
+      if (Array.isArray(patch.anchor) && patch.anchor.length >= 2) {
+        bl.anchor = [Number(patch.anchor[0]) || 0, Number(patch.anchor[1]) || 0];
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeBalloon(id) {
+    const cur = (dwg().balloons || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Positionsnummer gelöscht', () => {
+      const d = dwg();
+      d.balloons = (d.balloons || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function clearBalloons() {
+    if (!(dwg().balloons || []).length) return false;
+    App.change('Positionsnummern entfernt', () => {
+      dwg().balloons = [];
+    });
+    if (selDim && String(selDim).startsWith('bl')) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  async function setBomTable(show) {
+    const val = !!show;
+    const cur = dwg();
+    if ((cur.bomTable && !!cur.bomTable.show) === val) return false;
+    await ensureProjections();
+    App.change(val ? 'Stückliste eingeblendet' : 'Stückliste ausgeblendet', () => {
+      const d = dwg();
+      d.bomTable = { ...(d.bomTable || { pos: null }), show: val };
+    });
+    if (!val && selDim === '__bom__') selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetBomTablePos() {
+    const d = dwg();
+    if (!d.bomTable || !Array.isArray(d.bomTable.pos)) return false;
+    App.change('Stücklisten-Lage zurückgesetzt', () => {
+      const sh = dwg();
+      if (sh.bomTable) sh.bomTable.pos = null;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function balloonClick(P) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickBalloonTarget(P);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let offset = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(offset[0], offset[1]) < 4) offset = [14, -12];
+    toolState = { stage: 0 };
+    addBalloon({
+      view: target.view,
+      itemId: target.itemId,
+      bomKey: target.bomKey,
+      pos: target.pos,
+      anchor: target.anchor,
+      offset,
+      tip: target.autoTip,
+    });
+  }
+  function previewBalloon(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      const S = st.target.sheetPt;
+      const r = st.target.autoTip === 'dot' ? Math.max(0.9, 1.1 / zoom) : (1.3 / zoom) * 1.5;
+      lines.push({ circle: [S[0], S[1], r], cls: st.target.autoTip === 'dot' ? 'balloon-dot' : 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let offset = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(offset[0], offset[1]) < 4) offset = [14, -12];
+      drawBalloon({
+        id: '__blprev',
+        view: st.target.view,
+        itemId: st.target.itemId,
+        bomKey: st.target.bomKey,
+        pos: st.target.pos,
+        anchor: st.target.anchor,
+        offset,
+        tip: st.target.autoTip,
+      }, lines, texts, layout, dwg(), bomData);
+    }
+  }
   function onMove(e) {
     if (dragDetail) {
       const P = sheetPt(e);
@@ -3025,6 +3646,20 @@ const Drawing = (() => {
       const P = sheetPt(e);
       dragNote.curElbow = [dragNote.origElbow[0] + (P[0] - dragNote.startP[0]), dragNote.origElbow[1] + (P[1] - dragNote.startP[1])];
       if (Math.hypot(P[0] - dragNote.startP[0], P[1] - dragNote.startP[1]) > 0.5) dragNote.moved = true;
+      render();
+      return;
+    }
+    if (dragBalloon) {
+      const P = sheetPt(e);
+      dragBalloon.curOffset = [dragBalloon.origOffset[0] + (P[0] - dragBalloon.startP[0]), dragBalloon.origOffset[1] + (P[1] - dragBalloon.startP[1])];
+      if (Math.hypot(P[0] - dragBalloon.startP[0], P[1] - dragBalloon.startP[1]) > 0.5) dragBalloon.moved = true;
+      render();
+      return;
+    }
+    if (dragBom) {
+      const P = sheetPt(e);
+      dragBom.curPos = [dragBom.origPos[0] + (P[0] - dragBom.startP[0]), dragBom.origPos[1] + (P[1] - dragBom.startP[1])];
+      if (Math.hypot(P[0] - dragBom.startP[0], P[1] - dragBom.startP[1]) > 0.5) dragBom.moved = true;
       render();
       return;
     }
@@ -3042,6 +3677,14 @@ const Drawing = (() => {
       toolState = toolState || { stage: 0 };
       toolState.P = P;
       if (toolState.stage === 0) toolState.target = pickLeaderTarget(P);
+      render();
+      return;
+    }
+    if (tool === 'balloon') {
+      const P = sheetPt(e);
+      toolState = toolState || { stage: 0 };
+      toolState.P = P;
+      if (toolState.stage === 0) toolState.target = pickBalloonTarget(P);
       render();
       return;
     }
@@ -3127,6 +3770,7 @@ const Drawing = (() => {
     if (tool === 'detail') { detailClick(P); return; }
     if (tool === 'section') { sectionDown(P, e); return; }
     if (tool === 'note') { noteClick(P); return; }
+    if (tool === 'balloon') { balloonClick(P); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : centerAt(P);
@@ -3136,6 +3780,11 @@ const Drawing = (() => {
       const noteObj = dwg().notes.find((x) => x.id === selDim);
       if (e.detail === 2) { editNoteText(selDim); render(); Panels.renderRight(); return; }
       dragNote = { id: selDim, startP: P, origElbow: [...(noteObj.elbow || [14, -10])], curElbow: null, moved: false };
+    } else if (selDim && (dwg().balloons || []).some((x) => x.id === selDim)) {
+      const blObj = dwg().balloons.find((x) => x.id === selDim);
+      dragBalloon = { id: selDim, startP: P, origOffset: [...(blObj.offset || [14, -12])], curOffset: null, moved: false };
+    } else if (selDim === '__bom__' && layout && layout.bomRect) {
+      dragBom = { startP: P, origPos: [layout.bomRect.x, layout.bomRect.y], curPos: null, moved: false };
     } else if (!selDim) {
       const hitV = viewAtAll(P);
       if (hitV) selView = hitV;
@@ -3162,6 +3811,29 @@ const Drawing = (() => {
       const d = dragNote;
       dragNote = null;
       if (d.moved && d.curElbow) updateNote(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragBalloon) {
+      const d = dragBalloon;
+      dragBalloon = null;
+      if (d.moved && d.curOffset) updateBalloon(d.id, { offset: d.curOffset });
+      return;
+    }
+    if (dragBom) {
+      const d = dragBom;
+      dragBom = null;
+      if (d.moved && d.curPos) {
+        const lay = layout || computeLayout(dwg());
+        const br = lay.bomRect;
+        const w = br ? br.w : lay.tb.w, h = br ? br.h : 20;
+        const nx = clamp(d.curPos[0], lay.frame.x, lay.frame.x + lay.frame.w - w);
+        const ny = clamp(d.curPos[1], lay.frame.y, lay.frame.y + lay.frame.h - h);
+        App.change('Stückliste verschoben', () => {
+          const sh = dwg();
+          sh.bomTable = { ...(sh.bomTable || { show: true }), show: true, pos: [round(nx, 2), round(ny, 2)] };
+        });
+        render(); Panels.renderRight();
+      }
       return;
     }
     if (dragView) {
@@ -3324,6 +3996,7 @@ const Drawing = (() => {
       d.sections = (d.sections || []).filter((x) => x.id !== id);
       d.dims = (d.dims || []).filter((x) => x.view !== 'sec_' + id);
       d.notes = (d.notes || []).filter((x) => x.view !== 'sec_' + id);
+      d.balloons = (d.balloons || []).filter((x) => x.view !== 'sec_' + id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|sec_' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -3544,6 +4217,7 @@ const Drawing = (() => {
     if (e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('detail'); return true; }
     if (e.key.toLowerCase() === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('section'); return true; }
     if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('note'); return true; }
+    if (e.key.toLowerCase() === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('balloon'); return true; }
     return false;
   }
   function allCenters(viewName = null) {
@@ -3626,9 +4300,11 @@ const Drawing = (() => {
   }
   function removeSel() {
     const id = selDim; if (!id) return;
+    if (id === '__bom__') { setBomTable(false); return; }
     if (String(id).startsWith('ctr|')) { hideCenter(id); return; }
     if ((dwg().sections || []).some((x) => x.id === id)) { removeSection(id); return; }
     if ((dwg().notes || []).some((x) => x.id === id)) { removeNote(id); return; }
+    if ((dwg().balloons || []).some((x) => x.id === id)) { removeBalloon(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
@@ -3672,14 +4348,14 @@ const Drawing = (() => {
     })));
   }
   function setTool(t) {
-    dragDetail = null; dragNote = null; dragView = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
     } else {
-      toolState = (t === 'dim' || t === 'section' || t === 'note') ? { stage: 0 } : t ? {} : null;
+      toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon') ? { stage: 0 } : t ? {} : null;
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
@@ -3687,7 +4363,8 @@ const Drawing = (() => {
         : t === 'detail' ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
           : t === 'section' ? '<b>Schnittansicht:</b> Schnittlinie A–A durch eine Ansicht ziehen oder zwei Punkte anklicken (<b>Umschalt</b> = waagerecht/senkrecht, <b>Alt</b> = frei). <b>Esc</b> beendet.'
             : t === 'note' ? '<b>Hinweislinie:</b> Kante (Pfeil) oder Fläche (Punkt) anklicken, dann die Textstelle wählen. <b>Esc</b> beendet.'
-              : t && t.startsWith('free-') ? HINTS2[t] : null
+              : t === 'balloon' ? '<b>Positionsnummer:</b> Teil oder Kante in einer Ansicht anklicken, dann den Positionskreis absetzen. <b>Esc</b> beendet.'
+                : t && t.startsWith('free-') ? HINTS2[t] : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
   }
@@ -3810,6 +4487,19 @@ const Drawing = (() => {
       { label: T('menu.draw.addFreeShaded'), icon: 'eye', run: () => addView('free', { shaded: true }) },
     ]);
   }
+  function bomMenu(anchor) {
+    const sh = dwg();
+    const hasB = !!(sh.balloons && sh.balloons.length);
+    const hasBom = !!(sh.bomTable && sh.bomTable.show);
+    UI.menu(anchor, [
+      { id: 'dw-menu-auto-balloons', label: T('menu.draw.autoBalloons'), icon: 'list', help: 'drawingBalloons', run: () => autoBalloons() },
+      { id: 'dw-menu-add-balloon', label: T('menu.draw.addBalloon'), icon: 'plus', kbd: 'B', help: 'drawingBalloons', checked: tool === 'balloon', run: () => tool_('balloon') },
+      '-',
+      { id: 'dw-menu-bom-table', label: T('menu.draw.bomTable'), icon: 'sheet', help: 'drawingBom', checked: hasBom, run: () => setBomTable(!hasBom) },
+      '-',
+      { id: 'dw-menu-clear-balloons', label: T('menu.draw.clearBalloons'), icon: 'trash', disabled: !hasB, run: () => clearBalloons() },
+    ]);
+  }
   function exportMenu(anchor) {
     const entries = [
       { id: 'dw-exp-pdf', label: T('menu.draw.exportPdf'), icon: 'file', run: () => exportPDF() },
@@ -3883,6 +4573,11 @@ const Drawing = (() => {
       'arrow-open': [0.3, null],
       'arrow-slash': [0.45, null],
       leader: [0.25, null],
+      'balloon-line': [0.25, null],
+      'balloon-circle': [0.35, null],
+      'bom-frame': [0.5, null],
+      'bom-head-line': [0.35, null],
+      'bom-grid': [0.22, null],
       detail: [0.25, null],
       'detail-border': [0.25, [3, 1.5]],
     };
@@ -3893,12 +4588,17 @@ const Drawing = (() => {
     }
     for (const l of lines) {
       if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap' || l.cls === 'view-sel') continue;
-      if (l.cls === 'arrow' || l.cls === 'leader-arrow') {
+      if (l.cls === 'bom-bg' && l.rect) {
+        const [rx, ry, rw, rh] = l.rect;
+        out.push(`1 g ${px(rx)} ${py(ry + rh)} ${pf(rw * PT)} ${pf(rh * PT)} re f`);
+        continue;
+      }
+      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow') {
         const [a, b, c] = l.poly;
         out.push(`0.067 g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
         continue;
       }
-      if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot') && l.circle) {
+      if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot' || l.cls === 'balloon-dot') && l.circle) {
         const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
         const k = 0.5522847498 * R;
         out.push(
@@ -3921,12 +4621,14 @@ const Drawing = (() => {
       } else if (l.circle) {
         const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
         const k = 0.5522847498 * R;
+        const op = l.cls === 'balloon-circle' ? 'B' : 'S';
+        if (l.cls === 'balloon-circle') out.push('1 g');
         out.push(
           `${pf(cx + R)} ${pf(cy)} m`,
           `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
           `${pf(cx - k)} ${pf(cy + R)} ${pf(cx - R)} ${pf(cy + k)} ${pf(cx - R)} ${pf(cy)} c`,
           `${pf(cx - R)} ${pf(cy - k)} ${pf(cx - k)} ${pf(cy - R)} ${pf(cx)} ${pf(cy - R)} c`,
-          `${pf(cx + k)} ${pf(cy - R)} ${pf(cx + R)} ${pf(cy - k)} ${pf(cx + R)} ${pf(cy)} c S`
+          `${pf(cx + k)} ${pf(cy - R)} ${pf(cx + R)} ${pf(cy - k)} ${pf(cx + R)} ${pf(cy)} c ${op}`
         );
       } else if (l.pts && l.pts.length > 1) {
         const seg = [`${px(l.pts[0][0])} ${py(l.pts[0][1])} m`];
@@ -3941,7 +4643,7 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel') ? '/F2' : '/F1';
+      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'balloon-text') ? '/F2' : '/F1';
       const gray = t.cls === 'lab' ? '0.333' : '0.067';
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
@@ -4066,7 +4768,9 @@ const Drawing = (() => {
       hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE',
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
+      'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
       'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN',
+      'bom-frame': 'RAHMEN', 'bom-head-line': 'RAHMEN', 'bom-grid': 'RAHMEN',
     };
     const stats = { lines: 0, circles: 0, arcs: 0, polylines: 0, solids: 0, texts: 0, byLayer: {} };
     const bumpLayer = (ly) => { stats.byLayer[ly] = (stats.byLayer[ly] || 0) + 1; };
@@ -4088,7 +4792,7 @@ const Drawing = (() => {
         stats.circles++; bumpLayer(ly);
       } else if (l.poly) {
         const q = l.poly;
-        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow')) {
+        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow')) {
           P(0, 'SOLID', 8, ly,
             10, q[0][0].toFixed(4), 20, Y(q[0][1]).toFixed(4), 30, 0,
             11, q[1][0].toFixed(4), 21, Y(q[1][1]).toFixed(4), 31, 0,
@@ -4115,7 +4819,7 @@ const Drawing = (() => {
     for (const t of cur.texts || []) {
       if (t.cls === 'note') continue;
       const cls = String(t.cls || '');
-      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl') ? 'BEMASSUNG'
+      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text') ? 'BEMASSUNG'
         : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
@@ -4524,6 +5228,69 @@ const Drawing = (() => {
       noteSec.append(nl);
     }
     w.append(noteSec);
+    // Positionsnummern & Stückliste auf dem Blatt (ZE-12)
+    const bomSec = h('div', { class: 'section', id: 'dw-bom-sec', 'data-help': 'drawingBom' }, h('div', { class: 'section-h' }, 'Stückliste & Positionsnummern'));
+    const bomShow = !!(d.bomTable && d.bomTable.show);
+    const bomChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-bom-show', checked: bomShow }), 'Stückliste auf dem Blatt zeigen');
+    bomChk.querySelector('input').onchange = (e) => setBomTable(e.target.checked);
+    bomSec.append(bomChk);
+    const viewOptsBal = [['auto', 'Automatisch (beste Ansicht)'], ...avList.map((av) => [av.id, av.name])];
+    if (!viewOptsBal.some(([k]) => k === balloonViewPref)) balloonViewPref = 'auto';
+    bomSec.append(UI.selectField({
+      id: 'dw-balloon-view',
+      label: 'Ansicht für Positionsnummern',
+      value: balloonViewPref,
+      options: viewOptsBal,
+      onChange: (v) => { balloonViewPref = v; },
+    }));
+    const bAutoBal = h('button', { type: 'button', class: 'btn', id: 'dw-balloons-auto', 'data-help': 'drawingBalloons' });
+    bAutoBal.innerHTML = icon('list') + 'Positionsnummern automatisch';
+    bAutoBal.onclick = () => autoBalloons({ view: balloonViewPref === 'auto' ? null : balloonViewPref });
+    const bAddBal = h('button', { type: 'button', class: 'btn' + (tool === 'balloon' ? ' active' : ''), id: 'dw-balloon-add', 'data-help': 'drawingBalloons' });
+    bAddBal.innerHTML = icon('plus') + (tool === 'balloon' ? 'Setzen aktiv' : 'Einzeln setzen');
+    bAddBal.onclick = () => tool_('balloon');
+    bomSec.append(h('div', { class: 'btn-row' }, bAutoBal, bAddBal));
+    if (d.bomTable && Array.isArray(d.bomTable.pos)) {
+      const bResetBom = h('button', { type: 'button', class: 'btn', id: 'dw-bom-reset-pos', style: { marginTop: '6px' } }, 'Stücklisten-Lage zurücksetzen');
+      bResetBom.onclick = () => resetBomTablePos();
+      bomSec.append(bResetBom);
+    }
+    const bomRowsList = bomItems(bomData);
+    if (bomRowsList.length) {
+      const bList = h('div', { class: 'mini-list', id: 'dw-bom-list', style: { marginTop: '6px' } });
+      for (const r of bomRowsList) {
+        bList.append(h('div', { class: 'mini-row', 'data-bom-pos': String(r.pos) },
+          h('b', { class: 'mono' }, `${r.pos}`),
+          h('span', { class: 'mono', style: { color: 'var(--muted)' } }, `${r.n}×`),
+          h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, r.name),
+          h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, r.mat)));
+      }
+      bomSec.append(bList);
+    }
+    const blList = d.balloons || [];
+    if (blList.length) {
+      const bItems = h('div', { class: 'mini-list', id: 'dw-balloons-list', style: { marginTop: '6px' } });
+      for (const bl of blList) {
+        const bPos = resolveBalloonPos(bl, bomData);
+        const matchRow = bomRowsList.find((r) => r.pos === bPos);
+        const row = h('div', {
+          class: 'mini-row balloon-row',
+          'data-balloon-id': bl.id,
+          style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === bl.id ? 'var(--accent-soft)' : '' },
+        });
+        const badge = h('b', { class: 'mono' }, `(${bPos})`);
+        const nm = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, matchRow ? matchRow.name : `Pos. ${bPos}`);
+        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, bl.view ? viewLabel(bl.view, d) : 'Blatt');
+        const db = h('button', { type: 'button', class: 'btn danger balloon-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': 'Positionsnummer löschen' });
+        db.innerHTML = icon('trash');
+        db.onclick = (e) => { e.stopPropagation(); removeBalloon(bl.id); };
+        row.append(badge, nm, vw, db);
+        row.onclick = () => { selDim = bl.id; render(); Panels.renderRight(); };
+        bItems.append(row);
+      }
+      bomSec.append(bItems);
+    }
+    w.append(bomSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, 'Schnittansichten'));
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
@@ -4631,9 +5398,38 @@ const Drawing = (() => {
       const isSec = secs.some((x) => x.id === selDim);
       const selD = d.dims.find((x) => x.id === selDim);
       const selNote = (d.notes || []).find((x) => x.id === selDim);
+      const selBalloon = (d.balloons || []).find((x) => x.id === selDim);
+      const isBomSel = selDim === '__bom__';
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selDimInfo = !selDet && !isSec && !selNote && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
+      const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selBalloon ? `Positionsnummer ${resolveBalloonPos(selBalloon, bomData)}` : isBomSel ? 'Stückliste auf dem Blatt' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
+      if (selBalloon) {
+        const curPos = resolveBalloonPos(selBalloon, bomData);
+        const posOpts = bomRowsList.length
+          ? bomRowsList.map((r) => [String(r.pos), `${r.pos} · ${r.name} (${r.n}×)`])
+          : [[String(curPos), `Pos. ${curPos}`]];
+        selSec.append(UI.selectField({
+          id: 'dw-bl-pos',
+          label: 'Stücklisten-Position',
+          value: String(curPos),
+          options: posOpts,
+          onChange: (v) => {
+            const np = Math.max(1, Math.round(Number(v) || 1));
+            const r = bomRowsList.find((x) => x.pos === np);
+            updateBalloon(selBalloon.id, { pos: np, itemId: r && r.ids[0] ? r.ids[0] : null, bomKey: r ? r.key : null });
+          },
+        }));
+        selSec.append(UI.selectField({
+          id: 'dw-bl-tip',
+          label: 'Spitze',
+          value: selBalloon.tip === 'arrow' ? 'arrow' : 'dot',
+          options: [['dot', 'Punkt (Fläche)'], ['arrow', 'Pfeil (Kante)']],
+          onChange: (v) => updateBalloon(selBalloon.id, { tip: v }),
+        }));
+      }
+      if (isBomSel) {
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Positionen'), h('b', { class: 'mono' }, String(bomRowsList.length)))));
+      }
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
         const lFld = UI.textField({ id: 'dw-det-label', label: 'Buchstabe', value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
@@ -4805,6 +5601,16 @@ const Drawing = (() => {
         hb.innerHTML = icon('eyeOff') + 'Ausblenden';
         hb.onclick = () => hideCenter(selCtr.id);
         row.append(hb);
+      } else if (isBomSel) {
+        if (d.bomTable && Array.isArray(d.bomTable.pos)) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-sel-reset' }, 'Lage zurücksetzen');
+          rb.onclick = () => resetBomTablePos();
+          row.append(rb);
+        }
+        const hb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-hide' });
+        hb.innerHTML = icon('eyeOff') + 'Ausblenden';
+        hb.onclick = () => setBomTable(false);
+        row.append(hb);
       } else {
         const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
         row.append(del);
@@ -4819,13 +5625,17 @@ const Drawing = (() => {
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
-    open, close, refresh, sheetMenu, viewMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera,
     get selectedView() { return currentViewKey(); },
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     DIM_ARROWS, DIM_FONT_SIZES, dimStyle: () => sheetDimStyle(), setDimStyle,
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
+    bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
+    bomRows: () => bomItems(),
+    balloons: () => (dwg().balloons || []).map((b) => ({ ...b, pos: resolveBalloonPos(b, bomData) })),
+    autoBalloons, addBalloon, updateBalloon, removeBalloon, clearBalloons,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
     get selectedId() { return selDim; },
     addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,

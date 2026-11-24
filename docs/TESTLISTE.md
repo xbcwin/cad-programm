@@ -2026,6 +2026,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Befehlssuche & Hilfetexte**: Befehle `drawingExportDxf` und `drawingExportPng` sowie Hilfetexte `drawingExportDxf` und `drawingExportPng` in `werkzeug-hilfen.json` und `00-util.js` sind vorhanden.
 - [ ] **Von Hand**: Im Browser eine bemaßte Zeichnung mit Schnittansicht, Mittellinien und Schriftfeld als `.dxf` in einem DXF-Betrachter (z. B. LibreCAD / QCAD) auf Layer und Linientypen sowie das exportierte `.png` auf Schärfe und Lesbarkeit prüfen.
 
+## Zeichnung: Positionsnummern und Stückliste (Auto [A-070], ZE-12)
+
+- [x] **3 verschiedene Teile, eines zweimal → Tabelle & 3 Positionsnummern**: `#t-balloons` → „Positionsnummern automatisch setzen“ erzeugt auf dem Blatt die Stückliste (`Pos.`, `Menge`, `Name`, `Werkstoff`) mit exakt 3 Datenzeilen passend zu `Mass.bom()` (Menge `2` beim doppelten Teil) und exakt 3 überschneidungsfreien Positionskreisen (`1`, `2`, `3`) im Blattrahmen.
+- [x] **Ansicht verschieben, Werkstoff-Update & Gruppen**: Beim Verschieben der Ansicht wandern die Positionsnummern exakt mit; Werkstoffänderungen am Modell aktualisieren die Tabelle automatisch; Baugruppen/Gruppen werden samt Einzelteilen korrekt gruppiert und nummeriert.
+- [x] **Einzeln setzen (`B`), Spitze wechseln, Löschen & Tabelle schalten**: Einzelne Positionsnummern lassen sich per Taste `B` setzen, zwischen Punkt und Pfeil umschalten, per `Entf` löschen und die Stückliste auf dem Blatt über `#dw-bom-show` ein-/ausblenden.
+- [x] **Rückgängig, Speichern/Neuladen, PDF, DXF & Hilfen**: Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Spalten und Teilenamen), DXF-Export (Kreise auf `BEMASSUNG`, Tabellentexte auf `RAHMEN`), Befehlssuche und Hilfetexte (`drawingBalloons`, `drawingBom`) funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser eine kleine Baugruppe aus mehreren Teilen und einer Gruppe in der Zeichnung mit Positionsnummern versehen, Kreise und Stückliste auf dem Blatt zurechtschieben und die exportierte PDF- und DXF-Datei prüfen.
+
 ## Fehler melden
 
 ```

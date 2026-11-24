@@ -14989,6 +14989,255 @@ def t_a071_zeichnung_dxf_png(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12) ----------
+def t_a070_positionsnummern_stueckliste(p):
+    # 1. 3 verschiedene Teile, eines zweimal (4 Körper gesamt) → Tabelle mit 3 Zeilen (Menge 2 beim doppelten) & 3 Positionsnummern im Bild
+    p.empty()
+    p.ev("""
+      App.change('A070 Teile', d => {
+        const g = Model.newItem('box', { w: 100, d: 60, h: 6 }, { name: 'Grundplatte', mat: 'Alu 6061' });
+        g.t.z = 0;
+        const b1 = Model.newItem('cylinder', { d: 14, h: 18 }, { name: 'Buchse 1', mat: 'Messing' });
+        b1.t.x = -28; b1.t.z = 6;
+        const b2 = Model.newItem('cylinder', { d: 14, h: 18 }, { name: 'Buchse 2', mat: 'Messing' });
+        b2.t.x = 28; b2.t.z = 6;
+        const dk = Model.newItem('box', { w: 80, d: 40, h: 4 }, { name: 'Deckel', mat: 'PLA' });
+        dk.t.z = 24;
+        d.items.push(g, b1, b2, dk);
+      });
+    """); warte_rechnen(p, 40)
+
+    bom_expected = p.ev("""
+      return Mass.bom().then(b => b.rows.map((r, i) => ({
+        pos: i + 1, n: r.n, name: r.name, mat: r.kind
+      })));
+    """)
+
+    p.pg.click('#tab-drawing'); p.wait(600)
+    p.ev("return Drawing.waitReady()")
+    p.pg.click('#t-balloons'); p.wait(150)
+    p.pg.click('#dw-menu-auto-balloons'); p.wait(500)
+    p.ev("return Drawing.waitReady()")
+
+    svg_info = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const headers = [...svg.querySelectorAll('text.bom-th')].map(t => t.textContent.trim());
+      const cellMap = new Map();
+      for (const t of svg.querySelectorAll('text.bom-td')) {
+        const r = Number(t.dataset.bomRow || 0);
+        if (!r) continue;
+        if (!cellMap.has(r)) cellMap.set(r, {});
+        cellMap.get(r)[t.dataset.bomCol] = t.textContent.trim();
+      }
+      const tableRows = [...cellMap.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({
+        pos: Number(v.pos), n: Number(v.qty), name: v.name, mat: v.mat
+      }));
+      const circles = [...svg.querySelectorAll('circle.balloon-circle')].map(c => ({
+        id: c.dataset.id,
+        pos: Number(c.dataset.pos),
+        view: c.dataset.view,
+        cx: parseFloat(c.getAttribute('cx')),
+        cy: parseFloat(c.getAttribute('cy')),
+        r: parseFloat(c.getAttribute('r'))
+      }));
+      const labels = [...svg.querySelectorAll('text.balloon-text')].map(t => Number(t.textContent.trim())).sort((a, b) => a - b);
+      const lines = svg.querySelectorAll('polyline.balloon-line').length;
+      const frame = svg.querySelector('rect.frame');
+      const fx = parseFloat(frame.getAttribute('x')), fy = parseFloat(frame.getAttribute('y'));
+      const fw = parseFloat(frame.getAttribute('width')), fh = parseFloat(frame.getAttribute('height'));
+      let noOverlap = true;
+      for (let i = 0; i < circles.length; i++) {
+        const c = circles[i];
+        if (c.cx - c.r < fx || c.cx + c.r > fx + fw || c.cy - c.r < fy || c.cy + c.r > fy + fh) noOverlap = false;
+        for (let j = i + 1; j < circles.length; j++) {
+          const d = Math.hypot(c.cx - circles[j].cx, c.cy - circles[j].cy);
+          if (d < c.r + circles[j].r + 0.5) noOverlap = false;
+        }
+      }
+      return { headers, tableRows, circles, labels, lines, noOverlap };
+    """)
+
+    buchse_row = next((r for r in svg_info['tableRows'] if r['name'] == 'Buchse'), None)
+    ok1 = bool(
+        svg_info['headers'] == ['Pos.', 'Menge', 'Name', 'Werkstoff']
+        and len(bom_expected) == 3
+        and len(svg_info['tableRows']) == 3
+        and svg_info['tableRows'] == bom_expected
+        and buchse_row and buchse_row['n'] == 2 and buchse_row['mat'] == 'Messing'
+        and len(svg_info['circles']) == 3
+        and svg_info['labels'] == [1, 2, 3]
+        and svg_info['lines'] == 3
+        and svg_info['noOverlap']
+    )
+
+    # 2. Ansicht verschieben (Ballons wandern mit), Werkstoff-Update & Gruppen-Test
+    bal_view = svg_info['circles'][0]['view'] if svg_info['circles'] else 'front'
+    before_pos = {c['id']: (c['cx'], c['cy']) for c in svg_info['circles']}
+    p.ev("Drawing.moveView(arg[0], arg[1], arg[2])", [bal_view, 18, -10]); p.wait(200)
+    after_move = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return [...svg.querySelectorAll('circle.balloon-circle')].map(c => ({
+        id: c.dataset.id,
+        cx: parseFloat(c.getAttribute('cx')),
+        cy: parseFloat(c.getAttribute('cy'))
+      }));
+    """)
+    moved_ok = len(after_move) == 3 and all(
+        abs((c['cx'] - before_pos[c['id']][0]) - 18) < 0.1 and abs((c['cy'] - before_pos[c['id']][1]) - (-10)) < 0.1
+        for c in after_move
+    )
+    # Werkstoff-Änderung am Modell aktualisiert die Stückliste auf dem Blatt automatisch
+    p.ev("App.change('Werkstoff', d => { d.items.find(i => i.name === 'Deckel').mat = 'PETG'; })"); warte_rechnen(p)
+    p.ev("return Drawing.waitReady()")
+    deckel_mat = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const rows = {};
+      for (const t of svg.querySelectorAll('text.bom-td')) {
+        const r = t.dataset.bomRow;
+        if (!rows[r]) rows[r] = {};
+        rows[r][t.dataset.bomCol] = t.textContent.trim();
+      }
+      const hit = Object.values(rows).find(x => x.name === 'Deckel');
+      return hit ? hit.mat : null;
+    """)
+
+    # Auch Gruppen + Einzelteile testen (1 Gruppe mit Körper+Loch + 2 Einzelteile = 3 BOM-Zeilen, 3 Ballons)
+    p.ev("""
+      App.change('Gruppe + Teile', d => {
+        d.items = [];
+        const g = Model.newItem('group', {}, { name: 'Halter-Baugruppe', mat: 'Alu 7075' });
+        const body = Model.newItem('box', { w: 40, d: 30, h: 12 }, { name: 'Halter' });
+        const hole = Model.newItem('cylinder', { d: 8, h: 20 }, { name: 'Bohrung', role: 'hole' });
+        hole.t.z = -2;
+        g.children.push(body, hole);
+        const s1 = Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bolzen 1', mat: 'Stahl' });
+        s1.t.x = 45;
+        const s2 = Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bolzen 2', mat: 'Stahl' });
+        s2.t.x = 65;
+        const ab = Model.newItem('box', { w: 20, d: 20, h: 8 }, { name: 'Kappe', mat: 'ABS' });
+        ab.t.x = -45;
+        d.items.push(g, s1, s2, ab);
+      });
+    """); warte_rechnen(p, 40)
+    p.ev("return Drawing.autoBalloons()")
+    grp_info = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const rows = {};
+      for (const t of svg.querySelectorAll('text.bom-td')) {
+        const r = t.dataset.bomRow;
+        if (!rows[r]) rows[r] = {};
+        rows[r][t.dataset.bomCol] = t.textContent.trim();
+      }
+      const vals = Object.values(rows);
+      return {
+        rows: vals,
+        balloons: svg.querySelectorAll('circle.balloon-circle').length,
+      };
+    """)
+    grp_bolzen = next((x for x in grp_info['rows'] if x['name'] == 'Bolzen'), None)
+    grp_halter = next((x for x in grp_info['rows'] if x['name'] == 'Halter-Baugruppe'), None)
+    ok2 = bool(
+        moved_ok and deckel_mat == 'PETG'
+        and len(grp_info['rows']) == 3 and grp_info['balloons'] == 3
+        and grp_bolzen and grp_bolzen['qty'] == '2'
+        and grp_halter and grp_halter['mat'] == 'Alu 7075'
+    )
+
+    # 3. Einzeln setzen (Taste B), Spitze auf Pfeil umschalten, Entf löscht, Tabelle aus-/einblenden
+    p.pg.keyboard.press('b'); p.wait(150)
+    pt_top = p.ev("""
+      const lay = Drawing.layout;
+      const v = lay.views.top || lay.views.front;
+      const b = v.geo.box;
+      const sx = v.ox + ((b[0] + b[2]) * 0.5) * v.s;
+      const sy = v.oy - ((b[1] + b[3]) * 0.5) * v.s;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const pt1 = svg.createSVGPoint(); pt1.x = sx; pt1.y = sy;
+      const ctm = svg.getScreenCTM();
+      const s1 = pt1.matrixTransform(ctm);
+      const pt2 = svg.createSVGPoint(); pt2.x = sx + 18; pt2.y = sy - 14;
+      const s2 = pt2.matrixTransform(ctm);
+      return { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y };
+    """)
+    p.pg.mouse.move(pt_top['x1'], pt_top['y1']); p.wait(80)
+    p.pg.mouse.click(pt_top['x1'], pt_top['y1']); p.wait(120)
+    p.pg.mouse.move(pt_top['x2'], pt_top['y2']); p.wait(80)
+    p.pg.mouse.click(pt_top['x2'], pt_top['y2']); p.wait(200)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    count_after_add = p.ev("return document.querySelectorAll('#sheet svg circle.balloon-circle').length")
+    p.pg.select_option('#dw-bl-tip', 'arrow'); p.wait(150)
+    has_arrow = p.ev("return document.querySelectorAll('#sheet svg polygon.balloon-arrow').length >= 1")
+    p.pg.keyboard.press('Delete'); p.wait(150)
+    count_after_del = p.ev("return document.querySelectorAll('#sheet svg circle.balloon-circle').length")
+
+    p.pg.click('#dw-bom-show'); p.wait(150)
+    bom_hidden = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length === 0")
+    p.pg.click('#dw-bom-show'); p.wait(150)
+    bom_shown = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length === 1")
+
+    ok3 = bool(count_after_add == 4 and has_arrow and count_after_del == 3 and bom_hidden and bom_shown)
+
+    # 4. Rückgängig/Wiederholen, Speichern/Neuladen, PDF & DXF
+    p.ev("App.undo()"); p.wait(200); p.ev("return Drawing.waitReady()")
+    after_undo = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length")
+    p.ev("App.redo()"); p.wait(200); p.ev("return Drawing.waitReady()")
+    after_redo = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    after_reload = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        frames: svg.querySelectorAll('rect.bom-frame').length,
+        circles: svg.querySelectorAll('circle.balloon-circle').length,
+      };
+    """)
+
+    pdf_res = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const text = new TextDecoder('latin1').decode(bytes);
+        return {
+          hdr: text.startsWith('%PDF-1.4'),
+          hasCols: text.includes('Pos.') && text.includes('Menge') && text.includes('Name') && text.includes('Werkstoff'),
+          hasParts: text.includes('Halter-Baugruppe') && text.includes('Bolzen') && text.includes('Kappe'),
+        };
+      });
+    """)
+    dxf_res = p.ev("""
+      return Drawing.buildDXF().then(r => ({
+        hasCircle: r.text.includes('CIRCLE') && r.text.includes('BEMASSUNG'),
+        hasBomText: r.text.includes('Pos.') && r.text.includes('Menge') && r.text.includes('Halter-Baugruppe'),
+      }));
+    """)
+
+    ok4 = bool(
+        after_undo == 0 and after_redo == 1
+        and after_reload['frames'] == 1 and after_reload['circles'] == 3
+        and pdf_res['hdr'] and pdf_res['hasCols'] and pdf_res['hasParts']
+        and dxf_res['hasCircle'] and dxf_res['hasBomText']
+    )
+
+    # 5. Befehlssuche & Hilfetexte (drawingBalloons & drawingBom)
+    p.pg.hover('#dw-balloons-auto'); p.wait(1700)
+    tip_bal = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    p.pg.hover('#dw-bom-show'); p.wait(1700)
+    tip_bom = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    meta = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        jsonBal: !!(d.drawingBalloons && d.drawingBalloons.tip && d.drawingBalloons.hilfe && d.drawingBalloons.tipp),
+        jsonBom: !!(d.drawingBom && d.drawingBom.tip && d.drawingBom.hilfe && d.drawingBom.tipp),
+        domBal: document.querySelectorAll('[data-help="drawingBalloons"]').length >= 1,
+        domBom: document.querySelectorAll('[data-help="drawingBom"]').length >= 1,
+        cmdBal: Commands.search('positionsnummer').some(c => c.id === 'drawingBalloons'),
+        cmdBom: Commands.search('stückliste').some(c => c.id === 'drawingBomTable'),
+      }));
+    """)
+    ok5 = bool(all(meta.values()) and 'Positionsnummern' in tip_bal and 'Stückliste' in tip_bom)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15165,6 +15414,7 @@ TESTS = [
     ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
+    ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

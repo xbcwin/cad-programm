@@ -1776,6 +1776,16 @@ const HELP = {
   "tip": "Zeichnung als PNG-Bild in wählbarer Auflösung speichern",
   "hilfe": "Rendert das aktive Zeichnungsblatt gestochen scharf als PNG-Bild. Wähle eine feste Breite (1600, 2400 oder 3840 Pixel), eine Druckauflösung (150 oder 300 DPI) oder eine eigene Breite in Pixeln – die Höhe passt sich automatisch dem Blattformat an.",
   "tipp": "Aktiviere „Durchsichtiger Hintergrund“, wenn du die Zeichnung direkt in eine Präsentation oder Dokumentation einfügen willst."
+ },
+ "drawingBalloons": {
+  "tip": "Positionsnummern (nummerierte Kreise mit Hinweislinie) an Teile und Gruppen setzen",
+  "hilfe": "Setzt automatisch oder einzeln (Taste B) nummerierte Positionskreise mit Hinweislinie an jedes eindeutige Teil oder jede Gruppe auf dem Blatt. Die Nummern stimmen genau mit der Stückliste überein, wandern beim Verschieben einer Ansicht mit und lassen sich frei anordnen.",
+  "tipp": "Gleiche Teile mit gleichem Namen und Werkstoff erhalten dieselbe Positionsnummer – so zeigt die Stückliste direkt die richtige Menge."
+ },
+ "drawingBom": {
+  "tip": "Stückliste (Pos., Menge, Name, Werkstoff) direkt auf dem Zeichnungsblatt einblenden",
+  "hilfe": "Zeigt die Stückliste des Modells als normgerechte Tabelle mit Positionsnummer, Menge, Teilename und Werkstoff (oder Kaufteil) auf dem Zeichnungsblatt – passend zur Stückliste unter „Projekt“. Die Tabelle steht standardmäßig über dem Schriftfeld und lässt sich auf dem Blatt frei verschieben.",
+  "tipp": "Ändern sich Namen, Mengen oder Werkstoffe im Modell, aktualisieren sich Tabelle und Positionsnummern automatisch – auch in PDF, SVG und DXF."
  }
 };
 
