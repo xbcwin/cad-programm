@@ -1028,5 +1028,10 @@
     "tip": "Blattformat A4 bis A0 im Hoch- oder Querformat wählen",
     "hilfe": "Du kannst jedes Blatt einzeln auf DIN A4, A3, A2, A1 oder A0 sowie zwischen Quer- und Hochformat umstellen. Rahmen (20 mm Heftrand links, 10 bzw. 20 mm Außenrand) und das Schriftfeld passen sich der gewählten Blattgröße automatisch an.",
     "tipp": "Größere Formate wie A2, A1 oder A0 eignen sich besonders für Baugruppen oder große Werkstücke im Maßstab 1:1."
+  },
+  "drawingDetail": {
+    "tip": "Ausschnitt einer Ansicht vergrößert als Detailansicht (z. B. Detail Z, 4:1) darstellen",
+    "hilfe": "Ziehe einen Kreis um einen Bereich der Vorder-, Drauf- oder Seitenansicht, wähle den Vergrößerungsmaßstab (z. B. 2:1, 4:1 oder 5:1) sowie einen Kennbuchstaben und platziere die Detailansicht frei auf dem Blatt. Beide Stellen tragen denselben Kennbuchstaben, und Maße innerhalb der Detailansicht zeigen immer die wahren Längen am Modell.",
+    "tipp": "Nach dem Platzieren kannst du die Detailansicht auf dem Blatt verschieben und Maßstab, Buchstabe oder Kreisradius rechts anpassen."
   }
 }

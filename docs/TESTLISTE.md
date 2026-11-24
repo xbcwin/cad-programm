@@ -1942,6 +1942,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Skizze auf Fläche (`planeRef` mit `tid`) & Lage-Ersatz**: Skizze auf oberer Quaderfläche (`F:top`) samt Aufbau wandert bei Höhenänderung 15 → 25 mit auf Z = 33; alte Bezüge ohne `tid` greifen weiter über die Lage.
 - [ ] **Von Hand**: Im Browser einen Quader mit Tasche und Rundungen sowie einer Skizze auf der Deckfläche versehen, frühe Maße per Ziehgriff und Feld stark ändern und prüfen, dass Rundungen und Skizzenfläche ohne Warnung mitwandern.
 
+## Zeichnung: Detailansicht (Auto [A-064], ZE-03)
+
+- [x] **Detailansicht anlegen (Detail Z, 4:1)**: In der Draufsicht einen Kreis (`r = 9 mm`) aufziehen und als `Detail Z (4:1)` auf dem Blatt platzieren; Kreis und Kennbuchstabe `Z` erscheinen an der Quellansicht, Rahmenkreis und `Detail Z (4:1)` an der Detailansicht.
+- [x] **Vergrößerung & kreisförmiges Beschneiden**: Eine Ø-4-mm-Bohrung und eine 6-mm-Kante sind in Detail Z exakt 4-mal größer (`r = 8 mm`, Länge `24 mm`), alle Konturen liegen sauber innerhalb des Detailkreises.
+- [x] **Wahre Maße in der Detailansicht**: Lineares Maß und Durchmesser-Maß direkt in Detail Z zeigen die wahren Modellwerte (`6` und `Ø4`) statt `24` oder `Ø16` und behalten sie auch nach Maßstabsänderung (`5:1`).
+- [x] **Ändern, PDF-Export, Speichern/Laden & Rückgängig**: Buchstabe, Maßstab, Löschen, Rückgängig/Wiederholen, Projekt-Speicherung, mehrseitiger PDF-Export und Hilfetext `drawingDetail` funktionieren fehlerfrei.
+- [ ] **Von Hand**: Im Browser eine Detailansicht auf der Vorderansicht anlegen, auf dem Blatt verschieben und als PDF/DXF exportieren.
+
 ## Fehler melden
 
 ```

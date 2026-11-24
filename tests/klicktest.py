@@ -12732,6 +12732,264 @@ def t_a061_stabile_bezuege(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a064_zeichnung_detailansicht(p):
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    p.empty()
+    p.ev("""
+      App.change('Platte mit Ausschnitt und Bohrung', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' }));
+        d.items.push(Model.newItem('box', { w: 6, d: 4, h: 24 }, { name: 'Nut', role: 'hole', more: { t: { x: 12, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+        d.items.push(Model.newItem('cylinder', { d: 4, h: 24 }, { name: 'Bohrung', role: 'hole', more: { t: { x: 20, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    # In Bereich Zeichnung wechseln, A3 quer & Maßstab 1:1 wählen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(250)
+    p.pg.click('#t-sheet'); p.wait(200)
+    p.pg.select_option('#dw-scale', '1')
+    p.pg.click('#sheet-tabs'); p.wait(300)
+
+    # 1. Detailansicht Z mit Maßstab 4:1 um den Ausschnitt/Bohrung in der Draufsicht anlegen
+    p.pg.click('#t-detail'); p.wait(200)
+    p.pg.select_option('#dw-det-new-scale', '4')
+    p.wait(150)
+
+    pts_top = p.ev("""
+      const v = Drawing.layout.views.top;
+      const cc = v.geo.circles.find(c => c.full && Math.abs(c.r - 2) < 0.1) || v.geo.circles[0];
+      const cx = (cc ? cc.c[0] : 20) - 4;
+      const cy = cc ? cc.c[1] : 0;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      return { c: toS([cx, cy]), rad: toS([cx + 9, cy]), place: [335, 115] };
+    """)
+    sc_c = sheet_screen(*pts_top['c'])
+    sc_r = sheet_screen(*pts_top['rad'])
+    sc_p = sheet_screen(*pts_top['place'])
+    p.pg.mouse.click(sc_c[0], sc_c[1]); p.wait(150)
+    p.pg.mouse.move(sc_r[0], sc_r[1]); p.wait(100)
+    p.pg.mouse.click(sc_r[0], sc_r[1]); p.wait(150)
+    p.pg.mouse.move(sc_p[0], sc_p[1]); p.wait(100)
+    p.pg.mouse.click(sc_p[0], sc_p[1]); p.wait(300)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dets = Drawing.details();
+      const det = dets[0];
+      const srcC = svg.querySelector('circle.detail');
+      const brdC = svg.querySelector('circle.detail-border');
+      const lbls = [...svg.querySelectorAll('text.detail-lbl')].map(t => t.textContent);
+      return {
+        n: dets.length,
+        det,
+        srcR: srcC ? parseFloat(srcC.getAttribute('r')) : 0,
+        brdR: brdC ? parseFloat(brdC.getAttribute('r')) : 0,
+        lbls,
+        txt: svg.textContent || '',
+      };
+    """)
+    ok1 = (
+        s1['n'] == 1
+        and s1['det']['label'] == 'Z'
+        and s1['det']['source'] == 'top'
+        and abs(s1['det']['scale'] - 4) < 1e-6
+        and abs(s1['srcR'] - 9) < 0.2
+        and abs(s1['brdR'] - 36) < 0.5
+        and 'Z' in s1['lbls']
+        and 'Detail Z (4:1)' in s1['lbls']
+    )
+
+    # 2. Geometrie-Vergrößerung 4× und sauberes Beschneiden auf den Kreis prüfen
+    s2 = p.ev(r"""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const det = Drawing.details()[0];
+      const dv = Drawing.layout.views[det.id];
+      const topCircles = [...svg.querySelectorAll(`circle.vis[data-view="top"]`)].map(c => parseFloat(c.getAttribute('r')));
+      const detCircles = [...svg.querySelectorAll(`circle.vis[data-view="${det.id}"]`)].map(c => parseFloat(c.getAttribute('r')));
+      const segLens = (view) => {
+        const out = [];
+        for (const pl of svg.querySelectorAll(`polyline.vis[data-view="${view}"]`)) {
+          const pts = pl.getAttribute('points').trim().split(/\s+/).map(s => s.split(',').map(Number));
+          for (let i = 0; i < pts.length - 1; i++) out.push(Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]));
+        }
+        return out;
+      };
+      const topL = segLens('top'), detL = segLens(det.id);
+      const topEdge6 = topL.find(l => Math.abs(l - 6) < 0.2);
+      const detEdge24 = detL.find(l => Math.abs(l - 24) < 0.4);
+      const [cx, cy] = dv.sheetCenter;
+      const maxDist = [...svg.querySelectorAll(`polyline.vis[data-view="${det.id}"]`)].reduce((mx, pl) => {
+        const pts = pl.getAttribute('points').trim().split(/\s+/).map(s => s.split(',').map(Number));
+        for (const q of pts) mx = Math.max(mx, Math.hypot(q[0] - cx, q[1] - cy));
+        return mx;
+      }, 0);
+      return {
+        rTop: topCircles.find(r => Math.abs(r - 2) < 0.1) || 0,
+        rDet: detCircles.find(r => Math.abs(r - 8) < 0.2) || 0,
+        topEdge6: topEdge6 || 0,
+        detEdge24: detEdge24 || 0,
+        maxDist,
+        sheetR: dv.sheetR,
+      };
+    """)
+    ok2 = (
+        abs(s2['rTop'] - 2) < 0.1
+        and abs(s2['rDet'] - 8) < 0.2
+        and abs(s2['rDet'] / s2['rTop'] - 4) < 0.05
+        and abs(s2['topEdge6'] - 6) < 0.2
+        and abs(s2['detEdge24'] - 24) < 0.4
+        and abs(s2['detEdge24'] / s2['topEdge6'] - 4) < 0.05
+        and s2['maxDist'] <= s2['sheetR'] + 0.35
+    )
+
+    # 3. Maße in der Detailansicht per Klick setzen → zeigen wahre Modell-Längen (6 mm und Ø4), nicht 24 / Ø16
+    p.pg.click('#t-dim'); p.wait(200)
+    dim_pts = p.ev("""
+      const det = Drawing.details()[0];
+      const dv = Drawing.layout.views[det.id];
+      const toS = (q) => [dv.ox + q[0] * dv.s, dv.oy - q[1] * dv.s];
+      // horizontale 6-mm-Kante der Nut finden (aus den geklippten Linien)
+      let pA = null, pB = null;
+      for (const p of dv.geo.polys) {
+        if (p.c || p.pts.length < 2) continue;
+        for (let i = 0; i < p.pts.length - 1; i++) {
+          const a = p.pts[i], b = p.pts[i+1];
+          if (Math.abs(Math.abs(b[0] - a[0]) - 6) < 0.15 && Math.abs(b[1] - a[1]) < 0.05) {
+            if (!pA || a[1] > pA[1]) { pA = a; pB = b; }
+          }
+        }
+      }
+      const cc = dv.geo.circles.find(c => c.full && Math.abs(c.r - 2) < 0.1);
+      const cPt = cc ? [cc.c[0] + cc.r * Math.SQRT1_2, cc.c[1] + cc.r * Math.SQRT1_2] : null;
+      return {
+        detId: det.id,
+        a: pA ? toS(pA) : null,
+        b: pB ? toS(pB) : null,
+        off: pA && pB ? toS([(pA[0] + pB[0]) / 2, Math.max(pA[1], pB[1]) + 2.5]) : null,
+        c: cPt ? toS(cPt) : null,
+      };
+    """)
+    sc_a = sheet_screen(*dim_pts['a'])
+    sc_b = sheet_screen(*dim_pts['b'])
+    sc_o = sheet_screen(*dim_pts['off'])
+    sc_cir = sheet_screen(*dim_pts['c'])
+    p.pg.mouse.move(sc_a[0], sc_a[1]); p.wait(80)
+    p.pg.mouse.click(sc_a[0], sc_a[1]); p.wait(120)
+    p.pg.mouse.move(sc_b[0], sc_b[1]); p.wait(80)
+    p.pg.mouse.click(sc_b[0], sc_b[1]); p.wait(120)
+    p.pg.mouse.move(sc_o[0], sc_o[1]); p.wait(80)
+    p.pg.mouse.click(sc_o[0], sc_o[1]); p.wait(200)
+    p.pg.mouse.move(sc_cir[0], sc_cir[1]); p.wait(80)
+    p.pg.mouse.click(sc_cir[0], sc_cir[1]); p.wait(250)
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    s3 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const det = Drawing.details()[0];
+      const detDims = Drawing.activeSheet().dims.filter(x => x.view === det.id);
+      const textsById = {};
+      for (const t of svg.querySelectorAll('text.dimtext')) {
+        if (t.dataset.id) textsById[t.dataset.id] = t.textContent;
+      }
+      return {
+        dimCount: detDims.length,
+        labels: detDims.map(d => textsById[d.id] || ''),
+      };
+    """)
+    ok3 = (
+        s3['dimCount'] == 2
+        and '6' in s3['labels']
+        and 'Ø4' in s3['labels']
+        and '24' not in s3['labels']
+        and 'Ø16' not in s3['labels']
+    )
+
+    # 4. Maßstab (5:1) & Buchstabe (B → Z) ändern + PDF-Export prüfen
+    brd_pos = p.ev("""
+      const det = Drawing.details()[0];
+      const dv = Drawing.layout.views[det.id];
+      return [dv.sheetCenter[0], dv.sheetCenter[1] - dv.sheetR];
+    """)
+    sc_brd = sheet_screen(*brd_pos)
+    p.pg.mouse.click(sc_brd[0], sc_brd[1]); p.wait(250)
+    p.pg.select_option('#dw-det-scale', '5'); p.wait(250)
+    s4_5x = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const det = Drawing.details()[0];
+      const brdR = parseFloat(svg.querySelector('circle.detail-border')?.getAttribute('r') || '0');
+      const detDims = Drawing.activeSheet().dims.filter(x => x.view === det.id);
+      const textsById = {};
+      for (const t of svg.querySelectorAll('text.dimtext')) if (t.dataset.id) textsById[t.dataset.id] = t.textContent;
+      return { brdR, txt: svg.textContent || '', labels: detDims.map(d => textsById[d.id] || '') };
+    """)
+    p.pg.fill('#dw-det-label', 'B')
+    p.pg.press('#dw-det-label', 'Enter'); p.wait(200)
+    lbl_b = p.ev("return document.querySelector('#sheet .sheet-holder svg')?.textContent || ''")
+    p.pg.fill('#dw-det-label', 'Z')
+    p.pg.press('#dw-det-label', 'Enter'); p.wait(200)
+    p.pg.select_option('#dw-det-scale', '4'); p.wait(250)
+
+    pdf_info = p.ev(r"""
+      return Drawing.buildPDFBytes().then(bytes => {
+        let s = '';
+        for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+        return { head: s.slice(0, 8), hasDetail: s.includes('Detail Z \\(4:1\\)') };
+      });
+    """)
+    ok4 = (
+        abs(s4_5x['brdR'] - 45) < 0.5
+        and 'Detail Z (5:1)' in s4_5x['txt']
+        and '6' in s4_5x['labels'] and 'Ø4' in s4_5x['labels']
+        and 'Detail B (5:1)' in lbl_b
+        and pdf_info['head'] == '%PDF-1.4'
+        and pdf_info['hasDetail']
+    )
+
+    # 5. Speichern/Laden, Löschen, Rückgängig/Wiederholen, Hilfe & Suche
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(400)
+    after_reload = p.ev("const d=Drawing.details(); return { n:d.length, lbl:d[0]?.label, sc:d[0]?.scale, dims:Drawing.activeSheet().dims.filter(x=>x.view===d[0]?.id).length }")
+
+    # Detail wieder anklicken & über #dw-del-sel löschen
+    brd2 = p.ev("const d=Drawing.details()[0], dv=Drawing.layout.views[d.id]; return [dv.sheetCenter[0], dv.sheetCenter[1] - dv.sheetR];")
+    sc_brd2 = sheet_screen(*brd2)
+    p.pg.mouse.click(sc_brd2[0], sc_brd2[1]); p.wait(200)
+    p.pg.click('#dw-del-sel'); p.wait(250)
+    after_del = p.ev("return { n: Drawing.details().length, dims: Drawing.activeSheet().dims.filter(x => String(x.view).startsWith('det_')).length }")
+    p.ev("App.undo()"); p.wait(300)
+    after_undo = p.ev("return { n: Drawing.details().length, dims: Drawing.activeSheet().dims.filter(x => String(x.view).startsWith('det_')).length }")
+    p.ev("App.redo()"); p.wait(300)
+    after_redo = p.ev("return Drawing.details().length")
+    p.ev("App.undo()"); p.wait(300)
+
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const h = hj.drawingDetail;
+        return !!(h && h.tip && h.hilfe && h.tipp) && Commands.search('detailansicht').length >= 1;
+      });
+    """)
+
+    ok5 = (
+        after_reload['n'] == 1 and after_reload['lbl'] == 'Z' and after_reload['sc'] == 4 and after_reload['dims'] == 2
+        and after_del['n'] == 0 and after_del['dims'] == 0
+        and after_undo['n'] == 1 and after_undo['dims'] == 2
+        and after_redo == 0
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -12897,6 +13155,7 @@ TESTS = [
     ('[A-062] Zeichnung: mehrere Blätter, A4 bis A0 & PDF-Export', t_a062_zeichnung_blaetter),
     ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
+    ('[A-064] Zeichnung: Detailansicht (Detail Z 4:1, wahre Maße, 4× Geometrie)', t_a064_zeichnung_detailansicht),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

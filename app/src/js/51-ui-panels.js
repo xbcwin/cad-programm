@@ -23,7 +23,9 @@ const Panels = (() => {
     } else {
       const sheetBtn = btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
       sheetBtn.dataset.help = 'drawingFormat';
-      btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'));
+      const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
+      detBtn.dataset.help = 'drawingDetail';
+      btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' ? 'active' : '');
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
