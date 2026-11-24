@@ -20288,6 +20288,112 @@ def t_f11241932(p):
     return [ok1, ok2, ok3]
 
 
+def t_a097_teilellipse_formen(p):
+    # 1. Einfach-Modus: Stern mit 5 Zacken über Formen-Sammlung einfügen & hochziehen -> 1 geschlossener Körper
+    p.empty()
+    p.ev("ViewPrefs.set({ level: 'simple', firstStart: false }); Sketch.startOnPlane('XY')"); p.wait(1200)
+    vis_ok = sichtbar(p, '#sk-shapes') and sichtbar(p, '.sketchbar .tool[data-tool="ellarc"]')
+    p.pg.click('#sk-shapes summary'); p.wait(200)
+    p.pg.select_option('#sh-type', 'star'); p.wait(150)
+    p.pg.fill('#sh-n', '5'); p.pg.press('#sh-n', 'Enter'); p.wait(100)
+    p.pg.fill('#sh-ro', '20'); p.pg.press('#sh-ro', 'Enter'); p.wait(100)
+    p.pg.fill('#sh-ri', '8'); p.pg.press('#sh-ri', 'Enter'); p.wait(100)
+    p.pg.click('#sh-insert'); p.wait(300)
+    st1 = p.ev("const S=Sketch.state; return [S.ents.length, S.ents.filter(e=>e.type==='line').length, SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v1 = volumen(p)
+    soll1 = 5 * 20 * 8 * math.sin(math.pi / 5) * 3
+    err1 = p.ev("return App.errors.length")
+    bodies1 = p.ev("const r=App.results.get(App.doc.items[0].id); return [App.doc.items.length, (r&&r.data&&r.data.bodies)?r.data.bodies.length:(r&&r.data&&r.data.vertices&&r.data.vertices.length?1:0)]")
+    ok1 = vis_ok and st1 == [10, 10, 1, 0] and err1 == 0 and bodies1 == [1, 1] and abs(v1 - soll1) < 0.8
+
+    # 2. Elliptischer Bogen (Teil-Ellipse): Halbachsen per Tastatur eingeben, ändern, schließen & hochziehen
+    p.ev("ViewPrefs.set({ level: 'pro', firstStart: false }); App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1200); cx, cy = p.canvas_center()
+    p.pg.click('.sketchbar .tool[data-tool="ellarc"]'); p.wait(200)
+    p.pg.mouse.click(cx, cy); p.pg.mouse.move(cx + 50, cy); p.wait(150)
+    p.pg.keyboard.type('25'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('12'); p.pg.keyboard.press('Enter'); p.wait(400)
+    ea = p.ev("const S=Sketch.state; return [S.ents[0], S.dims.map(d=>d.k).sort()]")
+    ok2a = ea[0]['type'] == 'ellarc' and abs(ea[0]['rx'] - 25) < 1e-4 and abs(ea[0]['ry'] - 12) < 1e-4 and ea[1] == ['rx', 'ry']
+    p.pg.click('.sketchbar .tool[data-tool="select"]'); p.wait(150)
+    q_arc = to_screen(p, 0, 12)
+    p.pg.mouse.click(q_arc[0], q_arc[1]); p.wait(250)
+    p.pg.fill('#se-rx', '30'); p.pg.press('#se-rx', 'Enter'); p.wait(200)
+    p.pg.fill('#se-ry', '15'); p.pg.press('#se-ry', 'Enter'); p.wait(200)
+    ea2 = p.ev("return Sketch.state.ents[0]")
+    ok2b = abs(ea2['rx'] - 30) < 1e-4 and abs(ea2['ry'] - 15) < 1e-4
+    # Enden mit Linie schließen und hochziehen
+    p.ev("const e=Sketch.state.ents[0], a=SK.endA(e), b=SK.endB(e); Sketch.state.ents.push({id:'e_close',type:'line',a:b,b:a});")
+    p.wait(200)
+    reg2 = p.ev("const S=Sketch.state; return [SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v2 = volumen(p)
+    soll2 = 0.5 * math.pi * 30 * 15 * 3
+    err2 = p.ev("return App.errors.length")
+    ok2 = ok2a and ok2b and reg2 == [1, 0] and err2 == 0 and abs(v2 - soll2) < 1.5
+
+    # 3. Elliptischer Bogen per 5 Mausklicks (gedreht) + Richtung umkehren + Undo
+    p.ev("App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1200); cx, cy = p.canvas_center()
+    p.pg.click('.sketchbar .tool[data-tool="ellarc"]'); p.wait(200)
+    p.pg.mouse.click(cx, cy); p.wait(120)
+    p.pg.mouse.click(cx + 60, cy - 35); p.wait(120)
+    p.pg.mouse.click(cx + 15, cy - 45); p.wait(120)
+    p.pg.mouse.click(cx + 60, cy - 35); p.wait(120)
+    p.pg.mouse.click(cx - 40, cy + 10); p.wait(300)
+    ea3 = p.ev("return Sketch.state.ents[0]")
+    ok3a = bool(ea3 and ea3['type'] == 'ellarc' and abs(ea3['rot']) > 0.2 and ea3['rx'] > 1 and ea3['ry'] > 1)
+    q3 = p.ev("const e=Sketch.state.ents[0]; const t=e.a0+SK.ellArcSweep(e.a0,e.a1,e.ccw!==false)/2; return SK.ellArcPt(e.c,e.rx,e.ry,e.rot||0,t)")
+    s3 = to_screen(p, q3[0], q3[1])
+    p.pg.click('.sketchbar .tool[data-tool="select"]'); p.wait(150)
+    p.pg.mouse.click(s3[0], s3[1]); p.wait(250)
+    p.pg.click('#se-ellarc-flip'); p.wait(250)
+    ccw_flip = p.ev("return Sketch.state.ents[0].ccw")
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(250)
+    ccw_undo = p.ev("return Sketch.state.ents[0].ccw")
+    ok3 = ok3a and (ccw_flip is False) and (ccw_undo is True)
+
+    # 4. Alle übrigen Formen (Pfeil, Herz, Zahnrad-Umriss, Schlüsselloch) mit geänderten Maßen
+    p.ev("Sketch.cancel(true); App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1200)
+    check_each = p.ev("""
+      const cases = [
+        ['arrow', { len: 32, shaftW: 8, headW: 18, headL: 10 }, [-55, 0]],
+        ['heart', { w: 26, h: 24 }, [0, 0]],
+        ['gear',  { z: 10, m: 2, bore: 6 }, [55, 0]],
+        ['keyhole', { d: 12, w: 6, h: 22 }, [0, -45]],
+      ];
+      return cases.map(([k, prm, pos]) => {
+        const ents = SKO.shapeEnts(k, prm, pos);
+        return [k, ents.length, SK.regions(ents).length, SK.openEnds(ents).length];
+      });
+    """)
+    ok4a = all(r[2] == 1 and r[3] == 0 for r in check_each)
+    p.ev("""
+      Sketch.insertShape('arrow', { len: 32, shaftW: 8, headW: 18, headL: 10 }, [-55, 0]);
+      Sketch.insertShape('heart', { w: 26, h: 24 }, [0, 0]);
+      Sketch.insertShape('gear',  { z: 10, m: 2, bore: 6 }, [55, 0]);
+    """)
+    p.pg.click('#sk-shapes summary'); p.wait(150)
+    p.pg.select_option('#sh-type', 'keyhole'); p.wait(150)
+    p.pg.fill('#sh-d', '12'); p.pg.press('#sh-d', 'Enter'); p.wait(100)
+    p.pg.click('#sh-place'); p.wait(150)
+    sk_kh = to_screen(p, 0, -45)
+    p.pg.mouse.click(sk_kh[0], sk_kh[1]); p.wait(300)
+    fertig_hoch(p)
+    err4 = p.ev("return App.errors.length")
+    bodies4 = p.ev("const r=App.results.get(App.doc.items[0].id); return (r&&r.data&&r.data.bodies)?r.data.bodies.length:(r&&r.data&&r.data.vertices&&r.data.vertices.length?1:0)")
+    v4 = volumen(p)
+    ok4 = ok4a and err4 == 0 and bodies4 == 4 and v4 > 100
+
+    # 5. Hilfetexte prüfen (JSON + data-help Attribute in der Skizze)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(800)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    has_attrs = p.ev("return !!document.querySelector('[data-help=\"ellipseArc\"]') && !!document.querySelector('[data-help=\"sketchShapes\"]')")
+    ok5 = all(k in hilfen for k in ['ellipseArc', 'sketchShapes']) and has_attrs and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20493,6 +20599,7 @@ TESTS = [
     ('[A-095] Koordinatenmaße (Profi), Bogenlänge & Winkel über drei Punkte (SK-27, SK-28)', t_a095_koordinaten_bogen_winkel3),
     ('[A-096] Maß zwischen Kreisrändern, Skizze sperren & Drehachse markieren (SK-29, SK-54, SK-55)', t_a096_kreisrand_sperren_drehachse),
     ('[F-11241932] Volltest-Reparatur: Zeichnung-Panel schützt fokussiertes Toleranzfeld bei verzögertem doc-Refresh', t_f11241932),
+    ('[A-097] Teil-Ellipse (elliptischer Bogen) & Formen-Sammlung (SK-37, SK-41)', t_a097_teilellipse_formen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -528,6 +528,8 @@ const IC = {
   extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
   chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
   ellipse: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M12 12h.01" />',
+  ellipseArc: '<path d="M3 13.5A9 5.5 0 0 1 20.5 10.5" /><circle cx="3" cy="13.5" r="1.5" fill="currentColor"/><circle cx="20.5" cy="10.5" r="1.5" fill="currentColor"/><path d="M12 13.5h.01" />',
+  star: '<path d="M12 3l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.4 6.7 19.1l1-5.8-4.2-4.1 5.9-.9z" />',
   rectCenter: '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M12 12h.01 M12 12 20 18" opacity=".55"/>',
   text: '<path d="M5 6h14 M12 6v13 M9 19h6" />',
   construct: '<path d="M4 20 20 4" stroke-dasharray="3 3"/>',
@@ -1942,6 +1944,16 @@ const HELP = {
   "tip": "Linie als Drehachse markieren, damit „Drehen“ sie von selbst übernimmt",
   "hilfe": "Hake bei einer gewählten Linie „Als Drehachse markieren“ an. Sie erscheint dann als lila Strichpunkt-Achse und „Fertig → Drehen“ benutzt sie automatisch als Achse für den Drehkörper.",
   "tipp": "Pro Skizze kann genau eine Linie als Drehachse markiert sein; eine alleinstehende Drehachse wird nicht als offenes Ende bemängelt."
+ },
+ "ellipseArc": {
+  "tip": "Teil einer Ellipse (elliptischer Bogen) zeichnen",
+  "hilfe": "Klick zuerst den Mittelpunkt, dann das Ende der ersten Halbachse, die zweite Halbachse sowie Start- und Endwinkel. Oder tipp nach dem Mittelpunkt direkt beide Halbachsen mit Tab dazwischen ein.",
+  "tipp": "Schließt du die Enden mit einer Linie oder einem weiteren Bogen, entsteht sofort eine geschlossene Fläche zum Hochziehen."
+ },
+ "sketchShapes": {
+  "tip": "Fertige Formen wie Stern, Pfeil, Herz, Zahnrad-Umriss oder Schlüsselloch einfügen",
+  "hilfe": "Wähl eine Form aus der Sammlung, stell die Maße wie Zacken, Radien, Modul oder Breite ein und klick auf „In Mitte einfügen“ oder platziere sie frei im Bild.",
+  "tipp": "Jede Form ist sofort ein geschlossener Umriss und lässt sich direkt hochziehen oder mit anderen Linien weiterbearbeiten."
  }
 };
 

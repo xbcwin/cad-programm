@@ -1268,5 +1268,15 @@
     "tip": "Linie als Drehachse markieren, damit „Drehen“ sie von selbst übernimmt",
     "hilfe": "Hake bei einer gewählten Linie „Als Drehachse markieren“ an. Sie erscheint dann als lila Strichpunkt-Achse und „Fertig → Drehen“ benutzt sie automatisch als Achse für den Drehkörper.",
     "tipp": "Pro Skizze kann genau eine Linie als Drehachse markiert sein; eine alleinstehende Drehachse wird nicht als offenes Ende bemängelt."
+  },
+  "ellipseArc": {
+    "tip": "Teil einer Ellipse (elliptischer Bogen) zeichnen",
+    "hilfe": "Klick zuerst den Mittelpunkt, dann das Ende der ersten Halbachse, die zweite Halbachse sowie Start- und Endwinkel. Oder tipp nach dem Mittelpunkt direkt beide Halbachsen mit Tab dazwischen ein.",
+    "tipp": "Schließt du die Enden mit einer Linie oder einem weiteren Bogen, entsteht sofort eine geschlossene Fläche zum Hochziehen."
+  },
+  "sketchShapes": {
+    "tip": "Fertige Formen wie Stern, Pfeil, Herz, Zahnrad-Umriss oder Schlüsselloch einfügen",
+    "hilfe": "Wähl eine Form aus der Sammlung, stell die Maße wie Zacken, Radien, Modul oder Breite ein und klick auf „In Mitte einfügen“ oder platziere sie frei im Bild.",
+    "tipp": "Jede Form ist sofort ein geschlossener Umriss und lässt sich direkt hochziehen oder mit anderen Linien weiterbearbeiten."
   }
 }

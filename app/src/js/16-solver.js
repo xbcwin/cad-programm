@@ -19,14 +19,14 @@ const Solver = (() => {
   // ---------- Variablen je Element ----------
   const VARS = {
     line: ['a0', 'a1', 'b0', 'b1'], point: ['a0', 'a1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
-    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], text: ['a0', 'a1', 'h'],
+    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], ellarc: ['c0', 'c1', 'rx', 'ry', 'a0', 'a1'], text: ['a0', 'a1', 'h'],
   };
   // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
   const varsOf = (e) => (e.type === 'spline' ? (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']) : VARS[e.type]);
   const SPK = /^p(\d+)_([01])$/;
-  const getK = (e, k) => { if (k === 'r' || k === 'rx' || k === 'ry' || (k === 'h' && e.type === 'text')) return e[k]; const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]]; return e[k[0]][+k[1]]; };
+  const getK = (e, k) => { if (k === 'r' || k === 'rx' || k === 'ry' || ((k === 'a0' || k === 'a1') && e.type === 'ellarc') || (k === 'h' && e.type === 'text')) return e[k]; const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]]; return e[k[0]][+k[1]]; };
   const setK = (e, k, v) => {
-    if (k === 'r' || k === 'rx' || k === 'ry' || (k === 'h' && e.type === 'text')) { e[k] = v; return; }
+    if (k === 'r' || k === 'rx' || k === 'ry' || ((k === 'a0' || k === 'a1') && e.type === 'ellarc') || (k === 'h' && e.type === 'text')) { e[k] = v; return; }
     const m = SPK.exec(k);
     if (m) { e.pts = e.pts.slice(); e.pts[+m[1]] = e.pts[+m[1]].slice(); e.pts[+m[1]][+m[2]] = v; return; }
     e[k[0]] = e[k[0]].slice(); e[k[0]][+k[1]] = v;
@@ -88,6 +88,14 @@ const Solver = (() => {
         return { deps: ks, get: (X) => { const c = circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]); return [c[0], c[1]]; } };
       }
       if (e.type === 'ellipse' && p === 'c') return two('c');
+      if (e.type === 'ellarc') {
+        if (p === 'c') return two('c');
+        if (p === 'a' || p === 'b') {
+          const c0 = I(e.id, 'c0'), c1 = I(e.id, 'c1'), rx = I(e.id, 'rx'), ry = I(e.id, 'ry'), ak = I(e.id, p === 'a' ? 'a0' : 'a1');
+          const rot = e.rot || 0;
+          return { deps: [c0, c1, rx, ry, ak], get: (X) => SK.ellArcPt([X[c0], X[c1]], X[rx], X[ry], rot, X[ak]) };
+        }
+      }
       if (e.type === 'text' || e.type === 'point') return two('a');
       if (e.type === 'circle' || e.type === 'poly') {
         if (p === 'c') return two('c');
@@ -143,7 +151,7 @@ const Solver = (() => {
       const put = (ref, e) => { const P = point(ref); if (!P) return; const k = qk(P.get(x)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(P); };
       groups.set(qk([0, 0]), [point({ e: 'origin' })]);
       for (const e of ents) {
-        if (e.type === 'line' || e.type === 'arc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
+        if (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });
         else if (e.type === 'text' || e.type === 'point') put({ e: e.id, p: 'a' });
@@ -213,6 +221,8 @@ const Solver = (() => {
       else if (k === 'w' && e.type === 'slot') add([J.r], (X) => 2 * X[J.r] - v, tag);
       else if (k === 'w' && e.type === 'ellipse') add([J.rx], (X) => 2 * X[J.rx] - v, tag);
       else if (k === 'h' && e.type === 'ellipse') add([J.ry], (X) => 2 * X[J.ry] - v, tag);
+      else if (k === 'rx' && e.type === 'ellarc') add([J.rx], (X) => X[J.rx] - v, tag);
+      else if (k === 'ry' && e.type === 'ellarc') add([J.ry], (X) => X[J.ry] - v, tag);
       else if (k === 'h' && e.type === 'text') add([J.h], (X) => X[J.h] - v, tag);
       else if (k === 'w') { const s = x[J.b0] >= x[J.a0] ? 1 : -1; add([J.a0, J.b0], (X) => (X[J.b0] - X[J.a0]) * s - v, tag); }
       else if (k === 'h') { const s = x[J.b1] >= x[J.a1] ? 1 : -1; add([J.a1, J.b1], (X) => (X[J.b1] - X[J.a1]) * s - v, tag); }
@@ -222,7 +232,7 @@ const Solver = (() => {
         const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((q) => I(e.id, q));
         add(ks, (X) => arcLen(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]) - v, tag);
       }
-      else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
+      else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' || e.type === 'ellarc' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
     }
     // ---------- Bedingungen ----------
     for (const c of opts.cons || []) {
@@ -465,6 +475,13 @@ const Solver = (() => {
         if (loose.has(m.r)) pushPt(e.id, 'r', [e.c[0] + e.r, e.c[1]], [m.r], 'radius');
       } else if (e.type === 'ellipse') {
         pushPt(e.id, 'c', e.c, [m.c0, m.c1]);
+        const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
+        if (loose.has(m.rx)) pushPt(e.id, 'rx', [e.c[0] + cs * e.rx, e.c[1] + sn * e.rx], [m.rx], 'radius');
+        if (loose.has(m.ry)) pushPt(e.id, 'ry', [e.c[0] - sn * e.ry, e.c[1] + cs * e.ry], [m.ry], 'radius');
+      } else if (e.type === 'ellarc') {
+        pushPt(e.id, 'c', e.c, [m.c0, m.c1]);
+        pushPt(e.id, 'a', SK.ellArcPt(e.c, e.rx, e.ry, e.rot || 0, e.a0), [m.c0, m.c1, m.rx, m.ry, m.a0]);
+        pushPt(e.id, 'b', SK.ellArcPt(e.c, e.rx, e.ry, e.rot || 0, e.a1), [m.c0, m.c1, m.rx, m.ry, m.a1]);
         const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
         if (loose.has(m.rx)) pushPt(e.id, 'rx', [e.c[0] + cs * e.rx, e.c[1] + sn * e.rx], [m.rx], 'radius');
         if (loose.has(m.ry)) pushPt(e.id, 'ry', [e.c[0] - sn * e.ry, e.c[1] + cs * e.ry], [m.ry], 'radius');

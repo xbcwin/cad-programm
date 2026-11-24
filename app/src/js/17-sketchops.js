@@ -40,13 +40,15 @@ const SKO = (() => {
         tOf: (p) => norm(Math.atan2(p[1] - seg.c[1], p[0] - seg.c[0])) / TAU,
       };
     }
-    // Spline und Ellipse: als Linienzug mit Bogenlängen-Parameter
-    const poly = seg.t === 'ellipse' ? (() => { const q = SK.ellipsePoints(seg.c, seg.rx, seg.ry, seg.rot); q.push(q[0]); return q; })() : seg.t === 'bez' ? SK.bezPoints(seg) : SK.splinePoints(seg.pts, seg.closed);
+    // Spline, Ellipse und elliptischer Bogen: als Linienzug mit Bogenlängen-Parameter
+    const poly = seg.t === 'ellipse' ? (() => { const q = SK.ellipsePoints(seg.c, seg.rx, seg.ry, seg.rot); q.push(q[0]); return q; })()
+      : seg.t === 'ellarc' ? SK.ellArcPoints(seg.c, seg.rx, seg.ry, seg.rot, seg.a0, seg.a1, seg.ccw)
+      : seg.t === 'bez' ? SK.bezPoints(seg) : SK.splinePoints(seg.pts, seg.closed);
     const cum = [0];
     for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + d2(poly[i - 1], poly[i]));
     const total = cum[cum.length - 1] || 1;
     return {
-      type: 'spline', closed: seg.t === 'ellipse' || !!seg.closed, poly, cum, total, pts: seg.pts || poly,
+      type: 'spline', closed: seg.t === 'ellipse' || (seg.t !== 'ellarc' && !!seg.closed), poly, cum, total, pts: seg.pts || poly,
       at: (t) => {
         const L = Math.max(0, Math.min(1, t)) * total;
         let i = 1; while (i < cum.length - 1 && cum[i] < L) i++;
@@ -307,6 +309,87 @@ const SKO = (() => {
     return out;
   }
 
+  // ---------- Formen-Sammlung (SK-41): geschlossene Umrisse mit einstellbaren Maßen (Mitte c) ----------
+  const SHAPES = {
+    star: { name: 'Stern', p: { n: 5, ro: 20, ri: 8 } },
+    arrow: { name: 'Pfeil', p: { len: 30, shaftW: 8, headW: 18, headL: 12 } },
+    heart: { name: 'Herz', p: { w: 24, h: 22 } },
+    gear: { name: 'Zahnrad-Umriss', p: { z: 12, m: 2, bore: 6 } },
+    keyhole: { name: 'Schlüsselloch', p: { d: 10, w: 5, h: 20 } },
+  };
+  const SHAPENAMES = {
+    n: 'Zacken', ro: 'Außenradius', ri: 'Innenradius',
+    len: 'Länge', shaftW: 'Schaftbreite', headW: 'Kopfbreite', headL: 'Kopflänge',
+    w: 'Breite', h: 'Höhe', z: 'Zähne', m: 'Modul', bore: 'Bohrung Ø', d: 'Kopf Ø',
+  };
+  function shapeEnts(type, P = {}, c = [0, 0]) {
+    const out = [];
+    const pos = (k, d) => { const v = Number(P[k]); return isFinite(v) && v > 0 ? v : d; };
+    const cx = c[0] || 0, cy = c[1] || 0;
+    const polyLines = (pts) => {
+      const rp = pts.map((q) => pr([cx + q[0], cy + q[1]]));
+      for (let i = 0; i < rp.length; i++) out.push({ id: uid('e'), type: 'line', a: rp[i].slice(), b: rp[(i + 1) % rp.length].slice() });
+    };
+    if (type === 'star') {
+      const n = Math.max(3, Math.min(64, Math.round(pos('n', 5))));
+      const ro = pos('ro', 20), ri = Math.min(pos('ri', 8), ro * 0.95);
+      const pts = [];
+      for (let i = 0; i < 2 * n; i++) {
+        const th = Math.PI / 2 + (i * Math.PI) / n;
+        const r = i % 2 === 0 ? ro : ri;
+        pts.push([Math.cos(th) * r, Math.sin(th) * r]);
+      }
+      polyLines(pts);
+    } else if (type === 'arrow') {
+      const len = pos('len', 30);
+      const headL = Math.min(pos('headL', 12), len * 0.9);
+      const shaftW = pos('shaftW', 8);
+      const headW = Math.max(pos('headW', 18), shaftW + 0.5);
+      const x0 = -len / 2, x1 = len / 2 - headL, x2 = len / 2;
+      const sh = shaftW / 2, hh = headW / 2;
+      polyLines([[x0, -sh], [x1, -sh], [x1, -hh], [x2, 0], [x1, hh], [x1, sh], [x0, sh]]);
+    } else if (type === 'heart') {
+      const w = pos('w', 24), hh = pos('h', 22);
+      const half = [[0, -0.50], [0.28, -0.26], [0.50, 0.04], [0.46, 0.34], [0.26, 0.50], [0.08, 0.38], [0, 0.22]];
+      const rightPts = half.map(([x, y]) => pr([cx + x * w, cy + y * hh]));
+      const leftPts = half.slice().reverse().map(([x, y]) => pr([cx - x * w, cy + y * hh]));
+      leftPts[0] = rightPts[rightPts.length - 1].slice();
+      leftPts[leftPts.length - 1] = rightPts[0].slice();
+      out.push({ id: uid('e'), type: 'spline', pts: rightPts, closed: false });
+      out.push({ id: uid('e'), type: 'spline', pts: leftPts, closed: false });
+    } else if (type === 'gear') {
+      const z = Math.max(5, Math.min(48, Math.round(pos('z', 12))));
+      const m = Math.max(0.2, pos('m', 2));
+      const bore = Math.max(0, Number(P.bore) || 0);
+      const rp = (m * z) / 2, ra = rp + m, rf = Math.max(0.2 * m, rp - 1.25 * m);
+      const alpha = (20 * Math.PI) / 180, rb = rp * Math.cos(alpha);
+      const step = TAU / z, psiP = Math.PI / (2 * z), inv0 = Math.tan(alpha) - alpha, psiB = psiP + inv0;
+      const psiTip = ra > rb ? Math.max(0.06 * step, psiB - (Math.tan(Math.acos(rb / ra)) - Math.acos(rb / ra))) : 0.15 * step;
+      const psiRoot = Math.min(0.38 * step, Math.max(psiP * 1.15, psiB + (Math.max(0, rb - rf) / rp) * 0.25));
+      const pts = [];
+      for (let i = 0; i < z; i++) {
+        const th = i * step;
+        for (const [r, a] of [[rf, th - psiRoot], [ra, th - psiTip], [ra, th + psiTip], [rf, th + psiRoot]]) {
+          pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+        }
+      }
+      polyLines(pts);
+      if (bore > 0.1 && bore / 2 < rf - 0.2 * m) out.push({ id: uid('e'), type: 'circle', c: pr([cx, cy]), r: pr1(bore / 2) });
+    } else if (type === 'keyhole') {
+      const R = pos('d', 10) / 2, r = Math.min(pos('w', 5) / 2, R * 0.92);
+      const dy = Math.sqrt(Math.max(1e-6, R * R - r * r));
+      const hh = Math.max(pos('h', 20), R + dy + r + 0.5);
+      const C1y = cy + hh / 2 - R, C2y = cy - hh / 2 + r;
+      const PR = pr([cx + r, C1y - dy]), PL = pr([cx - r, C1y - dy]);
+      const QL = pr([cx - r, C2y]), QR = pr([cx + r, C2y]);
+      out.push({ id: uid('e'), type: 'arc', a: PR.slice(), m: pr([cx, C1y + R]), b: PL.slice() });
+      out.push({ id: uid('e'), type: 'line', a: PL.slice(), b: QL.slice() });
+      out.push({ id: uid('e'), type: 'arc', a: QL.slice(), m: pr([cx, C2y - r]), b: QR.slice() });
+      out.push({ id: uid('e'), type: 'line', a: QR.slice(), b: PR.slice() });
+    }
+    return out;
+  }
+
   // ---------- Ketten (zusammenhängende Linien und Bögen) ----------
   function chainOf(ents, e0) {
     const adj = new Map();
@@ -468,6 +551,18 @@ const SKO = (() => {
       }
       return { ok: true, ent: { type: 'spline', pts, closed: true } };
     }
+    if (e.type === 'ellarc') {
+      const rx = e.rx, ry = e.ry, rmin = Math.min(rx, ry) ** 2 / Math.max(rx, ry);
+      if (d <= -rmin * 0.98) return { ok: false, why: `Nach innen geht bei diesem Bogen höchstens ${Math.floor(rmin * 0.98 * 100) / 100} mm – sonst entstehen Spitzen.` };
+      const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), sw = SK.ellArcSweep(e.a0, e.a1, e.ccw !== false), N = 36, pts = [];
+      for (let k = 0; k < N; k++) {
+        const t = e.a0 + (sw * k) / (N - 1), x = rx * Math.cos(t), y = ry * Math.sin(t);
+        let nx = ry * Math.cos(t), ny = rx * Math.sin(t); const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+        const u = x + nx * d, v = y + ny * d;
+        pts.push(pr([e.c[0] + cs * u - sn * v, e.c[1] + sn * u + cs * v]));
+      }
+      return { ok: true, ent: { type: 'spline', pts, closed: false } };
+    }
     if (e.type === 'spline') {
       const P = e.pts, m = P.length;
       const pts = P.map((p, i) => {
@@ -487,7 +582,7 @@ const SKO = (() => {
       case 'line': case 'slot': return ['a', 'b'];
       case 'point': return ['a'];
       case 'arc': return ['a', 'b', 'c'];
-      case 'circle': case 'poly': case 'ellipse': return ['c'];
+      case 'circle': case 'poly': case 'ellipse': case 'ellarc': return ['c'];
       case 'text': return ['a'];
       case 'rect': return ['k0', 'k1', 'k2', 'k3'];
       case 'spline': return e.pts.map((_, i) => 'p' + i);
@@ -518,6 +613,13 @@ const SKO = (() => {
         ents.push({ ...e, id, a: pr(p0), rot: Math.atan2(ux[1], ux[0]), mir: flip ? !e.mir : !!e.mir, ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')]); break;
       }
       case 'ellipse': ents.push({ id, type: 'ellipse', c: pr(f(e.c)), rx: e.rx, ry: e.ry, rot: polyRot(e), ...base }); pairs.push([R(e.id, 'c'), R(id, 'c')]); break;
+      case 'ellarc': {
+        const p0 = f(e.c), u = e.rot || 0;
+        const px = f([e.c[0] + Math.cos(u), e.c[1] + Math.sin(u)]), py = f([e.c[0] - Math.sin(u), e.c[1] + Math.cos(u)]);
+        const ux = [px[0] - p0[0], px[1] - p0[1]], uy = [py[0] - p0[0], py[1] - p0[1]], flip = ux[0] * uy[1] - ux[1] * uy[0] < 0;
+        ents.push({ id, type: 'ellarc', c: pr(p0), rx: e.rx, ry: e.ry, rot: flip ? Math.atan2(ux[1], ux[0]) : polyRot(e), a0: flip ? -e.a0 : e.a0, a1: flip ? -e.a1 : e.a1, ccw: flip ? !(e.ccw !== false) : e.ccw !== false, ...base });
+        pairs.push([R(e.id, 'c'), R(id, 'c')]); break;
+      }
       case 'spline': ents.push({ id, type: 'spline', pts: e.pts.map((p) => pr(f(p))), closed: !!e.closed, ...base }); e.pts.forEach((_, i) => pairs.push([R(e.id, 'p' + i), R(id, 'p' + i)])); break;
       case 'rect': {
         if (!explodeRect) {
@@ -672,7 +774,7 @@ const SKO = (() => {
     const putV = (xy, ep) => { const k = key(xy); if (!verts.has(k)) verts.set(k, []); verts.get(k).push(ep); };
     for (const e of list) {
       if (dropped.has(e.id)) continue;
-      if (!(e.type === 'line' || e.type === 'arc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2))) continue;
+      if (!(e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2))) continue;
       const a = SK.endA(e), b = SK.endB(e);
       if (d2(a, b) <= 1e-9) continue;
       putV(a, { e: e.id, p: 'a', xy: a, type: e.type, npts: e.pts ? e.pts.length : 0, revAxis: !!e.revAxis });
@@ -890,7 +992,7 @@ const SKO = (() => {
     const hasDim = (eid, k) => wDims.some((d) => !d.ref && d.e === eid && d.k === k);
     const collapsed = (ents) => ents.some((e) => {
       if (e.type === 'circle' || e.type === 'poly' || e.type === 'slot') return !(e.r > 1e-5);
-      if (e.type === 'ellipse') return !(e.rx > 1e-5 && e.ry > 1e-5);
+      if (e.type === 'ellipse' || e.type === 'ellarc') return !(e.rx > 1e-5 && e.ry > 1e-5);
       if (e.type === 'text') return !(e.h > 1e-5);
       if (e.type === 'rect') return !(Math.abs(e.b[0] - e.a[0]) > 1e-5 && Math.abs(e.b[1] - e.a[1]) > 1e-5);
       return false;
@@ -928,6 +1030,7 @@ const SKO = (() => {
         return null;
       }
       if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') return p === 'c' ? e.c : null;
+      if (e.type === 'ellarc') return p === 'c' ? e.c : p === 'a' ? SK.endA(e) : p === 'b' ? SK.endB(e) : null;
       if (e.type === 'point' || e.type === 'text') return p === 'a' ? e.a : null;
       if (e.type === 'spline' && /^p\d+$/.test(p)) return e.pts[+p.slice(1)] || null;
       return null;
@@ -941,6 +1044,7 @@ const SKO = (() => {
       else if (e.type === 'arc') { addP('a', e.a); addP('b', e.b); const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) addP('c', ai.c); }
       else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => addP('k' + i, q)); addP('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
       else if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') addP('c', e.c);
+      else if (e.type === 'ellarc') { addP('a', SK.endA(e)); addP('b', SK.endB(e)); addP('c', e.c); }
       else if (e.type === 'point' || e.type === 'text') addP('a', e.a);
       else if (e.type === 'spline') (e.pts || []).forEach((q, i) => addP('p' + i, q));
     }
@@ -1012,6 +1116,9 @@ const SKO = (() => {
       } else if (e.type === 'ellipse') {
         tryDim(id, 'w', 2 * e.rx);
         tryDim(id, 'h', 2 * e.ry);
+      } else if (e.type === 'ellarc') {
+        tryDim(id, 'rx', e.rx);
+        tryDim(id, 'ry', e.ry);
       } else if (e.type === 'text') {
         tryDim(id, 'h', e.h);
       }
@@ -1046,7 +1153,7 @@ const SKO = (() => {
       else if (e.type === 'spline') (e.pts || []).forEach((q, i) => { if (cur.dof > 0) fixP('p' + i, q); });
       else if (e.type === 'line' || e.type === 'slot') { fixP('b', e.b); fixP('a', e.a); }
       else if (e.type === 'rect') { const c = SK.rectCorners(e); fixP('k2', c[2]); fixP('k0', c[0]); }
-      else if (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse') fixP('c', e.c);
+      else if (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' || e.type === 'ellarc') fixP('c', e.c);
       else if (e.type === 'point' || e.type === 'text') fixP('a', e.a);
       for (const k of Solver.varsOf(e) || []) {
         if (cur.dof <= 0 || !cur.freeEnts.has(id)) break;
@@ -1058,5 +1165,5 @@ const SKO = (() => {
     return { ok: cur.ok, alreadyFull: false, cons: propCons, dims: propDims, ents: wEnts, dofBefore, dofAfter: cur.dof };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
+  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
 })();

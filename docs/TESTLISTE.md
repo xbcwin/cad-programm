@@ -2233,6 +2233,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Eingabe übernehmen & Undo-Refresh ohne Fokus**: `Enter` übernimmt `+0,25` exakt ins SVG und Datenmodell (`Drawing.getDimTol`), `App.undo()` nach Fokusverlust aktualisiert SVG (`+0,05`) und Panel (`'0,05'`) ohne Fehler (`t_f11241932`, `t_a068_toleranzen_passungen`).
 - [ ] **Von Hand**: In der Zeichnung an einem Maß zwischen verschiedenen Toleranzarten wechseln und direkt zügig Werte in oberes/unteres Abmaß eintippen, ohne dass beim Tippen der Fokus oder Text verloren geht.
 
+## Teil-Ellipse und Formen-Sammlung (Auto [A-097], SK-37, SK-41)
+
+- [x] **Formen-Sammlung (Stern mit 5 Zacken → geschlossener Körper)**: Im Modus „Einfach“ im Skizzen-Panel über `#sk-shapes` einen Stern mit `n = 5`, `ro = 20`, `ri = 8` über `#sh-insert` eingefügt (`10` Linien, `1` geschlossene Region, `0` offene Enden) und hochgezogen → `1` geschlossener Körper mit exakt passendem Volumen (`5 * ro * ri * sin(π/5) * 3`).
+- [x] **Elliptischer Bogen (`ellarc`) mit Halbachsen**: Werkzeug `ellarc` per Leiste gewählt, Mittelpunkt geklickt und Halbachsen `25 Tab 12` eingetippt → `rx === 25`, `ry === 12` mit festen Maßen; Änderung über `#se-rx` (`30`) und `#se-ry` (`15`), mit Linie geschlossen und hochgezogen → geschlossener Körper mit Halb-Ellipsen-Volumen.
+- [x] **Elliptischer Bogen per 5 Mausklicks, Richtung umkehren & alle weiteren Formen**: Gedrehter elliptischer Bogen per 5 Klicks samt `#se-ellarc-flip` und Rückgängig; Pfeil, Herz, Zahnrad-Umriss (mit Bohrung) und Schlüsselloch mit geänderten Maßen erzeugen jeweils `1` geschlossene Region ohne offene Enden und lassen sich gemeinsam zu `4` Körpern hochziehen; Hilfetexte `ellipseArc` und `sketchShapes` vorhanden.
+- [ ] **Von Hand**: Im Browser eine gedrehte Teil-Ellipse mit 5 Klicks aufziehen, Enden schließen und alle 5 Formen aus „Formen-Sammlung“ über „Im Bild platzieren“ frei absetzen und hochziehen.
+
 ## Fehler melden
 
 ```
