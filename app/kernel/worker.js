@@ -34,7 +34,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'exportBREP') result = { data: await kernel.exportBREP(args.scene, args.only, args.originMat).arrayBuffer() };
     else if (cmd === 'measure') result = kernel.measure(args.scene);
     else if (cmd === 'distance') result = kernel.minDistance(args.scene, args.ids);
-    else if (cmd === 'project') result = kernel.project(args.scene, args.views);
+    else if (cmd === 'project') result = kernel.project(args.scene, args.views, args.sections);
     else if (cmd === 'clashes') result = kernel.clashes(args.scene, args.probes, args.skipPairs);
     else if (cmd === 'holeWalls') result = kernel.holeWalls(args.scene, args.ids, args);
     else if (cmd === 'faceLoops') result = kernel.faceLoopsOf(args.key, args.faceIdx);

@@ -88,7 +88,7 @@ Leitlinien:
 | `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Absturz-Sicherung (`saveRecovery`/`loadRecovery`/`clearRecovery`), Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `14-ttf.js` (`TTF`) | Kleiner TrueType-Leser im Browser (`parse`: `glyf`-Umrisse mit quadratischen Béziers und zusammengesetzten Glyphen, `cmap`, `hmtx`, `kern`, CFF/OTF-Abweisung) |
-| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
+| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`needsEntsFonts`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker (`Kernel.ensure`/`state`/`timings`, lädt WASM und Worker erst bei Bedarf) |
@@ -104,19 +104,19 @@ Leitlinien:
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
-| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“ (sofort bei Auswahl), Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
+| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“ (sofort bei Auswahl, `renderRight({ preserveFocus })` schützt fokussierte Eingabefelder bei asynchronen `results`-Updates), Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
 | `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |
 | `53-views.js` | Schnitt, Röntgen, Explosion (`animateTo` mit Timer-Fallback bei rAF-Stau), Fokus-Vorschau, Überhänge |
 | `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
-| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten, Re-Entranz-Schutz in `render()` |
+| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen (`done()` wartet auf ungeladene Text-Schriften), verbundene Kanten, Re-Entranz-Schutz in `render()` |
 | `56-notes.js` | Notizstift |
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
 | `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), Drucker-Liste `PRINTERS`, Bauraum-Prüfung `fitCheck`/`applyRotationSuggestion`, Loch-Ausgleich `holeComp` für STL/3MF, Passungs-Vorgaben `PRINT_FITS`/`printFit`, Düsen-Wandcheck `nozzleWallCheck`, Ausrichten `orientForPrint`/`bestPrintOrientation`, `Zip` (Packen/Entpacken) |
-| `70-drawing.js` | technische Zeichnung (`Drawing`), mehrere Blätter mit Tabs (`#sheet-tabs`, `addSheet`/`renameSheet`/`removeSheet`), Formate A4–A0 hoch/quer, Ansichten-Einstellungen je Ansicht (`viewOpts`, `extraViews`, `addView`, `setViewOpt`, Maßstab, verdeckte & tangentiale Kanten, isometrische & freie 3D-Ansicht, schattiert via `Viewer.renderOrthoView`), eingebauter mehrseitiger PDF-Export (`buildPDFBytes`), SVG/DXF |
+| `70-drawing.js` | technische Zeichnung (`Drawing`), mehrere Blätter mit Tabs (`#sheet-tabs`, `addSheet`/`renameSheet`/`removeSheet`), Formate A4–A0 hoch/quer, Ansichten-Einstellungen je Ansicht (`viewOpts`, `extraViews`, `addView`, `setViewOpt`, Maßstab, verdeckte & tangentiale Kanten, isometrische & freie 3D-Ansicht, schattiert via `Viewer.renderOrthoView`), Schnittansichten (`Schnitt A–A`, 45°-Schraffur nach Maßstab, Schnittlinie mit Pfeilen, `addSection`/`flipSection`/`removeSection`), Detailansichten (`details`, `addDetail`/`updateDetail`/`removeDetail`, `DETAIL_SCALES`, kreisförmiges Beschneiden mit wahren Maßen), automatische strichpunktierte Mittellinien/Mittelkreuze (`hiddenCenters`, `centers`/`allCenters`/`setCenters`/`hideCenter`/`showCenter`/`toggleCenter`/`showAllCenters`), eingebauter mehrseitiger PDF-Export (`buildPDFBytes`), SVG/DXF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
 | `85-start.js` | Startseite, Projekt-Vorlagen (`Templates.PROJECT_LIST`, eigene Vorlagen in `tracery-vorlagen`, `Start.newProjectDialog`/`saveAsTemplate`/`openTemplate`), Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Absturz-Wiederherstellung (`#recovery-bar`, `restoreRecovery`, `dismissRecovery`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |

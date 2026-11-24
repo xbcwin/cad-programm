@@ -25,7 +25,14 @@ const Panels = (() => {
       sheetBtn.dataset.help = 'drawingFormat';
       const viewBtn = btn('t-view-add', 'cube', T('tool.viewAdd'), T('tool.viewAddTip'), '', (e) => Drawing.viewMenu(e.currentTarget));
       viewBtn.dataset.help = 'drawingViews';
-      btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'));
+      const secBtn = btn('t-section', 'section', T('tool.dsection'), T('tool.dsectionTip'), 'S', () => Drawing.tool('section'), Drawing.activeTool === 'section' ? 'active' : '');
+      secBtn.dataset.help = 'drawingSection';
+      secBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'section'));
+      const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
+      detBtn.dataset.help = 'drawingDetail';
+      detBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'detail'));
+      const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' ? 'active' : '');
+      dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
@@ -902,7 +909,19 @@ const Panels = (() => {
     UI.pop(anchor, box);
   }
   // ---------- Einstellungen (rechts) ----------
-  function renderRight() {
+  let rightDeferred = false;
+  function hasFocusedRightInput() {
+    const body = $('#right-body');
+    const ae = document.activeElement;
+    if (!body || !ae || !body.contains(ae)) return false;
+    if (ae.tagName === 'TEXTAREA') return true;
+    if (ae.tagName !== 'INPUT') return false;
+    const t = (ae.type || 'text').toLowerCase();
+    return t !== 'checkbox' && t !== 'radio' && t !== 'button' && t !== 'submit' && t !== 'reset' && t !== 'range' && t !== 'color' && t !== 'file';
+  }
+  function renderRight(opts) {
+    if (opts && opts.preserveFocus && hasFocusedRightInput()) { rightDeferred = true; return; }
+    rightDeferred = false;
     const body = $('#right-body'); body.innerHTML = '';
     if (App.mode === 'drawing') { $('#right-title').textContent = 'Zeichnung'; Drawing.renderPanel(body); return; }
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
@@ -2300,9 +2319,31 @@ const Panels = (() => {
     if (typeof Kernel !== 'undefined' && Kernel.on) Kernel.on('state', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     Toolbar.init();
     renderTools(); initViewCube();
+    const rightBody = $('#right-body');
+    if (rightBody) {
+      rightBody.addEventListener('focusout', () => {
+        if (!rightDeferred) return;
+        setTimeout(() => { if (rightDeferred && !hasFocusedRightInput()) renderRight(); }, 0);
+      });
+    }
+    let pendingRightForce = false;
     const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
-    const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    const rerender = debounce(() => {
+      const force = pendingRightForce;
+      pendingRightForce = false;
+      rerenderLeftHint.cancel();
+      renderLeft();
+      renderRight(force ? undefined : { preserveFocus: true });
+      renderCtx();
+      UI.renderHint();
+    }, 16);
+    const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; rerender(); };
+    App.on('doc', () => scheduleRerender(true));
+    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); rerenderLeftHint(); });
+    App.on('results', () => scheduleRerender(false));
+    DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
+    Weak.on('analyzed', () => { if (!App.sel.length) scheduleRerender(false); });
+    App.on('mode', () => { renderTools(); scheduleRerender(true); });
     Viewer.on('camera', placeCtx);
     App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden

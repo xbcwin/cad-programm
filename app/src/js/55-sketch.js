@@ -392,13 +392,12 @@ const Sketch = (() => {
   }
   function ensureSketchFonts(extraFont = null) {
     if (!S || !SK.ensureEntsFonts) return;
-    SK.ensureEntsFonts(S.ents, extraFont).then((loaded) => {
-      if (loaded && S) { reapply(); render(); Panels.renderRight(); }
-    }).catch((e) => UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' }));
+    SK.ensureEntsFonts(S.ents, extraFont).catch((e) => UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' }));
   }
   function begin(init, skipDraw) {
     Views.collapse();
     if (S) cancel(true);
+    donePending = false;
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
@@ -4592,9 +4591,22 @@ const Sketch = (() => {
   }
 
   // ---------- Fertig / Hochziehen ----------
-  function done() {
-    if (!S) return;
+  let donePending = false;
+  function done(skipFontWait = false) {
+    if (!S || donePending) return;
     S.draft = null; hideEntry();
+    if (!skipFontWait && SK.needsEntsFonts && SK.needsEntsFonts(S.ents)) {
+      const sess = S;
+      donePending = true;
+      SK.ensureEntsFonts(S.ents).then(() => {
+        donePending = false;
+        if (S === sess) { reapply(); render(); done(true); }
+      }).catch((e) => {
+        donePending = false;
+        UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' });
+      });
+      return;
+    }
     const regs = SK.regions(S.ents);
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
@@ -5221,6 +5233,7 @@ const Sketch = (() => {
   }
   function finishSession() {
     if (!S) return;
+    donePending = false;
     stopWiggle(true); stopFreePulse();
     loftPreviewDebounced.cancel(); lpKey = ''; lpPending = '';
     const cam = S.cam, hid = S.hiddenEdit;
@@ -5237,7 +5250,13 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
-    if (SK.onFont) SK.onFont('loaded', () => { if (S) { reapply(); render(); Panels.renderRight(); } });
+    if (SK.onFont) SK.onFont('loaded', () => {
+      if (!S) return;
+      reapply(); render();
+      const note = $('#tx-font-loading');
+      if (note && S.txt && SK.isFontLoaded && SK.isFontLoaded(S.txt.font || 'inter')) note.remove();
+      Panels.renderRight({ preserveFocus: true });
+    });
     App.on('results', () => { relinkAll(); relinkSketchPlanes(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);

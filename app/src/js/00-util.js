@@ -1726,6 +1726,21 @@ const HELP = {
   "tip": "Maßstab, Kantenarten und Schattierung je Ansicht einstellen",
   "hilfe": "Für die gewählte Ansicht legst du einen eigenen Maßstab („Wie Blatt“ oder einen Normmaßstab), verdeckte Kanten (gestrichelt), tangentiale Übergangskanten (dünne Volllinie an Rundungen) und eine schattierte 3D-Füllung fest. Alles wird auch im PDF und SVG gespeichert.",
   "tipp": "Schalte verdeckte Kanten in der Isometrie aus und nur in den Schnitt- oder Hauptansichten ein, damit das Blatt übersichtlich bleibt."
+ },
+ "drawingDetail": {
+  "tip": "Ausschnitt einer Ansicht vergrößert als Detailansicht (z. B. Detail Z, 4:1) darstellen",
+  "hilfe": "Ziehe einen Kreis um einen Bereich der Vorder-, Drauf- oder Seitenansicht, wähle den Vergrößerungsmaßstab (z. B. 2:1, 4:1 oder 5:1) sowie einen Kennbuchstaben und platziere die Detailansicht frei auf dem Blatt. Beide Stellen tragen denselben Kennbuchstaben, und Maße innerhalb der Detailansicht zeigen immer die wahren Längen am Modell.",
+  "tipp": "Nach dem Platzieren kannst du die Detailansicht auf dem Blatt verschieben und Maßstab, Buchstabe oder Kreisradius rechts anpassen."
+ },
+ "drawingSection": {
+  "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
+  "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
+  "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
+ },
+ "drawingCenters": {
+  "tip": "Mittelkreuze und Mittellinien für Bohrungen und Zylinder automatisch ein- und ausblenden",
+  "hilfe": "Bohrungen und Zylinder erhalten in jeder Ansicht automatisch strichpunktierte Mittelkreuze (Draufsicht bzw. Blick auf die Öffnung) und Mittellinien (Seiten- und Schnittansichten). Klicke ein einzelnes Mittelkreuz oder eine Mittellinie im Blatt an und drücke Entf (oder Rechtsklick → Ausblenden), um es auszublenden – oder schalte sie rechts in der Liste einzeln ein und aus.",
+  "tipp": "Mit „Alle einblenden“ holst du einzeln ausgeblendete Mittellinien jederzeit mit einem Klick zurück; alle Änderungen lassen sich rückgängig machen."
  }
 };
 
