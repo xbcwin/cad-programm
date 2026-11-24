@@ -89,7 +89,7 @@ const UI = (() => {
     document.body.append(m); openMenu = m;
     const r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect();
     let x = opts.alignRight ? r.right - mr.width : r.left, y = opts.up ? r.top - mr.height - 6 : r.bottom + 6;
-    x = clamp(x, 8, innerWidth - mr.width - 8); y = clamp(y, 8, innerHeight - mr.height - 8);
+    x = clamp(x, 8, Math.max(8, innerWidth - mr.width - 8)); y = clamp(y, 8, Math.max(8, innerHeight - mr.height - 8));
     m.style.left = x + 'px'; m.style.top = y + 'px';
     setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
     return m;

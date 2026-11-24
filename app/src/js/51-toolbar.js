@@ -48,6 +48,7 @@ const Toolbar = (() => {
       // Projekt & Datei
       { id: 'save', group: T('dlg.tb.grpProject'), domId: 't-save', icon: 'save', label: T('common.save'), tip: T('dlg.tb.saveTip'), kbd: 'Strg S', cls: 'minor', run: () => Start.saveFile() },
       { id: 'import', group: T('dlg.tb.grpProject'), domId: 't-import', icon: 'folder', label: T('dlg.tb.import'), tip: T('dlg.tb.importTip'), cls: 'minor', help: 'importCad', run: () => Start.openFile() },
+      { id: 'insertFile', group: T('dlg.tb.grpProject'), domId: 't-insert-file-tool', icon: 'folder', label: T('asm.insertFromFileShort'), tip: T('asm.insertFromFileTip'), cls: 'minor', help: 'insertFromFile', run: () => Comp.insertFromFile() },
       { id: 'image', group: T('dlg.tb.grpProject'), domId: 't-image', icon: 'image', label: T('dlg.tb.image'), tip: T('dlg.tb.imageTip'), cls: 'minor', run: () => Print.imageDialog() },
       { id: 'versions', group: T('dlg.tb.grpProject'), domId: 't-versions', icon: 'rollback', label: T('dlg.tb.versions'), tip: T('dlg.tb.versionsTip'), cls: 'minor', help: 'versions', run: () => Versions.dialog() },
     ];
@@ -283,6 +284,17 @@ const Toolbar = (() => {
       ins.innerHTML = icon('parts') + `<span>${esc(T('asm.insertBtn'))}</span>`;
       ins.addEventListener('click', () => Comp.insertPartDialog());
       el.append(ins);
+      const insFile = h('button', {
+        type: 'button',
+        class: 'tool minor',
+        id: 't-insert-file',
+        'data-tip': T('asm.insertFromFileTip'),
+        'data-help': 'insertFromFile',
+        'aria-label': T('asm.insertFromFile'),
+      });
+      insFile.innerHTML = icon('folder') + `<span>${esc(T('asm.insertFromFileShort'))}</span>`;
+      insFile.addEventListener('click', () => Comp.insertFromFile());
+      el.append(insFile);
       const map = catalogMap();
       for (const id of ['clashes', 'measure', 'notes', 'views', 'check']) {
         if (map[id]) el.append(buildToolButton(map[id], false));

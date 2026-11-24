@@ -253,6 +253,13 @@ const Commands = (() => {
       if (Model.isAssembly(App.doc)) Comp.insertPartDialog();
       else UI.toast('Wechsle zuerst in eine Baugruppe (oder lege über Start → „Neue Baugruppe“ eine an).', { icon: 'info' });
     }, { group: 'Baugruppe' });
+    add('insert-from-file', 'Teil aus Datei einfügen (STEP / Projekt) …', 'folder', 'datei einfuegen einfügen step projekt tracery json importieren teil baugruppe bg-13', () => Comp.insertFromFile(), { group: 'Baugruppe' });
+    add('replace-part', 'Teil ersetzen (gegen Bauteil oder Datei) …', 'replace', 'teil ersetzen tauschen austauschen step projekt bauteil baugruppe bg-13', () => {
+      const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null;
+      if (!t) UI.toast(T('asm.selectPartToReplace'), { icon: 'info' });
+      else if (!Comp.canReplace(t, App.doc)) UI.toast(T('asm.cannotReplace'), { icon: 'info' });
+      else Comp.replacePartDialog(t.id);
+    }, { group: 'Baugruppe', needSel: true });
     add('ground-part', 'Teil festsetzen / lösen', 'lock', 'festsetzen fixieren lösen loesen sperren schloss verankern ground fix lock baugruppe', () => Actions.toggleGround(), { group: 'Baugruppe', needSel: true });
     add('open-part-tab', 'Bauteil im Tab öffnen', 'edit', 'bauteil tab oeffnen öffnen baugruppe bearbeiten', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && Assembly.canOpenInTab(t, App.doc)) Assembly.openPartTab(t.id); else UI.toast(T('asm.selectPartFirst'), { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });

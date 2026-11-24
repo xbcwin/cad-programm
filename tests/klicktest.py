@@ -19279,6 +19279,289 @@ def t_f11241729(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- [A-094] Teil ersetzen und aus Datei einfügen (BG-13) ----------
+def t_a094_teil_ersetzen_aus_datei(p):
+    import json
+    import os
+    import tempfile
+
+    p.empty()
+    # 1. Drei Bauteile anlegen (Kurz 12x12x10, Lang 12x12x35, Kugel Ø14) sowie STEP (50x15x12) & Projektdatei (24x18x14) erzeugen
+    p.ev("""
+      App.change('Kurz', d => {
+        d.name = 'Teil Kurz';
+        d.items.push(Model.newItem('box', { w: 12, d: 12, h: 10 }, { name: 'Kurz' }));
+      });
+    """)
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    kurz_id = p.ev("return App.doc.id")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    p.ev("""
+      App.change('Lang', d => {
+        d.name = 'Teil Lang';
+        d.items.push(Model.newItem('box', { w: 12, d: 12, h: 35 }, { name: 'Lang' }));
+      });
+    """)
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    lang_id = p.ev("return App.doc.id")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    p.ev("""
+      App.change('Kugel', d => {
+        d.name = 'Teil Kugel';
+        d.items.push(Model.newItem('sphere', { d: 14 }, { name: 'Kugel' }));
+      });
+    """)
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    kugel_id = p.ev("return App.doc.id")
+
+    # STEP-Datei (50 x 15 x 12) und Tracery-Projektdatei (24 x 18 x 14) erzeugen
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    p.ev("""
+      App.change('STEP-Quader', d => {
+        d.name = 'Block 50';
+        d.items.push(Model.newItem('box', { w: 50, d: 15, h: 12 }, { name: 'Block 50' }));
+      });
+    """)
+    warte_rechnen(p, 25)
+    step_arr = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      return Array.from(new Uint8Array(r.data));
+    }""")
+
+    proj_doc = p.ev("""
+      const d = Model.newDoc('Fremdteil 24');
+      d.items.push(Model.newItem('box', { w: 24, d: 18, h: 14 }, { name: 'Klotz 24' }));
+      return d;
+    """)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        step_path = os.path.join(tmpdir, 'Block50.step')
+        proj_path = os.path.join(tmpdir, 'Fremdteil24.tracery.json')
+        with open(step_path, 'wb') as f:
+            f.write(bytes(step_arr))
+        with open(proj_path, 'w', encoding='utf-8') as f:
+            json.dump(proj_doc, f)
+
+        # 2. Baugruppe mit Basis (20x20x10) und Teil Kurz (12x12x10), feste Verbindung Fläche-an-Fläche
+        p.pg.click('#proj-tab-add'); p.wait(150)
+        p.pg.click('#tab-add-assembly'); p.wait(350)
+        p.ev("""
+          App.change('Basis anlegen', d => {
+            const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Basis' });
+            d.items.push(b);
+          });
+        """)
+        warte_rechnen(p, 25)
+        p.ev("return Comp.insertPart(arg, { pos: [35, 10, 20] });", kurz_id)
+        p.wait(300)
+        warte_rechnen(p, 30)
+
+        joint_info = p.ev("""
+          const basis = App.doc.items[0], kurz = App.doc.items[1];
+          const af = (App.results.get(basis.id)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+          const bf = (App.results.get(kurz.id)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] < -0.9);
+          const r = Joints.addFixed({ id: basis.id, faceIdx: af }, { id: kurz.id, faceIdx: bf });
+          return { r, basisId: basis.id, kurzItemId: kurz.id };
+        """)
+        warte_rechnen(p, 25)
+        basis_id = joint_info['basisId']
+        slot_id = joint_info['kurzItemId']
+
+        st_init = p.ev("""
+          const ba = Actions.worldBox(arg[0]), bb = Actions.worldBox(arg[1]);
+          const j = (App.doc.joints || [])[0];
+          return {
+            ok: !!(j && j.kind === 'fixed' && j.a === arg[0] && j.b === arg[1]),
+            h: bb ? (bb.max.z - bb.min.z) : 0,
+            dz: (ba && bb) ? Math.abs(bb.min.z - ba.max.z) : 99,
+          };
+        """, [basis_id, slot_id])
+        ok1 = joint_info['r']['ok'] and st_init['ok'] and abs(st_init['h'] - 10) < 0.2 and st_init['dz'] < 0.05
+
+        # 3. Rechtsklick im 3D-Bild auf „Teil Kurz“ -> „Teil ersetzen …“ -> „Teil Lang“ (12x12x35)
+        p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(25, -45, 45), c.clone().set(0, 0, 12), null, false); Viewer.renderNow();")
+        p.wait(250)
+        sc = world_screen(p, 0, 0, 15)
+        p.pg.mouse.click(sc[0], sc[1], button='right')
+        p.wait(300)
+        has_cm = p.pg.locator('#cm-replace-part').count() == 1
+        p.pg.locator('#cm-replace-part').click()
+        p.wait(300)
+        dlg_ok = (
+            p.pg.locator('#asm-replace-dialog').count() == 1
+            and p.pg.locator(f'#asm-replace-dialog .asm-part-row[data-doc-id="{lang_id}"]').count() == 1
+            and p.pg.locator(f'#asm-replace-dialog .asm-part-row.disabled[data-doc-id="{kurz_id}"]').count() == 1
+        )
+        p.pg.locator(f'#asm-replace-dialog .asm-part-row[data-doc-id="{lang_id}"]').click()
+        p.wait(400)
+        warte_rechnen(p, 35)
+
+        st_lang = p.ev("""
+          const ba = Actions.worldBox(arg[0]), bb = Actions.worldBox(arg[1]);
+          const it = App.doc.items.find(x => x.id === arg[1]);
+          const j = (App.doc.joints || [])[0];
+          return {
+            sameId: !!it,
+            docId: it && it.p && it.p.docId,
+            jCount: (App.doc.joints || []).length,
+            jOk: !!(j && j.kind === 'fixed' && j.a === arg[0] && j.b === arg[1]),
+            w: bb ? (bb.max.x - bb.min.x) : 0,
+            d: bb ? (bb.max.y - bb.min.y) : 0,
+            h: bb ? (bb.max.z - bb.min.z) : 0,
+            dz: (ba && bb) ? Math.abs(bb.min.z - ba.max.z) : 99,
+            cx: bb ? (bb.min.x + bb.max.x) / 2 : 99,
+            cy: bb ? (bb.min.y + bb.max.y) / 2 : 99,
+          };
+        """, [basis_id, slot_id])
+
+        # Basis verschieben -> ersetztes Teil Lang wandert über die feste Verbindung mit
+        p.ev("App.change('Basis verschieben', d => { d.items[0].t.x = 15; d.items[0].t.y = -5; });")
+        warte_rechnen(p, 25)
+        st_follow = p.ev("""
+          const ba = Actions.worldBox(arg[0]), bb = Actions.worldBox(arg[1]);
+          return {
+            cx: bb ? (bb.min.x + bb.max.x) / 2 : 99,
+            cy: bb ? (bb.min.y + bb.max.y) / 2 : 99,
+            dz: (ba && bb) ? Math.abs(bb.min.z - ba.max.z) : 99,
+          };
+        """, [basis_id, slot_id])
+        ok2 = (
+            has_cm and dlg_ok and st_lang['sameId'] and st_lang['docId'] == lang_id
+            and st_lang['jCount'] == 1 and st_lang['jOk']
+            and abs(st_lang['w'] - 12) < 0.2 and abs(st_lang['d'] - 12) < 0.2 and abs(st_lang['h'] - 35) < 0.2
+            and st_lang['dz'] < 0.05 and abs(st_lang['cx']) < 0.05 and abs(st_lang['cy']) < 0.05
+            and abs(st_follow['cx'] - 15) < 0.05 and abs(st_follow['cy'] + 5) < 0.05 and st_follow['dz'] < 0.05
+        )
+
+        # 4. Durch STEP-Datei ersetzen (50x15x12) -> Verbindung bleibt erhalten, neues Hüllmaß 50x15x12, Strg+Z stellt Lang wieder her
+        p.ev("App.select([arg]);", slot_id)
+        p.wait(250)
+        p.pg.locator('#btn-ref-replace').click()
+        p.wait(250)
+        p.pg.locator('#asm-replace-file-input').set_input_files(step_path)
+        p.wait(500)
+        warte_rechnen(p, 40)
+
+        st_step = p.ev("""
+          const ba = Actions.worldBox(arg[0]), bb = Actions.worldBox(arg[1]);
+          const it = App.doc.items.find(x => x.id === arg[1]);
+          const j = (App.doc.joints || [])[0];
+          return {
+            kind: it && it.kind,
+            fmt: it && it.p && it.p.fmt,
+            jCount: (App.doc.joints || []).length,
+            jOk: !!(j && j.kind === 'fixed' && j.a === arg[0] && j.b === arg[1]),
+            w: bb ? (bb.max.x - bb.min.x) : 0,
+            d: bb ? (bb.max.y - bb.min.y) : 0,
+            h: bb ? (bb.max.z - bb.min.z) : 0,
+            dz: (ba && bb) ? Math.abs(bb.min.z - ba.max.z) : 99,
+            cx: bb ? (bb.min.x + bb.max.x) / 2 : 99,
+            cy: bb ? (bb.min.y + bb.max.y) / 2 : 99,
+          };
+        """, [basis_id, slot_id])
+
+        p.pg.click('#btn-undo')
+        p.wait(350)
+        warte_rechnen(p, 35)
+        st_undo_step = p.ev("""
+          const it = App.doc.items.find(x => x.id === arg);
+          const bb = Actions.worldBox(arg);
+          return {
+            kind: it && it.kind,
+            docId: it && it.p && it.p.docId,
+            jCount: (App.doc.joints || []).length,
+            h: bb ? (bb.max.z - bb.min.z) : 0,
+          };
+        """, slot_id)
+        ok3 = (
+            st_step['kind'] == 'import' and st_step['fmt'] == 'step'
+            and st_step['jCount'] == 1 and st_step['jOk']
+            and abs(st_step['w'] - 50) < 0.25 and abs(st_step['d'] - 15) < 0.25 and abs(st_step['h'] - 12) < 0.25
+            and st_step['dz'] < 0.05 and abs(st_step['cx'] - 15) < 0.1 and abs(st_step['cy'] + 5) < 0.1
+            and st_undo_step['kind'] == 'ref' and st_undo_step['docId'] == lang_id
+            and st_undo_step['jCount'] == 1 and abs(st_undo_step['h'] - 35) < 0.2
+        )
+
+        # 5. Durch Kugel ersetzen (ohne ebene Flächen) -> unpassende feste Verbindung wird sauber entfernt, Undo holt sie zurück
+        p.ev("App.select([arg]);", slot_id)
+        p.wait(250)
+        p.pg.locator('#btn-ref-replace').click()
+        p.wait(250)
+        p.pg.locator(f'#asm-replace-dialog .asm-part-row[data-doc-id="{kugel_id}"]').click()
+        p.wait(400)
+        warte_rechnen(p, 35)
+        st_kugel = p.ev("""
+          const bb = Actions.worldBox(arg);
+          return { jCount: (App.doc.joints || []).length, h: bb ? (bb.max.z - bb.min.z) : 0 };
+        """, slot_id)
+        p.pg.click('#btn-undo')
+        p.wait(350)
+        warte_rechnen(p, 35)
+        st_undo_kugel = p.ev("""
+          const bb = Actions.worldBox(arg);
+          return { jCount: (App.doc.joints || []).length, h: bb ? (bb.max.z - bb.min.z) : 0 };
+        """, slot_id)
+        ok4 = (
+            st_kugel['jCount'] == 0 and abs(st_kugel['h'] - 14) < 0.3
+            and st_undo_kugel['jCount'] == 1 and abs(st_undo_kugel['h'] - 35) < 0.2
+        )
+
+        # 6. „Aus Datei einfügen“: STEP (50x15x12) und Tracery-Projekt (24x18x14) zusätzlich einfügen
+        has_toolbar_btn = p.pg.locator('#t-insert-file').count() == 1
+        p.pg.click('#t-insert-part'); p.wait(250)
+        p.pg.locator('#asm-insert-file-input').set_input_files(step_path)
+        p.wait(450); warte_rechnen(p, 35)
+
+        p.pg.click('#t-insert-part'); p.wait(250)
+        p.pg.locator('#asm-insert-file-input').set_input_files(proj_path)
+        p.wait(450); warte_rechnen(p, 35)
+
+        st_ins = p.ev("""
+          return App.doc.items.map(it => {
+            const bb = Actions.worldBox(it.id);
+            return {
+              kind: it.kind,
+              fmt: it.p && it.p.fmt,
+              name: it.name,
+              w: bb ? (bb.max.x - bb.min.x) : 0,
+              d: bb ? (bb.max.y - bb.min.y) : 0,
+              h: bb ? (bb.max.z - bb.min.z) : 0,
+            };
+          });
+        """)
+        ok5 = (
+            has_toolbar_btn and len(st_ins) == 4
+            and st_ins[2]['kind'] == 'import' and st_ins[2]['fmt'] == 'step'
+            and abs(st_ins[2]['w'] - 50) < 0.25 and abs(st_ins[2]['d'] - 15) < 0.25 and abs(st_ins[2]['h'] - 12) < 0.25
+            and st_ins[3]['kind'] == 'ref'
+            and abs(st_ins[3]['w'] - 24) < 0.25 and abs(st_ins[3]['d'] - 18) < 0.25 and abs(st_ins[3]['h'] - 14) < 0.25
+        )
+
+    # 7. Hilfetexte, Übersetzungen (DE/EN), Befehlssuche und keine Fehler
+    meta = p.ev("""return Promise.all([
+      fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+      fetch('data/texte-de.json').then(r => r.json()),
+      fetch('data/texte-en.json').then(r => r.json()),
+    ]).then(([h, de, en]) => ({
+      helpOk: ['replacePart', 'insertFromFile'].every(k => h[k] && h[k].tip && h[k].hilfe && h[k].tipp),
+      i18nEq: Object.keys(de).length === Object.keys(en).length && Object.keys(de).every(k => k in en),
+      cmdReplace: Commands.search('Teil ersetzen').some(c => c.id === 'replace-part'),
+      cmdInsert: Commands.search('Aus Datei').some(c => c.id === 'insert-from-file'),
+      errs: App.errors.length === 0,
+    }));""")
+    ok6 = bool(all(meta.values()) and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -19478,6 +19761,7 @@ TESTS = [
     ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
     ('[A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)', t_a092_durchdringungen),
     ('[F-11241729] Volltest-Reparatur: Meldungen überleben Rechenphasen / Startseiten-Karte neben Baugruppe / Tablet-Kontext auf Deutsch', t_f11241729),
+    ('[A-094] Teil ersetzen und aus Datei einfügen: feste Verbindung erhalten, neues Hüllmaß, STEP & Projekt', t_a094_teil_ersetzen_aus_datei),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

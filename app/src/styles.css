@@ -544,7 +544,7 @@ body.sketching .timeline{display:none}
 .hw-preview{display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-s);padding:4px 6px}
 .hw-preview svg{width:100%;height:74px;display:block}
 .hw-info{font-size:12.5px;padding:7px 10px}
-.menu{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-2);padding:5px;display:grid;min-width:210px}
+.menu{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-2);padding:5px;display:grid;grid-auto-rows:max-content;min-width:210px;max-height:calc(100vh - 16px);overflow-y:auto}
 .menu button{display:flex;align-items:center;gap:10px;border:0;background:transparent;border-radius:6px;padding:8px 10px;text-align:left;font-size:14px;color:var(--ink)}
 .menu button svg{width:17px;height:17px;color:var(--muted)}
 .menu button:hover{background:var(--surface-2)}
@@ -1235,6 +1235,10 @@ body.tablet .tabbar-add{width:38px;height:38px}
 .asm-tree-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 0 8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
 .asm-insert-dlg{display:grid;gap:12px}
 .asm-insert-intro{margin:0;color:var(--muted);font-size:13.5px;line-height:1.45}
+.asm-file-bar{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:var(--surface-2)}
+.asm-file-bar .btn{align-self:flex-start}
+.asm-file-bar .hint-box{margin:0}
+.recent-row.disabled{opacity:.55;cursor:default}
 .asm-part-list{max-height:360px;overflow:auto}
 .asm-part-ic{display:inline-flex;align-items:center;color:var(--accent);flex:none}
 .asm-part-ic svg{width:24px;height:24px}

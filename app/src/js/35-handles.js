@@ -1054,6 +1054,7 @@ const Interact = (() => {
       items = [
         ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'cm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
         ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), kbd: 'E', id: 'cm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
+        ...(typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc) ? [{ icon: 'replace', label: T('asm.replacePart'), id: 'cm-replace-part', help: 'replacePart', run: () => Comp.replacePartDialog(it.id) }] : []),
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: it.locked ? 'unlock' : 'lock', label: it.locked ? T('asm.unground') : T('asm.ground'), id: 'cm-ground', help: 'groundPart', run: () => Actions.toggleGround([it.id]) },
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
@@ -1094,6 +1095,7 @@ const Interact = (() => {
         { icon: 'undo', label: T('menu.ctx.viewBack'), kbd: 'Umschalt Z', id: 'cm-viewback', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() },
         '-',
         { icon: 'sketch', label: T('menu.ctx.newSketch'), kbd: 'S', id: 'cm-sketch', run: () => Sketch.chooseAndStart() },
+        { icon: 'folder', label: T('asm.insertFromFile'), id: 'cm-insert-file', help: 'insertFromFile', run: () => Comp.insertFromFile() },
         { icon: 'image', label: T('menu.ctx.saveImage'), id: 'cm-image', run: () => Print.imageDialog() },
         ...(Commands.last ? ['-', { icon: 'undo', label: T('menu.ctx.repeat', { label: Commands.last.label }), kbd: 'Leertaste', id: 'cm-repeat', run: () => Commands.repeat() }] : []),
       ];

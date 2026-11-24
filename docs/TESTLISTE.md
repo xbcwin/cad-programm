@@ -2191,6 +2191,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Tablet-Kontext auf Deutsch**: Ein Touch-Kontext mit `locale='de-DE'` startet im `tablet`-Modus mit `I18n.lang === 'de'` und „Leeres Projekt“ (`t_a080_tablet`, `[F-11241729]`).
 - [ ] **Von Hand**: Bei einem schweren „Mach alles als Verbund“-Auftrag prüfen, ob die Toast-Meldung nach Abschluss der Berechnung noch sichtbar bleibt und sich danach sauber ausblendet.
 
+## Teil ersetzen und aus Datei einfügen (Auto [A-094], BG-13)
+
+- [x] **Teil mit fester Verbindung ersetzen (`Kurz` → `Lang`)**: Rechtsklick im 3D-Bild (`#cm-replace-part`) tauscht das fest verbundene Teil (`12×12×10`) gegen ein längeres (`12×12×35`); die feste Verbindung bleibt erhalten, beide Flächen sitzen weiter bündig aufeinander (`dz < 0,05 mm`), das neue Hüllmaß stimmt und beim Verschieben des Basisteils wandert das ersetzte Teil mit.
+- [x] **Durch STEP-Datei ersetzen & Rückgängig**: Tausch gegen eine STEP-Datei (`50×15×12`) übernimmt das neue Hüllmaß samt bestehender fester Verbindung (`kind: 'import'`); unpassende Verbindungen (z. B. beim Tausch gegen eine Kugel ohne ebene Flächen) werden sauber entfernt, und ein `Strg+Z` stellt das vorige Teil samt Verbindung wieder her.
+- [x] **Aus Datei einfügen (STEP & Tracery-Projekt)**: `#t-insert-file` / `#asm-insert-file-input` fügen sowohl eine STEP-Datei (`50×15×12`) als auch eine `.tracery.json`-Projektdatei (`24×18×14`, als verknüpfter `ref`) ins laufende Modell ein; Hilfetexte (`replacePart`, `insertFromFile`), DE/EN-Schlüsselgleichheit und Befehlssuche (`replace-part`, `insert-from-file`) sind ohne Seitenfehler vorhanden.
+- [ ] **Von Hand**: Im Browser eine eigene STEP-Datei per „Aus Datei einfügen …“ in eine Baugruppe laden, mit einem anderen Teil fest verbinden und anschließend über Rechtsklick → „Teil ersetzen …“ gegen ein anderes Bauteil austauschen.
+
 ## Fehler melden
 
 ```

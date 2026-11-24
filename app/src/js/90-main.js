@@ -49,6 +49,7 @@
       { label: T('menu.proj.saveToFolder'), icon: 'folder', id: 'pm-folder-save', help: 'saveFolder', run: () => Start.saveToFolder() },
     ]) : []),
     { label: T('menu.proj.openImport'), icon: 'folder', help: 'importCad', run: () => Start.openFile() },
+    { label: T('asm.insertFromFile'), icon: 'folder', id: 'pm-insert-file', help: 'insertFromFile', run: () => Comp.insertFromFile() },
     { label: T('menu.proj.versions'), icon: 'rollback', help: 'versions', run: () => Versions.dialog() },
     { label: T('menu.proj.saveTemplate'), icon: 'save', id: 'pm-save-template', help: 'saveTemplate', run: () => Start.saveAsTemplate() },
     '-',

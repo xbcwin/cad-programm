@@ -645,6 +645,7 @@ const IC = {
   keyway: '<circle cx="12" cy="13" r="8" opacity=".45"/><path d="M9.5 5.4V9h5V5.4"/><rect x="9.5" y="4.5" width="5" height="4.5" rx=".8" fill="currentColor" opacity=".25"/>',
   bearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="5.4" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="8.7" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="18.6" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="8.7" r="1.3" fill="currentColor" stroke="none"/>',
   sleeve: '<ellipse cx="12" cy="6" rx="6.5" ry="2.6" fill="currentColor" opacity=".2"/><path d="M5.5 6v12c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6V6"/><ellipse cx="12" cy="6" rx="6.5" ry="2.6"/><ellipse cx="12" cy="6" rx="3.4" ry="1.3"/>',
+  replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1901,6 +1902,16 @@ const HELP = {
   "tip": "Prüft alle Teile der Baugruppe paarweise auf Durchdringungen und listet jede Überschneidung",
   "hilfe": "Sucht in der ganzen Baugruppe nach Stellen, an denen zwei Teile ineinanderstecken. Jedes betroffene Paar erscheint in einer Liste mit seinem Überschneidungs-Volumen. Klickst du auf einen Eintrag, springt die Kamera direkt hin und hebt den gemeinsamen Überschneidungskörper rot hervor.",
   "tipp": "Teile, die sich nur exakt Fläche an Fläche berühren, werden nicht als Fehler gemeldet – nur echte Überschneidungen mit Volumen."
+ },
+ "replacePart": {
+  "tip": "Tauscht das gewählte Teil gegen ein anderes Bauteil oder eine STEP- bzw. Projektdatei aus",
+  "hilfe": "Rechtsklick auf ein Teil → „Teil ersetzen …“ tauscht es gegen ein gespeichertes Bauteil, eine Unterbaugruppe oder eine Datei (.step, .tracery.json) aus. Die Lage bleibt erhalten, und passende Verbindungen richten das neue Teil automatisch wieder an seinem Platz aus.",
+  "tipp": "Verbindungen auf Flächen oder Kanten, die es am neuen Teil nicht mehr gibt (z. B. Kugel statt Quader), werden sauber entfernt – mit Strg+Z machst du den ganzen Tausch rückgängig."
+ },
+ "insertFromFile": {
+  "tip": "Setzt eine STEP-Datei oder ein gespeichertes Tracery-Projekt als Teil ins offene Modell ein",
+  "hilfe": "Lädt eine CAD-Datei (.step, .iges, .brep, .stl) oder ein anderes Tracery-Projekt (.tracery.json) direkt in das laufende Projekt, ohne dein bisheriges Modell zu schließen. Eingefügte Tracery-Projekte bleiben als verknüpfte Bauteile bearbeitbar.",
+  "tipp": "Ideal, um Zukaufteile aus dem Netz (STEP) oder fertige eigene Bauteile direkt in deine Baugruppe einzusetzen."
  }
 };
 

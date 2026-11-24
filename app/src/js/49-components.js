@@ -157,11 +157,340 @@ const Comp = (() => {
     UI.toast(T(isSub ? 'asm.insertedSubToast' : 'asm.insertedToast', { name: Model.label(it) }), { icon: 'check', ms: 3200 });
     return it;
   }
+  function canReplace(it, doc = App.doc) {
+    if (!it || !doc || !Array.isArray(doc.items) || !doc.items.includes(it)) return false;
+    if (typeof App !== 'undefined' && App.ctx) return false;
+    if (it.role === 'hole') return false;
+    if (it.kind === 'transform' && !(it.p && it.p.copy)) return false;
+    if (it.kind === 'scale' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return false;
+    if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return false;
+    if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)) return false;
+    return true;
+  }
+  function ensureModelModeForFile() {
+    if (typeof Sketch !== 'undefined' && Sketch.active) Sketch.cancel(true);
+    if (typeof App !== 'undefined' && App.mode !== 'model' && typeof Commands !== 'undefined' && Commands.setMode) {
+      Commands.setMode('model');
+    }
+    if (typeof Start !== 'undefined' && Start.open && Start.hide) Start.hide();
+  }
+  async function buildStepItemFromBytes(bytes, fileName, fmt) {
+    const blobId = await Store.putBlob(bytes);
+    const base = String(fileName || 'Import').replace(/\.(step|stp|igs|iges|brep|stl)$/i, '') || 'Import';
+    if (fmt === 'step' && typeof Start !== 'undefined' && Start.parseSTEP) {
+      let parsed = null;
+      try { parsed = Start.parseSTEP(bytes); } catch (e) { console.warn(e); }
+      if (parsed && parsed.partCount > 0) {
+        let partIdx = 0;
+        const importIds = [];
+        const buildItems = (nodes) => nodes.map((node) => {
+          if (node.type === 'assembly') {
+            const kids = buildItems(node.children);
+            const firstSolid = kids.find((c) => c.role !== 'hole') || kids[0];
+            const g = Model.newItem('group', { assembly: true }, { name: node.name || base, color: (firstSolid && firstSolid.color) || undefined });
+            g.children = kids;
+            return g;
+          }
+          partIdx++;
+          const p = { fmt: 'step', blobId, size: bytes.byteLength, file: fileName, scale: 1 };
+          if (parsed.partCount > 1 && node.entityId) p.stepEntity = node.entityId;
+          if (node.matrix) p.stepMat = node.matrix;
+          const name = node.name || (parsed.partCount === 1 ? base : `${base} ${partIdx}`);
+          const extra = { name };
+          if (node.color) { extra.color = node.color; extra.more = { colorSet: true }; }
+          const imp = Model.newItem('import', p, extra);
+          importIds.push(imp.id);
+          return imp;
+        });
+        const items = buildItems(parsed.roots);
+        if (parsed.partCount === 1 && parsed.groupCount === 0 && items.length === 1) {
+          return { item: items[0], importIds, subCount: 1 };
+        }
+        if (items.length === 1) {
+          if (items[0].kind === 'group') items[0].comp = true;
+          return { item: items[0], importIds, subCount: parsed.partCount };
+        }
+        const firstSolid = items.find((c) => c.role !== 'hole') || items[0];
+        const grp = Model.newItem('group', { assembly: true }, { name: base, color: (firstSolid && firstSolid.color) || undefined });
+        grp.comp = true;
+        grp.children = items;
+        return { item: grp, importIds, subCount: parsed.partCount };
+      }
+    }
+    const imp = Model.newItem('import', { fmt, blobId, size: bytes.byteLength, file: fileName, scale: 1 }, { name: base });
+    return { item: imp, importIds: [imp.id], subCount: 1 };
+  }
+  async function buildRefItemFromProjectFile(file) {
+    let doc = null;
+    try {
+      const txt = await file.text();
+      doc = JSON.parse(txt);
+    } catch (e) {
+      console.warn(e);
+      UI.toast(T('asm.fileReadErr'), { kind: 'bad' });
+      return null;
+    }
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc) || (!Array.isArray(doc.items) && doc.format !== 'masswerk')) {
+      UI.toast(T('asm.fileBadFormat'), { kind: 'bad' });
+      return null;
+    }
+    Model.migrate(doc);
+    delete doc.versions;
+    if (Model.countItems(doc) <= 0) {
+      UI.toast(T('asm.fileEmptyErr'), { kind: 'bad' });
+      return null;
+    }
+    const base = String(file.name || '').replace(/(\.tracery)?\.json$/i, '').trim();
+    if (!doc.name || doc.name === 'Neues Projekt') doc.name = base || T('asm.partDefault');
+    const openDocIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
+    if (!doc.id || (App.doc && doc.id === App.doc.id) || openDocIds.has(doc.id) || (typeof Store !== 'undefined' && Store.hasProject && Store.hasProject(doc.id))) {
+      doc.id = uid('p');
+    }
+    if (typeof Store !== 'undefined' && Store.extractBlobs) Store.extractBlobs(doc);
+    if (typeof Store !== 'undefined' && Store.saveProject) {
+      await Store.saveProject(doc, Model.countItems(doc), { keepLast: true });
+    }
+    await ensureRefs(doc);
+    await persistRefTree(doc);
+    const isSub = Model.isAssembly(doc);
+    const firstSolid = (doc.items || []).find((x) => x && x.role !== 'hole' && !x.hidden);
+    const refP = { docId: doc.id, docName: doc.name || (isSub ? T('doc.assembly') : T('asm.partDefault')), ...(isSub ? { docType: 'assembly' } : {}) };
+    const it = Model.newItem('ref', refP, {
+      name: doc.name || (isSub ? T('doc.assembly') : T('asm.partDefault')),
+      color: (firstSolid && firstSolid.color) || undefined,
+    });
+    return { item: it, refDoc: doc, isSub, importIds: [], subCount: Model.countItems(doc) };
+  }
+  async function buildItemFromBlob(file) {
+    if (!file || !file.name) return null;
+    if (file.size > 100e6) {
+      UI.toast(T('asm.fileTooBig'), { kind: 'bad' });
+      return null;
+    }
+    if (/\.json$/i.test(file.name)) return buildRefItemFromProjectFile(file);
+    if (/\.(step|stp|igs|iges|brep|stl)$/i.test(file.name)) {
+      const fmt = /\.stl$/i.test(file.name) ? 'stl'
+        : /\.(igs|iges)$/i.test(file.name) ? 'iges'
+        : /\.brep$/i.test(file.name) ? 'brep'
+        : 'step';
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      return buildStepItemFromBytes(bytes, file.name, fmt);
+    }
+    UI.toast(T('asm.fileBadFormat'), { kind: 'bad' });
+    return null;
+  }
+  async function insertFromBlob(file, opts = {}) {
+    if (!file || !App.doc) return null;
+    ensureModelModeForFile();
+    const built = await buildItemFromBlob(file);
+    if (!built || !built.item) return null;
+    const it = built.item;
+    if (opts.name) it.name = opts.name;
+    if (opts.t) Object.assign(it.t, opts.t);
+    else if (Array.isArray(opts.pos)) {
+      it.t.x = opts.pos[0] || 0;
+      it.t.y = opts.pos[1] || 0;
+      it.t.z = opts.pos[2] != null ? opts.pos[2] : (opts.z || 0);
+    } else {
+      const spot = freeSpotFor(built.refDoc || null);
+      it.t.x = spot[0];
+      it.t.y = spot[1];
+      it.t.z = opts.z || 0;
+    }
+    const emptyBefore = !App.doc.items.length;
+    if (emptyBefore) App.fitAfterBuild();
+    App.change(T('asm.insertFileUndo', { name: Model.label(it) }), (doc) => {
+      doc.items.push(it);
+    });
+    App.select([it.id]);
+    if (built.subCount > 1 && it.kind === 'group') {
+      UI.toast(T('asm.insertFileMultiToast', { name: Model.label(it), n: built.subCount }), { icon: 'check', ms: 3800 });
+    } else {
+      UI.toast(T('asm.insertFileToast', { name: Model.label(it) }), { icon: 'check', ms: 3400 });
+    }
+    if (it.kind === 'import' && typeof Start !== 'undefined' && Start.checkImport) {
+      Start.checkImport(it.id).catch(() => {});
+    }
+    return it;
+  }
+  function insertFromFile(opts = {}) {
+    const inp = h('input', { type: 'file', accept: '.step,.stp,.json,application/json,.igs,.iges,.brep,.stl', style: { display: 'none' } });
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) insertFromBlob(f, opts); };
+    document.body.append(inp);
+    inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+  }
+  async function applyReplacement(itemId, newItem, opts = {}) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !canReplace(f.item, App.doc)) {
+      UI.toast(T('asm.cannotReplace'), { kind: 'bad' });
+      return null;
+    }
+    const oldItem = f.item;
+    newItem.id = oldItem.id;
+    newItem.t = deepClone(oldItem.t || Model.T0());
+    if (oldItem.locked) newItem.locked = true;
+    if (oldItem.hidden) newItem.hidden = true;
+    if (oldItem.suppressed) newItem.suppressed = true;
+    if (oldItem.opacity != null) newItem.opacity = oldItem.opacity;
+    if (oldItem.note) newItem.note = oldItem.note;
+    if (opts.keepName && oldItem.name) newItem.name = oldItem.name;
+    if (!newItem.color && oldItem.color) newItem.color = oldItem.color;
+    const undoLabel = T('asm.replaceUndo', { name: Model.label(newItem) });
+    const ok = App.change(undoLabel, (doc) => {
+      const idx = (doc.items || []).findIndex((x) => x.id === itemId);
+      if (idx < 0) return false;
+      doc.items[idx] = newItem;
+      if (typeof Joints !== 'undefined' && Joints.preparePartReplace) {
+        Joints.preparePartReplace(doc, itemId);
+      }
+    });
+    if (ok === false) return null;
+    App.select([itemId]);
+    await App.rebuild();
+    let jRes = { total: 0, kept: 0, dropped: 0, droppedIds: [] };
+    if (typeof Joints !== 'undefined' && Joints.finalizePartReplace) {
+      jRes = Joints.finalizePartReplace(itemId);
+      await App.rebuild();
+    }
+    const nm = Model.label(newItem);
+    let msg;
+    if (jRes.kept > 0 && jRes.dropped > 0) msg = T('asm.replaceToastMixed', { name: nm, kept: jRes.kept, dropped: jRes.dropped });
+    else if (jRes.kept === 1) msg = T('asm.replaceToastKeptOne', { name: nm });
+    else if (jRes.kept > 1) msg = T('asm.replaceToastKeptMany', { name: nm, kept: jRes.kept });
+    else if (jRes.dropped === 1) msg = T('asm.replaceToastDroppedOne', { name: nm });
+    else if (jRes.dropped > 1) msg = T('asm.replaceToastDroppedMany', { name: nm, dropped: jRes.dropped });
+    else msg = T('asm.replaceToast', { name: nm });
+    UI.toast(msg, { icon: jRes.dropped > 0 ? 'warn' : 'check', ms: 3800 });
+    if (newItem.kind === 'import' && typeof Start !== 'undefined' && Start.checkImport) {
+      Start.checkImport(itemId).catch(() => {});
+    }
+    return { item: Model.find(App.doc, itemId)?.item || newItem, joints: jRes };
+  }
+  async function replacePart(itemId, target, opts = {}) {
+    if (!itemId || !target || !App.doc) return null;
+    const f = Model.find(App.doc, itemId);
+    if (!f || !canReplace(f.item, App.doc)) {
+      UI.toast(T('asm.cannotReplace'), { kind: 'bad' });
+      return null;
+    }
+    if (typeof target === 'string') {
+      const docId = target;
+      if (docId === App.doc.id) {
+        UI.toast(T('asm.selfRefErr'), { kind: 'bad' });
+        return null;
+      }
+      let refDoc = resolveDoc(docId);
+      if (!refDoc && typeof Store !== 'undefined' && Store.loadProject) {
+        refDoc = await Store.loadProject(docId);
+      }
+      if (!refDoc) {
+        UI.toast(T('asm.partNotFound'), { kind: 'bad' });
+        return null;
+      }
+      await ensureRefs(refDoc);
+      if (refDoc.id === App.doc.id || docHasRef(refDoc, App.doc.id)) {
+        UI.toast(T('asm.cycleErr'), { kind: 'bad' });
+        return null;
+      }
+      await persistRefTree(refDoc);
+      const isSub = Model.isAssembly(refDoc);
+      const firstSolid = (refDoc.items || []).find((x) => x && x.role !== 'hole' && !x.hidden);
+      const refP = { docId: refDoc.id, docName: refDoc.name || (isSub ? T('doc.assembly') : T('asm.partDefault')), ...(isSub ? { docType: 'assembly' } : {}) };
+      const it = Model.newItem('ref', refP, {
+        name: opts.name || refDoc.name || (isSub ? T('doc.assembly') : T('asm.partDefault')),
+        color: opts.color || (firstSolid && firstSolid.color) || undefined,
+      });
+      return applyReplacement(itemId, it, opts);
+    }
+    const built = await buildItemFromBlob(target);
+    if (!built || !built.item) return null;
+    return applyReplacement(itemId, built.item, opts);
+  }
+  function replacePartWithFile(itemId, opts = {}) {
+    const inp = h('input', { type: 'file', accept: '.step,.stp,.json,application/json,.igs,.iges,.brep,.stl', style: { display: 'none' } });
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) replacePart(itemId, f, opts); };
+    document.body.append(inp);
+    inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+  }
+  function replacePartDialog(itemId) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !canReplace(f.item, App.doc)) {
+      UI.toast(T('asm.cannotReplace'), { kind: 'bad' });
+      return null;
+    }
+    const oldItem = f.item;
+    const currentDocId = oldItem.kind === 'ref' && oldItem.p ? oldItem.p.docId : null;
+    const parts = availableParts();
+    const wrap = h('div', { id: 'asm-replace-dialog', class: 'asm-insert-dlg' });
+    let modalRef = null;
+    wrap.append(h('p', { class: 'asm-insert-intro' }, T('asm.replaceIntro', { name: Model.label(oldItem) })));
+
+    const fileInput = h('input', { type: 'file', id: 'asm-replace-file-input', accept: '.step,.stp,.json,application/json,.igs,.iges,.brep,.stl', hidden: true });
+    const fileBtn = h('button', { type: 'button', class: 'btn', id: 'asm-replace-file-btn' });
+    fileBtn.innerHTML = icon('folder') + esc(T('asm.replaceFromFileBtn'));
+    fileBtn.onclick = () => fileInput.click();
+    fileInput.onchange = () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (modalRef) modalRef.close();
+      replacePart(itemId, file);
+    };
+    wrap.append(h('div', { class: 'asm-file-bar' }, fileBtn, fileInput, h('div', { class: 'hint-box' }, T('asm.replaceFileHint'))));
+
+    if (!parts.length) {
+      wrap.append(h('div', { class: 'hint-box' }, T('asm.replaceNoOtherParts')));
+    } else {
+      const list = h('div', { class: 'recent asm-part-list' });
+      for (const p of parts) {
+        const isSub = p.docType === 'assembly';
+        const isCurrent = p.id === currentDocId;
+        const row = h('div', { class: 'recent-row asm-part-row' + (isCurrent ? ' disabled' : ''), role: 'button', tabindex: isCurrent ? '-1' : '0', dataset: { docId: p.id, docType: p.docType || 'part' } });
+        const ic = h('span', { class: 'asm-part-ic', 'aria-hidden': 'true' }); ic.innerHTML = icon(isSub ? 'parts' : 'box3');
+        const meta = T(p.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: p.n, date: p.modified ? new Date(p.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : '' });
+        const info = h('div', { class: 'grow' }, h('b', null, p.name), h('span', null, meta));
+        row.append(ic, info);
+        if (isSub) row.append(h('span', { class: 'doc-type-badge asm' }, T('doc.assembly')));
+        if (p.open) row.append(h('span', { class: 'doc-type-badge open' }, T('asm.openTabBadge')));
+        if (isCurrent) row.append(h('span', { class: 'doc-type-badge' }, T('asm.replaceCurrentBadge')));
+        const repBtn = h('button', { type: 'button', class: 'btn primary small asm-replace-go', disabled: isCurrent }, T('asm.replaceGo'));
+        const pick = () => { if (isCurrent) return; if (modalRef) modalRef.close(); replacePart(itemId, p.id); };
+        repBtn.onclick = (e) => { e.stopPropagation(); pick(); };
+        if (!isCurrent) {
+          row.onclick = pick;
+          row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+        }
+        row.append(repBtn);
+        list.append(row);
+      }
+      wrap.append(list);
+    }
+    modalRef = UI.modal({
+      title: T('asm.replaceTitle'),
+      body: wrap,
+      wide: true,
+      actions: [{ label: T('common.cancel') }],
+    });
+    return modalRef;
+  }
   function insertPartDialog() {
     const parts = availableParts();
     const wrap = h('div', { id: 'asm-insert-dialog', class: 'asm-insert-dlg' });
     let modalRef = null;
+    const fileInput = h('input', { type: 'file', id: 'asm-insert-file-input', accept: '.step,.stp,.json,application/json,.igs,.iges,.brep,.stl', hidden: true });
+    const fileBtn = h('button', { type: 'button', class: 'btn', id: 'asm-insert-file-btn' });
+    fileBtn.innerHTML = icon('folder') + esc(T('asm.insertFromFile'));
+    fileBtn.onclick = () => fileInput.click();
+    fileInput.onchange = () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (modalRef) modalRef.close();
+      insertFromBlob(file);
+    };
+    const fileBar = h('div', { class: 'asm-file-bar' }, fileBtn, fileInput, h('div', { class: 'hint-box' }, T('asm.replaceFileHint')));
     if (!parts.length) {
+      wrap.append(fileBar);
       wrap.append(h('div', { class: 'hint-box' }, T('asm.noPartsHint')));
       const newBtn = h('button', { type: 'button', class: 'btn primary', id: 'asm-new-part-btn' });
       newBtn.innerHTML = icon('newfile') + esc(T('asm.createPartBtn'));
@@ -172,6 +501,7 @@ const Comp = (() => {
       wrap.append(h('div', { class: 'btn-row' }, newBtn));
     } else {
       wrap.append(h('p', { class: 'asm-insert-intro' }, T('asm.insertIntro')));
+      wrap.append(fileBar);
       const list = h('div', { class: 'recent asm-part-list' });
       for (const p of parts) {
         const isSub = p.docType === 'assembly';
@@ -256,6 +586,6 @@ const Comp = (() => {
     }
     App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30));
   }
-  return { init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts, insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef };
+  return { init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts, insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef, canReplace, insertFromBlob, insertFromFile, replacePart, replacePartWithFile, replacePartDialog };
 })();
 

@@ -1228,5 +1228,15 @@
     "tip": "Prüft alle Teile der Baugruppe paarweise auf Durchdringungen und listet jede Überschneidung",
     "hilfe": "Sucht in der ganzen Baugruppe nach Stellen, an denen zwei Teile ineinanderstecken. Jedes betroffene Paar erscheint in einer Liste mit seinem Überschneidungs-Volumen. Klickst du auf einen Eintrag, springt die Kamera direkt hin und hebt den gemeinsamen Überschneidungskörper rot hervor.",
     "tipp": "Teile, die sich nur exakt Fläche an Fläche berühren, werden nicht als Fehler gemeldet – nur echte Überschneidungen mit Volumen."
+  },
+  "replacePart": {
+    "tip": "Tauscht das gewählte Teil gegen ein anderes Bauteil oder eine STEP- bzw. Projektdatei aus",
+    "hilfe": "Rechtsklick auf ein Teil → „Teil ersetzen …“ tauscht es gegen ein gespeichertes Bauteil, eine Unterbaugruppe oder eine Datei (.step, .tracery.json) aus. Die Lage bleibt erhalten, und passende Verbindungen richten das neue Teil automatisch wieder an seinem Platz aus.",
+    "tipp": "Verbindungen auf Flächen oder Kanten, die es am neuen Teil nicht mehr gibt (z. B. Kugel statt Quader), werden sauber entfernt – mit Strg+Z machst du den ganzen Tausch rückgängig."
+  },
+  "insertFromFile": {
+    "tip": "Setzt eine STEP-Datei oder ein gespeichertes Tracery-Projekt als Teil ins offene Modell ein",
+    "hilfe": "Lädt eine CAD-Datei (.step, .iges, .brep, .stl) oder ein anderes Tracery-Projekt (.tracery.json) direkt in das laufende Projekt, ohne dein bisheriges Modell zu schließen. Eingefügte Tracery-Projekte bleiben als verknüpfte Bauteile bearbeitbar.",
+    "tipp": "Ideal, um Zukaufteile aus dem Netz (STEP) oder fertige eigene Bauteile direkt in deine Baugruppe einzusetzen."
   }
 }

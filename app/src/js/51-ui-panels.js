@@ -338,7 +338,10 @@ const Panels = (() => {
         const ib = h('button', { type: 'button', class: 'btn primary small', id: 'btn-asm-empty-insert', 'data-help': 'insertPart' });
         ib.innerHTML = icon('parts') + esc(T('asm.insertBtn'));
         ib.onclick = () => Comp.insertPartDialog();
-        emptyAsm.append(h('div', { class: 'btn-row', style: { marginTop: '10px', justifyContent: 'center' } }, ib));
+        const fb = h('button', { type: 'button', class: 'btn small', id: 'btn-asm-empty-insert-file', 'data-help': 'insertFromFile' });
+        fb.innerHTML = icon('folder') + esc(T('asm.insertFromFileShort'));
+        fb.onclick = () => Comp.insertFromFile();
+        emptyAsm.append(h('div', { class: 'btn-row', style: { marginTop: '10px', justifyContent: 'center' } }, ib, fb));
         body.append(emptyAsm);
       } else {
         body.append(h('div', { class: 'empty-tree', html: T('left.tree.emptyHtml') }));
@@ -485,6 +488,7 @@ const Panels = (() => {
         UI.menu(row, [
           ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'tm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
           ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), id: 'tm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
+          ...(typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc) ? [{ icon: 'replace', label: T('asm.replacePart'), id: 'tm-replace-part', help: 'replacePart', run: () => Comp.replacePartDialog(it.id) }] : []),
           ...(topIdx >= 0 ? [{ icon: it.locked ? 'unlock' : 'lock', label: it.locked ? T('asm.unground') : T('asm.ground'), id: 'tm-ground', help: 'groundPart', run: () => Actions.toggleGround([it.id]) }] : []),
           ...(refIssues.length ? [{ icon: 'warn', label: T('left.tree.refFixMenu'), id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
@@ -1039,7 +1043,10 @@ const Panels = (() => {
       const ib = h('button', { type: 'button', class: 'btn primary', id: 'proj-insert-part', 'data-help': 'insertPart' });
       ib.innerHTML = icon('parts') + esc(T('asm.insertBtn'));
       ib.onclick = () => Comp.insertPartDialog();
-      w.append(h('div', { class: 'btn-row' }, ib));
+      const fb = h('button', { type: 'button', class: 'btn', id: 'proj-insert-file', 'data-help': 'insertFromFile' });
+      fb.innerHTML = icon('folder') + esc(T('asm.insertFromFileShort'));
+      fb.onclick = () => Comp.insertFromFile();
+      w.append(h('div', { class: 'btn-row' }, ib, fb));
     }
     const unitF = UI.selectField({ id: 'proj-unit', label: T('panel.proj.unit'), value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
     unitF.dataset.help = 'projectUnit';
@@ -1469,6 +1476,12 @@ const Panels = (() => {
       ob.disabled = !refDoc;
       ob.onclick = () => Comp.openRef(it.id);
       br.append(ob);
+      if (typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc)) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'btn-ref-replace', 'data-help': 'replacePart' });
+        rb.innerHTML = icon('replace') + esc(T('asm.replacePartShort'));
+        rb.onclick = () => Comp.replacePartDialog(it.id);
+        br.append(rb);
+      }
       refSec.append(br, h('div', { class: 'hint-box' }, isSub ? T('asm.subAsmHint') : T('asm.refHint')));
       w.append(refSec);
     } else {
@@ -1969,7 +1982,10 @@ const Panels = (() => {
         const ub = h('button', { type: 'button', class: 'btn ghost', id: 'btn-unlink-part-ref' });
         ub.innerHTML = icon('ungroup') + esc(T('asm.unlink'));
         ub.onclick = () => Assembly.unlinkPart(it.id);
-        sec.append(h('div', { class: 'btn-row' }, ob, sb, ub));
+        const rb = h('button', { type: 'button', class: 'btn', id: 'btn-partref-replace', 'data-help': 'replacePart' });
+        rb.innerHTML = icon('replace') + esc(T('asm.replacePartShort'));
+        rb.onclick = () => Comp.replacePartDialog(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ob, sb, rb, ub));
         w.append(sec);
       } else {
         sec.append(h('div', { class: 'hint-box', html: T('panel.group.hint', { n: it.children.length }) }));
@@ -2392,6 +2408,8 @@ const Panels = (() => {
       const isSubAsm = Model.isSubAssemblyRef(it);
       bar.append(h('span', { class: 'lbl' }, isSubAsm ? T('asm.subAsmShort') : T('kind.ref')));
       b('edit', isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), () => Comp.openRef(it.id), 'accent', isSubAsm ? T('asm.openSubAsmTip') : T('asm.openPartTip')).dataset.help = isSubAsm ? 'subAssembly' : 'assemblyDoc';
+      const rp = b('replace', T('asm.replacePartShort'), () => Comp.replacePartDialog(it.id), '', T('asm.replacePartTip'), true);
+      rp.id = 'ctx-replace-part'; rp.dataset.help = 'replacePart';
       const gb = b(it.locked ? 'unlock' : 'lock', it.locked ? T('asm.unground') : T('asm.ground'), () => Actions.toggleGround([it.id]), it.locked ? 'accent' : '', it.locked ? T('asm.ungroundTip') : T('asm.groundTip'), true);
       gb.id = 'ctx-ground'; gb.dataset.help = 'groundPart';
       b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);

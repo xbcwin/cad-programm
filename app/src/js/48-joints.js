@@ -1489,6 +1489,182 @@ const Joints = (() => {
     } finally { relinking = false; }
   }
 
+  function preparePartReplace(doc, itemId) {
+    if (!doc || !itemId || !Array.isArray(doc.joints)) return 0;
+    let touched = 0;
+    const clearRef = (ref) => {
+      if (!ref || typeof ref !== 'object') return;
+      ref.tid = null;
+      delete ref.dock;
+    };
+    for (const j of doc.joints) {
+      if (!j) continue;
+      if (j.a === itemId) {
+        clearRef(j.refA); clearRef(j.refA1); clearRef(j.refA2);
+        touched++;
+      }
+      if (j.b === itemId) {
+        clearRef(j.refB); clearRef(j.refB1); clearRef(j.refB2);
+        touched++;
+      }
+    }
+    return touched;
+  }
+
+  function finalizePartReplace(itemId) {
+    if (!App.doc || !itemId) return { total: 0, kept: 0, dropped: 0, droppedIds: [] };
+    const touching = list().filter((j) => j.a === itemId || j.b === itemId);
+    const total = touching.length;
+    if (!total) return { total: 0, kept: 0, dropped: 0, droppedIds: [] };
+    const res = App.results.get(itemId);
+    const data = res && res.data;
+    if (!data) return { total, kept: total, dropped: 0, droppedIds: [] };
+    const bbox = data.bbox;
+    const dropIds = new Set();
+    const refUpdates = [];
+    const centerDowngrades = new Set();
+
+    const makeFaceRefObj = (prev, m) => {
+      const nVec = new THREE.Vector3(...m.n).normalize();
+      let xVec = prev && prev.x ? new THREE.Vector3(...prev.x) : canonicalX(m.n);
+      xVec.addScaledVector(nVec, -xVec.dot(nVec));
+      if (xVec.lengthSq() < 1e-9) xVec = canonicalX(m.n);
+      xVec.normalize();
+      return { ...(prev || {}), kind: 'face', c: m.c, n: m.n, x: r9(xVec.toArray()), tid: m.tid, idx: m.idx, frac: m.frac };
+    };
+    const sameFace = (prev, m) => prev && prev.c && prev.n
+      && Math.hypot(m.c[0] - prev.c[0], m.c[1] - prev.c[1], m.c[2] - prev.c[2]) <= 1e-4
+      && Math.hypot(m.n[0] - prev.n[0], m.n[1] - prev.n[1], m.n[2] - prev.n[2]) <= 1e-4
+      && (m.tid || null) === (prev.tid || null);
+    const sameEdge = (prev, m) => prev && prev.c && prev.d
+      && Math.hypot(m.c[0] - prev.c[0], m.c[1] - prev.c[1], m.c[2] - prev.c[2]) <= 1e-4
+      && Math.hypot(m.d[0] - prev.d[0], m.d[1] - prev.d[1], m.d[2] - prev.d[2]) <= 1e-4
+      && (m.tid || null) === (prev.tid || null);
+    const sameCyl = (prev, m) => prev && prev.o && prev.d
+      && Math.hypot(m.o[0] - prev.o[0], m.o[1] - prev.o[1], m.o[2] - prev.o[2]) <= 1e-4
+      && Math.hypot(m.d[0] - prev.d[0], m.d[1] - prev.d[1], m.d[2] - prev.d[2]) <= 1e-4
+      && Math.abs((m.r || 0) - (prev.r || 0)) <= 1e-4
+      && (m.tid || null) === (prev.tid || null);
+
+    const checkSideRef = (j, side) => {
+      const ref = j[side];
+      if (!ref) return false;
+      if (fixed(j)) {
+        if (j.mode === 'face') {
+          const m = matchFaceRef(itemId, ref);
+          if (!m) return false;
+          if (!sameFace(ref, m)) refUpdates.push({ jid: j.id, side, val: makeFaceRefObj(ref, m) });
+          return true;
+        }
+        if (j.mode === 'point') {
+          if (ref.frac && bbox) {
+            const nc = r6([
+              bbox[0] + ref.frac[0] * (bbox[3] - bbox[0]),
+              bbox[1] + ref.frac[1] * (bbox[4] - bbox[1]),
+              bbox[2] + ref.frac[2] * (bbox[5] - bbox[2]),
+            ]);
+            if (!ref.c || Math.hypot(nc[0] - ref.c[0], nc[1] - ref.c[1], nc[2] - ref.c[2]) > 1e-4) {
+              refUpdates.push({ jid: j.id, side, val: { ...ref, c: nc, tid: null } });
+            }
+          }
+          return true;
+        }
+        return true;
+      }
+      if (isAngle(j)) {
+        if (ref.kind === 'face') {
+          const m = matchFaceRef(itemId, ref);
+          if (!m) return false;
+          if (!sameFace(ref, m)) refUpdates.push({ jid: j.id, side, val: makeFaceRefObj(ref, m) });
+          return true;
+        }
+        if (ref.kind === 'edge') {
+          const m = matchEdgeRef(itemId, ref);
+          if (!m) return false;
+          if (!sameEdge(ref, m)) refUpdates.push({ jid: j.id, side, val: { ...ref, c: m.c, d: m.d, tid: m.tid, idx: m.idx, frac: m.frac } });
+          return true;
+        }
+        return true;
+      }
+      if (isLoose(j)) {
+        if (ref.kind === 'face') {
+          const m = matchFaceRef(itemId, ref);
+          if (!m) return false;
+          if (!sameFace(ref, m)) refUpdates.push({ jid: j.id, side, val: makeFaceRefObj(ref, m) });
+          return true;
+        }
+        if (ref.kind === 'cyl') {
+          const m = matchCylRef(itemId, ref);
+          if (!m) return false;
+          if (!sameCyl(ref, m)) refUpdates.push({ jid: j.id, side, val: { ...ref, o: m.o, d: m.d, r: m.r, c: m.c, tid: m.tid, idx: m.idx, frac: m.frac } });
+          return true;
+        }
+        return true;
+      }
+      return true;
+    };
+
+    for (const j of touching) {
+      if (isCenter(j)) {
+        if (j.a === itemId) {
+          const m1 = j.refA1 ? matchFaceRef(itemId, j.refA1) : null;
+          const m2 = j.refA2 ? matchFaceRef(itemId, j.refA2) : null;
+          if (!m1 || !m2) { dropIds.add(j.id); continue; }
+          if (!sameFace(j.refA1, m1)) refUpdates.push({ jid: j.id, side: 'refA1', val: makeFaceRefObj(j.refA1, m1) });
+          if (!sameFace(j.refA2, m2)) refUpdates.push({ jid: j.id, side: 'refA2', val: makeFaceRefObj(j.refA2, m2) });
+        }
+        if (j.b === itemId && j.bMode === 'faces') {
+          const m1 = j.refB1 ? matchFaceRef(itemId, j.refB1) : null;
+          const m2 = j.refB2 ? matchFaceRef(itemId, j.refB2) : null;
+          if (!m1 || !m2) {
+            centerDowngrades.add(j.id);
+          } else {
+            if (!sameFace(j.refB1, m1)) refUpdates.push({ jid: j.id, side: 'refB1', val: makeFaceRefObj(j.refB1, m1) });
+            if (!sameFace(j.refB2, m2)) refUpdates.push({ jid: j.id, side: 'refB2', val: makeFaceRefObj(j.refB2, m2) });
+          }
+        }
+        continue;
+      }
+      if (j.a === itemId && j.refA && !checkSideRef(j, 'refA')) { dropIds.add(j.id); continue; }
+      if (j.b === itemId && j.refB && !checkSideRef(j, 'refB')) { dropIds.add(j.id); continue; }
+    }
+
+    relinking = true;
+    try {
+      App.change('Verbindungen angepasst', (doc) => {
+        let ch = false;
+        for (const u of refUpdates) {
+          if (dropIds.has(u.jid)) continue;
+          const j = list(doc).find((x) => x.id === u.jid);
+          if (!j) continue;
+          j[u.side] = u.val;
+          ch = true;
+        }
+        for (const jid of centerDowngrades) {
+          if (dropIds.has(jid)) continue;
+          const j = list(doc).find((x) => x.id === jid);
+          if (!j) continue;
+          j.bMode = 'whole';
+          delete j.refB1;
+          delete j.refB2;
+          ch = true;
+        }
+        if (dropIds.size && Array.isArray(doc.joints)) {
+          const beforeLen = doc.joints.length;
+          doc.joints = doc.joints.filter((x) => x && !dropIds.has(x.id));
+          if (doc.joints.length !== beforeLen) ch = true;
+        }
+        const synced = syncAll(doc);
+        if (!ch && !synced) return false;
+      }, { amend: true });
+    } finally {
+      relinking = false;
+    }
+
+    const droppedIds = [...dropIds];
+    return { total, kept: total - droppedIds.length, dropped: droppedIds.length, droppedIds };
+  }
+
   function addFixed(aSpec, bSpec, opts = {}) {
     if (!aSpec || !bSpec) return { ok: false, msg: 'Bitte zwei verschiedene Teile wählen.' };
     const A = top(aSpec.id), B = top(bSpec.id);
@@ -4440,6 +4616,8 @@ const Joints = (() => {
     flipFixed,
     syncFixed,
     syncAll,
+    preparePartReplace,
+    finalizePartReplace,
     addAngle,
     updateAngle,
     flipAngle,
