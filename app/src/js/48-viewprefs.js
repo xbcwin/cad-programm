@@ -2,21 +2,45 @@
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
   let v = { ...DEF };
   let firstStart = !storageGet(KEY) && !storageGet('masswerk.last') && !storageGet('masswerk.index');
-  try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
+  try {
+    const raw = storageGet(KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.decimals === 0 && !('angleDecimals' in parsed)) parsed.decimals = 2;
+      v = { ...DEF, ...parsed };
+    }
+  } catch (_) {}
+  v.decimals = normDec(v.decimals, DEF.decimals);
+  v.angleDecimals = normDec(v.angleDecimals, DEF.angleDecimals);
   const ev = makeEmitter();
   function applyTheme() {
     const r = document.documentElement;
     if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
   }
   const simple = () => v.level === 'simple';
-  function apply() { document.body.classList.toggle('simple', simple()); Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); Viewer.setAdaptive(v.adaptive !== false); Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' }); applyTheme(); FMT.min = +v.decimals || 0; Viewer.setMouseStyle(v.mouse || 'tracery'); ev.emit('change', v); }
+  function apply() {
+    document.body.classList.toggle('simple', simple());
+    Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes });
+    Viewer.setOrtho(v.ortho);
+    Viewer.setAdaptive(v.adaptive !== false);
+    Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' });
+    applyTheme();
+    FMT.dec = normDec(v.decimals, DEF.decimals);
+    FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
+    Viewer.setMouseStyle(v.mouse || 'tracery');
+    ev.emit('change', v);
+  }
   function set(patch, msg) {
-    const oldQ = v.quality, oldDec = v.decimals, oldL = v.level;
-    if ('level' in patch) firstStart = false;
-    Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply();
+    const oldQ = v.quality, oldDec = v.decimals, oldAng = v.angleDecimals, oldL = v.level;
+    const next = { ...patch };
+    if ('decimals' in next) next.decimals = normDec(next.decimals, DEF.decimals);
+    if ('angleDecimals' in next) next.angleDecimals = normDec(next.angleDecimals, DEF.angleDecimals);
+    if ('level' in next) firstStart = false;
+    Object.assign(v, next); storageSet(KEY, JSON.stringify(v)); apply();
     syncLevel();
     if (v.level !== oldL) {
       // Oberfläche gewechselt: Werkzeuge, Leisten und Kontextleiste neu aufbauen
@@ -25,7 +49,13 @@ const ViewPrefs = (() => {
       if (typeof Commands !== 'undefined' && Commands.syncCmdKbds) Commands.syncCmdKbds();
     }
     if (v.quality !== oldQ) App.requalify();
-    if (v.decimals !== oldDec) { App.emit('doc'); Panels.renderRight(); }
+    if (v.decimals !== oldDec || v.angleDecimals !== oldAng) {
+      App.emit('doc');
+      Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx();
+      if (typeof Print !== 'undefined' && Print.updateAmpel) Print.updateAmpel();
+      if (typeof Sketch !== 'undefined' && Sketch.active && Sketch.render) Sketch.render();
+      if (typeof Measure !== 'undefined' && Measure.refreshDisplay) Measure.refreshDisplay();
+    }
     if (msg) UI.toast(msg, { icon: 'check', ms: 1600 });
   }
   function toggle(k) {
@@ -99,11 +129,34 @@ const ViewPrefs = (() => {
       levelCards({ idPrefix: 'set-level', active: v.level, onPick: () => syncTabs(curTab) }),
       h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, 'Einfach blendet Messen, Notizen, Ansicht, Zeichnung und Profi-Werkzeuge aus. Über „Mehr“ kommst du trotzdem hin.'),
     );
+    const decOpts = () => [0, 1, 2, 3, 4].map((d) => [String(d), `${d} ${d === 1 ? 'Stelle' : 'Stellen'} (${fmtFixed(12.3456, d)} ${Units.label()})`]);
+    const angOpts = [0, 1, 2, 3, 4].map((d) => [String(d), `${d} ${d === 1 ? 'Stelle' : 'Stellen'} (${fmtFixed(45.1234, d)}°)`]);
+    const decFields = h('div', { class: 'fields', 'data-help': 'precision' },
+      sel('set-dec', 'Nachkommastellen (Anzeige)', v.decimals, decOpts(), (x) => set({ decimals: +x })),
+      sel('set-angle-dec', 'Nachkommastellen (Winkel)', v.angleDecimals, angOpts, (x) => set({ angleDecimals: +x })),
+    );
+    const decBlock = h('div', { 'data-help': 'precision' },
+      decFields,
+      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, 'Gilt für Schilder, Maße, Messungen und Panels. Gespeicherte Werte und die Rechengenauigkeit bleiben immer exakt.'),
+    );
+    const unitSel = sel('set-proj-unit', 'Einheit in diesem Projekt', Units.key(), Units.OPTIONS, (x) => {
+      Units.set(x);
+      const sd = decFields.querySelector('#set-dec');
+      if (sd) {
+        const cur = sd.value;
+        sd.innerHTML = '';
+        for (const [ov, ol] of decOpts()) {
+          const op = h('option', { value: ov }, ol);
+          if (String(ov) === String(cur)) op.selected = true;
+          sd.append(op);
+        }
+      }
+    }, 'Gilt für alle Anzeigen, Maße und Eingaben ohne eigene Einheit in diesem Projekt.');
     paneGen.append(
       lvlField,
-      sel('set-proj-unit', 'Einheit in diesem Projekt', Units.key(), Units.OPTIONS, (x) => Units.set(x), 'Gilt für alle Anzeigen, Maße und Eingaben ohne eigene Einheit in diesem Projekt.'),
+      unitSel,
       sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
-      sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', `3 Stellen (0,001 ${Units.label()})`], ['4', `4 Stellen (0,0001 ${Units.label()})`]], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
+      decBlock,
       sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
       sel('set-mouse', 'Maus-Steuerung', v.mouse || 'tracery', [['tracery', 'Tracery – links drehen, rechts verschieben, Rad zoomt'], ['onshape', 'Wie Onshape – rechts drehen, Mitte verschieben'], ['solidworks', 'Wie SolidWorks – Mitte drehen, rechts verschieben'], ['fusion', 'Wie Fusion – Mitte verschieben, Umschalt + Mitte drehen'], ['blender', 'Wie Blender – Mitte drehen, Umschalt + Mitte verschieben']], (x) => set({ mouse: x }), 'Bei allen außer Tracery zieht die linke Maustaste im Leeren einen Auswahl-Rahmen auf. Das Mausrad zoomt immer.'),
       chk('adaptive', 'Darstellung automatisch anpassen', 'Teile, die du von nah ansiehst, werden feiner dargestellt. Beim Drehen eines großen Modells wird kurz gröber gezeichnet, damit es flüssig bleibt.'),

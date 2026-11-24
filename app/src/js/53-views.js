@@ -828,7 +828,7 @@ const Views = (() => {
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenU(a, 1)));
+    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenFixedU(a, 1)));
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
     bars().append(bar); o.bar = bar;
@@ -913,17 +913,17 @@ const Views = (() => {
     const r = topSpeed(g.n * t, m.mass, o.cw, (deg) => Viewer.silhouette(windIds(o.props), windDir(deg)).area, g.tilt || 0);
     o.top = r;
     if (!r) { el.textContent = 'Zu wenig Schub zum Schweben – keine Höchstgeschwindigkeit.'; return; }
-    el.innerHTML = `Höchstens etwa <b>${fmt(r.kmh, 0)} km/h</b> bei ${fmt(r.deg, 0)}° Neigung` + (g.tilt ? ` (Rumpf ${fmt(r.body, 0)}°, Motoren ${fmt(g.tilt, 0)}° geneigt)` : '') + ` – geschätzt aus Schub (${g.n} × ${fmt(t, 0)} g), Gewicht (${Mass.gText(m.mass)}) und Stirnfläche. Propeller verlieren bei hohem Tempo Schub, echt also eher weniger.`;
+    el.innerHTML = `Höchstens etwa <b>${fmtFixed(r.kmh, 0)} km/h</b> bei ${fmtFixed(r.deg, 0)}° Neigung` + (g.tilt ? ` (Rumpf ${fmtFixed(r.body, 0)}°, Motoren ${fmtFixed(g.tilt, 0)}° geneigt)` : '') + ` – geschätzt aus Schub (${g.n} × ${fmtFixed(t, 0)} g), Gewicht (${Mass.gText(m.mass)}) und Stirnfläche. Propeller verlieren bei hohem Tempo Schub, echt also eher weniger.`;
   }
   function drawWind(moveCam) {
     const o = st.wind; if (!o) return;
     const r = Viewer.silhouette(windIds(o.props), windDir(o.angle)); o.area = r.area;
     const t = o.bar.querySelector('#wind-area');
-    if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmt(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
+    if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmtFixed(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
     const dEl = o.bar.querySelector('#wind-drag');
     if (dEl) {
       const D = dragN(r.area, o.cw, o.v); o.drag = D;
-      dEl.innerHTML = r.area > 0 && o.v > 0 ? `Bei ${fmt(o.v, 0)} km/h: Luftwiderstand etwa <b>${fmt(D, D < 10 ? 1 : 0)} N</b> – so viel wie ${fmt((D / 9.80665) * 1000, 0)} g Schub; dafür braucht es etwa ${fmt((D * o.v) / 3.6, 0)} W.` : '';
+      dEl.innerHTML = r.area > 0 && o.v > 0 ? `Bei ${fmtFixed(o.v, 0)} km/h: Luftwiderstand etwa <b>${fmtFixed(D, D < 10 ? 1 : 0)} N</b> – so viel wie ${fmtFixed((D / 9.80665) * 1000, 0)} g Schub; dafür braucht es etwa ${fmtFixed((D * o.v) / 3.6, 0)} W.` : '';
     }
     if (moveCam && r.c) Viewer.lookAtPlane(r.c, windDir(o.angle).map((v) => -v), [1, 0, 0], r.R * 1.15);
     Viewer.requestRender();

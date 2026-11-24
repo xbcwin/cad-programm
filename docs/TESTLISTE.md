@@ -1840,6 +1840,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zurücksetzen & Hilfe**: „Zurücksetzen“ stellt die Ausgangs-Leiste samt Reihenfolge ohne Favoriten und ohne gespeicherte Anpassung wieder her; Hilfetext `toolbarCustomize` liegt in `werkzeug-hilfen.json`.
 - [ ] **Von Hand**: Werkzeugleiste in beiden Stufen („Einfach“ und „Profi“), bei schmalem Fenster sowie mit Suchfilter im Anpassen-Dialog testen und alle hinzugefügten Werkzeuge einmal anklicken.
 
+## Genauigkeit und Nachkommastellen (Auto [A-050], BE-11)
+
+- [x] **Anzeige 0–4 überall gleich**: Nachkommastellen 3 zeigt `12,3456` als `12,346`, 0 als `12` – in `#p-w`, `.dimlabel`, Ampel, Verlauf, Hüllmaßen und Kontextleiste; gespeichertes Maß und CAD-Volumen bleiben exakt.
+- [x] **Winkel getrennt einstellbar**: `#set-angle-dec` (0–4) steuert Drehung, Winkel-Maße und Drehkörper getrennt von Längen (`#set-dec`), gespeicherte Winkel bleiben exakt.
+- [x] **Skizze, Maße & Messungen**: Maße-Panel, `.skdim`, Eigenschaftsfelder, `#dim-table` und dauerhafte Messungen (`.mpin`, `#measure-tree`) übernehmen Änderungen sofort ohne Verlust der Genauigkeit.
+- [x] **Eingabe, Persistenz & Hilfe**: Exakte Eingaben bei 0 Stellen bleiben exakt gespeichert; Einstellungen bleiben nach Neuladen erhalten; Befehl `settings-precision` und Hilfetext `precision` sind vorhanden.
+- [ ] **Von Hand**: In den Einstellungen zwischen 0 und 4 Stellen für Anzeige und Winkel wechseln und prüfen, ob beim Messen und Zeichnen in Zoll und Millimeter alle Schilder ruhig und übersichtlich wirken.
+
 ## Volltest-Reparatur (Auto [F-11240651])
 
 - [x] **Übergang-Vorschau im Auswahl-Werkzeug**: `Sketch.onMove` löst `loftPreview()` auch bei `S.tool === 'select'` aus (`loftpath`, `loftrail`, `loftrail2`), ohne das `render()`-Aussetzen für normale Auswahl-Mausbewegungen aufzugeben; die Vorschau biegt und wölbt sich sofort.
@@ -1854,6 +1862,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rechenzustand (`#status-calc`)**: Wechselt zwischen „Bereit“ (`ready`), „Rechnet …“ (`busy`) und Fehleranzahl („1 Fehler“, `error`) samt Rückkehr nach `App.undo()`.
 - [x] **Layout & Hilfetexte**: `#coords`, `#status-sel`, `#status-unit`, `#status-calc` und `#ampel` liegen sauber nebeneinander im Bildbereich; `statusSel`, `statusUnit` und `statusCalc` sind in `werkzeug-hilfen.json` und `HELP` vorhanden.
 - [ ] **Von Hand**: Im Browser bei engem Fenster (< 1100 px), im Skizzen-Modus (Linien, Rechtecke, Mehrfach-Auswahl) und bei langen Neuberechnungen prüfen, dass sich die Felder in der Statusleiste nicht überdecken oder abschneiden.
+
+## Vorlagen für neue Projekte (Auto [A-053], BE-18)
+
+- [x] **Vorlagen-Auswahl bei „Neues Projekt“**: Startseite („Neues Projekt“), Projektmenü (`#pm-new-project`) und Befehlssuche öffnen `#new-proj-dialog` mit allen fünf Vorlagen (`empty-mm`, `empty-in`, `print3d`, `laser`, `enclosure`).
+- [x] **3D-Druck, Zoll, Laser & Gehäuse**: „3D-Druck“ aktiviert `doc.settings.printBed` (`220 × 220 × 250 mm`, Düse `0,4 mm`, Material `PLA`), zeigt den Bauraum-Rahmen im Viewer (`Viewer.groups.printBed`) und die Druckbett-Felder im Projekt-Panel; „Leer (Zoll)“ setzt Einheit `in`; „Laser (Platte 3 mm)“ erzeugt eine 3-mm-Platte; „Gehäuse“ legt Gehäuse und Deckel fehlerfrei an.
+- [x] **Eigene Vorlage speichern & wieder öffnen**: „Als Vorlage speichern …“ (`#pm-save-template`) sichert das aktuelle Projekt lokal unter `tracery-vorlagen`; nach Neuladen der Seite steht die Vorlage weiterhin im Dialog und auf der Startseite und öffnet sich als neues Projekt mit neuer ID, Maßen und Druckbett-Einstellung.
+- [x] **Löschen & Hilfetexte**: Eigene Vorlagen lassen sich über das Papierkorb-Symbol (`.tpl-del`) mit Bestätigung wieder entfernen; `projectTemplates`, `saveTemplate` und `printBed` liegen in `werkzeug-hilfen.json` und `HELP`.
+- [ ] **Von Hand**: Im Browser alle fünf eingebauten Vorlagen einmal durchklicken und prüfen, ob der 3D-Druckbett-Rahmen im hellen und dunklen Design gut sichtbar ist, ohne beim Klicken auf Modelle zu stören.
 
 ## Wiederherstellen nach Absturz (Auto [A-051], BE-15)
 

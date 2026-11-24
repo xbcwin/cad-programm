@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1333,7 +1333,7 @@ def t_masse_teil(p):
     ok2 = p.pg.locator('#p-mass').text_content() == '9,92 g' and p.ev("return App.doc.items[1].mat") == 'PLA'
     p.ev("App.clearSelection()"); p.wait(1500)
     sec = p.pg.locator('.section').filter(has_text='Schwerpunkt').inner_text()
-    ok3 = '22,3 g' in sec and '-2,2 · 0 · 10' in sec and 'eigenes Material' in sec
+    ok3 = '22,3 g' in sec and '-2,22 · 0 · 10' in sec and 'eigenes Material' in sec
     p.pg.locator('#proj-cog').check(); p.wait(1500)
     pos = p.ev("return Mass.markerPos")
     ok4 = p.ev("return Mass.markerShown") and pos and abs(pos[0] + 2.222) < 0.01 and abs(pos[2] - 10) < 0.01
@@ -10933,6 +10933,125 @@ def t_a052_statusleiste(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-053] Vorlagen für neue Projekte (BE-18) ----------
+def t_a053_projekt_vorlagen(p):
+    # 1. Startseite -> "Neues Projekt" öffnet den Vorlagen-Dialog mit allen 5 Vorlagen
+    p.pg.locator('#start-new-btn').click(); p.wait(300)
+    dlg = p.pg.locator('#new-proj-dialog')
+    ids = [dlg.locator(f'.tpl-card[data-tpl-id="{k}"]').count() for k in ('empty-mm', 'empty-in', 'print3d', 'laser', 'enclosure')]
+    ok1 = dlg.count() == 1 and all(c == 1 for c in ids)
+
+    # 2. Vorlage "3D-Druck" -> Druckbett & 0,4-mm-Düse sind gesetzt, Rahmen im 3D-Bild & Projekt-Panel
+    dlg.locator('.tpl-card[data-tpl-id="print3d"]').click(); p.wait(600)
+    warte_rechnen(p, 30)
+    pb3d = p.ev("return { bed: App.doc.settings.printBed, mat: App.doc.settings.material, unit: Units.key(), visCount: Viewer.groups.printBed.children.length }")
+    panel_on = p.pg.locator('#proj-bed-on').is_checked()
+    panel_noz = p.pg.locator('#proj-bed-nozzle').input_value().replace(',', '.')
+    ok2 = (
+        pb3d['bed']['enabled'] is True
+        and pb3d['bed']['x'] == 220 and pb3d['bed']['y'] == 220 and pb3d['bed']['z'] == 250
+        and abs(pb3d['bed']['nozzle'] - 0.4) < 1e-6
+        and pb3d['mat'] == 'PLA'
+        and pb3d['unit'] == 'mm'
+        and pb3d['visCount'] >= 3
+        and panel_on
+        and panel_noz.startswith('0.4')
+    )
+
+    # 3. Projektmenü -> "Leer (Zoll)", "Laser (Platte 3 mm)" und "Gehäuse"
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="empty-in"]').click(); p.wait(500)
+    in_st = p.ev("return { unit: Units.key(), bedOn: !!(App.doc.settings.printBed && App.doc.settings.printBed.enabled), visCount: Viewer.groups.printBed.children.length }")
+
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="laser"]').click(); p.wait(600)
+    warte_rechnen(p, 40)
+    las_st = p.ev("""const b = Actions.worldBox(App.doc.items[0].id);
+      return { n: App.doc.items.length, errs: App.errors.length, mat: App.doc.settings.material, dz: b ? Math.round((b.max.z - b.min.z)*100)/100 : 0 };""")
+
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="enclosure"]').click(); p.wait(800)
+    warte_rechnen(p, 40)
+    enc_st = p.ev("return { n: App.doc.items.length, names: App.doc.items.map(x=>x.name), errs: App.errors.length }")
+    ok3 = (
+        in_st['unit'] == 'in' and not in_st['bedOn'] and in_st['visCount'] == 0
+        and las_st['n'] == 1 and las_st['errs'] == 0 and las_st['mat'] == 'Pappel-Sperrholz' and abs(las_st['dz'] - 3) < 0.05
+        and enc_st['n'] == 2 and enc_st['errs'] == 0 and enc_st['names'] == ['Gehäuse', 'Deckel']
+    )
+
+    # 4. Eigene Vorlage speichern -> bleibt nach Neuladen in der Liste und öffnet sich wieder
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    p.pg.locator('#new-proj-dialog .tpl-card[data-tpl-id="print3d"]').click(); p.wait(500)
+    p.ev("""App.change('Vorlagenbau', d => {
+      d.params.push({ id: 'm_cust', name: 'MeinMass', expr: 42 });
+      d.items.push(Model.newItem('box', { w: 'MeinMass', d: 24, h: 12 }, { name: 'Halter' }));
+      d.settings.printBed = { enabled: true, x: 256, y: 256, z: 256, nozzle: 0.6 };
+    });""")
+    warte_rechnen(p, 30)
+    old_id = p.ev("return App.doc.id")
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-save-template').click(); p.wait(300)
+    p.pg.fill('#tpl-save-name', 'Bambu Halter')
+    p.pg.fill('#tpl-save-desc', 'Druckbett 256 mm mit 0,6-mm-Düse')
+    p.pg.locator('#tpl-save-ok').click(); p.wait(400)
+    saved_ok = p.ev("return Templates.customList().some(x => x.name === 'Bambu Halter')")
+
+    # Nach Neuladen steht sie noch in der Liste und öffnet sich als neues Projekt mit allen Daten
+    p.pg.reload()
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.Templates && window.__M.Start && window.__M.Log && window.__M.Log.startup.uiReadyMs !== null)", timeout=30000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=15000)
+    except Exception:
+        pass
+    p.wait(600)
+    p.ev("Start.newProject(true)")
+    p.wait(600)
+    p.pg.locator('#btn-project').click(); p.wait(250)
+    p.pg.locator('#pm-new-project').click(); p.wait(300)
+    cust_card = p.pg.locator('#tpl-custom-grid .tpl-card.custom', has_text='Bambu Halter')
+    in_list = cust_card.count() == 1
+    cust_card.first.click(); p.wait(700)
+    warte_rechnen(p, 40)
+    reopened = p.ev("""const b = App.doc.items[0] ? Actions.worldBox(App.doc.items[0].id) : null;
+      return {
+        id: App.doc.id,
+        name: App.doc.name,
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        hasParam: App.doc.params.some(x => x.name === 'MeinMass' && Number(x.expr) === 42),
+        bed: App.doc.settings.printBed,
+        dx: b ? Math.round((b.max.x - b.min.x)*100)/100 : 0,
+      };""")
+    ok4 = (
+        saved_ok and in_list
+        and reopened['id'] != old_id
+        and reopened['name'] == 'Bambu Halter'
+        and reopened['n'] == 1 and reopened['errs'] == 0
+        and reopened['hasParam']
+        and reopened['bed']['enabled'] is True and reopened['bed']['x'] == 256 and abs(reopened['bed']['nozzle'] - 0.6) < 1e-6
+        and abs(reopened['dx'] - 42) < 0.05
+    )
+
+    # 5. Auf Startseite gelistet, löschbar, Hilfetexte vorhanden
+    p.ev("Start.show()"); p.wait(300)
+    on_start = p.pg.locator('#start-custom-tpls .tpl-card.custom', has_text='Bambu Halter')
+    start_has = on_start.count() == 1
+    on_start.locator('.tpl-del').click(); p.wait(250)
+    p.pg.locator('.modal .btn.danger').click(); p.wait(300)
+    after_del = (
+        p.pg.locator('#start-custom-tpls .tpl-card.custom', has_text='Bambu Halter').count() == 0
+        and p.ev("return Templates.customList().length") == 0
+    )
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('projectTemplates', 'saveTemplate', 'printBed'))
+    ok5 = start_has and after_del and help_ok
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a051_absturz_wiederherstellen(p):
     import re
     p.empty()
@@ -11264,6 +11383,201 @@ def t_a054_schneller_start(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a050_genauigkeit(p):
+    def open_settings():
+        p.pg.click('#btn-menu'); p.wait(250)
+        p.pg.get_by_text('Einstellungen', exact=True).click(); p.wait(300)
+
+    def close_settings():
+        p.pg.locator('.modal .btn.primary').click(); p.wait(200)
+
+    try:
+        # 1. Nachkommastellen 3 vs. 0: Schilder, Maße, Ampel, Verlauf, Hüllmaße & Kontextleiste gleich; gespeichertes Maß & Volumen exakt
+        p.empty()
+        p.ev("Actions.addPrimitive('box', { p: { w: 12.3456, d: 20, h: 10 } })"); warte_rechnen(p)
+        p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+
+        open_settings()
+        dec_opts = p.pg.evaluate("[...document.querySelectorAll('#set-dec option')].map(o=>o.value)")
+        ang_opts = p.pg.evaluate("[...document.querySelectorAll('#set-angle-dec option')].map(o=>o.value)")
+        p.pg.select_option('#set-dec', '3'); p.wait(250)
+        close_settings()
+        p.wait(600)
+
+        pw_3 = p.pg.locator('#p-w').input_value()
+        lbls_3 = [el.text_content().strip() for el in p.pg.locator('.dimlabel').all()]
+        ampel_3 = p.pg.locator('#ampel .t').text_content() or ''
+        tree_3 = p.pg.locator('#left-body .node .sub').first.text_content() or ''
+        p.pg.wait_for_selector('#p-bbox', timeout=10000)
+        bbox_3 = p.pg.locator('#p-bbox').text_content() or ''
+        p.ev("const id=App.doc.items[0].id, r=App.results.get(id); const i=r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.l-12.3456)<1e-3); App.select([id],{edges:[{id,edgeIdx:i}]})"); p.wait(300)
+        sel_3 = p.pg.locator('#sel-val').text_content() if p.pg.locator('#sel-val').count() else ''
+        p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+
+        open_settings()
+        p.pg.select_option('#set-dec', '0'); p.wait(250)
+        close_settings()
+        p.wait(600)
+
+        pw_0 = p.pg.locator('#p-w').input_value()
+        lbls_0 = [el.text_content().strip() for el in p.pg.locator('.dimlabel').all()]
+        ampel_0 = p.pg.locator('#ampel .t').text_content() or ''
+        tree_0 = p.pg.locator('#left-body .node .sub').first.text_content() or ''
+        p.pg.wait_for_selector('#p-bbox', timeout=10000)
+        bbox_0 = p.pg.locator('#p-bbox').text_content() or ''
+        p.ev("const id=App.doc.items[0].id, r=App.results.get(id); const i=r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.l-12.3456)<1e-3); App.select([id],{edges:[{id,edgeIdx:i}]})"); p.wait(300)
+        sel_0 = p.pg.locator('#sel-val').text_content() if p.pg.locator('#sel-val').count() else ''
+        p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+
+        # Fokus + Verlassen im 0-Stellen-Feld darf den exakt gespeicherten Wert nicht überschreiben
+        p.pg.locator('#p-w').focus(); p.pg.locator('#p-w').blur(); p.wait(300)
+        w_exact = p.ev("return App.doc.items[0].p.w")
+        vol_exact = volumen(p)
+
+        ok1 = (
+            dec_opts == ['0', '1', '2', '3', '4'] and ang_opts == ['0', '1', '2', '3', '4']
+            and pw_3 == '12,346'
+            and '12,346' in lbls_3
+            and '12,346 × 20 × 10 mm' in ampel_3
+            and '12,346 × 20 × 10' in tree_3
+            and '12,346 × 20 × 10 mm' in bbox_3
+            and '12,346 mm' in sel_3
+            and pw_0 == '12'
+            and '12' in lbls_0 and not any('12,' in x for x in lbls_0)
+            and '12 × 20 × 10 mm' in ampel_0
+            and '12 × 20 × 10' in tree_0
+            and '12 × 20 × 10 mm' in bbox_0
+            and '12 mm' in sel_0 and '12,' not in sel_0
+            and abs(w_exact - 12.3456) < 1e-9
+            and vol_exact is not None and abs(vol_exact - 2469.12) < 0.05
+        )
+
+        # 2. Winkel getrennt von Längen (0–4) + Drehkörper-Anzeige
+        p.ev("App.change('rot', d=>{ d.items[0].t.rz = 12.3456; })"); warte_rechnen(p)
+        p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+        open_settings()
+        p.pg.select_option('#set-dec', '0'); p.wait(150)
+        p.pg.select_option('#set-angle-dec', '3'); p.wait(200)
+        close_settings(); p.wait(300)
+        pw_a3 = p.pg.locator('#p-w').input_value()
+        rz_a3 = p.pg.locator('#t-rz').input_value()
+        rev_a3 = p.ev("return Model.sizeText(Model.newItem('revolve', { angle: 12.3456, dir: 'normal' }), {})")
+
+        open_settings()
+        p.pg.select_option('#set-dec', '4'); p.wait(150)
+        p.pg.select_option('#set-angle-dec', '0'); p.wait(200)
+        close_settings(); p.wait(300)
+        pw_a0 = p.pg.locator('#p-w').input_value()
+        rz_a0 = p.pg.locator('#t-rz').input_value()
+        rev_a0 = p.ev("return Model.sizeText(Model.newItem('revolve', { angle: 12.3456, dir: 'normal' }), {})")
+        p.ev("ViewPrefs.set({ angleDecimals: 1 })"); p.wait(200)
+        rev_a1 = p.ev("return Model.sizeText(Model.newItem('revolve', { angle: 12.3456, dir: 'normal' }), {})")
+        rz_exact = p.ev("return App.doc.items[0].t.rz")
+
+        ok2 = (
+            pw_a3 == '12' and rz_a3 == '12,346' and rev_a3 == '12,346°'
+            and pw_a0 == '12,3456' and rz_a0 == '12' and rev_a0 == '12°'
+            and rev_a1 == '12,3°'
+            and abs(rz_exact - 12.3456) < 1e-9
+        )
+
+        # 3. Maße-Panel & Skizze (Schildchen .skdim, Eigenschaftsfeld & Maß-Tabelle) konsistent
+        p.ev("App.change('p', d=>{ d.params.push({id:'m_len', name:'Laenge', expr:12.3456}); })"); p.wait(200)
+        p.pg.click('#lt-params'); p.wait(250)
+        p.ev("ViewPrefs.set({ decimals: 3, angleDecimals: 2 })"); p.wait(250)
+        par_3 = p.pg.locator('#pv-m_len').input_value()
+        par_eval_3 = p.pg.locator('#left-body .mono').first.text_content() or ''
+        p.ev("ViewPrefs.set({ decimals: 0, angleDecimals: 0 })"); p.wait(250)
+        par_0 = p.pg.locator('#pv-m_len').input_value()
+        par_eval_0 = p.pg.locator('#left-body .mono').first.text_content() or ''
+        par_exact = p.ev("return App.doc.params.find(x=>x.id==='m_len').expr")
+
+        p.pg.click('#lt-tree'); p.wait(200)
+        p.ev("Start.show()"); p.wait(300)
+        scene(p, [{'id': 'L1', 'type': 'line', 'a': [0, 0], 'b': [11.325357, 4.914390]}])
+        SS(p, "S.dims.push({id:'dm1', e:'L1', k:'len', v:12.3456}, {id:'dm2', e:'L1', k:'ang', v:23.4567}); Sketch.setTool('select')")
+        p.ev("ViewPrefs.set({ decimals: 3, angleDecimals: 2 })"); p.wait(300)
+        sk_dims_3 = p.pg.locator('.skdim').all_text_contents()
+        p.ev("Sketch.state.sels=['L1']; Panels.renderRight()"); p.wait(250)
+        se_len_3 = p.pg.locator('#se-len').input_value()
+        se_ang_3 = p.pg.locator('#se-ang').input_value()
+        p.ev("Sketch.state.sels=[]; Panels.renderRight()"); p.wait(200)
+        p.pg.locator('#dim-table summary').click(); p.wait(200)
+        dt_len_3 = p.pg.locator('#dt-0').input_value()
+        dt_ang_3 = p.pg.locator('#dt-1').input_value()
+
+        p.ev("ViewPrefs.set({ decimals: 0, angleDecimals: 0 })"); p.wait(300)
+        sk_dims_0 = p.pg.locator('.skdim').all_text_contents()
+        dt_len_0 = p.pg.locator('#dt-0').input_value()
+        dt_ang_0 = p.pg.locator('#dt-1').input_value()
+        dim_vals_exact = SS(p, "return S.dims.map(d=>d.v)")
+        p.ev("Sketch.cancel()"); p.wait(300)
+
+        ok3 = (
+            par_3 == '12,346' and '= 12,346' in par_eval_3
+            and par_0 == '12' and '= 12' in par_eval_0 and abs(par_exact - 12.3456) < 1e-9
+            and any('12,346' in t for t in sk_dims_3) and any('23,46°' in t for t in sk_dims_3)
+            and se_len_3 == '12,346' and se_ang_3 == '23,46'
+            and dt_len_3 == '12,346' and dt_ang_3 == '23,46'
+            and any(t.strip() == '12' for t in sk_dims_0) and any('23°' in t for t in sk_dims_0)
+            and dt_len_0 == '12' and dt_ang_0 == '23'
+            and abs(dim_vals_exact[0] - 12.3456) < 1e-9 and abs(dim_vals_exact[1] - 23.4567) < 1e-9
+        )
+
+        # 4. Exakte Eingabe bei 0 Stellen + dauerhafte Messung
+        p.ev("Start.show()"); p.wait(300)
+        p.empty()
+        p.ev("ViewPrefs.set({ decimals: 0, angleDecimals: 0 })"); p.wait(200)
+        p.ev("Actions.addPrimitive('box', { p: { w: 10, d: 20, h: 10 } })"); warte_rechnen(p)
+        p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+        p.pg.fill('#p-w', '12,3456'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+        w_after_input = p.ev("return App.doc.items[0].p.w")
+        pw_disp_after = p.pg.locator('#p-w').input_value()
+        vol_after_input = volumen(p)
+
+        # Messung zwischen zwei Deckflächen (Abstand = 12,3456 mm) behalten
+        p.ev("App.change('b2', d=>{ const b=Model.newItem('box',{w:10,d:10,h:22.3456}); b.t.x=25; d.items.push(b); })"); warte_rechnen(p)
+        p.ev("App.select([]); Viewer.setView('iso', false); Viewer.fit()"); p.wait(500)
+        p.pg.locator('#t-measure').click(); p.wait(300)
+        top1, top2 = world_screen(p, 0, 0, 10), world_screen(p, 25, 0, 22.3456)
+        p.pg.mouse.click(*top1); p.wait(300)
+        p.pg.mouse.click(*top2); p.wait(400)
+        p.pg.locator('#measure-keep').click(); p.wait(350)
+        p.pg.keyboard.press('Escape'); p.wait(250)
+
+        m_pin_0 = p.pg.locator('.dimlabel.mpin').first.text_content() if p.pg.locator('.dimlabel.mpin').count() else ''
+        m_tree_0 = p.pg.locator('#measure-tree .sub').first.text_content() if p.pg.locator('#measure-tree .sub').count() else ''
+        p.ev("ViewPrefs.set({ decimals: 3 })"); p.wait(300)
+        m_pin_3 = p.pg.locator('.dimlabel.mpin').first.text_content() if p.pg.locator('.dimlabel.mpin').count() else ''
+        m_tree_3 = p.pg.locator('#measure-tree .sub').first.text_content() if p.pg.locator('#measure-tree .sub').count() else ''
+        m_val_exact = p.ev("return App.doc.measures[0] ? App.doc.measures[0].value : null")
+
+        ok4 = (
+            abs(w_after_input - 12.3456) < 1e-9
+            and pw_disp_after == '12'
+            and vol_after_input is not None and abs(vol_after_input - 2469.12) < 0.05
+            and m_pin_0 == '12 mm' and m_tree_0 == '12 mm'
+            and m_pin_3 == '12,346 mm' and m_tree_3 == '12,346 mm'
+            and m_val_exact is not None and abs(m_val_exact - 12.3456) < 1e-4
+        )
+
+        # 5. Persistenz über Neuladen (auch decimals: 0 bleibt 0), Befehlssuche & Hilfetext
+        p.ev("ViewPrefs.set({ decimals: 0, angleDecimals: 3 })"); p.wait(200)
+        p.pg.reload(); p.wait(4500)
+        p.pg.wait_for_function("() => !!(window.__M && window.__M.ViewPrefs && window.__M.Units)", timeout=15000)
+        persisted = p.ev("return { dec: ViewPrefs.get().decimals, ang: ViewPrefs.get().angleDecimals, len: Units.fmtLen(12.3456) }")
+        cmd_ids = p.ev("return Commands.search('Nachkommastellen').map(c=>c.id)")
+        help_ok = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json()).then(d=>!!(d.precision && d.precision.tip && d.precision.hilfe && d.precision.tipp))")
+        ok5 = (
+            persisted == {'dec': 0, 'ang': 3, 'len': '12'}
+            and 'settings-precision' in cmd_ids
+            and bool(help_ok)
+        )
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        p.ev("if (window.__M && window.__M.ViewPrefs) ViewPrefs.set({ decimals: 2, angleDecimals: 1 })")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -11415,8 +11729,10 @@ TESTS = [
     ('[A-048] Geometrie-Prüfung: gesunder Quader / Kugel & Zylinder / winzige Kante / Hervorheben / Suche & Hilfe', t_geometrie_pruefung),
     ('[A-047] Import prüfen und heilen: offenes STEP / Hinweis / Heilen mit Ergebnis / Lücken & gültiges STEP', t_a047_import_heilen),
     ('[A-049] Werkzeugleiste anpassen & Favoriten: Rechtsklick / Entfernen / Hinzufügen & Sortieren per Ziehen / Favorit ganz links / Neu laden / Zurücksetzen & Hilfe', t_a049_werkzeugleiste),
+    ('[A-050] Genauigkeit & Nachkommastellen: Anzeige 0–4 (12,3456 → 12,346 / 12) / Winkel getrennt / Schilder, Maße & Panels gleich / gespeichertes Maß & Kern exakt / Neuladen & Hilfe', t_a050_genauigkeit),
     ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
     ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
+    ('[A-053] Projekt-Vorlagen: 3D-Druck Druckbett / Zoll, Laser, Gehäuse / Eigene Vorlage speichern & wieder öffnen / Löschen', t_a053_projekt_vorlagen),
     ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
     ('[A-054] Schneller Start: Oberfläche sofort / Skizzieren ohne Kern / Kern & Schrift bei Bedarf / Protokoll', t_a054_schneller_start),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

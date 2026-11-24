@@ -90,14 +90,14 @@ const DroneCheck = (() => {
     if (!b) { UI.toast('Dafür braucht es einen Akku im Modell (ein Teil namens „Akku“ oder einen Akku aus „Kaufteile“, ganz oben im Verlauf).', { icon: 'info', ms: 4500 }); return false; }
     const L = Math.hypot(b.sx, b.sy);
     if (L < 0.05) { UI.toast('Der Schwerpunkt liegt schon in der Mitte.', { icon: 'check' }); return false; }
-    if (L > b.A * 0.6) { UI.toast(`„${b.name}“ müsste ${fmt(L, 0)} mm wandern – das ist zu weit. Setz schwere Teile wie Kamera oder Sender um.`, { icon: 'info', ms: 5000 }); return false; }
+    if (L > b.A * 0.6) { UI.toast(`„${b.name}“ müsste ${fmtFixed(L, 0)} mm wandern – das ist zu weit. Setz schwere Teile wie Kamera oder Sender um.`, { icon: 'info', ms: 5000 }); return false; }
     App.change('Schwerpunkt ausgeglichen', (doc) => {
       const it = doc.items.find((x) => x.id === b.id); if (!it) return false;
       Model.useVars(Model.vars(doc).v);
       it.t = it.t || Model.T0();
       it.t.x = round(Model.tnum(it, 'x') + b.sx, 2); it.t.y = round(Model.tnum(it, 'y') + b.sy, 2);
     });
-    UI.toast(`„${b.name}“ ${b.sy ? (b.sy < 0 ? 'nach vorne' : 'nach hinten') : 'zur Seite'} geschoben (${fmt(L, 1)} mm) – der Schwerpunkt liegt jetzt in der Mitte.`, { icon: 'check', ms: 4200 });
+    UI.toast(`„${b.name}“ ${b.sy ? (b.sy < 0 ? 'nach vorne' : 'nach hinten') : 'zur Seite'} geschoben (${fmtFixed(L, 1)} mm) – der Schwerpunkt liegt jetzt in der Mitte.`, { icon: 'check', ms: 4200 });
     return true;
   }
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
@@ -106,10 +106,10 @@ const DroneCheck = (() => {
     const doc = App.doc, g = geometryAny(doc);
     if (!g) return null;
     const rev = App.revision, out = [];
-    if (g.free) out.push({ id: 'free', title: 'Selbst gebauter Rahmen', s: 'info', text: `${g.n} Motoren aus deinen Kaufteilen erkannt` + (g.zoll ? `, Propeller ${fmt(g.zoll, 1)}" (${g.zoll_from === 'props' ? 'aus den Propellern im Modell' : 'eingetragen'}).` : '. Für die Propeller-Prüfungen fehlt noch die Größe – leg Propeller aus „Kaufteile“ auf die Motoren oder trag sie unten ein.') });
+    if (g.free) out.push({ id: 'free', title: 'Selbst gebauter Rahmen', s: 'info', text: `${g.n} Motoren aus deinen Kaufteilen erkannt` + (g.zoll ? `, Propeller ${fmtFixed(g.zoll, 1)}" (${g.zoll_from === 'props' ? 'aus den Propellern im Modell' : 'eingetragen'}).` : '. Für die Propeller-Prüfungen fehlt noch die Größe – leg Propeller aus „Kaufteile“ auf die Motoren oder trag sie unten ein.') });
     // 1. Abstand der Propeller untereinander
     const gap = g.gap;
-    if (gap != null) out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – ${g.free ? 'Motoren weiter auseinander setzen' : 'Achsabstand vergrößern'}.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
+    if (gap != null) out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmtFixed(-gap, 1)} mm – ${g.free ? 'Motoren weiter auseinander setzen' : 'Achsabstand vergrößern'}.` : `${fmtFixed(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
     // 2./3. Kollisionen aus dem CAD-Kern
     let cl = null;
     try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes: g.probes, skipPairs: g.skipPairs }); } catch (_) {}
@@ -119,7 +119,7 @@ const DroneCheck = (() => {
       cl.hits.forEach((hs, i) => { if (hs.length) bad.push(`Propeller ${g.motors[i][0]} trifft ${hs.map((x) => label(x.id)).join(', ')}`); });
       const ids = [...new Set(cl.hits.flat().map((x) => x.id))];
       if (g.probes.length) out.push({ id: 'props', title: 'Propellerkreise frei', s: bad.length ? 'bad' : 'ok', text: bad.length ? bad.join('. ') + '.' : 'Kein Teil ragt in die Propellerkreise (1 mm Sicherheitsabstand).', ids });
-      const pairs = cl.pairs.map((p) => `${label(p.a)} und ${label(p.b)} (${fmt(p.v / 1000, 2)} cm³)`);
+      const pairs = cl.pairs.map((p) => `${label(p.a)} und ${label(p.b)} (${fmtFixed(p.v / 1000, 2)} cm³)`);
       out.push({ id: 'clash', title: 'Teile stecken nicht ineinander', s: pairs.length ? 'warn' : 'ok', text: pairs.length ? 'Ineinander: ' + pairs.join('; ') + '.' : 'Alle Teile haben ihren eigenen Platz.', ids: [...new Set(cl.pairs.flatMap((p) => [p.a, p.b]))] });
     }
     // 4. Gewicht
@@ -131,7 +131,7 @@ const DroneCheck = (() => {
       const fr = doc.drone && doc.drone.frame;
       if (fr && fr.g) {
         const own = (m.parts || []).filter((p) => !p.fixed).reduce((s, p) => s + p.mass, 0), d = own - fr.g;
-        out.push({ id: 'frame', title: 'Rahmen gegen Original', s: 'info', text: `Rahmen im Modell ca. ${Mass.gText(own)}, ${fr.hersteller} ${fr.name} laut Hersteller ${Mass.gText(fr.g)} (${d >= 0 ? '+' : '−'}${Mass.gText(Math.abs(d))}). Der Nachbau hat vereinfachte Umrisse – Löcher, Fasen und Aussparungen des Originals fehlen.` + (fr.a && Math.abs(fr.a - g.A) > 0.5 ? ` Achsabstand hier ${fmt(g.A, 0)} mm, beim Original ${fmt(fr.a, 0)} mm.` : '') });
+        out.push({ id: 'frame', title: 'Rahmen gegen Original', s: 'info', text: `Rahmen im Modell ca. ${Mass.gText(own)}, ${fr.hersteller} ${fr.name} laut Hersteller ${Mass.gText(fr.g)} (${d >= 0 ? '+' : '−'}${Mass.gText(Math.abs(d))}). Der Nachbau hat vereinfachte Umrisse – Löcher, Fasen und Aussparungen des Originals fehlen.` + (fr.a && Math.abs(fr.a - g.A) > 0.5 ? ` Achsabstand hier ${fmtFixed(g.A, 0)} mm, beim Original ${fmtFixed(fr.a, 0)} mm.` : '') });
       }
       // 5. Schwerpunkt gegenüber der Mitte zwischen den Motoren
       if (m.com) {
@@ -140,20 +140,20 @@ const DroneCheck = (() => {
         const dir = [Math.abs(dy) > 0.5 ? (dy < 0 ? 'nach vorne' : 'nach hinten') : '', Math.abs(dx) > 0.5 ? (dx > 0 ? 'nach rechts' : 'nach links') : ''].filter(Boolean).join(' und ');
         const akku = batteries(doc).length > 0;
         const sc = d <= 0.03 * g.A ? 'ok' : !akku ? 'info' : d <= 0.08 * g.A ? 'warn' : 'bad';
-        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, ...(akku && d > 0.03 * g.A ? { fix: 'balance' } : {}), text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmt(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
+        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, ...(akku && d > 0.03 * g.A ? { fix: 'balance' } : {}), text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmtFixed(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
       }
       // 6. Schub zu Gewicht
       const t = thrustOf(doc);
       if (t) {
         const tw = (g.n * t) / m.mass;
-        const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmt(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
-        out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
+        const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmtFixed(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
+        out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmtFixed(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
       // 6b. Flugzeit im Schweben – Schätzung aus Gewicht, Propellerfläche und Akku
       const ak = batteryEnergy(doc);
       if (g.D && ak.wh > 0) {
         const hv = hoverTime(m.mass, g.n, g.D, ak.wh);
-        out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: hv.min < 3 ? 'warn' : 'info', text: `ca. ${fmt(hv.min, hv.min < 10 ? 1 : 0)} min ruhiges Schweben mit ${ak.text} (rund ${fmt(hv.w, 0)} W). Beim schnellen Fliegen ist es meist nur ein Drittel bis die Hälfte davon.` + (hv.min < 3 ? ' Das ist sehr kurz – ein größerer Akku oder weniger Gewicht hilft.' : '') });
+        out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: hv.min < 3 ? 'warn' : 'info', text: `ca. ${fmtFixed(hv.min, hv.min < 10 ? 1 : 0)} min ruhiges Schweben mit ${ak.text} (rund ${fmtFixed(hv.w, 0)} W). Beim schnellen Fliegen ist es meist nur ein Drittel bis die Hälfte davon.` + (hv.min < 3 ? ' Das ist sehr kurz – ein größerer Akku oder weniger Gewicht hilft.' : '') });
       } else if (g.D && batteries(doc).length) out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: 'info', text: 'Nenn den Akku mit Zellen und Kapazität, zum Beispiel „Akku 6S 1300 mAh“ – dann schätze ich die Flugzeit.' });
     }
     // 7. Speed-Rumpf: Form und Fluglage
@@ -161,7 +161,7 @@ const DroneCheck = (() => {
     if (!g.free && typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
       const L = V.Nasenlänge + V.Rumpflänge + V.Hecklänge, D = V.Rumpfdurchmesser;
       let fa = null; try { if (typeof Views !== 'undefined' && Viewer.nodes.size) fa = Views.windArea(0); } catch (_) {}
-      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (fa ? ` Stirnfläche von vorne ohne Propeller: ${fmt(fa / 100, 1)} cm² (Ansicht „Fahrtwind“).` : '') + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
+      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmtFixed(L, 0)} mm lang und ${fmtFixed(D, 0)} mm dick (${fmtFixed(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (fa ? ` Stirnfläche von vorne ohne Propeller: ${fmtFixed(fa / 100, 1)} cm² (Ansicht „Fahrtwind“).` : '') + (g.tilt ? ` Motoren ${fmtFixed(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmtFixed(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
     }
     last = { rev, list: out };
     return out;
@@ -245,7 +245,7 @@ const Plates = (() => {
     const v = res.views && res.views.top; if (!v) return null;
     const { bytes, count } = dxf(v.visible);
     const b = Viewer.baseBox(id); const t = b ? b.max.z - b.min.z : 0;
-    return { name: `${Print.safeName(Model.label(it))} – ${fmt(t, 2).replace('.', ',')} mm.dxf`, data: bytes, count, t, edges: v.visible };
+    return { name: `${Print.safeName(Model.label(it))} – ${fmtFixed(t, 2).replace('.', ',')} mm.dxf`, data: bytes, count, t, edges: v.visible };
   }
   return { candidates, file, dxf };
 })();
@@ -375,8 +375,8 @@ const Variants = (() => {
         ...c.names.map((n) => h('td', { class: 'mono' }, (r.v.values || {})[n] == null ? '–' : String(r.v.values[n]).replace('.', ','))),
         ...c.steps.map((s) => { const sup = isSuppressedIn(r.v, s.item.id); return h('td', { class: sup ? 'var-cmp-sup' : 'var-cmp-on' }, sup ? 'unterdrückt' : 'aktiv'); }),
         h('td', { class: 'mono' }, r.mass == null ? '–' : Mass.gText(r.mass)),
-        h('td', { class: 'mono' }, r.tw == null ? '–' : fmt(r.tw, 1) + ' : 1'),
-        h('td', { class: 'mono' }, r.gap == null ? '–' : fmt(r.gap, 1) + ' mm')));
+        h('td', { class: 'mono' }, r.tw == null ? '–' : fmtFixed(r.tw, 1) + ' : 1'),
+        h('td', { class: 'mono' }, r.gap == null ? '–' : fmtFixed(r.gap, 1) + ' mm')));
     }
     body.append(tbl);
   }

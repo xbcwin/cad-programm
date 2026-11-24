@@ -29,12 +29,23 @@ const uid = (p = 'i') => p + '_' + Math.random().toString(36).slice(2, 9);
 function debounce(fn, ms) { let t; const f = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; f.flush = (...a) => { clearTimeout(t); fn(...a); }; f.cancel = () => clearTimeout(t); return f; }
 function throttle(fn, ms) { let last = 0, t = null; return (...a) => { const now = performance.now(); const run = () => { last = performance.now(); t = null; fn(...a); }; if (now - last >= ms) run(); else if (!t) t = setTimeout(run, ms - (now - last)); }; }
 function round(v, d = 3) { const f = Math.pow(10, d); return Math.round(v * f) / f; }
-const FMT = { min: 0 };   // Einstellung „Nachkommastellen“: Mindestgenauigkeit aller Anzeigen
-function fmt(v, d = 2) {
+const FMT = { dec: 2, angle: 1 };   // Einstellung „Nachkommastellen“: Anzeige (0–4) und Winkel (0–4)
+function fmtFixed(v, d = 2) {
   if (typeof v !== 'number' || !isFinite(v)) return '–';
-  let r = round(v, Math.max(d, FMT.min));
+  const dc = clamp(Math.round(d), 0, 12);
+  let r = round(v, dc);
   if (Object.is(r, -0)) r = 0;
-  return String(r).replace('.', ',');
+  const s = dc > 0 ? r.toFixed(dc) : String(Math.round(r));
+  return (s.includes('.') ? s.replace(/\.?0+$/, '') : s).replace('.', ',');
+}
+function fmt(v, d) {
+  return fmtFixed(v, FMT.dec);
+}
+function fmtAngle(v) {
+  return fmtFixed(v, FMT.angle);
+}
+function fmtAngleU(v) {
+  return typeof v !== 'number' || !isFinite(v) ? '–' : fmtAngle(v) + '°';
 }
 function parseNum(s) {
   if (typeof s === 'number') return s;
@@ -257,7 +268,7 @@ const Expr = (() => {
         try { kv = parse(rawKey, vars, rawTbls, depth + 1); okKey = true; } catch (_) {}
         if (okKey) {
           row = findRow(String(kv), kv);
-          if (!row) throw new Error(`Schlüssel „${fmt(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+          if (!row) throw new Error(`Schlüssel „${fmtFixed(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
         }
       }
       if (!row) throw new Error(`Schlüssel „${litKey}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
@@ -380,31 +391,39 @@ const Units = (() => {
   const areaFromMM2 = (mm2, doc) => mm2 / def(doc).areaFac;
   const volFromMM3 = (mm3, doc) => mm3 / def(doc).volFac;
   const decFor = (d, doc) => (def(doc).k === 'mm' ? d : Math.max(d, def(doc).dec));
-  function fmtLen(mm, d = 2, doc) {
+  function fmtLen(mm, d, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '–';
-    return fmt(fromMM(mm, doc), decFor(d, doc));
+    return fmtFixed(fromMM(mm, doc), FMT.dec);
   }
-  function fmtLenU(mm, d = 2, doc) {
+  function fmtLenU(mm, d, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '–';
     return `${fmtLen(mm, d, doc)} ${label(doc)}`;
   }
-  function fmtArea(mm2, d = 2, doc) {
+  function fmtLenFixed(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return fmtFixed(fromMM(mm, doc), decFor(d, doc));
+  }
+  function fmtLenFixedU(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return `${fmtLenFixed(mm, d, doc)} ${label(doc)}`;
+  }
+  function fmtArea(mm2, d, doc) {
     if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
     const u = def(doc);
-    return fmt(mm2 / u.areaFac, u.k === 'mm' ? d : Math.max(d, u.k === 'm' ? 4 : 2));
+    return fmtFixed(mm2 / u.areaFac, u.k === 'm' ? Math.max(FMT.dec, 4) : FMT.dec);
   }
-  function fmtAreaU(mm2, d = 2, doc) {
+  function fmtAreaU(mm2, d, doc) {
     if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
     return `${fmtArea(mm2, d, doc)} ${def(doc).areaLabel}`;
   }
-  function fmtVolU(mm3, d = 3, doc) {
+  function fmtVolU(mm3, d, doc) {
     if (typeof mm3 !== 'number' || !isFinite(mm3)) return '–';
     const u = def(doc);
-    return `${fmt(mm3 / u.volFac, u.k === 'm' ? Math.max(d, 5) : d)} ${u.volLabel}`;
+    return `${fmtFixed(mm3 / u.volFac, u.k === 'm' ? Math.max(FMT.dec, 5) : FMT.dec)} ${u.volLabel}`;
   }
   function fmtInput(mm, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '';
-    return fmt(fromMM(mm, doc), def(doc).inputDec);
+    return fmtFixed(fromMM(mm, doc), Math.max(def(doc).inputDec, FMT.dec, 4));
   }
   const UFAC = { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 };
   function parseLen(raw, V, { expr = true, doc } = {}) {
@@ -446,7 +465,7 @@ const Units = (() => {
     App.change('Einheit: ' + DEFS[u].name, (doc) => { doc.settings = doc.settings || {}; doc.settings.unit = u; });
     return true;
   }
-  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
+  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtLenFixed, fmtLenFixedU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
 })();
 
 // ---------- Symbole ----------
@@ -1463,21 +1482,6 @@ const HELP = {
   "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
   "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
  },
- "revolveOptions": {
-  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
-  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
-  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
- },
- "scaleBody": {
-  "tip": "Körper gleichmäßig oder je Achse als Schritt skalieren",
-  "hilfe": "Legt einen Schritt „Skalieren“ im Verlauf an. Rechts stellst du einen gemeinsamen Faktor (z. B. ×2) oder getrennte Faktoren für X, Y und Z ein sowie den Bezugspunkt: Schwerpunkt des Körpers oder Ursprung (0 · 0 · 0).",
-  "tipp": "Als Schritt im Verlauf kannst du das Skalieren jederzeit ändern, unterdrücken oder den Marker davor schieben."
- },
- "thickenFace": {
-  "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
-  "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
-  "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
- },
  "rib": {
   "tip": "Offene Skizzenlinie als Versteifungs-Rippe bis an die Wände ziehen",
   "hilfe": "Verlängert eine offene Linie, einen Bogen oder eine Kurve in deiner Skizze mit einstellbarer Dicke (mittig oder einseitig) bis zu den angrenzenden Wänden des Zielkörpers und verschmilzt sie direkt damit. Optional kannst du eine Schräge und feste Tiefe angeben oder von senkrecht (Steg in einer Schale) auf in der Ebene (Stützrippe) umschalten.",
@@ -1488,10 +1492,10 @@ const HELP = {
   "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
   "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
  },
- "bodyList": {
-  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
-  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
-  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
+ "revolveOptions": {
+  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
+  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
+  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
  },
  "treeReorder": {
   "tip": "Schritte im Verlauf per Ziehen umsortieren",
@@ -1508,20 +1512,40 @@ const HELP = {
   "hilfe": "Legt direkt hinter dem gewählten Schritt eine exakte Kopie mit denselben Maßen und derselben Rolle an (10 mm versetzt). Steckt der Schritt in einem Ordner, landet die Kopie direkt daneben im selben Ordner.",
   "tipp": "Du kannst dafür auch das Kopieren-Symbol in der Zeile oder Strg + D nutzen."
  },
- "mirrorStep": {
-  "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
-  "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
-  "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
+ "bodyList": {
+  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
+  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
+  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
  },
  "patternSkip": {
   "tip": "Einzelne Kopien im Muster auslassen oder wieder einschalten",
   "hilfe": "Rechteck-, Kreis- und Kurvenmuster funktionieren nicht nur für ganze Körper, sondern auch für Formschritte wie Taschen, Nuten oder Rippen – alle Kopien schneiden oder verstärken denselben Zielkörper. Klicke im 3D-Bild auf einen kleinen Zahlen-Punkt oder rechts unter „Kopien“ auf ein Feld, um genau diese Kopie auszulassen (durchgestrichen) oder wieder einzuschalten.",
   "tipp": "Praktisch, wenn an einer Stelle ein Steg, eine Schraube oder ein Bauteil im Weg ist: Mindestens eine Kopie bleibt immer aktiv, und jede Änderung lässt sich rückgängig machen."
  },
+ "scaleBody": {
+  "tip": "Körper gleichmäßig oder je Achse als Schritt skalieren",
+  "hilfe": "Legt einen Schritt „Skalieren“ im Verlauf an. Rechts stellst du einen gemeinsamen Faktor (z. B. ×2) oder getrennte Faktoren für X, Y und Z ein sowie den Bezugspunkt: Schwerpunkt des Körpers oder Ursprung (0 · 0 · 0).",
+  "tipp": "Als Schritt im Verlauf kannst du das Skalieren jederzeit ändern, unterdrücken oder den Marker davor schieben."
+ },
+ "thickenFace": {
+  "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
+  "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
+  "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
+ },
  "refFix": {
   "tip": "Verlorene Kante oder Fläche neu wählen",
   "hilfe": "Verliert eine Rundung, Fase, Wandstärke oder Skizze ihre ursprüngliche Kante oder Fläche (etwa weil ein früheres Maß geändert wurde), erscheint im Verlauf ein gelbes Warnzeichen. Mit „Neu wählen“ blendet Tracery die alte Lage gelb gestrichelt ein – ein Klick auf die neue Kante oder Fläche repariert den Bezug, und alles rechnet weiter.",
   "tipp": "Du kannst die Ansicht währenddessen wie gewohnt drehen, um die gewünschte Kante oder Fläche gut anzuklicken."
+ },
+ "threadFace": {
+  "tip": "Echtes oder kosmetisches Gewinde direkt auf eine runde Fläche setzen",
+  "hilfe": "Rechtsklick auf einen Bolzen (außen) oder eine Bohrung (innen) → „Gewinde …“. Tracery schlägt die passende metrische Größe (M2 bis M24) samt Regelsteigung direkt aus dem Durchmesser vor. Du kannst Länge, Steigung und Ende wählen sowie zwischen echtem 3D-Gewinde und schneller Markierung umschalten.",
+  "tipp": "Bei gedruckten Innengewinden hilft ein kleines Spiel (Standard 0,3 mm), damit Schrauben leicht hineingehen."
+ },
+ "mirrorStep": {
+  "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
+  "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
+  "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
  },
  "threadStandards": {
   "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
@@ -1533,30 +1557,15 @@ const HELP = {
   "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
   "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
  },
- "wrapCyl": {
-  "tip": "Ebene Skizze ohne Verzerrung um einen Zylinder wickeln",
-  "hilfe": "Legt deine 2D-Skizze exakt nach Bogenlänge um eine gewählte Zylinderfläche – wahlweise als erhabene oder vertiefte Prägung oder als Linie auf der Oberfläche (auch für „Entlang Pfad“). Eine Breite von genau π × Ø umschließt den ganzen Umfang (360°), die halbe Breite genau 180°.",
-  "tipp": "Wähle im Modus „Linie“ danach „Entlang Pfad ziehen“, um zum Beispiel eine schräge Nut oder eine Spirale um den Zylinder zu führen."
- },
- "threadFace": {
-  "tip": "Echtes oder kosmetisches Gewinde direkt auf eine runde Fläche setzen",
-  "hilfe": "Rechtsklick auf einen Bolzen (außen) oder eine Bohrung (innen) → „Gewinde …“. Tracery schlägt die passende metrische Größe (M2 bis M24) samt Regelsteigung direkt aus dem Durchmesser vor. Du kannst Länge, Steigung und Ende wählen sowie zwischen echtem 3D-Gewinde und schneller Markierung umschalten.",
-  "tipp": "Bei gedruckten Innengewinden hilft ein kleines Spiel (Standard 0,3 mm), damit Schrauben leicht hineingehen."
- },
- "emboss": {
-  "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
-  "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
-  "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
- },
  "exportIgesBrep": {
   "tip": "Als IGES (.igs) oder BREP (.brep) speichern",
   "hilfe": "IGES (.igs) speichert exakte Flächen und Körper im verbreiteten Austauschformat – besonders hilfreich für ältere CAD- und CAM-Programme. BREP (.brep) ist das eigene, verlustfreie Format des OpenCascade-Kerns (zum Beispiel für FreeCAD oder zum exakten Wiederladen in Tracery). Beide beachten „Nur die Auswahl“ und einen gewählten Nullpunkt.",
   "tipp": "Für den Austausch mit Fusion, SolidWorks oder Onshape ist meist STEP die erste Wahl; IGES hilft bei älteren CAM-Programmen und BREP bei direktem Austausch mit FreeCAD."
  },
- "geomCheck": {
-  "tip": "Modell auf kaputte Flächen, winzige Kanten und Selbstschnitte prüfen",
-  "hilfe": "Prüfen → „Geometrie prüfen“ untersucht alle sichtbaren Körper mit dem OpenCascade-Kern auf beschädigte oder zusammengefallene Flächen, winzige Kanten unter 0,01 mm (oft durch zwei fast gleiche Maße) sowie sich selbst schneidende Flächen. Ein Klick auf einen Eintrag in der Liste hebt die betroffene Stelle rot im Modell hervor und fährt die Kamera heran.",
-  "tipp": "Wenn eine Rundung oder ein Export unerwartet scheitert, deckt die Geometrie-Prüfung winzige Kanten oder kaputte Flächen meist sofort auf."
+ "emboss": {
+  "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
+  "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
+  "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
  },
  "importCheck": {
   "tip": "Importierte Geometrie mit BRepCheck auf Fehler, Lücken und offene Kanten prüfen",
@@ -1573,10 +1582,25 @@ const HELP = {
   "hilfe": "Schreibt alle sichtbaren Körper als exakte B-Rep-Geometrie nach STEP AP214/AP242 (XCAF). Dabei kommen die Namen, Farben sowie Gruppen und Ordner als echte Baugruppen-Struktur mit – andere CAD-Programme wie Fusion, FreeCAD oder SolidWorks zeigen alles direkt sortiert und gefärbt an. Beim erneuten Öffnen in Tracery entstehen Gruppen, Teile, Namen und Farben wieder genauso.",
   "tipp": "Wenn Teile eine Gruppe bilden, bleiben beim Export alle darin enthaltenen Einzelteile mit ihren eigenen Namen und Farben erhalten."
  },
+ "wrapCyl": {
+  "tip": "Ebene Skizze ohne Verzerrung um einen Zylinder wickeln",
+  "hilfe": "Legt deine 2D-Skizze exakt nach Bogenlänge um eine gewählte Zylinderfläche – wahlweise als erhabene oder vertiefte Prägung oder als Linie auf der Oberfläche (auch für „Entlang Pfad“). Eine Breite von genau π × Ø umschließt den ganzen Umfang (360°), die halbe Breite genau 180°.",
+  "tipp": "Wähle im Modus „Linie“ danach „Entlang Pfad ziehen“, um zum Beispiel eine schräge Nut oder eine Spirale um den Zylinder zu führen."
+ },
  "toolbarCustomize": {
   "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
   "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
   "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
+ },
+ "precision": {
+  "tip": "Nachkommastellen für Anzeige (0–4) und Winkel (0–4) getrennt wählen",
+  "hilfe": "In den Einstellungen stellst du getrennt ein, wie viele Stellen nach dem Komma bei Längen, Maßen, Schildern, Messungen und Panels (0 bis 4) sowie bei Winkeln (0 bis 4) angezeigt werden. Alle eingegebenen Maße, Formeln und der CAD-Kern rechnen im Hintergrund immer mit voller Genauigkeit weiter.",
+  "tipp": "Auch wenn 0 Stellen eingestellt sind, kannst du jederzeit exakte Werte wie 12,3456 eintippen – sie bleiben genau so gespeichert und sichtbar, sobald du mehr Stellen wählst."
+ },
+ "geomCheck": {
+  "tip": "Modell auf kaputte Flächen, winzige Kanten und Selbstschnitte prüfen",
+  "hilfe": "Prüfen → „Geometrie prüfen“ untersucht alle sichtbaren Körper mit dem OpenCascade-Kern auf beschädigte oder zusammengefallene Flächen, winzige Kanten unter 0,01 mm (oft durch zwei fast gleiche Maße) sowie sich selbst schneidende Flächen. Ein Klick auf einen Eintrag in der Liste hebt die betroffene Stelle rot im Modell hervor und fährt die Kamera heran.",
+  "tipp": "Wenn eine Rundung oder ein Export unerwartet scheitert, deckt die Geometrie-Prüfung winzige Kanten oder kaputte Flächen meist sofort auf."
  },
  "statusSel": {
   "tip": "Auswahl-Info in der Statusleiste",
@@ -1592,6 +1616,21 @@ const HELP = {
   "tip": "Rechenzustand des CAD-Kerns",
   "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
   "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
+ },
+ "projectTemplates": {
+  "tip": "Neues Projekt aus einer Vorlage starten (mm, Zoll, 3D-Druck, Laser, Gehäuse)",
+  "hilfe": "Öffnet die Auswahl für neue Projekte: Leer in Millimetern oder Zoll, 3D-Druck mit eingeblendetem Druckbett und 0,4-mm-Düse, Laser mit 3-mm-Platte, ein fertiges Gehäuse sowie deine selbst gespeicherten Vorlagen.",
+  "tipp": "Du kannst auch jedes eigene Projekt als Vorlage ablegen und später mit einem Klick wieder als Startpunkt öffnen."
+ },
+ "saveTemplate": {
+  "tip": "Aktuelles Projekt lokal als eigene Vorlage speichern",
+  "hilfe": "Speichert den aktuellen Stand samt Maßen, Einheiten, Material und Druckbett-Einstellung als eigene Vorlage in diesem Browser. Sie erscheint danach direkt unter „Neues Projekt“ und auf der Startseite.",
+  "tipp": "Ideal für wiederkehrende Halterungen, eigene Druckerprofile oder Gehäuse-Grundformen."
+ },
+ "printBed": {
+  "tip": "Druckbett-Größe im 3D-Bild zeigen und Düsendurchmesser merken",
+  "hilfe": "Zeichnet den Bauraum deines 3D-Druckers als Rahmen auf der Arbeitsfläche ein und prüft, ob das Modell noch auf das Druckbett passt. Außerdem wird der Düsendurchmesser für Wandstärken gespeichert.",
+  "tipp": "Die Vorlage „3D-Druck“ aktiviert das Druckbett automatisch mit 220 × 220 × 250 mm und 0,4-mm-Düse."
  },
  "crashRecovery": {
   "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",

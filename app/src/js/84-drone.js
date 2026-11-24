@@ -411,10 +411,10 @@ const DroneUI = (() => {
           if (fr) Object.assign(o, DroneTpl.fromFrame(fr)); else o.A = null;
           draw();
         }),
-        sel('fa-zoll', 'Propeller', o.zoll, [...new Set([...DroneTpl.ZOLL, o.zoll])].sort((a, b) => a - b).map((z) => [String(z), `${zs(z)} Zoll (${fmt(z * 25.4, 1)} mm)`]), (v) => { free(); o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
+        sel('fa-zoll', 'Propeller', o.zoll, [...new Set([...DroneTpl.ZOLL, o.zoll])].sort((a, b) => a - b).map((z) => [String(z), `${zs(z)} Zoll (${fmtFixed(z * 25.4, 1)} mm)`]), (v) => { free(); o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
         sel('fa-form', 'Rahmenform', o.form, Object.entries(DroneTpl.FORMS).map(([k, v]) => [k, `${v[0]} (${v[1]}°${v[1] !== v[2] ? ' / ' + v[2] + '°' : ''})`]), (v) => { free(); o.form = v; o.A = null; draw(); }),
         sel('fa-stack', 'Stack', o.stack, DroneLib.stacks().map((s) => [String(s.a), `${s.name} · ${s.screw}`]), (v) => { o.stack = +v; draw(); }),
-        sel('fa-motor', 'Motor', o.motor, motors.map((m) => [m.stator, `${m.stator} · Lochkreis ${fmt(m.circle, 1)} · ${m.g !== '' ? fmt(m.g, 1) + ' g' : 'Gewicht eintragen'}`]), (v) => { o.motor = v; draw(); }),
+        sel('fa-motor', 'Motor', o.motor, motors.map((m) => [m.stator, `${m.stator} · Lochkreis ${fmtFixed(m.circle, 1)} · ${m.g !== '' ? fmtFixed(m.g, 1) + ' g' : 'Gewicht eintragen'}`]), (v) => { o.motor = v; draw(); }),
         sel('fa-video', 'Videosystem', o.video, Object.entries(DroneTpl.VIDEO).map(([k, v]) => [k, v[0]]), (v) => { o.video = v; draw(); }),
         sel('fa-akku', 'Akku', o.akku || '', [['', 'Keiner'], ...akkus.map((a) => [a.name.replace(/^Akku /, ''), `${a.name.replace(/^Akku /, '')} · ca. ${a.g} g`])], (v) => { o.akku = v || null; draw(); }),
         UI.numField({ id: 'fa-a', label: 'Achsabstand', value: A, onCommit: (v) => { const n = parseFloat(String(v).replace(',', '.')); free(); o.A = isFinite(n) && n > 0 ? n : null; draw(); } }),
@@ -429,19 +429,19 @@ const DroneUI = (() => {
       const warn = [];
       if (gap < 0) warn.push('Die Propeller überlappen sich – größerer Achsabstand nötig.');
       else if (gap < o.zoll * 25.4 * 0.08) warn.push('Sehr wenig Luft zwischen den Propellern.');
-      if (m && m.props && (o.zoll < m.props[0] - 0.01 || o.zoll > m.props[1] + 0.01)) warn.push(`Motor ${m.stator} passt eher zu ${fmt(m.props[0], 1)}–${fmt(m.props[1], 1)}"-Propellern.`);
-      if (o.form === 'speed') { const mt = DroneTpl.maxTilt(cfg); if (cfg.params.Motorneigung > mt) warn.push(`Bei ${fmt(cfg.params.Motorneigung, 0)}° Motorneigung streifen die hinteren Propeller ihre Arme – höchstens ${mt}° passen.`); }
+      if (m && m.props && (o.zoll < m.props[0] - 0.01 || o.zoll > m.props[1] + 0.01)) warn.push(`Motor ${m.stator} passt eher zu ${fmtFixed(m.props[0], 1)}–${fmtFixed(m.props[1], 1)}"-Propellern.`);
+      if (o.form === 'speed') { const mt = DroneTpl.maxTilt(cfg); if (cfg.params.Motorneigung > mt) warn.push(`Bei ${fmtFixed(cfg.params.Motorneigung, 0)}° Motorneigung streifen die hinteren Propeller ihre Arme – höchstens ${mt}° passen.`); }
       const P = cfg.params, extra = [];
-      if (o.form === 'speed') extra.push(['Rumpf', `Ø ${fmt(P.Rumpfdurchmesser, 0)} mm · ${fmt(P.Rumpflänge + P.Nasenlänge + P.Hecklänge, 0)} mm lang · Akku innen`]);
-      if (o.form === 'cine') extra.push(['Ducts', `innen Ø ${fmt(o.zoll * 25.4 + 2 * P.Ductspalt, 1)} mm · ${fmt(P.Bolzenhöhe - 1, 0)} mm hoch`]);
+      if (o.form === 'speed') extra.push(['Rumpf', `Ø ${fmtFixed(P.Rumpfdurchmesser, 0)} mm · ${fmtFixed(P.Rumpflänge + P.Nasenlänge + P.Hecklänge, 0)} mm lang · Akku innen`]);
+      if (o.form === 'cine') extra.push(['Ducts', `innen Ø ${fmtFixed(o.zoll * 25.4 + 2 * P.Ductspalt, 1)} mm · ${fmtFixed(P.Bolzenhöhe - 1, 0)} mm hoch`]);
       const fr = o.frame, grown = fr && A !== fr.achsabstand_mm;
       out.innerHTML = `<div class="mini-list">
-        <div class="mini-row"><span class="grow">Achsabstand</span><b class="mono">${fmt(A, 0)} mm${o.A ? (fr ? (A === fr.achsabstand_mm ? ' (Hersteller)' : ' (angepasst)') : '') : ' (berechnet)'}</b></div>
-        <div class="mini-row"><span class="grow">Luft zwischen den Propellerspitzen</span><b class="mono" id="fa-gap">${fmt(gap, 1)} mm</b></div>
-        <div class="mini-row"><span class="grow">Motorlochkreis</span><b class="mono">${m ? fmt(m.circle, 1) + ' mm · ' + m.screw : '–'}</b></div>
+        <div class="mini-row"><span class="grow">Achsabstand</span><b class="mono">${fmtFixed(A, 0)} mm${o.A ? (fr ? (A === fr.achsabstand_mm ? ' (Hersteller)' : ' (angepasst)') : '') : ' (berechnet)'}</b></div>
+        <div class="mini-row"><span class="grow">Luft zwischen den Propellerspitzen</span><b class="mono" id="fa-gap">${fmtFixed(gap, 1)} mm</b></div>
+        <div class="mini-row"><span class="grow">Motorlochkreis</span><b class="mono">${m ? fmtFixed(m.circle, 1) + ' mm · ' + m.screw : '–'}</b></div>
         ${extra.map(([a, b]) => `<div class="mini-row"><span class="grow">${a}</span><b class="mono">${b}</b></div>`).join('')}</div>` +
-        (grown ? `<div class="hint-box warn" id="fa-grown">Der Hersteller hat ${fmt(fr.achsabstand_mm, 0)} mm Achsabstand. Tracerys einfacher Rumpf braucht ${fmt(A, 0)} mm, damit Kamera und Bolzen nicht in die Propeller${o.form === 'cine' ? '-Ducts' : 'kreise'} ragen – das Original baut dort enger.</div>` : '') +
-        (fr ? `<div class="hint-box" id="fa-frame"><b>Nachbau nach Herstellermaßen</b> – Achsabstand ${fmt(fr.achsabstand_mm, 0)} mm, Arme ${fmt(fr.armdicke_mm, 1)} mm${fr.stack_mm ? `, Stack ${fmt(fr.stack_mm, 1)} mm` : ''}. Die Umrisse sind vereinfacht. Original-Rahmen: ${fr.gewicht_g ? fmt(fr.gewicht_g, 1) + ' g' : 'Gewicht nicht angegeben'} · <a href="${esc(fr.quelle)}" target="_blank" rel="noopener">Quelle</a>${fr.notiz ? `<br><span class="muted">${esc(fr.notiz)}</span>` : ''}</div>` : '') +
+        (grown ? `<div class="hint-box warn" id="fa-grown">Der Hersteller hat ${fmtFixed(fr.achsabstand_mm, 0)} mm Achsabstand. Tracerys einfacher Rumpf braucht ${fmtFixed(A, 0)} mm, damit Kamera und Bolzen nicht in die Propeller${o.form === 'cine' ? '-Ducts' : 'kreise'} ragen – das Original baut dort enger.</div>` : '') +
+        (fr ? `<div class="hint-box" id="fa-frame"><b>Nachbau nach Herstellermaßen</b> – Achsabstand ${fmtFixed(fr.achsabstand_mm, 0)} mm, Arme ${fmtFixed(fr.armdicke_mm, 1)} mm${fr.stack_mm ? `, Stack ${fmtFixed(fr.stack_mm, 1)} mm` : ''}. Die Umrisse sind vereinfacht. Original-Rahmen: ${fr.gewicht_g ? fmtFixed(fr.gewicht_g, 1) + ' g' : 'Gewicht nicht angegeben'} · <a href="${esc(fr.quelle)}" target="_blank" rel="noopener">Quelle</a>${fr.notiz ? `<br><span class="muted">${esc(fr.notiz)}</span>` : ''}</div>` : '') +
         (warn.length ? `<div class="hint-box warn" id="fa-warn">${warn.join('<br>')}</div>` : grown ? '' : '<div class="hint-box">Alles passt. Nach dem Bauen änderst du jedes Maß links unter „Maße“.</div>');
       body.append(out);
     };

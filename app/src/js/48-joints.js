@@ -187,7 +187,7 @@ const Joints = (() => {
   function describe(j, res) {
     const hit = res.filter((r) => r.v > 0.05);
     const u = slide(j) ? Units.label() : '°';
-    const fv = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+    const fv = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmtAngle(x));
     if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fv(j.min)} ${u} bis ${fv(j.max)} ${u} – nichts stößt an.` };
     const free = res.filter((r) => r.v <= 0.05).map((r) => r.a);
     const lo = res.filter((r) => r.a <= j.ang && r.v > 0.05).map((r) => r.a), hi = res.filter((r) => r.a >= j.ang && r.v > 0.05).map((r) => r.a);
@@ -288,7 +288,7 @@ const Joints = (() => {
         const fr = d.ok ? null : freeRange(j, r);
         const old = box.querySelector('.jt-stop'); if (old) old.remove();
         if (fr && fr[1] - fr[0] > 1e-9 && (fr[0] > j.min + 1e-9 || fr[1] < j.max - 1e-9)) {
-          const fVal = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+          const fVal = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmtAngle(x));
           const uLbl = slide(j) ? Units.label() : unit(j);
           const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fVal(fr[0])} … ${fVal(fr[1])} ${uLbl}`;
           sb.onclick = () => setStops(j.id, fr[0], fr[1]);

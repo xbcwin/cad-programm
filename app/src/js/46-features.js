@@ -821,8 +821,8 @@ const Features = (() => {
       return hasSkip ? `${active}/${total} (${base})` : base;
     }
     if (p.op === 'pattern' && p.pt === 'circ') {
-      const base = `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
-      return hasSkip ? `${active}/${total}× ${fmt(p.ang ?? 360, 0)}°` : base;
+      const base = `${Math.max(1, Math.round(p.n || 1))}× ${fmtAngleU(p.ang ?? 360)}`;
+      return hasSkip ? `${active}/${total}× ${fmtAngleU(p.ang ?? 360)}` : base;
     }
     if (p.op === 'pattern' && p.pt === 'path') {
       return total ? (hasSkip ? `${active}/${total}× entlang Kurve` : `${total}× entlang Kurve`) : 'Kurve fehlt';
@@ -1055,7 +1055,7 @@ const Features = (() => {
     const fields = h('div', { class: 'fields' });
     const modeRow = UI.selectField({ id: 'ct-mode', label: 'Ausführung', value: mode, options: [['real', 'Echt (3D-Gewinde)'], ['cosmetic', 'Kosmetisch (nur Markierung)']], onChange: (v) => { mode = v; syncMode(); } });
     fields.append(modeRow);
-    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (P ${fmt(s.pitch, 2)})`]), onChange: (v) => {
+    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (P ${fmtFixed(s.pitch, 2)})`]), onChange: (v) => {
       size = v;
       const sp = THREAD_MAP[v];
       if (sp) {
@@ -2090,7 +2090,7 @@ const Features = (() => {
     if (aInfo) {
       sec.append(h('div', { class: 'mini-row', id: 'wrap-angle-info' },
         h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
-        h('b', { class: 'mono' }, `${fmt(aInfo.deg, 1)}° (${fmt(aInfo.pct, 1)} %)`)));
+        h('b', { class: 'mono' }, `${fmtAngleU(aInfo.deg)} (${fmtFixed(aInfo.pct, 1)} %)`)));
     }
 
     const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
