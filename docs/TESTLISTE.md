@@ -1703,6 +1703,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Gelenk-Abspielen bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` bewegt `Joints.play()` das bewegliche Teil über den Timer-Fallback und stellt am Ende Ausgangslage, `Joints.playing` und den `#jt-play`-Knopf selbst nach zwischenzeitlichem `Panels.renderRight()` sauber zurück (`App.revision` unverändert).
 - [ ] **Von Hand**: Im Bauteil-Bearbeiten-Modus auf eine Bohrung klicken und direkt „Muster → Kreismuster“ wählen sowie bei einem Gelenk unter Last „Bewegung abspielen“ ansehen.
 
+## Muster von Schritten (Auto [A-036])
+
+- [x] **Tasche 6× im Kreis im selben Körper**: Skizzen-Tasche mit `op: cut` per „Muster → Kreismuster“ (Anzahl 6) gemustert; alle 6 Taschen landen im Zielkörper (`Viewer.nodes.size === 1`, `App.mergedInto`, Volumenabzug `6 × Taschenvolumen`).
+- [x] **Kopie per Klick auslassen & durchgestrichen**: Klick auf `.pat-dot[data-idx="2"]` im 3D-Bild lässt Kopie 3 aus (`p.skip = [2]`), markiert 3D-Punkt und Chip durchgestrichen (`.skipped`, `line-through`) und erhöht das Volumen exakt um eine Tasche (`5` Taschen, Anzeige `5/6× 360°`).
+- [x] **Wieder aktivieren, Undo/Redo & Speichern**: Klick auf `.pat-chip[data-idx="2"]` stellt 6 Taschen wieder her; `App.undo()` / `App.redo()` sowie Speichern und Neuladen der Projektdatei erhalten `G.op`, `p.skip` und das Volumen; Hilfetext `patternSkip` ist vorhanden.
+- [x] **Rechteckmuster & Auflösen**: Tasche als 3×2-Rechteckmuster ergibt 6 Taschen im Zielkörper, Auslassen einer Kopie ergibt 5 Taschen, „Auflösen“ behält nur 1 Tasche mit wiederhergestelltem `op: cut`.
+- [ ] **Von Hand**: Im Browser bei einer schräg stehenden Tasche und bei einer Rippe (`rib`) ein Muster anlegen, Kopien per Klick im 3D-Bild durchgestrichen auslassen und mit „Alle aktivieren“ zurücksetzen.
+
 ## Fehler melden
 
 ```

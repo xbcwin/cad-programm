@@ -62,7 +62,7 @@ export function createKernel(R, oc) {
     if (e) { e.gen = gen; return e.shape; }
     return null;
   }
-  function cachePut(key, shape, errs, resolved) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null }); return shape; }
+  function cachePut(key, shape, errs, resolved, baseBox = null) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null, baseBox: baseBox || null }); return shape; }
 
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
@@ -122,6 +122,49 @@ export function createKernel(R, oc) {
     const Ry = [cb, 0, -sb, 0, 0, 1, 0, 0, sb, 0, cb, 0, 0, 0, 0, 1];
     const Rz = [cc, sc, 0, 0, -sc, cc, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
     return matMul(Rx, matMul(Ry, Rz));
+  }
+  function matRotAxis(c, ax, deg) {
+    const a = norm(ax), x = a[0], y = a[1], z = a[2], rad = (deg * Math.PI) / 180;
+    const cs = Math.cos(rad), sn = Math.sin(rad), t = 1 - cs;
+    const R = [
+      cs + x * x * t, x * y * t + z * sn, x * z * t - y * sn, 0,
+      x * y * t - z * sn, cs + y * y * t, y * z * t + x * sn, 0,
+      x * z * t + y * sn, y * z * t - x * sn, cs + z * z * t, 0,
+      0, 0, 0, 1,
+    ];
+    return matMul(matTrans(c[0], c[1], c[2]), matMul(R, matTrans(-c[0], -c[1], -c[2])));
+  }
+  function patternStepMatrices(p) {
+    const ID = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const skipSet = new Set(Array.isArray(p.skip) ? p.skip.map((x) => Math.round(Number(x))) : []);
+    const out = [];
+    if (p.pt === 'rect') {
+      const nx = Math.max(1, Math.min(60, Math.round(num(p.nx, 1)))), ny = Math.max(1, Math.min(60, Math.round(num(p.ny, 1))));
+      const dx = num(p.dx, 10), dy = num(p.dy, 10);
+      let idx = 0;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
+        if (!skipSet.has(idx)) out.push(idx === 0 ? ID : matTrans(i * dx, j * dy, 0));
+      }
+    } else if (p.pt === 'circ') {
+      const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
+      const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
+      const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
+      const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
+      const c = picked ? p.ao.map(Number) : [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)];
+      for (let k = 0; k < n; k++) if (!skipSet.has(k)) out.push(k === 0 ? ID : matRotAxis(c, ax, k * step));
+    } else if (p.pt === 'path' && Array.isArray(p.places)) {
+      const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
+      const lim = Math.min(p.places.length, 200);
+      for (let k = 0; k < lim; k++) {
+        if (skipSet.has(k)) continue;
+        if (k === 0) { out.push(ID); continue; }
+        const q = p.places[k], d = (q.d || [0, 0, 0]).map(Number);
+        let m = matTrans(d[0], d[1], d[2]);
+        if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m = matMul(m, matRotAxis(p0, ax, Number(q.a)));
+        out.push(m);
+      }
+    }
+    return out.length ? out : [ID];
   }
   function buildTransformMatrix(p, wb) {
     const dx = num(p.dx, 0), dy = num(p.dy, 0), dz = num(p.dz, 0);
@@ -1606,11 +1649,16 @@ export function createKernel(R, oc) {
 
   // ---------- Muster, Spiegeln mit Kopie, Teilen ----------
   function patternShape(base, p) {
-    const copies = [base];
+    const skipSet = new Set(Array.isArray(p.skip) ? p.skip.map((x) => Math.round(Number(x))) : []);
+    const copies = [];
     if (p.pt === 'rect') {
       const nx = Math.max(1, Math.min(60, Math.round(num(p.nx, 1)))), ny = Math.max(1, Math.min(60, Math.round(num(p.ny, 1))));
       const dx = num(p.dx, 10), dy = num(p.dy, 10);
-      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) copies.push(base.clone().translate([i * dx, j * dy, 0]));
+      let idx = 0;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
+        if (skipSet.has(idx)) continue;
+        copies.push(idx === 0 ? base : base.clone().translate([i * dx, j * dy, 0]));
+      }
     } else if (p.pt === 'circ') {
       const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
@@ -1618,11 +1666,18 @@ export function createKernel(R, oc) {
       const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
       const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
       const c = picked ? p.ao.map(Number) : [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)];
-      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, c, ax));
+      for (let k = 0; k < n; k++) {
+        if (skipSet.has(k)) continue;
+        copies.push(k === 0 ? base : base.clone().rotate(k * step, c, ax));
+      }
     } else if (p.pt === 'path' && Array.isArray(p.places)) {
       // Muster entlang Kurve: Lage und Drehung je Kopie kommen fertig aus dem Modell
       const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
-      for (const q of p.places.slice(1, 200)) {
+      const lim = Math.min(p.places.length, 200);
+      for (let k = 0; k < lim; k++) {
+        if (skipSet.has(k)) continue;
+        if (k === 0) { copies.push(base); continue; }
+        const q = p.places[k];
         let c = base.clone();
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) c = c.rotate(Number(q.a), p0, ax);
         const d = (q.d || [0, 0, 0]).map(Number);
@@ -1630,6 +1685,7 @@ export function createKernel(R, oc) {
         copies.push(c);
       }
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
+      copies.push(base);
       const mn = p.mn.map(Number); let mo = p.mo.map(Number);
       if (p.bind) {
         // an die Fläche gebunden: die äußerste ebene Fläche mit dieser Richtung – wächst das Original, wandert die Ebene mit
@@ -1645,11 +1701,14 @@ export function createKernel(R, oc) {
       }
       copies.push(base.clone().mirror(mn, mo));
     } else if (p.pt === 'mirror') {
+      copies.push(base);
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ';
       const n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = num(p.off, 0);
       copies.push(base.clone().mirror(pl, [n[0] * off, n[1] * off, n[2] * off]));
     }
-    if (copies.length === 1) return base;
+    if (!copies.length) return base;
+    if (!copies.includes(base)) safeDelete(base);
+    if (copies.length === 1) return copies[0];
     return fuseAll(copies, true);
   }
   function splitBody(shape, p) {
@@ -1702,10 +1761,10 @@ export function createKernel(R, oc) {
         if (it.kind === 'group') Object.assign(ctx.resolved, ce.resolved);
         else ctx.resolved[it.id] = ce.resolved;
       }
-      return { shape: hit, key };
+      return { shape: hit, key, baseBox: ce.baseBox || null };
     }
     const e0 = errors.length;
-    let shape, resolvedInfo = null;
+    let shape, resolvedInfo = null, baseBox = null;
     try {
       if (it.kind === 'group') {
         const kids = (it.children || []).filter((c) => !c.hidden);
@@ -1732,7 +1791,7 @@ export function createKernel(R, oc) {
           if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
         } else if (holes.length) shape = fuseAll(holes, true);
         else shape = null;
-        if (shape && op === 'pattern') shape = patternShape(shape, it.p);
+        if (shape && op === 'pattern') { baseBox = bboxOf(shape); shape = patternShape(shape, it.p); }
         if (shape && op === 'split') shape = splitBody(shape, it.p);
       } else if (it.kind === 'extrude' && isDynamicExtent(it.p)) {
         const res = buildExtrudeToTarget(it, W || it.m, ctx);
@@ -1756,8 +1815,8 @@ export function createKernel(R, oc) {
       errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
       shape = null;
     }
-    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo);
-    return { shape, key };
+    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo, baseBox);
+    return { shape, key, baseBox };
   }
   function friendlyError(err) {
     const msg = String((err && err.message) || err || '');
@@ -2408,6 +2467,42 @@ export function createKernel(R, oc) {
         bodies.set(tid, src);
         continue;
       }
+      if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) {
+        const rib = it.children.find((c) => c.kind === 'rib');
+        const rp = (rib && rib.p) || {};
+        let tid = (it.op && it.op.target) || rp.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Rippen-Muster: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const mats = patternStepMatrices(it.p);
+        const k = keyOf([src.key, 'ribPat', it.p, rp, it.m.map((v) => Math.round(v * 1e6) / 1e6), rib.m.map((v) => Math.round(v * 1e6) / 1e6)]);
+        let next = cacheGet(k);
+        if (!next) {
+          let cur = src.shape;
+          try {
+            for (const M of mats) {
+              const rel = matMul(matInvRigid(src.m), matMul(it.m, matMul(M, rib.m)));
+              const nxt = buildRibOn(cur, rel, rp);
+              if (cur !== src.shape) safeDelete(cur);
+              cur = nxt;
+            }
+            next = cur === src.shape ? src.shape.clone() : cur;
+            cachePut(k, next);
+          } catch (err) {
+            if (cur && cur !== src.shape) safeDelete(cur);
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        continue;
+      }
       const op = it.op, o = live.get(it.id);
       if (!op || !NAMES[op.type] || !o || !o.shape || it.role === 'hole') continue;
       let tid = op.target;
@@ -2512,7 +2607,7 @@ export function createKernel(R, oc) {
       });
     }
     const ctx = { pool, poolKey: poolKeyOf(), consumed: p1Consumed, resolved: {} };
-    const evald = pass1Evald.map((e) => ({ it: e.it, shape: e.shape, key: e.key, wb: e.wb }));
+    const evald = pass1Evald.map((e) => ({ it: e.it, shape: e.shape, key: e.key, wb: e.wb, baseBox: e.baseBox }));
     try {
       for (let i = 0; i < tops.length; i++) {
         if (!pass1Evald[i].dyn) continue;
@@ -2559,7 +2654,7 @@ export function createKernel(R, oc) {
     const nodes = [];
     for (const e of evald) {
       const it = e.it;
-      if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id) }); continue; }
+      if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id), ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...(e.wb ? { ownBox: e.wb } : {}) }); continue; }
       if (!e.shape) { nodes.push({ id: it.id, key: null, empty: true }); continue; }
       let resultKey = e.key, result = e.shape;
       if (it.role !== 'hole') {
@@ -2585,7 +2680,7 @@ export function createKernel(R, oc) {
           }
         }
       }
-      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true }); continue; }
+      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) }); continue; }
       const mk = resultKey + '|' + Q.level;
       let payload = meshCache.get(mk);
       if (!payload) {
@@ -2593,7 +2688,7 @@ export function createKernel(R, oc) {
         try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
-      nodes.push({ id: it.id, key: resultKey, ...clonePayload(payload) });
+      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...clonePayload(payload) });
     }
     gc();
     return { nodes, errors, times, resolved };

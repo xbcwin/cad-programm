@@ -888,6 +888,19 @@ body.presenting .dimlabel.mpin,body.presenting .measurebar{display:none!importan
 .skdim.conf-focus,.skcon.conf-focus{background:var(--bad);color:#fff!important;border-color:var(--bad)!important;box-shadow:0 0 0 4px var(--bad-soft);z-index:8}
 .skdim.conf-focus .fx{color:#fff}
 .skdim.conf-pending{border-style:dashed;background:var(--bad-soft);color:var(--bad)}
+
+/* Muster von Schritten & einzelne Kopien auslassen (KP-13) */
+.pat-dot{position:absolute;transform:translate(-50%,-50%);min-width:22px;height:22px;padding:0 5px;border-radius:999px;border:1.5px solid var(--accent);background:var(--surface);color:var(--ink);font:700 11px/1 var(--font-mono);cursor:pointer;z-index:6;box-shadow:var(--shadow-1);display:inline-grid;place-items:center;transition:transform .1s,background .12s,border-color .12s}
+.pat-dot:hover{transform:translate(-50%,-50%) scale(1.14);background:var(--accent);color:var(--accent-ink)}
+.pat-dot.skipped{border-style:dashed;border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--surface));color:var(--bad);text-decoration:line-through;opacity:.88}
+.pat-dot.skipped:hover{background:var(--bad);color:#fff}
+body.presenting .pat-dot{display:none!important}
+.pat-skip-box{display:grid;gap:6px;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.pat-skip-head{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;font-weight:600;color:var(--muted)}
+.pat-chips{display:flex;flex-wrap:wrap;gap:4px}
+.pat-chip{min-width:28px;height:26px;padding:0 7px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font:600 12px/1 var(--font-mono);cursor:pointer;transition:border-color .12s,background .12s}
+.pat-chip:hover{border-color:var(--accent);color:var(--accent)}
+.pat-chip.skipped{border-style:dashed;border-color:var(--bad);background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
 </style>
 <div id="app">
   <header class="topbar">
@@ -2214,6 +2227,11 @@ const HELP = {
   "tip": "Mehrere getrennte Körper in einem Teil verwalten",
   "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
   "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
+ },
+ "patternSkip": {
+  "tip": "Einzelne Kopien im Muster auslassen oder wieder einschalten",
+  "hilfe": "Rechteck-, Kreis- und Kurvenmuster funktionieren nicht nur für ganze Körper, sondern auch für Formschritte wie Taschen, Nuten oder Rippen – alle Kopien schneiden oder verstärken denselben Zielkörper. Klicke im 3D-Bild auf einen kleinen Zahlen-Punkt oder rechts unter „Kopien“ auf ein Feld, um genau diese Kopie auszulassen (durchgestrichen) oder wieder einzuschalten.",
+  "tipp": "Praktisch, wenn an einer Stelle ein Steg, eine Schraube oder ein Bauteil im Weg ist: Mindestens eine Kopie bleibt immer aktiv, und jede Änderung lässt sich rückgängig machen."
  }
 };
 
@@ -2887,35 +2905,51 @@ const Model = (() => {
     if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
     return m;
   }
-  // Lage jeder Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
-  function patternMatrices(g, V) {
-    const I = new THREE.Matrix4(), out = [I];
-    if (!g.p || g.p.op !== 'pattern') return out;
+  // Alle Kopie-Instanzen einer Muster-Gruppe (inkl. skipped-Flag) – genau wie der Kern sie baut
+  function patternInstances(g, V) {
+    const I = new THREE.Matrix4();
+    if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, matrix: I, skipped: false, label: '1' }];
     const p = g.p.pt === 'path' ? pathPatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
+    const skipSet = new Set(Array.isArray(g.p.skip) ? g.p.skip.map((x) => Math.round(Number(x))) : []);
     const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
     const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
+    const out = [];
     if (p.pt === 'rect') {
       const nx = clamp(Math.round(N('nx', 1)), 1, 60), ny = clamp(Math.round(N('ny', 1)), 1, 60), dx = N('dx', 10), dy = N('dy', 10);
-      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) out.push(new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0));
+      let idx = 0;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
+        out.push({ idx, matrix: idx === 0 ? I : new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0), skipped: skipSet.has(idx), label: nx > 1 && ny > 1 ? `${i + 1}·${j + 1}` : String(idx + 1) });
+      }
     } else if (p.pt === 'circ') {
       const n = clamp(Math.round(N('n', 4)), 1, 120), ang = N('ang', 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
       const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
       const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
       const c = picked ? p.ao.map(Number) : [N('cx', 0), N('cy', 0), N('cz', 0)];
-      for (let k = 1; k < n; k++) out.push(rot(c, ax, k * step));
+      for (let k = 0; k < n; k++) {
+        out.push({ idx: k, matrix: k === 0 ? I : rot(c, ax, k * step), skipped: skipSet.has(k), label: String(k + 1) });
+      }
     } else if (p.pt === 'path') {
-      for (const q of (p.places || []).slice(1, 200)) {
+      const places = (p.places || []).slice(0, 200);
+      if (!places.length) out.push({ idx: 0, matrix: I, skipped: false, label: '1' });
+      else places.forEach((q, k) => {
+        if (k === 0) { out.push({ idx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
         const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
-        out.push(m);
-      }
-    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) out.push(refl(p.mn.map(Number), p.mo.map(Number)));
-    else if (p.pt === 'mirror') {
+        out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
+      });
+    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
+      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(p.mn.map(Number), p.mo.map(Number)), skipped: false, label: '2' });
+    } else if (p.pt === 'mirror') {
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ', n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = N('off', 0);
-      out.push(refl(n, [n[0] * off, n[1] * off, n[2] * off]));
+      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(n, [n[0] * off, n[1] * off, n[2] * off]), skipped: false, label: '2' });
     }
-    return out;
+    return out.length ? out : [{ idx: 0, matrix: I, skipped: false, label: '1' }];
+  }
+  // Lage jeder aktiven Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
+  function patternMatrices(g, V) {
+    const mats = patternInstances(g, V).filter((x) => !x.skipped).map((x) => x.matrix);
+    return mats.length ? mats : [new THREE.Matrix4()];
   }
   // Weltlage eines Teils – einmal je Kopie, wenn es in Muster-Gruppen steckt (z. B. ein Motor, viermal im Kreis kopiert)
   function instanceMatrices(doc, id, V = vars(doc).v) {
@@ -3191,6 +3225,7 @@ const Model = (() => {
   }
   function pathPatternParams(it, V) {
     const p = it.p || {}, out = { op: 'pattern', pt: 'path', places: [], n: [0, 0, 1], p0: [0, 0, 0], align: p.align !== false && p.align !== 'nein' };
+    if (Array.isArray(p.skip) && p.skip.length) out.skip = p.skip.slice();
     if (!p.sketch) return out;
     const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0)); if (!L.length) return out;
     const pl = p.sketch.plane, x = pl.x, n = pl.n, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
@@ -3469,6 +3504,46 @@ const Model = (() => {
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
         return null;
       }
+    }
+    return null;
+  }
+  function itemLocalBox(it, V = {}) {
+    if (!it) return null;
+    const pb = primitiveBox(it.kind, resolveP(it.p, V));
+    if (pb) return pb;
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'revolve') && it.p && it.p.sketch) {
+      const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
+      const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
+      if (b) {
+        const pl = it.p.sketch.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+        const x = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize(), n = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize(), y = new THREE.Vector3().crossVectors(n, x), o = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+        const dist = num(it.p.dist, V, 10), dir = it.p.dir || 'normal';
+        const w0 = it.kind === 'extrude' ? (dir === 'both' ? -dist / 2 : dir === 'two' ? -num(it.p.dist2, V, dist) : dir === 'reverse' ? -dist : 0) : -1;
+        const w1 = it.kind === 'extrude' ? (dir === 'both' ? dist / 2 : dir === 'reverse' ? 0 : dist) : 1;
+        const box = new THREE.Box3();
+        for (const u of [b[0], b[2]]) for (const v of [b[1], b[3]]) for (const w of [w0, w1]) {
+          box.expandByPoint(o.clone().addScaledVector(x, u).addScaledVector(y, v).addScaledVector(n, w));
+        }
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      }
+    }
+    if (it.kind === 'part') {
+      const p = resolveP(it.p || {}, V);
+      const r = Math.max(1, Number(p.d) || 6) / 2, dep = Math.max(2, Number(p.depth || p.length || p.h) || 10);
+      return [-r, -r, -dep / 2, r, r, dep / 2];
+    }
+    if (it.kind === 'group' && it.children && it.children.length) {
+      const prev = curV; curV = V;
+      try {
+        const box = new THREE.Box3();
+        for (const c of it.children) {
+          if (c.hidden) continue;
+          const cb = itemLocalBox(c, V); if (!cb) continue;
+          const b = new THREE.Box3(new THREE.Vector3(cb[0], cb[1], cb[2]), new THREE.Vector3(cb[3], cb[4], cb[5])).applyMatrix4(localMatrix(c, new THREE.Matrix4()));
+          box.union(b);
+        }
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      } finally { curV = prev; }
     }
     return null;
   }
@@ -3830,7 +3905,7 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 14-ttf.js ----
@@ -6658,7 +6733,7 @@ const Kernel = (() => {
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -6677,7 +6752,7 @@ const App = (() => {
     Model.useVars(Model.vars(S.doc).v);
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.resolved.clear(); S.errors = []; S.revision++;
+    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.revision++;
     Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
@@ -6857,10 +6932,14 @@ const App = (() => {
     const seen = new Set();
     S.merged = new Map();
     S.resolved = new Map(Object.entries(res.resolved || {}));
+    S.baseBoxes = new Map();
+    S.ownBoxes = new Map();
     for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
+      if (n.baseBox) S.baseBoxes.set(n.id, n.baseBox);
+      if (n.ownBox) S.ownBoxes.set(n.id, n.ownBox);
       const it = topItem(n.id); if (!it) continue;
       const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
@@ -7009,6 +7088,8 @@ const App = (() => {
     timeOf(id) { return times.get(id) || null; },
     get times() { return times; },
     mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
+    baseBox(id) { return (S.baseBoxes && S.baseBoxes.get(id)) || null; },
+    ownBox(id) { return (S.ownBoxes && S.ownBoxes.get(id)) || null; },
     resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
     resolvedDist(id) { const r = S.resolved && S.resolved.get(id); return r && isFinite(r.dist) ? r.dist : null; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
@@ -9971,7 +10052,7 @@ const Actions = (() => {
       const GM = Model.localMatrix(G);
       const at = ff.list.indexOf(G);
       ff.list.splice(at, 1);
-      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); ff.list.splice(at + i, 0, c); kids.push(c.id); });
+      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
     });
     App.select(kids);
     if ((f.item.finishes || []).length) UI.toast('Die Rundungen der Gruppe wurden entfernt, weil es die Gruppe nicht mehr gibt.', { icon: 'info' });
@@ -10388,13 +10469,55 @@ const Features = (() => {
     return items;
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
-  function wrap(items, name, p) {
+  function sharedFeatureOp(items) {
+    if (items.some((x) => x.kind === 'transform' && !(x.p && x.p.copy))) {
+      UI.toast('Verschieben-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
+      return { ok: false };
+    }
+    if (items.some((x) => x.kind === 'rib')) {
+      if (items.length === 1 && items[0].p && items[0].p.target && App.doc.items.includes(items[0])) {
+        return { ok: true, op: { type: 'join', target: items[0].p.target, rib: true } };
+      }
+      UI.toast('Eine Rippe lässt sich nur einzeln mit ihrem Zielkörper mustern.', { icon: 'info' });
+      return { ok: false };
+    }
+    if (items.some((x) => x.op && x.op.target)) {
+      const o0 = items[0].op;
+      const same = o0 && o0.target && items.every((x) => App.doc.items.includes(x) && x.op && x.op.type === o0.type && x.op.target === o0.target);
+      if (!same) {
+        UI.toast('Wähle Formschritte mit demselben Modus und Zielkörper (oder ohne Verrechnung).', { icon: 'info' });
+        return { ok: false };
+      }
+      return { ok: true, op: { type: o0.type, target: o0.target } };
+    }
+    return { ok: true, op: null };
+  }
+  function ownBoxOf(items) {
+    const box = new THREE.Box3(), V = Model.vars(App.doc).v;
+    for (const x of items) {
+      const ob = App.ownBox(x.id);
+      if (ob) { box.union(new THREE.Box3(new THREE.Vector3(ob[0], ob[1], ob[2]), new THREE.Vector3(ob[3], ob[4], ob[5]))); continue; }
+      const lb = Model.itemLocalBox(x, V);
+      if (lb) {
+        box.union(new THREE.Box3(new THREE.Vector3(lb[0], lb[1], lb[2]), new THREE.Vector3(lb[3], lb[4], lb[5])).applyMatrix4(Model.worldMatrix(App.doc, x.id)));
+        continue;
+      }
+      const wb = Actions.worldBox(x.id);
+      if (wb) box.union(wb);
+    }
+    return box;
+  }
+  function wrap(items, name, p, sharedOp = null) {
     let G;
     App.change(name + ' angelegt', (doc) => {
       const list = Model.find(doc, items[0].id).list; const its = items.map((x) => list.find((y) => y.id === x.id)).filter(Boolean);
       const first = its.find((x) => x.role !== 'hole') || its[0];
-      G = Model.newItem('group', {}, { name, color: first.color, role: its.every((x) => x.role === 'hole') ? 'hole' : 'solid' });
+      G = Model.newItem('group', {}, { name, color: first.color, role: sharedOp ? 'solid' : (its.every((x) => x.role === 'hole') ? 'hole' : 'solid') });
       G.p = { ...p };
+      if (sharedOp) {
+        G.op = { type: sharedOp.type, target: sharedOp.target };
+        for (const it of its) if (it.kind !== 'rib') delete it.op;
+      }
       const at = Math.min(...its.map((x) => list.indexOf(x)));
       for (const it of its) { list.splice(list.indexOf(it), 1); G.children.push(it); }
       list.splice(at, 0, G);
@@ -10404,11 +10527,26 @@ const Features = (() => {
   }
   function pattern(type, ids) {
     const items = need(ids); if (!items.length) return null;
-    const b = Actions.selBox(items.map((x) => x.id));
+    const sop = type === 'mirror' ? { ok: true, op: null } : sharedFeatureOp(items);
+    if (!sop.ok) return null;
+    const sharedOp = sop.op;
+    const b = sharedOp ? ownBoxOf(items) : Actions.selBox(items.map((x) => x.id));
     const size = b.isEmpty() ? new THREE.Vector3(10, 10, 10) : b.getSize(new THREE.Vector3());
     let G;
-    if (type === 'rect') G = wrap(items, NAMES.rect, { op: 'pattern', pt: 'rect', nx: 3, ny: 1, dx: round(size.x + 5, 1), dy: round(size.y + 5, 1) });
-    else if (type === 'circ') G = wrap(items, NAMES.circ, { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: 0, cy: 0 });
+    if (type === 'rect') G = wrap(items, NAMES.rect, { op: 'pattern', pt: 'rect', nx: 3, ny: 1, dx: round(size.x + 5, 1), dy: round(size.y + 5, 1) }, sharedOp);
+    else if (type === 'circ') {
+      let cx = 0, cy = 0;
+      if (sharedOp && sharedOp.target) {
+        const tid = App.mergedInto(sharedOp.target) || sharedOp.target;
+        const tb = Actions.worldBox(tid);
+        if (tb && !tb.isEmpty()) {
+          const tc = tb.getCenter(new THREE.Vector3());
+          cx = round(tc.x, 2) || 0;
+          cy = round(tc.y, 2) || 0;
+        }
+      }
+      G = wrap(items, NAMES.circ, { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx, cy }, sharedOp);
+    }
     else G = wrap(items, NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'YZ', off: 0 });
     UI.toast(type === 'mirror' ? 'Gespiegelte Kopie angelegt. Rechts wählst du die Spiegelebene.' : 'Muster angelegt. Rechts stellst du Anzahl und Abstand ein – auch mit Formeln.', { icon: 'check' });
     return G;
@@ -10416,8 +10554,9 @@ const Features = (() => {
   // Muster entlang Kurve: erst die Kurve zeichnen (Skizze auf Höhe der Oberkante), dann legt pathFromSketch die Gruppe an
   function patternPath(ids) {
     const items = need(ids); if (!items.length) return null;
+    const sop = sharedFeatureOp(items); if (!sop.ok) return null;
     const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
-    const b = Actions.selBox(items.map((x) => x.id));
+    const b = sop.op ? ownBoxOf(items) : Actions.selBox(items.map((x) => x.id));
     const c = b.isEmpty() ? new THREE.Vector3() : b.getCenter(new THREE.Vector3()).applyMatrix4(inv);
     const top = b.isEmpty() ? 0 : new THREE.Vector3(b.getCenter(new THREE.Vector3()).x, b.getCenter(new THREE.Vector3()).y, b.max.z).applyMatrix4(inv).z;
     Sketch.startPath({ plane: { o: [0, 0, round(top, 4)], x: [1, 0, 0], n: [0, 0, 1] }, W, ents: [{ id: uid('e'), type: 'point', a: [round(c.x, 4), round(c.y, 4)] }], ids: items.map((x) => x.id), viewSize: b.isEmpty() ? 100 : Math.max(100, 5 * Math.max(b.max.x - b.min.x, b.max.y - b.min.y)) });
@@ -10426,7 +10565,8 @@ const Features = (() => {
   function pathFromSketch(ids, sketch) {
     const items = siblings(ids);
     if (!items.length) { UI.toast('Die gewählten Objekte gibt es nicht mehr.', { kind: 'bad' }); return null; }
-    const G = wrap(items, NAMES.path, { op: 'pattern', pt: 'path', n: 5, d: 0, align: true, sketch });
+    const sop = sharedFeatureOp(items);
+    const G = wrap(items, NAMES.path, { op: 'pattern', pt: 'path', n: 5, d: 0, align: true, sketch }, sop.ok ? sop.op : null);
     UI.toast('Muster entlang der Kurve angelegt. Rechts stellst du Anzahl, Abstand und Mitdrehen ein.', { icon: 'check' });
     return G;
   }
@@ -10944,6 +11084,109 @@ const Features = (() => {
     App.select([it.id]);
     UI.toast(ex ? 'Öffnung umgeschaltet. Jede Fläche, die du so anklickst, wird offen oder wieder zu.' : 'Ausgehöhlt mit 2 mm Wand. Rechts änderst du die Wandstärke.', { icon: 'check' });
   }
+  // ---------- Einzelne Kopien im Muster auslassen (KP-13) ----------
+  let patDots = [];
+  function togglePatternSkip(id, idx) {
+    const f = Model.find(App.doc, id);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'pattern' || f.item.p.pt === 'mirror') return false;
+    const V = Model.vars(App.doc).v, inst = Model.patternInstances(f.item, V);
+    const k = Math.round(Number(idx));
+    if (!inst.some((x) => x.idx === k)) return false;
+    const valid = new Set(inst.map((x) => x.idx));
+    const cur = new Set((Array.isArray(f.item.p.skip) ? f.item.p.skip : []).map((x) => Math.round(Number(x))).filter((x) => valid.has(x)));
+    const wasSkipped = cur.has(k);
+    if (wasSkipped) cur.delete(k);
+    else {
+      if (cur.size + 1 >= inst.length) { UI.toast('Mindestens eine Kopie muss aktiv bleiben.', { icon: 'info' }); return false; }
+      cur.add(k);
+    }
+    const next = [...cur].sort((a, b) => a - b);
+    App.change(wasSkipped ? `Kopie ${k + 1} wieder aktiv` : `Kopie ${k + 1} ausgelassen`, (doc) => {
+      const fn = Model.find(doc, id); if (!fn) return false;
+      if (next.length) fn.item.p.skip = next; else delete fn.item.p.skip;
+    });
+    return true;
+  }
+  function resetPatternSkip(id) {
+    const f = Model.find(App.doc, id);
+    if (!f || !f.item.p || !Array.isArray(f.item.p.skip) || !f.item.p.skip.length) return false;
+    App.change('Alle Kopien aktiviert', (doc) => {
+      const fn = Model.find(doc, id); if (!fn || !fn.item.p) return false;
+      delete fn.item.p.skip;
+    });
+    return true;
+  }
+  function clearPatternMarkers() {
+    for (const d of patDots) d.el.remove();
+    patDots = [];
+  }
+  function placePatternMarkers() {
+    if (!patDots.length) return;
+    for (const d of patDots) {
+      const s = Viewer.toScreen(d.world);
+      if (s.behind) d.el.style.display = 'none';
+      else { d.el.style.display = ''; d.el.style.left = s.x + 'px'; d.el.style.top = s.y + 'px'; }
+    }
+  }
+  function syncPatternMarkers() {
+    clearPatternMarkers();
+    if (typeof Viewer === 'undefined' || !Viewer.container || App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging || Views.exploded || App.sel.length !== 1) return;
+    const f = Model.find(App.doc, App.sel[0]); if (!f) return;
+    const it = f.item;
+    if (!isOp(it) || it.p.op !== 'pattern' || it.p.pt === 'mirror') return;
+    if (!App.ctx && !Model.isActive(App.doc, it.id)) return;
+    const V = Model.vars(App.doc).v, inst = Model.patternInstances(it, V);
+    if (inst.length < 2 || inst.length > 64) return;
+    const ov = $('#overlay'); if (!ov) return;
+    const bb = App.baseBox(it.id) || Model.itemLocalBox(it, V) || App.localBox(it.id);
+    const c0 = bb ? new THREE.Vector3((bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2) : new THREE.Vector3();
+    const W = Model.worldMatrix(App.doc, it.id);
+    for (const x of inst) {
+      const w = c0.clone().applyMatrix4(x.matrix).applyMatrix4(W);
+      const b = h('button', {
+        type: 'button',
+        class: 'pat-dot' + (x.skipped ? ' skipped' : ''),
+        'aria-pressed': x.skipped ? 'true' : 'false',
+        dataset: { idx: x.idx },
+        'data-tip': x.skipped ? `Kopie ${x.label} ausgelassen – klicken zum Aktivieren` : `Kopie ${x.label} – klicken zum Auslassen`,
+      }, x.label);
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => { e.stopPropagation(); togglePatternSkip(it.id, x.idx); });
+      ov.append(b);
+      patDots.push({ el: b, world: w });
+    }
+    placePatternMarkers();
+  }
+  if (typeof Viewer !== 'undefined' && Viewer.on) Viewer.on('camera', placePatternMarkers);
+  if (typeof window !== 'undefined') window.addEventListener('resize', placePatternMarkers);
+  function renderSkipUI(it, sec) {
+    const p = it.p || {};
+    if (p.op !== 'pattern' || (p.pt !== 'rect' && p.pt !== 'circ' && p.pt !== 'path')) return;
+    const V = Model.vars(App.doc).v, inst = Model.patternInstances(it, V);
+    if (inst.length < 2) return;
+    const active = inst.filter((x) => !x.skipped).length;
+    const box = h('div', { class: 'pat-skip-box', id: 'op-skip-wrap', 'data-help': 'patternSkip' });
+    const head = h('div', { class: 'pat-skip-head' }, h('span', null, `Kopien (${active} von ${inst.length} aktiv)`));
+    if (active < inst.length) {
+      const rb = h('button', { type: 'button', class: 'btn ghost small', id: 'op-skip-reset' }, 'Alle aktivieren');
+      rb.onclick = () => resetPatternSkip(it.id);
+      head.append(rb);
+    }
+    const chips = h('div', { class: 'pat-chips' });
+    for (const x of inst) {
+      const ch = h('button', {
+        type: 'button',
+        class: 'pat-chip' + (x.skipped ? ' skipped' : ''),
+        'aria-pressed': x.skipped ? 'true' : 'false',
+        dataset: { idx: x.idx },
+        'data-tip': x.skipped ? `Kopie ${x.label} wieder aktivieren` : `Kopie ${x.label} auslassen`,
+      }, x.label);
+      ch.onclick = () => togglePatternSkip(it.id, x.idx);
+      chips.append(ch);
+    }
+    box.append(head, chips);
+    sec.append(box);
+  }
   // ---------- Rechte Leiste ----------
   function renderOp(it, sec, setP) {
     const p = it.p || {};
@@ -10951,7 +11194,7 @@ const Features = (() => {
     const num = (k, label, unit = 'mm', o = {}) => UI.numField({ id: 'op-' + k, label, value: p[k], unit, int: o.int, min: o.min, onCommit: (v) => setP(k, v) });
     const sel = (k, label, opts) => UI.selectField({ id: 'op-' + k, label, value: p[k], options: opts, onChange: (v) => setP(k, v) });
     let hint = '';
-    if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
+    if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).'; }
     else if (p.op === 'pattern' && p.pt === 'circ') {
       const axObj = p.axisId && typeof Datums !== 'undefined' ? Datums.findAxis(p.axisId) : null;
       const ax = p.axis === 'x' || p.axis === 'y' || (p.axis === 'pick' && Array.isArray(p.ad)) ? p.axis : 'z';
@@ -10978,9 +11221,11 @@ const Features = (() => {
       }
       const pb = h('button', { type: 'button', class: 'btn', id: 'op-axispick' }); pb.innerHTML = icon('cursor') + (ax === 'pick' ? 'Andere Achse wählen' : 'Achse im Bild wählen');
       pb.onclick = () => pickAxis(it.id);
-      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum.';
+      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).';
       sec.append(f); if (info) sec.append(info);
-      sec.append(h('div', { class: 'btn-row' }, pb), h('div', { class: 'hint-box', html: hint }));
+      sec.append(h('div', { class: 'btn-row' }, pb));
+      renderSkipUI(it, sec);
+      sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
       ub.onclick = () => Actions.ungroup(it.id);
       sec.append(h('div', { class: 'btn-row' }, ub));
@@ -10989,10 +11234,11 @@ const Features = (() => {
     else if (p.op === 'pattern' && p.pt === 'path') {
       f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('d', 'Abstand', 'mm', { min: 0 }));
       f.append(UI.selectField({ id: 'op-align', label: 'Ausrichtung', value: p.align === false ? 'nein' : 'ja', options: [['ja', 'Mit der Kurve'], ['nein', 'Wie das Original']], onChange: (v) => setP('align', v === 'ja') }));
-      hint = 'Die Anzahl zählt das Original mit. <b>Abstand 0</b> verteilt die Kopien gleichmäßig über die ganze Kurve, ein Wert setzt sie in diesem Abstand – bis die Kurve zu Ende ist. Ausrichtung „Mit der Kurve“ dreht jede Kopie so, wie die Kurve abbiegt – wie Zähne an einem Bogen.';
+      hint = 'Die Anzahl zählt das Original mit. <b>Abstand 0</b> verteilt die Kopien gleichmäßig über die ganze Kurve, ein Wert setzt sie in diesem Abstand – bis die Kurve zu Ende ist. Ausrichtung „Mit der Kurve“ dreht jede Kopie so, wie die Kurve abbiegt – wie Zähne an einem Bogen. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).';
       const eb = h('button', { type: 'button', class: 'btn', id: 'op-editpath' }); eb.innerHTML = icon('sketch') + 'Kurve bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
       sec.append(f, h('div', { class: 'btn-row' }, eb));
+      renderSkipUI(it, sec);
       sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
       ub.onclick = () => Actions.ungroup(it.id);
@@ -11008,6 +11254,7 @@ const Features = (() => {
       hint = 'Mit „Spalt“ rücken die Hälften auseinander – praktisch zum Drucken in zwei Teilen.';
     } else if (p.op === 'intersect') hint = 'Übrig bleibt nur, was in allen Körpern dieser Gruppe zugleich liegt.';
     sec.append(f);
+    renderSkipUI(it, sec);
     if (hint) sec.append(h('div', { class: 'hint-box', html: hint }));
     const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + (p.op === 'pattern' ? 'Auflösen (nur Original behalten)' : 'Auflösen');
     ub.onclick = () => Actions.ungroup(it.id);
@@ -11016,9 +11263,20 @@ const Features = (() => {
   // Text für Verlauf und Statuszeile
   function sizeText(it, V) {
     const p = Model.resolveP(it.p || {}, V || {});
-    if (p.op === 'pattern' && p.pt === 'rect') return `${Math.max(1, Math.round(p.nx || 1))} × ${Math.max(1, Math.round(p.ny || 1))}`;
-    if (p.op === 'pattern' && p.pt === 'circ') return `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
-    if (p.op === 'pattern' && p.pt === 'path') { let k = 0; try { k = Model.pathPatternParams(it, V || Model.vars(App.doc).v).places.length; } catch (_) { k = 0; } return k ? `${k}× entlang Kurve` : 'Kurve fehlt'; }
+    const inst = p.op === 'pattern' ? Model.patternInstances(it, V || {}) : null;
+    const total = inst ? inst.length : 0, active = inst ? inst.filter((x) => !x.skipped).length : 0;
+    const hasSkip = !!(inst && active < total);
+    if (p.op === 'pattern' && p.pt === 'rect') {
+      const base = `${Math.max(1, Math.round(p.nx || 1))} × ${Math.max(1, Math.round(p.ny || 1))}`;
+      return hasSkip ? `${active}/${total} (${base})` : base;
+    }
+    if (p.op === 'pattern' && p.pt === 'circ') {
+      const base = `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
+      return hasSkip ? `${active}/${total}× ${fmt(p.ang ?? 360, 0)}°` : base;
+    }
+    if (p.op === 'pattern' && p.pt === 'path') {
+      return total ? (hasSkip ? `${active}/${total}× entlang Kurve` : `${total}× entlang Kurve`) : 'Kurve fehlt';
+    }
     if (p.op === 'pattern' && p.pt === 'mirror') return 'gespiegelt';
     if (p.op === 'split') return { both: 'beide Hälften', positive: 'eine Hälfte', negative: 'eine Hälfte' }[p.keep] || '';
     if (p.op === 'intersect') return 'Schnittmenge';
@@ -11326,7 +11584,7 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
@@ -15130,7 +15388,8 @@ const Panels = (() => {
       if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
-      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
+      const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
+      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
       const acts = h('span', { class: 'acts' });
       const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
       dup.innerHTML = icon('copy');
@@ -15157,6 +15416,7 @@ const Panels = (() => {
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
+          ...(!(it.kind === 'transform' && !(it.p && it.p.copy)) ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -15630,7 +15890,8 @@ const Panels = (() => {
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
-    if (idx < 0 || it.kind === 'group' || it.kind === 'transform' || it.kind === 'rib') return null;
+    const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'rib') return null;
     const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
@@ -16234,8 +16495,8 @@ const Panels = (() => {
   let ctx = null;
   function renderCtx() {
     if (ctx) { ctx.remove(); ctx = null; }
-    if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
-    const items = App.selectedItems(); if (!items.length) return;
+    if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) { Features.syncPatternMarkers(); return; }
+    const items = App.selectedItems(); if (!items.length) { Features.syncPatternMarkers(); return; }
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': T('ctx.toolbarAria') });
     const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
@@ -16249,6 +16510,7 @@ const Panels = (() => {
       else b('rollback', T('ctx.markerAfter'), () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', T('ctx.markerAfterTip'));
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     if (items.length === 1 && items[0].item.kind === 'transform' && !(items[0].item.p && items[0].item.p.copy)) {
@@ -16259,17 +16521,20 @@ const Panels = (() => {
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     if (items.length === 1 && items[0].item.kind === 'rib') {
       const it = items[0].item;
       bar.append(h('span', { class: 'lbl' }, 'Rippe'));
       b('edit', 'Skizze bearbeiten', () => Sketch.editItem(it.id), 'accent', 'Skizze dieser Rippe bearbeiten');
+      b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }]), '', T('ctx.patternTip'), true);
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
+      Features.syncPatternMarkers();
       return;
     }
     const face = Actions.selectedFace();
@@ -16370,6 +16635,7 @@ const Panels = (() => {
     b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
     $('#overlay').append(bar); ctx = bar;
     placeCtx();
+    Features.syncPatternMarkers();
   }
   function placeCtx() {
     if (!ctx) return;
@@ -29009,7 +29275,7 @@ const Explain = (() => {
   // Körper und Löcher zählen – Muster zählen mit ihrer Anzahl (4 Motorschrauben im Kreismuster = 4 Löcher)
   function counts(it, V) {
     let solids = 0, holes = 0;
-    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'circ') return Math.max(1, Math.round(p.n || 1)); if (p.pt === 'rect') return Math.max(1, Math.round(p.nx || 1)) * Math.max(1, Math.round(p.ny || 1)); if (p.pt === 'path') return Math.max(1, Math.round(p.n || 1)); return 2; };
+    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'mirror') return 2; return Math.max(1, Model.patternMatrices(g, V).length); };
     const rec = (list, k, hole) => { for (const c of list || []) { if (c.suppressed) continue; const isH = hole || c.role === 'hole'; if (c.kind === 'group') rec(c.children, k * mult(c), isH); else if (isH) holes += k; else solids += k; } };
     rec(it.children, 1, false);
     return { solids, holes };

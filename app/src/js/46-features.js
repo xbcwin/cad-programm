@@ -17,13 +17,55 @@ const Features = (() => {
     return items;
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
-  function wrap(items, name, p) {
+  function sharedFeatureOp(items) {
+    if (items.some((x) => x.kind === 'transform' && !(x.p && x.p.copy))) {
+      UI.toast('Verschieben-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
+      return { ok: false };
+    }
+    if (items.some((x) => x.kind === 'rib')) {
+      if (items.length === 1 && items[0].p && items[0].p.target && App.doc.items.includes(items[0])) {
+        return { ok: true, op: { type: 'join', target: items[0].p.target, rib: true } };
+      }
+      UI.toast('Eine Rippe lässt sich nur einzeln mit ihrem Zielkörper mustern.', { icon: 'info' });
+      return { ok: false };
+    }
+    if (items.some((x) => x.op && x.op.target)) {
+      const o0 = items[0].op;
+      const same = o0 && o0.target && items.every((x) => App.doc.items.includes(x) && x.op && x.op.type === o0.type && x.op.target === o0.target);
+      if (!same) {
+        UI.toast('Wähle Formschritte mit demselben Modus und Zielkörper (oder ohne Verrechnung).', { icon: 'info' });
+        return { ok: false };
+      }
+      return { ok: true, op: { type: o0.type, target: o0.target } };
+    }
+    return { ok: true, op: null };
+  }
+  function ownBoxOf(items) {
+    const box = new THREE.Box3(), V = Model.vars(App.doc).v;
+    for (const x of items) {
+      const ob = App.ownBox(x.id);
+      if (ob) { box.union(new THREE.Box3(new THREE.Vector3(ob[0], ob[1], ob[2]), new THREE.Vector3(ob[3], ob[4], ob[5]))); continue; }
+      const lb = Model.itemLocalBox(x, V);
+      if (lb) {
+        box.union(new THREE.Box3(new THREE.Vector3(lb[0], lb[1], lb[2]), new THREE.Vector3(lb[3], lb[4], lb[5])).applyMatrix4(Model.worldMatrix(App.doc, x.id)));
+        continue;
+      }
+      const wb = Actions.worldBox(x.id);
+      if (wb) box.union(wb);
+    }
+    return box;
+  }
+  function wrap(items, name, p, sharedOp = null) {
     let G;
     App.change(name + ' angelegt', (doc) => {
       const list = Model.find(doc, items[0].id).list; const its = items.map((x) => list.find((y) => y.id === x.id)).filter(Boolean);
       const first = its.find((x) => x.role !== 'hole') || its[0];
-      G = Model.newItem('group', {}, { name, color: first.color, role: its.every((x) => x.role === 'hole') ? 'hole' : 'solid' });
+      G = Model.newItem('group', {}, { name, color: first.color, role: sharedOp ? 'solid' : (its.every((x) => x.role === 'hole') ? 'hole' : 'solid') });
       G.p = { ...p };
+      if (sharedOp) {
+        G.op = { type: sharedOp.type, target: sharedOp.target };
+        for (const it of its) if (it.kind !== 'rib') delete it.op;
+      }
       const at = Math.min(...its.map((x) => list.indexOf(x)));
       for (const it of its) { list.splice(list.indexOf(it), 1); G.children.push(it); }
       list.splice(at, 0, G);
@@ -33,11 +75,26 @@ const Features = (() => {
   }
   function pattern(type, ids) {
     const items = need(ids); if (!items.length) return null;
-    const b = Actions.selBox(items.map((x) => x.id));
+    const sop = type === 'mirror' ? { ok: true, op: null } : sharedFeatureOp(items);
+    if (!sop.ok) return null;
+    const sharedOp = sop.op;
+    const b = sharedOp ? ownBoxOf(items) : Actions.selBox(items.map((x) => x.id));
     const size = b.isEmpty() ? new THREE.Vector3(10, 10, 10) : b.getSize(new THREE.Vector3());
     let G;
-    if (type === 'rect') G = wrap(items, NAMES.rect, { op: 'pattern', pt: 'rect', nx: 3, ny: 1, dx: round(size.x + 5, 1), dy: round(size.y + 5, 1) });
-    else if (type === 'circ') G = wrap(items, NAMES.circ, { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: 0, cy: 0 });
+    if (type === 'rect') G = wrap(items, NAMES.rect, { op: 'pattern', pt: 'rect', nx: 3, ny: 1, dx: round(size.x + 5, 1), dy: round(size.y + 5, 1) }, sharedOp);
+    else if (type === 'circ') {
+      let cx = 0, cy = 0;
+      if (sharedOp && sharedOp.target) {
+        const tid = App.mergedInto(sharedOp.target) || sharedOp.target;
+        const tb = Actions.worldBox(tid);
+        if (tb && !tb.isEmpty()) {
+          const tc = tb.getCenter(new THREE.Vector3());
+          cx = round(tc.x, 2) || 0;
+          cy = round(tc.y, 2) || 0;
+        }
+      }
+      G = wrap(items, NAMES.circ, { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx, cy }, sharedOp);
+    }
     else G = wrap(items, NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'YZ', off: 0 });
     UI.toast(type === 'mirror' ? 'Gespiegelte Kopie angelegt. Rechts wählst du die Spiegelebene.' : 'Muster angelegt. Rechts stellst du Anzahl und Abstand ein – auch mit Formeln.', { icon: 'check' });
     return G;
@@ -45,8 +102,9 @@ const Features = (() => {
   // Muster entlang Kurve: erst die Kurve zeichnen (Skizze auf Höhe der Oberkante), dann legt pathFromSketch die Gruppe an
   function patternPath(ids) {
     const items = need(ids); if (!items.length) return null;
+    const sop = sharedFeatureOp(items); if (!sop.ok) return null;
     const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
-    const b = Actions.selBox(items.map((x) => x.id));
+    const b = sop.op ? ownBoxOf(items) : Actions.selBox(items.map((x) => x.id));
     const c = b.isEmpty() ? new THREE.Vector3() : b.getCenter(new THREE.Vector3()).applyMatrix4(inv);
     const top = b.isEmpty() ? 0 : new THREE.Vector3(b.getCenter(new THREE.Vector3()).x, b.getCenter(new THREE.Vector3()).y, b.max.z).applyMatrix4(inv).z;
     Sketch.startPath({ plane: { o: [0, 0, round(top, 4)], x: [1, 0, 0], n: [0, 0, 1] }, W, ents: [{ id: uid('e'), type: 'point', a: [round(c.x, 4), round(c.y, 4)] }], ids: items.map((x) => x.id), viewSize: b.isEmpty() ? 100 : Math.max(100, 5 * Math.max(b.max.x - b.min.x, b.max.y - b.min.y)) });
@@ -55,7 +113,8 @@ const Features = (() => {
   function pathFromSketch(ids, sketch) {
     const items = siblings(ids);
     if (!items.length) { UI.toast('Die gewählten Objekte gibt es nicht mehr.', { kind: 'bad' }); return null; }
-    const G = wrap(items, NAMES.path, { op: 'pattern', pt: 'path', n: 5, d: 0, align: true, sketch });
+    const sop = sharedFeatureOp(items);
+    const G = wrap(items, NAMES.path, { op: 'pattern', pt: 'path', n: 5, d: 0, align: true, sketch }, sop.ok ? sop.op : null);
     UI.toast('Muster entlang der Kurve angelegt. Rechts stellst du Anzahl, Abstand und Mitdrehen ein.', { icon: 'check' });
     return G;
   }
@@ -573,6 +632,109 @@ const Features = (() => {
     App.select([it.id]);
     UI.toast(ex ? 'Öffnung umgeschaltet. Jede Fläche, die du so anklickst, wird offen oder wieder zu.' : 'Ausgehöhlt mit 2 mm Wand. Rechts änderst du die Wandstärke.', { icon: 'check' });
   }
+  // ---------- Einzelne Kopien im Muster auslassen (KP-13) ----------
+  let patDots = [];
+  function togglePatternSkip(id, idx) {
+    const f = Model.find(App.doc, id);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'pattern' || f.item.p.pt === 'mirror') return false;
+    const V = Model.vars(App.doc).v, inst = Model.patternInstances(f.item, V);
+    const k = Math.round(Number(idx));
+    if (!inst.some((x) => x.idx === k)) return false;
+    const valid = new Set(inst.map((x) => x.idx));
+    const cur = new Set((Array.isArray(f.item.p.skip) ? f.item.p.skip : []).map((x) => Math.round(Number(x))).filter((x) => valid.has(x)));
+    const wasSkipped = cur.has(k);
+    if (wasSkipped) cur.delete(k);
+    else {
+      if (cur.size + 1 >= inst.length) { UI.toast('Mindestens eine Kopie muss aktiv bleiben.', { icon: 'info' }); return false; }
+      cur.add(k);
+    }
+    const next = [...cur].sort((a, b) => a - b);
+    App.change(wasSkipped ? `Kopie ${k + 1} wieder aktiv` : `Kopie ${k + 1} ausgelassen`, (doc) => {
+      const fn = Model.find(doc, id); if (!fn) return false;
+      if (next.length) fn.item.p.skip = next; else delete fn.item.p.skip;
+    });
+    return true;
+  }
+  function resetPatternSkip(id) {
+    const f = Model.find(App.doc, id);
+    if (!f || !f.item.p || !Array.isArray(f.item.p.skip) || !f.item.p.skip.length) return false;
+    App.change('Alle Kopien aktiviert', (doc) => {
+      const fn = Model.find(doc, id); if (!fn || !fn.item.p) return false;
+      delete fn.item.p.skip;
+    });
+    return true;
+  }
+  function clearPatternMarkers() {
+    for (const d of patDots) d.el.remove();
+    patDots = [];
+  }
+  function placePatternMarkers() {
+    if (!patDots.length) return;
+    for (const d of patDots) {
+      const s = Viewer.toScreen(d.world);
+      if (s.behind) d.el.style.display = 'none';
+      else { d.el.style.display = ''; d.el.style.left = s.x + 'px'; d.el.style.top = s.y + 'px'; }
+    }
+  }
+  function syncPatternMarkers() {
+    clearPatternMarkers();
+    if (typeof Viewer === 'undefined' || !Viewer.container || App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging || Views.exploded || App.sel.length !== 1) return;
+    const f = Model.find(App.doc, App.sel[0]); if (!f) return;
+    const it = f.item;
+    if (!isOp(it) || it.p.op !== 'pattern' || it.p.pt === 'mirror') return;
+    if (!App.ctx && !Model.isActive(App.doc, it.id)) return;
+    const V = Model.vars(App.doc).v, inst = Model.patternInstances(it, V);
+    if (inst.length < 2 || inst.length > 64) return;
+    const ov = $('#overlay'); if (!ov) return;
+    const bb = App.baseBox(it.id) || Model.itemLocalBox(it, V) || App.localBox(it.id);
+    const c0 = bb ? new THREE.Vector3((bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2) : new THREE.Vector3();
+    const W = Model.worldMatrix(App.doc, it.id);
+    for (const x of inst) {
+      const w = c0.clone().applyMatrix4(x.matrix).applyMatrix4(W);
+      const b = h('button', {
+        type: 'button',
+        class: 'pat-dot' + (x.skipped ? ' skipped' : ''),
+        'aria-pressed': x.skipped ? 'true' : 'false',
+        dataset: { idx: x.idx },
+        'data-tip': x.skipped ? `Kopie ${x.label} ausgelassen – klicken zum Aktivieren` : `Kopie ${x.label} – klicken zum Auslassen`,
+      }, x.label);
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => { e.stopPropagation(); togglePatternSkip(it.id, x.idx); });
+      ov.append(b);
+      patDots.push({ el: b, world: w });
+    }
+    placePatternMarkers();
+  }
+  if (typeof Viewer !== 'undefined' && Viewer.on) Viewer.on('camera', placePatternMarkers);
+  if (typeof window !== 'undefined') window.addEventListener('resize', placePatternMarkers);
+  function renderSkipUI(it, sec) {
+    const p = it.p || {};
+    if (p.op !== 'pattern' || (p.pt !== 'rect' && p.pt !== 'circ' && p.pt !== 'path')) return;
+    const V = Model.vars(App.doc).v, inst = Model.patternInstances(it, V);
+    if (inst.length < 2) return;
+    const active = inst.filter((x) => !x.skipped).length;
+    const box = h('div', { class: 'pat-skip-box', id: 'op-skip-wrap', 'data-help': 'patternSkip' });
+    const head = h('div', { class: 'pat-skip-head' }, h('span', null, `Kopien (${active} von ${inst.length} aktiv)`));
+    if (active < inst.length) {
+      const rb = h('button', { type: 'button', class: 'btn ghost small', id: 'op-skip-reset' }, 'Alle aktivieren');
+      rb.onclick = () => resetPatternSkip(it.id);
+      head.append(rb);
+    }
+    const chips = h('div', { class: 'pat-chips' });
+    for (const x of inst) {
+      const ch = h('button', {
+        type: 'button',
+        class: 'pat-chip' + (x.skipped ? ' skipped' : ''),
+        'aria-pressed': x.skipped ? 'true' : 'false',
+        dataset: { idx: x.idx },
+        'data-tip': x.skipped ? `Kopie ${x.label} wieder aktivieren` : `Kopie ${x.label} auslassen`,
+      }, x.label);
+      ch.onclick = () => togglePatternSkip(it.id, x.idx);
+      chips.append(ch);
+    }
+    box.append(head, chips);
+    sec.append(box);
+  }
   // ---------- Rechte Leiste ----------
   function renderOp(it, sec, setP) {
     const p = it.p || {};
@@ -580,7 +742,7 @@ const Features = (() => {
     const num = (k, label, unit = 'mm', o = {}) => UI.numField({ id: 'op-' + k, label, value: p[k], unit, int: o.int, min: o.min, onCommit: (v) => setP(k, v) });
     const sel = (k, label, opts) => UI.selectField({ id: 'op-' + k, label, value: p[k], options: opts, onChange: (v) => setP(k, v) });
     let hint = '';
-    if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
+    if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).'; }
     else if (p.op === 'pattern' && p.pt === 'circ') {
       const axObj = p.axisId && typeof Datums !== 'undefined' ? Datums.findAxis(p.axisId) : null;
       const ax = p.axis === 'x' || p.axis === 'y' || (p.axis === 'pick' && Array.isArray(p.ad)) ? p.axis : 'z';
@@ -607,9 +769,11 @@ const Features = (() => {
       }
       const pb = h('button', { type: 'button', class: 'btn', id: 'op-axispick' }); pb.innerHTML = icon('cursor') + (ax === 'pick' ? 'Andere Achse wählen' : 'Achse im Bild wählen');
       pb.onclick = () => pickAxis(it.id);
-      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum.';
+      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).';
       sec.append(f); if (info) sec.append(info);
-      sec.append(h('div', { class: 'btn-row' }, pb), h('div', { class: 'hint-box', html: hint }));
+      sec.append(h('div', { class: 'btn-row' }, pb));
+      renderSkipUI(it, sec);
+      sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
       ub.onclick = () => Actions.ungroup(it.id);
       sec.append(h('div', { class: 'btn-row' }, ub));
@@ -618,10 +782,11 @@ const Features = (() => {
     else if (p.op === 'pattern' && p.pt === 'path') {
       f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('d', 'Abstand', 'mm', { min: 0 }));
       f.append(UI.selectField({ id: 'op-align', label: 'Ausrichtung', value: p.align === false ? 'nein' : 'ja', options: [['ja', 'Mit der Kurve'], ['nein', 'Wie das Original']], onChange: (v) => setP('align', v === 'ja') }));
-      hint = 'Die Anzahl zählt das Original mit. <b>Abstand 0</b> verteilt die Kopien gleichmäßig über die ganze Kurve, ein Wert setzt sie in diesem Abstand – bis die Kurve zu Ende ist. Ausrichtung „Mit der Kurve“ dreht jede Kopie so, wie die Kurve abbiegt – wie Zähne an einem Bogen.';
+      hint = 'Die Anzahl zählt das Original mit. <b>Abstand 0</b> verteilt die Kopien gleichmäßig über die ganze Kurve, ein Wert setzt sie in diesem Abstand – bis die Kurve zu Ende ist. Ausrichtung „Mit der Kurve“ dreht jede Kopie so, wie die Kurve abbiegt – wie Zähne an einem Bogen. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).';
       const eb = h('button', { type: 'button', class: 'btn', id: 'op-editpath' }); eb.innerHTML = icon('sketch') + 'Kurve bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
       sec.append(f, h('div', { class: 'btn-row' }, eb));
+      renderSkipUI(it, sec);
       sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
       ub.onclick = () => Actions.ungroup(it.id);
@@ -637,6 +802,7 @@ const Features = (() => {
       hint = 'Mit „Spalt“ rücken die Hälften auseinander – praktisch zum Drucken in zwei Teilen.';
     } else if (p.op === 'intersect') hint = 'Übrig bleibt nur, was in allen Körpern dieser Gruppe zugleich liegt.';
     sec.append(f);
+    renderSkipUI(it, sec);
     if (hint) sec.append(h('div', { class: 'hint-box', html: hint }));
     const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + (p.op === 'pattern' ? 'Auflösen (nur Original behalten)' : 'Auflösen');
     ub.onclick = () => Actions.ungroup(it.id);
@@ -645,9 +811,20 @@ const Features = (() => {
   // Text für Verlauf und Statuszeile
   function sizeText(it, V) {
     const p = Model.resolveP(it.p || {}, V || {});
-    if (p.op === 'pattern' && p.pt === 'rect') return `${Math.max(1, Math.round(p.nx || 1))} × ${Math.max(1, Math.round(p.ny || 1))}`;
-    if (p.op === 'pattern' && p.pt === 'circ') return `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
-    if (p.op === 'pattern' && p.pt === 'path') { let k = 0; try { k = Model.pathPatternParams(it, V || Model.vars(App.doc).v).places.length; } catch (_) { k = 0; } return k ? `${k}× entlang Kurve` : 'Kurve fehlt'; }
+    const inst = p.op === 'pattern' ? Model.patternInstances(it, V || {}) : null;
+    const total = inst ? inst.length : 0, active = inst ? inst.filter((x) => !x.skipped).length : 0;
+    const hasSkip = !!(inst && active < total);
+    if (p.op === 'pattern' && p.pt === 'rect') {
+      const base = `${Math.max(1, Math.round(p.nx || 1))} × ${Math.max(1, Math.round(p.ny || 1))}`;
+      return hasSkip ? `${active}/${total} (${base})` : base;
+    }
+    if (p.op === 'pattern' && p.pt === 'circ') {
+      const base = `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
+      return hasSkip ? `${active}/${total}× ${fmt(p.ang ?? 360, 0)}°` : base;
+    }
+    if (p.op === 'pattern' && p.pt === 'path') {
+      return total ? (hasSkip ? `${active}/${total}× entlang Kurve` : `${total}× entlang Kurve`) : 'Kurve fehlt';
+    }
     if (p.op === 'pattern' && p.pt === 'mirror') return 'gespiegelt';
     if (p.op === 'split') return { both: 'beide Hälften', positive: 'eine Hälfte', negative: 'eine Hälfte' }[p.keep] || '';
     if (p.op === 'intersect') return 'Schnittmenge';
@@ -955,5 +1132,5 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

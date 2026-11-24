@@ -8715,6 +8715,132 @@ def t_f11240339(p):
     return [ok1, ok2]
 
 
+def t_muster_schritte(p):
+    # 1. Grundkörper Zylinder (Ø 60, H 10) + Tasche als Formschritt (op: cut)
+    p.empty()
+    p.ev("""App.change('x', d => {
+      const b = Model.newItem('cylinder', { d: 60, h: 10 }, { name: 'Scheibe' });
+      d.items.push(b);
+    })""")
+    warte_rechnen(p, 30)
+    v_base = volumen(p)
+    p.ev("""App.change('x', d => {
+      const b = d.items[0];
+      const pk = Model.newItem('extrude', {}, { name: 'Tasche' });
+      pk.p = { sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c1', type: 'circle', c: [18, 0], r: 4 }], dims: [], cons: [] }, dist: 5, dir: 'normal' };
+      pk.op = { type: 'cut', target: b.id };
+      d.items.push(pk);
+      App.select([pk.id]);
+    })""")
+    warte_rechnen(p, 30)
+    v_pocket = math.pi * 4 * 4 * 5
+    v_1 = volumen(p)
+    ok1 = (
+        v_base is not None and v_1 is not None
+        and abs((v_base - v_1) - v_pocket) < 10
+        and p.ev("return Viewer.nodes.size === 1 && App.mergedInto(App.doc.items[1].id) === App.doc.items[0].id && App.errors.length === 0")
+    )
+
+    # 2. Tasche 6× im Kreis -> 6 Taschen im selben Körper (Volumen passt)
+    p.ev("Viewer.setView('top', false)"); p.wait(600)
+    ctx(p, 'Muster', 'Kreismuster')
+    warte_rechnen(p, 30)
+    field(p, '#op-n', 6)
+    warte_rechnen(p, 30)
+    v_6 = volumen(p)
+    ok2 = (
+        v_6 is not None
+        and abs((v_base - v_6) - 6 * v_pocket) < 25
+        and p.ev("""const g = App.doc.items[1];
+          return Viewer.nodes.size === 1
+            && App.mergedInto(g.id) === App.doc.items[0].id
+            && g.op && g.op.type === 'cut' && g.op.target === App.doc.items[0].id
+            && document.querySelectorAll('.pat-dot').length === 6
+            && document.querySelectorAll('#op-skip-wrap .pat-chip').length === 6
+            && App.errors.length === 0""")
+    )
+
+    # 3. Eine Kopie im Bild per Klick auslassen -> 5 Taschen, durchgestrichen
+    p.pg.locator('.pat-dot[data-idx="2"]').click(timeout=8000)
+    warte_rechnen(p, 30)
+    v_5 = volumen(p)
+    deco_dot = p.pg.locator('.pat-dot[data-idx="2"]').evaluate("e => getComputedStyle(e).textDecorationLine")
+    deco_chip = p.pg.locator('#op-skip-wrap .pat-chip[data-idx="2"]').evaluate("e => getComputedStyle(e).textDecorationLine")
+    ok3 = (
+        v_5 is not None
+        and abs((v_base - v_5) - 5 * v_pocket) < 25
+        and abs((v_5 - v_6) - v_pocket) < 15
+        and p.ev("const g = App.doc.items[1]; return JSON.stringify(g.p.skip) === '[2]' && Model.sizeText(g, Model.vars(App.doc).v) === '5/6× 360°' && Viewer.nodes.size === 1")
+        and p.pg.locator('.pat-dot[data-idx="2"].skipped').count() == 1
+        and p.pg.locator('#op-skip-wrap .pat-chip[data-idx="2"].skipped').count() == 1
+        and 'line-through' in deco_dot
+        and 'line-through' in deco_chip
+    )
+
+    # 4. Kopie über Panel-Chip wieder aktivieren -> 6, Undo -> 5, Redo -> 6
+    p.pg.locator('#op-skip-wrap .pat-chip[data-idx="2"]').click()
+    warte_rechnen(p, 30)
+    v_back6 = volumen(p)
+    p.ev("App.undo()"); warte_rechnen(p, 30)
+    v_undo5 = volumen(p)
+    p.ev("App.redo()"); warte_rechnen(p, 30)
+    v_redo6 = volumen(p)
+    ok4 = (
+        v_back6 is not None and abs(v_back6 - v_6) < 10
+        and v_undo5 is not None and abs(v_undo5 - v_5) < 10
+        and v_redo6 is not None and abs(v_redo6 - v_6) < 10
+        and p.ev("return !App.doc.items[1].p.skip")
+    )
+
+    # 5. Rechteckmuster für eine Tasche auf Quader (3×2 = 6 Taschen -> 1 auslassen = 5 -> Auflösen = 1)
+    p.ev("App.setDoc(Model.newDoc())"); warte_rechnen(p, 30)
+    p.ev("""App.change('x', d => {
+      const box = Model.newItem('box', { w: 80, d: 50, h: 10 }, { name: 'Platte' });
+      d.items.push(box);
+      const pk = Model.newItem('extrude', {}, { name: 'Nut' });
+      pk.p = { sketch: { plane: { o: [0, 0, 6], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'r1', type: 'rect', a: [-24, -14], b: [-16, -6] }], dims: [], cons: [] }, dist: 4, dir: 'normal' };
+      pk.op = { type: 'cut', target: box.id };
+      d.items.push(pk);
+      App.select([pk.id]);
+    })""")
+    warte_rechnen(p, 30)
+    p.ev("Viewer.setView('top', false)"); p.wait(600)
+    ctx(p, 'Muster', 'Rechteckmuster')
+    warte_rechnen(p, 30)
+    field(p, '#op-nx', 3); field(p, '#op-ny', 2)
+    field(p, '#op-dx', 20); field(p, '#op-dy', 20)
+    warte_rechnen(p, 30)
+    v_rect6 = volumen(p)
+    p.pg.locator('.pat-dot[data-idx="4"]').click(timeout=8000)
+    warte_rechnen(p, 30)
+    v_rect5 = volumen(p)
+    p.pg.get_by_text('Auflösen').first.click()
+    warte_rechnen(p, 30)
+    v_rect1 = volumen(p)
+    ok5 = (
+        v_rect6 is not None and abs(v_rect6 - (40000 - 6 * 256)) < 20
+        and v_rect5 is not None and abs(v_rect5 - (40000 - 5 * 256)) < 20
+        and v_rect1 is not None and abs(v_rect1 - (40000 - 256)) < 20
+        and p.ev("const x = App.doc.items[1]; return x.kind === 'extrude' && x.op && x.op.type === 'cut' && Viewer.nodes.size === 1")
+    )
+
+    # 6. Hilfetext & Speichern/Laden mit skip
+    p.ev("App.undo()"); warte_rechnen(p, 30)  # wieder 5 Taschen mit skip=[4]
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg))", saved); warte_rechnen(p, 30)
+    v_reload = volumen(p)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(400)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json())")
+    ps = hilfen.get('patternSkip') or {}
+    ok6 = (
+        bool(ps.get('tip') and ps.get('hilfe') and ps.get('tipp'))
+        and p.pg.locator('[data-help="patternSkip"]').count() >= 1
+        and v_reload is not None and abs(v_reload - (40000 - 5 * 256)) < 20
+        and p.ev("const g = App.doc.items[1]; return g.op && g.op.type === 'cut' && JSON.stringify(g.p.skip) === '[4]'")
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8849,6 +8975,7 @@ TESTS = [
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
+    ('[A-036] Muster von Schritten: Tasche 6× im Kreis / Kopie per Klick auslassen / wieder aktiv & Undo / Rechteckmuster & Auflösen / Hilfe & Speichern', t_muster_schritte),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

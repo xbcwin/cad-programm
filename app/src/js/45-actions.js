@@ -336,7 +336,7 @@ const Actions = (() => {
       const GM = Model.localMatrix(G);
       const at = ff.list.indexOf(G);
       ff.list.splice(at, 1);
-      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); ff.list.splice(at + i, 0, c); kids.push(c.id); });
+      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
     });
     App.select(kids);
     if ((f.item.finishes || []).length) UI.toast('Die Rundungen der Gruppe wurden entfernt, weil es die Gruppe nicht mehr gibt.', { icon: 'info' });
