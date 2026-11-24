@@ -1790,6 +1790,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfe & Dialog**: Export-Dialog verweist auf `exportStep`; Eintrag in `werkzeug-hilfen.json` ist vollständig (`tip`, `hilfe`, `tipp`).
 - [ ] **Von Hand**: Eine mehrfarbige Baugruppe aus Tracery als STEP exportieren und in FreeCAD oder Fusion öffnen sowie umgekehrt eine fremde STEP-Baugruppe ins Tracery-Fenster ziehen und Namen, Farben und Lage prüfen.
 
+## Wickeln um Zylinder (Auto [A-043], KP-34)
+
+- [x] **Verzerrungsfreies Wickeln (180° ± 2°)**: Rechteck `31,4 × 8 mm` auf einem Zylinder Ø20 (`emboss`, `+2 mm`) umschließt exakt `179,9°` (`180° ± 2°`) mit Volumen `6835,8 mm³` und `0` Fehlern.
+- [x] **Vertieft, Startwinkel & Ø40**: Umschalten auf `deboss` (`−2 mm`) schneidet den 180°-Bogen (`5831,0 mm³`), Startwinkel `90°` dreht die Prägung um `90°`, und Vergrößern auf Ø40 halbiert den Umfangswinkel derselben 31,4-mm-Skizze auf `90° ± 2°`.
+- [x] **Linie & Entlang Pfad**: Modus `line` prägt den Umriss bzw. eine offene Helix auf die Zylinderoberfläche (`BRepAlgoAPI_Splitter`, Kantenlänge `31,4 mm`); „Entlang Pfad ziehen“ (`#wrap-to-sweep`) erzeugt einen `sweep`-Körper entlang der gewickelten 3D-Kurve.
+- [x] **Verlauf, Zeitleiste & Hilfe**: Unterdrücken, Marker zurückrollen, `Sketch.editItem`, `Model.dependencies`, `Explain.local`, `Commands.search('Wickeln')` und Hilfetext `wrapCyl` funktionieren fehlerfrei.
+- [ ] **Von Hand**: Im Browser eine Zylinderfläche anklicken, auf „Wickeln“ klicken, ein Rechteck und eine geschwungene Linie zeichnen und zwischen erhaben, vertieft und Linie mit „Entlang Pfad“ umschalten.
+
 ## IGES und BREP (Auto [A-044], IO-01)
 
 - [x] **BREP-Roundtrip (Quader 30×20×15)**: `exportBREP` liefert eine gültige OpenCascade-BREP-Datei (`CASCADE`), Re-Import über `.brep` erzeugt fehlerfrei ein `import`-Teil mit exakt gleichem Volumen (`±0,1 %`) und passenden Hüllmaßen.
