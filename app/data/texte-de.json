@@ -2308,5 +2308,7 @@
   "dlg.settings.langHint": "Wechselt sofort die Sprache der Oberfläche. Fehlt eine Übersetzung, erscheint Deutsch.",
   "dlg.settings.langToastDe": "Sprache: Deutsch",
   "dlg.settings.langToastEn": "Sprache: English",
-  "dlg.settings.langToastAuto": "Sprache: automatisch ({lang})"
+  "dlg.settings.langToastAuto": "Sprache: automatisch ({lang})",
+  "topbar.closePanel": "Leiste einklappen",
+  "hint.defaultIdleTouch": "<b>Antippen</b> wählt einen Körper · <b>Zwei Finger</b> drehen und zoomen die Ansicht · langes Tippen öffnet das Menü."
 }

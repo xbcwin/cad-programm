@@ -2308,5 +2308,7 @@
   "dlg.settings.langHint": "Switches the interface language immediately. Missing translations fall back to German.",
   "dlg.settings.langToastDe": "Language: Deutsch",
   "dlg.settings.langToastEn": "Language: English",
-  "dlg.settings.langToastAuto": "Language: automatic ({lang})"
+  "dlg.settings.langToastAuto": "Language: automatic ({lang})",
+  "topbar.closePanel": "Collapse panel",
+  "hint.defaultIdleTouch": "<b>Tap</b> selects a body · <b>Two fingers</b> orbit and zoom the view · long press opens the menu."
 }

@@ -93,8 +93,8 @@ Leitlinien:
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`poolStats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker, Zähler & Fingerabdrücke über `stats`/`resetStats`/`clearCache`/`lastStats`/`fingerprint`) |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), Bereinigung/Prüfung von `mergedInto`, mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse & Schritt-Cache (`stepFingerprint`/`stepCacheStatus`/`evalStats`) |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`) |
-| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze) |
+| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`, am Tablet vergrößert), Maus- und Touch-Bedienung (Antippen wählt, langes Tippen öffnet Kontextmenü, Mehr-Finger-Passthrough) |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `42-userlib.js` (`UserLib`) | Eigene Teile-Bibliothek (`tracery-bibliothek` in `localStorage`, Vorschaubild, lokale Maße) |
@@ -105,7 +105,7 @@ Leitlinien:
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste (`Timeline.refreshLabels`, mit Speicher-Status je Schritt), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
-| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, ViewCube (`Panels.refreshViewCube`), rechtes Panel „Eigenschaften“ (sofort bei Auswahl, `renderRight({ preserveFocus })` schützt fokussierte Eingabefelder bei asynchronen `results`-Updates), Null-Prüfung für `mergedInto` in `renderLeft`/`opSection`, Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
+| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, Tablet-Erkennung (`UI.hasTouch`/`UI.isTablet`/`UI.syncTablet`/`UI.initTablet`, Klasse `body.tablet` unter 1100 px mit Touch, mindestens 44 px große Knöpfe, einklappbare Seitenleisten mit `#btn-left-close`/`#btn-right-close`), ViewCube (`Panels.refreshViewCube`), rechtes Panel „Eigenschaften“ (sofort bei Auswahl, `renderRight({ preserveFocus })` schützt fokussierte Eingabefelder bei asynchronen `results`-Updates), Null-Prüfung für `mergedInto` in `renderLeft`/`opSection`, Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
 | `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |

@@ -7,10 +7,12 @@
   // Symbole in die festen Knöpfe setzen
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
+  $('#btn-left-close').innerHTML = icon('close'); $('#btn-right-close').innerHTML = icon('close');
 
   window.__masswerk = { App, Viewer, Model, Actions, Clipboard, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck, UserLib };
   UI.initTips();
   I18n.applyDom();
+  UI.initTablet();
   Viewer.init($('#viewport'));
   window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Clipboard, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, Log, Kernel, Drawing }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); GeomCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
@@ -49,9 +51,10 @@
     { label: T('menu.proj.startAndTemplates'), icon: 'home', run: () => Start.show() },
   ];
   $('#btn-project').onclick = (e) => UI.menu(e.currentTarget, projectItems(), { alignRight: true });
+  const vw = () => (document.documentElement && document.documentElement.clientWidth) || innerWidth;
   // auf schmalen Bildschirmen ist der Projektname ausgeblendet – dann steht das Projektmenü hier mit drin
   $('#btn-menu').onclick = (e) => UI.menu(e.currentTarget, [
-    ...(innerWidth <= 900 ? [...projectItems(), '-'] : []),
+    ...(vw() <= 900 || UI.isTablet() ? [...projectItems(), '-'] : []),
     { label: T('menu.main.tourBasics'), icon: 'play', run: () => Tour.start() },
     { label: T('menu.main.tourSketch'), icon: 'sketch', run: () => Tour.start('sketch') },
     { label: T('menu.main.settings'), icon: 'gear', run: () => ViewPrefs.dialog() },
@@ -62,9 +65,18 @@
     { label: T('menu.main.about'), icon: 'info', run: () => UI.modal({ title: T('menu.main.about'), body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, T('menu.main.aboutP1')), h('p', null, T('menu.main.aboutP2')), h('p', null, T('menu.main.aboutP3')), h('p', null, T('menu.main.aboutP4'))), actions: [{ label: T('common.close'), primary: true }] }) },
   ], { alignRight: true });
   const ws = $('#workspace');
-  $('#btn-left').onclick = () => { ws.classList.toggle('show-left'); ws.classList.remove('show-right'); };
-  $('#btn-right').onclick = () => { ws.classList.toggle('show-right'); ws.classList.remove('show-left'); };
-  $('#center').addEventListener('pointerdown', () => { if (innerWidth <= 900) ws.classList.remove('show-left', 'show-right'); });
+  const setPanels = (side) => {
+    const showL = side === 'left', showR = side === 'right';
+    ws.classList.toggle('show-left', showL);
+    ws.classList.toggle('show-right', showR);
+    $('#btn-left').setAttribute('aria-expanded', String(showL));
+    $('#btn-right').setAttribute('aria-expanded', String(showR));
+  };
+  $('#btn-left').onclick = () => setPanels(ws.classList.contains('show-left') ? null : 'left');
+  $('#btn-right').onclick = () => setPanels(ws.classList.contains('show-right') ? null : 'right');
+  $('#btn-left-close').onclick = () => setPanels(null);
+  $('#btn-right-close').onclick = () => setPanels(null);
+  $('#center').addEventListener('pointerdown', () => { if (vw() <= 900 || UI.isTablet()) setPanels(null); });
   App.on('busy', (on) => UI.busy(on));
   App.on('selection', () => { if (innerWidth <= 900 && App.sel.length) { /* rechte Leiste nicht aufzwingen */ } });
   window.addEventListener('beforeunload', () => {

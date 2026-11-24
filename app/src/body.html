@@ -4,7 +4,7 @@
     <button class="tabbar-add" id="proj-tab-add" type="button" aria-label="Neuer Tab" data-tip="Projekt in neuem Tab öffnen" data-help="projectTabs" data-i18n-aria="tabs.addAria" data-i18n-tip="tabs.addTip"></button>
   </nav>
   <header class="topbar">
-    <button class="icon-btn panel-toggle" id="btn-left" type="button" aria-label="Verlauf zeigen" data-tip="Verlauf" data-i18n-aria="topbar.showTree" data-i18n-tip="topbar.tree"></button>
+    <button class="icon-btn panel-toggle" id="btn-left" type="button" aria-label="Verlauf zeigen" data-tip="Verlauf" data-help="tabletPanels" aria-expanded="false" data-i18n-aria="topbar.showTree" data-i18n-tip="topbar.tree"></button>
     <a class="brand" href="#" id="brand" aria-label="Tracery – Startseite" data-i18n-aria="topbar.brandAria">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g></svg>
       <b>Tracery</b>
@@ -21,7 +21,7 @@
       <button class="proj-name" id="btn-project" type="button" data-tip="Projekt" data-i18n-tip="topbar.project">Neues Projekt</button>
       <button class="folder-badge" id="btn-folder-status" type="button" data-help="saveFolder" hidden></button>
       <button class="icon-btn" id="btn-menu" type="button" aria-label="Menü" data-tip="Menü" data-i18n-aria="topbar.menu" data-i18n-tip="topbar.menu"></button>
-      <button class="icon-btn panel-toggle" id="btn-right" type="button" aria-label="Eigenschaften zeigen" data-tip="Eigenschaften" data-i18n-aria="topbar.showProps" data-i18n-tip="topbar.props"></button>
+      <button class="icon-btn panel-toggle" id="btn-right" type="button" aria-label="Eigenschaften zeigen" data-tip="Eigenschaften" data-help="tabletPanels" aria-expanded="false" data-i18n-aria="topbar.showProps" data-i18n-tip="topbar.props"></button>
     </div>
   </header>
 
@@ -33,6 +33,7 @@
           <button type="button" role="tab" id="lt-params" aria-selected="false" data-i18n="topbar.params">Maße</button>
           <button type="button" role="tab" id="lt-log" class="pro" aria-selected="false" data-i18n="topbar.log">Protokoll</button>
         </div>
+        <button class="icon-btn panel-close" id="btn-left-close" type="button" aria-label="Leiste einklappen" data-tip="Leiste einklappen" data-i18n-aria="topbar.closePanel" data-i18n-tip="topbar.closePanel"></button>
       </div>
       <div class="panel-body" id="left-body"></div>
     </aside>
@@ -44,7 +45,7 @@
     </section>
 
     <aside class="right" id="right" aria-label="Eigenschaften" data-i18n-aria="topbar.props">
-      <div class="panel-head"><span class="panel-title" id="right-title" data-i18n="topbar.props">Eigenschaften</span></div>
+      <div class="panel-head"><span class="panel-title" id="right-title" data-i18n="topbar.props">Eigenschaften</span><button class="icon-btn panel-close" id="btn-right-close" type="button" aria-label="Leiste einklappen" data-tip="Leiste einklappen" data-i18n-aria="topbar.closePanel" data-i18n-tip="topbar.closePanel"></button></div>
       <div class="panel-body" id="right-body"></div>
     </aside>
   </main>

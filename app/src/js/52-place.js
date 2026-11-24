@@ -52,7 +52,7 @@ const Place = (() => {
       const down = { x: e.clientX, y: e.clientY };
       // Bewegungen am Fenster verfolgen: das Menü schließt sich beim Ziehen
       const move = (ev) => {
-        if (!st && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6) begin(spec);
+        if (!st && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > (ev.pointerType === 'touch' ? 12 : 6)) begin(spec);
         magnetOff = ev.ctrlKey || ev.metaKey;
         if (st) track(ev.clientX, ev.clientY);
       };

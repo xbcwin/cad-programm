@@ -1138,5 +1138,10 @@
     "tip": "Sprache der Oberfläche zwischen Deutsch und Englisch umschalten",
     "hilfe": "Stellt die Sprache von Menüs, Werkzeugen, Panels und Meldungen sofort um. Standardmäßig nutzt Tracery die Sprache deines Browsers (Englisch oder Deutsch, sonst Deutsch). Fehlt eine Übersetzung, erscheint automatisch der deutsche Text.",
     "tipp": "Du kannst jederzeit zwischen „Wie der Browser“, „Deutsch“ und „English“ wechseln – die Einstellung wird in deinem Browser gespeichert."
+  },
+  "tabletPanels": {
+    "tip": "Seitenleiste ein- und ausklappen",
+    "hilfe": "Auf schmalen Bildschirmen und am Tablet lassen sich Verlauf (links) und Eigenschaften (rechts) ein- und ausklappen, damit mehr Platz für die 3D-Ansicht bleibt. Tippe in die 3D-Ansicht oder auf das Schließen-Symbol, um die Leiste wieder einzuklappen.",
+    "tipp": "Am Tablet wählt ein Antippen den Körper, und zwei Finger drehen und zoomen die Ansicht."
   }
 }
