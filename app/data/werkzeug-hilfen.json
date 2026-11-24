@@ -1388,5 +1388,15 @@
     "tip": "Krümmungsglatt (G2): Spline geht nicht nur glatt, sondern auch mit gleicher Krümmung in die Nachbarkurve über (Profi)",
     "hilfe": "Verbindet ein Ende einer offenen Spline (mit mindestens 3 Punkten) mit einem Bogen, einer Linie, einer anderen Spline oder einem Kreis, sodass am Übergang Punkt, Richtung (Tangente) und Krümmungsradius nahtlos übereinstimmen.",
     "tipp": "Schalte „Krümmung zeigen“ ein, um den nahtlosen Übergang direkt als gleich hohen Krümmungskamm zu prüfen."
+  },
+  "stretch2d": {
+    "tip": "Einen Teil der Skizze per Rahmen in eine Richtung strecken",
+    "hilfe": "Zieh im Profi-Modus einen Rahmen über die Endpunkte oder Kanten, die wandern sollen. Danach gibst du rechts die Richtung (X, Y, Winkel oder X/Y) und den Weg ein. Nur die Punkte im Rahmen verschieben sich, der Rest bleibt stehen und bestehende Regeln sowie Maße bleiben erhalten.",
+    "tipp": "Zieh den Rahmen zum Beispiel nur über die rechte Kante eines Rechtecks und gib 5 mm in X ein – die linke Kante bleibt stehen und die Breite wächst um 5 mm."
+  },
+  "liveMirror": {
+    "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
+    "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
+    "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
   }
 }
