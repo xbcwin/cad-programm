@@ -2139,7 +2139,7 @@ const Start = (() => {
     });
     if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
     try {
-      if (!Kernel.ready) await Kernel.whenReady();
+      if (!Kernel.ready) await Kernel.ensure();
       if (startBlobId && !Store.getBlobSync(startBlobId)) await Store.getBlob(startBlobId);
       const fNow = Model.find(App.doc, id);
       if (!fNow || !fNow.item || fNow.item.kind !== 'import') return null;
@@ -2190,7 +2190,7 @@ const Start = (() => {
     if (checkBarItemId === id) renderImportBanner();
     if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight();
     try {
-      if (!Kernel.ready) await Kernel.whenReady();
+      if (!Kernel.ready) await Kernel.ensure();
       if (f0.item.p.blobId && !Store.getBlobSync(f0.item.p.blobId)) await Store.getBlob(f0.item.p.blobId);
       const res = await Kernel.call('healImport', { p: importParamFor(f0.item), tol, capOpen });
       if (!res || !res.ok || !res.brepBytes || !res.brepBytes.byteLength) {

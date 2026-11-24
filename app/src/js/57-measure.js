@@ -685,15 +685,25 @@ const Measure = (() => {
     return null;
   }
   function updateCalc() {
+    const kState = typeof Kernel !== 'undefined' ? (Kernel.state || (Kernel.ready ? 'ready' : 'idle')) : 'idle';
     let state = 'ready', cls = 'st-chip st-calc ok', text = 'Bereit', tip = 'CAD-Kern ist bereit';
-    if (typeof Kernel === 'undefined' || !Kernel.ready) {
-      state = 'loading'; cls = 'st-chip st-calc busy'; text = 'Lädt …'; tip = 'CAD-Kern wird geladen …';
+    if (kState === 'error') {
+      state = 'error'; cls = 'st-chip st-calc warn'; text = 'Kern-Fehler';
+      tip = (Kernel.error && Kernel.error.message) || 'Der CAD-Kern konnte nicht geladen werden';
+    } else if (kState === 'loading') {
+      const pct = Math.round((Kernel.progress || 0) * 100);
+      state = 'loading'; cls = 'st-chip st-calc busy';
+      text = pct > 5 && pct < 99 ? `Kern lädt (${pct} %) …` : 'Kern lädt …';
+      tip = 'CAD-Kern wird geladen …';
     } else if (calcBusy || uiBusy || App.busy) {
       state = 'busy'; cls = 'st-chip st-calc busy'; text = 'Rechnet …'; tip = 'Modell wird neu berechnet …';
     } else if (App.errors && App.errors.length) {
       state = 'error'; cls = 'st-chip st-calc warn';
       text = App.errors.length === 1 ? '1 Fehler' : `${App.errors.length} Fehler`;
       tip = App.errors[0].message || 'Ein Schritt hat ein Problem';
+    } else if (kState === 'idle') {
+      state = 'idle'; cls = 'st-chip st-calc ok'; text = 'Bereit';
+      tip = 'Oberfläche bereit – CAD-Kern lädt bei Bedarf';
     }
     statusState.calcState = state; statusState.calcText = text;
     const el = $('#status-calc');
@@ -750,6 +760,7 @@ const Measure = (() => {
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
     App.on('busy', (b) => { uiBusy = !!b; updateCalc(); });
+    if (typeof Kernel !== 'undefined' && Kernel.on) Kernel.on('state', updateCalc);
     if (typeof Kernel !== 'undefined' && Kernel.whenReady) Kernel.whenReady().then(updateStatus).catch(() => {});
     const selBtn = $('#status-sel');
     if (selBtn) selBtn.addEventListener('click', () => { if (selCopyVal) copyText(selCopyVal, selCopyWhat || 'Wert'); });
