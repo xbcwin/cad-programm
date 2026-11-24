@@ -778,5 +778,10 @@
     "tip": "Fehlende Regeln und Maße automatisch vorschlagen",
     "hilfe": "Prüft deine Skizze und schlägt fehlende Regeln vor: Waagerecht oder Senkrecht bei Linien unter 2° Abweichung, Deckungsgleich bei Punkten unter 0,05 mm Abstand, dazu fehlende Maße für Längen, Durchmesser, Radien und die Lage zum Ursprung. Alle Vorschläge erscheinen zuerst gestrichelt im Bild – „Übernehmen“ legt alles in einem einzigen Rückgängig-Schritt an, „Abbrechen“ verwirft sie.",
     "tipp": "Danach ist die Skizze voll bestimmt (alle Linien dunkel) und kann nicht mehr aus Versehen verrutschen."
+  },
+  "loadFont": {
+    "tip": "Eigene TrueType-Schrift (.ttf) aus einer Datei laden",
+    "hilfe": "Lädt eine TrueType-Schriftdatei (.ttf) von deinem Gerät, liest die Buchstaben-Umrisse und eventuelle Unterschneidungs-Paare (Kerning) direkt im Browser und speichert die Schrift im Projekt. Danach steht sie in der Schriftliste und bleibt beim Speichern und Öffnen erhalten.",
+    "tipp": "Wenn die Schrift eigene Zeichenabstände (kern-Tabelle) mitbringt, werden sie automatisch genutzt – zusätzlich kannst du rechts jederzeit den Zeichenabstand anpassen."
   }
 }

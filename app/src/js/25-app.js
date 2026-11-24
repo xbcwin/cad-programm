@@ -13,6 +13,7 @@ const App = (() => {
     // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
     if (S.doc) { try { autosave.flush(); } catch (_) {} }
     S.doc = Model.migrate(doc);
+    if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
       Store.extractBlobs(S.doc);
       if (S.doc.id) Store.loadVersions(S.doc.id).catch(() => {});
@@ -41,6 +42,7 @@ const App = (() => {
     const topBefore = new Set(S.doc.items.map((x) => x.id));
     const res = fn(S.doc);
     if (res === false) return false;
+    if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     placeNewAtMarker(S.doc, topBefore);
     Model.syncLinks(S.doc);
     const last = S.undo[S.undo.length - 1];
@@ -88,6 +90,7 @@ const App = (() => {
   function restore(json) {
     const doc = JSON.parse(json);
     S.doc = doc;
+    if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     Model.useVars(Model.vars(S.doc).v);
     const valid = new Set(); Model.walk(doc.items, (it) => valid.add(it.id));
     S.sel = S.sel.filter((id) => valid.has(id));

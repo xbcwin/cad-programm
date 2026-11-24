@@ -336,6 +336,7 @@ Fertig.
 - [x] Speicher für große Projekte (Auto [A-016], PL-06): Autosave und Versionen liegen jetzt in der Browser-Datenbank (`tracery-db`, IndexedDB) statt im engen `localStorage`; importierte STEP-, STL- und 3MF-Dateien bis 100 MB werden binär als `Uint8Array` im Blob-Store abgelegt, bestehende Projekte und Versionen aus `localStorage` beim ersten Start automatisch übernommen und verwaiste Blobs beim Löschen aufgeräumt
 - [x] Einheiten je Projekt (Auto [A-014], BE-10): Projekteinstellung `mm`, `cm`, `m` oder Zoll (`in`) unter `doc.settings.unit` (`Units` in `00-util.js`); alle Eingabefelder, Schildchen, Messen, Koordinaten, Kontextleiste, Ampel, Stückliste, Ansichten und Zeichnung zeigen in der Projekteinheit, Eingaben ohne Einheit gelten darin, explizite Einheiten (`1 in`, `25,4 mm`, `2 cm`) gehen weiter; intern bleibt alles exakt in mm
 - [x] Übersetzbare Oberfläche, Schritt 1 (Auto [A-019], PL-01): feste Texte für Startseite, Werkzeugleiste, Menüs und Kontextleiste in `app/data/texte-de.json` gezogen und über `T('schlüssel')` / `I18n` (`app/src/js/01-i18n.js`) angebunden
+- [x] Eigene Schrift laden und Unterschneidung (Auto [A-026], SK-47, SK-48): TrueType-Schriften (`.ttf`) im Browser ohne Zusatzbibliothek lesen (`app/src/js/14-ttf.js`, `glyf`-Umrisse, quadratische Kurven, zusammengesetzte Glyphen, `kern`-Unterschneidung), als Base64 in `doc.fonts` speichern, in `#tx-font`/`#se-font` wählen, Laufweite (`sp`) bleibt einstellbar; CFF/OTF meldet „noch nicht unterstützt“
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud
@@ -356,7 +357,7 @@ Fertig.
 - Übergang mit Mittellinie: Spitze und „Gerade Flächen“ gibt es dabei nicht; die Mittellinie liegt in einer Ebene (keine 3D-Kurve). Wo sie eng gebogen ist, kann der Körper an der Innenseite etwas über die Umrisse hinausragen
 - „An Fläche spiegeln“ hängt nur an der äußersten Fläche in Achsrichtung; bei einer inneren oder schrägen Fläche bleibt die Ebene, wo sie beim Spiegeln war
 
-- Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite
+- Die eingebaute Schrift „Inter“ hat keine Unterschneidung; eigene TTF-Schriften mit `kern`-Tabelle werden unterschnitten, `GPOS`-Kerning und CFF/OTF fehlen noch
 - Text lässt sich nicht trimmen; eine getrimmte Ellipse wird zur Spline (genau auf der Ellipse, aber ohne Ellipsen-Maße); Ellipsen-Drehung ist keine Regel (nur ein Wert)
 
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste

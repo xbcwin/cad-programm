@@ -96,10 +96,64 @@ const SK = (() => {
     return o;
   }
   const revSeg = (s) => (s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a });
-  // ---------- Text: Umrisse aus der eingebauten Schrift (Inter, SIL OFL 1.1) ----------
-  const FONTS = { inter: /*JSON:schrift-inter.json*/null, fett: /*JSON:schrift-inter-fett.json*/null };
-  const FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
+  // ---------- Text: Umrisse aus eingebauten und geladenen Schriften ----------
+  const BUILTIN_FONTS = { inter: /*JSON:schrift-inter.json*/null, fett: /*JSON:schrift-inter-fett.json*/null };
+  const BUILTIN_FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
+  const FONTS = { ...BUILTIN_FONTS };
+  const FONTNAMES = { ...BUILTIN_FONTNAMES };
+  const parsedFonts = new Map();
+  const customIds = new Set();
   const glyphCache = new Map();
+  const textCache = new Map();
+  function parseCustomFont(f) {
+    if (!f || !f.data || typeof TTF === 'undefined') return null;
+    if (parsedFonts.has(f.data)) return parsedFonts.get(f.data);
+    try {
+      const parsed = TTF.parse(f.data, { fallbackName: f.name });
+      parsedFonts.set(f.data, parsed);
+      return parsed;
+    } catch (e) {
+      console.warn('Schrift konnte nicht geladen werden:', f.name || f.id, e);
+      return null;
+    }
+  }
+  function syncFonts(list) {
+    let changed = false;
+    const nextIds = new Set();
+    for (const f of Array.isArray(list) ? list : []) {
+      if (!f || !f.id || BUILTIN_FONTS[f.id]) continue;
+      const parsed = parseCustomFont(f);
+      if (!parsed) continue;
+      nextIds.add(f.id);
+      const label = f.name || parsed.name || 'Eigene Schrift';
+      if (FONTS[f.id] !== parsed || FONTNAMES[f.id] !== label) changed = true;
+      FONTS[f.id] = parsed;
+      FONTNAMES[f.id] = label;
+      customIds.add(f.id);
+    }
+    for (const id of [...customIds]) {
+      if (!nextIds.has(id)) {
+        delete FONTS[id];
+        delete FONTNAMES[id];
+        customIds.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) textCache.clear();
+  }
+  function ensureFonts(list) {
+    let changed = false;
+    for (const f of Array.isArray(list) ? list : []) {
+      if (!f || !f.id || BUILTIN_FONTS[f.id] || FONTS[f.id]) continue;
+      const parsed = parseCustomFont(f);
+      if (!parsed) continue;
+      FONTS[f.id] = parsed;
+      FONTNAMES[f.id] = f.name || parsed.name || 'Eigene Schrift';
+      customIds.add(f.id);
+      changed = true;
+    }
+    if (changed) textCache.clear();
+  }
   function glyphContours(font, ch) {
     const key = font.name + '|' + ch;
     if (glyphCache.has(key)) return glyphCache.get(key);
@@ -119,7 +173,15 @@ const SK = (() => {
     glyphCache.set(key, out);
     return out;
   }
-  const textCache = new Map();
+  function getGlyph(font, ch) {
+    if (!font) return null;
+    if (font.ttf) return font.glyph(ch);
+    const g = font.glyphs[ch];
+    return g ? { w: g.w, contours: glyphContours(font, ch) } : null;
+  }
+  function getKern(font, a, b) {
+    return font && font.ttf && font.kern ? font.kern(a, b) : 0;
+  }
   // Konturen eines Text-Elements in Skizzen-Koordinaten: [[seg, …], …]
   function textContours(e) {
     const font = FONTS[e.font] || FONTS.inter;
@@ -129,7 +191,12 @@ const SK = (() => {
     if (textCache.has(key)) return textCache.get(key);
     const k = (e.h > 0 ? e.h : 5) / font.cap, sp = (e.sp || 0) / k;
     const chars = [...String(e.s || '')];
-    let w = 0; for (const ch of chars) w += ((font.glyphs[ch] || font.glyphs['?'] || { w: font.em / 2 }).w) + sp; if (chars.length) w -= sp;
+    let w = 0;
+    for (let i = 0; i < chars.length; i++) {
+      const g = getGlyph(font, chars[i]) || getGlyph(font, '?');
+      w += g ? g.w : font.em / 2;
+      if (i + 1 < chars.length) w += getKern(font, chars[i], chars[i + 1]) + sp;
+    }
     const x0 = PP ? 0 : e.align === 'm' ? -w / 2 : e.align === 'r' ? -w : 0;
     // Entlang einer Kurve (onP = Punkte auf ihr): Grundlinie folgt der Kurve, Buchstaben stehen senkrecht darauf (Normale links)
     let along = null;
@@ -151,16 +218,18 @@ const SK = (() => {
     const R = !PP && Math.abs(e.bend) > 1e-6 ? e.bend : 0;
     const B = (u, v) => { if (!R) return [u, v]; const f = u / R, r = R + v; return [r * Math.sin(f), r * Math.cos(f) - R]; };
     const out = []; let x = x0;
-    for (const ch of chars) {
-      const g = font.glyphs[ch] || font.glyphs['?'];
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i];
+      const g = getGlyph(font, ch) || getGlyph(font, '?');
       if (g) {
         const ox = x;
         const T = along ? (p) => along((p[0] + ox) * k, p[1] * k * my) : (p) => { const [u, v] = B((p[0] + ox) * k, p[1] * k * my); return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
         // gerade Stücke werden im Bogen zu Kurven (Stützpunkte bei einem und zwei Dritteln)
         const L3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R || along ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
-        x += g.w + sp;
-      } else x += font.em / 2 + sp;
+        for (const c of g.contours) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R || along ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
+        x += g.w;
+      } else x += font.em / 2;
+      if (i + 1 < chars.length) x += getKern(font, ch, chars[i + 1]) + sp;
     }
     if (textCache.size > 300) textCache.clear();
     textCache.set(key, out);
@@ -502,6 +571,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 
