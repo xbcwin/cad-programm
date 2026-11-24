@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -15649,6 +15649,276 @@ def t_a070_positionsnummern_stueckliste(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a076_kopieren_projekte(p):
+    # [A-076] Mehrere Projekte in Tabs, Schritt 2: Kopieren zwischen Projekten (BE-13)
+    def ev2(pg, js, arg=None):
+        return pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+
+    def wait_eval(pg):
+        pg.wait_for_timeout(1500)
+        for _ in range(30):
+            busy = ev2(pg, "return App.busy || Clipboard.busy")
+            if not busy:
+                break
+            pg.wait_for_timeout(300)
+        pg.wait_for_timeout(500)
+
+    p.empty()
+    # 1. Tab 1 -> echter Browser-Tab 2: Quader (40x30x20) mit Bohrung (Ø10) als Gruppe, Farbe #d6574c, Werkstoff PLA
+    p.ev("""
+      App.change('Quader mit Bohrung', (doc) => {
+        doc.name = 'Tab 1';
+        const b = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Block', color: '#d6574c', mat: 'PLA' });
+        b.colorSet = true;
+        const h = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bohrung', role: 'hole' });
+        h.t.z = -5;
+        const g = Model.newItem('group', {}, { name: 'Halterblock', color: '#d6574c', mat: 'PLA' });
+        g.colorSet = true;
+        g.children = [b, h];
+        doc.items.push(g);
+      });
+    """)
+    wait_eval(p.pg)
+    src1 = p.ev("return Mass.measure().then(r => ({ id: App.doc.items[0].id, vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0 }))")
+    p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+    p.ev("App.select([arg])", src1['id'])
+    p.pg.keyboard.press('ControlOrMeta+c')
+    p.wait(400)
+
+    pg2 = p.ctx.new_page()
+    try:
+        pg2.goto(URL)
+        pg2.wait_for_timeout(2500)
+        if pg2.locator('.start').count() > 0 and pg2.get_by_text('Leeres Projekt').count() > 0:
+            pg2.get_by_text('Leeres Projekt').first.click()
+            pg2.wait_for_timeout(4000)
+        else:
+            ev2(pg2, "if (Start.open) Start.hide(); App.setDoc(Model.newDoc('Tab 2'));")
+            pg2.wait_for_timeout(1500)
+        try:
+            pg2.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
+        ev2(pg2, "App.change('Name', d => { d.name = 'Tab 2'; });")
+        pg2.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        pg2.keyboard.press('ControlOrMeta+v')
+        wait_eval(pg2)
+
+        dst1 = ev2(pg2, """
+          return Mass.measure().then(r => {
+            const it = App.doc.items[0];
+            return {
+              len: App.doc.items.length,
+              kind: it && it.kind,
+              kids: it && it.children ? it.children.map(c => c.kind + ':' + c.role) : [],
+              color: it && it.color,
+              colorSet: !!(it && it.colorSet),
+              mat: it && it.mat,
+              vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0,
+              errs: App.errors.length
+            };
+          });
+        """)
+        ok1 = (
+            src1['vol'] > 20000
+            and dst1['len'] == 1
+            and dst1['kind'] == 'group'
+            and dst1['kids'] == ['box:solid', 'cylinder:hole']
+            and dst1['color'] == '#d6574c'
+            and dst1['colorSet'] is True
+            and dst1['mat'] == 'PLA'
+            and dst1['errs'] == 0
+            and abs(dst1['vol'] - src1['vol']) < 1.0
+        )
+
+        # Undo / Redo in Tab 2
+        ev2(pg2, "App.undo()")
+        wait_eval(pg2)
+        after_undo = ev2(pg2, "return App.doc.items.length")
+        ev2(pg2, "App.redo()")
+        wait_eval(pg2)
+        after_redo = ev2(pg2, "return App.doc.items.length")
+        ok1 = ok1 and after_undo == 0 and after_redo == 1
+
+        # 2. Formschritt (op: 'cut') + Formel-Maß (breite = 50) + Farbe #3f7fd6 + Werkstoff Alu 6061 -> In-App Projektwechsel
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt A'));
+          App.change('Formschritt mit Maß', (doc) => {
+            doc.params.push({ id: 'm_test1', name: 'breite', expr: 50 });
+            const b = Model.newItem('box', { w: 'breite', d: 20, h: 10 }, { name: 'Platte', color: '#3f7fd6', mat: 'Alu 6061' });
+            b.colorSet = true;
+            const c = Model.newItem('cylinder', { d: 8, h: 20 }, { name: 'Schnitt' });
+            c.t.z = -5;
+            c.op = { type: 'cut', target: b.id };
+            doc.items.push(b, c);
+          });
+        """)
+        wait_eval(p.pg)
+        src2 = p.ev("return Mass.measure().then(r => ({ id: App.doc.items[0].id, vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0 }))")
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.ev("App.select([arg])", src2['id'])
+        p.pg.keyboard.press('ControlOrMeta+c')
+        p.wait(400)
+
+        p.ev("App.setDoc(Model.newDoc('Projekt B'))")
+        p.wait(600)
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.pg.keyboard.press('ControlOrMeta+v')
+        wait_eval(p.pg)
+        dst2 = p.ev("""
+          return Mass.measure().then(r => {
+            const b = App.doc.items[0], c = App.doc.items[1];
+            return {
+              len: App.doc.items.length,
+              hasParam: (App.doc.params || []).some(q => q.name === 'breite' && Number(q.expr) === 50),
+              cutTargetOk: !!(c && c.op && c.op.type === 'cut' && b && c.op.target === b.id),
+              color: b && b.color,
+              mat: b && b.mat,
+              vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0
+            };
+          });
+        """)
+        ok2 = (
+            src2['vol'] > 9000
+            and dst2['len'] == 2
+            and dst2['hasParam'] is True
+            and dst2['cutTargetOk'] is True
+            and dst2['color'] == '#3f7fd6'
+            and dst2['mat'] == 'Alu 6061'
+            and abs(dst2['vol'] - src2['vol']) < 1.0
+        )
+
+        # 3. Loses oberstes Loch (role: 'hole') am Quader (PETG, #5b9f55): darf im Ziel-Tab keinen fremden Körper anschneiden
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt L1'));
+          App.change('Quader und loses Loch', (doc) => {
+            const b = Model.newItem('box', { w: 30, d: 30, h: 10 }, { name: 'Grundplatte', color: '#5b9f55', mat: 'PETG' });
+            b.colorSet = true;
+            const h = Model.newItem('cylinder', { d: 10, h: 20 }, { name: 'Loch', role: 'hole' });
+            h.t.z = -5;
+            doc.items.push(b, h);
+          });
+        """)
+        wait_eval(p.pg)
+        src3 = p.ev("return Mass.measure().then(r => ({ id: App.doc.items[0].id, vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0 }))")
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.ev("App.select([arg])", src3['id'])
+        p.pg.keyboard.press('ControlOrMeta+c')
+        p.wait(400)
+
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt L2'));
+          App.change('Bestehender Block', (doc) => {
+            doc.items.push(Model.newItem('box', { w: 15, d: 15, h: 10 }, { name: 'Fremd', color: '#8a6ad1' }));
+          });
+        """)
+        wait_eval(p.pg)
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.pg.keyboard.press('ControlOrMeta+v')
+        wait_eval(p.pg)
+        dst3 = p.ev("""
+          return Mass.measure().then(r => {
+            const fremd = App.doc.items.find(x => x.name === 'Fremd');
+            const copy = App.doc.items.find(x => x.name === 'Grundplatte');
+            const pf = fremd ? Mass.partOf(r, fremd.id) : null;
+            const pc = copy ? Mass.partOf(r, copy.id) : null;
+            return {
+              fremdVol: pf ? pf.volume : 0,
+              copyVol: pc ? pc.volume : 0,
+              color: copy && copy.color,
+              mat: copy && copy.mat
+            };
+          });
+        """)
+        ok3 = (
+            abs(dst3['fremdVol'] - 2250.0) < 0.5
+            and abs(dst3['copyVol'] - src3['vol']) < 1.0
+            and dst3['color'] == '#5b9f55'
+            and dst3['mat'] == 'PETG'
+        )
+
+        # 4. Feste Form (BREP-Fallback) bei externem Bezug (transform-Kopie ohne Original) -> Tab 2
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt Bake'));
+          App.change('Transform-Kopie', (doc) => {
+            const b = Model.newItem('box', { w: 20, d: 15, h: 10 }, { name: 'Basis' });
+            const xf = Model.newItem('transform', { target: b.id, copy: true, dx: 40, dy: 5, dz: 0, rx: 0, ry: 0, rz: 0 }, { name: 'GebakeneKopie', color: '#e8833a', mat: 'Messing' });
+            xf.colorSet = true;
+            doc.items.push(b, xf);
+          });
+        """)
+        wait_eval(p.pg)
+        src4 = p.ev("return Mass.measure().then(r => { const xf = App.doc.items[1]; const pt = Mass.partOf(r, xf.id); return { id: xf.id, vol: pt ? pt.volume : 0 }; })")
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.ev("App.select([arg])", src4['id'])
+        p.pg.keyboard.press('ControlOrMeta+c')
+        p.ev("return Clipboard.whenReady()")
+        p.wait(300)
+
+        ev2(pg2, "App.setDoc(Model.newDoc('Tab 2 Bake'))")
+        pg2.wait_for_timeout(600)
+        pg2.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        pg2.keyboard.press('ControlOrMeta+v')
+        wait_eval(pg2)
+        dst4 = ev2(pg2, """
+          return Mass.measure().then(r => {
+            const it = App.doc.items[0];
+            const pt = it ? Mass.partOf(r, it.id) : null;
+            return {
+              kind: it && it.kind,
+              fmt: it && it.p && it.p.fmt,
+              color: it && it.color,
+              mat: it && it.mat,
+              vol: pt ? pt.volume : 0,
+              errs: App.errors.length
+            };
+          });
+        """)
+        ok4 = (
+            abs(src4['vol'] - 3000.0) < 1.0
+            and dst4['kind'] == 'import'
+            and dst4['fmt'] == 'brep'
+            and dst4['color'] == '#e8833a'
+            and dst4['mat'] == 'Messing'
+            and dst4['errs'] == 0
+            and abs(dst4['vol'] - src4['vol']) < 1.0
+        )
+
+        # 5. Kontextmenü (#cm-copy / #cm-paste), Befehlssuche & Hilfetext
+        p.ev("Viewer.fit(null, false)")
+        p.wait(400)
+        meta = p.ev("""
+          return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => {
+            const b = App.doc.items[0];
+            const box = Actions.worldBox(b.id);
+            const ctr = box.min.clone().add(box.max).multiplyScalar(0.5);
+            const sc = Viewer.toScreen(ctr);
+            const rc = Viewer.canvas.getBoundingClientRect();
+            const onBody = Interact.contextMenu(sc.x + rc.left, sc.y + rc.top).map(x => x && x.id).filter(Boolean);
+            const hasHelpAttr = !!document.querySelector('#cm-copy[data-help="copyBetweenTabs"]');
+            document.querySelector('.menu')?.remove();
+            App.select([b.id]);
+            const cmdCopy = Commands.search('körper kopieren').some(c => c.id === 'copy');
+            App.clearSelection();
+            const onEmpty = Interact.contextMenu(rc.left + 20, rc.top + 20).map(x => x && x.id).filter(Boolean);
+            document.querySelector('.menu')?.remove();
+            const cmdPaste = Commands.search('kopierte körper einfügen').some(c => c.id === 'paste');
+            return {
+              hasCmCopy: onBody.includes('cm-copy'),
+              hasCmPaste: onEmpty.includes('cm-paste'),
+              hasHelpAttr,
+              cmdCopy,
+              cmdPaste,
+              helpJson: !!(d.copyBetweenTabs && d.copyBetweenTabs.tip && d.copyBetweenTabs.hilfe && d.copyBetweenTabs.tipp)
+            };
+          });
+        """)
+        ok5 = bool(all(meta.values()))
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        pg2.close()
+
+
 def t_a075_projekt_tabs(p):
     p.empty()
 
@@ -15795,6 +16065,155 @@ def t_a075_projekt_tabs(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-077] Große Modelle, Schritt 1: nur neu rechnen, was sich geändert hat (PL-04) ----------
+def t_a077_nur_geandertes_rechnen(p):
+    p.empty()
+    p.ev("""
+    App.change('3 Körper anlegen', (d) => {
+      const b1 = Model.newItem('box', { w: 20, d: 20, h: 15 }, { name: 'Klotz 1' });
+      b1.t.x = -40;
+      const b2 = Model.newItem('cylinder', { d: 18, h: 25 }, { name: 'Zylinder 2' });
+      b2.t.x = 0;
+      const sk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [
+          { id: 'r1', type: 'rect', a: [-10, -7.5], b: [10, 7.5] },
+        ],
+        dims: [],
+        cons: [],
+      };
+      const b3 = Model.newItem('extrude', { sketch: sk, dist: 10, dir: 'normal' }, { name: 'Skizzenkörper 3' });
+      b3.t.x = 40;
+      d.items.push(b1, b2, b3);
+    });
+    """)
+    warte_rechnen(p)
+    ids = p.ev("return App.doc.items.map(x => x.id)")
+    id1, id2, id3 = ids
+    st1 = p.ev("return Kernel.stats()")
+    fp1_before = p.ev("return [App.stepFingerprint(arg[0]), App.stepFingerprint(arg[1]), App.stepFingerprint(arg[2])]", ids)
+    bb1 = p.ev("return arg.map(id => App.results.get(id).data.bbox)", ids)
+    ok1 = (
+        len(ids) == 3
+        and st1['buildsByItem'].get(id1) == 1
+        and st1['buildsByItem'].get(id2) == 1
+        and st1['buildsByItem'].get(id3) == 1
+        and all(bool(x) for x in fp1_before)
+        and len(set(fp1_before)) == 3
+        and abs((bb1[0][5] - bb1[0][2]) - 15) < 0.1
+        and abs((bb1[1][5] - bb1[1][2]) - 25) < 0.1
+        and abs((bb1[2][5] - bb1[2][2]) - 10) < 0.1
+    )
+
+    # Maß direkt an Körper 3 ändern → Körper 1 & 2 dürfen nicht neu gerechnet werden
+    p.ev("App.change('Höhe Körper 3 auf 35', d => { d.items[2].p.dist = 35; })")
+    warte_rechnen(p)
+    st2 = p.ev("return Kernel.stats()")
+    fp2 = p.ev("return [App.stepFingerprint(arg[0]), App.stepFingerprint(arg[1]), App.stepFingerprint(arg[2])]", ids)
+    bb2 = p.ev("return arg.map(id => App.results.get(id).data.bbox)", ids)
+    ok2 = (
+        st2['buildsByItem'].get(id1) == 1
+        and st2['buildsByItem'].get(id2) == 1
+        and st2['buildsByItem'].get(id3) == 2
+        and set(st2['lastEval']['rebuilt']) == {id3}
+        and set(st2['lastEval']['cached']) == {id1, id2}
+        and fp2[0] == fp1_before[0]
+        and fp2[1] == fp1_before[1]
+        and fp2[2] != fp1_before[2]
+        and abs((bb2[0][5] - bb2[0][2]) - 15) < 0.1
+        and abs((bb2[1][5] - bb2[1][2]) - 25) < 0.1
+        and abs((bb2[2][5] - bb2[2][2]) - 35) < 0.1
+    )
+
+    # Parameter-Formel an Körper 3 anbinden und Parameter ändern + Zeitleiste prüfen
+    p.ev("""
+    App.change('Parameter Hoehe3', d => {
+      d.params.push({ id: 'par_hoehe3', name: 'Hoehe3', expr: '50' });
+      d.items[2].p.dist = 'Hoehe3';
+    });
+    """)
+    warte_rechnen(p)
+    p.ev("App.change('Hoehe3 auf 65', d => { d.params[0].expr = '65'; })")
+    warte_rechnen(p)
+    st3 = p.ev("return Kernel.stats()")
+    bb3_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    p.wait(200)
+    chips = p.ev("""
+    return [...document.querySelectorAll('.tl-chip')].map(el => ({
+      cache: el.dataset.cache || '',
+      fp: el.dataset.fp || '',
+      tip: el.dataset.tip || '',
+    }));
+    """)
+    ok3 = (
+        st3['buildsByItem'].get(id1) == 1
+        and st3['buildsByItem'].get(id2) == 1
+        and st3['buildsByItem'].get(id3) == 4
+        and abs(bb3_h - 65) < 0.1
+        and len(chips) == 3
+        and chips[0]['cache'] == 'hit' and 'aus Speicher' in chips[0]['tip']
+        and chips[1]['cache'] == 'hit' and 'aus Speicher' in chips[1]['tip']
+        and chips[2]['cache'] == 'rebuilt' and 'neu gerechnet' in chips[2]['tip']
+        and all(bool(c['fp']) for c in chips)
+    )
+
+    # Abhängiger Schritt 4 (Boolesch-Abzug auf Körper 3): bei Änderung an Körper 3 rechnen 3 & 4 neu, 1 & 2 nicht
+    p.ev("""
+    App.change('Schnittkörper 4', d => {
+      const c4 = Model.newItem('box', { w: 6, d: 6, h: 100 }, { name: 'Lochklotz 4' });
+      c4.t.x = 40;
+      c4.t.z = -5;
+      c4.op = { type: 'cut', target: d.items[2].id };
+      d.items.push(c4);
+    });
+    """)
+    warte_rechnen(p)
+    id4 = p.ev("return App.doc.items[3].id")
+    st4_before = p.ev("return Kernel.stats()")
+    p.ev("App.change('Hoehe3 auf 80', d => { d.params[0].expr = '80'; })")
+    warte_rechnen(p)
+    st4_after = p.ev("return Kernel.stats()")
+    bb4_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    vol3 = p.ev("return Mass.measure().then(r => (r.parts || []).find(x => x.id === arg).volume)", id3)
+    ok4 = (
+        st4_after['buildsByItem'].get(id1) == 1
+        and st4_after['buildsByItem'].get(id2) == 1
+        and st4_after['buildsByItem'].get(id3) == st4_before['buildsByItem'].get(id3) + 1
+        and st4_after['buildsByItem'].get(id4) == st4_before['buildsByItem'].get(id4) + 1
+        and abs(bb4_h - 80) < 0.1
+        and abs(vol3 - (20 * 15 * 80 - 6 * 6 * 80)) < 5
+    )
+
+    # Rückgängig nutzt gespeichertes Ergebnis ohne Neuberechnung
+    reb_before_undo = st4_after['totalRebuilds']
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    st5 = p.ev("return Kernel.stats()")
+    bb5_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    ok5 = (
+        st5['totalRebuilds'] == reb_before_undo
+        and st5['lastEval']['rebuilt'] == []
+        and abs(bb5_h - 65) < 0.1
+    )
+
+    # Zeitleisten-Marker zurückrollen und wieder vorrollen ohne Neuberechnung
+    p.ev("Timeline.setMarker(2)")
+    for _ in range(30):
+        p.wait(250)
+        if p.ev("return !App.busy && App.results.size === 2"):
+            break
+    p.ev("Timeline.setMarker(4)")
+    warte_rechnen(p)
+    st6 = p.ev("return Kernel.stats()")
+    bb6_h = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2];", id3)
+    ok6 = (
+        st6['totalRebuilds'] == reb_before_undo
+        and st6['lastEval']['rebuilt'] == []
+        and abs(bb6_h - 65) < 0.1
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 # ---------- [A-078] Große Modelle, Schritt 2: mehrere Rechen-Helfer (PL-04) ----------
 def t_a078_mehrere_rechenhelfer(p):
     reqs = []
@@ -15834,7 +16253,7 @@ def t_a078_mehrere_rechenhelfer(p):
     warte_rechnen(p, 40)
 
     # 2. Verteilung auf mehrere Rechen-Helfer & genau ein WASM-Abruf
-    st_multi = p.ev("return Kernel.stats;")
+    st_multi = p.ev("return Kernel.poolStats;")
     expected_max = p.ev("const c = Number(navigator.hardwareConcurrency); return Math.min(4, Math.max(1, Number.isFinite(c) && c >= 1 ? Math.floor(c) : 2));")
     multi_expected = expected_max > 1
     used_helpers = [w for w in st_multi['lastEval']['workerIds'] if w > 0]
@@ -15851,7 +16270,7 @@ def t_a078_mehrere_rechenhelfer(p):
 
     # 3. Schluessel-gebundene Aufrufe (faceLoops & remesh) funktionieren auch auf einem Neben-Helfer
     helper_res = p.ev("""return (async () => {
-      const st = Kernel.stats;
+      const st = Kernel.poolStats;
       const iw = st.lastEval.itemWorkers || {};
       const targetId = Object.keys(iw).find((id) => iw[id] > 0) || App.doc.items[0].id;
       const r = App.results.get(targetId);
@@ -15913,7 +16332,7 @@ def t_a078_mehrere_rechenhelfer(p):
     p.ev("App.requalify();")
     warte_rechnen(p, 40)
 
-    st_single = p.ev("return Kernel.stats;")
+    st_single = p.ev("return Kernel.poolStats;")
     res_single = p.ev(snap_js)
     same_geom = (
         res_single['errors'] == 0
@@ -15954,7 +16373,7 @@ def t_a078_mehrere_rechenhelfer(p):
       });
     """)
     warte_rechnen(p, 40)
-    st_dep = p.ev("return Kernel.stats;")
+    st_dep = p.ev("return Kernel.poolStats;")
     dep_ok = (
         st_dep['multiWorker'] is True
         and st_dep['lastEval']['chunks'] == 4
@@ -16161,8 +16580,10 @@ TESTS = [
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
     ('[A-074] Übersetzbare Oberfläche, Schritt 2: Test-Modus & vollständige DOM-Abdeckung', t_a074_uebersetzbare_oberflaeche_2),
     ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
+    ('[A-076] Kopieren zwischen Projekten: Quader mit Bohrung in Tab 1 → Tab 2 (Volumen, Farbe, Werkstoff, Schritte, feste Form, Rückgängig)', t_a076_kopieren_projekte),
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('[A-078] Mehrere Rechen-Helfer: 4 unabhängige Körper mit Bohrungsmustern verteilt & ergebnisgleich, Einstellung (Profi), kein Nachladen', t_a078_mehrere_rechenhelfer),
+    ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

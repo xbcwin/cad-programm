@@ -6,9 +6,12 @@ const Kernel = (() => {
   let loadStartMs = null, readyMs = null, loadDurMs = null, initMs = null;
   let wasmBytes = null, wasmFetchCount = 0, spawnKind = null;
   let multiWorker = true;
-  const pool = []; // [{ index, worker, ready, initPromise, pending, sentBlobs, terminated }]
+  let lastStats = null;
+  let evalStatsSeq = 0;
+  const pool = []; // [{ index, worker, ready, initPromise, pending, sentBlobs, terminated, lastKernelStats }]
   const keyOwner = new Map(); // resultKey -> workerIndex
   const itemOwner = new Map(); // itemId -> workerIndex
+  const retiredStats = { totalRebuilds: 0, totalHits: 0, buildsByItem: {}, hitsByItem: {} };
   const ev = makeEmitter();
   let readyResolve;
   const readyPromise = new Promise((res) => { readyResolve = res; });
@@ -26,6 +29,99 @@ const Kernel = (() => {
   function detectMaxWorkers() {
     const cores = detectCores();
     return Math.min(MAX_WORKERS, Math.max(1, cores != null ? cores : 2));
+  }
+
+  function canonical(v) {
+    if (v === undefined || typeof v === 'function' || typeof v === 'symbol') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? (Object.is(v, -0) ? 0 : v) : null;
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) {
+        const val = v[k];
+        if (val === undefined || typeof val === 'function' || typeof val === 'symbol') continue;
+        out[k] = canonical(val);
+      }
+      return out;
+    }
+    return v;
+  }
+  function fingerprint(val) {
+    const str = JSON.stringify(canonical(val));
+    let h1 = 0xdeadbeef ^ str.length, h2 = 0x41c6ce57 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+  function emptyStats() {
+    return {
+      evals: 0,
+      totalRebuilds: 0,
+      totalHits: 0,
+      buildsByItem: {},
+      hitsByItem: {},
+      lastEval: { evalId: 0, rebuilt: [], cached: [], meshed: [], fingerprints: {} },
+      cacheSize: 0,
+      meshCacheSize: 0,
+    };
+  }
+  let lastAggEval = emptyStats().lastEval;
+
+  function addMapCounts(dst, src) {
+    if (!src) return;
+    for (const [k, val] of Object.entries(src)) dst[k] = (dst[k] || 0) + (Number(val) || 0);
+  }
+  function retireSlotStats(slot) {
+    const st = slot && slot.lastKernelStats;
+    if (!st) return;
+    retiredStats.totalRebuilds += Number(st.totalRebuilds) || 0;
+    retiredStats.totalHits += Number(st.totalHits) || 0;
+    addMapCounts(retiredStats.buildsByItem, st.buildsByItem);
+    addMapCounts(retiredStats.hitsByItem, st.hitsByItem);
+    slot.lastKernelStats = null;
+  }
+  function activeSlots() {
+    return pool.filter((s) => s && s.ready && !s.terminated);
+  }
+  function aggregateKernelStats(overrideLastEval = null) {
+    let totalRebuilds = retiredStats.totalRebuilds;
+    let totalHits = retiredStats.totalHits;
+    let cacheSize = 0;
+    let meshCacheSize = 0;
+    const buildsByItem = { ...retiredStats.buildsByItem };
+    const hitsByItem = { ...retiredStats.hitsByItem };
+    for (const s of activeSlots()) {
+      const st = s.lastKernelStats;
+      if (!st) continue;
+      totalRebuilds += Number(st.totalRebuilds) || 0;
+      totalHits += Number(st.totalHits) || 0;
+      cacheSize += Number(st.cacheSize) || 0;
+      meshCacheSize += Number(st.meshCacheSize) || 0;
+      addMapCounts(buildsByItem, st.buildsByItem);
+      addMapCounts(hitsByItem, st.hitsByItem);
+    }
+    const le = overrideLastEval || lastAggEval || emptyStats().lastEval;
+    return {
+      evals: evalStatsSeq,
+      totalRebuilds,
+      totalHits,
+      buildsByItem,
+      hitsByItem,
+      lastEval: {
+        evalId: le.evalId || 0,
+        rebuilt: Array.isArray(le.rebuilt) ? le.rebuilt.slice() : [],
+        cached: Array.isArray(le.cached) ? le.cached.slice() : [],
+        meshed: Array.isArray(le.meshed) ? le.meshed.slice() : [],
+        fingerprints: le.fingerprints ? { ...le.fingerprints } : {},
+      },
+      cacheSize,
+      meshCacheSize,
+    };
   }
 
   async function fetchWasm(onProgress) {
@@ -148,7 +244,7 @@ const Kernel = (() => {
     if (pool[index] && !pool[index].terminated && (pool[index].ready || pool[index].initPromise)) {
       return pool[index].initPromise;
     }
-    const slot = { index, worker: null, ready: false, initPromise: null, pending: new Map(), sentBlobs: new Set(), terminated: false };
+    const slot = { index, worker: null, ready: false, initPromise: null, pending: new Map(), sentBlobs: new Set(), terminated: false, lastKernelStats: null };
     pool[index] = slot;
     slot.initPromise = (async () => {
       try {
@@ -173,6 +269,7 @@ const Kernel = (() => {
               ev.emit('error', err);
             }
           } else {
+            retireSlotStats(slot);
             slot.terminated = true;
             slot.ready = false;
             if (pool[index] === slot) pool[index] = null;
@@ -212,6 +309,8 @@ const Kernel = (() => {
       return startPromise;
     }
     state = 'loading'; progress = 0.02; loadError = null; loadStartMs = performance.now();
+    lastStats = null; evalStatsSeq = 0; lastAggEval = emptyStats().lastEval;
+    retiredStats.totalRebuilds = 0; retiredStats.totalHits = 0; retiredStats.buildsByItem = {}; retiredStats.hitsByItem = {};
     onProgress && onProgress(progress);
     ev.emit('state', { state, progress });
     startPromise = (async () => {
@@ -247,7 +346,8 @@ const Kernel = (() => {
 
   async function ensureWorkers(targetCount) {
     if (!ready) await ensure();
-    const limit = Math.min(detectMaxWorkers(), Math.max(1, targetCount | 0));
+    const maxW = detectMaxWorkers();
+    const limit = Math.min(maxW, Math.max(1, targetCount | 0));
     if (limit <= 1 || !multiWorker || !wasmBytes) return pool[0] ? [pool[0]] : [];
     const jobs = [];
     for (let i = 1; i < limit; i++) {
@@ -257,7 +357,7 @@ const Kernel = (() => {
     }
     if (jobs.length) await Promise.allSettled(jobs);
     const active = [];
-    for (let i = 0; i < limit; i++) {
+    for (let i = 0; i < maxW; i++) {
       const s = pool[i];
       if (s && s.ready && !s.terminated) active.push(s);
     }
@@ -269,6 +369,7 @@ const Kernel = (() => {
     for (let i = 1; i < pool.length; i++) {
       const s = pool[i];
       if (!s) continue;
+      retireSlotStats(s);
       s.terminated = true;
       s.ready = false;
       for (const p of s.pending.values()) p.reject(err);
@@ -636,8 +737,12 @@ const Kernel = (() => {
     }
   }
 
-  async function evaluateSingleOnSlot(slot, scene, known, totalVisibleCount) {
-    const res = await postTo(slot, 'evaluate', { scene, known });
+  async function evaluateSingleOnSlot(slot, scene, known, totalVisibleCount, opts) {
+    const subKnown = {};
+    for (const [id, kk] of Object.entries(known || {})) {
+      if (kk && keyOwner.get(kk) === slot.index) subKnown[id] = kk;
+    }
+    const res = await postTo(slot, 'evaluate', { scene, known: subKnown, opts });
     recordEvalOwnership(res && res.nodes, slot.index);
     workerJobs[slot.index] = (workerJobs[slot.index] || 0) + 1;
     totalEvalCalls++;
@@ -651,6 +756,22 @@ const Kernel = (() => {
       itemWorkers,
       parallel: false,
     };
+    if (res && res.stats) {
+      slot.lastKernelStats = res.stats;
+      evalStatsSeq++;
+      const rle = res.stats.lastEval || {};
+      lastAggEval = {
+        evalId: evalStatsSeq,
+        rebuilt: Array.isArray(rle.rebuilt) ? rle.rebuilt.slice() : [],
+        cached: Array.isArray(rle.cached) ? rle.cached.slice() : [],
+        meshed: Array.isArray(rle.meshed) ? rle.meshed.slice() : [],
+        fingerprints: rle.fingerprints ? { ...rle.fingerprints } : {},
+      };
+      const agg = aggregateKernelStats();
+      lastStats = agg;
+      ev.emit('stats', agg);
+      return { ...res, stats: agg };
+    }
     return res;
   }
 
@@ -658,16 +779,25 @@ const Kernel = (() => {
     if (!ready) await ensure();
     const scene = args.scene || { items: [] };
     const known = args.known || {};
+    const opts = args.opts;
+    if (opts && opts.aux) {
+      return postTo(pool[0], 'evaluate', { scene, known, opts });
+    }
     const { components, hiddenStubs, visible } = partitionScene(scene);
 
     if (!multiWorker || args.parallel === false || detectMaxWorkers() <= 1 || components.length < 2) {
-      return evaluateSingleOnSlot(pool[0], scene, known, visible.length);
+      let targetSlot = pool[0];
+      if (multiWorker && components.length === 1 && visible.length) {
+        const own = itemOwner.get(visible[0].id);
+        if (own != null && pool[own] && pool[own].ready && !pool[own].terminated) targetSlot = pool[own];
+      }
+      return evaluateSingleOnSlot(targetSlot, scene, known, visible.length, opts);
     }
 
     const target = Math.min(detectMaxWorkers(), components.length);
     const slots = await ensureWorkers(target);
     if (slots.length <= 1) {
-      return evaluateSingleOnSlot(pool[0], scene, known, visible.length);
+      return evaluateSingleOnSlot(pool[0], scene, known, visible.length, opts);
     }
 
     // Komponenten gleichmäßig auf verfügbare Helfer verteilen; bestehende Zuständigkeit (für Cache) bevorzugen,
@@ -715,7 +845,7 @@ const Kernel = (() => {
         let usedIdx = slot.index;
         let res;
         try {
-          res = await postTo(slot, 'evaluate', { scene: subScene, known: subKnown });
+          res = await postTo(slot, 'evaluate', { scene: subScene, known: subKnown, opts });
         } catch (err) {
           if (slot.index !== 0 && pool[0] && pool[0].ready) {
             usedIdx = 0;
@@ -724,11 +854,12 @@ const Kernel = (() => {
               const kk = known[it.id];
               if (kk && keyOwner.get(kk) === 0) fallbackKnown[it.id] = kk;
             }
-            res = await postTo(pool[0], 'evaluate', { scene: subScene, known: fallbackKnown });
+            res = await postTo(pool[0], 'evaluate', { scene: subScene, known: fallbackKnown, opts });
           } else {
             throw err;
           }
         }
+        if (res && res.stats && pool[usedIdx]) pool[usedIdx].lastKernelStats = res.stats;
         recordEvalOwnership(res && res.nodes, usedIdx);
         workerJobs[usedIdx] = (workerJobs[usedIdx] || 0) + 1;
         perWorker[usedIdx] = (perWorker[usedIdx] || 0) + 1;
@@ -747,12 +878,25 @@ const Kernel = (() => {
     const errors = [];
     const times = {};
     const resolved = {};
+    const rebuilt = [];
+    const cached = [];
+    const meshed = [];
+    const fingerprints = {};
+    let hasKernelStats = false;
     for (const cr of compResults) {
       if (!cr) continue;
       for (const n of cr.nodes || []) if (n && n.id) nodeById.set(n.id, n);
       if (Array.isArray(cr.errors)) errors.push(...cr.errors);
       if (cr.times) Object.assign(times, cr.times);
       if (cr.resolved) Object.assign(resolved, cr.resolved);
+      if (cr.stats) {
+        hasKernelStats = true;
+        const le = cr.stats.lastEval || {};
+        if (Array.isArray(le.rebuilt)) rebuilt.push(...le.rebuilt);
+        if (Array.isArray(le.cached)) cached.push(...le.cached);
+        if (Array.isArray(le.meshed)) meshed.push(...le.meshed);
+        if (le.fingerprints) Object.assign(fingerprints, le.fingerprints);
+      }
     }
     const nodes = [];
     for (const it of visible) {
@@ -771,7 +915,16 @@ const Kernel = (() => {
       itemWorkers,
       parallel: workerIds.length > 1,
     };
-    return { nodes, errors, times, resolved };
+    const out = { nodes, errors, times, resolved };
+    if (hasKernelStats) {
+      evalStatsSeq++;
+      lastAggEval = { evalId: evalStatsSeq, rebuilt, cached, meshed, fingerprints };
+      const aggStats = aggregateKernelStats();
+      lastStats = aggStats;
+      ev.emit('stats', aggStats);
+      out.stats = aggStats;
+    }
+    return out;
   }
 
   const KEY_ROUTED = new Set(['remesh', 'faceLoops', 'faceGrid', 'section']);
@@ -785,21 +938,63 @@ const Kernel = (() => {
     }
     return postTo(slot, cmd, args, transfer);
   }
-
-  function resetStats() {
+  function resetPoolStats() {
     totalEvalCalls = 0;
     parallelEvalCalls = 0;
     workerJobs.fill(0);
     lastEval = { chunks: 0, workersUsed: 0, workerIds: [], perWorker: {}, itemWorkers: {}, parallel: false };
   }
 
+  async function stats() {
+    if (!ready) return emptyStats();
+    const slots = activeSlots();
+    await Promise.all(slots.map(async (s) => {
+      try { s.lastKernelStats = await postTo(s, 'stats'); } catch (_) {}
+    }));
+    const r = aggregateKernelStats();
+    lastStats = r;
+    return r;
+  }
+  async function resetStats() {
+    resetPoolStats();
+    lastStats = null;
+    evalStatsSeq = 0;
+    lastAggEval = emptyStats().lastEval;
+    retiredStats.totalRebuilds = 0;
+    retiredStats.totalHits = 0;
+    retiredStats.buildsByItem = {};
+    retiredStats.hitsByItem = {};
+    if (!ready) return emptyStats();
+    const slots = activeSlots();
+    await Promise.all(slots.map(async (s) => {
+      try { s.lastKernelStats = await postTo(s, 'resetStats'); } catch (_) {}
+    }));
+    const r = aggregateKernelStats();
+    lastStats = r;
+    return r;
+  }
+  async function clearCache() {
+    keyOwner.clear();
+    itemOwner.clear();
+    if (!ready) return emptyStats();
+    const slots = activeSlots();
+    await Promise.all(slots.map(async (s) => {
+      try { s.lastKernelStats = await postTo(s, 'clearCache'); } catch (_) {}
+    }));
+    const r = aggregateKernelStats();
+    lastStats = r;
+    return r;
+  }
+
   return {
     start, ensure, call, on: ev.on,
-    setMultiWorker, resetStats, partitionScene,
+    stats, resetStats, resetPoolStats, clearCache, fingerprint,
+    setMultiWorker, partitionScene,
+    get lastStats() { return lastStats; },
     get multiWorker() { return multiWorker; },
     get maxWorkers() { return detectMaxWorkers(); },
     get workerCount() { return pool.filter((s) => s && s.ready && !s.terminated).length; },
-    get stats() {
+    get poolStats() {
       return {
         multiWorker,
         maxWorkers: detectMaxWorkers(),

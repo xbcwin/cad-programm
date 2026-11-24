@@ -23,10 +23,13 @@ const Timeline = (() => {
   function chipTip(it, i, V) {
     const errs = RefFix.hardErrorsFor(it.id);
     const refs = RefFix.issuesOf(it.id);
-    const st = it.suppressed ? T('tl.suppressed') : i >= markerPos() ? T('tl.afterMarker') : '';
+    const mk = markerPos();
+    const st = it.suppressed ? T('tl.suppressed') : i >= mk ? T('tl.afterMarker') : '';
+    const cs = (!it.suppressed && i < mk && owner() === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
+    const cacheTxt = cs ? (cs.cached ? ' · aus Speicher' : cs.rebuilt ? ' · neu gerechnet' : '') : '';
     const ai = it.ai ? ` · ${it.ai.edit ? T('tl.aiEdited') : T('tl.aiCreated')}: „${it.ai.q}“` : '';
     const msg = errs.length ? ' · ' + errs[0].message : refs.length ? ' · ' + refs[0].message : '';
-    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${msg}${it.note ? T('tl.notePrefix') + it.note : ''}`;
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${cacheTxt}${ai}${msg}${it.note ? T('tl.notePrefix') + it.note : ''}`;
   }
   function render() {
     if (!el) return;
@@ -44,7 +47,11 @@ const Timeline = (() => {
       const hardErrs = RefFix.hardErrorsFor(it.id);
       const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
       const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
+      const cs = (!it.suppressed && i < mk && own === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
+      const ds = { idx: i };
+      if (cs && cs.fp) ds.fp = cs.fp;
+      if (cs && (cs.cached || cs.rebuilt)) ds.cache = cs.cached ? 'hit' : 'rebuilt';
+      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: ds });
       c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
       if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
       c.onclick = (e) => { clearTimeout(peekT); peekK = null; App.peek(null); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
@@ -62,6 +69,9 @@ const Timeline = (() => {
     const pk = own === App.doc ? App.peeking : null;
     info.classList.toggle('peek', pk != null);
     info.textContent = pk != null ? T('tl.peekInfo', { n: pk }) : n ? (mk >= n ? (n === 1 ? T('tl.oneStep') : T('tl.manySteps', { n })) : `${mk} / ${n}`) : '';
+    const le = own === App.doc && App.evalStats && App.evalStats.lastEval;
+    if (le) info.dataset.tip = `Letztes Rechnen: ${le.rebuilt.length} neu gerechnet, ${le.cached.length} aus Speicher`;
+    else delete info.dataset.tip;
     if (pk != null) track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', j >= pk));
     bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
     // aktiven Bereich sichtbar halten

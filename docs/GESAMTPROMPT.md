@@ -91,19 +91,20 @@ Leitlinien:
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`needsEntsFonts`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
-| `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`stats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker) |
-| `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse |
+| `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`poolStats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker, Zähler & Fingerabdrücke über `stats`/`resetStats`/`clearCache`/`lastStats`/`fingerprint`) |
+| `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse & Schritt-Cache (`stepFingerprint`/`stepCacheStatus`/`evalStats`) |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `42-userlib.js` (`UserLib`) | Eigene Teile-Bibliothek (`tracery-bibliothek` in `localStorage`, Vorschaubild, lokale Maße) |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
+| `45-clipboard.js` | Zwischenablage (`Clipboard`) zum Kopieren/Einfügen von Körpern samt Schritten, Werkstoff, Farbe und Maßen (oder als feste BREP-Form) zwischen Projekten und Browser-Tabs (BE-13) |
 | `46-features.js` | Muster (inkl. „entlang Kurve“, Formschritt-Muster und Kopien auslassen `togglePatternSkip`), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
 | `46-reffix.js` | Kaputte Bezüge (`RefFix`): gelbe Warnung bei verlorener Kante/Fläche an Rundung, Fase, Wandstärke oder Skizze, gestrichelte Alt-Lage (`Viewer.setRefGhost`) und Assistent „Neu wählen“ |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
-| `49-*` | Bauteile im Kontext, Zeitleiste (`Timeline.refreshLabels`), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
+| `49-*` | Bauteile im Kontext, Zeitleiste (`Timeline.refreshLabels`, mit Speicher-Status je Schritt), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
 | `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, ViewCube (`Panels.refreshViewCube`), rechtes Panel „Eigenschaften“ (sofort bei Auswahl, `renderRight({ preserveFocus })` schützt fokussierte Eingabefelder bei asynchronen `results`-Updates), Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
 | `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |

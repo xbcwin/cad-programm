@@ -174,7 +174,7 @@ const ViewPrefs = (() => {
       chk('adaptive', T('dlg.settings.adaptive'), T('dlg.settings.adaptiveHint')),
     );
     const maxW = typeof Kernel !== 'undefined' && Kernel.maxWorkers ? Kernel.maxWorkers : 1;
-    const cores = typeof Kernel !== 'undefined' && Kernel.stats && Kernel.stats.cores ? Kernel.stats.cores : maxW;
+    const cores = typeof Kernel !== 'undefined' && Kernel.poolStats && Kernel.poolStats.cores ? Kernel.poolStats.cores : maxW;
     const mwChk = chk('multiWorker', T('dlg.settings.multiWorker'), maxW > 1 ? T('dlg.settings.multiWorkerHint', { n: maxW, cores }) : T('dlg.settings.multiWorkerSingleHint'));
     mwChk.classList.add('pro');
     mwChk.dataset.help = 'multiWorker';

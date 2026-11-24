@@ -2041,12 +2041,25 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Speichern/Neuladen, PDF, DXF & Hilfen**: Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Spalten und Teilenamen), DXF-Export (Kreise auf `BEMASSUNG`, Tabellentexte auf `RAHMEN`), Befehlssuche und Hilfetexte (`drawingBalloons`, `drawingBom`) funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser eine kleine Baugruppe aus mehreren Teilen und einer Gruppe in der Zeichnung mit Positionsnummern versehen, Kreise und Stückliste auf dem Blatt zurechtschieben und die exportierte PDF- und DXF-Datei prüfen.
 
+## Kopieren zwischen Projekten / Tabs (Auto [A-076], BE-13)
+
+- [x] **Quader mit Bohrung in Tab 1 → Tab 2 (`Strg/Cmd+C` / `Strg/Cmd+V`)**: Eine Gruppe aus Quader (`40 × 30 × 20 mm`) und durchgehender Bohrung (`Ø 10 mm`) mit Farbe `#d6574c` und Werkstoff `PLA` wird in Tab 1 kopiert und in einem zweiten Browser-Tab exakt mit gleichem Volumen, gleicher Farbe, gleichem Werkstoff und allen Schritten eingefügt; Rückgängig/Wiederholen arbeitet als ein Schritt.
+- [x] **Formschritte, lose Löcher & Formel-Maße**: Abzugs-Formschritte (`op: 'cut'`), verwendete Parameter (`breite = 50`) und lose oberste Löcher wandern mit; im Ziel-Tab schneiden mitgebrachte Löcher nur den kopierten Körper und keine bereits vorhandenen Körper.
+- [x] **Feste Form (BREP-Fallback), Kontextmenü & Hilfe**: Teile mit nicht mitkopierten externen Bezügen (z. B. isolierte `transform`-Kopie) werden automatisch als BREP gebacken und behalten Volumen, Farbe und Werkstoff; `#cm-copy`, `#cm-paste`, Befehlssuche und Hilfetext `copyBetweenTabs` sind vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Tracery-Tabs öffnen, einen aufwendigeren Körper mit Rundungen, Bohrung, eigenem Werkstoff und Farbe per `Strg/Cmd+C` kopieren, im zweiten Tab mit `Strg/Cmd+V` einfügen und Lage, Farbe und Material visuell prüfen.
+
 ## Mehrere Projekte in Tabs (Auto [A-075], BE-13)
 
 - [x] **Zwei Projekte in Tabs öffnen & wechseln**: Über „+“ → „Neues leeres Projekt“ bzw. gespeichertes Projekt ein zweites Projekt in einem neuen Tab öffnen; Klick auf die Tabs zeigt jeweils nur den zugehörigen Körper in 3D-Ansicht und Verlauf.
 - [x] **Eigenes Rückgängig je Tab**: Eine Änderung in Tab 2 per „Rückgängig“ zurücknehmen lässt Tab 1 samt seinem Verlauf und Rückgängig-Stapel unverändert.
 - [x] **Schließen mit Nachfrage, Einfach/Profi, Neuladen & Hilfe**: „×“ auf einem Tab mit ungespeicherten Änderungen öffnet den Bestätigungsdialog („Abbrechen“ / „Trotzdem schließen“), ein unberührter leerer Tab schließt sofort; Tab-Leiste funktioniert in „Einfach“ und „Profi“, offene Tabs werden beim Neuladen wiederhergestellt und der `+`-Knopf trägt `data-help="projectTabs"`.
 - [ ] **Von Hand**: Im Browser mehrere Projekte per „+“ (inkl. Vorlage und `.json`-Datei) öffnen, mit Doppelklick umbenennen, per Rechtsklick „Andere Tabs schließen“ prüfen und das Design in „Einfach“ und „Profi“ sowie bei schmalem Fenster ansehen.
+
+## Große Modelle, Schritt 1: nur neu rechnen, was sich geändert hat (Auto [A-077], PL-04)
+
+- [x] **3 unabhängige Körper → Maßänderung rechnet nur Körper 3 neu**: Nach dem Anlegen von Quader, Zylinder und Skizzenkörper zeigt `Kernel.stats()` für alle drei je `1` Neuberechnung; nach dem Ändern der Höhe an Körper 3 (direkt und per Parameter-Formel `Hoehe3`) bleiben die Zähler für Körper 1 und 2 bei `1`, nur Körper 3 wird neu gerechnet (`data-cache="hit"` bzw. `"rebuilt"` und Tooltip „aus Speicher“ / „neu gerechnet“ in der Zeitleiste).
+- [x] **Abhängiger Boolesch-Abzug, Rückgängig & Marker-Sprung**: Ein von Körper 3 abhängiger Schnitt rechnet bei Höhenänderung mit Körper 3 zusammen neu, während Körper 1 und 2 im Speicher bleiben; `App.undo()` sowie Zurück- und Vorrollen des Zeitleisten-Markers bedienen alle Schritte mit `0` Neuberechnungen aus dem Cache.
+- [ ] **Von Hand**: Im Browser bei einem größeren Modell mit mehreren Körpern und Verrundungen ein Maß am letzten Schritt ändern und im Protokoll („Rechenzeit je Schritt“) sowie an den Tooltips der Zeitleiste prüfen, dass frühere Schritte aus dem Speicher kommen.
 
 ## Übersetzbare Oberfläche, Schritt 2 (Auto [A-074], PL-01)
 
