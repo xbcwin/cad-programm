@@ -67,7 +67,7 @@ export function createKernel(R, oc) {
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
     for (const [k, e] of cache) {
-      if (gen - e.gen > 6) { try { e.shape.delete(); } catch (_) {} cache.delete(k); }
+      if (gen - e.gen > 6) { try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {} cache.delete(k); }
     }
     if (meshCache.size > 400) {
       const drop = meshCache.size - 300; let i = 0;
@@ -1341,6 +1341,14 @@ export function createKernel(R, oc) {
     return shape;
   }
 
+  let stepReaderCache = null;
+  function clearStepReaderCache() {
+    if (stepReaderCache && stepReaderCache.reader) {
+      try { stepReaderCache.reader.delete(); } catch (_) {}
+    }
+    stepReaderCache = null;
+  }
+
   // Importierte STEP-, IGES-, BREP- oder STL-Datei (binär per blobId/bytes oder Base64)
   function buildImport(p) {
     let bytes = p.bytes ? (p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) : (p.blobId ? importBlobs.get(p.blobId) : null);
@@ -1358,26 +1366,85 @@ export function createKernel(R, oc) {
     } else if (p.fmt === 'iges') {
       const txt = new TextDecoder('utf-8').decode(bytes);
       shape = parseIGESToShape(txt);
+    } else if (p.fmt === 'stl') {
+      const fn = 'imp_' + Math.random().toString(36).slice(2);
+      oc.FS.writeFile('/' + fn, bytes);
+      try {
+        const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
+        if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
+        const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
+        const ms = new oc.BRepBuilderAPI_MakeSolid();
+        try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
+        reader.delete(); up.delete(); ms.delete();
+      } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    } else if (p.stepEntity != null) {
+      const bKey = p.blobId || hashBytes(bytes);
+      let entry = stepReaderCache && stepReaderCache.key === bKey ? stepReaderCache : null;
+      let tempReader = false;
+      if (!entry) {
+        clearStepReaderCache();
+        const fn = 'imp_' + Math.random().toString(36).slice(2) + '.step';
+        oc.FS.writeFile('/' + fn, bytes);
+        const reader = new oc.STEPControl_Reader();
+        try {
+          const st = reader.ReadFile(fn);
+          const doneVal = oc.IFSelect_ReturnStatus && oc.IFSelect_ReturnStatus.IFSelect_RetDone ? oc.IFSelect_ReturnStatus.IFSelect_RetDone.value : null;
+          if (!st || (doneVal != null && st.value != null && st.value !== doneVal)) {
+            reader.delete();
+            throw new Error('Die STEP-Datei ließ sich nicht lesen.');
+          }
+        } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+        const idMap = new Map();
+        const mdl = reader.StepModel();
+        if (mdl) {
+          const nEnt = mdl.NbEntities();
+          for (let i = 1; i <= nEnt; i++) {
+            const ent = mdl.Value(i);
+            const sid = mdl.IdentLabel(ent);
+            if (sid > 0) idMap.set(sid, i);
+            safeDelete(ent);
+          }
+          safeDelete(mdl);
+        }
+        entry = { key: bKey, reader, idMap };
+        if (bytes.byteLength <= 8e6) stepReaderCache = entry;
+        else tempReader = true;
+      }
+      try {
+        entry.reader.ClearShapes();
+        const idx = entry.idMap.get(p.stepEntity);
+        if (idx != null && entry.reader.TransferOne(idx) && entry.reader.NbShapes() > 0) {
+          shape = R.cast(entry.reader.OneShape());
+        } else {
+          entry.reader.ClearShapes();
+          entry.reader.TransferRoots();
+          shape = R.cast(entry.reader.OneShape());
+        }
+      } finally {
+        if (tempReader) safeDelete(entry.reader);
+      }
     } else {
       const fn = 'imp_' + Math.random().toString(36).slice(2);
       oc.FS.writeFile('/' + fn, bytes);
       try {
-        if (p.fmt === 'stl') {
-          const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
-          if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
-          const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
-          const ms = new oc.BRepBuilderAPI_MakeSolid();
-          try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
-          reader.delete(); up.delete(); ms.delete();
-        } else {
-          const reader = new oc.STEPControl_Reader();
-          if (!reader.ReadFile(fn)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
-          reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
-        }
+        const reader = new oc.STEPControl_Reader();
+        const st = reader.ReadFile(fn);
+        const doneVal = oc.IFSelect_ReturnStatus && oc.IFSelect_ReturnStatus.IFSelect_RetDone ? oc.IFSelect_ReturnStatus.IFSelect_RetDone.value : null;
+        if (!st || (doneVal != null && st.value != null && st.value !== doneVal)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
+        reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
       } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
     }
+    if (shape && Array.isArray(p.stepMat) && p.stepMat.length === 16 && !isIdentity(p.stepMat)) {
+      const tr = applyMatrix(shape, p.stepMat);
+      safeDelete(shape);
+      shape = tr;
+    }
     const s = num(p.scale, 1);
-    if (shape && Math.abs(s - 1) > 1e-9) shape = shape.scale(s, [0, 0, 0]);
+    if (shape && Math.abs(s - 1) > 1e-9) {
+      const sc = shape.scale(s, [0, 0, 0]);
+      safeDelete(shape);
+      shape = sc;
+    }
     return shape;
   }
 
@@ -2197,11 +2264,13 @@ export function createKernel(R, oc) {
     let p = it.p;
     if (it.kind === 'import' && p && (p.blobId || p.bytes)) {
       p = { fmt: p.fmt, scale: p.scale, blobId: p.blobId || hashBytes(p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) };
+      if (it.p.stepEntity != null) p.stepEntity = it.p.stepEntity;
+      if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) p.stepMat = it.p.stepMat.map((v) => Math.round(v * 1e6) / 1e6);
     }
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep') return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it) };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -2274,6 +2343,8 @@ export function createKernel(R, oc) {
             // Schnittmenge: nur, was in allen Körpern liegt
             shape = solids[0];
             for (let i = 1; i < solids.length; i++) { const nx = shape.intersect(solids[i]); safeDelete(shape); safeDelete(solids[i]); shape = nx; }
+          } else if (it.p && it.p.assembly) {
+            shape = solids.length === 1 ? solids[0] : R.makeCompound(solids);
           } else shape = fuseAll(solids, true);
           if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
         } else if (holes.length) shape = fuseAll(holes, true);
@@ -2870,6 +2941,396 @@ export function createKernel(R, oc) {
     return res;
   }
 
+  // ---------- Wickeln um Zylinder (KP-34) ----------
+  function matchCylFace(shape, spec) {
+    const cyls = [];
+    for (const f of shape.faces) {
+      if (f.geomType !== 'CYLINDRE') continue;
+      try {
+        const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+        const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), d = ax.Direction();
+        const o = [l.X(), l.Y(), l.Z()], dir = norm([d.X(), d.Y(), d.Z()]), r = cy.Radius();
+        ad.delete();
+        const c = vec(f.center);
+        const ori = f.wrapped.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+        cyls.push({ face: f, o, d: dir, r, c, ori });
+      } catch (_) {}
+    }
+    if (!cyls.length) return null;
+    if (cyls.length === 1) return cyls[0].face;
+    const sAxis = spec && Array.isArray(spec.axis) && spec.axis.length >= 6 ? spec.axis : null;
+    const sO = sAxis ? sAxis.slice(0, 3) : null;
+    const sD = sAxis ? norm(sAxis.slice(3, 6)) : null;
+    const sR = spec && typeof spec.r === 'number' ? spec.r : null;
+    const sC = spec && Array.isArray(spec.c) && spec.c.length >= 3 ? spec.c : null;
+    const sOri = spec && typeof spec.ori === 'number' ? spec.ori : null;
+    const distLine = (p, o, d) => { const v = sub(p, o); return len(sub(v, mul(d, dot(v, d)))); };
+    let best = null, bs = Infinity;
+    for (const item of cyls) {
+      let score = 0;
+      if (sOri != null && item.ori !== sOri) score += 1000;
+      if (sD) score += (1 - Math.abs(dot(item.d, sD))) * 500;
+      if (sO && sD) score += distLine(item.o, sO, sD) * 20;
+      if (sR != null) score += Math.abs(item.r - sR) * 5;
+      if (sC) score += len(sub(item.c, sC));
+      if (score < bs) { bs = score; best = item.face; }
+    }
+    return best;
+  }
+  function cylFrameOf(face, spec) {
+    const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+    const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), d = ax.Direction();
+    const O = [l.X(), l.Y(), l.Z()];
+    let A = norm([d.X(), d.Y(), d.Z()]);
+    const r = cy.Radius();
+    ad.delete();
+    if (Math.abs(A[2]) > 0.001 ? A[2] < 0 : Math.abs(A[1]) > 0.001 ? A[1] < 0 : A[0] < 0) A = mul(A, -1);
+    const isInner = face.wrapped.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
+    let vMin = Infinity, vMax = -Infinity;
+    for (const ed of face.edges) {
+      for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+        const pt = vec(ed.pointAt(t));
+        const q = dot(sub(pt, O), A);
+        if (q < vMin) vMin = q;
+        if (q > vMax) vMax = q;
+      }
+    }
+    if (!isFinite(vMin)) { vMin = 0; vMax = 20; }
+    const vMid = (vMin + vMax) / 2;
+    let ref = spec && Array.isArray(spec.refDir) && spec.refDir.length >= 3
+      ? spec.refDir.map(Number)
+      : (Math.abs(A[2]) > 0.9 ? [0, -1, 0] : [0, 0, 1]);
+    let proj = sub(ref, mul(A, dot(ref, A)));
+    if (len(proj) < 1e-4) {
+      ref = Math.abs(A[1]) < 0.9 ? [0, -1, 0] : [1, 0, 0];
+      proj = sub(ref, mul(A, dot(ref, A)));
+    }
+    const R0 = norm(proj);
+    const T0 = norm(cross(A, R0));
+    return { O, A, R: r, R0, T0, vMin, vMax, vMid, isInner };
+  }
+  function arcToBeziers2D(a, m, b) {
+    const ai = arcInfo2D(a, m, b);
+    if (!ai) return [{ a, c1: [a[0] + (b[0] - a[0]) / 3, a[1] + (b[1] - a[1]) / 3], c2: [a[0] + (2 * (b[0] - a[0])) / 3, a[1] + (2 * (b[1] - a[1])) / 3], b }];
+    const n = Math.max(1, Math.ceil(Math.abs(ai.sweep) / (Math.PI / 4)));
+    const step = ai.sweep / n;
+    const a0 = Math.atan2(a[1] - ai.c[1], a[0] - ai.c[0]);
+    const k = (4 / 3) * Math.tan(step / 4);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t1 = a0 + i * step, t2 = a0 + (i + 1) * step;
+      const c1a = Math.cos(t1), s1a = Math.sin(t1), c2a = Math.cos(t2), s2a = Math.sin(t2);
+      const p1 = i === 0 ? a.slice() : [ai.c[0] + ai.r * c1a, ai.c[1] + ai.r * s1a];
+      const p2 = i === n - 1 ? b.slice() : [ai.c[0] + ai.r * c2a, ai.c[1] + ai.r * s2a];
+      const cp1 = [p1[0] - k * ai.r * s1a, p1[1] + k * ai.r * c1a];
+      const cp2 = [p2[0] + k * ai.r * s2a, p2[1] - k * ai.r * c2a];
+      out.push({ a: p1, c1: cp1, c2: cp2, b: p2 });
+    }
+    return out;
+  }
+  function ellipseToBeziers2D(E) {
+    const rx = E.rx, ry = E.ry, rot = E.rot || 0, c = E.c;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const mapPt = (x, y) => [c[0] + x * cr - y * sr, c[1] + x * sr + y * cr];
+    const n = 8, step = (Math.PI * 2) / n, k = (4 / 3) * Math.tan(step / 4);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t1 = i * step, t2 = (i + 1) * step;
+      const c1 = Math.cos(t1), s1 = Math.sin(t1), c2 = Math.cos(t2), s2 = Math.sin(t2);
+      const p1 = mapPt(rx * c1, ry * s1);
+      const p2 = mapPt(rx * c2, ry * s2);
+      const cp1 = mapPt(rx * (c1 - k * s1), ry * (s1 + k * c1));
+      const cp2 = mapPt(rx * (c2 + k * s2), ry * (s2 - k * c2));
+      out.push({ a: p1, c1: cp1, c2: cp2, b: p2 });
+    }
+    return out;
+  }
+  function wrap2dTransform(pt, rotRad, flip) {
+    let x = flip ? -pt[0] : pt[0], y = pt[1];
+    if (Math.abs(rotRad) > 1e-9) {
+      const co = Math.cos(rotRad), si = Math.sin(rotRad);
+      const nx = x * co - y * si, ny = x * si + y * co;
+      x = nx; y = ny;
+    }
+    return [x, y];
+  }
+  function wrapSegsOfLoop(loop, rotRad, flip) {
+    const xf = (q) => wrap2dTransform(q, rotRad, flip);
+    if (loop.ellipse) {
+      return ellipseToBeziers2D(loop.ellipse).map((s) => ({ t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) }));
+    }
+    if (loop.circle) {
+      const { c, r } = loop.circle;
+      return ellipseToBeziers2D({ c, rx: r, ry: r, rot: 0 }).map((s) => ({ t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) }));
+    }
+    return (loop.segs || []).map((s) => {
+      if (s.t === 'bez') return { t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) };
+      if (s.t === 'arc') return { t: 'arc', a: xf(s.a), m: xf(s.m), b: xf(s.b) };
+      return { t: 'line', a: xf(s.a), b: xf(s.b) };
+    });
+  }
+  function wrapLoopUBounds(loop, rotRad, flip, R, theta0) {
+    let uMin = Infinity, uMax = -Infinity;
+    const addX = (x) => { const u = theta0 + x / R; if (u < uMin) uMin = u; if (u > uMax) uMax = u; };
+    if (loop.circle) {
+      const c = wrap2dTransform(loop.circle.c, rotRad, flip);
+      addX(c[0] - loop.circle.r);
+      addX(c[0] + loop.circle.r);
+      return [uMin, uMax];
+    }
+    for (const s of wrapSegsOfLoop(loop, rotRad, flip)) {
+      if (s.t === 'arc') { for (const q of arcSample(s.a, s.m, s.b, 16)) addX(q[0]); }
+      else if (s.t === 'bez') {
+        for (let i = 0; i <= 12; i++) {
+          const t = i / 12, u = 1 - t;
+          addX(u * u * u * s.a[0] + 3 * u * u * t * s.c1[0] + 3 * u * t * t * s.c2[0] + t * t * t * s.b[0]);
+        }
+      } else { addX(s.a[0]); addX(s.b[0]); }
+    }
+    return [uMin, uMax];
+  }
+  function buildWrappedWire2d(loopOrSegs, isClosed, surf, R, theta0, uShift, vMid, shiftY, rotRad, flip, ccw) {
+    const toUV = (pt) => [theta0 + pt[0] / R + uShift, vMid + shiftY + pt[1]];
+    const makeBez2dEdge = (a, c1, c2, b) => {
+      const p1 = toUV(a), p2 = toUV(c1), p3 = toUV(c2), p4 = toUV(b);
+      const arr = new oc.NCollection_Array1_gp_Pnt2d(1, 4);
+      const g1 = new oc.gp_Pnt2d(p1[0], p1[1]), g2 = new oc.gp_Pnt2d(p2[0], p2[1]), g3 = new oc.gp_Pnt2d(p3[0], p3[1]), g4 = new oc.gp_Pnt2d(p4[0], p4[1]);
+      arr.SetValue(1, g1); arr.SetValue(2, g2); arr.SetValue(3, g3); arr.SetValue(4, g4);
+      const bz = new oc.Geom2d_BezierCurve(arr);
+      const me = new oc.BRepBuilderAPI_MakeEdge(bz, surf);
+      const ed = me.Edge();
+      me.delete(); bz.delete(); arr.delete(); g1.delete(); g2.delete(); g3.delete(); g4.delete();
+      return ed;
+    };
+    if (!Array.isArray(loopOrSegs) && loopOrSegs.circle) {
+      const c2 = wrap2dTransform(loopOrSegs.circle.c, rotRad, flip);
+      const uv = toUV(c2);
+      const ru = loopOrSegs.circle.r / R, rv = loopOrSegs.circle.r;
+      const pnt = new oc.gp_Pnt2d(uv[0], uv[1]);
+      let d1, d2, maj, min;
+      if (rv >= ru) {
+        d1 = new oc.gp_Dir2d(0, 1); d2 = new oc.gp_Dir2d(-1, 0); maj = rv; min = ru;
+      } else {
+        d1 = new oc.gp_Dir2d(1, 0); d2 = new oc.gp_Dir2d(0, 1); maj = ru; min = rv;
+      }
+      const ax22 = new oc.gp_Ax22d(pnt, d1, d2);
+      const gpEl = new oc.gp_Elips2d(ax22, maj, min);
+      const el = new oc.Geom2d_Ellipse(gpEl);
+      const me = new oc.BRepBuilderAPI_MakeEdge(el, surf);
+      let ed = me.Edge();
+      if (!ccw) ed = oc.TopoDS.Edge(ed.Reversed());
+      const wb = new oc.BRepBuilderAPI_MakeWire(ed);
+      const wire = wb.Wire();
+      wb.delete(); me.delete(); el.delete(); gpEl.delete(); ax22.delete(); d1.delete(); d2.delete(); pnt.delete();
+      oc.BRepLib.BuildCurves3d(wire);
+      return wire;
+    }
+    let segs = Array.isArray(loopOrSegs) ? loopOrSegs.map((s) => {
+      const xf = (q) => wrap2dTransform(q, rotRad, flip);
+      if (s.t === 'bez') return { t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) };
+      if (s.t === 'arc') return { t: 'arc', a: xf(s.a), m: xf(s.m), b: xf(s.b) };
+      return { t: 'line', a: xf(s.a), b: xf(s.b) };
+    }) : wrapSegsOfLoop(loopOrSegs, rotRad, flip);
+    if (isClosed) {
+      const area = loopArea({ segs });
+      if ((area > 0) !== ccw) {
+        segs = segs.slice().reverse().map((s) => (s.t === 'bez' ? { ...s, a: s.b, b: s.a, c1: s.c2, c2: s.c1 } : { ...s, a: s.b, b: s.a }));
+      }
+    }
+    const edges = [];
+    for (const s of segs) {
+      if (s.t === 'line') {
+        const p1 = toUV(s.a), p2 = toUV(s.b);
+        if (Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) < 1e-7) continue;
+        const g1 = new oc.gp_Pnt2d(p1[0], p1[1]), g2 = new oc.gp_Pnt2d(p2[0], p2[1]);
+        const ms = new oc.GC_MakeSegment2d(g1, g2);
+        const me = new oc.BRepBuilderAPI_MakeEdge(ms.Value(), surf);
+        edges.push(me.Edge());
+        me.delete(); ms.delete(); g1.delete(); g2.delete();
+      } else if (s.t === 'arc') {
+        for (const bz of arcToBeziers2D(s.a, s.m, s.b)) edges.push(makeBez2dEdge(bz.a, bz.c1, bz.c2, bz.b));
+      } else if (s.t === 'bez') {
+        edges.push(makeBez2dEdge(s.a, s.c1, s.c2, s.b));
+      }
+    }
+    if (!edges.length) return null;
+    const wire = makeWireFromEdges(edges);
+    oc.BRepLib.BuildCurves3d(wire);
+    return wire;
+  }
+  function makeCylAx3(O, A, R0, T0, rotU) {
+    const co = Math.cos(rotU), si = Math.sin(rotU);
+    const xDir = norm(add(mul(R0, co), mul(T0, si)));
+    const pO = R.asPnt(O), dA = R.asDir(A), dX = R.asDir(xDir);
+    const ax3 = new oc.gp_Ax3(pO, dA, dX);
+    pO.delete(); dA.delete(); dX.delete();
+    return ax3;
+  }
+  function fixWrapSolid(raw) {
+    const sfs = new oc.ShapeFix_Solid(oc.TopoDS.Solid(raw));
+    sfs.Perform();
+    let res = R.cast(oc.TopoDS.Solid(sfs.Solid()));
+    sfs.delete();
+    if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+    return res;
+  }
+  function buildWrapOn(srcShape, p) {
+    const cylFace = matchCylFace(srcShape, p.face);
+    if (!cylFace) { const e = new Error('Wickeln: Die gewählte Zylinderfläche gibt es nicht mehr.'); e.code = 'ref'; throw e; }
+    const F = cylFrameOf(cylFace, p.face);
+    const mode = p.mode === 'deboss' || p.mode === 'line' ? p.mode : 'emboss';
+    const depth = num(p.depth, 2);
+    const theta0 = (num(p.angle, 0) * Math.PI) / 180;
+    const shiftY = num(p.shiftY, 0);
+    const rotRad = (num(p.rot, 0) * Math.PI) / 180;
+    const flip = !!p.flip;
+    const regions = Array.isArray(p.regions) ? p.regions : [];
+    const chains = Array.isArray(p.chains) ? p.chains : [];
+
+    if (mode !== 'line') {
+      if (!regions.length) throw new Error('Wickeln als Prägung braucht mindestens eine geschlossene Skizzenfläche.');
+      if (!(depth > 1e-4 && isFinite(depth))) throw new Error('Wickeln: Die Tiefe muss größer als 0 sein.');
+      const outward = mode === 'emboss' ? !F.isInner : F.isInner;
+      if (!outward && depth >= F.R - 0.05) throw new Error('Wickeln: Die Tiefe darf höchstens etwas kleiner als der Zylinderradius sein.');
+      const eps = Math.min(0.05, F.R * 0.05, depth * 0.25);
+      const solids = [];
+      try {
+        for (const rg of regions) {
+          const [uMin, uMax] = wrapLoopUBounds(rg.outer, rotRad, flip, F.R, theta0);
+          if (uMax - uMin >= 2 * Math.PI - 1e-3) {
+            throw new Error('Wickeln: Der Umriss ist breiter als der Zylinderumfang (360°) und würde sich überschneiden.');
+          }
+          const uShift = Math.PI - (uMin + uMax) / 2;
+          const ax3 = makeCylAx3(F.O, F.A, F.R0, F.T0, -uShift);
+          const surf = new oc.Geom_CylindricalSurface(ax3, F.R);
+          let wf = null;
+          try {
+            const outerW = buildWrappedWire2d(rg.outer, true, surf, F.R, theta0, uShift, F.vMid, shiftY, rotRad, flip, true);
+            if (!outerW) continue;
+            const mf = new oc.BRepBuilderAPI_MakeFace(surf, outerW, true);
+            outerW.delete();
+            for (const hLoop of rg.holes || []) {
+              const hw = buildWrappedWire2d(hLoop, true, surf, F.R, theta0, uShift, F.vMid, shiftY, rotRad, flip, false);
+              if (hw) { mf.Add(hw); hw.delete(); }
+            }
+            wf = mf.Face(); mf.delete();
+            oc.BRepLib.BuildCurves3d(wf);
+            const sff = new oc.ShapeFix_Face(wf); sff.FixOrientation(); sff.Perform();
+            const fixedF = sff.Face(); sff.delete(); wf.delete(); wf = fixedF;
+            const ob = new oc.BRepOffsetAPI_MakeOffsetShape();
+            ob.PerformBySimple(wf, outward ? -eps : eps);
+            const offSh = ob.Shape(); ob.delete();
+            const ts = new oc.BRepOffsetAPI_MakeThickSolid();
+            ts.MakeThickSolidBySimple(offSh, outward ? (depth + eps) : -(depth + eps));
+            const rawSol = ts.Shape(); ts.delete(); safeDelete(offSh);
+            solids.push(fixWrapSolid(rawSol));
+            safeDelete(rawSol);
+          } finally {
+            safeDelete(wf); surf.delete(); ax3.delete();
+          }
+        }
+        if (!solids.length) throw new Error('Wickeln: Aus der Skizze ließ sich keine Fläche erzeugen.');
+        const toolShape = solids.length === 1 ? solids[0] : fuseAll(solids, true);
+        const next = mode === 'deboss' ? srcShape.cut(toolShape) : srcShape.fuse(toolShape);
+        return { shape: next, toolShape, wires: null, radius: F.R };
+      } catch (err) {
+        for (const s of solids) safeDelete(s);
+        throw err;
+      }
+    }
+
+    // Modus „Linie“: geschlossene Umrisse und offene Pfade auf den Zylinder legen und die Fläche daran teilen
+    const rawWires = [];
+    const wireShapes = [];
+    const buildRegionWire = (loop, ccw) => {
+      const [uMin, uMax] = wrapLoopUBounds(loop, rotRad, flip, F.R, theta0);
+      const uShift = uMax - uMin < 2 * Math.PI - 1e-3 ? Math.PI - (uMin + uMax) / 2 : 0;
+      const ax3 = makeCylAx3(F.O, F.A, F.R0, F.T0, -uShift);
+      const surf = new oc.Geom_CylindricalSurface(ax3, F.R);
+      try {
+        const w = buildWrappedWire2d(loop, true, surf, F.R, theta0, uShift, F.vMid, shiftY, rotRad, flip, ccw);
+        if (w) { rawWires.push(w); wireShapes.push(R.cast(w)); }
+      } finally { surf.delete(); ax3.delete(); }
+    };
+    for (const rg of regions) {
+      buildRegionWire(rg.outer, true);
+      for (const hLoop of rg.holes || []) buildRegionWire(hLoop, false);
+    }
+    if (chains.length) {
+      const ax3 = makeCylAx3(F.O, F.A, F.R0, F.T0, 0);
+      const surf = new oc.Geom_CylindricalSurface(ax3, F.R);
+      try {
+        for (const ch of chains) {
+          if (!ch || !Array.isArray(ch.segs) || !ch.segs.length) continue;
+          const w = buildWrappedWire2d(ch.segs, false, surf, F.R, theta0, 0, F.vMid, shiftY, rotRad, flip, true);
+          if (w) { rawWires.push(w); wireShapes.push(R.cast(w)); }
+        }
+      } finally { surf.delete(); ax3.delete(); }
+    }
+    if (!rawWires.length) throw new Error('Wickeln: Die Skizze enthält keine Linie und keinen Umriss.');
+    const args = new oc.NCollection_List_TopoDS_Shape();
+    args.Append(srcShape.wrapped);
+    const tools = new oc.NCollection_List_TopoDS_Shape();
+    for (const w of rawWires) tools.Append(w);
+    const spl = new oc.BRepAlgoAPI_Splitter();
+    spl.SetArguments(args);
+    spl.SetTools(tools);
+    spl.Build();
+    let resShape = null;
+    try {
+      if (spl.HasErrors()) throw new Error('Wickeln: Die Linie ließ sich nicht auf die Zylinderfläche legen.');
+      resShape = R.cast(spl.Shape());
+    } finally {
+      spl.delete(); args.delete(); tools.delete();
+    }
+    return { shape: resShape, toolShape: null, wires: wireShapes, radius: F.R };
+  }
+  function buildSweepAlongWires(wires, p) {
+    if (!wires || !wires.length) throw new Error('Entlang Pfad: Die gewickelte Linie ist leer.');
+    const solids = [];
+    for (const spine of wires) {
+      const ed = spine.edges && spine.edges[0];
+      if (!ed) continue;
+      const P0 = vec(ed.startPoint);
+      const T = norm(vec(ed.tangentAt(0)));
+      const up = Math.abs(T[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0];
+      const d = dot(T, up);
+      const N = norm([up[0] - T[0] * d, up[1] - T[1] * d, up[2] - T[2] * d]);
+      const V = cross(T, N);
+      const prof = (inset) => {
+        if (p.shape === 'sketch' && p.prof) {
+          if (inset > 0) return null;
+          const Y = cross(T, V);
+          const o = [0, 1, 2].map((k) => P0[k] - V[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
+          return loopWire(p.prof.outer, planeMap({ o, x: V, n: T }), true);
+        }
+        if (p.shape === 'rect') {
+          const w = pos(p.w, 3) / 2 - inset, h = pos(p.h, 2) / 2 - inset;
+          if (w <= 0 || h <= 0) return null;
+          const q = (a, b) => [0, 1, 2].map((k) => P0[k] + V[k] * a + N[k] * b);
+          const c = [q(-w, -h), q(w, -h), q(w, h), q(-w, h)];
+          return R.assembleWire([R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])]);
+        }
+        const r = pos(p.d, 2) / 2 - inset;
+        if (r <= 0) return null;
+        return R.assembleWire([R.makeCircle(r, P0, T)]);
+      };
+      const doSweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
+      let sh = doSweep(prof(0));
+      const wall = num(p.wall, 0);
+      if (wall > 0 && p.shape !== 'sketch') {
+        const inner = prof(wall);
+        if (!inner) { safeDelete(sh); throw new Error('Die Wand ist dicker als das halbe Rohr.'); }
+        const cutter = doSweep(inner);
+        const res = sh.cut(cutter);
+        safeDelete(sh); safeDelete(cutter);
+        sh = res;
+      }
+      solids.push(sh);
+    }
+    if (!solids.length) throw new Error('Entlang Pfad: Die gewickelte Linie ließ sich nicht ziehen.');
+    return solids.length === 1 ? solids[0] : fuseAll(solids, true);
+  }
   function buildEmbossOn(baseShape, rel, p) {
     const regions = p.regions || [];
     if (!regions.length) throw new Error('Prägen: Die Skizze hat keine geschlossene Fläche (z. B. Text oder Logo).');
@@ -2992,9 +3453,9 @@ export function createKernel(R, oc) {
   // Formschritte mit Modus: Ein Teil mit op = {type: 'join' | 'cut' | 'common', target} wird mit einem früheren
   // Körper verrechnet und verschwindet als eigenes Teil. Ketten (B in A, C in B) landen alle im ersten Körper.
   // Ergebnis: bodies (id → {shape, key, wb} im Koordinatensystem des Zielkörpers), consumed (id → Ziel-id)
-  function resolveOps(evald, errors, hiddenIds) {
+  function resolveOps(evald, errors, hiddenIds, resolved = null) {
     const byId = new Map(evald.map((e, i) => [e.it.id, { e, i }]));
-    const consumed = new Map(), live = new Map(), bodies = new Map(), featureOps = new Map();
+    const consumed = new Map(), live = new Map(), bodies = new Map(), featureOps = new Map(), wrapWires = new Map();
     const anyMirror = evald.some((e) => e.it.kind === 'mirrorStep');
     const r6 = (v) => Math.round(v * 1e6) / 1e6;
     const ID_MAT = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -3216,6 +3677,53 @@ export function createKernel(R, oc) {
         bodies.set(tid, src);
         continue;
       }
+      if (it.kind === 'wrap') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Wickeln: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const mode = p.mode === 'deboss' || p.mode === 'line' ? p.mode : 'emboss';
+        const k = keyOf([src.key, 'wrap', p]);
+        const kTool = keyOf([src.key, 'wrapTool', p]);
+        const kWires = keyOf([src.key, 'wrapWires', p]);
+        let next = cacheGet(k);
+        let tool = mode !== 'line' && anyMirror ? cacheGet(kTool) : null;
+        let wires = mode === 'line' ? cacheGet(kWires) : null;
+        let wrapRad = next && cache.get(k)?.resolved ? cache.get(k).resolved.radius : null;
+        if (!next || (mode === 'line' && !wires) || (mode !== 'line' && anyMirror && !tool)) {
+          try {
+            const built = buildWrapOn(src.shape, p);
+            wrapRad = built.radius || null;
+            if (!next) { next = built.shape; cachePut(k, next, null, wrapRad ? { radius: wrapRad } : null); }
+            else safeDelete(built.shape);
+            if (mode === 'line') {
+              if (!wires && built.wires) { wires = built.wires; cachePut(kWires, wires); }
+            } else if (anyMirror) {
+              if (!tool && built.toolShape) { tool = built.toolShape; cachePut(kTool, tool); }
+              else safeDelete(built.toolShape);
+            } else {
+              safeDelete(built.toolShape);
+            }
+          } catch (err) {
+            errors.push({ itemId: it.id, code: err && err.code === 'ref' ? 'ref' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (resolved && wrapRad) resolved[it.id] = { radius: wrapRad };
+        if (mode === 'line' && wires) wrapWires.set(it.id, { wires, m: src.m, key: kWires });
+        if (mode !== 'line' && anyMirror && tool) {
+          featureOps.set(it.id, { targetId: tid, opType: mode === 'deboss' ? 'cut' : 'join', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        }
+        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        continue;
+      }
       if (it.kind === 'emboss') {
         const p = it.p || {};
         let tid = p.target;
@@ -3247,6 +3755,41 @@ export function createKernel(R, oc) {
         src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         continue;
+      }
+      if (it.kind === 'sweep' && it.p && it.p.wrapId) {
+        const ww = wrapWires.get(it.p.wrapId);
+        if (!ww || !ww.wires || !ww.wires.length) {
+          errors.push({ itemId: it.id, code: 'op', message: 'Entlang Pfad: Die gewickelte Linie fehlt oder ist nicht im Modus „Linie“.' });
+          continue;
+        }
+        const rel = matMul(matInvRigid(it.m), ww.m);
+        const kBase = keyOf([ww.key, 'wrapSweep', it.p, rel.map(r6)]);
+        let shape = cacheGet(kBase), key = kBase;
+        if (!shape) {
+          try {
+            const sw = buildSweepAlongWires(ww.wires, it.p);
+            if (isIdentity(rel)) shape = sw;
+            else { shape = applyMatrix(sw, rel); safeDelete(sw); }
+            cachePut(kBase, shape);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (it.finishes && it.finishes.length) {
+          const kFin = keyOf([key, 'fin', it.finishes]);
+          const hitF = cacheGet(kFin);
+          if (hitF) { shape = hitF; key = kFin; }
+          else {
+            const e0 = errors.length;
+            const sf = applyFinishes(shape, it.finishes, errors, it.id);
+            if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+          }
+        }
+        const wb = bboxTransform(bboxCached(key, shape), it.m);
+        const entry = { shape, key, wb, m: it.m, it };
+        live.set(it.id, entry);
+        bodies.set(it.id, entry);
       }
       if (it.kind === 'mirrorStep') {
         const p = it.p || {};
@@ -3440,19 +3983,24 @@ export function createKernel(R, oc) {
     const addT = (id, t0) => { if (!times) return; const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
     const anyDyn = tops.some(hasDynamicExtent);
     if (!anyDyn) {
-      const evald = tops.map((it) => {
-        const t0 = now();
-        const r = evalItem(it, errors);
-        let wb = null;
-        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
-        addT(it.id, t0);
-        return { it, ...r, wb };
-      });
-      const tOps = now();
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
-      if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved: {} };
+      try {
+        const evald = tops.map((it) => {
+          const t0 = now();
+          const r = evalItem(it, errors);
+          let wb = null;
+          if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+          addT(it.id, t0);
+          return { it, ...r, wb };
+        });
+        const tOps = now();
+        const resolved = {};
+        const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved);
+        if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
+        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+        return { evald, consumed, resolved, opsModified: new Set(bodies.keys()) };
+      } finally {
+        clearStepReaderCache();
+      }
     }
 
     // Zwei-Pass-Auswertung: Pass 1 liefert alle festen Körper samt versetzten/verrechneten Zielen,
@@ -3522,13 +4070,53 @@ export function createKernel(R, oc) {
         }
       }
       const tOps = now();
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
+      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
       for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved: ctx.resolved };
+      return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
     } finally {
       for (const x of pool) safeDelete(x.worldShape);
+      clearStepReaderCache();
     }
+  }
+  function collectGroupBodyHints(it, parentM = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], out = []) {
+    for (const c of it.children || []) {
+      if (!c || c.hidden || c.role === 'hole' || c.kind === 'mirrorStep') continue;
+      const cm = matMul(parentM, c.m);
+      if (c.kind === 'group' && !(c.p && c.p.op)) {
+        collectGroupBodyHints(c, cm, out);
+        continue;
+      }
+      const sh = cacheGet(defKey(c));
+      if (!sh) continue;
+      const col = c.color || it.color || '#2f9e91';
+      const nm = c.name || 'Teil';
+      const parts = sortedSolids(sh);
+      if (parts.length > 1) {
+        const meta = matchBodiesLocal(c.bodies, parts);
+        for (let bi = 0; bi < parts.length; bi++) {
+          const mb = meta[bi];
+          const wb = bboxTransform(parts[bi].bbox, cm);
+          out.push({ c: [(wb[0] + wb[3]) / 2, (wb[1] + wb[4]) / 2, (wb[2] + wb[5]) / 2], name: (mb && mb.name) || nm, color: (mb && mb.color) || col });
+          safeDelete(parts[bi].shape);
+        }
+      } else {
+        for (const p of parts) safeDelete(p.shape);
+        const wb = bboxTransform(bboxCached(defKey(c), sh), cm);
+        out.push({ c: [(wb[0] + wb[3]) / 2, (wb[1] + wb[4]) / 2, (wb[2] + wb[5]) / 2], name: nm, color: col });
+      }
+    }
+    return out;
+  }
+  function applyGroupBodyHints(it, bodies) {
+    if (!it || it.kind !== 'group' || (it.p && it.p.op) || (it.finishes && it.finishes.length) || !Array.isArray(bodies) || bodies.length < 2) return bodies;
+    const hints = collectGroupBodyHints(it);
+    if (hints.length < 2) return bodies;
+    const hasDiffColors = new Set(hints.map((h) => String(h.color || '').toLowerCase())).size > 1;
+    const isAsm = !!(it.p && it.p.assembly);
+    if (!isAsm && !hasDiffColors) return bodies;
+    const matched = matchBodiesLocal(hints, bodies);
+    return bodies.map((b, bi) => (matched[bi] ? { ...b, name: matched[bi].name, color: matched[bi].color } : b));
   }
   function evaluate(scene, known = {}) {
     gen++;
@@ -3569,15 +4157,26 @@ export function createKernel(R, oc) {
           }
         }
       }
-      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) }); continue; }
       const mk = resultKey + '|' + Q.level;
+      if (known[it.id] === resultKey) {
+        const cachedPayload = meshCache.get(mk);
+        const sameNode = { id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) };
+        if (it.kind === 'group' && cachedPayload && cachedPayload.bodies && cachedPayload.bodies.length >= 2) {
+          const hinted = applyGroupBodyHints(it, cachedPayload.bodies);
+          if (hinted !== cachedPayload.bodies) sameNode.bodies = hinted;
+        }
+        nodes.push(sameNode);
+        continue;
+      }
       let payload = meshCache.get(mk);
       if (!payload) {
         const tm = now();
         try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
-      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...clonePayload(payload) });
+      const out = clonePayload(payload);
+      if (out.bodies && out.bodies.length >= 2) out.bodies = applyGroupBodyHints(it, out.bodies);
+      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...out });
     }
     gc();
     return { nodes, errors, times, resolved };
@@ -3766,6 +4365,22 @@ export function createKernel(R, oc) {
       s.shape.delete();
     }
     return { objects: objs, errors };
+  }
+  function srgbToLinear(c) {
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function hexToLinearRGBA(hex, alpha = 1) {
+    let s = String(hex || '#2f9e91').trim();
+    if (s.startsWith('#')) s = s.slice(1);
+    if (s.length === 3) s = s.replace(/([0-9a-f])/gi, '$1$1');
+    let r = 0x2f, g = 0x9e, b = 0x91;
+    if (/^[0-9a-f]{6}$/i.test(s)) {
+      r = parseInt(s.slice(0, 2), 16);
+      g = parseInt(s.slice(2, 4), 16);
+      b = parseInt(s.slice(4, 6), 16);
+    }
+    const a = Math.max(0.05, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
+    return new oc.Quantity_ColorRGBA(srgbToLinear(r / 255), srgbToLinear(g / 255), srgbToLinear(b / 255), a);
   }
   function makeArr1P2(pts) {
     const a = new oc.NCollection_Array1_gp_Pnt2d(1, pts.length);
@@ -4623,6 +5238,239 @@ export function createKernel(R, oc) {
     if (Math.abs(unitScale - 1) > 1e-9) shape = shape.scale(unitScale, [0, 0, 0]);
     return shape;
   }
+  function exportSTEP(scene, only, originMat = null) {
+    ingestBlobs(scene);
+    const errors = [];
+    const { evald, consumed, opsModified } = evalSceneCore(scene, errors);
+    const keep = only && only.length ? new Set(only) : null;
+    const useOrigin = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
+    const applyOrigin = (shape) => {
+      if (!useOrigin || !shape) return shape;
+      const tr = applyMatrix(shape, originMat);
+      safeDelete(shape);
+      return tr;
+    };
+    const topHoles = evald
+      .filter((e) => e.it.role === 'hole' && e.shape)
+      .map((h) => ({ shape: applyMatrix(h.shape, h.it.m), wb: h.wb }));
+    const ownedShapes = [];
+    for (const h of topHoles) ownedShapes.push(h.shape);
+
+    const cutHoles = (worldShape, holeList) => {
+      if (!worldShape || !holeList || !holeList.length) return worldShape;
+      const wb = bboxOf(worldShape);
+      const cutters = holeList.filter((h) => h.shape && h.wb && bboxHit(h.wb, wb));
+      if (!cutters.length) return worldShape;
+      try {
+        const tool = fuseAll(cutters.map((h) => h.shape.clone()), true);
+        const cut = worldShape.cut(tool);
+        safeDelete(tool);
+        safeDelete(worldShape);
+        return cut;
+      } catch (_) {
+        return worldShape;
+      }
+    };
+    const canDecomposeGroup = (it, isTop) => {
+      if (!it || it.kind !== 'group') return false;
+      if (isTop && opsModified && opsModified.has(it.id)) return false;
+      if (it.p && it.p.op) return false;
+      if (it.finishes && it.finishes.length) return false;
+      if (it.mir && it.mir.some((s) => s < 0)) return false;
+      if (it.bodies && it.bodies.some((b) => b && b.hidden)) return false;
+      const kids = (it.children || []).filter((c) => !c.hidden);
+      const solidKids = kids.filter((c) => c.role !== 'hole' && c.kind !== 'mirrorStep');
+      if (!solidKids.length) return false;
+      return solidKids.length >= 2 || solidKids.some((c) => c.kind === 'group') || !!(it.p && it.p.assembly) || !!it.comp;
+    };
+    const buildGroupExport = (it, parentM, inheritedHoles) => {
+      const worldM = parentM ? matMul(parentM, it.m) : it.m;
+      const kids = (it.children || []).filter((c) => !c.hidden);
+      const solidKids = kids.filter((c) => c.role !== 'hole' && c.kind !== 'mirrorStep');
+      const holeKids = kids.filter((c) => c.role === 'hole');
+      const localHoles = [];
+      for (const h of holeKids) {
+        const r = evalItem(h, errors);
+        if (!r.shape) continue;
+        const hm = matMul(worldM, h.m);
+        const hs = applyMatrix(r.shape, hm);
+        ownedShapes.push(hs);
+        localHoles.push({ shape: hs, wb: bboxOf(hs) });
+      }
+      const allHoles = localHoles.length ? inheritedHoles.concat(localHoles) : inheritedHoles;
+      const children = [];
+      for (const c of solidKids) {
+        if (canDecomposeGroup(c, false)) {
+          const sub = buildGroupExport(c, worldM, allHoles);
+          if (sub && sub.children.length) children.push(sub);
+          continue;
+        }
+        const r = evalItem(c, errors);
+        if (!r.shape) continue;
+        const cm = matMul(worldM, c.m);
+        let sh = applyMatrix(r.shape, cm);
+        sh = cutHoles(sh, allHoles);
+        sh = applyOrigin(sh);
+        ownedShapes.push(sh);
+        children.push({
+          type: 'part',
+          name: c.name || 'Teil',
+          color: c.color || it.color || '#2f9e91',
+          alpha: c.opacity != null ? c.opacity : 1,
+          shape: sh,
+        });
+      }
+      return { type: 'assembly', itemId: it.id, name: it.name || 'Gruppe', children };
+    };
+
+    const roots = [];
+    const byItemId = new Map();
+    for (const e of evald) {
+      const it = e.it;
+      if (it.role === 'hole' || consumed.has(it.id) || !e.shape) continue;
+      if (keep && !keep.has(it.id)) continue;
+      let node = null;
+      if (canDecomposeGroup(it, true)) {
+        const grp = buildGroupExport(it, null, topHoles);
+        if (grp.children.length) node = grp;
+      }
+      if (!node) {
+        let world = applyMatrix(e.shape, it.m);
+        world = cutHoles(world, topHoles);
+        const hasBodyMeta = Array.isArray(it.bodies) && it.bodies.some((b) => b && (b.hidden || b.name || b.color));
+        if (hasBodyMeta) {
+          const parts = sortedSolids(world, matInvRigid(it.m));
+          if (parts.length > 1) {
+            const meta = matchBodiesLocal(it.bodies, parts);
+            const subParts = [];
+            for (let bi = 0; bi < parts.length; bi++) {
+              const mb = meta[bi];
+              if (mb && mb.hidden) { safeDelete(parts[bi].shape); continue; }
+              let ps = applyOrigin(parts[bi].shape);
+              ownedShapes.push(ps);
+              subParts.push({
+                type: 'part',
+                name: (mb && mb.name) ? mb.name : ((it.name || 'Körper') + ' – Körper ' + (bi + 1)),
+                color: (mb && mb.color) ? mb.color : (it.color || '#2f9e91'),
+                alpha: it.opacity != null ? it.opacity : 1,
+                shape: ps,
+              });
+            }
+            safeDelete(world);
+            if (!subParts.length) continue;
+            if (it.bodies.some((b) => b && (b.name || b.color))) {
+              node = { type: 'assembly', itemId: it.id, name: it.name || 'Teil', children: subParts };
+            } else {
+              const combined = subParts.length === 1 ? subParts[0].shape : R.makeCompound(subParts.map((sp) => sp.shape));
+              if (subParts.length > 1) ownedShapes.push(combined);
+              node = { type: 'part', itemId: it.id, name: it.name || 'Teil', color: it.color || '#2f9e91', alpha: it.opacity != null ? it.opacity : 1, shape: combined };
+            }
+          } else {
+            for (const p of parts) safeDelete(p.shape);
+          }
+        }
+        if (!node) {
+          world = applyOrigin(world);
+          ownedShapes.push(world);
+          node = { type: 'part', itemId: it.id, name: it.name || 'Teil', color: it.color || '#2f9e91', alpha: it.opacity != null ? it.opacity : 1, shape: world };
+        }
+      }
+      roots.push(node);
+      if (node.itemId) byItemId.set(node.itemId, node);
+    }
+    if (!roots.length) {
+      for (const s of ownedShapes) safeDelete(s);
+      throw new Error('Es gibt nichts zu exportieren.');
+    }
+
+    // Ordner auf oberster Ebene als Baugruppen zusammenfassen
+    let finalRoots = roots;
+    if (Array.isArray(scene.folders) && scene.folders.length) {
+      const folderOfNode = new Map();
+      for (const fld of scene.folders) {
+        const mems = (fld.ids || []).map((id) => byItemId.get(id)).filter(Boolean);
+        if (!mems.length) continue;
+        for (const m of mems) folderOfNode.set(m, fld);
+      }
+      const emittedFolders = new Set();
+      finalRoots = [];
+      for (const node of roots) {
+        const fld = folderOfNode.get(node);
+        if (!fld) { finalRoots.push(node); continue; }
+        if (emittedFolders.has(fld.id)) continue;
+        emittedFolders.add(fld.id);
+        const children = (fld.ids || []).map((id) => byItemId.get(id)).filter(Boolean);
+        finalRoots.push({ type: 'assembly', name: fld.name || 'Ordner', children });
+      }
+    }
+
+    const wrapStr = (s) => new oc.TCollection_ExtendedString(String(s || ''), true);
+    const toRelease = [];
+    const track = (x) => { if (x) toRelease.push(x); return x; };
+    const fn = 'export_' + Math.random().toString(36).slice(2) + '.step';
+    try {
+      const docStr = track(wrapStr('XmlOcaf'));
+      const doc = track(new oc.TDocStd_Document(docStr));
+      oc.XCAFDoc_ShapeTool.SetAutoNaming(false);
+      const mainLabel = track(doc.Main());
+      const st = track(oc.XCAFDoc_DocumentTool.ShapeTool(mainLabel));
+      const ct = track(oc.XCAFDoc_DocumentTool.ColorTool(mainLabel));
+      const idLoc = track(new oc.TopLoc_Location());
+      const surfType = oc.XCAFDoc_ColorType.XCAFDoc_ColorSurf;
+
+      const addNode = (node, parentLabel) => {
+        if (node.type === 'assembly') {
+          const asmL = track(st.NewShape());
+          const nStr = track(wrapStr(node.name || 'Gruppe'));
+          oc.TDataStd_Name.Set(asmL, nStr);
+          for (const ch of node.children || []) addNode(ch, asmL);
+          if (parentLabel) {
+            const compL = track(st.AddComponent(parentLabel, asmL, idLoc));
+            const cnStr = track(wrapStr(node.name || 'Gruppe'));
+            oc.TDataStd_Name.Set(compL, cnStr);
+          }
+          return asmL;
+        }
+        const lbl = track(st.NewShape());
+        st.SetShape(lbl, node.shape.wrapped);
+        const nStr = track(wrapStr(node.name || 'Teil'));
+        oc.TDataStd_Name.Set(lbl, nStr);
+        const rgba = track(hexToLinearRGBA(node.color, node.alpha));
+        ct.SetColor(lbl, rgba, surfType);
+        if (parentLabel) {
+          const compL = track(st.AddComponent(parentLabel, lbl, idLoc));
+          const cnStr = track(wrapStr(node.name || 'Teil'));
+          oc.TDataStd_Name.Set(compL, cnStr);
+        }
+        return lbl;
+      };
+
+      for (const r of finalRoots) addNode(r, null);
+      st.UpdateAssemblies();
+
+      const dummy = track(new oc.STEPCAFControl_Writer());
+      oc.Interface_Static.SetCVal('xstep.cascade.unit', 'MM');
+      oc.Interface_Static.SetCVal('write.step.unit', 'MM');
+      const session = track(new oc.XSControl_WorkSession());
+      const writer = track(new oc.STEPCAFControl_Writer(session, false));
+      writer.SetColorMode(true);
+      writer.SetLayerMode(true);
+      writer.SetNameMode(true);
+      oc.Interface_Static.SetIVal('write.surfacecurve.mode', 1);
+      oc.Interface_Static.SetIVal('write.precision.mode', 0);
+      oc.Interface_Static.SetIVal('write.step.assembly', 2);
+      oc.Interface_Static.SetIVal('write.step.schema', 5);
+      const progress = track(new oc.Message_ProgressRange());
+      const ok = writer.Perform(doc, fn, progress);
+      if (!ok) throw new Error('Die STEP-Datei konnte nicht geschrieben werden.');
+      const file = oc.FS.readFile('/' + fn);
+      return new Blob([file], { type: 'application/STEP' });
+    } finally {
+      try { oc.FS.unlink('/' + fn); } catch (_) {}
+      for (let i = toRelease.length - 1; i >= 0; i--) safeDelete(toRelease[i]);
+      for (const s of ownedShapes) safeDelete(s);
+    }
+  }
   function collectExportShape(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
@@ -4663,10 +5511,6 @@ export function createKernel(R, oc) {
   function freeExportShape({ comp, solids }) {
     if (solids.length > 1) safeDelete(comp);
     for (const s of solids) safeDelete(s.shape);
-  }
-  function exportSTEP(scene, only, originMat = null) {
-    const ex = collectExportShape(scene, only, originMat);
-    try { return ex.comp.blobSTEP(); } finally { freeExportShape(ex); }
   }
   function exportIGES(scene, only, originMat = null) {
     const ex = collectExportShape(scene, only, originMat);

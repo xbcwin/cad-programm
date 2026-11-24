@@ -194,6 +194,510 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
+  // ---------- STEP lesen: Produkt-Namen, Baugruppen-Struktur, Placements und Farben (Part 21) ----------
+  function parseSTEP(buf) {
+    const bytes = buf instanceof Uint8Array ? buf : ArrayBuffer.isView(buf) ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) : new Uint8Array(buf);
+    const txt = new TextDecoder('utf-8').decode(bytes);
+    const dataM = /\bDATA\s*;/i.exec(txt);
+    if (!dataM) return { roots: [], partCount: 0, groupCount: 0 };
+
+    const decodeStepStr = (s) => {
+      if (!s) return '';
+      let out = s.replace(/''/g, "'");
+      out = out.replace(/\\X2\\([0-9A-Fa-f]+)\\X0\\/g, (_, hex) => {
+        let r = '';
+        for (let i = 0; i + 3 < hex.length; i += 4) r += String.fromCharCode(parseInt(hex.slice(i, i + 4), 16));
+        return r;
+      });
+      out = out.replace(/\\X4\\([0-9A-Fa-f]+)\\X0\\/g, (_, hex) => {
+        let r = '';
+        for (let i = 0; i + 7 < hex.length; i += 8) r += String.fromCodePoint(parseInt(hex.slice(i, i + 8), 16));
+        return r;
+      });
+      out = out.replace(/\\X\\([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+      out = out.replace(/\\S\\(.)/g, (_, ch) => String.fromCharCode(ch.charCodeAt(0) + 128));
+      out = out.replace(/\\\\/g, '\\');
+      return out;
+    };
+
+    const splitArgs = (str) => {
+      const args = [];
+      let i = 0;
+      const n = str.length;
+      const skipWs = () => { while (i < n && (str[i] === ' ' || str[i] === '\t' || str[i] === '\r' || str[i] === '\n')) i++; };
+      while (i < n) {
+        skipWs();
+        if (i >= n) break;
+        const ch = str[i];
+        if (ch === ',') { i++; continue; }
+        if (ch === "'") {
+          i++;
+          let s = '';
+          while (i < n) {
+            if (str[i] === "'") {
+              if (str[i + 1] === "'") { s += "''"; i += 2; continue; }
+              i++; break;
+            }
+            s += str[i++];
+          }
+          args.push({ str: decodeStepStr(s) });
+        } else if (ch === '(') {
+          let depth = 1, start = ++i;
+          while (i < n && depth > 0) {
+            if (str[i] === "'") {
+              i++;
+              while (i < n) {
+                if (str[i] === "'" && str[i + 1] === "'") { i += 2; continue; }
+                if (str[i] === "'") { i++; break; }
+                i++;
+              }
+              continue;
+            }
+            if (str[i] === '(') depth++;
+            else if (str[i] === ')') depth--;
+            i++;
+          }
+          args.push({ list: splitArgs(str.slice(start, i - 1)) });
+        } else if (ch === '#') {
+          i++;
+          let id = 0;
+          while (i < n && str[i] >= '0' && str[i] <= '9') id = id * 10 + (str.charCodeAt(i++) - 48);
+          args.push({ ref: id });
+        } else {
+          let start = i;
+          while (i < n && str[i] !== ',' && str[i] !== ')') i++;
+          const tok = str.slice(start, i).trim();
+          if (!tok || tok === '$' || tok === '*') args.push(null);
+          else {
+            const numV = Number(tok);
+            args.push(Number.isFinite(numV) && /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(tok) ? numV : tok);
+          }
+        }
+      }
+      return args;
+    };
+
+    const parseSubEnts = (body) => {
+      const res = [];
+      let s = body.trim();
+      if (s.startsWith('(') && s.endsWith(')')) s = s.slice(1, -1).trim();
+      let i = 0;
+      const n = s.length;
+      while (i < n) {
+        while (i < n && (s[i] <= ' ')) i++;
+        if (i >= n) break;
+        const tStart = i;
+        while (i < n && ((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9') || s[i] === '_')) i++;
+        const type = s.slice(tStart, i);
+        while (i < n && s[i] <= ' ') i++;
+        if (!type || s[i] !== '(') { i++; continue; }
+        let depth = 1, aStart = ++i;
+        while (i < n && depth > 0) {
+          if (s[i] === "'") {
+            i++;
+            while (i < n) {
+              if (s[i] === "'" && s[i + 1] === "'") { i += 2; continue; }
+              if (s[i] === "'") { i++; break; }
+              i++;
+            }
+            continue;
+          }
+          if (s[i] === '(') depth++;
+          else if (s[i] === ')') depth--;
+          i++;
+        }
+        res.push({ type, args: splitArgs(s.slice(aStart, i - 1)) });
+      }
+      return res;
+    };
+
+    const KEEP = new Set([
+      'PRODUCT', 'PRODUCT_DEFINITION_FORMATION', 'PRODUCT_DEFINITION_FORMATION_WITH_SPECIFIED_SOURCE',
+      'PRODUCT_DEFINITION', 'PRODUCT_DEFINITION_SHAPE', 'SHAPE_DEFINITION_REPRESENTATION',
+      'SHAPE_REPRESENTATION', 'ADVANCED_BREP_SHAPE_REPRESENTATION', 'MANIFOLD_SURFACE_SHAPE_REPRESENTATION',
+      'FACETED_BREP_SHAPE_REPRESENTATION', 'GEOMETRICALLY_BOUNDED_SURFACE_SHAPE_REPRESENTATION',
+      'NEXT_ASSEMBLY_USAGE_OCCURRENCE', 'CONTEXT_DEPENDENT_SHAPE_REPRESENTATION',
+      'ITEM_DEFINED_TRANSFORMATION', 'MAPPED_ITEM', 'REPRESENTATION_MAP',
+      'MANIFOLD_SOLID_BREP', 'BREP_WITH_VOIDS', 'FACETED_BREP', 'SHELL_BASED_SURFACE_MODEL',
+      'CLOSED_SHELL', 'OPEN_SHELL',
+      'STYLED_ITEM', 'OVER_RIDING_STYLED_ITEM', 'PRESENTATION_STYLE_ASSIGNMENT',
+      'SURFACE_STYLE_USAGE', 'SURFACE_SIDE_STYLE', 'SURFACE_STYLE_FILL_AREA',
+      'SURFACE_STYLE_RENDERING_WITH_PROPERTIES', 'FILL_AREA_STYLE', 'FILL_AREA_STYLE_COLOUR',
+      'COLOUR_RGB', 'DRAUGHTING_PRE_DEFINED_COLOUR',
+      'SI_UNIT', 'CONVERSION_BASED_UNIT', 'LENGTH_MEASURE_WITH_UNIT',
+    ]);
+    const GEOM_TYPES = new Set(['MANIFOLD_SOLID_BREP', 'BREP_WITH_VOIDS', 'FACETED_BREP', 'SHELL_BASED_SURFACE_MODEL', 'CLOSED_SHELL', 'OPEN_SHELL']);
+    const SHAPE_REP_TYPES = new Set(['ADVANCED_BREP_SHAPE_REPRESENTATION', 'MANIFOLD_SURFACE_SHAPE_REPRESENTATION', 'FACETED_BREP_SHAPE_REPRESENTATION', 'GEOMETRICALLY_BOUNDED_SURFACE_SHAPE_REPRESENTATION', 'SHAPE_REPRESENTATION']);
+
+    const ents = new Map();
+    const posRaw = new Map();
+    const byType = new Map();
+    const addType = (t, id, ent) => {
+      let arr = byType.get(t);
+      if (!arr) { arr = []; byType.set(t, arr); }
+      arr.push({ id, ent });
+    };
+
+    let i = dataM.index + dataM[0].length;
+    const len = txt.length;
+    while (i < len) {
+      const ch = txt[i];
+      if (ch <= ' ') { i++; continue; }
+      if (ch === '/' && txt[i + 1] === '*') {
+        const end = txt.indexOf('*/', i + 2);
+        i = end >= 0 ? end + 2 : len;
+        continue;
+      }
+      if (ch === '#') {
+        i++;
+        let id = 0;
+        while (i < len && txt[i] >= '0' && txt[i] <= '9') id = id * 10 + (txt.charCodeAt(i++) - 48);
+        while (i < len && txt[i] <= ' ') i++;
+        if (txt[i] !== '=') { i++; continue; }
+        i++;
+        while (i < len && txt[i] <= ' ') i++;
+        const bStart = i;
+        while (i < len) {
+          const c = txt[i];
+          if (c === "'") {
+            i++;
+            while (i < len) {
+              if (txt[i] === "'" && txt[i + 1] === "'") { i += 2; continue; }
+              if (txt[i] === "'") { i++; break; }
+              i++;
+            }
+            continue;
+          }
+          if (c === '/' && txt[i + 1] === '*') {
+            const end = txt.indexOf('*/', i + 2);
+            i = end >= 0 ? end + 2 : len;
+            continue;
+          }
+          if (c === ';') break;
+          i++;
+        }
+        const bEnd = i;
+        if (txt[i] === ';') i++;
+        const firstCh = txt[bStart];
+        if (firstCh === '(') {
+          if (txt.indexOf('REPRESENTATION_RELATIONSHIP', bStart) >= 0 && txt.indexOf('REPRESENTATION_RELATIONSHIP', bStart) < bEnd) {
+            const subs = parseSubEnts(txt.slice(bStart, bEnd));
+            ents.set(id, { id, type: 'COMPLEX', subs });
+            for (const sub of subs) addType(sub.type, id, { id, subs });
+          }
+          continue;
+        }
+        let tEnd = bStart;
+        while (tEnd < bEnd && ((txt[tEnd] >= 'A' && txt[tEnd] <= 'Z') || (txt[tEnd] >= '0' && txt[tEnd] <= '9') || txt[tEnd] === '_')) tEnd++;
+        const tName = txt.slice(bStart, tEnd);
+        if (tName === 'AXIS2_PLACEMENT_3D' || tName === 'CARTESIAN_POINT' || tName === 'DIRECTION') {
+          posRaw.set(id, { tName, s: bStart, e: bEnd });
+          continue;
+        }
+        if (!KEEP.has(tName)) continue;
+        const pOpen = txt.indexOf('(', tEnd);
+        const pClose = txt.lastIndexOf(')', bEnd - 1);
+        if (pOpen < 0 || pClose <= pOpen) continue;
+        const ent = { id, type: tName, args: splitArgs(txt.slice(pOpen + 1, pClose)) };
+        ents.set(id, ent);
+        addType(tName, id, ent);
+      } else {
+        i++;
+      }
+    }
+
+    // Längeneinheit für Placement-Translationen
+    let unitScale = 1;
+    for (const { ent } of byType.get('CONVERSION_BASED_UNIT') || []) {
+      const nm = ent.args[0] && ent.args[0].str ? ent.args[0].str.toUpperCase() : '';
+      if (nm.includes('INCH')) { unitScale = 25.4; break; }
+      if (nm.includes('FOOT') || nm.includes('FEET')) { unitScale = 304.8; break; }
+    }
+    if (unitScale === 1) {
+      for (const { ent } of byType.get('SI_UNIT') || []) {
+        if (ent.args[2] === '.METRE.') {
+          if (ent.args[1] === '.MILLI.') unitScale = 1;
+          else if (ent.args[1] === '.CENTI.') unitScale = 10;
+          else if (ent.args[1] == null) unitScale = 1000;
+        }
+      }
+    }
+
+    // Farben auflösen
+    const PREDEF_COLORS = {
+      red: '#ff0000', green: '#00ff00', blue: '#0000ff', yellow: '#ffff00',
+      magenta: '#ff00ff', cyan: '#00ffff', white: '#ffffff', black: '#000000',
+    };
+    const toHex = (r, g, b) => {
+      const h2 = (v) => clamp(Math.round((Number(v) || 0) * 255), 0, 255).toString(16).padStart(2, '0');
+      return '#' + h2(r) + h2(g) + h2(b);
+    };
+    const resolveColour = (id, seen = new Set()) => {
+      if (!id || seen.has(id)) return null;
+      seen.add(id);
+      const e = ents.get(id);
+      if (!e) return null;
+      if (e.type === 'COLOUR_RGB') return toHex(e.args[1], e.args[2], e.args[3]);
+      if (e.type === 'DRAUGHTING_PRE_DEFINED_COLOUR') {
+        const k = e.args[0] && e.args[0].str ? e.args[0].str.toLowerCase().trim() : '';
+        return PREDEF_COLORS[k] || null;
+      }
+      if (e.type === 'FILL_AREA_STYLE_COLOUR') return e.args[1] && e.args[1].ref ? resolveColour(e.args[1].ref, seen) : null;
+      if (e.type === 'FILL_AREA_STYLE') {
+        const lst = e.args[1] && e.args[1].list ? e.args[1].list : [];
+        for (const a of lst) if (a && a.ref) { const c = resolveColour(a.ref, seen); if (c) return c; }
+      }
+      if (e.type === 'SURFACE_STYLE_FILL_AREA') return e.args[0] && e.args[0].ref ? resolveColour(e.args[0].ref, seen) : null;
+      if (e.type === 'SURFACE_STYLE_RENDERING_WITH_PROPERTIES') return e.args[1] && e.args[1].ref ? resolveColour(e.args[1].ref, seen) : null;
+      if (e.type === 'SURFACE_SIDE_STYLE') {
+        const lst = e.args[1] && e.args[1].list ? e.args[1].list : [];
+        for (const a of lst) if (a && a.ref) { const c = resolveColour(a.ref, seen); if (c) return c; }
+      }
+      if (e.type === 'SURFACE_STYLE_USAGE') return e.args[1] && e.args[1].ref ? resolveColour(e.args[1].ref, seen) : null;
+      if (e.type === 'PRESENTATION_STYLE_ASSIGNMENT') {
+        const lst = e.args[0] && e.args[0].list ? e.args[0].list : [];
+        for (const a of lst) if (a && a.ref) { const c = resolveColour(a.ref, seen); if (c) return c; }
+      }
+      return null;
+    };
+    const itemColor = new Map();
+    for (const type of ['STYLED_ITEM', 'OVER_RIDING_STYLED_ITEM']) {
+      for (const { ent } of byType.get(type) || []) {
+        const styles = ent.args[1] && ent.args[1].list ? ent.args[1].list : [];
+        const targetRef = ent.args[2] && ent.args[2].ref ? ent.args[2].ref : null;
+        if (!targetRef) continue;
+        let col = null;
+        for (const st of styles) if (st && st.ref) { col = resolveColour(st.ref); if (col) break; }
+        if (col && (type === 'OVER_RIDING_STYLED_ITEM' || !itemColor.has(targetRef))) itemColor.set(targetRef, col);
+      }
+    }
+
+    // Placements & Matrizen (4x4 column-major)
+    const ID4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const isId4 = (m) => !m || m.every((v, k) => Math.abs(v - ID4[k]) < 1e-9);
+    const mul4 = (a, b) => {
+      const r = new Array(16);
+      for (let c = 0; c < 4; c++) for (let rr = 0; rr < 4; rr++) {
+        let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + rr] * b[c * 4 + k];
+        r[c * 4 + rr] = s;
+      }
+      return r;
+    };
+    const invRigid4 = (m) => {
+      const r = [m[0], m[4], m[8], 0, m[1], m[5], m[9], 0, m[2], m[6], m[10], 0, 0, 0, 0, 1];
+      const tx = m[12], ty = m[13], tz = m[14];
+      r[12] = -(r[0] * tx + r[4] * ty + r[8] * tz);
+      r[13] = -(r[1] * tx + r[5] * ty + r[9] * tz);
+      r[14] = -(r[2] * tx + r[6] * ty + r[10] * tz);
+      return r;
+    };
+    const norm3 = (v, fb) => { const l = Math.hypot(v[0], v[1], v[2]); return l > 1e-12 ? [v[0] / l, v[1] / l, v[2] / l] : fb; };
+    const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const parsePosEnt = (id) => {
+      const rec = posRaw.get(id);
+      if (!rec) return null;
+      const pOpen = txt.indexOf('(', rec.s);
+      const pClose = txt.lastIndexOf(')', rec.e - 1);
+      if (pOpen < 0 || pClose <= pOpen) return null;
+      return { type: rec.tName, args: splitArgs(txt.slice(pOpen + 1, pClose)) };
+    };
+    const vecOf = (id, def) => {
+      const e = parsePosEnt(id);
+      const lst = e && e.args[1] && e.args[1].list ? e.args[1].list : null;
+      if (!lst || lst.length < 2) return def;
+      return [Number(lst[0]) || 0, Number(lst[1]) || 0, Number(lst[2]) || 0];
+    };
+    const axisMatrix = (axId) => {
+      const e = parsePosEnt(axId);
+      if (!e || e.type !== 'AXIS2_PLACEMENT_3D') return ID4;
+      const o = e.args[1] && e.args[1].ref ? vecOf(e.args[1].ref, [0, 0, 0]).map((v) => v * unitScale) : [0, 0, 0];
+      const z = e.args[2] && e.args[2].ref ? norm3(vecOf(e.args[2].ref, [0, 0, 1]), [0, 0, 1]) : [0, 0, 1];
+      let x = e.args[3] && e.args[3].ref ? vecOf(e.args[3].ref, [1, 0, 0]) : null;
+      if (!x) {
+        const ref = Math.abs(z[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+        x = norm3(cross3(ref, z), [1, 0, 0]);
+      } else {
+        const d = dot3(x, z);
+        x = norm3([x[0] - d * z[0], x[1] - d * z[1], x[2] - d * z[2]], [1, 0, 0]);
+      }
+      const y = norm3(cross3(z, x), [0, 1, 0]);
+      return [x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, o[0], o[1], o[2], 1];
+    };
+
+    // Produkt-Namen & Shape-Representations je PRODUCT_DEFINITION
+    const pdName = new Map();
+    const pdsToPd = new Map();
+    for (const { ent } of byType.get('PRODUCT_DEFINITION_SHAPE') || []) {
+      const pdRef = ent.args[2] && ent.args[2].ref ? ent.args[2].ref : null;
+      if (pdRef) pdsToPd.set(ent.id, pdRef);
+    }
+    for (const { ent } of byType.get('PRODUCT_DEFINITION') || []) {
+      const pdfRef = ent.args[2] && ent.args[2].ref ? ent.args[2].ref : null;
+      const pdf = pdfRef ? ents.get(pdfRef) : null;
+      const prodRef = pdf && pdf.args[2] && pdf.args[2].ref ? pdf.args[2].ref : null;
+      const prod = prodRef ? ents.get(prodRef) : null;
+      const nm = (prod && prod.args[0] && prod.args[0].str) || (prod && prod.args[1] && prod.args[1].str) || '';
+      pdName.set(ent.id, nm.trim());
+    }
+
+    const repItems = (srId) => {
+      const sr = ents.get(srId);
+      if (!sr || !SHAPE_REP_TYPES.has(sr.type)) return [];
+      const lst = sr.args[1] && sr.args[1].list ? sr.args[1].list : [];
+      return lst.map((x) => x && x.ref).filter(Boolean);
+    };
+    const pdReps = new Map();
+    for (const { ent } of byType.get('SHAPE_DEFINITION_REPRESENTATION') || []) {
+      const pdsRef = ent.args[0] && ent.args[0].ref ? ent.args[0].ref : null;
+      const srRef = ent.args[1] && ent.args[1].ref ? ent.args[1].ref : null;
+      const pdRef = pdsRef ? pdsToPd.get(pdsRef) : null;
+      if (pdRef && srRef) {
+        if (!pdReps.has(pdRef)) pdReps.set(pdRef, []);
+        pdReps.get(pdRef).push(srRef);
+      }
+    }
+    // Indirekte Shape-Representation-Relationships (ohne Kontext-Bezug) verknüpfen
+    const extraReps = new Map();
+    for (const { ent } of byType.get('SHAPE_REPRESENTATION_RELATIONSHIP') || []) {
+      if (ent.subs) {
+        const rr = ent.subs.find((s) => s.type === 'REPRESENTATION_RELATIONSHIP');
+        const hasTr = ent.subs.some((s) => s.type === 'REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION');
+        if (rr && !hasTr) {
+          const r1 = rr.args[2] && rr.args[2].ref, r2 = rr.args[3] && rr.args[3].ref;
+          if (r1 && r2) {
+            if (!extraReps.has(r1)) extraReps.set(r1, []);
+            extraReps.get(r1).push(r2);
+            if (!extraReps.has(r2)) extraReps.set(r2, []);
+            extraReps.get(r2).push(r1);
+          }
+        }
+      }
+    }
+
+    // NAUOs & Transformationen
+    const nauoInfo = new Map();
+    const childrenOfPd = new Map();
+    const isChildPd = new Set();
+    for (const { ent } of byType.get('NEXT_ASSEMBLY_USAGE_OCCURRENCE') || []) {
+      const occName = ((ent.args[1] && ent.args[1].str) || (ent.args[0] && ent.args[0].str) || '').trim();
+      const parentPd = ent.args[3] && ent.args[3].ref ? ent.args[3].ref : null;
+      const childPd = ent.args[4] && ent.args[4].ref ? ent.args[4].ref : null;
+      if (!parentPd || !childPd) continue;
+      const edge = { id: ent.id, parentPd, childPd, occName, mat: null, rep1: null, rep2: null };
+      nauoInfo.set(ent.id, edge);
+      if (!childrenOfPd.has(parentPd)) childrenOfPd.set(parentPd, []);
+      childrenOfPd.get(parentPd).push(edge);
+      isChildPd.add(childPd);
+    }
+
+    for (const { ent } of byType.get('CONTEXT_DEPENDENT_SHAPE_REPRESENTATION') || []) {
+      const relRef = ent.args[0] && ent.args[0].ref ? ent.args[0].ref : null;
+      const pdsRef = ent.args[1] && ent.args[1].ref ? ent.args[1].ref : null;
+      const pds = pdsRef ? ents.get(pdsRef) : null;
+      const nauoRef = pds && pds.type === 'PRODUCT_DEFINITION_SHAPE' && pds.args[2] && pds.args[2].ref ? pds.args[2].ref : null;
+      const edge = nauoRef ? nauoInfo.get(nauoRef) : null;
+      const relEnt = relRef ? ents.get(relRef) : null;
+      if (!edge || !relEnt || !relEnt.subs) continue;
+      const rr = relEnt.subs.find((s) => s.type === 'REPRESENTATION_RELATIONSHIP');
+      const rrt = relEnt.subs.find((s) => s.type === 'REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION');
+      if (!rr || !rrt) continue;
+      const rep1 = rr.args[2] && rr.args[2].ref ? rr.args[2].ref : null;
+      const rep2 = rr.args[3] && rr.args[3].ref ? rr.args[3].ref : null;
+      const trRef = rrt.args[0] && rrt.args[0].ref ? rrt.args[0].ref : null;
+      const trEnt = trRef ? ents.get(trRef) : null;
+      if (!trEnt || trEnt.type !== 'ITEM_DEFINED_TRANSFORMATION') continue;
+      const ax1 = trEnt.args[2] && trEnt.args[2].ref ? trEnt.args[2].ref : null;
+      const ax2 = trEnt.args[3] && trEnt.args[3].ref ? trEnt.args[3].ref : null;
+      if (!ax1 || !ax2) continue;
+      const m1 = axisMatrix(ax1), m2 = axisMatrix(ax2);
+      const childReps = new Set(pdReps.get(edge.childPd) || []);
+      const parentReps = new Set(pdReps.get(edge.parentPd) || []);
+      // rep1 -> rep2 transformiert lokal (ax1) in Elternsystem (ax2); falls umgekehrt, invertieren
+      const reversed = parentReps.has(rep1) && childReps.has(rep2) && !childReps.has(rep1);
+      edge.mat = reversed ? mul4(m1, invRigid4(m2)) : mul4(m2, invRigid4(m1));
+    }
+
+    const findLeafRep = (pdId) => {
+      const queue = [...(pdReps.get(pdId) || [])];
+      const visited = new Set();
+      let fallback = queue[0] || null;
+      while (queue.length) {
+        const srId = queue.shift();
+        if (!srId || visited.has(srId)) continue;
+        visited.add(srId);
+        const items = repItems(srId);
+        const geoms = items.filter((id) => { const e = ents.get(id); return e && GEOM_TYPES.has(e.type); });
+        if (geoms.length) return { srId, geoms };
+        const sr = ents.get(srId);
+        if (sr && sr.type === 'ADVANCED_BREP_SHAPE_REPRESENTATION') return { srId, geoms: items };
+        for (const nx of extraReps.get(srId) || []) queue.push(nx);
+      }
+      return fallback ? { srId: fallback, geoms: repItems(fallback) } : null;
+    };
+
+    const isGenericName = (s) => !s || /^NONE$/i.test(s) || /^Open CASCADE STEP translator/i.test(s);
+    const pickName = (a, b) => (!isGenericName(a) ? a : !isGenericName(b) ? b : '');
+    let partCount = 0, groupCount = 0;
+
+    const buildNode = (pdId, accMat, occName, seen) => {
+      if (seen.has(pdId)) return null;
+      const nextSeen = new Set(seen);
+      nextSeen.add(pdId);
+      const kids = childrenOfPd.get(pdId) || [];
+      const myName = pdName.get(pdId) || '';
+      if (kids.length) {
+        const children = [];
+        for (const edge of kids) {
+          const nextMat = edge.mat ? mul4(accMat, edge.mat) : accMat;
+          const childNode = buildNode(edge.childPd, nextMat, edge.occName, nextSeen);
+          if (childNode) children.push(childNode);
+        }
+        if (!children.length) return null;
+        groupCount++;
+        return { type: 'assembly', name: pickName(myName, occName), children };
+      }
+      const rep = findLeafRep(pdId);
+      if (!rep) return null;
+      let color = itemColor.get(rep.srId) || null;
+      if (!color) {
+        for (const gid of rep.geoms) {
+          color = itemColor.get(gid) || null;
+          if (!color) {
+            const ge = ents.get(gid);
+            if (ge && ge.args) {
+              for (const a of ge.args) {
+                if (a && a.ref && itemColor.has(a.ref)) { color = itemColor.get(a.ref); break; }
+              }
+            }
+          }
+          if (color) break;
+        }
+      }
+      partCount++;
+      return {
+        type: 'part',
+        name: pickName(myName, occName),
+        color,
+        entityId: rep.srId,
+        matrix: isId4(accMat) ? null : accMat,
+      };
+    };
+
+    const rootPds = [...pdName.keys()].filter((pdId) => !isChildPd.has(pdId));
+    let roots = [];
+    for (const pdId of rootPds) {
+      const node = buildNode(pdId, ID4, '', new Set());
+      if (node) roots.push(node);
+    }
+    // Einzelne generische Wurzel-Baugruppe (z. B. STEP-Translator-Wrapper) bei einem einzigen Kind auspacken
+    if (roots.length === 1 && roots[0].type === 'assembly' && roots[0].children.length === 1 && isGenericName(roots[0].name)) {
+      roots = roots[0].children;
+      groupCount = Math.max(0, groupCount - 1);
+    }
+    return { roots, partCount, groupCount };
+  }
+
   function ensureModelMode() {
     if (Sketch.active) Sketch.cancel(true);
     if (App.mode !== 'model' && typeof Commands !== 'undefined' && Commands.setMode) Commands.setMode('model');
@@ -211,7 +715,55 @@ const Start = (() => {
     if (el) newProject(true);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const blobId = await Store.putBlob(bytes);
-    const it = Model.newItem('import', { fmt, blobId, size: bytes.byteLength, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|igs|iges|brep|stl)$/i, '') });
+    const base = f.name.replace(/\.(step|stp|igs|iges|brep|stl)$/i, '');
+    if (fmt === 'step') {
+      let parsed = null;
+      try { parsed = parseSTEP(bytes); } catch (e) { console.warn(e); }
+      if (parsed && parsed.partCount > 0) {
+        let partIdx = 0;
+        const groupIds = [];
+        const importIds = [];
+        const buildItems = (nodes) => nodes.map((node) => {
+          if (node.type === 'assembly') {
+            const kids = buildItems(node.children);
+            const firstSolid = kids.find((c) => c.role !== 'hole') || kids[0];
+            const g = Model.newItem('group', { assembly: true }, { name: node.name || base, color: (firstSolid && firstSolid.color) || undefined });
+            g.children = kids;
+            groupIds.push(g.id);
+            return g;
+          }
+          partIdx++;
+          const p = { fmt: 'step', blobId, size: bytes.byteLength, file: f.name, scale: 1 };
+          if (parsed.partCount > 1 && node.entityId) p.stepEntity = node.entityId;
+          if (node.matrix) p.stepMat = node.matrix;
+          const name = node.name || (parsed.partCount === 1 ? base : `${base} ${partIdx}`);
+          const extra = { name };
+          if (node.color) { extra.color = node.color; extra.more = { colorSet: true }; }
+          const imp = Model.newItem('import', p, extra);
+          importIds.push(imp.id);
+          return imp;
+        });
+        const items = buildItems(parsed.roots);
+        const label = parsed.partCount > 1 || parsed.groupCount > 0 ? 'STEP-Baugruppe importiert' : 'Importiert';
+        App.change(label, (doc) => { doc.items.push(...items); });
+        if (typeof Panels !== 'undefined' && Panels.expand) for (const gid of groupIds) Panels.expand(gid);
+        App.select(items.map((x) => x.id));
+        checkImportedList(importIds);
+        if (parsed.partCount === 1 && !groupIds.length) {
+          UI.toast(`„${f.name}“ importiert. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 5000 });
+        } else {
+          const grpTxt = groupIds.length ? ` in ${groupIds.length} ${groupIds.length === 1 ? 'Gruppe' : 'Gruppen'}` : '';
+          UI.toast(`„${f.name}“ importiert: ${parsed.partCount} ${parsed.partCount === 1 ? 'Teil' : 'Teile'}${grpTxt}.`, { icon: 'folder', ms: 6000 });
+        }
+        setTimeout(() => {
+          const box = new THREE.Box3();
+          for (const it of items) { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) box.union(b); }
+          if (!box.isEmpty()) Viewer.fit(items.map((x) => x.id));
+        }, 1500);
+        return;
+      }
+    }
+    const it = Model.newItem('import', { fmt, blobId, size: bytes.byteLength, file: f.name, scale: 1 }, { name: base });
     App.change('Importiert', (doc) => { doc.items.push(it); });
     App.select([it.id]);
     UI.toast(`„${f.name}“ importiert. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 5000 });
@@ -1044,6 +1596,8 @@ const Start = (() => {
     const p = { fmt: it.p.fmt, scale };
     if (it.p.blobId) p.blobId = it.p.blobId;
     else if (it.p.data) p.data = it.p.data;
+    if (it.p.stepEntity != null) p.stepEntity = it.p.stepEntity;
+    if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) p.stepMat = it.p.stepMat;
     return p;
   }
 
@@ -1203,6 +1757,8 @@ const Start = (() => {
         f.item.p.size = res.brepBytes.byteLength;
         f.item.p.scale = 1;
         delete f.item.p.data;
+        delete f.item.p.stepEntity;
+        delete f.item.p.stepMat;
         f.item.p.healed = healedMeta;
       });
       importChecks.set(id, {
@@ -1290,7 +1846,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },

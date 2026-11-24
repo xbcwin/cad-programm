@@ -113,11 +113,11 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
+| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
@@ -138,7 +138,7 @@ Leitlinien:
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
   - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
-  - Sonstige: `import` (STEP/IGES/BREP/STL), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`), `emboss` (Prägen einer Skizze auf eine ebene/gewölbte Fläche `face` von `p.target` mit `height`, `mode` `'emboss'|'deboss'`, `flip`), `mirrorStep` (einzelne Formschritte `features` an Grundebene, Bezugsebene `DATUM` oder Körperfläche `FACE` im selben Körper spiegeln)
+  - Sonstige: `import` (STEP/IGES/BREP/STL), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`), `wrap` (ebene Skizze verzerrungsfrei um Zylinderfläche `p.target`/`p.face` wickeln mit `mode` `'emboss'|'deboss'|'line'`, `depth`, `angle`, `shiftY`, `rot`, `flip`; `sweep` mit `p.wrapId` folgt der gewickelten Linie), `emboss` (Prägen einer Skizze auf eine ebene/gewölbte Fläche `face` von `p.target` mit `height`, `mode` `'emboss'|'deboss'`, `flip`), `mirrorStep` (einzelne Formschritte `features` an Grundebene, Bezugsebene `DATUM` oder Körperfläche `FACE` im selben Körper spiegeln)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt` (optional `skip` für ausgelassene Kopien und `G.op` für gemusterte Formschritte / Rippen; `Model.patternInstances`):
     - `rect` (nx, ny, dx, dy)
@@ -272,6 +272,7 @@ Leitlinien:
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
 - Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit) sowie **Schritt spiegeln** (`mirrorStep`, `Features.mirrorStep`: einzelne Formschritte wie Taschen, Erhöhungen, Rippen oder Löcher an Ebene, Bezugsebene oder Fläche im selben Körper spiegeln)
+- **Wickeln um Zylinder** (`wrap`, `Features.startWrap`/`createWrap`/`sweepFromWrap`): ebene Skizzen verzerrungsfrei um Zylinderflächen wickeln – als erhabene/vertiefte Prägung oder als Linie auf der Oberfläche samt „Entlang Pfad ziehen“
 - Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge); Verschieben/Drehen/Kopieren als Schritt (`transform` im Verlauf mit Werten, Formeln und Drehpunkt); **Skalieren** (`scale`, gleichmäßig oder je Achse um Schwerpunkt oder Ursprung), **Fläche aufdicken** (`thicken`, eben oder gewölbt nach außen/innen/mittig als Anbau, eigene Platte oder Abzug) und **Prägen** (`emboss`, Text/Logo auf ebene oder gewölbte Flächen wie Zylinder/Kugel erhaben oder vertieft übertragen) im Verlauf (`Features.scale`/`Features.thicken`/`Features.startEmboss`)
 - **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich, **Ketten** (Platte → Arm → Greifer). „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen; „Als Anschlag übernehmen“ und „Bewegung abspielen“.
 

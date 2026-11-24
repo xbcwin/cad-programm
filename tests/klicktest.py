@@ -2679,15 +2679,17 @@ def t_import_step(p):
     p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
     p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepFile)")
     warte_rechnen(p, 30)
-    it = p.ev("const it=App.doc.items[0]; return it && [it.kind, it.name, it.p.fmt]")
-    ok1 = n > 1000 and it == ['import', 'Halter', 'step']
-    bb = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
-    ok2 = bb is not None and abs((bb[3] - bb[0]) - 60) < 0.01 and p.ev("return App.errors.length") == 0
+    its = p.ev("return App.doc.items.map(it=>[it.kind, it.name, it.p.fmt])")
+    ok1 = n > 1000 and len(its) == 2 and all(x == ['import', 'Quader', 'step'] for x in its)
+    bbs = p.ev("return App.doc.items.map(it=>{ const r=App.results.get(it.id); return r && r.data.bbox; })")
+    ok2 = (all(b is not None for b in bbs)
+           and abs((max(b[3] for b in bbs) - min(b[0] for b in bbs)) - 60) < 0.01
+           and p.ev("return App.errors.length") == 0)
     # Einheit Zoll: 25,4-fach
     p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
     p.pg.select_option('#p-scale', '25.4'); warte_rechnen(p, 30)
     bb2 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
-    ok3 = bb2 is not None and abs((bb2[3] - bb2[0]) - 60 * 25.4) < 0.5
+    ok3 = bb2 is not None and abs((bb2[3] - bb2[0]) - 20 * 25.4) < 0.5
     # STL: Tetraeder als Text
     p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
     p.pg.evaluate("""() => { const V=[[0,0,0],[10,0,0],[0,10,0],[0,0,10]], F=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
@@ -9830,6 +9832,310 @@ def t_f11240521(p):
     return [ok1, ok2, ok3]
 
 
+def t_a045_step_farben_namen(p):
+    # 1. Zwei Teile „Deckel“ (rot) und „Boden“ (blau) in einer Gruppe „Gehäuse“ anlegen und als STEP exportieren
+    p.empty()
+    p.ev("""
+      App.change('x', d => {
+        const boden = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Boden', color: '#3f7fd6', more: { colorSet: true } });
+        const deckel = Model.newItem('box', { w: 20, d: 20, h: 5 }, { name: 'Deckel', color: '#d6574c', more: { colorSet: true } });
+        deckel.t.z = 10;
+        d.items.push(deckel, boden);
+      });
+    """); warte_rechnen(p)
+    p.ev("Actions.group(App.doc.items.map(x => x.id), { name: 'Gehäuse', quiet: true })"); warte_rechnen(p)
+    exp = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      const u8 = new Uint8Array(r.data);
+      window.__stepA045 = new File([u8], 'Gehaeuse.step');
+      return new TextDecoder('utf-8').decode(u8);
+    }""")
+    ok1 = (
+        "PRODUCT('Gehäuse'" in exp
+        and "PRODUCT('Deckel'" in exp
+        and "PRODUCT('Boden'" in exp
+        and 'NEXT_ASSEMBLY_USAGE_OCCURRENCE' in exp
+        and 'STYLED_ITEM' in exp
+        and 'COLOUR_RGB' in exp
+    )
+
+    # 2. Exportierte STEP-Datei in ein leeres Projekt importieren -> Gruppe, Namen, Farben und Volumen sind wieder da
+    p.ev("App.change('clear', d => { d.items = []; })"); p.wait(400)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepA045)")
+    warte_rechnen(p, 30)
+    imp = p.ev("""
+      const g = App.doc.items[0];
+      return {
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        kind: g && g.kind,
+        name: g && g.name,
+        kids: g && g.children ? g.children.map(c => ({ kind: c.kind, name: c.name, color: c.color, fmt: c.p && c.p.fmt })) : []
+      };
+    """)
+    vol = volumen(p)
+    kids_by_name = {k['name']: k for k in imp.get('kids', [])}
+    ok2 = (
+        imp['n'] == 1 and imp['errs'] == 0
+        and imp['kind'] == 'group' and imp['name'] == 'Gehäuse'
+        and len(imp['kids']) == 2
+        and kids_by_name.get('Deckel', {}).get('color') == '#d6574c'
+        and kids_by_name.get('Boden', {}).get('color') == '#3f7fd6'
+        and kids_by_name.get('Deckel', {}).get('fmt') == 'step'
+        and kids_by_name.get('Boden', {}).get('fmt') == 'step'
+        and vol is not None and abs(vol - 6000) < 5
+    )
+
+    # 3. 3D-Viewer zeigt zwei Körperfarben (rot und blau) & Verlauf links zeigt Gruppe, Deckel und Boden mit Farbkacheln
+    p.wait(300)
+    vis = p.ev("""
+      const g = App.doc.items[0];
+      const n = Viewer.nodes.get(g.id);
+      const c = n && n.mesh && n.mesh.geometry && n.mesh.geometry.getAttribute('color');
+      const cols = [];
+      if (c && n.data.faceGroups && n.data.faceBody) {
+        const seen = new Map();
+        for (const [st, cnt, fi] of n.data.faceGroups) {
+          const bi = fi >= 0 ? n.data.faceBody[fi] : -1;
+          if (bi >= 0 && !seen.has(bi)) {
+            const vi = n.data.triangles[st];
+            seen.set(bi, [c.getX(vi), c.getY(vi), c.getZ(vi)]);
+          }
+        }
+        for (const v of seen.values()) cols.push(v);
+      }
+      const rows = [...document.querySelectorAll('#left-body .tree .node')].map(el => ({
+        name: (el.querySelector('.nm') && el.querySelector('.nm').textContent || '').trim(),
+        bg: el.querySelector('.swatch') ? el.querySelector('.swatch').style.background : ''
+      }));
+      return { vc: !!(n && n.mesh && n.mesh.material && n.mesh.material.vertexColors), cols, rows, bodyRows: document.querySelectorAll('.bodies-wrap').length };
+    """)
+    cols = vis.get('cols', [])
+    color_diff = len(cols) == 2 and (sum((a - b) ** 2 for a, b in zip(cols[0], cols[1])) ** 0.5) > 0.2
+    row_names = [r['name'] for r in vis.get('rows', [])]
+    ok3 = (
+        vis['vc'] and color_diff and vis['bodyRows'] == 0
+        and 'Gehäuse' in row_names and 'Deckel' in row_names and 'Boden' in row_names
+    )
+
+    # 4. Erneuter Roundtrip + Ordner-Export + parseSTEP mit benannter Farbe & STEP-Umlaut (\X2\00E4\X0\)
+    exp2 = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      window.__stepA045_2 = new File([new Uint8Array(r.data)], 'Roundtrip2.step');
+      return new TextDecoder('utf-8').decode(new Uint8Array(r.data));
+    }""")
+    p.ev("App.change('clear', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepA045_2)")
+    warte_rechnen(p, 30)
+    rt2 = p.ev("""
+      const g = App.doc.items[0];
+      return g && g.kind === 'group' && g.name === 'Gehäuse'
+        ? g.children.map(c => [c.name, c.color])
+        : [];
+    """)
+    # Ordner-Export wird zur Baugruppe
+    p.ev("""
+      App.change('folder', d => {
+        d.items = [];
+        const a = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Stift', color: '#5b9f55', more: { colorSet: true } });
+        const b = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Kappe', color: '#e2b53a', more: { colorSet: true } });
+        b.t.x = 25;
+        d.items.push(a, b);
+        d.folders = [{ id: 'f1', name: 'Bausatz', ids: [a.id, b.id], collapsed: false }];
+      });
+    """); warte_rechnen(p)
+    exp_fld = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      window.__stepA045_fld = new File([new Uint8Array(r.data)], 'Bausatz.step');
+      return r.data.byteLength;
+    }""")
+    p.ev("App.change('clear', d => { d.items = []; d.folders = []; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepA045_fld)")
+    warte_rechnen(p, 30)
+    fld_imp = p.ev("const g=App.doc.items[0]; return g && [g.kind, g.name, (g.children||[]).map(c=>[c.name, c.color])]")
+    # parseSTEP-Einheitstest für DRAUGHTING_PRE_DEFINED_COLOUR & \X2\00E4\X0\
+    synth_step = r"""ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('','2026-01-01T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1 = APPLICATION_CONTEXT('automotive_design');
+#2 = PRODUCT('Tr\X2\00E4\X0\ger','Tr\X2\00E4\X0\ger','',(#1));
+#3 = PRODUCT_DEFINITION_FORMATION('','',#2);
+#4 = PRODUCT_DEFINITION('design','',#3,#1);
+#5 = PRODUCT_DEFINITION_SHAPE('','',#4);
+#6 = ADVANCED_BREP_SHAPE_REPRESENTATION('',(#7),#8);
+#7 = MANIFOLD_SOLID_BREP('',#9);
+#10 = SHAPE_DEFINITION_REPRESENTATION(#5,#6);
+#11 = STYLED_ITEM('color',(#12),#7);
+#12 = PRESENTATION_STYLE_ASSIGNMENT((#13));
+#13 = SURFACE_STYLE_USAGE(.BOTH.,#14);
+#14 = SURFACE_SIDE_STYLE('',(#15));
+#15 = SURFACE_STYLE_FILL_AREA(#16);
+#16 = FILL_AREA_STYLE('',(#17));
+#17 = FILL_AREA_STYLE_COLOUR('',#18);
+#18 = DRAUGHTING_PRE_DEFINED_COLOUR('red');
+ENDSEC;
+END-ISO-10303-21;"""
+    synth = p.ev("return Start.parseSTEP(new TextEncoder().encode(arg));", synth_step)
+    ok4 = (
+        "PRODUCT('Gehäuse'" in exp2
+        and sorted(rt2) == [['Boden', '#3f7fd6'], ['Deckel', '#d6574c']]
+        and exp_fld > 1000
+        and fld_imp is not None and fld_imp[0] == 'group' and fld_imp[1] == 'Bausatz'
+        and sorted(fld_imp[2]) == [['Kappe', '#e2b53a'], ['Stift', '#5b9f55']]
+        and synth and synth['partCount'] == 1
+        and synth['roots'][0]['name'] == 'Träger'
+        and synth['roots'][0]['color'] == '#ff0000'
+    )
+
+    # 5. Export-Dialog zeigt Hilfe-Attribut exportStep und werkzeug-hilfen.json ist vollständig
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    has_help_attr = p.pg.locator('[data-help="exportStep"]').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_es = hilfen.get('exportStep') or {}
+    ok5 = has_help_attr and bool(h_es.get('tip') and h_es.get('hilfe') and h_es.get('tipp'))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a043_wickeln_zylinder(p):
+    # 1. Zylinder Ø20 × 20 → Zylinderfläche anklicken → „Wickeln“ → Rechteck 31,4 × 8 mm → Prägung erhaben (+2 mm) → 180° ± 2°
+    p.empty()
+    p.ev("Actions.addPrimitive('cylinder')")
+    warte_rechnen(p, 30); p.wait(400)
+    pt = world_screen(p, 0, -10, 10)
+    p.pg.mouse.click(pt[0], pt[1]); p.wait(350)
+    p.pg.locator('.ctxbar').get_by_role('button', name='Wickeln').click(); p.wait(1000)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[-15.7,-4],b:[15.7,4]})")
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    has_step_help = p.pg.locator('#st-mode-wrap').get_attribute('data-help') == 'wrapCyl'
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30); p.wait(300)
+
+    def span_deg(r_min, r_max):
+        return p.ev("""const r=App.results.get(App.doc.items[0].id);
+          if(!r||!r.data||!r.data.vertices) return null;
+          const v=r.data.vertices; const angs=[];
+          for(let i=0;i<v.length;i+=3){
+            const x=v[i], y=v[i+1], rr=Math.hypot(x,y);
+            if(rr>arg[0] && rr<arg[1]) angs.push(Math.atan2(x,-y)*180/Math.PI);
+          }
+          if(!angs.length) return null;
+          angs.sort((a,b)=>a-b);
+          let maxGap=0, gapAt=0;
+          for(let i=0;i<angs.length;i++){
+            const nxt=i+1<angs.length?angs[i+1]:angs[0]+360;
+            const g=nxt-angs[i];
+            if(g>maxGap){maxGap=g;gapAt=(i+1)%angs.length;}
+          }
+          const span=360-maxGap;
+          const mid=(angs[gapAt]+span/2+180)%360-180;
+          return {span, mid, n:angs.length};""", [r_min, r_max])
+
+    m_emb = p.ev("return Mass.measureDoc(App.doc)")
+    st_emb = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    sp_emb = span_deg(10.5, 12.5)
+    info_emb = p.pg.locator('#wrap-angle-info').text_content()
+    exp_emb = math.pi * 100 * 20 + math.pi * (144 - 100) * 8 * (31.4 / (2 * math.pi * 10))
+    ok1 = (
+        has_step_help
+        and st_emb == {'len': 2, 'kind': 'wrap', 'merged': True, 'errs': 0}
+        and m_emb and m_emb['count'] == 1 and abs(m_emb['volume'] - exp_emb) < 5
+        and sp_emb is not None and abs(sp_emb['span'] - 180.0) <= 2.0 and abs(sp_emb['mid']) <= 2.0
+        and '179,9' in info_emb
+    )
+
+    # 2. Vertieft (deboss, 2 mm), Startwinkel 90° und Zylinder Ø40 → halber Winkel (90° ± 2°)
+    p.pg.select_option('#wrap-mode', 'deboss'); warte_rechnen(p, 30); p.wait(300)
+    m_deb = p.ev("return Mass.measureDoc(App.doc)")
+    sp_deb = span_deg(7.5, 9.5)
+    exp_deb = math.pi * 100 * 20 - math.pi * (100 - 64) * 8 * (31.4 / (2 * math.pi * 10))
+
+    field(p, '#wrap-angle', 90); warte_rechnen(p, 30); p.wait(250)
+    sp_rot = span_deg(7.5, 9.5)
+
+    p.ev("App.change('Ø40', d => { d.items[0].p.d = 40; })"); warte_rechnen(p, 30); p.wait(300)
+    sp_40 = span_deg(17.5, 19.5)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(250)
+    info_40 = p.pg.locator('#wrap-angle-info').text_content()
+    ok2 = (
+        m_deb and m_deb['count'] == 1 and abs(m_deb['volume'] - exp_deb) < 5
+        and sp_deb is not None and abs(sp_deb['span'] - 180.0) <= 2.0
+        and sp_rot is not None and abs(sp_rot['span'] - 180.0) <= 2.0 and abs(sp_rot['mid'] - 90.0) <= 2.0
+        and sp_40 is not None and abs(sp_40['span'] - 90.0) <= 2.0
+        and ('90°' in info_40 or '90,0°' in info_40 or '89,9°' in info_40)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 3. Zurück auf Ø20 & Modus „Linie“ → Fläche geteilt + Bogenkante 31,4 mm + „Entlang Pfad“ + offene Helix
+    p.ev("App.change('Ø20', d => { d.items[0].p.d = 20; d.items[1].p.angle = 0; })"); warte_rechnen(p, 30); p.wait(250)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(250)
+    p.pg.select_option('#wrap-mode', 'line'); warte_rechnen(p, 30); p.wait(300)
+    m_line = p.ev("return Mass.measureDoc(App.doc)")
+    line_info = p.ev("""const d=App.results.get(App.doc.items[0].id).data;
+      return {faces:d.faces.length, edges:d.edges.length, hasArc314:d.edges.some(e=>Math.abs((e.l||0)-31.4)<0.15)};""")
+    p.pg.locator('#wrap-to-sweep').click(); warte_rechnen(p, 30); p.wait(300)
+    m_sw = p.ev("return Mass.measureDoc(App.doc)")
+    sw_ok = p.ev("const it=App.doc.items[2]; return !!it && it.kind==='sweep' && it.p.wrapId===App.doc.items[1].id && App.errors.length===0")
+
+    # Offene Helix-Linie um Ø20 + Sweep
+    p.ev("""App.change('Helix', d => {
+      const w = d.items[1];
+      w.p.sketch.ents = [{id:'l1',type:'line',a:[-31.4,-6],b:[31.4,6]}];
+    })"""); warte_rechnen(p, 30); p.wait(300)
+    m_hx = p.ev("return Mass.measureDoc(App.doc)")
+    helix_ok = p.ev("return App.errors.length === 0") and m_hx and m_hx['count'] == 2 and m_hx['parts'][1]['volume'] > 100
+
+    ok3 = (
+        m_line and abs(m_line['volume'] - math.pi * 100 * 20) < 5
+        and line_info['faces'] >= 4 and line_info['edges'] >= 6 and line_info['hasArc314']
+        and sw_ok and m_sw and m_sw['count'] == 2 and m_sw['parts'][1]['volume'] > 100
+        and helix_ok
+    )
+
+    # 4. Zeitleiste (Unterdrücken & Marker), Skizze bearbeiten, Bezüge, Erklären, Befehlssuche & Hilfe
+    p.ev("App.change('Rect wieder', d => { d.items.splice(2,1); d.items[1].p.sketch.ents=[{id:'r1',type:'rect',a:[-15.7,-4],b:[15.7,4]}]; d.items[1].p.mode='emboss'; })")
+    warte_rechnen(p, 30); p.wait(250)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Unterdrücken').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_sup = volumen(p)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Wieder aktivieren').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_unsup = volumen(p)
+    p.ev("Timeline.setMarker(1)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk1 = volumen(p)
+    p.ev("Timeline.setMarker(2)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk2 = volumen(p)
+
+    p.ev("Sketch.editItem(App.doc.items[1].id)"); p.wait(1000)
+    edit_ok = p.ev("return Sketch.active && Sketch.state.ents.length === 1")
+    p.pg.keyboard.press('Enter'); p.wait(800); warte_rechnen(p, 30)
+
+    deps = p.ev("return Model.dependencies(App.doc)")
+    expl = p.ev("return Explain.local(App.doc.items[1].id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmd_ok = p.ev("return Commands.search('Wickeln').some(c=>c.id==='wrap-cyl')")
+    ok4 = (
+        v_sup is not None and abs(v_sup - math.pi * 100 * 20) < 5
+        and v_unsup is not None and abs(v_unsup - exp_emb) < 5
+        and v_mk1 is not None and abs(v_mk1 - math.pi * 100 * 20) < 5
+        and v_mk2 is not None and abs(v_mk2 - exp_emb) < 5
+        and edit_ok
+        and any(d.get('what') == 'wickelt um' for d in (deps or []))
+        and expl and any('Wickelt' in l['t'] for l in expl['lines'])
+        and cmd_ok
+        and 'wrapCyl' in hilfen and all(k in hilfen['wrapCyl'] for k in ('tip', 'hilfe', 'tipp'))
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a044_iges_brep(p):
     import zipfile, tempfile
     p.empty()
@@ -10458,6 +10764,8 @@ TESTS = [
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
     ('[A-042] Prägen auf gewölbter Fläche: Text auf Zylindermantel vertieft / erhaben ein Stück / Höhe, Unterdrücken & Marker / Kugel & Hilfe', t_a042_praegen),
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
+    ('[A-045] STEP mit Farben und Namen: Gruppe mit Deckel (rot) & Boden (blau) exportieren / Import stellt Gruppe, Namen & Farben wieder her / 3D-Farben & Verlauf / Roundtrip & Ordner / Hilfe', t_a045_step_farben_namen),
+    ('[A-043] Wickeln um Zylinder (KP-34): Rechteck 31,4 mm auf Ø20 → 180° ± 2° / vertieft, Winkel & Ø40 / Linie & Entlang Pfad / Verlauf & Hilfe', t_a043_wickeln_zylinder),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
     ('[A-047] Import prüfen und heilen: offenes STEP / Hinweis / Heilen mit Ergebnis / Lücken & gültiges STEP', t_a047_import_heilen),

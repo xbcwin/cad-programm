@@ -212,7 +212,11 @@ const App = (() => {
       const it = topItem(n.id); if (!it) continue;
       const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
-      if (n.same && S.results.has(n.id)) { Viewer.updateNode(n.id, info); continue; }
+      if (n.same && S.results.has(n.id)) {
+        if (n.bodies) { S.results.get(n.id).data.bodies = n.bodies; Viewer.updateNode(n.id, { ...info, forceBodies: true }); }
+        else Viewer.updateNode(n.id, info);
+        continue;
+      }
       Viewer.setNode(n.id, n, info);
       S.results.set(n.id, { key: n.key, data: n });
     }
@@ -315,7 +319,7 @@ const App = (() => {
       const top = Model.topOf(S.doc, id);
       if (top) {
         selTop.add(top.id);
-        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'emboss' || top.kind === 'mirrorStep') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'mirrorStep') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
       }
       selTop.add('__ex:' + id);
     }
