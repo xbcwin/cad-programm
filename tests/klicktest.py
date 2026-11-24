@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -15690,7 +15690,7 @@ def t_a070_positionsnummern_stueckliste(p):
 def t_a076_kopieren_projekte(p):
     # [A-076] Mehrere Projekte in Tabs, Schritt 2: Kopieren zwischen Projekten (BE-13)
     def ev2(pg, js, arg=None):
-        return pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        return pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def wait_eval(pg):
         pg.wait_for_timeout(1500)
@@ -16757,7 +16757,7 @@ def t_a080_tablet(p):
             pg.locator('.loading').wait_for(state='detached', timeout=15000)
         except Exception:
             pass
-        ev = lambda js, arg=None: pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        ev = lambda js, arg=None: pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
         # 1. Tablet-Modus aktiv (< 1100 px + Touch), Panels eingeklappt, Toggle-Knöpfe >= 44 px
         st1 = pg.evaluate("""() => {
@@ -18747,6 +18747,136 @@ def t_a089_verbindungen_winkel_mittig(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a092_durchdringungen(p):
+    # [A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)
+    p.empty()
+
+    # 1. 3 Teile, zwei überlappen um genau 1000 mm³ (10×10×10 mm), eines liegt frei daneben
+    p.ev("""App.change('Drei Teile', d => {
+      const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil A' });
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil B' });
+      b.t.x = 10; b.t.y = 10;
+      const c = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil C' });
+      c.t.x = 50;
+      d.items.push(a, b, c);
+    }); App.clearSelection();""")
+    warte_rechnen(p, 25)
+    p.pg.locator('#proj-clashes').click()
+    p.pg.locator('#clash-check-list button').first.wait_for(state='visible', timeout=15000)
+
+    list_cnt = p.pg.locator('#clash-check-list button').count()
+    list_txt = (p.pg.locator('#clash-check-list button').first.text_content() or '').lower()
+    st1 = p.ev("""const r = ClashCheck.last;
+      return r ? {
+        checked: r.checkedCount,
+        n: r.pairs.length,
+        v: r.pairs[0] ? r.pairs[0].v : 0,
+        a: r.pairs[0] ? r.pairs[0].nameA : '',
+        b: r.pairs[0] ? r.pairs[0].nameB : '',
+        meshVerts: r.pairs[0] && r.pairs[0].mesh ? r.pairs[0].mesh.vertices.length : 0,
+      } : null;""")
+    ok1 = (
+        list_cnt == 1
+        and st1 is not None
+        and st1['checked'] == 3
+        and st1['n'] == 1
+        and abs(st1['v'] - 1000) < 1.0
+        and st1['meshVerts'] >= 24
+        and 'teil a' in list_txt and 'teil b' in list_txt and '1000' in list_txt and 'mm³' in list_txt
+    )
+
+    # 2. Klick auf Eintrag springt hin (Kamera-Ziel ≈ [5,5,5]) & hebt Überschneidung rot hervor
+    p.ev("const { THREE } = window.__masswerk; Viewer.moveCamera(new THREE.Vector3(120, -140, 110), new THREE.Vector3(80, 40, 20), null, false);")
+    p.wait(150)
+    pre_focus = p.ev("return { focused: ClashCheck.focused, has: ClashCheck.hasHighlight };")
+    p.pg.locator('#clash-check-list button').first.click()
+    p.wait(650)
+    cls_btn = p.pg.locator('#clash-check-list button').first.get_attribute('class') or ''
+    hi_on = p.ev("""let hasRedMesh = false;
+      Viewer.groups.overlay.traverse(o => {
+        if (o.material && o.material.color && o.material.color.getHex() === 0xe5484d) hasRedMesh = true;
+      });
+      const t = Viewer.controls.target;
+      return {
+        focused: ClashCheck.focused,
+        has: ClashCheck.hasHighlight,
+        active: ClashCheck.active,
+        hasRedMesh,
+        selCount: App.sel.length,
+        target: [t.x, t.y, t.z],
+      };""")
+    dist_target = ((hi_on['target'][0] - 5) ** 2 + (hi_on['target'][1] - 5) ** 2 + (hi_on['target'][2] - 5) ** 2) ** 0.5
+    ok2 = (
+        pre_focus['focused'] is None and not pre_focus['has']
+        and 'active' in cls_btn
+        and hi_on['focused'] == 0 and hi_on['has'] and hi_on['active'] and hi_on['hasRedMesh']
+        and hi_on['selCount'] == 2
+        and dist_target < 1.0
+    )
+
+    # 3. Teile berühren sich nur Fläche an Fläche -> Stale-Hinweis, „Noch mal“ meldet Keine Durchdringungen
+    p.ev("""App.change('Berührend ohne Überlappung', d => {
+      const b = d.items.find(x => x.name === 'Teil B');
+      const c = d.items.find(x => x.name === 'Teil C');
+      if (b) { b.t.x = 20; b.t.y = 0; }
+      if (c) { c.t.x = 40; c.t.y = 0; }
+    });""")
+    warte_rechnen(p, 25)
+    stale_cnt = p.pg.locator('#clash-check-bar .gc-stale').count()
+    p.pg.locator('#cc-rerun').click()
+    p.pg.locator('#clash-check-ok').wait_for(state='visible', timeout=15000)
+    ok_txt = (p.pg.locator('#clash-check-bar').text_content() or '').lower()
+    st3 = p.ev("return ClashCheck.last ? { n: ClashCheck.last.pairs.length, checked: ClashCheck.last.checkedCount, has: ClashCheck.hasHighlight } : null;")
+    ok3 = (
+        stale_cnt == 1
+        and st3 is not None and st3['n'] == 0 and st3['checked'] == 3 and not st3['has']
+        and 'keine durchdringungen' in ok_txt
+    )
+
+    # 4. Echte Baugruppe (docType: 'assembly') mit 3 ref-Instanzen + #t-clashes & Schließen
+    p.pg.locator('#cc-close').click(); p.wait(200)
+    p.ev("""return (async () => {
+      const partDoc = Model.newDoc('Blockteil', { docType: 'part' });
+      partDoc.items.push(Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Block' }));
+      await Store.saveProject(partDoc, 1, { keepLast: true });
+      const asm = Model.newAssemblyDoc('Test-Baugruppe');
+      const r1 = Model.newItem('ref', { docId: partDoc.id, docName: 'Blockteil' }, { name: 'Instanz 1' });
+      const r2 = Model.newItem('ref', { docId: partDoc.id, docName: 'Blockteil' }, { name: 'Instanz 2' });
+      r2.t.x = 10; r2.t.y = 10;
+      const r3 = Model.newItem('ref', { docId: partDoc.id, docName: 'Blockteil' }, { name: 'Instanz 3' });
+      r3.t.x = 50;
+      asm.items.push(r1, r2, r3);
+      App.setDoc(asm, { fit: true });
+      return partDoc.id;
+    })();""")
+    warte_rechnen(p, 30)
+    p.pg.locator('#t-clashes').click()
+    p.pg.locator('#clash-check-list button').first.wait_for(state='visible', timeout=15000)
+    asm_txt = (p.pg.locator('#clash-check-list button').first.text_content() or '').lower()
+    st4 = p.ev("return ClashCheck.last ? { checked: ClashCheck.last.checkedCount, n: ClashCheck.last.pairs.length, v: ClashCheck.last.pairs[0]?.v || 0 } : null;")
+    p.pg.locator('#clash-check-list button').first.click(); p.wait(300)
+    p.pg.locator('#cc-close').click(); p.wait(200)
+    closed = p.ev("return { active: ClashCheck.active, has: ClashCheck.hasHighlight, bar: !!document.querySelector('#clash-check-bar') };")
+    ok4 = (
+        st4 is not None and st4['checked'] == 3 and st4['n'] == 1 and abs(st4['v'] - 1000) < 1.0
+        and 'instanz 1' in asm_txt and 'instanz 2' in asm_txt
+        and not closed['active'] and not closed['has'] and not closed['bar']
+    )
+
+    # 5. Prüfen-Menü, Befehlssuche, Hilfetext & keine Seitenfehler
+    p.pg.locator('#t-check').click(); p.wait(200)
+    has_menu = p.pg.locator('#check-clashes').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(100)
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      cmd: Commands.search('Durchdringungen suchen').some(c => c.id === 'clash-check'),
+      helpJson: !!(d.clashCheck && d.clashCheck.tip && d.clashCheck.hilfe && d.clashCheck.tipp),
+      domHelp: document.querySelectorAll('[data-help="clashCheck"]').length >= 1,
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = bool(has_menu and all(meta.values()) and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -18943,6 +19073,7 @@ TESTS = [
     ('[F-11241523] Volltest-Reparatur: Griff-Schilder bei Frontansicht & Alt/Rechtsklick / Skizze ohne 3D-Ansichtsleiste / Zeitleiste sofort bei Bauteil-Wechsel', t_f11241523),
     ('[A-090] Andock-Punkte & Einrasten beim Ziehen: Schraube in Bohrung (Einfach & Profi)', t_a090_andock_punkte),
     ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
+    ('[A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)', t_a092_durchdringungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

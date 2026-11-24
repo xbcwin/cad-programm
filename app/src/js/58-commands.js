@@ -235,6 +235,7 @@ const Commands = (() => {
     add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
     add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
     add('geom-check', 'Geometrie prüfen (kaputte Flächen, winzige Kanten)', 'target', 'geometrie prüfen check kaputt fläche kante winzig selbstschnitt brep fehler', () => GeomCheck.open(), { group: 'Projekt' });
+    add('clash-check', 'Durchdringungen suchen (Baugruppe prüfen)', 'boolIntersect', 'durchdringung durchdringungen kollision kollisionen überlappung überschneidung schnitt baugruppe prüfen clash interference bg-10', () => ClashCheck.open(), { group: 'Baugruppe' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
     add('chain', 'Kantenkette wählen', 'chainEdges', 'kette kanten umriss tangential rand alle zusammen', () => Select.chain(), { group: 'Bearbeiten', needSel: true });

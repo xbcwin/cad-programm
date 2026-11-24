@@ -4,12 +4,13 @@ const GeomCheck = (() => {
 
   function sync() {
     const b = $('#t-check');
-    if (b) b.classList.toggle('active', !!bar);
+    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active));
   }
 
   function menu(anchor) {
     UI.menu(anchor, [
       { label: T('menu.check.geom'), icon: 'target', id: 'check-geom', help: 'geomCheck', run: () => open() },
+      { label: T('menu.check.clashes'), icon: 'boolIntersect', id: 'check-clashes', help: 'clashCheck', run: () => ClashCheck.open() },
       { label: T('menu.check.weak'), icon: 'warn', id: 'check-weak', help: 'weakSpots', run: () => Weak.dialog() },
       '-',
       { label: T('menu.check.thin'), icon: 'ruler', id: 'check-thin', help: 'thinWalls', run: () => Views.thin() },
@@ -290,7 +291,7 @@ const GeomCheck = (() => {
   }
 
   return {
-    init, menu, open, run, close, focus, clearHighlight,
+    init, menu, open, run, close, focus, clearHighlight, sync,
     get active() { return !!bar; },
     get last() { return last; },
     get focused() { return focused; },

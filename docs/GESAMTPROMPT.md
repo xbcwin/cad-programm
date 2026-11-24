@@ -123,6 +123,7 @@ Leitlinien:
 | `85-start.js` | Startseite, Projekt-Tabs oben (`Start.renderTabs`/`openTabAddMenu`/`openNewTab`/`openStoredInTab`), Projekt-Vorlagen (`Templates.PROJECT_LIST`, eigene Vorlagen in `tracery-vorlagen`, `Start.newProjectDialog`/`saveAsTemplate`/`openTemplate`), Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Absturz-Wiederherstellung (`#recovery-bar`, `restoreRecovery`, `dismissRecovery`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
+| `87-clashcheck.js` | Durchdringungs-Prüfung der ganzen Baugruppe (`ClashCheck`, paarweise Überschneidungsliste mit Volumen, Anspringen & roter Schnittkörper-Hervorhebung) |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 

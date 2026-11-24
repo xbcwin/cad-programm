@@ -43,6 +43,7 @@ const Toolbar = (() => {
       { id: 'explode', group: T('dlg.tb.grpViewCheck'), domId: 't-explode', icon: 'explode', label: T('menu.view.explode'), tip: T('dlg.tb.explodeTip'), kbd: 'U', cls: 'minor', help: 'explode', run: () => Views.explode() },
       { id: 'fit', group: T('dlg.tb.grpViewCheck'), domId: 't-fit', icon: 'fit', label: T('menu.ctx.fitAll'), tip: T('dlg.tb.fitTip'), kbd: 'F', cls: 'minor', run: () => Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null) },
       { id: 'weak', group: T('dlg.tb.grpViewCheck'), domId: 't-weak', icon: 'target', label: T('dlg.tb.weak'), tip: T('dlg.tb.weakTip'), cls: 'minor', help: 'weakSpots', run: () => Weak.dialog() },
+      { id: 'clashes', group: T('dlg.tb.grpViewCheck'), domId: 't-clashes', icon: 'boolIntersect', label: T('menu.check.clashes'), tip: T('clash.btnTip'), cls: 'minor', help: 'clashCheck', run: () => ClashCheck.open() },
       { id: 'bom', group: T('dlg.tb.grpViewCheck'), domId: 't-bom', icon: 'list', label: T('dlg.tb.bom'), tip: T('dlg.tb.bomTip'), cls: 'minor', help: 'bom', run: () => Mass.bomDialog() },
       // Projekt & Datei
       { id: 'save', group: T('dlg.tb.grpProject'), domId: 't-save', icon: 'save', label: T('common.save'), tip: T('dlg.tb.saveTip'), kbd: 'Strg S', cls: 'minor', run: () => Start.saveFile() },
@@ -242,7 +243,8 @@ const Toolbar = (() => {
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
-    if (def.id === 'check' && typeof GeomCheck !== 'undefined' && GeomCheck.active) b.classList.add('active');
+    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && ClashCheck.active))) b.classList.add('active');
+    if (def.id === 'clashes' && typeof ClashCheck !== 'undefined' && ClashCheck.active) b.classList.add('active');
     return b;
   }
 
@@ -261,6 +263,7 @@ const Toolbar = (() => {
       { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
       { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
       { label: T('menu.check.geom'), icon: 'target', id: 'more-geom-check', help: 'geomCheck', run: () => GeomCheck.open() },
+      { label: T('menu.check.clashes'), icon: 'boolIntersect', id: 'more-clash-check', help: 'clashCheck', run: () => ClashCheck.open() },
       '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
     ]));
     return b;
@@ -281,7 +284,7 @@ const Toolbar = (() => {
       ins.addEventListener('click', () => Comp.insertPartDialog());
       el.append(ins);
       const map = catalogMap();
-      for (const id of ['measure', 'notes', 'views', 'check']) {
+      for (const id of ['clashes', 'measure', 'notes', 'views', 'check']) {
         if (map[id]) el.append(buildToolButton(map[id], false));
       }
       el.append(makeMoreButton());

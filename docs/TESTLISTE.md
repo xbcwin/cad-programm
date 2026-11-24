@@ -2167,6 +2167,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verlauf, Löschen, Rückgängig, Suche & Hilfe**: Verbindungen erscheinen im Verlauf unter `#joint-tree`, lassen sich rechts bearbeiten, per `#jt-del` lösen und per `Strg+Z` wiederherstellen; Befehlssuche (`mate-angle`, `mate-center`) und Hilfetexte (`mateAngle`, `mateCenter`) sind ohne Seitenfehler vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Körper über „Verbindung“ → „Winkel“ (Fläche/Kante) bzw. „Mittig“ (Nutwand 1, Nutwand 2, Teil) durch Anklicken im 3D-Bild verbinden und im Panel rechts Winkel/Formel sowie die angezeigten Nutabstände prüfen.
 
+## Durchdringungen der ganzen Baugruppe als Liste (Auto [A-092], BG-10)
+
+- [x] **3 Teile, 2 überlappen um 1000 mm³**: Klick auf „Durchdringungen suchen“ (`#proj-clashes`) liefert genau einen Eintrag (`Teil A – Teil B`) mit Volumen `≈ 1000 mm³` und berechnetem Schnittnetz.
+- [x] **Anspringen & rote 3D-Hervorhebung**: Klick auf den Eintrag fährt die Kamera direkt zum Überschneidungskörper (`[5, 5, 5]`), wählt beide Teile aus und zeigt die Schnittform rot im Overlay (`#0xe5484d`).
+- [x] **Berührende Flächen & „Noch mal“**: Nach Verschieben auf bündiges Berühren (`Abstand = 0`) erscheint der Hinweis auf Modelländerung; „Noch mal“ meldet „Keine Durchdringungen“.
+- [x] **Echte Baugruppe mit Verweisen (`ref`), Suche & Hilfe**: In einer Baugruppe (`docType: 'assembly'`) mit 3 eingesetzten `ref`-Instanzen findet `#t-clashes` exakt das überlappende Paar (`≈ 1000 mm³`); Prüfen-Menü, Befehlssuche (`clash-check`) und Hilfetext (`clashCheck`) arbeiten ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine Baugruppe mit mehreren leicht überlappenden und berührenden Teilen öffnen, auf „Durchdringungen suchen“ klicken, einen Listeneintrag anklicken und prüfen, ob die Kamera zur Stelle springt und die Überschneidung rot durchschimmert.
+
 ## Fehler melden
 
 ```

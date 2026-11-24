@@ -1048,7 +1048,9 @@ const Panels = (() => {
       if (wl) ps.append(wl.length ? Weak.rows(wl.slice(0, 4), null, true) : h('div', { class: 'hint-box' }, T('panel.proj.weakNone')), ...(wl.length > 4 ? [h('div', { class: 'hint-box' }, T('panel.proj.weakMore', { n: wl.length - 4 }))] : []));
       const wb = h('button', { type: 'button', class: 'btn small', id: 'proj-weak', 'data-help': 'weakSpots' }); wb.innerHTML = icon('target') + esc(wl ? T('panel.proj.weakAgain') : T('panel.proj.weakSearch'));
       wb.onclick = () => Weak.dialog();
-      ps.append(h('div', { class: 'btn-row' }, wb));
+      const cb = h('button', { type: 'button', class: 'btn small', id: 'proj-clashes', 'data-help': 'clashCheck' }); cb.innerHTML = icon('boolIntersect') + esc(T('menu.check.clashes'));
+      cb.onclick = () => ClashCheck.open();
+      ps.append(h('div', { class: 'btn-row' }, wb, cb));
       w.append(ps);
     }
     const pv = ViewPrefs.get();
