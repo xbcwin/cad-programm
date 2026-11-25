@@ -6,7 +6,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
   window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); if (Date.now() - errShown > 4000) { errShown = Date.now(); const m = (e.reason && e.reason.message) || String(e.reason || ''); if (m && !/abort|cancel/i.test(m)) UI.toast(T('status.unhandledErr', { msg: m.slice(0, 140) }), { kind: 'bad' }); } });
 
   // Symbole in die festen Knöpfe setzen
-  $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
+  $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-whatis').innerHTML = icon('help'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
   $('#btn-left-close').innerHTML = icon('close'); $('#btn-right-close').innerHTML = icon('close');
 
@@ -35,10 +35,11 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
   };
   App.on('doc', updName); App.on('doc', syncBed);
   $('#btn-level').onclick = () => ViewPrefs.setLevel(ViewPrefs.simple ? 'pro' : 'simple'); ViewPrefs.syncLevel();
+  $('#btn-whatis').onclick = () => UI.toggleWhatIs();
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
   $('#brand').onclick = (e) => { e.preventDefault(); Start.show(); };
-  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx(); Panels.refreshViewCube(); UI.renderHint(); Measure.updateStatus(); Print.updateAmpel(); Notices.refreshUI(); Timeline.refreshLabels(); Timeline.render(); updHist(); updName(); Start.renderTabs(); Assembly.renderBanner(); if (Sketch.active) Sketch.refreshUI(); if (App.mode === 'drawing') Drawing.refreshUI(); if (Start.open) Start.show(); });
+  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx(); Panels.refreshViewCube(); UI.renderHint(); UI.refreshWhatIs(); Measure.updateStatus(); Print.updateAmpel(); Notices.refreshUI(); Timeline.refreshLabels(); Timeline.render(); updHist(); updName(); Start.renderTabs(); Assembly.renderBanner(); if (Sketch.active) Sketch.refreshUI(); if (App.mode === 'drawing') Drawing.refreshUI(); if (Start.open) Start.show(); });
   const projectItems = () => [
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },

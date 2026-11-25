@@ -2543,6 +2543,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Hilfen, Übersetzung & Befehlssuche**: Knöpfe im Projekt-Panel, im Mehr-Menü (`#t-more` in „Einfach“) und im Prüfen-Menü (`#t-check` in „Profi“), Hilfetexte (`printCost`, `reportPdf` in JSON/`HELP`), DE/EN-Schlüsselgleichheit und Befehle `print-cost` / `report-pdf` geprüft (`t_a134_druckkosten_pruefbericht`).
 - [ ] **Von Hand**: Im Browser bei einem komplexen Modell mit dünner Wand und mehreren Teilen den Dialog „Druckkosten & Zeit“ anpassen und den erzeugten PDF-Prüfbericht in einem PDF-Viewer öffnen, um Layout, Umlaute, €-Zeichen, Bildqualität und Teileliste visuell zu prüfen.
 
+## „Was ist das?“-Modus (Auto [A-140], BE-32)
+
+- [x] **Einfach & Profi in der Kopfleiste**: Knopf `#btn-whatis` ist in „Profi“ und „Einfach“ sichtbar, die Kopfleiste läuft in „Einfach“ nicht um oder über (`t_a140_was_ist_das`).
+- [x] **Erklärung statt Ausführung**: Bei aktivem Modus (`body.whatis-mode`, `UI.whatIsActive`) bleibt ein offenes Körper-Flyout beim Klick auf `?` offen; ein Klick auf „Quader“ öffnet `#whatis-pop` mit Du-Form-Erklärung ohne einen Quader anzulegen (`App.doc.items.length === 0`); Klicks auf „Skizze“, „Profi“ und „Maße“ zeigen passende Erklärungen ohne Seiteneffekte (`t_a140_was_ist_das`).
+- [x] **Esc & Beenden, Schritte, DE/EN & Hilfen**: `Esc` beendet den Modus sauber, danach legt ein Klick auf „Quader“ den Körper normal an; Zeitleisten- und Verlaufs-Schritte werden über `Explain.describeElement` erklärt; DE/EN-Schlüsselgleichheit, `HELP.whatIsThis` und Befehlssuche (`what-is-this`) sind geprüft (`t_a140_was_ist_das`).
+- [ ] **Von Hand**: Im Browser den „Was ist das?“-Modus einschalten, den Mauszeiger über verschiedene Werkzeugleisten-Knöpfe, Skizzen-Werkzeuge und einen 3D-Körper fahren und optisch prüfen, dass Fragezeichen-Cursor, gestrichelte Vorschau-Markierung und die Position des Erklär-Popovers stimmen.
+
 ## Fehler melden
 
 ```

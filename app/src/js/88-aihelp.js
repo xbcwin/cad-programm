@@ -279,7 +279,224 @@ WAS TRACERY SCHON WEISS: ${info.lines.map((l) => l.t).join(' ')}`;
     const f = Model.find(App.doc, id);
     if (f && App.doc.items.includes(f.item) && f.item.role !== 'hole') Mass.measure().then((r) => { const p = Mass.partOf(r, id); const li = body.querySelector('.ex-material, .ex-gewicht'); if (p && li && !p.fixed) li.textContent += ` Wiegt ca. ${Mass.gText(p.mass)}.`; });
   }
-  return { local, dialog, keyOf, paramsUsed, askAI };
+
+  // ---------- „Was ist das?“-Erklärung für jedes UI-Element (BE-32) ----------
+  const WHATIS_ID_MAP = [
+    ['#brand', 'whatis.el.brand', 'Tracery', null],
+    ['#tab-model', 'whatis.el.tabModel', 'topbar.model', null],
+    ['#tab-drawing', 'whatis.el.tabDrawing', 'topbar.drawing', null],
+    ['#btn-undo', 'whatis.el.undo', 'topbar.undo', null],
+    ['#btn-redo', 'whatis.el.redo', 'topbar.redo', null],
+    ['#btn-project', 'whatis.el.project', 'topbar.project', null],
+    ['#btn-menu', 'whatis.el.menu', 'topbar.menu', null],
+    ['#btn-level', 'whatis.el.level', null, 'levelSwitch'],
+    ['#btn-whatis', 'whatis.el.whatis', 'whatis.btnAria', 'whatIsThis'],
+    ['#btn-left', 'whatis.el.btnLeft', 'topbar.tree', 'tabletPanels'],
+    ['#btn-right', 'whatis.el.btnRight', 'topbar.props', 'tabletPanels'],
+    ['#t-body', 'whatis.el.tBody', 'tool.body', null],
+    ['#t-parts', 'whatis.el.tParts', 'tool.parts', null],
+    ['#t-export', 'whatis.el.tExport', 'tool.export', null],
+    ['#t-more', 'whatis.el.tMore', 'tool.more', null],
+    ['#t-views', 'whatis.el.tViews', 'tool.views', null],
+    ['#t-check', 'whatis.el.tCheck', 'tool.check', null],
+    ['#t-notes', 'whatis.el.tNotes', 'tool.notes', null],
+    ['#lt-tree', 'whatis.el.ltTree', 'topbar.tree', null],
+    ['#lt-params', 'whatis.el.ltParams', 'topbar.params', 'params'],
+    ['#lt-log', 'whatis.el.ltLog', 'topbar.log', null],
+    ['#cmd', 'whatis.el.cmd', 'topbar.cmdAria', null],
+    ['#hintline', 'whatis.el.hintline', 'Hinweiszeile', null],
+    ['#ampel', 'whatis.el.ampel', 'Status', null],
+    ['#proj-tabs', 'whatis.el.tabs', null, 'projectTabs'],
+    ['.viewcube', 'whatis.el.viewcube', 'ViewCube', null],
+    ['.view-btns', 'whatis.el.viewBtns', 'Ansichts-Knöpfe', null],
+    ['#timeline', 'whatis.el.timeline', null, 'timeline'],
+    ['#sheet', 'whatis.el.sheet', 'topbar.drawing', null],
+  ];
+  function cleanLabel(node) {
+    if (!node) return '';
+    const lbl = node.querySelector && node.querySelector('.lbl, .l-full, .nm, .section-h');
+    if (lbl && lbl.textContent && lbl.textContent.trim()) return lbl.textContent.replace(/\u00AD/g, '').trim();
+    const aria = node.getAttribute && node.getAttribute('aria-label');
+    if (aria && aria.trim()) return aria.trim();
+    const ttl = node.getAttribute && node.getAttribute('title');
+    if (ttl && ttl.trim()) return ttl.trim();
+    if (node.cloneNode) {
+      const cl = node.cloneNode(true);
+      cl.querySelectorAll && cl.querySelectorAll('.kbd,.k,.role,.sub,.acts,.more').forEach((x) => x.remove());
+      const txt = (cl.textContent || '').replace(/\u00AD/g, '').replace(/\s+/g, ' ').trim();
+      if (txt) return txt.slice(0, 64);
+    }
+    return '';
+  }
+  function describeStep(id, anchor) {
+    const f = Model.find(App.doc, id);
+    if (!f) return null;
+    if (I18n.lang === 'de') {
+      const info = local(id, App.doc);
+      if (!info) return null;
+      const bodyTxt = info.lines.slice(0, 2).map((l) => l.t).join(' ');
+      return {
+        title: info.title,
+        text: T('whatis.stepPrefix', { where: info.where }) + (bodyTxt ? ' ' + bodyTxt : ''),
+        tip: (info.lines.find((l) => l.k === 'achtung') || {}).t || '',
+        kbd: '',
+        anchor,
+      };
+    }
+    const top = App.doc.items.indexOf(f.item);
+    const where = top >= 0 ? `${top + 1} / ${App.doc.items.length}` : Model.label(f.parent);
+    const kindLbl = T('kind.' + f.item.kind);
+    return {
+      title: Model.label(f.item),
+      text: `${T('whatis.stepPrefix', { where })} (${kindLbl})`,
+      tip: '',
+      kbd: '',
+      anchor,
+    };
+  }
+  function describeElement(rawEl, clientX, clientY) {
+    const el = rawEl && rawEl.nodeType === 1 ? rawEl : (rawEl && rawEl.parentElement);
+    if (!el) return { title: T('whatis.genericTitle'), text: T('whatis.genericFallback'), tip: '', kbd: '', anchor: null };
+    const de = I18n.lang === 'de';
+
+    // 1. Grundkörper-Kachel
+    const kindTile = el.closest('[data-kind]');
+    if (kindTile) {
+      const k = kindTile.dataset.kind;
+      const title = KINDS[k] ? T('kind.' + k) : (cleanLabel(kindTile) || k);
+      const text = I18n.t('whatis.kind.' + k);
+      const tip = de && STEP_TEXT && STEP_TEXT[k] && STEP_TEXT[k].achtung ? STEP_TEXT[k].achtung : T('whatis.tileTip');
+      return { title, text: text.startsWith('whatis.') ? T('whatis.tileTip') : text, tip, kbd: '', anchor: kindTile };
+    }
+
+    // 2. Explizites data-whatis (z. B. Zylinder-/Quader-Loch)
+    const wiEl = el.closest('[data-whatis]');
+    if (wiEl) {
+      const k = wiEl.dataset.whatis;
+      const text = T('whatis.kind.' + k);
+      return { title: cleanLabel(wiEl) || T('whatis.genericTitle'), text: text.startsWith('whatis.') ? T('whatis.genericFallback') : text, tip: T('whatis.tileTip'), kbd: '', anchor: wiEl };
+    }
+
+    // 3. Eigene Teile-Bibliothek & fertige Bauteile
+    const userTile = el.closest('[data-user-lib-id]');
+    if (userTile) {
+      const name = cleanLabel(userTile) || T('fly.myParts');
+      return { title: name, text: T('whatis.userLibPart', { name }), tip: T('whatis.tileTip'), kbd: '', anchor: userTile };
+    }
+    const libTile = el.closest('[data-lib]');
+    if (libTile) {
+      const lib = libTile.dataset.lib, d = typeof LIBMAP !== 'undefined' ? LIBMAP[lib] : null;
+      const name = (d && d.label) || cleanLabel(libTile) || lib;
+      const H = de && typeof HELP !== 'undefined' ? HELP[lib] : null;
+      return {
+        title: name,
+        text: (H && H.hilfe) || (!de && T(d && d.role === 'hole' ? 'whatis.libPartHole' : 'whatis.libPartSolid', { name })) || (d && d.desc) || T('whatis.libPartSolid', { name }),
+        tip: (H && H.tipp) || T('whatis.tileTip'),
+        kbd: '',
+        anchor: libTile,
+      };
+    }
+
+    // 4. Zeitleisten-Schritt & Verlaufs-Eintrag
+    const tlChip = el.closest('.tl-chip[data-idx]');
+    if (tlChip) {
+      const own = App.ctx ? (App.doc.items.find((x) => x.id === App.ctx) || App.doc) : App.doc;
+      const step = (own.items || own.children || [])[Number(tlChip.dataset.idx)];
+      const res = step && describeStep(step.id, tlChip);
+      if (res) return res;
+    }
+    const treeNode = el.closest('.node[data-id]');
+    if (treeNode && !el.closest('.acts, .tw')) {
+      const res = describeStep(treeNode.dataset.id, treeNode);
+      if (res) return res;
+    }
+
+    // 5. Bekannte Bereiche & Knöpfe
+    for (const [sel, key, titleRef, helpFallback] of WHATIS_ID_MAP) {
+      const match = el.closest(sel);
+      if (!match) continue;
+      // Innerhalb der Zeitleiste nur fangen, wenn kein spezifischeres Kind mit data-help/data-tip getroffen wurde
+      if ((sel === '#timeline' || sel === '.view-btns' || sel === '#ampel') && el !== match && el.closest('[data-help],[data-tip],button')) break;
+      const hk = helpFallback || (typeof UI !== 'undefined' && UI.helpKey ? UI.helpKey(match) : null);
+      const H = hk && typeof HELP !== 'undefined' ? HELP[hk] : null;
+      const title = cleanLabel(match) || (titleRef ? (titleRef.includes('.') ? T(titleRef) : titleRef) : (H && H.tip)) || T('whatis.genericTitle');
+      return {
+        title,
+        text: T(key),
+        tip: de && H && H.tipp ? H.tipp : '',
+        kbd: match.dataset ? (match.dataset.kbd || '') : '',
+        anchor: match,
+      };
+    }
+
+    // 6. 3D-Ansicht: getroffener Körper oder allgemeiner Viewport-Hinweis
+    const vp = el.closest('#viewport');
+    if (vp) {
+      if (typeof Viewer !== 'undefined' && Viewer.pick && Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        const hit = Viewer.pick(clientX, clientY, { noEdges: true });
+        if (hit && hit.id) {
+          const f = Model.find(App.doc, hit.id);
+          if (f) {
+            const name = Model.label(f.item);
+            const sz = Model.sizeText(f.item, Model.vars(App.doc).v);
+            return {
+              title: name,
+              text: T('whatis.bodyInViewport', { name }) + (sz ? ` (${sz})` : ''),
+              tip: '',
+              kbd: '',
+              anchor: vp,
+            };
+          }
+        }
+      }
+      return { title: de ? '3D-Ansicht' : '3D viewport', text: T('whatis.el.viewport'), tip: '', kbd: '', anchor: vp };
+    }
+
+    // 7. Elemente mit data-help / HELP
+    const target = el.closest('[data-help],[data-tip],button,a,[role="button"],[role="menuitem"],[role="tab"],.st-chip,.section') || el;
+    const hk = typeof UI !== 'undefined' && UI.helpKey ? UI.helpKey(target) : null;
+    if (hk && typeof HELP !== 'undefined' && HELP[hk]) {
+      const H = HELP[hk];
+      const title = cleanLabel(target) || H.tip || T('whatis.genericTitle');
+      if (de) {
+        return { title, text: H.hilfe || H.tip, tip: H.tipp || '', kbd: target.dataset ? (target.dataset.kbd || '') : '', anchor: target };
+      }
+      const tip = target.dataset && target.dataset.tip;
+      return { title, text: tip ? T('whatis.tipFallback', { tip }) : T('whatis.genericFallback'), tip: '', kbd: target.dataset ? (target.dataset.kbd || '') : '', anchor: target };
+    }
+
+    // 8. Eingabefelder (.field) mit <label>
+    const field = el.closest('.field');
+    if (field) {
+      const lblEl = field.querySelector('label');
+      const name = (lblEl && lblEl.textContent && lblEl.textContent.trim()) || cleanLabel(target) || T('whatis.genericTitle');
+      return { title: name, text: T('whatis.fieldFallback', { name }), tip: '', kbd: '', anchor: field };
+    }
+
+    // 9. Elemente mit data-tip / aria-label
+    const tip = (target.dataset && target.dataset.tip) || (el.dataset && el.dataset.tip) || '';
+    if (tip) {
+      const title = cleanLabel(target) || tip;
+      return { title, text: T('whatis.tipFallback', { tip }), tip: '', kbd: target.dataset ? (target.dataset.kbd || '') : '', anchor: target };
+    }
+
+    // 10. Bereichs-Fallbacks
+    const areas = [
+      ['.flyout', 'whatis.area.flyout'],
+      ['.menu', 'whatis.area.menu'],
+      ['.ctxbar', 'whatis.area.ctxbar'],
+      ['#left', 'whatis.area.left'],
+      ['#right', 'whatis.area.right'],
+      ['.topbar', 'whatis.area.topbar'],
+      ['.bottombar', 'whatis.area.bottombar'],
+    ];
+    for (const [sel, key] of areas) {
+      const area = el.closest(sel);
+      if (area) return { title: cleanLabel(target) || T('whatis.genericTitle'), text: T(key), tip: '', kbd: '', anchor: target };
+    }
+    return { title: cleanLabel(target) || T('whatis.genericTitle'), text: T('whatis.genericFallback'), tip: '', kbd: '', anchor: target };
+  }
+  return { local, dialog, keyOf, paramsUsed, askAI, describeElement };
 })();
 
 // ---------- Schwachstellen ----------

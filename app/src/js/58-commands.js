@@ -456,6 +456,7 @@ const Commands = (() => {
     add('tour', 'Einführung starten', 'play', 'hilfe tutorial einführung lernen', () => Tour.start(), { group: 'Hilfe' });
     add('tour-sketch', 'Einführung: Deine erste Skizze', 'sketch', 'hilfe tutorial einführung lernen skizze maß formel', () => Tour.start('sketch'), { group: 'Hilfe' });
     add('keys', 'Tastenkürzel anzeigen', 'help', 'hilfe tasten kürzel', () => showKeys(), { group: 'Hilfe' });
+    add('what-is-this', T('whatis.cmdLabel'), 'help', 'was ist das hilfe erklaeren erklaerung modus fragezeichen element be-32', () => UI.toggleWhatIs(), { group: 'Hilfe' });
   }
   function score(c, q) {
     if (!q) return 0;

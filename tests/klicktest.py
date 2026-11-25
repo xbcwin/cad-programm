@@ -27260,6 +27260,121 @@ def t_a134_druckkosten_pruefbericht(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a140_was_ist_das(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro'); I18n.use('de');")
+    p.wait(250)
+
+    # 1. Knopf #btn-whatis in Profi & Einfach sichtbar, Topbar läuft in Einfach nicht über
+    pro_vis = sichtbar(p, '#btn-whatis')
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(250)
+    simple_vis = sichtbar(p, '#btn-whatis')
+    simple_over = p.ev("const tb=document.querySelector('.topbar'); return tb.scrollHeight > tb.clientHeight + 1 || [...document.querySelectorAll('.topbar .tool, .topbar .right-tools button')].some(b=>b.offsetParent && b.getBoundingClientRect().bottom > tb.getBoundingClientRect().bottom + 1);")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(200)
+    ok1 = bool(pro_vis and simple_vis and not simple_over)
+
+    # 2. Körper-Flyout öffnen -> „?“ an -> Klick auf Quader -> Erklärung erscheint, kein Quader angelegt
+    p.pg.click('#t-body')
+    p.wait(200)
+    fly_open = sichtbar(p, '.flyout .tile[data-kind="box"]')
+    p.pg.click('#btn-whatis')
+    p.wait(150)
+    mode_on = p.ev("return UI.whatIsActive && document.body.classList.contains('whatis-mode') && document.querySelector('#btn-whatis').getAttribute('aria-pressed') === 'true'")
+    fly_still_open = sichtbar(p, '.flyout .tile[data-kind="box"]')
+    p.pg.click('.flyout .tile[data-kind="box"]')
+    p.wait(200)
+    pop_vis = sichtbar(p, '#whatis-pop')
+    pop_title = (p.pg.locator('#whatis-pop .whatis-title').text_content() or '').strip() if pop_vis else ''
+    pop_text = (p.pg.locator('#whatis-pop .whatis-text').text_content() or '').strip() if pop_vis else ''
+    items_after_box = p.ev("return App.doc.items.length")
+    ok2 = bool(
+        fly_open and mode_on and fly_still_open and pop_vis
+        and 'quader' in pop_title.lower()
+        and ('du' in pop_text.lower() or 'dein' in pop_text.lower())
+        and items_after_box == 0
+        and p.ev("return UI.whatIsActive")
+    )
+
+    # 3. Weitere Elemente anklicken (#t-sketch, #btn-level, #lt-params) -> Erklärungen ohne Aktion
+    p.pg.click('#t-sketch')
+    p.wait(150)
+    sk_title = (p.pg.locator('#whatis-pop .whatis-title').text_content() or '').strip()
+    sk_text = (p.pg.locator('#whatis-pop .whatis-text').text_content() or '').strip()
+    p.pg.click('#btn-level')
+    p.wait(150)
+    lvl_text = (p.pg.locator('#whatis-pop .whatis-text').text_content() or '').strip()
+    p.pg.click('#lt-params')
+    p.wait(150)
+    par_text = (p.pg.locator('#whatis-pop .whatis-text').text_content() or '').strip()
+    no_side_effects = p.ev("return !Sketch.active && ViewPrefs.level === 'pro' && document.querySelector('#lt-tree').getAttribute('aria-selected') === 'true'")
+    ok3 = bool(
+        'skizze' in sk_title.lower() and len(sk_text) > 15
+        and 'einfach' in lvl_text.lower()
+        and ('maße' in par_text.lower() or 'formeln' in par_text.lower())
+        and no_side_effects
+    )
+
+    # 4. Esc beendet den Modus; normaler Klick auf Quader legt dann Quader an
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    mode_off = p.ev("return !UI.whatIsActive && !document.body.classList.contains('whatis-mode') && document.querySelector('#btn-whatis').getAttribute('aria-pressed') === 'false' && !document.querySelector('#whatis-pop')")
+    if not sichtbar(p, '.flyout .tile[data-kind="box"]'):
+        p.pg.click('#t-body')
+        p.wait(200)
+    p.pg.click('.flyout .tile[data-kind="box"]')
+    warte_rechnen(p, 20)
+    items_created = p.ev("return App.doc.items.length")
+    ok4 = bool(mode_off and items_created == 1)
+
+    # 5. Modus wieder an -> Klick auf Zeitleisten-Schritt / Verlaufs-Eintrag erklärt Schritt; Modus-Beenden-Knopf schaltet aus
+    p.pg.click('#btn-whatis')
+    p.wait(150)
+    p.pg.click('.tl-chip')
+    p.wait(150)
+    tl_text = (p.pg.locator('#whatis-pop .whatis-text').text_content() or '').strip()
+    p.pg.click('#left-body .node .nm')
+    p.wait(150)
+    nd_text = (p.pg.locator('#whatis-pop .whatis-text').text_content() or '').strip()
+    p.pg.click('#whatis-exit')
+    p.wait(150)
+    exited = p.ev("return !UI.whatIsActive && !document.querySelector('#whatis-pop')")
+    ok5 = bool(
+        ('schritt' in tl_text.lower() or 'quader' in tl_text.lower())
+        and ('schritt' in nd_text.lower() or 'quader' in nd_text.lower())
+        and exited
+    )
+
+    # 6. DE/EN-Schlüsselgleichheit, englische Erklärung, HELP & Befehlssuche
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const wiDesc = Explain.describeElement(document.querySelector('#btn-whatis'));
+      const helpOk = !!(h.whatIsThis && h.whatIsThis.tip && h.whatIsThis.hilfe && h.whatIsThis.tipp && UI.helpKey(document.querySelector('#btn-whatis')) === 'whatIsThis' && wiDesc && wiDesc.tip === h.whatIsThis.tipp);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('was ist das').some(c => c.id === 'what-is-this');
+      const prevLang = I18n.lang;
+      I18n.use('en');
+      const fakeTile = document.createElement('div');
+      fakeTile.dataset.kind = 'box';
+      const enBox = Explain.describeElement(fakeTile);
+      I18n.use(prevLang);
+      return { helpOk, i18nEq, cmdOk, enBox };
+    })()""")
+    ok6 = bool(
+        meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk')
+        and meta.get('enBox', {}).get('title') == 'Box'
+        and 'creates a box' in (meta.get('enBox', {}).get('text') or '').lower()
+        and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -27507,6 +27622,7 @@ TESTS = [
     ('[A-136] Aufkleber, Logos und Texturen (AN-15, AN-16)', t_a136_aufkleber_texturen),
     ('[A-131] Rändel (gerade, gekreuzt, Teilung) und Griffmuster (Rillen, Noppen)', t_a131_raendel_griffmuster),
     ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
+    ('[A-140] Was-ist-das-Modus: Klick erklärt Elemente statt auszuführen / Esc aus (BE-32)', t_a140_was_ist_das),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

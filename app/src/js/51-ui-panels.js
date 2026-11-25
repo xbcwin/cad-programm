@@ -73,7 +73,7 @@ const Panels = (() => {
     return h('div', { class: 'hint-box', id, style: { marginTop: '6px' }, html: `<b>${esc(mat.name || mat.k)}</b><br>${parts.join(' · ')}${srcHtml}` });
   }
   function closeFlyout() { if (flyout) { flyout.el.remove(); const b = flyout.btn; b && b.setAttribute('aria-expanded', 'false'); flyout = null; document.removeEventListener('pointerdown', flyOutside, true); } }
-  function flyOutside(e) { if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
+  function flyOutside(e) { if (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop')) return; if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
   function toggleFlyout(kind, btn) {
     if (flyout && flyout.kind === kind) { closeFlyout(); return; }
     closeFlyout();
@@ -82,7 +82,7 @@ const Panels = (() => {
       el.append(h('h3', null, T('tool.fly.bodiesTitle')));
       const tiles = h('div', { class: 'tiles' });
       for (const k of PRIMITIVE_ORDER) {
-        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': T('tool.fly.tileTip') });
+        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-kind': k, 'data-tip': T('tool.fly.tileTip') });
         t.innerHTML = primitiveSVG(k); t.append(h('span', { class: 'lbl' }, hyph(KINDS[k].label)));
         Place.bindTile(t, { kind: k });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPrimitive(k); closeFlyout(); } });
@@ -90,9 +90,9 @@ const Panels = (() => {
       }
       el.append(tiles);
       const row = h('div', { class: 'btn-row' });
-      const holeBtn = h('button', { type: 'button', class: 'btn small' }); holeBtn.innerHTML = icon('hole') + esc(T('tool.fly.cylHole'));
+      const holeBtn = h('button', { type: 'button', class: 'btn small', 'data-whatis': 'cylHole' }); holeBtn.innerHTML = icon('hole') + esc(T('tool.fly.cylHole'));
       holeBtn.onclick = () => { Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }); closeFlyout(); };
-      const boxHole = h('button', { type: 'button', class: 'btn small' }); boxHole.innerHTML = icon('hole') + esc(T('tool.fly.boxHole'));
+      const boxHole = h('button', { type: 'button', class: 'btn small', 'data-whatis': 'boxHole' }); boxHole.innerHTML = icon('hole') + esc(T('tool.fly.boxHole'));
       boxHole.onclick = () => { Actions.addPrimitive('box', { role: 'hole', name: 'Aussparung', p: { w: 10, d: 10, h: 30 } }); closeFlyout(); };
       const routeBtn = h('button', { type: 'button', class: 'btn small pro', id: 'add-route', 'data-help': 'route3d' }); routeBtn.innerHTML = icon('sweep') + esc(T('tool.fly.route3d'));
       routeBtn.onclick = () => { closeFlyout(); Features.route3d(); };
@@ -112,7 +112,7 @@ const Panels = (() => {
     } else {
       el.classList.add('parts');
       const makeTile = (d) => {
-        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
+        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-lib': d.lib, 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? T('common.hole') : T('common.body')));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });

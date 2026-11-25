@@ -2395,6 +2395,11 @@ const HELP = {
   "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
   "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",
   "tipp": "Mit „Randabstand“ und „Länge“ grenzt du den Griffbereich sauber gegen Kanten und Schultern ab."
+ },
+ "whatIsThis": {
+  "tip": "„Was ist das?“-Modus: Klick auf ein Element erklärt es",
+  "hilfe": "Schaltet den Erklär-Modus ein. Solange er aktiv ist, löst kein Klick eine Aktion aus – stattdessen erscheint direkt am angeklickten Knopf, Feld oder Bauteil eine kurze Erklärung in Du-Form.",
+  "tipp": "Mit Esc oder einem erneuten Klick auf „?“ verlässt du den Modus sofort wieder."
  }
 };
 
