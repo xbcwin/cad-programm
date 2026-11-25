@@ -1484,6 +1484,16 @@
     "hilfe": "Im Profi-Modus startest du eine 3D-Skizze ohne feste Ebene (über „Skizze → 3D-Skizze“ oder die Befehlssuche). Setze Punkte per Klick im Raum, fange exakt an Körperecken und Kantenmitten oder gib X, Y und Z rechts ein. Jede Linie und jeder 3-Punkt-Bogen lässt sich über Längenmaße (auch Formeln) festlegen und anschließend mit „Entlang Pfad“ zu einem Körper ziehen.",
     "tipp": "Wenn du an einer Körperecke fängst, merkt sich die 3D-Skizze diesen Körper und wandert mit, falls sich der Körper verschiebt."
   },
+  "boss": {
+    "tip": "Schraubdom mit 0–6 Stützrippen und Loch auf eine Fläche setzen",
+    "hilfe": "Wähle eine ebene Fläche eines Körpers und klicke auf „Schraubdom“. Tracery baut einen zylindrischen Dom mit Außen- und Lochdurchmesser, Höhe und bis zu 6 strahlenförmigen Rippen rundherum – alles wird direkt mit dem Körper vereinigt.",
+    "tipp": "Rechts kannst du Versatz U/V, Rippenlänge, Rippendicke und Winkel genau einstellen oder Formeln nutzen."
+  },
+  "lipGroove": {
+    "tip": "Lippe und Nut mit Spiel für zwei Gehäusehälften anlegen",
+    "hilfe": "Wähle eine Trennkante, eine ebene Trennfläche oder beide Gehäusehälften und starte „Lippe und Nut“. Die eine Hälfte bekommt eine umlaufende Stecklippe (innen oder außen), die andere Hälfte die passende Nut samt einstellbarem Spiel.",
+    "tipp": "Mit 0,2 mm Spiel lassen sich gedruckte Gehäusehälften ohne Klemmen zusammenstecken und zentrieren."
+  },
   "loftClosed": {
     "tip": "Geschlossener Übergang (Ring): verbindet den letzten Umriss zurück zum ersten (Profi)",
     "hilfe": "Wähle mindestens drei Skizzenkörper im Kreis oder schalte rechts beim Übergang „Geschlossen (Ring)“ ein. Tracery schließt die Form nahtlos vom letzten Querschnitt wieder an den ersten an – wahlweise weich oder mit geraden Flächen.",

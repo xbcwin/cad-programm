@@ -1157,7 +1157,13 @@ const App = (() => {
       const top = Model.topOf(S.doc, id);
       if (top) {
         selTop.add(top.id);
-        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'vent' || top.kind === 'fins' || top.kind === 'web' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'mirrorStep') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'vent' || top.kind === 'fins' || top.kind === 'web' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'mirrorStep' || top.kind === 'boss') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if (top.kind === 'lipGroove' && top.p) {
+          for (const tid of [top.p.lipTarget, top.p.grooveTarget]) {
+            if (!tid) continue;
+            selTop.add((S.merged && S.merged.get(tid)) || tid);
+          }
+        }
       }
       selTop.add('__ex:' + id);
     }

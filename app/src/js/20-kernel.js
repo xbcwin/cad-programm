@@ -715,13 +715,17 @@ const Kernel = (() => {
       if (ti != null) union(idx, ti);
     };
 
-    const TARGET_KINDS = new Set(['transform', 'scale', 'thicken', 'rib', 'vent', 'fins', 'web', 'wrap', 'emboss', 'deleteBody']);
+    const TARGET_KINDS = new Set(['transform', 'scale', 'thicken', 'rib', 'vent', 'fins', 'web', 'wrap', 'emboss', 'deleteBody', 'boss', 'lipGroove']);
     const walkDeps = (x, topIdx, isTop) => {
       if (!x || x.hidden) return;
       const p = x.p || {};
       if (x.op && x.op.target) unionRef(topIdx, x.op.target);
       if (TARGET_KINDS.has(x.kind) && p.target) unionRef(topIdx, p.target);
       if (x.kind === 'deleteBody' && Array.isArray(p.targets)) for (const tid of p.targets) unionRef(topIdx, tid);
+      if (x.kind === 'lipGroove') {
+        if (p.lipTarget) unionRef(topIdx, p.lipTarget);
+        if (p.grooveTarget) unionRef(topIdx, p.grooveTarget);
+      }
       if (x.kind === 'sweep' && p.wrapId) unionRef(topIdx, p.wrapId);
       if (x.kind === 'extrude' && p.extent === 'toFace' && p.toFace && p.toFace.id) unionRef(topIdx, p.toFace.id);
       if (x.kind === 'revolve' && p.dir === 'toFace' && p.toFace && p.toFace.targetId) unionRef(topIdx, p.toFace.targetId);

@@ -38,6 +38,8 @@ const KINDS = {
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
+  boss: { get label() { return T('kind.boss'); }, params: [] },
+  lipGroove: { get label() { return T('kind.lipGroove'); }, params: [] },
   sketch3d: { get label() { return T('kind.sketch3d'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
 };
@@ -422,6 +424,11 @@ const Model = (() => {
         }
       }
       if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
+      if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
+      if (it.kind === 'lipGroove' && it.p) {
+        if (it.p.lipTarget) out.push({ from: me, to: top(it.p.lipTarget), what: 'Lippe an' });
+        if (it.p.grooveTarget) out.push({ from: me, to: top(it.p.grooveTarget), what: 'Nut in' });
+      }
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
@@ -601,6 +608,35 @@ const Model = (() => {
         const p = it.p || {};
         const targets = Array.isArray(p.targets) ? p.targets.filter(Boolean) : (p.target ? [p.target] : []);
         o.p = { targets };
+      } else if (it.kind === 'boss') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          outerD: num(p.outerD, ownV, 8),
+          holeD: num(p.holeD, ownV, 3),
+          height: num(p.height, ownV, 10),
+          holeDepth: num(p.holeDepth, ownV, 0),
+          ribs: Math.max(0, Math.min(6, Math.round(num(p.ribs, ownV, 4)))),
+          ribT: num(p.ribT, ownV, 1.5),
+          ribL: num(p.ribL, ownV, 4),
+          ribH: num(p.ribH, ownV, 0),
+          ribAngle: num(p.ribAngle, ownV, 0),
+          u: num(p.u, ownV, 0),
+          v: num(p.v, ownV, 0),
+        };
+      } else if (it.kind === 'lipGroove') {
+        const p = it.p || {};
+        o.p = {
+          lipTarget: p.lipTarget || null,
+          grooveTarget: p.grooveTarget || null,
+          face: p.face || null,
+          edge: p.edge || null,
+          side: p.side === 'outer' ? 'outer' : 'inner',
+          height: num(p.height, ownV, 2),
+          width: num(p.width, ownV, 1.2),
+          clearance: Math.max(0, num(p.clearance, ownV, 0.2)),
+        };
       }
       else {
         o.p = resolveP(it.p, ownV);
@@ -1664,6 +1700,11 @@ const Model = (() => {
         return `${parts.join(', ')} · ${f(res.totalLength)}${u}`;
       }
       case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
+      case 'boss': {
+        const ribs = Math.max(0, Math.min(6, Math.round(p.ribs ?? 4)));
+        return `Ø ${f(p.outerD ?? 8)}/${f(p.holeD ?? 3)}${u} · H ${f(p.height ?? 10)}${u}${ribs > 0 ? ` · ${ribs} Rippen` : ''}`;
+      }
+      case 'lipGroove': return `H ${f(p.height ?? 2)}${u} · Spiel ${f(p.clearance ?? 0.2)}${u}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'mirrorStep': {
@@ -1857,7 +1898,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'deleteBody' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

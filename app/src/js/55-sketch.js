@@ -8163,7 +8163,7 @@ const Sketch = (() => {
         stepBox.append(ex, fl);
       }
     } else if (st.sweep) {
-      const sweepTargets = !App.ctx ? App.doc.items.filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target)) : [];
+      const sweepTargets = !App.ctx ? App.doc.items.filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'boss' && x.kind !== 'lipGroove' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target)) : [];
       if (sweepTargets.length) {
         if (!st.sweepTarget || !sweepTargets.some((x) => x.id === st.sweepTarget)) st.sweepTarget = sweepTargets[sweepTargets.length - 1].id;
         const opF = UI.selectField({

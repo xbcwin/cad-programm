@@ -4325,7 +4325,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -6568,6 +6568,420 @@ export function createKernel(R, oc) {
     }
   }
 
+  function basisFromNormal(fn) {
+    const n = norm(fn);
+    const ref = Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const bx = norm(cross(ref, n));
+    const by = norm(cross(n, bx));
+    return { bx, by, fn: n };
+  }
+
+  function buildBossOn(baseShape, baseTopo, baseId, stepId, p) {
+    const outerD = num(p.outerD, 8);
+    const holeD = num(p.holeD, 3);
+    const height = num(p.height, 10);
+    const holeDepth = num(p.holeDepth, 0);
+    const ribs = Math.max(0, Math.min(6, Math.round(num(p.ribs, 4))));
+    const ribT = num(p.ribT, 1.5);
+    const ribL = num(p.ribL, 4);
+    const ribH = num(p.ribH, 0);
+    const ribAngle = num(p.ribAngle, 0);
+    const u = num(p.u, 0);
+    const v = num(p.v, 0);
+
+    if (!(outerD > 0.2 && isFinite(outerD))) throw new Error('Schraubdom: Der Außendurchmesser muss größer als 0,2 mm sein.');
+    if (!(height > 0.1 && isFinite(height))) throw new Error('Schraubdom: Die Höhe muss größer als 0,1 mm sein.');
+    if (!(holeD >= 0 && isFinite(holeD))) throw new Error('Schraubdom: Der Lochdurchmesser darf nicht negativ sein.');
+    if (holeD > 0 && holeD >= outerD - 0.1) throw new Error('Schraubdom: Der Lochdurchmesser muss kleiner als der Außendurchmesser sein.');
+
+    const fArr = [];
+    try { for (const fx of baseShape.faces) fArr.push(fx); } catch (_) {}
+    let fc = null, fn = null;
+    try {
+      const b = bboxOf(baseShape);
+      const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+      const f = resolveFaceRef({ ...p.face, tol }, fArr, baseTopo, baseId, true)[0] || matchFace(baseShape, p.face);
+      if (!f || f.geomType !== 'PLANE') {
+        const err = new Error('Schraubdom: Die gewählte ebene Fläche gibt es nicht mehr.');
+        err.code = 'edges';
+        throw err;
+      }
+      fc = vec(f.center);
+      fn = norm(vec(f.normalAt()));
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+
+    const { bx, by } = basisFromNormal(fn);
+    const baseO = add(fc, add(mul(bx, u), mul(by, v)));
+    const emb = 0.05;
+    const outerR = outerD / 2;
+
+    let bossSolid = null, bossTopo = null, fused = null, holeCyl = null;
+    try {
+      bossSolid = R.makeCylinder(outerR, height + emb, add(baseO, mul(fn, -emb)), fn);
+      if (ribs > 0) {
+        const rT = Math.min(outerD * 0.85, Math.max(0.2, ribT));
+        const rL = Math.max(0.2, ribL);
+        const rH = ribH > 0 ? Math.min(height, Math.max(0.2, ribH)) : Math.max(0.4, height * 0.75);
+        const rIn = Math.min(outerR * 0.6, Math.max(0.1, outerR - 0.15));
+        const rOut = outerR + rL;
+        for (let k = 0; k < ribs; k++) {
+          const ang = (ribAngle * Math.PI) / 180 + (2 * Math.PI * k) / ribs;
+          const rad = add(mul(bx, Math.cos(ang)), mul(by, Math.sin(ang)));
+          const tan = add(mul(bx, -Math.sin(ang)), mul(by, Math.cos(ang)));
+          const ptAt = (rVal, zVal) => add(add(baseO, mul(rad, rVal)), add(mul(fn, zVal), mul(tan, -rT / 2)));
+          const pts3 = [ptAt(rIn, 0), ptAt(rOut, 0), ptAt(outerR, rH), ptAt(rIn, rH)];
+          let rFace = null, rSolid = null;
+          try {
+            rFace = polygonFace(pts3);
+            rSolid = R.basicFaceExtrusion(rFace, new R.Vector(mul(tan, rT)));
+            if (R.measureVolume(rSolid) < 0) rSolid = R.cast(rSolid.wrapped.Reversed());
+            const nxt = bossSolid.fuse(rSolid);
+            safeDelete(bossSolid);
+            bossSolid = nxt;
+          } finally {
+            safeDelete(rFace);
+            safeDelete(rSolid);
+          }
+        }
+      }
+      bossTopo = ensureTopoComplete(bossSolid, createTopoMap(), stepId);
+      fused = boolWithTopo('fuse', baseShape, baseTopo, baseId, bossSolid, bossTopo, stepId, 'Boss:' + stepId);
+      if (!(holeD > 0)) {
+        const out = { shape: fused.shape, topo: fused.topo };
+        fused = null;
+        return out;
+      }
+      const hDepth = holeDepth > 0 ? Math.min(height + emb, holeDepth) : height;
+      const zBot = height - hDepth;
+      holeCyl = R.makeCylinder(holeD / 2, hDepth + 0.5, add(baseO, mul(fn, zBot)), fn);
+      const cutRes = boolWithTopo('cut', fused.shape, fused.topo, baseId, holeCyl, null, stepId, 'BossH:' + stepId);
+      return { shape: cutRes.shape, topo: cutRes.topo };
+    } finally {
+      safeDelete(bossSolid);
+      freeTopoMap(bossTopo);
+      if (fused) { safeDelete(fused.shape); freeTopoMap(fused.topo); }
+      safeDelete(holeCyl);
+    }
+  }
+
+  function buildLipGrooveOn(srcA, srcB, relAB, stepId, p) {
+    const side = p.side === 'outer' ? 'outer' : 'inner';
+    const height = num(p.height, 2);
+    const width = num(p.width, 1.2);
+    const clearance = Math.max(0, num(p.clearance, 0.2));
+    if (!(height > 0.05 && isFinite(height))) throw new Error('Lippe und Nut: Die Höhe muss größer als 0,05 mm sein.');
+    if (!(width > 0.05 && isFinite(width))) throw new Error('Lippe und Nut: Die Breite muss größer als 0,05 mm sein.');
+    if (!(clearance >= 0 && isFinite(clearance))) throw new Error('Lippe und Nut: Das Spiel darf nicht negativ sein.');
+
+    const makePlanarFaceFromWire = (gpPln, wire) => {
+      const mf = new oc.BRepBuilderAPI_MakeFace(gpPln, wire, true);
+      let nf = mf.Face(); mf.delete();
+      const sff = new oc.ShapeFix_Face(nf);
+      sff.FixOrientation();
+      sff.Perform();
+      nf = sff.Face();
+      sff.delete();
+      return nf;
+    };
+
+    const wireAreaOnPlane = (gpPln, wire) => {
+      let fw = null, rs = null;
+      try {
+        fw = makePlanarFaceFromWire(gpPln, wire);
+        rs = R.cast(fw);
+        return Math.abs(R.measureArea(rs));
+      } catch (_) {
+        return 0;
+      } finally {
+        if (rs) safeDelete(rs);
+        else if (fw && fw.delete) try { fw.delete(); } catch (_) {}
+      }
+    };
+
+    const extractWireFromOffset = (raw, gpPln) => {
+      if (!raw || raw.IsNull()) return null;
+      if (raw.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_WIRE) return oc.TopoDS.Wire(raw);
+      const wires = [];
+      const ex = new oc.TopExp_Explorer(raw, oc.TopAbs_ShapeEnum.TopAbs_WIRE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+      try {
+        while (ex.More()) { wires.push(oc.TopoDS.Wire(ex.Current())); ex.Next(); }
+      } finally { ex.delete(); }
+      if (!wires.length) return null;
+      if (wires.length === 1) return wires[0];
+      let best = wires[0], bestA = wireAreaOnPlane(gpPln, best);
+      for (let i = 1; i < wires.length; i++) {
+        const a = wireAreaOnPlane(gpPln, wires[i]);
+        if (a > bestA) { best = wires[i]; bestA = a; }
+      }
+      return best;
+    };
+
+    const offsetClosedWire = (wire, gpPln, dist, wantLarger, throwOnFail = true) => {
+      if (Math.abs(dist) < 1e-6) return wire;
+      const edges = collectEdges(wire);
+      if (edges.length === 1) {
+        let ad = null;
+        try {
+          ad = new oc.BRepAdaptor_Curve(edges[0]);
+          if (ad.GetType() === oc.GeomAbs_CurveType.GeomAbs_Circle) {
+            const per = Math.abs(ad.LastParameter() - ad.FirstParameter());
+            if (Math.abs(per - 2 * Math.PI) < 0.05) {
+              const gc = ad.Circle();
+              const r0 = gc.Radius();
+              const rNew = wantLarger ? r0 + dist : r0 - dist;
+              if (rNew <= 0.05) {
+                if (throwOnFail) throw new Error('Lippe und Nut: Versatz ist zu groß für diesen Kreis.');
+                return null;
+              }
+              const loc = gc.Location(), ax = gc.Axis().Direction();
+              const p0 = new oc.gp_Pnt(loc.X(), loc.Y(), loc.Z());
+              const d0 = new oc.gp_Dir(ax.X(), ax.Y(), ax.Z());
+              const ax2 = new oc.gp_Ax2(p0, d0);
+              const nCirc = new oc.gp_Circ(ax2, rNew);
+              const me = new oc.BRepBuilderAPI_MakeEdge(nCirc);
+              const ne = me.Edge();
+              const wb = new oc.BRepBuilderAPI_MakeWire(ne);
+              const outW = wb.Wire();
+              wb.delete(); me.delete(); nCirc.delete(); ax2.delete(); d0.delete(); p0.delete();
+              return outW;
+            }
+          }
+        } catch (err) {
+          if (err && /Versatz ist zu groß/.test(err.message)) throw err;
+        } finally {
+          if (ad && ad.delete) try { ad.delete(); } catch (_) {}
+        }
+      }
+
+      const area0 = wireAreaOnPlane(gpPln, wire);
+      const tryOffOn = (srcW, srcPln, d, joinType) => {
+        let off = null;
+        try {
+          off = new oc.BRepOffsetAPI_MakeOffset(srcW, joinType, false);
+          off.Perform(d, 0);
+          if (off.IsDone && !off.IsDone()) return null;
+          const raw = off.Shape();
+          return extractWireFromOffset(raw, srcPln);
+        } catch (_) {
+          return null;
+        } finally {
+          if (off && off.delete) try { off.delete(); } catch (_) {}
+        }
+      };
+
+      const checkDir = (w, pln, refArea) => {
+        if (!w) return false;
+        const a = wireAreaOnPlane(pln, w);
+        if (!(a > 1e-4)) return false;
+        return wantLarger ? a > refArea + 1e-4 : a < refArea - 1e-4;
+      };
+
+      const joins = [oc.GeomAbs_JoinType.GeomAbs_Intersection, oc.GeomAbs_JoinType.GeomAbs_Arc];
+      for (const jt of joins) {
+        for (const sg of [1, -1]) {
+          const cand = tryOffOn(wire, gpPln, sg * dist, jt);
+          if (checkDir(cand, gpPln, area0)) return cand;
+        }
+      }
+
+      // Fallback über XY-Ebene falls die 3D-Ebene schräg/verschoben ist
+      let trToXY = null, trBack = null, xyPln = null;
+      try {
+        const loc = gpPln.Location(), axDir = gpPln.Axis().Direction(), xDir = gpPln.XAxis().Direction();
+        const srcAx3 = new oc.gp_Ax3(loc, axDir, xDir);
+        const dstAx3 = new oc.gp_Ax3();
+        trToXY = new oc.gp_Trsf(); trToXY.SetDisplacement(srcAx3, dstAx3);
+        trBack = new oc.gp_Trsf(); trBack.SetDisplacement(dstAx3, srcAx3);
+        const bTo = new oc.BRepBuilderAPI_Transform(wire, trToXY, true, false);
+        const xyW = oc.TopoDS.Wire(bTo.ModifiedShape(wire)); bTo.delete();
+        const p0 = new oc.gp_Pnt(0, 0, 0), dz = new oc.gp_Dir(0, 0, 1);
+        xyPln = new oc.gp_Pln(p0, dz); p0.delete(); dz.delete();
+        srcAx3.delete(); dstAx3.delete();
+        const areaXY = wireAreaOnPlane(xyPln, xyW);
+        for (const jt of joins) {
+          for (const sg of [1, -1]) {
+            const candXY = tryOffOn(xyW, xyPln, sg * dist, jt);
+            if (checkDir(candXY, xyPln, areaXY)) {
+              const bBk = new oc.BRepBuilderAPI_Transform(candXY, trBack, true, false);
+              const outW = oc.TopoDS.Wire(bBk.ModifiedShape(candXY)); bBk.delete();
+              return outW;
+            }
+          }
+        }
+      } catch (_) {}
+      finally {
+        if (trToXY && trToXY.delete) try { trToXY.delete(); } catch (_) {}
+        if (trBack && trBack.delete) try { trBack.delete(); } catch (_) {}
+        if (xyPln && xyPln.delete) try { xyPln.delete(); } catch (_) {}
+      }
+
+      if (throwOnFail) throw new Error('Lippe und Nut: Der Rand ist für diese Breite zu schmal oder zu komplex.');
+      return null;
+    };
+
+    const makeSolidPrismFromWire = (wire, gpPln, fn, z0, z1) => {
+      const fw = makePlanarFaceFromWire(gpPln, wire);
+      let f = R.cast(fw);
+      if (Math.abs(z0) > 1e-9) {
+        const ft = f.translate(mul(fn, z0));
+        safeDelete(f);
+        f = ft;
+      }
+      const vecArg = new oc.gp_Vec(fn[0] * (z1 - z0), fn[1] * (z1 - z0), fn[2] * (z1 - z0));
+      const pr = new oc.BRepPrimAPI_MakePrism(f.wrapped, vecArg, false, true);
+      let res = R.cast(pr.Shape());
+      pr.delete(); vecArg.delete(); safeDelete(f);
+      if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+      return res;
+    };
+
+    const makeRingPrism = (outerW, innerW, gpPln, fn, z0, z1) => {
+      const pOut = makeSolidPrismFromWire(outerW, gpPln, fn, z0, z1);
+      const pIn = makeSolidPrismFromWire(innerW, gpPln, fn, z0 - 0.5, z1 + 0.5);
+      try {
+        return pOut.cut(pIn);
+      } finally {
+        safeDelete(pOut);
+        safeDelete(pIn);
+      }
+    };
+
+    const fArrA = [], fArrB = [];
+    try { for (const fx of srcA.shape.faces) fArrA.push(fx); } catch (_) {}
+    try { for (const fx of srcB.shape.faces) fArrB.push(fx); } catch (_) {}
+
+    let gpPln = null, lipSolid = null, grooveCutA = null, grooveCutB = null, resA = null, resB = null, invBShape = null;
+    try {
+      const bA = bboxOf(srcA.shape);
+      const tolA = 0.05 + 1e-3 * Math.max(bA[3] - bA[0], bA[4] - bA[1], bA[5] - bA[2]);
+      let faceA = p.face ? (resolveFaceRef({ ...p.face, tol: tolA }, fArrA, srcA.topo, srcA.it.id, true)[0] || matchFace(srcA.shape, p.face)) : null;
+
+      if (!faceA && p.edge && Array.isArray(p.edge.a) && Array.isArray(p.edge.b)) {
+        const mPt = Array.isArray(p.edge.m) ? p.edge.m : mul(add(p.edge.a, p.edge.b), 0.5);
+        const bbBInA = bboxTransform(bboxOf(srcB.shape), matInvRigid(relAB));
+        const cBInA = [(bbBInA[0] + bbBInA[3]) / 2, (bbBInA[1] + bbBInA[4]) / 2, (bbBInA[2] + bbBInA[5]) / 2];
+        let bestScore = -Infinity;
+        for (const fx of fArrA) {
+          if (fx.geomType !== 'PLANE') continue;
+          const fc = vec(fx.center), fn = norm(vec(fx.normalAt()));
+          const onPln = (pt) => Math.abs(dot(sub(pt, fc), fn)) < 0.05;
+          if (onPln(p.edge.a) && onPln(p.edge.b) && onPln(mPt)) {
+            const sc = dot(norm(sub(cBInA, fc)), fn);
+            if (sc > bestScore) { bestScore = sc; faceA = fx; }
+          }
+        }
+      }
+
+      if (!faceA || faceA.geomType !== 'PLANE') {
+        const err = new Error('Lippe und Nut: Die ebene Trennfläche wurde nicht gefunden.');
+        err.code = 'edges';
+        throw err;
+      }
+
+      const fc = vec(faceA.center);
+      const fn = norm(vec(faceA.normalAt()));
+      const gpP = new oc.gp_Pnt(fc[0], fc[1], fc[2]);
+      const gpD = new oc.gp_Dir(fn[0], fn[1], fn[2]);
+      gpPln = new oc.gp_Pln(gpP, gpD);
+      gpP.delete(); gpD.delete();
+
+      const wiresA = collectWires(oc.TopoDS.Face(faceA.wrapped));
+      const wOut = wiresA[0];
+      if (!wOut) throw new Error('Lippe und Nut: Der Umriss der Trennfläche fehlt.');
+      let wIn = null;
+      if (wiresA.length > 1) {
+        let bestInA = -1;
+        for (let wi = 1; wi < wiresA.length; wi++) {
+          const a = wireAreaOnPlane(gpPln, wiresA[wi]);
+          if (a > bestInA) { bestInA = a; wIn = wiresA[wi]; }
+        }
+      }
+
+      // Wenn die Lippen-Hälfte massiv ist, prüfen ob die Nut-Hälfte an der Trennebene ein inneres Loch hat
+      if (!wIn) {
+        const invRel = matInvRigid(relAB);
+        invBShape = isIdentity(invRel) ? srcB.shape.clone() : applyMatrix(srcB.shape, invRel);
+        const fbArr = [];
+        try { for (const fx of invBShape.faces) fbArr.push(fx); } catch (_) {}
+        try {
+          for (const fx of fbArr) {
+            if (fx.geomType !== 'PLANE') continue;
+            const nB = norm(vec(fx.normalAt())), cB = vec(fx.center);
+            if (dot(nB, fn) < -0.99 && Math.abs(dot(sub(cB, fc), fn)) < 0.1) {
+              const wiresB = collectWires(oc.TopoDS.Face(fx.wrapped));
+              if (wiresB.length > 1) {
+                let bestInB = -1;
+                for (let wi = 1; wi < wiresB.length; wi++) {
+                  const a = wireAreaOnPlane(gpPln, wiresB[wi]);
+                  if (a > bestInB) { bestInB = a; wIn = wiresB[wi]; }
+                }
+                break;
+              }
+            }
+          }
+        } finally {
+          for (const fx of fbArr) safeDelete(fx);
+        }
+      }
+
+      const areaOut = wireAreaOnPlane(gpPln, wOut);
+      const areaIn = wIn ? wireAreaOnPlane(gpPln, wIn) : 0;
+
+      if (side === 'inner') {
+        if (wIn) {
+          const wLipOut = offsetClosedWire(wIn, gpPln, width, true);
+          if (wireAreaOnPlane(gpPln, wLipOut) >= areaOut - 1e-2) {
+            throw new Error('Lippe und Nut: Die Lippe ist breiter als die Gehäusewand.');
+          }
+          lipSolid = makeRingPrism(wLipOut, wIn, gpPln, fn, -0.05, height);
+          const wGrvOut = offsetClosedWire(wIn, gpPln, width + clearance, true);
+          if (wireAreaOnPlane(gpPln, wGrvOut) >= areaOut - 1e-2) {
+            throw new Error('Lippe und Nut: Lippenbreite plus Spiel passt nicht in die Gehäusewand.');
+          }
+          grooveCutA = makeSolidPrismFromWire(wGrvOut, gpPln, fn, -0.1, height + clearance);
+        } else {
+          const wGrvOut = offsetClosedWire(wOut, gpPln, width, false);
+          const wLipOut = offsetClosedWire(wOut, gpPln, width + clearance, false);
+          const wLipIn = offsetClosedWire(wOut, gpPln, 2 * width + clearance, false, false);
+          lipSolid = wLipIn ? makeRingPrism(wLipOut, wLipIn, gpPln, fn, -0.05, height) : makeSolidPrismFromWire(wLipOut, gpPln, fn, -0.05, height);
+          grooveCutA = makeSolidPrismFromWire(wGrvOut, gpPln, fn, -0.1, height + clearance);
+        }
+      } else {
+        const wLipIn = offsetClosedWire(wOut, gpPln, width, false);
+        if (wIn && wireAreaOnPlane(gpPln, wLipIn) <= areaIn + 1e-2) {
+          throw new Error('Lippe und Nut: Die Lippe ist breiter als die Gehäusewand.');
+        }
+        lipSolid = makeRingPrism(wOut, wLipIn, gpPln, fn, -0.05, height);
+        const wGrvIn = offsetClosedWire(wOut, gpPln, width + clearance, false);
+        if (wIn && wireAreaOnPlane(gpPln, wGrvIn) <= areaIn + 1e-2) {
+          throw new Error('Lippe und Nut: Lippenbreite plus Spiel passt nicht in die Gehäusewand.');
+        }
+        const wGrvOut = offsetClosedWire(wOut, gpPln, Math.max(2.0, width + clearance + 1.0), true);
+        grooveCutA = makeRingPrism(wGrvOut, wGrvIn, gpPln, fn, -0.1, height + clearance);
+      }
+
+      resA = boolWithTopo('fuse', srcA.shape, srcA.topo, srcA.it.id, lipSolid, null, stepId, 'Lip:' + stepId);
+      grooveCutB = isIdentity(relAB) ? grooveCutA.clone() : applyMatrix(grooveCutA, relAB);
+      resB = boolWithTopo('cut', srcB.shape, srcB.topo, srcB.it.id, grooveCutB, null, stepId, 'Grv:' + stepId);
+
+      const out = { shapeA: resA.shape, topoA: resA.topo, shapeB: resB.shape, topoB: resB.topo };
+      resA = null; resB = null;
+      return out;
+    } finally {
+      for (const fx of fArrA) safeDelete(fx);
+      for (const fx of fArrB) safeDelete(fx);
+      if (gpPln && gpPln.delete) try { gpPln.delete(); } catch (_) {}
+      safeDelete(invBShape);
+      safeDelete(lipSolid);
+      safeDelete(grooveCutA);
+      safeDelete(grooveCutB);
+      if (resA) { safeDelete(resA.shape); freeTopoMap(resA.topo); }
+      if (resB) { safeDelete(resB.shape); freeTopoMap(resB.topo); }
+    }
+  }
+
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
   // known = { id: resultKey } (was die Anzeige schon hat)
@@ -7052,6 +7466,75 @@ export function createKernel(R, oc) {
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'boss') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Schraubdom: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, 'boss', p]);
+        const ceB = cacheEntry(k);
+        let next = ceB ? ceB.shape : null, nextTopo = ceB ? ceB.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildBossOn(src.shape, src.topo, src.it.id, it.id, p);
+            next = built.shape; nextTopo = built.topo;
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: err && err.code === 'edges' ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'lipGroove') {
+        const p = it.p || {};
+        let tidA = p.lipTarget, tidB = p.grooveTarget;
+        while (tidA && consumed.has(tidA)) tidA = consumed.get(tidA);
+        while (tidB && consumed.has(tidB)) tidB = consumed.get(tidB);
+        const tA = tidA ? byId.get(tidA) : null, srcA = tidA ? live.get(tidA) : null;
+        const tB = tidB ? byId.get(tidB) : null, srcB = tidB ? live.get(tidB) : null;
+        if (!tA || tA.i >= i || !srcA || !srcA.shape || srcA.it.role === 'hole' || !tB || tB.i >= i || !srcB || !srcB.shape || srcB.it.role === 'hole' || tidA === tidB) {
+          errors.push({ itemId: it.id, code: 'op', message: 'Lippe und Nut: Beide Gehäusehälften müssen vor diesem Schritt vorhanden und verschieden sein.' });
+          continue;
+        }
+        consumed.set(it.id, tidA);
+        const relAB = matMul(matInvRigid(srcB.m), srcA.m);
+        const relKey = relAB.map(r6);
+        const kA = keyOf([srcA.key, srcB.key, 'lipA', p, relKey]);
+        const kB = keyOf([srcA.key, srcB.key, 'grooveB', p, relKey]);
+        const ceA = cacheEntry(kA), ceB = cacheEntry(kB);
+        let nextA = ceA ? ceA.shape : null, topoA = ceA ? ceA.topo : null;
+        let nextB = ceB ? ceB.shape : null, topoB = ceB ? ceB.topo : null;
+        if (!nextA || !nextB) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildLipGrooveOn(srcA, srcB, relAB, it.id, p);
+            nextA = built.shapeA; topoA = built.topoA;
+            nextB = built.shapeB; topoB = built.topoB;
+            cachePut(kA, nextA, null, null, null, topoA);
+            cachePut(kB, nextB, null, null, null, topoB);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: err && err.code === 'edges' ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        srcA.shape = nextA; srcA.topo = topoA; srcA.key = kA; srcA.wb = bboxTransform(bboxCached(kA, nextA), srcA.m);
+        srcB.shape = nextB; srcB.topo = topoB; srcB.key = kB; srcB.wb = bboxTransform(bboxCached(kB, nextB), srcB.m);
+        bodies.set(tidA, srcA);
+        bodies.set(tidB, srcB);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf(['lipGroove', kA, kB]));
         continue;
       }
       if (it.kind === 'sweep' && it.p && it.p.wrapId) {
