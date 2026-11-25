@@ -26065,6 +26065,64 @@ def t_a128_fuellmuster_punkte_tabelle(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [F-11250536] Volltest-Reparatur: Skizzen-Koordinaten, Befehlssuche, Drehteller-Video ----------
+def t_f11250536(p):
+    # 1. Skizzen-Koordinaten werden bei pointermove sofort ohne Timer-Verzögerung aktualisiert
+    p.empty()
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(700)
+    s = to_screen(p, 12, 7)
+    r1 = p.ev("""
+      const origST = window.setTimeout;
+      window.setTimeout = () => 0;
+      try {
+        Viewer.canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: arg[0], clientY: arg[1], buttons: 0, bubbles: true }));
+        return {
+          txt: document.querySelector('#coords')?.textContent || '',
+          mc: Measure.coords,
+        };
+      } finally {
+        window.setTimeout = origST;
+      }
+    """, s)
+    ok1 = bool(
+        r1 and r1['txt'].startswith('Skizze') and 'X 12' in r1['txt'] and 'Y 7' in r1['txt']
+        and r1['mc'] and r1['mc'].get('sketch') is True
+        and abs(r1['mc']['x'] - 12) < 1e-6 and abs(r1['mc']['y'] - 7) < 1e-6
+    )
+    p.ev("Sketch.cancel(true)"); p.wait(300)
+
+    # 2. Befehlssuche „fläche auf fläche“ findet „Verbindung: Eben (Fläche auf Fläche)“ an erster Stelle
+    r2 = p.ev("""
+      return {
+        planar: Commands.search('fläche auf fläche').map(c => c.id),
+        cyl: Commands.search('zylindrisch').map(c => c.id),
+      };
+    """)
+    ok2 = bool(r2['planar'] and r2['planar'][0] == 'mate-planar' and 'mate-cyl' in r2['cyl'])
+
+    # 3. Drehteller-Video nimmt bei blockiertem requestAnimationFrame über 2D-Puffer ein echtes Video auf
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:30,d:20,h:10},{name:'Teil'})); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false)"); p.wait(400)
+    c0 = p.ev("return Viewer.camera.position.toArray()")
+    r3 = p.ev("""
+      const origRAF = window.requestAnimationFrame;
+      window.requestAnimationFrame = () => 1;
+      return Print.turntable({ seconds: 1.0, save: false })
+        .then(b => ({
+          size: b ? b.size : 0,
+          type: (Print.lastVideo && Print.lastVideo.type) || '',
+          leftover: document.querySelectorAll('body > canvas').length,
+        }))
+        .finally(() => { window.requestAnimationFrame = origRAF; });
+    """)
+    c1 = p.ev("return Viewer.camera.position.toArray()")
+    ok3 = bool(
+        r3 and r3['size'] > 1000 and r3['type'].startswith('video/') and r3['leftover'] == 0
+        and max(abs(a - b) for a, b in zip(c0, c1)) < 1e-6
+    )
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26305,6 +26363,7 @@ TESTS = [
     ('[A-130] Freistich, Einstich (DIN 471/472), Passfeder-Nut (DIN 6885), Keilwelle (DIN ISO 14)', t_a130_wellen_features),
     ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
+    ('[F-11250536] Volltest-Reparatur: Skizzen-Koordinaten sofort / Befehlssuche „Fläche auf Fläche“ / Drehteller-Video über 2D-Puffer', t_f11250536),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

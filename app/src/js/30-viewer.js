@@ -360,7 +360,7 @@ const Viewer = (() => {
       camera.position.lerpVectors(camAnim.p0, camAnim.p1, e);
       controls.target.lerpVectors(camAnim.q0, camAnim.q1, e);
       if (camAnim.up0) camera.up.lerpVectors(camAnim.up0, camAnim.up1, e).normalize();
-      if (t >= 1) cancelCamAnim();
+      if (t >= 1) { cancelCamAnim(); stopDamping(); }
       needsRender = true; camMoved = true;
     }
     if (controls) controls.dampingFactor = (!orbitActive && loopDt > 24) ? (1 - Math.pow(1 - BASE_DAMP, clamp(loopDt / (1000 / 60), 1, 60))) : BASE_DAMP;

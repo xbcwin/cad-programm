@@ -445,8 +445,18 @@ const Commands = (() => {
   function score(c, q) {
     if (!q) return 0;
     const words = q.split(/\s+/).filter(Boolean); let s = 0;
-    for (const w of words) { const i = c.keys.indexOf(w); if (i < 0) return -1; s += i === 0 ? 3 : c.keys[i - 1] === ' ' ? 2 : 1; }
-    return s + (normTxt(c.label).startsWith(q) ? 5 : 0);
+    for (const w of words) {
+      const i = c.keys.indexOf(w);
+      if (i < 0) return -1;
+      s += i === 0 ? 3 : !/[a-z0-9]/.test(c.keys[i - 1]) ? 2 : 1;
+    }
+    const lbl = normTxt(c.label);
+    if (lbl.startsWith(q)) s += 5;
+    if (words.length > 1) {
+      if (lbl.includes(q)) s += 6;
+      else if (c.keys.includes(q)) s += 3;
+    }
+    return s;
   }
   function search(text) {
     const q = normTxt(text.trim()); if (!q) return [];

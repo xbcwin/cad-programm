@@ -1066,9 +1066,18 @@ const Measure = (() => {
     };
     Viewer.canvas.addEventListener('pointermove', (e) => {
       if (e.buttons) { lastPos = null; return; }
+      if (Sketch.active && Sketch.state && Sketch.state.F) {
+        if (timer) { clearTimeout(timer); timer = null; }
+        lastPos = null;
+        lastT = performance.now();
+        showCoords(e.clientX, e.clientY);
+        return;
+      }
       lastPos = [e.clientX, e.clientY];
       if (timer) return;
-      timer = setTimeout(flushCoords, Math.max(0, 50 - (performance.now() - lastT)));
+      const wait = Math.max(0, 50 - (performance.now() - lastT));
+      if (wait === 0) { flushCoords(); return; }
+      timer = setTimeout(flushCoords, wait);
     });
     Viewer.canvas.addEventListener('pointerleave', () => {
       lastPos = null;

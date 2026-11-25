@@ -2489,6 +2489,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Muster aus CSV-Tabelle (`pt: 'table'`)**: Quader `6×6×6` über `Features.patternTable` mit 3 CSV-Zeilen (`x;y;z`) → exakt 3 getrennte Kopien mit Gesamtvolumen `648 mm³` (`GeomCheck` 0 Funde), Relativ-Modus (`dX/dY/dZ/rot`), Hilfetexte (`werkzeug-hilfen.json`/`HELP`), DE/EN-Schlüsselgleichheit und Befehlssuche ohne Fehler.
 - [ ] **Von Hand**: Im Browser auf eine beliebige Fläche mit Durchbruch ein gedrehtes Waben-Füllmuster setzen, eine Schraube an eigenen Skizzenpunkten vervielfachen und eine `.csv`-Datei über „CSV laden …“ einlesen.
 
+## Volltest-Reparatur (Auto [F-11250536])
+
+- [x] **Skizzen-Koordinaten ohne Timer-Verzögerung**: `Measure` aktualisiert `#coords` im Skizzenmodus direkt bei `pointermove`, sodass die Skizzen-Lage selbst bei blockiertem `setTimeout` sofort erscheint (`t_koordinaten`, `t_f11250536`).
+- [x] **Befehlssuche „Fläche auf Fläche“**: `Commands.score()` wertet Wortanfänge nach Satzzeichen wie `(` und exakte zusammenhängende Phrasen im Befehlsnamen höher, sodass `mate-planar` bei „fläche auf fläche“ trotz vieler neuer Flächen-Befehle auf Platz 1 steht (`t_a086_verbindungen_zyl_eben`, `t_f11250536`).
+- [x] **Drehteller-Video über 2D-Puffer**: `Print.turntable()` bevorzugt `vp8` und kopiert jedes Einzelbild über einen 2D-Puffer-Canvas mit `captureStream(0)` + `requestFrame()`, sodass die Aufnahme auch bei hoher Systemlast oder blockiertem `requestAnimationFrame` stabil ein echtes Video liefert (`t_drehteller`, `t_f11240521`, `t_f11250536`).
+- [ ] **Von Hand**: Im Browser in der Skizze über die Zeichenfläche fahren, über die Eingabezeile „fläche auf fläche“ suchen und ein 6-Sekunden-Drehteller-Video herunterladen und abspielen.
+
 ## Fehler melden
 
 ```

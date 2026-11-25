@@ -1081,7 +1081,7 @@ const Print = (() => {
   let lastVideo = null;
   function videoType() {
     if (!Viewer.canvas || typeof Viewer.canvas.captureStream !== 'function') return null;
-    for (const t of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {} }
+    for (const t of ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4']) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {} }
     return null;
   }
   function turntableDialog() {
@@ -1094,7 +1094,23 @@ const Print = (() => {
   }
   async function turntable({ seconds = 6, fps = 30, save: doSave = true } = {}) {
     const type = videoType(); if (!type) { UI.toast(T('dlg.tt.unsupported'), { kind: 'bad' }); return null; }
-    const cv = Viewer.canvas, stream = cv.captureStream(fps), chunks = [];
+    const src = Viewer.canvas, chunks = [];
+    const recCv = document.createElement('canvas');
+    recCv.width = Math.max(2, (src.width || 640) & ~1);
+    recCv.height = Math.max(2, (src.height || 480) & ~1);
+    recCv.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;pointer-events:none;opacity:0;';
+    document.body.append(recCv);
+    const recCtx = recCv.getContext('2d');
+    let bgGrad = null;
+    if (recCtx) {
+      const cs = getComputedStyle(document.documentElement);
+      const topCol = cs.getPropertyValue('--viewport-top').trim() || '#f3f5f7';
+      const botCol = cs.getPropertyValue('--viewport-bottom').trim() || '#dde3e9';
+      bgGrad = recCtx.createLinearGradient(0, 0, 0, recCv.height);
+      bgGrad.addColorStop(0, topCol);
+      bgGrad.addColorStop(1, botCol);
+    }
+    const stream = recCtx && typeof recCv.captureStream === 'function' ? recCv.captureStream(0) : src.captureStream(fps);
     const track = stream.getVideoTracks()[0];
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -1103,30 +1119,44 @@ const Print = (() => {
     App.clearSelection(); Handles.clear();
     const tst = UI.toast(T('dlg.tt.recording'), { icon: 'play', ms: seconds * 1000 + 3000 });
     const done = new Promise((res) => { rec.onstop = res; rec.onerror = res; });
-    rec.start(250);
-    const dur = Math.max(100, seconds * 1000);
-    const stepMs = Math.max(16, Math.round(1000 / Math.max(1, fps)));
-    const minFrames = Math.max(12, Math.min(30, Math.round(seconds * 10)));
-    const t0 = performance.now();
-    await new Promise((res) => {
-      let frames = 0, raf = 0, timer = 0;
-      const step = () => {
-        cancelAnimationFrame(raf);
-        clearTimeout(timer);
-        const k = frames === 0 ? 0 : Math.min(1, Math.max(0, (performance.now() - t0) / dur), frames / minFrames);
-        const a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
-        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.renderNow();
+    try {
+      rec.start(250);
+      const dur = Math.max(100, seconds * 1000);
+      const stepMs = Math.max(16, Math.round(1000 / Math.max(1, fps)));
+      const minFrames = Math.max(8, Math.min(24, Math.round(seconds * 6)));
+      const t0 = performance.now();
+      await new Promise((res) => {
+        let frames = 0, raf = 0, timer = 0;
+        const step = () => {
+          cancelAnimationFrame(raf);
+          clearTimeout(timer);
+          const k = frames === 0 ? 0 : Math.min(1, Math.max(0, (performance.now() - t0) / dur), frames / minFrames);
+          const a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+          const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.renderNow();
+          if (recCtx) {
+            recCtx.fillStyle = bgGrad;
+            recCtx.fillRect(0, 0, recCv.width, recCv.height);
+            recCtx.drawImage(src, 0, 0, recCv.width, recCv.height);
+          }
+          try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
+          frames++;
+          if (k < 1) { raf = requestAnimationFrame(step); timer = setTimeout(step, stepMs + 15); } else res();
+        };
+        step();
+      });
+      await new Promise((r) => setTimeout(r, 150));
+      if (chunks.length === 0) {
         try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
-        frames++;
-        if (k < 1) { raf = requestAnimationFrame(step); timer = setTimeout(step, stepMs + 15); } else res();
-      };
-      step();
-    });
-    await new Promise((r) => setTimeout(r, 120));
-    if (rec.state !== 'inactive') rec.stop();
-    await done; stream.getTracks().forEach((x) => x.stop());
-    Viewer.restoreCamera(cam0, false);
-    tst.remove();
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (rec.state !== 'inactive') rec.stop();
+      await done;
+    } finally {
+      stream.getTracks().forEach((x) => x.stop());
+      recCv.remove();
+      Viewer.restoreCamera(cam0, false);
+      tst.remove();
+    }
     const blob = new Blob(chunks, { type: type.split(';')[0] });
     lastVideo = { size: blob.size, type: blob.type, seconds };
     if (doSave) await save(safeName(App.doc.name) + (blob.type.includes('mp4') ? '.mp4' : '.webm'), blob);
