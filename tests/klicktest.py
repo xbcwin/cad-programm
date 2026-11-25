@@ -25278,6 +25278,241 @@ def t_a124_flaeche_teilen_kuppel(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a130_wellen_features(p):
+    # [A-130] Freistich (DIN 76-1), Einstich (DIN 471/472), Passfeder-Nut (DIN 6885), Keilwelle (DIN ISO 14)
+    p.empty()
+    p.ev("if (ViewPrefs.simple) ViewPrefs.setLevel('pro');")
+    p.pg.wait_for_timeout(120)
+
+    # 1. Welle d=20, h=50 mit Einstich (DIN 471) über Kontextleiste
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'Welle20', p: { d: 20, h: 50 } });
+    window.__w20 = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    shaft_vol0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__w20)?.volume);")
+    # Zylindermantel wählen und Kontextleisten-Knöpfe prüfen
+    p.ev("""
+    const fs = App.results.get(window.__w20).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    App.select([window.__w20], { face: { id: window.__w20, faceIdx: ci, info: fs[ci] } });
+    """)
+    p.pg.wait_for_timeout(120)
+    ctx_btns = [
+        p.pg.locator('#ctx-undercut').is_visible(),
+        p.pg.locator('#ctx-circlip').is_visible(),
+        p.pg.locator('#ctx-keyway').is_visible(),
+        p.pg.locator('#ctx-spline-profile').is_visible(),
+    ]
+    p.pg.locator('#ctx-circlip').click()
+    warte_rechnen(p)
+    cg1 = p.ev("""return (async () => {
+      const st = App.doc.items.find(x => x.kind === 'circlipGroove');
+      const r = App.results.get(window.__w20);
+      const fs = r.data.faces || [];
+      const grooveCyl = fs.find(f => f.t === 'CYLINDRE' && Math.abs(f.r - 9.5) < 0.03);
+      const walls = fs.filter(f => f.t === 'PLANE' && f.n && Math.abs(Math.abs(f.n[2]) - 1) < 0.01 && f.c[2] > 1 && f.c[2] < 49);
+      const wDist = walls.length >= 2 ? Math.abs(walls[0].c[2] - walls[1].c[2]) : 0;
+      const gc = await GeomCheck.run();
+      const ms = await Mass.measure();
+      const vol = Mass.partOf(ms, window.__w20)?.volume;
+      return {
+        ok: !!st, norm: st?.p?.norm, width: st?.p?.width, grooveD: st?.p?.grooveD,
+        hasGrooveCyl: !!grooveCyl, grooveR: grooveCyl?.r, wallCount: walls.length, wDist,
+        vol, errs: App.errors.length, geomErrs: gc.issues.length
+      };
+    })();""")
+    exp_dv = math.pi * (10**2 - 9.5**2) * 1.3
+    ok1 = (
+        all(ctx_btns)
+        and cg1['ok'] and cg1['norm'] == 'din471'
+        and abs(cg1['width'] - 1.3) < 0.01 and abs(cg1['grooveD'] - 19.0) < 0.01
+        and cg1['hasGrooveCyl'] and abs(cg1['grooveR'] - 9.5) < 0.02
+        and cg1['wallCount'] == 2 and abs(cg1['wDist'] - 1.3) < 0.02
+        and abs((shaft_vol0 - cg1['vol']) - exp_dv) < 0.2
+        and cg1['errs'] == 0 and cg1['geomErrs'] == 0
+    )
+
+    # Unterdrücken & Rückgängig prüfen
+    p.ev("Timeline.toggleSuppress(App.doc.items.find(x=>x.kind==='circlipGroove').id);")
+    warte_rechnen(p)
+    v_supp = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__w20)?.volume);")
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p)
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p)
+    cnt_after_undo = p.ev("return App.doc.items.filter(x=>x.kind==='circlipGroove').length;")
+    ok1 = ok1 and abs(v_supp - shaft_vol0) < 0.1 and cnt_after_undo == 0
+
+    # 2. Bohrung d=20 mit Einstich (DIN 472)
+    p.ev("""
+    Actions.addPrimitive('tube', { name: 'Nabe20', p: { d: 32, wall: 6, h: 40 } });
+    window.__h20 = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    cg2 = p.ev("""
+    const fs = App.results.get(window.__h20).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    const st = Features.circlipGroove({ id: window.__h20, idx: ci, info: fs[ci] });
+    return { id: st?.id, norm: st?.p?.norm, width: st?.p?.width, grooveD: st?.p?.grooveD };
+    """)
+    warte_rechnen(p)
+    cg2_res = p.ev("""return (async () => {
+      const fs = App.results.get(window.__h20).data.faces || [];
+      const grooveCyl = fs.find(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10.5) < 0.03);
+      const walls = fs.filter(f => f.t === 'PLANE' && f.n && Math.abs(Math.abs(f.n[2]) - 1) < 0.01 && f.c[2] > 1 && f.c[2] < 39);
+      const wDist = walls.length >= 2 ? Math.abs(walls[0].c[2] - walls[1].c[2]) : 0;
+      const gc = await GeomCheck.run();
+      return { hasGrooveCyl: !!grooveCyl, wallCount: walls.length, wDist, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    ok2 = (
+        cg2['norm'] == 'din472' and abs(cg2['width'] - 1.1) < 0.01 and abs(cg2['grooveD'] - 21.0) < 0.01
+        and cg2_res['hasGrooveCyl'] and cg2_res['wallCount'] == 2 and abs(cg2_res['wDist'] - 1.1) < 0.02
+        and cg2_res['errs'] == 0 and cg2_res['geomErrs'] == 0
+    )
+
+    # 3. Passfeder-Nut (DIN 6885) auf d=20 (Breite 6 mm, Tiefe 3,5 mm) und d=30 (Breite 8 mm)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'WelleKW', p: { d: 20, h: 50 } });
+    window.__kw = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    kw20 = p.ev("""
+    const fs = App.results.get(window.__kw).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    const st = Features.keyway({ id: window.__kw, idx: ci, info: fs[ci] });
+    return { id: st?.id, size: st?.p?.size, width: st?.p?.width, depth: st?.p?.depth };
+    """)
+    warte_rechnen(p)
+    kw20_res = p.ev("""return (async () => {
+      const fs = App.results.get(window.__kw).data.faces || [];
+      const verts = fs.filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[2]) < 0.01 && f.c[2] > 1 && f.c[2] < 49);
+      const dot3 = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+      let wDist = 0, floorR = 0, pairFound = false;
+      for (let i = 0; i < verts.length; i++) {
+        for (let j = i + 1; j < verts.length; j++) {
+          if (dot3(verts[i].n, verts[j].n) < -0.99) {
+            const dc = [verts[i].c[0] - verts[j].c[0], verts[i].c[1] - verts[j].c[1], verts[i].c[2] - verts[j].c[2]];
+            wDist = Math.abs(dot3(dc, verts[i].n));
+            const fl = verts.find(v => Math.abs(dot3(v.n, verts[i].n)) < 0.05);
+            if (fl) floorR = Math.abs(dot3(fl.c, fl.n));
+            pairFound = true;
+          }
+        }
+      }
+      const gc = await GeomCheck.run();
+      const deps = Model.dependencies(App.doc).filter(d => d.from === arg && d.to === window.__kw);
+      return { vertCount: verts.length, pairFound, wDist, floorR, errs: App.errors.length, geomErrs: gc.issues.length, depCount: deps.length };
+    })();""", kw20['id'])
+    # Auch d=30 testen -> 8x7 (Breite 8 mm)
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'Welle30', p: { d: 30, h: 60 }, t: { x: 45, y: 0, z: 0 } });
+    window.__w30 = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    kw30 = p.ev("""
+    const fs = App.results.get(window.__w30).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 15) < 0.05);
+    const st = Features.keyway({ id: window.__w30, idx: ci, info: fs[ci] });
+    return { size: st?.p?.size, width: st?.p?.width, depth: st?.p?.depth };
+    """)
+    warte_rechnen(p)
+    ok3 = (
+        kw20['size'] == '6x6' and abs(kw20['width'] - 6.0) < 0.01 and abs(kw20['depth'] - 3.5) < 0.01
+        and kw20_res['pairFound'] and abs(kw20_res['wDist'] - 6.0) < 0.02
+        and abs(kw20_res['floorR'] - 6.5) < 0.02
+        and kw20_res['errs'] == 0 and kw20_res['geomErrs'] == 0 and kw20_res['depCount'] >= 1
+        and kw30['size'] == '8x7' and abs(kw30['width'] - 8.0) < 0.01 and abs(kw30['depth'] - 4.0) < 0.01
+        and p.ev("return App.errors.length;") == 0
+    )
+
+    # 4. Gewinde-Freistich (DIN 76-1) auf Welle d=10 (M10, P=1.5) + Form B Umschaltung
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'BolzenM10', p: { d: 10, h: 30 } });
+    window.__w10 = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    ucA = p.ev("""
+    const fs = App.results.get(window.__w10).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 5) < 0.05);
+    const st = Features.undercut({ id: window.__w10, idx: ci, info: fs[ci] });
+    return { id: st?.id, form: st?.p?.form, pitch: st?.p?.pitch, grooveD: st?.p?.grooveD, width: st?.p?.width };
+    """)
+    warte_rechnen(p)
+    ucA_res = p.ev("""return (async () => {
+      const fs = App.results.get(window.__w10).data.faces || [];
+      const gCyl = fs.find(f => f.t === 'CYLINDRE' && Math.abs(f.r - 3.65) < 0.03);
+      const gCone = fs.find(f => f.t === 'CONE');
+      const gc = await GeomCheck.run();
+      return { hasCyl: !!gCyl, hasCone: !!gCone, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.pg.select_option('#uc-form', 'B')
+    warte_rechnen(p)
+    ucB = p.ev("""return (async () => {
+      const st = App.doc.items.find(x => x.kind === 'undercut');
+      const gc = await GeomCheck.run();
+      return { form: st?.p?.form, width: st?.p?.width, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    ok4 = (
+        ucA['form'] == 'A' and abs(ucA['pitch'] - 1.5) < 0.01
+        and abs(ucA['grooveD'] - 7.3) < 0.02 and abs(ucA['width'] - 5.2) < 0.02
+        and ucA_res['hasCyl'] and ucA_res['hasCone'] and ucA_res['errs'] == 0 and ucA_res['geomErrs'] == 0
+        and ucB['form'] == 'B' and abs(ucB['width'] - 3.8) < 0.02 and ucB['errs'] == 0 and ucB['geomErrs'] == 0
+    )
+
+    # 5. Keilwellen-Profil (DIN ISO 14): Normteil splineShaft + Formschritt splineProfile auf d=20
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""
+    let spPart = null;
+    App.change('Keilwelle', d => {
+      spPart = Model.newItem('part', { lib: 'splineShaft', profile: '6x16x20', length: 40, bore: 0 }, { name: 'Keilwelle' });
+      d.items.push(spPart);
+    });
+    window.__spPart = spPart.id;
+    Actions.addPrimitive('cylinder', { name: 'WelleKeil', p: { d: 20, h: 50 }, t: { x: 40, y: 0, z: 0 } });
+    window.__wSp = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    sp_step = p.ev("""
+    const fs = App.results.get(window.__wSp).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    const st = Features.splineProfile({ id: window.__wSp, idx: ci, info: fs[ci] });
+    return { id: st?.id, profile: st?.p?.profile, teeth: st?.p?.teeth, rootD: st?.p?.rootD, b: st?.p?.b };
+    """)
+    warte_rechnen(p)
+    sp_res = p.ev("""return (async () => {
+      const rp = App.results.get(window.__spPart).data;
+      const outerP = (rp.faces || []).filter(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05).length;
+      const rootP = (rp.faces || []).filter(f => f.t === 'CYLINDRE' && Math.abs(f.r - 8) < 0.05).length;
+      const flanksP = (rp.faces || []).filter(f => f.t === 'PLANE' && Math.abs(f.n[2]) < 0.01).length;
+      const rs = App.results.get(window.__wSp).data;
+      const rootS = (rs.faces || []).filter(f => f.t === 'CYLINDRE' && Math.abs(f.r - 8) < 0.05).length;
+      const gc = await GeomCheck.run();
+      const exp = Explain.local(arg);
+      const expTxt = exp ? exp.lines.map(l => l.t).join(' ') : '';
+      return {
+        bbP: rp.bbox, outerP, rootP, flanksP, rootS,
+        errs: App.errors.length, geomErrs: gc.issues.length,
+        expOk: expTxt.includes('DIN ISO 14')
+      };
+    })();""", sp_step['id'])
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('undercut', 'circlipGroove', 'keywayStep', 'splineProfile', 'splineShaft'))
+    ok5 = (
+        sp_res['outerP'] == 6 and sp_res['rootP'] == 6 and sp_res['flanksP'] == 12
+        and abs((sp_res['bbP'][3] - sp_res['bbP'][0]) - 20) < 0.05
+        and abs((sp_res['bbP'][5] - sp_res['bbP'][2]) - 40) < 0.05
+        and sp_step['teeth'] == 6 and abs(sp_step['rootD'] - 16) < 0.02 and abs(sp_step['b'] - 4) < 0.01
+        and sp_res['rootS'] == 6
+        and sp_res['errs'] == 0 and sp_res['geomErrs'] == 0
+        and sp_res['expOk'] and i18n_ok and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25514,6 +25749,7 @@ TESTS = [
     ('[A-127] Wandstärke je Fläche & Richtung innen/außen/mittig (KP-43)', t_a127_wandstaerke_flaechen),
     ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
+    ('[A-130] Freistich, Einstich (DIN 471/472), Passfeder-Nut (DIN 6885), Keilwelle (DIN ISO 14)', t_a130_wellen_features),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

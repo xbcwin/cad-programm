@@ -3247,5 +3247,22 @@
   "sk.toast.doneSplitFaceNeed": "Draw at least one curve or closed profile to split the face.",
   "sk.toast.stepNeedSplitFace": "Select a target face to split first.",
   "sk.toast.stepSplitFaceOk": "Face split.",
-  "sk.step.splitFaceHint": "Projects your curve or profile onto the chosen face and splits it there."
+  "sk.step.splitFaceHint": "Projects your curve or profile onto the chosen face and splits it there.",
+  "kind.undercut": "Thread Undercut",
+  "kind.circlipGroove": "Circlip Groove",
+  "kind.keyway": "Keyway",
+  "kind.splineProfile": "Spline Profile",
+  "ctx.undercut": "Undercut",
+  "ctx.undercutTip": "Cut a standard DIN 76-1 thread undercut at the thread end",
+  "ctx.circlip": "Circlip Groove",
+  "ctx.circlipTip": "Cut a retaining ring groove per DIN 471 (shaft) or DIN 472 (bore)",
+  "ctx.keyway": "Keyway",
+  "ctx.keywayTip": "Cut a DIN 6885 keyway sized for the shaft or bore diameter",
+  "ctx.splineProfile": "Spline",
+  "ctx.splineProfileTip": "Cut a DIN ISO 14 straight-sided spline profile on this shaft or bore",
+  "dlg.tb.undercutTip": "Add a DIN 76-1 thread undercut at the thread end",
+  "dlg.tb.circlipTip": "Cut a DIN 471/472 retaining ring groove",
+  "dlg.tb.keywayTip": "Cut a DIN 6885 keyway on a shaft or hub",
+  "dlg.tb.splineProfileTip": "Cut a DIN ISO 14 spline profile on a shaft or bore",
+  "panel.item.splineShaftHint": "DIN ISO 14 spline shaft <b>{n} × {d} × {D}</b> (key width b = {b}). Straight-sided flanks, internal centering."
 }

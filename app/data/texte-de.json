@@ -3248,5 +3248,22 @@
   "sk.toast.doneSplitFaceNeed": "Zeichne mindestens eine Kurve oder einen geschlossenen Umriss zum Teilen der Fläche.",
   "sk.toast.stepNeedSplitFace": "Wähle zuerst eine Zielfläche zum Teilen.",
   "sk.toast.stepSplitFaceOk": "Fläche geteilt.",
-  "sk.step.splitFaceHint": "Projiziert deine Kurve oder deinen Umriss auf die gewählte Fläche und teilt sie dort auf."
+  "sk.step.splitFaceHint": "Projiziert deine Kurve oder deinen Umriss auf die gewählte Fläche und teilt sie dort auf.",
+  "kind.undercut": "Gewinde-Freistich",
+  "kind.circlipGroove": "Einstich (Sicherungsring)",
+  "kind.keyway": "Passfeder-Nut",
+  "kind.splineProfile": "Keilwellen-Profil",
+  "ctx.undercut": "Freistich",
+  "ctx.undercutTip": "Normgerechten Gewinde-Freistich (DIN 76-1) ans Gewindeende schneiden",
+  "ctx.circlip": "Einstich",
+  "ctx.circlipTip": "Einstich für Sicherungsring nach DIN 471 (Welle) oder DIN 472 (Bohrung) einschneiden",
+  "ctx.keyway": "Passfeder-Nut",
+  "ctx.keywayTip": "Passfeder-Nut nach DIN 6885 passend zum Durchmesser einfräsen",
+  "ctx.splineProfile": "Keilwelle",
+  "ctx.splineProfileTip": "Keilwellen-Profil nach DIN ISO 14 auf diese Welle oder Bohrung schneiden",
+  "dlg.tb.undercutTip": "Gewinde-Freistich nach DIN 76-1 am Gewindeende anlegen",
+  "dlg.tb.circlipTip": "Einstich für Sicherungsring nach DIN 471/472 einschneiden",
+  "dlg.tb.keywayTip": "Passfeder-Nut nach DIN 6885 auf Welle oder Nabe fräsen",
+  "dlg.tb.splineProfileTip": "Keilwellen-Profil nach DIN ISO 14 auf Welle oder Bohrung schneiden",
+  "panel.item.splineShaftHint": "DIN ISO 14 Keilwelle <b>{n} × {d} × {D}</b> (Keilbreite b = {b}). Geradflankiges Profil mit Innenzentrierung."
 }

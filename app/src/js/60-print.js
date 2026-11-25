@@ -174,7 +174,7 @@ const Print = (() => {
     return true;
   }
   // ---------- DR-04: Wandstärken-Check gegen die Düse (Wand < 2 × Düse = Warnung) ----------
-  const NON_PRINT_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdBearing', 'stdSleeve', 'stdPin', 'stdKey', 'threadRod']);
+  const NON_PRINT_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdBearing', 'stdSleeve', 'stdPin', 'stdKey', 'splineShaft', 'threadRod']);
   let wallCache = null;
   function printableWallNodes(onlyIds = null) {
     const out = [];

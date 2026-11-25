@@ -1528,5 +1528,30 @@
     "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
     "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
     "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
+  },
+  "undercut": {
+    "tip": "Gewinde-Freistich nach DIN 76-1 am Gewindeende schneiden",
+    "hilfe": "Wähle eine runde Welle oder Bohrung und klicke auf „Freistich“. Tracery schlägt Steigung und Freistichmaße (Durchmesser, Breite, 30°-Auslauf) passend zum Durchmesser nach DIN 76-1 vor – wahlweise als Form A (normal) oder Form B (kurz).",
+    "tipp": "Wenn auf der Fläche schon ein kosmetisches Gewinde markiert ist, übernimmt der Freistich automatisch genau dessen Steigung."
+  },
+  "circlipGroove": {
+    "tip": "Einstich für Sicherungsring nach DIN 471 (Welle) oder DIN 472 (Bohrung)",
+    "hilfe": "Wähle eine Außenwelle oder Innenbohrung und klicke auf „Einstich“. Tracery sucht automatisch Nutbreite und Nutdurchmesser aus der DIN-471- bzw. DIN-472-Tabelle heraus und schneidet die Nut am gewählten Abstand ein.",
+    "tipp": "Wählst du rechts eine andere Nenngröße aus der Liste, passen sich Breite (m) und Nutdurchmesser (d₂) sofort normgerecht an."
+  },
+  "keywayStep": {
+    "tip": "Passfeder-Nut nach DIN 6885 direkt auf Welle oder Nabe fräsen",
+    "hilfe": "Wähle eine Welle oder Nabenbohrung und klicke auf „Passfeder-Nut“. Tracery bestimmt die passende DIN-6885-Größe zum Durchmesser und fräst die Nut mit Tiefe t₁ (Welle, rundstirnig) bzw. t₂ (Nabe, gerade) direkt in den Körper.",
+    "tipp": "Mit „Winkel um Achse“ drehst du die Nut rund um die Welle, und über „Versatz längs“ schiebst du sie exakt an die gewünschte Position."
+  },
+  "splineProfile": {
+    "tip": "Keilwellen-Profil nach DIN ISO 14 auf Welle oder Bohrung schneiden",
+    "hilfe": "Wähle eine Welle oder Bohrung und klicke auf „Keilwelle“. Tracery wählt das passende DIN-ISO-14-Profil mit geraden parallelen Flanken und schneidet die Keile über die gewählte Länge oder über die ganze Welle ein.",
+    "tipp": "Lässt du die Länge auf 0, läuft das Keilwellen-Profil automatisch über die gesamte Zylinderlänge."
+  },
+  "splineShaft": {
+    "tip": "Normteil: fertige Keilwelle nach DIN ISO 14 einfügen",
+    "hilfe": "Erzeugt eine eigenständige Keilwelle nach DIN ISO 14 (6 oder 8 Keile, parallele Flanken, Innenzentrierung) mit wählbarem Profil, Länge und optionaler Mittenbohrung.",
+    "tipp": "Wähle bei „Profil“ „Eigene Maße“, wenn du Zähnezahl, Innendurchmesser, Außendurchmesser und Keilbreite frei festlegen möchtest."
   }
 }

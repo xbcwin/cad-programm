@@ -43,6 +43,10 @@ const KINDS = {
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
   boss: { get label() { return T('kind.boss'); }, params: [] },
   lipGroove: { get label() { return T('kind.lipGroove'); }, params: [] },
+  undercut: { get label() { return T('kind.undercut'); }, params: [] },
+  circlipGroove: { get label() { return T('kind.circlipGroove'); }, params: [] },
+  keyway: { get label() { return T('kind.keyway'); }, params: [] },
+  splineProfile: { get label() { return T('kind.splineProfile'); }, params: [] },
   sketch3d: { get label() { return T('kind.sketch3d'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
 };
@@ -431,6 +435,10 @@ const Model = (() => {
       if (it.kind === 'splitFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'teilt Fläche von' });
       if (it.kind === 'dome' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kuppel auf' });
       if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
+      if (it.kind === 'undercut' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Freistich an' });
+      if (it.kind === 'circlipGroove' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Einstich an' });
+      if (it.kind === 'keyway' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Passfeder-Nut in' });
+      if (it.kind === 'splineProfile' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Keilwellen-Profil an' });
       if (it.kind === 'lipGroove' && it.p) {
         if (it.p.lipTarget) out.push({ from: me, to: top(it.p.lipTarget), what: 'Lippe an' });
         if (it.p.grooveTarget) out.push({ from: me, to: top(it.p.grooveTarget), what: 'Nut in' });
@@ -671,6 +679,58 @@ const Model = (() => {
           width: num(p.width, ownV, 1.2),
           clearance: Math.max(0, num(p.clearance, ownV, 0.2)),
         };
+      } else if (it.kind === 'undercut') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          form: p.form === 'B' ? 'B' : 'A',
+          pitch: num(p.pitch, ownV, 1.5),
+          width: num(p.width, ownV, 5.2),
+          grooveD: num(p.grooveD, ownV, 7.3),
+          end: p.end === 'bottom' ? 'bottom' : 'top',
+          offset: Math.max(0, num(p.offset, ownV, 0)),
+          rampAngle: Math.max(10, Math.min(89, num(p.rampAngle, ownV, 30))),
+        };
+      } else if (it.kind === 'circlipGroove') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          norm: p.norm === 'din472' ? 'din472' : 'din471',
+          width: num(p.width, ownV, 1.3),
+          grooveD: num(p.grooveD, ownV, 19),
+          from: p.from === 'bottom' || p.from === 'center' ? p.from : 'top',
+          offset: num(p.offset, ownV, 3),
+        };
+      } else if (it.kind === 'keyway') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          size: p.size || '6x6',
+          width: num(p.width, ownV, 6),
+          depth: num(p.depth, ownV, 3.5),
+          length: num(p.length, ownV, 20),
+          ends: p.ends === 'straight' ? 'straight' : 'round',
+          from: p.from === 'top' || p.from === 'bottom' ? p.from : 'center',
+          offset: num(p.offset, ownV, 0),
+          angle: num(p.angle, ownV, 0),
+        };
+      } else if (it.kind === 'splineProfile') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          profile: p.profile || '6x16x20',
+          teeth: Math.max(4, Math.min(24, Math.round(num(p.teeth, ownV, 6)))),
+          rootD: num(p.rootD, ownV, 16),
+          b: num(p.b, ownV, 4),
+          length: Math.max(0, num(p.length, ownV, 0)),
+          from: p.from === 'bottom' ? 'bottom' : 'top',
+          offset: Math.max(0, num(p.offset, ownV, 0)),
+          angle: num(p.angle, ownV, 0),
+        };
       }
       else {
         o.p = resolveP(it.p, ownV);
@@ -687,6 +747,9 @@ const Model = (() => {
           } else if ((o.p.lib === 'stdKey' || o.p.lib === 'stdKeyway') && typeof keyEntry === 'function') {
             const ke = keyEntry(o.p.size);
             if (ke) o.p.spec = { b: ke.b_mm, h: ke.h_mm, t1: ke.t1_mm, t2: ke.t2_mm };
+          } else if (o.p.lib === 'splineShaft' && typeof splineEntry === 'function') {
+            const se = o.p.profile !== 'custom' ? splineEntry(o.p.profile) : null;
+            if (se) o.p.spec = { n: se.n, d: se.d, D: se.D, b: se.b };
           } else if (o.p.lib === 'stdBearing' && typeof bearingEntry === 'function') {
             const be = bearingEntry(o.p.size);
             if (be) o.p.spec = { d: be.d_mm, D: be.D_mm, B: be.B_mm, r: be.r_min_mm, balls: be.kugeln_richtwert || 8 };
@@ -1606,6 +1669,7 @@ const Model = (() => {
         if (L === 'stdPin') { const pe = typeof pinEntry === 'function' ? pinEntry(p.size ?? p.d) : null; const r = (pe ? pe.d_mm : 6) / 2, len = n('length', 20); return [-r, -r, 0, r, r, len]; }
         if (L === 'stdKey') { const ke = typeof keyEntry === 'function' ? keyEntry(p.size) : null; const b = ke ? ke.b_mm : 6, h = ke ? ke.h_mm : 6, len = n('length', 20); return [-len / 2, -b / 2, 0, len / 2, b / 2, h]; }
         if (L === 'stdKeyway') { const ke = typeof keyEntry === 'function' ? keyEntry(p.size) : null; const b = ke ? ke.b_mm : 6, dep = ke ? (p.kind === 'hub' ? ke.t2_mm : ke.t1_mm) : 3.5, len = n('length', 20), up = Math.max(0.2, n('extra', 0.5)); return [-len / 2, -b / 2, -dep, len / 2, b / 2, up]; }
+        if (L === 'splineShaft') { const se = typeof splineEntry === 'function' && p.profile !== 'custom' ? splineEntry(p.profile) : null; const r = n('D', se ? se.D : 20) / 2, len = n('length', 40); return [-r, -r, 0, r, r, len]; }
         if (L === 'stdBearing') { const be = typeof bearingEntry === 'function' ? bearingEntry(p.size) : null; const r = (be ? be.D_mm : 22) / 2, B = be ? be.B_mm : 7; return [-r, -r, 0, r, r, B]; }
         if (L === 'stdSleeve') { const se = typeof sleeveEntry === 'function' ? sleeveEntry(p.size) : null; const D = se ? (p.flange === 'flange' ? (se.flansch_d_mm || se.D_mm + 4 * se.wand_mm) : se.D_mm) : 10, r = D / 2, len = n('length', 10); return [-r, -r, 0, r, r, len]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
@@ -1795,6 +1859,10 @@ const Model = (() => {
         return `Ø ${f(p.outerD ?? 8)}/${f(p.holeD ?? 3)}${u} · H ${f(p.height ?? 10)}${u}${ribs > 0 ? ` · ${ribs} Rippen` : ''}`;
       }
       case 'lipGroove': return `H ${f(p.height ?? 2)}${u} · Spiel ${f(p.clearance ?? 0.2)}${u}`;
+      case 'undercut': return `DIN 76-${(it.p && it.p.form) === 'B' ? 'B' : 'A'} · Ø ${f(p.grooveD ?? 7.3)}${u} × ${f(p.width ?? 5.2)}${u}`;
+      case 'circlipGroove': return `${(it.p && it.p.norm) === 'din472' ? 'DIN 472' : 'DIN 471'} · Ø ${f(p.grooveD ?? 19)}${u} × ${f(p.width ?? 1.3)}${u}`;
+      case 'keyway': return `DIN 6885 · ${f(p.width ?? 6)} × ${f(p.length ?? 20)}${u}`;
+      case 'splineProfile': return `DIN ISO 14 · ${Math.round(p.teeth ?? 6)}×${f(p.rootD ?? 16)}${u}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'deform': {
         const dm = (it.p && it.p.mode) || 'bend';
@@ -1994,7 +2062,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
