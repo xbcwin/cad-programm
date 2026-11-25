@@ -2383,6 +2383,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `silhouette2d` und `intersectCurve2d` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`umriss`, `schnittkurve`) ohne Fehler.
 - [ ] **Von Hand**: Im Browser die Silhouette eines gedrehten Körpers mit Bohrung sowie die Schnittkurve zweier schräger Freiform-/Zylinderflächen auf einer geneigten Skizzenebene prüfen und mit `RefFix` auf eine neue Fläche umhängen.
 
+## Volltest-Reparatur (Auto [F-11250121])
+
+- [x] **Fokus-Vorschau bei rAF-Stau**: Bei blockiertem `requestAnimationFrame` zeichnet `Views.focus()` über den `60 ms`-Timer-Fallback (`requestFocusDraw` → `Viewer.renderNow()`) das gewählte Teil (`Views.focusDrawn === true`) und setzt `focusDrawn` beim Leeren der Auswahl sauber auf `false` zurück (`t_fokus`, `t_f11250121`).
+- [x] **Meldung überlebt Hauptthread-Hänger**: `UI.toast()` (`scheduleToast`) zählt die Restlaufzeit in `500 ms`-Scheiben herunter, sodass ein einzelner `900 ms`-Hänger eine `600 ms`-Meldung nicht vorzeitig löscht und sie danach sauber nach Ablauf der Restzeit verschwindet (`t_explosion_regeln`, `t_f11250121`).
+- [ ] **Von Hand**: Im Browser bei langsamer Darstellung die Fokus-Vorschau öffnen, ein Teil wählen und drehen sowie mit einem einzelnen Teil die Explosions-Meldung auslösen und prüfen, dass Vorschau und Hinweis zuverlässig sichtbar bleiben.
+
 ## Fehler melden
 
 ```

@@ -710,6 +710,21 @@ const Views = (() => {
   function collapse() { if (st.exGoal > 0 || st.ex > 0) animateTo(0, 250); }
 
   // ---------- Fokus-Vorschau ----------
+  function stopFocusTimer(f) {
+    if (f && f.drawTimer) { clearTimeout(f.drawTimer); f.drawTimer = null; }
+  }
+  function requestFocusDraw() {
+    const f = st.focus; if (!f) return;
+    Viewer.requestRender();
+    if (!f.ids.length) { f.dirty = false; stopFocusTimer(f); return; }
+    f.dirty = true;
+    stopFocusTimer(f);
+    // Timer-Fallback bei blockiertem requestAnimationFrame (wie in animateTo/Viewer)
+    f.drawTimer = setTimeout(() => {
+      f.drawTimer = null;
+      if (st.focus === f && f.dirty && f.ids.length) Viewer.renderNow();
+    }, 60);
+  }
   function focus(on = !st.focus) {
     if (!on) { if (st.focus) { st.focus.el.remove(); st.focus.off(); st.focus = null; Viewer.requestRender(); } sync(); return; }
     if (st.focus) return;
@@ -721,29 +736,34 @@ const Views = (() => {
     const empty = h('div', { class: 'fv-empty' }, 'Wähle ein Teil – es erscheint hier groß.');
     body.append(empty); el.append(head, body);
     bars().append(el);
-    const f = { el, body, empty, title: head.firstChild, rot: [0, 0], ids: [] };
+    const f = { el, body, empty, title: head.firstChild, rot: [0, 0], ids: [], drawn: false, dirty: false, drawTimer: null };
     let drag = null;
     body.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, r: f.rot.slice() }; try { body.setPointerCapture(e.pointerId); } catch (_) {} e.stopPropagation(); });
-    body.addEventListener('pointermove', (e) => { if (!drag) return; f.rot = [drag.r[0] - (e.clientX - drag.x) * 0.6, clamp(drag.r[1] + (e.clientY - drag.y) * 0.5, -80, 80)]; Viewer.requestRender(); });
+    body.addEventListener('pointermove', (e) => { if (!drag) return; f.rot = [drag.r[0] - (e.clientX - drag.x) * 0.6, clamp(drag.r[1] + (e.clientY - drag.y) * 0.5, -80, 80)]; requestFocusDraw(); });
     body.addEventListener('pointerup', () => { drag = null; });
-    body.addEventListener('dblclick', () => { f.rot = [0, 0]; Viewer.requestRender(); });
+    body.addEventListener('dblclick', () => { f.rot = [0, 0]; requestFocusDraw(); });
     body.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
     const offR = Viewer.on('afterRender', () => drawFocus());
-    const offS = App.on('selection', () => { refreshFocus(); Viewer.requestRender(); });
-    const offD = App.on('results', () => { refreshFocus(); Viewer.requestRender(); });
-    f.off = () => { offR && offR(); offS && offS(); offD && offD(); };
-    st.focus = f; refreshFocus(); Viewer.requestRender(); sync();
+    const offS = App.on('selection', () => { refreshFocus(); requestFocusDraw(); });
+    const offD = App.on('results', () => { refreshFocus(); requestFocusDraw(); });
+    f.off = () => { stopFocusTimer(f); offR && offR(); offS && offS(); offD && offD(); };
+    st.focus = f; refreshFocus(); requestFocusDraw(); sync();
   }
   function refreshFocus() {
     const f = st.focus; if (!f) return;
     const ids = []; for (const id of App.sel) { const t = Model.topOf(App.doc, id); if (t && Viewer.nodes.has(t.id) && !ids.includes(t.id)) ids.push(t.id); }
+    const same = ids.length === f.ids.length && ids.every((id, i) => id === f.ids[i]);
     f.ids = ids;
+    if (!ids.length || !same) f.drawn = false;
     const name = ids.length === 1 ? Model.label(App.doc.items.find((x) => x.id === ids[0])) : ids.length ? ids.length + ' Teile' : '';
     f.title.textContent = name ? 'Fokus · ' + name : 'Fokus';
     f.empty.hidden = !!ids.length;
   }
   function drawFocus() {
-    const f = st.focus; if (!f || !f.ids.length) return;
+    const f = st.focus; if (!f) return;
+    stopFocusTimer(f);
+    f.dirty = false;
+    if (!f.ids.length) { f.drawn = false; return; }
     const cr = Viewer.canvas.getBoundingClientRect(), br = f.body.getBoundingClientRect();
     f.drawn = Viewer.renderInset({ x: br.left - cr.left, y: br.top - cr.top, w: br.width, h: br.height }, f.ids, f.rot);
   }
