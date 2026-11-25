@@ -22857,6 +22857,287 @@ def t_a110_strecken_live_spiegeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a115_kurvenmuster_fuellmuster(p):
+    # 1. Start in XY-Skizze: beide Werkzeuge sind in Einfach und Profi sichtbar
+    sketch_xy(p)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_ok = (
+        sichtbar(p, '.sketchbar .tool[data-tool="patcurve"]')
+        and sichtbar(p, '.sketchbar .tool[data-tool="patfill"]')
+    )
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_ok = (
+        sichtbar(p, '.sketchbar .tool[data-tool="patcurve"]')
+        and sichtbar(p, '.sketchbar .tool[data-tool="patfill"]')
+    )
+    ok1 = simple_ok and pro_ok
+
+    # 2. SK-44: 5 Kreise entlang eines Halbkreis-Bogens (R=20, L=20*pi) -> gleiche Abstände
+    SS(p, """
+      S.ents = [
+        { id: 'A1', type: 'arc', a: [20, 0], m: [0, 20], b: [-20, 0] },
+        { id: 'C1', type: 'circle', c: [20, 0], r: 2 },
+      ];
+      S.cons = [];
+      S.dims = [];
+      S.undo = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="patcurve"]')
+    p.wait(80)
+    # Kreisrand (22, 0) anklicken (nicht Mitte (20,0), da dort das Bogenende liegt)
+    click_uv(p, 22, 0, alt=True)
+    p.pg.click('#pt-pick-curve')
+    p.wait(60)
+    click_uv(p, 0, 20, alt=True)
+    p.pg.fill('#pt-cn', '5')
+    p.pg.press('#pt-cn', 'Enter')
+    p.wait(60)
+    p.pg.click('#pt-make')
+    p.wait(100)
+    res_cnt = SS(p, """
+      const cs = S.ents.filter((e) => e.type === 'circle');
+      const angs = cs.map((e) => {
+        let a = Math.atan2(e.c[1], e.c[0]);
+        if (a < -1e-4) a += Math.PI * 2;
+        return a;
+      }).sort((u, v) => u - v);
+      const pts = cs.slice().sort((u, v) => {
+        let au = Math.atan2(u.c[1], u.c[0]); if (au < -1e-4) au += Math.PI * 2;
+        let av = Math.atan2(v.c[1], v.c[0]); if (av < -1e-4) av += Math.PI * 2;
+        return au - av;
+      }).map((e) => e.c);
+      return {
+        n: cs.length,
+        radii: cs.map((e) => e.r),
+        rPos: cs.map((e) => Math.hypot(e.c[0], e.c[1])),
+        angs,
+        pts,
+        ok: !!(S.status && S.status.ok),
+      };
+    """)
+    chords = [
+        math.hypot(res_cnt['pts'][i + 1][0] - res_cnt['pts'][i][0], res_cnt['pts'][i + 1][1] - res_cnt['pts'][i][1])
+        for i in range(len(res_cnt['pts']) - 1)
+    ]
+    ang_diffs = [res_cnt['angs'][i + 1] - res_cnt['angs'][i] for i in range(len(res_cnt['angs']) - 1)]
+    ok_cnt = (
+        res_cnt['n'] == 5
+        and res_cnt['ok'] is True
+        and all(abs(r - 2) < 1e-4 for r in res_cnt['radii'])
+        and all(abs(rp - 20) < 1e-3 for rp in res_cnt['rPos'])
+        and len(ang_diffs) == 4
+        and all(abs(d - math.pi / 4) < 1e-3 for d in ang_diffs)
+        and (max(chords) - min(chords)) < 1e-3
+    )
+
+    # Rückgängig entfernt alle 4 Kopien auf einmal
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(80)
+    after_undo_cnt = SS(p, "return S.ents.filter((e) => e.type === 'circle').length;")
+
+    # Modus „Fester Abstand“ (15 mm entlang Bogen der Länge 20*pi ≈ 62.83 mm -> 5 Teile: 0, 15, 30, 45, 60)
+    p.pg.click('.sketchbar .tool[data-tool="patcurve"]')
+    p.wait(60)
+    click_uv(p, 22, 0, alt=True)
+    p.pg.click('#pt-pick-curve')
+    p.wait(60)
+    click_uv(p, 0, 20, alt=True)
+    p.pg.select_option('#pt-cmode', 'spacing')
+    p.wait(60)
+    p.pg.fill('#pt-cdist', '15')
+    p.pg.press('#pt-cdist', 'Enter')
+    p.wait(60)
+    p.pg.click('#pt-make')
+    p.wait(100)
+    res_spc = SS(p, """
+      const cs = S.ents.filter((e) => e.type === 'circle');
+      const angs = cs.map((e) => {
+        let a = Math.atan2(e.c[1], e.c[0]);
+        if (a < -1e-4) a += Math.PI * 2;
+        return a;
+      }).sort((u, v) => u - v);
+      return { n: cs.length, angs, ok: !!(S.status && S.status.ok) };
+    """)
+    arc_diffs = [(res_spc['angs'][i + 1] - res_spc['angs'][i]) * 20.0 for i in range(len(res_spc['angs']) - 1)]
+    ok_spc = (
+        res_spc['n'] == 5
+        and res_spc['ok'] is True
+        and len(arc_diffs) == 4
+        and all(abs(d - 15.0) < 1e-3 for d in arc_diffs)
+    )
+
+    # Ausrichten entlang der Kurve (radiale Linie [18,0]-[22,0] -> bei (0,20) um 90° gedreht)
+    SS(p, """
+      S.ents = [
+        { id: 'A1', type: 'arc', a: [20, 0], m: [0, 20], b: [-20, 0] },
+        { id: 'L1', type: 'line', a: [18, 0], b: [22, 0] },
+      ];
+      S.cons = [];
+      S.dims = [];
+      S.undo = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="patcurve"]')
+    p.wait(60)
+    click_uv(p, 21, 0, alt=True)
+    p.pg.click('#pt-pick-curve')
+    p.wait(60)
+    click_uv(p, 0, 20, alt=True)
+    p.pg.select_option('#pt-cmode', 'count')
+    p.wait(60)
+    p.pg.fill('#pt-cn', '5')
+    p.pg.press('#pt-cn', 'Enter')
+    p.wait(60)
+    p.pg.click('#pt-make')
+    p.wait(100)
+    res_align = SS(p, """
+      const ls = S.ents.filter((e) => e.type === 'line');
+      const top = ls.find((e) => Math.abs((e.a[0] + e.b[0]) / 2) < 1e-2 && ((e.a[1] + e.b[1]) / 2) > 15);
+      return { n: ls.length, ok: !!(S.status && S.status.ok), top: top ? { a: top.a, b: top.b } : null };
+    """)
+    ok_align = (
+        res_align['n'] == 5
+        and res_align['ok'] is True
+        and res_align['top'] is not None
+        and abs(res_align['top']['a'][0]) < 1e-2
+        and abs(res_align['top']['b'][0]) < 1e-2
+        and abs(abs(res_align['top']['a'][1] - res_align['top']['b'][1]) - 4.0) < 1e-2
+    )
+    ok2 = ok_cnt and after_undo_cnt == 1 and ok_spc and ok_align
+
+    # 3. SK-45: Wabenfüllung in Rechteck 50x30 (size=6, pitch=8, margin=3 -> 5+4+5 = 14 Waben, kein Schnitt mit Rand)
+    SS(p, """
+      S.ents = [{ id: 'R1', type: 'rect', a: [0, 0], b: [50, 30] }];
+      S.cons = [];
+      S.dims = [];
+      S.undo = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="patfill"]')
+    p.wait(80)
+    p.pg.select_option('#fp-kind', 'hex')
+    p.pg.fill('#fp-size', '6')
+    p.pg.press('#fp-size', 'Enter')
+    p.pg.fill('#fp-pitch', '8')
+    p.pg.press('#fp-pitch', 'Enter')
+    p.pg.fill('#fp-margin', '3')
+    p.pg.press('#fp-margin', 'Enter')
+    p.wait(80)
+    p.pg.click('#fp-make')
+    p.wait(100)
+    hex_res = SS(p, """
+      const polys = S.ents.filter((e) => e.type === 'poly');
+      const verts = polys.map((e) => SK.polyCorners(e));
+      const regs = SK.regions(S.ents);
+      return {
+        n: polys.length,
+        ns: polys.map((e) => e.n),
+        rs: polys.map((e) => e.r),
+        cs: polys.map((e) => e.c),
+        verts,
+        regCount: regs.length,
+        holeCount: regs[0] ? regs[0].holes.length : 0,
+      };
+    """)
+    r_exp = 6.0 / math.sqrt(3.0)
+    ny_exp = math.floor((30.0 - 6.0 - 2.0 * r_exp) / (8.0 * math.sqrt(3.0) / 2.0) + 1e-6) + 1
+    nx_exp = math.floor((50.0 - 6.0 - 6.0) / 8.0 + 1e-6) + 1
+    expected_hex = ny_exp * nx_exp - (ny_exp // 2)  # 3*5 - 1 = 14
+    all_verts_inside = all(
+        3.0 - 1e-3 <= v[0] <= 47.0 + 1e-3 and 3.0 - 1e-3 <= v[1] <= 27.0 + 1e-3
+        for poly in hex_res['verts'] for v in poly
+    )
+    min_cc_dist = min(
+        math.hypot(hex_res['cs'][i][0] - hex_res['cs'][j][0], hex_res['cs'][i][1] - hex_res['cs'][j][1])
+        for i in range(len(hex_res['cs'])) for j in range(i + 1, len(hex_res['cs']))
+    ) if len(hex_res['cs']) > 1 else 0
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(80)
+    after_hex_undo = SS(p, "return S.ents.filter((e) => e.type === 'poly').length;")
+    ok3 = (
+        expected_hex == 14
+        and hex_res['n'] == expected_hex
+        and all(n == 6 for n in hex_res['ns'])
+        and all(abs(r - r_exp) < 1e-3 for r in hex_res['rs'])
+        and all_verts_inside
+        and min_cc_dist >= 8.0 - 1e-3
+        and hex_res['regCount'] == 1
+        and hex_res['holeCount'] == expected_hex
+        and after_hex_undo == 0
+    )
+
+    # 4. SK-45: Raster (grid) und Versetzt (staggered) + Ungültige Maße (pitch <= size)
+    p.pg.select_option('#fp-kind', 'grid')
+    p.pg.fill('#fp-size', '5')
+    p.pg.press('#fp-size', 'Enter')
+    p.pg.fill('#fp-pitch', '10')
+    p.pg.press('#fp-pitch', 'Enter')
+    p.pg.fill('#fp-margin', '3')
+    p.pg.press('#fp-margin', 'Enter')
+    p.wait(80)
+    p.pg.click('#fp-make')
+    p.wait(80)
+    grid_res = SS(p, "return S.ents.filter((e) => e.type === 'circle').map((e) => ({ c: e.c, r: e.r }));")
+    ok_grid = (
+        len(grid_res) == 8
+        and all(
+            c['c'][0] - c['r'] >= 3.0 - 1e-3 and c['c'][0] + c['r'] <= 47.0 + 1e-3
+            and c['c'][1] - c['r'] >= 3.0 - 1e-3 and c['c'][1] + c['r'] <= 27.0 + 1e-3
+            for c in grid_res
+        )
+    )
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(80)
+
+    p.pg.select_option('#fp-kind', 'staggered')
+    p.wait(60)
+    p.pg.click('#fp-make')
+    p.wait(80)
+    stag_res = SS(p, "return S.ents.filter((e) => e.type === 'circle').map((e) => ({ c: e.c, r: e.r }));")
+    ok_stag = (
+        len(stag_res) == 11
+        and all(
+            c['c'][0] - c['r'] >= 3.0 - 1e-3 and c['c'][0] + c['r'] <= 47.0 + 1e-3
+            and c['c'][1] - c['r'] >= 3.0 - 1e-3 and c['c'][1] + c['r'] <= 27.0 + 1e-3
+            for c in stag_res
+        )
+    )
+    p.pg.fill('#fp-size', '6')
+    p.pg.press('#fp-size', 'Enter')
+    p.pg.fill('#fp-pitch', '5')
+    p.pg.press('#fp-pitch', 'Enter')
+    p.wait(60)
+    bad_disabled = p.pg.locator('#fp-make').is_disabled()
+    err_vis = sichtbar(p, '#fp-info.err-box')
+    ok4 = ok_grid and ok_stag and bad_disabled and err_vis
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine Seitenfehler
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    i18n_eq = de_keys == en_keys
+    cmd_ok = p.ev("""
+      const a = Commands.search('kurve').some((c) => c.id === 'sketch-patcurve');
+      const b = Commands.search('füllmuster').some((c) => c.id === 'sketch-patfill');
+      return a && b;
+    """)
+    help_ok = all(
+        k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp'))
+        for k in ('patternCurve2d', 'patternFill2d')
+    )
+    ok5 = i18n_eq and cmd_ok and help_ok and len(p.errs) == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a113_kegelschnitt_bruecke(p):
     # 1. Nur Profi-Modus: Kegelschnitt und Brücke im Modus „Einfach“ ausgeblendet, in „Profi“ sichtbar
     p.empty()
@@ -23391,6 +23672,7 @@ TESTS = [
     ('[A-111] Spline mit Kontrollpunkten und Tangenten-Griffen (SK-32, SK-33)', t_spline_kontrollpunkte_griffe),
     ('[A-112] Krümmungskamm und Regel „krümmungsglatt“ (SK-34, SK-35)', t_a112_kruemmung_g2),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
+    ('[A-115] Muster entlang Kurve und Füllmuster in der Skizze (SK-44, SK-45)', t_a115_kurvenmuster_fuellmuster),
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

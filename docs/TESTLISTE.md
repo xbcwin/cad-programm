@@ -2355,6 +2355,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `stretch2d` und `liveMirror` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`strecken`, `live-spiegeln`) ohne Fehler.
 - [ ] **Von Hand**: In einer Skizze mit gemischtem Profil einen Rahmen schräg mit Winkel/Weg strecken und Live-Spiegeln an einer schrägen Hilfslinie beim freien Zeichnen testen.
 
+## Muster entlang Kurve und Füllmuster in der Skizze (Auto [A-115], SK-44, SK-45)
+- [x] **Einfach & Profi**: Werkzeuge „Kurvenmuster“ (`[data-tool="patcurve"]`) und „Füllmuster“ (`[data-tool="patfill"]`) sind in Einfach und Profi sichtbar und bleiben in der zweizeiligen Skizzen-Leiste.
+- [x] **Kurvenmuster (SK-44)**: 5 Kreise entlang eines Bogens (`R = 20`) mit fester Anzahl (`5`) sowie mit festem Abstand (`15 mm`) → exakte Abstände, Löser gültig, „An Kurve ausrichten“ dreht Kopien mit und `Strg+Z` macht das Muster in einem Schritt rückgängig.
+- [x] **Füllmuster (SK-45)**: Wabenfüllung (`6 mm`, Abstand `8 mm`, Randabstand `3 mm`) in Rechteck `50 × 30` → genau `14` Sechsecke ohne Randschnitt und mit vollem Rand- und Lochabstand; Raster (`8` Kreise) und versetzt (`11` Kreise) sowie Ablehnung bei `Abstand ≤ Lochgröße` geprüft.
+- [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `patternCurve2d` und `patternFill2d` in `werkzeug-hilfen.json`/`HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kurve`, `füllmuster`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine geschwungene Spline als Leitkurve mit Ausrichten/Richtungsumkehr sowie ein Füllmuster auf einer Fläche mit Innenloch ausprobieren und danach hochziehen.
+
 ## Kegelschnitt und Brückenkurve (Auto [A-113], SK-36, SK-40)
 - [x] **Profi-Modus**: Werkzeuge `conic` („Kegelschnitt“) und `bridge` („Brücke“) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
 - [x] **Kegelschnitt mit Rho = 0,5 (Parabel), Ellipse & Hyperbel**: Start `(0, 0)`, Ende `(40, 0)`, Schulterpunkt `(20, 20)` und Rho `0,5` per Maus/Tastatur erzeugt `conic`, dessen Mittelpunkt exakt mit der Parabel `(20, 10)` übereinstimmt; Umschalten auf `0,3` (Ellipsenstück) und `0,75` (Hyperbel) über `#se-rho` passt die Kurvenmitte exakt an; geschlossen mit Linie und hochgezogen ergibt einen fehlerfreien 3D-Körper mit Parabel-Volumen.

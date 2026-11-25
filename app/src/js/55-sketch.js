@@ -27,12 +27,14 @@ const Sketch = (() => {
     { id: 'mirror', icon: 'mirror', get label() { return T('sk.tool.mirror'); }, key: 'M', get tip() { return T('sk.toolTip.mirror'); } },
     { id: 'patrect', icon: 'patternRect', get label() { return T('sk.tool.patrect'); }, key: 'Q', get tip() { return T('sk.toolTip.patrect'); } },
     { id: 'patcirc', icon: 'patternCirc', get label() { return T('sk.tool.patcirc'); }, key: 'W', get tip() { return T('sk.toolTip.patcirc'); } },
+    { id: 'patcurve', icon: 'patternPath', get label() { return T('sk.tool.patcurve'); }, key: '', get tip() { return T('sk.toolTip.patcurve'); } },
+    { id: 'patfill', icon: 'patternFill', get label() { return T('sk.tool.patfill'); }, key: '', get tip() { return T('sk.toolTip.patfill'); } },
     { id: 'xmove', icon: 'arrowR', get label() { return T('sk.tool.xmove'); }, key: 'H', get tip() { return T('sk.toolTip.xmove'); } },
     { id: 'stretch', icon: 'stretch', get label() { return T('sk.tool.stretch'); }, key: '', get tip() { return T('sk.toolTip.stretch'); }, pro: true },
     { id: 'dim', icon: 'dim', get label() { return T('sk.tool.dim'); }, key: 'D', get tip() { return T('sk.toolTip.dim'); }, sep: true },
     { id: 'bg', icon: 'image', get label() { return T('sk.tool.bg'); }, key: 'I', get tip() { return T('sk.toolTip.bg'); } },
   ];
-  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', conic: 'conic2d', bridge: 'bridge2d', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', stretch: 'stretch2d' };
+  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', conic: 'conic2d', bridge: 'bridge2d', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', patcurve: 'patternCurve2d', patfill: 'patternFill2d', stretch: 'stretch2d' };
   // Bedingungen (Regeln): zweite Leiste unter den Zeichenwerkzeugen
   const CTOOLS = [
     { id: 'horizontal', icon: 'cHoriz', get label() { return T('sk.con.horizontal'); }, help: 'cHoriz' },
@@ -60,6 +62,11 @@ const Sketch = (() => {
       const n = S.stretch.sel.pointCount;
       return T('sk.hint.stretchReady', { n, unit: T(n === 1 ? 'sk.panel.stretchPtOne' : 'sk.panel.stretchPtMany') });
     }
+    if (id === 'patcurve' && S) {
+      if (S.patPickCurve) return T('sk.hint.patcurvePick');
+      if (S.patSel && S.patSel.length && S.patCurve) return T('sk.hint.patcurveReady');
+    }
+    if (id === 'patfill' && S && activeFillRegion().reg) return T('sk.hint.patfillReady');
     if (id === 'dim' && S) {
       if (S.dimMode === 'arcLen') return T('sk.hint.dimArcLen');
       if (S.dimMode === 'ang3') return T('sk.hint.dimAng3_' + Math.min(2, (S.dimPicks || []).length));
@@ -381,7 +388,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -649,7 +656,7 @@ const Sketch = (() => {
     if (next) {
       S.draft = null; S.drag = null; S.dragPins = null; S.dragged = false;
       S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null;
-      S.autoDef = null; S.mir = null; S.liveMirPick = false; S.patPick = false;
+      S.autoDef = null; S.mir = null; S.liveMirPick = false; S.patPick = false; S.patPickCurve = false;
       if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
       if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; }
       stopWiggle(true);
@@ -673,11 +680,19 @@ const Sketch = (() => {
     if ((id === 'stretch' || id === 'conic' || id === 'bridge') && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
     commitDraftPolyline();
     clearBand();
-    const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
+    const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc' || id === 'patcurve') ? selectedIds() : [];
     S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; hideEntry(); hideDimBox();
     if (isSimpleMode() && S.dimMode === 'ord') S.dimMode = 'auto';
     if (isSimpleMode() && S.splineMode === 'cv') S.splineMode = 'fit';
-    S.mir = null; S.liveMirPick = false; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.hoverHandle = null; S.autoDef = null;
+    S.mir = null; S.liveMirPick = false; S.patSel = carry; S.patPick = false; S.patCurve = null; S.patPickCurve = (id === 'patcurve' && carry.length > 0); S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.hoverHandle = null; S.autoDef = null;
+    if (S.fill) {
+      S.fill.hoverRegionKey = null;
+      if (id === 'patfill') {
+        const regs = SK.regions(S.ents);
+        if (regs.length === 1) S.fill.regionKey = regs[0].key;
+        else if (!regs.some((r) => r.key === S.fill.regionKey)) S.fill.regionKey = null;
+      }
+    }
     if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
     if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; }
     Viewer.highlightFace('hover', null, null);
@@ -1265,7 +1280,8 @@ const Sketch = (() => {
     for (const c of S.cons) {
       for (const k of c.type === 'offset' ? ['v'] : c.type === 'xform' && c.mode !== 'rot' ? ['dx', 'dy'] : []) c[k] = typeof c[k] === 'number' ? round(c[k] * f, 4) : c[k] != null ? `(${c[k]})*${fs}` : c[k];
       if (Array.isArray(c.at)) P(c.at);
-      if (c.pm) for (const k of ['dx', 'dy']) if (typeof c.pm[k] === 'number') c.pm[k] = round(c.pm[k] * f, 4);
+      if (c.center && Array.isArray(c.center.at)) P(c.center.at);
+      if (c.pm) for (const k of ['dx', 'dy', 'dist', 'curveDist']) if (typeof c.pm[k] === 'number') c.pm[k] = round(c.pm[k] * f, 4);
     }
     reapply(); render(); Panels.renderRight();
     return true;
@@ -1283,6 +1299,7 @@ const Sketch = (() => {
     if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== id);
     if (S.ordBase && S.ordBase.ref && S.ordBase.ref.e === id) S.ordBase = null;
     S.patSel = (S.patSel || []).filter((x) => x !== id);
+    if (S.patCurve === id) S.patCurve = null;
     if (S.liveMir && S.liveMir.axis === id) {
       S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn();
       UI.toast(T('sk.toast.liveMirLost'), { icon: 'info', ms: 2600 });
@@ -2437,6 +2454,24 @@ const Sketch = (() => {
   }
   // ---------- Muster ----------
   let lastPatClick = null;
+  function patSelCenter(ids = S.patSel) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const id of ids) { const e = ent(id); if (!e) continue; for (const pl of entPts(e)) for (const p of pl) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); } }
+    return isFinite(x0) ? [round((x0 + x1) / 2, 6), round((y0 + y1) / 2, 6)] : [0, 0];
+  }
+  function curvePlan() {
+    if (!S || !S.patCurve) return null;
+    const ce = ent(S.patCurve);
+    if (!ce || !SKO.isCurveEnt(ce)) return null;
+    const P = S.pat;
+    return SKO.curvePatternJobs(ce, {
+      mode: P.curveMode || 'count',
+      n: P.curveN,
+      dist: P.curveDist,
+      align: P.curveAlign !== false,
+      flip: !!P.curveFlip,
+    }, S.patSel && S.patSel.length ? patSelCenter() : null);
+  }
   function patternDown(uv, p) {
     if ((S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick) {
       const pk = pickAt(uv);
@@ -2444,19 +2479,28 @@ const Sketch = (() => {
       S.patCenter = { ref: pk.ref, xy: pk.xy.slice() }; S.patPick = false;
       UI.hint(hintFor('patcirc')); render(); Panels.renderRight(); return;
     }
+    if (S.tool === 'patcurve' && S.patPickCurve) {
+      const hit = SK.hit(S.ents, uv, tolPx());
+      if (!hit || !SKO.isCurveEnt(hit)) { UI.toast(T('sk.toast.patCurveBadEnt'), { icon: 'info' }); return; }
+      S.patCurve = hit.id;
+      S.patSel = (S.patSel || []).filter((id) => id !== hit.id);
+      S.patPickCurve = false;
+      UI.hint(hintFor('patcurve')); render(); Panels.renderRight(); return;
+    }
     const hit = SK.hit(S.ents, uv, tolPx()); if (!hit) return;
+    if (S.tool === 'patcurve' && hit.id === S.patCurve) return;
     const now = performance.now(), dbl = lastPatClick && lastPatClick.id === hit.id && now - lastPatClick.t < 400;
     lastPatClick = { id: hit.id, t: now };
     if (dbl && (hit.type === 'line' || hit.type === 'arc')) {
       // Doppelklick: alle verbundenen Linien und Bögen dazu
-      const ch = SKO.chainOf(S.ents, hit); const ids = (ch && ch.segs ? ch.segs.map((x) => x.e.id) : [hit.id]);
+      const ch = SKO.chainOf(S.ents, hit); const ids = (ch && ch.segs ? ch.segs.map((x) => x.e.id) : [hit.id]).filter((id) => S.tool !== 'patcurve' || id !== S.patCurve);
       for (const id of ids) if (!S.patSel.includes(id)) S.patSel.push(id);
       lastPatClick = null;
-      render(); Panels.renderRight(); return;
+      UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return;
     }
     const i = S.patSel.indexOf(hit.id);
     if (i >= 0) S.patSel.splice(i, 1); else S.patSel.push(hit.id);
-    render(); Panels.renderRight();
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
   }
   // alle Verschiebungen bzw. Drehungen der Kopien (ohne das Original)
   function patternJobs() {
@@ -2528,30 +2572,49 @@ const Sketch = (() => {
     if (guardLocked()) return 0;
     const ids = S.patSel.filter((id) => ent(id));
     if (!ids.length) { UI.toast('Klick zuerst die Elemente an, die vervielfältigt werden sollen.', { icon: 'info' }); return 0; }
+    const curve = S.tool === 'patcurve';
     const circ = S.tool === 'patcirc';
-    const C = circ ? S.patCenter || { ref: { e: 'origin' }, xy: [0, 0] } : null;
-    const jobs = patternJobs();
-    if (!jobs.length) { UI.toast('Mit dieser Anzahl entstehen keine Kopien.', { icon: 'info' }); return 0; }
+    const P = S.pat, pg = o.pg || uid('pg');
+    let jobs, C = null, piv = null, pm;
+    if (curve) {
+      if (!S.patCurve || !ent(S.patCurve)) { UI.toast(T('sk.toast.patCurveNeedCurve'), { icon: 'info' }); return 0; }
+      const plan = curvePlan();
+      if (!plan || !plan.ok) { UI.toast((plan && plan.why) || T('sk.toast.patCurveNeedCurve'), { kind: 'bad' }); return 0; }
+      if (!plan.jobs.length) { UI.toast('Mit dieser Einstellung entstehen keine Kopien.', { icon: 'info' }); return 0; }
+      jobs = plan.jobs;
+      piv = patSelCenter(ids);
+      pm = { kind: 'curve', curveId: S.patCurve, curveMode: P.curveMode || 'count', curveN: P.curveN, curveDist: P.curveDist, curveAlign: P.curveAlign !== false, curveFlip: !!P.curveFlip, src: ids.slice() };
+    } else {
+      C = circ ? S.patCenter || { ref: { e: 'origin' }, xy: [0, 0] } : null;
+      jobs = patternJobs();
+      if (!jobs.length) { UI.toast('Mit dieser Anzahl entstehen keine Kopien.', { icon: 'info' }); return 0; }
+      pm = circ ? { kind: 'circ', n: P.n, ang: P.ang, src: ids.slice(), center: C.ref, cxy: C.xy.slice() } : { kind: 'rect', nx: P.nx, ny: P.ny, dx: P.dx, dy: P.dy, src: ids.slice() };
+    }
     if (!o.noUndo) pushUndo();
     // alle Regeln dieses Musters tragen dieselbe Kennung und die Einstellungen – so lässt es sich später als Ganzes ändern
-    const P = S.pat, pg = o.pg || uid('pg');
-    const pm = circ ? { kind: 'circ', n: P.n, ang: P.ang, src: ids.slice(), center: C.ref, cxy: C.xy.slice() } : { kind: 'rect', nx: P.nx, ny: P.ny, dx: P.dx, dy: P.dy, src: ids.slice() };
     const newCons = []; let made = 0;
     for (const job of jobs) for (const id of ids) {
       const e = ent(id);
-      const r = patternCopy(e, job, C);
+      const r = curve ? SKO.transformEnt(e, job.dx, job.dy, job.da, piv) : patternCopy(e, job, C);
+      for (const ne of r.ents) delete ne.revAxis;
       S.ents.push(...r.ents);
       const refs = []; for (const [a, b] of r.pairs) refs.push(a, b);
       const c = { id: uid('k'), type: 'xform', refs };
       if (r.rad.length) c.req = r.rad.flat();
-      if (circ) { c.mode = 'rot'; c.center = C.ref; c.ang = round(job.ang, 4); } else { c.dx = round(job.dx, 4); c.dy = round(job.dy, 4); }
+      if (curve) {
+        if (r.xform.mode === 'rot') { c.mode = 'rot'; c.center = r.xform.center; c.ang = r.xform.ang; }
+        else { c.dx = r.xform.dx; c.dy = r.xform.dy; }
+      } else if (circ) { c.mode = 'rot'; c.center = C.ref; c.ang = round(job.ang, 4); }
+      else { c.dx = round(job.dx, 4); c.dy = round(job.dy, 4); }
       c.pg = pg; c.pm = deepClone(pm);
       newCons.push(c); made += r.ents.length;
     }
     S.cons.push(...newCons);
     S.patSel = []; clearSel();
+    if (curve) { S.patCurve = null; S.patPickCurve = false; }
     sanitize(newCons.map((c) => c.id));
     if (o.select && newCons.length) S.selCon = newCons[0].id;
+    if (curve && !o.noUndo && made) UI.toast(T('sk.toast.patCurveDone', { n: made }), { icon: 'check' });
     UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
     return made;
   }
@@ -2560,20 +2623,60 @@ const Sketch = (() => {
     const cons = S.cons.filter((c) => c.type === 'xform' && c.pg === pg); if (!cons.length || !cons[0].pm) return false;
     const pm = cons[0].pm, src = pm.src.filter((id) => ent(id));
     if (!src.length) { UI.toast('Die Originale dieses Musters gibt es nicht mehr.', { kind: 'bad' }); return false; }
+    if (pm.kind === 'curve' && (!pm.curveId || !ent(pm.curveId))) { UI.toast('Die Leitkurve dieses Musters gibt es nicht mehr.', { kind: 'bad' }); return false; }
     pushUndo();
     const copies = new Set(); for (const c of cons) for (let i = 1; i < c.refs.length; i += 2) if (c.refs[i] && c.refs[i].e) copies.add(c.refs[i].e);
     S.cons = S.cons.filter((c) => !(c.type === 'xform' && c.pg === pg));
     for (const id of copies) if (!src.includes(id)) removeEntData(id);
-    const keep = { tool: S.tool, pat: S.pat, patSel: S.patSel, patCenter: S.patCenter };
-    S.tool = pm.kind === 'circ' ? 'patcirc' : 'patrect';
-    S.pat = { ...S.pat, ...(pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, ny: pm.ny, dx: pm.dx, dy: pm.dy }), ...P };
+    const keep = { tool: S.tool, pat: S.pat, patSel: S.patSel, patCenter: S.patCenter, patCurve: S.patCurve, patPickCurve: S.patPickCurve };
+    S.tool = pm.kind === 'circ' ? 'patcirc' : pm.kind === 'curve' ? 'patcurve' : 'patrect';
+    S.pat = { ...S.pat, ...(pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : pm.kind === 'curve' ? { curveMode: pm.curveMode, curveN: pm.curveN, curveDist: pm.curveDist, curveAlign: pm.curveAlign, curveFlip: pm.curveFlip } : { nx: pm.nx, ny: pm.ny, dx: pm.dx, dy: pm.dy }), ...P };
     S.patSel = src.slice();
     S.patCenter = pm.kind === 'circ' && pm.center && pm.center.e !== 'origin' ? { ref: pm.center, xy: refXY(pm.center) || pm.cxy } : null;
+    S.patCurve = pm.kind === 'curve' ? pm.curveId : null;
+    S.patPickCurve = false;
     const made = createPattern({ noUndo: true, pg, select: true });
-    S.tool = keep.tool; S.pat = keep.pat; S.patSel = keep.patSel; S.patCenter = keep.patCenter;
+    S.tool = keep.tool; S.pat = keep.pat; S.patSel = keep.patSel; S.patCenter = keep.patCenter; S.patCurve = keep.patCurve; S.patPickCurve = keep.patPickCurve;
     UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
     if (!made) UI.toast('Mit dieser Anzahl bleibt nur das Original – das Muster ist aufgelöst.', { icon: 'info' });
     return true;
+  }
+  // ---------- Füllmuster in der Skizze (SK-45) ----------
+  function activeFillRegion() {
+    if (!S || !S.fill) return { regs: [], reg: null };
+    const regs = SK.regions(S.ents);
+    let reg = regs.find((r) => r.key === S.fill.regionKey) || null;
+    if (!reg && regs.length === 1) { reg = regs[0]; S.fill.regionKey = reg.key; }
+    return { regs, reg };
+  }
+  function fillPreviewResult() {
+    const { reg } = activeFillRegion();
+    return reg ? SKO.fillPattern(reg, S.fill) : null;
+  }
+  function fillPatternDown(uv) {
+    const regs = SK.regions(S.ents);
+    let reg = SK.regionAt(regs, uv);
+    if (!reg) {
+      const hit = SK.hit(S.ents, uv, tolPx());
+      if (hit) reg = regs.find((r) => r.outer.ents.includes(hit.id));
+    }
+    if (!reg) { UI.toast(T('sk.toast.fillNoRegion'), { icon: 'info' }); return; }
+    S.fill.regionKey = reg.key;
+    UI.hint(hintFor('patfill')); render(); Panels.renderRight();
+  }
+  function applyFillPattern() {
+    if (guardLocked()) return 0;
+    const res = fillPreviewResult();
+    if (!res || !res.ok || !res.ents.length) {
+      UI.toast((res && res.why) || T('sk.panel.fillEmpty'), { icon: 'info' });
+      return 0;
+    }
+    pushUndo();
+    S.ents.push(...res.ents);
+    S.fill.regionKey = null;
+    reapply(); UI.hint(hintFor('patfill')); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.fillDone', { n: res.ents.length }), { icon: 'check' });
+    return res.ents.length;
   }
   function onDown(e) {
     if (!S || S.step) return stepDown(e);
@@ -2800,7 +2903,8 @@ const Sketch = (() => {
     if (t === 'trim') { S.trimming = true; if (trimAt(uv0)) Panels.renderRight(); return; }
     if (t === 'offset') { offsetDown(uv0, e); return; }
     if (t === 'mirror') { mirrorDown(uv0); return; }
-    if (t === 'patrect' || t === 'patcirc' || t === 'xmove') { patternDown(uv0, p); return; }
+    if (t === 'patrect' || t === 'patcirc' || t === 'patcurve' || t === 'xmove') { patternDown(uv0, p); return; }
+    if (t === 'patfill') { fillPatternDown(uv0); return; }
     if (t === 'bridge') { bridgeDown(uv0); return; }
     if (t === 'spline') {
       if (!S.draft) S.draft = { pts: [p] };
@@ -4012,9 +4116,15 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'stretch') { S.cursor = null; return; }
+    if (S.tool === 'patfill') {
+      const regs = SK.regions(S.ents), r = SK.regionAt(regs, uv0);
+      S.fill.hoverRegionKey = r ? r.key : null;
+      S.cursor = null; render(); return;
+    }
     if (S.tool === 'bridge') { S.bridge.hoverEnd = pickCurveEnd(uv0, pxSize() * 14, S.bridge.first); S.cursor = null; render(); return; }
-    if (S.tool === 'offset' || S.tool === 'mirror' || S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'xmove') {
-      const hv = SK.hit(S.ents, uv0, pxSize() * 9); S.hoverEnt = hv ? hv.id : null;
+    if (S.tool === 'offset' || S.tool === 'mirror' || S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'patcurve' || S.tool === 'xmove') {
+      const hv = SK.hit(S.ents, uv0, pxSize() * 9);
+      S.hoverEnt = hv && !(S.tool === 'patcurve' && S.patPickCurve && !SKO.isCurveEnt(hv)) ? hv.id : null;
       S.cursor = (S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick ? snap(uv0, { fine: e.shiftKey, off: e.altKey }) : null;
       render(); return;
     }
@@ -4281,6 +4391,9 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.tool === 'stretch' && S.stretch && S.stretch.box) { S.stretch.box = null; S.stretch.sel = null; UI.hint(hintFor('stretch')); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'bridge' && S.bridge && S.bridge.first) { S.bridge.first = null; S.bridge.hoverEnd = null; UI.hint(hintFor('bridge')); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
+    if (e.key === 'Escape' && S.patPickCurve) { S.patPickCurve = false; UI.hint(hintFor('patcurve')); render(); Panels.renderRight(); return true; }
+    if (e.key === 'Escape' && S.tool === 'patcurve' && S.patCurve) { S.patCurve = null; UI.hint(hintFor('patcurve')); render(); Panels.renderRight(); return true; }
+    if (e.key === 'Escape' && S.tool === 'patfill' && S.fill && S.fill.regionKey) { S.fill.regionKey = null; UI.hint(hintFor('patfill')); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); UI.hint(hintFor(S.tool)); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
@@ -4291,7 +4404,8 @@ const Sketch = (() => {
     }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
     if (e.key === 'Enter' && S.tool === 'stretch' && S.stretch && S.stretch.sel && S.stretch.sel.pointCount > 0) { applyStretch(); return true; }
-    if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc') && S.patSel.length) { createPattern(); return true; }
+    if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc' || (S.tool === 'patcurve' && S.patCurve)) && S.patSel.length) { createPattern(); return true; }
+    if (e.key === 'Enter' && S.tool === 'patfill' && activeFillRegion().reg) { applyFillPattern(); return true; }
     if (e.key === 'Enter' && S.tool === 'xmove' && S.patSel.length) { applyXmove(); return true; }
     if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); } else done(); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.selCon) { removeCons(S.selCon); return true; }
@@ -5043,15 +5157,47 @@ const Sketch = (() => {
       }
     }
     // Muster: Auswahl und Vorschau der Kopien
-    if (S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'xmove') {
+    if (S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'patcurve' || S.tool === 'xmove') {
       const hv = S.hoverEnt && ent(S.hoverEnt);
       if (hv) for (const p of entPts(hv)) lineObj(p, acc, 3, { order: 26, opacity: 0.7 });
+      if (S.tool === 'patcurve' && S.patCurve && ent(S.patCurve)) {
+        for (const p of entPts(ent(S.patCurve))) lineObj(p, '#0f9d58', 3.2, { order: 26 });
+      }
       for (const id of S.patSel) { const e = ent(id); if (e) for (const p of entPts(e)) lineObj(p, acc, 3.4, { order: 26 }); }
-      if (S.patSel.length) {
+      if (S.tool === 'patcurve') {
+        const plan = curvePlan();
+        if (plan && plan.ok) {
+          ring(plan.start, pxSize() * 5, '#0f9d58', 2.2);
+          if (S.patSel.length && plan.jobs.length * S.patSel.length <= 240) {
+            const piv = patSelCenter();
+            for (const job of plan.jobs) for (const id of S.patSel) {
+              const e = ent(id); if (!e) continue;
+              for (const ne of SKO.transformEnt(e, job.dx, job.dy, job.da, piv).ents) for (const p of entPts(ne)) lineObj(p, acc, 1.6, { dashed: true, opacity: 0.55, order: 26 });
+            }
+          }
+        }
+      } else if (S.patSel.length) {
         const C = S.tool === 'xmove' ? xmoveCenter() : S.patCenter || { xy: [0, 0] };
         if (S.tool === 'patcirc' || (S.tool === 'xmove' && S.xm.mode === 'rot')) { ring(C.xy, pxSize() * 6, acc, 2); }
         const jobs = S.tool === 'xmove' ? [xmoveJob()] : patternJobs();
         if (jobs.length * S.patSel.length <= 240) for (const job of jobs) for (const id of S.patSel) { const e = ent(id); if (!e) continue; for (const ne of patternCopy(e, job, C).ents) for (const p of entPts(ne)) lineObj(p, acc, 1.6, { dashed: true, opacity: 0.55, order: 26 }); }
+      }
+    }
+    // Füllmuster: gewählte Fläche und Vorschau der Löcher
+    if (S.tool === 'patfill') {
+      const { regs, reg } = activeFillRegion();
+      if (S.fill && S.fill.hoverRegionKey && (!reg || reg.key !== S.fill.hoverRegionKey)) {
+        const hreg = regs.find((r) => r.key === S.fill.hoverRegionKey);
+        if (hreg) { const hp = hreg.outer.poly.slice(); hp.push(hp[0]); lineObj(hp, acc, 2.2, { opacity: 0.5, order: 25 }); }
+      }
+      if (reg) {
+        const op = reg.outer.poly.slice(); op.push(op[0]);
+        lineObj(op, '#0f9d58', 2.8, { order: 26 });
+        const res = fillPreviewResult();
+        if (res && res.ok && res.ents.length) {
+          const lim = Math.min(res.ents.length, 300);
+          for (let i = 0; i < lim; i++) for (const p of entPts(res.ents[i])) lineObj(p, acc, 1.5, { dashed: true, opacity: 0.65, order: 26 });
+        }
       }
     }
     // Strecken: Auswahlrahmen, markierte Punkte & Vorschau
@@ -5833,11 +5979,27 @@ const Sketch = (() => {
       if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', T('sk.panel.xformX'), 'mm', 'dx'); editNum('co-dy', T('sk.panel.xformY'), 'mm', 'dy'); }
       if (selCon.type === 'xform' && selCon.pg && selCon.pm) {
         // ganzes Muster: Anzahl und Abstand für alle Kopien zusammen
-        const pm = selCon.pm, Q = pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, dx: pm.dx, ny: pm.ny, dy: pm.dy };
+        const pm = selCon.pm, Q = pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : pm.kind === 'curve' ? { curveMode: pm.curveMode || 'count', curveN: pm.curveN || 5, curveDist: pm.curveDist || 10, curveAlign: pm.curveAlign !== false, curveFlip: !!pm.curveFlip } : { nx: pm.nx, dx: pm.dx, ny: pm.ny, dy: pm.dy };
         const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('sk.panel.wholePattern')));
         const fm = h('div', { class: 'fields' });
         const fld = (id, label, key, unit, o2 = {}) => fm.append(UI.numField({ id, label, value: Q[key], unit, expr: false, min: o2.min, int: o2.int, onCommit: (v) => { Q[key] = v; } }));
         if (pm.kind === 'circ') { fld('pg-n', T('common.count'), 'n', '', { min: 1, int: true }); fld('pg-ang', T('sk.panel.totalAngle'), 'ang', '°'); }
+        else if (pm.kind === 'curve') {
+          const valEl = h('div', { class: 'fields' });
+          const renderCurveFields = () => {
+            valEl.innerHTML = '';
+            if (Q.curveMode === 'spacing') valEl.append(UI.numField({ id: 'pg-cdist', label: T('sk.panel.curveDist'), value: Q.curveDist, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { Q.curveDist = v; } }));
+            else valEl.append(UI.numField({ id: 'pg-cn', label: T('common.count'), value: Q.curveN, unit: '', expr: false, min: 1, int: true, onCommit: (v) => { Q.curveN = v; } }));
+          };
+          fm.append(UI.selectField({ id: 'pg-cmode', label: T('sk.panel.curveMode'), value: Q.curveMode, options: [['count', T('sk.panel.curveModeCount')], ['spacing', T('sk.panel.curveModeSpacing')]], onChange: (v) => { Q.curveMode = v; renderCurveFields(); } }));
+          renderCurveFields();
+          fm.append(valEl);
+          const al = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'pg-calign', checked: !!Q.curveAlign }), T('sk.panel.curveAlign'));
+          al.querySelector('input').onchange = (e) => { Q.curveAlign = e.target.checked; };
+          const fl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'pg-cflip', checked: !!Q.curveFlip }), T('sk.panel.curveFlip'));
+          fl.querySelector('input').onchange = (e) => { Q.curveFlip = e.target.checked; };
+          fm.append(al, fl);
+        }
         else { fld('pg-nx', T('sk.panel.nx'), 'nx', '', { min: 1, int: true }); fld('pg-dx', T('sk.panel.dx'), 'dx', 'mm'); fld('pg-ny', T('sk.panel.ny'), 'ny', '', { min: 1, int: true }); fld('pg-dy', T('sk.panel.dy'), 'dy', 'mm'); }
         const ap = h('button', { type: 'button', class: 'btn primary', id: 'pg-apply' }); ap.innerHTML = icon('check') + esc(T('sk.panel.patApply'));
         ap.onclick = () => regenPattern(selCon.pg, Q);
@@ -6246,6 +6408,93 @@ const Sketch = (() => {
         const ok = h('button', { type: 'button', class: 'btn primary', id: 'pt-make' }, T('sk.panel.makePattern', { n: S.patSel.length }));
         ok.disabled = !S.patSel.length; ok.onclick = () => createPattern();
         w.append(h('div', { class: 'btn-row' }, ok));
+      }
+      if (S.tool === 'patcurve') {
+        const P = S.pat;
+        const cEnt = S.patCurve ? ent(S.patCurve) : null;
+        const cName = cEnt ? T('sk.panel.ent.' + cEnt.type) : T('sk.panel.curveNone');
+        const cb = h('button', { type: 'button', class: 'btn' + (S.patPickCurve ? ' primary' : ''), id: 'pt-pick-curve' }, T(S.patPickCurve ? 'sk.panel.curvePicking' : 'sk.panel.curvePick'));
+        cb.onclick = () => { S.patPickCurve = !S.patPickCurve; UI.hint(hintFor('patcurve')); Panels.renderRight(); render(); };
+        w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('sk.panel.curvePrefix') + cName), h('div', { class: 'btn-row' }, cb)));
+        w.append(UI.selectField({
+          id: 'pt-cmode', label: T('sk.panel.curveMode'), value: P.curveMode || 'count',
+          options: [['count', T('sk.panel.curveModeCount')], ['spacing', T('sk.panel.curveModeSpacing')]],
+          onChange: (v) => { P.curveMode = v; Panels.renderRight(); render(); },
+        }));
+        const infoBox = h('div', { id: 'pt-cinfo' });
+        const ok = h('button', { type: 'button', class: 'btn primary', id: 'pt-make' }, T('sk.panel.makePattern', { n: S.patSel.length }));
+        const syncCurveUI = (redraw = true) => {
+          const plan = curvePlan();
+          infoBox.innerHTML = '';
+          if (plan && plan.ok) {
+            infoBox.className = 'ok-box';
+            infoBox.innerHTML = T('sk.panel.curveInfo', { len: Units.fmtLenU(plan.len, 2), n: plan.count, step: Units.fmtLenU(plan.spacing, 2) });
+            ok.disabled = !(S.patSel.length > 0 && plan.jobs.length > 0);
+          } else {
+            infoBox.className = 'hint-box';
+            infoBox.textContent = (plan && plan.why) || T('sk.toast.patCurveNeedCurve');
+            ok.disabled = true;
+          }
+          if (redraw) render();
+        };
+        const f2 = h('div', { class: 'fields' });
+        if ((P.curveMode || 'count') === 'spacing') {
+          f2.append(UI.numField({ id: 'pt-cdist', label: T('sk.panel.curveDist'), value: P.curveDist, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { P.curveDist = v; syncCurveUI(); } }));
+        } else {
+          f2.append(UI.numField({ id: 'pt-cn', label: T('common.count'), value: P.curveN, unit: '', expr: false, min: 2, int: true, onCommit: (v) => { P.curveN = v; syncCurveUI(); } }));
+        }
+        w.append(f2);
+        const al = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'pt-calign', checked: P.curveAlign !== false }), T('sk.panel.curveAlign'));
+        al.querySelector('input').onchange = (e) => { P.curveAlign = e.target.checked; syncCurveUI(); };
+        const fl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'pt-cflip', checked: !!P.curveFlip }), T('sk.panel.curveFlip'));
+        fl.querySelector('input').onchange = (e) => { P.curveFlip = e.target.checked; syncCurveUI(); };
+        ok.onclick = () => createPattern();
+        syncCurveUI(false);
+        w.append(al, fl, infoBox, h('div', { class: 'btn-row' }, ok));
+      }
+      if (S.tool === 'patfill') {
+        const F = S.fill;
+        w.append(UI.selectField({
+          id: 'fp-kind', label: T('sk.panel.fillKind'), value: F.kind,
+          options: [['grid', T('sk.panel.fillGrid')], ['staggered', T('sk.panel.fillStaggered')], ['hex', T('sk.panel.fillHex')]],
+          onChange: (v) => { F.kind = v; syncFillUI(); },
+        }));
+        const infoBox = h('div', { id: 'fp-info' });
+        const ok = h('button', { type: 'button', class: 'btn primary', id: 'fp-make' });
+        const syncFillUI = (redraw = true) => {
+          const { regs, reg } = activeFillRegion();
+          const res = reg ? SKO.fillPattern(reg, F) : null;
+          infoBox.innerHTML = '';
+          if (!reg) {
+            infoBox.className = 'hint-box';
+            infoBox.textContent = T(regs.length ? 'sk.panel.fillPickRegion' : 'sk.panel.fillNoRegion');
+            ok.disabled = true;
+            ok.textContent = T('sk.panel.fillMake', { n: 0 });
+          } else if (!res || !res.ok) {
+            infoBox.className = 'err-box';
+            infoBox.textContent = (res && res.why) || T('sk.panel.fillEmpty');
+            ok.disabled = true;
+            ok.textContent = T('sk.panel.fillMake', { n: 0 });
+          } else if (!res.ents.length) {
+            infoBox.className = 'hint-box';
+            infoBox.textContent = T('sk.panel.fillEmpty');
+            ok.disabled = true;
+            ok.textContent = T('sk.panel.fillMake', { n: 0 });
+          } else {
+            infoBox.className = 'ok-box';
+            infoBox.innerHTML = T('sk.panel.fillInfo', { n: res.ents.length, wall: Units.fmtLenU(res.wall, 2) }) + (res.truncated ? T('sk.panel.fillTrunc', { n: res.ents.length }) : '');
+            ok.disabled = false;
+            ok.textContent = T('sk.panel.fillMake', { n: res.ents.length });
+          }
+          if (redraw) render();
+        };
+        const ff = h('div', { class: 'fields' });
+        ff.append(UI.numField({ id: 'fp-size', label: T('sk.panel.fillSize'), value: F.size, unit: 'mm', expr: false, min: 0.2, onCommit: (v) => { F.size = v; syncFillUI(); } }));
+        ff.append(UI.numField({ id: 'fp-pitch', label: T('sk.panel.fillPitch'), value: F.pitch, unit: 'mm', expr: false, min: 0.3, onCommit: (v) => { F.pitch = v; syncFillUI(); } }));
+        ff.append(UI.numField({ id: 'fp-margin', label: T('sk.panel.fillMargin'), value: F.margin, unit: 'mm', expr: false, min: 0, onCommit: (v) => { F.margin = v; syncFillUI(); } }));
+        ok.onclick = () => applyFillPattern();
+        syncFillUI(false);
+        w.append(ff, infoBox, h('div', { class: 'btn-row' }, ok));
       }
       if (S.tool === 'xmove') {
         const X = S.xm; const f2 = h('div', { class: 'fields' });
