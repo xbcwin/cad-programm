@@ -11,14 +11,14 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
   $('#btn-left-close').innerHTML = icon('close'); $('#btn-right-close').innerHTML = icon('close');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Clipboard, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck, ClashCheck, InnerRadius, SymmetryCheck, UserLib, Assembly, PointClouds, Notices };
+  window.__masswerk = { App, Viewer, Model, Actions, Clipboard, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck, ClashCheck, InnerRadius, SymmetryCheck, UserLib, Assembly, PointClouds, Notices, PWA };
   UI.initTips();
   I18n.applyDom();
   UI.initTablet();
   UI.initA11y();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, PointClouds, RefFix, Print, ViewPrefs, App, Actions, Clipboard, Model, Timeline, Start, Templates, Comp, Assembly, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, ClashCheck, InnerRadius, SymmetryCheck, Log, Notices, Kernel, Drawing, UI }; window.__S = Start; // für automatische Tests
-  Panels.init(); Datums.init(); PointClouds.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Notices.init(); Timeline.init(); Refine.init(); Comp.init(); Assembly.init(); Views.init(); GeomCheck.init(); ClashCheck.init(); InnerRadius.init(); SymmetryCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, PointClouds, RefFix, Print, ViewPrefs, App, Actions, Clipboard, Model, Timeline, Start, Templates, Comp, Assembly, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, ClashCheck, InnerRadius, SymmetryCheck, Log, Notices, PWA, Kernel, Drawing, UI }; window.__S = Start; // für automatische Tests
+  Panels.init(); Datums.init(); PointClouds.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Notices.init(); Timeline.init(); Refine.init(); Comp.init(); Assembly.init(); Views.init(); GeomCheck.init(); ClashCheck.init(); InnerRadius.init(); SymmetryCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init(); PWA.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -45,6 +45,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
   const projectItems = () => [
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
+    { id: 'pm-export-bundle', label: T('menu.proj.exportBundle'), icon: 'export', help: 'exportBundle', run: () => Print.exportBundle() },
     ...(Start.folderSupported() ? (Start.folderInfo() ? [
       { label: T('menu.proj.saveInFolderNow', { name: Start.folderInfo().name }), icon: 'save', id: 'pm-folder-now', help: 'saveFolder', run: () => Start.saveToFolderNow() },
       { label: T('menu.proj.changeFolder'), icon: 'folder', id: 'pm-folder-change', help: 'saveFolder', run: () => Start.saveToFolder() },
@@ -109,6 +110,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
     { label: T('menu.main.settings'), icon: 'gear', run: () => ViewPrefs.dialog() },
     { label: T('menu.main.shortcuts'), icon: 'help', run: () => Commands.showKeys() },
     { label: T('menu.main.export'), icon: 'export', run: () => Print.exportDialog() },
+    { id: 'mm-export-bundle', label: T('menu.proj.exportBundle'), icon: 'export', help: 'exportBundle', run: () => Print.exportBundle() },
     { label: T('menu.main.saveImage'), icon: 'image', run: () => Print.imageDialog() },
     '-',
     { label: T('menu.main.about'), icon: 'info', run: () => openAboutDialog() },
@@ -200,6 +202,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
       Print.updateAmpel();
       Measure.updateStatus();
       Log.markUiReady(performance.now());
+      setTimeout(() => PWA.register(), 300);
     }
   })();
 })();

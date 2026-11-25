@@ -300,9 +300,19 @@ const ViewPrefs = (() => {
   }
   async function loadFromFile(file) {
     if (!file) return { ok: false, error: 'no_file' };
+    const sz = typeof Store !== 'undefined' && Store.checkFileSize ? Store.checkFileSize(file, 'settings') : { ok: true };
+    if (!sz.ok) {
+      UI.toast(sz.message, { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: 'too_large' };
+    }
     try {
       const txt = await file.text();
-      return importData(txt);
+      const parsed = typeof Store !== 'undefined' && Store.safeParseJSON ? Store.safeParseJSON(txt, { limit: Store.LIMITS.settings, name: file.name }) : { ok: true, data: JSON.parse(txt) };
+      if (!parsed.ok) {
+        UI.toast(T('dlg.settings.loadBadFile'), { kind: 'bad', icon: 'warn' });
+        return { ok: false, error: 'parse_error' };
+      }
+      return importData(parsed.data);
     } catch (_) {
       UI.toast(T('dlg.settings.loadBadFile'), { kind: 'bad', icon: 'warn' });
       return { ok: false, error: 'read_error' };
@@ -362,6 +372,15 @@ const ViewPrefs = (() => {
   }
   async function loadEnvImage(file) {
     if (!file || typeof Viewer === 'undefined' || !Viewer.setEnvImage) return { ok: false, error: 'no_file' };
+    const sz = typeof Store !== 'undefined' && Store.checkFileSize ? Store.checkFileSize(file, 'image') : { ok: true };
+    if (!sz.ok) {
+      UI.toast(sz.message, { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: sz.reason || 'too_large' };
+    }
+    if (/\.svg$/i.test(file.name || '') || (file.type || '').toLowerCase().includes('svg')) {
+      UI.toast(T('look.envLoadErr'), { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: 'unsupported_svg' };
+    }
     const res = await Viewer.setEnvImage(file, file.name || '');
     if (!res || !res.ok) {
       UI.toast(T('look.envLoadErr'), { kind: 'bad', icon: 'warn' });
@@ -784,7 +803,45 @@ const ViewPrefs = (() => {
       h('small', { style: { color: 'var(--muted)' } }, T('dlg.settings.lookHint')),
       h('div', { class: 'btn-row' }, lookBtn),
     );
-    paneGen.append(lookBox, ioBox);
+    const pwaStatusEl = h('div', { id: 'set-pwa-status', class: 'pwa-status' });
+    const pwaHintEl = h('small', { id: 'set-pwa-hint', style: { color: 'var(--muted)' } });
+    const pwaBtnsEl = h('div', { class: 'btn-row' });
+    const renderPwaBox = () => {
+      const st = typeof PWA !== 'undefined' ? PWA.status() : { swState: 'unsupported', offlineReady: false, installed: false, canPrompt: false, online: true };
+      let dotCls = 'off', stText = T('dlg.settings.pwaUnsupported');
+      if (st.installed) { dotCls = 'ok'; stText = T('dlg.settings.pwaInstalled'); }
+      else if (!st.online) { dotCls = st.offlineReady ? 'ok' : 'off'; stText = T('dlg.settings.pwaOfflineNow'); }
+      else if (st.offlineReady) { dotCls = 'ok'; stText = T('dlg.settings.pwaReady'); }
+      else if (st.swState === 'unsupported' || st.swState === 'error') { dotCls = 'off'; stText = T('dlg.settings.pwaUnsupported'); }
+      else { dotCls = 'busy'; stText = T('dlg.settings.pwaCaching'); }
+      pwaStatusEl.innerHTML = '';
+      pwaStatusEl.append(h('span', { class: 'pwa-dot ' + dotCls, 'aria-hidden': 'true' }), document.createTextNode(stText));
+      pwaHintEl.textContent = st.installed ? T('dlg.settings.pwaHintInstalled') : (st.canPrompt ? T('dlg.settings.pwaHintPrompt') : T('dlg.settings.pwaHintManual'));
+      pwaBtnsEl.innerHTML = '';
+      if (st.canPrompt) {
+        const b = h('button', { type: 'button', class: 'btn small', id: 'set-pwa-install' });
+        b.innerHTML = icon('logo');
+        b.append(document.createTextNode(T('dlg.settings.pwaInstallBtn')));
+        b.onclick = () => { if (typeof PWA !== 'undefined') PWA.promptInstall(); };
+        pwaBtnsEl.append(b);
+      } else if (!st.installed) {
+        const b = h('button', { type: 'button', class: 'btn small', id: 'set-pwa-guide' });
+        b.innerHTML = icon('logo');
+        b.append(document.createTextNode(T('dlg.settings.pwaGuideBtn')));
+        b.onclick = () => { if (typeof PWA !== 'undefined') PWA.guideDialog(); };
+        pwaBtnsEl.append(b);
+      }
+      pwaBtnsEl.hidden = !pwaBtnsEl.childNodes.length;
+    };
+    renderPwaBox();
+    const offPwa = typeof PWA !== 'undefined' ? PWA.on('change', renderPwaBox) : null;
+    const pwaBox = h('div', { id: 'set-pwa-box', class: 'set-io-box', 'data-help': 'installApp', tabindex: '-1' },
+      h('div', { class: 'section-h' }, T('dlg.settings.pwaTitle')),
+      pwaStatusEl,
+      pwaHintEl,
+      pwaBtnsEl,
+    );
+    paneGen.append(lookBox, ioBox, pwaBox);
 
     const syncTabs = (tab) => {
       tabs.hidden = simple();
@@ -808,6 +865,7 @@ const ViewPrefs = (() => {
       body,
       actions: [{ label: T('common.done'), primary: true }],
       onClose: () => {
+        if (offPwa) offPwa();
         if (kbdEd) kbdEd.destroy();
         if (openDialogState && openDialogState.handle === modalHandle) openDialogState = null;
       },

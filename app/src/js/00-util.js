@@ -2439,6 +2439,16 @@ const HELP = {
   "tip": "Vierfach-Ansicht: Vorn, Oben, Rechts und Schräg gleichzeitig im Bild (Profi)",
   "hilfe": "Teilt das 3D-Fenster in vier Bereiche (Vorn, Oben, Rechts und Schräg). Jeden Bereich kannst du einzeln mit der Maus drehen, zoomen und verschieben, per Knopf zwischen orthografisch und perspektivisch umschalten oder auf seine Grundrichtung zurücksetzen.",
   "tipp": "Ein Klick auf „1 Ansicht“ oben rechts oder erneut auf „Vierfach-Ansicht“ im Ansicht-Menü kehrt sofort zur großen Einzelansicht zurück."
+ },
+ "installApp": {
+  "tip": "Tracery wie ein Programm auf deinem Gerät installieren und ohne Internet nutzen",
+  "hilfe": "Tracery speichert seine Programmdateien und den CAD-Kern automatisch im Browser-Speicher. Danach öffnet es auch ohne Internetverbindung sofort. Über die Adresszeile oder das Teilen-Menü kannst du es als eigenes Fenster (App) auf Schreibtisch, Dock oder Startbildschirm legen.",
+  "tipp": "Sobald der grüne Punkt „Ohne Internet nutzbar“ erscheint, liegen alle Dateien inklusive CAD-Kern lokal auf deinem Gerät."
+ },
+ "exportBundle": {
+  "tip": "Alles als Paket (ZIP): Projekt, Zeichnungen (PDF), STEP und STL je Körper zusammen speichern",
+  "hilfe": "Packt dein gesamtes Projekt in eine einzige ZIP-Datei: die Tracery-Projektdatei zum Weiterbauen, alle technischen Zeichnungen als PDF, das komplette Modell als STEP sowie eine eigene STL-Datei für jeden sichtbaren Körper.",
+  "tipp": "Ideal zum Weitergeben, Archivieren oder für den Fertiger – alle wichtigen Formate sind direkt dabei."
  }
 };
 

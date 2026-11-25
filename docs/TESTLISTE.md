@@ -2567,6 +2567,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, DE/EN-Texte & Befehle**: `werkzeug-hilfen.json`/`HELP` enthalten `radialMenu` und `paintSelect`, DE/EN-Schlüssel sind gleich, Befehlssuche findet Kreis-Menü und Malen-Auswahl (`t_kreis_malen`).
 - [ ] **Von Hand**: Im Browser mit rechter Maustaste kurz gedrückt halten, direkt auf ein Feld ziehen und loslassen (flüssige Geste ohne zweiten Klick) sowie auf einem abgerundeten Bauteil mit Malen-Auswahl mehrere Flächen einfärben und Kantenketten abrunden.
 
+## Als App installieren & ohne Internet nutzbar (Auto [A-142], BE-23)
+
+- [x] **Manifest & lokale Symbole ohne Fremd-Anfragen**: `<link rel="manifest" href="manifest.webmanifest">` liegt in `<head>`, `manifest.webmanifest` liefert `short_name: "Tracery"`, `display: "standalone"` und gültige lokale Symbole (`app-icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`); auf der Seite und beim Laden entstehen null externe HTTP-Anfragen (`t_a142_pwa_offline`).
+- [x] **Service Worker & lokaler Voll-Cache**: `app/sw.js` ist registriert und aktiv (`PWA.status().offlineReady === true`), und der Cache `tracery-offline-*` enthält alle Programmdateien inklusive `index.html`, `./`, `occ-kernel.wasm`, `kernel/worker.js`, `kernel/core.js`, Three.js-Modulen, Schriften und Symbolen (`t_a142_pwa_offline`).
+- [x] **Start & CAD-Berechnung ohne Internet**: Mit abgeschaltetem Netz (`set_offline(True)`) lädt ein Neuladen der Seite Tracery fehlerfrei auf die Startseite und ein Quader wird samt Web Worker und `occ-kernel.wasm` komplett offline berechnet (`V = 8000 mm³`, `t_a142_pwa_offline`).
+- [x] **Einstellungen, Anleitung, Hilfe & DE/EN**: `#set-pwa-box` („Als App installieren & ohne Internet nutzen“) erscheint in Einfach und Profi mit Statuspunkt, öffnet die Chrome/Edge/Safari-Anleitung (`#pwa-guide-dlg`) bzw. bei `beforeinstallprompt` `#set-pwa-install`, und `installApp`-Hilfe, Befehl `install-app` sowie DE/EN-Schlüsselgleichheit sind geprüft (`t_a142_pwa_offline`).
+- [ ] **Von Hand**: Tracery über HTTPS oder `localhost` in Chrome/Edge („App installieren“) bzw. Safari auf Mac/iPad („Zum Dock hinzufügen“ / „Zum Home-Bildschirm“) als eigenständige App installieren, das Symbol im Dock/Startbildschirm prüfen und anschließend bei getrenntem WLAN starten.
+
 ## Tastaturbedienung, hoher Kontrast und Vorlese-Texte (Auto [A-141], BE-24)
 
 - [x] **Nur mit Tastatur bis zum Quader (`BE-24`)**: In einem leeren Projekt per `Tab` bis `#t-body` (sichtbarer Fokusrahmen), `Enter` öffnet das Körper-Flyout, `Tab` zur Quader-Kachel (`data-kind="box"`), `Esc` schließt wieder mit Fokus zurück auf `#t-body`, erneutes `Enter` + `Tab` + `Enter` legt den Quader an (`t_a141_barrierefreiheit`).
@@ -2574,6 +2582,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Vorlese-Texte (`aria-label`)**: Kein sichtbarer Knopf oder `role="button"` in Modellansicht, Flyout, Einstellungen, Werkzeugleisten-Dialog, Skizze und Zeichnung bleibt ohne Beschriftung oder Fokusierbarkeit (`t_a141_barrierefreiheit`).
 - [x] **Hoher Kontrast, Hilfe & DE/EN**: Einstellung `#set-highContrast` setzt `body.high-contrast` und speichert `highContrast` dauerhaft in `masswerk.view`; `HELP.highContrast`, DE/EN-Schlüsselgleichheit und Befehlssuche (`high-contrast`) geprüft (`t_a141_barrierefreiheit`).
 - [ ] **Von Hand**: Im Browser ein komplettes Teil nur per Tastatur (Tab, Pfeiltasten, Enter, Esc) im Modus „Hoher Kontrast“ (hell & dunkel) erstellen und mit VoiceOver (macOS) oder NVDA (Windows) prüfen, ob alle Symbolknöpfe verständlich vorgelesen werden.
+
+## Volltest-Reparatur (Auto [F-11250803])
+
+- [x] **Schraubenlöcher bei kaltem CAD-Kern**: Nach „Leeres Projekt“ (Kern noch im Zustand `idle` durch A-054) wartet `t_schrauben` per `warte_rechnen()` zuverlässig auf den ersten Kern-Start und jede `#lp-fit`/`#lp-size`-Änderung, sodass M3 `3,4 / 3,2 / 2,5 mm` und M1.6 ohne Fehler gelingen (`Schraubenlöcher`, `t_f11250803`).
+- [x] **Befehlssuche „Fläche auf Fläche“ (`[A-086]`)**: `Commands.search('fläche auf fläche')` liefert `mate-planar` auf Platz 1 und `Commands.search('zylindrisch')` findet `mate-cyl` (bereits durch `[F-11250536]` repariert, im Volltest-Nachlauf bestätigt: `t_a086_verbindungen_zyl_eben`, `t_f11250803`).
+- [ ] **Von Hand**: Im Browser über „Leeres Projekt“ (ohne vorher geladenen Kern) ein Schraubenloch M3 anlegen, Passung von Mittel auf Eng und Kernloch umschalten und in der Eingabezeile „fläche auf fläche“ suchen.
+
+## Alles als Paket (ZIP) und Sicherheit beim Einlesen (Auto [A-143], IO-18, PL-16)
+
+- [x] **Einfach & Profi, Hilfe und Befehlssuche**: Knopf `#ex-bundle-btn` („Alles als Paket speichern“) ist sowohl in „Einfach“ als auch in „Profi“ im Export-Dialog sichtbar; Hilfetext `exportBundle` und Befehl `export-bundle` sind vorhanden (`t_paket_und_sicherheit`).
+- [x] **Alles als Paket (ZIP) mit 2 Körpern (`IO-18`)**: Exportiert über `#ex-bundle-btn` ein `<Name>-Paket.zip` mit der Projektdatei (`.tracery.json`, 2 Körper), den technischen Zeichnungen (`Zeichnungen/<Name>.pdf` als gültiges `%PDF-`), exakt einer `.step`-Datei, genau zwei STL-Dateien (`STL/Deckel.stl`, `STL/Boden.stl`) sowie `LIESMICH.txt` (`t_paket_und_sicherheit`).
+- [x] **SVG-Schutz ohne Ausführung (`PL-16`)**: SVG mit `<script>`, `onclick`-Handler, `<style>@import …</style>` und externen `href`-Links wird ohne Skriptausführung eingelesen (`window.__a143_xss === 0`), die Skripte/Handler/Links werden entfernt (`Start.lastSvgSanitize`), das Rechteck (40 × 20 mm) sauber importiert und ein Hinweis-Toast angezeigt; SVG-Aufkleber (`Actions.parseDecalFile`) und `Model.normalizeDecal` bereinigen unsichere Inhalte ebenso (`t_paket_und_sicherheit`).
+- [x] **Größenlimits, Dateiformat, Prototype-Pollution & ZIP-Schutz**: Übergroße Dateien (`Store.checkFileSize`), nicht unterstützte Endungen (`virus.exe`), `__proto__`-Schlüssel in JSON (`Store.safeParseJSON`) und `..`-Pfade in ZIPs (`Zip.read`) werden mit klaren deutschen Meldungen abgewiesen (`t_paket_und_sicherheit`).
+- [ ] **Von Hand**: Im Browser ein Projekt mit mehreren Körpern und einer bemaßten Zeichnung sowohl in „Einfach“ als auch in „Profi“ über Projekt-Menü und Export-Dialog als Paket herunterladen, entpacken und die erzeugte PDF-Zeichnung, STEP und STLs in einem externen Viewer öffnen sowie eine große (> 8 MB) oder fremde Datei per Drag-and-Drop ins Fenster ziehen.
 
 ## Technische Illustration und vier Ansichten (Auto [A-137], AN-17, AN-18)
 

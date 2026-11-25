@@ -1336,6 +1336,12 @@ body.tablet .inp .meas-btn svg{width:17px;height:17px}
 .uiscale-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .uiscale-presets .btn.on,.uiscale-presets .btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .set-io-box{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.pwa-status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink)}
+.pwa-dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--muted)}
+.pwa-dot.ok{background:var(--ok)}
+.pwa-dot.busy{background:var(--warn)}
+.pwa-dot.off{background:var(--muted)}
+.pwa-guide-list{margin:0;padding-left:20px;display:grid;gap:6px;font-size:13.5px}
 
 /* Oberflächen-Größe (BE-31) */
 :root{--ui-scale:1;--topbar-h:calc(52px * var(--ui-scale,1))}

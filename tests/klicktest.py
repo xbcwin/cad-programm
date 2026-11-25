@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -590,12 +590,13 @@ def t_einfuehrung(p):
 # ---------- Schraubenlöcher ----------
 def t_schrauben(p):
     p.empty()
-    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:10},{role:'solid'})); }); App.select([App.doc.items[0].id])"); p.wait(2500)
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:10},{role:'solid'})); }); App.select([App.doc.items[0].id])")
+    warte_rechnen(p, 30)
     r = lambda: p.ev("const b=App.results.get(App.doc.items[0].id).data.bbox; return Math.round((b[3]-b[0])*1000)/1000")
     a = r()
-    p.pg.select_option('#lp-fit', 'fine'); p.wait(2000); b = r()
-    p.pg.select_option('#lp-fit', 'tap'); p.wait(2000); c = r()
-    p.pg.select_option('#lp-size', 'M1.6'); p.wait(2000)
+    p.pg.select_option('#lp-fit', 'fine'); warte_rechnen(p, 25); b = r()
+    p.pg.select_option('#lp-fit', 'tap'); warte_rechnen(p, 25); c = r()
+    p.pg.select_option('#lp-size', 'M1.6'); warte_rechnen(p, 25)
     d = p.ev("return App.errors.length")
     return (a, b, c) == (3.4, 3.2, 2.5) and d == 0, f'M3: {a} / {b} / {c} mm'
 
@@ -27744,6 +27745,184 @@ def t_kreis_malen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a142_pwa_offline(p):
+    # 1. Manifest in <head>, lokale Symbole, keine fremden Netz-Anfragen
+    reqs = []
+    p.pg.on('request', lambda req: reqs.append(req.url))
+    p.pg.reload(wait_until='load', timeout=30000)
+    p.wait(1200)
+
+    man_res = p.pg.evaluate("""async () => {
+      const link = document.head.querySelector('link[rel="manifest"]');
+      if (!link) return { hasLink: false };
+      const href = link.getAttribute('href');
+      const r = await fetch(link.href);
+      const man = r.ok ? await r.json() : null;
+      const iconChecks = [];
+      for (const ic of (man && man.icons) || []) {
+        const ir = await fetch(new URL(ic.src, r.url).href);
+        const buf = ir.ok ? await ir.arrayBuffer() : new ArrayBuffer(0);
+        iconChecks.push({ src: ic.src, sizes: ic.sizes, type: ic.type, ok: ir.ok, bytes: buf.byteLength });
+      }
+      const extTags = [...document.querySelectorAll('link[href], script[src]')].map(el => el.href || el.src).filter(u => {
+        if (!/^https?:/i.test(u)) return false;
+        try { return new URL(u).origin !== location.origin; } catch (_) { return true; }
+      });
+      return { hasLink: true, href, status: r.status, man, iconChecks, extTags };
+    }""")
+    foreign_reqs = [
+        u for u in reqs
+        if u.startswith('http')
+        and not u.startswith('http://localhost:')
+        and not u.startswith('http://127.0.0.1:')
+    ]
+    man = man_res.get('man') or {}
+    icons = man_res.get('iconChecks') or []
+    ok1 = (
+        bool(man_res.get('hasLink'))
+        and man_res.get('status') == 200
+        and man.get('short_name') == 'Tracery'
+        and man.get('display') == 'standalone'
+        and man.get('start_url') == './'
+        and any(ic.get('sizes') == '192x192' and ic.get('type') == 'image/png' and ic.get('ok') and ic.get('bytes', 0) > 0 for ic in icons)
+        and any(ic.get('sizes') == '512x512' and ic.get('type') == 'image/png' and ic.get('ok') and ic.get('bytes', 0) > 0 for ic in icons)
+        and any(ic.get('type') == 'image/svg+xml' and ic.get('ok') and ic.get('bytes', 0) > 0 for ic in icons)
+        and len(man_res.get('extTags') or []) == 0
+        and len(foreign_reqs) == 0
+    )
+
+    # 2. Service Worker aktiv & alle Programmdateien im lokalen Cache
+    sw_info = None
+    for _ in range(40):
+        sw_info = p.pg.evaluate("""async () => {
+          if (!('serviceWorker' in navigator)) return { supported: false };
+          const reg = await navigator.serviceWorker.getRegistration();
+          const st = window.__M.PWA.status();
+          const keys = await caches.keys();
+          const cName = keys.find(k => k.startsWith('tracery-offline-'));
+          let cachedUrls = [];
+          if (cName) {
+            const c = await caches.open(cName);
+            cachedUrls = (await c.keys()).map(req => new URL(req.url).pathname);
+          }
+          return {
+            supported: true,
+            scriptURL: reg && reg.active ? reg.active.scriptURL : '',
+            controlled: !!navigator.serviceWorker.controller,
+            st,
+            cName: cName || '',
+            cachedUrls,
+          };
+        }""")
+        if sw_info.get('scriptURL') and sw_info.get('controlled') and sw_info.get('st', {}).get('offlineReady') and len(sw_info.get('cachedUrls') or []) >= 100:
+            break
+        p.wait(500)
+
+    cached = set(sw_info.get('cachedUrls') or []) if sw_info else set()
+    needed_suffixes = (
+        '/', '/index.html', '/manifest.webmanifest', '/occ-kernel.wasm',
+        '/kernel/worker.js', '/kernel/core.js', '/lib/three/build/three.module.js',
+        '/data/schrift-inter.json', '/assets/app-icon.svg', '/assets/icon-192.png', '/assets/icon-512.png',
+    )
+    has_all_needed = all(any(u.endswith(suf) for u in cached) for suf in needed_suffixes)
+    ok2 = bool(
+        sw_info
+        and sw_info.get('supported')
+        and sw_info.get('scriptURL', '').endswith('/sw.js')
+        and sw_info.get('controlled')
+        and sw_info.get('st', {}).get('swState') == 'ready'
+        and sw_info.get('st', {}).get('offlineReady') is True
+        and len(cached) >= 100
+        and has_all_needed
+    )
+
+    # 3. Netz abschalten, Seite neu laden & 3D-Quader inkl. CAD-Kern komplett offline rechnen
+    ok3 = False
+    try:
+        p.ctx.set_offline(True)
+        p.pg.reload(wait_until='load', timeout=30000)
+        p.pg.locator('.start').wait_for(state='visible', timeout=15000)
+        p.wait(300)
+        offline_start = p.pg.evaluate("() => ({ online: navigator.onLine, startCount: document.querySelectorAll('.start').length, sw: !!navigator.serviceWorker.controller })")
+        p.empty()
+        p.ev("Actions.addPrimitive('box')")
+        warte_rechnen(p, 35)
+        vol = volumen(p)
+        box_st = p.ev("return { res: App.results.size, errs: App.errors.length };")
+        ok3 = bool(
+            offline_start.get('online') is False
+            and offline_start.get('startCount') == 1
+            and offline_start.get('sw') is True
+            and box_st['res'] >= 1
+            and box_st['errs'] == 0
+            and vol is not None
+            and abs(vol - 8000) < 1
+            and len(p.errs) == 0
+        )
+    finally:
+        p.ctx.set_offline(False)
+    p.wait(300)
+
+    # 4. Hinweis in den Einstellungen (Profi & Einfach), Anleitung, Install-Prompt, Hilfe, Befehl & DE/EN
+    p.ev("ViewPrefs.setLevel('pro'); ViewPrefs.dialog();")
+    p.wait(250)
+    pro_txt = p.pg.locator('#set-pwa-box').text_content()
+    pro_vis = p.pg.locator('#set-pwa-box').is_visible()
+    has_dot = p.pg.locator('#set-pwa-status .pwa-dot').count() == 1
+    desc = p.ev("return Explain.describeElement(document.querySelector('#set-pwa-box'))")
+    p.pg.locator('#set-pwa-guide').click()
+    p.wait(200)
+    guide_txt = p.pg.locator('#pwa-guide-dlg').inner_text()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    # Simuliertes beforeinstallprompt-Ereignis schaltet den direkten Installations-Knopf frei
+    p.ev("""const ev = new Event('beforeinstallprompt', { cancelable: true });
+      ev.prompt = async () => {};
+      ev.userChoice = Promise.resolve({ outcome: 'dismissed' });
+      window.dispatchEvent(ev);""")
+    p.wait(150)
+    has_prompt_btn = p.pg.locator('#set-pwa-install').is_visible()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('simple'); ViewPrefs.dialog();")
+    p.wait(250)
+    simple_vis = p.pg.locator('#set-pwa-box').is_visible()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+
+    meta = p.pg.evaluate("""async (desc) => {
+      const hilfen = await fetch('data/werkzeug-hilfen.json').then(r => r.json());
+      const { I18n, Commands } = window.__M;
+      const hJson = hilfen.installApp || {};
+      const helpOk = !!(hJson.tip && hJson.hilfe && hJson.tipp && desc)
+        && desc.text === hJson.hilfe && desc.tip === hJson.tipp;
+      const deKeys = Object.keys(I18n.packs.de || {});
+      const enKeys = Object.keys(I18n.packs.en || {});
+      const enSet = new Set(enKeys);
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every(k => enSet.has(k))
+        && !!I18n.packs.de['dlg.settings.pwaTitle'] && !!I18n.packs.en['dlg.settings.pwaTitle'];
+      const cmdOk = Commands.search('als app installieren').some(c => c.id === 'install-app');
+      return { helpOk, i18nEq, cmdOk };
+    }""", desc)
+    ok4 = bool(
+        pro_vis
+        and 'Als App installieren' in pro_txt
+        and has_dot
+        and 'Chrome' in guide_txt
+        and 'Safari' in guide_txt
+        and has_prompt_btn
+        and simple_vis
+        and meta.get('helpOk')
+        and meta.get('i18nEq')
+        and meta.get('cmdOk')
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a141_barrierefreiheit(p):
     p.empty()
     # 1. Mit Tab bis zum Körper-Knopf (#t-body), sichtbarer Fokus, Enter öffnet Flyout
@@ -27865,6 +28044,172 @@ def t_a141_barrierefreiheit(p):
       return { helpOk, i18nEq, cmdOk };
     })()""", tip_hc)
     ok5 = bool(hc_on and hc_saved and hc_off and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+# ---------- [F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“ ----------
+def t_f11250803(p):
+    # 1. Schraubenlöcher nach „Leeres Projekt“ mit kaltem Kern (A-054) wartet sauber auf den ersten Aufbau
+    p.empty()
+    cold = p.ev("return !Kernel.ready && Kernel.state === 'idle'")
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:10},{role:'solid'})); }); App.select([App.doc.items[0].id])")
+    warte_rechnen(p, 30)
+    dia = lambda: p.ev("const r=App.results.get(App.doc.items[0].id); const b=r && r.data && r.data.bbox; return b ? Math.round((b[3]-b[0])*1000)/1000 : null")
+    a = dia()
+    p.pg.select_option('#lp-fit', 'fine'); warte_rechnen(p, 25); b = dia()
+    p.pg.select_option('#lp-fit', 'tap'); warte_rechnen(p, 25); c = dia()
+    p.pg.select_option('#lp-size', 'M1.6'); warte_rechnen(p, 25)
+    ok1 = bool(cold and p.ev("return Kernel.ready && App.errors.length === 0") and (a, b, c) == (3.4, 3.2, 2.5))
+
+    # 2. Befehlssuche „fläche auf fläche“ findet mate-planar auf Platz 1 und „zylindrisch“ findet mate-cyl ([A-086])
+    cmd = p.ev("""return {
+      planar: Commands.search('fläche auf fläche').map(c => c.id),
+      cyl: Commands.search('zylindrisch').map(c => c.id),
+      errs: App.errors.length,
+    };""")
+    ok2 = bool(cmd['planar'] and cmd['planar'][0] == 'mate-planar' and 'mate-cyl' in cmd['cyl'] and cmd['errs'] == 0)
+    return [ok1, ok2]
+
+
+def t_paket_und_sicherheit(p):
+    import base64, tempfile, zipfile
+    p.empty()
+
+    # 1. Zwei Körper anlegen und prüfen: „Alles als Paket“ in Einfach und Profi sichtbar + Hilfe + Befehlssuche
+    p.ev("""App.change('Paket-Test', d => {
+      const a = Model.newItem('box', {w: 30, d: 20, h: 10}, {name: 'Deckel'});
+      const b = Model.newItem('cylinder', {d: 16, h: 12}, {name: 'Boden'});
+      b.t.x = 40;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    vis_simple = p.pg.locator('#ex-bundle-btn').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    vis_pro = p.pg.locator('#ex-bundle-btn').is_visible()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    eb_help = hilfen.get('exportBundle') or {}
+    meta = p.ev("""return {
+      cmd: Commands.search('alles als paket').some(c => c.id === 'export-bundle'),
+    };""")
+    ok1 = vis_simple and vis_pro and bool(eb_help.get('tip') and eb_help.get('hilfe') and eb_help.get('tipp')) and meta['cmd']
+
+    # 2. Paket-ZIP mit 2 Körpern: Projekt, Zeichnung (PDF), STEP und 2 STL-Dateien
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.locator('#ex-bundle-btn').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a143-paket.zip')
+    dl.value.save_as(zpath)
+    with zipfile.ZipFile(zpath) as zf:
+        names = zf.namelist()
+        json_files = [n for n in names if n.endswith('.tracery.json')]
+        pdf_files = [n for n in names if n.startswith('Zeichnungen/') and n.endswith('.pdf')]
+        step_files = [n for n in names if n.endswith('.step')]
+        stl_files = sorted(n for n in names if n.startswith('STL/') and n.endswith('.stl'))
+        proj_ok = False
+        if len(json_files) == 1:
+            proj = json.loads(zf.read(json_files[0]).decode('utf-8'))
+            proj_ok = proj.get('format') == 'masswerk' and len(proj.get('items', [])) == 2
+        pdf_ok = len(pdf_files) == 1 and zf.read(pdf_files[0]).startswith(b'%PDF-') and len(zf.read(pdf_files[0])) > 200
+        step_ok = len(step_files) == 1 and b'ISO-10303-21' in zf.read(step_files[0])
+        stl_ok = stl_files == ['STL/Boden.stl', 'STL/Deckel.stl'] and all(len(zf.read(s)) > 84 for s in stl_files)
+        ok2 = proj_ok and pdf_ok and step_ok and stl_ok and ('LIESMICH.txt' in names)
+
+    # 3. SVG mit <script>, Event-Handlern und externen Links einlesen
+    p.ev("Start.newProject(true); window.__a143_xss = 0;"); p.wait(400)
+    evil_svg = """<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="20mm" viewBox="0 0 40 20">
+  <script>window.__a143_xss = 1;</script>
+  <style>@import url(https://evil.example/style.css);</style>
+  <a href="https://evil.example/click">
+    <rect x="0" y="0" width="40" height="20" onclick="window.__a143_xss = 2"/>
+  </a>
+  <image href="https://evil.example/img.png" width="5" height="5"/>
+</svg>"""
+    p.ev("Start.openBlob(new File([arg], 'sicher.svg', {type: 'image/svg+xml'}))", evil_svg)
+    p.wait(800); warte_rechnen(p, 40)
+    svg_res = p.ev("""const it = App.doc.items[0];
+      const R = it && App.results.get(it.id);
+      const san = Store.sanitizeSVG(arg);
+      return {
+        xss: window.__a143_xss,
+        stats: Start.lastSvgSanitize,
+        clean: san && san.svg,
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        bb: R && R.data && R.data.bbox,
+      };""", evil_svg)
+    toast_txt = p.pg.locator('.toast').last.inner_text()
+    bb = svg_res['bb']
+    clean_low = (svg_res['clean'] or '').lower()
+    st = svg_res['stats'] or {}
+    ok3 = (
+        svg_res['xss'] == 0
+        and st.get('scripts') == 1
+        and st.get('handlers', 0) >= 1
+        and st.get('externalLinks', 0) >= 2
+        and '<script' not in clean_low
+        and 'onclick' not in clean_low
+        and 'evil.example' not in clean_low
+        and svg_res['n'] == 1
+        and svg_res['errs'] == 0
+        and bb is not None and abs(bb[3] - bb[0] - 40) < 0.05 and abs(bb[4] - bb[1] - 20) < 0.05
+        and ('Skripte' in toast_txt or 'Sicherheitsgründen' in toast_txt)
+    )
+
+    # 4. SVG-Aufkleber und normalizeDecal bereinigen unsichere SVG-Daten
+    decal_out = p.ev("""return Actions.parseDecalFile(new File([arg], 'aufkleber.svg', {type: 'image/svg+xml'})).then(d => ({
+      src: d && d.src,
+      badUrlRejected: Model.normalizeDecal({src: 'javascript:alert(1)', face: {n: [0,0,1], c: [0,0,0]}}) === null,
+    }));""", evil_svg)
+    dec_src = decal_out.get('src') or ''
+    dec_svg = ''
+    if dec_src.startswith('data:image/svg+xml;base64,'):
+        dec_svg = base64.b64decode(dec_src.split(',', 1)[1]).decode('utf-8', 'replace').lower()
+    ok4 = (
+        bool(dec_svg)
+        and '<script' not in dec_svg
+        and 'onclick' not in dec_svg
+        and 'evil.example' not in dec_svg
+        and decal_out.get('badUrlRejected') is True
+    )
+
+    # 5. Größenlimit, unbekanntes Format, Prototype-Pollution & ZIP-Pfad-Schutz
+    sec = p.ev("""const big = Store.checkFileSize({name: 'riesig.svg', size: 12 * 1024 * 1024}, 'svg');
+      const pj = Store.safeParseJSON('{"format":"masswerk","__proto__":{"a143Polluted":1},"items":[]}');
+      const polluted = ({}).a143Polluted !== undefined;
+      let travErr = '';
+      return Start.openBlob(new File(['MZ'], 'virus.exe')).then(async () => {
+        const zBad = await Print.build3MF([], 'x').catch(() => null);
+        // Manuelles ZIP mit '../evil.txt' prüfen
+        const enc = new TextEncoder();
+        const nm = enc.encode('../evil.txt'), data = enc.encode('hi');
+        const lh = new DataView(new ArrayBuffer(30));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, nm.length, true);
+        const ch = new DataView(new ArrayBuffer(46));
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, nm.length, true);
+        const off = 30 + nm.length + data.length;
+        const end = new DataView(new ArrayBuffer(22));
+        end.setUint32(0, 0x06054b50, true); end.setUint16(8, 1, true); end.setUint16(10, 1, true); end.setUint32(12, 46 + nm.length, true); end.setUint32(16, off, true);
+        const zipBytes = new Uint8Array(off + 46 + nm.length + 22);
+        zipBytes.set(new Uint8Array(lh.buffer), 0); zipBytes.set(nm, 30); zipBytes.set(data, 30 + nm.length);
+        zipBytes.set(new Uint8Array(ch.buffer), off); zipBytes.set(nm, off + 46); zipBytes.set(new Uint8Array(end.buffer), off + 46 + nm.length);
+        try { await Start.parse3MF(zipBytes); } catch (e) { travErr = e && e.message || String(e); }
+        return { big, pjOk: pj.ok, polluted, travErr };
+      });""")
+    bad_toast = p.pg.locator('.toast').last.inner_text()
+    ok5 = (
+        sec['big']['ok'] is False
+        and 'zu groß' in sec['big']['message']
+        and sec['pjOk'] is True
+        and sec['polluted'] is False
+        and 'Ungültiger Dateipfad' in sec['travErr']
+        and 'nicht unterstützt' in bad_toast
+        and len(p.errs) == 0
+    )
     return [ok1, ok2, ok3, ok4, ok5]
 
 
@@ -28313,8 +28658,11 @@ TESTS = [
     ('[A-140] Was-ist-das-Modus: Klick erklärt Elemente statt auszuführen / Esc aus (BE-32)', t_a140_was_ist_das),
     ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
+    ('[A-142] Als App installieren, ohne Internet nutzbar (BE-23)', t_a142_pwa_offline),
     ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
     ('[A-137] Technische Illustration (weiß/Kanten) und Vierfach-Ansicht (4 drehbare Ansichten)', t_a137_illustration_vierfach),
+    ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
+    ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
