@@ -1031,7 +1031,8 @@ const Panels = (() => {
             const eMap = { all: T('left.tree.finAllEdges'), top: T('left.tree.finTop'), bottom: T('left.tree.finBottom'), vertical: T('left.tree.finVert'), horizontal: T('left.tree.finHoriz') };
             const cnt = (fin.edges || []).length;
             const eTxt = typeof fin.edges === 'string' ? (eMap[fin.edges] ? ' · ' + eMap[fin.edges] : '') : ' · ' + (cnt === 1 ? T('panel.edges.oneEdge') : T('panel.edges.manyEdges', { n: cnt }));
-            fr.append(h('span', null, (fin.type === 'chamfer' ? T('panel.edges.chamfer') : T('panel.edges.fillet')) + ' ' + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + eTxt));
+            const g2Txt = fin.type === 'fillet' && fin.shape === 'g2' ? ' · ' + T('panel.edges.shapeG2Short') : '';
+            fr.append(h('span', null, (fin.type === 'chamfer' ? T('panel.edges.chamfer') : T('panel.edges.fillet')) + ' ' + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + g2Txt + eTxt));
           }
           if (isRef) {
             const iss = refIssues.find((x) => x.finishId === fin.id);
@@ -2795,8 +2796,7 @@ const Panels = (() => {
           if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: T('panel.edges.dist2'), value: fin.r2 != null ? fin.r2 : r0, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
           if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: T('common.angle'), value: fin.a != null ? fin.a : 45, unit: '°', vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
         } else {
-          mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: T('panel.edges.filletMode'), value: vr ? 'var' : '', options: [['', T('panel.edges.vrEqual')], ['var', T('panel.edges.vrVar')]], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'var' ? { vr: true, r2: fin.r2 != null ? fin.r2 : round(r0 / 2, 3) } : { vr: null }) }));
-          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: T('panel.edges.to'), value: fin.r2 != null ? fin.r2 : r0, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          Features.renderFilletMore(it, fin, mo, V, r0);
         }
         ks.append(mo);
         if (vr || cm) {

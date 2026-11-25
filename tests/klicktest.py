@@ -28071,6 +28071,197 @@ def t_f11250803(p):
     return [ok1, ok2]
 
 
+# ---------- [A-145] Krümmungsglatte Rundung, Schritt 1 (KP-40) ----------
+def t_a145_rundung_g2(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro');")
+    # 1. Quader 40x30x20: ungerundet (24000), eine Kante normal runden (r=5), dann auf G2 umschalten
+    p.ev("""
+      App.change('Quader', d => {
+        const b = Model.newItem('box', { w: 40, d: 30, h: 20 });
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 40)
+    v_orig = volumen(p)
+    p.ev("""
+      const it = App.doc.items[0];
+      App.change('Kante runden', d => {
+        const b = d.items[0];
+        b.finishes = [{ id: 'fg2', type: 'fillet', r: 5, edges: [{ t: 'LINE', m: [0, 15, 20], l: 40 }] }];
+      });
+      App.select([it.id]);
+    """)
+    warte_rechnen(p, 30)
+    v_round = volumen(p)
+    errs_round = p.ev("return App.errors.length")
+    sel_el = p.pg.locator('#fin-shape-fg2')
+    opts = p.ev("return [...document.querySelectorAll('#fin-shape-fg2 option')].map(o => o.value)")
+    ok1 = bool(
+        abs(v_orig - 24000) < 0.2
+        and errs_round == 0
+        and abs(v_round - (24000 - (1 - 3.1415926535 / 4) * 25 * 40)) < 0.5
+        and sel_el.count() == 1
+        and sel_el.is_visible()
+        and sel_el.input_value() == 'round'
+        and opts == ['round', 'g2']
+    )
+
+    # 2. Auf krümmungsglatt (G2) umschalten: Volumen zwischen normal gerundet und ungerundet, ohne Fehler
+    p.pg.select_option('#fin-shape-fg2', 'g2')
+    warte_rechnen(p, 30)
+    v_g2 = volumen(p)
+    p.ev("const tw = document.querySelector('#left-body .tw'); if (tw && !tw.classList.contains('open')) tw.click();")
+    p.wait(150)
+    st_g2 = p.ev("""
+      const it = App.doc.items[0];
+      const fin = it.finishes[0];
+      const rowTxt = (document.querySelector('.finish-row') || {}).textContent || '';
+      return { shape: fin.shape, errs: App.errors.length, rowTxt };
+    """)
+    ok2 = bool(
+        st_g2['errs'] == 0
+        and st_g2['shape'] == 'g2'
+        and v_round + 5.0 < v_g2 < v_orig - 5.0
+        and 'G2' in st_g2['rowTxt']
+    )
+
+    # 3. Einfach-Stufe blendet die Wahl aus, Profi zeigt sie wieder; Rückwechsel auf rund & zurück auf G2
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(200)
+    hidden_simple = not sel_el.is_visible()
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(200)
+    shown_pro = sel_el.is_visible()
+    p.pg.select_option('#fin-shape-fg2', 'round')
+    warte_rechnen(p, 30)
+    v_back_round = volumen(p)
+    has_shape_round = p.ev("return 'shape' in App.doc.items[0].finishes[0]")
+    p.pg.select_option('#fin-shape-fg2', 'g2')
+    warte_rechnen(p, 30)
+    v_back_g2 = volumen(p)
+    ok3 = bool(
+        hidden_simple and shown_pro
+        and not has_shape_round
+        and abs(v_back_round - v_round) < 0.2
+        and abs(v_back_g2 - v_g2) < 0.2
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 4. Speichern & Laden erhält Wahl und Volumen
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(Model.newDoc('Leer'));")
+    warte_rechnen(p, 20)
+    p.ev("const doc = Model.migrate(JSON.parse(arg)); App.setDoc(doc, { forceReplace: true }); App.select([doc.items[0].id]);", saved)
+    warte_rechnen(p, 30)
+    v_loaded = volumen(p)
+    st_loaded = p.ev("""
+      const it = App.doc.items[0];
+      return { shape: it.finishes[0].shape, errs: App.errors.length };
+    """)
+    ok4 = bool(
+        st_loaded['errs'] == 0
+        and st_loaded['shape'] == 'g2'
+        and sel_el.is_visible()
+        and sel_el.input_value() == 'g2'
+        and abs(v_loaded - v_g2) < 0.2
+    )
+
+    # 5. Zusatzfälle (konkave Kante, Zylinder-Kreiskante, variabler Radius, zu groß) + Hilfen/DE-EN/Befehl/Explain
+    p.ev("""
+      const d = Model.newDoc('L');
+      const b1 = Model.newItem('box', { w: 40, d: 40, h: 10 });
+      const b2 = Model.newItem('box', { w: 40, d: 10, h: 30 });
+      b2.t.y = -15;
+      const g = Model.newItem('group', {});
+      g.children.push(b1, b2);
+      d.items.push(g);
+      App.setDoc(d);
+    """)
+    warte_rechnen(p, 30)
+    v_l_orig = volumen(p)
+    p.ev("""
+      const gid = App.doc.items[0].id;
+      const r = App.results.get(gid);
+      const ei = r.data.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.m[1] + 10) < 0.2 && Math.abs(e.m[2] - 10) < 0.2 && e.l > 30);
+      const sig = Actions.edgeSigOf(gid, ei);
+      App.change('L rund', d => {
+        d.items[0].finishes = [{ id: 'fl', type: 'fillet', r: 4, edges: [sig] }];
+      });
+    """)
+    warte_rechnen(p, 30)
+    v_l_round = volumen(p)
+    p.ev("Actions.setFinish(App.doc.items[0].id, 'fl', { shape: 'g2' })")
+    warte_rechnen(p, 30)
+    v_l_g2 = volumen(p)
+    l_errs = p.ev("return App.errors.length")
+
+    p.ev("const d = Model.newDoc('Zyl'); d.items.push(Model.newItem('cylinder', { d: 30, h: 20 })); App.setDoc(d);")
+    warte_rechnen(p, 30)
+    v_c_orig = volumen(p)
+    p.ev("""
+      const cid = App.doc.items[0].id;
+      const r = App.results.get(cid);
+      const ei = r.data.edges.findIndex(e => e.t === 'CIRCLE' && e.m[2] > 19);
+      const sig = Actions.edgeSigOf(cid, ei);
+      App.change('Zyl rund', d => { d.items[0].finishes = [{ id: 'fc', type: 'fillet', r: 3, edges: [sig] }]; });
+    """)
+    warte_rechnen(p, 30)
+    v_c_round = volumen(p)
+    p.ev("Actions.setFinish(App.doc.items[0].id, 'fc', { shape: 'g2' })")
+    warte_rechnen(p, 30)
+    v_c_g2 = volumen(p)
+    c_errs = p.ev("return App.errors.length")
+
+    p.ev("""
+      const d = Model.newDoc('Var');
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 });
+      b.finishes = [{ id: 'fv', type: 'fillet', r: 4, vr: true, r2: 2, shape: 'g2', edges: [{ t: 'LINE', m: [0, 10, 10], l: 20 }] }];
+      d.items.push(b);
+      App.setDoc(d);
+    """)
+    warte_rechnen(p, 30)
+    v_var = volumen(p)
+    var_errs = p.ev("return App.errors.length")
+    p.ev("Actions.setFinish(App.doc.items[0].id, 'fv', { r: 25, vr: null })")
+    warte_rechnen(p, 30)
+    toobig_code = p.ev("return App.errors[0] && App.errors[0].code")
+
+    meta = p.ev("""return (async () => {
+      const [hilfen, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then((r) => r.json()),
+        fetch('data/texte-de.json').then((r) => r.json()),
+        fetch('data/texte-en.json').then((r) => r.json()),
+      ]);
+      const h = hilfen && hilfen.filletG2;
+      const probe = document.createElement('div');
+      probe.dataset.help = 'filletG2';
+      const desc = Explain.describeElement(probe);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('krümmungsglatt').some(c => c.id === 'fillet-g2');
+      const bId = App.doc.items[0].id;
+      const exp = Explain.local(bId);
+      const expOk = !!(exp && exp.lines && exp.lines.some(l => l.t.includes('krümmungsglatt')));
+      return {
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp && desc && desc.title === h.tip && desc.text === h.hilfe && desc.tip === h.tipp),
+        i18nEq,
+        cmdOk,
+        expOk,
+      };
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro');")
+    ok5 = bool(
+        l_errs == 0 and v_l_orig + 5.0 < v_l_g2 < v_l_round - 5.0
+        and c_errs == 0 and v_c_round + 5.0 < v_c_g2 < v_c_orig - 5.0
+        and var_errs == 0 and 3900 < v_var < 4000
+        and toobig_code == 'toobig'
+        and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and meta.get('expOk')
+        and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_paket_und_sicherheit(p):
     import base64, tempfile, zipfile
     p.empty()
@@ -28867,6 +29058,7 @@ TESTS = [
     ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
     ('[A-137] Technische Illustration (weiß/Kanten) und Vierfach-Ansicht (4 drehbare Ansichten)', t_a137_illustration_vierfach),
     ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
+    ('[A-145] Krümmungsglatte Rundung (G2): Form-Wahl, Volumen, Profi & Speichern/Laden (KP-40)', t_a145_rundung_g2),
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

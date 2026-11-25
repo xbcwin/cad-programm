@@ -4922,6 +4922,283 @@ export function createKernel(R, oc) {
     }
     return [];
   }
+  const G2_A = 0.35, G2_B = 0.70;
+  function makeBez5Edge(pts) {
+    const arr = new oc.NCollection_Array1_gp_Pnt(1, pts.length);
+    let curve = null, me = null;
+    try {
+      for (let i = 0; i < pts.length; i++) {
+        const p = new oc.gp_Pnt(pts[i][0], pts[i][1], pts[i][2]);
+        arr.SetValue(i + 1, p);
+        p.delete();
+      }
+      curve = new oc.Geom_BezierCurve(arr);
+      me = new oc.BRepBuilderAPI_MakeEdge(curve);
+      return me.Edge();
+    } finally {
+      safeDelete(me); safeDelete(curve); safeDelete(arr);
+    }
+  }
+  function makeG2WireConvex(O, t1, t2, n1, n2, s, pad) {
+    const P0 = add(O, mul(t1, s)), P1 = add(O, mul(t1, (1 - G2_A) * s)), P2 = add(O, mul(t1, (1 - G2_B) * s));
+    const P3 = add(O, mul(t2, (1 - G2_B) * s)), P4 = add(O, mul(t2, (1 - G2_A) * s)), P5 = add(O, mul(t2, s));
+    const denom = Math.max(0.1, 1 + dot(n1, n2));
+    const E1 = add(P0, mul(n1, pad)), E2 = add(P5, mul(n2, pad));
+    const E0 = add(O, mul(add(n1, n2), pad / denom));
+    let wb = null, l1 = null, l2 = null, l3 = null, l4 = null, bz = null;
+    try {
+      wb = new oc.BRepBuilderAPI_MakeWire();
+      l1 = R.makeLine(P0, E1); wb.Add(l1.wrapped);
+      l2 = R.makeLine(E1, E0); wb.Add(l2.wrapped);
+      l3 = R.makeLine(E0, E2); wb.Add(l3.wrapped);
+      l4 = R.makeLine(E2, P5); wb.Add(l4.wrapped);
+      bz = makeBez5Edge([P5, P4, P3, P2, P1, P0]); wb.Add(bz);
+      wb.Build();
+      return wb.Wire();
+    } finally {
+      safeDelete(wb); safeDelete(l1); safeDelete(l2); safeDelete(l3); safeDelete(l4); safeDelete(bz);
+    }
+  }
+  function makeG2WireConcave(O, t1, t2, s) {
+    const P0 = add(O, mul(t1, s)), P1 = add(O, mul(t1, (1 - G2_A) * s)), P2 = add(O, mul(t1, (1 - G2_B) * s));
+    const P3 = add(O, mul(t2, (1 - G2_B) * s)), P4 = add(O, mul(t2, (1 - G2_A) * s)), P5 = add(O, mul(t2, s));
+    let wb = null, l1 = null, bz = null, l2 = null;
+    try {
+      wb = new oc.BRepBuilderAPI_MakeWire();
+      l1 = R.makeLine(O, P0); wb.Add(l1.wrapped);
+      bz = makeBez5Edge([P0, P1, P2, P3, P4, P5]); wb.Add(bz);
+      l2 = R.makeLine(P5, O); wb.Add(l2.wrapped);
+      wb.Build();
+      return wb.Wire();
+    } finally {
+      safeDelete(wb); safeDelete(l1); safeDelete(bz); safeDelete(l2);
+    }
+  }
+  function runG2FilletWithTopo(shape, topo, r, matchedEdges, fin, itemId, skipTopo = false) {
+    const r2 = fin.vr ? num(fin.r2, r) * (r / Math.max(1e-9, num(fin.r, r))) : r;
+    const isVar = !!(fin.vr && r2 > 0 && Math.abs(r2 - r) > 1e-9);
+    const origFaces = [];
+    const origFaceEdges = [];
+    try { for (const f of shape.faces) origFaces.push(f); } catch (_) {}
+    for (const f of origFaces) {
+      const es = [];
+      try { for (const e of f.edges) es.push(e); } catch (_) {}
+      origFaceEdges.push(es);
+    }
+    const b = bboxOf(shape);
+    const volBefore = R.measureVolume(shape);
+    const jobs = [];
+    const faceSpanEntries = [];
+    const freeOrig = () => {
+      for (const es of origFaceEdges) for (const e of es) safeDelete(e);
+      for (const f of origFaces) safeDelete(f);
+    };
+    const faceDirFromEdge = (fIdx, f, origin, dirCand) => {
+      let maxPos = 0, maxNeg = 0;
+      for (const fe of origFaceEdges[fIdx]) {
+        for (const pt of [vec(fe.startPoint), vec(fe.endPoint), vec(fe.pointAt(0.5))]) {
+          const pr = dot(sub(pt, origin), dirCand);
+          if (pr > maxPos) maxPos = pr;
+          if (-pr > maxNeg) maxNeg = -pr;
+        }
+      }
+      if (maxPos >= maxNeg) return { dir: dirCand, reach: maxPos };
+      return { dir: mul(dirCand, -1), reach: maxNeg };
+    };
+    try {
+      for (const e of matchedEdges) {
+        const adjIdx = [];
+        for (let i = 0; i < origFaces.length; i++) {
+          if (origFaceEdges[i].some((fe) => fe.isSame(e))) adjIdx.push(i);
+        }
+        if (adjIdx.length < 2) continue;
+        const f1Idx = adjIdx[0], f2Idx = adjIdx[1];
+        const f1 = origFaces[f1Idx], f2 = origFaces[f2Idx];
+        if (e.geomType === 'LINE' && f1.geomType === 'PLANE' && f2.geomType === 'PLANE') {
+          const A = vec(e.startPoint), B = vec(e.endPoint), dAB = sub(B, A), L = len(dAB);
+          if (!(L > 1e-6)) continue;
+          const u = mul(dAB, 1 / L);
+          const n1 = norm(vec(f1.normalAt())), n2 = norm(vec(f2.normalAt()));
+          const t1Info = faceDirFromEdge(f1Idx, f1, A, norm(cross(u, n1)));
+          const t2Info = faceDirFromEdge(f2Idx, f2, A, norm(cross(u, n2)));
+          const t1 = t1Info.dir, t2 = t2Info.dir;
+          const c12 = dot(n1, t2), c21 = dot(n2, t1);
+          const isConvex = c12 < -1e-4 && c21 < -1e-4;
+          const isConcave = c12 > 1e-4 && c21 > 1e-4;
+          if (!isConvex && !isConcave) continue;
+          const gamma = Math.acos(Math.max(-0.9999, Math.min(0.9999, dot(t1, t2))));
+          const tanHalf = Math.tan(gamma / 2);
+          if (!(tanHalf > 1e-4)) continue;
+          const s1 = r / tanHalf, s2 = isVar ? r2 / tanHalf : s1, sMax = Math.max(s1, s2);
+          if (!(sMax < t1Info.reach - 1e-3 && sMax < t2Info.reach - 1e-3)) {
+            throw new Error('Rundung zu groß.');
+          }
+          faceSpanEntries.push({ fIdx: f1Idx, t: t1, s: sMax, reach: t1Info.reach });
+          faceSpanEntries.push({ fIdx: f2Idx, t: t2, s: sMax, reach: t2Info.reach });
+          let shUMin = Infinity, shUMax = -Infinity;
+          for (const ix of [b[0], b[3]]) for (const iy of [b[1], b[4]]) for (const iz of [b[2], b[5]]) {
+            const pr = dot(sub([ix, iy, iz], A), u);
+            if (pr < shUMin) shUMin = pr;
+            if (pr > shUMax) shUMax = pr;
+          }
+          const padLo = 0 <= shUMin + 1e-3 ? Math.max(0.25, sMax * 0.15) : 0;
+          const padHi = L >= shUMax - 1e-3 ? Math.max(0.25, sMax * 0.15) : 0;
+          jobs.push({ kind: 'line', A, B, L, u, t1, t2, n1, n2, s1, s2, sMax, isConvex, isVar, padLo, padHi });
+        } else if (e.geomType === 'CIRCLE' && ((f1.geomType === 'PLANE' && (f2.geomType === 'CYLINDRE' || f2.geomType === 'CONE')) || (f2.geomType === 'PLANE' && (f1.geomType === 'CYLINDRE' || f1.geomType === 'CONE')))) {
+          const pIdx = f1.geomType === 'PLANE' ? f1Idx : f2Idx;
+          const cIdx = f1.geomType === 'PLANE' ? f2Idx : f1Idx;
+          const fp = origFaces[pIdx], fc = origFaces[cIdx];
+          let adapt = null, circ = null, cLoc = null, cAx = null, p0Obj = null;
+          try {
+            adapt = new oc.BRepAdaptor_Curve(e.wrapped);
+            const first = adapt.FirstParameter(), last = adapt.LastParameter();
+            const angSpan = Math.abs(last - first);
+            if (!(angSpan > 1e-4)) continue;
+            circ = adapt.Circle();
+            cLoc = circ.Location();
+            cAx = circ.Axis().Direction();
+            const cCen = [cLoc.X(), cLoc.Y(), cLoc.Z()];
+            const axDir = norm([cAx.X(), cAx.Y(), cAx.Z()]);
+            const circR = circ.Radius();
+            p0Obj = adapt.Value(first);
+            const pStart = [p0Obj.X(), p0Obj.Y(), p0Obj.Z()];
+            const radVec = sub(pStart, add(cCen, mul(axDir, dot(sub(pStart, cCen), axDir))));
+            const radDir = norm(radVec);
+            const uCirc = norm(cross(axDir, radDir));
+            const nPlane = norm(vec(fp.normalAt()));
+            const tPlaneInfo = faceDirFromEdge(pIdx, fp, pStart, radDir);
+            const tPlane = tPlaneInfo.dir;
+            let nCyl = radDir;
+            try {
+              const q = vec(fc.pointOnSurface(0.5, 0.5));
+              const nq = norm(vec(fc.normalAt()));
+              const qRad = norm(sub(q, add(cCen, mul(axDir, dot(sub(q, cCen), axDir)))));
+              nCyl = norm(add(mul(radDir, dot(nq, qRad)), mul(axDir, dot(nq, axDir))));
+            } catch (_) {}
+            const tCylCand = norm(cross(uCirc, nCyl));
+            const tCylInfo = faceDirFromEdge(cIdx, fc, pStart, tCylCand);
+            const tCyl = tCylInfo.dir;
+            const c12 = dot(nPlane, tCyl), c21 = dot(nCyl, tPlane);
+            const isConvex = c12 < -1e-4 && c21 < -1e-4;
+            const isConcave = c12 > 1e-4 && c21 > 1e-4;
+            if (!isConvex && !isConcave) continue;
+            const gamma = Math.acos(Math.max(-0.9999, Math.min(0.9999, dot(tPlane, tCyl))));
+            const tanHalf = Math.tan(gamma / 2);
+            if (!(tanHalf > 1e-4)) continue;
+            const s1 = r / tanHalf;
+            const planeLimit = dot(tPlane, radDir) < -0.5 ? circR : tPlaneInfo.reach;
+            if (!(s1 < planeLimit - 1e-3 && s1 < tCylInfo.reach - 1e-3)) {
+              throw new Error('Rundung zu groß.');
+            }
+            jobs.push({ kind: 'circle', cCen, axDir, angSpan: Math.abs(angSpan - 2 * Math.PI) < 1e-4 ? 2 * Math.PI : angSpan, pStart, t1: tPlane, t2: tCyl, n1: nPlane, n2: nCyl, s1, isConvex });
+          } finally {
+            safeDelete(p0Obj); safeDelete(cAx); safeDelete(cLoc); safeDelete(circ); safeDelete(adapt);
+          }
+        } else {
+          throw Object.assign(new Error('Krümmungsglatte Rundung (G2) wird bisher für gerade Kanten zwischen ebenen Flächen sowie Kreiskanten an Zylindern und Kegeln unterstützt.'), { code: 'g2_unsupported' });
+        }
+      }
+      for (let i = 0; i < faceSpanEntries.length; i++) {
+        for (let j = i + 1; j < faceSpanEntries.length; j++) {
+          const ei = faceSpanEntries[i], ej = faceSpanEntries[j];
+          if (ei.fIdx === ej.fIdx && dot(ei.t, ej.t) < -0.99) {
+            if (!(ei.s + ej.s < ei.reach - 1e-3)) throw new Error('Rundung zu groß.');
+          }
+        }
+      }
+      if (!jobs.length) throw new Error('Keine Kante gewählt.');
+
+      let curShape = shape;
+      let curTopo = topo;
+      let ownsCur = false;
+      for (const j of jobs) {
+        let tool = null, boolOp = null, w = null, w2 = null, fb = null, fw = null, gv = null, pr = null, loft = null, axP = null, axD = null, ax1 = null, rev = null, chk = null, next = null;
+        try {
+          if (j.kind === 'line') {
+            if (j.isConvex) {
+              const pad = Math.max(0.5, j.sMax * 0.5);
+              if (j.isVar) {
+                w = makeG2WireConvex(j.A, j.t1, j.t2, j.n1, j.n2, j.s1, pad);
+                w2 = makeG2WireConvex(j.B, j.t1, j.t2, j.n1, j.n2, j.s2, pad);
+                loft = new oc.BRepOffsetAPI_ThruSections(true, true, 1e-6);
+                loft.AddWire(w); loft.AddWire(w2); loft.Build();
+                tool = loft.Shape();
+              } else {
+                const O0 = add(j.A, mul(j.u, -j.padLo));
+                const hU = j.L + j.padLo + j.padHi;
+                w = makeG2WireConvex(O0, j.t1, j.t2, j.n1, j.n2, j.s1, pad);
+                fb = new oc.BRepBuilderAPI_MakeFace(w, false);
+                fw = fb.Face();
+                gv = new oc.gp_Vec(j.u[0] * hU, j.u[1] * hU, j.u[2] * hU);
+                pr = new oc.BRepPrimAPI_MakePrism(fw, gv, false, true);
+                pr.Build();
+                tool = pr.Shape();
+              }
+            } else {
+              if (j.isVar) {
+                w = makeG2WireConcave(j.A, j.t1, j.t2, j.s1);
+                w2 = makeG2WireConcave(j.B, j.t1, j.t2, j.s2);
+                loft = new oc.BRepOffsetAPI_ThruSections(true, true, 1e-6);
+                loft.AddWire(w); loft.AddWire(w2); loft.Build();
+                tool = loft.Shape();
+              } else {
+                w = makeG2WireConcave(j.A, j.t1, j.t2, j.s1);
+                fb = new oc.BRepBuilderAPI_MakeFace(w, false);
+                fw = fb.Face();
+                gv = new oc.gp_Vec(j.u[0] * j.L, j.u[1] * j.L, j.u[2] * j.L);
+                pr = new oc.BRepPrimAPI_MakePrism(fw, gv, false, true);
+                pr.Build();
+                tool = pr.Shape();
+              }
+            }
+          } else {
+            const pad = Math.max(0.5, j.s1 * 0.5);
+            w = j.isConvex ? makeG2WireConvex(j.pStart, j.t1, j.t2, j.n1, j.n2, j.s1, pad) : makeG2WireConcave(j.pStart, j.t1, j.t2, j.s1);
+            fb = new oc.BRepBuilderAPI_MakeFace(w, false);
+            fw = fb.Face();
+            axP = new oc.gp_Pnt(j.cCen[0], j.cCen[1], j.cCen[2]);
+            axD = new oc.gp_Dir(j.axDir[0], j.axDir[1], j.axDir[2]);
+            ax1 = new oc.gp_Ax1(axP, axD);
+            rev = new oc.BRepPrimAPI_MakeRevol(fw, ax1, j.angSpan, true);
+            rev.Build();
+            tool = rev.Shape();
+          }
+          boolOp = j.isConvex ? new oc.BRepAlgoAPI_Cut(curShape.wrapped, tool) : new oc.BRepAlgoAPI_Fuse(curShape.wrapped, tool);
+          boolOp.Build();
+          next = R.cast(boolOp.Shape());
+          if (!next || !R.isShape3D(next)) { safeDelete(next); throw new Error('Rundung fehlgeschlagen.'); }
+          chk = new oc.BRepCheck_Analyzer(next.wrapped);
+          if (!chk.IsValid()) { safeDelete(next); throw new Error('Rundung fehlgeschlagen.'); }
+          const nextTopo = skipTopo ? null : propagateHistory(boolOp, [{ topo: curTopo, selfId: itemId }], next, 'FiG2:' + (fin.id || 'f'));
+          if (ownsCur) {
+            safeDelete(curShape);
+            freeTopoMap(curTopo);
+          }
+          curShape = next;
+          curTopo = nextTopo;
+          ownsCur = true;
+          next = null;
+        } catch (err) {
+          if (ownsCur) {
+            safeDelete(curShape);
+            freeTopoMap(curTopo);
+          }
+          throw err;
+        } finally {
+          safeDelete(chk); safeDelete(boolOp); safeDelete(rev); safeDelete(ax1); safeDelete(axD); safeDelete(axP);
+          safeDelete(loft); safeDelete(pr); safeDelete(gv); safeDelete(fw); safeDelete(fb); safeDelete(w2); safeDelete(w); safeDelete(tool);
+        }
+      }
+      const volAfter = R.measureVolume(curShape);
+      if (!(Math.abs(volAfter - volBefore) > 1e-4)) {
+        if (ownsCur) { safeDelete(curShape); freeTopoMap(curTopo); }
+        throw new Error('Rundung fehlgeschlagen.');
+      }
+      return { shape: curShape, topo: curTopo };
+    } finally {
+      freeOrig();
+    }
+  }
   function runFilletChamferWithTopo(shape, topo, type, r, matchedEdges, fin, itemId, skipTopo = false) {
     if (!matchedEdges.length) throw new Error('Keine Kante gewählt.');
     if (type === 'chamfer') {
@@ -4954,6 +5231,9 @@ export function createKernel(R, oc) {
         const outTopo = skipTopo ? null : propagateHistory(builder, [{ topo, selfId: itemId }], res, 'Ch:' + (fin.id || 'f'));
         return { shape: res, topo: outTopo };
       } finally { builder.delete(); }
+    }
+    if (fin && fin.shape === 'g2') {
+      return runG2FilletWithTopo(shape, topo, r, matchedEdges, fin, itemId, skipTopo);
     }
     const builder = new oc.BRepFilletAPI_MakeFillet(shape.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);
     try {
@@ -6151,6 +6431,11 @@ export function createKernel(R, oc) {
         if (ownsTopo) freeTopoMap(curTopo);
         curShape = res.shape; curTopo = res.topo; ownsTopo = true;
       } catch (err) {
+        if (err && err.code === 'g2_unsupported') {
+          errors.push({ itemId, finishId: fin.id, code: 'fillet', message: err.message });
+          for (const e of shapeEdges) safeDelete(e);
+          continue;
+        }
         // größten möglichen Wert suchen
         let lo = 0, hi = r;
         for (let i = 0; i < 6; i++) {
