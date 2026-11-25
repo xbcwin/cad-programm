@@ -2521,6 +2521,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Persistenz, Hilfen, DE/EN & Befehle**: `ViewPrefs.exportData()` / `importData()` sichert Boden und Lichter; `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüssel sind vollständig (`t_a135_boden_licht`).
 - [ ] **Von Hand**: Im Browser ein hochglänzendes Metallteil (z. B. Alu oder Chrom) auf den spiegelnden Studio-Boden stellen, ein echtes 360°-HDR-Panorama laden und die drei Lichter farbig um das Modell drehen.
 
+## Druck-Kosten und Prüfbericht als PDF (Auto [A-134], PF-17, PF-18)
+
+- [x] **3D-Druck-Schätzung (Würfel 20 mm, 20 % Füllung, 25 €/kg)**: `#proj-print-cost` öffnet `#print-cost-dlg`, schätzt Filamentmenge (g & m), Materialkosten (`costEur > 0`, plausibel ca. 0,10 €) und Druckzeit aus Volumen, Oberfläche, Füllung und Drucker-Profil (`Print.estimatePrint`), reagiert live auf Füllung (100 % > 20 %), Kilopreis (50 €/kg = 2× Kosten) und Drucker-Profil (`ender-3` langsamer als `bambu-a1`) (`t_a134_druckkosten_pruefbericht`).
+- [x] **Prüfbericht als PDF (lokal erzeugt)**: `#proj-report-pdf` öffnet `#report-pdf-dlg` mit 3D-Vorschaubild, Maßen, Volumen, Masse und Wandstärke; `#rep-download` lädt eine gültige `%PDF-1.4`-Datei mit eingebettetem JPEG (`/Subtype /Image`, `/Filter /DCTDecode`) sowie `Volumen`, `Masse` und `Wandst` (`t_a134_druckkosten_pruefbericht`).
+- [x] **Einfach & Profi, Hilfen, Übersetzung & Befehlssuche**: Knöpfe im Projekt-Panel, im Mehr-Menü (`#t-more` in „Einfach“) und im Prüfen-Menü (`#t-check` in „Profi“), Hilfetexte (`printCost`, `reportPdf` in JSON/`HELP`), DE/EN-Schlüsselgleichheit und Befehle `print-cost` / `report-pdf` geprüft (`t_a134_druckkosten_pruefbericht`).
+- [ ] **Von Hand**: Im Browser bei einem komplexen Modell mit dünner Wand und mehreren Teilen den Dialog „Druckkosten & Zeit“ anpassen und den erzeugten PDF-Prüfbericht in einem PDF-Viewer öffnen, um Layout, Umlaute, €-Zeichen, Bildqualität und Teileliste visuell zu prüfen.
+
 ## Fehler melden
 
 ```

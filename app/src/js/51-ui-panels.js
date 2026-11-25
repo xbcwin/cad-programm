@@ -1222,7 +1222,10 @@ const Panels = (() => {
       const orientBtn = h('button', { type: 'button', class: 'btn', id: 'proj-orient-print', 'data-help': 'orientPrint' });
       orientBtn.innerHTML = icon('overhang') + esc(T('panel.proj.orientPrint'));
       orientBtn.onclick = () => Print.orientForPrint();
-      orientRow.append(orientBtn);
+      const costBtn = h('button', { type: 'button', class: 'btn', id: 'proj-print-cost', 'data-help': 'printCost' });
+      costBtn.innerHTML = icon('printer') + esc(T('panel.proj.printCost'));
+      costBtn.onclick = () => Print.costDialog();
+      orientRow.append(orientBtn, costBtn);
       bedSec.append(orientRow);
     }
     const hcVal = Print.holeComp();
@@ -1259,7 +1262,8 @@ const Panels = (() => {
     cog.querySelector('input').onchange = (e) => ViewPrefs.set({ cog: e.target.checked });
     ms.append(cog, own);
     const bomB = h('button', { type: 'button', class: 'btn', id: 'proj-bom', 'data-help': 'bom' }); bomB.innerHTML = icon('list') + esc(T('panel.proj.bom')); bomB.onclick = () => Mass.bomDialog();
-    ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB));
+    const repB = h('button', { type: 'button', class: 'btn', id: 'proj-report-pdf', 'data-help': 'reportPdf' }); repB.innerHTML = icon('file') + esc(T('panel.proj.reportPdf')); repB.onclick = () => Measure.reportDialog();
+    ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB, repB));
     Mass.measure().then((r) => {
       if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
       vRow.textContent = Units.fmtVolU(r.volume, 3); gRow.textContent = Mass.gText(r.mass);
