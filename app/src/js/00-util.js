@@ -2152,6 +2152,16 @@ const HELP = {
   "tip": "Tangenten-Griffe an jedem Punkt einer Durchgangs-Spline einstellen (Profi)",
   "hilfe": "Wähle eine Durchgangs-Spline aus, um an jedem Punkt einen Griff für Richtung (Winkel) und Stärke (Länge) der Tangente zu sehen. Ziehe ein Griffende direkt im Bild oder gib Winkel und Stärke rechts bzw. mit dem Maß-Werkzeug (D) exakt ein.",
   "tipp": "Mit „Griff zurücksetzen“ übernimmt der Punkt wieder automatisch die weiche Standard-Tangente seiner Nachbarpunkte."
+ },
+ "polarGrid": {
+  "tip": "Zwischen rechteckigem und polarem Raster (Ringe und Strahlen) umschalten (Profi)",
+  "hilfe": "Im Profi-Modus schaltet das polare Raster konzentrische Ringe um den Nullpunkt und Winkelstrahlen ein. Punkte und Zeichenwerkzeuge fangen genau auf jedem Ring-Abstand und Winkel-Schritt.",
+  "tipp": "Mit einem Klick auf das Ecksymbol links oben zwischen den Linealen schaltest du jederzeit direkt zwischen rechteckig und polar um."
+ },
+ "rulerGuides": {
+  "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
+  "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
+  "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
  }
 };
 

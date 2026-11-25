@@ -802,6 +802,59 @@ const Snap = (() => {
     Viewer.requestRender();
   }
 
+  // ---------- Skizze: Polares Raster & Lineal-Hilfslinien (SK-52) ----------
+  function polarSnap(uv, opts = {}) {
+    const ox = opts.origin ? opts.origin[0] : 0;
+    const oy = opts.origin ? opts.origin[1] : 0;
+    const rStep = opts.fine ? 0.1 : Math.max(0.1, Number(opts.rStep) || 5);
+    const aStep = opts.fine ? 1 : clamp(Number(opts.aStep) || 15, 1, 90);
+    const dx = uv[0] - ox, dy = uv[1] - oy;
+    const r0 = Math.hypot(dx, dy);
+    const r = round(Math.max(0, Math.round(r0 / rStep) * rStep), 6);
+    if (r < 1e-9) return { p: [round(ox, 6), round(oy, 6)], r: 0, deg: 0, rad: 0 };
+    const deg0 = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const degRaw = Math.round(deg0 / aStep) * aStep;
+    const rad = (degRaw * Math.PI) / 180;
+    let deg = round(((degRaw % 360) + 360) % 360, 4);
+    if (Math.abs(deg - 360) < 1e-6 || Object.is(deg, -0)) deg = 0;
+    const p = [round(ox + Math.cos(rad) * r, 6), round(oy + Math.sin(rad) * r, 6)];
+    return { p, r, deg, rad };
+  }
+
+  function guideSnap(uv, guides, tol) {
+    if (!Array.isArray(guides) || !guides.length || !(tol > 0)) return null;
+    let bestX = null, dx = tol;
+    let bestY = null, dy = tol;
+    for (const g of guides) {
+      if (!g || !isFinite(g.v)) continue;
+      if (g.axis === 'x') {
+        const d = Math.abs(g.v - uv[0]);
+        if (d < dx) { dx = d; bestX = g; }
+      } else if (g.axis === 'y') {
+        const d = Math.abs(g.v - uv[1]);
+        if (d < dy) { dy = d; bestY = g; }
+      }
+    }
+    if (!bestX && !bestY) return null;
+    return {
+      x: bestX,
+      y: bestY,
+      both: !!(bestX && bestY),
+      ids: [bestX && bestX.id, bestY && bestY.id].filter(Boolean),
+    };
+  }
+
+  function hitGuide(uv, guides, tol) {
+    if (!Array.isArray(guides) || !guides.length || !(tol > 0)) return null;
+    let best = null;
+    for (const g of guides) {
+      if (!g || !isFinite(g.v)) continue;
+      const d = g.axis === 'x' ? Math.abs(g.v - uv[0]) : Math.abs(g.v - uv[1]);
+      if (d < tol && (!best || d < best.d)) best = { g, d };
+    }
+    return best ? { guide: best.g, dist: best.d } : null;
+  }
+
   // ---------- Anzeige ----------
   function show(guides, label, at) {
     clearGuides();
@@ -823,6 +876,7 @@ const Snap = (() => {
   function prime(id, faceIdx) { faceData(id, faceIdx); }
   return {
     onFace, bodies, clear, prime,
+    polarSnap, guideSnap, hitGuide,
     dockPoints, beginDockDrag, updateDockDrag, setDockVisible, endDockDrag,
     get label() { return tip ? tip.textContent : null; },
     get dockCount() { return dockDrag ? dockDrag.targetPts.length : 0; },

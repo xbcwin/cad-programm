@@ -2362,6 +2362,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Brückenkurve krümmungsglatt (G2) & 3D-Hochziehen**: Verbindet Kreisbogen (`R = 20`) und Linie mit `pts.length === 6`, Winkelfehler `< 0,1°` sowie passender Krümmung (`1/20` bzw. `0`) an beiden Enden, schließt zum Profil und lässt sich ohne Fehler hochziehen; Hilfetexte `conic2d` / `bridge2d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kegelschnitt`, `brückenkurve`) vollständig.
 - [ ] **Von Hand**: In einer Skizze einen Kegelschnitt frei mit der Maus aufziehen (Ellipsenstück, Parabel und Hyperbel am Schulterpunkt beobachten) und zwei schräge Splines bzw. Bögen mit „Brücke“ (G1 und G2) sowie Stärke 1/2 verbinden.
 
+## Polares Raster und Hilfslinien (Auto [A-117], SK-52)
+- [x] **Profi-Modus**: Abschnitt `#sk-grid-sec` sowie die Skizzen-Lineale `#sk-ruler-t`, `#sk-ruler-l` und `#sk-ruler-c` sind im Modus „Einfach“ ausgeblendet (und `Sketch.setGridMode('polar')` gesperrt) und im Modus „Profi“ sichtbar.
+- [x] **Polares Raster & Fang**: Umschalten über `#sk-grid-polar` zeichnet konzentrische Ringe und Strahlen (`sketchGrid === 'polar'`); Punkt bei `r = 10, 30°` sowie nach Umstellen auf `10 mm / 45°` bei `r = 20, 45°` fangen exakt auf den Polarkoordinaten.
+- [x] **Hilfslinien vom Lineal & Schnittpunkt-Fang**: Ziehen aus `#sk-ruler-l` erzeugt X-Hilfslinie bei `x = 15`, an der Punkte sowohl bei polarem als auch rechteckigem Raster exakt fangen; Ziehen aus `#sk-ruler-t` erzeugt Y-Hilfslinie bei `y = -10` mit Schnittpunkt-Fang `(15, -10)`; Zurückziehen aufs Lineal löscht mit `Strg+Z`-Wiederherstellung; Panel-Anlage, `#sk-guides-clear`, Hilfetexte (`polarGrid`, `rulerGuides`), DE/EN-Schlüsselgleichheit und Befehlssuche (`polar`, `hilfslinien`) ohne Seitenfehler.
+- [ ] **Von Hand**: In einer Skizze per Ziehen aus beiden Linealen mehrere X-/Y-Hilfslinien anlegen, bei verschiedenen Zoomstufen verschieben und das Fangen mit Rechteck, Linie und Kreis auf dem polaren Raster prüfen.
+
 ## Fehler melden
 
 ```
