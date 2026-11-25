@@ -1784,6 +1784,16 @@
     "hilfe": "Treibt deine Baugruppe über eine echte Zeitachse an. Jeder Motor steuert ein Gelenk mit fester Drehzahl oder Geschwindigkeit (z. B. 60°/s) oder über eine Stützpunkt-Kurve (Weg über Zeit). Gleichzeitig verfolgt Tracery auf Wunsch den Weg einzelner Punkte am Bauteil als 3D-Bahnkurve im Bild und als Weg-Zeit-Diagramm.",
     "tipp": "Ziehe am Zeitschieber oder klicke direkt ins Weg-Zeit-Diagramm, um jede Zwischenstellung sofort im 3D-Modell zu prüfen."
   },
+  "stackHole": {
+    "tip": "Bohrung durch Stapel: bohrt ein Loch gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
+    "hilfe": "Setzt ein einfaches Loch, eine genormte Schrauben-Durchgangsbohrung (wahlweise mit Senk- oder Zylinderkopf), ein Sackloch oder eine Passbohrung H7 direkt als Schritt in der Baugruppe. Alle getroffenen oder gezielt ausgewählten Teile erhalten gleichzeitig dasselbe Loch, bleiben aber getrennte Körper und verändern keine verknüpften Bauteil-Dateien.",
+    "tipp": "Unter „Zielteile“ kannst du auf „Nur gewählte Teile“ umschalten, wenn das Loch z. B. nur durch zwei bestimmte Platten gehen soll."
+  },
+  "asmCut": {
+    "tip": "Baugruppen-Schnitt: schneidet eine Skizze gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
+    "hilfe": "Erzeugt auf einer gewählten Fläche oder Ebene einen geschlossenen Schnitt-Umriss und zieht ihn gleichzeitig von allen getroffenen oder ausgewählten Teilen der Baugruppe ab. Die Teile bleiben einzelne Baugruppen-Komponenten.",
+    "tipp": "Mit „Skizze bearbeiten“ passt du den Ausschnitt später an – alle betroffenen Teile werden sofort mitgeändert."
+  },
   "autoScrews": {
     "tip": "Schrauben automatisch einsetzen: erkennt Bohrungen in Bauteilen und setzt passende Normschrauben ein",
     "hilfe": "Sucht alle runden Durchgangs-, Kern- und Sacklöcher in deinen Bauteilen, ordnet ihnen die passende metrische Normschraube (M1.6–M24 nach ISO 273 / DIN 336) zu und schlägt anhand der Materialstärke – auch über mehrere gestapelte Platten hinweg – eine Normlänge vor. Du kannst Größe, Kopfform, Länge sowie Scheiben und Muttern vor dem Einsetzen noch anpassen.",
