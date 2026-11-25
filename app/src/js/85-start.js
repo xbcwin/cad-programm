@@ -255,6 +255,108 @@ const Templates = (() => {
 const Start = (() => {
   let el = null, escHandler = null;
   let recBaseDoc = null, recPending = null, recBarEl = null, recTimer = null, recTracking = false, recBusy = false;
+  let examplesCache = null, examplesPromise = null;
+  function normalizeExampleEntry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = String(raw.id || '').trim();
+    const name = String(raw.name || '').trim();
+    const file = String(raw.file || '').trim();
+    const thumb = String(raw.thumb || '').trim();
+    if (!id || !name || !file || !thumb) return null;
+    if (/^[a-z]+:|^\/\//i.test(file) || /^[a-z]+:|^\/\//i.test(thumb) || file.includes('..') || thumb.includes('..')) return null;
+    return {
+      id,
+      name,
+      nameEn: String(raw.nameEn || name),
+      desc: String(raw.desc || ''),
+      descEn: String(raw.descEn || raw.desc || ''),
+      tag: String(raw.tag || ''),
+      tagEn: String(raw.tagEn || raw.tag || ''),
+      file,
+      thumb,
+    };
+  }
+  async function loadExamples() {
+    if (examplesCache) return examplesCache.slice();
+    if (examplesPromise) return examplesPromise;
+    examplesPromise = (async () => {
+      try {
+        const resp = await fetch('data/beispiele/index.json');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const list = await resp.json();
+        if (!Array.isArray(list)) return [];
+        examplesCache = list.map(normalizeExampleEntry).filter(Boolean);
+        return examplesCache.slice();
+      } catch (e) {
+        console.warn(e);
+        return [];
+      } finally {
+        examplesPromise = null;
+      }
+    })();
+    return examplesPromise;
+  }
+  async function openExample(id, opts = {}) {
+    const list = await loadExamples();
+    const ex = list.find((x) => x.id === id);
+    if (!ex) { UI.toast(T('start.exampleLoadError'), { kind: 'bad', ms: 5000 }); return null; }
+    try {
+      const resp = await fetch('data/beispiele/' + ex.file);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const txt = await resp.text();
+      const parsed = Store.safeParseJSON(txt, { limit: Store.LIMITS.project, name: ex.file });
+      if (!parsed.ok) throw new Error(parsed.error);
+      const doc = parsed.data;
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc) || doc.format !== 'masswerk') {
+        throw new Error('Keine Tracery-Projektdatei');
+      }
+      Model.migrate(doc);
+      // Immer eine eigene Kopie mit neuer Kennung anlegen, damit das Original in app/data/beispiele/ unberührt bleibt
+      doc.id = uid('p');
+      doc.created = Date.now();
+      doc.modified = Date.now();
+      Store.extractBlobs(doc);
+      ensureModelMode();
+      App.setDoc(doc, opts && opts.newTab ? { newTab: true, fit: true } : { fit: true });
+      hide();
+      App.markClean();
+      const title = I18n.lang === 'en' ? (ex.nameEn || doc.name || ex.name) : (doc.name || ex.name);
+      UI.toast(T('start.exampleLoaded', { name: title }), { icon: 'check', ms: 4500 });
+      return doc;
+    } catch (e) {
+      console.warn(e);
+      UI.toast(T('start.exampleLoadError'), { kind: 'bad', ms: 5000 });
+      return null;
+    }
+  }
+  function renderExamplesGrid(grid, list) {
+    if (!grid) return;
+    grid.innerHTML = '';
+    if (!list || !list.length) {
+      grid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('start.examplesEmpty')));
+      return;
+    }
+    const isEn = I18n.lang === 'en';
+    for (const ex of list) {
+      const title = isEn ? (ex.nameEn || ex.name) : ex.name;
+      const desc = isEn ? (ex.descEn || ex.desc) : ex.desc;
+      const tag = isEn ? (ex.tagEn || ex.tag) : ex.tag;
+      const btn = h('button', { type: 'button', class: 'card example-card', dataset: { exampleId: ex.id } });
+      const th = h('div', { class: 'thumb example-thumb' },
+        h('img', { src: 'data/beispiele/' + ex.thumb, alt: title }),
+      );
+      btn.append(th);
+      if (tag) btn.append(h('span', { class: 'tpl-badge example-badge' }, tag));
+      btn.append(h('b', null, title), h('span', null, desc));
+      btn.onclick = async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try { await openExample(ex.id); }
+        finally { if (btn.isConnected) btn.disabled = false; }
+      };
+      grid.append(btn);
+    }
+  }
   function tplThumb(t) {
     return `<svg viewBox="0 0 110 56" aria-hidden="true"><style>.a1{fill:var(--accent);fill-opacity:.3;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a2{fill:var(--accent);fill-opacity:.55;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a3{fill:var(--accent);fill-opacity:.8;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b1{fill:#e8833a;fill-opacity:.35;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b2{fill:#e8833a;fill-opacity:.6;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b3{fill:#e8833a;fill-opacity:.85;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.hole{fill:var(--surface);stroke:var(--ink);stroke-opacity:.6;stroke-width:1}.line{stroke:var(--ink);stroke-opacity:.6;stroke-width:1.4}</style>${t.svg}</svg>`;
   }
@@ -501,6 +603,21 @@ const Start = (() => {
       cards.append(c);
     }
     tsec.append(cards); inner.append(tsec);
+    const exSec = h('section', { id: 'start-examples', class: 'start-examples', 'data-help': 'exampleGallery' },
+      h('div', { class: 'start-sec-head' },
+        h('h2', null, T('start.examplesHeading')),
+        h('p', { class: 'start-sec-sub' }, T('start.examplesSub')),
+      ),
+    );
+    const exGrid = h('div', { class: 'cards example-cards', id: 'start-examples-grid' });
+    if (examplesCache) {
+      renderExamplesGrid(exGrid, examplesCache);
+    } else {
+      exGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('start.examplesLoading')));
+      loadExamples().then((list) => { if (el && exGrid.isConnected) renderExamplesGrid(exGrid, list); });
+    }
+    exSec.append(exGrid);
+    inner.append(exSec);
     inner.append(h('div', { class: 'start-foot', html: T('start.footHtml') }));
     el.append(inner);
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('common.close'), style: { position: 'fixed', top: '12px', right: '12px' } }); close.innerHTML = icon('close'); close.onclick = hide;
@@ -3091,6 +3208,7 @@ const Start = (() => {
   function init() {
     if (folderInited) return;
     folderInited = true;
+    loadExamples().catch(() => {});
     const addTabBtn = $('#proj-tab-add');
     if (addTabBtn) {
       addTabBtn.innerHTML = icon('plus');
@@ -3187,7 +3305,7 @@ const Start = (() => {
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,
     get pendingRecovery() { return recPending; },
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
-    openDrone, get open() { return !!el; },
+    openDrone, loadExamples, openExample, get examples() { return examplesCache ? examplesCache.slice() : []; }, get open() { return !!el; },
   };
 })();
 

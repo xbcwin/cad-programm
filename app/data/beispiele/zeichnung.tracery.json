@@ -1,0 +1,182 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_zeichnung",
+  "name": "Lagerbock mit Zeichnung",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [
+    { "id": "m_lb_l", "name": "Länge", "expr": 80 },
+    { "id": "m_lb_b", "name": "Breite", "expr": 40 },
+    { "id": "m_lb_d", "name": "Bohrung", "expr": 16 }
+  ],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_lb_grp",
+      "kind": "group",
+      "name": "Lagerbock",
+      "role": "solid",
+      "p": {},
+      "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#5b8fc9",
+      "mat": "Alu 6061",
+      "hidden": false,
+      "locked": false,
+      "finishes": [],
+      "children": [
+        {
+          "id": "i_lb_base",
+          "kind": "box",
+          "name": "Grundplatte",
+          "role": "solid",
+          "p": { "w": "Länge", "d": "Breite", "h": 10 },
+          "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#5b8fc9",
+          "hidden": false,
+          "locked": false,
+          "finishes": [
+            { "id": "f_lb_1", "type": "fillet", "r": 5, "edges": "vertical" }
+          ]
+        },
+        {
+          "id": "i_lb_block",
+          "kind": "box",
+          "name": "Lagerblock",
+          "role": "solid",
+          "p": { "w": 36, "d": "Breite", "h": 26 },
+          "t": { "x": 0, "y": 0, "z": 10, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#5b8fc9",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_lb_top",
+          "kind": "cylinder",
+          "name": "Rundkopf",
+          "role": "solid",
+          "p": { "d": 36, "h": "Breite" },
+          "t": { "x": 0, "y": "Breite/2", "z": 36, "rx": 90, "ry": 0, "rz": 0 },
+          "color": "#5b8fc9",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_lb_bore",
+          "kind": "cylinder",
+          "name": "Lagerbohrung",
+          "role": "hole",
+          "p": { "d": "Bohrung", "h": "Breite + 4" },
+          "t": { "x": 0, "y": "Breite/2 + 2", "z": 36, "rx": 90, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_lb_m1",
+          "kind": "cylinder",
+          "name": "Befestigungsloch 1",
+          "role": "hole",
+          "p": { "d": 6.6, "h": 14 },
+          "t": { "x": -30, "y": -11, "z": -2, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_lb_m2",
+          "kind": "cylinder",
+          "name": "Befestigungsloch 2",
+          "role": "hole",
+          "p": { "d": 6.6, "h": 14 },
+          "t": { "x": 30, "y": -11, "z": -2, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_lb_m3",
+          "kind": "cylinder",
+          "name": "Befestigungsloch 3",
+          "role": "hole",
+          "p": { "d": 6.6, "h": 14 },
+          "t": { "x": -30, "y": 11, "z": -2, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_lb_m4",
+          "kind": "cylinder",
+          "name": "Befestigungsloch 4",
+          "role": "hole",
+          "p": { "d": 6.6, "h": 14 },
+          "t": { "x": 30, "y": 11, "z": -2, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "Alu 6061"
+  },
+  "drawing": {
+    "sheets": [
+      {
+        "id": "sh_ex1",
+        "name": "Blatt 1",
+        "sheet": "A4",
+        "orient": "landscape",
+        "scale": "auto",
+        "views": { "front": true, "top": true, "left": true, "iso": true },
+        "viewOpts": {},
+        "extraViews": [],
+        "hidden": true,
+        "centers": true,
+        "hiddenCenters": [],
+        "dims": [
+          { "id": "d_w", "auto": "width", "view": "front" },
+          { "id": "d_h", "auto": "height", "view": "front" },
+          { "id": "d_d", "auto": "depth", "view": "left" },
+          { "id": "d_c", "auto": "circles", "view": "top" }
+        ],
+        "free": [],
+        "details": [],
+        "sections": [],
+        "dimStyle": { "arrow": "filled", "fontSize": 3.5, "decimals": null },
+        "notes": [],
+        "balloons": [],
+        "bomTable": { "show": false, "pos": null },
+        "viewPos": {},
+        "title": {
+          "titel": "Lagerbock Ø16",
+          "nummer": "ZB-001",
+          "name": "Tracery Beispiel",
+          "datum": "25.11.2026",
+          "werkstoff": "Aluminium 6061",
+          "firma": "Tracery CAD",
+          "blatt": ""
+        }
+      }
+    ],
+    "active": "sh_ex1"
+  }
+}

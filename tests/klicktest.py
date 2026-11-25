@@ -28804,6 +28804,162 @@ def t_verlauf_abschalten(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]
 
 
+# ---------- [A-149] Beispiel-Galerie, Schritt 1 (BE-34) ----------
+def t_a149_beispiel_galerie(p):
+    # 1. Startseite in Profi und Einfach zeigt >= 8 Beispiele mit lokalen Vorschaubildern
+    def check_cards():
+        for _ in range(30):
+            res = p.ev("""return (() => {
+              const sec = document.getElementById('start-examples');
+              if (!sec || !sec.offsetParent) return { ok: false, ready: false, n: 0 };
+              const cards = [...sec.querySelectorAll('.example-card')];
+              const items = cards.map((c) => {
+                const img = c.querySelector('.example-thumb img');
+                const src = img ? (img.getAttribute('src') || '') : '';
+                const title = (c.querySelector('b')?.textContent || '').trim();
+                const desc = (c.querySelector('span:last-of-type')?.textContent || '').trim();
+                return {
+                  id: c.dataset.exampleId || '',
+                  vis: !!c.offsetParent,
+                  srcOk: src.startsWith('data/beispiele/') && !/^https?:/i.test(src),
+                  imgOk: !!(img && img.complete && img.naturalWidth > 0),
+                  txtOk: title.length > 0 && desc.length > 0,
+                };
+              });
+              const ready = items.length >= 8 && items.every((x) => x.imgOk);
+              return {
+                ok: items.length >= 8 && items.every((x) => x.vis && x.srcOk && x.imgOk && x.txtOk),
+                ready,
+                n: items.length,
+                items,
+              };
+            })()""")
+            if res.get('ok'):
+                return res
+            p.wait(150)
+        return res
+
+    pro_res = check_cards()
+    p.ev("ViewPrefs.setLevel('simple'); Start.show()")
+    simple_res = check_cards()
+    p.ev("ViewPrefs.setLevel('pro'); Start.show()")
+    for _ in range(20):
+        if p.pg.locator('#start-examples .example-card').count() >= 8:
+            break
+        p.wait(150)
+    ok1 = bool(pro_res.get('ok') and simple_res.get('ok'))
+
+    # 2. Klick auf ein Beispiel oeffnet ein Projekt mit Koerpern ohne Fehler
+    p.pg.locator('#start-examples .example-card[data-example-id="handyhalter"]').click()
+    for _ in range(30):
+        if p.pg.locator('.start').count() == 0 and p.ev("return App.doc && App.doc.items.length > 0"):
+            break
+        p.wait(200)
+    warte_rechnen(p, 40)
+    st_hh = p.ev("""return (async () => {
+      const boxes = [...App.results.values()].map((r) => r && r.data && r.data.bbox).filter(Boolean);
+      const raw = await fetch('data/beispiele/handyhalter.tracery.json').then((r) => r.text());
+      return {
+        id: App.doc.id,
+        name: App.doc.name,
+        cnt: Model.countItems(App.doc),
+        params: JSON.stringify(App.doc.params || []),
+        errs: App.errors.length,
+        resCount: App.results.size,
+        boxesOk: boxes.length > 0 && boxes.every((b) => (b[3] - b[0]) > 0.1 && (b[4] - b[1]) > 0.1 && (b[5] - b[2]) > 0.1),
+        raw,
+      };
+    })()""")
+    ok2 = st_hh['errs'] == 0 and st_hh['resCount'] > 0 and st_hh['boxesOk'] and st_hh['cnt'] > 0
+
+    # 3. Aenderungen an der geoeffneten Kopie lassen Original und naechste Kopie unveraendert
+    p.ev("""App.change('Umbau', (d) => {
+      d.name = 'Mein Handyhalter Umbau';
+      if (d.params && d.params[0]) d.params[0].expr = 120;
+    });
+    Actions.addPrimitive('box', { p: { w: 12, d: 12, h: 12 } });""")
+    warte_rechnen(p, 25)
+    p.ev("App.autosave.flush(); Start.show()")
+    for _ in range(20):
+        if p.pg.locator('#start-examples .example-card').count() >= 8:
+            break
+        p.wait(150)
+    p.pg.locator('#start-examples .example-card[data-example-id="handyhalter"]').click()
+    for _ in range(30):
+        if p.pg.locator('.start').count() == 0 and p.ev("return App.doc && App.doc.id !== arg", st_hh['id']):
+            break
+        p.wait(200)
+    warte_rechnen(p, 40)
+    st_hh2 = p.ev("""return (async () => {
+      const raw = await fetch('data/beispiele/handyhalter.tracery.json').then((r) => r.text());
+      return {
+        id: App.doc.id,
+        name: App.doc.name,
+        cnt: Model.countItems(App.doc),
+        params: JSON.stringify(App.doc.params || []),
+        errs: App.errors.length,
+        raw,
+      };
+    })()""")
+    ok3 = (
+        st_hh2['id'] != st_hh['id']
+        and st_hh2['name'] == st_hh['name']
+        and st_hh2['cnt'] == st_hh['cnt']
+        and st_hh2['params'] == st_hh['params']
+        and st_hh2['errs'] == 0
+        and st_hh2['raw'] == st_hh['raw']
+    )
+
+    # 4. Alle uebrigen Beispiele (>= 8 insgesamt) laden mit Koerpern ohne Fehler, inkl. Baugruppe & Zeichnung
+    ex_ids = p.ev("return Start.examples.map(x => x.id)")
+    all_ok = len(ex_ids) >= 8
+    for eid in ex_ids:
+        if eid == 'handyhalter':
+            continue
+        p.ev("return Start.openExample(arg)", eid)
+        warte_rechnen(p, 45)
+        info = p.ev("""return (() => {
+          const boxes = [...App.results.values()].map((r) => r && r.data && r.data.bbox).filter(Boolean);
+          return {
+            errs: App.errors.length,
+            cnt: Model.countItems(App.doc),
+            resCount: App.results.size,
+            boxesOk: boxes.length > 0 && boxes.every((b) => (b[3] - b[0]) > 0.1 && (b[4] - b[1]) > 0.1 && (b[5] - b[2]) > 0.1),
+            isAsm: Model.isAssembly(App.doc),
+            joints: (App.doc.joints || []).length,
+            sheets: (App.doc.drawing && Array.isArray(App.doc.drawing.sheets)) ? App.doc.drawing.sheets.length : 0,
+          };
+        })()""")
+        cur_ok = info['errs'] == 0 and info['cnt'] > 0 and info['resCount'] > 0 and info['boxesOk']
+        if eid == 'baugruppe-scharnier':
+            cur_ok = cur_ok and info['isAsm'] is True and info['joints'] >= 1 and info['resCount'] >= 2
+        if eid == 'zeichnung':
+            cur_ok = cur_ok and info['sheets'] >= 1
+        if not cur_ok:
+            all_ok = False
+    ok4 = all_ok
+
+    # 5. Hilfetext, DE/EN-Schluesselgleichheit und EN-Ansicht
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then((r) => r.json()),
+        fetch('data/texte-de.json').then((r) => r.json()),
+        fetch('data/texte-en.json').then((r) => r.json()),
+      ]);
+      const helpOk = !!(h.exampleGallery && h.exampleGallery.tip && h.exampleGallery.hilfe && h.exampleGallery.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nEq = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      I18n.use('en');
+      Start.show();
+      const enHead = document.querySelector('#start-examples h2')?.textContent || '';
+      const enTitle = document.querySelector('#start-examples .example-card[data-example-id="handyhalter"] b')?.textContent || '';
+      I18n.use('de');
+      return { helpOk, i18nEq, enHead, enTitle };
+    })()""")
+    ok5 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('enHead') == 'Examples' and meta.get('enTitle') == 'Phone Stand' and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -29061,6 +29217,7 @@ TESTS = [
     ('[A-145] Krümmungsglatte Rundung (G2): Form-Wahl, Volumen, Profi & Speichern/Laden (KP-40)', t_a145_rundung_g2),
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
+    ('[A-149] Beispiel-Galerie: 8 lokale Beispiele mit Vorschaubild / Kopie öffnen / Original unverändert', t_a149_beispiel_galerie),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

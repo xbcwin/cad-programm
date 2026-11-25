@@ -2459,6 +2459,11 @@ const HELP = {
   "tip": "Ohne Verlauf arbeiten: Körper einfrieren und direkt verschieben, bohren und runden (Profi)",
   "hilfe": "Friert deinen aktuellen Körper als feste Form ein und blendet die Schritte-Liste aus. Neue Änderungen wie Verschieben, Bohren oder Abrunden wirken sofort direkt am Körper, ohne neue Schritte zu sammeln. Rückgängig (Strg Z) funktioniert weiter wie gewohnt.",
   "tipp": "Wenn du wieder mit Schritten arbeiten willst, nimm das Häkchen einfach wieder heraus – nach einer kurzen Rückfrage startet der eingefrorene Stand als erster Schritt im Verlauf."
+ },
+ "exampleGallery": {
+  "tip": "Beispiel-Galerie: fertige CAD-Projekte als eigene Kopie zum Ausprobieren öffnen",
+  "hilfe": "Hier findest du eine Sammlung fertiger Projekte – vom Handyhalter über Zahnräder und eine gedrehte Vase bis hin zur beweglichen Scharnier-Baugruppe und einer technischen Zeichnung. Ein Klick öffnet immer eine frische Kopie für dich, sodass du nach Lust und Laune ändern kannst.",
+  "tipp": "Schau bei den Beispielen in den Verlauf und unter „Maße“ – dort siehst du, wie andere Teile sauber und änderbar aufgebaut sind."
  }
 };
 

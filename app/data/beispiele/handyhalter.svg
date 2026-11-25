@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3f5f8"/>
+      <stop offset="100%" stop-color="#dfe5ee"/>
+    </linearGradient>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a58ae6"/>
+      <stop offset="100%" stop-color="#7656c2"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg)"/>
+  <ellipse cx="160" cy="156" rx="92" ry="18" fill="#1e293b" fill-opacity="0.1"/>
+  <!-- Fußplatte -->
+  <polygon points="62,136 168,100 258,130 152,166" fill="#9c7fe0" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="62,136 152,166 152,175 62,145" fill="#7758c2" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="258,130 152,166 152,175 258,139" fill="#6346aa" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Lippe vorne -->
+  <polygon points="62,120 152,150 152,166 62,136" fill="#8869d2" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="62,120 74,116 164,146 152,150" fill="#b39be9" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="152,150 164,146 164,162 152,166" fill="#6d50b8" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Kabelschlitz -->
+  <polygon points="98,132 118,139 118,154 98,147" fill="#e6ebf2" stroke="#242933" stroke-width="1.4" stroke-linejoin="round"/>
+  <!-- Lehne 20° -->
+  <polygon points="134,126 152,26 238,54 218,154" fill="url(#p1)" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="152,26 164,22 250,50 238,54" fill="#bba4ee" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="238,54 250,50 230,150 218,154" fill="#6447ad" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Stütze -->
+  <polygon points="172,118 228,136 244,128 186,108" fill="#7f61c9" stroke="#242933" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

@@ -3727,5 +3727,11 @@
   "tl.noHistoryMoveHint": "Without history, drag the body directly in the viewport or adjust its position under “Location” on the right.",
   "tl.frozenBodyName": "Frozen body",
   "panel.imp.frozenDirectHint": "Frozen body (no history). Moving, drilling and filleting apply directly to this body.",
-  "panel.imp.frozenStepHint": "Frozen state as the first step in history. Further steps build on top of it."
+  "panel.imp.frozenStepHint": "Frozen state as the first step in history. Further steps build on top of it.",
+  "start.examplesHeading": "Examples",
+  "start.examplesSub": "Ready-made projects to explore and customize – each click opens your own copy.",
+  "start.examplesLoading": "Loading examples …",
+  "start.examplesEmpty": "No examples found.",
+  "start.exampleLoaded": "Opened a copy of “{name}” – the original stays untouched.",
+  "start.exampleLoadError": "Could not load the example."
 }

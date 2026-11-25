@@ -1,0 +1,125 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_kiste_deckel",
+  "name": "Kiste mit Deckel",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [
+    { "id": "m_kd_w", "name": "Breite", "expr": 70 },
+    { "id": "m_kd_d", "name": "Tiefe", "expr": 45 },
+    { "id": "m_kd_h", "name": "Höhe", "expr": 32 },
+    { "id": "m_kd_t", "name": "Wand", "expr": 2.4 },
+    { "id": "m_kd_s", "name": "Spiel", "expr": 0.25 }
+  ],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_kd_box",
+      "kind": "group",
+      "name": "Kiste",
+      "role": "solid",
+      "p": {},
+      "t": { "x": "-(Breite/2 + 8)", "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#2f9e91",
+      "mat": "PLA",
+      "hidden": false,
+      "locked": false,
+      "finishes": [],
+      "children": [
+        {
+          "id": "i_kd_box_out",
+          "kind": "box",
+          "name": "Außenkörper",
+          "role": "solid",
+          "p": { "w": "Breite", "d": "Tiefe", "h": "Höhe" },
+          "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#2f9e91",
+          "hidden": false,
+          "locked": false,
+          "finishes": [
+            { "id": "f_kd_1", "type": "fillet", "r": 4, "edges": "vertical" }
+          ]
+        },
+        {
+          "id": "i_kd_box_in",
+          "kind": "box",
+          "name": "Innenraum",
+          "role": "hole",
+          "p": { "w": "Breite - 2*Wand", "d": "Tiefe - 2*Wand", "h": "Höhe" },
+          "t": { "x": 0, "y": 0, "z": "Wand", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        }
+      ]
+    },
+    {
+      "id": "i_kd_lid",
+      "kind": "group",
+      "name": "Deckel",
+      "role": "solid",
+      "p": {},
+      "t": { "x": "Breite/2 + 8", "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#e8833a",
+      "mat": "PLA",
+      "hidden": false,
+      "locked": false,
+      "finishes": [],
+      "children": [
+        {
+          "id": "i_kd_lid_plate",
+          "kind": "box",
+          "name": "Deckelplatte",
+          "role": "solid",
+          "p": { "w": "Breite", "d": "Tiefe", "h": "Wand" },
+          "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#e8833a",
+          "hidden": false,
+          "locked": false,
+          "finishes": [
+            { "id": "f_kd_2", "type": "fillet", "r": 4, "edges": "vertical" }
+          ]
+        },
+        {
+          "id": "i_kd_lid_lip",
+          "kind": "box",
+          "name": "Führungssteg",
+          "role": "solid",
+          "p": { "w": "Breite - 2*Wand - 2*Spiel", "d": "Tiefe - 2*Wand - 2*Spiel", "h": 3.5 },
+          "t": { "x": 0, "y": 0, "z": "Wand", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#e8833a",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_kd_lid_cut",
+          "kind": "box",
+          "name": "Steg innen",
+          "role": "hole",
+          "p": { "w": "Breite - 4*Wand - 2*Spiel", "d": "Tiefe - 4*Wand - 2*Spiel", "h": 4 },
+          "t": { "x": 0, "y": 0, "z": "Wand", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "PLA"
+  },
+  "drawing": null
+}

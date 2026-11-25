@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f7f9fc"/>
+      <stop offset="100%" stop-color="#e5ebf3"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg)"/>
+  <!-- Zeichenblatt-Rahmen -->
+  <rect x="14" y="12" width="292" height="176" fill="#ffffff" stroke="#334155" stroke-width="1.6"/>
+  <rect x="20" y="18" width="280" height="164" fill="none" stroke="#94a3b8" stroke-width="0.9"/>
+  <!-- Schriftfeld unten rechts -->
+  <rect x="190" y="150" width="110" height="32" fill="#f8fafc" stroke="#334155" stroke-width="1.1"/>
+  <line x1="190" y1="166" x2="300" y2="166" stroke="#334155" stroke-width="0.8"/>
+  <line x1="245" y1="166" x2="245" y2="182" stroke="#334155" stroke-width="0.8"/>
+  <!-- Vorderansicht Lagerbock (links) -->
+  <path d="M44,128 L44,114 L76,114 L76,72 A24,24 0 0,1 124,72 L124,114 L156,114 L156,128 Z" fill="#dbeafe" stroke="#1e293b" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="100" cy="72" r="10" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/>
+  <!-- Mittellinien & Maßlinien -->
+  <line x1="100" y1="42" x2="100" y2="136" stroke="#dc2626" stroke-width="0.9" stroke-dasharray="6 2 1.5 2"/>
+  <line x1="72" y1="72" x2="128" y2="72" stroke="#dc2626" stroke-width="0.9" stroke-dasharray="6 2 1.5 2"/>
+  <line x1="44" y1="142" x2="156" y2="142" stroke="#2563eb" stroke-width="1"/>
+  <line x1="44" y1="128" x2="44" y2="146" stroke="#2563eb" stroke-width="0.8"/>
+  <line x1="156" y1="128" x2="156" y2="146" stroke="#2563eb" stroke-width="0.8"/>
+  <!-- Seitenansicht (rechts) -->
+  <rect x="196" y="48" width="54" height="80" fill="#dbeafe" stroke="#1e293b" stroke-width="1.6"/>
+  <line x1="196" y1="114" x2="250" y2="114" stroke="#1e293b" stroke-width="1.2"/>
+  <line x1="196" y1="62" x2="250" y2="62" stroke="#64748b" stroke-width="1.1" stroke-dasharray="4 3"/>
+  <line x1="196" y1="82" x2="250" y2="82" stroke="#64748b" stroke-width="1.1" stroke-dasharray="4 3"/>
+  <line x1="190" y1="72" x2="256" y2="72" stroke="#dc2626" stroke-width="0.9" stroke-dasharray="6 2 1.5 2"/>
+</svg>

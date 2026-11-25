@@ -2619,6 +2619,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zurückschalten & Metadaten**: Zurückschalten fragt per Bestätigungs-Dialog (`#nh-resume-cancel` / `#nh-resume-ok`) nach und legt den eingefrorenen Stand als ersten Schritt im neuen Verlauf an; `HELP.noHistory`, Befehl `toggle-no-history` und DE/EN-Schlüsselgleichheit geprüft (`t_verlauf_abschalten`).
 - [ ] **Von Hand**: Im Browser in „Profi“ ein Teil mit mehreren Schritten anlegen, „Ohne Verlauf arbeiten“ aktivieren, den Körper per Ziehgriff im Bild verschieben, per Rechtsklick-/Kontextleiste eine Bohrung setzen und abrunden, mit `Strg Z` zurückgehen und über „Verlauf einschalten“ wieder mit einzelnen Schritten weiterbauen.
 
+## Beispiel-Galerie, Schritt 1 (Auto [A-149], BE-34)
+
+- [x] **8 lokale Beispiele mit Vorschaubildern in Einfach & Profi**: Auf der Startseite ist `#start-examples` sowohl in „Profi“ als auch in „Einfach“ sichtbar und listet mindestens 8 fertige Projekte (`app/data/beispiele/index.json`) mit geladenen lokalen SVG-Vorschaubildern (`data/beispiele/*.svg`), lokalisiert auf Deutsch und Englisch (`t_a149_beispiel_galerie`).
+- [x] **Klick öffnet eigene Kopie mit berechneten Körpern**: Klick auf „Handyhalter“ und Laden aller 8 Beispiele (`handyhalter`, `kiste-mit-deckel`, `zahnrad-paar`, `halterung`, `vase`, `schild`, `baugruppe-scharnier` als Baugruppe mit Gelenk, `zeichnung` mit DIN-A4-Zeichnung) erzeugen jeweils fehlerfreie 3D-Körper; Umbenennen/Ändern der Kopie lässt Originaldatei und nächste geöffnete Kopie unverändert (`t_a149_beispiel_galerie`).
+- [x] **Hilfe & DE/EN-Schlüssel**: `HELP.exampleGallery` und identische Schlüssel in `texte-de.json`/`texte-en.json` geprüft (`t_a149_beispiel_galerie`).
+- [ ] **Von Hand**: Im Browser in „Einfach“ und „Profi“ alle 8 Beispiele auf der Startseite durchsehen, „Vase“, „Baugruppe Scharnier“ (Gelenk bewegen) und „Lagerbock mit Zeichnung“ (Reiter „Zeichnung“ öffnen) anklicken und umbauen.
+
 ## Fehler melden
 
 ```

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "handyhalter",
+    "name": "Handyhalter",
+    "nameEn": "Phone Stand",
+    "desc": "Schräge Lehne (20°), Ablage vorne und Kabelschlitz – direkt zum 3D-Druck.",
+    "descEn": "20° angled backrest, front lip and cable slot – ready for 3D printing.",
+    "tag": "3D-Druck",
+    "tagEn": "3D Print",
+    "file": "handyhalter.tracery.json",
+    "thumb": "handyhalter.svg"
+  },
+  {
+    "id": "kiste-mit-deckel",
+    "name": "Kiste mit Deckel",
+    "nameEn": "Box with Lid",
+    "desc": "Parametrische Aufbewahrungsbox mit Maßen für Breite, Tiefe, Wand und Spiel.",
+    "descEn": "Parametric storage box driven by width, depth, wall thickness and clearance.",
+    "tag": "Parametrisch",
+    "tagEn": "Parametric",
+    "file": "kiste-mit-deckel.tracery.json",
+    "thumb": "kiste-mit-deckel.svg"
+  },
+  {
+    "id": "zahnrad-paar",
+    "name": "Zahnrad-Paar",
+    "nameEn": "Gear Pair",
+    "desc": "Zwei kämmende Evolventen-Zahnräder (24 und 12 Zähne) mit gemeinsamem Modul.",
+    "descEn": "Two meshing involute gears (24 and 12 teeth) sharing a common module.",
+    "tag": "Mechanik",
+    "tagEn": "Mechanics",
+    "file": "zahnrad-paar.tracery.json",
+    "thumb": "zahnrad-paar.svg"
+  },
+  {
+    "id": "halterung",
+    "name": "Winkel-Halterung",
+    "nameEn": "Mounting Bracket",
+    "desc": "Stabiler L-Winkel aus Aluminium mit Versteifungsrippe und M4-Senklöchern.",
+    "descEn": "Sturdy aluminum L-bracket with stiffening rib and M4 countersunk holes.",
+    "tag": "Technik",
+    "tagEn": "Hardware",
+    "file": "halterung.tracery.json",
+    "thumb": "halterung.svg"
+  },
+  {
+    "id": "vase",
+    "name": "Vase",
+    "nameEn": "Vase",
+    "desc": "Geschwungene Vase als 360°-Drehkörper aus einer profilierten Skizze.",
+    "descEn": "Curved vase built as a 360° revolve body from a profiled sketch.",
+    "tag": "Drehteil",
+    "tagEn": "Revolve",
+    "file": "vase.tracery.json",
+    "thumb": "vase.svg"
+  },
+  {
+    "id": "schild",
+    "name": "Schild",
+    "nameEn": "Sign Plate",
+    "desc": "Namens- oder Türschild mit abgerundeten Ecken, Rand und Aufhängelöchern.",
+    "descEn": "Name or door plate with rounded corners, raised rim and hanging holes.",
+    "tag": "Alltag",
+    "tagEn": "Everyday",
+    "file": "schild.tracery.json",
+    "thumb": "schild.svg"
+  },
+  {
+    "id": "baugruppe-scharnier",
+    "name": "Baugruppe Scharnier",
+    "nameEn": "Hinge Assembly",
+    "desc": "Zweiteiliges Scharnier mit Gelenkbolzen und beweglichem Drehgelenk (±90°).",
+    "descEn": "Two-leaf hinge with pin and movable rotary joint (±90°).",
+    "tag": "Baugruppe",
+    "tagEn": "Assembly",
+    "file": "baugruppe-scharnier.tracery.json",
+    "thumb": "baugruppe-scharnier.svg"
+  },
+  {
+    "id": "zeichnung",
+    "name": "Lagerbock mit Zeichnung",
+    "nameEn": "Bearing Block with Drawing",
+    "desc": "CNC-Lagerbock mit Ø-16-Bohrung und fertiger mehrseitiger DIN-A4-Zeichnung.",
+    "descEn": "CNC bearing block with 16 mm bore and ready-to-export A4 engineering drawing.",
+    "tag": "Zeichnung",
+    "tagEn": "Drawing",
+    "file": "zeichnung.tracery.json",
+    "thumb": "zeichnung.svg"
+  }
+]
