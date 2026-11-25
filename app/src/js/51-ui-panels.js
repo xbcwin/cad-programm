@@ -569,7 +569,10 @@ const Panels = (() => {
       const pcBtn = h('button', { type: 'button', class: 'btn small', id: 'add-port-cutout', 'data-help': 'portCutout', 'data-tip': T('tool.fly.portCutoutTip') });
       pcBtn.innerHTML = icon('portCutout') + esc(T('tool.fly.portCutout'));
       pcBtn.onclick = () => { closeFlyout(); Features.startPortCutout(); };
-      stepRow.append(mpBtn, pcBtn);
+      const bhBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-battery-holder', 'data-help': 'batteryHolder', 'data-tip': T('tool.fly.batteryHolderTip') });
+      bhBtn.innerHTML = icon('batteryHolder') + esc(T('tool.fly.batteryHolder'));
+      bhBtn.onclick = () => { Actions.addPart(LIBMAP.batteryHolder, libDefaults(LIBMAP.batteryHolder)); closeFlyout(); };
+      stepRow.append(mpBtn, pcBtn, bhBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
@@ -2550,6 +2553,15 @@ const Panels = (() => {
             style: esc(styleTxt), d1: Units.fmtLenU(m.d1, 2), d2: Units.fmtLenU(m.d2, 2),
             d1Eff: Units.fmtLenU(m.d1Eff, 2), d2Eff: Units.fmtLenU(m.d2Eff, 2),
             D: Units.fmtLenU(m.outerD, 1), L: Units.fmtLenU(m.L, 1), screw: esc(m.screw),
+          }) }));
+        } else if (def.lib === 'batteryHolder' && typeof batteryHolderMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = batteryHolderMetrics(rp);
+          sec.append(h('div', { id: 'p-batteryholder-hint', class: 'hint-box', html: T('panel.item.batteryHolderHint', {
+            count: m.count, id: esc(m.id), source: esc(m.source),
+            inW: Units.fmtLenU(m.innerW, 2), inL: Units.fmtLenU(m.innerL, 2), inH: Units.fmtLenU(m.innerH, 2),
+            slotW: Units.fmtLenU(m.slotW, 2),
+            outW: Units.fmtLenU(m.outerW, 2), outL: Units.fmtLenU(m.outerL, 2), outH: Units.fmtLenU(m.outerH, 2),
           }) }));
         } else if (def.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
           const rp = Model.resolveP(it.p, V);

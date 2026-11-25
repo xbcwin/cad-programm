@@ -441,7 +441,7 @@
     "achtung": "Teilung, Rollendurchmesser und Zahnbreite müssen zur gewählten Rollenkette passen."
   },
   "mountPattern": {
-    "was": "Schneidet ein genormtes Befestigungs-Lochbild (Lüfter 25–140 mm, NEMA 14/17/23 oder Servo) samt optionalem Mittel- oder Gehäuseausschnitt in eine ebene Fläche.",
+    "was": "Schneidet ein genormtes Befestigungs-Lochbild (Lüfter 25–140 mm, NEMA 14/17/23, Servo oder Platine wie Raspberry Pi, Arduino, ESP32) samt optionalem Ausschnitt in eine ebene Fläche.",
     "wozu": "Spart das einzelne Zeichnen und Bemaßen aller Schraubenlöcher und Ausschnitte auf Montageplatten und Gehäusen.",
     "achtung": "Prüfe, ob die Platte genug Rand um alle Löcher und den Ausschnitt herum bietet und stelle bei Bedarf eine 3D-Druck-Passung ein."
   },
@@ -449,5 +449,10 @@
     "was": "Schneidet einen genormten Ausschnitt für Stecker, Buchsen (USB-C, HDMI, Klinke, RJ45, SD), Schalter, Taster oder kleine Displays (OLED/LCD) in eine ebene Wand.",
     "wozu": "Erspart das Nachschlagen von Stecker- und Schaltermaßen und schneidet runde Enden, Fasen oder Display-Befestigungslöcher gleich mit.",
     "achtung": "Prüfe bei tief sitzenden Buchsen hinter dickeren Gehäusewänden, ob das Steckergehäuse selbst etwas mehr Luft braucht, und nutze bei Bedarf die 3D-Druck-Passung."
+  },
+  "batteryHolder": {
+    "was": "Erzeugt ein parametrisches Batteriefach für ein bis acht Rundzellen (AA, AAA, 18650) mit Innenfach, Trennwänden und Kontakt-/Kabellöchern.",
+    "wozu": "Dient als fertiger Batteriehalter in Gehäusen, Robotik- und Elektronikprojekten – passend zu echten Zellenmaßen nach IEC samt Federkontakt-Zugabe.",
+    "achtung": "Prüfe bei geschützten 18650-Zellen (mit Schutzschaltung), dass du „18650 geschützt“ auswählst, da sie etwa 4,5 mm länger sind als ungeschützte Zellen."
   }
 }

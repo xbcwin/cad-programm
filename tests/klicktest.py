@@ -38965,6 +38965,266 @@ def t_a190_ausschnitte_stecker_schalter(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a189_platinen_batteriefaecher(p):
+    p.empty()
+
+    # 1. Lochbild Raspberry Pi 4 auf 100×80×5-mm-Platte -> 4 Löcher Ø 2,75 mm im Raster 58 × 49 mm (kein Mittelloch)
+    p.ev("""
+      App.change('Platte 100x80x5', (doc) => {
+        const b = Model.newItem('box', { w: 100, d: 80, h: 5 }, { name: 'Platte' });
+        doc.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 45)
+    p.ev("""
+      const plate = App.doc.items[0];
+      const r = App.results.get(plate.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Features.mountPattern({ id: plate.id, idx: fi, info: r.data.faces[fi] }, { preset: 'rpi4' });
+    """)
+    warte_rechnen(p, 45)
+
+    def cyl_stats():
+        return p.ev("""return (() => {
+          const plate = App.doc.items[0];
+          const step = App.doc.items[1];
+          const r = App.results.get(plate.id);
+          const faces = (r && r.data && r.data.faces) || [];
+          const cyls = faces.filter(f => f.t === 'CYLINDRE' && f.axis).map(f => ({
+            r: Math.round(f.r * 1000) / 1000,
+            d: Math.round(f.r * 2000) / 1000,
+            x: Math.round(f.axis[0] * 1000) / 1000,
+            y: Math.round(f.axis[1] * 1000) / 1000,
+          }));
+          return {
+            errs: App.errors.length,
+            cylCount: cyls.length,
+            cyls,
+            hasCenterCb: !!document.querySelector('#mp-center'),
+            info: document.querySelector('#mp-info')?.textContent || '',
+            stepKind: step ? step.kind : null,
+          };
+        })()""")
+
+    def hole_dists(cyls, hole_r):
+        small = [c for c in cyls if abs(c['r'] - hole_r) < 0.08]
+        dists = []
+        for i in range(len(small)):
+            for j in range(i + 1, len(small)):
+                dists.append(round(((small[i]['x'] - small[j]['x']) ** 2 + (small[i]['y'] - small[j]['y']) ** 2) ** 0.5, 3))
+        dists.sort()
+        return small, dists
+
+    rpi4 = cyl_stats()
+    small_rpi4, dists_rpi4 = hole_dists(rpi4['cyls'], 1.375)
+    diag_rpi4 = round((58.0 ** 2 + 49.0 ** 2) ** 0.5, 3)
+    gc_rpi4 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    ok1 = (
+        rpi4['errs'] == 0
+        and rpi4['stepKind'] == 'mountPattern'
+        and rpi4['cylCount'] == 4
+        and len(small_rpi4) == 4
+        and not rpi4['hasCenterCb']
+        and len(dists_rpi4) == 6
+        and abs(dists_rpi4[0] - 49.0) < 0.05 and abs(dists_rpi4[1] - 49.0) < 0.05
+        and abs(dists_rpi4[2] - 58.0) < 0.05 and abs(dists_rpi4[3] - 58.0) < 0.05
+        and abs(dists_rpi4[4] - diag_rpi4) < 0.05 and abs(dists_rpi4[5] - diag_rpi4) < 0.05
+        and '58' in rpi4['info'] and '49' in rpi4['info']
+        and gc_rpi4['issues'] == 0 and gc_rpi4['checked'] >= 1
+    )
+
+    # 2. Weitere Platinen-Lochbilder (Arduino Uno asymmetrisch, Arduino Nano, ESP32 DevKit/Feather, Raspberry Pi Zero/Pico)
+    pcb_checks = []
+    for preset, hole_r, expected_d0 in [
+        ('arduinoUno', 1.6, 27.94),
+        ('arduinoNano', 0.85, 15.24),
+        ('esp32Devkit', 1.4, 24.5),
+        ('esp32Feather', 1.25, 17.78),
+        ('rpiZero', 1.375, 23.0),
+        ('rpiPico', 1.05, 11.4),
+    ]:
+        p.pg.locator('#mp-preset').select_option(preset)
+        warte_rechnen(p, 45)
+        st = cyl_stats()
+        pts, dists = hole_dists(st['cyls'], hole_r)
+        pcb_checks.append(
+            st['errs'] == 0
+            and st['cylCount'] == 4
+            and len(pts) == 4
+            and not st['hasCenterCb']
+            and len(dists) == 6
+            and abs(dists[0] - expected_d0) < 0.08
+        )
+    ok2 = all(pcb_checks)
+
+    # 3. Batteriefach 2×AA (Innenmaß für zwei Zellen, Wand/Trennwand, Kabellöcher) sowie AAA (3×) und 18650 (1× mit Bodenlöchern)
+    p.ev("""
+      App.change('Batteriefach 2xAA', (doc) => {
+        doc.items = [Model.newItem('part', { lib: 'batteryHolder', cell: 'AA', count: 2, wall: 2, floor: 2, divider: 1.2, wireHoles: 'ja', mountHoles: 'nein' }, { name: 'Batteriefach 2xAA', role: 'solid' })];
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    aa2 = p.ev("""return (() => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const planes = faces.filter(f => f.t === 'PLANE' && f.n && f.c);
+      // Innenwände entlang X (Normalen +-X innerhalb der Außenwand)
+      const inX = planes.filter(f => Math.abs(Math.abs(f.n[0]) - 1) < 0.01 && Math.abs(f.c[0]) < 17.5);
+      const xVals = [...new Set(inX.map(f => Math.round(f.c[0] * 100) / 100))].sort((a, b) => a - b);
+      // Innen-Stirnwände entlang Y (Normalen +-Y innerhalb der Außenwand)
+      const inY = planes.filter(f => Math.abs(Math.abs(f.n[1]) - 1) < 0.01 && Math.abs(f.c[1]) < 28.0);
+      const yVals = [...new Set(inY.map(f => Math.round(f.c[1] * 100) / 100))].sort((a, b) => a - b);
+      // Bodenfläche innen (Normale +Z bei z > 0.5 und z < 16)
+      const inZ = planes.filter(f => f.n[2] > 0.99 && f.c[2] > 0.5 && f.c[2] < 10);
+      const cyls = faces.filter(f => f.t === 'CYLINDRE');
+      return {
+        errs: App.errors.length,
+        dx: bb ? Math.round((bb[3] - bb[0]) * 100) / 100 : 0,
+        dy: bb ? Math.round((bb[4] - bb[1]) * 100) / 100 : 0,
+        dz: bb ? Math.round((bb[5] - bb[2]) * 100) / 100 : 0,
+        xVals,
+        yVals,
+        floorZ: inZ.length ? Math.round(inZ[0].c[2] * 100) / 100 : 0,
+        cylCount: cyls.length,
+        hint: document.querySelector('#p-batteryholder-hint')?.textContent || '',
+      };
+    })()""")
+    gc_aa2 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    # Innenmaße 2×AA prüfen: zwei Zellen à 14,5×50,5 mm (+ Spiel 0,8 mm = 15,3 mm Fachbreite, 53,5 mm Länge)
+    aa2_span_x = round(aa2['xVals'][-1] - aa2['xVals'][0], 2) if len(aa2['xVals']) >= 2 else 0
+    aa2_span_y = round(aa2['yVals'][-1] - aa2['yVals'][0], 2) if len(aa2['yVals']) >= 2 else 0
+    aa2_slot_w = round(aa2['xVals'][1] - aa2['xVals'][0], 2) if len(aa2['xVals']) >= 4 else 0
+    aa2_inner_h = round(aa2['dz'] - aa2['floorZ'], 2) if aa2['floorZ'] > 0 else 0
+
+    # 3×AAA und 1×18650 mit M3-Bodenlöchern
+    p.ev("""
+      App.change('3xAAA', (doc) => {
+        doc.items[0].p.cell = 'AAA';
+        doc.items[0].p.count = 3;
+      });
+    """)
+    warte_rechnen(p, 45)
+    aaa3 = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      return {
+        errs: App.errors.length,
+        dx: bb ? Math.round((bb[3] - bb[0]) * 100) / 100 : 0,
+        dy: bb ? Math.round((bb[4] - bb[1]) * 100) / 100 : 0,
+        dz: bb ? Math.round((bb[5] - bb[2]) * 100) / 100 : 0,
+        cylCount: r ? r.data.faces.filter(f => f.t === 'CYLINDRE').length : 0,
+      };
+    })()""")
+
+    p.ev("""
+      App.change('1x18650 Bodenloecher', (doc) => {
+        doc.items[0].p.cell = '18650';
+        doc.items[0].p.count = 1;
+        doc.items[0].p.divider = 0;
+        doc.items[0].p.mountHoles = 'ja';
+      });
+    """)
+    warte_rechnen(p, 45)
+    b18650 = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      const cyls = r ? r.data.faces.filter(f => f.t === 'CYLINDRE') : [];
+      const m3 = cyls.filter(f => Math.abs(f.r - 1.7) < 0.05);
+      return {
+        errs: App.errors.length,
+        dx: bb ? Math.round((bb[3] - bb[0]) * 100) / 100 : 0,
+        dy: bb ? Math.round((bb[4] - bb[1]) * 100) / 100 : 0,
+        dz: bb ? Math.round((bb[5] - bb[2]) * 100) / 100 : 0,
+        m3Count: m3.length,
+        cylCount: cyls.length,
+      };
+    })()""")
+    gc_18650 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    ok3 = bool(
+        aa2['errs'] == 0
+        and abs(aa2['dx'] - 35.8) < 0.05 and abs(aa2['dy'] - 57.5) < 0.05 and abs(aa2['dz'] - 16.9) < 0.05
+        and abs(aa2_span_x - 31.8) < 0.05 and aa2_span_x >= 2 * 14.5
+        and abs(aa2_slot_w - 15.3) < 0.05 and aa2_slot_w >= 14.5
+        and abs(aa2_span_y - 53.5) < 0.05 and aa2_span_y >= 50.5
+        and abs(aa2_inner_h - 14.9) < 0.05 and aa2_inner_h >= 14.5
+        and aa2['cylCount'] >= 2
+        and '2× AA' in aa2['hint'] and '31,8' in aa2['hint']
+        and gc_aa2['issues'] == 0 and gc_aa2['checked'] == 1
+        and aaa3['errs'] == 0 and abs(aaa3['dx'] - 40.0) < 0.05 and abs(aaa3['dy'] - 51.0) < 0.05 and aaa3['cylCount'] >= 3
+        and b18650['errs'] == 0 and abs(b18650['dx'] - 23.3) < 0.05 and abs(b18650['dy'] - 73.0) < 0.05 and b18650['m3Count'] == 2
+        and gc_18650['issues'] == 0 and gc_18650['checked'] == 1
+    )
+
+    # 4. Einfach & Profi, Befehlssuche, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('model');")
+    p.wait(200)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    simple_fly = p.ev("""return {
+      tileCount: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      mpBtn: !!document.querySelector('#add-mount-pattern') && !!document.querySelector('#add-mount-pattern').offsetParent,
+      bhBtn: !!document.querySelector('#add-battery-holder') && !!document.querySelector('#add-battery-holder').offsetParent,
+      cmdsPcb: Commands.search('raspberry pi').map(c => c.id),
+      cmdsBat: Commands.search('batteriefach').map(c => c.id),
+    }""")
+    p.pg.locator('#add-battery-holder').click()
+    warte_rechnen(p, 45)
+    added_simple = p.ev("return App.doc.items.length === 2 && App.doc.items[1].kind === 'part' && App.doc.items[1].p.lib === 'batteryHolder' && App.errors.length === 0")
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    pro_fly = p.ev("""return {
+      bhTile: (() => {
+        const el = document.querySelector('.flyout.parts [data-lib="batteryHolder"]');
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === 'batteryHolder');
+      })(),
+      bhBtnHidden: (() => {
+        const el = document.querySelector('#add-battery-holder');
+        return !el || el.offsetParent === null;
+      })(),
+      cmdsArd: Commands.search('arduino uno').map(c => c.id),
+      cmdsEsp: Commands.search('esp32').map(c => c.id),
+      cmds18650: Commands.search('18650').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("App.undo()"); warte_rechnen(p, 35)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo()"); warte_rechnen(p, 35)
+    redo_len = p.ev("return App.doc.items.length")
+
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = !!(wh.batteryHolder && wh.batteryHolder.tip && wh.batteryHolder.hilfe && wh.batteryHolder.tipp && wh.mountPattern && wh.mountPattern.hilfe.includes('Raspberry Pi'));
+      const sOk = !!(se.batteryHolder && se.batteryHolder.was && se.batteryHolder.wozu && se.batteryHolder.achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, i18nOk };
+    })()""")
+
+    ok4 = bool(
+        simple_fly['tileCount'] == 5 and simple_fly['mpBtn'] and simple_fly['bhBtn']
+        and 'mount-pattern' in simple_fly['cmdsPcb'] and 'lib-batteryHolder' in simple_fly['cmdsBat']
+        and added_simple
+        and pro_fly['bhTile'] and pro_fly['bhBtnHidden']
+        and 'mount-pattern' in pro_fly['cmdsArd'] and 'mount-pattern' in pro_fly['cmdsEsp'] and 'lib-batteryHolder' in pro_fly['cmds18650']
+        and undo_len == 1 and redo_len == 2
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -39268,6 +39528,7 @@ TESTS = [
     ('[A-185] Bibliothek: Zahnriemenscheiben (GT2, HTD) & Kettenräder nach Teilung (BI-12)', t_a185_zahnriemenscheiben_kettenraeder),
     ('[A-188] Bibliothek: Lochbilder für Lüfter, Motoren, Servos (BI-16)', t_a188_lochbilder_luefter_motoren_servos),
     ('[A-190] Bibliothek: Ausschnitte für Stecker und Schalter (BI-18)', t_a190_ausschnitte_stecker_schalter),
+    ('[A-189] Bibliothek: Lochbilder Platinen & Batteriefächer (BI-17, BI-19)', t_a189_platinen_batteriefaecher),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

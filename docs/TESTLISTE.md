@@ -2970,6 +2970,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Undo/Redo, Validierung & Hilfen**: Sichtbarkeit in Einfach (`#add-port-cutout`, `#ctx-port-cutout` bei unveränderter Kachelzahl) und Profi, Befehlssuche (`usb-c`, `rj45`), `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a190_ausschnitte_stecker_schalter`).
 - [ ] **Von Hand**: Im Browser eine Gehäusewand aufbauen, über „Bauteile → Ausschnitt (Stecker, Schalter, Display)“ oder Rechtsklick auf eine Wandfläche zwischen USB-C, HDMI, RJ45, Wippschalter und OLED-Display wechseln und Öffnungen sowie Befestigungslöcher prüfen.
 
+## Bibliothek: Lochbilder Platinen und Batteriefächer (Auto [A-189], BI-17, BI-19)
+
+- [x] **Raspberry Pi 4 & weitere Platinen-Lochbilder**: `Features.mountPattern(topFace, { preset: 'rpi4' })` schneidet auf einer 100×80×5-mm-Platte fehlerfrei 4 Bohrungen Ø 2,75 mm im exakten Raster **58 × 49 mm** ohne Mittelloch (`#mp-center` ausgeblendet, `GeomCheck` 0 Fehler); Umschalten über `#mp-preset` auf `arduinoUno` (4 asymmetrische Löcher Ø 3,2 mm), `arduinoNano` (40,64 × 15,24 mm), `esp32Devkit`, `esp32Feather`, `rpiZero` und `rpiPico` erzeugt jeweils alle 4 Bohrungen exakt (`t_a189_platinen_batteriefaecher`).
+- [x] **Batteriefach 2×AA, AAA & 18650**: `batteryHolder` für `2×AA` erzeugt ein geschlossenes, fehlerfreies 3D-Gehäuse (35,8 × 57,5 × 16,9 mm) mit gemessenem Innenmaß für zwei AA-Zellen (31,8 mm Gesamtinnenbreite ≥ 2×14,5 mm, 15,3 mm je Zellenfach, 53,5 mm Innenlänge ≥ 50,5 mm, 14,9 mm Innenhöhe) samt Mittelsteg und Kabellöchern; Varianten `3×AAA` und `1×18650` mit M3-Bodenlöchern bestehen `GeomCheck` mit 0 Fehlern (`t_a189_platinen_batteriefaecher`).
+- [x] **Einfach & Profi, Suche, Undo/Redo, Validierung & Hilfen**: Im Einfach-Modus bleiben genau 5 Kacheln sichtbar und `#add-battery-holder` sowie `#add-mount-pattern` sind direkt klickbar, im Profi-Modus erscheint die Kachel `[data-lib="batteryHolder"]`; Befehlssuche (`raspberry pi`, `arduino uno`, `esp32`, `batteriefach`, `18650`), `App.undo()`/`redo()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a189_platinen_batteriefaecher`).
+- [ ] **Von Hand**: Im Browser eine Platte mit Raspberry-Pi-4- und Arduino-Uno-Lochbild sowie ein 2×AA- und 1×18650-Batteriefach anlegen und Wandstärken, Trennwände und Kabel- bzw. Bodenlöcher aus verschiedenen Blickwinkeln prüfen.
+
 ## Fehler melden
 
 ```

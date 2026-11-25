@@ -732,6 +732,48 @@ function wormWheelMetrics(p) {
   const leadAngleDeg = (Math.atan((m * starts) / d1) * 180) / Math.PI;
   return { z2, m, h, d1, starts, bore, d2, da2, df2, centerDist, ratio, leadAngleDeg, dir: p && p.dir === 'left' ? 'left' : 'right' };
 }
+// Batteriefächer für Rundzellen (AA, AAA, 18650; BI-19)
+const BATTERY_CELLS = [
+  { id: 'AA', label: 'AA (Mignon / LR6, Ø 14,5 × 50,5 mm)', d: 14.5, L: 50.5, clear: 0.8, contact: 3.0, wireHoleD: 2.5, source: 'IEC 60086-2 (LR6)' },
+  { id: 'AAA', label: 'AAA (Micro / LR03, Ø 10,5 × 44,5 mm)', d: 10.5, L: 44.5, clear: 0.7, contact: 2.5, wireHoleD: 2.0, source: 'IEC 60086-2 (LR03)' },
+  { id: '18650', label: '18650 (Li-Ion, Ø 18,5 × 65,5 mm)', d: 18.5, L: 65.5, clear: 0.8, contact: 3.5, wireHoleD: 2.8, source: 'IEC 61960 (18650)' },
+  { id: '18650p', label: '18650 geschützt (Ø 18,6 × 70 mm)', d: 18.6, L: 70.0, clear: 0.8, contact: 3.5, wireHoleD: 2.8, source: '18650 geschützt (Richtwert)' },
+];
+const BATTERY_CELL_BY_ID = new Map(BATTERY_CELLS.map((x) => [x.id.toLowerCase(), x]));
+const BATTERY_CELL_OPTIONS = BATTERY_CELLS.map((x) => [x.id, x.label]);
+function batteryCellEntry(id) {
+  const s = String(id || 'AA').trim().toLowerCase();
+  return BATTERY_CELL_BY_ID.get(s) || BATTERY_CELL_BY_ID.get('aa') || BATTERY_CELLS[0];
+}
+function batteryHolderMetrics(p = {}) {
+  const e = batteryCellEntry(p.cell);
+  const count = Math.max(1, Math.min(8, Math.round(Number(p.count ?? 2) || 2)));
+  const wall = Math.max(0.8, Number(p.wall ?? 2) || 2);
+  const floor = Math.max(0.8, Number(p.floor ?? 2) || 2);
+  const hasDiv = p.divider != null && p.divider !== '' && isFinite(Number(p.divider));
+  const divider = hasDiv ? Math.max(0, Number(p.divider)) : 1.2;
+  const hasClear = p.clear != null && p.clear !== '' && isFinite(Number(p.clear));
+  const clear = hasClear ? Math.max(0, Number(p.clear)) : e.clear;
+  const hasContact = p.contactSpace != null && p.contactSpace !== '' && isFinite(Number(p.contactSpace));
+  const contactSpace = hasContact ? Math.max(0, Number(p.contactSpace)) : e.contact;
+  const pf = printFitMm(p.printFit);
+  const slotW = round(e.d + clear + pf, 3);
+  const innerW = round(count * slotW + Math.max(0, count - 1) * divider, 3);
+  const innerL = round(e.L + contactSpace + pf, 3);
+  const innerH = round(e.d + clear * 0.5 + pf * 0.5, 3);
+  const divH = count > 1 && divider >= 0.4 ? round(Math.min(innerH - 1.0, e.d * 0.65), 3) : 0;
+  const outerW = round(innerW + 2 * wall, 3);
+  const outerL = round(innerL + 2 * wall, 3);
+  const outerH = round(floor + innerH, 3);
+  const wireHoles = p.wireHoles !== 'nein' && p.wireHoles !== false;
+  const mountHoles = p.mountHoles === 'ja' || p.mountHoles === true;
+  return {
+    id: e.id, cellLabel: e.label, source: e.source,
+    cellD: e.d, cellL: e.L, count, wall, floor, divider,
+    clear, contactSpace, pf, slotW, innerW, innerL, innerH, divH,
+    outerW, outerL, outerH, wireHoles, wireHoleD: e.wireHoleD, mountHoles,
+  };
+}
 // Zahnriemenscheiben (GT2 & HTD) und Rollenkettenräder nach Teilung (DIN 8187 / ISO 606, BI-12)
 const TIMING_PULLEY_PROFILES = [
   { id: 'GT2', label: 'GT2 (2 mm Teilung)', family: 'GT2', pitch: 2.0, pld: 0.254, grooveDepth: 0.75, grooveFrac: 0.56, defBeltW: 6, flangeAdd: 3.2, flangeT: 1.2 },
@@ -996,6 +1038,20 @@ const LIB = [
   { lib: 'hinge', label: 'Scharnier', role: 'solid', icon: 'hinge', desc: 'Scharnier mit Spiel, aus einem Stück', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 40 }, { k: 'w', label: 'Flügelbreite', type: 'num', def: 15 }, { k: 't', label: 'Dicke', type: 'num', def: 2.4 }, { k: 'gap', label: 'Spiel', type: 'num', def: 0.4 },
   ] },
+  { lib: 'batteryHolder', label: 'Batteriefach', role: 'solid', icon: 'batteryHolder',
+    kw: 'batterie batteriefach akku akkufach halter aa aaa mignon micro 18650 zelle zellen bi-19',
+    desc: 'Parametrisches Batteriefach für AA-, AAA- oder 18650-Zellen (1–8 Zellen)', params: [
+      { k: 'cell', label: 'Zellentyp', type: 'select', options: BATTERY_CELL_OPTIONS, def: 'AA' },
+      { k: 'count', label: 'Zellenanzahl', type: 'num', def: 2, int: true, unit: '' },
+      { k: 'wall', label: 'Wandstärke', type: 'num', def: 2 },
+      { k: 'floor', label: 'Bodendicke', type: 'num', def: 2 },
+      { k: 'divider', label: 'Trennwand (0 = ohne)', type: 'num', def: 1.2 },
+      { k: 'clear', label: 'Spiel Ø', type: 'num', def: null, auto: true },
+      { k: 'contactSpace', label: 'Kontakt-Zugabe', type: 'num', def: null, auto: true },
+      { k: 'wireHoles', label: 'Kontakt-/Kabellöcher', type: 'select', options: [['ja', 'Ja (beide Enden)'], ['nein', 'Nein (geschlossen)']], def: 'ja' },
+      { k: 'mountHoles', label: 'Boden-Schraublöcher', type: 'select', options: [['nein', 'Nein'], ['ja', 'Ja (2× M3)']], def: 'nein' },
+      { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
+    ] },
   { lib: 'goproMount', label: 'GoPro-Halterung', role: 'solid', icon: 'actionMount', drone: true, desc: 'Finger mit M5-Loch für Action-Kameras, auf einer Grundplatte – mit Mutter-Nabe', params: [
     { k: 'n', label: 'Finger', type: 'select', options: ['3', '2'], def: '3' }, { k: 't', label: 'Fingerdicke', type: 'num', def: 3 }, { k: 'gap', label: 'Spalt', type: 'num', def: 3.2 }, { k: 'hole', label: 'Loch Ø', type: 'num', def: 5.2 },
     { k: 'fw', label: 'Fingerbreite', type: 'num', def: 15 }, { k: 'hz', label: 'Lochhöhe', type: 'num', def: 9 }, { k: 'nut', label: 'Mutter M5', type: 'select', options: ['ja', 'nein'], def: 'ja' },
@@ -1347,11 +1403,12 @@ function sprocketMateTransform(p1 = {}, t1 = null) {
   };
 }
 
-// Genormte Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) & Servos (BI-16)
+// Genormte Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23), Servos & Platinen (BI-16, BI-17)
 const MOUNT_PATTERN_GROUPS = [
   { id: 'fan', label: 'Lüfter (25–140 mm)' },
   { id: 'nema', label: 'Schrittmotoren (NEMA)' },
   { id: 'servo', label: 'Servos' },
+  { id: 'pcb', label: 'Platinen (Raspberry Pi, Arduino, ESP32)' },
 ];
 const MOUNT_PATTERNS = [
   // Axiallüfter (Quadrat-Lochbild + runder Luftausschnitt)
@@ -1374,12 +1431,25 @@ const MOUNT_PATTERNS = [
   { id: 'servoMini', group: 'servo', label: 'Mini-Servo (HS-81 / MG92B)', layout: 'pair2', pitchX: 34.5, pitchY: 0, holeD: 2.5, screw: 'M2.5', centerKind: 'rect', cutW: 30.5, cutH: 12.5, source: 'Hitec HS-81' },
   { id: 'servoMicro', group: 'servo', label: 'Micro-Servo 9g (SG90 / MG90S)', layout: 'pair2', pitchX: 27.5, pitchY: 0, holeD: 2.2, screw: 'M2', centerKind: 'rect', cutW: 23, cutH: 12.5, source: 'TowerPro SG90' },
   { id: 'servoLarge', group: 'servo', label: 'Groß-Servo (HS-805BB)', layout: 'rect4', pitchX: 75.5, pitchY: 18, holeD: 4.2, screw: 'M4', centerKind: 'rect', cutW: 66.5, cutH: 30.5, source: 'Hitec HS-805BB' },
+  // Platinen (Raspberry Pi, Arduino, ESP32; BI-17)
+  { id: 'rpi4', group: 'pcb', label: 'Raspberry Pi 4 / 3 / 5 (Model B)', layout: 'rect4', pitchX: 58, pitchY: 49, holeD: 2.75, screw: 'M2.5', centerKind: 'none', boardW: 85, boardH: 56, source: 'Raspberry Pi Ltd (58 × 49 mm)' },
+  { id: 'rpiZero', group: 'pcb', label: 'Raspberry Pi Zero / Zero 2 W', layout: 'rect4', pitchX: 58, pitchY: 23, holeD: 2.75, screw: 'M2.5', centerKind: 'none', boardW: 65, boardH: 30, source: 'Raspberry Pi Ltd (58 × 23 mm)' },
+  { id: 'rpiPico', group: 'pcb', label: 'Raspberry Pi Pico / Pico 2', layout: 'rect4', pitchX: 47, pitchY: 11.4, holeD: 2.1, screw: 'M2', centerKind: 'none', boardW: 51, boardH: 21, source: 'Raspberry Pi Ltd (47 × 11,4 mm)' },
+  { id: 'arduinoUno', group: 'pcb', label: 'Arduino Uno (R3 / R4)', layout: 'points', points: [[-20.32, -24.13], [-19.05, 24.13], [31.75, -19.05], [31.75, 8.89]], spanX: 52.07, spanY: 48.26, holeD: 3.2, screw: 'M3', centerKind: 'none', boardW: 68.6, boardH: 53.3, source: 'Arduino Uno R3 (asym.)' },
+  { id: 'arduinoNano', group: 'pcb', label: 'Arduino Nano (V3 / Every)', layout: 'rect4', pitchX: 40.64, pitchY: 15.24, holeD: 1.7, screw: 'M1.6', centerKind: 'none', boardW: 43.2, boardH: 17.8, source: 'Arduino Nano V3 (40,64 × 15,24)' },
+  { id: 'esp32Devkit', group: 'pcb', label: 'ESP32 DevKit V1 (30-Pin)', layout: 'rect4', pitchX: 44, pitchY: 24.5, holeD: 2.8, screw: 'M2.5', centerKind: 'none', boardW: 52, boardH: 28.2, source: 'DOIT ESP32 DevKit V1 (Richtwert)' },
+  { id: 'esp32Feather', group: 'pcb', label: 'ESP32 Feather (Adafruit)', layout: 'rect4', pitchX: 45.72, pitchY: 17.78, holeD: 2.5, screw: 'M2.5', centerKind: 'none', boardW: 50.8, boardH: 22.9, source: 'Adafruit Feather (45,72 × 17,78)' },
 ];
 const MOUNT_PATTERN_BY_ID = new Map(MOUNT_PATTERNS.map((x) => [x.id, x]));
 function mountPatternDimSummary(e) {
   const f = (v) => String(v).replace('.', ',');
+  if (e.layout === 'points') return `${f(e.spanX)} × ${f(e.spanY)} mm (asym.) · ${e.screw}`;
   if (e.layout === 'square') return `${f(e.pitch)} × ${f(e.pitch)} mm · Mitte Ø ${f(e.centerD)}`;
-  if (e.layout === 'rect4') return `${f(e.pitchX)} × ${f(e.pitchY)} mm · ${f(e.cutW)} × ${f(e.cutH)}`;
+  if (e.layout === 'rect4') {
+    return e.centerKind === 'none'
+      ? `${f(e.pitchX)} × ${f(e.pitchY)} mm · ${e.screw}`
+      : `${f(e.pitchX)} × ${f(e.pitchY)} mm · ${f(e.cutW)} × ${f(e.cutH)}`;
+  }
   return `Abstand ${f(e.pitchX)} mm · ${f(e.cutW)} × ${f(e.cutH)}`;
 }
 const MOUNT_PATTERN_GROUPED_OPTIONS = MOUNT_PATTERN_GROUPS.map((g) => ({
@@ -1395,13 +1465,14 @@ function mountPatternMetrics(p = {}) {
   const rawHoleD = Number(p.holeD);
   const holeD = p.holeD != null && p.holeD !== '' && isFinite(rawHoleD) && rawHoleD > 0 ? rawHoleD : e.holeD;
   const holeDEff = round(holeD + pf, 3);
-  const includeCenter = p.includeCenter !== false;
+  const centerKind = e.centerKind === 'circle' || e.centerKind === 'rect' ? e.centerKind : 'none';
+  const includeCenter = centerKind === 'none' ? false : p.includeCenter !== false;
   let centerD = 0, centerDEff = 0, cutW = 0, cutH = 0, cutWEff = 0, cutHEff = 0;
-  if (e.centerKind === 'circle') {
+  if (centerKind === 'circle') {
     const rawCD = Number(p.centerD);
     centerD = p.centerD != null && p.centerD !== '' && isFinite(rawCD) && rawCD >= 0 ? rawCD : e.centerD;
     centerDEff = centerD > 0 ? round(centerD + pf, 3) : 0;
-  } else {
+  } else if (centerKind === 'rect') {
     const rawW = Number(p.cutW), rawH = Number(p.cutH);
     cutW = p.cutW != null && p.cutW !== '' && isFinite(rawW) && rawW > 0 ? rawW : e.cutW;
     cutH = p.cutH != null && p.cutH !== '' && isFinite(rawH) && rawH > 0 ? rawH : e.cutH;
@@ -1409,7 +1480,9 @@ function mountPatternMetrics(p = {}) {
     cutHEff = round(cutH + pf, 3);
   }
   let holes;
-  if (e.layout === 'square') {
+  if (e.layout === 'points' && Array.isArray(e.points)) {
+    holes = e.points.map((q) => [q[0], q[1]]);
+  } else if (e.layout === 'square') {
     const h = e.pitch / 2;
     holes = [[-h, -h], [h, -h], [h, h], [-h, h]];
   } else if (e.layout === 'rect4') {
@@ -1421,6 +1494,7 @@ function mountPatternMetrics(p = {}) {
   }
   return {
     ...e,
+    centerKind,
     holeD, holeDEff,
     includeCenter,
     centerD, centerDEff,
