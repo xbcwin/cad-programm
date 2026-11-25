@@ -3677,5 +3677,9 @@
   "pwa.guideChrome": "Chrome, Edge or Brave: click the install icon on the right side of the address bar (or menu ⋮ → “Install Tracery”).",
   "pwa.guideSafariMac": "Safari on Mac: File menu → “Add to Dock…”.",
   "pwa.guideSafariIos": "Safari on iPad or iPhone: tap the Share button → “Add to Home Screen”.",
-  "pwa.guideOffline": "Once the green “Ready for offline use” status is shown, Tracery starts and computes completely without an internet connection."
+  "pwa.guideOffline": "Once the green “Ready for offline use” status is shown, Tracery starts and computes completely without an internet connection.",
+  "dlg.settings.highContrast": "High contrast (stronger borders and focus)",
+  "dlg.settings.highContrastHint": "Draws borders, text and keyboard focus rings extra clearly in both light and dark themes.",
+  "dlg.settings.tHighContrastOn": "High contrast on",
+  "dlg.settings.tHighContrastOff": "High contrast off"
 }

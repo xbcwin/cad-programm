@@ -2575,6 +2575,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstellungen, Anleitung, Hilfe & DE/EN**: `#set-pwa-box` („Als App installieren & ohne Internet nutzen“) erscheint in Einfach und Profi mit Statuspunkt, öffnet die Chrome/Edge/Safari-Anleitung (`#pwa-guide-dlg`) bzw. bei `beforeinstallprompt` `#set-pwa-install`, und `installApp`-Hilfe, Befehl `install-app` sowie DE/EN-Schlüsselgleichheit sind geprüft (`t_a142_pwa_offline`).
 - [ ] **Von Hand**: Tracery über HTTPS oder `localhost` in Chrome/Edge („App installieren“) bzw. Safari auf Mac/iPad („Zum Dock hinzufügen“ / „Zum Home-Bildschirm“) als eigenständige App installieren, das Symbol im Dock/Startbildschirm prüfen und anschließend bei getrenntem WLAN starten.
 
+## Tastaturbedienung, hoher Kontrast und Vorlese-Texte (Auto [A-141], BE-24)
+
+- [x] **Nur mit Tastatur bis zum Quader (`BE-24`)**: In einem leeren Projekt per `Tab` bis `#t-body` (sichtbarer Fokusrahmen), `Enter` öffnet das Körper-Flyout, `Tab` zur Quader-Kachel (`data-kind="box"`), `Esc` schließt wieder mit Fokus zurück auf `#t-body`, erneutes `Enter` + `Tab` + `Enter` legt den Quader an (`t_a141_barrierefreiheit`).
+- [x] **Esc & Tab-Erreichbarkeit**: `Esc` schließt Menüs, Einstellungen und Werkzeuge-Dialog; linkes/rechtes Panel, Verlaufseinträge, Zeitleiste, Eingabezeile und ViewCube-Flächen (`tabindex="0"`) sind per Tab erreichbar (`t_a141_barrierefreiheit`).
+- [x] **Vorlese-Texte (`aria-label`)**: Kein sichtbarer Knopf oder `role="button"` in Modellansicht, Flyout, Einstellungen, Werkzeugleisten-Dialog, Skizze und Zeichnung bleibt ohne Beschriftung oder Fokusierbarkeit (`t_a141_barrierefreiheit`).
+- [x] **Hoher Kontrast, Hilfe & DE/EN**: Einstellung `#set-highContrast` setzt `body.high-contrast` und speichert `highContrast` dauerhaft in `masswerk.view`; `HELP.highContrast`, DE/EN-Schlüsselgleichheit und Befehlssuche (`high-contrast`) geprüft (`t_a141_barrierefreiheit`).
+- [ ] **Von Hand**: Im Browser ein komplettes Teil nur per Tastatur (Tab, Pfeiltasten, Enter, Esc) im Modus „Hoher Kontrast“ (hell & dunkel) erstellen und mit VoiceOver (macOS) oder NVDA (Windows) prüfen, ob alle Symbolknöpfe verständlich vorgelesen werden.
+
 ## Fehler melden
 
 ```

@@ -301,7 +301,7 @@ const Notes = (() => {
     bf.onclick = () => { UI.closePop(); focusPin(pin.id); };
     const be = h('button', { type: 'button', class: 'btn small' }, T('common.edit'));
     be.onclick = () => { UI.closePop(); editPin(pin.id); };
-    const bd = h('button', { type: 'button', class: 'btn small ghost' });
+    const bd = h('button', { type: 'button', class: 'btn small ghost', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
     bd.innerHTML = icon('trash');
     bd.onclick = () => { UI.closePop(); removePin(pin.id); };
     acts.append(bf, be, bd);
@@ -457,10 +457,10 @@ const Notes = (() => {
         const acts = h('div', { class: 'pin-card-acts' });
         const bf = h('button', { type: 'button', class: 'btn small', dataset: { pinFocus: pin.id } }, T('notes.pinFocus'));
         bf.onclick = () => { listModal && listModal.close(); selectPin(pin.id); focusPin(pin.id); };
-        const be = h('button', { type: 'button', class: 'btn small', dataset: { pinEdit: pin.id } });
+        const be = h('button', { type: 'button', class: 'btn small', dataset: { pinEdit: pin.id }, 'aria-label': T('common.edit'), 'data-tip': T('common.edit') });
         be.innerHTML = icon('edit');
         be.onclick = () => editPin(pin.id);
-        const bd = h('button', { type: 'button', class: 'btn small ghost', dataset: { pinDel: pin.id } });
+        const bd = h('button', { type: 'button', class: 'btn small ghost', dataset: { pinDel: pin.id }, 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
         bd.innerHTML = icon('trash');
         bd.onclick = () => removePin(pin.id);
         acts.append(bf, be, bd);

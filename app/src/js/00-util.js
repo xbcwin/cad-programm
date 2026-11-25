@@ -2427,6 +2427,11 @@ const HELP = {
   "tip": "Tracery wie ein Programm auf deinem Gerät installieren und ohne Internet nutzen",
   "hilfe": "Tracery speichert seine Programmdateien und den CAD-Kern automatisch im Browser-Speicher. Danach öffnet es auch ohne Internetverbindung sofort. Über die Adresszeile oder das Teilen-Menü kannst du es als eigenes Fenster (App) auf Schreibtisch, Dock oder Startbildschirm legen.",
   "tipp": "Sobald der grüne Punkt „Ohne Internet nutzbar“ erscheint, liegen alle Dateien inklusive CAD-Kern lokal auf deinem Gerät."
+ },
+ "highContrast": {
+  "tip": "Hoher Kontrast: kräftige Rahmen, klare Farben und extra deutlicher Fokusrahmen",
+  "hilfe": "Verstärkt alle Ränder, Schriften, Knöpfe und Fokus-Umrandungen im hellen und dunklen Design, damit die Oberfläche auch bei grellem Licht oder schwachem Sehvermögen leicht lesbar bleibt.",
+  "tipp": "Alle Knöpfe lassen sich außerdem per Tab, Pfeiltasten, Enter und Esc komplett ohne Maus bedienen."
  }
 };
 

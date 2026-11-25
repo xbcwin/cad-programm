@@ -471,20 +471,32 @@ const Panels = (() => {
     const srcHtml = mat.src ? `<br><span style="color:var(--muted)">${esc(T('panel.matInfoSource', { src: mat.src }))}</span>` : '';
     return h('div', { class: 'hint-box', id, style: { marginTop: '6px' }, html: `<b>${esc(mat.name || mat.k)}</b><br>${parts.join(' · ')}${srcHtml}` });
   }
-  function closeFlyout() { if (flyout) { flyout.el.remove(); const b = flyout.btn; b && b.setAttribute('aria-expanded', 'false'); flyout = null; document.removeEventListener('pointerdown', flyOutside, true); } }
+  function closeFlyout(restore = false) {
+    if (!flyout) return;
+    const prev = flyout.btn;
+    flyout.el.remove();
+    prev && prev.setAttribute('aria-expanded', 'false');
+    if (flyout.onKey) document.removeEventListener('keydown', flyout.onKey, true);
+    flyout = null;
+    document.removeEventListener('pointerdown', flyOutside, true);
+    if (restore && prev && prev.isConnected && typeof prev.focus === 'function') {
+      try { prev.focus({ preventScroll: true }); } catch (_) { prev.focus(); }
+    }
+  }
   function flyOutside(e) { if (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop')) return; if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
   function toggleFlyout(kind, btn) {
     if (flyout && flyout.kind === kind) { closeFlyout(); return; }
     closeFlyout();
-    const el = h('div', { class: 'flyout' });
+    const flyTitle = kind === 'bodies' ? T('tool.fly.bodiesTitle') : kind === 'drone' ? T('tool.drone') : T('tool.fly.partsTitle');
+    const el = h('div', { class: 'flyout', role: 'dialog', 'aria-label': flyTitle, tabindex: '-1' });
     if (kind === 'bodies') {
       el.append(h('h3', null, T('tool.fly.bodiesTitle')));
       const tiles = h('div', { class: 'tiles' });
       for (const k of PRIMITIVE_ORDER) {
-        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-kind': k, 'data-tip': T('tool.fly.tileTip') });
+        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-kind': k, 'aria-label': KINDS[k].label, 'data-tip': T('tool.fly.tileTip') });
         t.innerHTML = primitiveSVG(k); t.append(h('span', { class: 'lbl' }, hyph(KINDS[k].label)));
         Place.bindTile(t, { kind: k });
-        t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPrimitive(k); closeFlyout(); } });
+        t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPrimitive(k); closeFlyout(); } });
         tiles.append(t);
       }
       el.append(tiles);
@@ -511,10 +523,10 @@ const Panels = (() => {
     } else {
       el.classList.add('parts');
       const makeTile = (d) => {
-        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-lib': d.lib, 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
+        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-lib': d.lib, 'aria-label': d.label, 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? T('common.hole') : T('common.body')));
         Place.bindTile(t, { part: d });
-        t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
+        t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
         return t;
       };
       const base = LIB.filter((x) => !x.buy && !x.drone && !x.std);
@@ -541,7 +553,7 @@ const Panels = (() => {
         for (const entry of list) {
           const pCount = Array.isArray(entry.params) ? entry.params.length : 0;
           const tipTxt = entry.desc || (pCount ? (pCount === 1 ? T('fly.myPartsTipDimsOne') : T('fly.myPartsTipDimsMany', { n: pCount })) : T('fly.myPartsTip'));
-          const tile = h('div', { class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', dataset: { userLibId: entry.id }, 'data-tip': tipTxt, 'data-help': 'userLibrary' });
+          const tile = h('div', { class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', 'aria-label': entry.name, dataset: { userLibId: entry.id }, 'data-tip': tipTxt, 'data-help': 'userLibrary' });
           tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }), h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, pCount ? (pCount === 1 ? T('fly.myPartsOneDim') : T('fly.myPartsManyDims', { n: pCount })) : (entry.role === 'hole' ? T('common.hole') : T('common.body'))));
           const delBtn = h('button', { type: 'button', class: 'ul-del', 'aria-label': T('fly.myPartsRemove'), 'data-tip': T('fly.myPartsRemove') });
           delBtn.innerHTML = icon('trash');
@@ -554,7 +566,7 @@ const Panels = (() => {
           });
           tile.append(delBtn);
           Place.bindTile(tile, { userPart: entry });
-          tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') { UserLib.insert(entry); closeFlyout(); } });
+          tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); UserLib.insert(entry); closeFlyout(); } });
           tile.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
             UI.menu(tile, [
@@ -576,7 +588,13 @@ const Panels = (() => {
     const br = anc ? anc.getBoundingClientRect() : { left: 16 }, cr = $('#center').getBoundingClientRect();
     el.style.left = clamp(br.left - cr.left, 8, cr.width - el.offsetWidth - 8) + 'px'; el.style.top = '8px';
     if (btn) btn.setAttribute('aria-expanded', 'true');
-    flyout = { el, btn, kind };
+    const onKey = (e) => {
+      if (!flyout || flyout.el !== el) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFlyout(true); }
+    };
+    flyout = { el, btn, kind, onKey };
+    el.focus({ preventScroll: true });
+    document.addEventListener('keydown', onKey, true);
     setTimeout(() => document.addEventListener('pointerdown', flyOutside, true), 0);
   }
 
@@ -844,10 +862,10 @@ const Panels = (() => {
       const subDoc = isSubAsm ? Model.resolveDoc(it.p && it.p.docId) : null;
       const hasSubKids = !!(subDoc && (subDoc.items || []).some((x) => x && !x.suppressed));
       const delBy = App.deletedBy && App.deletedBy(it.id);
-      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (delBy ? ' dim' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
+      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (delBy ? ' dim' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), tabindex: '0', 'aria-selected': selSet.has(it.id) ? 'true' : 'false', draggable: 'true', dataset: { id: it.id } });
       const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': T('left.tree.expand') });
       if ((it.kind === 'group' && !it.partRef) || (it.finishes || []).length || hasSubKids) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
-      else tw.style.visibility = 'hidden';
+      else { tw.style.visibility = 'hidden'; tw.tabIndex = -1; tw.setAttribute('aria-hidden', 'true'); }
       const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
       if (it.partRef) { sw.innerHTML = icon('parts'); sw.classList.add('partref'); }
       else if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
@@ -893,6 +911,7 @@ const Panels = (() => {
       }
       row.append(sub, acts);
       row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
+      row.addEventListener('keydown', (e) => { if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopPropagation(); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); } });
       row.addEventListener('contextmenu', (e) => {
         e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
@@ -1363,7 +1382,7 @@ const Panels = (() => {
     for (const x of FORMULA_EXAMPLES) {
       let val = '';
       try { val = fmtFixed(Expr.eval(x.f, FORMULA_DEMO), 2); } catch (_) {}
-      const cp = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': T('left.par.formulaCopyTip') }); cp.innerHTML = icon('copy');
+      const cp = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': T('left.par.formulaCopyTip'), 'aria-label': T('left.par.formulaCopyTip') }); cp.innerHTML = icon('copy');
       cp.onclick = async () => { try { await navigator.clipboard.writeText(x.f); UI.toast(T('left.par.formulaCopied', { f: x.f }), { icon: 'check', ms: 1500 }); } catch (_) { UI.toast(T('left.par.formulaCopyFail'), { icon: 'info' }); } };
       list.append(h('div', { class: 'formula-row' }, h('div', { class: 'formula-top' }, h('code', null, x.f), h('b', { class: 'mono' }, '= ' + val), cp), h('p', null, x.e)));
     }
@@ -2591,7 +2610,7 @@ const Panels = (() => {
         }
         if (fin.type === 'cornerChamfer') {
           const ttl = h('div', { class: 'mini-row' + (isRef ? ' warn' : err ? ' invalid' : '') }, h('span', { class: 'grow' }, T('panel.edges.cornerChamfer')));
-          const rot = h('button', { type: 'button', class: 'btn ghost small', id: 'fin-rot-' + fin.id, 'data-tip': T('panel.edges.rotateOrder') });
+          const rot = h('button', { type: 'button', class: 'btn ghost small', id: 'fin-rot-' + fin.id, 'data-tip': T('panel.edges.rotateOrder'), 'aria-label': T('panel.edges.rotateOrder') });
           rot.innerHTML = icon('rotate');
           rot.onclick = () => Actions.setFinish(it.id, fin.id, { d1: fin.d2, d2: fin.d3, d3: fin.d1 });
           row.style.gridTemplateColumns = isRef ? '1fr auto auto auto' : '1fr auto auto';
@@ -3500,10 +3519,11 @@ const Panels = (() => {
       const N = new THREE.Vector3(...n), U = new THREE.Vector3(...up), Rr = new THREE.Vector3().crossVectors(U, N);
       const t = N.clone().multiplyScalar(30);
       const m = [Rr.x, Rr.y, Rr.z, 0, -U.x, -U.y, -U.z, 0, N.x, N.y, N.z, 0, t.x, t.y, t.z, 1];
-      const f = h('div', { class: 'face', role: 'button', 'data-face': id, 'aria-label': T('vc.faceAria', { name: label }), title: label }, label);
+      const f = h('div', { class: 'face', role: 'button', tabindex: '0', 'data-face': id, 'aria-label': T('vc.faceAria', { name: label }), title: label }, label);
       f.style.transform = `matrix3d(${m.join(',')})`;
       f.style.left = '0'; f.style.top = '0';
       f.addEventListener('click', () => Viewer.setView(id));
+      f.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); Viewer.setView(id); } });
       cube.append(f);
     }
     wrap.append(cube);

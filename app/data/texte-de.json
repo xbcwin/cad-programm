@@ -3677,5 +3677,9 @@
   "pwa.guideChrome": "Chrome, Edge oder Brave: Rechts in der Adresszeile auf das Installieren-Symbol klicken (oder Menü ⋮ → „Tracery installieren“).",
   "pwa.guideSafariMac": "Safari auf dem Mac: Menü „Ablage“ → „Zum Dock hinzufügen …“.",
   "pwa.guideSafariIos": "Safari auf iPad oder iPhone: Teilen-Symbol antippen → „Zum Home-Bildschirm“.",
-  "pwa.guideOffline": "Sobald der grüne Status „Ohne Internet nutzbar“ leuchtet, startet und rechnet Tracery komplett ohne Internetverbindung."
+  "pwa.guideOffline": "Sobald der grüne Status „Ohne Internet nutzbar“ leuchtet, startet und rechnet Tracery komplett ohne Internetverbindung.",
+  "dlg.settings.highContrast": "Hoher Kontrast (stärkere Rahmen und Fokus)",
+  "dlg.settings.highContrastHint": "Zeichnet Ränder, Schriften und den Tastatur-Fokus extra deutlich – im hellen und dunklen Design.",
+  "dlg.settings.tHighContrastOn": "Hoher Kontrast an",
+  "dlg.settings.tHighContrastOff": "Hoher Kontrast aus"
 }
