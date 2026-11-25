@@ -43,6 +43,24 @@ const Drawing = (() => {
     { key: 'stepped', pro: true, get label() { return T('draw.secMode.stepped'); }, get hint() { return T('draw.hint.sectionStepped'); } },
     { key: 'breakout', pro: true, get label() { return T('draw.secMode.breakout'); }, get hint() { return T('draw.hint.sectionBreakout'); } },
   ];
+  const DATUM_LETTERS = 'ABCDEFGHJKLMNPRSTUVWXYZ'.split('');
+  const GDT_SYMBOLS = [
+    { key: 'straightness', group: 'form', glyph: '⎯', needsDatum: false, defaultDia: false, get label() { return T('draw.gdt.sym.straightness'); } },
+    { key: 'flatness', group: 'form', glyph: '▱', needsDatum: false, defaultDia: false, get label() { return T('draw.gdt.sym.flatness'); } },
+    { key: 'circularity', group: 'form', glyph: '○', needsDatum: false, defaultDia: false, get label() { return T('draw.gdt.sym.circularity'); } },
+    { key: 'cylindricity', group: 'form', glyph: '⌭', needsDatum: false, defaultDia: false, get label() { return T('draw.gdt.sym.cylindricity'); } },
+    { key: 'profileLine', group: 'form', glyph: '⌒', needsDatum: false, defaultDia: false, get label() { return T('draw.gdt.sym.profileLine'); } },
+    { key: 'profileSurface', group: 'form', glyph: '⌓', needsDatum: false, defaultDia: false, get label() { return T('draw.gdt.sym.profileSurface'); } },
+    { key: 'parallelism', group: 'orient', glyph: '∥', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.parallelism'); } },
+    { key: 'perpendicularity', group: 'orient', glyph: '⊥', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.perpendicularity'); } },
+    { key: 'angularity', group: 'orient', glyph: '∠', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.angularity'); } },
+    { key: 'position', group: 'loc', glyph: '⌖', needsDatum: true, defaultDia: true, get label() { return T('draw.gdt.sym.position'); } },
+    { key: 'concentricity', group: 'loc', glyph: '◎', needsDatum: true, defaultDia: true, get label() { return T('draw.gdt.sym.concentricity'); } },
+    { key: 'symmetry', group: 'loc', glyph: '⌯', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.symmetry'); } },
+    { key: 'runout', group: 'runout', glyph: '↗', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.runout'); } },
+    { key: 'totalRunout', group: 'runout', glyph: '⌰', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.totalRunout'); } },
+  ];
+  const gdtSymMeta = (key) => GDT_SYMBOLS.find((x) => x.key === key) || GDT_SYMBOLS[6];
   const THREAD_ARC_START = Math.PI / 12;
   const THREAD_ARC_SPAN = Math.PI * 1.5;
   const HATCH_PATTERNS = {
@@ -64,14 +82,83 @@ const Drawing = (() => {
   let dimMode = 'lin';
   let sectionMode = 'full';
   let sectionDraft = { halfAxis: 'v', halfSide: 'right', depth: null };
-  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null;
+  let lastDimAnchors = new Map();
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let noteDraft = { tip: 'auto', text: '' };
   let breakDraft = { dir: 'auto', gap: 6, style: 'zigzag' };
+  let datumDraft = { label: 'A' };
+  let gdtDraft = { symbol: 'parallelism', tol: 0.05, dia: false, mod: '', d1: '', d2: '', d3: '' };
   let balloonViewPref = 'auto';
   let centersListOpen = false;
   let lastLostKey = '';
+  function cleanDatumLabel(raw, fallback = 'A') {
+    const s = String(raw || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+    return s || fallback;
+  }
+  function nextDatumLabel(sh = dwg()) {
+    const used = new Set(((sh && sh.datums) || []).map((x) => String(x.label || '').toUpperCase()));
+    const free = DATUM_LETTERS.find((ch) => !used.has(ch));
+    if (free) return free;
+    let n = 1;
+    while (used.has('A' + n)) n++;
+    return 'A' + n;
+  }
+  function normalizeDatum(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const attachType = raw.attachType === 'dim' ? 'dim' : raw.attachType === 'free' ? 'free' : (raw.view ? 'edge' : 'free');
+    const a = Array.isArray(raw.anchor) && raw.anchor.length >= 2 ? [Number(raw.anchor[0]) || 0, Number(raw.anchor[1]) || 0] : [0, 0];
+    const off = Array.isArray(raw.offset) && raw.offset.length >= 2 ? [Number(raw.offset[0]) || 0, Number(raw.offset[1]) || 0] : [0, 10];
+    let edgeDir = null;
+    if (Array.isArray(raw.edgeDir) && raw.edgeDir.length >= 2) {
+      const L = Math.hypot(Number(raw.edgeDir[0]) || 0, Number(raw.edgeDir[1]) || 0);
+      if (L > 1e-6) edgeDir = [(Number(raw.edgeDir[0]) || 0) / L, (Number(raw.edgeDir[1]) || 0) / L];
+    }
+    return {
+      id: raw.id || uid('dat'),
+      label: cleanDatumLabel(raw.label, 'A'),
+      view: raw.view ? String(raw.view) : null,
+      attachType,
+      dimId: attachType === 'dim' && raw.dimId ? String(raw.dimId) : null,
+      anchor: a,
+      edgeDir,
+      offset: off,
+    };
+  }
+  function normalizeGdtFrame(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const sym = GDT_SYMBOLS.some((x) => x.key === raw.symbol) ? raw.symbol : 'parallelism';
+    const tolNum = Number(raw.tol);
+    const tol = Number.isFinite(tolNum) && tolNum >= 0 ? round(tolNum, 4) : 0.05;
+    const mod = raw.mod === 'M' || raw.mod === 'L' ? raw.mod : '';
+    const attachType = raw.attachType === 'dim' ? 'dim' : raw.attachType === 'free' ? 'free' : (raw.view ? 'edge' : 'free');
+    const datums = [];
+    if (Array.isArray(raw.datums)) {
+      for (const d of raw.datums) {
+        if (datums.length >= 3) break;
+        const lbl = typeof d === 'string' ? cleanDatumLabel(d, '') : (d && typeof d === 'object' ? cleanDatumLabel(d.label, '') : '');
+        if (!lbl) continue;
+        const dm = d && typeof d === 'object' && (d.mod === 'M' || d.mod === 'L') ? d.mod : '';
+        datums.push({ label: lbl, mod: dm });
+      }
+    }
+    const a = Array.isArray(raw.anchor) && raw.anchor.length >= 2 ? [Number(raw.anchor[0]) || 0, Number(raw.anchor[1]) || 0] : [0, 0];
+    const elb = Array.isArray(raw.elbow) && raw.elbow.length >= 2 ? [Number(raw.elbow[0]) || 0, Number(raw.elbow[1]) || 0] : (attachType === 'dim' ? [0, 0] : [14, -10]);
+    return {
+      id: raw.id || uid('gdt'),
+      symbol: sym,
+      tol,
+      dia: !!raw.dia,
+      mod,
+      datums,
+      view: raw.view ? String(raw.view) : null,
+      attachType,
+      dimId: attachType === 'dim' && raw.dimId ? String(raw.dimId) : null,
+      anchor: a,
+      elbow: elb,
+    };
+  }
   function normalizeSection(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const type = raw.type === 'half' || raw.type === 'stepped' || raw.type === 'breakout' ? raw.type : 'full';
@@ -215,6 +302,8 @@ const Drawing = (() => {
       dimStyle: normDimStyle(opts.dimStyle, tpl),
       notes: Array.isArray(opts.notes) ? opts.notes.map((n) => ({ ...n, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] })) : [],
       balloons: Array.isArray(opts.balloons) ? opts.balloons.map((b) => ({ ...b, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] })) : [],
+      datums: Array.isArray(opts.datums) ? opts.datums.map(normalizeDatum).filter(Boolean) : [],
+      gdtFrames: Array.isArray(opts.gdtFrames) ? opts.gdtFrames.map(normalizeGdtFrame).filter(Boolean) : [],
       bomTable: {
         show: !!(opts.bomTable && opts.bomTable.show),
         pos: Array.isArray(opts.bomTable && opts.bomTable.pos) && opts.bomTable.pos.length >= 2
@@ -258,6 +347,8 @@ const Drawing = (() => {
       dimStyle: raw && raw.dimStyle && typeof raw.dimStyle === 'object' ? raw.dimStyle : undefined,
       notes: raw && Array.isArray(raw.notes) ? raw.notes : undefined,
       balloons: raw && Array.isArray(raw.balloons) ? raw.balloons : undefined,
+      datums: raw && Array.isArray(raw.datums) ? raw.datums : undefined,
+      gdtFrames: raw && Array.isArray(raw.gdtFrames) ? raw.gdtFrames : undefined,
       bomTable: raw && raw.bomTable && typeof raw.bomTable === 'object' ? raw.bomTable : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
     });
@@ -296,6 +387,10 @@ const Drawing = (() => {
       if (cur && typeof cur.materialHatch !== 'boolean') cur.materialHatch = cur.materialHatch == null ? true : !!cur.materialHatch;
       if (cur && !Array.isArray(cur.notes)) cur.notes = [];
       if (cur && !Array.isArray(cur.balloons)) cur.balloons = [];
+      if (cur && !Array.isArray(cur.datums)) cur.datums = [];
+      else if (cur) cur.datums = cur.datums.map(normalizeDatum).filter(Boolean);
+      if (cur && !Array.isArray(cur.gdtFrames)) cur.gdtFrames = [];
+      else if (cur) cur.gdtFrames = cur.gdtFrames.map(normalizeGdtFrame).filter(Boolean);
       if (cur && (!cur.bomTable || typeof cur.bomTable !== 'object')) cur.bomTable = { show: false, pos: null };
       else if (cur) cur.bomTable = {
         show: !!cur.bomTable.show,
@@ -341,8 +436,8 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -357,8 +452,8 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -411,8 +506,10 @@ const Drawing = (() => {
       return idMap.get(v) || v;
     };
     clone.breaks = (clone.breaks || []).map((b) => ({ ...b, id: uid('brk'), view: remapView(b.view) }));
+    const dimMap = new Map();
     clone.dims = (clone.dims || []).map((x) => {
       const oldId = x.id, nid = uid('d');
+      dimMap.set(oldId, nid);
       const view = remapView(x.view);
       const out = { ...x, id: nid, view };
       if (Array.isArray(x.hide)) {
@@ -439,6 +536,26 @@ const Drawing = (() => {
     clone.dimStyle = normDimStyle(src.dimStyle);
     clone.notes = (clone.notes || []).map((n) => ({ ...n, id: uid('ln'), view: remapView(n.view), anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] }));
     clone.balloons = (clone.balloons || []).map((b) => ({ ...b, id: uid('bl'), view: remapView(b.view), anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] }));
+    const remapDimId = (did) => {
+      if (!did) return did;
+      if (dimMap.has(did)) return dimMap.get(did);
+      for (const [oldD, newD] of dimMap.entries()) {
+        if (did.startsWith(oldD + '_')) return newD + did.slice(oldD.length);
+      }
+      return did;
+    };
+    clone.datums = (clone.datums || []).map((dt) => normalizeDatum({
+      ...dt,
+      id: uid('dat'),
+      view: remapView(dt.view),
+      dimId: remapDimId(dt.dimId),
+    })).filter(Boolean);
+    clone.gdtFrames = (clone.gdtFrames || []).map((fr) => normalizeGdtFrame({
+      ...fr,
+      id: uid('gdt'),
+      view: remapView(fr.view),
+      dimId: remapDimId(fr.dimId),
+    })).filter(Boolean);
     clone.bomTable = {
       show: !!(src.bomTable && src.bomTable.show),
       pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
@@ -520,7 +637,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -958,6 +1075,8 @@ const Drawing = (() => {
       if (s.viewPos) delete s.viewPos[key];
       s.notes = (s.notes || []).filter((n) => n.view !== key);
       s.balloons = (s.balloons || []).filter((b) => b.view !== key);
+      s.datums = (s.datums || []).filter((dt) => dt.view !== key);
+      s.gdtFrames = (s.gdtFrames || []).filter((fr) => fr.view !== key);
     });
     selView = currentViewKey();
     render(); Panels.renderRight();
@@ -2622,6 +2741,8 @@ const Drawing = (() => {
       d.dims = d.dims.filter((x) => x.view !== id);
       d.notes = (d.notes || []).filter((x) => x.view !== id);
       d.balloons = (d.balloons || []).filter((x) => x.view !== id);
+      d.datums = (d.datums || []).filter((x) => x.view !== id);
+      d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -4462,6 +4583,194 @@ const Drawing = (() => {
       texts.push({ x: tx, y, t: tLines[i], size: TXT, rot: 0, anchor, id: note.id, view: note.view || undefined, cls: 'leadertext' });
     }
   }
+  function fmtGdtTol(valMm) {
+    const u = Units.fromMM(Math.max(0, Number(valMm) || 0));
+    const dec = Units.key() === 'mm' ? Math.max(0, decNeeded(u)) : Math.max(3, decNeeded(u));
+    return fmtTolVal(u, dec);
+  }
+  function drawGdtSymbol(key, cx, cy, boxH, lines, id, view, extra = {}) {
+    const r = boxH * 0.29;
+    const base = { cls: 'gdt-sym', id, ...(view ? { view } : {}), ...extra };
+    const seg = (pts) => lines.push({ ...base, pts });
+    const circ = (x, y, rad) => lines.push({ ...base, circle: [x, y, rad] });
+    if (key === 'straightness') {
+      seg([[cx - r * 0.9, cy], [cx + r * 0.9, cy]]);
+    } else if (key === 'flatness') {
+      seg([[cx - r * 0.9, cy + r * 0.45], [cx - r * 0.3, cy - r * 0.45], [cx + r * 0.9, cy - r * 0.45], [cx + r * 0.3, cy + r * 0.45], [cx - r * 0.9, cy + r * 0.45]]);
+    } else if (key === 'circularity') {
+      circ(cx, cy, r * 0.72);
+    } else if (key === 'cylindricity') {
+      circ(cx, cy, r * 0.56);
+      seg([[cx - r * 0.88, cy + r * 0.68], [cx - r * 0.22, cy - r * 0.68]]);
+      seg([[cx + r * 0.22, cy + r * 0.68], [cx + r * 0.88, cy - r * 0.68]]);
+    } else if (key === 'profileLine' || key === 'profileSurface') {
+      const pts = [];
+      for (let i = 0; i <= 10; i++) {
+        const a = (i / 10) * Math.PI;
+        pts.push([cx - r * 0.85 * Math.cos(a), cy + r * 0.38 - r * 0.85 * Math.sin(a)]);
+      }
+      if (key === 'profileSurface') pts.push(pts[0]);
+      seg(pts);
+    } else if (key === 'parallelism') {
+      seg([[cx - r * 0.62, cy + r * 0.7], [cx - r * 0.02, cy - r * 0.7]]);
+      seg([[cx + r * 0.04, cy + r * 0.7], [cx + r * 0.64, cy - r * 0.7]]);
+    } else if (key === 'perpendicularity') {
+      seg([[cx - r * 0.78, cy + r * 0.65], [cx + r * 0.78, cy + r * 0.65]]);
+      seg([[cx, cy + r * 0.65], [cx, cy - r * 0.75]]);
+    } else if (key === 'angularity') {
+      seg([[cx - r * 0.78, cy + r * 0.62], [cx + r * 0.78, cy + r * 0.62]]);
+      seg([[cx - r * 0.78, cy + r * 0.62], [cx + r * 0.58, cy - r * 0.65]]);
+    } else if (key === 'position') {
+      circ(cx, cy, r * 0.52);
+      seg([[cx - r * 0.88, cy], [cx + r * 0.88, cy]]);
+      seg([[cx, cy - r * 0.88], [cx, cy + r * 0.88]]);
+    } else if (key === 'concentricity') {
+      circ(cx, cy, r * 0.76);
+      circ(cx, cy, r * 0.40);
+    } else if (key === 'symmetry') {
+      seg([[cx - r * 0.85, cy], [cx + r * 0.85, cy]]);
+      seg([[cx - r * 0.52, cy - r * 0.46], [cx + r * 0.52, cy - r * 0.46]]);
+      seg([[cx - r * 0.52, cy + r * 0.46], [cx + r * 0.52, cy + r * 0.46]]);
+    } else if (key === 'runout') {
+      const tip = [cx + r * 0.58, cy - r * 0.68];
+      const tail = [cx - r * 0.58, cy + r * 0.68];
+      seg([tail, tip]);
+      arrowHead(lines, tip, tail, Math.max(1.2, r * 0.58), true, id, null, 'filled', 'gdt-arrow', view);
+    } else if (key === 'totalRunout') {
+      const tip1 = [cx - r * 0.02, cy - r * 0.68], tail1 = [cx - r * 0.72, cy + r * 0.66];
+      const tip2 = [cx + r * 0.68, cy - r * 0.68], tail2 = [cx - r * 0.02, cy + r * 0.66];
+      seg([tip1, tail1, tail2, tip2]);
+      arrowHead(lines, tip1, tail1, Math.max(1.1, r * 0.52), true, id, null, 'filled', 'gdt-arrow', view);
+      arrowHead(lines, tip2, tail2, Math.max(1.1, r * 0.52), true, id, null, 'filled', 'gdt-arrow', view);
+    }
+  }
+  function drawDatum(dat, lines, texts, lay = layout, sh = dwg(), dimAnchors = lastDimAnchors) {
+    const st = sheetDimStyle(sh);
+    let A, eDir = [1, 0];
+    if (dat.attachType === 'dim') {
+      const da = dimAnchors && dat.dimId ? dimAnchors.get(dat.dimId) : null;
+      if (!da) return;
+      A = [da.cx, da.bottomY + 0.4];
+      eDir = [1, 0];
+    } else if (dat.view) {
+      const v = lay.views[dat.view];
+      if (!v) return;
+      A = toSheet(v, dat.anchor);
+      if (dat.edgeDir) {
+        const L = Math.hypot(dat.edgeDir[0], -dat.edgeDir[1]) || 1;
+        eDir = [dat.edgeDir[0] / L, -dat.edgeDir[1] / L];
+      }
+    } else {
+      A = [dat.anchor[0], dat.anchor[1]];
+      if (dat.edgeDir) {
+        const L = Math.hypot(dat.edgeDir[0], dat.edgeDir[1]) || 1;
+        eDir = [dat.edgeDir[0] / L, dat.edgeDir[1] / L];
+      }
+    }
+    const off = (dragDatum && dragDatum.id === dat.id && dragDatum.curOffset) ? dragDatum.curOffset : (dat.offset || [0, 10]);
+    const B = [A[0] + off[0], A[1] + off[1]];
+    const FS = clamp(st.fontSize * 0.98, 2.6, 7.2);
+    const S = clamp(FS * 1.85, 5.6, 11.0);
+    const dx = B[0] - A[0], dy = B[1] - A[1], stemL = Math.hypot(dx, dy);
+    let nx = -eDir[1], ny = eDir[0];
+    if (dx * nx + dy * ny < 0) { nx = -nx; ny = -ny; }
+    if (stemL > 0.5 && Math.abs(dx * nx + dy * ny) / stemL < 0.25) {
+      nx = dx / stemL; ny = dy / stemL;
+      eDir = [-ny, nx];
+    }
+    const triH = clamp(FS * 0.72, 2.2, 4.0), triW = triH * 0.7;
+    const meta = { id: dat.id, view: dat.view || undefined, gdtKind: 'datum', gdtLabel: dat.label, ...(dat.dimId ? { dimId: dat.dimId } : {}) };
+    lines.push({
+      poly: [
+        [A[0] - eDir[0] * triW, A[1] - eDir[1] * triW],
+        [A[0] + eDir[0] * triW, A[1] + eDir[1] * triW],
+        [A[0] + nx * triH, A[1] + ny * triH],
+      ],
+      cls: 'gdt-datum-tri',
+      ...meta,
+    });
+    if (stemL > S * 0.55) {
+      const tx = Math.abs(dx) > 1e-6 ? (S * 0.5) / Math.abs(dx) : Infinity;
+      const ty = Math.abs(dy) > 1e-6 ? (S * 0.5) / Math.abs(dy) : Infinity;
+      const t = Math.min(tx, ty);
+      const stemEnd = [B[0] - dx * t, B[1] - dy * t];
+      lines.push({ pts: [A, stemEnd], cls: 'gdt-line', ...meta });
+    }
+    const x0 = B[0] - S * 0.5, y0 = B[1] - S * 0.5;
+    lines.push({ rect: [x0, y0, S, S], cls: 'gdt-bg', ...meta });
+    lines.push({ rect: [x0, y0, S, S], cls: 'gdt-frame', ...meta });
+    texts.push({ x: B[0], y: B[1] + FS * 0.35, t: dat.label, size: FS, rot: 0, anchor: 'middle', cls: 'gdt-text', ...meta });
+  }
+  function drawGdtFrame(fr, lines, texts, lay = layout, sh = dwg(), dimAnchors = lastDimAnchors) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (fr.attachType === 'dim') {
+      const da = dimAnchors && fr.dimId ? dimAnchors.get(fr.dimId) : null;
+      if (!da) return;
+      A = [da.cx, da.bottomY + 0.8];
+    } else if (fr.view) {
+      const v = lay.views[fr.view];
+      if (!v) return;
+      A = toSheet(v, fr.anchor);
+    } else {
+      A = [fr.anchor[0], fr.anchor[1]];
+    }
+    const FS = clamp(st.fontSize * 0.94, 2.5, 7.0);
+    const H = clamp(FS * 1.9, 6.0, 11.5);
+    const modR = FS * 0.44;
+    const modW = modR * 2 + 0.9;
+    const wSym = H;
+    const tolStr = (fr.dia ? 'Ø' : '') + fmtGdtTol(fr.tol);
+    const tolTextW = textW(tolStr, FS);
+    const wTol = Math.max(H * 1.35, tolTextW + (fr.mod ? modW : 0) + 3.0);
+    const datumCols = (fr.datums || []).map((dt) => {
+      const dw = textW(dt.label, FS);
+      const cw = Math.max(H * 0.95, dw + (dt.mod ? modW : 0) + 2.6);
+      return { ...dt, dw, cw };
+    });
+    const Wtot = wSym + wTol + datumCols.reduce((acc, c) => acc + c.cw, 0);
+    const elb = (dragGdt && dragGdt.id === fr.id && dragGdt.curElbow) ? dragGdt.curElbow : (fr.elbow || [14, -10]);
+    const meta = { id: fr.id, view: fr.view || undefined, gdtKind: 'frame', gdtSym: fr.symbol, ...(fr.dimId ? { dimId: fr.dimId } : {}) };
+    let x0, y0;
+    if (fr.attachType === 'dim' && Math.hypot(elb[0], elb[1]) <= 2.5) {
+      x0 = A[0] - Wtot * 0.5;
+      y0 = A[1] + 0.6;
+    } else {
+      const E = [A[0] + elb[0], A[1] + elb[1]];
+      const dir = E[0] >= A[0] ? 1 : -1;
+      const C = [E[0] + dir * 3.5, E[1]];
+      x0 = dir >= 0 ? C[0] : C[0] - Wtot;
+      y0 = C[1] - H * 0.5;
+      lines.push({ pts: [A, E, C], cls: 'gdt-line', ...meta });
+      arrowHead(lines, A, E, clamp(FS * 0.85, 2.0, 5.5), true, fr.id, null, 'filled', 'gdt-arrow', fr.view || undefined);
+    }
+    lines.push({ rect: [x0, y0, Wtot, H], cls: 'gdt-bg', ...meta });
+    lines.push({ rect: [x0, y0, Wtot, H], cls: 'gdt-frame', ...meta });
+    const midY = y0 + H * 0.5;
+    const baseTextY = midY + FS * 0.35;
+    lines.push({ pts: [[x0 + wSym, y0], [x0 + wSym, y0 + H]], cls: 'gdt-frame', ...meta });
+    drawGdtSymbol(fr.symbol, x0 + wSym * 0.5, midY, H, lines, fr.id, fr.view || undefined, meta);
+    const tolStartX = x0 + wSym;
+    const tolCenterX = tolStartX + (wTol - (fr.mod ? modW : 0)) * 0.5;
+    texts.push({ x: tolCenterX, y: baseTextY, t: tolStr, size: FS, rot: 0, anchor: 'middle', cls: 'gdt-text', ...meta });
+    if (fr.mod) {
+      const mx = tolStartX + wTol - modR - 1.2;
+      lines.push({ circle: [mx, midY, modR], cls: 'gdt-sym', ...meta });
+      texts.push({ x: mx, y: midY + FS * 0.24, t: fr.mod, size: FS * 0.66, rot: 0, anchor: 'middle', cls: 'gdt-text', ...meta });
+    }
+    let curX = tolStartX + wTol;
+    for (const dc of datumCols) {
+      lines.push({ pts: [[curX, y0], [curX, y0 + H]], cls: 'gdt-frame', ...meta });
+      const dCenterX = curX + (dc.cw - (dc.mod ? modW : 0)) * 0.5;
+      texts.push({ x: dCenterX, y: baseTextY, t: dc.label, size: FS, rot: 0, anchor: 'middle', cls: 'gdt-text', ...meta });
+      if (dc.mod) {
+        const mx = curX + dc.cw - modR - 1.1;
+        lines.push({ circle: [mx, midY, modR], cls: 'gdt-sym', ...meta });
+        texts.push({ x: mx, y: midY + FS * 0.24, t: dc.mod, size: FS * 0.66, rot: 0, anchor: 'middle', cls: 'gdt-text', ...meta });
+      }
+      curX += dc.cw;
+    }
+  }
   function drawBalloon(bl, lines, texts, lay = layout, sh = dwg(), bom = bomData) {
     const st = sheetDimStyle(sh);
     let A;
@@ -4790,15 +5099,32 @@ const Drawing = (() => {
       if (pv) drawAuxArrow(pv, aux, lines, texts);
     }
     // Bemaßungen
-    for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay, sh);
+    const dimAnchors = new Map();
+    for (const dim of autoDimList(sh, lay)) {
+      if (!lay.views[dim.view] || lay.views[dim.view].noDims) continue;
+      const t0 = texts.length;
+      dimSVG(dim, lines, texts, lay, sh);
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = t0; i < texts.length; i++) {
+        const r = textRectOf(texts[i], 0);
+        if (r[0] < x0) x0 = r[0];
+        if (r[1] < y0) y0 = r[1];
+        if (r[2] > x1) x1 = r[2];
+        if (r[3] > y1) y1 = r[3];
+      }
+      if (isFinite(x0)) dimAnchors.set(dim.id, { cx: (x0 + x1) * 0.5, leftX: x0, rightX: x1, topY: y0, bottomY: y1, view: dim.view });
+    }
     // Notizen mit Hinweislinie
     for (const note of sh.notes || []) drawLeaderNote(note, lines, texts, lay, sh);
     // Positionsnummern
     for (const bl of sh.balloons || []) drawBalloon(bl, lines, texts, lay, sh, bomData);
+    // Form- und Lagetoleranzen & Bezüge (ZE-24)
+    for (const dat of sh.datums || []) drawDatum(dat, lines, texts, lay, sh, dimAnchors);
+    for (const fr of sh.gdtFrames || []) drawGdtFrame(fr, lines, texts, lay, sh, dimAnchors);
     // Schriftfeld & Stückliste
     titleBlock(sh, lay, idx, total, lines, texts);
     drawBomTable(sh, lay, lines, texts);
-    return { layout: lay, lines, texts, images };
+    return { layout: lay, lines, texts, images, dimAnchors };
   }
   function render() {
     if (!holder) return;
@@ -4806,6 +5132,7 @@ const Drawing = (() => {
     const all = sheets(), idx = activeIndex(), sh = all[idx] || dwg();
     const cur = buildSheetContent(sh, idx, all.length);
     layout = cur.layout;
+    lastDimAnchors = cur.dimAnchors || new Map();
     const svKey = currentViewKey(sh);
     if (svKey && layout.views[svKey] && layout.views[svKey].rect && !tool) {
       const r = layout.views[svKey].rect;
@@ -4819,6 +5146,8 @@ const Drawing = (() => {
     if (tool === 'balloon' && toolState) previewBalloon(cur.lines, cur.texts);
     if (tool === 'break' && toolState) previewBreak(cur.lines, cur.texts);
     if (tool === 'aux' && toolState) previewAux(cur.lines, cur.texts);
+    if (tool === 'datum' && toolState) previewDatum(cur.lines, cur.texts);
+    if (tool === 'gdt' && toolState) previewGdt(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts, cur.images);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
@@ -4894,7 +5223,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -4941,6 +5270,10 @@ const Drawing = (() => {
         if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
         if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
         if (l.projSym) el.dataset.projSym = l.projSym;
+        if (l.gdtKind) el.dataset.gdtKind = l.gdtKind;
+        if (l.gdtSym) el.dataset.gdtSym = l.gdtSym;
+        if (l.gdtLabel) el.dataset.gdtLabel = l.gdtLabel;
+        if (l.dimId) el.dataset.dimId = l.dimId;
       }
       g.append(el);
     };
@@ -4976,6 +5309,10 @@ const Drawing = (() => {
         if (t.bomRow != null) el.dataset.bomRow = String(t.bomRow);
         if (t.bomCol) el.dataset.bomCol = t.bomCol;
         if (t.projMode) el.dataset.projMode = t.projMode;
+        if (t.gdtKind) el.dataset.gdtKind = t.gdtKind;
+        if (t.gdtSym) el.dataset.gdtSym = t.gdtSym;
+        if (t.gdtLabel) el.dataset.gdtLabel = t.gdtLabel;
+        if (t.dimId) el.dataset.dimId = t.dimId;
       }
       el.textContent = t.t;
       g.append(el);
@@ -5589,6 +5926,322 @@ const Drawing = (() => {
       }, lines, texts, layout, dwg());
     }
   }
+  // ---------- Form- und Lagetoleranzen & Bezüge (ZE-24) ----------
+  function datums(sh = dwg()) { return (sh.datums || []).slice(); }
+  function gdtFrames(sh = dwg()) { return (sh.gdtFrames || []).slice(); }
+  function pickGdtTarget(P, e = null) {
+    if (lastDimAnchors && lastDimAnchors.size) {
+      const el = e && e.target && e.target.closest ? e.target.closest('[data-id]') : null;
+      const hitId = el ? el.dataset.id : null;
+      if (hitId && lastDimAnchors.has(hitId)) {
+        const da = lastDimAnchors.get(hitId);
+        return { attachType: 'dim', dimId: hitId, view: da.view, anchor: [0, 0], sheetPt: [da.cx, da.bottomY + 0.6], edgeDir: [1, 0] };
+      }
+      let bestId = null, bestD = 3.5;
+      for (const [did, da] of lastDimAnchors.entries()) {
+        const dx = P[0] < da.leftX ? da.leftX - P[0] : P[0] > da.rightX ? P[0] - da.rightX : 0;
+        const dy = P[1] < da.topY ? da.topY - P[1] : P[1] > da.bottomY ? P[1] - da.bottomY : 0;
+        const d = Math.hypot(dx, dy);
+        if (d < bestD) { bestD = d; bestId = did; }
+      }
+      if (bestId) {
+        const da = lastDimAnchors.get(bestId);
+        return { attachType: 'dim', dimId: bestId, view: da.view, anchor: [0, 0], sheetPt: [da.cx, da.bottomY + 0.6], edgeDir: [1, 0] };
+      }
+    }
+    const name = leaderViewAt(P);
+    if (name && layout && layout.views[name]) {
+      const v = layout.views[name];
+      const tol = Math.max(2.8, 4.2 / zoom);
+      let bestPt = null, bestDir = [1, 0], bd = tol;
+      for (const seg of straightSegsOf(v, false)) {
+        const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+        if (L2 < 1e-6) continue;
+        const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+        const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+        if (d < bd) {
+          bd = d;
+          bestPt = [seg.a[0] + t * (seg.b[0] - seg.a[0]), seg.a[1] + t * (seg.b[1] - seg.a[1])];
+          bestDir = [(seg.b[0] - seg.a[0]) / seg.L, (seg.b[1] - seg.a[1]) / seg.L];
+        }
+      }
+      const q = toView(v, P);
+      for (const c of v.geo.circles || []) {
+        const dist = Math.hypot(q[0] - c.c[0], q[1] - c.c[1]);
+        const d = Math.abs(dist - c.r) * v.s;
+        if (d >= bd) continue;
+        let ang = dist > 1e-6 ? angOf(c.c, q) : 0;
+        if (c.arc) {
+          let a = ang;
+          if (a < c.arc[0] - 0.08) a += TWO_PI;
+          if (a > c.arc[1] + 0.08) continue;
+        }
+        bd = d;
+        bestPt = [c.c[0] + Math.cos(ang) * c.r, c.c[1] + Math.sin(ang) * c.r];
+        bestDir = [-Math.sin(ang), Math.cos(ang)];
+      }
+      for (const p of v.geo.polys || []) {
+        if (p.c || !p.pts || p.pts.length <= 2) continue;
+        for (let i = 0; i < p.pts.length - 1; i++) {
+          const a = p.pts[i], b = p.pts[i + 1];
+          const A = toSheet(v, a), B = toSheet(v, b);
+          const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+          if (L2 < 1e-6) continue;
+          const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+          const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+          if (d < bd) {
+            bd = d;
+            bestPt = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+            const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+            bestDir = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+          }
+        }
+      }
+      if (bestPt) {
+        return { attachType: 'edge', view: name, dimId: null, anchor: bestPt, sheetPt: toSheet(v, bestPt), edgeDir: bestDir };
+      }
+    }
+    return { attachType: 'free', view: null, dimId: null, anchor: [P[0], P[1]], sheetPt: [P[0], P[1]], edgeDir: [1, 0] };
+  }
+  function addDatum(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return null; }
+    const sh = dwg();
+    const dat = normalizeDatum({
+      ...opts,
+      id: uid('dat'),
+      label: cleanDatumLabel(opts.label, nextDatumLabel(sh)),
+    });
+    if (!dat) return null;
+    App.change('Bezug hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.datums)) d.datums = [];
+      d.datums.push(dat);
+    });
+    datumDraft.label = nextDatumLabel(dwg());
+    if (gdtSymMeta(gdtDraft.symbol).needsDatum && !gdtDraft.d1) gdtDraft.d1 = dat.label;
+    selDim = dat.id;
+    render(); Panels.renderRight();
+    return dat;
+  }
+  function updateDatum(id, patch = {}) {
+    let changed = false;
+    App.change('Bezug geändert', () => {
+      const dat = (dwg().datums || []).find((x) => x.id === id);
+      if (!dat) return;
+      if (patch.label != null) {
+        const lbl = cleanDatumLabel(patch.label, dat.label);
+        if (lbl !== dat.label) { dat.label = lbl; changed = true; }
+      }
+      if (Array.isArray(patch.offset) && patch.offset.length >= 2) {
+        dat.offset = [Number(patch.offset[0]) || 0, Number(patch.offset[1]) || 0];
+        changed = true;
+      }
+      if (Array.isArray(patch.anchor) && patch.anchor.length >= 2) {
+        dat.anchor = [Number(patch.anchor[0]) || 0, Number(patch.anchor[1]) || 0];
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeDatum(id) {
+    const cur = (dwg().datums || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Bezug gelöscht', () => {
+      const d = dwg();
+      d.datums = (d.datums || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addGdtFrame(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return null; }
+    const fr = normalizeGdtFrame({ ...opts, id: uid('gdt') });
+    if (!fr) return null;
+    App.change('Toleranzrahmen hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.gdtFrames)) d.gdtFrames = [];
+      d.gdtFrames.push(fr);
+    });
+    selDim = fr.id;
+    render(); Panels.renderRight();
+    return fr;
+  }
+  function updateGdtFrame(id, patch = {}) {
+    let changed = false;
+    App.change('Toleranzrahmen geändert', () => {
+      const fr = (dwg().gdtFrames || []).find((x) => x.id === id);
+      if (!fr) return;
+      const merged = normalizeGdtFrame({ ...fr, ...patch, id: fr.id });
+      if (!merged) return;
+      Object.assign(fr, merged);
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeGdtFrame(id) {
+    const cur = (dwg().gdtFrames || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Toleranzrahmen gelöscht', () => {
+      const d = dwg();
+      d.gdtFrames = (d.gdtFrames || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function datumClick(P, e) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickGdtTarget(P, e);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = target.attachType === 'dim' && lastDimAnchors.has(target.dimId)
+      ? [lastDimAnchors.get(target.dimId).cx, lastDimAnchors.get(target.dimId).bottomY + 0.4]
+      : (v ? toSheet(v, target.anchor) : target.anchor);
+    let offset = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(offset[0], offset[1]) < 3) offset = [0, 10];
+    toolState = { stage: 0 };
+    addDatum({
+      label: datumDraft.label,
+      view: target.view,
+      attachType: target.attachType,
+      dimId: target.dimId,
+      anchor: target.anchor,
+      edgeDir: target.edgeDir,
+      offset,
+    });
+  }
+  function gdtClick(P, e) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickGdtTarget(P, e);
+      if (target.attachType === 'dim') {
+        const datumsList = [gdtDraft.d1, gdtDraft.d2, gdtDraft.d3].filter(Boolean).map((lbl) => ({ label: lbl, mod: '' }));
+        toolState = { stage: 0 };
+        addGdtFrame({
+          symbol: gdtDraft.symbol,
+          tol: gdtDraft.tol,
+          dia: gdtDraft.dia,
+          mod: gdtDraft.mod,
+          datums: datumsList,
+          view: target.view,
+          attachType: 'dim',
+          dimId: target.dimId,
+          anchor: [0, 0],
+          elbow: [0, 0],
+        });
+        return;
+      }
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let elbow = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [14, -10];
+    const datumsList = [gdtDraft.d1, gdtDraft.d2, gdtDraft.d3].filter(Boolean).map((lbl) => ({ label: lbl, mod: '' }));
+    toolState = { stage: 0 };
+    addGdtFrame({
+      symbol: gdtDraft.symbol,
+      tol: gdtDraft.tol,
+      dia: gdtDraft.dia,
+      mod: gdtDraft.mod,
+      datums: datumsList,
+      view: target.view,
+      attachType: target.attachType,
+      dimId: target.dimId,
+      anchor: target.anchor,
+      elbow,
+    });
+  }
+  function previewDatum(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      const S = st.target.sheetPt;
+      lines.push({ circle: [S[0], S[1], (1.3 / zoom) * 1.5], cls: 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = st.target.attachType === 'dim' && lastDimAnchors.has(st.target.dimId)
+        ? [lastDimAnchors.get(st.target.dimId).cx, lastDimAnchors.get(st.target.dimId).bottomY + 0.4]
+        : (v ? toSheet(v, st.target.anchor) : st.target.anchor);
+      let offset = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(offset[0], offset[1]) < 3) offset = [0, 10];
+      drawDatum({
+        id: '__datprev',
+        label: cleanDatumLabel(datumDraft.label, nextDatumLabel()),
+        view: st.target.view,
+        attachType: st.target.attachType,
+        dimId: st.target.dimId,
+        anchor: st.target.anchor,
+        edgeDir: st.target.edgeDir,
+        offset,
+      }, lines, texts, layout, dwg(), lastDimAnchors);
+    }
+  }
+  function previewGdt(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      const S = st.target.sheetPt;
+      lines.push({ circle: [S[0], S[1], (1.3 / zoom) * 1.5], cls: 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let elbow = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [14, -10];
+      const datumsList = [gdtDraft.d1, gdtDraft.d2, gdtDraft.d3].filter(Boolean).map((lbl) => ({ label: lbl, mod: '' }));
+      drawGdtFrame({
+        id: '__gdtprev',
+        symbol: gdtDraft.symbol,
+        tol: gdtDraft.tol,
+        dia: gdtDraft.dia,
+        mod: gdtDraft.mod,
+        datums: datumsList,
+        view: st.target.view,
+        attachType: st.target.attachType,
+        dimId: st.target.dimId,
+        anchor: st.target.anchor,
+        elbow,
+      }, lines, texts, layout, dwg(), lastDimAnchors);
+    }
+  }
+  function gdtMenu(anchor) {
+    if (isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return; }
+    const startSym = (symKey) => {
+      const meta = gdtSymMeta(symKey);
+      gdtDraft.symbol = meta.key;
+      gdtDraft.dia = meta.defaultDia;
+      if (meta.needsDatum && !gdtDraft.d1 && (dwg().datums || []).length) gdtDraft.d1 = dwg().datums[0].label;
+      if (!meta.needsDatum) { gdtDraft.d1 = ''; gdtDraft.d2 = ''; gdtDraft.d3 = ''; }
+      setTool('gdt');
+    };
+    UI.menu(anchor, [
+      { label: T('menu.draw.gdtDatum'), icon: 'gdt', help: 'drawingGdt', checked: tool === 'datum', run: () => setTool(tool === 'datum' ? null : 'datum') },
+      { label: T('menu.draw.gdtFrame'), icon: 'gdt', help: 'drawingGdt', checked: tool === 'gdt', run: () => setTool(tool === 'gdt' ? null : 'gdt') },
+      '-',
+      { label: `▱ ${T('draw.gdt.sym.flatness')}`, icon: 'gdt', run: () => startSym('flatness') },
+      { label: `∥ ${T('draw.gdt.sym.parallelism')}`, icon: 'gdt', run: () => startSym('parallelism') },
+      { label: `⊥ ${T('draw.gdt.sym.perpendicularity')}`, icon: 'gdt', run: () => startSym('perpendicularity') },
+      { label: `⌖ ${T('draw.gdt.sym.position')}`, icon: 'gdt', run: () => startSym('position') },
+      { label: `◎ ${T('draw.gdt.sym.concentricity')}`, icon: 'gdt', run: () => startSym('concentricity') },
+      { label: `↗ ${T('draw.gdt.sym.runout')}`, icon: 'gdt', run: () => startSym('runout') },
+    ]);
+  }
   // ---------- Positionsnummern & Stückliste auf dem Blatt (ZE-12) ----------
   function viewBasis(viewName, sh = dwg()) {
     if (!proj) return null;
@@ -6053,6 +6706,20 @@ const Drawing = (() => {
       render();
       return;
     }
+    if (dragDatum) {
+      const P = sheetPt(e);
+      dragDatum.curOffset = [dragDatum.origOffset[0] + (P[0] - dragDatum.startP[0]), dragDatum.origOffset[1] + (P[1] - dragDatum.startP[1])];
+      if (Math.hypot(P[0] - dragDatum.startP[0], P[1] - dragDatum.startP[1]) > 0.5) dragDatum.moved = true;
+      render();
+      return;
+    }
+    if (dragGdt) {
+      const P = sheetPt(e);
+      dragGdt.curElbow = [dragGdt.origElbow[0] + (P[0] - dragGdt.startP[0]), dragGdt.origElbow[1] + (P[1] - dragGdt.startP[1])];
+      if (Math.hypot(P[0] - dragGdt.startP[0], P[1] - dragGdt.startP[1]) > 0.5) dragGdt.moved = true;
+      render();
+      return;
+    }
     if (dragBom) {
       const P = sheetPt(e);
       dragBom.curPos = [dragBom.origPos[0] + (P[0] - dragBom.startP[0]), dragBom.origPos[1] + (P[1] - dragBom.startP[1])];
@@ -6082,6 +6749,14 @@ const Drawing = (() => {
       toolState = toolState || { stage: 0 };
       toolState.P = P;
       if (toolState.stage === 0) toolState.target = pickBalloonTarget(P);
+      render();
+      return;
+    }
+    if (tool === 'datum' || tool === 'gdt') {
+      const P = sheetPt(e);
+      toolState = toolState || { stage: 0 };
+      toolState.P = P;
+      if (toolState.stage === 0) toolState.target = pickGdtTarget(P, e);
       render();
       return;
     }
@@ -6215,6 +6890,8 @@ const Drawing = (() => {
     if (tool === 'balloon') { balloonClick(P); return; }
     if (tool === 'break') { breakClick(P, e); return; }
     if (tool === 'aux') { auxClick(P); return; }
+    if (tool === 'datum') { datumClick(P, e); return; }
+    if (tool === 'gdt') { gdtClick(P, e); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : centerAt(P);
@@ -6227,6 +6904,12 @@ const Drawing = (() => {
     } else if (selDim && (dwg().balloons || []).some((x) => x.id === selDim)) {
       const blObj = dwg().balloons.find((x) => x.id === selDim);
       dragBalloon = { id: selDim, startP: P, origOffset: [...(blObj.offset || [14, -12])], curOffset: null, moved: false };
+    } else if (selDim && (dwg().datums || []).some((x) => x.id === selDim)) {
+      const datObj = dwg().datums.find((x) => x.id === selDim);
+      dragDatum = { id: selDim, startP: P, origOffset: [...(datObj.offset || [0, 10])], curOffset: null, moved: false };
+    } else if (selDim && (dwg().gdtFrames || []).some((x) => x.id === selDim)) {
+      const frObj = dwg().gdtFrames.find((x) => x.id === selDim);
+      dragGdt = { id: selDim, startP: P, origElbow: [...(frObj.elbow || [14, -10])], curElbow: null, moved: false };
     } else if (selDim === '__bom__' && layout && layout.bomRect) {
       dragBom = { startP: P, origPos: [layout.bomRect.x, layout.bomRect.y], curPos: null, moved: false };
     } else if (!selDim) {
@@ -6264,6 +6947,18 @@ const Drawing = (() => {
       const d = dragBalloon;
       dragBalloon = null;
       if (d.moved && d.curOffset) updateBalloon(d.id, { offset: d.curOffset });
+      return;
+    }
+    if (dragDatum) {
+      const d = dragDatum;
+      dragDatum = null;
+      if (d.moved && d.curOffset) updateDatum(d.id, { offset: d.curOffset });
+      return;
+    }
+    if (dragGdt) {
+      const d = dragGdt;
+      dragGdt = null;
+      if (d.moved && d.curElbow) updateGdtFrame(d.id, { elbow: d.curElbow });
       return;
     }
     if (dragBom) {
@@ -6681,6 +7376,8 @@ const Drawing = (() => {
       d.dims = (d.dims || []).filter((x) => x.view !== 'sec_' + id);
       d.notes = (d.notes || []).filter((x) => x.view !== 'sec_' + id);
       d.balloons = (d.balloons || []).filter((x) => x.view !== 'sec_' + id);
+      d.datums = (d.datums || []).filter((x) => x.view !== 'sec_' + id);
+      d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== 'sec_' + id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|sec_' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -6909,6 +7606,8 @@ const Drawing = (() => {
       d.dims = (d.dims || []).filter((x) => x.view !== key);
       d.notes = (d.notes || []).filter((x) => x.view !== key);
       d.balloons = (d.balloons || []).filter((x) => x.view !== key);
+      d.datums = (d.datums || []).filter((x) => x.view !== key);
+      d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== key);
       d.breaks = (d.breaks || []).filter((x) => x.view !== key);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + key + '|'));
       if (d.viewOpts) delete d.viewOpts[key];
@@ -7284,6 +7983,8 @@ const Drawing = (() => {
     App.change('Verlorenes Maß gelöscht', () => {
       const sh = dwg();
       sh.dims = (sh.dims || []).filter((x) => x.id !== id);
+      sh.datums = (sh.datums || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
+      sh.gdtFrames = (sh.gdtFrames || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
     });
     if (selDim === id) selDim = null;
     if (tool === 'dim' && toolState && toolState.rebindId === id) {
@@ -7303,6 +8004,8 @@ const Drawing = (() => {
     App.change('Verlorene Maße gelöscht', () => {
       const sh = dwg();
       sh.dims = (sh.dims || []).filter((x) => !ids.has(x.id));
+      sh.datums = (sh.datums || []).filter((x) => !x.dimId || !ids.has(x.dimId));
+      sh.gdtFrames = (sh.gdtFrames || []).filter((x) => !x.dimId || !ids.has(x.dimId));
     });
     if (selDim && ids.has(selDim)) selDim = null;
     if (tool === 'dim' && toolState && toolState.rebindId && ids.has(toolState.rebindId)) {
@@ -7520,12 +8223,17 @@ const Drawing = (() => {
     if ((dwg().breaks || []).some((x) => x.id === id)) { removeBreak(id); return; }
     if ((dwg().notes || []).some((x) => x.id === id)) { removeNote(id); return; }
     if ((dwg().balloons || []).some((x) => x.id === id)) { removeBalloon(id); return; }
+    if ((dwg().datums || []).some((x) => x.id === id)) { removeDatum(id); return; }
+    if ((dwg().gdtFrames || []).some((x) => x.id === id)) { removeGdtFrame(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
         d.details = (d.details || []).filter((x) => x.id !== id);
         d.dims = d.dims.filter((x) => x.view !== id);
         d.notes = (d.notes || []).filter((x) => x.view !== id);
+        d.balloons = (d.balloons || []).filter((x) => x.view !== id);
+        d.datums = (d.datums || []).filter((x) => x.view !== id);
+        d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== id);
         d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
         return;
       }
@@ -7534,6 +8242,8 @@ const Drawing = (() => {
       if (auto && auto.id === id) d.dims = d.dims.filter((x) => x !== auto);
       else if (auto) auto.hide = [...(auto.hide || []), id];
       else d.dims = d.dims.filter((x) => x.id !== id);
+      d.datums = (d.datums || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
+      d.gdtFrames = (d.gdtFrames || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
       d.free = d.free.filter((x) => x.id !== id);
     });
     selDim = null;
@@ -7551,7 +8261,7 @@ const Drawing = (() => {
     const m = DIM_MODES.find((x) => x.key === mode) || DIM_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
     dimMode = m.key;
-    dragDetail = null;
+    dragDetail = null; dragDatum = null; dragGdt = null;
     tool = 'dim';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -7579,7 +8289,7 @@ const Drawing = (() => {
     const m = SECTION_MODES.find((x) => x.key === mode) || SECTION_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.secProOnly'), { icon: 'info' }); return false; }
     sectionMode = m.key;
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
     tool = 'section';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -7598,12 +8308,21 @@ const Drawing = (() => {
     })));
   }
   function setTool(t) {
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    if ((t === 'datum' || t === 'gdt') && isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return false; }
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'section' && (!SECTION_MODES.some((x) => x.key === sectionMode) || (sectionMode !== 'full' && isSimpleMode()))) sectionMode = 'full';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
+      toolState = { stage: 0 };
+    } else if (t === 'datum') {
+      datumDraft.label = nextDatumLabel();
+      toolState = { stage: 0 };
+    } else if (t === 'gdt') {
+      if (gdtSymMeta(gdtDraft.symbol).needsDatum && !gdtDraft.d1 && (dwg().datums || []).length) {
+        gdtDraft.d1 = dwg().datums[0].label;
+      }
       toolState = { stage: 0 };
     } else {
       toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon' || t === 'break' || t === 'aux') ? { stage: 0 } : t ? {} : null;
@@ -7617,9 +8336,12 @@ const Drawing = (() => {
               : t === 'balloon' ? T('draw.hint.balloon')
                 : t === 'break' ? T('draw.hint.break')
                   : t === 'aux' ? T('draw.hint.aux')
+                    : t === 'datum' ? T('draw.hint.datum')
+                      : t === 'gdt' ? T('draw.hint.gdt')
                     : t && t.startsWith('free-') ? freeHint(t) : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
+    return true;
   }
   // ---------- Maße aus dem Modell übernehmen & ordnen (ZE-23) ----------
   function vec3FromPt(p, M) {
@@ -8721,13 +9443,19 @@ const Drawing = (() => {
     const base = ((sh.title && sh.title.titel) || App.doc.name) + ' Zeichnung';
     return Print.safeName(withSheet && sheets().length > 1 ? `${base} ${sh.name}` : base);
   }
-  async function exportSVG() {
+  async function buildSVGString(opts = {}) {
     await ensureProjections();
-    const all = sheets(), idx = activeIndex(), sh = all[idx] || dwg();
+    const all = sheets();
+    const idx = opts.sheetIndex != null ? clamp(opts.sheetIndex, 0, all.length - 1) : activeIndex();
+    const sh = all[idx] || dwg();
     const cur = buildSheetContent(sh, idx, all.length);
     const [W, H] = [cur.layout.W, cur.layout.H];
-    const el = buildSheetSVGElement(cur, { widthAttr: `${W}mm`, heightAttr: `${H}mm`, transparent: false, interactive: false });
-    const str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(el);
+    const el = buildSheetSVGElement(cur, { widthAttr: `${W}mm`, heightAttr: `${H}mm`, transparent: !!opts.transparent, interactive: false });
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(el);
+  }
+  async function exportSVG() {
+    const sh = dwg();
+    const str = await buildSVGString();
     await Print.save(fileBase(true, sh) + '.svg', str);
   }
   // Eingebauter PDF-1.4-Writer ohne externe Abhängigkeit: unterstützt mehrere Blätter mit beliebigen Größen (A4–A0, hoch/quer)
@@ -8784,6 +9512,9 @@ const Drawing = (() => {
       leader: [0.25, null],
       'balloon-line': [0.25, null],
       'balloon-circle': [0.35, null],
+      'gdt-frame': [0.3, null],
+      'gdt-line': [0.25, null],
+      'gdt-sym': [0.3, null],
       'bom-frame': [0.5, null],
       'bom-head-line': [0.35, null],
       'bom-grid': [0.22, null],
@@ -8797,12 +9528,12 @@ const Drawing = (() => {
     }
     for (const l of lines) {
       if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap' || l.cls === 'view-sel') continue;
-      if (l.cls === 'bom-bg' && l.rect) {
+      if ((l.cls === 'bom-bg' || l.cls === 'gdt-bg') && l.rect) {
         const [rx, ry, rw, rh] = l.rect;
         out.push(`1 g ${px(rx)} ${py(ry + rh)} ${pf(rw * PT)} ${pf(rh * PT)} re f`);
         continue;
       }
-      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow') {
+      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri') {
         const [a, b, c] = l.poly;
         out.push(`${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
         continue;
@@ -8854,7 +9585,7 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'auxlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'balloon-text') ? '/F2' : '/F1';
+      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'auxlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'balloon-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
       const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' ? '0.333' : '0.067');
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
@@ -8982,6 +9713,7 @@ const Drawing = (() => {
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
       'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
+      'gdt-frame': 'BEMASSUNG', 'gdt-line': 'BEMASSUNG', 'gdt-sym': 'BEMASSUNG', 'gdt-arrow': 'BEMASSUNG', 'gdt-datum-tri': 'BEMASSUNG',
       'detail-border': 'RAHMEN', breakline: 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN',
       'bom-frame': 'RAHMEN', 'bom-head-line': 'RAHMEN', 'bom-grid': 'RAHMEN',
     };
@@ -9006,7 +9738,7 @@ const Drawing = (() => {
         stats.circles++; bumpLayer(ly);
       } else if (l.poly) {
         const q = l.poly;
-        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow')) {
+        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri')) {
           P(0, 'SOLID', 8, ly,
             10, q[0][0].toFixed(4), 20, Y(q[0][1]).toFixed(4), 30, 0,
             11, q[1][0].toFixed(4), 21, Y(q[1][1]).toFixed(4), 31, 0,
@@ -9033,7 +9765,7 @@ const Drawing = (() => {
     for (const t of cur.texts || []) {
       if (t.cls === 'note') continue;
       const cls = String(t.cls || '');
-      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel') ? 'BEMASSUNG'
+      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel' || cls === 'gdt-text') ? 'BEMASSUNG'
         : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
@@ -9249,6 +9981,86 @@ const Drawing = (() => {
     });
   }
   // ---------- Rechte Leiste ----------
+  function gdtSymOptions() {
+    const groups = [
+      ['form', T('draw.gdt.grpForm')],
+      ['orient', T('draw.gdt.grpOrient')],
+      ['loc', T('draw.gdt.grpLoc')],
+      ['runout', T('draw.gdt.grpRunout')],
+    ];
+    return groups.map(([gk, gl]) => ({
+      group: gl,
+      options: GDT_SYMBOLS.filter((s) => s.group === gk).map((s) => [s.key, `${s.glyph} ${s.label}`]),
+    }));
+  }
+  function gdtDatumOptions(sh = dwg(), curVal = '') {
+    const opts = [['', T('draw.panel.gdtDatumNone')]];
+    const seen = new Set();
+    for (const dt of (sh && sh.datums) || []) {
+      if (dt && dt.label && !seen.has(dt.label)) { seen.add(dt.label); opts.push([dt.label, dt.label]); }
+    }
+    for (const ch of ['A', 'B', 'C', 'D', 'E', 'F']) {
+      if (!seen.has(ch)) { seen.add(ch); opts.push([ch, ch]); }
+    }
+    if (curVal && !seen.has(curVal)) opts.push([curVal, curVal]);
+    return opts;
+  }
+  function renderGdtFields({ prefix, val, sh, onUpdate }) {
+    const box = h('div', { style: { display: 'grid', gap: '8px', marginTop: '6px', marginBottom: '6px' } });
+    const symFld = UI.selectField({
+      id: prefix + 'sym',
+      label: T('draw.panel.gdtSymbol'),
+      value: val.symbol,
+      options: gdtSymOptions(),
+      onChange: (v) => {
+        const meta = gdtSymMeta(v);
+        const patch = { symbol: meta.key, dia: meta.defaultDia };
+        if (!meta.needsDatum) patch.datums = [];
+        onUpdate(patch, true);
+      },
+    });
+    const tolInp = h('input', {
+      type: 'number',
+      id: prefix + 'tol',
+      step: '0.01',
+      min: '0',
+      value: String(val.tol ?? 0.05),
+    });
+    tolInp.addEventListener('keydown', (e) => e.stopPropagation());
+    tolInp.addEventListener('change', () => {
+      const n = Number(tolInp.value.replace(',', '.'));
+      if (Number.isFinite(n) && n >= 0) onUpdate({ tol: round(n, 4) }, false);
+    });
+    const tolWrap = h('div', { class: 'field' },
+      h('label', { for: prefix + 'tol' }, T('draw.panel.gdtTolVal')),
+      h('div', { class: 'inp' }, tolInp, h('span', { class: 'u' }, Units.label())));
+    const modFld = UI.selectField({
+      id: prefix + 'mod',
+      label: T('draw.panel.gdtMod'),
+      value: val.mod || '',
+      options: [['', T('draw.panel.gdtModNone')], ['M', T('draw.panel.gdtModM')], ['L', T('draw.panel.gdtModL')]],
+      onChange: (v) => onUpdate({ mod: v }, false),
+    });
+    const diaChk = h('label', { class: 'check' },
+      h('input', { type: 'checkbox', id: prefix + 'dia', checked: !!val.dia }),
+      T('draw.panel.gdtDiaZone'));
+    diaChk.querySelector('input').onchange = (e) => onUpdate({ dia: e.target.checked }, false);
+    box.append(symFld, h('div', { class: 'fields' }, tolWrap, modFld), diaChk);
+    const meta = gdtSymMeta(val.symbol);
+    const curD = Array.isArray(val.datums) ? val.datums : [];
+    if (meta.needsDatum || curD.length) {
+      const d1Val = curD[0] ? curD[0].label : (val.d1 || '');
+      const d2Val = curD[1] ? curD[1].label : (val.d2 || '');
+      const d3Val = curD[2] ? curD[2].label : (val.d3 || '');
+      const emitDatums = (a, b, c) => [a, b, c].filter(Boolean).map((lbl) => ({ label: lbl, mod: '' }));
+      box.append(h('div', { class: 'fields' },
+        UI.selectField({ id: prefix + 'd1', label: T('draw.panel.gdtDatum1'), value: d1Val, options: gdtDatumOptions(sh, d1Val), onChange: (v) => onUpdate({ d1: v, datums: emitDatums(v, d2Val, d3Val) }, true) }),
+        UI.selectField({ id: prefix + 'd2', label: T('draw.panel.gdtDatum2'), value: d2Val, options: gdtDatumOptions(sh, d2Val), onChange: (v) => onUpdate({ d2: v, datums: emitDatums(d1Val, v, d3Val) }, true) }),
+        UI.selectField({ id: prefix + 'd3', label: T('draw.panel.gdtDatum3'), value: d3Val, options: gdtDatumOptions(sh, d3Val), onChange: (v) => onUpdate({ d3: v, datums: emitDatums(d1Val, d2Val, v) }, true) }),
+      ));
+    }
+    return box;
+  }
   function tolNumField({ id, label, value, min = null, placeholder = '0', onCommit }) {
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
@@ -9545,6 +10357,89 @@ const Drawing = (() => {
       noteSec.append(nl);
     }
     w.append(noteSec);
+    // Form- und Lagetoleranzen & Bezüge (ZE-24, Profi)
+    if (!simpleMode) {
+      const gdtSec = h('div', { class: 'section pro', id: 'dw-gdt-sec', 'data-help': 'drawingGdt' }, h('div', { class: 'section-h' }, T('draw.panel.gdtSec')));
+      const bDat = h('button', { type: 'button', class: 'btn' + (tool === 'datum' ? ' active' : ''), id: 'dw-gdt-datum-btn', 'data-help': 'drawingGdt' });
+      bDat.innerHTML = icon('gdt') + esc(T(tool === 'datum' ? 'draw.panel.gdtDatumActive' : 'draw.panel.gdtDatumBtn'));
+      bDat.onclick = () => tool_('datum');
+      const bFrm = h('button', { type: 'button', class: 'btn' + (tool === 'gdt' ? ' active' : ''), id: 'dw-gdt-frame-btn', 'data-help': 'drawingGdt' });
+      bFrm.innerHTML = icon('gdt') + esc(T(tool === 'gdt' ? 'draw.panel.gdtFrameActive' : 'draw.panel.gdtFrameBtn'));
+      bFrm.onclick = () => tool_('gdt');
+      gdtSec.append(h('div', { class: 'btn-row' }, bDat, bFrm));
+      if (tool === 'datum') {
+        const dLbl = UI.textField({
+          id: 'dw-datum-new-label',
+          label: T('draw.panel.gdtDatumLabel'),
+          value: datumDraft.label,
+          live: true,
+          onCommit: (v) => { datumDraft.label = cleanDatumLabel(v, datumDraft.label); render(); },
+        });
+        const dInp = dLbl.querySelector('input');
+        dInp.maxLength = 2;
+        dInp.addEventListener('keydown', (e) => e.stopPropagation());
+        gdtSec.append(dLbl);
+      }
+      if (tool === 'gdt') {
+        gdtSec.append(renderGdtFields({
+          prefix: 'dw-gdt-new-',
+          val: gdtDraft,
+          sh: d,
+          onUpdate: (patch, needPanel) => {
+            Object.assign(gdtDraft, patch);
+            if (patch.symbol && !gdtSymMeta(patch.symbol).needsDatum) {
+              gdtDraft.d1 = ''; gdtDraft.d2 = ''; gdtDraft.d3 = '';
+            } else if (patch.symbol && gdtSymMeta(patch.symbol).needsDatum && !gdtDraft.d1 && (d.datums || []).length) {
+              gdtDraft.d1 = d.datums[0].label;
+            }
+            render();
+            if (needPanel) Panels.renderRight();
+          },
+        }));
+      }
+      const datList = d.datums || [];
+      if (datList.length) {
+        const dl = h('div', { class: 'mini-list', id: 'dw-gdt-datums-list', style: { marginTop: '6px' } });
+        for (const dt of datList) {
+          const row = h('div', {
+            class: 'mini-row datum-row',
+            'data-datum-id': dt.id,
+            style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === dt.id ? 'var(--accent-soft)' : '' },
+          });
+          const vw = dt.attachType === 'dim' ? T('draw.panel.gdtAttachDim') : dt.view ? viewLabel(dt.view, d) : T('draw.tb.sheet');
+          const db = h('button', { type: 'button', class: 'btn danger datum-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.datumDelTip'), 'aria-label': T('draw.panel.datumDelTip') });
+          db.innerHTML = icon('trash');
+          db.onclick = (e) => { e.stopPropagation(); removeDatum(dt.id); };
+          row.append(h('b', { class: 'mono' }, `[${dt.label}]`), h('span', { class: 'grow' }, T('draw.panel.selDatum', { lbl: dt.label })), h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, vw), db);
+          row.onclick = () => { selDim = dt.id; render(); Panels.renderRight(); };
+          dl.append(row);
+        }
+        gdtSec.append(dl);
+      }
+      const frList = d.gdtFrames || [];
+      if (frList.length) {
+        const fl = h('div', { class: 'mini-list', id: 'dw-gdt-frames-list', style: { marginTop: '6px' } });
+        for (const fr of frList) {
+          const meta = gdtSymMeta(fr.symbol);
+          const dTxt = (fr.datums || []).map((x) => x.label).join(' ');
+          const summary = `${fr.dia ? 'Ø' : ''}${fmtGdtTol(fr.tol)}${dTxt ? ' | ' + dTxt : ''}`;
+          const row = h('div', {
+            class: 'mini-row gdt-row',
+            'data-gdt-id': fr.id,
+            style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === fr.id ? 'var(--accent-soft)' : '' },
+          });
+          const vw = fr.attachType === 'dim' ? T('draw.panel.gdtAttachDim') : fr.view ? viewLabel(fr.view, d) : T('draw.tb.sheet');
+          const db = h('button', { type: 'button', class: 'btn danger gdt-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.gdtDelTip'), 'aria-label': T('draw.panel.gdtDelTip') });
+          db.innerHTML = icon('trash');
+          db.onclick = (e) => { e.stopPropagation(); removeGdtFrame(fr.id); };
+          row.append(h('b', { class: 'mono' }, meta.glyph), h('span', { class: 'grow mono', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, summary), h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, vw), db);
+          row.onclick = () => { selDim = fr.id; render(); Panels.renderRight(); };
+          fl.append(row);
+        }
+        gdtSec.append(fl);
+      }
+      w.append(gdtSec);
+    }
     // Positionsnummern & Stückliste auf dem Blatt (ZE-12)
     const bomSec = h('div', { class: 'section', id: 'dw-bom-sec', 'data-help': 'drawingBom' }, h('div', { class: 'section-h' }, T('draw.panel.bomSec')));
     const bomShow = !!(d.bomTable && d.bomTable.show);
@@ -9951,11 +10846,13 @@ const Drawing = (() => {
       const selD = d.dims.find((x) => x.id === selDim);
       const selNote = (d.notes || []).find((x) => x.id === selDim);
       const selBalloon = (d.balloons || []).find((x) => x.id === selDim);
+      const selDatum = (d.datums || []).find((x) => x.id === selDim);
+      const selGdt = (d.gdtFrames || []).find((x) => x.id === selDim);
       const isBomSel = selDim === '__bom__';
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selDimInfo = !selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const selDimInfo = !selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !selDatum && !selGdt && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
+      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !selDatum && !selGdt && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
       if (selBrk) {
         selSec.append(
           UI.selectField({
@@ -9991,6 +10888,30 @@ const Drawing = (() => {
             return chk;
           })(),
         );
+      }
+      if (selDatum) {
+        const aTxt = T(selDatum.attachType === 'dim' ? 'draw.panel.gdtAttachDim' : selDatum.attachType === 'edge' ? 'draw.panel.gdtAttachEdge' : 'draw.panel.gdtAttachFree');
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, selDatum.view ? viewLabel(selDatum.view, d) : T('draw.panel.freeOnSheet')), h('b', null, aTxt))));
+        const dFld = UI.textField({ id: 'dw-sel-datum-label', label: T('draw.panel.gdtDatumLabel'), value: selDatum.label, onCommit: (v) => updateDatum(selDatum.id, { label: v }) });
+        const dInp = dFld.querySelector('input');
+        dInp.maxLength = 2;
+        dInp.addEventListener('keydown', (e) => e.stopPropagation());
+        selSec.append(dFld);
+      }
+      if (selGdt) {
+        const aTxt = T(selGdt.attachType === 'dim' ? 'draw.panel.gdtAttachDim' : selGdt.attachType === 'edge' ? 'draw.panel.gdtAttachEdge' : 'draw.panel.gdtAttachFree');
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, selGdt.view ? viewLabel(selGdt.view, d) : T('draw.panel.freeOnSheet')), h('b', null, aTxt))));
+        selSec.append(renderGdtFields({
+          prefix: 'dw-sel-gdt-',
+          val: selGdt,
+          sh: d,
+          onUpdate: (patch, needPanel) => {
+            const up = { ...patch };
+            delete up.d1; delete up.d2; delete up.d3;
+            updateGdtFrame(selGdt.id, up);
+            if (needPanel) Panels.renderRight();
+          },
+        }));
       }
       if (selBalloon) {
         const curPos = resolveBalloonPos(selBalloon, bomData);
@@ -10173,6 +11094,31 @@ const Drawing = (() => {
           }
         }
         selSec.append(tolBox);
+        if (!simpleMode) {
+          const bDimDat = h('button', { type: 'button', class: 'btn', id: 'dw-dim-add-datum', 'data-help': 'drawingGdt' });
+          bDimDat.innerHTML = icon('gdt') + esc(T('draw.panel.dimAddDatum'));
+          bDimDat.onclick = () => addDatum({ label: nextDatumLabel(d), view: selDimInfo.dim.view, attachType: 'dim', dimId: selDimInfo.dim.id, anchor: [0, 0], offset: [0, 10] });
+          const bDimGdt = h('button', { type: 'button', class: 'btn', id: 'dw-dim-add-gdt', 'data-help': 'drawingGdt' });
+          bDimGdt.innerHTML = icon('gdt') + esc(T('draw.panel.dimAddGdt'));
+          bDimGdt.onclick = () => {
+            const meta = gdtSymMeta(gdtDraft.symbol);
+            const d1 = gdtDraft.d1 || (meta.needsDatum && (d.datums || []).length ? d.datums[0].label : '');
+            const dList = [d1, gdtDraft.d2, gdtDraft.d3].filter(Boolean).map((lbl) => ({ label: lbl, mod: '' }));
+            addGdtFrame({
+              symbol: gdtDraft.symbol,
+              tol: gdtDraft.tol,
+              dia: gdtDraft.dia,
+              mod: gdtDraft.mod,
+              datums: meta.needsDatum ? dList : [],
+              view: selDimInfo.dim.view,
+              attachType: 'dim',
+              dimId: selDimInfo.dim.id,
+              anchor: [0, 0],
+              elbow: [0, 0],
+            });
+          };
+          selSec.append(h('div', { class: 'btn-row pro', style: { marginBottom: '8px' } }, bDimDat, bDimGdt));
+        }
       }
       if (selResolved && selResolved.lost) {
         selSec.append(h('div', { class: 'hint-box', id: 'dw-dim-lost-hint', html: T('draw.panel.lostRefHint', { reason: esc(selResolved.lostReason || T('draw.panel.lostDefaultReason')) }) }));
@@ -10271,7 +11217,7 @@ const Drawing = (() => {
     Panels.renderTools();
     Panels.renderRight();
   }
-  function tool_(t) { setTool(tool === t ? null : t); }
+  function tool_(t) { return setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   App.on('docLoaded', () => { lastLostKey = ''; });
   if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
@@ -10285,6 +11231,7 @@ const Drawing = (() => {
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     DIM_ARROWS, DIM_FONT_SIZES, DIM_MODES, dimStyle: () => sheetDimStyle(), setDimStyle, setDualDims,
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
+    GDT_SYMBOLS, gdtMenu, datums, gdtFrames, addDatum, updateDatum, removeDatum, nextDatumLabel, addGdtFrame, updateGdtFrame, removeGdtFrame,
     bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
     bomRows: () => bomItems(),
     balloons: () => (dwg().balloons || []).map((b) => ({ ...b, pos: resolveBalloonPos(b, bomData) })),
@@ -10305,7 +11252,7 @@ const Drawing = (() => {
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
     lostDims, removeDim, removeLostDims, startRebind, rebindDim, addDim,
     getDimTol, setDimTol,
-    exportPDF, buildPDFBytes, exportSVG, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
+    exportPDF, buildPDFBytes, exportSVG, buildSVGString, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
     get lastDXF() { return lastDXF; },
     get lastPNG() { return lastPNG; },
     get layout() { return layout; },

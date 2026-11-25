@@ -35078,6 +35078,216 @@ def t_a172_zeichnung_koord_bogen_doppel(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a174_zeichnung_form_lagetoleranzen(p):
+    # [A-174] Zeichnung (Profi): Form- und Lagetoleranzen (ZE-24)
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit Bohrung', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' }));
+        d.items.push(Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bohrung', role: 'hole', more: { t: { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(150)
+    p.pg.click('#t-sheet'); p.wait(150)
+    p.pg.select_option('#dw-scale', '2')
+    p.pg.click('#sheet-tabs'); p.wait(200)
+
+    # 1. Bezug A an untere Kante der Vorderansicht, dann Rahmen Parallelität 0,05 zu A an obere Kante
+    pts_front = p.ev("""
+      const v = Drawing.layout.views.front;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      const bot = toS([(b[0] + b[2]) * 0.5, b[1]]);
+      const top = toS([(b[0] + b[2]) * 0.5, b[3]]);
+      return {
+        botHit: bot,
+        botPlace: [bot[0], bot[1] + 10],
+        topHit: top,
+        topPlace: [top[0] + 18, top[1] - 10],
+      };
+    """)
+    p.pg.click('#dw-gdt-datum-btn'); p.wait(150)
+    for k in ('botHit', 'botPlace'):
+        pt = sheet_screen(*pts_front[k])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    p.pg.click('#dw-gdt-frame-btn'); p.wait(150)
+    p.pg.select_option('#dw-gdt-new-sym', 'parallelism'); p.wait(120)
+    p.pg.fill('#dw-gdt-new-tol', '0.05')
+    p.pg.dispatch_event('#dw-gdt-new-tol', 'change'); p.wait(100)
+    p.pg.select_option('#dw-gdt-new-d1', 'A'); p.wait(100)
+    for k in ('topHit', 'topPlace'):
+        pt = sheet_screen(*pts_front[k])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    s_gdt1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dats = Drawing.datums();
+      const frs = Drawing.gdtFrames();
+      const d0 = dats[0];
+      const f0 = frs[0];
+      const dTexts = d0 ? [...svg.querySelectorAll(`text.gdt-text[data-id="${d0.id}"]`)].map(e => e.textContent) : [];
+      const fTexts = f0 ? [...svg.querySelectorAll(`text.gdt-text[data-id="${f0.id}"]`)].map(e => e.textContent) : [];
+      return {
+        nDat: dats.length,
+        datLbl: d0?.label,
+        datTri: d0 ? svg.querySelectorAll(`polygon.gdt-datum-tri[data-id="${d0.id}"]`).length : 0,
+        dTexts,
+        nFr: frs.length,
+        frSym: f0?.symbol,
+        frTol: f0?.tol,
+        frBoxes: f0 ? svg.querySelectorAll(`rect.gdt-frame[data-id="${f0.id}"]`).length : 0,
+        frSyms: f0 ? svg.querySelectorAll(`polyline.gdt-sym[data-id="${f0.id}"]`).length : 0,
+        frArrow: f0 ? svg.querySelectorAll(`polygon.gdt-arrow[data-id="${f0.id}"]`).length : 0,
+        fTexts,
+      };
+    """)
+    ok1 = bool(
+        s_gdt1['nDat'] == 1 and s_gdt1['datLbl'] == 'A' and s_gdt1['datTri'] == 1 and s_gdt1['dTexts'] == ['A']
+        and s_gdt1['nFr'] == 1 and s_gdt1['frSym'] == 'parallelism' and abs((s_gdt1['frTol'] or 0) - 0.05) < 1e-6
+        and s_gdt1['frBoxes'] == 1 and s_gdt1['frSyms'] >= 2 and s_gdt1['frArrow'] == 1
+        and '0,05' in s_gdt1['fTexts'] and 'A' in s_gdt1['fTexts']
+    )
+
+    # 2. Toleranzrahmen direkt an ein Maß hängen & rechts bearbeiten + Ebenheit & Position
+    p.ev("""
+      const wDim = Drawing.dims().find(x => x.auto === 'width');
+      if (wDim) Drawing.select(wDim.id);
+    """)
+    p.wait(150)
+    p.pg.click('#dw-dim-add-gdt'); p.wait(150)
+    p.pg.select_option('#dw-sel-gdt-sym', 'perpendicularity'); p.wait(120)
+    p.pg.fill('#dw-sel-gdt-tol', '0.02')
+    p.pg.dispatch_event('#dw-sel-gdt-tol', 'change'); p.wait(100)
+    p.pg.check('#dw-sel-gdt-dia'); p.wait(100)
+    p.pg.select_option('#dw-sel-gdt-mod', 'M'); p.wait(100)
+    p.pg.select_option('#dw-sel-gdt-d1', 'A'); p.wait(150)
+
+    s_gdt2 = p.ev("""
+      const dB = Drawing.addDatum({ label: 'B', view: 'left', attachType: 'edge', anchor: [0, 0], edgeDir: [1, 0], offset: [0, 9] });
+      const fFlat = Drawing.addGdtFrame({ symbol: 'flatness', tol: 0.01, view: 'top', attachType: 'edge', anchor: [0, 20], elbow: [12, -10] });
+      const fPos = Drawing.addGdtFrame({ symbol: 'position', tol: 0.1, dia: true, datums: [{ label: 'A', mod: '' }, { label: 'B', mod: '' }], view: 'top', attachType: 'edge', anchor: [5, 0], elbow: [14, 12] });
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dimFr = Drawing.gdtFrames().find(x => x.attachType === 'dim');
+      const texts = dimFr ? [...svg.querySelectorAll(`text.gdt-text[data-id="${dimFr.id}"]`)].map(e => e.textContent) : [];
+      const syms = dimFr ? svg.querySelectorAll(`polyline.gdt-sym[data-id="${dimFr.id}"]`).length : 0;
+      const modCircs = dimFr ? svg.querySelectorAll(`circle.gdt-sym[data-id="${dimFr.id}"]`).length : 0;
+      const posCirc = fPos ? svg.querySelectorAll(`circle.gdt-sym[data-id="${fPos.id}"]`).length : 0;
+      const flatPoly = fFlat ? svg.querySelectorAll(`polyline.gdt-sym[data-id="${fFlat.id}"]`).length : 0;
+      return { ok: !!dimFr, texts, syms, modCircs, hasB: !!dB, posCirc, flatPoly, totalFr: Drawing.gdtFrames().length };
+    """)
+    ok2 = bool(
+        s_gdt2['ok'] and s_gdt2['syms'] >= 2 and s_gdt2['modCircs'] == 1
+        and 'Ø0,02' in s_gdt2['texts'] and 'M' in s_gdt2['texts'] and 'A' in s_gdt2['texts']
+        and s_gdt2['hasB'] and s_gdt2['posCirc'] >= 1 and s_gdt2['flatPoly'] >= 1 and s_gdt2['totalFr'] == 4
+    )
+
+    # 3. SVG-, PDF- und DXF-Export
+    exp_chk = p.ev("""return (async () => {
+      const svgStr = await Drawing.buildSVGString();
+      const bytes = await Drawing.buildPDFBytes();
+      let pdfStr = '';
+      for (let i = 0; i < bytes.length; i++) pdfStr += String.fromCharCode(bytes[i]);
+      const dxf = await Drawing.buildDXF();
+      return {
+        svgOk: svgStr.includes('gdt-frame') && svgStr.includes('gdt-datum-tri') && svgStr.includes('gdt-sym')
+          && svgStr.includes('0,05') && svgStr.includes('Ø0,02') && svgStr.includes('>A<'),
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('(0,05)') && pdfStr.includes('(A)')
+          && pdfStr.includes('(\\xD80,02)') && !pdfStr.includes('(?)'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('0,05') && dxf.text.includes('%%c0,02')
+          && dxf.text.includes('BEMASSUNG') && dxf.stats.solids >= 2),
+      };
+    })()""")
+    ok3 = bool(exp_chk['svgOk'] and exp_chk['pdfOk'] and exp_chk['dxfOk'])
+
+    # 4. Profi-Schutz, Löschen + Undo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(150)
+    simple_chk = p.ev("""
+      const btn = document.querySelector('#t-gdt');
+      const sec = document.querySelector('#dw-gdt-sec');
+      return {
+        btnHidden: !btn || !btn.offsetParent,
+        secAbsent: !sec,
+        addDatNull: Drawing.addDatum({ label: 'C' }) === null,
+        addFrNull: Drawing.addGdtFrame({ symbol: 'flatness', tol: 0.01 }) === null,
+        toolBlocked: Drawing.tool('gdt') === false && Drawing.activeTool !== 'gdt',
+        cmdsBlocked: Commands.search('toleranzrahmen').length === 0 && Commands.search('bezugsbuchstabe').length === 0,
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    fr_del_id = p.ev("const f = Drawing.gdtFrames()[0]; Drawing.select(f.id); return f.id;")
+    p.wait(120)
+    p.pg.click('#dw-del-sel'); p.wait(150)
+    after_del = p.ev("return Drawing.gdtFrames().length")
+    p.ev("App.undo()"); p.wait(150)
+    after_undo = p.ev("return Drawing.gdtFrames().some(x => x.id === arg)", fr_del_id)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const texts = [...svg.querySelectorAll('text.gdt-text')].map(e => e.textContent);
+      return {
+        datCnt: Drawing.datums().length,
+        frCnt: Drawing.gdtFrames().length,
+        hasVals: texts.includes('0,05') && texts.includes('A') && texts.includes('Ø0,02'),
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h = wh['drawingGdt'];
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('bezugsbuchstabe').some(c => c.id === 'drawingDatum')
+        && Commands.search('toleranzrahmen').some(c => c.id === 'drawingGdtFrame');
+      return !!(h && h.tip && h.hilfe && h.tipp && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        simple_chk['btnHidden'] and simple_chk['secAbsent']
+        and simple_chk['addDatNull'] and simple_chk['addFrNull'] and simple_chk['cmdsBlocked']
+        and after_del == 3 and after_undo
+        and val_ok and reload_chk['datCnt'] == 2 and reload_chk['frCnt'] == 4 and reload_chk['hasVals']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_f11251719(p):
     # 1. Befehlssuche bevorzugt Treffer im Befehlsnamen auch bei Einzelwort-Suchen (A-152: 'schraube' -> couple-screw in Top 6)
     p.empty()
@@ -35729,6 +35939,7 @@ TESTS = [
     ('[A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)', t_a170_zeichnung_explosion_projektion),
     ('[A-173] Zeichnung: Maße aus dem Modell übernehmen und ordnen (ZE-23)', t_a173_zeichnung_modellmasse),
     ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
+    ('[A-174] Zeichnung: Form- und Lagetoleranzen (ZE-24)', t_a174_zeichnung_form_lagetoleranzen),
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

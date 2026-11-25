@@ -454,6 +454,9 @@ const Panels = (() => {
       const balBtn = btn('t-balloons', 'list', T('tool.balloons'), T('tool.balloonsTip'), '', (e) => Drawing.bomMenu(e.currentTarget), Drawing.activeTool === 'balloon' ? 'active' : '', T('tool.balloonsShort'));
       balBtn.dataset.help = 'drawingBalloons';
       balBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'balloon'));
+      const gdtBtn = btn('t-gdt', 'gdt', T('tool.gdt'), T('tool.gdtTip'), '', (e) => Drawing.gdtMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'datum' || Drawing.activeTool === 'gdt' ? ' active' : ''), T('tool.gdtShort'));
+      gdtBtn.dataset.help = 'drawingGdt';
+      gdtBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'datum' || Drawing.activeTool === 'gdt'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
       const dexBtn = btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));

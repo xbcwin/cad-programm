@@ -720,6 +720,7 @@ const IC = {
   layout: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8.5 4v16 M15.5 4v16" />',
   illustration: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z M4 7.5 12 12l8-4.5 M12 12v9" stroke-width="1.9" />',
   quadView: '<rect x="3" y="3" width="8" height="8" rx="1.2"/><rect x="13" y="3" width="8" height="8" rx="1.2"/><rect x="3" y="13" width="8" height="8" rx="1.2"/><rect x="13" y="13" width="8" height="8" rx="1.2"/>',
+  gdt: '<rect x="2.5" y="6.5" width="19" height="11" rx="1"/><path d="M9 6.5v11 M15.5 6.5v11 M4.7 14.5l1.6-5 M6.8 14.5l1.6-5 M12.2 12a1.3 1.3 0 1 0 0 .01 M17.2 14.5l1.3-5 1.3 5 M17.7 13.1h1.6"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2656,6 +2657,11 @@ const HELP = {
   "tip": "Doppelmaße in Millimetern und Zoll [eckige Klammer] je Blatt einblenden (Profi)",
   "hilfe": "Schreibt auf dem aktuellen Blatt hinter jedes Maß zusätzlich den umgerechneten Wert in Zoll in eckigen Klammern, zum Beispiel 25,4 [1.000]. Steht das Projekt auf Zoll, erscheint umgekehrt der Wert in Millimetern in Klammern.",
   "tipp": "Die Nachkommastellen der Zoll-Angabe (2, 3 oder 4 Stellen) kannst du direkt darunter unter „Maß-Stil“ wählen."
+ },
+ "drawingGdt": {
+  "tip": "Form- und Lagetoleranzen: Toleranzrahmen und Bezugsbuchstaben (A, B, C …) an Kanten oder Maßen (Profi)",
+  "hilfe": "Legt normgerechte Toleranzrahmen nach ISO 1101 für Geradheit, Ebenheit, Rundheit, Zylindrizität, Parallelität, Rechtwinkligkeit, Neigung, Position, Konzentrizität, Symmetrie sowie Rund- und Gesamtlauf auf das Blatt. Zuerst kannst du mit „Bezug setzen“ eine Kante oder ein Maß als Bezug A (B, C …) festlegen und danach den passenden Toleranzrahmen anhängen.",
+  "tipp": "Wählst du ein bestehendes Maß an, kannst du rechts direkt mit „+ Bezug“ oder „+ Rahmen“ einen Bezugsbuchstaben oder Toleranzrahmen genau unter das Maß hängen."
  }
 };
 
