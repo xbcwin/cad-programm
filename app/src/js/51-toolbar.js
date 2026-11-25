@@ -68,6 +68,8 @@ const Toolbar = (() => {
       { id: 'fit', group: T('dlg.tb.grpViewCheck'), domId: 't-fit', icon: 'fit', label: T('menu.ctx.fitAll'), tip: T('dlg.tb.fitTip'), kbd: 'F', cls: 'minor', run: () => Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null) },
       { id: 'weak', group: T('dlg.tb.grpViewCheck'), domId: 't-weak', icon: 'target', label: T('dlg.tb.weak'), tip: T('dlg.tb.weakTip'), cls: 'minor', help: 'weakSpots', run: () => Weak.dialog() },
       { id: 'clashes', group: T('dlg.tb.grpViewCheck'), domId: 't-clashes', icon: 'boolIntersect', label: T('menu.check.clashes'), tip: T('clash.btnTip'), cls: 'minor', help: 'clashCheck', run: () => ClashCheck.open() },
+      { id: 'clearance', group: T('dlg.tb.grpViewCheck'), domId: 't-clearance', icon: 'clearance', label: T('menu.check.clearance'), tip: T('clearance.btnTip'), cls: 'minor pro', help: 'clearanceCheck', run: () => ClashCheck.openClearance() },
+      { id: 'dragStop', group: T('dlg.tb.grpViewCheck'), domId: 't-drag-stop', icon: 'warn', label: T('clash.stopOnContactShort'), tip: T('clash.stopOnContactTip'), cls: 'minor pro', help: 'dragCollisionStop', run: () => ClashCheck.toggleStopOnContact() },
       { id: 'bom', group: T('dlg.tb.grpViewCheck'), domId: 't-bom', icon: 'list', label: T('dlg.tb.bom'), tip: T('dlg.tb.bomTip'), cls: 'minor', help: 'bom', run: () => Mass.bomDialog() },
       { id: 'printCost', group: T('dlg.tb.grpViewCheck'), domId: 't-print-cost', icon: 'printer', label: T('menu.check.printCost'), tip: T('dlg.tb.printCostTip'), cls: 'minor', help: 'printCost', run: () => Print.costDialog() },
       { id: 'reportPdf', group: T('dlg.tb.grpViewCheck'), domId: 't-report-pdf', icon: 'file', label: T('menu.check.reportPdf'), tip: T('dlg.tb.reportPdfTip'), cls: 'minor', help: 'reportPdf', run: () => Measure.reportDialog() },
@@ -288,8 +290,10 @@ const Toolbar = (() => {
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
-    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive || Measure.tolChainActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
+    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && (ClashCheck.active || ClashCheck.clearanceActive)) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive || Measure.tolChainActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
     if (def.id === 'clashes' && typeof ClashCheck !== 'undefined' && ClashCheck.active) b.classList.add('active');
+    if (def.id === 'clearance' && typeof ClashCheck !== 'undefined' && ClashCheck.clearanceActive) b.classList.add('active');
+    if (def.id === 'dragStop' && typeof ClashCheck !== 'undefined' && ClashCheck.stopOnContact && ClashCheck.stopOnContact()) b.classList.add('active');
     if (def.id === 'motion' && typeof Motion !== 'undefined' && Motion.active) b.classList.add('active');
     return b;
   }
@@ -378,7 +382,7 @@ const Toolbar = (() => {
         el.append(lwBtn);
       }
       if (map.asmEnvelope) el.append(buildToolButton(map.asmEnvelope, false));
-      for (const id of ['clashes', 'measure', 'notes', 'views', 'check']) {
+      for (const id of ['clashes', 'clearance', 'measure', 'notes', 'views', 'check']) {
         if (map[id]) el.append(buildToolButton(map[id], false));
       }
       el.append(makeMoreButton());

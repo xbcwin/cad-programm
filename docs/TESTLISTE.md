@@ -2748,6 +2748,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Auflösen, Entfernen, Validierung, i18n, Hilfen & Befehlssuche**: `dissolvePattern`, `removePattern`, `Store.validateProject`, Speichern/Laden mit `doc.asmPatterns`, DE/EN-Schlüsselgleichheit, `HELP.asmPattern`/`HELP.asmMirror` und Befehlssuche (`asm-pattern-rect`, `asm-pattern-circ`, `asm-mirror-part`) laufen ohne Fehler (`t_a162_baugruppe_spiegeln_muster`).
 - [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus in einer Baugruppe ein Bauteil einsetzen, über „Muster / Spiegeln“ ein Rechteck-, Kreis- und Spiegelmuster anlegen, Abstände rechts ändern und das Original im Bauteil-Tab umbauen.
 
+## Kollision beim Ziehen und Abstands-Prüfung (Auto [A-155], BG-17, BG-18)
+
+- [x] **Kollisions-Stopp beim freien Ziehen & Gelenk-Ziehen**: Mit aktivem `#drag-stop-contact` im Profi-Modus bleibt ein gezogenes Teil (und ein Schlitten am Schiebegelenk) exakt an der Berührung mit einem Hindernis stehen (0 Durchdringungen laut Kern); Wegziehen sowie Durchziehen nach Abschalten des Schalters bleiben frei (`t_a155_kollision_und_luft`).
+- [x] **Profi-Schutz**: Im Einfach-Modus sind Schalter und „Luft prüfen“ ausgeblendet (`ClashCheck.stopOnContact() === false`, `openClearance() === null`) und stehen nach Rückkehr zu Profi wieder bereit (`t_a155_kollision_und_luft`).
+- [x] **Luft prüfen mit 1 mm & Anspringen**: Findet zwischen drei Quadern (0,5 mm und 4,5 mm Spalt) genau das 0,5-mm-Paar, wählt beim Klick beide Teile aus, markiert die engste Stelle mit Abstandsschild und schwenkt die Kamera dorthin; mit 0,3 mm meldet die Liste „Genug Luft überall“; in einer Baugruppe mit `ref`-Teilen klappt `#t-clearance` genauso (`t_a155_kollision_und_luft`).
+- [x] **Validierung, Undo, Menü, Befehle, Hilfen & i18n**: `Store.validateProject`, `App.undo()`, `#t-check`-Menü, Befehlssuche (`clearance-check`, `drag-stop-contact`), `HELP`/`werkzeug-hilfen.json` und DE/EN-Schlüsselgleichheit laufen ohne Fehler (`t_a155_kollision_und_luft`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus ein Bauteil mit „Beim Ziehen anhalten, wenn Teile sich berühren“ schräg gegen eine Ecke und entlang einer Fläche ziehen (inkl. Zahleneingabe beim Ziehen) sowie „Luft prüfen“ an einer größeren Baugruppe testen.
+
 ## Leichtmodus und vereinfachte Hülle (Auto [A-164], BG-29, BG-30)
 
 - [x] **Profi-Sichtbarkeit & 20-Teile-Baugruppe öffnet im Leichtmodus schneller**: `#t-asm-lightweight`, `#t-asm-envelope` und `#proj-asm-perf-sec` sind in „Einfach“ verborgen und in „Profi“ sichtbar; eine 20-Teile-Baugruppe (Klötze mit Rundung und Zylinderloch) öffnet im Leichtmodus (`doc.lightweight`, 20 gecachte `lightCache`-Blobs) messbar schneller als normal ohne Leichtmodus, zeigt alle 20 Netze mit `.lw-badge` und überspringt adaptive Verfeinerung (`Refine.isSkipped`) (`t_a164_leichtmodus_huelle`).

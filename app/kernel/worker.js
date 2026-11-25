@@ -66,6 +66,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'distance') result = kernel.minDistance(args.scene, args.ids);
     else if (cmd === 'project') result = kernel.project(args.scene, args.views, args.sections);
     else if (cmd === 'clashes') result = kernel.clashes(args.scene, args.probes, args.skipPairs, args.opts);
+    else if (cmd === 'clearances') result = kernel.clearances(args.scene, args.minGap, args.skipPairs, args.opts);
     else if (cmd === 'holeWalls') result = kernel.holeWalls(args.scene, args.ids, args);
     else if (cmd === 'faceLoops') result = kernel.faceLoopsOf(args.key, args.faceIdx);
     else if (cmd === 'faceGrid') result = kernel.faceGridOf(args.key, args.faceIdx);

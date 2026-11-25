@@ -1621,7 +1621,9 @@ const Panels = (() => {
       wb.onclick = () => Weak.dialog();
       const cb = h('button', { type: 'button', class: 'btn small', id: 'proj-clashes', 'data-help': 'clashCheck' }); cb.innerHTML = icon('boolIntersect') + esc(T('menu.check.clashes'));
       cb.onclick = () => ClashCheck.open();
-      ps.append(h('div', { class: 'btn-row' }, wb, cb));
+      const clb = h('button', { type: 'button', class: 'btn small pro', id: 'proj-clearance', 'data-help': 'clearanceCheck' }); clb.innerHTML = icon('clearance') + esc(T('menu.check.clearance'));
+      clb.onclick = () => ClashCheck.openClearance();
+      ps.append(h('div', { class: 'btn-row' }, wb, cb), h('div', { class: 'btn-row', style: { marginTop: '6px' } }, clb));
       w.append(ps);
     }
     const pv = ViewPrefs.get();
@@ -1646,7 +1648,9 @@ const Panels = (() => {
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
     const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), T('panel.proj.magnetOn'));
     mag.querySelector('input').onchange = (e) => App.change('Magnet geändert', (doc) => { doc.settings.magnet = e.target.checked; });
-    f2.append(snap); gr.append(f2, mag); w.append(gr);
+    const dragStop = h('label', { class: 'check', 'data-help': 'dragCollisionStop', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'drag-stop-contact', checked: !!(App.doc.settings && App.doc.settings.stopOnContact) }), T('clash.stopOnContact'));
+    dragStop.querySelector('input').onchange = (e) => ClashCheck.setStopOnContact(e.target.checked);
+    f2.append(snap); gr.append(f2, mag, dragStop); w.append(gr);
     const st = Print.stats();
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.proj.overview')));
     info.append(h('div', { class: 'mini-list' },
