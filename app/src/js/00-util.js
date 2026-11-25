@@ -2596,6 +2596,11 @@ const HELP = {
   "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
   "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
   "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
+ },
+ "asmCable": {
+  "tip": "Kabel oder Schlauch zwischen zwei Anschlusspunkten mit Durchmesser und Biegeradius verlegen (Profi)",
+  "hilfe": "Erzeugt eine weiche 3D-Kurve zwischen zwei Punkten (direkt eingeben oder auf Bauteilflächen anklicken) mit frei wählbarem Durchmesser, Wandstärke (bei Schläuchen) und Biegeradius. Werden die Anschlusspunkte auf Bauteile geklickt, wandert das Kabel beim Verschieben mit, und die exakte Länge erscheint in der Stückliste.",
+  "tipp": "Wähle „Schlauch (hohl)“, um einen Innenhohlraum über die Wandstärke zu erhalten, oder füge rechts im Panel Zwischenpunkte hinzu."
  }
 };
 

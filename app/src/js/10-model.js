@@ -374,6 +374,10 @@ const Model = (() => {
             if (b && b.id) b.id = mapId(b.id);
           }
         }
+        if (it.p.cable) {
+          if (it.p.cable.bindA && it.p.cable.bindA.id) it.p.cable.bindA.id = mapId(it.p.cable.bindA.id);
+          if (it.p.cable.bindB && it.p.cable.bindB.id) it.p.cable.bindB.id = mapId(it.p.cable.bindB.id);
+        }
       }
     });
     return cloned;
@@ -526,6 +530,10 @@ const Model = (() => {
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
       if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
       if (it.kind === 'sweep' && it.p && it.p.sketch3dId) out.push({ from: me, to: top(it.p.sketch3dId), what: 'folgt 3D-Skizze' });
+      if (it.kind === 'sweep' && it.p && it.p.cable) {
+        if (it.p.cable.bindA && it.p.cable.bindA.id) out.push({ from: me, to: top(it.p.cable.bindA.id), what: 'angeschlossen an' });
+        if (it.p.cable.bindB && it.p.cable.bindB.id) out.push({ from: me, to: top(it.p.cable.bindB.id), what: 'angeschlossen an' });
+      }
       if (it.kind === 'sketch3d' && it.p && it.p.sketch3d) {
         for (const e of it.p.sketch3d.ents || []) {
           for (const bk of ['bindA', 'bindM', 'bindB']) {
@@ -1838,6 +1846,257 @@ const Model = (() => {
     R[i] = Object.keys(r).length ? r : null;
     if (R.some(Boolean)) pp.rules = R; else delete pp.rules;
   }
+  // ---------- Kabel und Schläuche (BG-34): weiche Bézier-Kurve mit Biegeradius und Länge ----------
+  const GL8_X = [-0.9602898565, -0.7966664774, -0.5255324099, -0.1834346425, 0.1834346425, 0.5255324099, 0.7966664774, 0.9602898565];
+  const GL8_W = [0.1012285363, 0.2223810345, 0.3137066459, 0.3626837834, 0.3626837834, 0.3137066459, 0.2223810345, 0.1012285363];
+  function bezEvalDeriv(g, t) {
+    const u = 1 - t;
+    const d1 = [0, 1, 2].map((k) => 3 * u * u * (g.c1[k] - g.a[k]) + 6 * u * t * (g.c2[k] - g.c1[k]) + 3 * t * t * (g.b[k] - g.c2[k]));
+    const d2 = [0, 1, 2].map((k) => 6 * u * (g.c2[k] - 2 * g.c1[k] + g.a[k]) + 6 * t * (g.b[k] - 2 * g.c2[k] + g.c1[k]));
+    return { d1, d2 };
+  }
+  function bezSegLength(g) {
+    let sum = 0;
+    for (let i = 0; i < 8; i++) {
+      const t = 0.5 * (GL8_X[i] + 1);
+      const { d1 } = bezEvalDeriv(g, t);
+      sum += GL8_W[i] * Math.hypot(d1[0], d1[1], d1[2]);
+    }
+    return 0.5 * sum;
+  }
+  function bezStats(segs) {
+    let length = 0;
+    let minBendR = Infinity;
+    for (const g of segs) {
+      length += bezSegLength(g);
+      for (let i = 0; i <= 32; i++) {
+        const t = i / 32;
+        const { d1, d2 } = bezEvalDeriv(g, t);
+        const s1 = Math.hypot(d1[0], d1[1], d1[2]);
+        if (s1 < 1e-6) { minBendR = 0; continue; }
+        const cx = d1[1] * d2[2] - d1[2] * d2[1];
+        const cy = d1[2] * d2[0] - d1[0] * d2[2];
+        const cz = d1[0] * d2[1] - d1[1] * d2[0];
+        const cl = Math.hypot(cx, cy, cz);
+        const kappa = cl / (s1 * s1 * s1);
+        if (kappa > 1e-7) minBendR = Math.min(minBendR, 1 / kappa);
+      }
+    }
+    return { length, minBendR };
+  }
+  function splitBezHalf(a, c1, c2, b) {
+    const mid = (p, q) => [0.5 * (p[0] + q[0]), 0.5 * (p[1] + q[1]), 0.5 * (p[2] + q[2])];
+    const p01 = mid(a, c1);
+    const p12 = mid(c1, c2);
+    const p23 = mid(c2, b);
+    const p012 = mid(p01, p12);
+    const p123 = mid(p12, p23);
+    const m = mid(p012, p123);
+    return {
+      pts: [a, m, b],
+      segs: [
+        { a, c1: p01, c2: p012, b: m },
+        { a: m, c1: p123, c2: p23, b },
+      ],
+    };
+  }
+  const CABLE_DIR_AXES = { '+X': [1, 0, 0], '-X': [-1, 0, 0], '+Y': [0, 1, 0], '-Y': [0, -1, 0], '+Z': [0, 0, 1], '-Z': [0, 0, -1] };
+  function cableDirVec(rawDir, u, perp, isEnd) {
+    if (Array.isArray(rawDir) && rawDir.length >= 3) {
+      const n = rawDir.slice(0, 3).map((v) => Number(v) || 0);
+      const l = Math.hypot(n[0], n[1], n[2]);
+      if (l > 1e-6) return [n[0] / l, n[1] / l, n[2] / l];
+    }
+    if (typeof rawDir === 'string') {
+      const k = rawDir.trim().toUpperCase();
+      if (CABLE_DIR_AXES[k]) return CABLE_DIR_AXES[k].slice();
+    }
+    const s = isEnd ? -0.75 : 0.75;
+    const v = [u[0] * s + perp[0] * 0.66, u[1] * s + perp[1] * 0.66, u[2] * s + perp[2] * 0.66];
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  }
+  function cableGeometry(p, V = {}) {
+    const c = (p && p.cable) || {};
+    const type = c.type === 'hose' ? 'hose' : 'cable';
+    const d = Math.max(0.4, num(p && p.d, V, type === 'hose' ? 8 : 4));
+    const rawWall = type === 'hose' ? Math.max(0, num(p && p.wall, V, 1.5)) : 0;
+    const wall = type === 'hose' ? Math.min(rawWall, Math.max(0, d / 2 - 0.15)) : 0;
+    const reqBendR = Math.max(0.5, num(c.bendR, V, Math.max(15, d * 3)));
+    const safeR = Math.max(reqBendR * 1.02 + 0.1, d * 0.55 + 0.2);
+    const sag = num(c.sag, V, 0);
+    const slack = Math.max(0, num(c.slack, V, 0));
+    const A = [0, 1, 2].map((k) => num(c.start && c.start[k], V, 0));
+    let B = [0, 1, 2].map((k) => num(c.end && c.end[k], V, k === 0 ? 100 : 0));
+    let dx = B[0] - A[0], dy = B[1] - A[1], dz = B[2] - A[2];
+    let D = Math.hypot(dx, dy, dz);
+    if (D < 1e-4) {
+      B = [A[0] + 1, A[1], A[2]];
+      dx = 1; dy = 0; dz = 0; D = 1;
+    }
+    const u = [dx / D, dy / D, dz / D];
+    const refUp = Math.abs(u[2]) > 0.95 ? [1, 0, 0] : [0, 0, 1];
+    const dUp = u[0] * refUp[0] + u[1] * refUp[1] + u[2] * refUp[2];
+    const pRaw = [refUp[0] - u[0] * dUp, refUp[1] - u[1] * dUp, refUp[2] - u[2] * dUp];
+    const pLen = Math.hypot(pRaw[0], pRaw[1], pRaw[2]) || 1;
+    const perp = [pRaw[0] / pLen, pRaw[1] / pLen, pRaw[2] / pLen];
+    const tA = cableDirVec(c.dirA, u, perp, false);
+    const tB = cableDirVec(c.dirB, u, perp, true);
+    let via = Array.isArray(c.via)
+      ? c.via.filter((q) => Array.isArray(q) && q.length >= 3).map((q) => [num(q[0], V, 0), num(q[1], V, 0), num(q[2], V, 0)])
+      : [];
+
+    let pts = [];
+    let segs = [];
+    let smooth = true;
+    let st = { length: D, minBendR: Infinity };
+
+    const buildVia = (viaList) => {
+      let Q = [A, ...viaList, B];
+      if (!viaList.length && Math.abs(sag) >= 1e-4) {
+        const sagAxis = Math.abs(u[2]) < 0.95 ? [0, 0, -1] : [0, -1, 0];
+        const M = [0, 1, 2].map((k) => 0.5 * (A[k] + B[k]) + sagAxis[k] * sag);
+        Q = [A, M, B];
+      }
+      const n = Q.length;
+      const T = new Array(n);
+      T[0] = tA;
+      T[n - 1] = [-tB[0], -tB[1], -tB[2]];
+      for (let i = 1; i < n - 1; i++) {
+        const v1 = [Q[i][0] - Q[i - 1][0], Q[i][1] - Q[i - 1][1], Q[i][2] - Q[i - 1][2]];
+        const v2 = [Q[i + 1][0] - Q[i][0], Q[i + 1][1] - Q[i][1], Q[i + 1][2] - Q[i][2]];
+        const l1 = Math.hypot(v1[0], v1[1], v1[2]) || 1;
+        const l2 = Math.hypot(v2[0], v2[1], v2[2]) || 1;
+        let tv = [v1[0] / l1 + v2[0] / l2, v1[1] / l1 + v2[1] / l2, v1[2] / l1 + v2[2] / l2];
+        let tl = Math.hypot(tv[0], tv[1], tv[2]);
+        if (tl < 1e-6) {
+          tv = [Q[i + 1][0] - Q[i - 1][0], Q[i + 1][1] - Q[i - 1][1], Q[i + 1][2] - Q[i - 1][2]];
+          tl = Math.hypot(tv[0], tv[1], tv[2]);
+        }
+        T[i] = tl > 1e-6 ? [tv[0] / tl, tv[1] / tl, tv[2] / tl] : u.slice();
+      }
+      const outSegs = [];
+      for (let i = 0; i < n - 1; i++) {
+        const di = Math.hypot(Q[i + 1][0] - Q[i][0], Q[i + 1][1] - Q[i][1], Q[i + 1][2] - Q[i][2]);
+        const h = Math.min(di * 0.45, Math.max(di * 0.33, reqBendR * 0.5));
+        outSegs.push({
+          a: Q[i],
+          c1: [Q[i][0] + T[i][0] * h, Q[i][1] + T[i][1] * h, Q[i][2] + T[i][2] * h],
+          c2: [Q[i + 1][0] - T[i + 1][0] * h, Q[i + 1][1] - T[i + 1][1] * h, Q[i + 1][2] - T[i + 1][2] * h],
+          b: Q[i + 1],
+        });
+      }
+      pts = Q;
+      segs = outSegs;
+      smooth = true;
+      st = bezStats(segs);
+    };
+
+    if (via.length === 0 && Math.abs(sag) < 1e-4) {
+      const cA = tA[0] * u[0] + tA[1] * u[1] + tA[2] * u[2];
+      const cB = -(tB[0] * u[0] + tB[1] * u[1] + tB[2] * u[2]);
+      const crA = Math.hypot(tA[1] * u[2] - tA[2] * u[1], tA[2] * u[0] - tA[0] * u[2], tA[0] * u[1] - tA[1] * u[0]);
+      const crB = Math.hypot(tB[1] * u[2] - tB[2] * u[1], tB[2] * u[0] - tB[0] * u[2], tB[0] * u[1] - tB[1] * u[0]);
+      if (cA > 0.9995 && cB > 0.9995 && slack <= 1e-4) {
+        pts = [A, B];
+        segs = [];
+        smooth = false;
+        st = { length: D, minBendR: Infinity };
+      } else if (crA < 1e-3 && crB < 1e-3 && (cA < 0.9995 || cB < 0.9995)) {
+        const off = Math.max(reqBendR * 1.5, d * 2, D * 0.25);
+        const M = [0, 1, 2].map((k) => 0.5 * (A[k] + B[k]) + perp[k] * off);
+        via = [M];
+        buildVia(via);
+      } else {
+        const evalS = (s) => {
+          const seg0 = {
+            a: A,
+            c1: [A[0] + s * tA[0], A[1] + s * tA[1], A[2] + s * tA[2]],
+            c2: [B[0] + s * tB[0], B[1] + s * tB[1], B[2] + s * tB[2]],
+            b: B,
+          };
+          return { seg0, st: bezStats([seg0]) };
+        };
+        const sMin = Math.max(d * 0.6, Math.min(D * 0.15, reqBendR * 0.4));
+        const sMax = Math.max(D * 1.8, reqBendR * 3.5) + slack;
+        const N = 31;
+        const samples = [];
+        for (let i = 0; i <= N; i++) {
+          const s = sMin + (sMax - sMin) * (i / N);
+          samples.push({ s, ...evalS(s) });
+        }
+        const baseCand = samples.find((x) => x.st.minBendR >= d * 0.55 + 0.2) || samples[0];
+        const minLen = slack > 0 ? baseCand.st.length + slack : 0;
+        let hitIdx = -1;
+        for (let i = 0; i < samples.length; i++) {
+          const x = samples[i];
+          if (x.st.minBendR >= safeR && x.st.length >= minLen) { hitIdx = i; break; }
+        }
+        let bestS;
+        if (hitIdx === 0) {
+          bestS = samples[0].s;
+        } else if (hitIdx > 0) {
+          let lo = samples[hitIdx - 1].s;
+          let hi = samples[hitIdx].s;
+          for (let it = 0; it < 6; it++) {
+            const m = 0.5 * (lo + hi);
+            const ev = evalS(m);
+            if (ev.st.minBendR >= safeR && ev.st.length >= minLen) hi = m;
+            else lo = m;
+          }
+          bestS = hi;
+        } else {
+          let bestIdx = 0;
+          for (let i = 1; i < samples.length; i++) {
+            if (samples[i].st.minBendR > samples[bestIdx].st.minBendR) bestIdx = i;
+          }
+          let lo = samples[Math.max(0, bestIdx - 1)].s;
+          let hi = samples[Math.min(samples.length - 1, bestIdx + 1)].s;
+          bestS = samples[bestIdx].s;
+          let bestR = samples[bestIdx].st.minBendR;
+          for (let it = 0; it < 6; it++) {
+            const m1 = lo + (hi - lo) / 3;
+            const m2 = hi - (hi - lo) / 3;
+            const e1 = evalS(m1), e2 = evalS(m2);
+            if (e1.st.minBendR > bestR) { bestR = e1.st.minBendR; bestS = m1; }
+            if (e2.st.minBendR > bestR) { bestR = e2.st.minBendR; bestS = m2; }
+            if (e1.st.minBendR < e2.st.minBendR) lo = m1;
+            else hi = m2;
+          }
+        }
+        const chosen = evalS(bestS).seg0;
+        const sp = splitBezHalf(chosen.a, chosen.c1, chosen.c2, chosen.b);
+        pts = sp.pts;
+        segs = sp.segs;
+        smooth = true;
+        st = bezStats(segs);
+      }
+    } else {
+      buildVia(via);
+    }
+
+    return {
+      pts,
+      segs,
+      smooth,
+      length: st.length,
+      minBendR: st.minBendR,
+      bendR: reqBendR,
+      bendOk: !isFinite(st.minBendR) || st.minBendR + 0.1 >= reqBendR,
+      d,
+      wall,
+      type,
+      start: A,
+      end: B,
+      dirA: tA,
+      dirB: tB,
+      directDist: D,
+      via,
+    };
+  }
+  function cableMetrics(p, V = {}) {
+    return cableGeometry(p, V);
+  }
   // ---------- 3D-Skizze (SK-51): Linien und Bögen frei im Raum ----------
   function sketch3dArcInfo(a, m, b) {
     if (!a || !m || !b) return null;
@@ -2041,6 +2300,19 @@ const Model = (() => {
         ? { t: 'arc', a: tp(s.a), m: tp(s.m), b: tp(s.b) }
         : { t: 'line', a: tp(s.a), b: tp(s.b) });
       return { ...base, sketch3dId: p.sketch3dId, segs3d, p0: tp(ch.p0), t0: td(ch.t0) };
+    }
+    if (p.cable) {
+      const cg = cableGeometry(p, V);
+      return {
+        path3d: { pts: cg.pts, smooth: cg.smooth, segs: cg.segs },
+        prof: null,
+        shape: 'circle',
+        d: cg.d,
+        w: cg.d,
+        h: cg.d,
+        wall: cg.type === 'hose' ? cg.wall : 0,
+        twist: 0,
+      };
     }
     if (p.path3d && Array.isArray(p.path3d.pts)) {
       // Pfad im Raum statt Skizze
@@ -2301,6 +2573,10 @@ const Model = (() => {
         return base + contTxt + opTxt;
       }
       case 'sweep': {
+        if (it.p && it.p.cable) {
+          const cm = cableMetrics(it.p, V);
+          return `Ø ${f(cm.d)}${u} · L ${f(cm.length)}${u}`;
+        }
         const shp = p.shape === 'rect' ? `${f(p.w ?? 6)} × ${f(p.h ?? 4)}${u}` : p.shape === 'sketch' ? 'eigene Form' : `Ø ${f(p.d ?? 6)}${u}`;
         const tw = Math.abs(p.twist || 0) > 1e-6 ? ` · ↻ ${fmtAngleU(p.twist)}` : '';
         const opTxt = it.op && it.op.type === 'cut' ? ' · Schnitt' : it.op && it.op.type === 'join' ? ' · Vereinigen' : it.op && it.op.type === 'common' ? ' · Schnittmenge' : (it.role === 'hole' ? ' · Schnitt' : '');
@@ -3065,6 +3341,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, cableGeometry, cableMetrics, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

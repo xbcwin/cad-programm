@@ -2778,6 +2778,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject` akzeptiert `doc.tolChains`, `HELP.asmSingleBody`/`HELP.tolChain`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-single-body`, `tol-chain`) laufen ohne JS-Fehler (`t_a165_baugruppe_einkoerper_toleranzkette`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe aus mehreren verschraubten oder gestapelten Teilen öffnen, über „Prüfen → Toleranzkette“ per „Fläche“ oder „Im Bild wählen“ eine gemischte `+`/`−`-Kette mit Spielprüfung rechnen und die Baugruppe über „Als 1 Körper“ als STEP sowie als STL in einen Slicer laden.
 
+## Kabel und Schläuche (Auto [A-167], BG-34)
+
+- [x] **Profi-Trennung**: Im Einfach-Modus sind `#proj-asm-cable` und `#btn-asm-cable` ausgeblendet, `Assembly.cableDialog()` und `Assembly.createCable()` liefern `null`, `Assembly.startCable()` liefert `false` und `asm-cable` fehlt in der Befehlssuche (`t_a167_kabel_schlaeuche`).
+- [x] **Kabel im Abstand 100 & Biegeradius**: Ein Kabel (`Ø 5 mm`, `R 20 mm`) zwischen `(0, 0, 20)` und `(100, 0, 20)` mit Abgang `+Z`/`+Z` erzeugt einen 3D-Körper mit Länge `≥ 100` (`> 115 mm`) und kleinstem Biegeradius `≥ 19,5 mm`; Erhöhen von `#cable-bendr` auf `40 mm` vergrößert Biegeradius (`≥ 39,5 mm`) und Kabellänge (`t_a167_kabel_schlaeuche`).
+- [x] **Stückliste zeigt Länge**: `Mass.bom()`, `#bom-cables` im Stücklisten-Dialog `#bom` sowie `Mass.bomCSV()` führen das Kabel samt berechneter Länge (`≥ 100 mm`) auf (`t_a167_kabel_schlaeuche`).
+- [x] **Hohler Schlauch, Nachführen bei Bewegung & Rückgängig**: Ein Schlauch (`wall: 1,5 mm`, gebunden an zwei Blöcke) hat echt geringeres Volumen als ein Vollkörper und folgt dem Verschieben von `Box B` (`x = 140`, Länge wächst entsprechend); `App.undo()` funktioniert (`t_a167_kabel_schlaeuche`).
+- [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject`, `HELP.asmCable`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-cable`, `asm-cable-pick`) laufen ohne JS-Fehler (`t_a167_kabel_schlaeuche`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus zwei Bauteile in einer Baugruppe platzieren, über „Kabel / Schlauch → Im 3D-Bild wählen“ beide Anschlüsse direkt auf Flächen klicken, Durchhang oder Zwischenpunkt hinzufügen, ein Bauteil verschieben und die aktualisierte Länge in der Stückliste prüfen.
+
 ## Fehler melden
 
 ```

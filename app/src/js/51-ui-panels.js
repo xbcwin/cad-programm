@@ -1597,6 +1597,10 @@ const Panels = (() => {
       tcBtn.innerHTML = icon('ruler') + esc(T('tc.title'));
       tcBtn.onclick = () => Measure.tolChain();
       w.append(h('div', { class: 'btn-row pro' }, oneBtn, tcBtn));
+      const cableBtn = h('button', { type: 'button', class: 'btn', id: 'proj-asm-cable', 'data-help': 'asmCable' });
+      cableBtn.innerHTML = icon('sweep') + esc(T('asm.cableBtn'));
+      cableBtn.onclick = () => Assembly.cableDialog();
+      w.append(h('div', { class: 'btn-row pro' }, cableBtn));
     }
     const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
     if (poseSec) w.append(poseSec);
@@ -2473,6 +2477,12 @@ const Panels = (() => {
       w.append(sec);
       }
     } else if (it.kind === 'sweep') {
+      if (it.p && it.p.cable) {
+        sec.firstChild.textContent = it.p.cable.type === 'hose' ? T('asm.hoseTitle') : T('asm.cableTitle');
+        sec.setAttribute('data-help', 'asmCable');
+        Features.renderCable(it, sec, setP);
+        w.append(sec);
+      } else {
       const fl = h('div', { class: 'fields' });
       const profs = App.doc.items.filter((x) => x.kind === 'extrude' && x.p && x.p.sketch && x.id !== it.id);
       const shp = it.p.shape || 'circle';
@@ -2561,6 +2571,7 @@ const Panels = (() => {
         sec.append(eb, h('div', { class: 'hint-box', html: T('panel.sweep.pathHint') }));
       }
       w.append(sec);
+      }
     } else if (it.kind === 'loft') {
       Features.renderLoft(it, sec, setP, w);
     } else if (it.kind === 'transform') {
