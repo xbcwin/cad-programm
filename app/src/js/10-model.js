@@ -91,7 +91,7 @@ const Model = (() => {
       format: 'masswerk', version: 1, docType: (opts && opts.docType === 'assembly') ? 'assembly' : 'part',
       id: uid('p'), name, created: Date.now(), modified: Date.now(),
       params: [], tables: [], items: [], notes: [], blocks: [],
-      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, printBed: defBed(), grid: 1, snap: true, unit: 'mm' },
+      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, printBed: defBed(), grid: 1, snap: true, stopOnContact: false, unit: 'mm' },
       drawing: null,
     };
   }
@@ -2412,7 +2412,7 @@ const Model = (() => {
     doc.params = doc.params || []; doc.items = doc.items || [];
     if (!Array.isArray(doc.tables)) doc.tables = [];
     for (const t of doc.tables) { if (!t || typeof t !== 'object') continue; if (!Array.isArray(t.rows)) t.rows = []; }
-    doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' }, doc.settings || {});
+    doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, stopOnContact: false, unit: 'mm' }, doc.settings || {});
     const rawBed = doc.settings.printBed && typeof doc.settings.printBed === 'object' ? doc.settings.printBed : {};
     doc.settings.printBed = {
       enabled: !!rawBed.enabled,

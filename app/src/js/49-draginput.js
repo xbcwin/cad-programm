@@ -28,6 +28,7 @@ const DragInput = (() => {
     const cancelBtn = h('button', { type: 'button', id: 'drag-input-cancel', class: 'di-btn cancel', 'aria-label': 'Abbrechen', title: 'Abbrechen' }, '×');
     cancelBtn.onclick = () => close();
     el.append(okBtn, cancelBtn, h('small', null, '↵ übernehmen · Tab wechseln · Esc'));
+    if (sp.hint) el.append(h('small', { class: 'di-hint' }, sp.hint));
     const r = $('#overlay').getBoundingClientRect();
     const px = at && Number.isFinite(at.x) ? at.x : r.left + r.width / 2;
     const py = at && Number.isFinite(at.y) ? at.y : r.top + r.height / 2;

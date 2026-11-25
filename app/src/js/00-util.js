@@ -2546,6 +2546,16 @@ const HELP = {
   "tip": "Teil in der Baugruppe spiegeln (verknüpfte Kopie)",
   "hilfe": "Erzeugt eine gespiegelte, verknüpfte Kopie des gewählten Teils an einer Grund- oder Bezugsebene. Änderungen an der Vorlage übernehmen sich automatisch auf das Spiegelbild.",
   "tipp": "Verschiebst du die Spiegelebene über den Abstand, wandert die gespiegelte Kopie direkt mit."
+ },
+ "dragCollisionStop": {
+  "tip": "Beim Ziehen anhalten, wenn sich Teile berühren (Profi)",
+  "hilfe": "Prüft beim Verschieben, Anheben, Drehen oder Ziehen an Gelenken laufend, ob das bewegte Teil auf ein anderes Teil stößt. Sobald die Oberflächen sich berühren, hält das Teil genau dort an, statt hindurchzufahren.",
+  "tipp": "Ziehst du ein Teil schräg gegen eine Wand, gleitet es an der Fläche entlang weiter. Zum Durchziehen einfach kurz den Schalter wieder ausmachen."
+ },
+ "clearanceCheck": {
+  "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
+  "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
+  "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
  }
 };
 

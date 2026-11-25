@@ -15434,6 +15434,66 @@ export function createKernel(R, oc) {
     return { pairs, hits, errors, checkedCount: solids.length };
   }
 
+  // Abstands-Prüfung (BG-18): alle Teilepaare mit weniger als minGap mm Abstand (optional inkl. Berührung)
+  function clearances(scene, minGap = 1, skipPairs = [], opts = {}) {
+    ingestBlobs(scene);
+    const errors = [];
+    const solids = evaluateShapes(scene, errors);
+    const boxes = solids.map((s) => bboxOf(s.shape));
+    const limit = Math.max(0, Number(minGap) || 0);
+    const includeTouch = !!(opts && opts.includeTouch);
+    const boxDist = (a, b) => Math.hypot(
+      Math.max(0, a[0] - b[3], b[0] - a[3]),
+      Math.max(0, a[1] - b[4], b[1] - a[4]),
+      Math.max(0, a[2] - b[5], b[2] - a[5])
+    );
+    const hit = (a, b) => a[0] < b[3] - 0.01 && b[0] < a[3] - 0.01 && a[1] < b[4] - 0.01 && b[1] < a[4] - 0.01 && a[2] < b[5] - 0.01 && b[2] < a[5] - 0.01;
+    const overlapVol = (A, B) => { let x = null; try { x = A.intersect(B); return R.measureVolume(x); } catch (_) { return 0; } finally { safeDelete(x); } };
+    const pairs = [];
+    for (let i = 0; i < solids.length; i++) {
+      if (skipPairs.includes(solids[i].id)) continue;
+      for (let j = i + 1; j < solids.length; j++) {
+        if (skipPairs.includes(solids[j].id) || boxDist(boxes[i], boxes[j]) >= limit - 1e-6) continue;
+        let t = null, p1 = null, p2 = null;
+        try {
+          t = new oc.BRepExtrema_DistShapeShape();
+          t.LoadS1(solids[i].shape.wrapped);
+          t.LoadS2(solids[j].shape.wrapped);
+          t.Perform();
+          if (t.IsDone() && t.NbSolution() > 0) {
+            const d = t.Value();
+            if (d < limit - 1e-5) {
+              p1 = t.PointOnShape1(1);
+              p2 = t.PointOnShape2(1);
+              const pa = [p1.X(), p1.Y(), p1.Z()];
+              const pb = [p2.X(), p2.Y(), p2.Z()];
+              const center = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (pa[2] + pb[2]) / 2];
+              if (d <= 1e-4) {
+                const v = hit(boxes[i], boxes[j]) ? overlapVol(solids[i].shape, solids[j].shape) : 0;
+                if (v > 0.05) {
+                  pairs.push({ a: solids[i].id, b: solids[j].id, d: 0, v, kind: 'overlap', pa, pb, center });
+                } else if (includeTouch) {
+                  pairs.push({ a: solids[i].id, b: solids[j].id, d: 0, kind: 'touch', pa, pb, center });
+                }
+              } else {
+                pairs.push({ a: solids[i].id, b: solids[j].id, d, kind: 'gap', pa, pb, center });
+              }
+            }
+          }
+        } catch (e) {
+          errors.push({ itemId: solids[i].id, code: 'clearance', message: String((e && e.message) || e) });
+        } finally {
+          if (p1) try { p1.delete(); } catch (_) {}
+          if (p2) try { p2.delete(); } catch (_) {}
+          if (t) try { t.delete(); } catch (_) {}
+        }
+      }
+    }
+    pairs.sort((p, q) => p.d - q.d);
+    for (const s of solids) safeDelete(s.shape);
+    return { pairs, errors, checkedCount: solids.length, minGap: limit };
+  }
+
   // Wand um Schraubenlöcher in beliebigen Teilen: um jede runde Bohrung (volle Zylinderfläche, nach innen gewölbt)
   // einen Ring mit der Mindestwand legen – ragt davon etwas aus dem Teil heraus, ist die Wand dort dünner.
   function holeWalls(scene, ids = [], opts = {}) {
@@ -16554,5 +16614,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, clearances, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
 }

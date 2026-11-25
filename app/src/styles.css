@@ -1333,6 +1333,20 @@ body.tablet .tabbar-add{width:38px;height:38px}
 .clash-check-bar{width:350px;max-width:calc(100vw - 24px)}
 .clash-vol{font-size:12px;color:var(--bad);font-weight:600}
 
+/* Abstands-Prüfung & Kollisions-Stopp beim Ziehen (BG-17, BG-18) */
+.clearance-check-bar{width:360px;max-width:calc(100vw - 24px)}
+.cl-ctrl-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+.cl-ctrl-row label{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.clearance-dist{font-size:12px;color:#b45309;font-weight:600}
+[data-theme="dark"] .clearance-dist{color:#fbbf24}
+.clearance-dist.bad{color:var(--bad)}
+.dimlabel.contact-stop{border-color:#d97706;background:#fff7ed;color:#b45309}
+[data-theme="dark"] .dimlabel.contact-stop{border-color:#f59e0b;background:#3a2308;color:#fde68a}
+.dimlabel.clearance-tag{pointer-events:none;border-color:#d97706;color:#92400e;background:#fffbeb}
+[data-theme="dark"] .dimlabel.clearance-tag{border-color:#f59e0b;color:#fde68a;background:#3b2608}
+.drag-input .di-hint{color:#b45309;font-weight:600}
+[data-theme="dark"] .drag-input .di-hint{color:#fbbf24}
+
 /* Skizze sperren, Kreisrand-Maß & Drehachse (SK-29, SK-54, SK-55) */
 .sk-lock-btn{display:inline-flex;align-items:center;gap:6px}
 .sk-lock-btn.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
