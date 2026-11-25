@@ -33116,6 +33116,131 @@ def t_a163_anzeige_zustaende_varianten(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11251455(p):
+    # 1. Toast überdeckt Zeitleiste nicht; Marker lässt sich auch bei sichtbarem Toast ziehen
+    three(p)
+    p.ev("UI.toast('F-11251455 Test-Toast', { icon: 'info', ms: 5000 });")
+    p.wait(200)
+    pos_info = p.ev("""
+      const tl = document.querySelector('#timeline').getBoundingClientRect();
+      const toast = document.querySelector('#toasts .toast').getBoundingClientRect();
+      const mk = document.querySelector('.tl-marker').getBoundingClientRect();
+      const hits = document.elementsFromPoint(mk.left + mk.width / 2, mk.top + mk.height / 2);
+      return {
+        aboveTl: toast.bottom <= tl.top + 1,
+        noToastAtMarker: !hits.some(el => el.closest && el.closest('.toast')),
+      };
+    """)
+    m = p.pg.locator('.tl-marker').bounding_box()
+    c = p.pg.locator('.tl-chip').nth(1).bounding_box()
+    p.pg.mouse.move(m['x'] + 6, m['y'] + 19)
+    p.pg.mouse.down()
+    p.pg.mouse.move(c['x'] + 5, c['y'] + 16, steps=8)
+    p.pg.mouse.up()
+    p.wait(500)
+    ok1 = bool(
+        pos_info['aboveTl']
+        and pos_info['noToastAtMarker']
+        and p.ev("return App.doc.rollback") == 1
+    )
+    p.pg.locator('.tl-chip').last.dblclick()
+    p.wait(400)
+
+    # 2. Timeline.render() aktualisiert Chips & Marker in-place bei Auswahl/Render ohne DOM-Verlust und sofort bei doc-Änderung
+    in_place_ok = p.ev("""
+      const mk0 = document.querySelector('.tl-marker');
+      const chips0 = [...document.querySelectorAll('.tl-chip')];
+      App.select([App.doc.items[0].id]);
+      App.clearSelection();
+      Timeline.render();
+      const mk1 = document.querySelector('.tl-marker');
+      const chips1 = [...document.querySelectorAll('.tl-chip')];
+      const inPlace = !!mk0 && mk0 === mk1 && mk1.isConnected
+          && chips0.length === chips1.length
+          && chips0.every((el, idx) => el === chips1[idx] && el.isConnected);
+      Actions.addPrimitive('cone');
+      const cAdd = document.querySelectorAll('.tl-chip').length;
+      const iAdd = document.querySelector('.tl-info')?.textContent || '';
+      App.undo();
+      const cUndo = document.querySelectorAll('.tl-chip').length;
+      const iUndo = document.querySelector('.tl-info')?.textContent || '';
+      return inPlace && cAdd === 4 && iAdd.includes('4') && cUndo === 3 && iUndo.includes('3');
+    """)
+    ok2 = bool(in_place_ok)
+
+    # 3. Actions.setGrounded aktualisiert Panels sofort & pendingLeftDirty verhindert verlorenen doc-Tree-Render
+    ids = p.ev("return App.doc.items.map(x => x.id);")
+    p.ev("App.select([arg]);", ids[0])
+    p.wait(150)
+    ground_sync = p.ev("""
+      Actions.setGrounded([arg], true);
+      return {
+        lockMark: document.querySelectorAll('#left-body .node[data-id="' + arg + '"] .lock-mark').length === 1,
+        txDisabled: !!document.querySelector('#t-x')?.disabled,
+        hasHint: !!document.querySelector('#grounded-hint'),
+      };
+    """, ids[0])
+    p.ev("""
+      App.change('Entsichern', d => {
+        const it = Model.find(d, arg[0]).item;
+        if (it) it.locked = false;
+      });
+      App.select([arg[1]]);
+    """, [ids[0], ids[1]])
+    p.wait(80)
+    lock_cleared = p.ev("return document.querySelectorAll('#left-body .node[data-id=\"' + arg + '\"] .lock-mark').length === 0;", ids[0])
+    ok3 = bool(ground_sync['lockMark'] and ground_sync['txDisabled'] and ground_sync['hasHint'] and lock_cleared)
+
+    # 4. Tooltip räumt Vorgänger beim Zielwechsel auf, übersteht verzögertes scroll-Event & Neurendern von #right-body unter ruhender Maus; Mass.measure liefert echtes Gewicht für __fix
+    p.ev("App.select([arg]);", ids[0])
+    p.pg.wait_for_selector('#part-props-sec .section-h', timeout=10000)
+    p.ev("return Mass.measure();")
+    p.pg.wait_for_selector('[data-help="inertia"]', timeout=5000)
+    p.pg.locator('[data-help="inertia"]').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=2500)
+        old_tip_ok = True
+    except Exception:
+        old_tip_ok = False
+    p.pg.locator('#part-props-sec .section-h').hover()
+    stale_cleared = p.ev("return document.querySelector('.tooltip') === null;")
+    p.wait(80)
+    p.ev("document.querySelector('#right-body').dispatchEvent(new Event('scroll'));")
+    p.wait(70)
+    p.ev("Panels.renderRight();")
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=2500)
+        tip_ok = True
+    except Exception:
+        tip_ok = False
+    tip_info = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => {
+      const tip = document.querySelector('.tooltip')?.textContent || '';
+      return {
+        hasTip: !!(d.partProps && d.partProps.tip && tip.includes(d.partProps.tip)),
+      };
+    });""")
+    p.ev("App.select([arg]);", ids[1])
+    p.pg.wait_for_selector('#p-mat', timeout=10000)
+    exp_mass = p.ev("return Mass.measure().then(r => { const pt = Mass.partOf(r, arg); return pt ? Math.round(pt.mass * 10) / 10 : null; });", ids[1])
+    p.pg.select_option('#p-mat', '__fix')
+    for _ in range(15):
+        p.wait(200)
+        if p.ev("return Model.find(App.doc, arg).item.massG != null;", ids[1]):
+            break
+    got_mass = p.ev("return Model.find(App.doc, arg).item.massG;", ids[1])
+    ok4 = bool(
+        old_tip_ok
+        and stale_cleared
+        and tip_ok
+        and tip_info['hasTip']
+        and exp_mass is not None
+        and got_mass is not None
+        and abs(got_mass - exp_mass) < 1e-6
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a166_skelett_skizze(p):
     # [A-166] Baugruppe (Profi): Skelett-Skizze (BG-32)
     p.ev("""
@@ -33479,6 +33604,247 @@ def t_a165_baugruppe_einkoerper_toleranzkette(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a168_schnittarten(p):
+    # [A-168] Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit 3 versetzten Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' }));
+        const hA = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Loch A', role: 'hole' });
+        hA.t.x = -15; hA.t.y = 8; hA.t.z = -2;
+        const hB = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Loch B', role: 'hole' });
+        hB.t.x = 15; hB.t.y = -8; hB.t.z = -2;
+        const hC = Model.newItem('cylinder', { d: 8, h: 24 }, { name: 'Loch C', role: 'hole' });
+        hC.t.z = -2;
+        d.items.push(hA, hB, hC);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    def view_pt(view_name, u, v):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const vw = Drawing.layout.views[arg.view];
+          const pt = svg.createSVGPoint();
+          pt.x = vw.ox + arg.u * vw.s;
+          pt.y = vw.oy - arg.v * vw.s;
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, {'view': view_name, 'u': u, 'v': v})
+
+    def read_hatch_uv(sec_idx):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[arg];
+          const v = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+          const hatches = sec && v ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)].map(el => {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const u0 = (pts[0][0] - v.ox) / v.s, v0 = (v.oy - pts[0][1]) / v.s;
+            const u1 = (pts[1][0] - v.ox) / v.s, v1 = (v.oy - pts[1][1]) / v.s;
+            return { u0, v0, u1, v1, uMin: Math.min(u0, u1), uMax: Math.max(u0, u1), vMin: Math.min(v0, v1), vMax: Math.max(v0, v1) };
+          }) : [];
+          return {
+            sec,
+            hasView: !!v,
+            hatches,
+            cutlines: sec ? svg.querySelectorAll(`polyline.cutline[data-sec="${sec.id}"]`).length : 0,
+            cutends: sec ? svg.querySelectorAll(`polyline.cutend[data-sec="${sec.id}"]`).length : 0,
+            breaklines: sec ? svg.querySelectorAll(`polyline.breakline[data-sec="${sec.id}"]`).length : 0,
+            ctrs: v ? svg.querySelectorAll(`polyline.ctr[data-sec="${sec.id}"]`).length : 0,
+            cutPts: sec ? [...svg.querySelectorAll(`polyline.cutline[data-sec="${sec.id}"]`)].map(el => el.getAttribute('points').trim().split(/\\s+/).length) : [],
+            txt: svg.textContent || '',
+          };
+        """, sec_idx)
+
+    # 1. Halbschnitt: Draufsicht bei y = 0 schneiden -> rechte Hälfte schraffiert, dann auf linke Hälfte umschalten
+    p.pg.select_option('#dw-sec-type', 'half'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    p0 = view_pt('top', -32, 0)
+    p1 = view_pt('top', 32, 0)
+    p.pg.mouse.move(p0[0], p0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(p1[0], p1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    h_right = read_hatch_uv(0)
+    right_ok = (
+        h_right['hasView'] and h_right['sec'] and h_right['sec']['type'] == 'half'
+        and 'Halbschnitt A–A' in h_right['txt']
+        and h_right['ctrs'] >= 1
+        and len(h_right['hatches']) >= 4
+        and all(h['uMin'] >= -0.05 for h in h_right['hatches'])
+        and not any(h['uMin'] < 0 and h['uMax'] > 0 for h in h_right['hatches'])
+        and not any(h['uMin'] < -3.5 and h['uMax'] > -3.5 for h in h_right['hatches'])
+    )
+
+    # Auf linke Hälfte umschalten
+    p.pg.select_option('#dw-sel-half-side', 'left'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    h_left = read_hatch_uv(0)
+    left_ok = (
+        len(h_left['hatches']) >= 4
+        and all(h['uMax'] <= 0.05 for h in h_left['hatches'])
+        and not any(h['uMin'] > 0.05 for h in h_left['hatches'])
+    )
+    ok1 = bool(right_ok and left_ok)
+
+    # 2. Abgesetzter Schnitt: 4-Punkt-Linie mit 90°-Knicken (-32,8) -> (0,8) -> (0,-8) -> (32,-8)
+    p.pg.select_option('#dw-sec-type', 'stepped'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    for (u, v) in [(-32, 8), (0, 8), (0, -8), (32, -8)]:
+        sp = view_pt('top', u, v)
+        p.pg.mouse.move(sp[0], sp[1])
+        p.pg.mouse.click(sp[0], sp[1])
+        p.wait(100)
+    p.pg.keyboard.press('Enter')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    st_res = read_hatch_uv(1)
+    st_hatches = st_res['hatches']
+    ok2 = bool(
+        st_res['hasView'] and st_res['sec'] and st_res['sec']['type'] == 'stepped'
+        and 'Schnitt B–B (abgesetzt)' in st_res['txt']
+        and st_res['cutlines'] == 1
+        and st_res['cutPts'] and st_res['cutPts'][0] >= 4
+        and st_res['cutends'] >= 6
+        and len(st_hatches) >= 8
+        and any(h['uMax'] < -20 for h in st_hatches)
+        and any(h['uMin'] > -10 and h['uMax'] < 10 for h in st_hatches)
+        and any(h['uMin'] > 20 for h in st_hatches)
+        and not any(h['uMin'] < -15 and h['uMax'] > -15 for h in st_hatches)
+        and not any(h['uMin'] < 15 and h['uMax'] > 15 for h in st_hatches)
+    )
+
+    # 3. Ausbruch: Bereich [-12, 3] .. [12, 17] in Vorderansicht aufziehen
+    p.pg.select_option('#dw-sec-type', 'breakout'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    b0 = view_pt('front', -12, 3)
+    b1 = view_pt('front', 12, 17)
+    p.pg.mouse.move(b0[0], b0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(b1[0], b1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    br1 = read_hatch_uv(2)
+    br1_h = br1['hatches']
+    br_mid_ok = (
+        br1['hasView'] and br1['sec'] and br1['sec']['type'] == 'breakout'
+        and 'Ausbruch C–C' in br1['txt']
+        and br1['breaklines'] >= 2
+        and len(br1_h) >= 4
+        and all(h['uMin'] >= -12.05 and h['uMax'] <= 12.05 and h['vMin'] >= 2.95 and h['vMax'] <= 17.05 for h in br1_h)
+        and not any(h['uMin'] < 0 and h['uMax'] > 0 for h in br1_h)
+    )
+
+    # Schnitttiefe auf 12 mm setzen (schneidet bei y = -8 vor Loch C -> durchgehende Schraffur über u = 0)
+    p.pg.fill('#dw-sel-sec-depth', '12')
+    p.pg.locator('#dw-sel-sec-depth').dispatch_event('change')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    br2 = read_hatch_uv(2)
+    br2_h = br2['hatches']
+    br_depth_ok = (
+        len(br2_h) >= 4
+        and all(h['uMin'] >= -12.05 and h['uMax'] <= 12.05 and h['vMin'] >= 2.95 and h['vMax'] <= 17.05 for h in br2_h)
+        and any(h['uMin'] < 0 and h['uMax'] > 0 for h in br2_h)
+    )
+    ok3 = bool(br_mid_ok and br_depth_ok)
+
+    # 4. Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & I18n
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(150)
+    simple_chk = p.ev("""return (() => {
+      const tSel = document.querySelector('#dw-sec-type');
+      const tBtn = document.querySelector('#t-section-kind');
+      const hidden = (!tSel || tSel.offsetParent === null) && (!tBtn || tBtn.offsetParent === null);
+      const blocked = Drawing.setSectionMode('half') === false;
+      const cmdsBlocked = Commands.search('halbschnitt').length === 0 && Commands.search('abgesetzter schnitt').length === 0 && Commands.search('ausbruch').length === 0;
+      return { hidden, blocked, cmdsBlocked };
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    exp_chk = p.ev("""return (async () => {
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('Halbschnitt A-A') && pdfStr.includes('Schnitt B-B') && pdfStr.includes('Ausbruch C-C'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('SCHRAFFUR') && dxf.text.includes('SCHNITTLINIE') && dxf.stats.lines > 20),
+      };
+    })()""")
+
+    p.pg.locator('#right-body .sec-del').nth(2).click(); p.wait(200)
+    n_del = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    n_undo = p.ev("return Drawing.sections().length")
+    p.ev("App.redo()"); p.wait(250)
+    n_redo = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    re_chk = p.ev("""
+      const secs = Drawing.sections();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        n: secs.length,
+        types: secs.map(s => s.type),
+        hatches: svg.querySelectorAll('polyline.hatch').length,
+        txt: svg.textContent || '',
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h = wh['drawingSectionKinds'];
+      const tKind = document.querySelector('#t-section-kind');
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('halbschnitt').length >= 1 && Commands.search('abgesetzter schnitt').length >= 1 && Commands.search('ausbruch').length >= 1;
+      return !!(h && h.tip && h.hilfe && h.tipp && tKind && tKind.dataset.help === 'drawingSectionKinds' && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdsBlocked']
+        and exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and n_del == 2 and n_undo == 3 and n_redo == 2
+        and val_ok and re_chk['n'] == 3 and re_chk['types'] == ['half', 'stepped', 'breakout']
+        and re_chk['hatches'] >= 12
+        and 'Halbschnitt A–A' in re_chk['txt']
+        and 'Schnitt B–B (abgesetzt)' in re_chk['txt']
+        and 'Ausbruch C–C' in re_chk['txt']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a167_kabel_schlaeuche(p):
     # [A-167] Baugruppe (Profi): Kabel und Schläuche zwischen zwei Anschlusspunkten (BG-34)
     p.empty()
@@ -33683,6 +34049,1091 @@ def t_a167_kabel_schlaeuche(p):
     })()""")
     ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['valOk'] and meta['cmds'] and len(p.errs) == 0)
     return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a171_gewinde_und_materialschraffur(p):
+    # [A-171] Zeichnung (Profi): Gewinde-Darstellung nach Norm (ZE-20) und Schraffur je Material (ZE-28)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit Gewindebohrung M6', d => {
+        const box = Model.newItem('box', { w: 40, d: 30, h: 12 }, { name: 'Platte' });
+        d.items.push(box);
+        const tap = Model.newItem('part', { lib: 'screwHole', size: 'M6', head: 'none', fit: 'tap', length: 12 }, { name: 'Gewinde M6', role: 'hole' });
+        tap.t.z = 12;
+        Actions.attach(d, box.id, tap);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    def view_pt(view_name, u, v):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const vw = Drawing.layout.views[arg.view];
+          const pt = svg.createSVGPoint();
+          pt.x = vw.ox + arg.u * vw.s;
+          pt.y = vw.oy - arg.v * vw.s;
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, {'view': view_name, 'u': u, 'v': v})
+
+    # 1. Gewindebohrung M6: Dreiviertelkreis (270°) in Draufsicht, dünne Linien im Schnitt, Umschalter & DXF
+    p.pg.click('#t-section'); p.wait(150)
+    s0 = view_pt('top', -24, 0)
+    s1 = view_pt('top', 24, 0)
+    p.pg.mouse.move(s0[0], s0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(s1[0], s1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    th1 = p.ev("""return (async () => {
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tv = Drawing.layout.views.top;
+      const sec = Drawing.sections()[0];
+      const sv = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+      const ends = [...svg.querySelectorAll('polyline.thin.thread[data-view="top"][data-thread="end"]')].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const rs = pts.map(pt => Math.hypot(pt[0] - tv.ox, pt[1] - tv.oy));
+        const a0 = Math.atan2(-(pts[0][1] - tv.oy), pts[0][0] - tv.ox);
+        const a1 = Math.atan2(-(pts[pts.length - 1][1] - tv.oy), pts[pts.length - 1][0] - tv.ox);
+        let span = ((a1 - a0) * 180 / Math.PI + 360) % 360;
+        return {
+          kind: el.dataset.threadKind,
+          size: el.dataset.threadSize,
+          rExp: 3.0 * tv.s,
+          rMin: Math.min(...rs),
+          rMax: Math.max(...rs),
+          span,
+          nPts: pts.length,
+        };
+      });
+      const secSides = sec && sv ? [...svg.querySelectorAll(`polyline.thin.thread[data-view="sec_${sec.id}"][data-thread="side"]`)].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        return {
+          xDist: Math.abs(((pts[0][0] + pts[1][0]) * 0.5) - sv.ox),
+          expR: 3.0 * sv.s,
+        };
+      }) : [];
+      const dxf = await Drawing.buildDXF();
+      return {
+        ends,
+        secSides,
+        txt: svg.textContent || '',
+        summary: document.getElementById('dw-threads-summary')?.textContent || '',
+        dxfHasThread: !!(dxf && dxf.text && dxf.text.includes('GEWINDE') && dxf.text.includes('ARC')),
+      };
+    })()""")
+
+    p.pg.uncheck('#dw-norm-threads'); p.wait(250)
+    off_threads = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.thread').length")
+    p.ev("App.undo()"); p.wait(250)
+    p.ev("return Drawing.waitReady()"); p.wait(100)
+    undo_threads = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.thread').length")
+
+    ok1 = bool(
+        len(th1['ends']) == 1
+        and th1['ends'][0]['kind'] == 'int' and th1['ends'][0]['size'] == 'M6'
+        and abs(th1['ends'][0]['rMin'] - th1['ends'][0]['rExp']) < 0.25
+        and abs(th1['ends'][0]['rMax'] - th1['ends'][0]['rExp']) < 0.25
+        and 264 <= th1['ends'][0]['span'] <= 276
+        and 'M6' in th1['txt'] and 'M6' in th1['summary']
+        and len(th1['secSides']) == 2
+        and all(abs(x['xDist'] - x['expR']) < 0.25 for x in th1['secSides'])
+        and th1['dxfHasThread']
+        and off_threads == 0 and undo_threads >= 3
+    )
+
+    # 2. Außengewinde (stdScrew M6) & Normmutter (stdNut M6) sowie threadRod/threadHole-Erkennung
+    p.ev("""
+      App.change('Normschraube und Mutter M6', d => {
+        d.items = [];
+        d.drawing = null;
+        const scr = Model.newItem('part', { lib: 'stdScrew', size: 'M6', head: 'zyl', length: 14 }, { name: 'Schraube' });
+        scr.t.z = 14;
+        const nut = Model.newItem('part', { lib: 'stdNut', size: 'M6' }, { name: 'Mutter' });
+        nut.t.x = 24;
+        d.items.push(scr, nut);
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    ext_res = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tv = Drawing.layout.views.top;
+      const extEnds = [...svg.querySelectorAll('polyline.thin.thread[data-view="top"][data-thread="end"][data-thread-kind="ext"]')].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const cx = tv.ox, cy = tv.oy;
+        const rs = pts.map(pt => Math.hypot(pt[0] - cx, pt[1] - cy));
+        const a0 = Math.atan2(-(pts[0][1] - cy), pts[0][0] - cx);
+        const a1 = Math.atan2(-(pts[pts.length - 1][1] - cy), pts[pts.length - 1][0] - cx);
+        const span = ((a1 - a0) * 180 / Math.PI + 360) % 360;
+        return { rMin: Math.min(...rs), rMax: Math.max(...rs), rExp: 2.5 * tv.s, span };
+      });
+      const intEnds = [...svg.querySelectorAll('polyline.thin.thread[data-view="top"][data-thread="end"][data-thread-kind="int"]')].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const cx = tv.ox + 24 * tv.s, cy = tv.oy;
+        const rs = pts.map(pt => Math.hypot(pt[0] - cx, pt[1] - cy));
+        return { rMin: Math.min(...rs), rMax: Math.max(...rs), rExp: 3.0 * tv.s };
+      });
+      const frontSides = svg.querySelectorAll('polyline.thin.thread[data-view="front"][data-thread="side"][data-thread-kind="ext"]').length;
+      return { extEnds, intEnds, frontSides };
+    """)
+    rod_hole_chk = p.ev("""
+      const d0 = App.doc;
+      const box = Model.newItem('box', { w: 20, d: 20, h: 12 });
+      const rod = Model.newItem('part', { lib: 'threadRod', size: 'M6', length: 12 });
+      const hole = Model.newItem('part', { lib: 'threadHole', size: 'M6', length: 10 }, { role: 'hole' });
+      hole.t.z = 12;
+      const savedItems = d0.items;
+      d0.items = [box, rod, hole];
+      const ths = Drawing.threads();
+      d0.items = savedItems;
+      return {
+        hasRod: ths.some(t => t.source === 'threadRod' && t.kind === 'ext' && Math.abs(t.r - 3) < 0.05 && Math.abs(t.rThread - 2.5) < 0.05),
+        hasHole: ths.some(t => t.source === 'threadHole' && t.kind === 'int' && Math.abs(t.r - 2.5) < 0.05 && Math.abs(t.rThread - 3) < 0.05),
+      };
+    """)
+    ok2 = bool(
+        len(ext_res['extEnds']) == 1
+        and abs(ext_res['extEnds'][0]['rMin'] - ext_res['extEnds'][0]['rExp']) < 0.25
+        and abs(ext_res['extEnds'][0]['rMax'] - ext_res['extEnds'][0]['rExp']) < 0.25
+        and 264 <= ext_res['extEnds'][0]['span'] <= 276
+        and len(ext_res['intEnds']) == 1
+        and abs(ext_res['intEnds'][0]['rMin'] - ext_res['intEnds'][0]['rExp']) < 0.25
+        and abs(ext_res['intEnds'][0]['rMax'] - ext_res['intEnds'][0]['rExp']) < 0.25
+        and ext_res['frontSides'] >= 2
+        and rod_hole_chk['hasRod'] and rod_hole_chk['hasHole']
+    )
+
+    # 3. Schraffur je Werkstoff: Alu 6061 (Doppellinien) vs. PLA Kunststoff (Kreuzschraffur)
+    p.ev("""
+      App.change('Alu und Kunststoff', d => {
+        d.items = [];
+        d.drawing = null;
+        const alu = Model.newItem('box', { w: 30, d: 30, h: 16 }, { name: 'Alu-Block', mat: 'Alu 6061' });
+        alu.t.x = -20;
+        const pla = Model.newItem('box', { w: 30, d: 30, h: 16 }, { name: 'Kunststoff-Block', mat: 'PLA' });
+        pla.t.x = 20;
+        d.items.push(alu, pla);
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    p.pg.click('#t-section'); p.wait(150)
+    a0 = view_pt('top', -38, 0)
+    a1 = view_pt('top', 38, 0)
+    p.pg.mouse.move(a0[0], a0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(a1[0], a1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()"); p.wait(150)
+
+    def read_mat_hatches():
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[0];
+          const byMat = {};
+          const lines = sec ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)] : [];
+          for (const el of lines) {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const dx = pts[1][0] - pts[0][0], dy = pts[1][1] - pts[0][1];
+            const mx = (pts[0][0] + pts[1][0]) * 0.5, my = (pts[0][1] + pts[1][1]) * 0.5;
+            const mat = el.dataset.mat || 'none';
+            const rec = {
+              pat: el.dataset.hatchPat || '',
+              dash: el.classList.contains('hatch-dash'),
+              dx, dy, mx, my,
+              slope: Math.atan2(dy, dx),
+              pos: dx * dy < 0,
+              neg: dx * dy > 0,
+            };
+            (byMat[mat] = byMat[mat] || []).push(rec);
+          }
+          const gapStats = (arr) => {
+            if (!arr || arr.length < 3) return null;
+            const ref = arr[0];
+            const L = Math.hypot(ref.dx, ref.dy) || 1;
+            const nx = -ref.dy / L, ny = ref.dx / L;
+            const bs = arr.map(x => x.mx * nx + x.my * ny).sort((p, q) => p - q);
+            const diffs = [];
+            for (let i = 1; i < bs.length; i++) if (bs[i] - bs[i - 1] > 0.05) diffs.push(bs[i] - bs[i - 1]);
+            if (diffs.length < 2) return null;
+            return { min: Math.min(...diffs), max: Math.max(...diffs), ratio: Math.max(...diffs) / Math.min(...diffs) };
+          };
+          return {
+            byMat,
+            aluGaps: gapStats(byMat['Alu 6061']),
+            steelGaps: gapStats(byMat['Baustahl']),
+            legend: document.getElementById('dw-hatch-legend')?.textContent || '',
+          };
+        """)
+
+    h3 = read_mat_hatches()
+    alu_l = h3['byMat'].get('Alu 6061') or []
+    pla_l = h3['byMat'].get('PLA') or []
+    ok3 = bool(
+        len(alu_l) >= 6 and len(pla_l) >= 6
+        and all(x['pat'] == 'alu' for x in alu_l)
+        and (all(x['pos'] for x in alu_l) or all(x['neg'] for x in alu_l))
+        and h3['aluGaps'] and h3['aluGaps']['ratio'] > 2.2
+        and all(x['pat'] == 'plastic' for x in pla_l)
+        and any(x['pos'] for x in pla_l) and any(x['neg'] for x in pla_l)
+        and 'Alu 6061' in h3['legend'] and 'PLA' in h3['legend']
+    )
+
+    # 4. Weitere Werkstoffe (Baustahl, Messing, Buche) und Umschalter #dw-mat-hatch
+    p.ev("""
+      App.change('Stahl und Messing', d => {
+        d.items[0].mat = 'Baustahl';
+        d.items[1].mat = 'Messing';
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    h4a = read_mat_hatches()
+    st_l = h4a['byMat'].get('Baustahl') or []
+    br_l = h4a['byMat'].get('Messing') or []
+
+    p.ev("App.change('Buche', d => { d.items[1].mat = 'Buche'; })")
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    h4b = read_mat_hatches()
+    wd_l = h4b['byMat'].get('Buche') or []
+
+    p.pg.uncheck('#dw-mat-hatch'); p.wait(250)
+    off_mat = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const hs = [...svg.querySelectorAll('polyline.hatch')];
+      return { n: hs.length, allSteel: hs.every(el => el.dataset.hatchPat === 'steel'), anyDash: hs.some(el => el.classList.contains('hatch-dash')) };
+    """)
+    p.ev("App.undo()"); p.wait(250)
+    p.ev("return Drawing.waitReady()"); p.wait(100)
+    undo_mat = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg polyline.hatch')].some(el => el.dataset.hatchPat === 'wood')")
+
+    ok4 = bool(
+        len(st_l) >= 4 and all(x['pat'] == 'steel' and not x['dash'] for x in st_l)
+        and h4a['steelGaps'] and h4a['steelGaps']['ratio'] < 1.25
+        and len(br_l) >= 4 and all(x['pat'] == 'brass' for x in br_l)
+        and any(x['dash'] for x in br_l) and any(not x['dash'] for x in br_l)
+        and len(wd_l) >= 4 and all(x['pat'] == 'wood' for x in wd_l)
+        and any(x['dash'] for x in wd_l)
+        and all(abs(x['dx']) > abs(x['dy']) * 1.4 for x in wd_l)
+        and off_mat['n'] >= 6 and off_mat['allSteel'] and not off_mat['anyDash']
+        and undo_mat
+    )
+
+    # 5. Profi-Trennung, PDF/DXF, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_chk = p.ev("""
+      return {
+        hasNormSec: !!document.getElementById('dw-norm-sec'),
+        cmdT: Commands.search('gewinde nach norm').some(c => c.id === 'drawingNormThreads'),
+        cmdH: Commands.search('schraffur je werkstoff').some(c => c.id === 'drawingMaterialHatch'),
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      return {
+        normSec: !!document.getElementById('dw-norm-sec'),
+        shFlags: Drawing.activeSheet().normThreads === true && Drawing.activeSheet().materialHatch === true,
+        valOk: Store.validateProject(App.doc).ok,
+        pdfOk: pdfStr.startsWith('%PDF-1.4'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('SCHRAFFUR') && dxf.stats.lines > 10),
+        helpOk: !!(wh.drawingNormThreads?.tip && wh.drawingNormThreads?.hilfe && wh.drawingNormThreads?.tipp
+          && wh.drawingMaterialHatch?.tip && wh.drawingMaterialHatch?.hilfe && wh.drawingMaterialHatch?.tipp),
+        i18nOk: deK.length === enK.length && deK.every((k, i) => k === enK[i]),
+        cmdsOk: Commands.search('gewinde nach norm').some(c => c.id === 'drawingNormThreads')
+          && Commands.search('schraffur je werkstoff').some(c => c.id === 'drawingMaterialHatch'),
+      };
+    })()""")
+
+    ok5 = bool(
+        not simple_chk['hasNormSec'] and not simple_chk['cmdT'] and not simple_chk['cmdH']
+        and meta['normSec'] and meta['shFlags'] and meta['valOk']
+        and meta['pdfOk'] and meta['dxfOk']
+        and meta['helpOk'] and meta['i18nOk'] and meta['cmdsOk']
+        and len(p.errs) == 0
+    )
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a170_zeichnung_explosion_projektion(p):
+    # [A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)
+    p.empty()
+    ids = p.ev("""
+      const base = Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Grundplatte' });
+      const top = Model.newItem('box', { w: 30, d: 20, h: 12 }, { name: 'Deckel' });
+      top.t.z = 10;
+      const pin = Model.newItem('cylinder', { d: 14, h: 16 }, { name: 'Bolzen' });
+      pin.t.x = 25;
+      App.change('Baugruppe für Zeichnung', d => { d.docType = 'assembly'; d.items.push(base, top, pin); });
+      return { base: base.id, top: top.id, pin: pin.id };
+    """)
+    warte_rechnen(p)
+
+    # In Zeichnung wechseln
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    # 1. Explosionsansicht anlegen und gegen normale Isometrie vergleichen
+    iso_id = p.ev("return Drawing.addView('iso').then(v => v ? v.id : null)")
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    p.pg.click('#dw-add-explode')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    ex_id = p.ev("""
+      const v = Drawing.activeViews().find(x => x.kind === 'explode');
+      return v ? v.id : null;
+    """)
+    ex1 = p.ev("""return (({ exId, isoId }) => {
+      const lay = Drawing.layout;
+      const isoV = lay && lay.views && isoId && lay.views[isoId];
+      const exV = lay && lay.views && exId && lay.views[exId];
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const info = exId ? Drawing.explodeViewInfo(exId) : null;
+      return {
+        hasEx: !!(exV && exV.geo),
+        hasIso: !!(isoV && isoV.geo),
+        isoW: isoV ? isoV.geo.w : 0,
+        isoH: isoV ? isoV.geo.h : 0,
+        exW: exV ? exV.geo.w : 0,
+        exH: exV ? exV.geo.h : 0,
+        visCount: exId ? svg.querySelectorAll('.vis[data-view="' + exId + '"]').length : 0,
+        trailCount: exId ? svg.querySelectorAll('.explode-trail[data-view="' + exId + '"]').length : 0,
+        info,
+      };
+    })(arg)""", {'exId': ex_id, 'isoId': iso_id})
+
+    # Abstand auf 130 % erhöhen -> Bounding-Box wächst weiter; Wegen-Linien aus-/einschalten
+    p.pg.locator('#dw-v-ex-amount').fill('130')
+    p.pg.locator('#dw-v-ex-amount').dispatch_event('change')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    ex2 = p.ev("""return ((exId) => {
+      const exV = Drawing.layout && Drawing.layout.views && Drawing.layout.views[exId];
+      return { exW: exV ? exV.geo.w : 0, exH: exV ? exV.geo.h : 0 };
+    })(arg)""", ex_id)
+
+    p.pg.uncheck('#dw-v-ex-trails'); p.wait(150)
+    trails_off = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg .explode-trail[data-view=\"' + arg + '\"]').length", ex_id)
+    p.pg.check('#dw-v-ex-trails'); p.wait(150)
+    trails_on = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg .explode-trail[data-view=\"' + arg + '\"]').length", ex_id)
+
+    ex_offs = (ex1['info'] or {}).get('offsets') or {}
+    pin_off = ex_offs.get(ids['pin'], [0, 0, 0])
+    top_off1 = ex_offs.get(ids['top'], [0, 0, 0])
+    ok1 = bool(
+        ex_id and iso_id and ex1['hasEx'] and ex1['hasIso']
+        and ex1['visCount'] >= 6 and ex1['trailCount'] >= 2
+        and ex1['info'] and ex1['info']['partCount'] >= 3
+        and pin_off[0] > 5 and top_off1[2] > 5
+        and (ex1['exW'] > ex1['isoW'] + 2 or ex1['exH'] > ex1['isoH'] + 2)
+        and (ex2['exW'] > ex1['exW'] + 2 or ex2['exH'] > ex1['exH'] + 2)
+        and trails_off == 0 and trails_on == ex1['trailCount']
+    )
+
+    # 2. Explosions-Schritte nutzen & Einfach-Modus prüfen
+    p.ev("""
+      Assembly.addExplodeStep({ partIds: [arg.top], dir: '+Z', dist: 45 });
+      Panels.renderRight();
+    """, ids)
+    p.wait(150)
+    p.pg.select_option('#dw-v-ex-mode', 'steps')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    step_info = p.ev("return Drawing.explodeViewInfo(arg)", ex_id)
+
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    simple_ok = p.ev("""return (() => {
+      const bEx = document.querySelector('#dw-add-explode');
+      const pSel = document.querySelector('#dw-panel-projection');
+      const cmdsOk = Commands.search('explosionsansicht').some(c => c.id === 'drawingAddExplode')
+        && Commands.search('iso a').some(c => c.id === 'drawingProjUs');
+      return !!(bEx && bEx.offsetParent !== null && pSel && pSel.offsetParent !== null && cmdsOk);
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    top_off = (step_info and step_info.get('offsets') or {}).get(ids['top'], [0, 0, 0])
+    ok2 = bool(step_info and step_info['mode'] == 'steps' and top_off[2] >= 40 and simple_ok)
+
+    # 3. Projektion Europa (ISO E) <-> USA (ISO A) umschalten & Schriftfeld-Symbol prüfen
+    def read_proj_state():
+        return p.ev("""return (() => {
+          const lay = Drawing.layout;
+          const v = lay && lay.views ? lay.views : {};
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const cone = svg.querySelector('[data-proj-sym="cone"]');
+          const cirs = [...svg.querySelectorAll('[data-proj-sym="circles"]')];
+          let coneCx = null, cirCx = null;
+          if (cone) {
+            const pts = (cone.getAttribute('points') || '').trim().split(/\\s+/).map(s => Number(s.split(',')[0])).filter(Number.isFinite);
+            if (pts.length) coneCx = (Math.min(...pts) + Math.max(...pts)) * 0.5;
+          }
+          if (cirs.length) {
+            cirCx = Number(cirs[0].getAttribute('cx'));
+          }
+          return {
+            mode: Drawing.projection(),
+            front: v.front ? v.front.rect : null,
+            left: v.left ? v.left.rect : null,
+            top: v.top ? v.top.rect : null,
+            coneCx,
+            cirCx,
+            txt: svg.textContent || '',
+          };
+        })()""")
+
+    eu = read_proj_state()
+    p.pg.select_option('#dw-panel-projection', 'us')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    us = read_proj_state()
+
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    eu_undo = read_proj_state()
+    p.ev("App.redo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    us_redo = read_proj_state()
+
+    eu_ok = (
+        eu['mode'] == 'eu'
+        and eu['front'] and eu['left'] and eu['top']
+        and eu['left'][0] > eu['front'][2]
+        and eu['top'][1] > eu['front'][3]
+        and eu['coneCx'] is not None and eu['cirCx'] is not None and eu['coneCx'] < eu['cirCx']
+        and 'ISO 5456-2 (E)' in eu['txt']
+    )
+    us_ok = (
+        us['mode'] == 'us'
+        and us['front'] and us['left'] and us['top']
+        and us['left'][2] < us['front'][0]
+        and us['top'][3] < us['front'][1]
+        and us['coneCx'] is not None and us['cirCx'] is not None and us['cirCx'] < us['coneCx']
+        and 'ISO 5456-2 (A)' in us['txt']
+    )
+    undo_ok = (
+        eu_undo['mode'] == 'eu' and eu_undo['left'][0] > eu_undo['front'][2] and eu_undo['top'][1] > eu_undo['front'][3]
+        and us_redo['mode'] == 'us' and us_redo['left'][2] < us_redo['front'][0] and us_redo['top'][3] < us_redo['front'][1]
+    )
+    ok3 = bool(eu_ok and us_ok and undo_ok)
+
+    # 4. PDF/DXF-Export, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    exp_chk = p.ev("""return (async () => {
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfBytes.length > 1500,
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('ISO 5456-2 (A)') && dxf.text.includes('MITTELLINIE')),
+      };
+    })()""")
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const v = Drawing.activeViews().find(x => x.kind === 'explode');
+      return { proj: Drawing.projection(), hasEx: !!v };
+    """)
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h1 = wh['drawingExplode'], h2 = wh['drawingProjection'];
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('explosionsansicht').some(c => c.id === 'drawingAddExplode')
+        && Commands.search('iso e').some(c => c.id === 'drawingProjEu')
+        && Commands.search('iso a').some(c => c.id === 'drawingProjUs');
+      return !!(h1 && h1.tip && h1.hilfe && h1.tipp && h2 && h2.tip && h2.hilfe && h2.tipp && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and val_ok and reload_chk['proj'] == 'us' and reload_chk['hasEx']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a173_zeichnung_modellmasse(p):
+    # [A-173] Zeichnung: Maße aus dem Modell übernehmen und ordnen (ZE-23)
+    p.empty()
+    p.ev("""
+      const box = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Quader' });
+      App.change('Quader 40x30x20', d => { d.items.push(box); });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    def read_dim_state():
+        return p.ev("""return (() => {
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const els = [...svg.querySelectorAll('text.dimtext')];
+          const boxes = els.map(el => {
+            const r = el.getBoundingClientRect();
+            return {
+              id: el.dataset.id || '',
+              view: el.dataset.view || '',
+              text: (el.textContent || '').trim(),
+              left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+              w: r.width, h: r.height,
+            };
+          });
+          let domOverlaps = 0;
+          for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+              const a = boxes[i], b = boxes[j];
+              if (a.id && b.id && a.id === b.id) continue;
+              if (a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5) domOverlaps++;
+            }
+          }
+          const dims = Drawing.dims();
+          const tb = Drawing.dimTextBoxes();
+          return {
+            texts: boxes.map(b => b.text),
+            views: boxes.map(b => b.view),
+            fromModelCount: dims.filter(d => d.fromModel).length,
+            lostCount: Drawing.lostDims().length,
+            domOverlaps,
+            mathOverlaps: tb.overlaps,
+            dimsCount: dims.length,
+          };
+        })()""")
+
+    p.pg.click('#dw-model-dims')
+    p.wait(200)
+    st1 = read_dim_state()
+
+    # Zweiter Klick über Werkzeugleiste verdoppelt keine Maße
+    p.pg.click('#t-model-dims')
+    p.wait(150)
+    st1_again = read_dim_state()
+
+    p.ev("App.undo(); App.undo();"); p.wait(150)
+    st_undo = read_dim_state()
+    p.ev("App.redo(); App.redo();"); p.wait(150)
+    st_redo = read_dim_state()
+
+    def has_num(texts, val):
+        s = str(val)
+        return any(t == s or t.startswith(s + ',') or t.startswith(s + '.') for t in texts)
+
+    ok1 = bool(
+        st1['fromModelCount'] == 3
+        and st1['lostCount'] == 0
+        and has_num(st1['texts'], 40)
+        and has_num(st1['texts'], 30)
+        and has_num(st1['texts'], 20)
+        and st1['domOverlaps'] == 0
+        and st1['mathOverlaps'] == 0
+        and st1_again['fromModelCount'] == 3
+        and st1_again['domOverlaps'] == 0
+        and st_undo['fromModelCount'] == 0
+        and st_redo['fromModelCount'] == 3
+    )
+
+    # 2. Skizzen-Maße + Schritt-Maße (Extrude + Bohrungen + zweiter Quader) ohne Überlappen
+    p.ev("""
+      Commands.setMode('model');
+      App.setDoc(Model.newDoc('Skizzenmodell'));
+      const rId = 'e_rect1', c1Id = 'e_c1', c2Id = 'e_c2';
+      const sk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [
+          { id: rId, type: 'rect', a: [-40, -25], b: [40, 25] },
+          { id: c1Id, type: 'circle', c: [-18, 0], r: 6 },
+          { id: c2Id, type: 'circle', c: [18, 0], r: 4 },
+        ],
+        dims: [
+          { id: 'm_w', e: rId, k: 'w', v: 80 },
+          { id: 'm_h', e: rId, k: 'h', v: 50 },
+          { id: 'm_d1', e: c1Id, k: 'd', v: 12 },
+          { id: 'm_d2', e: c2Id, k: 'd', v: 8 },
+          { id: 'm_cc', k: 'distCC', refs: [{ e: c1Id }, { e: c2Id }], v: 36 },
+        ],
+        cons: [],
+      };
+      const base = Model.newItem('extrude', { sketch: sk, dist: 15, dir: 'normal' }, { name: 'Platte' });
+      const top = Model.newItem('box', { w: 30, d: 20, h: 10 }, { name: 'Aufsatz' });
+      top.t.z = 15;
+      App.change('Platte mit Skizze und Aufsatz', d => { d.items.push(base, top); });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    p.pg.click('#t-model-dims')
+    p.wait(250)
+    st2 = read_dim_state()
+
+    ok2 = bool(
+        st2['fromModelCount'] >= 7
+        and st2['lostCount'] == 0
+        and has_num(st2['texts'], 80)
+        and has_num(st2['texts'], 50)
+        and has_num(st2['texts'], 15)
+        and has_num(st2['texts'], 30)
+        and has_num(st2['texts'], 10)
+        and any('Ø12' in t for t in st2['texts'])
+        and any('Ø8' in t for t in st2['texts'])
+        and st2['domOverlaps'] == 0
+        and st2['mathOverlaps'] == 0
+    )
+
+    # 3. Einfach-Modus sichtbar + „Maße ordnen“ entzerrt überlappende Maße
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    simple_vis = p.ev("""return (() => {
+      const b1 = document.querySelector('#t-model-dims');
+      const b2 = document.querySelector('#dw-model-dims');
+      const b3 = document.querySelector('#dw-arrange-dims');
+      return !!(b1 && b1.offsetParent !== null && b2 && b2.offsetParent !== null && b3 && b3.offsetParent !== null);
+    })()""")
+    p.pg.click('#dw-model-dims')
+    p.wait(200)
+    st_simple = read_dim_state()
+
+    # Provozierte Überlappung zweier manueller Maße mit gleichem off in front
+    p.ev("""
+      App.change('Überlappende Maße', d => {
+        const s = Drawing.activeSheet();
+        s.dims.push(
+          { id: 'd_ov1', view: 'front', type: 'lin', dir: 'h', a: [-15, 15], b: [15, 15], off: -9 },
+          { id: 'd_ov2', view: 'front', type: 'lin', dir: 'h', a: [-15, 15], b: [15, 15], off: -9 }
+        );
+      });
+      Drawing.refresh();
+    """)
+    p.wait(150)
+    st_before_arr = read_dim_state()
+    p.pg.click('#dw-arrange-dims')
+    p.wait(200)
+    st_after_arr = read_dim_state()
+
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+
+    ok3 = bool(
+        simple_vis
+        and st_simple['fromModelCount'] >= 7
+        and st_simple['domOverlaps'] == 0
+        and st_before_arr['mathOverlaps'] >= 1
+        and st_after_arr['domOverlaps'] == 0
+        and st_after_arr['mathOverlaps'] == 0
+    )
+
+    # 4. PDF/DXF, Validierung, Hilfen, i18n, Befehlssuche & keine JS-Fehler
+    extra_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      const val = Store.validateProject(App.doc);
+      const h = wh && wh.drawingModelDims;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nSync = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('maße aus dem modell');
+      const cmdArr = Commands.search('maße ordnen');
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfBytes.length > 1000,
+        dxfOk: !!(dxf && dxf.text && (dxf.text.includes('BEMASSUNG') || dxf.text.includes('DIMENSION') || dxf.text.includes('80'))),
+        valOk: !!(val && val.ok),
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp),
+        cmdOk: cmds.some(c => c.id === 'drawingModelDims') && cmdArr.some(c => c.id === 'drawingArrangeDims'),
+        deEnOk: i18nSync && T('tool.modelDims') === 'Maße aus dem Modell' && T('draw.panel.arrangeDimsBtn') === 'Maße ordnen',
+      };
+    })()""")
+    ok4 = bool(
+        extra_chk['pdfOk'] and extra_chk['dxfOk']
+        and extra_chk['valOk'] and extra_chk['helpOk']
+        and extra_chk['cmdOk'] and extra_chk['deEnOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a172_zeichnung_koord_bogen_doppel(p):
+    # [A-172] Zeichnung (Profi): Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit Rundung und 3 Löchern', d => {
+        d.items.push(Model.newItem('box', { w: 80, d: 50, h: 25.4 }, { name: 'Platte' }));
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("""
+      const it = App.doc.items[0];
+      const edges = App.results.get(it.id).data.edges;
+      const eFil = edges.findIndex(e => e && e.m && Math.hypot(e.m[0] - 40, e.m[1] - 25, e.m[2] - 12.7) < 0.25);
+      if (eFil >= 0) Actions.addFinish('fillet', 10, [{ id: it.id, edgeIdx: eFil }]);
+      App.change('3 Bohrungen hinzufügen', d => {
+        const holes = [[-25, -5], [0, 5], [20, 10]];
+        holes.forEach(([x, y], i) => {
+          d.items.push(Model.newItem('cylinder', { d: 8, h: 30 }, { name: 'Loch' + (i + 1), role: 'hole', more: { t: { x, y, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+        });
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(150)
+    p.pg.click('#t-sheet'); p.wait(150)
+    p.pg.select_option('#dw-scale', '2')
+    p.pg.click('#sheet-tabs'); p.wait(200)
+
+    # 1. Koordinatenmaße ab unterer linker Ecke (-40, -25) an die 3 Löcher (X: 15, 40, 60; Y: 20, 30, 35)
+    p.pg.click('#dw-dm-ordinate'); p.wait(150)
+    ord_h_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        origin: toS([b[0], b[1]]),
+        h1: toS([-25, -5]),
+        place: toS([0, b[1] - 10]),
+        h2: toS([0, 5]),
+        h3: toS([20, 10]),
+      };
+    """)
+    for key in ('origin', 'h1', 'place', 'h2', 'h3'):
+        pt = sheet_screen(*ord_h_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(140)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+
+    s_ord_h = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'h');
+      const texts = d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+      const circles = d ? svg.querySelectorAll(`circle.dim[data-id="${d.id}"]`).length : 0;
+      return { ok: !!d, id: d?.id, nPts: d?.pts?.length || 0, texts, circles };
+    """)
+
+    # Vertikale Koordinatenmaße (Y: 0, 20, 30, 35)
+    ord_v_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        origin: toS([b[0], b[1]]),
+        h1: toS([-25, -5]),
+        place: toS([b[0] - 10, 0]),
+        h2: toS([0, 5]),
+        h3: toS([20, 10]),
+      };
+    """)
+    for key in ('origin', 'h1', 'place', 'h2', 'h3'):
+        pt = sheet_screen(*ord_v_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(140)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+
+    s_ord_v = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'v');
+      const texts = d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+      return { ok: !!d, nPts: d?.pts?.length || 0, texts };
+    """)
+
+    # Plattenbreite im Modell auf 90 mm ändern -> linke Ecke wandert nach -45, Koordinatenmaße folgen auf 20, 45, 65
+    p.ev("""
+      App.change('Plattenbreite auf 90 mm', d => {
+        const box = d.items.find(x => x.kind === 'box');
+        if (box) box.p.w = 90;
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    ord_moved = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'h');
+      return d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+    """)
+
+    ok1 = bool(
+        s_ord_h['ok'] and s_ord_h['nPts'] == 3 and s_ord_h['circles'] == 1
+        and s_ord_h['texts'] == ['0', '15', '40', '60']
+        and s_ord_v['ok'] and s_ord_v['nPts'] == 3
+        and s_ord_v['texts'] == ['35', '30', '20', '0']
+        and ord_moved == ['0', '20', '45', '65']
+    )
+
+    # 2. Bogenlängen-Maß an der R10-Rundung (90° -> 15,71 mm)
+    p.pg.click('#dw-dm-arclen'); p.wait(150)
+    arc_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const c = v.geo.circles.find(x => !x.full && x.arc && Math.abs(x.r - 10) < 0.25);
+      const mid = c ? (c.arc[0] + c.arc[1]) * 0.5 : Math.PI * 0.25;
+      return c ? {
+        hit: toS([c.c[0] + c.r * Math.cos(mid), c.c[1] + c.r * Math.sin(mid)]),
+        place: toS([c.c[0] + (c.r + 7) * Math.cos(mid), c.c[1] + (c.r + 7) * Math.sin(mid)]),
+      } : null;
+    """)
+    for key in ('hit', 'place'):
+        pt = sheet_screen(*arc_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    s_arc = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.dims().find(x => x.type === 'arclen');
+      const txt = d ? svg.querySelector(`text.dimtext[data-id="${d.id}"]`)?.textContent : '';
+      const arrows = d ? svg.querySelectorAll(`polygon.arrow[data-id="${d.id}"]`).length : 0;
+      return { ok: !!d, id: d?.id, r: d?.r, nom: d?.nominalMm, txt, arrows };
+    """)
+    ok2 = bool(
+        s_arc['ok']
+        and abs((s_arc['r'] or 0) - 10) < 0.1
+        and abs((s_arc['nom'] or 0) - 15.708) < 0.15
+        and s_arc['txt'] == '⌒15,71'
+        and s_arc['arrows'] == 2
+    )
+
+    # 3. Doppelmaße: 25,4 mm -> "25,4 [1.000]", Bogenlänge -> "⌒15,71 [0.618]", Koordinaten -> "45 [1.772]"
+    p.pg.click('#dw-style-dual'); p.wait(200)
+    s_dual = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const allT = [...svg.querySelectorAll('text.dimtext')].map(e => e.textContent);
+      const ordD = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'h');
+      const ordT = ordD ? [...svg.querySelectorAll(`text.dimtext[data-id="${ordD.id}"]`)].map(e => e.textContent) : [];
+      const arcD = Drawing.activeSheet().dims.find(x => x.type === 'arclen');
+      const arcT = arcD ? svg.querySelector(`text.dimtext[data-id="${arcD.id}"]`)?.textContent : '';
+      return { allT, ordT, arcT };
+    """)
+    # Zweites Blatt ohne Doppelmaße -> Blatt 1 behält Doppelmaße
+    p.pg.click('#dw-panel-add'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.uncheck('#dw-style-dual'); p.wait(150)
+    s2_texts = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+    p.pg.locator('#sheet-tabs .sheet-tab').first.click(); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    s1_back = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+
+    ok3 = bool(
+        '25,4 [1.000]' in s_dual['allT']
+        and s_dual['arcT'] == '⌒15,71 [0.618]'
+        and '0' in s_dual['ordT'] and '45 [1.772]' in s_dual['ordT']
+        and '25,4' in s2_texts and '25,4 [1.000]' not in s2_texts
+        and '25,4 [1.000]' in s1_back
+    )
+
+    # 4. Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(150)
+    simple_chk = p.ev("""
+      return {
+        ordBtn: !!document.querySelector('#dw-dm-ordinate'),
+        arcBtn: !!document.querySelector('#dw-dm-arclen'),
+        dualChk: !!document.querySelector('#dw-style-dual'),
+        setOrd: Drawing.setDimMode('ordinate'),
+        setArc: Drawing.setDimMode('arclen'),
+        setDual: Drawing.setDualDims(true),
+        cmdsBlocked: Commands.search('koordinatenmaße').length === 0
+          && Commands.search('bogenlängen-maß').length === 0
+          && Commands.search('doppelmaße').length === 0,
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    exp_chk = p.ev("""return (async () => {
+      const bytes = await Drawing.buildPDFBytes();
+      let pdfStr = '';
+      for (let i = 0; i < bytes.length; i++) pdfStr += String.fromCharCode(bytes[i]);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('25,4 [1.000]') && pdfStr.includes('Bogen 15,71 [0.618]'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('25,4 [1.000]') && dxf.text.includes('BEMASSUNG') && dxf.stats.arcs >= 1),
+      };
+    })()""")
+
+    p.ev("Drawing.select(arg)", s_arc['id']); p.wait(120)
+    p.pg.click('#dw-del-sel'); p.wait(150)
+    n_after_del = p.ev("return Drawing.activeSheet().dims.some(x => x.type === 'arclen')")
+    p.ev("App.undo()"); p.wait(150)
+    n_after_undo = p.ev("return Drawing.activeSheet().dims.some(x => x.type === 'arclen')")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const sh = Drawing.activeSheet();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const allT = [...svg.querySelectorAll('text.dimtext')].map(e => e.textContent);
+      return {
+        hasOrd: sh.dims.some(x => x.type === 'ordinate'),
+        hasArc: sh.dims.some(x => x.type === 'arclen'),
+        dual: !!(sh.dimStyle && sh.dimStyle.dual),
+        hasDualTxt: allT.includes('25,4 [1.000]'),
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h1 = wh['drawingOrdArc'], h2 = wh['drawingDualDims'];
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('koordinatenmaße').some(c => c.id === 'drawingDimOrdinate')
+        && Commands.search('bogenlänge').some(c => c.id === 'drawingDimArcLen')
+        && Commands.search('doppelmaße').some(c => c.id === 'drawingDualDims');
+      return !!(h1 && h1.tip && h1.hilfe && h1.tipp && h2 && h2.tip && h2.hilfe && h2.tipp && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        not simple_chk['ordBtn'] and not simple_chk['arcBtn'] and not simple_chk['dualChk']
+        and simple_chk['setOrd'] is False and simple_chk['setArc'] is False and simple_chk['setDual'] is False
+        and simple_chk['cmdsBlocked']
+        and exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and not n_after_del and n_after_undo
+        and val_ok and reload_chk['hasOrd'] and reload_chk['hasArc'] and reload_chk['dual'] and reload_chk['hasDualTxt']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_f11251719(p):
+    # 1. Befehlssuche bevorzugt Treffer im Befehlsnamen auch bei Einzelwort-Suchen (A-152: 'schraube' -> couple-screw in Top 6)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('F-11251719 Körper', (d) => {
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil A' });
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil B' });
+        b.t.x = 30;
+        d.items.push(a, b);
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("App.select(App.doc.items.map(x => x.id));")
+    p.wait(150)
+
+    cmds_ok = p.ev("""
+      const s = Commands.search('schraube').map(c => c.id);
+      const r = Commands.search('riemen').map(c => c.id);
+      const l = Commands.search('linear').map(c => c.id);
+      const d = Commands.search('abstand').map(c => c.id);
+      return {
+        screw: s.includes('couple-screw') && s.includes('auto-screws') && s.includes('lib-stdScrew'),
+        belt: r.includes('couple-belt'),
+        linear: l.includes('couple-linear'),
+        dist: d.includes('mate-distance'),
+        s,
+      };
+    """)
+    ok1 = bool(cmds_ok['screw'] and cmds_ok['belt'] and cmds_ok['linear'] and cmds_ok['dist'])
+
+    # 2. Tooltip-Timer bleibt erhalten, wenn #right-body vor einem verzögerten scroll-Event unter der ruhenden Maus neu gerendert wird
+    p.ev("App.clearSelection();")
+    p.pg.wait_for_selector('#proj-print-cost', timeout=10000)
+    p.pg.mouse.move(10, 10)
+    p.wait(120)
+    p.pg.locator('#proj-print-cost').hover()
+    p.wait(60)
+    p.ev("""
+      Panels.renderRight();
+      const rb = document.querySelector('#right-body');
+      if (rb) rb.dispatchEvent(new Event('scroll'));
+    """)
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=3000)
+        tip_txt = p.pg.locator('.tooltip').text_content() or ''
+    except Exception:
+        tip_txt = ''
+    tip_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        match: !!(d.printCost && d.printCost.tip && String(arg || '').includes(d.printCost.tip)),
+        errs: App.errors.length === 0,
+      }));
+    """, tip_txt)
+    ok2 = bool(tip_ok['match'] and tip_ok['errs'] and len(p.errs) == 0)
+    return [ok1, ok2]
 
 
 def t_a169_zeichnung_bruch_hilfsansicht(p):
@@ -34268,10 +35719,17 @@ TESTS = [
     ('[A-155] Kollision beim Ziehen und Abstands-Prüfung (BG-17, BG-18)', t_a155_kollision_und_luft),
     ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
+    ('[F-11251455] Volltest-Reparatur: Toast über Zeitleiste / Zeitleiste in-place / Festsetzen & doc-Tree-Sync / Mass.measure & Tooltip-Reacquire', t_f11251455),
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
+    ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
     ('[A-169] Zeichnung: unterbrochene Ansicht (500 mm Welle) & Hilfsansicht (30°-Fläche unverzerrt)', t_a169_zeichnung_bruch_hilfsansicht),
+    ('[A-171] Zeichnung: Gewinde-Darstellung und Schraffur je Material', t_a171_gewinde_und_materialschraffur),
+    ('[A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)', t_a170_zeichnung_explosion_projektion),
+    ('[A-173] Zeichnung: Maße aus dem Modell übernehmen und ordnen (ZE-23)', t_a173_zeichnung_modellmasse),
+    ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
+    ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -2616,6 +2616,46 @@ const HELP = {
   "tip": "Hilfsansicht senkrecht zu einer schrägen Kante (Profi): zeigt schräge Flächen unverzerrt",
   "hilfe": "Klicke im Werkzeug „Hilfsansicht“ auf eine schräge oder gerade Kante einer Zeichnungsansicht. Tracery legt genau senkrecht zu dieser Kante eine neue Ansicht („Ansicht A“) mit Blickpfeil an der Kante an, sodass schräge Flächen in wahrer Größe und Form erscheinen und sich direkt bemaßen lassen.",
   "tipp": "Wenn die Hilfsansicht von der falschen Seite auf die Kante schaut, drehst du den Blick im rechten Panel mit „Umkehren“."
+ },
+ "drawingNormThreads": {
+  "tip": "Gewinde in der Zeichnung nach Norm als Dreiviertelkreis und dünne Linien darstellen (Profi)",
+  "hilfe": "Zeichnet alle Gewinde im Modell (Gewindebohrungen, gedruckte Innengewinde, Gewindebolzen, Normschrauben, Muttern und kosmetische Gewinde) nach DIN ISO 6410-1: In der Draufsicht erscheint ein dünner Dreiviertelkreis (270°), in der Seiten- und Schnittansicht dünne parallele Linien samt Gewindegrenze.",
+  "tipp": "Bei Durchgangs- und Sacklochgewinden steht in der Bemaßung automatisch das Gewindemaß wie „M6“ statt nur der Bohrloch-Durchmesser."
+ },
+ "drawingMaterialHatch": {
+  "tip": "Schnittflächen in der Zeichnung je nach Werkstoff unterschiedlich schraffieren (Profi)",
+  "hilfe": "Passt die Schraffur jeder geschnittenen Fläche automatisch an den zugewiesenen Werkstoff des Bauteils an (z. B. einfache 45°-Linien für Stahl, Doppellinien für Aluminium, abwechselnde Strichlinien für Messing/Kupfer und Kreuzschraffur für Kunststoffe).",
+  "tipp": "Eine kleine Legende direkt darunter zeigt dir alle im Modell verwendeten Werkstoffe und ihre Schraffur-Muster auf einen Blick."
+ },
+ "drawingSectionKinds": {
+  "tip": "Weitere Schnittarten in der Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt und Ausbruch",
+  "hilfe": "Im Profi-Modus stehen dir neben dem normalen Vollschnitt drei weitere Schnittarten zur Wahl: Beim Halbschnitt siehst du die eine Hälfte als Außenansicht und die andere als Schnitt (ideal für runde oder symmetrische Teile). Beim abgesetzten Schnitt knickst du die Schnittlinie im rechten Winkel ab, um versetzte Bohrungen oder Taschen gemeinsam zu schneiden. Beim Ausbruch brichst du nur einen gezeichneten Bereich bis zur gewünschten Tiefe auf.",
+  "tipp": "Beim Halbschnitt kannst du die geschnittene Seite jederzeit rechts im Panel wechseln; beim Ausbruch lässt sich die Schnitttiefe dort genau eintippen."
+ },
+ "drawingExplode": {
+  "tip": "Explosionsansicht der Baugruppe auf das Blatt legen",
+  "hilfe": "Zieht alle Teile der Baugruppe auseinander und zeigt sie als 3D-Ansicht samt gestrichelten Wegen-Linien auf der Zeichnung. Du kannst den Abstand stufenlos verstellen, eigene Explosions-Schritte nutzen und den Blickwinkel aus dem 3D-Modell übernehmen.",
+  "tipp": "Mit „Positionsnummern automatisch“ wandern die Nummernkreise direkt an die auseinandergezogenen Teile."
+ },
+ "drawingProjection": {
+  "tip": "Projektion zwischen Europa (ISO E) und USA (ISO A) umschalten",
+  "hilfe": "Bestimmt, wo Draufsicht und Seitenansicht rund um die Vorderansicht liegen: Bei Europa (ISO E, Methode 1) stehen Draufsicht unten und Seitenansicht rechts; bei USA (ISO A, Methode 3) stehen Draufsicht oben und Seitenansicht links. Das Normsymbol im Schriftfeld wechselt automatisch mit.",
+  "tipp": "Die Einstellung gilt pro Blatt – so kannst du bei Bedarf auch internationale Fertigungsblätter kombinieren."
+ },
+ "drawingModelDims": {
+  "tip": "Maße aus Skizzen und Schritten des 3D-Modells übernehmen und ohne Überlappen auf dem Blatt ordnen",
+  "hilfe": "Liest die gespeicherten Maße aus deinen Skizzen, Grundkörpern, Auszügen, Bohrungen, Rundungen und Fasen aus, legt sie in die jeweils passenden Ansichten (Vorder-, Drauf- oder Seitenansicht) und rückt alle Maßtexte so zurecht, dass sich nichts überdeckt.",
+  "tipp": "Mit „Maße ordnen“ kannst du auch später hinzugefügte Maße jederzeit wieder sauber auseinanderrücken."
+ },
+ "drawingOrdArc": {
+  "tip": "Koordinatenmaße ab einem Nullpunkt und Bogenlängen-Maße (Profi)",
+  "hilfe": "Mit „Koordinaten“ bemaßt du mehrere Löcher oder Kanten übersichtlich ab einem gemeinsamen Nullpunkt (0) entlang der X- oder Y-Achse ohne viele Maßlinien. Mit „Bogenlänge“ misst du die gekrümmte Länge entlang eines Kreisbogens oder einer Rundung (⌒).",
+  "tipp": "Beim Koordinatenmaß kannst du nach dem ersten Ziel einfach weitere Lochmitten oder Ecken anklicken und mit Enter abschließen."
+ },
+ "drawingDualDims": {
+  "tip": "Doppelmaße in Millimetern und Zoll [eckige Klammer] je Blatt einblenden (Profi)",
+  "hilfe": "Schreibt auf dem aktuellen Blatt hinter jedes Maß zusätzlich den umgerechneten Wert in Zoll in eckigen Klammern, zum Beispiel 25,4 [1.000]. Steht das Projekt auf Zoll, erscheint umgekehrt der Wert in Millimetern in Klammern.",
+  "tipp": "Die Nachkommastellen der Zoll-Angabe (2, 3 oder 4 Stellen) kannst du direkt darunter unter „Maß-Stil“ wählen."
  }
 };
 

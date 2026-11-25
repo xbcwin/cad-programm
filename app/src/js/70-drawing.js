@@ -5,6 +5,12 @@ const Drawing = (() => {
   const SCALES = [20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
   const DETAIL_SCALES = [1, 2, 2.5, 3, 4, 5, 10, 20];
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
+  const PROJECTIONS = ['eu', 'us'];
+  function normProjection(val, fallback = 'eu') {
+    if (val === 'us' || val === 'iso-a' || val === 'third') return 'us';
+    if (val === 'eu' || val === 'iso-e' || val === 'first') return 'eu';
+    return fallback === 'us' ? 'us' : 'eu';
+  }
   const VIEW_NAMES = { get front() { return T('draw.view.front'); }, get top() { return T('draw.view.top'); }, get left() { return T('draw.view.left'); } };
   const DIM_ARROWS = [
     { key: 'filled', get label() { return T('draw.arrow.filled'); } },
@@ -13,7 +19,7 @@ const Drawing = (() => {
     { key: 'dot', get label() { return T('draw.arrow.dot'); } },
   ];
   const DIM_FONT_SIZES = [2.5, 3.5, 5, 7, 10];
-  const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null };
+  const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null, dual: false, dualDecimals: 3 };
   const NOTE_TIPS = [
     { key: 'auto', get label() { return T('draw.noteTip.auto'); } },
     { key: 'arrow', get label() { return T('draw.noteTip.arrow'); } },
@@ -24,17 +30,40 @@ const Drawing = (() => {
     { key: 'lin', get label() { return T('draw.dimMode.lin'); }, get short() { return T('draw.dimMode.lin'); }, get hint() { return T('draw.dimHint.lin'); } },
     { key: 'chain', get label() { return T('draw.dimMode.chain'); }, get short() { return T('draw.dimMode.chain'); }, get hint() { return T('draw.dimHint.chain'); } },
     { key: 'base', get label() { return T('draw.dimMode.base'); }, get short() { return T('draw.dimMode.base'); }, get hint() { return T('draw.dimHint.base'); } },
+    { key: 'ordinate', pro: true, get label() { return T('draw.dimMode.ordinate'); }, get short() { return T('draw.dimMode.ordinate'); }, get hint() { return T('draw.dimHint.ordinate'); } },
     { key: 'ang', get label() { return T('draw.dimMode.ang'); }, get short() { return T('draw.dimMode.ang'); }, get hint() { return T('draw.dimHint.ang'); } },
     { key: 'rad', get label() { return T('draw.dimMode.rad'); }, get short() { return T('draw.dimMode.rad'); }, get hint() { return T('draw.dimHint.rad'); } },
     { key: 'dia', get label() { return T('draw.dimMode.dia'); }, get short() { return T('draw.dimMode.dia'); }, get hint() { return T('draw.dimHint.dia'); } },
+    { key: 'arclen', pro: true, get label() { return T('draw.dimMode.arclen'); }, get short() { return T('draw.dimMode.arclen'); }, get hint() { return T('draw.dimHint.arclen'); } },
     { key: 'chamfer', get label() { return T('draw.dimMode.chamfer'); }, get short() { return T('draw.dimMode.chamfer'); }, get hint() { return T('draw.dimHint.chamfer'); } },
   ];
+  const SECTION_MODES = [
+    { key: 'full', get label() { return T('draw.secMode.full'); }, get hint() { return T('draw.hint.section'); } },
+    { key: 'half', pro: true, get label() { return T('draw.secMode.half'); }, get hint() { return T('draw.hint.sectionHalf'); } },
+    { key: 'stepped', pro: true, get label() { return T('draw.secMode.stepped'); }, get hint() { return T('draw.hint.sectionStepped'); } },
+    { key: 'breakout', pro: true, get label() { return T('draw.secMode.breakout'); }, get hint() { return T('draw.hint.sectionBreakout'); } },
+  ];
+  const THREAD_ARC_START = Math.PI / 12;
+  const THREAD_ARC_SPAN = Math.PI * 1.5;
+  const HATCH_PATTERNS = {
+    steel:     { key: 'steel',     get label() { return T('draw.hatch.steel'); },     angles: [45],       flipAngles: [135],      stepMul: 1.0,  pairOff: 0,    altDash: false },
+    alu:       { key: 'alu',       get label() { return T('draw.hatch.alu'); },       angles: [45],       flipAngles: [135],      stepMul: 1.45, pairOff: 0.28, altDash: false },
+    brass:     { key: 'brass',     get label() { return T('draw.hatch.brass'); },     angles: [45],       flipAngles: [135],      stepMul: 1.0,  pairOff: 0,    altDash: true  },
+    plastic:   { key: 'plastic',   get label() { return T('draw.hatch.plastic'); },   angles: [45, 135],  flipAngles: [45, 135],  stepMul: 1.25, pairOff: 0,    altDash: false, oddPhase: 0.5 },
+    composite: { key: 'composite', get label() { return T('draw.hatch.composite'); }, angles: [30, 150],  flipAngles: [30, 150],  stepMul: 1.2,  pairOff: 0,    altDash: false, oddPhase: 0.5 },
+    wood:      { key: 'wood',      get label() { return T('draw.hatch.wood'); },      angles: [30],       flipAngles: [150],      stepMul: 1.1,  pairOff: 0,    altDash: true  },
+  };
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
+  const isSimpleMode = () => typeof ViewPrefs !== 'undefined' && ViewPrefs.level === 'simple';
+  const normThreadsActive = (sh = dwg()) => !isSimpleMode() && (!sh || sh.normThreads !== false);
+  const materialHatchActive = (sh = dwg()) => !isSimpleMode() && (!sh || sh.materialHatch !== false);
   let proj = null, projRev = -1, projSceneKey = null, loadingProjPromise = null, projId = 0;
   const projSigs = new Map(), shadeCache = new Map();
   let bomData = null, bomMeasure = null, bomCacheKey = null;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null, selView = null;
   let dimMode = 'lin';
+  let sectionMode = 'full';
+  let sectionDraft = { halfAxis: 'v', halfSide: 'right', depth: null };
   let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null;
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
@@ -43,6 +72,41 @@ const Drawing = (() => {
   let balloonViewPref = 'auto';
   let centersListOpen = false;
   let lastLostKey = '';
+  function normalizeSection(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const type = raw.type === 'half' || raw.type === 'stepped' || raw.type === 'breakout' ? raw.type : 'full';
+    const parent = raw.parent === 'front' || raw.parent === 'left' ? raw.parent : 'top';
+    const normPt = (p) => (Array.isArray(p) && p.length >= 2 ? [Number(p[0]) || 0, Number(p[1]) || 0] : [0, 0]);
+    const out = {
+      id: raw.id || uid('sec'),
+      label: String(raw.label || 'A'),
+      parent,
+      type,
+      flip: !!raw.flip,
+      pos: Array.isArray(raw.pos) && raw.pos.length >= 2 ? [Number(raw.pos[0]) || 0, Number(raw.pos[1]) || 0] : null,
+    };
+    if (type === 'stepped') {
+      const pts = Array.isArray(raw.pts) ? raw.pts.map(normPt) : [normPt(raw.a), normPt(raw.b)];
+      out.pts = pts;
+      out.a = pts[0] ? [...pts[0]] : [0, 0];
+      out.b = pts[pts.length - 1] ? [...pts[pts.length - 1]] : [10, 0];
+    } else if (type === 'breakout') {
+      out.region = Array.isArray(raw.region) ? raw.region.map(normPt) : [];
+      out.depth = raw.depth != null && Number.isFinite(Number(raw.depth)) && Number(raw.depth) > 0 ? Number(raw.depth) : null;
+    } else {
+      out.a = normPt(raw.a);
+      out.b = normPt(raw.b);
+      if (type === 'half') {
+        const ax = raw.halfAxis === 'h' ? 'h' : 'v';
+        out.halfAxis = ax;
+        out.halfSide = ax === 'h'
+          ? (raw.halfSide === 'top' || raw.halfSide === 'bottom' ? raw.halfSide : 'bottom')
+          : (raw.halfSide === 'left' || raw.halfSide === 'right' ? raw.halfSide : 'right');
+        if (raw.split != null && Number.isFinite(Number(raw.split))) out.split = Number(raw.split);
+      }
+    }
+    return out;
+  }
   function normDimStyle(raw, tpl = null) {
     const t = (tpl && tpl.dimStyle) || DEFAULT_DIM_STYLE;
     const rawArrow = raw && raw.arrow;
@@ -53,7 +117,10 @@ const Drawing = (() => {
     const decimals = (rawDec === null || rawDec === undefined || rawDec === '' || rawDec === 'auto')
       ? null
       : (Number.isFinite(Number(rawDec)) ? clamp(Math.round(Number(rawDec)), 0, 4) : null);
-    return { arrow, fontSize, decimals };
+    const dual = (raw && 'dual' in raw) ? !!raw.dual : !!t.dual;
+    const rawDualDec = (raw && raw.dualDecimals != null) ? Number(raw.dualDecimals) : Number(t.dualDecimals);
+    const dualDecimals = Number.isFinite(rawDualDec) ? clamp(Math.round(rawDualDec), 1, 4) : DEFAULT_DIM_STYLE.dualDecimals;
+    return { arrow, fontSize, decimals, dual, dualDecimals };
   }
   function sheetDimStyle(sh = dwg()) {
     return normDimStyle(sh && sh.dimStyle);
@@ -85,16 +152,23 @@ const Drawing = (() => {
   };
   function normalizeExtraView(v) {
     if (!v || typeof v !== 'object') return null;
-    const kind = v.kind === 'free' ? 'free' : 'iso';
+    const kind = v.kind === 'free' ? 'free' : v.kind === 'explode' ? 'explode' : 'iso';
     const dir = norm3(v.dir, ISO_DIR);
     const x = orthoX3(v.x, dir);
-    return {
+    const defaultName = kind === 'free' ? 'Freie Ansicht' : kind === 'explode' ? (T('draw.view.explode') || 'Explosionsansicht') : 'Isometrie';
+    const out = {
       id: v.id || uid('v'),
       kind,
-      name: String(v.name || (kind === 'free' ? 'Freie Ansicht' : 'Isometrie')),
+      name: String(v.name || defaultName),
       dir,
       x,
     };
+    if (kind === 'explode') {
+      out.explodeAmount = Number.isFinite(Number(v.explodeAmount)) ? clamp(Number(v.explodeAmount), 0.1, 1.5) : 0.7;
+      out.explodeMode = v.explodeMode === 'steps' ? 'steps' : 'auto';
+      out.explodeTrails = v.explodeTrails !== false;
+    }
+    return out;
   }
   function defaultAutoDims() {
     return [
@@ -111,17 +185,20 @@ const Drawing = (() => {
       name: opts.name || 'Blatt 1',
       sheet: SHEETS[opts.sheet] ? opts.sheet : (tpl && SHEETS[tpl.sheet] ? tpl.sheet : 'A4'),
       orient: opts.orient === 'portrait' || opts.orient === 'landscape' ? opts.orient : (tpl && tpl.orient ? tpl.orient : 'landscape'),
+      projection: normProjection(opts.projection, tpl ? tpl.projection : 'eu'),
       scale: opts.scale != null ? opts.scale : 'auto',
       views: opts.views ? { ...opts.views } : { front: true, top: true, left: true, iso: false },
       viewOpts: opts.viewOpts && typeof opts.viewOpts === 'object' ? JSON.parse(JSON.stringify(opts.viewOpts)) : {},
       extraViews: Array.isArray(opts.extraViews) ? opts.extraViews.map(normalizeExtraView).filter(Boolean) : [],
       hidden: opts.hidden != null ? !!opts.hidden : (tpl ? !!tpl.hidden : true),
       centers: opts.centers != null ? !!opts.centers : (tpl ? !!tpl.centers : true),
+      normThreads: opts.normThreads != null ? !!opts.normThreads : (tpl && tpl.normThreads != null ? !!tpl.normThreads : true),
+      materialHatch: opts.materialHatch != null ? !!opts.materialHatch : (tpl && tpl.materialHatch != null ? !!tpl.materialHatch : true),
       hiddenCenters: Array.isArray(opts.hiddenCenters) ? opts.hiddenCenters.slice() : [],
       dims: opts.dims || defaultAutoDims(),
       free: opts.free || [],
       details: opts.details ? opts.details.map((x) => ({ ...x, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null })) : [],
-      sections: Array.isArray(opts.sections) ? opts.sections : [],
+      sections: Array.isArray(opts.sections) ? opts.sections.map(normalizeSection).filter(Boolean) : [],
       auxViews: Array.isArray(opts.auxViews) ? opts.auxViews.map((a) => ({ ...a, a: a.a ? [...a.a] : [0, 0], b: a.b ? [...a.b] : [10, 0], flip: !!a.flip, pos: Array.isArray(a.pos) ? [Number(a.pos[0]) || 0, Number(a.pos[1]) || 0] : null })) : [],
       breaks: Array.isArray(opts.breaks) ? opts.breaks.map((b) => {
         const a0 = Number(b.a) || 0, b0 = Number(b.b) || 0;
@@ -162,12 +239,15 @@ const Drawing = (() => {
       name: raw && raw.name ? String(raw.name) : fallbackName,
       sheet: raw && raw.sheet,
       orient: raw && raw.orient,
+      projection: raw && raw.projection,
       scale: raw && raw.scale != null ? raw.scale : 'auto',
       views: raw && raw.views,
       viewOpts: raw && raw.viewOpts,
       extraViews: raw && raw.extraViews,
       hidden: raw && raw.hidden,
       centers: raw && raw.centers,
+      normThreads: raw && raw.normThreads,
+      materialHatch: raw && raw.materialHatch,
       hiddenCenters: raw && Array.isArray(raw.hiddenCenters) ? raw.hiddenCenters : [],
       dims: raw && Array.isArray(raw.dims) ? raw.dims : undefined,
       free: raw && Array.isArray(raw.free) ? raw.free : undefined,
@@ -208,9 +288,12 @@ const Drawing = (() => {
     for (let i = 0; i < d.drawing.sheets.length; i++) {
       const cur = d.drawing.sheets[i];
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
+      else if (cur) cur.sections = cur.sections.map(normalizeSection).filter(Boolean);
       if (cur && !Array.isArray(cur.auxViews)) cur.auxViews = [];
       if (cur && !Array.isArray(cur.breaks)) cur.breaks = [];
       if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
+      if (cur && typeof cur.normThreads !== 'boolean') cur.normThreads = cur.normThreads == null ? true : !!cur.normThreads;
+      if (cur && typeof cur.materialHatch !== 'boolean') cur.materialHatch = cur.materialHatch == null ? true : !!cur.materialHatch;
       if (cur && !Array.isArray(cur.notes)) cur.notes = [];
       if (cur && !Array.isArray(cur.balloons)) cur.balloons = [];
       if (cur && (!cur.bomTable || typeof cur.bomTable !== 'object')) cur.bomTable = { show: false, pos: null };
@@ -221,12 +304,16 @@ const Drawing = (() => {
           : null,
       };
       if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
-      if (cur) cur.dimStyle = normDimStyle(cur.dimStyle);
+      if (cur) {
+        cur.dimStyle = normDimStyle(cur.dimStyle);
+        cur.projection = normProjection(cur.projection);
+      }
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
       } else {
         if (!cur.viewOpts || typeof cur.viewOpts !== 'object') cur.viewOpts = {};
         if (!Array.isArray(cur.extraViews)) cur.extraViews = [];
+        else cur.extraViews = cur.extraViews.map(normalizeExtraView).filter(Boolean);
         if (!Array.isArray(cur.details)) cur.details = [];
       }
     }
@@ -356,6 +443,8 @@ const Drawing = (() => {
       show: !!(src.bomTable && src.bomTable.show),
       pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
     };
+    clone.normThreads = src.normThreads !== false;
+    clone.materialHatch = src.materialHatch !== false;
     const nextVP = {};
     for (const [k, v] of Object.entries(clone.viewPos || {})) {
       if (Array.isArray(v) && v.length >= 2) nextVP[idMap.get(k) || k] = [Number(v[0]) || 0, Number(v[1]) || 0];
@@ -499,12 +588,20 @@ const Drawing = (() => {
   function dirSig(v) {
     return (v.dir || []).concat(v.x || []).map((n) => Math.round(n * 10000)).join(',');
   }
+  function sectionTitle(sec) {
+    if (!sec) return T('draw.view.section');
+    const a = sec.label, b = sec.label;
+    if (sec.type === 'half') return T('draw.view.halfSectionNamed', { a, b });
+    if (sec.type === 'stepped') return T('draw.view.steppedSectionNamed', { a, b });
+    if (sec.type === 'breakout') return T('draw.view.breakoutSectionNamed', { a, b });
+    return T('draw.view.sectionNamed', { a, b });
+  }
   function viewLabel(vName, sh = dwg()) {
     if (VIEW_NAMES[vName]) return VIEW_NAMES[vName];
     if (vName === 'iso') return T('draw.view.iso');
     if (String(vName).startsWith('sec_')) {
       const sec = (sh.sections || []).find((x) => 'sec_' + x.id === vName);
-      return sec ? T('draw.view.sectionNamed', { a: sec.label, b: sec.label }) : T('draw.view.section');
+      return sectionTitle(sec);
     }
     if (String(vName).startsWith('aux_')) {
       const aux = (sh.auxViews || []).find((x) => 'aux_' + x.id === vName);
@@ -535,7 +632,10 @@ const Drawing = (() => {
       if (sh.views && sh.views[k]) out.push({ id: k, kind: k, name: viewLabel(k, sh), is3d: k === 'iso', custom: false, removable: k === 'iso' });
     }
     for (const ev of sh.extraViews || []) {
-      out.push({ id: ev.id, kind: ev.kind, name: ev.name, is3d: true, custom: true, removable: true, dir: ev.dir, x: ev.x });
+      out.push({
+        id: ev.id, kind: ev.kind, name: ev.name, is3d: true, custom: true, removable: true, dir: ev.dir, x: ev.x,
+        ...(ev.kind === 'explode' ? { explodeAmount: ev.explodeAmount, explodeMode: ev.explodeMode, explodeTrails: ev.explodeTrails } : {}),
+      });
     }
     for (const av of sh.auxViews || []) {
       out.push({ id: 'aux_' + av.id, kind: 'aux', name: viewLabel('aux_' + av.id, sh), is3d: false, custom: false, removable: true, aux: av });
@@ -559,17 +659,215 @@ const Drawing = (() => {
     });
     render(); Panels.renderRight();
   }
+  function setProjection(mode) {
+    const next = normProjection(mode);
+    App.change('Projektion geändert', () => {
+      dwg().projection = next;
+    });
+    render();
+    Panels.renderRight();
+    return next;
+  }
+  function itemWorldBox(it, doc = App.doc) {
+    if (!it) return null;
+    if (typeof Viewer !== 'undefined' && Viewer.baseBox) {
+      const vb = Viewer.baseBox(it.id);
+      if (vb && !vb.isEmpty()) return [vb.min.x, vb.min.y, vb.min.z, vb.max.x, vb.max.y, vb.max.z];
+    }
+    const r = typeof App !== 'undefined' && App.results && typeof App.results.get === 'function' ? App.results.get(it.id) : null;
+    const b = r && r.data && Array.isArray(r.data.bbox) && r.data.bbox.length >= 6 ? r.data.bbox : null;
+    if (b && typeof Model !== 'undefined' && Model.localMatrix) {
+      const box = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5])).applyMatrix4(Model.localMatrix(it));
+      if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+    }
+    return null;
+  }
+  function approxChildWorldBox(parent, child, idx) {
+    const pb = typeof Model !== 'undefined' && Model.primitiveBox ? Model.primitiveBox(child.kind, child.p || {}) : null;
+    if (pb && pb.length >= 6 && typeof Model !== 'undefined' && Model.localMatrix) {
+      const M = Model.localMatrix(parent, new THREE.Matrix4()).multiply(Model.localMatrix(child, new THREE.Matrix4()));
+      const b3 = new THREE.Box3(new THREE.Vector3(pb[0], pb[1], pb[2]), new THREE.Vector3(pb[3], pb[4], pb[5])).applyMatrix4(M);
+      if (!b3.isEmpty()) return [b3.min.x, b3.min.y, b3.min.z, b3.max.x, b3.max.y, b3.max.z];
+    }
+    const z0 = idx * 12;
+    return [-5, -5, z0, 5, 5, z0 + 10];
+  }
+  function computeExplodeData(ev, doc = App.doc) {
+    const active = Model.activeItems(doc);
+    const candidates = active.filter((it) => it && !it.hidden && it.role !== 'hole' && !(typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)));
+    const boxes = [];
+    let splitGroupId = null;
+    let splitChildren = [];
+    if (candidates.length === 1 && candidates[0].kind === 'group' && !(candidates[0].p && candidates[0].p.op)) {
+      const g = candidates[0];
+      const kids = (g.children || []).filter((c) => c && !c.suppressed && !c.hidden);
+      const solids = kids.filter((c) => c.role !== 'hole');
+      if (solids.length >= 2) {
+        splitGroupId = g.id;
+        const holes = kids.filter((c) => c.role === 'hole');
+        splitChildren = solids.map((c, idx) => {
+          const exId = '__ex:' + c.id;
+          const bb = (typeof Viewer !== 'undefined' && Viewer.baseBox && Viewer.baseBox(exId))
+            ? (() => { const vb = Viewer.baseBox(exId); return [vb.min.x, vb.min.y, vb.min.z, vb.max.x, vb.max.y, vb.max.z]; })()
+            : approxChildWorldBox(g, c, idx);
+          boxes.push([exId, bb]);
+          return { id: exId, child: c, holes, parent: g };
+        });
+      }
+    }
+    if (!splitGroupId) {
+      for (const it of candidates) {
+        const bb = itemWorldBox(it, doc);
+        if (bb) boxes.push([it.id, bb]);
+      }
+    }
+    const offsets = new Map();
+    const trails3d = [];
+    const partBoxes = new Map();
+    const centerOf = (b) => [(b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5];
+    const hasSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps(doc).length > 0;
+    const mode = ev && ev.explodeMode === 'steps' && hasSteps ? 'steps' : 'auto';
+    if (mode === 'steps') {
+      const f = clamp(Number(ev.explodeAmount ?? 1), 0, 1);
+      const evalRes = Assembly.evalExplodeSteps(f, doc);
+      const boxMap = new Map(boxes);
+      for (const [pid, arr] of evalRes.offsets.entries()) {
+        const off = [Number(arr[0]) || 0, Number(arr[1]) || 0, Number(arr[2]) || 0];
+        offsets.set(pid, off);
+        if (splitGroupId) {
+          for (const sc of splitChildren) offsets.set(sc.id, off);
+        }
+      }
+      if (evalRes.paths) {
+        for (const [pid, pts] of evalRes.paths.entries()) {
+          const bb = boxMap.get(pid);
+          if (!bb || !pts || pts.length < 2) continue;
+          const c0 = centerOf(bb);
+          trails3d.push({
+            partId: pid,
+            pts: pts.map(([dx, dy, dz]) => [c0[0] + dx, c0[1] + dy, c0[2] + dz]),
+          });
+        }
+      }
+    } else if (boxes.length >= 2) {
+      const f = clamp(Number(ev && ev.explodeAmount != null ? ev.explodeAmount : 0.7), 0.1, 1.5);
+      let b0 = Infinity, b1 = Infinity, b2 = Infinity, b3 = -Infinity, b4 = -Infinity, b5 = -Infinity;
+      for (const [, b] of boxes) {
+        b0 = Math.min(b0, b[0]); b1 = Math.min(b1, b[1]); b2 = Math.min(b2, b[2]);
+        b3 = Math.max(b3, b[3]); b4 = Math.max(b4, b[4]); b5 = Math.max(b5, b[5]);
+      }
+      const C = [(b0 + b3) * 0.5, (b1 + b4) * 0.5, (b2 + b5) * 0.5];
+      const S = Math.max(10, Math.hypot(b3 - b0, b4 - b1, b5 - b2));
+      const sorted = boxes.slice().sort((a, b) => a[1][2] - b[1][2]);
+      const layerOf = new Map();
+      const layers = [];
+      for (const [id, b] of sorted) {
+        let L = layers[layers.length - 1];
+        if (!L || b[2] - L.z > 0.5) { L = { z: b[2], h: 0 }; layers.push(L); }
+        L.h = Math.max(L.h, b[5] - b[2]);
+        layerOf.set(id, layers.length - 1);
+      }
+      const lift = [0];
+      for (let i = 1; i < layers.length; i++) lift[i] = lift[i - 1] + layers[i - 1].h + S * 0.08;
+      let maxOff = 0;
+      for (const [id, b] of boxes) {
+        const c = centerOf(b);
+        const off = [(c[0] - C[0]) * f * 1.2, (c[1] - C[1]) * f * 1.2, lift[layerOf.get(id)] * f];
+        offsets.set(id, off);
+        maxOff = Math.max(maxOff, Math.hypot(off[0], off[1], off[2]));
+      }
+      if (maxOff < 0.1) {
+        boxes.forEach(([id], idx) => {
+          offsets.set(id, [0, 0, idx * (S * 0.35) * f]);
+        });
+      }
+      for (const [id, b] of boxes) {
+        const off = offsets.get(id);
+        if (!off || Math.hypot(off[0], off[1], off[2]) <= 0.1) continue;
+        const c = centerOf(b);
+        trails3d.push({ partId: id, pts: [c, [c[0] + off[0], c[1] + off[1], c[2] + off[2]]] });
+      }
+    }
+    for (const [id, b] of boxes) {
+      const off = offsets.get(id) || [0, 0, 0];
+      partBoxes.set(id, [b[0] + off[0], b[1] + off[1], b[2] + off[2], b[3] + off[0], b[4] + off[1], b[5] + off[2]]);
+    }
+    return { offsets, trails3d, partBoxes, partCount: boxes.length, splitGroupId, splitChildren };
+  }
+  function buildExplodedScene(baseScene, exData, doc = App.doc) {
+    const scene = JSON.parse(JSON.stringify(baseScene));
+    if (!exData) return scene;
+    const shiftMatrix = (m, off) => {
+      if (!off || !Array.isArray(m) || m.length < 16) return;
+      m[12] += off[0];
+      m[13] += off[1];
+      m[14] += off[2];
+    };
+    if (exData.splitGroupId) {
+      const idx = scene.items.findIndex((it) => it && it.id === exData.splitGroupId);
+      if (idx >= 0) {
+        const orig = scene.items[idx];
+        const splitItems = [];
+        for (const sc of exData.splitChildren || []) {
+          const itemObj = {
+            id: sc.id,
+            kind: 'group',
+            name: Model.label(sc.child),
+            role: 'solid',
+            color: sc.child.color || orig.color,
+            mat: sc.child.mat || orig.mat,
+            t: deepClone(sc.parent.t || Model.T0()),
+            p: {},
+            finishes: [],
+            children: [deepClone(sc.child), ...sc.holes.map(deepClone)],
+          };
+          const kItem = Model.kernelItem(itemObj, Model.vars(doc).v);
+          shiftMatrix(kItem.m, exData.offsets.get(sc.id));
+          splitItems.push(kItem);
+        }
+        scene.items.splice(idx, 1, ...splitItems);
+      }
+      return scene;
+    }
+    const boxesHit = (a, b) => a && b && a[0] <= b[3] && a[3] >= b[0] && a[1] <= b[4] && a[4] >= b[1] && a[2] <= b[5] && a[5] >= b[2];
+    const solidBoxes = [];
+    for (const [id] of exData.offsets.entries()) {
+      const it = Model.find(doc, id);
+      const bb = it ? itemWorldBox(it, doc) : null;
+      if (bb) solidBoxes.push([id, bb]);
+    }
+    for (const it of scene.items || []) {
+      if (!it) continue;
+      let off = exData.offsets.get(it.id);
+      if (!off && typeof App !== 'undefined' && App.mergedInto) {
+        const hostId = App.mergedInto(it.id);
+        if (hostId) off = exData.offsets.get(hostId);
+      }
+      if (!off && it.role === 'hole') {
+        const docIt = Model.find(doc, it.id);
+        const hb = docIt ? itemWorldBox(docIt, doc) : null;
+        const host = hb ? solidBoxes.find(([, b]) => boxesHit(hb, b)) : null;
+        if (host) off = exData.offsets.get(host[0]);
+      }
+      if (off) shiftMatrix(it.m, off);
+    }
+    return scene;
+  }
+  function explodeSig(ev, doc = App.doc) {
+    const stepsSig = ev.explodeMode === 'steps' && typeof Assembly !== 'undefined' ? JSON.stringify(Assembly.explodeSteps(doc)) : '';
+    return dirSig(ev) + '|ex|' + (ev.explodeMode || 'auto') + '|' + round(Number(ev.explodeAmount ?? 0.7), 3) + '|' + stepsSig;
+  }
   async function addView(kind = 'iso', opts = {}) {
-    const k = kind === 'free' ? 'free' : 'iso';
+    const k = kind === 'free' ? 'free' : kind === 'explode' ? 'explode' : 'iso';
     let dir, x;
-    if (k === 'free') {
+    if (k === 'free' || (k === 'explode' && opts.fromCamera)) {
       if (opts.dir) { dir = norm3(opts.dir, ISO_DIR); x = orthoX3(opts.x, dir); }
       else if (typeof Viewer !== 'undefined' && Viewer.cameraBasis) { const cb = Viewer.cameraBasis(); dir = norm3(cb.dir, ISO_DIR); x = orthoX3(cb.x, dir); }
       else { dir = ISO_DIR; x = ISO_X; }
     } else {
       dir = norm3(opts.dir, ISO_DIR); x = orthoX3(opts.x, dir);
     }
-    const base = k === 'free' ? 'Freie Ansicht' : 'Isometrie';
+    const base = k === 'free' ? 'Freie Ansicht' : k === 'explode' ? T('draw.view.explode') : 'Isometrie';
     const used = new Set(activeViews(dwg()).map((v) => v.name));
     let name = opts.name || base;
     if (!opts.name && used.has(name)) {
@@ -578,22 +876,77 @@ const Drawing = (() => {
       name = base + ' ' + n;
     }
     const nv = { id: uid('v'), kind: k, name, dir, x };
+    if (k === 'explode') {
+      const hasSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps().length > 0;
+      nv.explodeMode = (opts.explodeMode === 'steps' || opts.explodeMode === 'auto') ? opts.explodeMode : (hasSteps ? 'steps' : 'auto');
+      nv.explodeAmount = opts.explodeAmount != null ? clamp(Number(opts.explodeAmount), 0.1, 1.5) : (nv.explodeMode === 'steps' ? 1 : 0.7);
+      nv.explodeTrails = opts.explodeTrails !== false;
+    }
     const vOpts = {
       scale: typeof opts.scale === 'number' && opts.scale > 0 ? opts.scale : 'sheet',
       hidden: opts.hidden != null ? !!opts.hidden : false,
       tangent: opts.tangent != null ? !!opts.tangent : true,
       shaded: !!opts.shaded,
     };
-    App.change(k === 'free' ? 'Freie Ansicht hinzugefügt' : 'Isometrische Ansicht hinzugefügt', () => {
+    const undoLbl = k === 'free' ? 'Freie Ansicht hinzugefügt' : k === 'explode' ? 'Explosionsansicht hinzugefügt' : 'Isometrische Ansicht hinzugefügt';
+    App.change(undoLbl, () => {
       const s = dwg();
       s.extraViews = s.extraViews || [];
       s.extraViews.push(nv);
       s.viewOpts = s.viewOpts || {};
       s.viewOpts[nv.id] = vOpts;
     });
+    if (k === 'explode' && computeExplodeData(nv, App.doc).partCount < 2) {
+      UI.toast(T('draw.explodeNeedTwo'), { icon: 'info', ms: 3800 });
+    }
     selView = nv.id; selDim = null;
     await refresh(); Panels.renderRight();
     return nv;
+  }
+  async function updateExplodeView(key, patch = {}) {
+    let changed = false;
+    App.change('Explosionsansicht geändert', () => {
+      const s = dwg();
+      const ev = (s.extraViews || []).find((v) => v.id === key && v.kind === 'explode');
+      if (!ev) return;
+      if (patch.explodeAmount != null && Number.isFinite(Number(patch.explodeAmount))) {
+        ev.explodeAmount = clamp(Number(patch.explodeAmount), 0.1, 1.5);
+        changed = true;
+      }
+      if (patch.explodeMode === 'auto' || patch.explodeMode === 'steps') {
+        ev.explodeMode = patch.explodeMode;
+        changed = true;
+      }
+      if (patch.explodeTrails !== undefined) {
+        ev.explodeTrails = !!patch.explodeTrails;
+        changed = true;
+      }
+      if (patch.dir) {
+        ev.dir = norm3(patch.dir, ISO_DIR);
+        ev.x = orthoX3(patch.x || ev.x, ev.dir);
+        changed = true;
+      }
+    });
+    if (!changed) return false;
+    for (const ck of [...shadeCache.keys()]) if (ck.startsWith(key + '|')) shadeCache.delete(ck);
+    await refresh();
+    Panels.renderRight();
+    return true;
+  }
+  function explodeViewInfo(key) {
+    const sh = dwg();
+    const ev = (sh.extraViews || []).find((v) => v.id === key && v.kind === 'explode');
+    if (!ev) return null;
+    const meta = (proj && proj.explodeMeta && proj.explodeMeta[key]) || computeExplodeData(ev, App.doc);
+    return {
+      id: ev.id,
+      amount: ev.explodeAmount,
+      mode: ev.explodeMode,
+      trails: ev.explodeTrails !== false,
+      offsets: Object.fromEntries(meta.offsets || []),
+      trailCount: (meta.trails3d || []).length,
+      partCount: meta.partCount || 0,
+    };
   }
   function removeView(key) {
     if (String(key).startsWith('aux_')) return removeAuxView(String(key).slice(4));
@@ -634,11 +987,31 @@ const Drawing = (() => {
     if (all.some((s) => s.views && s.views.iso)) addSpec('iso', 'iso', 'std');
     for (const s of all) {
       for (const ev of s.extraViews || []) {
+        if (ev.kind === 'explode') continue;
         addSpec(ev.id, { key: ev.id, dir: ev.dir, x: ev.x }, dirSig(ev));
       }
       for (const aux of s.auxViews || []) {
         const sp = auxViewSpec(aux);
         addSpec('aux_' + aux.id, { key: 'aux_' + aux.id, dir: sp.dir, x: sp.x }, dirSig(sp));
+      }
+      for (const sec of s.sections || []) {
+        if (sec.type === 'half') {
+          const sp = sectionPlaneSpec(sec);
+          const vk = secUncutViewKey(sp);
+          addSpec(vk, { key: vk, dir: sp.dir, x: sp.x }, dirSig(sp));
+        }
+      }
+    }
+    return specs;
+  }
+  function collectNeededExplodeViews() {
+    const specs = [];
+    const seen = new Set();
+    for (const s of sheets()) {
+      for (const ev of s.extraViews || []) {
+        if (ev.kind !== 'explode' || seen.has(ev.id)) continue;
+        seen.add(ev.id);
+        specs.push({ key: ev.id, ev, sig: explodeSig(ev) });
       }
     }
     return specs;
@@ -649,6 +1022,7 @@ const Drawing = (() => {
     left: { dir: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
   };
   const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const vCross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const vNorm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
   function auxViewSpec(aux) {
@@ -666,10 +1040,44 @@ const Drawing = (() => {
     const y = vNorm(vCross(dir, x));
     return { dir, x, y, cam2, look2, t2, angleDeg: (Math.atan2(Math.abs(dv), Math.abs(du)) * 180) / Math.PI };
   }
+  function modelDepthRange(dir) {
+    let bb = proj && Array.isArray(proj.bbox) && proj.bbox.length >= 6 ? proj.bbox : null;
+    if (!bb && typeof App !== 'undefined' && App.results) {
+      let b0 = Infinity, b1 = Infinity, b2 = Infinity, b3 = -Infinity, b4 = -Infinity, b5 = -Infinity;
+      for (const r of Object.values(App.results)) {
+        if (!r || !Array.isArray(r.bbox) || r.bbox.length < 6) continue;
+        b0 = Math.min(b0, r.bbox[0]); b1 = Math.min(b1, r.bbox[1]); b2 = Math.min(b2, r.bbox[2]);
+        b3 = Math.max(b3, r.bbox[3]); b4 = Math.max(b4, r.bbox[4]); b5 = Math.max(b5, r.bbox[5]);
+      }
+      if (isFinite(b0)) bb = [b0, b1, b2, b3, b4, b5];
+    }
+    if (!bb) bb = [-10, -10, -10, 10, 10, 10];
+    let wMin = Infinity, wMax = -Infinity;
+    for (const x of [bb[0], bb[3]]) for (const y of [bb[1], bb[4]]) for (const z of [bb[2], bb[5]]) {
+      const w = x * dir[0] + y * dir[1] + z * dir[2];
+      if (w < wMin) wMin = w;
+      if (w > wMax) wMax = w;
+    }
+    return [wMin, wMax];
+  }
+  function breakoutPlaneSpec(sec) {
+    const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+    const [wMin, wMax] = modelDepthRange(vf.dir);
+    const thick = Math.max(0.1, wMax - wMin);
+    const dVal = (sec.depth != null && Number.isFinite(Number(sec.depth)) && Number(sec.depth) > 0)
+      ? clamp(Number(sec.depth), 0.05, thick - 0.05)
+      : thick * 0.5;
+    const wCut = wMax - dVal;
+    const o = [vf.dir[0] * wCut, vf.dir[1] * wCut, vf.dir[2] * wCut];
+    return { o, dir: vf.dir, x: vf.x, y: vf.y, wMin, wMax, depth: dVal, thick };
+  }
   function sectionPlaneSpec(sec) {
+    if (sec && sec.type === 'breakout') return breakoutPlaneSpec(sec);
     const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
     const ex = vf.x, ey = vf.y;
-    const a = sec.a || [0, 0], b = sec.b || [10, 0];
+    const pts = (sec && sec.type === 'stepped' && Array.isArray(sec.pts) && sec.pts.length >= 2) ? sec.pts : null;
+    const a = pts ? pts[0] : (sec.a || [0, 0]);
+    const b = pts ? pts[1] : (sec.b || [10, 0]);
     const du = b[0] - a[0], dv = b[1] - a[1], L = Math.hypot(du, dv) || 1;
     const t2 = [du / L, dv / L];
     const look2 = sec.flip ? [t2[1], -t2[0]] : [-t2[1], t2[0]];
@@ -688,7 +1096,56 @@ const Drawing = (() => {
     }
     return { o, dir, x: secX, y: secY, look2, t2 };
   }
+  const secUncutViewKey = (sp) => '__secv_' + dirSig(sp);
+  function steppedSegments(sec) {
+    const pts = (sec && Array.isArray(sec.pts) && sec.pts.length >= 4) ? sec.pts : null;
+    if (!pts) return null;
+    const sp = sectionPlaneSpec(sec);
+    const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+    const ex = vf.x, ey = vf.y, t2 = sp.t2;
+    const T3 = vNorm([ex[0] * t2[0] + ey[0] * t2[1], ex[1] * t2[0] + ey[1] * t2[1], ex[2] * t2[0] + ey[2] * t2[1]]);
+    const axLen = Math.hypot(dot3(T3, sp.x), dot3(T3, sp.y)) || 1;
+    const ax2 = [dot3(T3, sp.x) / axLen, dot3(T3, sp.y) / axLen];
+    const sig = dirSig(sp);
+    const segs = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const A = pts[i], B = pts[i + 1];
+      const du = B[0] - A[0], dv = B[1] - A[1], L = Math.hypot(du, dv);
+      if (L < 1e-3) continue;
+      const align = Math.abs((du * t2[0] + dv * t2[1]) / L);
+      if (align <= 0.7) continue;
+      const mu = (A[0] + B[0]) * 0.5, mv = (A[1] + B[1]) * 0.5;
+      const o = [ex[0] * mu + ey[0] * mv, ex[1] * mu + ey[1] * mv, ex[2] * mu + ey[2] * mv];
+      const PA3 = [ex[0] * A[0] + ey[0] * A[1], ex[1] * A[0] + ey[1] * A[1], ex[2] * A[0] + ey[2] * A[1]];
+      const PB3 = [ex[0] * B[0] + ey[0] * B[1], ex[1] * B[0] + ey[1] * B[1], ex[2] * B[0] + ey[2] * B[1]];
+      const sA = dot3(PA3, sp.x) * ax2[0] + dot3(PA3, sp.y) * ax2[1];
+      const sB = dot3(PB3, sp.x) * ax2[0] + dot3(PB3, sp.y) * ax2[1];
+      const sLoRaw = Math.min(sA, sB), sHiRaw = Math.max(sA, sB);
+      segs.push({
+        o,
+        sLoRaw,
+        sHiRaw,
+        sMid: (sLoRaw + sHiRaw) * 0.5,
+        key: `st|${sec.parent}|${r4(o[0])},${r4(o[1])},${r4(o[2])}|${sig}`,
+      });
+    }
+    if (!segs.length) return null;
+    segs.sort((p, q) => p.sMid - q.sMid);
+    for (let i = 0; i < segs.length; i++) {
+      segs[i].lo = i === 0 ? -Infinity : (segs[i - 1].sHiRaw + segs[i].sLoRaw) * 0.5;
+      segs[i].hi = i === segs.length - 1 ? Infinity : (segs[i].sHiRaw + segs[i + 1].sLoRaw) * 0.5;
+    }
+    return { sp, ax2, segments: segs };
+  }
   function secCacheKey(sec) {
+    if (sec && sec.type === 'breakout') {
+      const bp = breakoutPlaneSpec(sec);
+      return `br|${sec.parent}|${r4(bp.o[0])},${r4(bp.o[1])},${r4(bp.o[2])}`;
+    }
+    if (sec && sec.type === 'stepped') {
+      const st = steppedSegments(sec);
+      return st ? 'st|' + st.segments.map((g) => g.key).join(';') : 'st|invalid';
+    }
     const a = sec.a || [0, 0], b = sec.b || [10, 0];
     return `${sec.parent}|${r4(a[0])},${r4(a[1])}|${r4(b[0])},${r4(b[1])}|${sec.flip ? 1 : 0}`;
   }
@@ -696,6 +1153,14 @@ const Drawing = (() => {
     const map = new Map();
     for (const sh of sheets()) {
       for (const sec of sh.sections || []) {
+        if (sec.type === 'stepped') {
+          const st = steppedSegments(sec);
+          if (!st) continue;
+          for (const seg of st.segments) {
+            if (!map.has(seg.key)) map.set(seg.key, { key: seg.key, o: seg.o, dir: st.sp.dir, x: st.sp.x, y: st.sp.y });
+          }
+          continue;
+        }
         const key = secCacheKey(sec);
         if (!map.has(key)) {
           const sp = sectionPlaneSpec(sec);
@@ -770,15 +1235,17 @@ const Drawing = (() => {
       return ensureProjections();
     }
     const specs = collectNeededViews();
+    const exSpecs = collectNeededExplodeViews();
     const allSecs = collectNeededSections();
     const scene = Model.kernelScene(App.doc);
     const sceneKey = JSON.stringify(scene);
     const rev = App.revision;
     const needFull = !proj || sceneKey !== projSceneKey;
     const missingViews = needFull ? specs : specs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
+    const missingEx = needFull ? exSpecs : exSpecs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
     const existingSecs = (proj && proj.sections) || {};
     const missingSecs = needFull ? allSecs : allSecs.filter((s) => !existingSecs[s.key]);
-    if (!needFull && !missingViews.length && !missingSecs.length) {
+    if (!needFull && !missingViews.length && !missingSecs.length && !missingEx.length) {
       await ensureBom(sceneKey);
       projRev = rev;
       return;
@@ -787,6 +1254,7 @@ const Drawing = (() => {
       try {
         if (needFull) {
           proj = await Kernel.call('project', { scene, views: specs.map((s) => s.spec), sections: allSecs });
+          proj.explodeMeta = {};
           projSceneKey = sceneKey;
           projRev = rev;
           projSigs.clear();
@@ -794,25 +1262,47 @@ const Drawing = (() => {
           projId++;
           geoCache.clear();
           shadeCache.clear();
-        } else {
-          const res = await Kernel.call('project', {
-            scene,
-            views: missingViews.map((s) => s.spec),
-            sections: missingSecs,
-          });
-          if (missingViews.length) {
-            proj.views = proj.views || {};
-            if (res && res.views) Object.assign(proj.views, res.views);
-            for (const s of missingViews) {
-              projSigs.set(s.key, s.sig);
-              for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
-            }
+          const afterSecs = collectNeededSections().filter((s) => !(proj.sections && proj.sections[s.key]));
+          if (afterSecs.length) {
+            const res2 = await Kernel.call('project', { scene, views: [], sections: afterSecs });
+            proj.sections = { ...(proj.sections || {}), ...((res2 && res2.sections) || {}) };
           }
-          if (missingSecs.length) {
-            proj.sections = { ...(proj.sections || {}), ...((res && res.sections) || {}) };
+        } else {
+          if (missingViews.length || missingSecs.length) {
+            const res = await Kernel.call('project', {
+              scene,
+              views: missingViews.map((s) => s.spec),
+              sections: missingSecs,
+            });
+            if (missingViews.length) {
+              proj.views = proj.views || {};
+              if (res && res.views) Object.assign(proj.views, res.views);
+              for (const s of missingViews) {
+                projSigs.set(s.key, s.sig);
+                for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
+              }
+            }
+            if (missingSecs.length) {
+              proj.sections = { ...(proj.sections || {}), ...((res && res.sections) || {}) };
+            }
           }
           projRev = rev;
           projId++;
+        }
+        for (const s of missingEx) {
+          const exData = computeExplodeData(s.ev, App.doc);
+          const exScene = buildExplodedScene(scene, exData, App.doc);
+          const exRes = await Kernel.call('project', {
+            scene: exScene,
+            views: [{ key: s.key, dir: s.ev.dir, x: s.ev.x }],
+            sections: [],
+          });
+          proj.views = proj.views || {};
+          proj.explodeMeta = proj.explodeMeta || {};
+          if (exRes && exRes.views && exRes.views[s.key]) proj.views[s.key] = exRes.views[s.key];
+          proj.explodeMeta[s.key] = exData;
+          projSigs.set(s.key, s.sig);
+          for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
         }
         await ensureBom(sceneKey);
       } finally {
@@ -1269,8 +1759,10 @@ const Drawing = (() => {
     if (!proj || !proj.views || !proj.views[name]) return null;
     const opts = viewOpts(sh, name);
     const is3d = is3dView(sh, name);
+    const ev = (sh.extraViews || []).find((x) => x.id === name && x.kind === 'explode');
+    const exTag = ev ? ('|ex:' + (ev.explodeTrails !== false ? 1 : 0)) : '';
     // beim Bemaßen wird bei jeder Mausbewegung neu gezeichnet – die aufgeräumten Kanten merken
-    const ck = name + '|' + projId + '|' + !!opts.hidden + '|' + !!opts.tangent + '|' + is3d;
+    const ck = name + '|' + projId + '|' + !!opts.hidden + '|' + !!opts.tangent + '|' + is3d + exTag;
     let g = geoCache.get(ck);
     if (!g) {
       if (geoCache.size > 32) geoCache.clear();
@@ -1278,7 +1770,8 @@ const Drawing = (() => {
       if (!g) return null;
       geoCache.set(ck, g);
     }
-    const base = { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    const threads = is3d ? [] : projectThreadsForView(proj.views[name], sh);
+    const base = { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
     const viewBrks = !is3d ? ((sh.breaks || []).filter((b) => b.view === name)) : [];
     return viewBrks.length ? applyBreaksToGeom(base, viewBrks) : base;
   }
@@ -1306,95 +1799,733 @@ const Drawing = (() => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const arr of [polys, tangents, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
-    // Mittellinien und kosmetische Gewinde (KP-20)
+    // Mittellinien (KP-20/ZE-06); Gewinde werden ungecached in viewGeom() projiziert
     const allCenters = is3d ? [] : computeViewCenters(name, v);
-    const threads = [];
-    if (!is3d) {
-      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
-      const seenT = new Set();
-      for (const th of docThreads()) {
-        const k = Math.abs(th.d.dot(dir));
-        if (k > 0.995) {
-          const c = [th.p0.dot(ex), th.p0.dot(ey)];
-          const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
-          if (seenT.has(key)) continue; seenT.add(key);
-          threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
-        } else if (k < 0.05) {
-          const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
-          const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20), sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
-          const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind;
-          if (seenT.has(key)) continue; seenT.add(key);
-          threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+    const explodeTrails = [];
+    const exView = (sh.extraViews || []).find((x) => x.id === name && x.kind === 'explode');
+    if (exView && exView.explodeTrails !== false && proj && proj.explodeMeta && proj.explodeMeta[name]) {
+      const vx = v.x || [1, 0, 0], vy = v.y || [0, 1, 0];
+      for (const tr of proj.explodeMeta[name].trails3d || []) {
+        if (!tr || !Array.isArray(tr.pts) || tr.pts.length < 2) continue;
+        explodeTrails.push({
+          partId: tr.partId,
+          pts: tr.pts.map((p) => [dot3(p, vx), dot3(p, vy)]),
+        });
+      }
+    }
+    return { polys, tangents, hidden, circles, points, allCenters, threads: [], explodeTrails, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+  }
+  function clipSegStrip(a, b, ax, ay, lo, hi) {
+    const d0 = a[0] * ax + a[1] * ay;
+    const d1 = b[0] * ax + b[1] * ay;
+    const dd = d1 - d0;
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dd) < 1e-9) {
+      if (d0 < lo - 1e-5 || d0 > hi + 1e-5) return null;
+    } else {
+      if (isFinite(lo)) {
+        const t = (lo - d0) / dd;
+        if (dd > 0) t0 = Math.max(t0, t);
+        else t1 = Math.min(t1, t);
+      }
+      if (isFinite(hi)) {
+        const t = (hi - d0) / dd;
+        if (dd > 0) t1 = Math.min(t1, t);
+        else t0 = Math.max(t0, t);
+      }
+      if (t1 - t0 <= 1e-7) return null;
+    }
+    const P0 = [a[0] + t0 * (b[0] - a[0]), a[1] + t0 * (b[1] - a[1])];
+    const P1 = [a[0] + t1 * (b[0] - a[0]), a[1] + t1 * (b[1] - a[1])];
+    if (Math.hypot(P1[0] - P0[0], P1[1] - P0[1]) <= 1e-6) return null;
+    return [P0, P1];
+  }
+  function clipPolyStrip(pts, ax, ay, lo, hi) {
+    const out = [];
+    let run = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const seg = clipSegStrip(pts[i], pts[i + 1], ax, ay, lo, hi);
+      if (!seg) {
+        if (run && run.length > 1) out.push({ pts: run });
+        run = null;
+        continue;
+      }
+      if (run && Math.hypot(run[run.length - 1][0] - seg[0][0], run[run.length - 1][1] - seg[0][1]) <= 1e-5) {
+        run.push(seg[1]);
+      } else {
+        if (run && run.length > 1) out.push({ pts: run });
+        run = [seg[0], seg[1]];
+      }
+    }
+    if (run && run.length > 1) out.push({ pts: run });
+    return out;
+  }
+  function clipEdgeItemStrip(item, ax, ay, lo, hi) {
+    if (item.c && item.pts && item.pts.length >= 2) {
+      const allIn = item.pts.every((p) => {
+        const d = p[0] * ax + p[1] * ay;
+        return d >= lo - 1e-5 && d <= hi + 1e-5;
+      });
+      if (allIn) {
+        if (item.arc) return [item];
+        const cd = item.c[0] * ax + item.c[1] * ay;
+        if (cd - item.r >= lo - 1e-5 && cd + item.r <= hi + 1e-5) return [item];
+      }
+    }
+    return clipPolyStrip(item.pts || [], ax, ay, lo, hi);
+  }
+  function polySignedArea2D(poly) {
+    let a = 0;
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const p = poly[i], q = poly[(i + 1) % n];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return a * 0.5;
+  }
+  function pointInPoly2D(pt, poly) {
+    let inside = false;
+    const x = pt[0], y = pt[1];
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function clipSegPolygon(a, b, poly, keepInside = true) {
+    if (!poly || poly.length < 3) return keepInside ? [] : [[a, b]];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    if (Math.hypot(dx, dy) < 1e-7) return [];
+    const hits = [];
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const p0 = poly[i], p1 = poly[(i + 1) % n];
+      const ex = p1[0] - p0[0], ey = p1[1] - p0[1];
+      const det = dx * ey - dy * ex;
+      if (Math.abs(det) < 1e-9) continue;
+      const qx = p0[0] - a[0], qy = p0[1] - a[1];
+      const t = (qx * ey - qy * ex) / det;
+      const u = (qx * dy - qy * dx) / det;
+      if (t > 1e-6 && t < 1 - 1e-6 && u >= -1e-6 && u <= 1 + 1e-6) hits.push(t);
+    }
+    hits.sort((p, q) => p - q);
+    const ts = [0];
+    for (const t of hits) if (t - ts[ts.length - 1] > 1e-6) ts.push(t);
+    if (1 - ts[ts.length - 1] > 1e-6) ts.push(1);
+    else ts[ts.length - 1] = 1;
+    const kept = [];
+    for (let k = 0; k < ts.length - 1; k++) {
+      const s0 = ts[k], s1 = ts[k + 1];
+      if (s1 - s0 <= 1e-6) continue;
+      const tm = (s0 + s1) * 0.5;
+      const pm = [a[0] + tm * dx, a[1] + tm * dy];
+      if (pointInPoly2D(pm, poly) === !!keepInside) {
+        if (kept.length && Math.abs(kept[kept.length - 1][1] - s0) <= 1e-6) kept[kept.length - 1][1] = s1;
+        else kept.push([s0, s1]);
+      }
+    }
+    const out = [];
+    for (const [s0, s1] of kept) {
+      const P0 = [a[0] + s0 * dx, a[1] + s0 * dy];
+      const P1 = [a[0] + s1 * dx, a[1] + s1 * dy];
+      if (Math.hypot(P1[0] - P0[0], P1[1] - P0[1]) > 1e-5) out.push([P0, P1]);
+    }
+    return out;
+  }
+  function clipPolyPolygon(pts, poly, keepInside = true) {
+    const out = [];
+    let run = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const segs = clipSegPolygon(pts[i], pts[i + 1], poly, keepInside);
+      if (!segs.length) {
+        if (run && run.length > 1) out.push({ pts: run });
+        run = null;
+        continue;
+      }
+      for (const seg of segs) {
+        if (run && Math.hypot(run[run.length - 1][0] - seg[0][0], run[run.length - 1][1] - seg[0][1]) <= 1e-5) {
+          run.push(seg[1]);
+        } else {
+          if (run && run.length > 1) out.push({ pts: run });
+          run = [seg[0], seg[1]];
         }
       }
     }
-    return { polys, tangents, hidden, circles, points, allCenters, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    if (run && run.length > 1) out.push({ pts: run });
+    return out;
+  }
+  function clipEdgeItemPolygon(item, poly, keepInside = true) {
+    if (item.c && item.pts && item.pts.length >= 2) {
+      let crosses = false;
+      for (let i = 0; i < item.pts.length - 1; i++) {
+        const segs = clipSegPolygon(item.pts[i], item.pts[i + 1], poly, keepInside);
+        if (segs.length !== 1 || Math.hypot(segs[0][0][0] - item.pts[i][0], segs[0][0][1] - item.pts[i][1]) > 1e-4 || Math.hypot(segs[0][1][0] - item.pts[i + 1][0], segs[0][1][1] - item.pts[i + 1][1]) > 1e-4) {
+          crosses = true;
+          break;
+        }
+      }
+      if (!crosses && item.pts.every((p) => pointInPoly2D(p, poly) === !!keepInside)) return [item];
+    }
+    return clipPolyPolygon(item.pts || [], poly, keepInside);
+  }
+  function makeBreakPoly(region) {
+    if (!Array.isArray(region) || region.length < 3) return [];
+    if (region.length >= 10) return region.map((p) => [p[0], p[1]]);
+    const ccw = polySignedArea2D(region) >= 0 ? 1 : -1;
+    let minL = Infinity;
+    for (let i = 0; i < region.length; i++) {
+      const A = region[i], B = region[(i + 1) % region.length];
+      const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+      if (L > 1e-4 && L < minL) minL = L;
+    }
+    if (!isFinite(minL)) minL = 10;
+    const amp = clamp(minL * 0.035, 0.15, 0.65);
+    const out = [];
+    for (let i = 0; i < region.length; i++) {
+      const A = region[i], B = region[(i + 1) % region.length];
+      const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+      out.push([A[0], A[1]]);
+      if (L < 0.8) continue;
+      const ux = dx / L, uy = dy / L;
+      const inX = ccw >= 0 ? -uy : uy;
+      const inY = ccw >= 0 ? ux : -ux;
+      const steps = clamp(Math.round(L / 2.2), 4, 24);
+      const cycles = Math.max(1, Math.round(L / 6));
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        const w = amp * 0.5 * (1 - Math.cos(t * TWO_PI * cycles)) * Math.sin(t * Math.PI);
+        out.push([A[0] + dx * t + inX * w, A[1] + dy * t + inY * w]);
+      }
+    }
+    return out;
+  }
+  function parseRawEdges(v, showHidden, withTangents = false) {
+    const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
+    const sharpVis = (v.visible || []).map(raw).filter(Boolean);
+    const tanVis = withTangents ? (v.tangentVisible || []).map(raw).filter(Boolean) : [];
+    const sharpHid = (v.hidden || []).map(raw).filter(Boolean);
+    const tanHid = withTangents ? (v.tangentHidden || []).map(raw).filter(Boolean) : [];
+    const cg1 = cleanGeom(sharpVis, tanVis);
+    let hid = [];
+    if (showHidden) {
+      const allVis = withTangents ? [...sharpVis, ...tanVis] : sharpVis;
+      const allHid = withTangents ? [...sharpHid, ...tanHid] : sharpHid;
+      hid = cleanGeom(allVis, allHid).hid;
+    }
+    return { vis: cg1.vis, tan: withTangents ? cg1.hid : [], hid };
+  }
+  function finalizeSectionGeom(polys, tangents, hidden, caps, allCenters, extra = {}) {
+    const circles = [], points = [];
+    for (const arr of [polys, tangents]) for (const p of arr) {
+      if (!p.pts || !p.pts.length) continue;
+      points.push(p.pts[0], p.pts[p.pts.length - 1]);
+      if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
+    }
+    for (const p of hidden) if (p.pts && p.pts.length) points.push(p.pts[0], p.pts[p.pts.length - 1]);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const arr of [polys, tangents, hidden]) for (const p of arr) for (const q of p.pts || []) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+    for (const cap of caps) {
+      if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
+      for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    }
+    if (!isFinite(x0)) return null;
+    return { polys, tangents, hidden, caps, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0, ...extra };
   }
   function sectionGeom(sec, sh = dwg()) {
+    const type = sec.type || 'full';
     const key = secCacheKey(sec);
-    if (!proj || !proj.sections || !proj.sections[key]) return null;
     const viewName = 'sec_' + sec.id;
+    if (type === 'half') {
+      const sp = sectionPlaneSpec(sec);
+      const vk = secUncutViewKey(sp);
+      if (!proj || !proj.sections || !proj.sections[key] || !proj.views || !proj.views[vk]) return null;
+      const ck = 'half|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden + '|' + (sec.halfAxis || 'v') + '|' + (sec.halfSide || 'right') + '|' + (sec.split ?? '');
+      let g = geoCache.get(ck);
+      if (!g) {
+        if (geoCache.size > 32) geoCache.clear();
+        const secRaw = proj.sections[key], fullRaw = proj.views[vk];
+        const sc = parseRawEdges(secRaw, !!sh.hidden, false);
+        const fc = parseRawEdges(fullRaw, !!sh.hidden, true);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const arr of [fc.vis, fc.tan, fc.hid, sc.vis, sc.hid]) for (const p of arr) for (const q of p.pts || []) {
+          x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+        }
+        for (const cap of secRaw.caps || []) {
+          if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
+        }
+        if (!isFinite(x0)) return null;
+        const isH = sec.halfAxis === 'h';
+        const splitVal = (sec.split != null && Number.isFinite(Number(sec.split))) ? Number(sec.split) : (isH ? (y0 + y1) * 0.5 : (x0 + x1) * 0.5);
+        const side = sec.halfSide || (isH ? 'bottom' : 'right');
+        const ax = isH ? 0 : 1, ay = isH ? 1 : 0;
+        const cutPosHalf = (!isH && side === 'right') || (isH && side === 'top');
+        const cutStrip = cutPosHalf ? { ax, ay, lo: splitVal, hi: Infinity } : { ax, ay, lo: -Infinity, hi: splitVal };
+        const uncutStrip = cutPosHalf ? { ax, ay, lo: -Infinity, hi: splitVal } : { ax, ay, lo: splitVal, hi: Infinity };
+        const polys = [], tangents = [], hidden = [];
+        for (const p of fc.vis) polys.push(...clipEdgeItemStrip(p, uncutStrip.ax, uncutStrip.ay, uncutStrip.lo, uncutStrip.hi));
+        for (const p of fc.tan) tangents.push(...clipEdgeItemStrip(p, uncutStrip.ax, uncutStrip.ay, uncutStrip.lo, uncutStrip.hi));
+        for (const p of fc.hid) hidden.push(...clipEdgeItemStrip(p, uncutStrip.ax, uncutStrip.ay, uncutStrip.lo, uncutStrip.hi));
+        for (const p of sc.vis) polys.push(...clipEdgeItemStrip(p, cutStrip.ax, cutStrip.ay, cutStrip.lo, cutStrip.hi));
+        for (const p of sc.hid) hidden.push(...clipEdgeItemStrip(p, cutStrip.ax, cutStrip.ay, cutStrip.lo, cutStrip.hi));
+        const caps = [];
+        for (const cap of secRaw.caps || []) {
+          if (cap.bbox) {
+            const cLo = Math.min(cap.bbox[0] * ax + cap.bbox[1] * ay, cap.bbox[2] * ax + cap.bbox[3] * ay);
+            const cHi = Math.max(cap.bbox[0] * ax + cap.bbox[1] * ay, cap.bbox[2] * ax + cap.bbox[3] * ay);
+            if (cHi < cutStrip.lo - 1e-4 || cLo > cutStrip.hi + 1e-4) continue;
+          }
+          caps.push({ ...cap, strip: cutStrip });
+        }
+        const splitLine = isH ? { a: [x0, splitVal], b: [x1, splitVal] } : { a: [splitVal, y0], b: [splitVal, y1] };
+        const allCenters = computeViewCenters(viewName, fullRaw);
+        g = finalizeSectionGeom(polys, tangents, hidden, caps, allCenters, { splitLine, halfClip: cutStrip });
+        if (!g) return null;
+        geoCache.set(ck, g);
+      }
+      const threads = projectThreadsForView(proj.views[vk], sh, { isSection: true, sectionPlane: sp, halfClip: g.halfClip });
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
+    }
+    if (type === 'stepped') {
+      const st = steppedSegments(sec);
+      if (!st || !st.segments.length || !proj || !proj.sections) return null;
+      for (const seg of st.segments) if (!proj.sections[seg.key]) return null;
+      const ck = 'step|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden;
+      let g = geoCache.get(ck);
+      if (!g) {
+        if (geoCache.size > 32) geoCache.clear();
+        const polys = [], hidden = [], caps = [];
+        const [ax, ay] = st.ax2;
+        for (const seg of st.segments) {
+          const v = proj.sections[seg.key];
+          const sc = parseRawEdges(v, !!sh.hidden, false);
+          for (const p of sc.vis) polys.push(...clipEdgeItemStrip(p, ax, ay, seg.lo, seg.hi));
+          for (const p of sc.hid) hidden.push(...clipEdgeItemStrip(p, ax, ay, seg.lo, seg.hi));
+          for (const cap of v.caps || []) {
+            if (cap.bbox) {
+              const vals = [
+                cap.bbox[0] * ax + cap.bbox[1] * ay,
+                cap.bbox[2] * ax + cap.bbox[1] * ay,
+                cap.bbox[0] * ax + cap.bbox[3] * ay,
+                cap.bbox[2] * ax + cap.bbox[3] * ay,
+              ];
+              if (Math.max(...vals) < seg.lo - 1e-4 || Math.min(...vals) > seg.hi + 1e-4) continue;
+            }
+            caps.push({ ...cap, strip: { ax, ay, lo: seg.lo, hi: seg.hi } });
+          }
+        }
+        const allCenters = computeViewCenters(viewName, st.sp);
+        g = finalizeSectionGeom(polys, [], hidden, caps, allCenters);
+        if (!g) return null;
+        geoCache.set(ck, g);
+      }
+      const threads = projectThreadsForView(st.sp, sh, { isSection: true, steppedSegments: st });
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
+    }
+    if (type === 'breakout') {
+      if (!proj || !proj.sections || !proj.sections[key] || !proj.views || !proj.views[sec.parent]) return null;
+      if (!Array.isArray(sec.region) || sec.region.length < 3) return null;
+      const regSig = sec.region.map((p) => `${r4(p[0])},${r4(p[1])}`).join(';');
+      const ck = 'brk|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden + '|' + (sec.depth ?? '') + '|' + regSig;
+      let g = geoCache.get(ck);
+      if (!g) {
+        if (geoCache.size > 32) geoCache.clear();
+        const secRaw = proj.sections[key], fullRaw = proj.views[sec.parent];
+        const fc = parseRawEdges(fullRaw, !!sh.hidden, true);
+        const sc = parseRawEdges(secRaw, !!sh.hidden, false);
+        const breakPoly = makeBreakPoly(sec.region);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const arr of [fc.vis, fc.tan, fc.hid, sc.vis, sc.hid]) for (const p of arr) for (const q of p.pts || []) {
+          x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+        }
+        if (!isFinite(x0)) return null;
+        const polys = [], tangents = [], hidden = [];
+        for (const p of fc.vis) polys.push(...clipEdgeItemPolygon(p, breakPoly, false));
+        for (const p of fc.tan) tangents.push(...clipEdgeItemPolygon(p, breakPoly, false));
+        for (const p of fc.hid) hidden.push(...clipEdgeItemPolygon(p, breakPoly, false));
+        for (const p of sc.vis) polys.push(...clipEdgeItemPolygon(p, breakPoly, true));
+        for (const p of sc.hid) hidden.push(...clipEdgeItemPolygon(p, breakPoly, true));
+        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+        for (const p of breakPoly) { bx0 = Math.min(bx0, p[0]); by0 = Math.min(by0, p[1]); bx1 = Math.max(bx1, p[0]); by1 = Math.max(by1, p[1]); }
+        const caps = [];
+        for (const cap of secRaw.caps || []) {
+          if (cap.bbox && (cap.bbox[2] < bx0 - 1e-4 || cap.bbox[0] > bx1 + 1e-4 || cap.bbox[3] < by0 - 1e-4 || cap.bbox[1] > by1 + 1e-4)) continue;
+          caps.push({ ...cap, clipPoly: breakPoly });
+        }
+        const closedLoop = [...breakPoly, breakPoly[0]];
+        const clipX = clipPolyStrip(closedLoop, 1, 0, x0 - 0.01, x1 + 0.01);
+        const breakLines = [];
+        for (const item of clipX) breakLines.push(...clipPolyStrip(item.pts, 0, 1, y0 - 0.01, y1 + 0.01));
+        const allCenters = computeViewCenters(viewName, fullRaw);
+        g = finalizeSectionGeom(polys, tangents, hidden, caps, allCenters, { breakPoly, breakLines });
+        if (!g) return null;
+        g.box = [x0, y0, x1, y1];
+        g.w = x1 - x0;
+        g.h = y1 - y0;
+        geoCache.set(ck, g);
+      }
+      const bp = breakoutPlaneSpec(sec);
+      const threads = projectThreadsForView(proj.views[sec.parent], sh, { isSection: true, sectionPlane: bp, breakPoly: g.breakPoly });
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
+    }
+    if (!proj || !proj.sections || !proj.sections[key]) return null;
     const ck = 'sec|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden;
     let g = geoCache.get(ck);
     if (!g) {
       if (geoCache.size > 32) geoCache.clear();
       const v = proj.sections[key];
-      const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
-      const cg = cleanGeom((v.visible || []).map(raw).filter(Boolean), sh.hidden ? (v.hidden || []).map(raw).filter(Boolean) : []);
-      const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
-      for (const p of polys) {
-        points.push(p.pts[0], p.pts[p.pts.length - 1]);
-        if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
-      }
-      for (const p of hidden) points.push(p.pts[0], p.pts[p.pts.length - 1]);
+      const sc = parseRawEdges(v, !!sh.hidden, false);
       const caps = v.caps || [];
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
-      for (const cap of caps) {
-        if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
-        for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
-      }
-      if (!isFinite(x0)) return null;
       const sDir = new THREE.Vector3(...v.dir), oVec = new THREE.Vector3(...(v.o || [0, 0, 0]));
       const allCenters = computeViewCenters(viewName, v, (a, o, d) => {
         const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
         const w0 = p0.sub(oVec).dot(sDir), w1 = p1.sub(oVec).dot(sDir);
         return Math.min(w0, w1) <= a.r + 0.5;
       });
-      g = { polys, hidden, caps, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+      g = finalizeSectionGeom(sc.vis, [], sc.hid, caps, allCenters);
+      if (!g) return null;
       geoCache.set(ck, g);
     }
-    const base = { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    const secRaw = proj.sections[key];
+    const threads = projectThreadsForView(secRaw, sh, { isSection: true, sectionPlane: { o: secRaw.o || [0, 0, 0], dir: secRaw.dir } });
+    const base = { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
     const viewBrks = (sh.breaks || []).filter((b) => b.view === viewName);
     return viewBrks.length ? applyBreaksToGeom(base, viewBrks) : base;
   }
-  function docThreads() {
-    const out = [], V = Model.vars(App.doc).v;
-    Model.walk(App.doc.items, (it) => {
-      if (it.role === 'hole' || it.suppressed || !Model.isActive(App.doc, it.id) || !it.threads || !it.threads.length) return;
-      const mats = Model.instanceMatrices(App.doc, it.id, V);
-      for (const th of it.threads) {
-        const fi = Viewer.threadFaceIndex(it.id, th);
-        const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
-          o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
-        } : null);
-        if (!g) continue;
-        const kind = th.kind || g.kind || 'ext';
-        const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
-        const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
-        const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
-        const spec = THREAD_MAP[th.size];
-        const rThread = kind === 'int' ? (spec ? spec.d / 2 : g.r * 1.15) : (spec ? spec.core / 2 : g.r * 0.85);
-        const dL = new THREE.Vector3(...g.d).normalize();
-        const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
-        const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
-        for (const M of mats) {
-          const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
-          out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind });
+  function threadDims(size) {
+    const te = typeof threadEntry === 'function' ? threadEntry(size) : null;
+    if (te && te.nenn_d_mm > 0) {
+      return {
+        d: Number(te.nenn_d_mm),
+        core: Number(te.kernloch_mm) || Number(te.nenn_d_mm) * 0.82,
+        pitch: Number(te.steigung_mm) || 1,
+      };
+    }
+    const sp = THREAD_MAP[size];
+    if (sp) return { d: sp.d, core: sp.core, pitch: sp.pitch };
+    const d = parseFloat(String(size || '').replace(/[^\d.]/g, '')) || 6;
+    return { d, core: d * 0.83, pitch: 1 };
+  }
+  function isItemActiveVisible(doc, it) {
+    if (!it || it.suppressed || it.hidden || !Model.isActive(doc, it.id)) return false;
+    for (const p of Model.parentsOf(doc, it.id)) {
+      if (p && (p.suppressed || p.hidden)) return false;
+    }
+    return true;
+  }
+  function collectSolidBBoxes(doc = App.doc) {
+    const boxes = [];
+    if (typeof Actions !== 'undefined' && Actions.worldBox) {
+      for (const top of Model.activeItems(doc)) {
+        if (!top || top.role === 'hole' || top.suppressed || top.hidden) continue;
+        const wb = Actions.worldBox(top.id);
+        if (wb && !wb.isEmpty()) boxes.push([wb.min.x, wb.min.y, wb.min.z, wb.max.x, wb.max.y, wb.max.z]);
+      }
+    }
+    if (!boxes.length && proj && Array.isArray(proj.bbox) && proj.bbox.length >= 6) boxes.push(proj.bbox);
+    return boxes;
+  }
+  function ptInBox3(pt, b, eps = 0.05) {
+    return pt.x >= b[0] - eps && pt.x <= b[3] + eps
+      && pt.y >= b[1] - eps && pt.y <= b[4] + eps
+      && pt.z >= b[2] - eps && pt.z <= b[5] + eps;
+  }
+  function clampThreadSeg(p0, p1, solidBBoxes) {
+    const len = p0.distanceTo(p1);
+    if (len < 0.2) return [];
+    if (!solidBBoxes || !solidBBoxes.length) return [{ p0, p1, blind0: false, blind1: false }];
+    const u = p1.clone().sub(p0).divideScalar(len);
+    const dirArr = [u.x, u.y, u.z];
+    const pArr = [p0.x, p0.y, p0.z];
+    const ivs = [];
+    const hitBoxes = [];
+    for (const b of solidBBoxes) {
+      let t0 = 0, t1 = len, ok = true;
+      for (let k = 0; k < 3; k++) {
+        const d = dirArr[k], lo = b[k] - 0.02, hi = b[k + 3] + 0.02;
+        if (Math.abs(d) < 1e-8) {
+          if (pArr[k] < lo || pArr[k] > hi) { ok = false; break; }
+        } else {
+          let a = (lo - pArr[k]) / d, bb = (hi - pArr[k]) / d;
+          if (a > bb) [a, bb] = [bb, a];
+          t0 = Math.max(t0, a);
+          t1 = Math.min(t1, bb);
+          if (t0 >= t1 - 0.2) { ok = false; break; }
         }
       }
+      if (ok && t1 - t0 > 0.2) {
+        ivs.push([t0, t1]);
+        hitBoxes.push(b);
+      }
+    }
+    if (!ivs.length) return [];
+    ivs.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const [a, b] of ivs) {
+      const last = merged[merged.length - 1];
+      if (last && a <= last[1] + 0.05) last[1] = Math.max(last[1], b);
+      else merged.push([a, b]);
+    }
+    return merged.map(([tA, tB]) => {
+      const q0 = p0.clone().addScaledVector(u, tA);
+      const q1 = p0.clone().addScaledVector(u, tB);
+      const probe0 = q0.clone().addScaledVector(u, -0.15);
+      const probe1 = q1.clone().addScaledVector(u, 0.15);
+      const blind0 = hitBoxes.some((b) => ptInBox3(probe0, b, 0.04));
+      const blind1 = hitBoxes.some((b) => ptInBox3(probe1, b, 0.04));
+      return { p0: q0, p1: q1, blind0, blind1 };
     });
+  }
+  function docThreads(doc = App.doc, extraMat = null, visited = null, solidBBoxes = null) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    const vis = visited || new Set();
+    if (doc.id && vis.has(doc.id)) return [];
+    if (doc.id) vis.add(doc.id);
+    const out = [], V = Model.vars(doc).v;
+    const boxes = solidBBoxes || collectSolidBBoxes(doc);
+    try {
+      Model.walk(doc.items, (it) => {
+        if (!isItemActiveVisible(doc, it)) return;
+        const mats = Model.instanceMatrices(doc, it.id, V).map((m) => (extraMat ? extraMat.clone().multiply(m) : m));
+        if (!mats.length) return;
+        if (it.kind === 'ref' && it.p && it.p.docId && typeof Model.resolveDoc === 'function') {
+          const rd = Model.resolveDoc(it.p.docId);
+          if (rd) {
+            for (const M of mats) out.push(...docThreads(rd, M, vis, boxes));
+          }
+          return;
+        }
+        if (it.role !== 'hole' && it.threads && it.threads.length) {
+          for (const th of it.threads) {
+            const fi = !extraMat ? Viewer.threadFaceIndex(it.id, th) : -1;
+            const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+              o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+            } : null);
+            if (!g) continue;
+            const kind = th.kind || g.kind || 'ext';
+            const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+            const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+            const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+            const td = threadDims(th.size);
+            const rThread = kind === 'int' ? (td ? td.d / 2 : g.r * 1.15) : (td ? td.core / 2 : g.r * 0.85);
+            const dL = new THREE.Vector3(...g.d).normalize();
+            const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
+            const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
+            for (const M of mats) {
+              const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+              out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind, source: 'cosmetic', blind0: true, blind1: true });
+            }
+          }
+        }
+        if (it.kind === 'part' && it.p) {
+          const p = it.p;
+          if (p.lib === 'screwHole' && p.fit === 'tap') {
+            const size = p.size || 'M6';
+            const td = threadDims(size);
+            const L = Math.max(0.2, Model.num(p.length, V, 10));
+            const p0L = new THREE.Vector3(0, 0, -L), p1L = new THREE.Vector3(0, 0, 0);
+            for (const M of mats) {
+              const w0 = p0L.clone().applyMatrix4(M), w1 = p1L.clone().applyMatrix4(M);
+              for (const seg of clampThreadSeg(w0, w1, boxes)) {
+                out.push({ p0: seg.p0, p1: seg.p1, d: seg.p1.clone().sub(seg.p0).normalize(), r: td.core / 2, rThread: td.d / 2, size, length: round(seg.p0.distanceTo(seg.p1), 2), kind: 'int', source: 'tapHole', blind0: seg.blind0, blind1: seg.blind1 });
+              }
+            }
+          } else if (p.lib === 'threadHole') {
+            const size = p.size || 'M6';
+            const td = threadDims(size);
+            const L = Math.max(0.2, Model.num(p.length, V, 10));
+            const p0L = new THREE.Vector3(0, 0, -L), p1L = new THREE.Vector3(0, 0, 0);
+            for (const M of mats) {
+              const w0 = p0L.clone().applyMatrix4(M), w1 = p1L.clone().applyMatrix4(M);
+              const segs = (it.role === 'hole' || (it.op && it.op.type === 'cut')) ? clampThreadSeg(w0, w1, boxes) : [{ p0: w0, p1: w1, blind0: false, blind1: false }];
+              for (const seg of segs) {
+                out.push({ p0: seg.p0, p1: seg.p1, d: seg.p1.clone().sub(seg.p0).normalize(), r: td.core / 2, rThread: td.d / 2, size, length: round(seg.p0.distanceTo(seg.p1), 2), kind: 'int', source: 'threadHole', blind0: seg.blind0, blind1: seg.blind1 });
+              }
+            }
+          } else if (it.role !== 'hole' && p.lib === 'threadRod') {
+            const size = p.size || 'M6';
+            const td = threadDims(size);
+            const L = Math.max(0.2, Model.num(p.length, V, 12));
+            const p0L = new THREE.Vector3(0, 0, 0), p1L = new THREE.Vector3(0, 0, L);
+            for (const M of mats) {
+              const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+              out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: td.d / 2, rThread: td.core / 2, size, length: round(L, 2), kind: 'ext', source: 'threadRod', blind0: true, blind1: true });
+            }
+          } else if (it.role !== 'hole' && p.lib === 'stdScrew') {
+            const size = p.size || 'M3';
+            const td = threadDims(size);
+            const L = Math.max(0.5, Model.num(p.length, V, 10));
+            const se = typeof screwEntry === 'function' ? screwEntry(size) : null;
+            const ck = se && se.senkkopf && se.senkkopf.kopf_h_mm ? Number(se.senkkopf.kopf_h_mm) : 0;
+            const z0 = p.head === 'senk' && ck > 0 ? -Math.max(L, ck + 0.5) : -L;
+            const z1 = p.head === 'senk' && ck > 0 ? -ck : 0;
+            if (z1 - z0 >= 0.2) {
+              const p0L = new THREE.Vector3(0, 0, z0), p1L = new THREE.Vector3(0, 0, z1);
+              for (const M of mats) {
+                const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+                out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: td.d / 2, rThread: td.core / 2, size, length: round(z1 - z0, 2), kind: 'ext', source: 'stdScrew', blind0: true, blind1: true });
+              }
+            }
+          } else if (it.role !== 'hole' && p.lib === 'stdNut') {
+            const size = p.size || 'M3';
+            const td = threadDims(size);
+            const se = typeof screwEntry === 'function' ? screwEntry(size) : null;
+            const nutH = (se && se.mutter && Number(se.mutter.hoehe_mm)) || td.d * 0.8;
+            const p0L = new THREE.Vector3(0, 0, 0), p1L = new THREE.Vector3(0, 0, nutH);
+            for (const M of mats) {
+              const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+              out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: td.core / 2, rThread: td.d / 2, size, length: round(nutH, 2), kind: 'int', source: 'stdNut', blind0: false, blind1: false });
+            }
+          }
+        }
+      });
+    } finally {
+      if (doc.id) vis.delete(doc.id);
+    }
     return out;
+  }
+  function projectThreadsForView(v, sh = dwg(), opts = {}) {
+    if (!v || !v.dir || !v.x || !v.y) return [];
+    const normOn = normThreadsActive(sh);
+    const allowCosmetic = !sh || sh.normThreads !== false;
+    if (!normOn && !allowCosmetic) return [];
+    const rawList = docThreads().filter((th) => normOn || th.source === 'cosmetic');
+    if (!rawList.length) return [];
+    const dir = new THREE.Vector3(...v.dir).normalize();
+    const ex = new THREE.Vector3(...v.x).normalize();
+    const ey = new THREE.Vector3(...v.y).normalize();
+    const threads = [];
+    const seenT = new Set();
+    const sp = opts.sectionPlane || null;
+    const spO = sp && sp.o ? new THREE.Vector3(...sp.o) : null;
+    const spDir = sp && sp.dir ? new THREE.Vector3(...sp.dir).normalize() : null;
+    const cutStatus = (th, planeO, planeDir) => {
+      if (!planeO || !planeDir) return { keep: true, isCut: false };
+      const w0 = th.p0.clone().sub(planeO).dot(planeDir);
+      const w1 = th.p1.clone().sub(planeO).dot(planeDir);
+      if (Math.min(w0, w1) > th.rThread + 0.5) return { keep: false, isCut: false };
+      const isCut = Math.min(w0, w1) <= th.rThread + 0.25 && Math.max(w0, w1) >= -(th.rThread + 0.25);
+      return { keep: true, isCut };
+    };
+    const pushSide = (a, b, th, isCut, blind0 = th.blind0, blind1 = th.blind1) => {
+      if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) <= 0.2) return;
+      const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20);
+      const sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
+      const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind + '|' + (isCut ? 1 : 0);
+      if (seenT.has(key)) return;
+      seenT.add(key);
+      threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind, source: th.source, blind0, blind1, isCut: !!isCut });
+    };
+    const pushEnd = (c, th, isCut) => {
+      const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
+      if (seenT.has(key)) return;
+      seenT.add(key);
+      threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind, source: th.source, blind0: th.blind0, blind1: th.blind1, isCut: !!isCut });
+    };
+    for (const th of rawList) {
+      const k = Math.abs(th.d.dot(dir));
+      if (k > 0.995) {
+        const c = [th.p0.dot(ex), th.p0.dot(ey)];
+        if (opts.isSection && spO && spDir) {
+          const w0 = th.p0.clone().sub(spO).dot(spDir), w1 = th.p1.clone().sub(spO).dot(spDir);
+          if (Math.min(w0, w1) > 0.5) continue;
+        }
+        if (opts.halfClip) {
+          const d = c[0] * opts.halfClip.ax + c[1] * opts.halfClip.ay;
+          const inCut = d >= opts.halfClip.lo - 1e-4 && d <= opts.halfClip.hi + 1e-4;
+          pushEnd(c, th, inCut);
+        } else if (opts.breakPoly) {
+          pushEnd(c, th, pointInPoly2D(c, opts.breakPoly));
+        } else {
+          pushEnd(c, th, !!opts.isSection);
+        }
+      } else if (k < 0.05) {
+        const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
+        if (opts.steppedSegments && opts.steppedSegments.segments) {
+          const st = opts.steppedSegments;
+          for (const seg of st.segments) {
+            const clipped = clipSegStrip(a, b, st.ax2[0], st.ax2[1], seg.lo, seg.hi);
+            if (!clipped) continue;
+            const cs = cutStatus(th, new THREE.Vector3(...seg.o), new THREE.Vector3(...st.sp.dir).normalize());
+            if (!cs.keep) continue;
+            pushSide(clipped[0], clipped[1], th, cs.isCut, th.blind0 && Math.hypot(clipped[0][0] - a[0], clipped[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(clipped[1][0] - b[0], clipped[1][1] - b[1]) < 0.05);
+          }
+        } else if (opts.halfClip) {
+          const hc = opts.halfClip;
+          const cutSeg = clipSegStrip(a, b, hc.ax, hc.ay, hc.lo, hc.hi);
+          if (cutSeg) {
+            const cs = cutStatus(th, spO, spDir);
+            if (cs.keep) pushSide(cutSeg[0], cutSeg[1], th, cs.isCut, th.blind0 && Math.hypot(cutSeg[0][0] - a[0], cutSeg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(cutSeg[1][0] - b[0], cutSeg[1][1] - b[1]) < 0.05);
+          }
+          const uncutLo = isFinite(hc.lo) ? -Infinity : hc.hi;
+          const uncutHi = isFinite(hc.lo) ? hc.lo : Infinity;
+          const unSeg = clipSegStrip(a, b, hc.ax, hc.ay, uncutLo, uncutHi);
+          if (unSeg) {
+            pushSide(unSeg[0], unSeg[1], th, false, th.blind0 && Math.hypot(unSeg[0][0] - a[0], unSeg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(unSeg[1][0] - b[0], unSeg[1][1] - b[1]) < 0.05);
+          }
+        } else if (opts.breakPoly) {
+          for (const seg of clipSegPolygon(a, b, opts.breakPoly, true)) {
+            const cs = cutStatus(th, spO, spDir);
+            if (cs.keep) pushSide(seg[0], seg[1], th, cs.isCut, th.blind0 && Math.hypot(seg[0][0] - a[0], seg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(seg[1][0] - b[0], seg[1][1] - b[1]) < 0.05);
+          }
+          for (const seg of clipSegPolygon(a, b, opts.breakPoly, false)) {
+            pushSide(seg[0], seg[1], th, false, th.blind0 && Math.hypot(seg[0][0] - a[0], seg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(seg[1][0] - b[0], seg[1][1] - b[1]) < 0.05);
+          }
+        } else if (opts.isSection && spO && spDir) {
+          const cs = cutStatus(th, spO, spDir);
+          if (!cs.keep) continue;
+          pushSide(a, b, th, cs.isCut);
+        } else {
+          pushSide(a, b, th, false);
+        }
+      }
+    }
+    return threads;
+  }
+  function hatchPatternForMaterial(matKey) {
+    const k = String(matKey || '').trim().toLowerCase();
+    if (!k) return 'steel';
+    if (k.includes('alu')) return 'alu';
+    if (k.includes('messing') || k.includes('kupfer') || k.includes('brass') || k.includes('copper') || k.includes('bronze')) return 'brass';
+    if (k.includes('cfk') || k.includes('gfk') || k.includes('faser') || k.includes('carbon')) return 'composite';
+    if (k.includes('holz') || k.includes('buche') || k.includes('birke') || k.includes('pappel') || k.includes('mdf') || k.includes('wood')) return 'wood';
+    if (k.includes('stahl') || k.includes('titan') || k.includes('eisen') || k.includes('steel')) return 'steel';
+    const m = typeof MATERIALS !== 'undefined' ? MATERIALS.find((x) => String(x.k || '').toLowerCase() === k || String(x.name || '').toLowerCase() === k) : null;
+    if (m) {
+      if (m.cat === 'Kunststoffe') return 'plastic';
+      if (m.cat === 'Holz & Platten') return 'wood';
+      if (m.cat === 'Faserverbund') return 'composite';
+      if (m.cat === 'Metalle') return 'steel';
+    }
+    if (/(pla|petg|abs|asa|tpu|pa6|pa12|nylon|pom|pc|kunststoff|plastic)/i.test(k)) return 'plastic';
+    return 'steel';
+  }
+  function resolveCapItem(cap, doc = App.doc) {
+    if (!doc || !Array.isArray(doc.items)) return null;
+    if (cap && cap.partId) {
+      const direct = doc.items.find((x) => x.id === cap.partId);
+      if (direct) return direct;
+      const found = Model.find(doc, cap.partId);
+      if (found && found.item) return found.item;
+    }
+    const solids = Model.activeItems(doc).filter((it) => it && it.role !== 'hole' && !(typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)));
+    return (cap && typeof cap.partIdx === 'number' && solids[cap.partIdx]) || null;
+  }
+  function itemExplicitMaterial(it, doc = App.doc) {
+    if (it && it.mat) return String(it.mat);
+    if (it && it.kind === 'ref' && it.p && it.p.docId && typeof Model.resolveDoc === 'function') {
+      const rd = Model.resolveDoc(it.p.docId);
+      if (rd) {
+        if (rd.settings && rd.settings.material) return String(rd.settings.material);
+        const solids = Model.activeItems(rd).filter((x) => x && x.role !== 'hole');
+        const mats = [...new Set(solids.map((x) => x.mat).filter(Boolean))];
+        if (mats.length === 1) return String(mats[0]);
+      }
+    }
+    if (doc && doc.settings && doc.settings.material) return String(doc.settings.material);
+    return null;
+  }
+  function capMaterialInfo(cap, doc = App.doc) {
+    const it = resolveCapItem(cap, doc);
+    const matKey = itemExplicitMaterial(it, doc);
+    return { item: it, matKey, pattern: hatchPatternForMaterial(matKey) };
   }
   function freeGeom(sh = dwg()) {
     if (!sh.free.length) return null;
@@ -1717,28 +2848,36 @@ const Drawing = (() => {
       const py = ry + (ah - ex.geo.h * si) / 2;
       place(ex.id, ex.geo, si, px, py, ex.opts, ex.label, true, 4, 4);
     };
-    let x0 = area.x + 12, y0 = area.y + 12, fw = 0, fh = 0, lw = 0, th = 0;
+    const isUS = normProjection(sh.projection) === 'us';
+    let x0 = area.x + 12, y0 = area.y + 12, fw = 0, fh = 0, lw = 0, th = 0, totalW = 0, totalH = 0;
+    let frontX = x0, frontY = y0;
     if (main) {
       const sf = scOf(oF, s), st = scOf(oT, s), sl = scOf(oL, s);
       fw = Math.max(G.front ? G.front.w * sf : 0, G.top ? G.top.w * st : 0);
       fh = Math.max(G.front ? G.front.h * sf : 0, G.left ? G.left.h * sl : 0);
       lw = G.left ? G.left.w * sl : 0; th = G.top ? G.top.h * st : 0;
-      const totalW = fw + (G.left ? gap + lw : 0), totalH = fh + (G.top ? gap + th : 0);
+      const gapX = G.left && fw > 0 ? gap : 0;
+      const gapY = G.top && fh > 0 ? gap : 0;
+      totalW = fw + gapX + lw; totalH = fh + gapY + th;
       const room = extras.length ? 0.68 : (secGeos.length || auxGeos.length) ? 0.72 : 1;
       x0 = area.x + Math.max(12, (area.w * room - totalW) / 2);
       y0 = area.y + Math.max(12, (area.h - totalH) / 2);
-      if (G.front) place('front', G.front, sf, x0, y0, oF, viewLabel('front', sh), false);
+      frontX = x0 + (isUS && G.left ? lw + gapX : 0);
+      frontY = y0 + (isUS && G.top ? th + gapY : 0);
+      if (G.front) place('front', G.front, sf, frontX, frontY, oF, viewLabel('front', sh), false);
       if (G.left) {
-        const py = G.front ? (sl === sf ? y0 + (G.front.box[3] - G.left.box[3]) * sf : y0 + (fh - G.left.h * sl) / 2) : y0;
-        place('left', G.left, sl, x0 + fw + gap, py, oL, viewLabel('left', sh), false);
+        const lx = isUS ? x0 : x0 + fw + gapX;
+        const ly = G.front ? (sl === sf && Math.abs(G.front.h - G.left.h) <= 0.1 ? frontY + (G.front.box[3] - G.left.box[3]) * sf : frontY + (fh - G.left.h * sl) / 2) : frontY;
+        place('left', G.left, sl, lx, ly, oL, viewLabel('left', sh), false);
         if (G.front && sl === sf && Math.abs(G.front.h - G.left.h) <= 0.1) views.left.oy = views.front.oy;
       }
       if (G.top) {
-        const px = G.front && (st !== sf || Math.abs(G.front.w - G.top.w) > 0.1) ? x0 + (fw - G.top.w * st) / 2 : x0;
-        place('top', G.top, st, px, y0 + fh + (G.front ? gap : 0), oT, viewLabel('top', sh), false);
+        const tx = G.front && (st !== sf || Math.abs(G.front.w - G.top.w) > 0.1) ? frontX + (fw - G.top.w * st) / 2 : frontX;
+        const ty = isUS ? y0 : y0 + fh + gapY;
+        place('top', G.top, st, tx, ty, oT, viewLabel('top', sh), false);
         if (G.front && st === sf && Math.abs(G.front.w - G.top.w) <= 0.1) views.top.ox = views.front.ox;
       }
-      if (extras.length === 1 && G.front && G.left && G.top && !secGeos.length && !auxGeos.length) {
+      if (!isUS && extras.length === 1 && G.front && G.left && G.top && !secGeos.length && !auxGeos.length) {
         const rx = x0 + fw + gap, ry = y0 + fh + gap;
         const rawH = area.y + area.h - ry - 10;
         const maxH = bomRect ? Math.min(rawH, bomRect.y - ry - 6) : rawH;
@@ -1760,10 +2899,15 @@ const Drawing = (() => {
     let fits = true;
     const placeFreeOrtho = (vw, vh, pcx, pcy, extraCands = []) => {
       const cands = [...extraCands];
-      if (G.left) cands.push([x0 + fw + gap + lw + gap, y0]);
-      if (G.front || G.top) cands.push([x0 + fw + gap, y0 + fh + gap]);
-      if (G.top) cands.push([x0, y0 + fh + gap + th + gap]);
-      cands.push([x0 + fw + gap, y0]);
+      if (isUS) {
+        cands.push([x0 + totalW + gap, y0]);
+        if (G.top && G.left) cands.push([x0, y0]);
+      } else {
+        if (G.left) cands.push([x0 + fw + gap + lw + gap, y0]);
+        if (G.front || G.top) cands.push([x0 + fw + gap, y0 + fh + gap]);
+        if (G.top) cands.push([x0, y0 + fh + gap + th + gap]);
+        cands.push([x0 + fw + gap, y0]);
+      }
       for (let gy = area.y + 8; gy <= area.y + area.h - vh - 14; gy += 14) {
         for (let gx = area.x + 8; gx <= area.x + area.w - vw - 8; gx += 14) cands.push([gx, gy]);
       }
@@ -1873,7 +3017,8 @@ const Drawing = (() => {
     const gap = 22;
     const needW = (sc) => Math.max(G.front ? G.front.w * scOf(oF, sc) : 0, G.top ? G.top.w * scOf(oT, sc) : 0) + (G.left ? gap + G.left.w * scOf(oL, sc) : 0);
     const needH = (sc) => Math.max(G.front ? G.front.h * scOf(oF, sc) : 0, G.left ? G.left.h * scOf(oL, sc) : 0) + (G.top ? gap + G.top.h * scOf(oT, sc) : 0);
-    const extraRoom = extras.length > 1 || (extras.length && !G.top) ? 0.35 : 0;
+    const isUS = normProjection(sh.projection) === 'us';
+    const extraRoom = extras.length > 1 || (extras.length && (!G.top || isUS)) ? 0.35 : 0;
     let views = {};
     if (!secGeos.length && !auxGeos.length) {
       if (sh.scale === 'auto') {
@@ -2041,6 +3186,7 @@ const Drawing = (() => {
     if (!dim) return 0;
     if (dim.type === 'dia') return Number(dim.r || 0) * 2;
     if (dim.type === 'rad') return Number(dim.r || 0);
+    if (dim.type === 'arclen') return Math.abs(Number(dim.r || 0) * (Number(dim.a1 || 0) - Number(dim.a0 || 0)));
     if (dim.type === 'lin') {
       if (dim.dir === 'h') return Math.abs(dim.b[0] - dim.a[0]);
       if (dim.dir === 'v') return Math.abs(dim.b[1] - dim.a[1]);
@@ -2050,18 +3196,22 @@ const Drawing = (() => {
   }
   function dimLabelParts(dim, nominalMm, st = sheetDimStyle()) {
     const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
+    const dualLabel = (st && st.dual) ? fmtDualSecondary(nominalMm, st) : '';
     if (dim.type === 'dia' || dim.type === 'rad') {
-      if (dim.threadLabel) return { mainLabel: countPrefix + dim.threadLabel, prefix: '', isThread: true };
+      if (dim.threadLabel) return { mainLabel: countPrefix + dim.threadLabel, dualLabel: '', prefix: '', isThread: true };
       const prefix = dim.type === 'dia' ? 'Ø' : 'R';
-      return { mainLabel: countPrefix + prefix + fmtDim(nominalMm, st), prefix, isThread: false };
+      return { mainLabel: countPrefix + prefix + fmtDim(nominalMm, st), dualLabel, prefix, isThread: false };
     }
-    return { mainLabel: fmtDim(nominalMm, st), prefix: '', isThread: false };
+    if (dim.type === 'arclen') {
+      return { mainLabel: countPrefix + '⌒' + fmtDim(nominalMm, st), dualLabel, prefix: '⌒', isThread: false };
+    }
+    return { mainLabel: fmtDim(nominalMm, st), dualLabel, prefix: '', isThread: false };
   }
   function findDimById(id, sh = dwg(), lay = layout) {
     if (!id || !sh) return null;
     const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
     const dim = list.find((x) => x.id === id);
-    if (!dim || !['lin', 'dia', 'rad'].includes(dim.type)) return null;
+    if (!dim || !['lin', 'dia', 'rad', 'arclen'].includes(dim.type)) return null;
     const nominalMm = dimNominal(dim);
     const { mainLabel } = dimLabelParts(dim, nominalMm, sheetDimStyle(sh));
     return { dim, nominalMm, label: mainLabel };
@@ -2147,73 +3297,104 @@ const Drawing = (() => {
     }
     return null;
   }
-  function measureDimLabel(mainLabel, prefix, tolInfo, TXT, count = 1) {
-    if (!tolInfo) return { totalW: textW(mainLabel, TXT) * 0.92 };
-    if (tolInfo.mode === 'sym') return { totalW: textW(`${mainLabel} ±${tolInfo.symStr}`, TXT) * 0.92 };
+  function measureDimLabel(mainLabel, prefix, tolInfo, TXT, count = 1, dualLabel = '') {
+    const dualTxt = dualLabel ? ' ' + dualLabel : '';
+    if (!tolInfo) return { totalW: textW(mainLabel + dualTxt, TXT) * 0.92 };
+    if (tolInfo.mode === 'sym') return { totalW: textW(`${mainLabel} ±${tolInfo.symStr}${dualTxt}`, TXT) * 0.92 };
     if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
-      return { totalW: textW(`${mainLabel} ${tolInfo.code}`, TXT) * 0.92 };
+      return { totalW: textW(`${mainLabel} ${tolInfo.code}${dualTxt}`, TXT) * 0.92 };
     }
     const k = TXT / 3.5;
+    const wDual = dualLabel ? textW(dualLabel, TXT) * 0.92 : 0;
+    const gap = round(0.8 * k, 2);
     if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
       const LIM = round(2.8 * k, 2);
       const countPrefix = count > 1 ? count + '× ' : '';
-      return { totalW: Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95 };
+      const wLim = Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95;
+      return { totalW: wLim + (wDual ? gap + wDual : 0) };
     }
-    const SUB = round(2.3 * k, 2), gap = round(0.8 * k, 2);
+    const SUB = round(2.3 * k, 2);
     const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
     const wMain = textW(leftText, TXT) * 0.92;
     const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
-    return { totalW: wMain + gap + wStack };
+    return { totalW: wMain + gap + wStack + (wDual ? gap + wDual : 0) };
   }
-  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost = !!(dim && dim.lost)) {
+  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost = !!(dim && dim.lost), dualLabel = '') {
     const rad = (ang * Math.PI) / 180;
     const exX = Math.cos(rad), exY = Math.sin(rad);
     const euX = Math.sin(rad), euY = -Math.cos(rad);
     const pt = (lx, ly) => [cx + exX * lx + euX * ly, cy + exY * lx + euY * ly];
     const base = { rot: ang, id: dim.id, view: dim.view, ...(isLost ? { lost: true } : {}) };
+    const dualTxt = dualLabel ? ' ' + dualLabel : '';
     if (!tolInfo) {
-      texts.push({ ...base, x: cx, y: cy, t: mainLabel, size: TXT, anchor: 'middle', cls: 'dimtext' });
+      texts.push({ ...base, x: cx, y: cy, t: mainLabel + dualTxt, size: TXT, anchor: 'middle', cls: 'dimtext' });
       return;
     }
     if (tolInfo.mode === 'sym') {
-      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ±${tolInfo.symStr}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'sym' });
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ±${tolInfo.symStr}${dualTxt}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'sym' });
       return;
     }
     if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
-      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ${tolInfo.code}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'fit' });
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ${tolInfo.code}${dualTxt}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'fit' });
       return;
     }
     const k = TXT / 3.5;
+    const gap = round(0.8 * k, 2);
+    const wDual = dualLabel ? textW(dualLabel, TXT) * 0.92 : 0;
     if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
       const LIM = round(2.8 * k, 2);
       const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
-      const pTop = pt(0, 2.7 * k), pBot = pt(0, 0);
-      texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
-      texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+      if (dualLabel) {
+        const wLim = Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95;
+        const x0 = -(wLim + gap + wDual) / 2;
+        const pTop = pt(x0 + wLim * 0.5, 2.7 * k), pBot = pt(x0 + wLim * 0.5, 0), pDual = pt(x0 + wLim + gap, 0.1 * k);
+        texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
+        texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+        texts.push({ ...base, x: pDual[0], y: pDual[1], t: dualLabel, size: TXT, anchor: 'start', cls: 'dimtext dimdual' });
+      } else {
+        const pTop = pt(0, 2.7 * k), pBot = pt(0, 0);
+        texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
+        texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+      }
       return;
     }
-    const SUB = round(2.3 * k, 2), gap = round(0.8 * k, 2);
+    const SUB = round(2.3 * k, 2);
     const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
     const wMain = textW(leftText, TXT) * 0.92;
     const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
-    const x0 = -(wMain + gap + wStack) / 2;
+    const x0 = -(wMain + gap + wStack + (wDual ? gap + wDual : 0)) / 2;
     const pMain = pt(x0, 0.1 * k), pUp = pt(x0 + wMain + gap, 2.0 * k), pLo = pt(x0 + wMain + gap, -0.2 * k);
     texts.push({ ...base, x: pMain[0], y: pMain[1], t: leftText, size: TXT, anchor: 'start', cls: 'dimtext', tolPart: 'main' });
     texts.push({ ...base, x: pUp[0], y: pUp[1], t: tolInfo.upStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'upper' });
     texts.push({ ...base, x: pLo[0], y: pLo[1], t: tolInfo.loStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'lower' });
+    if (dualLabel) {
+      const pDual = pt(x0 + wMain + gap + wStack + gap, 0.1 * k);
+      texts.push({ ...base, x: pDual[0], y: pDual[1], t: dualLabel, size: TXT, anchor: 'start', cls: 'dimtext dimdual' });
+    }
   }
 
   // ---------- Bemaßung ----------
   function setDimStyle(patch = {}) {
+    const cleanPatch = { ...(patch || {}) };
+    if (cleanPatch.dual && isSimpleMode()) {
+      UI.toast(T('draw.dimProOnly'), { icon: 'info' });
+      delete cleanPatch.dual;
+      if (!Object.keys(cleanPatch).length) return null;
+    }
     let next = null;
     App.change('Maß-Stil geändert', () => {
       const s = dwg();
-      s.dimStyle = normDimStyle({ ...sheetDimStyle(s), ...patch });
+      s.dimStyle = normDimStyle({ ...sheetDimStyle(s), ...cleanPatch });
       next = s.dimStyle;
     });
     render();
     Panels.renderRight();
     return next;
+  }
+  function setDualDims(on) {
+    if (on && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
+    setDimStyle({ dual: !!on });
+    return true;
   }
   // ---------- Modelländerungen & verlorene Maße (ZE-14) ----------
   function viewCirclesPool(v) {
@@ -2341,6 +3522,11 @@ const Drawing = (() => {
         || { c: dim.c, r: dim.r, full: !dim.partial };
       return makeCircleRef(v, hit);
     }
+    if (dim.type === 'arclen') {
+      const hit = viewCirclesPool(v).find((c) => !c.full && c.arc && Math.hypot(c.c[0] - dim.c[0], c.c[1] - dim.c[1]) <= 0.2 && Math.abs(c.r - dim.r) <= 0.2)
+        || { c: dim.c, r: dim.r, full: false, arc: [dim.a0, dim.a1] };
+      return makeCircleRef(v, hit);
+    }
     if (dim.type === 'lin') {
       return { kind: 'lin', a: makePointRef(v, dim.a), b: makePointRef(v, dim.b) };
     }
@@ -2357,6 +3543,9 @@ const Drawing = (() => {
     }
     if (dim.type === 'base' && dim.base) {
       return { kind: 'base', base: makePointRef(v, dim.base), pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
+    }
+    if (dim.type === 'ordinate' && dim.origin) {
+      return { kind: 'ordinate', origin: makePointRef(v, dim.origin), pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
     }
     return null;
   }
@@ -2528,6 +3717,11 @@ const Drawing = (() => {
       if (!c) return { ...dim, lost: true, lostReason: dim.type === 'dia' ? 'Bohrung/Kreis fehlt' : 'Rundung/Bogen fehlt' };
       return { ...dim, c: c.c, r: c.r, partial: !c.full, lost: false };
     }
+    if (dim.type === 'arclen') {
+      const c = resolveCircleRef(v, dim.ref);
+      if (!c || c.full || !c.arc) return { ...dim, lost: true, lostReason: 'Kreisbogen fehlt' };
+      return { ...dim, c: c.c, r: c.r, a0: c.arc[0], a1: c.arc[1], lost: false };
+    }
     if (dim.type === 'lin') {
       const a = resolvePointRef(v, dim.ref.a), b = resolvePointRef(v, dim.ref.b);
       if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-4) return { ...dim, lost: true, lostReason: 'Kante oder Punkt fehlt' };
@@ -2559,11 +3753,17 @@ const Drawing = (() => {
       if (!base || !pts.length || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Bezugspunkt oder Kante fehlt' };
       return { ...dim, base, pts, lost: false };
     }
+    if (dim.type === 'ordinate') {
+      const origin = resolvePointRef(v, dim.ref.origin);
+      const pts = (dim.ref.pts || []).map((pr) => resolvePointRef(v, pr));
+      if (!origin || !pts.length || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Nullpunkt oder Zielpunkt fehlt' };
+      return { ...dim, origin, pts, lost: false };
+    }
     return { ...dim, lost: false };
   }
   function dimSummaryLabel(dim, st = sheetDimStyle()) {
     if (!dim) return 'Maß';
-    if (dim.type === 'dia' || dim.type === 'rad') return dimLabelParts(dim, dimNominal(dim), st).mainLabel;
+    if (dim.type === 'dia' || dim.type === 'rad' || dim.type === 'arclen') return dimLabelParts(dim, dimNominal(dim), st).mainLabel;
     if (dim.type === 'lin') return fmtDim(dimNominal(dim), st);
     if (dim.type === 'chamfer') {
       const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
@@ -2572,6 +3772,7 @@ const Drawing = (() => {
     if (dim.type === 'ang') return fmtDimAngle(((dim.a1 - dim.a0) * 180) / Math.PI, st);
     if (dim.type === 'chain') return 'Kettenmaß';
     if (dim.type === 'base') return 'Bezugsmaß';
+    if (dim.type === 'ordinate') return T('draw.dimMode.ordinate');
     return 'Maß';
   }
   function lostDims(sh = dwg()) {
@@ -2586,9 +3787,9 @@ const Drawing = (() => {
       const out = [];
       const v = lay.views[dim.view]; if (!v) continue;
       const b = v.geo.trueBox || v.geo.box;
-      if (dim.auto === 'width') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: -(9 / v.s) });
-      if (dim.auto === 'height') out.push({ ...dim, type: 'lin', dir: 'v', a: [b[0], b[1]], b: [b[0], b[3]], off: -(9 / v.s) });
-      if (dim.auto === 'depth') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: -(9 / v.s) });
+      if (dim.auto === 'width') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: typeof dim.off === 'number' && isFinite(dim.off) ? dim.off : -(9 / v.s) });
+      if (dim.auto === 'height') out.push({ ...dim, type: 'lin', dir: 'v', a: [b[0], b[1]], b: [b[0], b[3]], off: typeof dim.off === 'number' && isFinite(dim.off) ? dim.off : -(9 / v.s) });
+      if (dim.auto === 'depth') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: typeof dim.off === 'number' && isFinite(dim.off) ? dim.off : -(9 / v.s) });
       if (dim.auto === 'circles') {
         // Gleiche Durchmesser nur einmal bemaßen („2× Ø4,5“). Verschiedene Durchmesser möglichst an verschiedenen
         // Bohrungen, sonst in verschiedene Richtungen – immer vom Teil weg, damit sich nichts überdeckt.
@@ -2605,10 +3806,11 @@ const Drawing = (() => {
           const away = Math.hypot(best.c[0] - mx, best.c[1] - my) > 1e-6 ? (Math.atan2(best.c[1] - my, best.c[0] - mx) * 180) / Math.PI : 30;
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
-          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
+          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && (Math.abs(th.r - best.r) < 0.45 || Math.abs(th.rThread - best.r) < 0.45));
           const subId = dim.id + '_' + Math.round(best.r * 200);
           const subTol = dim.tols && dim.tols[subId] ? dim.tols[subId] : undefined;
-          const item = { ...dim, id: subId, type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length, st)}` } : {}) };
+          const thLbl = mt ? ((mt.source === 'cosmetic' || mt.blind0 || mt.blind1) ? `${mt.size} × ${fmtDim(mt.length, st)}` : `${mt.size}`) : null;
+          const item = { ...dim, id: subId, type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(thLbl ? { threadLabel: thLbl } : {}) };
           delete item.tols;
           if (subTol) item.tol = subTol;
           out.push(item);
@@ -2656,11 +3858,11 @@ const Drawing = (() => {
     const gap = Math.max(1.2, TXT * 0.34);
     const tx = mx + Math.sin(r) * gap, ty = my - Math.cos(r) * gap;
     if (dim) {
-      const { mainLabel, prefix } = dimLabelParts(dim, val, st);
+      const { mainLabel, dualLabel, prefix } = dimLabelParts(dim, val, st);
       const tolInfo = resolveDimTol(dim, val);
-      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost, dualLabel);
     } else {
-      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext', ...lostObj });
+      texts.push({ x: tx, y: ty, t: fmtDimWithDual(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext', ...lostObj });
     }
   }
   function dimSVG(dim, lines, texts, lay = layout, sh = dwg()) {
@@ -2698,12 +3900,13 @@ const Drawing = (() => {
       const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
       const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
       const tEx = Math.min(tx, ty);
-      const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
+      const autoLead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
+      const lead = typeof dim.lead === 'number' && isFinite(dim.lead) && dim.lead > 0 ? dim.lead : autoLead;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
       const nomVal = dim.type === 'dia' ? dim.r * 2 : dim.r;
-      const { mainLabel, prefix } = dimLabelParts(dim, nomVal, st);
+      const { mainLabel, dualLabel, prefix } = dimLabelParts(dim, nomVal, st);
       const tolInfo = resolveDimTol(dim, nomVal);
-      const { totalW } = measureDimLabel(mainLabel, prefix, tolInfo, TXT, dim.count);
+      const { totalW } = measureDimLabel(mainLabel, prefix, tolInfo, TXT, dim.count, dualLabel);
       const tl = totalW + 2.5;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
@@ -2727,7 +3930,7 @@ const Drawing = (() => {
         arrowHead(lines, P, C, AR, true, dim.id, null, aStyle, null, null, isLost);
       } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id, ...lostObj });
-      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost);
+      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost, dualLabel);
     } else if (dim.type === 'chamfer') {
       const P = toSheet(v, dim.p);
       const ux = dim.dir[0], uy = -dim.dir[1];
@@ -2735,10 +3938,11 @@ const Drawing = (() => {
       const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
       const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
       const tEx = Math.min(tx, ty);
-      const lead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+      const autoLead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+      const lead = typeof dim.lead === 'number' && isFinite(dim.lead) && dim.lead > 0 ? dim.lead : autoLead;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
       const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
-      const label = `${fmtDim(dim.dist, st)}×${angTxt}`;
+      const label = `${fmtDimWithDual(dim.dist, st)}×${angTxt}`;
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
@@ -2849,12 +4053,129 @@ const Drawing = (() => {
           drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st, isLost);
         }
       }
+    } else if (dim.type === 'arclen') {
+      const a0 = dim.a0, a1 = dim.a1, span = a1 - a0;
+      if (!(span > 1e-4) || !(dim.r > 1e-4)) return;
+      const off = Number.isFinite(Number(dim.off)) ? Number(dim.off) : (6 / v.s);
+      const rModel = Math.max(2 / v.s, dim.r + off);
+      const R = rModel * v.s;
+      const VC = toSheet(v, dim.c);
+      const sgn = rModel >= dim.r ? 1 : -1;
+      for (const ang of [a0, a1]) {
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const s0 = dim.r + sgn * (GAPX / v.s);
+        const s1 = rModel + sgn * (EXT / v.s);
+        lines.push({ pts: [toSheet(v, [dim.c[0] + ux * s0, dim.c[1] + uy * s0]), toSheet(v, [dim.c[0] + ux * s1, dim.c[1] + uy * s1])], cls: 'dim', id: dim.id, ...lostObj });
+      }
+      const nA0 = ((a0 % TWO_PI) + TWO_PI) % TWO_PI;
+      const nA1 = nA0 + span;
+      const aPts = arcPts(dim.c, rModel, a0, a1).map((q) => toSheet(v, q));
+      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id, ...lostObj });
+      const P0 = [VC[0] + R * Math.cos(a0), VC[1] - R * Math.sin(a0)];
+      const P1 = [VC[0] + R * Math.cos(a1), VC[1] - R * Math.sin(a1)];
+      const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : span * R > AR * 2.6;
+      const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
+      const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
+      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle, null, null, isLost);
+      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle, null, null, isLost);
+      if (!inside) {
+        const extA = (AR * 2.4) / R;
+        lines.push(
+          { pts: arcPts(dim.c, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj },
+          { pts: arcPts(dim.c, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj }
+        );
+      }
+      const val = dim.r * span;
+      const { mainLabel, dualLabel, prefix } = dimLabelParts(dim, val, st);
+      const tolInfo = resolveDimTol(dim, val);
+      const am = (a0 + a1) * 0.5;
+      const radOut = R + Math.max(3.2, TXT * 0.95);
+      const tx = VC[0] + Math.cos(am) * radOut;
+      const ty = VC[1] - Math.sin(am) * radOut + TXT * 0.34;
+      emitDimTexts(texts, tx, ty, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost, dualLabel);
+    } else if (dim.type === 'ordinate') {
+      const originPt = dim.origin;
+      const pts = [...(dim.pts || [])];
+      if (!originPt || !pts.length) return;
+      const O = toSheet(v, originPt);
+      const origR = clamp(TXT * 0.36, 0.9, 1.8);
+      const minGap = Math.max(TXT * 1.15, 3.8);
+      const axis = dim.dir === 'v' ? 1 : 0;
+      const deltas = pts.map((p) => p[axis] - originPt[axis]);
+      const useSigned = deltas.some((d) => d > 1e-4) && deltas.some((d) => d < -1e-4);
+      const fmtOrd = (delta) => {
+        const sVal = useSigned ? delta : Math.abs(delta);
+        if (Math.abs(sVal) < 1e-6) return '0';
+        return (sVal < 0 ? '\u2212' : '') + fmtDimWithDual(Math.abs(sVal), st);
+      };
+      const entries = [
+        { isOrigin: true, P: O, coord: dim.dir === 'v' ? O[1] : O[0], lCoord: 0, label: '0' },
+        ...pts.map((p, i) => {
+          const S = toSheet(v, p);
+          return { isOrigin: false, P: S, coord: dim.dir === 'v' ? S[1] : S[0], lCoord: 0, label: fmtOrd(deltas[i]) };
+        }),
+      ];
+      entries.sort((a, b) => a.coord - b.coord);
+      const oi = entries.findIndex((e) => e.isOrigin);
+      entries[oi].lCoord = entries[oi].coord;
+      for (let i = oi + 1; i < entries.length; i++) {
+        entries[i].lCoord = Math.max(entries[i].coord, entries[i - 1].lCoord + minGap);
+      }
+      for (let i = oi - 1; i >= 0; i--) {
+        entries[i].lCoord = Math.min(entries[i].coord, entries[i + 1].lCoord - minGap);
+      }
+      if (dim.dir === 'h') {
+        const yl = toSheet(v, [0, dim.linePos])[1];
+        const outSign = yl >= O[1] ? 1 : -1;
+        for (const e of entries) {
+          const sgn = Math.sign(yl - e.P[1]) || outSign;
+          const start = [e.P[0], e.P[1] + sgn * GAPX];
+          const lPts = (Math.abs(e.lCoord - e.P[0]) > 0.15 && Math.abs(yl - e.P[1]) > 5.5)
+            ? [start, [e.P[0], yl - sgn * 4.5], [e.lCoord, yl - sgn * 1.6], [e.lCoord, yl]]
+            : [start, [e.lCoord, yl]];
+          lines.push({ pts: lPts, cls: 'dim', id: dim.id, ...lostObj });
+          if (e.isOrigin) lines.push({ circle: [e.lCoord, yl, origR], cls: 'dim', id: dim.id, ...lostObj });
+          const tx = e.lCoord + TXT * 0.34;
+          const ty = yl + outSign * (e.isOrigin ? origR + 1.4 : 1.4);
+          texts.push({ x: tx, y: ty, t: e.label, size: TXT, rot: -90, anchor: outSign > 0 ? 'end' : 'start', id: dim.id, view: dim.view, cls: 'dimtext', ...lostObj });
+        }
+      } else {
+        const xl = toSheet(v, [dim.linePos, 0])[0];
+        const outSign = xl <= O[0] ? -1 : 1;
+        for (const e of entries) {
+          const sgn = Math.sign(xl - e.P[0]) || outSign;
+          const start = [e.P[0] + sgn * GAPX, e.P[1]];
+          const lPts = (Math.abs(e.lCoord - e.P[1]) > 0.15 && Math.abs(xl - e.P[0]) > 5.5)
+            ? [start, [xl - sgn * 4.5, e.P[1]], [xl - sgn * 1.6, e.lCoord], [xl, e.lCoord]]
+            : [start, [xl, e.lCoord]];
+          lines.push({ pts: lPts, cls: 'dim', id: dim.id, ...lostObj });
+          if (e.isOrigin) lines.push({ circle: [xl, e.lCoord, origR], cls: 'dim', id: dim.id, ...lostObj });
+          const tx = xl + outSign * (e.isOrigin ? origR + 1.4 : 1.4);
+          const ty = e.lCoord + TXT * 0.34;
+          texts.push({ x: tx, y: ty, t: e.label, size: TXT, rot: 0, anchor: outSign < 0 ? 'end' : 'start', id: dim.id, view: dim.view, cls: 'dimtext', ...lostObj });
+        }
+      }
     }
   }
   function fmtDim(v, st = sheetDimStyle()) {
     if (typeof v !== 'number' || !isFinite(v)) return '–';
     const dec = (st && st.decimals != null) ? st.decimals : FMT.dec;
     return fmtFixed(Units.fromMM(v), dec);
+  }
+  function fmtDualSecondary(mmVal, st = sheetDimStyle()) {
+    if (typeof mmVal !== 'number' || !isFinite(mmVal)) return '';
+    if (Units.key() === 'in') {
+      const dec = (st && st.decimals != null) ? st.decimals : FMT.dec;
+      return `[${fmtFixed(mmVal, dec)}]`;
+    }
+    const dec = clamp(Math.round(Number(st && st.dualDecimals != null ? st.dualDecimals : 3)), 1, 4);
+    let v = round(mmVal / 25.4, dec);
+    if (Object.is(v, -0)) v = 0;
+    return `[${v.toFixed(dec)}]`;
+  }
+  function fmtDimWithDual(mmVal, st = sheetDimStyle()) {
+    const pri = fmtDim(mmVal, st);
+    return (st && st.dual) ? `${pri} ${fmtDualSecondary(mmVal, st)}` : pri;
   }
   function fmtDimAngle(deg, st = sheetDimStyle()) {
     if (st && st.decimals != null) return fmtFixed(deg, st.decimals) + '°';
@@ -2892,72 +4213,182 @@ const Drawing = (() => {
     const byScale = s >= 2 ? 3.2 : s >= 1 ? 2.5 : s >= 0.5 ? 2.0 : 1.6;
     return clamp(Math.min(byScale, Math.max(1.2, diagMm / 18)), 1.2, 4.5);
   }
-  function buildHatchLines(v, sec, lines) {
+  function buildHatchLines(v, sec, lines, sh = dwg()) {
     const caps = (v.geo && v.geo.caps) || [];
     if (!caps.length) return;
     const paperStep = hatchStepSheet(v.s, v.geo);
-    const modelStep = paperStep / (v.s || 1);
+    const useMat = materialHatchActive(sh);
     for (let capIdx = 0; capIdx < caps.length; capIdx++) {
       const cap = caps[capIdx];
       const loops = [cap.outer, ...(cap.holes || [])].filter((lp) => lp && lp.length >= 3);
       if (!loops.length) continue;
-      const deg = (cap.partIdx % 2 === 1) ? 135 : 45;
-      const rad = (deg * Math.PI) / 180;
-      const tx = Math.cos(rad), ty = Math.sin(rad), nx = -ty, ny = tx;
-      let bMin = Infinity, bMax = -Infinity;
-      const rotLoops = loops.map((lp) => lp.map((p) => {
-        const a = p[0] * tx + p[1] * ty;
-        const b = p[0] * nx + p[1] * ny;
-        if (b < bMin) bMin = b;
-        if (b > bMax) bMax = b;
-        return [a, b];
-      }));
-      if (!isFinite(bMin) || bMax - bMin < 1e-6) continue;
-      let k0 = Math.ceil((bMin + 1e-6) / modelStep);
-      let k1 = Math.floor((bMax - 1e-6) / modelStep);
-      const bs = [];
-      if (k0 <= k1) {
-        for (let k = k0; k <= k1; k++) bs.push(k * modelStep);
-      } else {
-        bs.push((bMin + bMax) * 0.5);
-      }
-      for (const b0 of bs) {
-        const hits = [];
-        for (const lp of rotLoops) {
-          for (let i = 0, n = lp.length; i < n; i++) {
-            const p0 = lp[i], p1 = lp[(i + 1) % n];
-            if ((p0[1] <= b0 && p1[1] > b0) || (p1[1] <= b0 && p0[1] > b0)) {
-              const t = (b0 - p0[1]) / (p1[1] - p0[1]);
-              hits.push(p0[0] + t * (p1[0] - p0[0]));
+      const mi = useMat ? capMaterialInfo(cap) : { item: null, matKey: null, pattern: 'steel' };
+      const pat = HATCH_PATTERNS[mi.pattern] || HATCH_PATTERNS.steel;
+      const odd = cap.partIdx % 2 === 1;
+      const angles = odd ? pat.flipAngles : pat.angles;
+      const effModelStep = (paperStep * pat.stepMul) / (v.s || 1);
+      const phase = (odd && pat.oddPhase) ? pat.oddPhase * effModelStep : 0;
+      const pairGap = pat.pairOff > 0 ? (paperStep * pat.pairOff) / (v.s || 1) : 0;
+      const partId = cap.partId || (mi.item ? mi.item.id : '');
+      for (const deg of angles) {
+        const rad = (deg * Math.PI) / 180;
+        const tx = Math.cos(rad), ty = Math.sin(rad), nx = -ty, ny = tx;
+        let bMin = Infinity, bMax = -Infinity;
+        const rotLoops = loops.map((lp) => lp.map((p) => {
+          const a = p[0] * tx + p[1] * ty;
+          const b = p[0] * nx + p[1] * ny;
+          if (b < bMin) bMin = b;
+          if (b > bMax) bMax = b;
+          return [a, b];
+        }));
+        if (!isFinite(bMin) || bMax - bMin < 1e-6) continue;
+        const k0 = Math.ceil((bMin + 1e-6 - phase) / effModelStep);
+        const k1 = Math.floor((bMax - 1e-6 - phase) / effModelStep);
+        const bs = [];
+        if (k0 <= k1) {
+          const kStart = pairGap > 0 ? k0 - 1 : k0;
+          for (let k = kStart; k <= k1; k++) {
+            const b0 = k * effModelStep + phase;
+            if (b0 >= bMin + 1e-6 && b0 <= bMax - 1e-6) bs.push({ b0, k });
+            if (pairGap > 0) {
+              const b2 = b0 + pairGap;
+              if (b2 >= bMin + 1e-6 && b2 <= bMax - 1e-6) bs.push({ b0: b2, k });
             }
           }
         }
-        hits.sort((x, y) => x - y);
-        for (let i = 0; i + 1 < hits.length; i += 2) {
-          const a0 = hits[i], a1 = hits[i + 1];
-          if (a1 - a0 < 1e-5) continue;
-          const P0 = [a0 * tx + b0 * nx, a0 * ty + b0 * ny];
-          const P1 = [a1 * tx + b0 * nx, a1 * ty + b0 * ny];
-          const segs = (v.geo && v.geo.breakMap)
-            ? clipSegByBreaks(P0, P1, v.geo.breakMap.hCuts, v.geo.breakMap.vCuts)
-            : [[P0, P1]];
-          for (const [q0, q1] of segs) {
-            lines.push({ pts: [toSheet(v, q0), toSheet(v, q1)], cls: 'hatch', id: sec.id, secId: sec.id, capIdx });
+        if (!bs.length) bs.push({ b0: (bMin + bMax) * 0.5, k: 0 });
+        for (const { b0, k } of bs) {
+          const isDashed = !!(pat.altDash && (Math.abs(k) % 2 === 1));
+          const hits = [];
+          for (const lp of rotLoops) {
+            for (let i = 0, n = lp.length; i < n; i++) {
+              const p0 = lp[i], p1 = lp[(i + 1) % n];
+              if ((p0[1] <= b0 && p1[1] > b0) || (p1[1] <= b0 && p0[1] > b0)) {
+                const t = (b0 - p0[1]) / (p1[1] - p0[1]);
+                hits.push(p0[0] + t * (p1[0] - p0[0]));
+              }
+            }
+          }
+          hits.sort((x, y) => x - y);
+          for (let i = 0; i + 1 < hits.length; i += 2) {
+            const a0 = hits[i], a1 = hits[i + 1];
+            if (a1 - a0 < 1e-5) continue;
+            const P0 = [a0 * tx + b0 * nx, a0 * ty + b0 * ny];
+            const P1 = [a1 * tx + b0 * nx, a1 * ty + b0 * ny];
+            const emitSeg = (S0, S1) => {
+              const segs = (v.geo && v.geo.breakMap)
+                ? clipSegByBreaks(S0, S1, v.geo.breakMap.hCuts, v.geo.breakMap.vCuts)
+                : [[S0, S1]];
+              for (const [q0, q1] of segs) {
+                if (Math.hypot(q1[0] - q0[0], q1[1] - q0[1]) > 1e-4) {
+                  lines.push({
+                    pts: [toSheet(v, q0), toSheet(v, q1)],
+                    cls: 'hatch',
+                    extraCls: isDashed ? 'hatch-dash' : '',
+                    dashed: isDashed,
+                    hatchPat: pat.key,
+                    matKey: mi.matKey || '',
+                    partId,
+                    id: sec.id,
+                    secId: sec.id,
+                    capIdx,
+                    secType: sec.type || 'full',
+                  });
+                }
+              }
+            };
+            if (cap.strip) {
+              const clipped = clipSegStrip(P0, P1, cap.strip.ax, cap.strip.ay, cap.strip.lo, cap.strip.hi);
+              if (clipped) emitSeg(clipped[0], clipped[1]);
+            } else if (cap.clipPoly) {
+              for (const sub of clipSegPolygon(P0, P1, cap.clipPoly, true)) emitSeg(sub[0], sub[1]);
+            } else {
+              emitSeg(P0, P1);
+            }
           }
         }
       }
     }
   }
   function drawSectionLine(v, sec, lines, texts) {
+    const type = (sec && sec.type) || 'full';
+    const secType = type;
+    if (type === 'breakout') {
+      if (!Array.isArray(sec.region) || sec.region.length < 3) return;
+      const bPoly = makeBreakPoly(sec.region);
+      if (bPoly.length < 3) return;
+      const pts = bPoly.map((p) => toSheet(v, p));
+      pts.push([...pts[0]]);
+      lines.push({ pts, cls: 'breakline', id: sec.id, secId: sec.id, secType });
+      let tr = pts[0];
+      for (const p of pts) if (p[0] - p[1] > tr[0] - tr[1]) tr = p;
+      texts.push({ x: tr[0] + 3.2, y: tr[1] - 1.5, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel', secType });
+      return;
+    }
     const vf = sectionPlaneSpec(sec);
+    const lookSheet = [vf.look2[0], -vf.look2[1]];
+    const b = v.geo.box;
+    const TL = toSheetRaw(v, [b[0], b[3]]), BR = toSheetRaw(v, [b[2], b[1]]);
+    const corners = [TL, [BR[0], TL[1]], BR, [TL[0], BR[1]]];
+    const endLen = 5;
+    const shaft = 8;
+    const drawArrowEnd = (EP, ux, uy, outU) => {
+      const tail = [EP[0] - lookSheet[0] * shaft, EP[1] - lookSheet[1] * shaft];
+      lines.push({ pts: [tail, EP], cls: 'dim', id: sec.id, secId: sec.id, secType });
+      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id, 'filled');
+      const lx = tail[0] - lookSheet[0] * 1.2 + ux * outU * 3.2;
+      const ly = tail[1] - lookSheet[1] * 1.2 + uy * outU * 3.2 + 1.5;
+      texts.push({ x: lx, y: ly, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel', secType });
+    };
+    if (type === 'stepped') {
+      const rawPts = Array.isArray(sec.pts) && sec.pts.length >= 2 ? sec.pts : [sec.a, sec.b];
+      const S = rawPts.map((p) => toSheet(v, p));
+      if (S.length < 2) return;
+      const s0 = S[0], s1 = S[1];
+      let d0x = s1[0] - s0[0], d0y = s1[1] - s0[1], L0 = Math.hypot(d0x, d0y);
+      if (L0 < 1e-3) return;
+      const u0x = d0x / L0, u0y = d0y / L0;
+      const sn1 = S[S.length - 2], sn2 = S[S.length - 1];
+      let dnx = sn2[0] - sn1[0], dny = sn2[1] - sn1[1], Ln = Math.hypot(dnx, dny);
+      if (Ln < 1e-3) { dnx = d0x; dny = d0y; Ln = L0; }
+      const unx = dnx / Ln, uny = dny / Ln;
+      let tMin0 = Infinity, tMaxN = -Infinity;
+      for (const c of corners) {
+        const t0 = (c[0] - s0[0]) * u0x + (c[1] - s0[1]) * u0y;
+        if (t0 < tMin0) tMin0 = t0;
+        const tn = (c[0] - sn1[0]) * unx + (c[1] - sn1[1]) * uny;
+        if (tn > tMaxN) tMaxN = tn;
+      }
+      const sStart = Math.min(0, tMin0 - 5), sEnd = Math.max(Ln, tMaxN + 5);
+      const E1 = [s0[0] + u0x * sStart, s0[1] + u0y * sStart];
+      const E2 = [sn1[0] + unx * sEnd, sn1[1] + uny * sEnd];
+      const poly = [E1, ...S.slice(1, -1), E2];
+      lines.push({ pts: poly, cls: 'cutline', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [E1, [E1[0] + u0x * endLen, E1[1] + u0y * endLen]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [[E2[0] - unx * endLen, E2[1] - uny * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      for (let k = 1; k < poly.length - 1; k++) {
+        const P = poly[k], prev = poly[k - 1], next = poly[k + 1];
+        const lA = Math.hypot(prev[0] - P[0], prev[1] - P[1]);
+        const lB = Math.hypot(next[0] - P[0], next[1] - P[1]);
+        if (lA > 1e-3) {
+          const kA = Math.min(3.5, lA * 0.45) / lA;
+          lines.push({ pts: [[P[0] + (prev[0] - P[0]) * kA, P[1] + (prev[1] - P[1]) * kA], P], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+        }
+        if (lB > 1e-3) {
+          const kB = Math.min(3.5, lB * 0.45) / lB;
+          lines.push({ pts: [P, [P[0] + (next[0] - P[0]) * kB, P[1] + (next[1] - P[1]) * kB]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+        }
+      }
+      drawArrowEnd(E1, u0x, u0y, -1);
+      drawArrowEnd(E2, unx, uny, 1);
+      return;
+    }
     const A0 = toSheet(v, sec.a), B0 = toSheet(v, sec.b);
     const dx = B0[0] - A0[0], dy = B0[1] - A0[1];
     const L = Math.hypot(dx, dy);
     if (L < 1e-3) return;
     const ux = dx / L, uy = dy / L;
-    const b = v.geo.box;
-    const TL = toSheetRaw(v, [b[0], b[3]]), BR = toSheetRaw(v, [b[2], b[1]]);
-    const corners = [TL, [BR[0], TL[1]], BR, [TL[0], BR[1]]];
+
     let tMin = Infinity, tMax = -Infinity;
     for (const c of corners) {
       const t = (c[0] - A0[0]) * ux + (c[1] - A0[1]) * uy;
@@ -2967,20 +4398,34 @@ const Drawing = (() => {
     const sStart = Math.min(0, tMin - 5), sEnd = Math.max(L, tMax + 5);
     const E1 = [A0[0] + ux * sStart, A0[1] + uy * sStart];
     const E2 = [A0[0] + ux * sEnd, A0[1] + uy * sEnd];
-    const lookSheet = [vf.look2[0], -vf.look2[1]];
-    const endLen = 5;
-    lines.push({ pts: [E1, E2], cls: 'cutline', id: sec.id, secId: sec.id });
-    lines.push({ pts: [E1, [E1[0] + ux * endLen, E1[1] + uy * endLen]], cls: 'cutend', id: sec.id, secId: sec.id });
-    lines.push({ pts: [[E2[0] - ux * endLen, E2[1] - uy * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id });
-    const shaft = 8;
-    for (const [EP, outU] of [[E1, -1], [E2, 1]]) {
-      const tail = [EP[0] - lookSheet[0] * shaft, EP[1] - lookSheet[1] * shaft];
-      lines.push({ pts: [tail, EP], cls: 'dim', id: sec.id, secId: sec.id });
-      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id, 'filled');
-      const lx = tail[0] - lookSheet[0] * 1.2 + ux * outU * 3.2;
-      const ly = tail[1] - lookSheet[1] * 1.2 + uy * outU * 3.2 + 1.5;
-      texts.push({ x: lx, y: ly, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel' });
+    if (type === 'half' && sec.halfAxis !== 'h') {
+      const pvf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+      const p3 = (p) => [pvf.x[0] * p[0] + pvf.y[0] * p[1], pvf.x[1] * p[0] + pvf.y[1] * p[1], pvf.x[2] * p[0] + pvf.y[2] * p[1]];
+      const uA = dot3(p3(sec.a), vf.x), uB = dot3(p3(sec.b), vf.x);
+      const cutRight = (sec.halfSide || 'right') !== 'left';
+      const cutIsE2 = cutRight ? uB >= uA : uA > uB;
+      const E_cut = cutIsE2 ? E2 : E1;
+      const uDir = cutIsE2 ? [ux, uy] : [-ux, -uy];
+      const M = [(E1[0] + E2[0]) * 0.5, (E1[1] + E2[1]) * 0.5];
+      let turnLen = 10;
+      for (const c of corners) {
+        const d = (c[0] - M[0]) * (-lookSheet[0]) + (c[1] - M[1]) * (-lookSheet[1]);
+        if (d + 5 > turnLen) turnLen = d + 5;
+      }
+      const E_turn = [M[0] - lookSheet[0] * turnLen, M[1] - lookSheet[1] * turnLen];
+      lines.push({ pts: [E_cut, M, E_turn], cls: 'cutline', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [E_cut, [E_cut[0] - uDir[0] * endLen, E_cut[1] - uDir[1] * endLen]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [[M[0] + uDir[0] * 3.5, M[1] + uDir[1] * 3.5], M, [M[0] - lookSheet[0] * 3.5, M[1] - lookSheet[1] * 3.5]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [[E_turn[0] + lookSheet[0] * endLen, E_turn[1] + lookSheet[1] * endLen], E_turn], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      drawArrowEnd(E_cut, uDir[0], uDir[1], 1);
+      texts.push({ x: E_turn[0] - lookSheet[0] * 3.5, y: E_turn[1] - lookSheet[1] * 3.5 + 1.5, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel', secType });
+      return;
     }
+    lines.push({ pts: [E1, E2], cls: 'cutline', id: sec.id, secId: sec.id, secType });
+    lines.push({ pts: [E1, [E1[0] + ux * endLen, E1[1] + uy * endLen]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+    lines.push({ pts: [[E2[0] - ux * endLen, E2[1] - uy * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+    drawArrowEnd(E1, ux, uy, -1);
+    drawArrowEnd(E2, ux, uy, 1);
   }
 
   // ---------- Zeichnen ----------
@@ -3090,9 +4535,36 @@ const Drawing = (() => {
   function getShadedImage(name, v) {
     if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
     const pv = proj.views[name];
-    const ck = name + '|' + projSceneKey + '|' + dirSig(pv) + '|' + v.geo.box.map((n) => Math.round(n * 100)).join(',');
+    const sig = projSigs.get(name) || '';
+    const ck = name + '|' + projSceneKey + '|' + dirSig(pv) + '|' + sig + '|' + v.geo.box.map((n) => Math.round(n * 100)).join(',');
     if (shadeCache.has(ck)) return shadeCache.get(ck);
-    const img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+    const exMeta = proj.explodeMeta && proj.explodeMeta[name];
+    let img = null;
+    if (exMeta && exMeta.offsets && Viewer.setOffsets && Viewer.nodes) {
+      const prevOffsets = new Map();
+      for (const [nid, node] of Viewer.nodes.entries()) {
+        if (node && node.off) prevOffsets.set(nid, node.off.clone());
+      }
+      const exVecMap = new Map();
+      for (const [pid, arr] of exMeta.offsets.entries()) {
+        exVecMap.set(pid, new THREE.Vector3(arr[0], arr[1], arr[2]));
+      }
+      if (typeof App !== 'undefined' && App.mergedInto) {
+        for (const nid of Viewer.nodes.keys()) {
+          if (exVecMap.has(nid)) continue;
+          const hostId = App.mergedInto(nid);
+          if (hostId && exVecMap.has(hostId)) exVecMap.set(nid, exVecMap.get(hostId).clone());
+        }
+      }
+      try {
+        Viewer.setOffsets(exVecMap.size ? exVecMap : null);
+        img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+      } finally {
+        Viewer.setOffsets(prevOffsets.size ? prevOffsets : null);
+      }
+    } else {
+      img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+    }
     if (img) {
       if (shadeCache.size > 24) shadeCache.clear();
       shadeCache.set(ck, img);
@@ -3186,15 +4658,29 @@ const Drawing = (() => {
         if (p.arc) l.arc = { c: toSheet(v, p.c), r: p.r * v.s, a: p.arc };
         return l;
       };
-      if (v.isSection) buildHatchLines(v, v.section, lines);
+      if (v.isSection) buildHatchLines(v, v.section, lines, sh);
       for (const p of v.geo.polys) lines.push(asLine(p, 'vis'));
       for (const p of v.geo.tangents || []) lines.push(asLine(p, 'tan'));
       for (const p of v.geo.hidden) lines.push(asLine(p, 'hid'));
       if (v.geo && v.geo.breakMap) drawBreakLines(v, name, lines);
+      for (const tr of v.geo.explodeTrails || []) {
+        if (tr.pts && tr.pts.length >= 2) lines.push({ pts: tr.pts.map((q) => toSheet(v, q)), cls: 'explode-trail', view: name });
+      }
+      if (v.isSection && v.geo.splitLine) {
+        const A = toSheet(v, v.geo.splitLine.a), B = toSheet(v, v.geo.splitLine.b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1;
+        const e = 2.5;
+        lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name, id: v.section.id, secId: v.section.id });
+      }
+      if (v.isSection && v.geo.breakLines) {
+        for (const bl of v.geo.breakLines) {
+          lines.push({ pts: bl.pts.map((q) => toSheet(v, q)), cls: 'breakline', view: name, id: v.section.id, secId: v.section.id, secType: 'breakout' });
+        }
+      }
       if (v.isSection && v.section) {
         const b = v.geo.box;
         const TL = toSheetRaw(v, [b[0], b[3]]), BR = toSheetRaw(v, [b[2], b[1]]);
-        texts.push({ x: (TL[0] + BR[0]) * 0.5, y: BR[1] + 6, t: `Schnitt ${v.section.label}–${v.section.label}`, size: 4, anchor: 'middle', id: v.section.id, secId: v.section.id, cls: 'viewlabel' });
+        texts.push({ x: (TL[0] + BR[0]) * 0.5, y: BR[1] + 6, t: sectionTitle(v.section), size: 4, anchor: 'middle', id: v.section.id, secId: v.section.id, cls: 'viewlabel', secType: v.section.type || 'full' });
       }
       if (v.isAux && v.aux) {
         const b = v.geo.box;
@@ -3218,22 +4704,43 @@ const Drawing = (() => {
           lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name, id: c.id, ctrType: c.ctrGroup || 'line' });
         }
       }
-      // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
+      // Kosmetische & Norm-Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seiten-/Schnittansicht)
       const labelSide = !v.detail && (name === 'front' || (name === 'left' && !lay.views.front));
+      const showHid = v.opts ? !!v.opts.hidden : !!sh.hidden;
       for (const th of v.geo.threads || []) {
         if (th.type === 'end') {
           const C = toSheet(v, th.c), rr = th.rThread * v.s;
-          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin', view: name });
+          if (rr > 0.3) {
+            lines.push({
+              pts: arcPts(th.c, th.rThread, THREAD_ARC_START, THREAD_ARC_START + THREAD_ARC_SPAN).map((q) => toSheet(v, q)),
+              arc: { c: C, r: rr, a: [THREAD_ARC_START, THREAD_ARC_START + THREAD_ARC_SPAN] },
+              cls: 'thin',
+              extraCls: 'thread',
+              thread: 'end',
+              threadKind: th.kind,
+              threadSize: th.size,
+              view: name,
+            });
+          }
         } else if (th.type === 'side') {
           const A = toSheet(v, th.a), B = toSheet(v, th.b);
           const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
           if (L < 0.3) continue;
           const px = -dy / L, py = dx / L, rt = th.rThread * v.s, ro = th.r * v.s;
-          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin', view: name });
-          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin', view: name });
-          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis', view: name });
-          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis', view: name });
-          if (labelSide) {
+          const isHiddenInt = th.kind === 'int' && (!v.isSection || !th.isCut);
+          if (isHiddenInt && !showHid) continue;
+          const lineCls = isHiddenInt ? 'hid' : 'thin';
+          const endCls = isHiddenInt ? 'hid' : 'vis';
+          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: lineCls, extraCls: 'thread', thread: 'side', threadKind: th.kind, threadSize: th.size, view: name });
+          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: lineCls, extraCls: 'thread', thread: 'side', threadKind: th.kind, threadSize: th.size, view: name });
+          if (th.kind === 'ext') {
+            lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis', extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+            lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis', extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+          } else {
+            if (th.blind0) lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [A[0] + px * rt, A[1] + py * rt]], cls: endCls, extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+            if (th.blind1) lines.push({ pts: [[B[0] - px * rt, B[1] - py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: endCls, extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+          }
+          if (labelSide && th.source === 'cosmetic') {
             const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
             const P0 = [mx + px * ro, my + py * ro];
             const P1 = [P0[0] + px * 5 + 3, P0[1] + py * 5 - 4];
@@ -3349,27 +4856,45 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: Units.label() }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
-    // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
+    const unitLabel = sheetDimStyle(sh).dual ? (Units.key() === 'in' ? 'in [mm]' : `${Units.label()} [in]`) : Units.label();
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: unitLabel }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
+    // Projektionssymbol nach ISO 5456-2: Methode 1 (Europa / ISO E) oder Methode 3 (USA / ISO A)
+    const projMode = normProjection(sh.projection);
     lab(cD, rows[0], T('draw.tb.projection'));
-    const sx = cD + 4.5, cy = y0 + 11.5;
-    lines.push({ pts: [[sx, cy - 1.6], [sx + 10, cy - 3], [sx + 10, cy + 3], [sx, cy + 1.6], [sx, cy - 1.6]], cls: 'thin' });
-    lines.push({ pts: [[sx - 1.5, cy], [sx + 11.5, cy]], cls: 'ctr' });
-    const ccx = sx + 18.5;
-    lines.push({ circle: [ccx, cy, 1.6], cls: 'thin' }, { circle: [ccx, cy, 3], cls: 'thin' });
-    lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
-    texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2', size: 2, anchor: 'start', cls: 'lab' });
-    texts.push({ x: cD + 1.2, y: y0 + 30.4, t: T('draw.tb.method1'), size: 2.5, anchor: 'start', cls: 'val' });
+    const cy = y0 + 11.5;
+    if (projMode === 'us') {
+      const ccx = cD + 8.5;
+      lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
+      lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+      const tx = cD + 16.5;
+      lines.push({ pts: [[tx, cy - 1.6], [tx + 10, cy - 3], [tx + 10, cy + 3], [tx, cy + 1.6], [tx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
+      lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr' });
+      texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2 (A)', size: 2, anchor: 'start', cls: 'lab', projMode: 'us' });
+      const mTxt = T('draw.tb.method3');
+      const mSz = fitSize(mTxt, 29.6, 2.5, 1.8);
+      texts.push({ x: cD + 1.2, y: y0 + 30.4, t: clipText(mTxt, 29.6, mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'us' });
+    } else {
+      const sx = cD + 4.5;
+      lines.push({ pts: [[sx, cy - 1.6], [sx + 10, cy - 3], [sx + 10, cy + 3], [sx, cy + 1.6], [sx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
+      lines.push({ pts: [[sx - 1.5, cy], [sx + 11.5, cy]], cls: 'ctr' });
+      const ccx = sx + 18.5;
+      lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
+      lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+      texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2 (E)', size: 2, anchor: 'start', cls: 'lab', projMode: 'eu' });
+      const mTxt = T('draw.tb.method1Iso');
+      const mSz = fitSize(mTxt, 29.6, 2.5, 1.8);
+      texts.push({ x: cD + 1.2, y: y0 + 30.4, t: clipText(mTxt, 29.6, mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'eu' });
+    }
   }
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
   // Die Standardschrift im PDF kennt nur Latin-1: typografische Zeichen ersetzen
   function latin1(s) {
-    return String(s).replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
+    return String(s).replace(/⌒/g, 'Bogen ').replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
   }
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -3395,7 +4920,7 @@ const Drawing = (() => {
       else if (l.circle) { el = document.createElementNS(NS, 'circle'); el.setAttribute('cx', f(l.circle[0])); el.setAttribute('cy', f(l.circle[1])); el.setAttribute('r', f(l.circle[2])); }
       else if (l.poly) { el = document.createElementNS(NS, 'polygon'); el.setAttribute('points', l.poly.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       else { el = document.createElementNS(NS, 'polyline'); el.setAttribute('points', l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
-      el.setAttribute('class', l.cls + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
+      el.setAttribute('class', l.cls + (l.extraCls ? ' ' + l.extraCls : '') + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
       if (interactive) {
         if (l.id) el.dataset.id = l.id;
         if (l.lost) el.dataset.lost = '1';
@@ -3404,10 +4929,18 @@ const Drawing = (() => {
         if (l.secId) el.dataset.sec = l.secId;
         if (l.brkId) el.dataset.brk = l.brkId;
         if (l.auxId) el.dataset.aux = l.auxId;
+        if (l.secType) el.dataset.secType = l.secType;
         if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
+        if (l.thread) el.dataset.thread = l.thread;
+        if (l.threadKind) el.dataset.threadKind = l.threadKind;
+        if (l.threadSize) el.dataset.threadSize = l.threadSize;
+        if (l.hatchPat) el.dataset.hatchPat = l.hatchPat;
+        if (l.matKey) el.dataset.mat = l.matKey;
+        if (l.partId) el.dataset.part = l.partId;
         if (l.noteTip) el.dataset.tipKind = l.noteTip;
         if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
         if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
+        if (l.projSym) el.dataset.projSym = l.projSym;
       }
       g.append(el);
     };
@@ -3437,10 +4970,12 @@ const Drawing = (() => {
         if (t.view) el.dataset.view = t.view;
         if (t.secId) el.dataset.sec = t.secId;
         if (t.auxId) el.dataset.aux = t.auxId;
+        if (t.secType) el.dataset.secType = t.secType;
         if (t.tolPart) el.dataset.tol = t.tolPart;
         if (t.balloonPos != null) el.dataset.pos = String(t.balloonPos);
         if (t.bomRow != null) el.dataset.bomRow = String(t.bomRow);
         if (t.bomCol) el.dataset.bomCol = t.bomCol;
+        if (t.projMode) el.dataset.projMode = t.projMode;
       }
       el.textContent = t.t;
       g.append(el);
@@ -3647,6 +5182,45 @@ const Drawing = (() => {
     const dx = Math.abs(ed.b[0] - ed.a[0]), dy = Math.abs(ed.b[1] - ed.a[1]);
     const preferDir = dy > dx * 4 ? 'h' : dx > dy * 4 ? 'v' : null;
     return { p: ed.hit, S: toSheet(v, ed.hit), edge: ed, preferDir };
+  }
+  function arcAt(name, P) {
+    const v = layout.views[name]; if (!v) return null;
+    const q = toView(v, P);
+    const tol = Math.max(2.5, 4 / zoom) / v.s;
+    const pool = [...v.geo.circles, ...v.geo.hidden.filter((p) => p.c).map((p) => ({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }))];
+    let best = null, bd = tol;
+    for (const c of pool) {
+      if (c.full || !c.arc || c.arc[1] - c.arc[0] <= 1e-4) continue;
+      const d = Math.abs(Math.hypot(q[0] - c.c[0], q[1] - c.c[1]) - c.r);
+      if (d >= bd) continue;
+      let a = angOf(c.c, q);
+      if (a < c.arc[0] - 0.12) a += TWO_PI;
+      if (a > c.arc[1] + 0.12) continue;
+      bd = d; best = c;
+    }
+    if (!best) return null;
+    return { ...best, a0: best.arc[0], a1: best.arc[1] };
+  }
+  function pickOrdinatePoint(name, P) {
+    const sn = snapIn(name, P);
+    if (sn) return sn;
+    const c = circleAt(name, P, true);
+    if (c) {
+      const v = layout.views[name];
+      return { p: [c.c[0], c.c[1]], S: toSheet(v, c.c), edge: null, preferDir: null };
+    }
+    return pickDimPoint(name, P);
+  }
+  function ordinateDir(v, origin, b, q, preferDir = null) {
+    const dx = Math.abs(b[0] - origin[0]), dy = Math.abs(b[1] - origin[1]);
+    if (dx > 1e-4 && dy <= 1e-4) return 'h';
+    if (dy > 1e-4 && dx <= 1e-4) return 'v';
+    const b0 = v && v.geo && v.geo.box;
+    if (b0) {
+      if ((q[1] < b0[1] - 0.5 || q[1] > b0[3] + 0.5) && q[0] >= b0[0] - 2 && q[0] <= b0[2] + 2) return 'h';
+      if ((q[0] < b0[0] - 0.5 || q[0] > b0[2] + 0.5) && q[1] >= b0[1] - 2 && q[1] <= b0[3] + 2) return 'v';
+    }
+    return chainDir(origin, b, q, preferDir);
   }
   function angularSector(V, e1, e2, q) {
     const rayAngles = (edge) => {
@@ -4047,9 +5621,12 @@ const Drawing = (() => {
     if (ev) return { dir: ev.dir, x: ev.x, y: vNorm(vCross(ev.dir, ev.x)) };
     return null;
   }
-  function projectPartInView(part, basis) {
+  function projectPartInView(part, basis, offset = null) {
     if (!part || !part.bbox || !basis) return null;
-    const b = part.bbox;
+    const ox = offset ? (Number(offset[0]) || 0) : 0;
+    const oy = offset ? (Number(offset[1]) || 0) : 0;
+    const oz = offset ? (Number(offset[2]) || 0) : 0;
+    const b = [part.bbox[0] + ox, part.bbox[1] + oy, part.bbox[2] + oz, part.bbox[3] + ox, part.bbox[4] + oy, part.bbox[5] + oz];
     const ex = basis.x, ey = basis.y, d = basis.dir;
     let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
     let dMin = Infinity, dMax = -Infinity;
@@ -4061,12 +5638,17 @@ const Drawing = (() => {
       if (v < vMin) vMin = v; if (v > vMax) vMax = v;
       if (dp < dMin) dMin = dp; if (dp > dMax) dMax = dp;
     }
-    const c = Array.isArray(part.com) && part.com.length >= 3
+    const cRaw = Array.isArray(part.com) && part.com.length >= 3
       ? part.com
-      : [(b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5];
+      : [(part.bbox[0] + part.bbox[3]) * 0.5, (part.bbox[1] + part.bbox[4]) * 0.5, (part.bbox[2] + part.bbox[5]) * 0.5];
+    const c = [cRaw[0] + ox, cRaw[1] + oy, cRaw[2] + oz];
     const cu = clamp(c[0] * ex[0] + c[1] * ex[1] + c[2] * ex[2], uMin, uMax);
     const cv = clamp(c[0] * ey[0] + c[1] * ey[1] + c[2] * ey[2], vMin, vMax);
     return { box2: [uMin, vMin, uMax, vMax], center2: [cu, cv], minDepth: dMin, maxDepth: dMax };
+  }
+  function explodePartOffset(vk, partId) {
+    const exMeta = proj && proj.explodeMeta && proj.explodeMeta[vk];
+    return exMeta && exMeta.offsets ? (exMeta.offsets.get(partId) || null) : null;
   }
   function chooseBalloonView(sh, lay, rows, partsById) {
     const avail = Object.keys(lay.views || {}).filter((k) => k !== 'free' && lay.views[k] && lay.views[k].geo && lay.views[k].geo.box);
@@ -4083,7 +5665,7 @@ const Drawing = (() => {
         let chosen = null, bestD = -Infinity;
         for (const id of row.ids) {
           const p = partsById.get(id);
-          const pr = projectPartInView(p, basis);
+          const pr = projectPartInView(p, basis, explodePartOffset(vk, id));
           if (!pr) continue;
           if (pr.maxDepth > bestD) { bestD = pr.maxDepth; chosen = pr; }
         }
@@ -4127,7 +5709,7 @@ const Drawing = (() => {
     const cands = [];
     for (const id of row.ids) {
       const part = partsById.get(id);
-      const pr = projectPartInView(part, basis);
+      const pr = projectPartInView(part, basis, explodePartOffset(vName, id));
       if (pr) cands.push({ id, pr });
     }
     if (!cands.length) {
@@ -4187,7 +5769,7 @@ const Drawing = (() => {
     const basis = viewBasis(vName, simSh);
     const allProjected = [];
     for (const [id, part] of partsById.entries()) {
-      const pr = projectPartInView(part, basis);
+      const pr = projectPartInView(part, basis, explodePartOffset(vName, id));
       if (pr) allProjected.push({ id, pr });
     }
     const st = sheetDimStyle(sh);
@@ -4512,12 +6094,17 @@ const Drawing = (() => {
       if (dimMode === 'dia' || dimMode === 'rad') {
         toolState.hoverCircle = name ? circleAt(name, P, true) : null;
         toolState.snap = null;
+      } else if (dimMode === 'arclen') {
+        toolState.hoverArc = (toolState.stage === 0 && name) ? arcAt(name, P) : null;
+        toolState.snap = null;
       } else if (dimMode === 'chamfer') {
         toolState.hoverChamfer = name ? chamferEdgeAt(name, P) : null;
         toolState.snap = null;
       } else if (dimMode === 'ang') {
         toolState.hoverEdge = (toolState.stage < 2 && name) ? edgeAt(name, P, true) : null;
         toolState.snap = null;
+      } else if (dimMode === 'ordinate') {
+        toolState.snap = name ? pickOrdinatePoint(name, P) : null;
       } else if (dimMode === 'chain' || dimMode === 'base') {
         toolState.snap = name ? pickDimPoint(name, P) : null;
       } else {
@@ -4532,7 +6119,26 @@ const Drawing = (() => {
       const P = sheetPt(e);
       toolState = toolState || { stage: 0 };
       toolState.P = P;
-      if (toolState.stage === 1 && toolState.view) {
+      if (sectionMode === 'stepped') {
+        if (toolState.stage === 1 && toolState.view && toolState.pts && toolState.pts.length === 1) {
+          toolState.cur = snapSectionPt(toolState.view, P, toolState.pts[0], e.shiftKey, e.altKey);
+        } else if (toolState.stage === 2 && toolState.view) {
+          toolState.cur = snapSteppedNext(toolState, P);
+        } else {
+          const name = sectionParentAt(P);
+          toolState.hoverView = name;
+          toolState.snapPt = name ? snapSectionPt(name, P, null, e.shiftKey, e.altKey) : null;
+        }
+      } else if (sectionMode === 'breakout') {
+        if (toolState.stage >= 1 && toolState.view) {
+          const v = layout && layout.views && layout.views[toolState.view];
+          if (v) toolState.cur = toView(v, P);
+        } else {
+          const name = sectionParentAt(P);
+          toolState.hoverView = name;
+          toolState.snapPt = name ? snapSectionPt(name, P, null, e.shiftKey, e.altKey) : null;
+        }
+      } else if (toolState.stage === 1 && toolState.view) {
         toolState.b = snapSectionPt(toolState.view, P, toolState.a, e.shiftKey, e.altKey);
       } else {
         const name = sectionParentAt(P);
@@ -4699,13 +6305,40 @@ const Drawing = (() => {
       return;
     }
     if (!e || e.button !== 0 || tool !== 'section' || !toolState || toolState.stage !== 1 || !svg) return;
+    if (sectionMode === 'breakout') {
+      if (toolState.dragging && Array.isArray(toolState.pts) && toolState.pts.length === 1) {
+        toolState.dragging = false;
+        const P = sheetPt(e);
+        const downP = toolState.downSheet || P;
+        if (Math.hypot(P[0] - downP[0], P[1] - downP[1]) >= 4) {
+          const v = layout && layout.views && layout.views[toolState.view];
+          if (v) {
+            const p0 = toolState.pts[0];
+            const p1 = toView(v, P);
+            if (Math.abs(p1[0] - p0[0]) >= 1 && Math.abs(p1[1] - p0[1]) >= 1) {
+              addSection({ type: 'breakout', parent: toolState.view, region: [p0, [p1[0], p0[1]], p1, [p0[0], p1[1]]], depth: sectionDraft.depth });
+              return;
+            }
+          }
+        }
+        render(); Panels.renderRight();
+      }
+      return;
+    }
+    if (sectionMode === 'stepped') return;
     const P = sheetPt(e);
     const downP = toolState.downSheet || P;
     if (Math.hypot(P[0] - downP[0], P[1] - downP[1]) < 4) return;
     const a = toolState.a;
     const b = snapSectionPt(toolState.view, P, a, e.shiftKey, e.altKey);
     if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 2) {
-      addSection({ parent: toolState.view, a, b });
+      addSection({
+        type: sectionMode === 'half' ? 'half' : 'full',
+        parent: toolState.view,
+        a,
+        b,
+        ...(sectionMode === 'half' ? { halfAxis: sectionDraft.halfAxis, halfSide: sectionDraft.halfSide } : {}),
+      });
     } else {
       toolState = { stage: 0 };
       render();
@@ -4749,8 +6382,99 @@ const Drawing = (() => {
       texts.push({ x: st.P[0], y: st.P[1] - DR - 3, t: `Detail ${detailDraft.label} (${scaleText(ds)})`, size: 4, anchor: 'middle', cls: 'detail-lbl' });
     }
   }
+  function snapSteppedNext(st, P) {
+    const v = layout && layout.views && layout.views[st.view];
+    if (!v || !st.pts || !st.pts.length) return [0, 0];
+    const q = toView(v, P);
+    const last = st.pts[st.pts.length - 1];
+    const t2 = st.t2 || [1, 0];
+    const n2 = [-t2[1], t2[0]];
+    if (st.pts.length % 2 === 0) {
+      const proj = (q[0] - last[0]) * n2[0] + (q[1] - last[1]) * n2[1];
+      return [last[0] + n2[0] * proj, last[1] + n2[1] * proj];
+    }
+    const proj = (q[0] - last[0]) * t2[0] + (q[1] - last[1]) * t2[1];
+    return [last[0] + t2[0] * proj, last[1] + t2[1] * proj];
+  }
+  function finishSectionTool() {
+    if (tool !== 'section' || !toolState || !toolState.view) return false;
+    if (sectionMode === 'stepped') {
+      const pts = (toolState.pts || []).map((p) => [...p]);
+      if (pts.length === 3 && toolState.cur) {
+        const last = pts[pts.length - 1];
+        if (Math.hypot(toolState.cur[0] - last[0], toolState.cur[1] - last[1]) >= 1) pts.push([...toolState.cur]);
+      } else if (pts.length >= 5 && pts.length % 2 === 1) {
+        const last = pts[pts.length - 1];
+        if (toolState.cur && Math.hypot(toolState.cur[0] - last[0], toolState.cur[1] - last[1]) >= 1) pts.push([...toolState.cur]);
+        else pts.pop();
+      }
+      if (pts.length < 4) { UI.toast('Klicke mindestens 4 Punkte für einen abgesetzten Schnitt.', { icon: 'info', ms: 2200 }); return false; }
+      addSection({ type: 'stepped', parent: toolState.view, pts });
+      return true;
+    }
+    if (sectionMode === 'breakout') {
+      const region = (toolState.pts || []).map((p) => [...p]);
+      if (region.length < 3) { UI.toast('Klicke mindestens 3 Punkte oder ziehe ein Rechteck auf.', { icon: 'info', ms: 2200 }); return false; }
+      addSection({ type: 'breakout', parent: toolState.view, region, depth: sectionDraft.depth });
+      return true;
+    }
+    return false;
+  }
   function sectionDown(P, e) {
     const st = toolState || { stage: 0 };
+    if (sectionMode === 'stepped') {
+      if (st.stage === 0) {
+        const name = sectionParentAt(P);
+        if (!name) { UI.toast('Klicke den Startpunkt des abgesetzten Schnitts in der Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
+        const a = snapSectionPt(name, P, null, e.shiftKey, e.altKey);
+        toolState = { stage: 1, view: name, pts: [a], cur: a };
+        render(); Panels.renderRight();
+      } else if (st.stage === 1) {
+        const b = snapSectionPt(st.view, P, st.pts[0], e.shiftKey, e.altKey);
+        const L = Math.hypot(b[0] - st.pts[0][0], b[1] - st.pts[0][1]);
+        if (L < 1.5) return;
+        const t2 = [(b[0] - st.pts[0][0]) / L, (b[1] - st.pts[0][1]) / L];
+        toolState = { stage: 2, view: st.view, pts: [st.pts[0], b], cur: b, t2 };
+        render(); Panels.renderRight();
+      } else if (st.stage === 2) {
+        const nextPt = snapSteppedNext(st, P);
+        const last = st.pts[st.pts.length - 1];
+        if (st.pts.length >= 4 && (e.detail === 2 || Math.hypot(nextPt[0] - last[0], nextPt[1] - last[1]) < 1.0)) {
+          finishSectionTool();
+          return;
+        }
+        if (Math.hypot(nextPt[0] - last[0], nextPt[1] - last[1]) < 0.8) return;
+        st.pts.push(nextPt);
+        st.cur = nextPt;
+        render(); Panels.renderRight();
+      }
+      return;
+    }
+    if (sectionMode === 'breakout') {
+      if (st.stage === 0) {
+        const name = sectionParentAt(P);
+        if (!name) { UI.toast('Zieh ein Rechteck oder klicke einen Umriss in der Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
+        const v = layout.views[name];
+        const p0 = toView(v, P);
+        toolState = { stage: 1, view: name, pts: [p0], cur: p0, downSheet: P, dragging: true };
+        render(); Panels.renderRight();
+      } else if (st.stage === 1 && !st.dragging) {
+        const v = layout.views[st.view];
+        if (!v) return;
+        const q = toView(v, P);
+        const closeTol = Math.max(2, 5 / zoom / v.s);
+        if (st.pts.length >= 3 && (e.detail === 2 || Math.hypot(q[0] - st.pts[0][0], q[1] - st.pts[0][1]) <= closeTol)) {
+          finishSectionTool();
+          return;
+        }
+        const last = st.pts[st.pts.length - 1];
+        if (Math.hypot(q[0] - last[0], q[1] - last[1]) < 0.5) return;
+        st.pts.push(q);
+        st.cur = q;
+        render(); Panels.renderRight();
+      }
+      return;
+    }
     if (st.stage === 0) {
       const name = sectionParentAt(P);
       if (!name) { UI.toast('Zieh oder klick eine Schnittlinie durch die Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
@@ -4760,7 +6484,13 @@ const Drawing = (() => {
     } else if (st.stage === 1) {
       const b = snapSectionPt(st.view, P, st.a, e.shiftKey, e.altKey);
       if (Math.hypot(b[0] - st.a[0], b[1] - st.a[1]) < 2) return;
-      addSection({ parent: st.view, a: st.a, b });
+      addSection({
+        type: sectionMode === 'half' ? 'half' : 'full',
+        parent: st.view,
+        a: st.a,
+        b,
+        ...(sectionMode === 'half' ? { halfAxis: sectionDraft.halfAxis, halfSide: sectionDraft.halfSide } : {}),
+      });
     }
   }
   function previewSection(lines, texts) {
@@ -4774,6 +6504,38 @@ const Drawing = (() => {
       }
       return;
     }
+    if (sectionMode === 'stepped' && st.stage >= 1 && st.view && Array.isArray(st.pts)) {
+      const v = layout.views[st.view];
+      if (!v) return;
+      const pts = st.cur ? [...st.pts, st.cur] : st.pts.slice();
+      if (pts.length >= 2) {
+        const S = pts.map((p) => toSheet(v, p));
+        if (pts.length >= 2 && Math.hypot(S[1][0] - S[0][0], S[1][1] - S[0][1]) >= 0.5) {
+          drawSectionLine(v, { id: '__secprev', type: 'stepped', label: nextSectionLabel(), parent: st.view, pts, flip: false }, lines, texts);
+        }
+      }
+      return;
+    }
+    if (sectionMode === 'breakout' && st.stage >= 1 && st.view && Array.isArray(st.pts)) {
+      const v = layout.views[st.view];
+      if (!v) return;
+      if (st.dragging && st.pts.length === 1 && st.cur) {
+        const p0 = st.pts[0], p1 = st.cur;
+        const reg = [p0, [p1[0], p0[1]], p1, [p0[0], p1[1]]];
+        const S = reg.map((p) => toSheet(v, p));
+        S.push([...S[0]]);
+        lines.push({ pts: S, cls: 'prev' });
+      } else {
+        const pts = st.cur ? [...st.pts, st.cur] : st.pts.slice();
+        if (pts.length >= 2) lines.push({ pts: pts.map((p) => toSheet(v, p)), cls: 'prev' });
+        if (st.pts.length >= 3 && st.cur) {
+          lines.push({ pts: [toSheet(v, st.cur), toSheet(v, st.pts[0])], cls: 'prev' });
+          const S0 = toSheet(v, st.pts[0]);
+          lines.push({ circle: [S0[0], S0[1], (1.4 / zoom) * 1.4], cls: 'snap' });
+        }
+      }
+      return;
+    }
     if (st.stage === 1 && st.view && st.a && st.b) {
       const v = layout.views[st.view];
       if (!v) return;
@@ -4783,7 +6545,16 @@ const Drawing = (() => {
         return;
       }
       const lbl = nextSectionLabel();
-      drawSectionLine(v, { id: '__secprev', label: lbl, parent: st.view, a: st.a, b: st.b, flip: false }, lines, texts);
+      drawSectionLine(v, {
+        id: '__secprev',
+        type: sectionMode === 'half' ? 'half' : 'full',
+        label: lbl,
+        parent: st.view,
+        a: st.a,
+        b: st.b,
+        flip: false,
+        ...(sectionMode === 'half' ? { halfAxis: sectionDraft.halfAxis, halfSide: sectionDraft.halfSide } : {}),
+      }, lines, texts);
     }
   }
   function nextSectionLabel(sh = dwg()) {
@@ -4795,21 +6566,39 @@ const Drawing = (() => {
     return 'A' + n;
   }
   async function addSection(opts) {
-    if (!opts || !opts.parent || !opts.a || !opts.b) return null;
-    if (Math.hypot(opts.b[0] - opts.a[0], opts.b[1] - opts.a[1]) < 1e-3) return null;
+    if (!opts || !opts.parent) return null;
+    const type = opts.type === 'half' || opts.type === 'stepped' || opts.type === 'breakout' ? opts.type : 'full';
+    if (type !== 'full' && isSimpleMode()) {
+      UI.toast(T('draw.secProOnly'), { icon: 'info' });
+      return null;
+    }
+    if (type === 'stepped') {
+      if (!Array.isArray(opts.pts) || opts.pts.length < 4) return null;
+    } else if (type === 'breakout') {
+      if (!Array.isArray(opts.region) || opts.region.length < 3) return null;
+    } else {
+      if (!opts.a || !opts.b || Math.hypot(opts.b[0] - opts.a[0], opts.b[1] - opts.a[1]) < 1e-3) return null;
+    }
     let sec = null;
     App.change('Schnittansicht hinzugefügt', () => {
       const d = dwg();
       if (!Array.isArray(d.sections)) d.sections = [];
-      sec = {
+      sec = normalizeSection({
         id: uid('sec'),
         label: opts.label || nextSectionLabel(d),
         parent: opts.parent,
-        a: [opts.a[0], opts.a[1]],
-        b: [opts.b[0], opts.b[1]],
+        type,
+        a: opts.a,
+        b: opts.b,
+        pts: opts.pts,
+        region: opts.region,
+        halfAxis: opts.halfAxis,
+        halfSide: opts.halfSide,
+        split: opts.split,
+        depth: opts.depth,
         flip: !!opts.flip,
         pos: opts.pos || null,
-      };
+      });
       d.sections.push(sec);
     });
     selDim = sec.id;
@@ -4822,6 +6611,54 @@ const Drawing = (() => {
     render();
     Panels.renderRight();
     return sec;
+  }
+  async function updateSection(id, patch = {}) {
+    const cur = (dwg().sections || []).find((x) => x.id === id);
+    if (!cur || !patch || typeof patch !== 'object') return false;
+    let changed = false;
+    App.change('Schnittansicht geändert', () => {
+      const s = (dwg().sections || []).find((x) => x.id === id);
+      if (!s) return;
+      if (patch.label != null) {
+        const lbl = String(patch.label).trim().slice(0, 3);
+        if (lbl && lbl !== s.label) { s.label = lbl; changed = true; }
+      }
+      if (patch.flip != null && !!patch.flip !== !!s.flip) { s.flip = !!patch.flip; changed = true; }
+      if (patch.halfAxis === 'v' || patch.halfAxis === 'h') {
+        if (s.halfAxis !== patch.halfAxis) {
+          s.halfAxis = patch.halfAxis;
+          if (!patch.halfSide) {
+            s.halfSide = patch.halfAxis === 'h'
+              ? (s.halfSide === 'left' ? 'top' : 'bottom')
+              : (s.halfSide === 'top' ? 'left' : 'right');
+          }
+          changed = true;
+        }
+      }
+      if (patch.halfSide === 'left' || patch.halfSide === 'right' || patch.halfSide === 'top' || patch.halfSide === 'bottom') {
+        if (s.halfSide !== patch.halfSide) { s.halfSide = patch.halfSide; changed = true; }
+      }
+      if ('split' in patch) {
+        const spVal = patch.split === null || patch.split === '' ? undefined : Number(patch.split);
+        if (spVal === undefined) { if (s.split !== undefined) { delete s.split; changed = true; } }
+        else if (Number.isFinite(spVal) && spVal !== s.split) { s.split = spVal; changed = true; }
+      }
+      if ('depth' in patch) {
+        const dVal = patch.depth === null || patch.depth === '' ? null : Number(patch.depth);
+        if (dVal === null) { if (s.depth !== null) { s.depth = null; changed = true; } }
+        else if (Number.isFinite(dVal) && dVal > 0 && dVal !== s.depth) { s.depth = dVal; changed = true; }
+      }
+      if (patch.pos === null) { if (s.pos !== null) { s.pos = null; changed = true; } }
+      else if (Array.isArray(patch.pos) && patch.pos.length >= 2) {
+        s.pos = [Number(patch.pos[0]) || 0, Number(patch.pos[1]) || 0];
+        changed = true;
+      }
+    });
+    if (!changed) return false;
+    await ensureProjections();
+    render();
+    Panels.renderRight();
+    return true;
   }
   async function flipSection(id) {
     const cur = (dwg().sections || []).find((x) => x.id === id);
@@ -5142,6 +6979,89 @@ const Drawing = (() => {
       render();
       return;
     }
+    if (dimMode === 'arclen') {
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const arc = arcAt(name, P);
+        if (!arc) { UI.toast(T('draw.toast.pickArc'), { icon: 'info', ms: 2000 }); return; }
+        toolState = { ...st, stage: 1, view: name, arc, P };
+        render();
+        return;
+      }
+      if (st.stage === 1) {
+        const v = layout.views[st.view]; if (!v || !st.arc) return;
+        const q = toView(v, P);
+        const rawOff = Math.hypot(q[0] - st.arc.c[0], q[1] - st.arc.c[1]) - st.arc.r;
+        const minOff = 2 / v.s - st.arc.r;
+        const off = Math.max(minOff, Math.abs(rawOff) < 2 / v.s ? 6 / v.s : rawOff);
+        addDim({ view: st.view, type: 'arclen', c: st.arc.c, r: st.arc.r, a0: st.arc.a0, a1: st.arc.a1, off, ref: makeCircleRef(v, st.arc) });
+        return;
+      }
+    }
+    if (dimMode === 'ordinate') {
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const sn = pickOrdinatePoint(name, P);
+        if (!sn) { UI.toast(T('draw.toast.pickOrigin'), { icon: 'info', ms: 2000 }); return; }
+        toolState = { ...st, stage: 1, view: name, origin: sn.p, originEdge: sn.edge || null, preferDir: sn.preferDir || null, P };
+      } else if (st.stage === 1) {
+        const sn = pickOrdinatePoint(st.view, P); if (!sn) return;
+        if (Math.hypot(sn.p[0] - st.origin[0], sn.p[1] - st.origin[1]) < 1e-4) return;
+        toolState = { ...st, stage: 2, b: sn.p, bEdge: sn.edge || null, P };
+      } else if (st.stage === 2) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, P);
+        const dir = ordinateDir(v, st.origin, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        const oRef = makePointRef(v, st.origin, st.originEdge), bRef = makePointRef(v, st.b, st.bEdge);
+        const dimData = { view: st.view, type: 'ordinate', dir, linePos, origin: st.origin, pts: [st.b], ref: { kind: 'ordinate', origin: oRef, pts: [bRef] } };
+        if (st.rebindId) {
+          const targetId = st.rebindId;
+          App.change('Maß neu zugeordnet', () => {
+            const d = dwg();
+            const idx = (d.dims || []).findIndex((x) => x.id === targetId);
+            if (idx >= 0) {
+              const old = d.dims[idx];
+              d.dims[idx] = { ...dimData, id: old.id, ...(old.tol ? { tol: old.tol } : {}) };
+            }
+          });
+          selDim = targetId;
+          toolState = { stage: 3, view: st.view, dimId: targetId, dir, linePos, P };
+          lastLostKey = lostDims(dwg()).map((x) => x.id).sort().join(',');
+          Panels.renderRight();
+        } else {
+          const dim = { id: uid('d'), ...dimData };
+          App.change('Koordinatenmaß hinzugefügt', () => { dwg().dims.push(dim); });
+          selDim = dim.id;
+          toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
+          Panels.renderRight();
+        }
+      } else if (st.stage === 3) {
+        const hitView = viewAt(P);
+        if (hitView && hitView !== st.view) { toolState = { stage: 0 }; render(); Panels.renderRight(); return; }
+        const sn = pickOrdinatePoint(st.view, P);
+        if (!sn) {
+          if (!hitView) { toolState = { stage: 0 }; render(); Panels.renderRight(); }
+          return;
+        }
+        const cur = dwg().dims.find((x) => x.id === st.dimId);
+        if (!cur) { toolState = { stage: 0 }; render(); return; }
+        const coord = st.dir === 'h' ? sn.p[0] : sn.p[1];
+        const existing = [cur.origin, ...(cur.pts || [])].filter(Boolean);
+        if (existing.some((p) => Math.abs((st.dir === 'h' ? p[0] : p[1]) - coord) < 1e-4)) return;
+        const v = layout.views[st.view];
+        const ptRef = v ? makePointRef(v, sn.p, sn.edge || null) : null;
+        App.change('Koordinatenmaß erweitert', () => {
+          const d = dwg().dims.find((x) => x.id === st.dimId);
+          if (d) {
+            d.pts.push(sn.p);
+            if (ptRef && d.ref && Array.isArray(d.ref.pts)) d.ref.pts.push(ptRef);
+          }
+        });
+      }
+      render();
+      return;
+    }
     if (dimMode === 'chain' || dimMode === 'base') {
       const isBase = dimMode === 'base';
       if (st.stage === 0) {
@@ -5265,6 +7185,36 @@ const Drawing = (() => {
         const C = toSheet(v, st.hoverCircle.c);
         lines.push({ circle: [C[0], C[1], st.hoverCircle.r * v.s], cls: 'prev' });
         dimSVG({ id: '__prev', view: st.hoverView, type: dimMode, c: st.hoverCircle.c, r: st.hoverCircle.r, ang: Math.round(st.hoverCircle.ang), ...(st.hoverCircle.full ? {} : { partial: true }) }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'arclen') {
+      const v = layout.views[st.view || st.hoverView];
+      const arc = st.stage === 1 ? st.arc : st.hoverArc;
+      if (arc && v) {
+        lines.push({ pts: arcPts(arc.c, arc.r, arc.a0, arc.a1).map((q) => toSheet(v, q)), cls: 'prev' });
+        let off = 6 / v.s;
+        if (st.stage === 1 && st.P) {
+          const q = toView(v, st.P);
+          const rawOff = Math.hypot(q[0] - arc.c[0], q[1] - arc.c[1]) - arc.r;
+          off = Math.max(2 / v.s - arc.r, Math.abs(rawOff) < 2 / v.s ? 6 / v.s : rawOff);
+        }
+        dimSVG({ id: '__prev', view: st.view || st.hoverView, type: 'arclen', c: arc.c, r: arc.r, a0: arc.a0, a1: arc.a1, off }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'ordinate') {
+      if (st.stage === 1 && st.P) { const v = layout.views[st.view]; if (v) lines.push({ pts: [toSheet(v, st.origin), st.P], cls: 'prev' }); }
+      if (st.stage === 2 && st.P) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, st.P);
+        const dir = ordinateDir(v, st.origin, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        dimSVG({ id: '__prev', view: st.view, type: 'ordinate', dir, linePos, origin: st.origin, pts: [st.b] }, lines, texts);
+      }
+      if (st.stage === 3 && st.snap && st.snap.p) {
+        const v = layout.views[st.view];
+        if (v) lines.push({ circle: [st.snap.S[0], st.snap.S[1], (1.3 / zoom) * 1.6], cls: 'prev' });
       }
       return;
     }
@@ -5411,9 +7361,11 @@ const Drawing = (() => {
     if (svg) svg.style.cursor = 'crosshair';
     const what = dimMode === 'dia' ? 'die neue Bohrung oder den Kreis'
       : dimMode === 'rad' ? 'die neue Rundung oder den Bogen'
-        : dimMode === 'chamfer' ? 'die neue Fasen-Kante'
-          : dimMode === 'ang' ? 'zwei neue Kanten im Winkel'
-            : 'neue Punkte oder Kanten';
+        : dimMode === 'arclen' ? 'den neuen Kreisbogen'
+          : dimMode === 'chamfer' ? 'die neue Fasen-Kante'
+            : dimMode === 'ang' ? 'zwei neue Kanten im Winkel'
+              : dimMode === 'ordinate' ? 'Nullpunkt und Zielpunkte'
+                : 'neue Punkte oder Kanten';
     UI.hint(`<b>Maß neu zuordnen:</b> Klicke auf ${what} in einer Ansicht. <b>Esc</b> bricht ab.`);
     Panels.renderTools();
     Panels.renderRight();
@@ -5437,8 +7389,18 @@ const Drawing = (() => {
   }
   function onKey(e) {
     if (e.key === 'Escape') { if (tool) { setTool(null); return true; } if (selDim) { selDim = null; render(); Panels.renderRight(); return true; } return false; }
-    if (e.key === 'Enter' && tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+    if (e.key === 'Enter' && tool === 'dim' && (dimMode === 'chain' || dimMode === 'base' || dimMode === 'ordinate') && toolState && toolState.stage === 3) {
       toolState = { stage: 0 };
+      render(); Panels.renderRight();
+      return true;
+    }
+    if (e.key === 'Enter' && tool === 'section' && (sectionMode === 'stepped' || sectionMode === 'breakout')) {
+      return finishSectionTool();
+    }
+    if (e.key === 'Backspace' && tool === 'section' && (sectionMode === 'stepped' || sectionMode === 'breakout') && toolState && Array.isArray(toolState.pts) && toolState.pts.length > 0) {
+      toolState.pts.pop();
+      if (!toolState.pts.length) toolState = { stage: 0 };
+      else if (sectionMode === 'stepped' && toolState.pts.length === 1) toolState.stage = 1;
       render(); Panels.renderRight();
       return true;
     }
@@ -5494,6 +7456,20 @@ const Drawing = (() => {
     if (dwg().centers === val) return;
     App.change(val ? 'Mittellinien eingeblendet' : 'Mittellinien ausgeblendet', () => { dwg().centers = val; });
     if (!val && selDim && String(selDim).startsWith('ctr|')) selDim = null;
+    render(); Panels.renderRight();
+  }
+  function setNormThreads(on) {
+    const val = !!on;
+    const cur = dwg();
+    if ((cur.normThreads !== false) === val) return;
+    App.change(val ? 'Gewinde nach Norm eingeblendet' : 'Gewinde nach Norm ausgeblendet', () => { dwg().normThreads = val; });
+    render(); Panels.renderRight();
+  }
+  function setMaterialHatch(on) {
+    const val = !!on;
+    const cur = dwg();
+    if ((cur.materialHatch !== false) === val) return;
+    App.change(val ? 'Schraffur je Werkstoff aktiviert' : 'Schraffur je Werkstoff deaktiviert', () => { dwg().materialHatch = val; });
     render(); Panels.renderRight();
   }
   function hideCenter(id) {
@@ -5571,29 +7547,61 @@ const Drawing = (() => {
     return m ? m.hint : DIM_MODES[0].hint;
   }
   function setDimMode(mode) {
-    if (!mode) { setTool(null); return; }
-    dimMode = DIM_MODES.some((x) => x.key === mode) ? mode : 'lin';
+    if (!mode) { setTool(null); return false; }
+    const m = DIM_MODES.find((x) => x.key === mode) || DIM_MODES[0];
+    if (m.pro && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
+    dimMode = m.key;
     dragDetail = null;
     tool = 'dim';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
     UI.hint(dimHint(dimMode));
     Panels.renderTools(); Panels.renderRight(); render();
+    return true;
   }
   function dimMenu(anchor) {
-    const tMap = { lin: 'menu.draw.dimLin', chain: 'menu.draw.dimChain', base: 'menu.draw.dimBase', ang: 'menu.draw.dimAng', rad: 'menu.draw.dimRad', dia: 'menu.draw.dimDia', chamfer: 'menu.draw.dimChamfer' };
-    UI.menu(anchor, DIM_MODES.map((m) => ({
+    const simple = isSimpleMode();
+    const tMap = { lin: 'menu.draw.dimLin', chain: 'menu.draw.dimChain', base: 'menu.draw.dimBase', ordinate: 'menu.draw.dimOrdinate', ang: 'menu.draw.dimAng', rad: 'menu.draw.dimRad', dia: 'menu.draw.dimDia', arclen: 'menu.draw.dimArcLen', chamfer: 'menu.draw.dimChamfer' };
+    UI.menu(anchor, DIM_MODES.filter((m) => !simple || !m.pro).map((m) => ({
       label: T(tMap[m.key] || m.label),
       icon: 'dim',
-      help: 'drawingDimTypes',
+      help: m.pro ? 'drawingOrdArc' : 'drawingDimTypes',
       checked: tool === 'dim' && dimMode === m.key,
       run: () => setDimMode(m.key),
+    })));
+  }
+  function sectionHint(mode) {
+    const m = SECTION_MODES.find((x) => x.key === mode);
+    return m ? m.hint : SECTION_MODES[0].hint;
+  }
+  function setSectionMode(mode) {
+    if (!mode) { setTool(null); return false; }
+    const m = SECTION_MODES.find((x) => x.key === mode) || SECTION_MODES[0];
+    if (m.pro && isSimpleMode()) { UI.toast(T('draw.secProOnly'), { icon: 'info' }); return false; }
+    sectionMode = m.key;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    tool = 'section';
+    toolState = { stage: 0 };
+    if (svg) svg.style.cursor = 'crosshair';
+    UI.hint(sectionHint(sectionMode));
+    Panels.renderTools(); Panels.renderRight(); render();
+    return true;
+  }
+  function sectionMenu(anchor) {
+    const simple = isSimpleMode();
+    UI.menu(anchor, SECTION_MODES.filter((m) => !simple || !m.pro).map((m) => ({
+      label: m.label,
+      icon: 'section',
+      help: 'drawingSectionKinds',
+      checked: tool === 'section' && sectionMode === m.key,
+      run: () => setSectionMode(m.key),
     })));
   }
   function setTool(t) {
     dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
+    if (t === 'section' && (!SECTION_MODES.some((x) => x.key === sectionMode) || (sectionMode !== 'full' && isSimpleMode()))) sectionMode = 'full';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
@@ -5604,7 +7612,7 @@ const Drawing = (() => {
     UI.hint(
       t === 'dim' ? dimHint(dimMode)
         : t === 'detail' ? T('draw.hint.detail')
-          : t === 'section' ? T('draw.hint.section')
+          : t === 'section' ? sectionHint(sectionMode)
             : t === 'note' ? T('draw.hint.note')
               : t === 'balloon' ? T('draw.hint.balloon')
                 : t === 'break' ? T('draw.hint.break')
@@ -5612,6 +7620,949 @@ const Drawing = (() => {
                     : t && t.startsWith('free-') ? freeHint(t) : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
+  }
+  // ---------- Maße aus dem Modell übernehmen & ordnen (ZE-23) ----------
+  function vec3FromPt(p, M) {
+    const v = new THREE.Vector3(Number(p[0]) || 0, Number(p[1]) || 0, Number(p[2]) || 0);
+    return M ? v.applyMatrix4(M) : v;
+  }
+  function normalToWorld3(n, M) {
+    const v = new THREE.Vector3(Number(n[0]) || 0, Number(n[1]) || 0, Number(n[2]) || 0);
+    if (M) v.applyMatrix3(new THREE.Matrix3().getNormalMatrix(M));
+    return v.lengthSq() > 1e-12 ? v.normalize() : new THREE.Vector3(0, 0, 1);
+  }
+  function sketchRefPt2(ref, entById) {
+    if (!ref) return null;
+    if (ref.e === 'origin') return [0, 0];
+    const e = entById.get(ref.e);
+    if (!e) return null;
+    if (e.type === 'rect' && ref.p && /^k[0-3]$/.test(ref.p)) {
+      const c = SK.rectCorners(e);
+      return c[Number(ref.p[1])] || null;
+    }
+    if (e.type === 'circle' || e.type === 'ellipse') return e.c ? [...e.c] : null;
+    if (e.type === 'poly') return e.c ? [...e.c] : null;
+    if (e.type === 'point' || e.type === 'text') return e.a ? [...e.a] : null;
+    if (ref.p === 'a' && e.a) return [...e.a];
+    if (ref.p === 'b' && e.b) return [...e.b];
+    if (ref.p === 'm' && e.m) return [...e.m];
+    if (ref.p === 'c' && e.c) return [...e.c];
+    return e.a ? [...e.a] : e.c ? [...e.c] : null;
+  }
+  function sketchRefLine2(ref, entById) {
+    if (!ref) return null;
+    const e = entById.get(ref.e);
+    if (!e) return null;
+    if (e.type === 'line' && e.a && e.b) return [e.a, e.b];
+    if (e.type === 'rect' && ref.edge != null) {
+      const c = SK.rectCorners(e);
+      const i = ((Number(ref.edge) % 4) + 4) % 4;
+      return [c[i], c[(i + 1) % 4]];
+    }
+    return null;
+  }
+  function collectSketchModelDims(sk, M, V, itemId, out, isHole = false, addFallback = true) {
+    if (!sk) return null;
+    const ents = (typeof Solver !== 'undefined' && Solver.cached) ? Solver.cached(sk, V).ents : (sk.ents || []);
+    const entById = new Map();
+    for (const e of ents) if (e && e.id) entById.set(e.id, e);
+    const pl = sk.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const px = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize();
+    const pn = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize();
+    const py = new THREE.Vector3().crossVectors(pn, px).normalize();
+    const po = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+    const wn = normalToWorld3([pn.x, pn.y, pn.z], M);
+    const skPt = (pt) => {
+      const v = po.clone().addScaledVector(px, Number(pt[0]) || 0).addScaledVector(py, Number(pt[1]) || 0);
+      return M ? v.applyMatrix4(M) : v;
+    };
+    const pushLin = (a2, b2, valHint = null, axisHint = null) => {
+      if (!a2 || !b2 || Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) < 0.15) return;
+      out.push({ kind: 'lin', p0: skPt(a2), p1: skPt(b2), planeNormal: wn, valHint, axisHint, itemId, source: 'sketch' });
+    };
+    let addedHere = 0;
+    for (const dm of sk.dims || []) {
+      if (!dm || dm.ref) continue;
+      const val = Model.num(dm.v, V, NaN);
+      if (!isFinite(val)) continue;
+      if (dm.e) {
+        const e = entById.get(dm.e);
+        if (!e || e.con) continue;
+        if (dm.k === 'w' && e.type === 'rect' && e.a && e.b) {
+          const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]);
+          const y0 = Math.min(e.a[1], e.b[1]);
+          pushLin([x0, y0], [x1, y0], val);
+          addedHere++;
+        } else if (dm.k === 'h' && e.type === 'rect' && e.a && e.b) {
+          const x0 = Math.min(e.a[0], e.b[0]);
+          const y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
+          pushLin([x0, y0], [x0, y1], val);
+          addedHere++;
+        } else if (dm.k === 'w' && e.type === 'slot' && e.a && e.r > 0.05) {
+          out.push({ kind: 'dia', c: skPt(e.a), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (dm.k === 'len' && (e.type === 'line' || e.type === 'slot') && e.a && e.b) {
+          pushLin(e.a, e.b, val);
+          addedHere++;
+        } else if (dm.k === 'd' && e.type === 'circle' && e.c && e.r > 0.05) {
+          out.push({ kind: 'dia', c: skPt(e.c), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (dm.k === 'r' && e.type === 'circle' && e.c && e.r > 0.05) {
+          out.push({ kind: 'rad', c: skPt(e.c), n: wn, r: e.r, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (dm.k === 'r' && e.type === 'arc' && e.a && e.m && e.b) {
+          const ai = SK.arcInfo(e.a, e.m, e.b);
+          if (ai && ai.r > 0.05) {
+            out.push({ kind: 'rad', c: skPt(ai.c), n: wn, r: ai.r, pMid: skPt(e.m), itemId, source: 'sketch' });
+            addedHere++;
+          }
+        } else if ((dm.k === 'rx' || dm.k === 'ry') && e.type === 'ellipse' && e.c) {
+          const rot = e.rot || 0;
+          const dir = dm.k === 'rx' ? [Math.cos(rot), Math.sin(rot)] : [-Math.sin(rot), Math.cos(rot)];
+          const rVal = dm.k === 'rx' ? e.rx : e.ry;
+          if (rVal > 0.05) {
+            pushLin(e.c, [e.c[0] + dir[0] * rVal, e.c[1] + dir[1] * rVal], val);
+            addedHere++;
+          }
+        }
+      } else if (Array.isArray(dm.refs) && dm.refs.length >= 2) {
+        if (dm.k === 'dist') {
+          const a2 = sketchRefPt2(dm.refs[0], entById), b2 = sketchRefPt2(dm.refs[1], entById);
+          if (a2 && b2) { pushLin(a2, b2, val); addedHere++; }
+        } else if (dm.k === 'distPL') {
+          const p2 = sketchRefPt2(dm.refs[0], entById), L = sketchRefLine2(dm.refs[1], entById);
+          if (p2 && L) {
+            const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1], L2 = dx * dx + dy * dy;
+            if (L2 > 1e-8) {
+              const t = ((p2[0] - L[0][0]) * dx + (p2[1] - L[0][1]) * dy) / L2;
+              const q2 = [L[0][0] + t * dx, L[0][1] + t * dy];
+              pushLin(p2, q2, val);
+              addedHere++;
+            }
+          }
+        } else if (dm.k === 'distCC') {
+          const e0 = entById.get(dm.refs[0].e), e1 = entById.get(dm.refs[1].e);
+          const c0 = e0 && e0.c, c1 = e1 && e1.c;
+          if (c0 && c1) { pushLin(c0, c1, val); addedHere++; }
+        } else if (dm.k === 'ord') {
+          const p2 = sketchRefPt2(dm.refs[0], entById);
+          const L = sketchRefLine2(dm.refs[1], entById);
+          const o2 = sketchRefPt2(dm.refs[1], entById);
+          if (p2 && L) {
+            const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1], L2 = dx * dx + dy * dy;
+            if (L2 > 1e-8) {
+              const t = ((p2[0] - L[0][0]) * dx + (p2[1] - L[0][1]) * dy) / L2;
+              pushLin(p2, [L[0][0] + t * dx, L[0][1] + t * dy], Math.abs(val));
+              addedHere++;
+            }
+          } else if (p2 && o2) {
+            const ax = dm.axis === 'y' ? 1 : 0;
+            const q2 = ax === 0 ? [o2[0], p2[1]] : [p2[0], o2[1]];
+            pushLin(p2, q2, Math.abs(val));
+            addedHere++;
+          }
+        } else if (dm.k === 'angLL') {
+          const L1 = sketchRefLine2(dm.refs[0], entById), L2 = sketchRefLine2(dm.refs[1], entById);
+          if (L1 && L2) {
+            const V2 = lineIntersect2D(L1[0], L1[1], L2[0], L2[1]);
+            if (V2) {
+              out.push({
+                kind: 'ang',
+                v: skPt(V2),
+                e1: [skPt(L1[0]), skPt(L1[1])],
+                e2: [skPt(L2[0]), skPt(L2[1])],
+                n: wn,
+                itemId,
+                source: 'sketch',
+              });
+              addedHere++;
+            }
+          }
+        } else if (dm.k === 'ang3' && dm.refs.length >= 3) {
+          const A2 = sketchRefPt2(dm.refs[0], entById), V2 = sketchRefPt2(dm.refs[1], entById), B2 = sketchRefPt2(dm.refs[2], entById);
+          if (A2 && V2 && B2) {
+            out.push({
+              kind: 'ang',
+              v: skPt(V2),
+              e1: [skPt(V2), skPt(A2)],
+              e2: [skPt(V2), skPt(B2)],
+              n: wn,
+              itemId,
+              source: 'sketch',
+            });
+            addedHere++;
+          }
+        }
+      }
+    }
+    if (addedHere === 0 && addFallback) {
+      const visEnts = ents.filter((e) => e && !e.con);
+      for (const e of visEnts) {
+        if (e.type === 'circle' && e.c && e.r > 0.05) {
+          out.push({ kind: 'dia', c: skPt(e.c), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (e.type === 'rect' && e.a && e.b) {
+          const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]);
+          const y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
+          pushLin([x0, y0], [x1, y0]);
+          pushLin([x0, y0], [x0, y1]);
+          addedHere += 2;
+        }
+      }
+      if (addedHere === 0) {
+        const b = SK.bounds(visEnts);
+        if (b && b.w > 0.1 && b.h > 0.1) {
+          pushLin([b.minX, b.minY], [b.maxX, b.minY]);
+          pushLin([b.minX, b.minY], [b.minX, b.maxY]);
+        }
+      }
+    }
+    return { ents, plane: pl, px, py, pn, po, wn, skPt };
+  }
+  function collectModelDims(doc = App.doc, extraMat = null, visited = null, out = []) {
+    if (!doc || !Array.isArray(doc.items)) return out;
+    const vis = visited || new Set();
+    if (doc.id && vis.has(doc.id)) return out;
+    if (doc.id) vis.add(doc.id);
+    try {
+      Model.walk(doc.items, (it) => {
+        if (!isItemActiveVisible(doc, it)) return;
+        const V = Model.itemVars(doc, it.id);
+        const mats = Model.instanceMatrices(doc, it.id, V).map((m) => (extraMat ? extraMat.clone().multiply(m) : m));
+        if (!mats.length) return;
+        const M = mats[0];
+        if (it.kind === 'ref' && it.p && it.p.docId && typeof Model.resolveDoc === 'function') {
+          const rd = Model.resolveDoc(it.p.docId);
+          if (rd) collectModelDims(rd, M, vis, out);
+          return;
+        }
+        if (it.kind === 'group') return;
+        const isCut = it.role === 'hole' || (it.op && it.op.type === 'cut');
+        const p = Model.resolveP(it.p || {}, V);
+        const wN = (n) => normalToWorld3(n, M);
+        const wP = (pt) => vec3FromPt(pt, M);
+
+        if (it.kind === 'box' || it.kind === 'pyramid' || it.kind === 'wedge') {
+          const w = Number(p.w) || 0, d = Number(p.d) || 0, h = Number(p.h) || 0;
+          if (w > 0.1) out.push({ kind: 'lin', p0: wP([-w / 2, -d / 2, 0]), p1: wP([w / 2, -d / 2, 0]), axisHint: 'x', itemId: it.id, source: 'step' });
+          if (d > 0.1) out.push({ kind: 'lin', p0: wP([-w / 2, -d / 2, 0]), p1: wP([-w / 2, d / 2, 0]), axisHint: 'y', itemId: it.id, source: 'step' });
+          if (h > 0.1 && !(isCut && p.thru)) out.push({ kind: 'lin', p0: wP([-w / 2, -d / 2, 0]), p1: wP([-w / 2, -d / 2, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'cylinder') {
+          const r = (Number(p.d) || 0) / 2, h = Number(p.h) || 0;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r, isHole: isCut, itemId: it.id, source: 'step' });
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'tube') {
+          const r = (Number(p.d) || 0) / 2, wall = Number(p.wall) || 0, h = Number(p.h) || 0;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r, isHole: false, itemId: it.id, source: 'step' });
+          if (r - wall > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: r - wall, isHole: true, itemId: it.id, source: 'step' });
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'cone') {
+          const r1 = (Number(p.d1) || 0) / 2, r2 = (Number(p.d2) || 0) / 2, h = Number(p.h) || 0;
+          if (r1 > 0.05) out.push({ kind: 'dia', c: wP([0, 0, 0]), n: wN([0, 0, 1]), r: r1, isHole: isCut, itemId: it.id, source: 'step' });
+          if (r2 > 0.05 && Math.abs(r2 - r1) > 0.1) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: r2, isHole: isCut, itemId: it.id, source: 'step' });
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([Math.max(r1, r2), 0, 0]), p1: wP([Math.max(r1, r2), 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'sphere' || it.kind === 'hemisphere') {
+          const r = (Number(p.d) || 0) / 2;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, it.kind === 'sphere' ? r : 0]), n: wN([0, 0, 1]), r, omni: true, isHole: isCut, itemId: it.id, source: 'step' });
+        } else if (it.kind === 'prism') {
+          const r = (Number(p.d) || 0) / 2, h = Number(p.h) || 0;
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'torus') {
+          const r = (Number(p.d) || 0) / 2, t = (Number(p.t) || 0) / 2;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, t]), n: wN([0, 0, 1]), r: r + t, itemId: it.id, source: 'step' });
+        } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
+          const skInfo = collectSketchModelDims(it.p.sketch, M, V, it.id, out, isCut, true);
+          if (skInfo && !p.thru) {
+            const dist = Number(p.dist) || 0, dir = p.dir || 'normal';
+            const b = SK.bounds(skInfo.ents);
+            if (b && dist > 0.1) {
+              const base2 = [b.minX, b.minY];
+              const pBase = skInfo.skPt(base2);
+              const w0 = dir === 'both' ? -dist / 2 : dir === 'two' ? -(Number(p.dist2) || dist) : dir === 'reverse' ? -dist : 0;
+              const w1 = dir === 'both' ? dist / 2 : dir === 'reverse' ? 0 : dist;
+              if (Math.abs(w1 - w0) > 0.1) {
+                out.push({
+                  kind: 'lin',
+                  p0: pBase.clone().addScaledVector(skInfo.wn, w0),
+                  p1: pBase.clone().addScaledVector(skInfo.wn, w1),
+                  itemId: it.id,
+                  source: 'step',
+                });
+              }
+            }
+          }
+        } else if ((it.kind === 'revolve' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace') && it.p && it.p.sketch) {
+          collectSketchModelDims(it.p.sketch, M, V, it.id, out, isCut, true);
+        } else if (it.kind === 'loft' && it.p && Array.isArray(it.p.sketches)) {
+          for (const sk of it.p.sketches) collectSketchModelDims(sk, M, V, it.id, out, isCut, false);
+        } else if (it.kind === 'sweep' && it.p && it.p.sketch) {
+          collectSketchModelDims(it.p.sketch, M, V, it.id, out, isCut, false);
+        } else if (it.kind === 'boss') {
+          const rOut = (Number(p.outerD) || 0) / 2, rHole = (Number(p.holeD) || 0) / 2, h = Number(p.height) || 0;
+          if (rOut > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: rOut, itemId: it.id, source: 'step' });
+          if (rHole > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: rHole, isHole: true, itemId: it.id, source: 'step' });
+          if (h > 0.1) out.push({ kind: 'lin', p0: wP([rOut, 0, 0]), p1: wP([rOut, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'part') {
+          const L = String(p.lib || '');
+          if (L === 'screwHole') {
+            const r = (Number(p.d) || 0) / 2, dep = Number(p.depth) || 0;
+            if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, 0]), n: wN([0, 0, 1]), r, isHole: true, itemId: it.id, source: 'step' });
+            if (!p.thru && dep > 0.1) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, -dep]), axisHint: 'z', itemId: it.id, source: 'step' });
+          } else if (L === 'slotHole') {
+            const r = (Number(p.d) || 0) / 2, len = Number(p.len) || 0;
+            if (r > 0.05) out.push({ kind: 'dia', c: wP([-len / 2, 0, 0]), n: wN([0, 0, 1]), r, isHole: true, itemId: it.id, source: 'step' });
+            if (len > 0.1) out.push({ kind: 'lin', p0: wP([-len / 2, 0, 0]), p1: wP([len / 2, 0, 0]), itemId: it.id, source: 'step' });
+          } else if (L === 'stdPin') {
+            const pe = typeof pinEntry === 'function' ? pinEntry(p.size ?? p.d) : null;
+            const r = (pe ? pe.d_mm : 6) / 2, len = Number(p.length) || 20;
+            if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, len]), n: wN([0, 0, 1]), r, itemId: it.id, source: 'step' });
+            if (len > 0.1) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, len]), axisHint: 'z', itemId: it.id, source: 'step' });
+          } else if (L === 'stdBearing') {
+            const be = typeof bearingEntry === 'function' ? bearingEntry(p.size) : null;
+            if (be) {
+              if (be.D_mm > 0.1) out.push({ kind: 'dia', c: wP([0, 0, be.B_mm || 7]), n: wN([0, 0, 1]), r: be.D_mm / 2, itemId: it.id, source: 'step' });
+              if (be.d_mm > 0.1) out.push({ kind: 'dia', c: wP([0, 0, be.B_mm || 7]), n: wN([0, 0, 1]), r: be.d_mm / 2, isHole: true, itemId: it.id, source: 'step' });
+            }
+          }
+        }
+        for (const f of it.finishes || []) {
+          if (!f) continue;
+          if (f.type === 'fillet' || f.type === 'faceFillet' || f.type === 'fullFillet') {
+            const r = Model.num(f.r, V, 0);
+            if (r > 0.05) out.push({ kind: 'finishRad', r, itemId: it.id, source: 'step' });
+          } else if (f.type === 'chamfer') {
+            const dist = Model.num(f.r, V, 0);
+            const ang = f.cm === 'angle' ? Model.num(f.a, V, 45) : 45;
+            if (dist > 0.05) out.push({ kind: 'finishChamfer', dist, ang, itemId: it.id, source: 'step' });
+          }
+        }
+      });
+    } finally {
+      if (doc.id) vis.delete(doc.id);
+    }
+    return out;
+  }
+  function project3ToView2(p, basis) {
+    return [
+      p.x * basis.x[0] + p.y * basis.x[1] + p.z * basis.x[2],
+      p.x * basis.y[0] + p.y * basis.y[1] + p.z * basis.y[2],
+    ];
+  }
+  function snapPtToView(v, pt2, tol = 0.45) {
+    let best = pt2, bd = tol;
+    for (const q of viewVertexPoints(v)) {
+      const d = Math.hypot(q[0] - pt2[0], q[1] - pt2[1]);
+      if (d < bd) { bd = d; best = [q[0], q[1]]; }
+    }
+    if (bd === tol) {
+      for (const c of viewCirclesPool(v)) {
+        const d = Math.hypot(c.c[0] - pt2[0], c.c[1] - pt2[1]);
+        if (d < bd) { bd = d; best = [c.c[0], c.c[1]]; }
+      }
+    }
+    return best;
+  }
+  function inViewBox2(v, pt2, tol = 0.8) {
+    const b = v && v.geo && v.geo.box;
+    if (!b) return false;
+    return pt2[0] >= b[0] - tol && pt2[0] <= b[2] + tol && pt2[1] >= b[1] - tol && pt2[1] <= b[3] + tol;
+  }
+  function attachSafeRef(dim, v, lay, sh) {
+    if (!v || !v.geo) return dim;
+    const ref = buildDimRef(dim, v);
+    if (!ref) return dim;
+    const check = resolveManualDim({ ...dim, ref }, lay, sh);
+    if (!check.lost) return { ...dim, ref };
+    return dim;
+  }
+  function mapModelDimsToViews(rawDims, sh, lay) {
+    const avail = ['front', 'top', 'left'].filter((k) => lay.views[k] && lay.views[k].geo && !lay.views[k].noDims);
+    if (!avail.length) return [];
+    const bases = {};
+    for (const vk of avail) bases[vk] = viewBasis(vk, sh);
+    const viewCount = { front: 0, top: 0, left: 0 };
+    const mapped = [];
+    const globalLinKeys = [];
+    const hasLinInView = (vk, dir, a, b) => mapped.some((d) => {
+      if (d.view !== vk || d.type !== 'lin' || d.dir !== dir) return false;
+      const d1 = Math.hypot(d.a[0] - a[0], d.a[1] - a[1]) + Math.hypot(d.b[0] - b[0], d.b[1] - b[1]);
+      const d2 = Math.hypot(d.a[0] - b[0], d.a[1] - b[1]) + Math.hypot(d.b[0] - a[0], d.b[1] - a[1]);
+      if (Math.min(d1, d2) < 0.45) return true;
+      if (dir === 'h' && Math.abs(Math.min(d.a[0], d.b[0]) - Math.min(a[0], b[0])) < 0.35 && Math.abs(Math.max(d.a[0], d.b[0]) - Math.max(a[0], b[0])) < 0.35) return true;
+      if (dir === 'v' && Math.abs(Math.min(d.a[1], d.b[1]) - Math.min(a[1], b[1])) < 0.35 && Math.abs(Math.max(d.a[1], d.b[1]) - Math.max(a[1], b[1])) < 0.35) return true;
+      return false;
+    });
+    const isDuplicateGlobalLin = (item) => {
+      const len = item.p0.distanceTo(item.p1);
+      const u = item.p1.clone().sub(item.p0).normalize();
+      for (const g of globalLinKeys) {
+        if (g.itemId === item.itemId && Math.abs(g.len - len) < 0.25 && Math.abs(g.u.dot(u)) > 0.985) return true;
+      }
+      return false;
+    };
+    const pendingCircleGroups = new Map();
+    const pendingFinishRad = new Set();
+    const pendingFinishChamfer = new Set();
+
+    for (const item of rawDims) {
+      if (item.kind === 'lin') {
+        const L3 = item.p0.distanceTo(item.p1);
+        if (L3 < 0.2) continue;
+        if (isDuplicateGlobalLin(item)) continue;
+        const u3 = item.p1.clone().sub(item.p0).normalize();
+        let best = null;
+        for (const vk of avail) {
+          const v = lay.views[vk], basis = bases[vk];
+          if (!v || !basis) continue;
+          const aRaw = project3ToView2(item.p0, basis);
+          const bRaw = project3ToView2(item.p1, basis);
+          const L2 = Math.hypot(bRaw[0] - aRaw[0], bRaw[1] - aRaw[1]);
+          if (L2 < 0.2 || Math.abs(L2 - L3) > Math.max(0.18, L3 * 0.02)) continue;
+          if (!inViewBox2(v, aRaw) || !inViewBox2(v, bRaw)) continue;
+          let a = snapPtToView(v, aRaw), b = snapPtToView(v, bRaw);
+          if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.2) { a = aRaw; b = bRaw; }
+          const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+          const dir = dy <= 0.12 ? 'h' : dx <= 0.12 ? 'v' : 'a';
+          if (dir === 'h' && a[0] > b[0]) [a, b] = [b, a];
+          if (dir === 'v' && a[1] > b[1]) [a, b] = [b, a];
+          if (hasLinInView(vk, dir, a, b)) continue;
+          let score = 0;
+          if (item.planeNormal) {
+            const dn = Math.abs(item.planeNormal.x * basis.dir[0] + item.planeNormal.y * basis.dir[1] + item.planeNormal.z * basis.dir[2]);
+            if (dn > 0.98) score += 50;
+          }
+          const verts = viewVertexPoints(v);
+          const hitA = verts.some((q) => Math.hypot(q[0] - a[0], q[1] - a[1]) <= 0.45);
+          const hitB = verts.some((q) => Math.hypot(q[0] - b[0], q[1] - b[1]) <= 0.45);
+          if (hitA) score += 12;
+          if (hitB) score += 12;
+          const ax = Math.abs(u3.x) > 0.9 ? 'x' : Math.abs(u3.y) > 0.9 ? 'y' : Math.abs(u3.z) > 0.9 ? 'z' : item.axisHint;
+          if (ax === 'x') score += vk === 'front' ? 14 : vk === 'top' ? 8 : 0;
+          else if (ax === 'z') score += vk === 'front' ? 14 : vk === 'left' ? 8 : 0;
+          else if (ax === 'y') score += vk === 'left' ? 14 : vk === 'top' ? 10 : 0;
+          if (dir !== 'a') score += 4;
+          score -= viewCount[vk] * 2.5;
+          if (!best || score > best.score) best = { vk, v, dir, a, b, score };
+        }
+        if (best) {
+          const dObj = attachSafeRef({ id: uid('d'), view: best.vk, type: 'lin', dir: best.dir, a: best.a, b: best.b, off: -(9 / best.v.s), fromModel: true }, best.v, lay, sh);
+          mapped.push(dObj);
+          viewCount[best.vk]++;
+          globalLinKeys.push({ itemId: item.itemId, len: L3, u: u3 });
+        }
+      } else if (item.kind === 'dia' || item.kind === 'rad') {
+        let best = null;
+        for (const vk of avail) {
+          const v = lay.views[vk], basis = bases[vk];
+          if (!v || !basis) continue;
+          if (!item.omni && item.n) {
+            const dn = Math.abs(item.n.x * basis.dir[0] + item.n.y * basis.dir[1] + item.n.z * basis.dir[2]);
+            if (dn <= 0.96) continue;
+          }
+          const c2 = project3ToView2(item.c, basis);
+          if (!inViewBox2(v, c2, item.r + 1)) continue;
+          const visPool = v.geo.circles || [];
+          const allPool = viewCirclesPool(v);
+          const matchC = (cc) => Math.hypot(cc.c[0] - c2[0], cc.c[1] - c2[1]) <= 0.55 && Math.abs(cc.r - item.r) <= 0.3;
+          let hit = item.kind === 'dia'
+            ? (visPool.find((cc) => cc.full && matchC(cc)) || allPool.find((cc) => cc.full && matchC(cc)) || visPool.find(matchC) || allPool.find(matchC))
+            : visPool.find(matchC);
+          if (!hit && !item.omni) continue;
+          const cUse = hit ? hit.c : c2;
+          const rUse = hit ? hit.r : item.r;
+          let score = hit ? (hit.hidden ? 22 : hit.full ? 40 : 32) : 10;
+          if (vk === 'top') score += 8;
+          else if (vk === 'front') score += 6;
+          score -= viewCount[vk] * 2.0;
+          if (!best || score > best.score) best = { vk, v, c: cUse, r: rUse, hit, score };
+        }
+        if (best) {
+          const rk = `${best.vk}|${item.kind}|${Math.round(best.r * 200)}`;
+          if (!pendingCircleGroups.has(rk)) pendingCircleGroups.set(rk, []);
+          pendingCircleGroups.get(rk).push({ vk: best.vk, v: best.v, c: best.c, r: best.r, hit: best.hit });
+          viewCount[best.vk]++;
+        }
+      } else if (item.kind === 'ang') {
+        for (const vk of avail) {
+          const v = lay.views[vk], basis = bases[vk];
+          if (!v || !basis) continue;
+          if (item.n && Math.abs(item.n.x * basis.dir[0] + item.n.y * basis.dir[1] + item.n.z * basis.dir[2]) <= 0.96) continue;
+          const V2 = snapPtToView(v, project3ToView2(item.v, basis));
+          const e1 = [project3ToView2(item.e1[0], basis), project3ToView2(item.e1[1], basis)];
+          const e2 = [project3ToView2(item.e2[0], basis), project3ToView2(item.e2[1], basis)];
+          const midPt = [(e1[0][0] + e1[1][0] + e2[0][0] + e2[1][0]) * 0.25, (e1[0][1] + e1[1][1] + e2[0][1] + e2[1][1]) * 0.25];
+          const sec = angularSector(V2, { a: e1[0], b: e1[1] }, { a: e2[0], b: e2[1] }, midPt);
+          const span = sec.a1 - sec.a0;
+          if (span > 1e-3 && span < Math.PI - 1e-3) {
+            const dObj = attachSafeRef({ id: uid('d'), view: vk, type: 'ang', v: V2, e1, e2, a0: sec.a0, a1: sec.a1, r: Math.max(6, 12 / v.s), fromModel: true }, v, lay, sh);
+            mapped.push(dObj);
+            viewCount[vk]++;
+            break;
+          }
+        }
+      } else if (item.kind === 'finishRad') {
+        const rk = Math.round(item.r * 200);
+        if (pendingFinishRad.has(rk)) continue;
+        pendingFinishRad.add(rk);
+        let best = null;
+        for (const vk of avail) {
+          const v = lay.views[vk];
+          const arcs = (v.geo.circles || []).filter((c) => !c.full && c.arc && c.arc[1] - c.arc[0] >= 0.35 && Math.abs(c.r - item.r) <= 0.28);
+          if (!arcs.length) continue;
+          const b = v.geo.box, mx = (b[0] + b[2]) * 0.5, my = (b[1] + b[3]) * 0.5;
+          let pick = arcs[0], bd = -1;
+          for (const c of arcs) {
+            const mid = (c.arc[0] + c.arc[1]) * 0.5;
+            const d = Math.hypot(c.c[0] + c.r * Math.cos(mid) - mx, c.c[1] + c.r * Math.sin(mid) - my);
+            if (d > bd) { bd = d; pick = c; }
+          }
+          const score = arcs.length * 10 - viewCount[vk] * 2;
+          if (!best || score > best.score) best = { vk, v, pick, count: arcs.length, score };
+        }
+        if (best) {
+          const mid = (best.pick.arc[0] + best.pick.arc[1]) * 0.5;
+          const rkKey = `${best.vk}|rad|${Math.round(best.pick.r * 200)}`;
+          if (!pendingCircleGroups.has(rkKey)) {
+            const dObj = attachSafeRef({ id: uid('d'), view: best.vk, type: 'rad', c: best.pick.c, r: best.pick.r, ang: (mid * 180) / Math.PI, count: best.count, partial: true, fromModel: true }, best.v, lay, sh);
+            mapped.push(dObj);
+            viewCount[best.vk]++;
+          }
+        }
+      } else if (item.kind === 'finishChamfer') {
+        const ck = `${Math.round(item.dist * 100)}|${Math.round(item.ang * 10)}`;
+        if (pendingFinishChamfer.has(ck)) continue;
+        pendingFinishChamfer.add(ck);
+        for (const vk of avail) {
+          const v = lay.views[vk];
+          let foundInfo = null;
+          for (const seg of straightSegsOf(v, false)) {
+            const info = analyzeChamfer(v, seg);
+            if (!info) continue;
+            if (Math.abs(info.dist - item.dist) <= 0.35 && Math.abs(info.ang - item.ang) <= 3.0) {
+              foundInfo = info; break;
+            }
+          }
+          if (foundInfo) {
+            const dObj = attachSafeRef({ id: uid('d'), view: vk, type: 'chamfer', p: foundInfo.p, dir: foundInfo.dir, dist: foundInfo.dist, ang: foundInfo.ang, fromModel: true }, v, lay, sh);
+            mapped.push(dObj);
+            viewCount[vk]++;
+            break;
+          }
+        }
+      }
+    }
+
+    const st = sheetDimStyle(sh);
+    for (const [rk, list] of pendingCircleGroups.entries()) {
+      const first = list[0];
+      const v = first.v, b = v.geo.box, mx = (b[0] + b[2]) * 0.5, my = (b[1] + b[3]) * 0.5;
+      const type = rk.split('|')[1];
+      let pick = first;
+      if (list.length > 1) {
+        let bd = -1;
+        for (const it of list) {
+          const d = Math.hypot(it.c[0] - mx, it.c[1] - my);
+          if (d > bd) { bd = d; pick = it; }
+        }
+      }
+      const away = Math.hypot(pick.c[0] - mx, pick.c[1] - my) > 1e-4 ? (Math.atan2(pick.c[1] - my, pick.c[0] - mx) * 180) / Math.PI : 45;
+      const toRad = Math.PI / 180;
+      const ang = type === 'rad' && pick.hit && pick.hit.arc
+        ? (((pick.hit.arc[0] + pick.hit.arc[1]) * 0.5) * 180) / Math.PI
+        : ([45, 135, 225, 315].sort((p, q) => Math.abs(angleDiff(p * toRad, away * toRad)) - Math.abs(angleDiff(q * toRad, away * toRad)))[0] || 45);
+      const mt = type === 'dia' ? (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - pick.c[0], th.c[1] - pick.c[1]) < 0.3 && (Math.abs(th.r - pick.r) < 0.45 || Math.abs(th.rThread - pick.r) < 0.45)) : null;
+      const thLbl = mt ? ((mt.source === 'cosmetic' || mt.blind0 || mt.blind1) ? `${mt.size} × ${fmtDim(mt.length, st)}` : `${mt.size}`) : null;
+      const dObj = attachSafeRef({
+        id: uid('d'),
+        view: first.vk,
+        type,
+        c: pick.c,
+        r: pick.r,
+        ang,
+        count: list.length,
+        ...(type === 'rad' && pick.hit && !pick.hit.full ? { partial: true } : {}),
+        ...(thLbl ? { threadLabel: thLbl } : {}),
+        fromModel: true,
+      }, v, lay, sh);
+      mapped.push(dObj);
+    }
+
+    if (!mapped.length && avail.length) {
+      const addFallbackLin = (vk, dir, a, b) => {
+        const v = lay.views[vk];
+        if (!v || Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.2) return;
+        mapped.push(attachSafeRef({ id: uid('d'), view: vk, type: 'lin', dir, a, b, off: -(9 / v.s), fromModel: true }, v, lay, sh));
+      };
+      if (lay.views.front) {
+        const b = lay.views.front.geo.box;
+        addFallbackLin('front', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addFallbackLin('front', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top) {
+        const b = lay.views.top.geo.box;
+        addFallbackLin('top', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addFallbackLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+      if (lay.views.left) {
+        const b = lay.views.left.geo.box;
+        addFallbackLin('left', 'h', [b[0], b[1]], [b[2], b[1]]);
+        if (!lay.views.front) addFallbackLin('left', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top && lay.views.front) {
+        const b = lay.views.top.geo.box;
+        addFallbackLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+    }
+    return mapped;
+  }
+  function textRectOf(t, pad = 0) {
+    const str = String((t && t.t) || '');
+    const sz = Math.max(1, Number(t && t.size) || 3.5);
+    const w = Math.max(sz * 0.85, str.length * sz * 0.64);
+    const lx0 = t.anchor === 'middle' ? -w * 0.5 : t.anchor === 'end' ? -w : 0;
+    const lx1 = lx0 + w;
+    const ly0 = -sz * 0.98, ly1 = sz * 0.34;
+    const rad = ((t.rot || 0) * Math.PI) / 180;
+    const cs = Math.cos(rad), sn = Math.sin(rad);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [lx, ly] of [[lx0, ly0], [lx1, ly0], [lx1, ly1], [lx0, ly1]]) {
+      const gx = t.x + lx * cs - ly * sn;
+      const gy = t.y + lx * sn + ly * cs;
+      if (gx < x0) x0 = gx; if (gx > x1) x1 = gx;
+      if (gy < y0) y0 = gy; if (gy > y1) y1 = gy;
+    }
+    return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+  }
+  function rectsOverlap(a, b) {
+    return a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+  }
+  function rectOverlapArea(a, b) {
+    const ox = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+    const oy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    return ox * oy;
+  }
+  function measureDimTexts(dim, lay, sh, pad = 1.3) {
+    const tmpTexts = [];
+    dimSVG(dim, [], tmpTexts, lay, sh);
+    return tmpTexts
+      .filter((t) => t && String(t.cls || '').includes('dimtext'))
+      .map((t) => ({ rect: textRectOf(t, pad), rawRect: textRectOf(t, 0), t }));
+  }
+  function dimTextBoxes(sh = dwg(), lay = layout) {
+    const useLay = lay || computeLayout(sh);
+    const items = [];
+    for (const dim of autoDimList(sh, useLay)) {
+      if (!useLay.views[dim.view] || useLay.views[dim.view].noDims) continue;
+      for (const m of measureDimTexts(dim, useLay, sh, 0)) {
+        items.push({ id: dim.id, view: dim.view, text: m.t.t, rect: m.rawRect });
+      }
+    }
+    let overlaps = 0;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        if (items[i].id === items[j].id) continue;
+        if (rectsOverlap(items[i].rect, items[j].rect)) overlaps++;
+      }
+    }
+    return { items, overlaps };
+  }
+  function arrangeSheetDims(sh, lay) {
+    if (!sh || !lay || !lay.views) return 0;
+    const st = sheetDimStyle(sh);
+    const TXT = st.fontSize;
+    const { frame, tb } = lay;
+    const viewRects = new Map();
+    for (const [k, v] of Object.entries(lay.views)) {
+      if (k === 'free' || !v || !v.geo || !v.geo.box) continue;
+      const b = v.geo.box;
+      const TL = toSheetRaw(v, [b[0], b[3]]), BR = toSheetRaw(v, [b[2], b[1]]);
+      viewRects.set(k, [Math.min(TL[0], BR[0]), Math.min(TL[1], BR[1]), Math.max(TL[0], BR[0]), Math.max(TL[1], BR[1])]);
+    }
+    const staticObs = [
+      [frame.x + frame.w - tb.w - 2, frame.y + frame.h - tb.h - 2, frame.x + frame.w, frame.y + frame.h],
+    ];
+    if (lay.bomRect) {
+      staticObs.push([lay.bomRect.x - 2, lay.bomRect.y - 2, lay.bomRect.x + lay.bomRect.w + 2, lay.bomRect.y + lay.bomRect.h + 2]);
+    }
+    for (const [k, v] of Object.entries(lay.views)) {
+      const r = viewRects.get(k);
+      if (!r) continue;
+      if (v.isSection) staticObs.push([r[0], r[3] + 1, r[2], r[3] + 8.5]);
+      else if (v.is3d) staticObs.push([r[0], r[3] + 0.5, r[2], r[3] + 6.5]);
+      else if (v.customScale) staticObs.push([r[0], r[1] - 6, r[2], r[1] - 0.5]);
+    }
+    const placedTexts = [];
+    for (const dim of autoDimList(sh, lay)) {
+      if (!lay.views[dim.view] || lay.views[dim.view].noDims) continue;
+      if (dim.auto === 'circles' || dim.type === 'chain' || dim.type === 'base') {
+        for (const m of measureDimTexts(dim, lay, sh, 1.3)) placedTexts.push(m.rect);
+      }
+    }
+    const evalCost = (dim, viewKey, preferPen = 0) => {
+      const boxes = measureDimTexts(dim, lay, sh, 1.3);
+      if (!boxes.length) return preferPen;
+      let cost = preferPen;
+      for (const { rect } of boxes) {
+        for (const pt of placedTexts) {
+          if (rectsOverlap(rect, pt)) cost += 1e6 + rectOverlapArea(rect, pt) * 1e4;
+        }
+        for (const ob of staticObs) {
+          if (rectsOverlap(rect, ob)) cost += 5e5 + rectOverlapArea(rect, ob) * 1e3;
+        }
+        if (rect[0] < frame.x + 1 || rect[1] < frame.y + 1 || rect[2] > frame.x + frame.w - 1 || rect[3] > frame.y + frame.h - 1) {
+          const ox = Math.max(0, (frame.x + 1) - rect[0], rect[2] - (frame.x + frame.w - 1));
+          const oy = Math.max(0, (frame.y + 1) - rect[1], rect[3] - (frame.y + frame.h - 1));
+          cost += 4e5 + (ox + oy) * 1e3;
+        }
+        for (const [, vr] of viewRects.entries()) {
+          const padVr = [vr[0] - 0.8, vr[1] - 0.8, vr[2] + 0.8, vr[3] + 0.8];
+          if (rectsOverlap(rect, padVr)) cost += 2e5 + rectOverlapArea(rect, padVr) * 500;
+        }
+      }
+      return cost;
+    };
+    const clearSpace = (viewKey, side) => {
+      const vr = viewRects.get(viewKey);
+      if (!vr) return 0;
+      let limit = side === 'left' ? vr[0] - frame.x : side === 'right' ? (frame.x + frame.w) - vr[2] : side === 'top' ? vr[1] - frame.y : (frame.y + frame.h) - vr[3];
+      for (const [ok, or] of viewRects.entries()) {
+        if (ok === viewKey) continue;
+        if ((side === 'left' || side === 'right') && Math.min(vr[3], or[3]) > Math.max(vr[1], or[1]) - 14) {
+          if (side === 'left' && or[2] <= vr[0]) limit = Math.min(limit, vr[0] - or[2]);
+          if (side === 'right' && or[0] >= vr[2]) limit = Math.min(limit, or[0] - vr[2]);
+        }
+        if ((side === 'top' || side === 'bottom') && Math.min(vr[2], or[2]) > Math.max(vr[0], or[0]) - 14) {
+          if (side === 'top' && or[3] <= vr[1]) limit = Math.min(limit, vr[1] - or[3]);
+          if (side === 'bottom' && or[1] >= vr[3]) limit = Math.min(limit, or[1] - vr[3]);
+        }
+      }
+      return limit;
+    };
+
+    const resolvedAll = autoDimList(sh, lay);
+    const linGroups = new Map();
+    const otherDims = [];
+    for (const rawDim of sh.dims) {
+      if (rawDim.auto === 'circles' || rawDim.type === 'chain' || rawDim.type === 'base') continue;
+      const res = resolvedAll.find((x) => x.id === rawDim.id) || rawDim;
+      const v = lay.views[res.view];
+      if (!v || v.noDims || res.lost) continue;
+      if (res.type === 'lin') {
+        const gk = `${res.view}|${res.dir || 'a'}`;
+        if (!linGroups.has(gk)) linGroups.set(gk, []);
+        linGroups.get(gk).push({ raw: rawDim, res, v });
+      } else if (res.type === 'dia' || res.type === 'rad' || res.type === 'chamfer' || res.type === 'ang') {
+        otherDims.push({ raw: rawDim, res, v });
+      }
+    }
+
+    const firstClear = Math.max(8, TXT * 2.4);
+    const stepClear = Math.max(7.5, TXT * 2.2);
+    let moved = 0;
+
+    for (const [gk, list] of linGroups.entries()) {
+      const [vk, dir] = gk.split('|');
+      const v = list[0].v;
+      const vr = viewRects.get(vk);
+      if (!vr) continue;
+      list.sort((a, b) => dimNominal(a.res) - dimNominal(b.res));
+      let sides = ['bottom', 'top'];
+      if (dir === 'h') {
+        const spBot = clearSpace(vk, 'bottom'), spTop = clearSpace(vk, 'top');
+        sides = spBot >= spTop ? ['bottom', 'top'] : ['top', 'bottom'];
+      } else if (dir === 'v') {
+        const spL = clearSpace(vk, 'left'), spR = clearSpace(vk, 'right');
+        sides = spL >= spR ? ['left', 'right'] : ['right', 'left'];
+      } else {
+        sides = ['out', 'in'];
+      }
+      const usedBands = [];
+      for (const item of list) {
+        const A = toSheet(v, item.res.a), B = toSheet(v, item.res.b);
+        let bestOff = item.res.off, bestCost = Infinity;
+        for (let si = 0; si < sides.length; si++) {
+          const side = sides[si];
+          for (let tier = 0; tier < 14; tier++) {
+            const clr = firstClear + tier * stepClear;
+            let off;
+            let lineCoord = null, span0 = 0, span1 = 0;
+            if (dir === 'h') {
+              const targetY = side === 'bottom' ? vr[3] + clr : vr[1] - clr;
+              off = side === 'bottom' ? (Math.max(A[1], B[1]) - targetY) / v.s : (Math.min(A[1], B[1]) - targetY) / v.s;
+              if (Math.abs(off) < 1e-4) off = side === 'bottom' ? -0.1 : 0.1;
+              lineCoord = targetY; span0 = Math.min(A[0], B[0]); span1 = Math.max(A[0], B[0]);
+            } else if (dir === 'v') {
+              const targetX = side === 'left' ? vr[0] - clr : vr[2] + clr;
+              off = side === 'left' ? (targetX - Math.min(A[0], B[0])) / v.s : (targetX - Math.max(A[0], B[0])) / v.s;
+              if (Math.abs(off) < 1e-4) off = side === 'left' ? -0.1 : 0.1;
+              lineCoord = targetX; span0 = Math.min(A[1], B[1]); span1 = Math.max(A[1], B[1]);
+            } else {
+              const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1;
+              const nx = -dy / L, ny = dx / L;
+              const vcx = (vr[0] + vr[2]) * 0.5, vcy = (vr[1] + vr[3]) * 0.5;
+              const mx = (A[0] + B[0]) * 0.5, my = (A[1] + B[1]) * 0.5;
+              const outSign = ((mx - vcx) * nx + (my - vcy) * ny) >= 0 ? 1 : -1;
+              off = (side === 'out' ? outSign : -outSign) * (clr / v.s);
+            }
+            let bandPen = si * 12 + tier * 2.5;
+            if (lineCoord != null) {
+              for (const ub of usedBands) {
+                if (ub.side === side && Math.abs(ub.coord - lineCoord) < 4.5 && Math.min(span1, ub.s1) > Math.max(span0, ub.s0) - 4) {
+                  bandPen += 1500;
+                }
+              }
+            }
+            const cand = { ...item.res, off };
+            const c = evalCost(cand, vk, bandPen);
+            if (c < bestCost) {
+              bestCost = c;
+              bestOff = off;
+            }
+            if (c < 20) break;
+          }
+          if (bestCost < 20) break;
+        }
+        let chosenLine = null;
+        if (dir === 'h' || dir === 'v') {
+          const lineC = dir === 'h'
+            ? (bestOff < 0 ? Math.max(A[1], B[1]) - bestOff * v.s : Math.min(A[1], B[1]) - bestOff * v.s)
+            : (bestOff < 0 ? Math.min(A[0], B[0]) + bestOff * v.s : Math.max(A[0], B[0]) + bestOff * v.s);
+          const sideTag = dir === 'h' ? (bestOff < 0 ? 'bottom' : 'top') : (bestOff < 0 ? 'left' : 'right');
+          chosenLine = { side: sideTag, coord: lineC, s0: dir === 'h' ? Math.min(A[0], B[0]) : Math.min(A[1], B[1]), s1: dir === 'h' ? Math.max(A[0], B[0]) : Math.max(A[1], B[1]) };
+        }
+        if (chosenLine) usedBands.push(chosenLine);
+        if (Math.abs((item.raw.off ?? 0) - bestOff) > 1e-4) moved++;
+        item.raw.off = bestOff;
+        item.res.off = bestOff;
+        for (const m of measureDimTexts(item.res, lay, sh, 1.3)) placedTexts.push(m.rect);
+      }
+    }
+
+    const baseAngles = [45, 135, 225, 315, 30, 60, 120, 150, 210, 240, 300, 330, 15, 75, 165, 195, 255, 285, 345, 105];
+    for (const item of otherDims) {
+      const { raw, res, v } = item;
+      const vr = viewRects.get(res.view);
+      if (res.type === 'dia' || res.type === 'rad') {
+        const C = toSheet(v, res.c);
+        const vcx = vr ? (vr[0] + vr[2]) * 0.5 : C[0], vcy = vr ? (vr[1] + vr[3]) * 0.5 : C[1];
+        const away = Math.hypot(C[0] - vcx, C[1] - vcy) > 1e-3 ? (-Math.atan2(C[1] - vcy, C[0] - vcx) * 180) / Math.PI : (res.ang ?? 45);
+        const toRad = Math.PI / 180;
+        const angs = [...new Set([Math.round(res.ang ?? 45), ...baseAngles])].sort((p, q) => angleDiff(p * toRad, away * toRad) - angleDiff(q * toRad, away * toRad));
+        let bestAng = res.ang ?? 45, bestLead = raw.lead ?? null, bestCost = Infinity;
+        for (const leadExtra of [0, 6, 12, 18, 26, 35]) {
+          for (let ai = 0; ai < angs.length; ai++) {
+            const ang = angs[ai];
+            const rad = (ang * Math.PI) / 180;
+            const ux = Math.cos(rad), uy = -Math.sin(rad);
+            const P = [C[0] + ux * res.r * v.s, C[1] + uy * res.r * v.s];
+            const bx = v.geo.box, TL = toSheet(v, [bx[0], bx[3]]), BR = toSheet(v, [bx[2], bx[1]]), M = 3;
+            const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
+            const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
+            const tEx = Math.min(tx, ty);
+            const autoLead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
+            const lead = leadExtra > 0 ? autoLead + leadExtra : undefined;
+            const cand = { ...res, ang, ...(lead != null ? { lead } : {}) };
+            if (!lead) delete cand.lead;
+            const c = evalCost(cand, res.view, leadExtra * 1.5 + ai * 0.5);
+            if (c < bestCost) { bestCost = c; bestAng = ang; bestLead = lead ?? null; }
+            if (c < 15) break;
+          }
+          if (bestCost < 15) break;
+        }
+        if (Math.abs((raw.ang ?? 45) - bestAng) > 0.1 || (raw.lead ?? null) !== bestLead) moved++;
+        raw.ang = bestAng;
+        if (bestLead != null) raw.lead = bestLead;
+        else delete raw.lead;
+        const fin = { ...res, ang: bestAng, ...(bestLead != null ? { lead: bestLead } : {}) };
+        if (bestLead == null) delete fin.lead;
+        for (const m of measureDimTexts(fin, lay, sh, 1.3)) placedTexts.push(m.rect);
+      } else if (res.type === 'chamfer') {
+        const P = toSheet(v, res.p);
+        const ux = res.dir[0], uy = -res.dir[1];
+        const bx = v.geo.box, TL = toSheet(v, [bx[0], bx[3]]), BR = toSheet(v, [bx[2], bx[1]]), M = 3.5;
+        const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
+        const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
+        const tEx = Math.min(tx, ty);
+        const autoLead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+        let bestLead = null, bestCost = Infinity;
+        for (const leadExtra of [0, 6, 12, 18, 26, 34]) {
+          const lead = leadExtra > 0 ? autoLead + leadExtra : undefined;
+          const cand = { ...res, ...(lead != null ? { lead } : {}) };
+          if (!lead) delete cand.lead;
+          const c = evalCost(cand, res.view, leadExtra);
+          if (c < bestCost) { bestCost = c; bestLead = lead ?? null; }
+          if (c < 15) break;
+        }
+        if ((raw.lead ?? null) !== bestLead) moved++;
+        if (bestLead != null) raw.lead = bestLead;
+        else delete raw.lead;
+        const fin = { ...res, ...(bestLead != null ? { lead: bestLead } : {}) };
+        if (bestLead == null) delete fin.lead;
+        for (const m of measureDimTexts(fin, lay, sh, 1.3)) placedTexts.push(m.rect);
+      } else if (res.type === 'ang') {
+        const baseR = Math.max(6, res.r || 10);
+        let bestR = baseR, bestCost = Infinity;
+        for (const step of [0, 5 / v.s, 10 / v.s, 16 / v.s, 22 / v.s]) {
+          const cand = { ...res, r: baseR + step };
+          const c = evalCost(cand, res.view, step);
+          if (c < bestCost) { bestCost = c; bestR = baseR + step; }
+          if (c < 15) break;
+        }
+        if (Math.abs((raw.r ?? baseR) - bestR) > 1e-4) moved++;
+        raw.r = bestR;
+        for (const m of measureDimTexts({ ...res, r: bestR }, lay, sh, 1.3)) placedTexts.push(m.rect);
+      }
+    }
+    return moved;
+  }
+  function importModelDims() {
+    const sh0 = dwg();
+    const lay = layout || computeLayout(sh0);
+    const hasViews = ['front', 'top', 'left'].some((k) => lay.views[k] && lay.views[k].geo && !lay.views[k].noDims);
+    if (!hasViews) {
+      UI.toast(T('draw.modelDimsEmptyToast'), { icon: 'info' });
+      return { added: 0, total: (sh0.dims || []).length, arranged: 0, overlaps: 0 };
+    }
+    const raw = collectModelDims(App.doc);
+    const newDims = mapModelDimsToViews(raw, sh0, lay);
+    let added = 0;
+    let arranged = 0;
+    App.change('Maße aus dem Modell übernommen', () => {
+      const d = dwg();
+      d.dims = (d.dims || []).filter((x) => !x.auto && !x.fromModel);
+      for (const nd of newDims) {
+        if (nd.type === 'lin') {
+          const dup = d.dims.some((m) => m.view === nd.view && m.type === 'lin' && m.dir === nd.dir
+            && ((Math.hypot(m.a[0] - nd.a[0], m.a[1] - nd.a[1]) < 0.35 && Math.hypot(m.b[0] - nd.b[0], m.b[1] - nd.b[1]) < 0.35)
+              || (Math.hypot(m.a[0] - nd.b[0], m.a[1] - nd.b[1]) < 0.35 && Math.hypot(m.b[0] - nd.a[0], m.b[1] - nd.a[1]) < 0.35)));
+          if (dup) continue;
+        } else if (nd.type === 'dia' || nd.type === 'rad') {
+          const dup = d.dims.some((m) => m.view === nd.view && m.type === nd.type && Math.hypot(m.c[0] - nd.c[0], m.c[1] - nd.c[1]) < 0.35 && Math.abs(m.r - nd.r) < 0.25);
+          if (dup) continue;
+        }
+        d.dims.push(nd);
+        added++;
+      }
+      const curLay = computeLayout(d);
+      arranged = arrangeSheetDims(d, curLay);
+    });
+    render();
+    Panels.renderRight();
+    const res = dimTextBoxes(dwg(), layout);
+    UI.toast(added === 1 ? T('draw.modelDimsOneToast') : T('draw.modelDimsToast', { n: added }), { icon: 'dim' });
+    return { added, total: res.items.length, arranged, overlaps: res.overlaps };
+  }
+  function arrangeDims() {
+    const sh0 = dwg();
+    const lay = layout || computeLayout(sh0);
+    let moved = 0;
+    App.change('Maße geordnet', () => {
+      const d = dwg();
+      moved = arrangeSheetDims(d, lay);
+    });
+    render();
+    Panels.renderRight();
+    const res = dimTextBoxes(dwg(), layout);
+    UI.toast(T('draw.arrangeDimsToast'), { icon: 'dim' });
+    return { moved, overlaps: res.overlaps };
   }
   function autoDims() {
     App.change('Automatisch bemaßt', () => {
@@ -5700,6 +8651,9 @@ const Drawing = (() => {
     f.append(UI.selectField({ id: 'dw-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); Panels.renderRight(); renderTabs(); } }));
     box.append(f);
     box.append(UI.selectField({ id: 'dw-scale', label: T('menu.draw.scale'), value: String(d.scale), options: [['auto', T('menu.draw.scaleAuto')], ...SCALES.map((s) => [String(s), scaleText(s)])], onChange: (v) => set((x) => { x.scale = v === 'auto' ? 'auto' : +v; }) }));
+    const projMenuFld = UI.selectField({ id: 'dw-projection', label: T('draw.tb.projection'), value: normProjection(d.projection), options: [['eu', T('draw.proj.eu')], ['us', T('draw.proj.us')]], onChange: (v) => setProjection(v) });
+    projMenuFld.dataset.help = 'drawingProjection';
+    box.append(projMenuFld);
     box.append(h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     for (const [k, l] of [['front', T('menu.draw.vFront')], ['top', T('menu.draw.vTop')], ['left', T('menu.draw.vLeft')], ['iso', T('menu.draw.vIso')]]) {
       const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-' + k, checked: !!d.views[k] }), l);
@@ -5733,6 +8687,9 @@ const Drawing = (() => {
       '-',
       { id: 'dw-menu-aux', label: T('menu.draw.addAux'), icon: 'arrowR', help: 'drawingAuxView', run: () => tool_('aux') },
       { id: 'dw-menu-break', label: T('menu.draw.addBreak'), icon: 'split', help: 'drawingBreakView', run: () => tool_('break') },
+      '-',
+      { id: 'dw-menu-add-explode', label: T('menu.draw.addExplode'), icon: 'explode', help: 'drawingExplode', run: () => addView('explode') },
+      { id: 'dw-menu-add-explode-shaded', label: T('menu.draw.addExplodeShaded'), icon: 'explode', help: 'drawingExplode', run: () => addView('explode', { shaded: true }) },
     ]);
   }
   function bomMenu(anchor) {
@@ -5814,11 +8771,13 @@ const Drawing = (() => {
       tan: [0.2, null],
       hid: [0.25, [2.4, 1.2]],
       ctr: [0.25, [5, 1.2, 0.6, 1.2]],
+      'explode-trail': [0.22, [3, 1.4]],
       hatch: [0.22, null],
       breakline: [0.25, null],
       auxarrow: [0.35, null],
       cutline: [0.35, [7, 1.2, 0.7, 1.2]],
       cutend: [0.7, null],
+      breakline: [0.25, null],
       dim: [0.25, null],
       'arrow-open': [0.3, null],
       'arrow-slash': [0.45, null],
@@ -5864,6 +8823,7 @@ const Drawing = (() => {
       if (!st) continue;
       out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : '0.067')} G ${pf(st[0] * PT)} w`);
       if (l.lost && l.cls === 'dim') out.push(`[${pf(2 * PT)} ${pf(1 * PT)}] 0 d`);
+      else if (l.cls === 'hatch' && l.dashed) out.push(`[${pf(3 * PT)} ${pf(1.2 * PT)}] 0 d`);
       else if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
       else out.push('[] 0 d');
       if (l.rect) {
@@ -5989,11 +8949,13 @@ const Drawing = (() => {
     ['SCHRAFFUR', 'CONTINUOUS', 8],
     ['SCHNITTLINIE', 'CENTER', 1],
     ['BEMASSUNG', 'CONTINUOUS', 3],
+    ['GEWINDE', 'CONTINUOUS', 4],
     ['RAHMEN', 'CONTINUOUS', 7],
   ];
   function dxfEscText(s) {
     return String(s ?? '')
       .replace(/\r?\n/g, ' ')
+      .replace(/⌒/g, 'Bogen ')
       .replace(/Ø/g, '%%c')
       .replace(/±/g, '%%p')
       .replace(/°/g, '%%d')
@@ -6015,7 +8977,7 @@ const Drawing = (() => {
     for (const [n, lt, col] of DXF_LAYERS) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
     const layer = {
-      vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE',
+      vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE', 'explode-trail': 'MITTELLINIE',
       hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', auxarrow: 'BEMASSUNG',
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
@@ -6026,16 +8988,17 @@ const Drawing = (() => {
     const stats = { lines: 0, circles: 0, arcs: 0, polylines: 0, solids: 0, texts: 0, byLayer: {} };
     const bumpLayer = (ly) => { stats.byLayer[ly] = (stats.byLayer[ly] || 0) + 1; };
     const Y = (y) => H - y;
-    const line = (a, b, ly) => {
-      P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
+    const line = (a, b, ly, lt = null) => {
+      P(0, 'LINE', 8, ly, ...(lt ? [6, lt] : []), 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
       stats.lines++; bumpLayer(ly);
     };
     for (const l of cur.lines || []) {
-      const ly = layer[l.cls]; if (!ly) continue;
+      const ly = (l.thread || l.threadEnd) ? 'GEWINDE' : (l.cls === 'breakline' && l.secId ? 'SCHNITTLINIE' : layer[l.cls]); if (!ly) continue;
+      const lt = l.cls === 'breakline' ? 'CONTINUOUS' : ((l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
       if (l.rect) {
         const [x, y, w, hh] = l.rect;
         const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]];
-        for (let i = 0; i < 4; i++) line(c[i], c[(i + 1) % 4], ly);
+        for (let i = 0; i < 4; i++) line(c[i], c[(i + 1) % 4], ly, lt);
       } else if (l.circle) {
         P(0, 'CIRCLE', 8, ly);
         if (l.cls === 'detail-border') P(6, 'DASHED');
@@ -6051,17 +9014,17 @@ const Drawing = (() => {
             13, q[2][0].toFixed(4), 23, Y(q[2][1]).toFixed(4), 33, 0);
           stats.solids++; bumpLayer(ly);
         } else {
-          for (let i = 0; i < q.length; i++) line(q[i], q[(i + 1) % q.length], ly);
+          for (let i = 0; i < q.length; i++) line(q[i], q[(i + 1) % q.length], ly, lt);
         }
       } else if (l.arc) {
         // echter Bogen (gegen den Uhrzeigersinn); die Winkel der Ansicht gelten unverändert, weil DXF wie die Ansicht nach oben zählt
         const deg = (x) => ((((x * 180) / Math.PI) % 360) + 360) % 360;
-        P(0, 'ARC', 8, ly, 10, l.arc.c[0].toFixed(4), 20, Y(l.arc.c[1]).toFixed(4), 30, 0, 40, l.arc.r.toFixed(4), 50, deg(l.arc.a[0]).toFixed(4), 51, deg(l.arc.a[1]).toFixed(4));
+        P(0, 'ARC', 8, ly, ...(lt ? [6, lt] : []), 10, l.arc.c[0].toFixed(4), 20, Y(l.arc.c[1]).toFixed(4), 30, 0, 40, l.arc.r.toFixed(4), 50, deg(l.arc.a[0]).toFixed(4), 51, deg(l.arc.a[1]).toFixed(4));
         stats.arcs++; bumpLayer(ly);
       } else if (l.pts && l.pts.length === 2) {
-        line(l.pts[0], l.pts[1], ly);
+        line(l.pts[0], l.pts[1], ly, lt);
       } else if (l.pts && l.pts.length > 2) {
-        P(0, 'POLYLINE', 8, ly, 66, 1, 10, 0, 20, 0, 30, 0, 70, 0);
+        P(0, 'POLYLINE', 8, ly, ...(lt ? [6, lt] : []), 66, 1, 10, 0, 20, 0, 30, 0, 70, 0);
         for (const q of l.pts) P(0, 'VERTEX', 8, ly, 10, q[0].toFixed(4), 20, Y(q[1]).toFixed(4), 30, 0);
         P(0, 'SEQEND', 8, ly);
         stats.polylines++; bumpLayer(ly);
@@ -6381,7 +9344,10 @@ const Drawing = (() => {
     const bFree = h('button', { type: 'button', class: 'btn', id: 'dw-add-free', 'data-help': 'drawingViews' });
     bFree.innerHTML = icon('eye') + esc(T('draw.panel.addFree'));
     bFree.onclick = () => addView('free');
-    vSec.append(h('div', { class: 'btn-row' }, bIso, bFree));
+    const bEx = h('button', { type: 'button', class: 'btn', id: 'dw-add-explode', 'data-help': 'drawingExplode' });
+    bEx.innerHTML = icon('explode') + esc(T('draw.panel.addExplode'));
+    bEx.onclick = () => addView('explode');
+    vSec.append(h('div', { class: 'btn-row' }, bIso, bFree), h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bEx));
     const avList = activeViews(d);
     const curKey = currentViewKey(d);
     if (avList.length) {
@@ -6420,7 +9386,30 @@ const Drawing = (() => {
         chk.querySelector('input').onchange = (e) => setViewOpt(curKey, { [ok]: e.target.checked }, 'Ansichtseinstellung geändert');
         vp.append(chk);
       }
-      if (curMeta && curMeta.kind === 'free') {
+      if (curMeta && curMeta.kind === 'explode') {
+        const pctVal = Math.round((curMeta.explodeAmount ?? 0.7) * 100);
+        const pctEl = h('b', { class: 'mono', id: 'dw-v-ex-pct' }, pctVal + ' %');
+        const rng = h('input', { type: 'range', id: 'dw-v-ex-amount', min: '10', max: '150', step: '5', value: String(pctVal), style: { flex: '1' } });
+        rng.addEventListener('input', () => { pctEl.textContent = rng.value + ' %'; });
+        rng.addEventListener('change', () => updateExplodeView(curKey, { explodeAmount: Number(rng.value) / 100 }));
+        vp.append(h('div', { class: 'field' },
+          h('div', { class: 'mini-row' }, h('label', { for: 'dw-v-ex-amount', class: 'grow' }, T('draw.panel.exAmount')), pctEl),
+          rng));
+        const hasExSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps().length > 0;
+        if (hasExSteps || curMeta.explodeMode === 'steps') {
+          vp.append(UI.selectField({
+            id: 'dw-v-ex-mode',
+            label: T('draw.panel.exMode'),
+            value: curMeta.explodeMode === 'steps' ? 'steps' : 'auto',
+            options: [['auto', T('draw.panel.exModeAuto')], ['steps', T('draw.panel.exModeSteps')]],
+            onChange: (v) => updateExplodeView(curKey, { explodeMode: v }),
+          }));
+        }
+        const trChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-ex-trails', checked: curMeta.explodeTrails !== false }), T('draw.panel.exTrails'));
+        trChk.querySelector('input').onchange = (e) => updateExplodeView(curKey, { explodeTrails: e.target.checked });
+        vp.append(trChk);
+      }
+      if (curMeta && (curMeta.kind === 'free' || curMeta.kind === 'explode')) {
         const recam = h('button', { type: 'button', class: 'btn', id: 'dw-v-recam' });
         recam.innerHTML = icon('eye') + esc(T('draw.panel.recam'));
         recam.onclick = () => updateFreeViewCamera(curKey);
@@ -6443,7 +9432,9 @@ const Drawing = (() => {
     const flds = h('div', { class: 'fields', 'data-help': 'drawingFormat' });
     flds.append(UI.selectField({ id: 'dw-panel-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: sheetOptions(), onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); renderTabs(); } }));
     flds.append(UI.selectField({ id: 'dw-panel-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); renderTabs(); } }));
-    info.append(flds);
+    const projFld = UI.selectField({ id: 'dw-panel-projection', label: T('draw.tb.projection'), value: normProjection(d.projection), options: [['eu', T('draw.proj.eu')], ['us', T('draw.proj.us')]], onChange: (v) => setProjection(v) });
+    projFld.dataset.help = 'drawingProjection';
+    info.append(flds, projFld);
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + esc(T('draw.panel.sheetAndViews')); b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + esc(T('draw.panel.newSheet')); bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd));
@@ -6455,26 +9446,35 @@ const Drawing = (() => {
     w.append(info);
     const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, T('draw.panel.dimSec')));
     const dimGrid = h('div', { class: 'dw-dim-grid' });
+    const simpleMode = isSimpleMode();
     for (const m of DIM_MODES) {
+      if (simpleMode && m.pro) continue;
       const act = tool === 'dim' && dimMode === m.key;
       const db = h('button', {
         type: 'button',
-        class: 'btn' + (act ? ' active' : ''),
+        class: 'btn' + (m.pro ? ' pro' : '') + (act ? ' active' : ''),
         id: 'dw-dm-' + m.key,
         'aria-pressed': String(act),
-        'data-help': 'drawingDimTypes',
+        'data-help': m.pro ? 'drawingOrdArc' : 'drawingDimTypes',
       }, m.short);
       db.onclick = () => { if (tool === 'dim' && dimMode === m.key) setTool(null); else setDimMode(m.key); };
       dimGrid.append(db);
     }
     dimSec.append(dimGrid);
-    if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+    const bModelDims = h('button', { type: 'button', class: 'btn', id: 'dw-model-dims', 'data-help': 'drawingModelDims' });
+    bModelDims.innerHTML = icon('dim') + esc(T('draw.panel.modelDimsBtn'));
+    bModelDims.onclick = () => importModelDims();
+    const bArrangeDims = h('button', { type: 'button', class: 'btn', id: 'dw-arrange-dims', 'data-help': 'drawingModelDims' });
+    bArrangeDims.innerHTML = icon('sliders') + esc(T('draw.panel.arrangeDimsBtn'));
+    bArrangeDims.onclick = () => arrangeDims();
+    dimSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bModelDims, bArrangeDims));
+    if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base' || dimMode === 'ordinate') && toolState && toolState.stage === 3) {
       const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, T('draw.panel.finishChain'));
       fin.onclick = () => { toolState = { stage: 0 }; render(); Panels.renderRight(); };
       dimSec.append(fin);
     }
     w.append(dimSec);
-    // Maß-Stil je Blatt (ZE-10)
+    // Maß-Stil je Blatt (ZE-10) & Doppelmaße (ZE-22)
     const ds = sheetDimStyle(d);
     const styleSec = h('div', { class: 'section', id: 'dw-dimstyle-sec', 'data-help': 'drawingDimStyle' }, h('div', { class: 'section-h' }, T('draw.panel.dimStyleSec')));
     const fsList = DIM_FONT_SIZES.includes(ds.fontSize) ? DIM_FONT_SIZES : [...DIM_FONT_SIZES, ds.fontSize].sort((a, b) => a - b);
@@ -6494,6 +9494,23 @@ const Drawing = (() => {
         UI.selectField({ id: 'dw-style-dec', label: T('draw.panel.decimals'), value: decVal, options: decOpts, onChange: (v) => setDimStyle({ decimals: v === 'auto' ? null : +v }) }),
       ),
     );
+    if (!simpleMode) {
+      const dualChk = h('label', { class: 'check pro', 'data-help': 'drawingDualDims' }, h('input', { type: 'checkbox', id: 'dw-style-dual', checked: !!ds.dual }), T('draw.panel.dualDims'));
+      dualChk.querySelector('input').onchange = (e) => setDualDims(e.target.checked);
+      styleSec.append(dualChk);
+      if (ds.dual && Units.key() !== 'in') {
+        const dualDecFld = UI.selectField({
+          id: 'dw-style-dual-dec',
+          label: T('draw.panel.dualDec'),
+          value: String(ds.dualDecimals),
+          options: [['2', T('draw.panel.dualDec2')], ['3', T('draw.panel.dualDec3')], ['4', T('draw.panel.dualDec4')]],
+          onChange: (v) => setDimStyle({ dualDecimals: +v || 3 }),
+        });
+        dualDecFld.classList.add('pro');
+        dualDecFld.dataset.help = 'drawingDualDims';
+        styleSec.append(dualDecFld);
+      }
+    }
     w.append(styleSec);
     // Hinweislinien / Notizen (ZE-11)
     const noteSec = h('div', { class: 'section', id: 'dw-notes-sec', 'data-help': 'drawingLeader' }, h('div', { class: 'section-h' }, T('draw.panel.leadersSec')));
@@ -6593,24 +9610,98 @@ const Drawing = (() => {
     w.append(bomSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, T('draw.panel.sectionsSec')));
+    if (!isSimpleMode()) {
+      const modeSel = UI.selectField({
+        id: 'dw-sec-type',
+        label: T('draw.panel.secType'),
+        value: sectionMode,
+        options: SECTION_MODES.map((m) => [m.key, m.label]),
+        onChange: (v) => {
+          sectionMode = SECTION_MODES.some((m) => m.key === v) ? v : 'full';
+          if (tool === 'section') setSectionMode(sectionMode);
+          else { Panels.renderTools(); Panels.renderRight(); }
+        },
+      });
+      modeSel.classList.add('pro');
+      modeSel.dataset.help = 'drawingSectionKinds';
+      secBox.append(modeSel);
+      if (sectionMode === 'half') {
+        const hRow = h('div', { class: 'fields pro' });
+        const ax = sectionDraft.halfAxis === 'h' ? 'h' : 'v';
+        const sideOpts = ax === 'h'
+          ? [['bottom', T('draw.panel.secHalfBottom')], ['top', T('draw.panel.secHalfTop')]]
+          : [['right', T('draw.panel.secHalfRight')], ['left', T('draw.panel.secHalfLeft')]];
+        hRow.append(
+          UI.selectField({
+            id: 'dw-sec-half-axis',
+            label: T('draw.panel.secHalfAxis'),
+            value: ax,
+            options: [['v', T('draw.panel.secHalfAxisV')], ['h', T('draw.panel.secHalfAxisH')]],
+            onChange: (v) => {
+              sectionDraft.halfAxis = v === 'h' ? 'h' : 'v';
+              sectionDraft.halfSide = sectionDraft.halfAxis === 'h' ? 'bottom' : 'right';
+              Panels.renderRight();
+            },
+          }),
+          UI.selectField({
+            id: 'dw-sec-half-side',
+            label: T('draw.panel.secHalfSide'),
+            value: sideOpts.some((o) => o[0] === sectionDraft.halfSide) ? sectionDraft.halfSide : sideOpts[0][0],
+            options: sideOpts,
+            onChange: (v) => { sectionDraft.halfSide = v; },
+          }),
+        );
+        secBox.append(hRow);
+      } else if (sectionMode === 'breakout') {
+        const dInp = h('input', {
+          type: 'number',
+          id: 'dw-sec-depth',
+          step: '0.5',
+          min: '0.1',
+          placeholder: T('draw.panel.secDepthAuto'),
+          value: sectionDraft.depth != null ? String(sectionDraft.depth) : '',
+        });
+        dInp.addEventListener('keydown', (e) => e.stopPropagation());
+        dInp.addEventListener('change', () => {
+          const val = dInp.value.trim();
+          const num = val === '' ? null : Number(val);
+          sectionDraft.depth = num != null && Number.isFinite(num) && num > 0 ? num : null;
+        });
+        secBox.append(h('div', { class: 'field pro' }, h('label', { for: 'dw-sec-depth' }, T('draw.panel.secDepth')), dInp));
+      }
+    }
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
     bSec.innerHTML = icon('section') + esc(T('draw.panel.drawSection'));
-    bSec.onclick = () => tool_('section');
-    secBox.append(bSec);
+    bSec.onclick = () => {
+      if (tool === 'section') setTool(null);
+      else setSectionMode(isSimpleMode() ? 'full' : sectionMode);
+    };
+    const secBtnRow = h('div', { class: 'btn-row' }, bSec);
+    if (tool === 'section' && toolState && Array.isArray(toolState.pts)
+      && ((sectionMode === 'stepped' && toolState.pts.length >= 4) || (sectionMode === 'breakout' && toolState.pts.length >= 3))) {
+      const fBtn = h('button', { type: 'button', class: 'btn primary', id: 'dw-sec-finish' }, T('draw.panel.secFinish'));
+      fBtn.onclick = () => finishSectionTool();
+      secBtnRow.append(fBtn);
+    }
+    secBox.append(secBtnRow);
     if (secs.length) {
       const lst = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
       const pName = { front: T('draw.panel.pFront'), top: T('draw.panel.pTop'), left: T('draw.panel.pLeft') };
       for (const sec of secs) {
-        const row = h('div', { class: 'mini-row sec-row', 'data-sec-id': sec.id });
-        const lbl = h('span', { class: 'grow' }, T('draw.panel.secRow', { a: sec.label, b: sec.label, parent: pName[sec.parent] || sec.parent }));
+        const row = h('div', { class: 'mini-row sec-row', 'data-sec-id': sec.id, 'data-sec-type': sec.type || 'full' });
+        const lbl = h('span', { class: 'grow' }, `${sectionTitle(sec)} (${pName[sec.parent] || sec.parent})`);
         lbl.style.cursor = 'pointer';
         lbl.onclick = () => { selDim = sec.id; render(); Panels.renderRight(); };
-        const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secFlipTip') }, T('draw.panel.secFlipShort'));
-        fb.onclick = () => flipSection(sec.id);
+        row.append(lbl);
+        if (sec.type !== 'breakout') {
+          const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secFlipTip') }, T('draw.panel.secFlipShort'));
+          fb.onclick = () => flipSection(sec.id);
+          row.append(fb);
+        }
         const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secDelTip'), 'aria-label': T('draw.panel.secDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = () => removeSection(sec.id);
-        row.append(lbl, fb, db);
+        row.append(db);
         lst.append(row);
       }
       secBox.append(lst);
@@ -6698,6 +9789,81 @@ const Drawing = (() => {
       auxBox.append(al);
     }
     w.append(auxBox);
+    // Norm-Darstellung (Profi): Gewinde (ZE-20) & Werkstoff-Schraffur (ZE-28)
+    if (!isSimpleMode()) {
+      const normSec = h('div', { class: 'section pro', id: 'dw-norm-sec' }, h('div', { class: 'section-h' }, T('draw.panel.normSec')));
+      const thChk = h('label', { class: 'check', 'data-help': 'drawingNormThreads' },
+        h('input', { type: 'checkbox', id: 'dw-norm-threads', checked: d.normThreads !== false }),
+        T('draw.panel.normThreads'));
+      thChk.querySelector('input').onchange = (e) => setNormThreads(e.target.checked);
+      normSec.append(thChk);
+      const thList = docThreads();
+      if (thList.length) {
+        const sizes = [...new Set(thList.map((x) => x.size).filter(Boolean))].join(', ');
+        normSec.append(h('div', {
+          class: 'mini-row',
+          id: 'dw-threads-summary',
+          style: { fontSize: '11.5px', color: 'var(--muted)', paddingLeft: '22px' },
+        }, thList.length === 1 ? T('draw.panel.threadsFoundOne', { sizes }) : T('draw.panel.threadsFoundMany', { n: thList.length, sizes })));
+      }
+      const mhChk = h('label', { class: 'check', 'data-help': 'drawingMaterialHatch' },
+        h('input', { type: 'checkbox', id: 'dw-mat-hatch', checked: d.materialHatch !== false }),
+        T('draw.panel.matHatch'));
+      mhChk.querySelector('input').onchange = (e) => setMaterialHatch(e.target.checked);
+      normSec.append(mhChk);
+      if (d.materialHatch !== false) {
+        const usedMats = new Map();
+        for (const top of Model.activeItems(App.doc)) {
+          if (!top || top.role === 'hole' || (typeof App.mergedInto === 'function' && App.mergedInto(top.id))) continue;
+          const mk = itemExplicitMaterial(top, App.doc);
+          if (!mk) continue;
+          const pk = hatchPatternForMaterial(mk);
+          if (!usedMats.has(mk)) usedMats.set(mk, pk);
+        }
+        if (usedMats.size) {
+          const swatchSvg = (pk) => {
+            const segs = [];
+            if (pk === 'alu') {
+              for (const x of [-4, 6, 16]) {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"/>`);
+                segs.push(`<line x1="${x + 2.4}" y1="14" x2="${x + 16.4}" y2="0"/>`);
+              }
+            } else if (pk === 'brass') {
+              [-4, 2, 8, 14, 20].forEach((x, idx) => {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"${idx % 2 === 1 ? ' stroke-dasharray="3 1.4"' : ''}/>`);
+              });
+            } else if (pk === 'plastic') {
+              for (const x of [-4, 3, 10, 17]) {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"/>`);
+                segs.push(`<line x1="${x}" y1="0" x2="${x + 14}" y2="14"/>`);
+              }
+            } else if (pk === 'composite') {
+              for (const x of [-4, 4, 12, 20]) {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 20}" y2="0"/>`);
+                segs.push(`<line x1="${x}" y1="0" x2="${x + 20}" y2="14"/>`);
+              }
+            } else if (pk === 'wood') {
+              [-4, 3, 10, 17].forEach((x, idx) => {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 20}" y2="0"${idx % 2 === 1 ? ' stroke-dasharray="3 1.4"' : ''}/>`);
+              });
+            } else {
+              for (const x of [-4, 2, 8, 14, 20]) segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"/>`);
+            }
+            return `<svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true" style="border:1px solid var(--line-strong);border-radius:3px;background:#fff;flex-shrink:0"><g stroke="#111" stroke-width="0.9">${segs.join('')}</g></svg>`;
+          };
+          const leg = h('div', { class: 'mini-list', id: 'dw-hatch-legend', style: { marginTop: '4px' } });
+          for (const [mk, pk] of usedMats.entries()) {
+            const pat = HATCH_PATTERNS[pk] || HATCH_PATTERNS.steel;
+            const row = h('div', { class: 'mini-row', 'data-mat': mk, 'data-hatch-pat': pk, style: { gap: '8px', alignItems: 'center' } });
+            row.innerHTML = swatchSvg(pk);
+            row.append(h('b', { style: { fontSize: '12px' } }, mk), h('span', { class: 'grow', style: { fontSize: '11.5px', color: 'var(--muted)', textAlign: 'right' } }, pat.label));
+            leg.append(row);
+          }
+          normSec.append(leg);
+        }
+      }
+      w.append(normSec);
+    }
     // Detailansichten (ZE-03)
     const detSec = h('div', { class: 'section', 'data-help': 'drawingDetail' }, h('div', { class: 'section-h' }, T('draw.panel.detailsSec')));
     if (tool === 'detail') {
@@ -6778,7 +9944,8 @@ const Drawing = (() => {
     w.append(ctrSec);
     if (selDim) {
       const selDet = detList.find((x) => x.id === selDim);
-      const isSec = secs.some((x) => x.id === selDim);
+      const selSecObj = secs.find((x) => x.id === selDim);
+      const isSec = !!selSecObj;
       const selBrk = brkList.find((x) => x.id === selDim);
       const selAux = auxList.find((x) => x.id === selDim);
       const selD = d.dims.find((x) => x.id === selDim);
@@ -6788,7 +9955,7 @@ const Drawing = (() => {
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
       const selDimInfo = !selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
       const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
       if (selBrk) {
         selSec.append(
           UI.selectField({
@@ -7017,7 +10184,47 @@ const Drawing = (() => {
         rb.onclick = () => { if (isRb) setTool(null); else startRebind(selResolved.id); };
         row.append(rb);
       }
-      if (isSec) {
+      if (selSecObj && selSecObj.type === 'half') {
+        const ax = selSecObj.halfAxis === 'h' ? 'h' : 'v';
+        const sideOpts = ax === 'h'
+          ? [['bottom', T('draw.panel.secHalfBottom')], ['top', T('draw.panel.secHalfTop')]]
+          : [['right', T('draw.panel.secHalfRight')], ['left', T('draw.panel.secHalfLeft')]];
+        const hFields = h('div', { class: 'fields' });
+        hFields.append(
+          UI.selectField({
+            id: 'dw-sel-half-axis',
+            label: T('draw.panel.secHalfAxis'),
+            value: ax,
+            options: [['v', T('draw.panel.secHalfAxisV')], ['h', T('draw.panel.secHalfAxisH')]],
+            onChange: (v) => updateSection(selSecObj.id, { halfAxis: v }),
+          }),
+          UI.selectField({
+            id: 'dw-sel-half-side',
+            label: T('draw.panel.secHalfSide'),
+            value: sideOpts.some((o) => o[0] === selSecObj.halfSide) ? selSecObj.halfSide : sideOpts[0][0],
+            options: sideOpts,
+            onChange: (v) => updateSection(selSecObj.id, { halfSide: v }),
+          }),
+        );
+        selSec.append(hFields);
+      }
+      if (selSecObj && selSecObj.type === 'breakout') {
+        const dInp = h('input', {
+          type: 'number',
+          id: 'dw-sel-sec-depth',
+          step: '0.5',
+          min: '0.1',
+          placeholder: T('draw.panel.secDepthAuto'),
+          value: selSecObj.depth != null ? String(selSecObj.depth) : '',
+        });
+        dInp.addEventListener('keydown', (e) => e.stopPropagation());
+        dInp.addEventListener('change', () => {
+          const val = dInp.value.trim();
+          updateSection(selSecObj.id, { depth: val === '' ? null : Number(val) });
+        });
+        selSec.append(h('div', { class: 'field' }, h('label', { for: 'dw-sel-sec-depth' }, T('draw.panel.secDepth')), dInp));
+      }
+      if (isSec && selSecObj && selSecObj.type !== 'breakout') {
         const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, T('draw.panel.secFlipBtn'));
         fl.onclick = () => flipSection(selDim);
         row.append(fl);
@@ -7067,14 +10274,16 @@ const Drawing = (() => {
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   App.on('docLoaded', () => { lastLostKey = ''; });
+  if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
-    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
-    addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera,
+    PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
+    addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera, updateExplodeView, explodeViewInfo,
     get selectedView() { return currentViewKey(); },
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
-    DIM_ARROWS, DIM_FONT_SIZES, dimStyle: () => sheetDimStyle(), setDimStyle,
+    DIM_ARROWS, DIM_FONT_SIZES, DIM_MODES, dimStyle: () => sheetDimStyle(), setDimStyle, setDualDims,
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
     bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
     bomRows: () => bomItems(),
@@ -7082,9 +10291,15 @@ const Drawing = (() => {
     autoBalloons, addBalloon, updateBalloon, removeBalloon, clearBalloons,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
     get selectedId() { return selDim; },
-    addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
+    SECTION_MODES, setSectionMode, sectionMenu, finishSectionTool,
+    addSection, updateSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
     breaks, addBreak, updateBreak, removeBreak,
     auxViews, addAuxView, flipAuxView, removeAuxView, nextAuxLabel, auxViewSpec,
+    HATCH_PATTERNS, hatchPatternForMaterial, setNormThreads, setMaterialHatch,
+    normThreads: () => normThreadsActive(),
+    materialHatch: () => materialHatchActive(),
+    threads: () => docThreads(),
+    get sectionMode() { return sectionMode; },
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),

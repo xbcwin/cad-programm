@@ -420,16 +420,27 @@ const Commands = (() => {
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
     add('drawingAddIso', 'Zeichnung: Isometrische Ansicht hinzufügen', 'cube', 'zeichnung isometrie isometrisch 3d ansicht schattiert', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('iso'); }, { group: 'Werkzeuge' });
     add('drawingAddFree', 'Zeichnung: Freie 3D-Ansicht hinzufügen', 'eye', 'zeichnung freie ansicht 3d kamera aktuell schattiert', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('free'); }, { group: 'Werkzeuge' });
+    add('drawingAddExplode', 'Zeichnung: Explosionsansicht hinzufügen', 'explode', 'zeichnung explosion explosionsansicht baugruppe auseinander ze-18', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('explode'); }, { group: 'Werkzeuge' });
+    add('drawingProjEu', 'Zeichnung: Projektion Europa (ISO E)', 'sheet', 'zeichnung projektion europa iso e methode 1 ze-19', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setProjection('eu'); }, { group: 'Werkzeuge' });
+    add('drawingProjUs', 'Zeichnung: Projektion USA (ISO A)', 'sheet', 'zeichnung projektion usa amerika iso a methode 3 ze-19', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setProjection('us'); }, { group: 'Werkzeuge' });
     add('drawingDetail', 'Detailansicht in Zeichnung anlegen', 'zoomIn', 'detail lupe vergrößern ausschnitt kreis zeichnung ze-03', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('detail'); }, { group: 'Werkzeuge' });
     add('drawingSection', 'Schnittansicht in Zeichnung (A–A)', 'section', 'schnitt schnittansicht schraffur zeichnung a-a', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('section'); }, { group: 'Werkzeuge' });
     add('drawingBreakView', 'Zeichnung: Ansicht unterbrechen (Bruchlinie)', 'split', 'unterbrechen bruch bruchlinie gekürzt gekuerzt lang welle zeichnung ze-16', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('break'); }, { group: 'Werkzeuge', kbd: 'U' });
     add('drawingAuxView', 'Zeichnung: Hilfsansicht (senkrecht zu Kante)', 'arrowR', 'hilfsansicht schräg schraege kante fläche flaeche unverzerrt zeichnung ze-17', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('aux'); }, { group: 'Werkzeuge', kbd: 'H' });
+    add('drawingHalfSection', 'Zeichnung: Halbschnitt (halb Ansicht, halb Schnitt)', 'section', 'halbschnitt halb schnitt schnittansicht zeichnung ze-15', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setSectionMode('half'); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
+    add('drawingSteppedSection', 'Zeichnung: Abgesetzter Schnitt (mit Knicken)', 'section', 'abgesetzter schnitt stufenschnitt knick knicke schnittansicht zeichnung ze-15', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setSectionMode('stepped'); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
+    add('drawingBreakoutSection', 'Zeichnung: Ausbruch (Teilschnitt im Bereich)', 'section', 'ausbruch teilschnitt bereich bruchlinie schnittansicht zeichnung ze-15', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setSectionMode('breakout'); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
+    add('drawingNormThreads', 'Zeichnung: Gewinde nach Norm ein-/ausblenden', 'thread', 'gewinde norm din iso 6410 dreiviertelkreis zeichnung ze-20', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setNormThreads(!Drawing.activeSheet().normThreads); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
+    add('drawingMaterialHatch', 'Zeichnung: Schraffur je Werkstoff ein-/ausblenden', 'section', 'schraffur werkstoff material alu kunststoff stahl din 201 zeichnung ze-28', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setMaterialHatch(!Drawing.activeSheet().materialHatch); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
     add('drawingDimChain', 'Zeichnung: Kettenmaß', 'dim', 'kettenmaß kette bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('chain'); }, { group: 'Werkzeuge' });
     add('drawingDimBase', 'Zeichnung: Bezugsmaß (ab Kante)', 'dim', 'bezugsmaß bezug kante bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('base'); }, { group: 'Werkzeuge' });
     add('drawingDimAngle', 'Zeichnung: Winkelmaß', 'dim', 'winkel winkelmaß grad bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('ang'); }, { group: 'Werkzeuge' });
     add('drawingDimRadius', 'Zeichnung: Radius-Maß (R)', 'dim', 'radius r rundung bogen bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('rad'); }, { group: 'Werkzeuge' });
     add('drawingDimDia', 'Zeichnung: Durchmesser-Maß (Ø)', 'dim', 'durchmesser ø bohrung kreis bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('dia'); }, { group: 'Werkzeuge' });
     add('drawingDimChamfer', 'Zeichnung: Fasenmaß (1×45°)', 'dim', 'fase fasenmaß 45 grad schräge bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('chamfer'); }, { group: 'Werkzeuge' });
+    add('drawingDimOrdinate', 'Zeichnung: Koordinatenmaße (ab Nullpunkt)', 'dim', 'koordinatenmaß koordinatenmaße ordinate nullpunkt löcher bemaßung zeichnung ze-21', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('ordinate'); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
+    add('drawingDimArcLen', 'Zeichnung: Bogenlängen-Maß', 'dim', 'bogenlänge bogenlängenmaß bogen kreisbogen bemaßung zeichnung ze-21', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('arclen'); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
+    add('drawingDualDims', 'Zeichnung: Doppelmaße (mm und Zoll) umschalten', 'sliders', 'doppelmaß doppelmaße zoll inch mm klammer zeichnung ze-22', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDualDims(!Drawing.dimStyle().dual); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
     add('drawingCenters', 'Mittellinien automatisch ein-/ausblenden', 'target', 'mittellinie mittellinien mittelkreuz mittelkreuze achse bohrung zylinder zeichnung ze-06', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setCenters(!Drawing.activeSheet().centers); }, { group: 'Werkzeuge' });
     add('drawingCentersShowAll', 'Alle Mittellinien in Zeichnung einblenden', 'eye', 'mittellinie mittellinien mittelkreuz alle einblenden zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.showAllCenters(); }, { group: 'Werkzeuge' });
     add('drawingLeaderNote', 'Zeichnung: Notiz mit Hinweislinie', 'noteText', 'notiz hinweislinie pfeil punkt kante fläche kommentar zeichnung ze-11', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('note'); }, { group: 'Werkzeuge', kbd: 'N' });
@@ -437,6 +448,8 @@ const Commands = (() => {
     add('drawingBalloonTool', 'Zeichnung: Positionsnummer einzeln setzen', 'list', 'positionsnummer ballon einzeln setzen ze-12', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('balloon'); }, { group: 'Werkzeuge', kbd: 'B' });
     add('drawingBomTable', 'Zeichnung: Stückliste auf dem Blatt ein-/ausblenden', 'list', 'stückliste tabelle zeichnung ze-12 pos menge werkstoff', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setBomTable(!(Drawing.bomTable().show)); }, { group: 'Werkzeuge' });
     add('drawingDimStyle', 'Zeichnung: Maß-Stil (Pfeile, Schriftgröße, Stellen)', 'sliders', 'maß-stil stil pfeil pfeilart schriftgröße nachkommastellen zeichnung ze-10', () => { if (App.mode !== 'drawing') setMode('drawing'); Panels.renderRight(); document.querySelector('#dw-style-size')?.focus(); }, { group: 'Werkzeuge' });
+    add('drawingModelDims', 'Zeichnung: Maße aus dem Modell übernehmen', 'dim', 'maße modell übernehmen skizze schritt bemaßen ordnen ze-23', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => Drawing.importModelDims()); }, { group: 'Werkzeuge' });
+    add('drawingArrangeDims', 'Zeichnung: Maße automatisch ordnen', 'sliders', 'maße ordnen aufräumen überlappen bemaßung zeichnung ze-23', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => Drawing.arrangeDims()); }, { group: 'Werkzeuge' });
     add('drawingResetViews', 'Zeichnung: Ansichten-Lage zurücksetzen', 'fit', 'ansichten verschieben zurücksetzen lage zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.resetViewPos(); }, { group: 'Werkzeuge' });
     add('drawingTolerance', 'Toleranz oder ISO-Passung am Maß setzen', 'dim', 'toleranz passung iso 286 h7 g6 grenzmaß abmaß symmetrisch zeichnung ze-08 ze-09', () => { if (App.mode !== 'drawing') setMode('drawing'); const sel = document.getElementById('dw-tol-mode'); if (sel) sel.focus(); else UI.toast('Klick ein Maß auf dem Blatt an, um rechts eine Toleranz oder Passung zu wählen.', { icon: 'dim', ms: 3000 }); }, { group: 'Werkzeuge' });
     add('drawingLostDims', 'Zeichnung: Verlorene Maße prüfen', 'dim', 'verlorene maße kante fehlt zeichnung aktualisieren ze-14', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => { const n = Drawing.lostDims().length; UI.toast(n ? `${n} ${n === 1 ? 'verlorenes Maß' : 'verlorene Maße'} gefunden – rechts unter „Verlorene Maße“.` : 'Alle Maße auf diesem Blatt sind gültig.', { icon: n ? 'warn' : 'check', kind: n ? 'warn' : undefined, ms: 3000 }); }); }, { group: 'Werkzeuge' });
@@ -514,15 +527,30 @@ const Commands = (() => {
     add('keys', 'Tastenkürzel anzeigen', 'help', 'hilfe tasten kürzel', () => showKeys(), { group: 'Hilfe' });
     add('what-is-this', T('whatis.cmdLabel'), 'help', 'was ist das hilfe erklaeren erklaerung modus fragezeichen element be-32', () => UI.toggleWhatIs(), { group: 'Hilfe' });
   }
+  function matchBonus(str, w) {
+    let best = 0, pos = 0;
+    while (pos <= str.length - w.length) {
+      const i = str.indexOf(w, pos);
+      if (i < 0) break;
+      const sb = i === 0 || !/[a-z0-9]/.test(str[i - 1]);
+      const eb = i + w.length === str.length || !/[a-z0-9]/.test(str[i + w.length]);
+      const v = sb ? (eb ? 4 : 3) : 1;
+      if (v > best) best = v;
+      if (best === 4) break;
+      pos = i + 1;
+    }
+    return best;
+  }
   function score(c, q) {
     if (!q) return 0;
     const words = q.split(/\s+/).filter(Boolean); let s = 0;
+    const lbl = normTxt(c.label);
     for (const w of words) {
       const i = c.keys.indexOf(w);
       if (i < 0) return -1;
       s += i === 0 ? 3 : !/[a-z0-9]/.test(c.keys[i - 1]) ? 2 : 1;
+      s += matchBonus(lbl, w);
     }
-    const lbl = normTxt(c.label);
     if (lbl.startsWith(q)) s += 5;
     if (words.length > 1) {
       if (lbl.includes(q)) s += 6;

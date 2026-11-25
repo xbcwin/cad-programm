@@ -2770,6 +2770,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Validierung, Speichern/Laden, i18n, Hilfen & Befehlssuche**: Im Einfach-Modus sind die Bereiche ausgeblendet und Dialoge/Prompts geben `null` zurück; `Store.validateProject`, Speichern/Laden mit `displayStates` und `asmVariants`, `HELP.displayStates`/`HELP.asmVariants`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-display-state-save`, `asm-variant-save` …) laufen ohne JS-Fehler (`t_a163_anzeige_zustaende_varianten`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Teilen öffnen, einen Anzeige-Zustand mit ausgeblendetem Deckel und durchsichtigem Gehäuse anlegen, eine Baugruppen-Variante mit geändertem Maß oder Ersatzteil über „Verwalten“ einrichten und im Studio-Licht-Panel sowie Ansichtsmenü umschalten.
 
+## Volltest-Reparatur (Auto [F-11251455])
+
+- [x] **Toast über Zeitleiste & In-Place-Zeitleiste (`Zeitleiste`)**: `.toasts` sitzt oberhalb von `#timeline`, sodass `.tl-marker` frei anklick- und ziehbar bleibt; `Timeline.render()` aktualisiert Marker und Chips bei unveränderter Schrittliste in-place, rendert auf `App.on('doc')` sofort ohne Debounce-Verzögerung und verschiebt Neurendern während des Ziehens bis zum Loslassen (`t_tl`, `t_f11251455`).
+- [x] **Festsetzen-Panels & `doc`-Verlaufs-Abgleich (`[A-084]`)**: `Actions.setGrounded()` aktualisiert linkes und rechtes Panel unmittelbar (`lock-mark`, `#t-x.disabled`, `#grounded-hint`), und `pendingLeftDirty` verhindert, dass `syncLeftSelection()` ein ausstehendes `doc`-`renderLeft()` verwirft (`t_a084_unterbaugruppe_festsetzen`, `t_f11251455`).
+- [x] **`Mass.measure()` bei ladendem Kern & Tooltip-Stabilität (`Kaufteil mit festem Gewicht`, `[A-093]`)**: `Mass.measure()`/`measureDoc()` warten bei `Kernel.state === 'loading'` (oder `{ ensure: true }`) statt `null` zurückzugeben und cachen `null` nicht dauerhaft; `UI.initTips()` schließt beim Zielwechsel den vorherigen Tooltip sofort, `UI.showTip()` re-akquiriert ein während der Hover-Verzögerung neu gerendertes Zielelement über `elementFromPoint`, und `onScrollTip()` bricht laufende Tooltip-Timer bei einem `scroll`-Event nicht ab, solange dasselbe Ziel unter dem Mauszeiger bleibt (`t_festes_gewicht`, `t_a093_eigenschaften_je_teil`, `t_f11251455`).
+- [ ] **Von Hand**: Im Browser drei Körper anlegen, direkt während der Toast-Meldung den Zeitleisten-Marker verschieben, sowie in den Teileigenschaften über die Abschnitts-Überschrift fahren und prüfen, dass der Tooltip auch bei gleichzeitigem Neubau erscheint.
+
 ## Skelett-Skizze (Auto [A-166], BG-32)
 
 - [x] **Profi-Schutz & Hauptskizze im 2D-Editor anlegen**: `#t-asm-skeleton` und `Comp.startSkeleton()` sind im Einfach-Modus gesperrt/verborgen und im Profi-Modus aktiv; im 2D-Editor (`Sketch.startSkeleton`) gezeichnete Linien mit benanntem Steuer-Maß (`Laenge = 100`) speichern nach `Sketch.done()` in `doc.skeletons`, synchronisieren `doc.params` (`p.skeleton`), zeichnen die 3D-Linien in `Viewer.groups.sketch3d` und erscheinen im Verlauf `#skel-tree` (`t_a166_skelett_skizze`).
@@ -2785,6 +2792,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject` akzeptiert `doc.tolChains`, `HELP.asmSingleBody`/`HELP.tolChain`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-single-body`, `tol-chain`) laufen ohne JS-Fehler (`t_a165_baugruppe_einkoerper_toleranzkette`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe aus mehreren verschraubten oder gestapelten Teilen öffnen, über „Prüfen → Toleranzkette“ per „Fläche“ oder „Im Bild wählen“ eine gemischte `+`/`−`-Kette mit Spielprüfung rechnen und die Baugruppe über „Als 1 Körper“ als STEP sowie als STL in einen Slicer laden.
 
+## Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (Auto [A-168], ZE-15)
+
+- [x] **Halbschnitt (halb Ansicht, halb Schnitt)**: Schnittlinie A–A durch die Draufsicht im Modus `half` erzeugt `Halbschnitt A–A` mit strichpunktierter Trennlinie; Schraffurlinien liegen ausschließlich in der geschnittenen Hälfte (`u >= 0` bei „Rechts“ bzw. `u <= 0` nach Umschalten auf „Links“) und sparen die Mittelbohrung aus (`t_a168_schnittarten`).
+- [x] **Abgesetzter Schnitt (mit Knicken)**: Mehrpunkt-Schnittlinie `(-32, 8) → (0, 8) → (0, -8) → (32, -8)` erzeugt Knick-Schnittverlauf samt `Schnitt B–B (abgesetzt)`; Schraffur erscheint in linker Wand, Mittelsteg und rechter Wand und spart beide versetzten Bohrungen (`x = -15` und `x = +15`) aus (`t_a168_schnittarten`).
+- [x] **Ausbruch (Teilschnitt im Bereich)**: Aufgezogener Bereich `[-12, 3] .. [12, 17]` in der Vorderansicht erzeugt `Ausbruch C–C` mit Wellen-Bruchlinie (`polyline.breakline`); Schraffur bleibt strikt innerhalb des Bereichs, spart in Tiefenmitte die Bohrung aus und füllt bei geänderter Schnitttiefe `12 mm` die volle Ausbruch-Fläche (`t_a168_schnittarten`).
+- [x] **Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & i18n**: Im Einfach-Modus verborgen und gesperrt; PDF (`%PDF-1.4`) und DXF (`SCHRAFFUR`, `SCHNITTLINIE`), Rückgängig/Wiederholen, Speichern/Laden (`Store.validateProject`), `HELP.drawingSectionKinds`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a168_schnittarten`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ über „Schnitt-Art“ nacheinander Halbschnitt, abgesetzten Schnitt mit mehreren Knicken sowie Ausbruch (sowohl Rechteck-Ziehen als auch Polygon-Klicken) an einem Bauteil anlegen und Schnitthälfte bzw. Schnitttiefe rechts anpassen.
+
 ## Kabel und Schläuche (Auto [A-167], BG-34)
 
 - [x] **Profi-Trennung**: Im Einfach-Modus sind `#proj-asm-cable` und `#btn-asm-cable` ausgeblendet, `Assembly.cableDialog()` und `Assembly.createCable()` liefern `null`, `Assembly.startCable()` liefert `false` und `asm-cable` fehlt in der Befehlssuche (`t_a167_kabel_schlaeuche`).
@@ -2793,6 +2808,43 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hohler Schlauch, Nachführen bei Bewegung & Rückgängig**: Ein Schlauch (`wall: 1,5 mm`, gebunden an zwei Blöcke) hat echt geringeres Volumen als ein Vollkörper und folgt dem Verschieben von `Box B` (`x = 140`, Länge wächst entsprechend); `App.undo()` funktioniert (`t_a167_kabel_schlaeuche`).
 - [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject`, `HELP.asmCable`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-cable`, `asm-cable-pick`) laufen ohne JS-Fehler (`t_a167_kabel_schlaeuche`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus zwei Bauteile in einer Baugruppe platzieren, über „Kabel / Schlauch → Im 3D-Bild wählen“ beide Anschlüsse direkt auf Flächen klicken, Durchhang oder Zwischenpunkt hinzufügen, ein Bauteil verschieben und die aktualisierte Länge in der Stückliste prüfen.
+
+## Zeichnung: Gewinde nach Norm und Schraffur je Material (Auto [A-171], ZE-20, ZE-28)
+
+- [x] **Gewindebohrung & Außengewinde nach Norm (ZE-20)**: Gewindebohrung `M6` (`screwHole`, `fit: 'tap'`) zeigt in der Draufsicht einen dünnen Dreiviertelkreis (270°, Ø 6 mm) und im Schnitt dünne parallele Linien samt `M6`-Bemaßung; `threadRod` und `stdScrew` M6 zeigen in der Draufsicht den inneren Dreiviertelkreis (Ø 5 mm) und in der Vorderansicht dünne Seitenlinien; `#dw-norm-threads` schaltet aus und per `App.undo()` wieder ein (`t_a171_gewinde_und_materialschraffur`).
+- [x] **Schraffur je Werkstoff (ZE-28)**: Schnitt A–A durch ein Teil aus `Alu 6061` und eines aus `PLA` schraffiert Aluminium mit 45°-Doppellinien-Paaren und Kunststoff mit 45°/135°-Kreuzschraffur; `Baustahl` zeigt einfache 45°-Linien, `Messing` abwechselnd Voll-/Strichlinien, `Buche` 30°-Linien mit Strich-Voll-Wechsel; `#dw-hatch-legend` und `#dw-mat-hatch` (inkl. Undo) arbeiten korrekt (`t_a171_gewinde_und_materialschraffur`).
+- [x] **Profi-Trennung, PDF/DXF, Speichern/Laden, Hilfen & i18n**: Im Einfach-Modus verborgen; PDF (`%PDF-1.4`) und DXF (Layer `GEWINDE` mit `ARC` sowie `SCHRAFFUR`), `Store.validateProject`, `HELP.drawingNormThreads`/`HELP.drawingMaterialHatch`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a171_gewinde_und_materialschraffur`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe aus Aluminium-Platte (mit M6-Gewindebohrung und Zylinderschraube) und Kunststoff-Deckel schneiden, die Werkstoff-Legende prüfen und die Zeichnung als PDF und DXF öffnen.
+
+## Zeichnung: Explosionsansicht und Projektion umschalten (Auto [A-170], ZE-18, ZE-19)
+
+- [x] **Explosionsansicht auf dem Blatt (ZE-18)**: Baugruppe aus drei Teilen legt über `#dw-add-explode` eine Explosionsansicht mit deutlich größerer Bounding-Box als die normale Isometrie und gestrichelten Wegen-Linien (`.explode-trail`) an; Abstand (`130 %`) vergrößert den Versatz weiter, Wegen-Linien sind ein-/ausblendbar (`t_a170_zeichnung_explosion_projektion`).
+- [x] **Explosions-Schritte & Einfach-Modus**: Umschalten auf `steps` übernimmt eigene `Assembly.explodeSteps`-Verschiebungen; Explosionsansicht und Projektionswahl bleiben im Einfach-Modus sichtbar und bedienbar (`t_a170_zeichnung_explosion_projektion`).
+- [x] **Projektion Europa / USA (ZE-19)**: Standard `eu` (ISO E, Draufsicht unter und Seitenansicht rechts der Vorderansicht, Kegelstumpf links der Kreise) schaltet über `#dw-panel-projection` auf `us` (ISO A, Draufsicht über und Seitenansicht links der Vorderansicht, Kreise links des Kegelstumpfs, `ISO 5456-2 (A)`) samt Rückgängig/Wiederholen (`t_a170_zeichnung_explosion_projektion`).
+- [x] **Export, Speichern/Laden, Hilfen & I18n**: PDF (`%PDF-1.4`), DXF (`ISO 5456-2 (A)`, `MITTELLINIE`), `Store.validateProject`, `HELP.drawingExplode`/`HELP.drawingProjection`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a170_zeichnung_explosion_projektion`).
+- [ ] **Von Hand**: Im Browser in „Zeichnung“ eine Explosionsansicht schattiert anlegen, den Blickwinkel aus dem 3D-Modell übernehmen, Positionsnummern automatisch setzen und ein Blatt im Format USA (ISO A) als PDF exportieren.
+
+## Zeichnung: Maße aus dem Modell übernehmen (Auto [A-173], ZE-23)
+
+- [x] **Quader 40×30×20 ohne Überlappen**: Klick auf `#dw-model-dims` legt genau die drei Maße `40`, `30`, `20` assoziativ (`lostCount == 0`) auf dem Blatt an; weder DOM-`getBoundingClientRect()` noch `Drawing.dimTextBoxes()` melden Überlappungen; erneuter Klick über `#t-model-dims` verdoppelt keine Maße; `App.undo()` / `App.redo()` arbeiten sauber (`t_a173_zeichnung_modellmasse`).
+- [x] **Skizzen- und Schritt-Maße zusammen**: Rechteck-Skizze (`80 × 50`, `Ø12`, `Ø8`, `36`) mit `extrude` (`15`) und Aufsatz-Quader (`30 × 20 × 10`) platziert alle Skizzen- und Schritt-Maße in passenden Ansichten ohne jede Überlappung (`t_a173_zeichnung_modellmasse`).
+- [x] **Einfach-Modus & „Maße ordnen“**: Im Einfach-Modus sind `#t-model-dims`, `#dw-model-dims` und `#dw-arrange-dims` sichtbar und funktionsfähig; zwei gezielt übereinander gelegte Maße werden durch `#dw-arrange-dims` überlappungsfrei getrennt (`t_a173_zeichnung_modellmasse`).
+- [x] **Export, Validierung, Hilfen, I18n & Befehlssuche**: `Drawing.buildPDFBytes()`, `Drawing.buildDXF()`, `Store.validateProject()`, `HELP.drawingModelDims`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingModelDims`, `drawingArrangeDims`) laufen fehlerfrei (`t_a173_zeichnung_modellmasse`).
+- [ ] **Von Hand**: Im Browser in „Zeichnung“ an einem eigenen Mehrstufen-Teil mit Rundungen, Fasen und Bohrungen „Maße aus dem Modell“ testen und prüfen, ob alle Maße sauber lesbar außen am Bauteil sitzen.
+
+## Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (Auto [A-172], ZE-21, ZE-22)
+
+- [x] **Koordinatenmaße ab Ecke an 3 Löchern & Nachführung (ZE-21)**: Nullpunkt `(-40, -25)` und drei Bohrungen zeigen waagerecht `0`, `15`, `40`, `60` (mit Nullpunkt-Kreis) sowie senkrecht `0`, `20`, `30`, `35`; nach Ändern der Plattenbreite von `80` auf `90 mm` aktualisiert sich das Koordinatenmaß automatisch auf `0`, `20`, `45`, `65` (`t_a172_zeichnung_koord_bogen_doppel`).
+- [x] **Bogenlängen-Maß (ZE-21)**: Klicken auf eine R10-Eckenrundung erzeugt ein konzentrisches Bogenlängen-Maß mit Maßtext `⌒15,71` und zwei Bogenpfeilen (`t_a172_zeichnung_koord_bogen_doppel`).
+- [x] **Doppelmaße mm / Zoll (ZE-22)**: Einschalten von `#dw-style-dual` ergänzt alle Maße je Blatt um Zoll in eckigen Klammern – `25,4 [1.000]`, `⌒15,71 [0.618]`, `45 [1.772]` (Nullpunkt bleibt `0`); ein zweites Blatt ohne Doppelmaße beeinflusst Blatt 1 nicht (`t_a172_zeichnung_koord_bogen_doppel`).
+- [x] **Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus verborgen und gesperrt; PDF (`%PDF-1.4`) und DXF (`BEMASSUNG`, `ARC`), Rückgängig/Wiederholen, Speichern/Laden (`Store.validateProject`), `HELP.drawingOrdArc`/`HELP.drawingDualDims`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingDimOrdinate`, `drawingDimArcLen`, `drawingDualDims`) laufen fehlerfrei (`t_a172_zeichnung_koord_bogen_doppel`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ mehrere eng beieinander liegende Bohrungen ab einer Kante per Koordinatenmaß bemaßen, ein Bogenlängen-Maß nach innen und außen ziehen, Doppelmaße ein- und ausschalten und die PDF-Ausgabe prüfen.
+
+## Volltest-Reparatur (Auto [F-11251719])
+
+- [x] **Befehlssuche-Ranking bei Einzelwörtern (`58-commands.js`)**: `Commands.score()` (`matchBonus`) bevorzugt Treffer im Befehlsnamen, sodass bei der Suche nach „schraube“ auch mit gewählten Körpern `couple-screw` zusammen mit `auto-screws` und `lib-stdScrew` in den Top 6 erscheint (ebenso `couple-belt`, `couple-linear` und `mate-distance`, `t_f11251719`).
+- [x] **Tooltip-Scroll nach Panel-Neubau (`50-ui-core.js`)**: `UI.onScrollTip()` re-akquiriert ein unter der ruhenden Maus neu gerendertes Ziel (`#proj-print-cost`) vor einem verzögerten `scroll`-Event auf `#right-body` über `reacquireTipTarget()`, sodass der Tooltip planmäßig erscheint (`t_f11251719`).
+- [ ] **Von Hand**: Im Browser mit Strg/Cmd+K nach „schraube“ suchen und prüfen, ob „Kopplung: Schraube (Drehen → Vorschub)“ neben „Schrauben automatisch einsetzen“ unter den ersten Treffern steht, sowie im rechten Panel über mehrere Knöpfe ganz unten hovern.
 
 ## Zeichnung: unterbrochene Ansicht und Hilfsansicht (Auto [A-169], ZE-16, ZE-17)
 
