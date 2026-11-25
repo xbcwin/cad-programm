@@ -1,0 +1,128 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_halterung",
+  "name": "Winkel-Halterung",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [
+    { "id": "m_ha_l", "name": "Länge", "expr": 48 },
+    { "id": "m_ha_b", "name": "Breite", "expr": 34 },
+    { "id": "m_ha_t", "name": "Dicke", "expr": 4.5 }
+  ],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_ha_grp",
+      "kind": "group",
+      "name": "Winkel-Halterung",
+      "role": "solid",
+      "p": {},
+      "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#e8833a",
+      "mat": "Alu 6061",
+      "hidden": false,
+      "locked": false,
+      "finishes": [],
+      "children": [
+        {
+          "id": "i_ha_base",
+          "kind": "box",
+          "name": "Bodenplatte",
+          "role": "solid",
+          "p": { "w": "Länge", "d": "Breite", "h": "Dicke" },
+          "t": { "x": 0, "y": "Breite/2", "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#e8833a",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_ha_wall",
+          "kind": "box",
+          "name": "Rückwand",
+          "role": "solid",
+          "p": { "w": "Länge", "d": "Dicke", "h": "Breite" },
+          "t": { "x": 0, "y": "Dicke/2", "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#e8833a",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_ha_rib",
+          "kind": "wedge",
+          "name": "Versteifungsrippe",
+          "role": "solid",
+          "p": { "w": "Breite - Dicke", "d": "Dicke", "h": "Breite - Dicke" },
+          "t": { "x": 0, "y": "Breite/2 + Dicke/2", "z": "Dicke", "rx": 0, "ry": 0, "rz": 90 },
+          "color": "#e8833a",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_ha_h1",
+          "kind": "part",
+          "name": "Senkloch unten links",
+          "role": "hole",
+          "p": { "lib": "screwHole", "size": "M4", "head": "countersunk", "fit": "medium", "length": 12 },
+          "t": { "x": -14, "y": "Breite/2 + 5", "z": "Dicke", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_ha_h2",
+          "kind": "part",
+          "name": "Senkloch unten rechts",
+          "role": "hole",
+          "p": { "lib": "screwHole", "size": "M4", "head": "countersunk", "fit": "medium", "length": 12 },
+          "t": { "x": 14, "y": "Breite/2 + 5", "z": "Dicke", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_ha_h3",
+          "kind": "part",
+          "name": "Senkloch Wand links",
+          "role": "hole",
+          "p": { "lib": "screwHole", "size": "M4", "head": "countersunk", "fit": "medium", "length": 12 },
+          "t": { "x": -14, "y": "Dicke", "z": "Breite/2 + 5", "rx": -90, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_ha_h4",
+          "kind": "part",
+          "name": "Senkloch Wand rechts",
+          "role": "hole",
+          "p": { "lib": "screwHole", "size": "M4", "head": "countersunk", "fit": "medium", "length": 12 },
+          "t": { "x": 14, "y": "Dicke", "z": "Breite/2 + 5", "rx": -90, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "Alu 6061"
+  },
+  "drawing": null
+}

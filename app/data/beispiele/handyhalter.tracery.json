@@ -1,0 +1,87 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_handyhalter",
+  "name": "Handyhalter",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [
+    { "id": "m_hh_w", "name": "Breite", "expr": 75 }
+  ],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_hh_grp",
+      "kind": "group",
+      "name": "Handyhalter",
+      "role": "solid",
+      "p": {},
+      "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#8a6ad1",
+      "mat": "PLA",
+      "hidden": false,
+      "locked": false,
+      "finishes": [],
+      "children": [
+        {
+          "id": "i_hh_body",
+          "kind": "extrude",
+          "name": "Halter",
+          "role": "solid",
+          "p": {
+            "sketch": {
+              "plane": { "o": [0, 0, 0], "x": [0, 1, 0], "n": [1, 0, 0] },
+              "ents": [
+                { "id": "e_hh_1", "type": "line", "a": [-40, 0], "b": [40, 0] },
+                { "id": "e_hh_2", "type": "line", "a": [40, 0], "b": [40, 4] },
+                { "id": "e_hh_3", "type": "line", "a": [40, 4], "b": [28, 4] },
+                { "id": "e_hh_4", "type": "line", "a": [28, 4], "b": [8.737, 50] },
+                { "id": "e_hh_5", "type": "line", "a": [8.737, 50], "b": [21.072, 83.874] },
+                { "id": "e_hh_6", "type": "line", "a": [21.072, 83.874], "b": [17.072, 83.874] },
+                { "id": "e_hh_7", "type": "line", "a": [17.072, 83.874], "b": [-12, 4] },
+                { "id": "e_hh_8", "type": "line", "a": [-12, 4], "b": [-36, 4] },
+                { "id": "e_hh_9", "type": "line", "a": [-36, 4], "b": [-36, 16] },
+                { "id": "e_hh_10", "type": "line", "a": [-36, 16], "b": [-40, 16] },
+                { "id": "e_hh_11", "type": "line", "a": [-40, 16], "b": [-40, 0] }
+              ],
+              "dims": [],
+              "cons": []
+            },
+            "dist": "Breite",
+            "dir": "normal"
+          },
+          "t": { "x": "-Breite/2", "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#8a6ad1",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_hh_slot",
+          "kind": "box",
+          "name": "Kabelschlitz",
+          "role": "hole",
+          "p": { "w": 14, "d": 10, "h": 20 },
+          "t": { "x": 0, "y": -38, "z": 7, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "PLA"
+  },
+  "drawing": null
+}

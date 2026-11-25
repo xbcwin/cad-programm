@@ -1723,5 +1723,10 @@
     "tip": "Eck-Übergang bei drei abgerundeten Kanten an einer Ecke wählen: Kugel-Ecke oder weicher Übergang (Profi)",
     "hilfe": "Treffen drei abgerundete Kanten an einer Ecke zusammen, füllt „Kugel-Ecke“ die dreieckige Ecke direkt bündig zwischen den drei Rundungen. „Weicher Übergang“ zieht die Rundungen vor der Ecke etwas früher zurück und spannt ein größeres, sanft überlaufendes Eckfeld auf.",
     "tipp": "Funktioniert sowohl bei krümmungsglatten (G2) als auch bei klassisch runden Kanten."
+  },
+  "exampleGallery": {
+    "tip": "Beispiel-Galerie: fertige CAD-Projekte als eigene Kopie zum Ausprobieren öffnen",
+    "hilfe": "Hier findest du eine Sammlung fertiger Projekte – vom Handyhalter über Zahnräder und eine gedrehte Vase bis hin zur beweglichen Scharnier-Baugruppe und einer technischen Zeichnung. Ein Klick öffnet immer eine frische Kopie für dich, sodass du nach Lust und Laune ändern kannst.",
+    "tipp": "Schau bei den Beispielen in den Verlauf und unter „Maße“ – dort siehst du, wie andere Teile sauber und änderbar aufgebaut sind."
   }
 }

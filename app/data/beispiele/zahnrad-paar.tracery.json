@@ -1,0 +1,54 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_zahnrad_paar",
+  "name": "Zahnrad-Paar",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [
+    { "id": "m_zp_mod", "name": "Modul", "expr": 1.5 },
+    { "id": "m_zp_h", "name": "Dicke", "expr": 8 }
+  ],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_zp_g1",
+      "kind": "part",
+      "name": "Zahnrad 24Z",
+      "role": "solid",
+      "p": { "lib": "gear", "teeth": 24, "module": "Modul", "h": "Dicke", "bore": 6 },
+      "t": { "x": -12, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#5b9f55",
+      "mat": "PETG",
+      "hidden": false,
+      "locked": false,
+      "finishes": []
+    },
+    {
+      "id": "i_zp_g2",
+      "kind": "part",
+      "name": "Zahnrad 12Z",
+      "role": "solid",
+      "p": { "lib": "gear", "teeth": 12, "module": "Modul", "h": "Dicke", "bore": 6 },
+      "t": { "x": "-12 + (24+12)/2*Modul + 2*Modul + 4", "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#e2b53a",
+      "mat": "PETG",
+      "hidden": false,
+      "locked": false,
+      "finishes": []
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "PETG"
+  },
+  "drawing": null
+}

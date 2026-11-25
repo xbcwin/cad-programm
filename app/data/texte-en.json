@@ -3735,5 +3735,11 @@
   "panel.edges.filletCorner": "Corner blend",
   "panel.edges.cornerSphere": "Spherical corner",
   "panel.edges.cornerSmooth": "Smooth setback",
-  "panel.edges.cornerSmoothShort": "Smooth corner"
+  "panel.edges.cornerSmoothShort": "Smooth corner",
+  "start.examplesHeading": "Examples",
+  "start.examplesSub": "Ready-made projects to explore and customize – each click opens your own copy.",
+  "start.examplesLoading": "Loading examples …",
+  "start.examplesEmpty": "No examples found.",
+  "start.exampleLoaded": "Opened a copy of “{name}” – the original stays untouched.",
+  "start.exampleLoadError": "Could not load the example."
 }

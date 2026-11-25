@@ -1,0 +1,59 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_vase",
+  "name": "Vase",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_vase_rev",
+      "kind": "revolve",
+      "name": "Vase (Drehkörper)",
+      "role": "solid",
+      "p": {
+        "sketch": {
+          "plane": { "o": [0, 0, 0], "x": [1, 0, 0], "n": [0, -1, 0] },
+          "ents": [
+            { "id": "e_v_1", "type": "line", "a": [0, 0], "b": [20, 0] },
+            { "id": "e_v_2", "type": "arc", "a": [20, 0], "m": [29.5, 22], "b": [30, 40] },
+            { "id": "e_v_3", "type": "arc", "a": [30, 40], "m": [21, 58], "b": [17, 74] },
+            { "id": "e_v_4", "type": "arc", "a": [17, 74], "m": [18.5, 86], "b": [22, 95] },
+            { "id": "e_v_5", "type": "line", "a": [22, 95], "b": [19, 95] },
+            { "id": "e_v_6", "type": "arc", "a": [19, 95], "m": [15.5, 86], "b": [14, 74] },
+            { "id": "e_v_7", "type": "arc", "a": [14, 74], "m": [18, 58], "b": [27, 40] },
+            { "id": "e_v_8", "type": "arc", "a": [27, 40], "m": [26.5, 22], "b": [16, 4] },
+            { "id": "e_v_9", "type": "line", "a": [16, 4], "b": [0, 4] },
+            { "id": "e_v_10", "type": "line", "a": [0, 4], "b": [0, 0] }
+          ],
+          "dims": [],
+          "cons": []
+        },
+        "angle": 360,
+        "dir": "normal",
+        "axis": { "a": [0, 0], "b": [0, 1] }
+      },
+      "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#c9704b",
+      "mat": "PLA",
+      "hidden": false,
+      "locked": false,
+      "finishes": []
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "PLA"
+  },
+  "drawing": null
+}

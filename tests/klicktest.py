@@ -29260,6 +29260,248 @@ def t_a146_ecken_uebergaenge(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-149] Beispiel-Galerie, Schritt 1 (BE-34) ----------
+def t_a149_beispiel_galerie(p):
+    # 1. Startseite in Profi und Einfach zeigt >= 8 Beispiele mit lokalen Vorschaubildern
+    def check_cards():
+        for _ in range(30):
+            res = p.ev("""return (() => {
+              const sec = document.getElementById('start-examples');
+              if (!sec || !sec.offsetParent) return { ok: false, ready: false, n: 0 };
+              const cards = [...sec.querySelectorAll('.example-card')];
+              const items = cards.map((c) => {
+                const img = c.querySelector('.example-thumb img');
+                const src = img ? (img.getAttribute('src') || '') : '';
+                const title = (c.querySelector('b')?.textContent || '').trim();
+                const desc = (c.querySelector('span:last-of-type')?.textContent || '').trim();
+                return {
+                  id: c.dataset.exampleId || '',
+                  vis: !!c.offsetParent,
+                  srcOk: src.startsWith('data/beispiele/') && !/^https?:/i.test(src),
+                  imgOk: !!(img && img.complete && img.naturalWidth > 0),
+                  txtOk: title.length > 0 && desc.length > 0,
+                };
+              });
+              const ready = items.length >= 8 && items.every((x) => x.imgOk);
+              return {
+                ok: items.length >= 8 && items.every((x) => x.vis && x.srcOk && x.imgOk && x.txtOk),
+                ready,
+                n: items.length,
+                items,
+              };
+            })()""")
+            if res.get('ok'):
+                return res
+            p.wait(150)
+        return res
+
+    pro_res = check_cards()
+    p.ev("ViewPrefs.setLevel('simple'); Start.show()")
+    simple_res = check_cards()
+    p.ev("ViewPrefs.setLevel('pro'); Start.show()")
+    for _ in range(20):
+        if p.pg.locator('#start-examples .example-card').count() >= 8:
+            break
+        p.wait(150)
+    ok1 = bool(pro_res.get('ok') and simple_res.get('ok'))
+
+    # 2. Klick auf ein Beispiel oeffnet ein Projekt mit Koerpern ohne Fehler
+    p.pg.locator('#start-examples .example-card[data-example-id="handyhalter"]').click()
+    for _ in range(30):
+        if p.pg.locator('.start').count() == 0 and p.ev("return App.doc && App.doc.items.length > 0"):
+            break
+        p.wait(200)
+    warte_rechnen(p, 40)
+    st_hh = p.ev("""return (async () => {
+      const boxes = [...App.results.values()].map((r) => r && r.data && r.data.bbox).filter(Boolean);
+      const raw = await fetch('data/beispiele/handyhalter.tracery.json').then((r) => r.text());
+      return {
+        id: App.doc.id,
+        name: App.doc.name,
+        cnt: Model.countItems(App.doc),
+        params: JSON.stringify(App.doc.params || []),
+        errs: App.errors.length,
+        resCount: App.results.size,
+        boxesOk: boxes.length > 0 && boxes.every((b) => (b[3] - b[0]) > 0.1 && (b[4] - b[1]) > 0.1 && (b[5] - b[2]) > 0.1),
+        raw,
+      };
+    })()""")
+    ok2 = st_hh['errs'] == 0 and st_hh['resCount'] > 0 and st_hh['boxesOk'] and st_hh['cnt'] > 0
+
+    # 3. Aenderungen an der geoeffneten Kopie lassen Original und naechste Kopie unveraendert
+    p.ev("""App.change('Umbau', (d) => {
+      d.name = 'Mein Handyhalter Umbau';
+      if (d.params && d.params[0]) d.params[0].expr = 120;
+    });
+    Actions.addPrimitive('box', { p: { w: 12, d: 12, h: 12 } });""")
+    warte_rechnen(p, 25)
+    p.ev("App.autosave.flush(); Start.show()")
+    for _ in range(20):
+        if p.pg.locator('#start-examples .example-card').count() >= 8:
+            break
+        p.wait(150)
+    p.pg.locator('#start-examples .example-card[data-example-id="handyhalter"]').click()
+    for _ in range(30):
+        if p.pg.locator('.start').count() == 0 and p.ev("return App.doc && App.doc.id !== arg", st_hh['id']):
+            break
+        p.wait(200)
+    warte_rechnen(p, 40)
+    st_hh2 = p.ev("""return (async () => {
+      const raw = await fetch('data/beispiele/handyhalter.tracery.json').then((r) => r.text());
+      return {
+        id: App.doc.id,
+        name: App.doc.name,
+        cnt: Model.countItems(App.doc),
+        params: JSON.stringify(App.doc.params || []),
+        errs: App.errors.length,
+        raw,
+      };
+    })()""")
+    ok3 = (
+        st_hh2['id'] != st_hh['id']
+        and st_hh2['name'] == st_hh['name']
+        and st_hh2['cnt'] == st_hh['cnt']
+        and st_hh2['params'] == st_hh['params']
+        and st_hh2['errs'] == 0
+        and st_hh2['raw'] == st_hh['raw']
+    )
+
+    # 4. Alle uebrigen Beispiele (>= 8 insgesamt) laden mit Koerpern ohne Fehler, inkl. Baugruppe & Zeichnung
+    ex_ids = p.ev("return Start.examples.map(x => x.id)")
+    all_ok = len(ex_ids) >= 8
+    for eid in ex_ids:
+        if eid == 'handyhalter':
+            continue
+        p.ev("return Start.openExample(arg)", eid)
+        warte_rechnen(p, 45)
+        info = p.ev("""return (() => {
+          const boxes = [...App.results.values()].map((r) => r && r.data && r.data.bbox).filter(Boolean);
+          return {
+            errs: App.errors.length,
+            cnt: Model.countItems(App.doc),
+            resCount: App.results.size,
+            boxesOk: boxes.length > 0 && boxes.every((b) => (b[3] - b[0]) > 0.1 && (b[4] - b[1]) > 0.1 && (b[5] - b[2]) > 0.1),
+            isAsm: Model.isAssembly(App.doc),
+            joints: (App.doc.joints || []).length,
+            sheets: (App.doc.drawing && Array.isArray(App.doc.drawing.sheets)) ? App.doc.drawing.sheets.length : 0,
+          };
+        })()""")
+        cur_ok = info['errs'] == 0 and info['cnt'] > 0 and info['resCount'] > 0 and info['boxesOk']
+        if eid == 'baugruppe-scharnier':
+            cur_ok = cur_ok and info['isAsm'] is True and info['joints'] >= 1 and info['resCount'] >= 2
+        if eid == 'zeichnung':
+            cur_ok = cur_ok and info['sheets'] >= 1
+        if not cur_ok:
+            all_ok = False
+    ok4 = all_ok
+
+    # 5. Hilfetext, DE/EN-Schluesselgleichheit und EN-Ansicht
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then((r) => r.json()),
+        fetch('data/texte-de.json').then((r) => r.json()),
+        fetch('data/texte-en.json').then((r) => r.json()),
+      ]);
+      const helpOk = !!(h.exampleGallery && h.exampleGallery.tip && h.exampleGallery.hilfe && h.exampleGallery.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nEq = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      I18n.use('en');
+      Start.show();
+      const enHead = document.querySelector('#start-examples h2')?.textContent || '';
+      const enTitle = document.querySelector('#start-examples .example-card[data-example-id="handyhalter"] b')?.textContent || '';
+      I18n.use('de');
+      return { helpOk, i18nEq, enHead, enTitle };
+    })()""")
+    ok5 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('enHead') == 'Examples' and meta.get('enTitle') == 'Phone Stand' and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a150_dateiformat(p):
+    import re
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    doc_path = os.path.join(repo_root, 'docs', 'DATEIFORMAT.md')
+    if not os.path.isfile(doc_path):
+        return [False, False, False, False, False]
+    doc_txt = open(doc_path, encoding='utf-8').read()
+    examples = re.findall(r'```json\r?\n(.*?)\r?\n```', doc_txt, re.S)
+    ok1 = (
+        all(w in doc_txt for w in ('masswerk', 'version', 'items', 'params', 'settings', 'sketch', 'docType', 'validateProject', 'Version'))
+        and len(examples) >= 3
+    )
+
+    p.empty()
+
+    # 2. Alle Beispiel-Projekte aus DATEIFORMAT.md werden als gültig erkannt, Beispiel 1 öffnet & rechnet fehlerfrei
+    ex_res = p.ev("""
+      return arg.map(raw => {
+        const a = Store.validateProject(raw);
+        let b = null;
+        try { b = Store.validateProject(JSON.parse(raw)); } catch (_) {}
+        return { a, b };
+      });
+    """, examples)
+    ok2_val = len(ex_res) >= 3 and all(
+        r['a']['ok'] is True and len(r['a']['errors']) == 0 and len(r['a']['warnings']) == 0 and r['a']['version'] == 1
+        and r['b'] and r['b']['ok'] is True and len(r['b']['errors']) == 0
+        for r in ex_res
+    )
+    p.ev("Start.openBlob(new File([arg], 'beispiel.tracery.json', { type: 'application/json' }))", examples[0])
+    warte_rechnen(p, 40)
+    opened = p.ev("return { items: App.doc.items.length, errs: App.errors.length, res: App.results.size, name: App.doc.name };")
+    ok2 = ok2_val and opened['items'] >= 1 and opened['errs'] == 0 and opened['res'] >= 1
+
+    # 3. Echte erzeugte Projekte (Vorlage & Export-Payload) bestehen Store.validateProject
+    real_res = p.ev("""return (async () => {
+      const tpl = Templates.LIST[0].build();
+      const vTpl = Store.validateProject(tpl);
+      const payload = await Start.projectPayload();
+      const vPay = Store.validateProject(payload);
+      return { vTpl, vPay };
+    })();""")
+    ok3 = (
+        real_res['vTpl']['ok'] is True and len(real_res['vTpl']['errors']) == 0 and real_res['vTpl']['itemCount'] > 0
+        and real_res['vPay']['ok'] is True and len(real_res['vPay']['errors']) == 0 and real_res['vPay']['itemCount'] > 0
+    )
+
+    # 4. Kaputte Dateien geben deutsche Meldungen; neuere Version / unbekannte Schritt-Art nur Warnungen
+    bad_res = p.ev("""
+      const noFmt = Store.validateProject({ version: 1, id: 'p1', name: 'Test', items: [] });
+      const badFmt = Store.validateProject({ format: 'andere-app', version: 1, id: 'p1', name: 'Test', items: [] });
+      const noVer = Store.validateProject({ format: 'masswerk', id: 'p1', name: 'Test', items: [] });
+      const noItems = Store.validateProject({ format: 'masswerk', version: 1, id: 'p1', name: 'Test' });
+      const noIdName = Store.validateProject({ format: 'masswerk', version: 1, items: [] });
+      const badItem = Store.validateProject({
+        format: 'masswerk', version: 1, id: 'p1', name: 'Test',
+        items: [
+          { id: 'i1', name: 'OhneArt' },
+          { id: 'i1', kind: 'box', name: 'Doppelt' },
+        ],
+      });
+      const badJson = Store.validateProject('{kaputt');
+      const future = Store.validateProject({
+        format: 'masswerk', version: 99, id: 'p2', name: 'Zukunft',
+        items: [{ id: 'i_z', kind: 'zukunft', name: 'Neu' }],
+      });
+      return { noFmt, badFmt, noVer, noItems, noIdName, badItem, badJson, future };
+    """)
+    ok4 = (
+        bad_res['noFmt']['ok'] is False and 'Pflichtfeld' in bad_res['noFmt']['message'] and 'format' in bad_res['noFmt']['message']
+        and bad_res['badFmt']['ok'] is False and 'Ungültiges Format' in bad_res['badFmt']['message']
+        and bad_res['noVer']['ok'] is False and 'Pflichtfeld' in bad_res['noVer']['message'] and 'version' in bad_res['noVer']['message']
+        and bad_res['noItems']['ok'] is False and 'Pflichtfeld' in bad_res['noItems']['message'] and 'items' in bad_res['noItems']['message']
+        and bad_res['noIdName']['ok'] is False
+        and any('id' in e for e in bad_res['noIdName']['errors'])
+        and any('name' in e for e in bad_res['noIdName']['errors'])
+        and bad_res['badItem']['ok'] is False
+        and any('kind' in e for e in bad_res['badItem']['errors'])
+        and any('Doppelte' in e for e in bad_res['badItem']['errors'])
+        and bad_res['badJson']['ok'] is False and 'JSON' in bad_res['badJson']['message']
+        and bad_res['future']['ok'] is True and len(bad_res['future']['errors']) == 0 and len(bad_res['future']['warnings']) >= 2
+    )
+    ok5 = len(p.errs) == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -29519,6 +29761,8 @@ TESTS = [
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('[A-148] Trackpad-, Touch- und Stift-Gesten: Zoom, langes Drücken, Stift in Skizze & Einstellung aus (BE-21)', t_a148_gesten),
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
+    ('[A-149] Beispiel-Galerie: 8 lokale Beispiele mit Vorschaubild / Kopie öffnen / Original unverändert', t_a149_beispiel_galerie),
+    ('[A-150] Dateiformat offen beschreiben: DATEIFORMAT.md, Beispiel-Projekt gültig & kaputte Datei deutsch gemeldet (PL-12)', t_a150_dateiformat),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

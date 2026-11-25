@@ -2635,6 +2635,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfe, DE/EN, Befehlssuche & Erklärung**: `HELP.filletCorner` stimmt mit `werkzeug-hilfen.json` überein, `texte-de.json` und `texte-en.json` sind schlüsselgleich, `Commands.search('eckübergang')` findet `fillet-corner-smooth` und `Explain.local` nennt `weichem Eckübergang` (`t_a146_ecken_uebergaenge`).
 - [ ] **Von Hand**: Im Browser einen Würfel an drei zusammenlaufenden Kanten einer Ecke mit `r = 5 mm` und „Krümmungsglatt (G2)“ abrunden, zwischen „Kugel-Ecke“ und „Weicher Übergang“ umschalten und die Lichtreflexe an der Ecke im „Studio-Look“ vergleichen.
 
+## Beispiel-Galerie, Schritt 1 (Auto [A-149], BE-34)
+
+- [x] **8 lokale Beispiele mit Vorschaubildern in Einfach & Profi**: Auf der Startseite ist `#start-examples` sowohl in „Profi“ als auch in „Einfach“ sichtbar und listet mindestens 8 fertige Projekte (`app/data/beispiele/index.json`) mit geladenen lokalen SVG-Vorschaubildern (`data/beispiele/*.svg`), lokalisiert auf Deutsch und Englisch (`t_a149_beispiel_galerie`).
+- [x] **Klick öffnet eigene Kopie mit berechneten Körpern**: Klick auf „Handyhalter“ und Laden aller 8 Beispiele (`handyhalter`, `kiste-mit-deckel`, `zahnrad-paar`, `halterung`, `vase`, `schild`, `baugruppe-scharnier` als Baugruppe mit Gelenk, `zeichnung` mit DIN-A4-Zeichnung) erzeugen jeweils fehlerfreie 3D-Körper; Umbenennen/Ändern der Kopie lässt Originaldatei und nächste geöffnete Kopie unverändert (`t_a149_beispiel_galerie`).
+- [x] **Hilfe & DE/EN-Schlüssel**: `HELP.exampleGallery` und identische Schlüssel in `texte-de.json`/`texte-en.json` geprüft (`t_a149_beispiel_galerie`).
+- [ ] **Von Hand**: Im Browser in „Einfach“ und „Profi“ alle 8 Beispiele auf der Startseite durchsehen, „Vase“, „Baugruppe Scharnier“ (Gelenk bewegen) und „Lagerbock mit Zeichnung“ (Reiter „Zeichnung“ öffnen) anklicken und umbauen.
+
+## Dateiformat offen beschreiben (Auto [A-150], PL-12)
+
+- [x] **`docs/DATEIFORMAT.md` vollständig**: Beschreibt `.tracery.json`-Aufbau (`format: "masswerk"`, `version: 1`, `id`, `name`, `items`, `params`, `settings`, `sketch`, `docType`), Einheiten/Formeln, Versionen sowie `Store.validateProject` samt drei vollständigen JSON-Beispielen (`t_a150_dateiformat`).
+- [x] **Beispiele & echte Projekte gültig**: Alle drei Beispiel-Projekte aus `docs/DATEIFORMAT.md` (als JSON-Text und Objekt) sowie Vorlagen (`Templates.LIST[0].build()`) und `Start.projectPayload()` bestehen `Store.validateProject()` fehler- und warnungsfrei; Beispiel 1 („Schild mit Loch“) öffnet über `Start.openBlob` und rechnet fehlerfrei (`t_a150_dateiformat`).
+- [x] **Kaputte Dateien & Vorwärtskompatibilität**: Fehlendes oder falsches `format`, fehlendes `version`/`items`/`id`/`name`, fehlendes `kind`, doppelte Schritt-IDs und kaputtes JSON liefern klare deutsche Fehlermeldungen (`ok: false`), während eine neuere `version` oder unbekannte Schritt-Art nur Warnungen auslöst (`t_a150_dateiformat`).
+- [ ] **Von Hand**: `docs/DATEIFORMAT.md` einmal durchlesen, eines der Beispiele als `.tracery.json` speichern und per Drag-and-Drop in Tracery öffnen sowie in der Browser-Konsole `Store.validateProject(...)` mit einer eigenen leicht veränderten Datei ausprobieren.
+
 ## Fehler melden
 
 ```

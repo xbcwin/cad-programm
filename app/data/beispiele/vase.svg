@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3f5f8"/>
+      <stop offset="100%" stop-color="#dfe5ee"/>
+    </linearGradient>
+    <linearGradient id="vaseBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a85636"/>
+      <stop offset="35%" stop-color="#df8c68"/>
+      <stop offset="72%" stop-color="#c9704b"/>
+      <stop offset="100%" stop-color="#8c4226"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg)"/>
+  <ellipse cx="160" cy="170" rx="52" ry="12" fill="#1e293b" fill-opacity="0.12"/>
+  <!-- Vasen-Körper -->
+  <path d="M126,30 C134,54 134,68 118,90 C102,112 104,142 126,166 A34,9 0 0,0 194,166 C216,142 218,112 202,90 C186,68 186,54 194,30 Z" fill="url(#vaseBody)" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Öffnung oben -->
+  <ellipse cx="160" cy="30" rx="34" ry="10" fill="#e69e7e" stroke="#242933" stroke-width="1.6"/>
+  <ellipse cx="160" cy="30" rx="26" ry="7" fill="#6f321b" stroke="#242933" stroke-width="1.2"/>
+  <!-- Glanzlinie -->
+  <path d="M140,46 C145,66 144,78 130,98 C120,114 122,138 136,156" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="3" stroke-linecap="round"/>
+</svg>

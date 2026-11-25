@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3f5f8"/>
+      <stop offset="100%" stop-color="#dfe5ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg)"/>
+  <ellipse cx="122" cy="162" rx="64" ry="12" fill="#1e293b" fill-opacity="0.1"/>
+  <ellipse cx="222" cy="158" rx="40" ry="10" fill="#1e293b" fill-opacity="0.1"/>
+  <!-- Großes Zahnrad (24Z, grün) -->
+  <g transform="translate(122,100)" stroke="#242933" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M0,-58 L6,-58 L8,-49 A49,49 0 0,1 18,-46 L23,-53 L29,-50 L26,-41 A49,49 0 0,1 35,-34 L43,-38 L47,-32 L40,-25 A49,49 0 0,1 46,-15 L55,-17 L57,-10 L49,-6 A49,49 0 0,1 49,6 L57,10 L55,17 L46,15 A49,49 0 0,1 40,25 L47,32 L43,38 L35,34 A49,49 0 0,1 26,41 L29,50 L23,53 L18,46 A49,49 0 0,1 8,49 L6,58 L0,58 L-6,58 L-8,49 A49,49 0 0,1 -18,46 L-23,53 L-29,50 L-26,41 A49,49 0 0,1 -35,34 L-43,38 L-47,32 L-40,25 A49,49 0 0,1 -46,15 L-55,17 L-57,10 L-49,6 A49,49 0 0,1 -49,-6 L-57,-10 L-55,-17 L-46,-15 A49,49 0 0,1 -40,-25 L-47,-32 L-43,-38 L-35,-34 A49,49 0 0,1 -26,-41 L-29,-50 L-23,-53 L-18,-46 A49,49 0 0,1 -8,-49 L-6,-58 Z" fill="#5b9f55"/>
+    <circle cx="0" cy="0" r="36" fill="#70b46a"/>
+    <circle cx="0" cy="0" r="13" fill="#e6ecf4"/>
+  </g>
+  <!-- Kleines Zahnrad (12Z, gelb) -->
+  <g transform="translate(224,100)" stroke="#242933" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M-5,-36 L5,-36 L7,-27 A28,28 0 0,1 16,-22 L23,-28 L29,-22 L23,-15 A28,28 0 0,1 27,-6 L36,-4 L36,4 L27,6 A28,28 0 0,1 23,15 L29,22 L23,28 L16,22 A28,28 0 0,1 7,27 L5,36 L-5,36 L-7,27 A28,28 0 0,1 -16,22 L-23,28 L-29,22 L-23,15 A28,28 0 0,1 -27,6 L-36,4 L-36,-4 L-27,-6 A28,28 0 0,1 -23,-15 L-29,-22 L-23,-28 L-16,-22 A28,28 0 0,1 -7,-27 Z" fill="#e2b53a"/>
+    <circle cx="0" cy="0" r="19" fill="#edd06c"/>
+    <circle cx="0" cy="0" r="9" fill="#e6ecf4"/>
+  </g>
+</svg>

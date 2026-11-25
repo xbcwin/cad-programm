@@ -3735,5 +3735,11 @@
   "panel.edges.filletCorner": "Eck-Übergang",
   "panel.edges.cornerSphere": "Kugel-Ecke",
   "panel.edges.cornerSmooth": "Weicher Übergang",
-  "panel.edges.cornerSmoothShort": "Weiche Ecke"
+  "panel.edges.cornerSmoothShort": "Weiche Ecke",
+  "start.examplesHeading": "Beispiele",
+  "start.examplesSub": "Fertige Projekte zum Ausprobieren und Umbauen – jeder Klick öffnet eine eigene Kopie.",
+  "start.examplesLoading": "Beispiele werden geladen …",
+  "start.examplesEmpty": "Keine Beispiele gefunden.",
+  "start.exampleLoaded": "Beispiel „{name}“ als Kopie geöffnet – das Original bleibt unverändert.",
+  "start.exampleLoadError": "Das Beispiel konnte nicht geladen werden."
 }

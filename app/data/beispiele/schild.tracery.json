@@ -1,0 +1,110 @@
+{
+  "format": "masswerk",
+  "version": 1,
+  "docType": "part",
+  "id": "ex_schild",
+  "name": "Schild",
+  "created": 1764060000000,
+  "modified": 1764060000000,
+  "params": [
+    { "id": "m_sc_l", "name": "Länge", "expr": 100 },
+    { "id": "m_sc_b", "name": "Breite", "expr": 38 },
+    { "id": "m_sc_d", "name": "Dicke", "expr": 3 }
+  ],
+  "tables": [],
+  "items": [
+    {
+      "id": "i_sc_grp",
+      "kind": "group",
+      "name": "Schild",
+      "role": "solid",
+      "p": {},
+      "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+      "color": "#3f7fd6",
+      "mat": "PLA",
+      "hidden": false,
+      "locked": false,
+      "finishes": [],
+      "children": [
+        {
+          "id": "i_sc_plate",
+          "kind": "box",
+          "name": "Grundplatte",
+          "role": "solid",
+          "p": { "w": "Länge", "d": "Breite", "h": "Dicke" },
+          "t": { "x": 0, "y": 0, "z": 0, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#3f7fd6",
+          "hidden": false,
+          "locked": false,
+          "finishes": [
+            { "id": "f_sc_1", "type": "fillet", "r": 6, "edges": "vertical" }
+          ]
+        },
+        {
+          "id": "i_sc_rim_out",
+          "kind": "box",
+          "name": "Rand außen",
+          "role": "solid",
+          "p": { "w": "Länge", "d": "Breite", "h": 1.5 },
+          "t": { "x": 0, "y": 0, "z": "Dicke", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#3f7fd6",
+          "hidden": false,
+          "locked": false,
+          "finishes": [
+            { "id": "f_sc_2", "type": "fillet", "r": 6, "edges": "vertical" }
+          ]
+        },
+        {
+          "id": "i_sc_rim_in",
+          "kind": "box",
+          "name": "Innenfeld",
+          "role": "hole",
+          "p": { "w": "Länge - 6", "d": "Breite - 6", "h": 2.5 },
+          "t": { "x": 0, "y": 0, "z": "Dicke - 0.5", "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": [
+            { "id": "f_sc_3", "type": "fillet", "r": 3, "edges": "vertical" }
+          ]
+        },
+        {
+          "id": "i_sc_hole_l",
+          "kind": "cylinder",
+          "name": "Loch links",
+          "role": "hole",
+          "p": { "d": 4.5, "h": 12 },
+          "t": { "x": "-(Länge/2 - 8)", "y": 0, "z": -2, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        },
+        {
+          "id": "i_sc_hole_r",
+          "kind": "cylinder",
+          "name": "Loch rechts",
+          "role": "hole",
+          "p": { "d": 4.5, "h": 12 },
+          "t": { "x": "Länge/2 - 8", "y": 0, "z": -2, "rx": 0, "ry": 0, "rz": 0 },
+          "color": "#d6574c",
+          "hidden": false,
+          "locked": false,
+          "finishes": []
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "blocks": [],
+  "settings": {
+    "printer": "std",
+    "custom": { "x": 220, "y": 220, "z": 250 },
+    "printBed": { "enabled": false, "x": 220, "y": 220, "z": 250, "nozzle": 0.4 },
+    "grid": 1,
+    "snap": true,
+    "unit": "mm",
+    "material": "PLA"
+  },
+  "drawing": null
+}

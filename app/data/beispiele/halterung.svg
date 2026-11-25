@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3f5f8"/>
+      <stop offset="100%" stop-color="#dfe5ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg)"/>
+  <ellipse cx="160" cy="158" rx="92" ry="18" fill="#1e293b" fill-opacity="0.1"/>
+  <!-- Rückwand -->
+  <polygon points="72,118 176,82 176,26 72,62" fill="#e8833a" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="72,62 84,58 188,22 176,26" fill="#f5aa74" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="176,26 188,22 188,78 176,82" fill="#c76926" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Bodenplatte -->
+  <polygon points="72,118 176,82 254,114 150,150" fill="#f19a5d" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="72,118 150,150 150,162 72,130" fill="#dc7830" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="254,114 150,150 150,162 254,126" fill="#b95f1e" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Versteifungsrippe -->
+  <polygon points="124,99 124,46 192,126" fill="#cf6e28" stroke="#242933" stroke-width="1.6" stroke-linejoin="round"/>
+  <polygon points="124,46 132,43 200,123 192,126" fill="#f4aa74" stroke="#242933" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Senklöcher -->
+  <ellipse cx="104" cy="78" rx="4.5" ry="7" fill="#3a4350" stroke="#242933" stroke-width="1.2"/>
+  <ellipse cx="152" cy="61" rx="4.5" ry="7" fill="#3a4350" stroke="#242933" stroke-width="1.2"/>
+  <ellipse cx="144" cy="128" rx="8" ry="4.5" fill="#3a4350" stroke="#242933" stroke-width="1.2"/>
+  <ellipse cx="206" cy="107" rx="8" ry="4.5" fill="#3a4350" stroke="#242933" stroke-width="1.2"/>
+</svg>
