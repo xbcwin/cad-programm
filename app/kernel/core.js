@@ -260,6 +260,16 @@ export function createKernel(R, oc) {
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m = matMul(m, matRotAxis(p0, ax, Number(q.a)));
         out.push(m);
       }
+    } else if ((p.pt === 'points' || p.pt === 'table') && Array.isArray(p.places)) {
+      const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
+      const lim = Math.min(p.places.length, 200);
+      for (let k = 0; k < lim; k++) {
+        if (skipSet.has(k)) continue;
+        const q = p.places[k], d = (q.d || [0, 0, 0]).map(Number);
+        let m = matTrans(d[0], d[1], d[2]);
+        if (Math.abs(Number(q.a) || 0) > 1e-9) m = matMul(m, matRotAxis(p0, ax, Number(q.a)));
+        out.push(m);
+      }
     }
     return out.length ? out : [ID];
   }
@@ -5815,6 +5825,18 @@ export function createKernel(R, oc) {
         if (Math.hypot(d[0], d[1], d[2]) > 1e-9) c = c.translate(d);
         copies.push(c);
       }
+    } else if ((p.pt === 'points' || p.pt === 'table') && Array.isArray(p.places)) {
+      const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
+      const lim = Math.min(p.places.length, 200);
+      for (let k = 0; k < lim; k++) {
+        if (skipSet.has(k)) continue;
+        const q = p.places[k];
+        let c = base.clone();
+        if (Math.abs(Number(q.a) || 0) > 1e-9) c = c.rotate(Number(q.a), p0, ax);
+        const d = (q.d || [0, 0, 0]).map(Number);
+        if (Math.hypot(d[0], d[1], d[2]) > 1e-9) c = c.translate(d);
+        copies.push(c);
+      }
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
       copies.push(base);
       const mn = p.mn.map(Number); let mo = p.mo.map(Number);
@@ -5979,7 +6001,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -7531,6 +7553,183 @@ export function createKernel(R, oc) {
         return { tool };
       } catch (err) {
         for (const s of finSolids) safeDelete(s);
+        throw err;
+      }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function buildFillPatternOn(baseShape, p, topo = null, tid = null) {
+    const kind = p.kind === 'staggered' || p.kind === 'hex' ? p.kind : 'grid';
+    const size = num(p.size, 5);
+    if (!(size >= 0.2)) throw new Error('Füllmuster: Die Lochgröße muss mindestens 0,2 mm sein.');
+    const pitch = num(p.pitch, 8);
+    if (!(pitch > size + 0.05)) throw new Error('Füllmuster: Der Abstand muss größer als die Lochgröße sein, sonst überlappen sich die Löcher.');
+    const margin = Math.max(0, num(p.margin, 4));
+    const effMargin = Math.max(margin, 0.05);
+    const angle = num(p.angle, 0);
+    const depth = Math.max(0, num(p.depth, 0));
+    const maxHoles = 300;
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Füllmuster: Wähle eine ebene Körperfläche.');
+      const F = planarFaceFrame(f);
+      const { outer, holes } = sampleFaceLoops2D(f, F);
+      if (outer.length < 3) throw new Error('Füllmuster: Die gewählte Fläche hat keinen gültigen Umriss.');
+      const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+      const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+      const Muv = {
+        o: F.o, x: U, y: V, n: F.n,
+        P: (uv) => [F.o[0] + U[0] * uv[0] + V[0] * uv[1], F.o[1] + U[1] * uv[0] + V[1] * uv[1], F.o[2] + U[2] * uv[0] + V[2] * uv[1]],
+      };
+      const outerRot = rotatePoly2D(outer, cosA, sinA);
+      const holesRot = holes.map((h) => rotatePoly2D(h, cosA, sinA));
+      const rings = [outerRot, ...holesRot];
+
+      const pointInPoly2D = (pt, poly) => {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+          if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+      };
+      const pointInRegion = (pt) => pointInPoly2D(pt, outerRot) && !holesRot.some((h) => pointInPoly2D(pt, h));
+      const distPtSeg2D = (pt, a, b) => {
+        const vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy;
+        if (l2 <= 1e-12) return Math.hypot(pt[0] - a[0], pt[1] - a[1]);
+        const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * vx + (pt[1] - a[1]) * vy) / l2));
+        return Math.hypot(pt[0] - (a[0] + t * vx), pt[1] - (a[1] + t * vy));
+      };
+      const distToRings = (pt) => {
+        let dm = Infinity;
+        for (const ring of rings) {
+          for (let i = 0; i < ring.length; i++) dm = Math.min(dm, distPtSeg2D(pt, ring[i], ring[(i + 1) % ring.length]));
+        }
+        return dm;
+      };
+      const segsIntersect2D = (a, b, c, d) => {
+        if (Math.max(a[0], b[0]) < Math.min(c[0], d[0]) - 1e-9 || Math.max(c[0], d[0]) < Math.min(a[0], b[0]) - 1e-9) return false;
+        if (Math.max(a[1], b[1]) < Math.min(c[1], d[1]) - 1e-9 || Math.max(c[1], d[1]) < Math.min(a[1], b[1]) - 1e-9) return false;
+        const ccw = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+        const d1 = ccw(c, d, a), d2 = ccw(c, d, b), d3 = ccw(a, b, c), d4 = ccw(a, b, d);
+        if (((d1 > 1e-9 && d2 < -1e-9) || (d1 < -1e-9 && d2 > 1e-9)) && ((d3 > 1e-9 && d4 < -1e-9) || (d3 < -1e-9 && d4 > 1e-9))) return true;
+        const onSeg = (p, q, r) => Math.abs(ccw(p, q, r)) <= 1e-9 && r[0] >= Math.min(p[0], q[0]) - 1e-9 && r[0] <= Math.max(p[0], q[0]) + 1e-9 && r[1] >= Math.min(p[1], q[1]) - 1e-9 && r[1] <= Math.max(p[1], q[1]) + 1e-9;
+        return onSeg(c, d, a) || onSeg(c, d, b) || onSeg(a, b, c) || onSeg(a, b, d);
+      };
+      const segSegDist2D = (a, b, c, d) => (segsIntersect2D(a, b, c, d) ? 0 : Math.min(distPtSeg2D(a, c, d), distPtSeg2D(b, c, d), distPtSeg2D(c, a, b), distPtSeg2D(d, a, b)));
+
+      const isHex = kind === 'hex', isStag = kind === 'staggered' || isHex;
+      const rIn = size / 2, rOut = isHex ? size / Math.sqrt(3) : size / 2;
+      const dx = pitch, dy = isStag ? (pitch * Math.sqrt(3)) / 2 : pitch;
+
+      const hexVerts = (c) => {
+        const vs = [];
+        for (let k = 0; k < 6; k++) {
+          const t = Math.PI / 2 + (k * Math.PI) / 3;
+          vs.push([c[0] + Math.cos(t) * rOut, c[1] + Math.sin(t) * rOut]);
+        }
+        return vs;
+      };
+      const fitsCircle = (c) => pointInRegion(c) && distToRings(c) >= rOut + effMargin - 1e-6;
+      const fitsHex = (c) => {
+        if (!pointInRegion(c)) return false;
+        const dC = distToRings(c);
+        if (dC < rIn + effMargin - 1e-6) return false;
+        const verts = hexVerts(c);
+        if (holesRot.some((h) => h.length && pointInPoly2D(h[0], verts))) return false;
+        if (dC >= rOut + effMargin - 1e-6) return true;
+        for (const v of verts) if (!pointInRegion(v)) return false;
+        const pad = effMargin + 1e-4;
+        const hx0 = c[0] - rIn - pad, hx1 = c[0] + rIn + pad, hy0 = c[1] - rOut - pad, hy1 = c[1] + rOut + pad;
+        for (const ring of rings) {
+          for (let i = 0; i < ring.length; i++) {
+            const a = ring[i], b = ring[(i + 1) % ring.length];
+            if (Math.max(a[0], b[0]) < hx0 || Math.min(a[0], b[0]) > hx1 || Math.max(a[1], b[1]) < hy0 || Math.min(a[1], b[1]) > hy1) continue;
+            for (let k = 0; k < 6; k++) {
+              if (segSegDist2D(verts[k], verts[(k + 1) % 6], a, b) < effMargin - 1e-6) return false;
+            }
+          }
+        }
+        return true;
+      };
+
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of outerRot) {
+        if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0];
+        if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1];
+      }
+      const W = x1 - x0, H = y1 - y0, midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
+      const availW = W - 2 * effMargin - 2 * rIn;
+      const availH = H - 2 * effMargin - 2 * rOut;
+      if (availW < -1e-6 || availH < -1e-6) {
+        throw new Error('Füllmuster: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Löcher.');
+      }
+      const ny = Math.floor(availH / dy + 1e-6) + 1;
+      const nxMax = Math.floor(availW / dx + 1e-6) + 1;
+      const centers = [];
+      let truncated = false;
+      if (!isStag) {
+        for (let j = 0; j < ny && !truncated; j++) {
+          const y = midY + (j - (ny - 1) / 2) * dy;
+          for (let i = 0; i < nxMax; i++) {
+            const x = midX + (i - (nxMax - 1) / 2) * dx;
+            if (fitsCircle([x, y])) {
+              centers.push([x, y]);
+              if (centers.length >= maxHoles) { truncated = true; break; }
+            }
+          }
+        }
+      } else {
+        const baseShift = nxMax % 2 === 0 ? 0.5 : 0;
+        for (let j = 0; j < ny && !truncated; j++) {
+          const y = midY + (j - (ny - 1) / 2) * dy;
+          const shift = j % 2 === 0 ? baseShift : (baseShift ? 0 : 0.5);
+          const kMin = Math.floor((x0 + effMargin + rIn - midX) / dx - shift) - 1;
+          const kMax = Math.ceil((x1 - effMargin - rIn - midX) / dx - shift) + 1;
+          for (let k = kMin; k <= kMax; k++) {
+            const x = midX + (k + shift) * dx;
+            if (x < x0 + effMargin + rIn - 1e-5 || x > x1 - effMargin - rIn + 1e-5) continue;
+            const pt = [x, y];
+            if (isHex ? fitsHex(pt) : fitsCircle(pt)) {
+              centers.push(pt);
+              if (centers.length >= maxHoles) { truncated = true; break; }
+            }
+          }
+        }
+      }
+      if (!centers.length) {
+        throw new Error('Füllmuster: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Löcher.');
+      }
+
+      const bb = bboxOf(baseShape);
+      let sMax = 0;
+      for (const q of cornersOf(bb)) sMax = Math.max(sMax, dot(sub(q, F.o), mul(F.n, -1)));
+      const Hcut = depth > 1e-4 ? depth : probeWallDepth(baseShape, Muv, centers.slice(0, 3).map((c) => ({ uA: c[0] - 0.2, uB: c[0] + 0.2, v: c[1] })), Math.max(1, sMax));
+
+      const holeSolids = [];
+      try {
+        for (const c of centers) {
+          let fc;
+          if (!isHex) {
+            fc = regionFace({ outer: { circle: { c, r: rOut } }, holes: [] }, Muv);
+          } else {
+            const vs = hexVerts(c);
+            const segs = [];
+            for (let k = 0; k < 6; k++) segs.push({ t: 'line', a: vs[k], b: vs[(k + 1) % 6] });
+            fc = regionFace({ outer: { segs }, holes: [] }, Muv);
+          }
+          const fcTop = fc.translate(mul(F.n, 0.05));
+          safeDelete(fc);
+          const sol = R.basicFaceExtrusion(fcTop, new R.Vector(mul(F.n, -(Hcut + 0.05))));
+          safeDelete(fcTop);
+          holeSolids.push(sol);
+        }
+        const tool = holeSolids.length === 1 ? holeSolids[0] : R.makeCompound(holeSolids);
+        return { tool, count: centers.length, kind };
+      } catch (err) {
+        for (const s of holeSolids) safeDelete(s);
         throw err;
       }
     } finally {
@@ -9582,6 +9781,55 @@ export function createKernel(R, oc) {
           }
         }
         if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType: isVent ? 'cut' : 'join', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'fillPattern') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Füllmuster: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Füllmuster: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, 'fillPattern', p]);
+        const kTool = keyOf([src.key, 'fillPatternTool', p]);
+        const ce = cacheEntry(k);
+        let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+        let resMeta = ce ? ce.resolved : null;
+        let tool = anyMirror ? cacheGet(kTool) : null;
+        if (!next || (anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildFillPatternOn(src.shape, p, src.topo, src.it.id);
+            tool = built.tool;
+            resMeta = { count: built.count, kind: built.kind };
+            if (!next) {
+              const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
+              const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Fp:' + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(toolTopo);
+              cachePut(k, next, null, resMeta, null, nextTopo);
+            }
+            if (anyMirror) cachePut(kTool, tool);
+            else safeDelete(tool);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (resolved && resMeta) resolved[it.id] = resMeta;
+        if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType: 'cut', tools: [{ shape: tool, m: src.m, key: kTool }] });
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         if (track && track.stepKeys) track.stepKeys.set(it.id, k);

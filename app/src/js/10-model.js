@@ -34,6 +34,7 @@ const KINDS = {
   rib: { get label() { return T('kind.rib'); }, params: [] },
   vent: { get label() { return T('kind.vent'); }, params: [] },
   fins: { get label() { return T('kind.fins'); }, params: [] },
+  fillPattern: { get label() { return T('kind.fillPattern'); }, params: [] },
   web: { get label() { return T('kind.web'); }, params: [] },
   wrap: { get label() { return T('kind.wrap'); }, params: [] },
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
@@ -159,7 +160,7 @@ const Model = (() => {
   function patternInstances(g, V) {
     const I = new THREE.Matrix4();
     if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, matrix: I, skipped: false, label: '1' }];
-    const p = g.p.pt === 'path' ? pathPatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
+    const p = g.p.pt === 'path' ? pathPatternParams(g, V) : g.p.pt === 'points' ? pointsPatternParams(g, V) : g.p.pt === 'table' ? tablePatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
     const skipSet = new Set(Array.isArray(g.p.skip) ? g.p.skip.map((x) => Math.round(Number(x))) : []);
     const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
     const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
@@ -186,6 +187,14 @@ const Model = (() => {
         if (k === 0) { out.push({ idx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
         const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
+        out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
+      });
+    } else if (p.pt === 'points' || p.pt === 'table') {
+      const places = (p.places || []).slice(0, 200);
+      if (!places.length) out.push({ idx: 0, matrix: I, skipped: false, label: '1' });
+      else places.forEach((q, k) => {
+        const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
+        if (Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0 || [0, 0, 0], p.n || [0, 0, 1], Number(q.a)));
         out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
       });
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
@@ -420,6 +429,8 @@ const Model = (() => {
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.kind === 'vent' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Lüftungsgitter in' });
       if (it.kind === 'fins' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kühlrippen auf' });
+      if (it.kind === 'fillPattern' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Füllmuster in' });
+      if (it.kind === 'group' && it.p && it.p.op === 'pattern' && it.p.pt === 'points' && it.p.sourceId) out.push({ from: me, to: top(it.p.sourceId), what: 'Muster an Punkten von' });
       if (it.kind === 'web' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Steg-Netz an' });
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
       if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
@@ -579,7 +590,9 @@ const Model = (() => {
         let kids = it.children || [];
         if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
         o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, ownV));
-        if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, ownV) : resolveP(it.p, ownV);
+        if (it.p && it.p.op) o.p = it.p.op === 'pattern'
+          ? (it.p.pt === 'path' ? pathPatternParams(it, ownV) : it.p.pt === 'points' ? pointsPatternParams(it, ownV) : it.p.pt === 'table' ? tablePatternParams(it, ownV) : resolveP(it.p, ownV))
+          : resolveP(it.p, ownV);
         if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
       }
       else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, ownV);
@@ -589,6 +602,7 @@ const Model = (() => {
       else if (it.kind === 'rib') o.p = ribParams(it, ownV);
       else if (it.kind === 'vent') o.p = ventParams(it, ownV);
       else if (it.kind === 'fins') o.p = finsParams(it, ownV);
+      else if (it.kind === 'fillPattern') o.p = fillPatternParams(it, ownV);
       else if (it.kind === 'web') o.p = webParams(it, ownV);
       else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
@@ -878,6 +892,19 @@ const Model = (() => {
       draft: Math.max(0, num(p.draft, V, 0)),
     };
   }
+  function fillPatternParams(it, V) {
+    const p = it.p || {};
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      kind: p.kind === 'staggered' || p.kind === 'hex' ? p.kind : 'grid',
+      size: Math.max(0.2, num(p.size, V, 5)),
+      pitch: Math.max(0.3, num(p.pitch, V, 8)),
+      margin: Math.max(0, num(p.margin, V, 4)),
+      angle: num(p.angle, V, 0),
+      depth: Math.max(0, num(p.depth, V, 0)),
+    };
+  }
   function webParams(it, V) {
     const p = it.p || {};
     let skForSolve = p.sketch;
@@ -1101,6 +1128,179 @@ const Model = (() => {
     }
     const o = pl.o, w0 = W(P0.p[0], P0.p[1]);
     out.p0 = [o[0] + w0[0], o[1] + w0[1], o[2] + w0[2]]; out.n = n.slice();
+    return out;
+  }
+  function splitPatternCsvLine(line, sep) {
+    if (sep === 'ws') return line.trim().split(/\s+/);
+    const out = []; let cur = '', qq = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (qq) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') qq = false;
+        else cur += ch;
+      } else if (ch === '"') qq = true;
+      else if (ch === sep) { out.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  function parsePatternCSV(text, V = {}) {
+    const lines = String(text ?? '').replace(/^\ufeff/, '').split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'));
+    if (!lines.length) return { ok: false, rows: [], skipped: 0, header: false, error: 'Die Tabelle enthält keine Zeilen.' };
+    const evalCell = (raw, sep) => {
+      const s = String(raw ?? '').trim();
+      if (!s) return NaN;
+      const norm = sep === ',' ? s : s.replace(/(\d),(\d)/g, '$1.$2');
+      const p = parseNum(s);
+      if (sep !== ',' && !isNaN(p)) return p;
+      const nDirect = Number(norm);
+      if (isFinite(nDirect)) return nDirect;
+      return num(s, V, NaN);
+    };
+    let sep = 'ws';
+    if (lines.some((l) => l.includes(';'))) sep = ';';
+    else if (lines.some((l) => l.includes('\t'))) sep = '\t';
+    else if (lines.some((l) => l.includes(','))) {
+      const testLine = lines[lines.length - 1];
+      const byComma = splitPatternCsvLine(testLine, ',');
+      if (byComma.length >= 2 && byComma.slice(0, 2).every((c) => isFinite(evalCell(c, ',')))) sep = ',';
+      else if (/\s+/.test(testLine)) sep = 'ws';
+      else sep = ',';
+    }
+    const firstCells = splitPatternCsvLine(lines[0], sep);
+    const hasHeader = firstCells.length < 2 || !isFinite(evalCell(firstCells[0], sep)) || !isFinite(evalCell(firstCells[1], sep));
+    let colX = 0, colY = 1, colZ = -1, colRot = -1;
+    if (hasHeader) {
+      const lower = firstCells.map((c) => c.trim().toLowerCase());
+      const findCol = (names) => lower.findIndex((c) => names.includes(c));
+      const ix = findCol(['x', 'dx', 'pos_x', 'posx']);
+      const iy = findCol(['y', 'dy', 'pos_y', 'posy']);
+      const iz = findCol(['z', 'dz', 'pos_z', 'posz']);
+      const ir = findCol(['rot', 'rz', 'angle', 'winkel', 'deg', 'grad', 'a']);
+      if (ix >= 0 && iy >= 0 && ix !== iy) {
+        colX = ix; colY = iy; colZ = iz; colRot = ir;
+      } else if (firstCells.length >= 3 && /^(id|nr|no|index|name|punkt|point|#)$/i.test(firstCells[0].trim())) {
+        colX = 1; colY = 2;
+        if (firstCells.length >= 4) colZ = 3;
+        if (firstCells.length >= 5) colRot = 4;
+      } else {
+        if (firstCells.length >= 3) colZ = 2;
+        if (firstCells.length >= 4) colRot = 3;
+      }
+    } else {
+      if (firstCells.length >= 3) colZ = 2;
+      if (firstCells.length >= 4) colRot = 3;
+    }
+    const startIdx = hasHeader ? 1 : 0;
+    const rows = []; let skipped = 0;
+    for (let i = startIdx; i < lines.length; i++) {
+      const cells = splitPatternCsvLine(lines[i], sep);
+      if (cells.length <= Math.max(colX, colY)) { skipped++; continue; }
+      const x = evalCell(cells[colX], sep), y = evalCell(cells[colY], sep);
+      if (!isFinite(x) || !isFinite(y)) { skipped++; continue; }
+      let z = 0, hasZ = false;
+      if (colZ >= 0 && colZ < cells.length && String(cells[colZ]).trim() !== '') {
+        const zv = evalCell(cells[colZ], sep);
+        if (isFinite(zv)) { z = zv; hasZ = true; }
+      }
+      let rot = 0;
+      if (colRot >= 0 && colRot < cells.length && String(cells[colRot]).trim() !== '') {
+        const rv = evalCell(cells[colRot], sep);
+        if (isFinite(rv)) rot = rv;
+      }
+      rows.push({ x, y, z, rot, hasZ });
+      if (rows.length >= 200) break;
+    }
+    if (!rows.length) return { ok: false, rows: [], skipped, header: hasHeader, error: 'Mindestens eine gültige Zeile mit X und Y erforderlich.' };
+    return { ok: true, rows, skipped, header: hasHeader, error: null };
+  }
+  function patternBaseCenter(it, V) {
+    const ownV = scopeItemVars(V, it);
+    const box = new THREE.Box3();
+    for (const c of (it && it.children) || []) {
+      if (!c || c.suppressed) continue;
+      const lb = itemLocalBox(c, ownV);
+      if (!lb) continue;
+      box.union(new THREE.Box3(new THREE.Vector3(lb[0], lb[1], lb[2]), new THREE.Vector3(lb[3], lb[4], lb[5])).applyMatrix4(localMatrix(c, new THREE.Matrix4())));
+    }
+    if (!box.isEmpty()) {
+      const c = box.getCenter(new THREE.Vector3());
+      return [c.x, c.y, c.z];
+    }
+    if (it && it.p && Array.isArray(it.p.ref) && it.p.ref.length >= 3) return it.p.ref.slice(0, 3).map((v) => Number(v) || 0);
+    return [0, 0, 0];
+  }
+  function pointsPatternParams(it, V) {
+    const p = it.p || {}, out = { op: 'pattern', pt: 'points', places: [], n: [0, 0, 1], p0: [0, 0, 0] };
+    if (Array.isArray(p.skip) && p.skip.length) out.skip = p.skip.slice();
+    const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+    let sk = p.sketch || null;
+    let toLocal = new THREE.Matrix4();
+    if (p.sourceId && doc) {
+      const src = find(doc, p.sourceId);
+      if (src && src.item && src.item.p && src.item.p.sketch) {
+        sk = src.item.p.sketch;
+        const fIt = find(doc, it.id);
+        const wIt = fIt ? worldMatrix(doc, it.id) : new THREE.Matrix4();
+        const wSrc = worldMatrix(doc, src.item.id);
+        toLocal = wIt.clone().invert().multiply(wSrc);
+      } else sk = null;
+    }
+    if (!sk || !sk.plane) return out;
+    let skForSolve = sk;
+    if (Array.isArray(skForSolve.blockInsts) && skForSolve.blockInsts.length && doc && Array.isArray(doc.blocks)) {
+      skForSolve = { ...skForSolve, ents: (skForSolve.ents || []).slice() };
+      syncSketchBlocks(skForSolve, doc.blocks, V);
+    }
+    const ents = typeof Solver !== 'undefined' ? Solver.cached(skForSolve, V).ents : (skForSolve.ents || []);
+    const pl = sk.plane;
+    const xV = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize();
+    const nV = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize();
+    const yV = new THREE.Vector3().crossVectors(nV, xV);
+    const oV = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+    const plO = oV.clone().applyMatrix4(toLocal).toArray();
+    const plN = nV.clone().transformDirection(toLocal).normalize().toArray();
+    const ref = patternBaseCenter(it, V);
+    const dRef = (ref[0] - plO[0]) * plN[0] + (ref[1] - plO[1]) * plN[1] + (ref[2] - plO[2]) * plN[2];
+    const refOnPlane = [ref[0] - dRef * plN[0], ref[1] - dRef * plN[1], ref[2] - dRef * plN[2]];
+    const r6 = (v) => Math.round(v * 1e6) / 1e6;
+    const pts3 = [];
+    for (const e of ents) {
+      if (!e || e.type !== 'point' || !Array.isArray(e.a) || e.a.length < 2) continue;
+      const wp = oV.clone().addScaledVector(xV, Number(e.a[0]) || 0).addScaledVector(yV, Number(e.a[1]) || 0).applyMatrix4(toLocal);
+      pts3.push([wp.x, wp.y, wp.z]);
+      if (pts3.length >= 200) break;
+    }
+    if (!pts3.length) return out;
+    for (const q of pts3) {
+      out.places.push({ d: [r6(q[0] - refOnPlane[0]), r6(q[1] - refOnPlane[1]), r6(q[2] - refOnPlane[2])], a: 0 });
+    }
+    if (p.keepOrigin && !pts3.some((q) => Math.hypot(q[0] - refOnPlane[0], q[1] - refOnPlane[1], q[2] - refOnPlane[2]) < 1e-4)) {
+      out.places.unshift({ d: [0, 0, 0], a: 0 });
+    }
+    out.n = plN;
+    out.p0 = ref;
+    return out;
+  }
+  function tablePatternParams(it, V) {
+    const p = it.p || {}, out = { op: 'pattern', pt: 'table', places: [], n: [0, 0, 1], p0: [0, 0, 0] };
+    if (Array.isArray(p.skip) && p.skip.length) out.skip = p.skip.slice();
+    const parsed = parsePatternCSV(p.csv, V);
+    if (!parsed.ok || !parsed.rows.length) return out;
+    const ref = patternBaseCenter(it, V);
+    const relMode = p.mode === 'rel';
+    const r6 = (v) => Math.round(v * 1e6) / 1e6;
+    for (const r of parsed.rows) {
+      const dx = relMode ? r.x : r.x - ref[0];
+      const dy = relMode ? r.y : r.y - ref[1];
+      const dz = r.hasZ ? (relMode ? r.z : r.z - ref[2]) : 0;
+      out.places.push({ d: [r6(dx), r6(dy), r6(dz)], a: r6(r.rot || 0) });
+    }
+    out.p0 = ref;
     return out;
   }
   // Übergang (Loft): je Profil die größte geschlossene Fläche, dazu optional eine Spitze hinter dem letzten Profil
@@ -1828,6 +2028,11 @@ const Model = (() => {
       }
       case 'vent': return `${Math.max(1, Math.round(p.count ?? 6))}× · ${f(p.slotW ?? 3)}${u}`;
       case 'fins': return `${Math.max(1, Math.round(p.count ?? 6))}× · ${f(p.height ?? 10)}${u} hoch`;
+      case 'fillPattern': {
+        const kn = p.kind === 'hex' ? 'Waben' : p.kind === 'staggered' ? 'Versetzt' : 'Raster';
+        const sym = p.kind === 'hex' ? 'SW' : 'Ø';
+        return `${kn} · ${sym} ${f(p.size ?? 5)}${u} · ${f(p.pitch ?? 8)}${u}`;
+      }
       case 'web': {
         const t = f(p.thickness ?? 2);
         const dep = (p.depth || 0) > 1e-4 ? ` · ${f(p.depth)}${u}` : '';
@@ -2062,7 +2267,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
@@ -2269,6 +2474,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
