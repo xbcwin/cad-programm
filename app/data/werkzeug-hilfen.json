@@ -1948,5 +1948,10 @@
     "tip": "Symbol-Sammlung mit Normzeichen für Geometrie, Bohrungen, Toleranzen und Fertigung (Profi)",
     "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
     "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
+  },
+  "drawingFinish": {
+    "tip": "Zeichnung auf Knopfdruck mit Ansichten, Maßstab, Maßen, Mittellinien und Schriftfeld fertig machen",
+    "hilfe": "Schaltet Vorder-, Drauf-, Seiten- und isometrische Ansicht ein, wählt einen passenden Standard-Maßstab ohne Überlauf über den Blattrand, übernimmt die Maße aus dem Modell ohne Überlappen, blendet Mittellinien an allen Bohrungen und Zylindern ein und füllt leere Felder im Schriftfeld automatisch aus.",
+    "tipp": "Du kannst jederzeit einzelne Maße, Ansichten oder Schriftfeld-Angaben nachträglich ändern – und mit Rückgängig stellst du den vorherigen Stand wieder her."
   }
 }

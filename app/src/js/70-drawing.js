@@ -6749,10 +6749,10 @@ const Drawing = (() => {
           if (projMode === 'us') {
             const ccx = fx + 8.5 * sx;
             lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr', projSym: 'ctr' });
             const tx = fx + 16.5 * sx;
             lines.push({ pts: [[tx, cy - 1.6], [tx + 10, cy - 3], [tx + 10, cy + 3], [tx, cy + 1.6], [tx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr' });
+            lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + 1.2, y: fy + 26.2 * sy, t: 'ISO 5456-2 (A)', size: 2, anchor: 'start', cls: 'lab', projMode: 'us' });
             const mTxt = T('draw.tb.method3');
             const mSz = fitSize(mTxt, Math.max(6, fw - 2.4), 2.5, 1.8);
@@ -6760,10 +6760,10 @@ const Drawing = (() => {
           } else {
             const sx0 = fx + 4.5 * sx;
             lines.push({ pts: [[sx0, cy - 1.6], [sx0 + 10, cy - 3], [sx0 + 10, cy + 3], [sx0, cy + 1.6], [sx0, cy - 1.6]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[sx0 - 1.5, cy], [sx0 + 11.5, cy]], cls: 'ctr' });
+            lines.push({ pts: [[sx0 - 1.5, cy], [sx0 + 11.5, cy]], cls: 'ctr', projSym: 'ctr' });
             const ccx = sx0 + 18.5;
             lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + 1.2, y: fy + 26.2 * sy, t: 'ISO 5456-2 (E)', size: 2, anchor: 'start', cls: 'lab', projMode: 'eu' });
             const mTxt = T('draw.tb.method1Iso');
             const mSz = fitSize(mTxt, Math.max(6, fw - 2.4), 2.5, 1.8);
@@ -6777,18 +6777,18 @@ const Drawing = (() => {
           if (projMode === 'us') {
             const ccx = xStart + r2;
             lines.push({ circle: [ccx, cy, r1], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, r2], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr', projSym: 'ctr' });
             const tx = xStart + r2 * 2 + gap;
             lines.push({ pts: [[tx, cy - r1], [tx + cW, cy - r2], [tx + cW, cy + r2], [tx, cy + r1], [tx, cy - r1]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr' });
+            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + fw * 0.5, y: fy + fh - 1.3, t: 'ISO 5456-2 (A)', size: clamp(fh * 0.11, 1.5, 1.9), anchor: 'middle', cls: 'lab', projMode: 'us' });
           } else {
             const tx = xStart;
             lines.push({ pts: [[tx, cy - r1], [tx + cW, cy - r2], [tx + cW, cy + r2], [tx, cy + r1], [tx, cy - r1]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr' });
+            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr', projSym: 'ctr' });
             const ccx = tx + cW + gap + r2;
             lines.push({ circle: [ccx, cy, r1], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, r2], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + fw * 0.5, y: fy + fh - 1.3, t: 'ISO 5456-2 (E)', size: clamp(fh * 0.11, 1.5, 1.9), anchor: 'middle', cls: 'lab', projMode: 'eu' });
           }
         }
@@ -11820,6 +11820,73 @@ const Drawing = (() => {
     }
     return moved;
   }
+  function lineBoundsOf(l) {
+    if (!l) return null;
+    if (Array.isArray(l.rect) && l.rect.length >= 4) {
+      return [l.rect[0], l.rect[1], l.rect[0] + l.rect[2], l.rect[1] + l.rect[3]];
+    }
+    if (Array.isArray(l.circle) && l.circle.length >= 3) {
+      const r = Math.abs(l.circle[2]);
+      return [l.circle[0] - r, l.circle[1] - r, l.circle[0] + r, l.circle[1] + r];
+    }
+    const pts = Array.isArray(l.poly) ? l.poly : l.pts;
+    if (!Array.isArray(pts) || !pts.length) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      if (!p || p.length < 2) continue;
+      if (p[0] < x0) x0 = p[0];
+      if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1];
+      if (p[1] > y1) y1 = p[1];
+    }
+    return isFinite(x0) ? [x0, y0, x1, y1] : null;
+  }
+  function sheetOverflowInfo(cur) {
+    if (!cur || !cur.layout) return { outsidePaper: 0, outsideFrame: 0, tbOverlap: 0, ok: true, bounds: [0, 0, 0, 0] };
+    const { W, H, frame, tb } = cur.layout;
+    const fx0 = frame.x, fy0 = frame.y, fx1 = frame.x + frame.w, fy1 = frame.y + frame.h;
+    const tbBox = [fx1 - tb.w + 0.5, fy1 - tb.h + 0.5, fx1, fy1];
+    const skip = new Set(['paper', 'frame', 'view-sel', 'prev', 'snap']);
+    let outsidePaper = 0, outsideFrame = 0, tbOverlap = 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const checkRect = (r, isTbItem) => {
+      if (!r) return;
+      if (r[0] < minX) minX = r[0];
+      if (r[1] < minY) minY = r[1];
+      if (r[2] > maxX) maxX = r[2];
+      if (r[3] > maxY) maxY = r[3];
+      if (r[0] < -0.05 || r[1] < -0.05 || r[2] > W + 0.05 || r[3] > H + 0.05) outsidePaper++;
+      if (r[0] < fx0 - 0.5 || r[1] < fy0 - 0.5 || r[2] > fx1 + 0.5 || r[3] > fy1 + 0.5) outsideFrame++;
+      if (!isTbItem && rectsOverlap(r, tbBox)) tbOverlap++;
+    };
+    for (const l of cur.lines || []) {
+      if (!l || skip.has(l.cls)) continue;
+      const isTbItem = !!(l.tbPart || l.tbLine || l.projSym);
+      checkRect(lineBoundsOf(l), isTbItem);
+    }
+    for (const t of cur.texts || []) {
+      if (!t || (t.cls === 'note' && !Object.keys(cur.layout.views || {}).length)) continue;
+      const isTbItem = !!(t.tbField || t.projMode);
+      checkRect(textRectOf(t, 0), isTbItem);
+    }
+    for (const im of cur.images || []) {
+      if (!im) continue;
+      checkRect([im.x, im.y, im.x + im.w, im.y + im.h], !!im.tbLogo);
+    }
+    return {
+      outsidePaper,
+      outsideFrame,
+      tbOverlap,
+      ok: outsidePaper === 0 && outsideFrame === 0 && tbOverlap === 0,
+      bounds: isFinite(minX) ? [minX, minY, maxX, maxY] : [0, 0, 0, 0],
+    };
+  }
+  function sheetBoundsCheck(sh = dwg()) {
+    const all = sheets();
+    const idx = Math.max(0, all.findIndex((x) => x.id === sh.id));
+    const cur = buildSheetContent(sh, idx, all.length);
+    return sheetOverflowInfo(cur);
+  }
   function importModelDims() {
     const sh0 = dwg();
     const lay = layout || computeLayout(sh0);
@@ -11878,6 +11945,242 @@ const Drawing = (() => {
       d.dims.push({ id: uid('d'), auto: 'width', view: 'front' }, { id: uid('d'), auto: 'height', view: 'front' }, { id: uid('d'), auto: 'depth', view: 'left' }, { id: uid('d'), auto: 'circles', view: 'top' });
     });
     render(); UI.toast(T('draw.autoDimsToast'), { icon: 'dim' });
+  }
+  function detectDrawingMaterial(doc = App.doc) {
+    const mats = new Set();
+    if (doc && Array.isArray(doc.items)) {
+      Model.walk(doc.items, (it) => {
+        if (!isItemActiveVisible(doc, it)) return;
+        if (it.role === 'hole' || (it.op && it.op.type === 'cut')) return;
+        const m = String(it.mat || '').trim();
+        if (m) mats.add(m);
+      });
+    }
+    if (!mats.size) {
+      for (const r of bomItems(bomData)) {
+        const m = String(r.mat || '').trim();
+        if (m && m !== '–') mats.add(m);
+      }
+    }
+    if (!mats.size) {
+      const dm = doc && doc.settings && String(doc.settings.material || '').trim();
+      if (dm) mats.add(dm);
+    }
+    const list = [...mats];
+    if (list.length === 1) return list[0];
+    if (list.length === 2) return list.join(' / ');
+    if (list.length > 2) return 'Verschiedene';
+    return null;
+  }
+  function detectDrawingPartNo(doc = App.doc) {
+    let partNo = '';
+    if (doc && Array.isArray(doc.items)) {
+      Model.walk(doc.items, (it) => {
+        if (partNo || !isItemActiveVisible(doc, it)) return;
+        if (it.role === 'hole' || (it.op && it.op.type === 'cut')) return;
+        const pn = it.props && String(it.props.partNo || '').trim();
+        if (pn) partNo = pn;
+      });
+    }
+    return partNo || 'Z-001';
+  }
+  function buildFinishDims(rawDims, sh, lay) {
+    const mapped = mapModelDimsToViews(rawDims, sh, lay);
+    const hasDia = mapped.some((d) => d.type === 'dia');
+    if (!hasDia) {
+      const toRad = Math.PI / 180;
+      for (const vk of ['top', 'front', 'left']) {
+        const v = lay.views[vk];
+        if (!v || !v.geo || v.noDims) continue;
+        const fullCircles = (v.geo.circles || []).filter((c) => c.full && c.r > 0.05);
+        if (!fullCircles.length) continue;
+        const groups = new Map();
+        for (const c of fullCircles) {
+          const rk = Math.round(c.r * 200);
+          if (!groups.has(rk)) groups.set(rk, []);
+          groups.get(rk).push(c);
+        }
+        const b = v.geo.box, mx = (b[0] + b[2]) * 0.5, my = (b[1] + b[3]) * 0.5;
+        for (const grp of groups.values()) {
+          let pick = grp[0], bd = -1;
+          for (const c of grp) {
+            const dist = Math.hypot(c.c[0] - mx, c.c[1] - my);
+            if (dist > bd) { bd = dist; pick = c; }
+          }
+          const away = Math.hypot(pick.c[0] - mx, pick.c[1] - my) > 1e-4 ? (Math.atan2(pick.c[1] - my, pick.c[0] - mx) * 180) / Math.PI : 45;
+          const ang = [45, 135, 225, 315].sort((p, q) => Math.abs(angleDiff(p * toRad, away * toRad)) - Math.abs(angleDiff(q * toRad, away * toRad)))[0] || 45;
+          mapped.push(attachSafeRef({
+            id: uid('d'),
+            view: vk,
+            type: 'dia',
+            c: pick.c,
+            r: pick.r,
+            ang,
+            count: grp.length,
+            fromModel: true,
+          }, v, lay, sh));
+        }
+        break;
+      }
+    }
+    const hasLin = mapped.some((d) => d.type === 'lin');
+    if (!hasLin) {
+      const addEnvLin = (vk, dir, a, b) => {
+        const v = lay.views[vk];
+        if (!v || v.noDims || Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.2) return;
+        mapped.push(attachSafeRef({ id: uid('d'), view: vk, type: 'lin', dir, a, b, off: -(9 / v.s), fromModel: true }, v, lay, sh));
+      };
+      if (lay.views.front) {
+        const b = lay.views.front.geo.box;
+        addEnvLin('front', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addEnvLin('front', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top) {
+        const b = lay.views.top.geo.box;
+        addEnvLin('top', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addEnvLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+      if (lay.views.left) {
+        const b = lay.views.left.geo.box;
+        addEnvLin('left', 'h', [b[0], b[1]], [b[2], b[1]]);
+        if (!lay.views.front) addEnvLin('left', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top && lay.views.front) {
+        const b = lay.views.top.geo.box;
+        addEnvLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+    }
+    return mapped;
+  }
+  function dedupDimsInto(existing, candidates) {
+    const out = [];
+    for (const nd of candidates) {
+      if (nd.type === 'lin') {
+        const dup = existing.some((m) => m.view === nd.view && m.type === 'lin' && m.dir === nd.dir
+          && ((Math.hypot(m.a[0] - nd.a[0], m.a[1] - nd.a[1]) < 0.35 && Math.hypot(m.b[0] - nd.b[0], m.b[1] - nd.b[1]) < 0.35)
+            || (Math.hypot(m.a[0] - nd.b[0], m.a[1] - nd.b[1]) < 0.35 && Math.hypot(m.b[0] - nd.a[0], m.b[1] - nd.a[1]) < 0.35)));
+        if (dup) continue;
+      } else if (nd.type === 'dia' || nd.type === 'rad') {
+        const dup = existing.some((m) => m.view === nd.view && m.type === nd.type && Math.hypot(m.c[0] - nd.c[0], m.c[1] - nd.c[1]) < 0.35 && Math.abs(m.r - nd.r) < 0.25);
+        if (dup) continue;
+      }
+      out.push(nd);
+    }
+    return out;
+  }
+  async function finishDrawing() {
+    if (!Model.activeItems(App.doc).length) {
+      UI.toast(T('draw.finishEmptyToast'), { icon: 'info' });
+      return { ok: false, reason: 'empty' };
+    }
+    await ensureProjections();
+    if (!proj || !proj.views || !proj.views.front) {
+      return { ok: false, reason: 'no-proj' };
+    }
+    if (!proj.views.iso) {
+      try {
+        const scene = Model.kernelScene(App.doc);
+        const isoRes = await Kernel.call('project', { scene, views: ['iso'], sections: [] });
+        if (isoRes && isoRes.views && isoRes.views.iso) {
+          proj.views.iso = isoRes.views.iso;
+          projSigs.set('iso', 'std');
+          for (const ck of [...geoCache.keys()]) if (ck.startsWith('iso|')) geoCache.delete(ck);
+        }
+      } catch (_) {}
+    }
+    const rawModelDims = collectModelDims(App.doc);
+    const autoMat = detectDrawingMaterial(App.doc);
+    const autoPartNo = detectDrawingPartNo(App.doc);
+    const todayStr = new Date().toLocaleDateString('de-DE');
+    const isAsm = (typeof Model.isAssembly === 'function' && Model.isAssembly(App.doc)) || bomItems(bomData).length > 1;
+    const hasIso = !!(proj && proj.views && proj.views.iso);
+
+    App.change('Zeichnung fertig gemacht', () => {
+      const all = sheets();
+      const idx = activeIndex();
+      const d = all[idx] || dwg();
+      d.views = { front: true, top: true, left: true, iso: hasIso };
+      d.viewPos = {};
+      d.hidden = true;
+      if (d.viewOpts) {
+        for (const k of ['front', 'top', 'left']) {
+          if (d.viewOpts[k]) {
+            delete d.viewOpts[k].scale;
+            delete d.viewOpts[k].hidden;
+          }
+        }
+        if (d.viewOpts.iso) delete d.viewOpts.iso.scale;
+      }
+      d.centers = true;
+      d.hiddenCenters = [];
+      d.title = d.title || {};
+      if (!String(d.title.titel || '').trim()) d.title.titel = App.doc.name || T('draw.finishDefaultTitle');
+      if (!String(d.title.datum || '').trim()) d.title.datum = todayStr;
+      if (autoMat && (!String(d.title.werkstoff || '').trim() || d.title.werkstoff === 'PLA')) d.title.werkstoff = autoMat;
+      else if (!String(d.title.werkstoff || '').trim()) d.title.werkstoff = (App.doc.settings && App.doc.settings.material) || 'PLA';
+      if (!String(d.title.nummer || '').trim()) d.title.nummer = autoPartNo;
+      if (!String(d.title.allgemeintol || '').trim()) d.title.allgemeintol = 'ISO 2768-m';
+      if (!String(d.title.dokumentart || '').trim()) d.title.dokumentart = isAsm ? 'Baugruppe' : 'Einzelteil';
+
+      const preserved = (d.dims || []).filter((x) => !x.auto && !x.fromModel);
+      const tryWithIso = (useIso) => {
+        d.views.iso = useIso;
+        d.scale = 'auto';
+        const autoLay = computeLayout(d);
+        const startIdx = Math.max(0, SCALES.indexOf(autoLay.s));
+        let best = null;
+        for (let si = startIdx; si < SCALES.length; si++) {
+          const sc = SCALES[si];
+          d.scale = sc;
+          const tryLay = computeLayout(d);
+          const baseDims = deepClone(preserved);
+          const candDims = buildFinishDims(rawModelDims, d, tryLay);
+          d.dims = [...baseDims, ...dedupDimsInto(baseDims, candDims)];
+          arrangeSheetDims(d, tryLay);
+          const cur = buildSheetContent(d, idx, all.length);
+          const ov = sheetOverflowInfo(cur);
+          const boxes = dimTextBoxes(d, cur.layout);
+          const isoPlaced = !useIso || !!cur.layout.views.iso;
+          const score = (ov.outsidePaper * 1e6) + (ov.outsideFrame * 1e4) + (ov.tbOverlap * 1e4) + (isoPlaced ? 0 : 500) + (boxes.overlaps * 100);
+          if (!best || score < best.score) {
+            best = { sc, dims: deepClone(d.dims), score, ov, overlaps: boxes.overlaps, useIso };
+          }
+          if (ov.ok && isoPlaced && boxes.overlaps === 0) break;
+        }
+        return best;
+      };
+
+      let best = tryWithIso(hasIso);
+      if (hasIso && (!best || !best.ov.ok)) {
+        const bestNoIso = tryWithIso(false);
+        if (bestNoIso && (!best || bestNoIso.score < best.score)) best = bestNoIso;
+      }
+      if (best) {
+        d.views.iso = best.useIso;
+        d.scale = best.sc;
+        d.dims = best.dims;
+      }
+    });
+
+    tool = null; toolState = null; selDim = null;
+    fitZoom();
+    render();
+    Panels.renderTools();
+    Panels.renderRight();
+
+    const viewCount = Object.keys((layout && layout.views) || {}).filter((k) => k !== 'free').length;
+    const dimCount = autoDimList(dwg(), layout).length;
+    const ctrCount = centers().length;
+    const ov = sheetBoundsCheck();
+    const boxes = dimTextBoxes(dwg(), layout);
+    UI.toast(T('draw.finishToast', { views: viewCount, dims: dimCount, scale: scaleText(layout.s) }), { icon: 'spark' });
+    return {
+      ok: true,
+      views: viewCount,
+      dims: dimCount,
+      centers: ctrCount,
+      scale: layout.s,
+      overflow: ov,
+      overlaps: boxes.overlaps,
+    };
   }
   // ---------- Freies Zeichnen (2D) ----------
   const freeHint = (t) => T('draw.freeHint.' + String(t || '').slice(5));
@@ -12934,6 +13237,12 @@ const Drawing = (() => {
       }
       w.append(lostSec);
     }
+    const finSec = h('div', { class: 'section', id: 'dw-finish-sec', 'data-help': 'drawingFinish' });
+    const bFinish = h('button', { type: 'button', class: 'btn primary', id: 'dw-finish-drawing', 'data-help': 'drawingFinish', style: { width: '100%' } });
+    bFinish.innerHTML = icon('spark') + esc(T('draw.panel.finishBtn'));
+    bFinish.onclick = () => finishDrawing();
+    finSec.append(bFinish);
+    w.append(finSec);
     const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     const bIso = h('button', { type: 'button', class: 'btn', id: 'dw-add-iso', 'data-help': 'drawingViews' });
     bIso.innerHTML = icon('plus') + esc(T('draw.panel.addIso'));
@@ -15030,7 +15339,7 @@ const Drawing = (() => {
   if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
-    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, tablesMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, tablesMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, finishDrawing, sheetBoundsCheck, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
     TITLE_TEMPLATES: TB_BUILTIN_IDS, titleBlock: () => deepClone(sheetTitleBlock()), setTitleBlock, titleBlockTemplates, applyTitleBlockTemplate, saveTitleBlockTemplate, deleteTitleBlockTemplate, addTitleBlockField, removeTitleBlockField, addTitleBlockLine, removeTitleBlockLine, setTitleBlockLogo, openTitleBlockEditor,

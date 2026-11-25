@@ -4859,5 +4859,12 @@
   "draw.symlib.item.pe.label": "Schutzleiter (PE)",
   "draw.symlib.item.pe.desc": "Schutzleiter-Anschluss im Kreis",
   "draw.symlib.item.northArrow.label": "Einbaulage",
-  "draw.symlib.item.northArrow.desc": "Richtungspfeil für Ausrichtung"
+  "draw.symlib.item.northArrow.desc": "Richtungspfeil für Ausrichtung",
+  "tool.finishDrawing": "Zeichnung fertig machen",
+  "tool.finishDrawingShort": "Fertig machen",
+  "tool.finishDrawingTip": "Passende Ansichten, Maßstab, Maße, Mittellinien und Schriftfeld automatisch anlegen",
+  "draw.panel.finishBtn": "Zeichnung fertig machen",
+  "draw.finishToast": "Zeichnung fertig: {views} Ansichten, {dims} Maße, Maßstab {scale}.",
+  "draw.finishEmptyToast": "Noch kein Modell vorhanden – bau zuerst etwas im Reiter „Modell“.",
+  "draw.finishDefaultTitle": "Bauteil"
 }

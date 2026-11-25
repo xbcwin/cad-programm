@@ -4859,5 +4859,12 @@
   "draw.symlib.item.pe.label": "Protective Earth (PE)",
   "draw.symlib.item.pe.desc": "Protective earth terminal",
   "draw.symlib.item.northArrow.label": "Orientation",
-  "draw.symlib.item.northArrow.desc": "Mounting direction arrow"
+  "draw.symlib.item.northArrow.desc": "Mounting direction arrow",
+  "tool.finishDrawing": "Auto-complete drawing",
+  "tool.finishDrawingShort": "Auto-complete",
+  "tool.finishDrawingTip": "Automatically create suitable views, scale, dimensions, centerlines, and title block",
+  "draw.panel.finishBtn": "Auto-complete drawing",
+  "draw.finishToast": "Drawing ready: {views} views, {dims} dimensions, scale {scale}.",
+  "draw.finishEmptyToast": "No model yet – build something in the Model tab first.",
+  "draw.finishDefaultTitle": "Part"
 }

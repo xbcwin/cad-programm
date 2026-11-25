@@ -36340,6 +36340,277 @@ def t_a175_zeichnung_oberflaechen_symbole(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a180_zeichnung_fertig_machen(p):
+    # [A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)
+    p.empty()
+    p.ev("""
+      const blk = Model.newItem('box', { w: 80, d: 50, h: 20 }, { name: 'Flanschplatte', mat: 'Alu 6061' });
+      const hole = Model.newItem('cylinder', { d: 14, h: 30 }, { name: 'Bohrung', role: 'hole' });
+      hole.t.x = 15; hole.t.z = -5;
+      App.change('Flanschplatte mit Bohrung', d => {
+        d.name = 'Flanschplatte';
+        d.items.push(blk, hole);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    def read_finish_state():
+        return p.ev("""return (() => {
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const paperEl = svg.querySelector('rect.paper');
+          const frameEl = svg.querySelector('rect.frame');
+          const paperR = paperEl ? paperEl.getBoundingClientRect() : null;
+          const frameR = frameEl ? frameEl.getBoundingClientRect() : null;
+          let domOutsidePaper = 0, domOutsideFrame = 0;
+          if (paperR && frameR) {
+            const els = svg.querySelectorAll('.vis, .hid, .ctr, .dim, text.dimtext, text.vlabel, text.title, text.val');
+            for (const el of els) {
+              const r = el.getBoundingClientRect();
+              if (r.width === 0 && r.height === 0) continue;
+              if (r.left < paperR.left - 1 || r.right > paperR.right + 1 || r.top < paperR.top - 1 || r.bottom > paperR.bottom + 1) domOutsidePaper++;
+              if (r.left < frameR.left - 2.5 || r.right > frameR.right + 2.5 || r.top < frameR.top - 2.5 || r.bottom > frameR.bottom + 2.5) domOutsideFrame++;
+            }
+          }
+          const sh = Drawing.activeSheet();
+          const lay = Drawing.layout;
+          const activeViewKeys = Object.keys((lay && lay.views) || {}).filter(k => k !== 'free');
+          const visViewKeys = [...new Set([...svg.querySelectorAll('.vis')].map(el => el.dataset.view).filter(Boolean))];
+          const dimEls = [...svg.querySelectorAll('text.dimtext')];
+          const dimTexts = dimEls.map(el => (el.textContent || '').trim());
+          const ctrEls = [...svg.querySelectorAll('.ctr[data-view]')];
+          const crossTop = ctrEls.some(el => el.dataset.view === 'top' && el.dataset.ctr === 'cross');
+          const axisSide = ctrEls.some(el => (el.dataset.view === 'front' || el.dataset.view === 'left'));
+          const tb = Drawing.dimTextBoxes();
+          const bounds = Drawing.sheetBoundsCheck();
+          return {
+            activeViewCount: activeViewKeys.length,
+            visViewCount: visViewKeys.length,
+            views: sh.views,
+            scale: lay ? lay.s : null,
+            dimsCount: Drawing.dims().length,
+            dimTexts,
+            lostCount: Drawing.lostDims().length,
+            overlaps: tb.overlaps,
+            centersFlag: !!sh.centers,
+            centersCount: Drawing.centers().length,
+            crossTop,
+            axisSide,
+            title: sh.title || {},
+            boundsOk: !!(bounds && bounds.ok),
+            outsidePaper: bounds ? bounds.outsidePaper : -1,
+            outsideFrame: bounds ? bounds.outsideFrame : -1,
+            tbOverlap: bounds ? bounds.tbOverlap : -1,
+            domOutsidePaper,
+            domOutsideFrame,
+            viewPosKeys: Object.keys(sh.viewPos || {}).length,
+          };
+        })()""")
+
+    def has_num(texts, val):
+        s = str(val)
+        return any(t == s or t.startswith(s + ',') or t.startswith(s + '.') for t in texts)
+
+    # 1. Blatt absichtlich verstellen, dann per Panel-Knopf „Zeichnung fertig machen“
+    p.ev("""
+      App.change('Blatt verstellt', () => {
+        const s = Drawing.activeSheet();
+        s.views = { front: true, top: false, left: false, iso: false };
+        s.centers = false;
+        s.dims = [];
+        s.scale = 5;
+        s.viewPos = { front: [120, 80] };
+        s.title = { titel: '', nummer: '', name: '', datum: '', werkstoff: '', firma: '', blatt: '' };
+      });
+      Drawing.refresh();
+    """)
+    p.wait(150)
+
+    p.pg.click('#dw-finish-drawing')
+    p.pg.wait_for_function("() => Object.keys((window.__M.Drawing.layout && window.__M.Drawing.layout.views) || {}).filter(k => k !== 'free').length >= 3 && window.__M.Drawing.dims().length >= 4", timeout=15000)
+    p.wait(200)
+    st1 = read_finish_state()
+
+    # Zweiter Klick über Werkzeugleiste verdoppelt keine Maße
+    dims_before_2nd = st1['dimsCount']
+    p.pg.click('#t-finish-drawing')
+    p.wait(250)
+    st1_again = read_finish_state()
+
+    # Rückgängig / Wiederherstellen
+    p.ev("App.undo(); App.undo(); return Drawing.waitReady();")
+    p.wait(150)
+    st_undo = read_finish_state()
+    p.ev("App.redo(); App.redo(); return Drawing.waitReady();")
+    p.wait(150)
+    st_redo = read_finish_state()
+
+    ok1 = bool(
+        st1['activeViewCount'] >= 3
+        and st1['visViewCount'] >= 3
+        and st1['dimsCount'] >= 4
+        and has_num(st1['dimTexts'], 80)
+        and has_num(st1['dimTexts'], 50)
+        and has_num(st1['dimTexts'], 20)
+        and any('Ø14' in t for t in st1['dimTexts'])
+        and st1['lostCount'] == 0
+        and st1['overlaps'] == 0
+        and st1['centersFlag']
+        and st1['centersCount'] >= 2
+        and st1['crossTop']
+        and st1['axisSide']
+        and st1['title'].get('titel') == 'Flanschplatte'
+        and st1['title'].get('werkstoff') == 'Alu 6061'
+        and bool(st1['title'].get('datum'))
+        and bool(st1['title'].get('nummer'))
+        and st1['viewPosKeys'] == 0
+        and st1['boundsOk']
+        and st1['domOutsidePaper'] == 0
+        and st1['domOutsideFrame'] == 0
+        and st1_again['dimsCount'] == dims_before_2nd
+        and st_undo['activeViewCount'] == 1
+        and not st_undo['centersFlag']
+        and st_redo['activeViewCount'] >= 3
+        and st_redo['centersFlag']
+    )
+
+    # 2. Großes Bauteil mit zwei Bohrungen -> passender kleiner Standard-Maßstab ohne Blattrand-Überlauf
+    p.ev("""
+      Commands.setMode('model');
+      App.setDoc(Model.newDoc('Große Grundplatte'));
+      const rId = 'e_rect_big', c1Id = 'e_c_big1', c2Id = 'e_c_big2';
+      const sk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [
+          { id: rId, type: 'rect', a: [-110, -70], b: [110, 70] },
+          { id: c1Id, type: 'circle', c: [-55, 0], r: 10 },
+          { id: c2Id, type: 'circle', c: [55, 0], r: 6 },
+        ],
+        dims: [
+          { id: 'm_bw', e: rId, k: 'w', v: 220 },
+          { id: 'm_bh', e: rId, k: 'h', v: 140 },
+          { id: 'm_bd1', e: c1Id, k: 'd', v: 20 },
+          { id: 'm_bd2', e: c2Id, k: 'd', v: 12 },
+        ],
+        cons: [],
+      };
+      const plate = Model.newItem('extrude', { sketch: sk, dist: 60, dir: 'normal' }, { name: 'Grundplatte', mat: 'Stahl' });
+      App.change('Große Grundplatte 220x140x60', d => { d.items.push(plate); });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    p.pg.click('#t-finish-drawing')
+    p.pg.wait_for_function("() => Object.keys((window.__M.Drawing.layout && window.__M.Drawing.layout.views) || {}).filter(k => k !== 'free').length >= 3 && window.__M.Drawing.dims().length >= 5", timeout=15000)
+    p.wait(250)
+    st2 = read_finish_state()
+
+    ok2 = bool(
+        st2['activeViewCount'] >= 3
+        and st2['visViewCount'] >= 3
+        and st2['scale'] is not None and st2['scale'] <= 0.5
+        and has_num(st2['dimTexts'], 220)
+        and has_num(st2['dimTexts'], 140)
+        and has_num(st2['dimTexts'], 60)
+        and any('Ø20' in t for t in st2['dimTexts'])
+        and any('Ø12' in t for t in st2['dimTexts'])
+        and st2['centersCount'] >= 4
+        and st2['crossTop']
+        and st2['boundsOk']
+        and st2['domOutsidePaper'] == 0
+        and st2['domOutsideFrame'] == 0
+    )
+
+    # 3. Einfach-Modus: Knöpfe sichtbar und funktional
+    p.ev("""
+      ViewPrefs.setLevel('simple');
+      Commands.setMode('drawing');
+      App.change('Leeres Blatt Einfach', () => {
+        const s = Drawing.activeSheet();
+        s.views = { front: true, top: false, left: false, iso: false };
+        s.centers = false;
+        s.dims = [];
+      });
+      Drawing.refresh();
+    """)
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    simple_vis = p.ev("""return (() => {
+      const b1 = document.querySelector('#t-finish-drawing');
+      const b2 = document.querySelector('#dw-finish-drawing');
+      return !!(b1 && b1.offsetParent !== null && b2 && b2.offsetParent !== null);
+    })()""")
+    p.pg.click('#dw-finish-drawing')
+    p.pg.wait_for_function("() => Object.keys((window.__M.Drawing.layout && window.__M.Drawing.layout.views) || {}).filter(k => k !== 'free').length >= 3 && window.__M.Drawing.dims().length >= 5", timeout=15000)
+    p.wait(250)
+    st_simple = read_finish_state()
+
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+
+    ok3 = bool(
+        simple_vis
+        and st_simple['activeViewCount'] >= 3
+        and st_simple['centersFlag']
+        and st_simple['centersCount'] >= 4
+        and st_simple['boundsOk']
+        and st_simple['domOutsidePaper'] == 0
+        and st_simple['domOutsideFrame'] == 0
+    )
+
+    # 4. Export (PDF/SVG/DXF), Validierung, Hilfen, I18n, Befehlssuche & 0 JS-Fehler
+    p.pg.locator('#dw-finish-drawing').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=5000)
+        tip_txt = p.pg.locator('.tooltip').text_content()
+    except Exception:
+        tip_txt = ''
+    extra_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const svgStr = await Drawing.buildSVGString();
+      const dxf = await Drawing.buildDXF();
+      const val = Store.validateProject(App.doc);
+      const h = wh && wh.drawingFinish;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nSync = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('zeichnung fertig machen');
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfBytes.length > 1000 && !pdfStr.includes('(?)'),
+        svgOk: typeof svgStr === 'string' && svgStr.includes('<svg') && svgStr.includes('Große Grundplatte'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('MITTELLINIE') && dxf.text.includes('BEMASSUNG')),
+        valOk: !!(val && val.ok),
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp && String(arg || '').includes(h.tip)),
+        domHelpOk: document.querySelectorAll('[data-help="drawingFinish"]').length >= 2,
+        cmdOk: cmds.some(c => c.id === 'drawingFinish'),
+        deEnOk: i18nSync && T('tool.finishDrawing') === 'Zeichnung fertig machen' && T('draw.panel.finishBtn') === 'Zeichnung fertig machen',
+      };
+    })()""", tip_txt)
+    ok4 = bool(
+        extra_chk['pdfOk'] and extra_chk['svgOk'] and extra_chk['dxfOk']
+        and extra_chk['valOk'] and extra_chk['helpOk'] and extra_chk['domHelpOk']
+        and extra_chk['cmdOk'] and extra_chk['deEnOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -36632,6 +36903,7 @@ TESTS = [
     ('[A-176] Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)', t_a176_zeichnung_tabellen),
     ('[A-178] Zeichnung: Schriftfeld-Editor und Vorlagen (ISO, DIN, ANSI & eigene Vorlage)', t_a178_zeichnung_schriftfeld),
     ('[A-175] Zeichnung: Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)', t_a175_zeichnung_oberflaechen_symbole),
+    ('[A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)', t_a180_zeichnung_fertig_machen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

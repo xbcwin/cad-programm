@@ -2884,6 +2884,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Rückgängig, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind `#t-symbols`, `#dw-sym-sec`, API-Funktionen, Dialog und Befehle gesperrt; Löschen + `App.undo()`, `Store.validateProject` + Neuladen, `werkzeug-hilfen.json` (`drawingSymbols`, `drawingSymbolLibrary`), DE/EN-Schlüsselgleichheit und `Commands.search` bestehen (`t_a175_zeichnung_oberflaechen_symbole`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ ein Oberflächenzeichen mit Rillenrichtung, ein Schweißsymbol (Gegenseite) und zwei Zeichen aus der Symbol-Sammlung auf dem Blatt verschieben und als PDF prüfen.
 
+## Zeichnung: „Zeichnung fertig machen“ auf Knopfdruck (Auto [A-180], ZE-34)
+
+- [x] **Teil mit Bohrung auf Knopfdruck (Profi)**: Ein Klick auf `#dw-finish-drawing` schaltet mindestens 3 Ansichten (Vorder-, Drauf-, Seiten- und isometrische Ansicht) ein, wählt einen passenden Standard-Maßstab, legt assoziative Modell- und Bohrungsmaße (`80`, `50`, `20`, `Ø14`) ohne Überlappen an, aktiviert Mittellinien/Mittelkreuze an der Bohrung, füllt das Schriftfeld (Titel, Werkstoff, Nummer, Datum) aus und hält alle SVG-Elemente innerhalb des Blattrands (`sheetBoundsCheck().ok` und DOM-Prüfung gegen `.frame`/`.paper`); `App.undo()`/`redo()` und Doppelklick-Schutz funktionieren (`t_a180_zeichnung_fertig_machen`).
+- [x] **Großes Bauteil & Einfach-Modus**: Ein großes Teil (`220×140×60` mit `Ø20` und `Ø12`) wird automatisch auf einen kleineren Standard-Maßstab skaliert (`<= 0,5`) ohne Blattrand-Überlauf; im Einfach-Modus sind `#t-finish-drawing` und `#dw-finish-drawing` sichtbar und liefern dasselbe vollständige Ergebnis (`t_a180_zeichnung_fertig_machen`).
+- [x] **Export, Validierung, Hilfen, I18n & Befehlssuche**: `buildPDFBytes()`, `buildSVGString()`, `buildDXF()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP.drawingFinish`, DE/EN-Schlüsselgleichheit und `Commands.search('zeichnung fertig machen')` bestehen ohne JS-Fehler (`t_a180_zeichnung_fertig_machen`).
+- [ ] **Von Hand**: Im Browser ein beliebiges Bauteil mit mehreren Bohrungen in „Zeichnung“ öffnen, auf „Zeichnung fertig machen“ klicken und die gedruckte/gespeicherte PDF-Vorschau auf Vollständigkeit und Ränder prüfen.
+
 ## Fehler melden
 
 ```
