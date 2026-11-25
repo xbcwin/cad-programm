@@ -1403,6 +1403,11 @@ const App = (() => {
             selTop.add((S.merged && S.merged.get(tid)) || tid);
           }
         }
+        if (top.kind === 'stackHole' || top.kind === 'asmCut') {
+          const res = S.resolved && S.resolved.get(top.id);
+          const idsToHl = (res && Array.isArray(res.cutIds) && res.cutIds.length) ? res.cutIds : ((top.p && Array.isArray(top.p.targets)) ? top.p.targets : []);
+          for (const tid of idsToHl) selTop.add((S.merged && S.merged.get(tid)) || tid);
+        }
       }
       selTop.add('__ex:' + id);
     }

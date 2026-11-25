@@ -31589,6 +31589,228 @@ def t_a158_bewegungs_studie(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-161] Bohrung durch Stapel und Schritte in der Baugruppe (BG-24, BG-25) ----------
+def t_a161_bohrung_stapel_baugruppe(p):
+    # 1. Bauteil-Vorlage „Platte“ (40x40x10 = 16000 mm^3) speichern und in neuer Baugruppe zweimal gestapelt einsetzen
+    p.empty()
+    part_id = p.ev("""
+      const d = Model.newDoc('Platte', { docType: 'part' });
+      const b = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Platte' });
+      d.items.push(b);
+      App.setDoc(d);
+      return d.id;
+    """)
+    warte_rechnen(p, 30)
+    p.ev("return App.saveNow();")
+
+    ids = p.ev("""return (async () => {
+      const asm = Assembly.newAssembly('Stapel-Baugruppe');
+      App.setDoc(asm);
+      const p1 = await Comp.insertPart(arg, { name: 'Platte 1', pos: [0, 0], z: 0 });
+      const p2 = await Comp.insertPart(arg, { name: 'Platte 2', pos: [0, 0], z: 10 });
+      return { p1: p1 && p1.id, p2: p2 && p2.id };
+    })();""", part_id)
+    warte_rechnen(p, 30)
+
+    # Einfach-Modus: Profi-Werkzeuge ausgeblendet; Profi-Modus: sichtbar
+    p.ev("App.clearSelection(); ViewPrefs.setLevel('simple'); Panels.renderTools(); Panels.renderRight();")
+    p.wait(150)
+    simple_hidden = p.ev("""
+      const tb1 = document.querySelector('#t-asm-stack-hole');
+      const tb2 = document.querySelector('#t-asm-cut');
+      const sec = document.querySelector('#proj-asm-steps-sec');
+      const vis = (el) => !!(el && getComputedStyle(el).display !== 'none');
+      return !vis(tb1) && !vis(tb2) && !vis(sec);
+    """)
+    p.ev("ViewPrefs.setLevel('pro'); Panels.renderTools(); Panels.renderRight();")
+    p.wait(150)
+    pro_visible = p.ev("""
+      const tb1 = document.querySelector('#t-asm-stack-hole');
+      const tb2 = document.querySelector('#t-asm-cut');
+      const sec = document.querySelector('#proj-asm-steps-sec');
+      const vis = (el) => !!(el && getComputedStyle(el).display !== 'none');
+      return vis(tb1) && vis(tb2) && vis(sec);
+    """)
+
+    vols0 = p.ev("""return (async () => {
+      const m = await Mass.measure();
+      const map = Object.fromEntries((m && m.parts || []).map(x => [x.id, x.volume]));
+      return { v1: map[arg.p1], v2: map[arg.p2] };
+    })();""", ids)
+
+    # 2. Bohrung durch Stapel über die Werkzeugleiste (#t-asm-stack-hole) mit Ø 10 mm anlegen
+    p.pg.click('#t-asm-stack-hole')
+    p.wait(200)
+    p.pg.fill('#asm-sh-d', '10')
+    p.pg.click('#asm-sh-ok')
+    warte_rechnen(p, 30)
+
+    after_hole = p.ev("""return (async () => {
+      const step = App.doc.items.find(x => x.kind === 'stackHole');
+      const res = step ? App.resolvedOf(step.id) : null;
+      const m = await Mass.measure();
+      const map = Object.fromEntries((m && m.parts || []).map(x => [x.id, x.volume]));
+      const r1 = App.results.get(arg.p1)?.data;
+      const r2 = App.results.get(arg.p2)?.data;
+      const hasCyl1 = !!(r1 && r1.faces && r1.faces.some(f => f.t === 'CYLINDRE'));
+      const hasCyl2 = !!(r2 && r2.faces && r2.faces.some(f => f.t === 'CYLINDRE'));
+      const orig = await Store.loadProject(arg.partId);
+      return {
+        stepId: step && step.id,
+        errs: App.errors.length,
+        cutIds: (res && res.cutIds) || [],
+        v1: map[arg.p1],
+        v2: map[arg.p2],
+        hasCyl1,
+        hasCyl2,
+        origCount: orig && orig.items ? orig.items.length : -1,
+      };
+    })();""", {**ids, 'partId': part_id})
+
+    expected_vol = 16000.0 - math.pi * 25.0 * 10.0  # ~15214.6 mm^3
+    ok1 = (
+        simple_hidden is True
+        and pro_visible is True
+        and abs(vols0['v1'] - 16000.0) < 2.0
+        and abs(vols0['v2'] - 16000.0) < 2.0
+        and after_hole['stepId'] is not None
+        and after_hole['errs'] == 0
+        and set(after_hole['cutIds']) == {ids['p1'], ids['p2']}
+        and after_hole['hasCyl1'] is True
+        and after_hole['hasCyl2'] is True
+        and abs(after_hole['v1'] - expected_vol) < 5.0
+        and abs(after_hole['v2'] - expected_vol) < 5.0
+        and after_hole['origCount'] == 1
+    )
+
+    # 3. Zielteile-Auswahl (nur Platte 2) im rechten Panel, zurück auf Alle, Senkbohrung (M5 Senkkopf), Unterdrücken
+    p.ev("App.select([arg])", after_hole['stepId'])
+    p.wait(200)
+    p.pg.select_option('#sh-scope', 'selected')
+    p.wait(150)
+    p.ev("document.querySelector('input[data-sh-target=\"' + arg + '\"]').click()", ids['p1'])
+    warte_rechnen(p, 30)
+
+    only_p2 = p.ev("""return (async () => {
+      const res = App.resolvedOf(arg.stepId);
+      const m = await Mass.measure();
+      const map = Object.fromEntries((m && m.parts || []).map(x => [x.id, x.volume]));
+      return { cutIds: (res && res.cutIds) || [], v1: map[arg.p1], v2: map[arg.p2] };
+    })();""", {**ids, 'stepId': after_hole['stepId']})
+
+    p.pg.select_option('#sh-scope', 'auto')
+    warte_rechnen(p, 30)
+
+    # Schrauben-Durchgang M5 mit Senkkopf -> obere Platte (Platte 2) hat wegen der Senkung weniger Volumen als Platte 1
+    p.ev("""
+      App.change('Senkbohrung', d => {
+        const s = Model.find(d, arg).item;
+        s.p.holeType = 'through';
+        s.p.size = 'M5';
+        s.p.head = 'countersunk';
+      });
+    """, after_hole['stepId'])
+    warte_rechnen(p, 30)
+
+    csk_res = p.ev("""return (async () => {
+      const m = await Mass.measure();
+      const map = Object.fromEntries((m && m.parts || []).map(x => [x.id, x.volume]));
+      return { errs: App.errors.length, v1: map[arg.p1], v2: map[arg.p2] };
+    })();""", ids)
+
+    # Unterdrücken -> beide Platten wieder bei 16000 mm^3, danach wieder aktivieren
+    p.ev("Timeline.toggleSuppress(arg)", after_hole['stepId'])
+    warte_rechnen(p, 30)
+    supp_vols = p.ev("""return (async () => {
+      const m = await Mass.measure();
+      const map = Object.fromEntries((m && m.parts || []).map(x => [x.id, x.volume]));
+      return { v1: map[arg.p1], v2: map[arg.p2] };
+    })();""", ids)
+    p.ev("Timeline.toggleSuppress(arg)", after_hole['stepId'])
+    warte_rechnen(p, 30)
+
+    ok2 = (
+        only_p2['cutIds'] == [ids['p2']]
+        and abs(only_p2['v1'] - 16000.0) < 2.0
+        and abs(only_p2['v2'] - expected_vol) < 5.0
+        and csk_res['errs'] == 0
+        and csk_res['v1'] < 15900.0
+        and csk_res['v2'] < csk_res['v1'] - 10.0
+        and abs(supp_vols['v1'] - 16000.0) < 2.0
+        and abs(supp_vols['v2'] - 16000.0) < 2.0
+    )
+
+    # 4. BG-25: Baugruppen-Schnitt (10x10 Rechteck am Rand x=12, y=0 durch beide Platten), Skizze bearbeiten, Validierung, Hilfen & Undo
+    cut_info = p.ev("""
+      const st = Assembly.asmCut({
+        plane: { o: [12, 0, 20], x: [1, 0, 0], n: [0, 0, 1] },
+        w: 8, h: 8, dir: 'reverse', thru: true,
+      });
+      return { id: st && st.id };
+    """)
+    warte_rechnen(p, 30)
+
+    after_cut = p.ev("""return (async () => {
+      const res = App.resolvedOf(arg.cutId);
+      const m = await Mass.measure();
+      const map = Object.fromEntries((m && m.parts || []).map(x => [x.id, x.volume]));
+      return {
+        errs: App.errors.length,
+        cutIds: (res && res.cutIds) || [],
+        v1: map[arg.p1],
+        v2: map[arg.p2],
+      };
+    })();""", {**ids, 'cutId': cut_info['id']})
+
+    # Skizze bearbeiten öffnen und sofort wieder schließen
+    p.ev("Sketch.editItem(arg)", cut_info['id'])
+    p.wait(150)
+    sk_active = p.ev("return Sketch.active")
+    p.ev("Sketch.cancel()")
+    p.wait(150)
+
+    meta = p.ev("""return (async () => {
+      const val = Store.validateProject(App.doc);
+      const beforeUndo = App.doc.items.length;
+      App.undo();
+      const afterUndo = App.doc.items.length;
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const d1 = Explain.describeElement(document.querySelector('#t-asm-stack-hole'));
+      const d2 = Explain.describeElement(document.querySelector('#t-asm-cut'));
+      const hOk = !!(
+        wh.stackHole && wh.stackHole.tip && wh.stackHole.hilfe && wh.stackHole.tipp
+        && wh.asmCut && wh.asmCut.tip && wh.asmCut.hilfe && wh.asmCut.tipp
+        && d1 && d1.text === wh.stackHole.hilfe && d2 && d2.text === wh.asmCut.hilfe
+      );
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i])
+        && T('kind.stackHole') === de['kind.stackHole'] && T('kind.asmCut') === de['kind.asmCut'];
+      const cmdOk = Commands.search('bohrung stapel').some(c => c.id === 'asm-stack-hole')
+        && Commands.search('baugruppen schnitt').some(c => c.id === 'asm-cut');
+      return { valOk: !!(val && val.ok), beforeUndo, afterUndo, hOk, i18nOk, cmdOk };
+    })();""")
+    warte_rechnen(p, 30)
+
+    ok3 = (
+        after_cut['errs'] == 0
+        and set(after_cut['cutIds']) == {ids['p1'], ids['p2']}
+        and abs(after_cut['v1'] - (csk_res['v1'] - 640.0)) < 5.0
+        and abs(after_cut['v2'] - (csk_res['v2'] - 640.0)) < 5.0
+        and sk_active is True
+        and meta['valOk'] is True
+        and meta['afterUndo'] == meta['beforeUndo'] - 1
+        and meta['hOk'] is True
+        and meta['i18nOk'] is True
+        and meta['cmdOk'] is True
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -31860,6 +32082,7 @@ TESTS = [
     ('[F-11251236] Volltest-Reparatur: Linke Leiste überlappt Skizzen-Lineal nicht / Beispiel-Galerie im I18n-Testmodus / Gelenk-Anschlag, Körper-Zeile & Tooltip', t_f11251236),
     ('[A-159] Bezüge zwischen Teilen verwalten: Liste, Einfrieren, Auftauen & Lösen (BG-22)', t_a159_bezuege_verwalten),
     ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
+    ('[A-161] Bohrung durch Stapel und Baugruppen-Schnitt (BG-24, BG-25)', t_a161_bohrung_stapel_baugruppe),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

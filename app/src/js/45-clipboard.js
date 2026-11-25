@@ -198,7 +198,7 @@ const Clipboard = (() => {
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return true;
     if (it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut') return true;
     if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) return true;
     return false;
   }
@@ -215,7 +215,7 @@ const Clipboard = (() => {
         if (it.p.lipTarget) out.push(it.p.lipTarget);
         if (it.p.grooveTarget) out.push(it.p.grooveTarget);
       }
-      if (it.kind === 'deleteBody') {
+      if (it.kind === 'deleteBody' || ((it.kind === 'stackHole' || it.kind === 'asmCut') && it.p.scope === 'selected')) {
         const tgs = Array.isArray(it.p.targets) ? it.p.targets : (it.p.target ? [it.p.target] : []);
         for (const tid of tgs) if (tid) out.push(tid);
       }

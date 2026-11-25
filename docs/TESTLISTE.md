@@ -2724,6 +2724,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Speichern/Laden, Rückgängig & Hilfen**: Im Einfach-Modus ausgeblendet und gesperrt; `doc.motion` besteht `Store.validateProject`, bleibt nach JSON-Reload erhalten; `App.undo()`, `HELP.motionStudy`, DE/EN-Schlüsselgleichheit und Befehlssuche (`motion-study`) funktionieren ohne JS-Fehler (`t_a158_bewegungs_studie`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Gelenken öffnen, einen Punkt über „Im Bild wählen“ direkt am 3D-Teil anklicken, die Zeitachse über „Abspielen“ und durch Ziehen im Weg-Zeit-Diagramm prüfen.
 
+## Bohrung durch Stapel und Baugruppen-Schnitt (Auto [A-161], BG-24, BG-25)
+
+- [x] **Profi-Trennung & Werkzeugleiste**: `#t-asm-stack-hole` und `#t-asm-cut` sind im Einfach-Modus ausgeblendet und im Profi-Modus in Baugruppen sichtbar (`t_a161_bohrung_stapel_baugruppe`).
+- [x] **Bohrung durch Stapel (BG-24)**: Zwei gestapelte `ref`-Platten (`40×40×10 mm` auf `z = 0` und `z = 10 mm`, je `16 000 mm³`) werden über `#t-asm-stack-hole` (`Ø 10 mm`) gleichzeitig gebohrt; beide Teile behalten getrennte Körper mit Zylinderflächen und sinken im Volumen um `≈ 785,4 mm³` auf `≈ 15 214,6 mm³`, während die Bauteil-Vorlage unverändert bleibt (`t_a161_bohrung_stapel_baugruppe`).
+- [x] **Zielteile, Senkung & Unterdrücken**: Umstellen auf „Nur gewählte Teile“ (`#sh-scope`) schneidet nur noch die ausgewählte Platte; Senkbohrung (`M5` Senkkopf) verkleinert die obere Platte stärker als die untere; Unterdrücken stellt beide Ausgangsvolumina (`16 000 mm³`) wieder her (`t_a161_bohrung_stapel_baugruppe`).
+- [x] **Baugruppen-Schnitt (BG-25), Validierung & Hilfen**: Ein rechteckiger Baugruppen-Schnitt (`asmCut`, `10×10 mm` durch beide Platten) verringert beide Volumina um je weitere `≈ 1 000 mm³`; `Sketch.editItem`, `Store.validateProject`, `App.undo()`, `HELP.stackHole`/`HELP.asmCut`, DE/EN-Schlüssel und Befehlssuche (`asm-stack-hole`, `asm-cut`) laufen fehlerfrei (`t_a161_bohrung_stapel_baugruppe`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus zwei gestapelte Teile als Baugruppe laden, auf der oberen Fläche eine „Stapel-Bohrung“ sowie über „Schnitt durch Teile“ einen eigenen Skizzen-Umriss durch beide Teile schneiden und die Vorschau sowie die getrennten Lochränder prüfen.
+
 ## Fehler melden
 
 ```

@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2068,7 +2068,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -5541,6 +5541,277 @@ const Features = (() => {
     sec.append(row, h('div', { class: 'hint-box', html: 'Legt rutschfeste Rillen oder Noppen (erhaben oder vertieft) auf ebenen Flächen oder Zylindermänteln an.' }));
   }
 
+  // ---------- Bohrung durch Stapel & Baugruppen-Schnitt (BG-24, BG-25) ----------
+  function pickStackHolePoint(stepId = null, cb = null) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0 && hit.normal) {
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (fi && fi.t === 'PLANE') {
+          const sn = (e.ctrlKey || e.metaKey) ? null : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+          const pt = sn ? sn.point : hit.point;
+          const nn = ((sn && sn.normal) || hit.normal).clone().normalize();
+          const dir = [-round(nn.x, 6), -round(nn.y, 6), -round(nn.z, 6)];
+          const x = round(pt.x, 4), y = round(pt.y, 4), z = round(pt.z, 4);
+          const face = { id: hit.id, idx: hit.faceIdx, info: fi, point: pt.toArray(), normal: nn.toArray() };
+          stopPick();
+          Snap.clear();
+          if (cb) { cb({ face, x, y, z, dir }); return; }
+          if (stepId) {
+            App.change(T('asm.stackHoleMovedUndo'), (doc) => {
+              const f = Model.find(doc, stepId);
+              if (!f || f.item.kind !== 'stackHole') return false;
+              f.item.p.x = x;
+              f.item.p.y = y;
+              f.item.p.z = z;
+              f.item.p.dir = dir;
+            });
+            UI.toast('Bohrungsstelle aktualisiert.', { icon: 'check' });
+          }
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine ebene Fläche eines Teils.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? hit.id : null, fi && fi.t === 'PLANE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(T('asm.stackHolePickHint'));
+  }
+
+  function pickAsmCutFace(cb) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.faceIdx >= 0 && hit.normal) {
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (fi && fi.t === 'PLANE') {
+          stopPick();
+          cb({ id: hit.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null, normal: hit.normal.toArray() });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine ebene Fläche eines Teils.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? hit.id : null, fi && fi.t === 'PLANE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(T('asm.cutPickFaceHint'));
+  }
+
+  function cutTargetsSummary(it) {
+    const res = App.resolvedOf ? App.resolvedOf(it.id) : null;
+    const ids = res && Array.isArray(res.cutIds) ? res.cutIds : [];
+    if (!ids.length) return { cls: 'hint-box', text: T('asm.cutCountNone') };
+    const names = ids.map((id) => {
+      const f = Model.find(App.doc, id);
+      return f ? Model.label(f.item) : id;
+    });
+    return { cls: 'mini-row', count: ids.length, names: names.join(', ') };
+  }
+
+  function renderCutTargetScope(it, sec, scopeId, attrKey, avail) {
+    const p = it.p || {};
+    const scope = p.scope === 'selected' ? 'selected' : 'auto';
+    sec.append(UI.selectField({
+      id: scopeId,
+      label: T('asm.scopeLabel'),
+      value: scope,
+      options: [['auto', T('asm.scopeAuto')], ['selected', T('asm.scopeSelected')]],
+      onChange: (v) => App.change('Ziel-Umfang geändert', (doc) => {
+        const x = Model.find(doc, it.id);
+        if (!x) return false;
+        x.item.p.scope = v;
+        if (v === 'selected' && (!Array.isArray(x.item.p.targets) || !x.item.p.targets.length)) {
+          const res = App.resolvedOf ? App.resolvedOf(it.id) : null;
+          const fromRes = res && Array.isArray(res.cutIds) && res.cutIds.length ? res.cutIds : null;
+          x.item.p.targets = fromRes ? fromRes.slice() : avail.map((t) => t.id);
+        }
+      }),
+    }));
+    if (scope === 'selected') {
+      const curTargets = Array.isArray(p.targets) ? p.targets : [];
+      const box = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
+      if (!avail.length) {
+        box.append(h('div', { class: 'hint-box' }, T('asm.needPart')));
+      } else {
+        for (const t of avail) {
+          const chk = h('label', { class: 'check' },
+            h('input', { type: 'checkbox', checked: curTargets.includes(t.id), dataset: { [attrKey]: t.id } }),
+            Model.label(t));
+          chk.querySelector('input').onchange = (e) => {
+            App.change('Zielteile geändert', (doc) => {
+              const x = Model.find(doc, it.id);
+              if (!x) return false;
+              const arr = Array.isArray(x.item.p.targets) ? x.item.p.targets.slice() : [];
+              if (e.target.checked) { if (!arr.includes(t.id)) arr.push(t.id); }
+              else { const idx = arr.indexOf(t.id); if (idx >= 0) arr.splice(idx, 1); }
+              x.item.p.targets = arr;
+            });
+          };
+          box.append(chk);
+        }
+      }
+      sec.append(box);
+    }
+  }
+
+  function renderStackHole(it, sec, setP) {
+    const p = it.p || {};
+    const V = Model.itemVars(App.doc, it.id);
+    const ht = p.holeType === 'through' || p.holeType === 'blind' || p.holeType === 'fit' ? p.holeType : 'simple';
+    const avail = typeof Assembly !== 'undefined' && Assembly.assemblyPartTargets ? Assembly.assemblyPartTargets(App.doc, it) : activeTargetsBefore(it).filter((x) => x.role !== 'hole');
+    const sum = cutTargetsSummary(it);
+    if (sum.count) {
+      sec.append(h('div', { class: 'mini-row', id: 'sh-cut-info' }, h('span', { class: 'grow' }, T('asm.cutCountSome', { n: sum.count })), h('b', { class: 'mono' }, sum.names)));
+    } else {
+      sec.append(h('div', { class: 'hint-box', id: 'sh-cut-info' }, sum.text));
+    }
+
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'sh-type',
+      label: T('asm.holeTypeLabel'),
+      value: ht,
+      options: [
+        ['simple', T('asm.holeTypeSimple')],
+        ['through', T('asm.holeTypeThrough')],
+        ['blind', T('asm.holeTypeBlind')],
+        ['fit', T('asm.holeTypeFit')],
+      ],
+      onChange: (v) => App.change('Bohrungsart geändert', (doc) => {
+        const x = Model.find(doc, it.id);
+        if (!x) return false;
+        x.item.p.holeType = v;
+        if (v === 'blind') x.item.p.thru = false;
+      }),
+    }));
+    if (ht === 'through') {
+      const sizes = typeof threadSizesForNorm === 'function' ? threadSizesForNorm('metric') : ['M2', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10'];
+      fl.append(
+        UI.selectField({ id: 'sh-size', label: T('asm.holeSizeLabel'), value: sizes.includes(p.size) ? p.size : 'M4', options: sizes, onChange: (v) => setP('size', v) }),
+        UI.selectField({ id: 'sh-head', label: T('asm.holeHeadLabel'), value: p.head || 'none', options: [['none', T('asm.holeHeadNone')], ['countersunk', T('asm.holeHeadCsk')], ['counterbore', T('asm.holeHeadCb')]], onChange: (v) => setP('head', v) }),
+        UI.selectField({ id: 'sh-fit', label: T('asm.holeFitLabel'), value: p.fit || 'medium', options: [['medium', T('asm.holeFitMed')], ['fine', T('asm.holeFitFine')], ['coarse', T('asm.holeFitCoarse')]], onChange: (v) => setP('fit', v) }),
+      );
+    } else {
+      fl.append(UI.numField({ id: 'sh-d', label: ht === 'fit' ? T('asm.holeFitDLabel') : T('asm.holeDLabel'), value: p.d ?? 6, min: 0.2, unit: 'mm', vars: V, onCommit: (v) => setP('d', v) }));
+      if (ht === 'blind') {
+        const tipOpts = typeof LIBMAP !== 'undefined' && LIBMAP.blindHole && LIBMAP.blindHole.params[2]
+          ? LIBMAP.blindHole.params[2].options
+          : [['118', '118° (Standardbohrer)'], ['180', '180° (flacher Boden)']];
+        fl.append(UI.selectField({ id: 'sh-tip', label: T('asm.holeTipLabel'), value: String(p.tipAngle ?? 118), options: tipOpts, onChange: (v) => setP('tipAngle', Number(v)) }));
+      }
+    }
+    sec.append(fl);
+
+    if (ht !== 'blind') {
+      const thru = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'sh-thru', checked: p.thru !== false }), T('asm.holeThru'));
+      thru.querySelector('input').onchange = (e) => setP('thru', e.target.checked);
+      sec.append(thru);
+    }
+    if (p.thru === false || ht === 'blind') {
+      sec.append(h('div', { style: { marginTop: '6px' } }, UI.numField({ id: 'sh-depth', label: T('asm.holeDepthLabel'), value: p.depth ?? 20, min: 0.2, unit: 'mm', vars: V, onCommit: (v) => setP('depth', v) })));
+    }
+
+    const posF = h('div', { class: 'fields three', style: { marginTop: '8px' } });
+    posF.append(
+      UI.numField({ id: 'sh-x', label: 'X', value: p.x ?? 0, unit: 'mm', vars: V, onCommit: (v) => setP('x', v) }),
+      UI.numField({ id: 'sh-y', label: 'Y', value: p.y ?? 0, unit: 'mm', vars: V, onCommit: (v) => setP('y', v) }),
+      UI.numField({ id: 'sh-z', label: 'Z', value: p.z ?? 0, unit: 'mm', vars: V, onCommit: (v) => setP('z', v) }),
+    );
+    sec.append(posF);
+
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'sh-pick-face' });
+    pb.innerHTML = icon('cursor') + esc(T('asm.holePickBtn'));
+    pb.onclick = () => pickStackHolePoint(it.id);
+    const fb = h('button', { type: 'button', class: 'btn small', id: 'sh-flip' });
+    fb.innerHTML = icon('replace') + esc(T('asm.holeFlipBtn'));
+    fb.onclick = () => App.change('Bohrrichtung umgekehrt', (doc) => {
+      const x = Model.find(doc, it.id);
+      if (!x) return false;
+      const d = Array.isArray(x.item.p.dir) ? x.item.p.dir : [0, 0, -1];
+      x.item.p.dir = [-Number(d[0] || 0), -Number(d[1] || 0), -Number(d[2] || -1)];
+    });
+    row.append(pb, fb);
+    sec.append(row);
+
+    const scopeWrap = h('div', { style: { marginTop: '8px' } });
+    renderCutTargetScope(it, scopeWrap, 'sh-scope', 'shTarget', avail);
+    sec.append(scopeWrap);
+    sec.append(h('div', { class: 'hint-box' }, T('asm.stackHoleHint')));
+  }
+
+  function renderAsmCut(it, sec, setP) {
+    const p = it.p || {};
+    const V = Model.itemVars(App.doc, it.id);
+    const avail = typeof Assembly !== 'undefined' && Assembly.assemblyPartTargets ? Assembly.assemblyPartTargets(App.doc, it) : activeTargetsBefore(it).filter((x) => x.role !== 'hole');
+    const sum = cutTargetsSummary(it);
+    if (sum.count) {
+      sec.append(h('div', { class: 'mini-row', id: 'ac-cut-info' }, h('span', { class: 'grow' }, T('asm.cutCountSome', { n: sum.count })), h('b', { class: 'mono' }, sum.names)));
+    } else {
+      sec.append(h('div', { class: 'hint-box', id: 'ac-cut-info' }, sum.text));
+    }
+
+    const row = h('div', { class: 'btn-row', style: { marginTop: '6px' } });
+    const eb = h('button', { type: 'button', class: 'btn small primary', id: 'ac-edit-sketch' });
+    eb.innerHTML = icon('edit') + esc(T('panel.item.editSketch'));
+    eb.onclick = () => Sketch.editItem(it.id);
+    row.append(eb);
+    sec.append(row);
+
+    const thru = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'ac-thru', checked: p.thru !== false }), T('asm.holeThru'));
+    thru.querySelector('input').onchange = (e) => setP('thru', e.target.checked);
+    sec.append(thru);
+
+    const fl = h('div', { class: 'fields', style: { marginTop: '6px' } });
+    fl.append(UI.selectField({
+      id: 'ac-dir',
+      label: T('asm.cutDirLabel'),
+      value: p.dir || 'reverse',
+      options: [
+        ['reverse', T('asm.cutDirReverse')],
+        ['normal', T('asm.cutDirNormal')],
+        ['both', T('asm.cutDirBoth')],
+        ['two', T('asm.cutDirTwo')],
+      ],
+      onChange: (v) => setP('dir', v),
+    }));
+    if (p.thru === false) {
+      fl.append(UI.numField({ id: 'ac-dist', label: T('asm.cutDistLabel'), value: p.dist ?? 20, min: 0.1, unit: 'mm', vars: V, onCommit: (v) => setP('dist', v) }));
+      if (p.dir === 'two') {
+        fl.append(UI.numField({ id: 'ac-dist2', label: T('asm.cutDist2Label'), value: p.dist2 ?? p.dist ?? 20, min: 0.1, unit: 'mm', vars: V, onCommit: (v) => setP('dist2', v) }));
+      }
+    }
+    sec.append(fl);
+
+    const scopeWrap = h('div', { style: { marginTop: '8px' } });
+    renderCutTargetScope(it, scopeWrap, 'ac-scope', 'acTarget', avail);
+    sec.append(scopeWrap);
+    sec.append(h('div', { class: 'hint-box' }, T('asm.cutHint')));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
 })();

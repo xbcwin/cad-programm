@@ -338,6 +338,28 @@ const Toolbar = (() => {
       insFile.innerHTML = icon('folder') + `<span>${esc(T('asm.insertFromFileShort'))}</span>`;
       insFile.addEventListener('click', () => Comp.insertFromFile());
       el.append(insFile);
+      const stackHoleBtn = h('button', {
+        type: 'button',
+        class: 'tool pro',
+        id: 't-asm-stack-hole',
+        'data-tip': T('asm.stackHoleTip'),
+        'data-help': 'stackHole',
+        'aria-label': T('asm.stackHoleShort'),
+      });
+      stackHoleBtn.innerHTML = icon('holeWizard') + `<span>${esc(T('asm.stackHoleShort'))}</span>`;
+      stackHoleBtn.addEventListener('click', () => Assembly.startStackHole());
+      el.append(stackHoleBtn);
+      const asmCutBtn = h('button', {
+        type: 'button',
+        class: 'tool pro',
+        id: 't-asm-cut',
+        'data-tip': T('asm.cutTip'),
+        'data-help': 'asmCut',
+        'aria-label': T('asm.cutShort'),
+      });
+      asmCutBtn.innerHTML = icon('boolSubtract') + `<span>${esc(T('asm.cutShort'))}</span>`;
+      asmCutBtn.addEventListener('click', () => Assembly.startAsmCut());
+      el.append(asmCutBtn);
       const map = catalogMap();
       for (const id of ['clashes', 'measure', 'notes', 'views', 'check']) {
         if (map[id]) el.append(buildToolButton(map[id], false));
