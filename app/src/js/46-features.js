@@ -210,6 +210,7 @@ const Features = (() => {
     return null;
   }
   function stopPick() {
+    if (typeof stopCablePick === 'function') stopCablePick();
     if (!picking) return;
     const cv = Viewer.canvas;
     cv.removeEventListener('pointerdown', picking.down, true);
@@ -272,23 +273,67 @@ const Features = (() => {
   // Punkte, die an einem Körper hängen, wandern mit, wenn der Körper verschoben oder gedreht wird (ohne eigenen Rückgängig-Schritt)
   let relinkRounds = 0;
   function relinkRoutes() {
-    if (!App.doc || route) return;
+    if (!App.doc || route || cablePick) return;
     const jobs = [];
     Model.walk(App.doc.items, (it) => {
-      const pp = it.kind === 'sweep' && it.p && it.p.path3d; if (!pp || !Array.isArray(pp.bind) || !pp.bind.some(Boolean)) return;
-      const WI = Model.worldMatrix(App.doc, it.id).invert();
-      pp.bind.forEach((b, i) => {
-        if (!b || b.frozen || !pp.pts[i]) return;
-        if (!Model.find(App.doc, b.id)) { jobs.push({ id: it.id, i, drop: true }); return; }
-        const w = new THREE.Vector3(...b.lp).applyMatrix4(Model.worldMatrix(App.doc, b.id)).applyMatrix4(WI);
-        if (pp.pts[i].some((v, k) => !(typeof v === 'number' && Math.abs(v - w.getComponent(k)) < 1e-3))) jobs.push({ id: it.id, i, p: w.toArray().map((v) => round(v, 4)) });
-      });
+      if (it.kind !== 'sweep' || !it.p) return;
+      const pp = it.p.path3d;
+      if (pp && Array.isArray(pp.bind) && pp.bind.some(Boolean)) {
+        const WI = Model.worldMatrix(App.doc, it.id).invert();
+        pp.bind.forEach((b, i) => {
+          if (!b || b.frozen || !pp.pts[i]) return;
+          if (!Model.find(App.doc, b.id)) { jobs.push({ id: it.id, i, drop: true }); return; }
+          const w = new THREE.Vector3(...b.lp).applyMatrix4(Model.worldMatrix(App.doc, b.id)).applyMatrix4(WI);
+          if (pp.pts[i].some((v, k) => !(typeof v === 'number' && Math.abs(v - w.getComponent(k)) < 1e-3))) jobs.push({ id: it.id, i, p: w.toArray().map((v) => round(v, 4)) });
+        });
+      }
+      const cb = it.p.cable;
+      if (cb && (cb.bindA || cb.bindB)) {
+        const WI = Model.worldMatrix(App.doc, it.id).invert();
+        for (const [bindKey, ptKey, dirKey] of [['bindA', 'start', 'dirA'], ['bindB', 'end', 'dirB']]) {
+          const b = cb[bindKey];
+          if (!b || b.frozen || !b.id || !Array.isArray(b.lp)) continue;
+          if (!Model.find(App.doc, b.id)) { jobs.push({ cable: true, id: it.id, bindKey, drop: true }); continue; }
+          const Wb = Model.worldMatrix(App.doc, b.id);
+          const w = new THREE.Vector3(...b.lp).applyMatrix4(Wb).applyMatrix4(WI);
+          const ptCur = Array.isArray(cb[ptKey]) ? cb[ptKey] : [0, 0, 0];
+          const ptChanged = [0, 1, 2].some((k) => !(typeof ptCur[k] === 'number' && Math.abs(ptCur[k] - w.getComponent(k)) < 1e-3));
+          let nextDir = null;
+          let dirChanged = false;
+          if (Array.isArray(b.ln) && b.ln.length >= 3 && Array.isArray(cb[dirKey])) {
+            const nW = new THREE.Vector3(...b.ln).transformDirection(Wb).transformDirection(WI).normalize();
+            nextDir = nW.toArray().map((v) => round(v, 6));
+            dirChanged = [0, 1, 2].some((k) => Math.abs((Number(cb[dirKey][k]) || 0) - nextDir[k]) > 1e-3);
+          }
+          if (ptChanged || dirChanged) {
+            jobs.push({
+              cable: true,
+              id: it.id,
+              ptKey,
+              dirKey,
+              p: w.toArray().map((v) => round(v, 4)),
+              dir: dirChanged ? nextDir : null,
+            });
+          }
+        }
+      }
     });
     if (!jobs.length) { relinkRounds = 0; return; }
     if (++relinkRounds > 3) { relinkRounds = 0; return; }   // Schutz gegen Hin und Her
     App.change('Rohr folgt dem Körper', (doc) => {
       for (const j of jobs) {
-        const f = Model.find(doc, j.id); if (!f || !f.item.p.path3d) continue;
+        const f = Model.find(doc, j.id); if (!f || !f.item || !f.item.p) continue;
+        if (j.cable) {
+          const cb = f.item.p.cable;
+          if (!cb) continue;
+          if (j.drop) delete cb[j.bindKey];
+          else {
+            cb[j.ptKey] = j.p;
+            if (j.dir) cb[j.dirKey] = j.dir;
+          }
+          continue;
+        }
+        if (!f.item.p.path3d) continue;
         const pp = f.item.p.path3d;
         if (j.drop) { pp.bind[j.i] = null; if (!pp.bind.some(Boolean)) delete pp.bind; } else pp.pts[j.i] = j.p;
       }
@@ -5812,6 +5857,442 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box' }, T('asm.cutHint')));
   }
 
+  // ---------- Kabel und Schläuche (BG-34): 3D-Anschlüsse klicken & Eigenschaften-Panel ----------
+  let cablePick = null;
+  function clearCableOverlay() {
+    if (cablePick && cablePick.obj) {
+      Viewer.groups.overlay.remove(cablePick.obj);
+      cablePick.obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      cablePick.obj = null;
+    }
+  }
+  function stopCablePick() {
+    if (!cablePick) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', cablePick.down, true);
+    cv.removeEventListener('pointerup', cablePick.up, true);
+    cv.removeEventListener('pointermove', cablePick.move);
+    window.removeEventListener('keydown', cablePick.key, true);
+    clearCableOverlay();
+    if (cablePick.bar) cablePick.bar.remove();
+    if (typeof Snap !== 'undefined' && Snap.clear) Snap.clear();
+    cv.style.cursor = '';
+    UI.hint(null);
+    cablePick = null;
+    Viewer.requestRender();
+  }
+  function cableHitAt(cx, cy, fallbackZ = 0, ignoreCtrl = false) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true });
+    if (hit && hit.normal) {
+      const sn = (!ignoreCtrl && hit.faceIdx >= 0 && typeof Snap !== 'undefined' && Snap.onFace)
+        ? Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal })
+        : null;
+      const ptV = sn ? sn.point : hit.point;
+      const nn = ((sn && sn.normal) || hit.normal).clone().normalize();
+      const WI = Model.worldMatrix(App.doc, hit.id).invert();
+      const lp = ptV.clone().applyMatrix4(WI).toArray().map((v) => round(v, 4));
+      const ln = nn.clone().transformDirection(WI).normalize().toArray().map((v) => round(v, 6));
+      return {
+        pt: ptV.toArray().map((v) => round(v, 3)),
+        dir: nn.toArray().map((v) => round(v, 6)),
+        bind: { id: hit.id, lp, ln },
+      };
+    }
+    const P = Viewer.pickPlane(cx, cy, fallbackZ);
+    if (!P) return null;
+    return {
+      pt: P.toArray().map((v) => round(v, 3)),
+      dir: 'auto',
+      bind: null,
+    };
+  }
+  function drawCablePreview(hover) {
+    if (!cablePick) return;
+    clearCableOverlay();
+    const g = new THREE.Group();
+    const accent = new THREE.Color(Viewer.theme.accent);
+    const dotR = Math.max(0.9, (cablePick.d || 4) * 0.45);
+    const addPt = (q, col) => {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(dotR, 14, 10),
+        new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: 0.92 })
+      );
+      m.position.set(q[0], q[1], q[2]);
+      m.renderOrder = 32;
+      g.add(m);
+    };
+    const addNorm = (q, dir, col) => {
+      if (!Array.isArray(dir)) return;
+      const lenN = Math.max(8, (cablePick.d || 4) * 2.2);
+      const ln = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(q[0], q[1], q[2]),
+          new THREE.Vector3(q[0] + dir[0] * lenN, q[1] + dir[1] * lenN, q[2] + dir[2] * lenN),
+        ]),
+        new THREE.LineBasicMaterial({ color: col, depthTest: false })
+      );
+      ln.renderOrder = 31;
+      g.add(ln);
+    };
+    if (cablePick.start) {
+      addPt(cablePick.start, accent);
+      addNorm(cablePick.start, cablePick.dirA, accent);
+    }
+    if (hover && hover.pt) {
+      addPt(hover.pt, accent);
+      addNorm(hover.pt, hover.dir, accent);
+    }
+    const lenEl = cablePick.bar && cablePick.bar.querySelector('#cp-len');
+    if (cablePick.start && hover && hover.pt && Math.hypot(hover.pt[0] - cablePick.start[0], hover.pt[1] - cablePick.start[1], hover.pt[2] - cablePick.start[2]) >= 0.5) {
+      const cg = Model.cableGeometry({
+        d: cablePick.d,
+        wall: cablePick.type === 'hose' ? cablePick.wall : 0,
+        cable: {
+          type: cablePick.type,
+          start: cablePick.start,
+          end: hover.pt,
+          dirA: cablePick.dirA,
+          dirB: hover.dir,
+          bendR: cablePick.bendR,
+          sag: cablePick.sag || 0,
+        },
+      }, Model.vars(App.doc).v);
+      const pts3 = [];
+      if (cg.segs.length) {
+        for (const s of cg.segs) {
+          for (let i = pts3.length ? 1 : 0; i <= 24; i++) {
+            const t = i / 24, u = 1 - t;
+            pts3.push(new THREE.Vector3(...[0, 1, 2].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k])));
+          }
+        }
+      } else if (cg.pts.length >= 2) {
+        pts3.push(new THREE.Vector3(...cg.pts[0]), new THREE.Vector3(...cg.pts[1]));
+      }
+      if (pts3.length >= 2) {
+        const lineCol = cg.bendOk ? accent : new THREE.Color('#e67e22');
+        const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts3), new THREE.LineBasicMaterial({ color: lineCol, depthTest: false }));
+        ln.renderOrder = 30;
+        g.add(ln);
+      }
+      if (lenEl) lenEl.textContent = Units.fmtLenU(cg.length, 1);
+    } else if (lenEl) {
+      lenEl.textContent = '–';
+    }
+    Viewer.groups.overlay.add(g);
+    cablePick.obj = g;
+    Viewer.requestRender();
+  }
+  function startCablePick(opts = {}) {
+    if (!App.doc) return false;
+    stopPick(); stopRoute(); stopCablePick();
+    const type = opts.type === 'hose' ? 'hose' : 'cable';
+    const d = Number(opts.d) > 0 ? Number(opts.d) : (type === 'hose' ? 8 : 4);
+    const wall = type === 'hose' ? (Number(opts.wall) >= 0 ? Number(opts.wall) : 1.5) : 0;
+    const bendR = Number(opts.bendR) > 0 ? Number(opts.bendR) : Math.max(15, d * 3);
+    cablePick = {
+      mode: 'new',
+      type,
+      d,
+      wall,
+      bendR,
+      sag: Number(opts.sag) || 0,
+      name: opts.name || '',
+      start: null,
+      dirA: 'auto',
+      bindA: null,
+      obj: null,
+      at: null,
+      bar: null,
+    };
+    const cv = Viewer.canvas;
+    cablePick.down = (e) => { if (e.button === 0) cablePick.at = [e.clientX, e.clientY]; };
+    cablePick.move = (e) => {
+      if (!cablePick) return;
+      const z = cablePick.start ? cablePick.start[2] : 0;
+      const h0 = cableHitAt(e.clientX, e.clientY, z, e.ctrlKey || e.metaKey);
+      drawCablePreview(h0);
+    };
+    cablePick.up = (e) => {
+      if (e.button !== 0 || !cablePick || !cablePick.at) return;
+      const moved = Math.hypot(e.clientX - cablePick.at[0], e.clientY - cablePick.at[1]);
+      cablePick.at = null;
+      if (moved >= 5) return;
+      const z = cablePick.start ? cablePick.start[2] : 0;
+      const h0 = cableHitAt(e.clientX, e.clientY, z, e.ctrlKey || e.metaKey);
+      if (!h0) return;
+      if (!cablePick.start) {
+        cablePick.start = h0.pt;
+        cablePick.dirA = h0.dir;
+        cablePick.bindA = h0.bind;
+        UI.hint(T('asm.cablePickHint2'));
+        drawCablePreview(h0);
+        return;
+      }
+      const st = cablePick;
+      const distAB = Math.hypot(h0.pt[0] - st.start[0], h0.pt[1] - st.start[1], h0.pt[2] - st.start[2]);
+      if (distAB < 0.5) {
+        UI.toast(T('asm.cableTooCloseErr'), { icon: 'info' });
+        return;
+      }
+      stopCablePick();
+      if (typeof Assembly !== 'undefined' && Assembly.createCable) {
+        Assembly.createCable({
+          type: st.type,
+          name: st.name || undefined,
+          d: st.d,
+          wall: st.wall,
+          bendR: st.bendR,
+          sag: st.sag,
+          start: st.start,
+          dirA: st.dirA,
+          bindA: st.bindA,
+          end: h0.pt,
+          dirB: h0.dir,
+          bindB: h0.bind,
+        });
+      }
+    };
+    cablePick.key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopCablePick(); Panels.renderRight(); }
+    };
+    const bar = h('div', { class: 'viewbar', id: 'cable-pick-bar', role: 'toolbar', 'aria-label': T('asm.cableTitle') });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, T('asm.cableTitle')));
+    const xBtn = h('button', { type: 'button', class: 'vb-x', 'aria-label': T('common.cancel'), 'data-tip': T('common.cancel') });
+    xBtn.innerHTML = icon('close');
+    xBtn.onclick = () => { stopCablePick(); Panels.renderRight(); };
+    head.append(xBtn);
+    const typeSel = h('select', { id: 'cp-type', class: 'vb-sel', 'aria-label': T('asm.cableTypeLabel') },
+      h('option', { value: 'cable', selected: type === 'cable' }, T('asm.cableKindCable')),
+      h('option', { value: 'hose', selected: type === 'hose' }, T('asm.cableKindHose')));
+    typeSel.onchange = () => {
+      cablePick.type = typeSel.value === 'hose' ? 'hose' : 'cable';
+      if (cablePick.type === 'hose' && cablePick.wall <= 0) cablePick.wall = 1.5;
+      drawCablePreview(null);
+    };
+    const din = h('input', { type: 'number', id: 'cp-d', class: 'vb-sel', value: cablePick.d, min: 0.4, step: 0.5, 'aria-label': T('param.dia'), style: { width: '58px' } });
+    din.onchange = () => { const v = parseFloat(String(din.value).replace(',', '.')); if (v >= 0.4) { cablePick.d = v; drawCablePreview(null); } };
+    const rin = h('input', { type: 'number', id: 'cp-r', class: 'vb-sel', value: cablePick.bendR, min: 0.5, step: 1, 'aria-label': T('asm.cableBendRLabel'), style: { width: '58px' } });
+    rin.onchange = () => { const v = parseFloat(String(rin.value).replace(',', '.')); if (v >= 0.5) { cablePick.bendR = v; drawCablePreview(null); } };
+    bar.append(
+      head,
+      h('div', { class: 'vb-row' }, typeSel, h('span', { class: 'vb-l' }, 'Ø'), din, h('span', { class: 'vb-l' }, 'R'), rin, h('span', { class: 'vb-l' }, 'L'), h('b', { class: 'mono', id: 'cp-len' }, '–'))
+    );
+    Views.bars().append(bar);
+    cablePick.bar = bar;
+    cv.addEventListener('pointerdown', cablePick.down, true);
+    cv.addEventListener('pointerup', cablePick.up, true);
+    cv.addEventListener('pointermove', cablePick.move);
+    window.addEventListener('keydown', cablePick.key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(T('asm.cablePickHint1'));
+    drawCablePreview(null);
+    return true;
+  }
+  function pickCablePort(itemId, which = 'start') {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item || f.item.kind !== 'sweep' || !f.item.p || !f.item.p.cable) return false;
+    stopPick(); stopRoute(); stopCablePick();
+    const cv = Viewer.canvas;
+    cablePick = { mode: 'port', itemId, which, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 4), obj: null, at: null };
+    cablePick.down = (e) => { if (e.button === 0) cablePick.at = [e.clientX, e.clientY]; };
+    cablePick.move = (e) => {
+      if (!cablePick) return;
+      const h0 = cableHitAt(e.clientX, e.clientY, 0, e.ctrlKey || e.metaKey);
+      drawCablePreview(h0);
+    };
+    cablePick.up = (e) => {
+      if (e.button !== 0 || !cablePick || !cablePick.at) return;
+      const moved = Math.hypot(e.clientX - cablePick.at[0], e.clientY - cablePick.at[1]);
+      cablePick.at = null;
+      if (moved >= 5) return;
+      const h0 = cableHitAt(e.clientX, e.clientY, 0, e.ctrlKey || e.metaKey);
+      if (!h0) return;
+      stopCablePick();
+      const WI = Model.worldMatrix(App.doc, itemId).invert();
+      const ptL = new THREE.Vector3(...h0.pt).applyMatrix4(WI).toArray().map((v) => round(v, 3));
+      const dirL = Array.isArray(h0.dir)
+        ? new THREE.Vector3(...h0.dir).transformDirection(WI).normalize().toArray().map((v) => round(v, 6))
+        : h0.dir;
+      App.change(T('asm.cablePortUndo'), (doc) => {
+        const cur = Model.find(doc, itemId);
+        if (!cur || !cur.item || !cur.item.p || !cur.item.p.cable) return false;
+        const cb = cur.item.p.cable;
+        if (which === 'via') {
+          cb.via = Array.isArray(cb.via) ? cb.via : [];
+          cb.via.push(ptL);
+        } else {
+          const isA = which === 'start';
+          cb[isA ? 'start' : 'end'] = ptL;
+          cb[isA ? 'dirA' : 'dirB'] = dirL;
+          const bKey = isA ? 'bindA' : 'bindB';
+          if (h0.bind) cb[bKey] = h0.bind;
+          else delete cb[bKey];
+        }
+      });
+      UI.toast(T('asm.cablePortUpdated'), { icon: 'check' });
+    };
+    cablePick.key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopCablePick(); Panels.renderRight(); }
+    };
+    cv.addEventListener('pointerdown', cablePick.down, true);
+    cv.addEventListener('pointerup', cablePick.up, true);
+    cv.addEventListener('pointermove', cablePick.move);
+    window.addEventListener('keydown', cablePick.key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(which === 'via' ? T('asm.cablePickViaHint') : T('asm.cablePickPortHint'));
+    return true;
+  }
+  function renderCable(it, sec, setP) {
+    const p = it.p || {};
+    const c = p.cable || {};
+    const V = Model.itemVars(App.doc, it.id);
+    const cm = Model.cableMetrics(p, V);
+    const isHose = cm.type === 'hose';
+    const minRTxt = isFinite(cm.minBendR) ? `R ${Units.fmtLenU(cm.minBendR, 1)}` : T('asm.cableStraight');
+    sec.append(h('div', { class: 'mini-row', id: 'cable-len-info' },
+      h('span', { class: 'grow' }, `${T('asm.cableLengthLabel')}: ${Units.fmtLenU(cm.length, 1)}`),
+      h('b', { class: 'mono', id: 'cable-minr-val' }, minRTxt)));
+    if (!cm.bendOk) {
+      sec.append(h('div', { class: 'hint-box warn', id: 'cable-bend-warn' },
+        T('asm.cableBendWarn', { minR: Units.fmtLenU(cm.minBendR, 1), req: Units.fmtLenU(cm.bendR, 1) })));
+    }
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'cable-type',
+      label: T('asm.cableTypeLabel'),
+      value: isHose ? 'hose' : 'cable',
+      options: [['cable', T('asm.cableKindCable')], ['hose', T('asm.cableKindHose')]],
+      onChange: (v) => App.change(T('asm.cableEditUndo'), (doc) => {
+        const cur = Model.find(doc, it.id);
+        if (!cur || !cur.item || !cur.item.p || !cur.item.p.cable) return false;
+        const nextType = v === 'hose' ? 'hose' : 'cable';
+        cur.item.p.cable.type = nextType;
+        if (nextType === 'hose' && !(Number(cur.item.p.wall) > 0)) {
+          cur.item.p.wall = round(Math.min(1.5, Math.max(0.4, (Number(cur.item.p.d) || 8) * 0.2)), 2);
+        } else if (nextType === 'cable') {
+          cur.item.p.wall = 0;
+        }
+      }),
+    }));
+    fl.append(UI.numField({ id: 'cable-d', label: T('param.dia'), value: p.d ?? cm.d, min: 0.4, unit: 'mm', vars: V, onCommit: (v) => setP('d', v) }));
+    if (isHose) {
+      fl.append(UI.numField({ id: 'cable-wall', label: T('asm.cableWallLabel'), value: p.wall ?? cm.wall, min: 0.1, unit: 'mm', vars: V, onCommit: (v) => setP('wall', v) }));
+    }
+    const setC = (key, val, mergeKey = null) => App.change(T('asm.cableEditUndo'), (doc) => {
+      const cur = Model.find(doc, it.id);
+      if (!cur || !cur.item || !cur.item.p || !cur.item.p.cable) return false;
+      cur.item.p.cable[key] = val;
+    }, mergeKey ? { merge: mergeKey } : undefined);
+    fl.append(
+      UI.numField({ id: 'cable-bendr', label: T('asm.cableBendRLabel'), value: c.bendR ?? cm.bendR, min: 0.5, unit: 'mm', vars: V, onCommit: (v) => setC('bendR', v) }),
+      UI.numField({ id: 'cable-sag', label: T('asm.cableSagLabel'), value: c.sag ?? 0, unit: 'mm', vars: V, onCommit: (v) => setC('sag', v) }),
+    );
+    sec.append(fl);
+
+    const dirOptions = (curDir) => {
+      const opts = [
+        ['auto', T('asm.cableDirAuto')],
+        ['+X', '+X'], ['-X', '−X'],
+        ['+Y', '+Y'], ['-Y', '−Y'],
+        ['+Z', '+Z'], ['-Z', '−Z'],
+      ];
+      if (Array.isArray(curDir)) opts.push(['__custom', T('asm.cableDirFace')]);
+      return opts;
+    };
+    const renderPort = (which, title, ptKey, dirKey, bindKey, pfx) => {
+      const pt = Array.isArray(c[ptKey]) ? c[ptKey] : (which === 'start' ? cm.start : cm.end);
+      const rawDir = c[dirKey];
+      const box = h('div', { class: 'p3-list', style: { marginTop: '8px' } });
+      box.append(h('div', { class: 'mini-row' }, h('b', null, title)));
+      const pr = h('div', { class: 'fields three p3-row' });
+      ['x', 'y', 'z'].forEach((ax, k) => {
+        pr.append(UI.numField({
+          id: `cable-${pfx}${ax}`,
+          label: ax.toUpperCase(),
+          value: typeof pt[k] === 'string' ? pt[k] : round(cm[which][k], 3),
+          vars: V,
+          onCommit: (v) => App.change(T('asm.cableEditUndo'), (doc) => {
+            const cur = Model.find(doc, it.id);
+            if (!cur || !cur.item || !cur.item.p || !cur.item.p.cable) return false;
+            const cb = cur.item.p.cable;
+            cb[ptKey] = Array.isArray(cb[ptKey]) ? cb[ptKey].slice() : [0, 0, 0];
+            cb[ptKey][k] = v;
+            delete cb[bindKey];
+          }, { merge: `cb:${it.id}:${ptKey}:${k}` }),
+        }));
+      });
+      box.append(pr);
+      const df = UI.selectField({
+        id: `cable-dir${pfx}`,
+        label: T('asm.cableDirLabel'),
+        value: Array.isArray(rawDir) ? '__custom' : (rawDir || 'auto'),
+        options: dirOptions(rawDir),
+        onChange: (v) => {
+          if (v === '__custom') return;
+          setC(dirKey, v);
+        },
+      });
+      box.append(h('div', { class: 'fields', style: { marginTop: '4px' } }, df));
+      const row = h('div', { class: 'btn-row', style: { marginTop: '4px' } });
+      const pb = h('button', { type: 'button', class: 'btn small', id: `cable-pick-${pfx}` });
+      pb.innerHTML = icon('cursor') + esc(T('asm.cablePickPortBtn'));
+      pb.onclick = () => pickCablePort(it.id, which);
+      row.append(pb);
+      if (c[bindKey]) {
+        const bf = Model.find(App.doc, c[bindKey].id);
+        const ub = h('button', { type: 'button', class: 'btn small ghost', id: `cable-unbind-${pfx}` });
+        ub.innerHTML = icon('close') + esc(T('panel.sweep.unbind'));
+        ub.onclick = () => App.change(T('asm.cableEditUndo'), (doc) => {
+          const cur = Model.find(doc, it.id);
+          if (!cur || !cur.item || !cur.item.p || !cur.item.p.cable) return false;
+          delete cur.item.p.cable[bindKey];
+        });
+        row.append(ub);
+        box.append(h('div', { class: 'mini-row', id: `cable-bound-${pfx}` }, h('span', { class: 'grow' }, T('asm.cableBoundInfo', { name: bf ? Model.label(bf.item) : '?' }))));
+      }
+      box.append(row);
+      sec.append(box);
+    };
+    renderPort('start', T('asm.cablePortA'), 'start', 'dirA', 'bindA', 'a');
+    renderPort('end', T('asm.cablePortB'), 'end', 'dirB', 'bindB', 'b');
+
+    const via = Array.isArray(c.via) ? c.via : [];
+    if (via.length) {
+      const vBox = h('div', { class: 'p3-list', style: { marginTop: '8px' } });
+      vBox.append(h('div', { class: 'mini-row' }, h('b', null, T('asm.cableViaList'))));
+      via.forEach((q, i) => {
+        const vr = h('div', { class: 'fields three p3-row' });
+        ['x', 'y', 'z'].forEach((ax, k) => vr.append(UI.numField({
+          id: `cable-via-${i}-${ax}`,
+          label: `${i + 1} ${ax.toUpperCase()}`,
+          value: typeof q[k] === 'string' ? q[k] : round(Number(q[k]) || 0, 3),
+          vars: V,
+          onCommit: (v) => App.change(T('asm.cableEditUndo'), (doc) => {
+            const cur = Model.find(doc, it.id);
+            const arr = cur && cur.item && cur.item.p && cur.item.p.cable && cur.item.p.cable.via;
+            if (!arr || !arr[i]) return false;
+            arr[i][k] = v;
+          }),
+        })));
+        const del = h('button', { type: 'button', class: 'btn ghost small', id: `cable-via-del-${i}` });
+        del.innerHTML = icon('trash') + esc(T('common.delete'));
+        del.onclick = () => App.change(T('asm.cableEditUndo'), (doc) => {
+          const cur = Model.find(doc, it.id);
+          const cb = cur && cur.item && cur.item.p && cur.item.p.cable;
+          if (!cb || !Array.isArray(cb.via)) return false;
+          cb.via.splice(i, 1);
+          if (!cb.via.length) delete cb.via;
+        });
+        vBox.append(vr, del);
+      });
+      sec.append(vBox);
+    }
+    const viaBtn = h('button', { type: 'button', class: 'btn small', id: 'cable-add-via', style: { marginTop: '8px' } });
+    viaBtn.innerHTML = icon('plus') + esc(T('asm.cableAddViaBtn'));
+    viaBtn.onclick = () => pickCablePort(it.id, 'via');
+    sec.append(viaBtn, h('div', { class: 'hint-box', html: T('asm.cableHint') }));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
 })();

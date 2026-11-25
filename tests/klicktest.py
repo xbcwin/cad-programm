@@ -33720,6 +33720,212 @@ def t_a168_schnittarten(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a167_kabel_schlaeuche(p):
+    # [A-167] Baugruppe (Profi): Kabel und Schläuche zwischen zwei Anschlusspunkten (BG-34)
+    p.empty()
+    p.ev("""(() => {
+      const { App, Model, ViewPrefs } = window.__M;
+      ViewPrefs.setLevel('pro');
+      const d = Model.newAssemblyDoc('Kabel-Test');
+      const b1 = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Box A', color: '#2f9e91' });
+      b1.t.x = 0;
+      const b2 = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Box B', color: '#3b82f6' });
+      b2.t.x = 100;
+      d.items = [b1, b2];
+      App.setDoc(d, { fit: true });
+    })()""")
+    warte_rechnen(p)
+
+    # 1. Profi-Trennung: Im Einfach-Modus ausgeblendet & blockiert
+    p.ev("window.__M.ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_chk = p.ev("""return (() => {
+      const hidden = ['#proj-asm-cable', '#btn-asm-cable'].every(sel => {
+        const el = document.querySelector(sel);
+        return !el || el.offsetParent === null;
+      });
+      const blocked = Assembly.cableDialog() === null
+        && Assembly.createCable({ start: [0, 0, 20], end: [100, 0, 20] }) === null
+        && Assembly.startCable() === false;
+      const cmdBlocked = Commands.search('kabel').every(c => c.id !== 'asm-cable' && c.id !== 'asm-cable-pick');
+      return { hidden, blocked, cmdBlocked };
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_vis = p.ev("""return ['#proj-asm-cable', '#btn-asm-cable'].every(sel => {
+      const el = document.querySelector(sel);
+      return !!(el && el.offsetParent !== null);
+    }) && Commands.search('kabel').some(c => c.id === 'asm-cable')""")
+    ok1 = bool(simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdBlocked'] and pro_vis)
+
+    # 2. Kabel zwischen zwei Punkten im Abstand 100 über Dialog, Körper & Biegeradius
+    p.pg.click('#proj-asm-cable')
+    p.wait(120)
+    p.pg.select_option('#cb-type', 'cable')
+    p.pg.fill('#cb-d', '5')
+    p.pg.press('#cb-d', 'Enter')
+    p.pg.fill('#cb-bendr', '20')
+    p.pg.press('#cb-bendr', 'Enter')
+    for sel, val in [('#cb-ax', '0'), ('#cb-ay', '0'), ('#cb-az', '20'), ('#cb-bx', '100'), ('#cb-by', '0'), ('#cb-bz', '20')]:
+        p.pg.fill(sel, val)
+        p.pg.press(sel, 'Enter')
+    p.pg.select_option('#cb-dira', '+Z')
+    p.pg.select_option('#cb-dirb', '+Z')
+    p.wait(80)
+    p.pg.click('#cb-create')
+    warte_rechnen(p)
+
+    c_res = p.ev("""return (async () => {
+      const c = App.doc.items.find(x => Assembly.isCableItem(x));
+      if (!c) return null;
+      const cm = Model.cableMetrics(c.p, Model.itemVars(App.doc, c.id));
+      const m = await Mass.measure();
+      const part = m ? Mass.partOf(m, c.id) : null;
+      const hasNode = Viewer.nodes.has(c.id);
+      return { id: c.id, cm, part, hasNode };
+    })()""")
+    ok2 = False
+    if c_res and c_res.get('part') and c_res.get('hasNode'):
+        cm = c_res['cm']
+        vol = c_res['part'].get('volume') or 0
+        expected_vol = 3.14159265 * 2.5 * 2.5 * cm['length']
+        ok2 = bool(
+            cm['length'] >= 100 and cm['length'] > 115
+            and cm['minBendR'] >= 19.5
+            and cm['bendOk']
+            and vol > 0 and abs(vol - expected_vol) < expected_vol * 0.08
+        )
+
+    # Biegeradius im Panel auf 40 mm erhöhen -> Kurve und Länge wachsen
+    p.pg.fill('#cable-bendr', '40')
+    p.pg.press('#cable-bendr', 'Enter')
+    warte_rechnen(p)
+    c_res2 = p.ev("""return (() => {
+      const c = App.doc.items.find(x => Assembly.isCableItem(x));
+      return c ? Model.cableMetrics(c.p, Model.itemVars(App.doc, c.id)) : null;
+    })()""")
+    ok2 = ok2 and bool(c_res2 and c_res2['minBendR'] >= 39.5 and c_res2['length'] > c_res['cm']['length'])
+
+    # 3. Stückliste zeigt Kabellänge
+    bom_data = p.ev("""return (async () => {
+      const b = await Mass.bom(App.doc);
+      const csv = b ? Mass.bomCSV(b, App.doc.name) : '';
+      return { b, csv };
+    })()""")
+    p.ev("Mass.bomDialog()")
+    p.wait(300)
+    bom_dlg = p.ev("""return (() => {
+      const dlg = document.querySelector('#bom');
+      const tbl = dlg ? dlg.querySelector('#bom-cables') : null;
+      const tot = dlg ? dlg.querySelector('#bom-cables-total-len') : null;
+      return {
+        hasDlg: !!dlg,
+        hasTbl: !!tbl,
+        tblTxt: tbl ? tbl.textContent : '',
+        totTxt: tot ? tot.textContent : '',
+        dlgTxt: dlg ? dlg.textContent : '',
+      };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(100)
+    b = bom_data.get('b') or {}
+    c_rows = [r for r in (b.get('rows') or []) if r.get('isCable')]
+    c_list = b.get('cables') or []
+    exp_len = c_res2['length'] if c_res2 else 0
+    len_prefix = str(round(exp_len, 1)).replace('.', ',')[:4]
+    ok3 = bool(
+        len(c_rows) == 1 and (c_rows[0].get('cableLen') or 0) >= 100
+        and len(c_list) == 1 and abs((c_list[0].get('length') or 0) - exp_len) < 0.2
+        and bom_dlg['hasDlg'] and bom_dlg['hasTbl']
+        and len_prefix in bom_dlg['tblTxt']
+        and len_prefix in bom_dlg['totTxt']
+        and len_prefix in bom_data.get('csv', '')
+    )
+
+    # 4. Hohler Schlauch, Nachführen bei Bauteil-Bewegung & Rückgängig
+    hose_res = p.ev("""return (async () => {
+      const b1 = App.doc.items.find(x => x.name === 'Box A');
+      const b2 = App.doc.items.find(x => x.name === 'Box B');
+      const h = Assembly.createCable({
+        type: 'hose',
+        name: 'Kühl-Schlauch',
+        d: 8,
+        wall: 1.5,
+        bendR: 25,
+        start: [0, 0, 20],
+        end: [100, 0, 20],
+        dirA: [0, 0, 1],
+        dirB: [0, 0, 1],
+        bindA: { id: b1.id, lp: [0, 0, 20], ln: [0, 0, 1] },
+        bindB: { id: b2.id, lp: [0, 0, 20], ln: [0, 0, 1] },
+      });
+      return h ? h.id : null;
+    })()""")
+    warte_rechnen(p)
+    hose_meas = p.ev("""return (async () => {
+      const h = App.doc.items.find(x => x.id === arg);
+      if (!h) return null;
+      const cm = Model.cableMetrics(h.p, Model.itemVars(App.doc, h.id));
+      const m = await Mass.measure();
+      const part = m ? Mass.partOf(m, h.id) : null;
+      return { cm, vol: part ? part.volume : 0 };
+    })()""", hose_res)
+    p.ev("""(() => {
+      App.change('Box B verschoben', (doc) => {
+        const b2 = doc.items.find(x => x.name === 'Box B');
+        if (b2) b2.t.x = 140;
+      });
+    })()""")
+    warte_rechnen(p)
+    p.wait(150)
+    warte_rechnen(p)
+    moved_hose = p.ev("""return (() => {
+      const h = App.doc.items.find(x => x.id === arg);
+      if (!h) return null;
+      const cm = Model.cableMetrics(h.p, Model.itemVars(App.doc, h.id));
+      return { end: h.p.cable.end, cm };
+    })()""", hose_res)
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    undo_move_end = p.ev("""return (() => {
+      const h = App.doc.items.find(x => x.id === arg);
+      return h ? h.p.cable.end[0] : null;
+    })()""", hose_res)
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    undo_len = p.ev("return App.doc.items.filter(x => Assembly.isCableItem(x)).length")
+    solid_equiv = (3.14159265 * 4.0 * 4.0 * hose_meas['cm']['length']) if hose_meas else 0
+    hollow_equiv = (3.14159265 * (4.0 * 4.0 - 2.5 * 2.5) * hose_meas['cm']['length']) if hose_meas else 0
+    ok4 = bool(
+        hose_res and hose_meas and hose_meas['vol'] > 0
+        and hose_meas['vol'] < solid_equiv * 0.78
+        and abs(hose_meas['vol'] - hollow_equiv) < hollow_equiv * 0.1
+        and moved_hose and abs((moved_hose['end'][0] or 0) - 140) < 0.05
+        and moved_hose['cm']['bendOk']
+        and moved_hose['cm']['length'] > hose_meas['cm']['length'] + 20
+        and undo_move_end is not None and abs(undo_move_end - 100) < 0.05
+        and undo_len == 1
+    )
+
+    # 5. Validierung, Hilfen, I18n, Befehlssuche & keine Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = !!(wh.asmCable && wh.asmCable.tip && wh.asmCable.hilfe && wh.asmCable.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const valOk = Store.validateProject(App.doc).ok;
+      const c1 = Commands.search('kabel').some(c => c.id === 'asm-cable');
+      const c2 = Commands.search('schlauch anklicken').some(c => c.id === 'asm-cable-pick');
+      return { hOk, i18nOk, valOk, cmds: c1 && c2 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['valOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -34000,6 +34206,7 @@ TESTS = [
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
+    ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

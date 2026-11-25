@@ -2606,6 +2606,11 @@ const HELP = {
   "tip": "Weitere Schnittarten in der Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt und Ausbruch",
   "hilfe": "Im Profi-Modus stehen dir neben dem normalen Vollschnitt drei weitere Schnittarten zur Wahl: Beim Halbschnitt siehst du die eine Hälfte als Außenansicht und die andere als Schnitt (ideal für runde oder symmetrische Teile). Beim abgesetzten Schnitt knickst du die Schnittlinie im rechten Winkel ab, um versetzte Bohrungen oder Taschen gemeinsam zu schneiden. Beim Ausbruch brichst du nur einen gezeichneten Bereich bis zur gewünschten Tiefe auf.",
   "tipp": "Beim Halbschnitt kannst du die geschnittene Seite jederzeit rechts im Panel wechseln; beim Ausbruch lässt sich die Schnitttiefe dort genau eintippen."
+ },
+ "asmCable": {
+  "tip": "Kabel oder Schlauch zwischen zwei Anschlusspunkten mit Durchmesser und Biegeradius verlegen (Profi)",
+  "hilfe": "Erzeugt eine weiche 3D-Kurve zwischen zwei Punkten (direkt eingeben oder auf Bauteilflächen anklicken) mit frei wählbarem Durchmesser, Wandstärke (bei Schläuchen) und Biegeradius. Werden die Anschlusspunkte auf Bauteile geklickt, wandert das Kabel beim Verschieben mit, und die exakte Länge erscheint in der Stückliste.",
+  "tipp": "Wähle „Schlauch (hohl)“, um einen Innenhohlraum über die Wandstärke zu erhalten, oder füge rechts im Panel Zwischenpunkte hinzu."
  }
 };
 
