@@ -242,6 +242,29 @@ const Viewer = (() => {
     shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.2, depthWrite: false }));
     shadowFloor.receiveShadow = true; shadowFloor.renderOrder = -1; shadowFloor.visible = false; shadowFloor.userData.noPick = true;
     groups.ground.add(shadowFloor);
+    reflectAlphaTex = makeFloorAlphaTex();
+    reflectFloor = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(theme.dark ? '#242c36' : '#e6ecf2'),
+        roughness: 0.25,
+        metalness: 0.25,
+        reflectivity: 0,
+        clearcoat: 0,
+        clearcoatRoughness: 0.12,
+        envMapIntensity: 0,
+        transparent: true,
+        opacity: 0,
+        alphaMap: reflectAlphaTex,
+        depthWrite: false,
+      }),
+    );
+    reflectFloor.name = 'studioFloor';
+    reflectFloor.renderOrder = -3;
+    reflectFloor.visible = false;
+    reflectFloor.userData.noPick = true;
+    reflectFloor.userData.studioFloor = true;
+    groups.ground.add(reflectFloor);
     // Lichter folgen der Kamera leicht
     camera.add(new THREE.PointLight(0xffffff, 0, 0));
     controls = new OrbitControls(camera, renderer.domElement);
@@ -260,7 +283,7 @@ const Viewer = (() => {
     const ro = new ResizeObserver(resize); ro.observe(el);
     resize();
     const mq = matchMedia('(prefers-color-scheme: dark)');
-    const onTheme = () => { readTheme(); buildGrid(gridStep); if (lastPrintBed) setPrintBed(lastPrintBed); for (const [id, n] of nodes) styleNode(n); needsRender = true; listeners.emit('theme'); };
+    const onTheme = () => { readTheme(); buildGrid(gridStep); if (lastPrintBed) setPrintBed(lastPrintBed); fitShadow(); for (const [id, n] of nodes) styleNode(n); needsRender = true; listeners.emit('theme'); };
     mq.addEventListener ? mq.addEventListener('change', onTheme) : mq.addListener(onTheme);
     new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     loop();
@@ -274,15 +297,66 @@ const Viewer = (() => {
   }
   const fatMaterials = new Set();
 
-  // ---------- Aussehen: Studio-Licht, Werkstoff, Schatten, Prüfansicht ----------
+  // ---------- Aussehen: Studio-Licht, Werkstoff, Schatten, Boden-Spiegelung, eigene Umgebung ----------
   // look: 'studio' (Werkstoff mit Glanz, Umgebung, Schatten) · 'plain' (einfach, matt) · 'clay' / 'chrome' (Prüfansicht)
   const lights = {};
-  let shadowFloor = null, envTex = null, envMood = null, pmrem = null;
-  const LOOK = { look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const DEFAULT_LIGHTS = [{ azimuth: 35, elevation: 52, color: '#ffffff', intensity: 2.1 }];
+  const LIGHT_PRESETS = [
+    { azimuth: 35, elevation: 52, color: '#ffffff', intensity: 2.1 },
+    { azimuth: -55, elevation: 25, color: '#dfe8ff', intensity: 1.0 },
+    { azimuth: 165, elevation: 30, color: '#fff3e0', intensity: 0.8 },
+  ];
+  let shadowFloor = null, reflectFloor = null, reflectAlphaTex = null;
+  let envTex = null, envMood = null, customEnvTex = null, customEnvRT = null, customEnvName = '', pmrem = null;
+  let customLights = [];
+  const LOOK = {
+    look: 'studio', mood: 'studio', shadows: true, display: 'edges',
+    floorReflect: false, floorReflectStrength: 0.45,
+    manualLights: false, lights: DEFAULT_LIGHTS.map((l) => ({ ...l })),
+  };
   // Werkstoff → Oberfläche (aus app/data/materialien.json). nat = der Werkstoff hat eine eigene Farbe (Metall, Kohlefaser, Holz, Glas)
   const LOOKS = Object.fromEntries((typeof MATERIALS !== 'undefined' ? MATERIALS : []).filter((m) => m.look).map((m) => [m.k, m.look]));
   const PLASTIC = { rough: 0.45, clear: 0.15 };
   function lookOf(mat) { return (mat && LOOKS[mat]) || PLASTIC; }
+  function makeFloorAlphaTex() {
+    const N = 256, c = document.createElement('canvas');
+    c.width = c.height = N;
+    const g = c.getContext('2d');
+    const rg = g.createRadialGradient(N / 2, N / 2, N * 0.175, N / 2, N / 2, N * 0.48);
+    rg.addColorStop(0, '#ffffff');
+    rg.addColorStop(0.55, '#d8d8d8');
+    rg.addColorStop(0.85, '#505050');
+    rg.addColorStop(1, '#000000');
+    g.fillStyle = rg;
+    g.fillRect(0, 0, N, N);
+    const t = new THREE.CanvasTexture(c);
+    t.needsUpdate = true;
+    return t;
+  }
+  function updateReflectFloor(c, r, z0) {
+    if (!reflectFloor || !reflectFloor.material) return;
+    const strength = clamp(Number(LOOK.floorReflectStrength) || 0, 0, 1);
+    const on = LOOK.look === 'studio' && !!LOOK.floorReflect && strength > 0;
+    reflectFloor.visible = on;
+    const m = reflectFloor.material;
+    m.color.set(theme.dark ? '#242c36' : '#e6ecf2');
+    m.reflectivity = on ? strength : 0;
+    m.clearcoat = on ? strength : 0;
+    m.clearcoatRoughness = clamp(0.32 - strength * 0.26, 0.04, 0.35);
+    m.roughness = on ? clamp(0.42 - strength * 0.36, 0.04, 0.5) : 0.9;
+    m.metalness = on ? clamp(0.12 + strength * 0.48, 0, 0.65) : 0;
+    m.envMapIntensity = on ? (0.45 + strength * 1.45) : 0;
+    m.opacity = on ? clamp(0.22 + strength * 0.68, 0.15, 0.9) : 0;
+    m.userData.reflectStrength = on ? strength : 0;
+    m.needsUpdate = true;
+    if (c && r > 0) {
+      reflectFloor.position.set(c.x, c.y, z0 - 0.03);
+      reflectFloor.scale.set(r * 7, r * 7, 1);
+    } else {
+      reflectFloor.position.set(0, 0, -0.08);
+      reflectFloor.scale.set(360, 360, 1);
+    }
+  }
   // Licht-Stimmungen als kleiner Raum mit Leuchtflächen – daraus wird die Spiegel-Umgebung
   const MOODS = {
     studio: { wall: 0xb4b8bc, floor: 0x8e9195, panels: [[[0, 0, 9], [8, 8, 0.2], 0xffffff, 9], [[-9, -2, 4], [0.2, 6, 3], 0xffffff, 5], [[9, 3, 3], [0.2, 4, 4], 0xdfe8ff, 3.5], [[0, 9, 5], [10, 0.2, 1.2], 0xffffff, 2.5]] },
@@ -303,6 +377,277 @@ const Viewer = (() => {
     sc.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     return envTex;
   }
+  // Kompakter Radiance-RGBE-Decoder (.hdr) für eigene Umgebungsbilder ohne Zusatzbibliothek
+  function parseHDR(buf) {
+    const bytes = new Uint8Array(buf);
+    let pos = 0;
+    const readLine = () => {
+      const start = pos;
+      while (pos < bytes.length && bytes[pos] !== 10) pos++;
+      let end = pos;
+      if (end > start && bytes[end - 1] === 13) end--;
+      if (pos < bytes.length && bytes[pos] === 10) pos++;
+      return String.fromCharCode.apply(null, bytes.subarray(start, end));
+    };
+    const magic = readLine();
+    if (!magic.startsWith('#?RADIANCE') && !magic.startsWith('#?RGBE')) throw new Error('Ungültiges HDR-Format');
+    let line = '';
+    while (pos < bytes.length) {
+      line = readLine();
+      if (line === '') break;
+    }
+    const dimLine = readLine();
+    const m = /^([+-]Y)\s+(\d+)\s+([+-]X)\s+(\d+)/.exec(dimLine.trim());
+    if (!m) throw new Error('HDR-Größe fehlt');
+    const h = parseInt(m[2], 10), w = parseInt(m[4], 10);
+    if (!(w > 0 && h > 0 && w <= 8192 && h <= 8192)) throw new Error('Ungültige HDR-Abmessungen');
+    const rgbe = new Uint8Array(w * h * 4);
+    const scan = new Uint8Array(w * 4);
+    for (let y = 0; y < h; y++) {
+      if (pos + 4 > bytes.length) break;
+      const b0 = bytes[pos], b1 = bytes[pos + 1], b2 = bytes[pos + 2], b3 = bytes[pos + 3];
+      if (b0 !== 2 || b1 !== 2 || ((b2 << 8) | b3) !== w) {
+        const len = Math.min(w * 4, bytes.length - pos);
+        rgbe.set(bytes.subarray(pos, pos + len), y * w * 4);
+        pos += len;
+        continue;
+      }
+      pos += 4;
+      for (let ch = 0; ch < 4; ch++) {
+        let ptr = ch * w;
+        const endPtr = ptr + w;
+        while (ptr < endPtr && pos < bytes.length) {
+          const code = bytes[pos++];
+          if (code > 128) {
+            const cnt = code - 128;
+            const val = bytes[pos++] || 0;
+            for (let k = 0; k < cnt && ptr < endPtr; k++) scan[ptr++] = val;
+          } else {
+            const cnt = code;
+            for (let k = 0; k < cnt && ptr < endPtr && pos < bytes.length; k++) scan[ptr++] = bytes[pos++];
+          }
+        }
+      }
+      const rowOff = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        rgbe[rowOff + x * 4] = scan[x];
+        rgbe[rowOff + x * 4 + 1] = scan[w + x];
+        rgbe[rowOff + x * 4 + 2] = scan[2 * w + x];
+        rgbe[rowOff + x * 4 + 3] = scan[3 * w + x];
+      }
+    }
+    const toHalf = (THREE.DataUtils && THREE.DataUtils.toHalfFloat) ? THREE.DataUtils.toHalfFloat : null;
+    const floatData = toHalf ? new Uint16Array(w * h * 4) : null;
+    const ldrData = new Uint8Array(w * h * 4);
+    const oneHalf = toHalf ? toHalf(1) : 15360;
+    for (let i = 0; i < w * h; i++) {
+      const si = i * 4, e = rgbe[si + 3];
+      let r = 0, g = 0, b = 0;
+      if (e > 0) {
+        const sc = Math.pow(2, e - 128) / 256;
+        r = rgbe[si] * sc; g = rgbe[si + 1] * sc; b = rgbe[si + 2] * sc;
+      }
+      if (floatData) {
+        floatData[si] = toHalf(clamp(r, 0, 65504));
+        floatData[si + 1] = toHalf(clamp(g, 0, 65504));
+        floatData[si + 2] = toHalf(clamp(b, 0, 65504));
+        floatData[si + 3] = oneHalf;
+      }
+      ldrData[si] = Math.round(clamp(r / (1 + r), 0, 1) * 255);
+      ldrData[si + 1] = Math.round(clamp(g / (1 + g), 0, 1) * 255);
+      ldrData[si + 2] = Math.round(clamp(b / (1 + b), 0, 1) * 255);
+      ldrData[si + 3] = 255;
+    }
+    return { width: w, height: h, data: floatData, ldrData };
+  }
+  function applyEnvTexture(srcTex, name) {
+    if (!pmrem) pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const rt = pmrem.fromEquirectangular(srcTex);
+    srcTex.dispose();
+    if (customEnvRT) customEnvRT.dispose();
+    else if (customEnvTex) customEnvTex.dispose();
+    customEnvRT = rt;
+    customEnvTex = rt.texture;
+    customEnvName = name || 'Umgebungsbild';
+    applyLook();
+    listeners.emit('viewmode');
+  }
+  function loadImgFromUrl(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+      img.src = url;
+    });
+  }
+  function makeCompactEnvDataUrl(img) {
+    try {
+      const maxW = 512, maxH = 256;
+      const w = img.naturalWidth || img.width || 256, h = img.naturalHeight || img.height || 128;
+      const sc = Math.min(1, maxW / w, maxH / h);
+      const cw = Math.max(16, Math.round(w * sc)), ch = Math.max(16, Math.round(h * sc));
+      const cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      cv.getContext('2d').drawImage(img, 0, 0, cw, ch);
+      return cv.toDataURL('image/jpeg', 0.82);
+    } catch (_) {
+      return null;
+    }
+  }
+  async function setEnvImage(source, name = '') {
+    if (!source) {
+      if (customEnvRT) { customEnvRT.dispose(); customEnvRT = null; }
+      else if (customEnvTex) customEnvTex.dispose();
+      customEnvTex = null;
+      customEnvName = '';
+      applyLook();
+      listeners.emit('viewmode');
+      return { ok: true, cleared: true };
+    }
+    try {
+      if (typeof Blob !== 'undefined' && source instanceof Blob) {
+        const fname = name || source.name || 'Umgebungsbild';
+        const buf = await source.arrayBuffer();
+        const head = String.fromCharCode.apply(null, new Uint8Array(buf, 0, Math.min(16, buf.byteLength)));
+        const isHdr = /\.(hdr|pic)$/i.test(fname) || head.startsWith('#?RADIANCE') || head.startsWith('#?RGBE');
+        if (isHdr) {
+          const hdr = parseHDR(buf);
+          let applied = false;
+          if (hdr.data) {
+            try {
+              const dt = new THREE.DataTexture(hdr.data, hdr.width, hdr.height, THREE.RGBAFormat, THREE.HalfFloatType);
+              dt.mapping = THREE.EquirectangularReflectionMapping;
+              dt.colorSpace = THREE.LinearSRGBColorSpace;
+              dt.magFilter = THREE.LinearFilter;
+              dt.minFilter = THREE.LinearFilter;
+              dt.flipY = true;
+              dt.needsUpdate = true;
+              applyEnvTexture(dt, fname);
+              applied = true;
+            } catch (_) { applied = false; }
+          }
+          if (!applied) {
+            const dt = new THREE.DataTexture(hdr.ldrData, hdr.width, hdr.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+            dt.mapping = THREE.EquirectangularReflectionMapping;
+            dt.colorSpace = THREE.SRGBColorSpace;
+            dt.magFilter = THREE.LinearFilter;
+            dt.minFilter = THREE.LinearFilter;
+            dt.flipY = true;
+            dt.needsUpdate = true;
+            applyEnvTexture(dt, fname);
+          }
+          return { ok: true, name: fname, type: 'hdr', width: hdr.width, height: hdr.height, dataUrl: null };
+        }
+        const url = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+          fr.readAsDataURL(source);
+        });
+        const img = await loadImgFromUrl(url);
+        const tex = new THREE.Texture(img);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.needsUpdate = true;
+        applyEnvTexture(tex, fname);
+        return { ok: true, name: fname, type: 'image', width: img.naturalWidth, height: img.naturalHeight, dataUrl: makeCompactEnvDataUrl(img) };
+      }
+      if (typeof source === 'string') {
+        const img = await loadImgFromUrl(source);
+        const tex = new THREE.Texture(img);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.needsUpdate = true;
+        applyEnvTexture(tex, name || 'Umgebungsbild');
+        return { ok: true, name: name || 'Umgebungsbild', type: 'image', width: img.naturalWidth, height: img.naturalHeight, dataUrl: source };
+      }
+      if ((typeof HTMLImageElement !== 'undefined' && source instanceof HTMLImageElement) || (typeof HTMLCanvasElement !== 'undefined' && source instanceof HTMLCanvasElement)) {
+        const tex = new THREE.Texture(source);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.needsUpdate = true;
+        applyEnvTexture(tex, name || 'Umgebungsbild');
+        return { ok: true, name: name || 'Umgebungsbild', type: 'image', width: source.width, height: source.height, dataUrl: null };
+      }
+      return { ok: false, error: 'Unbekanntes Bildformat' };
+    } catch (err) {
+      return { ok: false, error: (err && err.message) || String(err) };
+    }
+  }
+  function lightDirFromAngles(azDeg, elDeg) {
+    const az = ((Number(azDeg) || 0) * Math.PI) / 180;
+    const el = (clamp(Number(elDeg) || 0, -85, 89) * Math.PI) / 180;
+    return new THREE.Vector3(Math.cos(el) * Math.sin(az), -Math.cos(el) * Math.cos(az), Math.sin(el)).normalize();
+  }
+  function normalizeLightCfg(l, idx = 0) {
+    const fb = LIGHT_PRESETS[idx % LIGHT_PRESETS.length] || DEFAULT_LIGHTS[0];
+    const src = l && typeof l === 'object' ? l : {};
+    const az = Number(src.azimuth);
+    const el = Number(src.elevation);
+    const inten = Number(src.intensity);
+    const col = typeof src.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(src.color) ? src.color.toLowerCase() : fb.color;
+    return {
+      azimuth: Number.isFinite(az) ? clamp(Math.round(az), -180, 180) : fb.azimuth,
+      elevation: Number.isFinite(el) ? clamp(Math.round(el), -60, 90) : fb.elevation,
+      color: col,
+      intensity: Number.isFinite(inten) ? clamp(Math.round(inten * 100) / 100, 0, 5) : fb.intensity,
+    };
+  }
+  function syncLights() {
+    if (!scene || !lights.key) return;
+    const st = LOOK.look === 'studio';
+    if (LOOK.manualLights) {
+      for (const obj of [lights.key, lights.key.target, lights.fill, lights.rim]) {
+        if (obj && obj.parent === scene) scene.remove(obj);
+      }
+      const cfgs = (Array.isArray(LOOK.lights) && LOOK.lights.length ? LOOK.lights : DEFAULT_LIGHTS).slice(0, 3).map((l, i) => normalizeLightCfg(l, i));
+      LOOK.lights = cfgs;
+      while (customLights.length > cfgs.length) {
+        const old = customLights.pop();
+        if (old.target && old.target.parent === scene) scene.remove(old.target);
+        if (old.parent === scene) scene.remove(old);
+        if (old.dispose) old.dispose();
+      }
+      while (customLights.length < cfgs.length) {
+        const dl = new THREE.DirectionalLight(0xffffff, 1.5);
+        dl.userData.customLight = true;
+        if (customLights.length === 0) {
+          dl.shadow.mapSize.set(2048, 2048);
+          dl.shadow.radius = 4;
+          dl.shadow.bias = -0.0006;
+          dl.shadow.normalBias = 0.6;
+        }
+        scene.add(dl);
+        scene.add(dl.target);
+        customLights.push(dl);
+      }
+      for (let i = 0; i < cfgs.length; i++) {
+        const cfg = cfgs[i], L = customLights[i];
+        L.color.set(cfg.color);
+        L.intensity = cfg.intensity;
+        L.castShadow = i === 0 && st && LOOK.shadows;
+        L.userData.lightIndex = i;
+        L.userData.cfg = { ...cfg };
+      }
+      lights.hemi.intensity = st ? 0.22 : 0.4;
+      return;
+    }
+    while (customLights.length) {
+      const old = customLights.pop();
+      if (old.target && old.target.parent === scene) scene.remove(old.target);
+      if (old.parent === scene) scene.remove(old);
+      if (old.dispose) old.dispose();
+    }
+    for (const obj of [lights.key, lights.key.target, lights.fill, lights.rim]) {
+      if (obj && obj.parent !== scene) scene.add(obj);
+    }
+    lights.hemi.intensity = st ? 0.35 : 1.55;
+    lights.key.intensity = 2.1;
+    lights.fill.intensity = st ? 0.25 : 0.8;
+    lights.rim.intensity = st ? 0.35 : 0.45;
+    lights.key.castShadow = st && LOOK.shadows;
+  }
   // Prüfansicht: Ton (zeigt jede Delle) oder Chrom (Streifen zeigen, wie glatt Flächen ineinander laufen)
   const matcaps = {};
   function matcap(kind) {
@@ -321,31 +666,66 @@ const Viewer = (() => {
   }
   function applyLook() {
     const st = LOOK.look === 'studio';
-    scene.environment = st ? buildEnv(LOOK.mood) : null;
+    scene.environment = st ? (customEnvTex || buildEnv(LOOK.mood)) : null;
     renderer.toneMapping = st ? THREE.NeutralToneMapping : THREE.NoToneMapping; renderer.toneMappingExposure = st ? 1.05 : 1;
-    lights.hemi.intensity = st ? 0.35 : 1.55; lights.key.intensity = st ? 2.1 : 2.1; lights.fill.intensity = st ? 0.25 : 0.8; lights.rim.intensity = st ? 0.35 : 0.45;
-    lights.key.castShadow = st && LOOK.shadows;
+    syncLights();
     fitShadow();
     restyleAll();
   }
   // Schatten-Kamera und Boden an die Teile anpassen (nach jeder Änderung der Teile)
   function fitShadow() {
-    const on = LOOK.look === 'studio' && LOOK.shadows && nodes.size > 0;
+    const st = LOOK.look === 'studio';
+    let box = null;
+    if (nodes.size > 0) {
+      const b = new THREE.Box3();
+      for (const n of nodes.values()) if (n.role !== 'hole' && n.obj.visible && n.mesh && n.mesh.geometry && n.mesh.geometry.boundingBox) b.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix));
+      if (!b.isEmpty()) box = b;
+    }
+    const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 0);
+    const r = box ? Math.max(5, box.getSize(new THREE.Vector3()).length() / 2) : 40;
+    const z0 = box ? Math.min(0, box.min.z) - 0.05 : -0.05;
+    updateReflectFloor(box ? c : null, box ? r : 0, z0);
+
+    const on = st && LOOK.shadows && !!box;
     shadowFloor.visible = on;
-    if (!on) { renderer.shadowMap.needsUpdate = true; needsRender = true; return; }
-    const box = new THREE.Box3();
-    for (const n of nodes.values()) if (n.role !== 'hole' && n.obj.visible) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix));
-    if (box.isEmpty()) { shadowFloor.visible = false; return; }
-    const c = box.getCenter(new THREE.Vector3()), r = Math.max(5, box.getSize(new THREE.Vector3()).length() / 2);
-    const z0 = Math.min(0, box.min.z) - 0.05;
-    shadowFloor.position.set(c.x, c.y, z0); shadowFloor.scale.set(r * 6, r * 6, 1);
-    const L = lights.key, dir = new THREE.Vector3(0.55, -0.8, 1.25).normalize();
-    L.target.position.copy(c); L.position.copy(c).addScaledVector(dir, r * 4); L.target.updateMatrixWorld();
-    const sc = L.shadow.camera; sc.left = -r * 2.2; sc.right = r * 2.2; sc.top = r * 2.2; sc.bottom = -r * 2.2; sc.near = r * 0.5; sc.far = r * 9; sc.updateProjectionMatrix();
+    if (on) {
+      shadowFloor.position.set(c.x, c.y, z0);
+      shadowFloor.scale.set(r * 6, r * 6, 1);
+    }
+    if (LOOK.manualLights && customLights.length) {
+      for (let i = 0; i < customLights.length; i++) {
+        const L = customLights[i];
+        const cfg = (L.userData && L.userData.cfg) || LOOK.lights[i] || DEFAULT_LIGHTS[0];
+        const dir = lightDirFromAngles(cfg.azimuth, cfg.elevation);
+        L.target.position.copy(c);
+        L.position.copy(c).addScaledVector(dir, r * 4);
+        L.target.updateMatrixWorld();
+        if (i === 0) {
+          const sc = L.shadow.camera;
+          sc.left = -r * 2.2; sc.right = r * 2.2; sc.top = r * 2.2; sc.bottom = -r * 2.2;
+          sc.near = r * 0.5; sc.far = r * 9; sc.updateProjectionMatrix();
+        }
+      }
+    } else if (on && lights.key) {
+      const L = lights.key, dir = new THREE.Vector3(0.55, -0.8, 1.25).normalize();
+      L.target.position.copy(c); L.position.copy(c).addScaledVector(dir, r * 4); L.target.updateMatrixWorld();
+      const sc = L.shadow.camera; sc.left = -r * 2.2; sc.right = r * 2.2; sc.top = r * 2.2; sc.bottom = -r * 2.2; sc.near = r * 0.5; sc.far = r * 9; sc.updateProjectionMatrix();
+    }
     renderer.shadowMap.needsUpdate = true; needsRender = true;
   }
   const fitShadowSoon = debounce(fitShadow, 60);
-  function setLook(patch) { Object.assign(LOOK, patch); applyLook(); listeners.emit('viewmode'); }
+  function setLook(patch) {
+    if (patch && typeof patch === 'object') {
+      const next = { ...patch };
+      if ('floorReflectStrength' in next) next.floorReflectStrength = clamp(Number(next.floorReflectStrength) || 0, 0, 1);
+      if ('lights' in next) {
+        next.lights = (Array.isArray(next.lights) && next.lights.length ? next.lights : DEFAULT_LIGHTS).slice(0, 3).map((l, i) => normalizeLightCfg(l, i));
+      }
+      Object.assign(LOOK, next);
+    }
+    applyLook();
+    listeners.emit('viewmode');
+  }
   // ein Bild in hoher Auflösung (Bild speichern)
 
   function loop() {
@@ -2423,7 +2803,7 @@ const Viewer = (() => {
   // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
   function renderImage(w, hgt, opts = {}) {
     const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
-    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch3d, groups.sketch, groups.reffix].filter(Boolean), was = hide.map((o) => o.visible);
+    const hide = [gridMinor, gridMajor, opts.transparent ? reflectFloor : null, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch3d, groups.sketch, groups.reffix].filter(Boolean), was = hide.map((o) => o.visible);
     hide.forEach((o) => { o.visible = false; });
     const c = cam(), oldAspect = camera.aspect;
     renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
@@ -2602,7 +2982,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, TEXTURES: BODY_TEXTURES, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },

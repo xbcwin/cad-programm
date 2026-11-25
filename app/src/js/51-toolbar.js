@@ -62,6 +62,8 @@ const Toolbar = (() => {
       { id: 'weak', group: T('dlg.tb.grpViewCheck'), domId: 't-weak', icon: 'target', label: T('dlg.tb.weak'), tip: T('dlg.tb.weakTip'), cls: 'minor', help: 'weakSpots', run: () => Weak.dialog() },
       { id: 'clashes', group: T('dlg.tb.grpViewCheck'), domId: 't-clashes', icon: 'boolIntersect', label: T('menu.check.clashes'), tip: T('clash.btnTip'), cls: 'minor', help: 'clashCheck', run: () => ClashCheck.open() },
       { id: 'bom', group: T('dlg.tb.grpViewCheck'), domId: 't-bom', icon: 'list', label: T('dlg.tb.bom'), tip: T('dlg.tb.bomTip'), cls: 'minor', help: 'bom', run: () => Mass.bomDialog() },
+      { id: 'printCost', group: T('dlg.tb.grpViewCheck'), domId: 't-print-cost', icon: 'printer', label: T('menu.check.printCost'), tip: T('dlg.tb.printCostTip'), cls: 'minor', help: 'printCost', run: () => Print.costDialog() },
+      { id: 'reportPdf', group: T('dlg.tb.grpViewCheck'), domId: 't-report-pdf', icon: 'file', label: T('menu.check.reportPdf'), tip: T('dlg.tb.reportPdfTip'), cls: 'minor', help: 'reportPdf', run: () => Measure.reportDialog() },
       // Projekt & Datei
       { id: 'save', group: T('dlg.tb.grpProject'), domId: 't-save', icon: 'save', label: T('common.save'), tip: T('dlg.tb.saveTip'), kbd: 'Strg S', cls: 'minor', run: () => Start.saveFile() },
       { id: 'import', group: T('dlg.tb.grpProject'), domId: 't-import', icon: 'folder', label: T('dlg.tb.import'), tip: T('dlg.tb.importTip'), cls: 'minor', help: 'importCad', run: () => Start.openFile() },
@@ -291,9 +293,12 @@ const Toolbar = (() => {
       { label: T('menu.more.measure'), icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
       { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
       { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
+      { label: T('menu.view.floorLights'), icon: 'sun', id: 'more-look-panel', help: 'studioFloorLight', run: () => ViewPrefs.openLookPanel() },
       { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
       { label: T('menu.check.geom'), icon: 'target', id: 'more-geom-check', help: 'geomCheck', run: () => GeomCheck.open() },
       { label: T('menu.check.clashes'), icon: 'boolIntersect', id: 'more-clash-check', help: 'clashCheck', run: () => ClashCheck.open() },
+      { label: T('menu.check.printCost'), icon: 'printer', id: 'more-print-cost', help: 'printCost', run: () => Print.costDialog() },
+      { label: T('menu.check.reportPdf'), icon: 'file', id: 'more-report-pdf', help: 'reportPdf', run: () => Measure.reportDialog() },
       '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
     ]));
     return b;

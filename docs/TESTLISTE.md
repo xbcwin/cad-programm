@@ -2520,6 +2520,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Speichern, Laden, Hilfe & Übersetzung**: Nach Speichern über `Start.projectPayload()` und Laden über `Start.openBlob()` bleiben Aufkleber samt Lage/Drehung/Skalierung sowie Holz-Textur samt geladener `THREE.Texture` vollständig erhalten; `HELP.decal`, `HELP.bodyTexture`, Befehle und DE/EN-Texte sind vorhanden (`t_a136_aufkleber_texturen`).
 - [ ] **Von Hand**: Im Browser ein eigenes PNG-Logo mit durchsichtigem Hintergrund auf eine Quader-Fläche legen, verschieben/drehen, anschließend auf Karbon-Textur umschalten und per Auge die Nahtlosigkeit an den Kanten prüfen.
 
+## Boden mit Spiegelung und Licht von Hand (Auto [A-135], AN-11, AN-12)
+
+- [x] **Einfach & Profi Zugang**: `#look-panel` öffnet in „Einfach“ über `#proj-look-open` und `#t-more` (`#more-look-panel`) sowie in „Profi“ über `#t-views` (`#look-studio-panel`) und Befehlssuche (`t_a135_boden_licht`).
+- [x] **Studio-Boden mit Spiegelung (`AN-11`)**: `#look-floor-reflect` schaltet den Studio-Boden sichtbar (`reflectivity > 0`, `clearcoat > 0`), `#look-floor-strength` auf `85` steigert `reflectivity > 0,8`, Ausschalten setzt `visible = false` und `reflectivity = 0` (`t_a135_boden_licht`).
+- [x] **Eigenes Umgebungsbild (`AN-11`)**: Laden eines PNG- und eines Radiance-`.hdr`-Umgebungsbildes über `#look-env-input` aktiviert `Viewer.hasCustomEnv` samt Dateiname in `#look-env-status`; `#look-env-clear` kehrt sauber zur Standard-Umgebung zurück (`t_a135_boden_licht`).
+- [x] **Lichter von Hand (`AN-12`)**: `#look-manual-lights` wechselt auf 1 Richtungslicht, `#look-light-add` ergänzt ein 2. und 3. Licht (ab 3 deaktiviert); Farbe `#ff6600`, Azimut `-90°`, Höhe `40°` und Stärke `3,2` erscheinen exakt am 2. Licht in `Viewer.scene`; Entfernen und „Standard-Lichter“ funktionieren (`t_a135_boden_licht`).
+- [x] **Persistenz, Hilfen, DE/EN & Befehle**: `ViewPrefs.exportData()` / `importData()` sichert Boden und Lichter; `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüssel sind vollständig (`t_a135_boden_licht`).
+- [ ] **Von Hand**: Im Browser ein hochglänzendes Metallteil (z. B. Alu oder Chrom) auf den spiegelnden Studio-Boden stellen, ein echtes 360°-HDR-Panorama laden und die drei Lichter farbig um das Modell drehen.
+
+## Druck-Kosten und Prüfbericht als PDF (Auto [A-134], PF-17, PF-18)
+
+- [x] **3D-Druck-Schätzung (Würfel 20 mm, 20 % Füllung, 25 €/kg)**: `#proj-print-cost` öffnet `#print-cost-dlg`, schätzt Filamentmenge (g & m), Materialkosten (`costEur > 0`, plausibel ca. 0,10 €) und Druckzeit aus Volumen, Oberfläche, Füllung und Drucker-Profil (`Print.estimatePrint`), reagiert live auf Füllung (100 % > 20 %), Kilopreis (50 €/kg = 2× Kosten) und Drucker-Profil (`ender-3` langsamer als `bambu-a1`) (`t_a134_druckkosten_pruefbericht`).
+- [x] **Prüfbericht als PDF (lokal erzeugt)**: `#proj-report-pdf` öffnet `#report-pdf-dlg` mit 3D-Vorschaubild, Maßen, Volumen, Masse und Wandstärke; `#rep-download` lädt eine gültige `%PDF-1.4`-Datei mit eingebettetem JPEG (`/Subtype /Image`, `/Filter /DCTDecode`) sowie `Volumen`, `Masse` und `Wandst` (`t_a134_druckkosten_pruefbericht`).
+- [x] **Einfach & Profi, Hilfen, Übersetzung & Befehlssuche**: Knöpfe im Projekt-Panel, im Mehr-Menü (`#t-more` in „Einfach“) und im Prüfen-Menü (`#t-check` in „Profi“), Hilfetexte (`printCost`, `reportPdf` in JSON/`HELP`), DE/EN-Schlüsselgleichheit und Befehle `print-cost` / `report-pdf` geprüft (`t_a134_druckkosten_pruefbericht`).
+- [ ] **Von Hand**: Im Browser bei einem komplexen Modell mit dünner Wand und mehreren Teilen den Dialog „Druckkosten & Zeit“ anpassen und den erzeugten PDF-Prüfbericht in einem PDF-Viewer öffnen, um Layout, Umlaute, €-Zeichen, Bildqualität und Teileliste visuell zu prüfen.
+
 ## Fehler melden
 
 ```

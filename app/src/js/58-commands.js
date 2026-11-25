@@ -307,6 +307,9 @@ const Commands = (() => {
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
     add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
+    add('look-panel', 'Aussehen: Boden, Umgebung & Licht einstellen', 'sun', 'aussehen studio boden spiegelung umgebung hdri hdr bild licht lichter farbe richtung an-11 an-12', () => ViewPrefs.openLookPanel(), { group: 'Ansicht' });
+    add('floor-reflect', 'Boden-Spiegelung ein/aus', 'shadow', 'boden spiegelung reflektion studio boden an-11', () => { const on = !ViewPrefs.get().floorReflect; ViewPrefs.set({ floorReflect: on, ...(on ? { look: 'studio' } : {}) }); }, { group: 'Ansicht' });
+    add('manual-lights', 'Lichter von Hand einstellen', 'sun', 'licht lichter beleuchtung farbe richtung staerke stärke an-12', () => { ViewPrefs.set({ manualLights: true }); ViewPrefs.openLookPanel(); }, { group: 'Ansicht' });
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
@@ -319,6 +322,8 @@ const Commands = (() => {
     add('draft-analysis', 'Schräge- und Hinterschnitt-Analyse', 'chamfer', 'schräge schraege entformung hinterschnitt form guss spritzguss winkel farben prüfen analyse draft undercut pf-09 pf-10', () => Measure.draft(), { group: 'Projekt' });
     add('inner-radius', 'Kleinster Innenradius (Fräser-Prüfung)', 'fillet', 'innenradius innenrundung radius fräser fraeser tasche ecke zu klein prüfen pf-11', () => InnerRadius.open(), { group: 'Projekt' });
     add('symmetry-check', 'Symmetrie prüfen', 'mirror', 'symmetrie symmetrisch spiegeln ebene abweichung prüfen farben pf-16', () => SymmetryCheck.open(), { group: 'Projekt' });
+    add('print-cost', '3D-Druck: Kosten, Filament & Zeit schätzen', 'printer', 'druck kosten preis filament zeit dauer schaetzung schätzung fuellung füllung infill 3d-druck euro kg pf-17', () => Print.costDialog(), { group: 'Projekt' });
+    add('report-pdf', 'Prüfbericht als PDF erstellen', 'file', 'pruefbericht prüfbericht bericht pdf report protokoll masse volumen wandstaerke wandstärke bild drucken export pf-18', () => Measure.reportDialog(), { group: 'Projekt' });
     add('compare-bodies', 'Körper oder Versionen vergleichen (Farben)', 'compare', 'vergleich vergleichen körper versionen unterschied diff farben grün rot grau pf-12', () => Versions.openCompare(), { group: 'Projekt' });
     add('silhouette-area', 'Schattenriss-Fläche in Blickrichtung (mm²)', 'silhouette2d', 'schattenriss silhouette fläche stirnfläche projektion blickrichtung querschnitt mm2 pf-15', () => Measure.silhouette(), { group: 'Projekt' });
     add('clash-check', 'Durchdringungen suchen (Baugruppe prüfen)', 'boolIntersect', 'durchdringung durchdringungen kollision kollisionen überlappung überschneidung schnitt baugruppe prüfen clash interference bg-10', () => ClashCheck.open(), { group: 'Baugruppe' });

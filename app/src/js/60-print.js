@@ -1234,12 +1234,379 @@ const Print = (() => {
       try { Panels.firstStepDone('saved'); } catch (_) {}
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
+  // ---------- PF-17: 3D-Druck-Schätzung (Filamentmenge, Kosten & Druckzeit) ----------
+  const PRINT_FILAMENTS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA6', 'PA12', 'PC'];
+  const FILAMENT_DIA = 1.75;
+  const FILAMENT_AREA = Math.PI * (FILAMENT_DIA / 2) * (FILAMENT_DIA / 2);
+  // Geschwindigkeits-Richtwerte je Drucker-Klasse (Schätzung für normalen Druck)
+  const SPEED_PROFILES = {
+    'bambu-x1c': { speed: 180, maxFlow: 16, layerSec: 1.4, warmupMin: 4, label: 'Schnell (CoreXY)' },
+    'bambu-p1s': { speed: 180, maxFlow: 16, layerSec: 1.4, warmupMin: 4, label: 'Schnell (CoreXY)' },
+    'bambu-a1': { speed: 160, maxFlow: 14, layerSec: 1.6, warmupMin: 4, label: 'Schnell' },
+    'bambu-a1-mini': { speed: 160, maxFlow: 14, layerSec: 1.6, warmupMin: 4, label: 'Schnell' },
+    'voron-24-250': { speed: 170, maxFlow: 15, layerSec: 1.5, warmupMin: 5, label: 'Schnell (CoreXY)' },
+    'voron-24-300': { speed: 170, maxFlow: 15, layerSec: 1.5, warmupMin: 5, label: 'Schnell (CoreXY)' },
+    'voron-24-350': { speed: 170, maxFlow: 15, layerSec: 1.5, warmupMin: 5, label: 'Schnell (CoreXY)' },
+    'prusa-mk4': { speed: 130, maxFlow: 11, layerSec: 1.8, warmupMin: 3.5, label: 'Mittel–Schnell' },
+    'prusa-mini': { speed: 100, maxFlow: 9, layerSec: 2.0, warmupMin: 3.5, label: 'Mittel' },
+    'ender-3': { speed: 55, maxFlow: 5.5, layerSec: 2.6, warmupMin: 4, label: 'Standard' },
+    'custom': { speed: 80, maxFlow: 8, layerSec: 2.2, warmupMin: 4, label: 'Standard (geschätzt)' },
+  };
+  function defaultPrintMaterial(doc = App.doc) {
+    const m = doc && doc.settings && doc.settings.material;
+    return PRINT_FILAMENTS.includes(m) ? m : 'PLA';
+  }
+  function printCostSettings(doc = App.doc) {
+    const s = (doc && doc.settings) || {};
+    const pc = (s.printCost && typeof s.printCost === 'object') ? s.printCost : {};
+    const pb = (s.printBed && typeof s.printBed === 'object') ? s.printBed : {};
+    const infillRaw = Number(pc.infill);
+    const priceRaw = Number(pc.pricePerKg);
+    const layerRaw = Number(pc.layerHeight);
+    const wallsRaw = Number(pc.walls);
+    const nozRaw = Number(pc.nozzle);
+    const printer = pc.printer === 'custom' || findPrinter(pc.printer)
+      ? pc.printer
+      : (pb.enabled && findPrinter(pb.printer) ? pb.printer : 'bambu-a1');
+    return {
+      infill: Number.isFinite(infillRaw) ? clamp(Math.round(infillRaw), 0, 100) : 20,
+      pricePerKg: Number.isFinite(priceRaw) ? clamp(round(priceRaw, 2), 0, 1000) : 25,
+      layerHeight: Number.isFinite(layerRaw) ? clamp(round(layerRaw, 2), 0.05, 1.2) : 0.2,
+      walls: Number.isFinite(wallsRaw) ? clamp(Math.round(wallsRaw), 1, 8) : 2,
+      material: PRINT_FILAMENTS.includes(pc.material) ? pc.material : defaultPrintMaterial(doc),
+      printer,
+      nozzle: Number.isFinite(nozRaw) ? clamp(round(nozRaw, 2), 0.1, 2.0) : nozzle(doc),
+    };
+  }
+  function setPrintCostSettings(patch) {
+    if (!patch || typeof patch !== 'object') return false;
+    const cur = printCostSettings(App.doc);
+    const clean = {};
+    if (patch.infill != null && Number.isFinite(Number(patch.infill))) clean.infill = clamp(Math.round(Number(patch.infill)), 0, 100);
+    if (patch.pricePerKg != null && Number.isFinite(Number(patch.pricePerKg))) clean.pricePerKg = clamp(round(Number(patch.pricePerKg), 2), 0, 1000);
+    if (patch.layerHeight != null && Number.isFinite(Number(patch.layerHeight))) clean.layerHeight = clamp(round(Number(patch.layerHeight), 2), 0.05, 1.2);
+    if (patch.walls != null && Number.isFinite(Number(patch.walls))) clean.walls = clamp(Math.round(Number(patch.walls)), 1, 8);
+    if (typeof patch.material === 'string' && PRINT_FILAMENTS.includes(patch.material)) clean.material = patch.material;
+    if (typeof patch.printer === 'string' && (patch.printer === 'custom' || findPrinter(patch.printer))) clean.printer = patch.printer;
+    if (patch.nozzle != null && Number.isFinite(Number(patch.nozzle))) clean.nozzle = clamp(round(Number(patch.nozzle), 2), 0.1, 2.0);
+    if (!Object.keys(clean).length) return false;
+    App.change('Druck-Schätzung angepasst', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printCost = { ...cur, ...clean };
+    }, { merge: 'printCost' });
+    return true;
+  }
+  function formatDuration(sec) {
+    if (!(sec >= 0) || !Number.isFinite(sec)) return '–';
+    if (sec < 60) return '< 1 min';
+    const totalMin = Math.round(sec / 60);
+    if (totalMin < 60) return `${totalMin} min`;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    const hUnit = typeof I18n !== 'undefined' && I18n.lang === 'en' ? 'h' : 'Std.';
+    return m ? `${h} ${hUnit} ${m} min` : `${h} ${hUnit}`;
+  }
+  function computePrintEstimate(mRes, opts = {}) {
+    const base = printCostSettings(App.doc);
+    const hasPrinterOpt = typeof opts.printer === 'string' && (opts.printer === 'custom' || findPrinter(opts.printer));
+    const printer = hasPrinterOpt ? opts.printer : base.printer;
+    const pr = findPrinter(printer);
+    const cfg = {
+      infill: opts.infill != null && Number.isFinite(Number(opts.infill)) ? clamp(Math.round(Number(opts.infill)), 0, 100) : base.infill,
+      pricePerKg: opts.pricePerKg != null && Number.isFinite(Number(opts.pricePerKg)) ? clamp(round(Number(opts.pricePerKg), 2), 0, 1000) : base.pricePerKg,
+      layerHeight: opts.layerHeight != null && Number.isFinite(Number(opts.layerHeight)) ? clamp(round(Number(opts.layerHeight), 2), 0.05, 1.2) : base.layerHeight,
+      walls: opts.walls != null && Number.isFinite(Number(opts.walls)) ? clamp(Math.round(Number(opts.walls)), 1, 8) : base.walls,
+      material: typeof opts.material === 'string' && PRINT_FILAMENTS.includes(opts.material) ? opts.material : base.material,
+      printer,
+      nozzle: opts.nozzle != null && Number.isFinite(Number(opts.nozzle))
+        ? clamp(round(Number(opts.nozzle), 2), 0.1, 2.0)
+        : (hasPrinterOpt && pr && pr.nozzle ? pr.nozzle : base.nozzle),
+    };
+    const parts = (mRes && Array.isArray(mRes.parts)) ? mRes.parts : [];
+    let volumeMm3 = 0, areaMm2 = 0, excludedFixed = 0, partsCount = 0;
+    let b = null;
+    for (const p of parts) {
+      if (p.fixed) { excludedFixed++; continue; }
+      if (!(p.volume > 0)) continue;
+      volumeMm3 += p.volume;
+      areaMm2 += Math.max(0, p.area || 0);
+      partsCount++;
+      if (Array.isArray(p.bbox) && p.bbox.length >= 6) {
+        b = b
+          ? [Math.min(b[0], p.bbox[0]), Math.min(b[1], p.bbox[1]), Math.min(b[2], p.bbox[2]), Math.max(b[3], p.bbox[3]), Math.max(b[4], p.bbox[4]), Math.max(b[5], p.bbox[5])]
+          : p.bbox.slice(0, 6);
+      }
+    }
+    if (!(volumeMm3 > 0) && mRes && mRes.volume > 0 && !parts.length) {
+      volumeMm3 = mRes.volume;
+      areaMm2 = Math.max(0, mRes.area || 0);
+      b = mRes.bbox || null;
+      partsCount = 1;
+    }
+    if (!mRes || !(volumeMm3 > 0)) {
+      return {
+        ok: false,
+        reason: excludedFixed > 0 ? 'onlyFixed' : 'empty',
+        estimated: true,
+        ...cfg,
+        printerName: pr ? pr.name : T('printCost.printerCustom'),
+        volumeMm3: 0, areaMm2: 0, shellVolumeMm3: 0, infillVolumeMm3: 0, printVolumeMm3: 0,
+        filamentG: 0, filamentM: 0, costEur: 0, timeSec: 0, timeMin: 0, timeText: '–',
+        layers: 0, sizeMm: null, excludedFixed, partsCount: 0,
+      };
+    }
+    if (!b && mRes.bbox) b = mRes.bbox;
+    const stFallback = !b ? stats() : null;
+    const sizeMm = b
+      ? [Math.abs(b[3] - b[0]), Math.abs(b[4] - b[1]), Math.abs(b[5] - b[2])]
+      : (stFallback ? [stFallback.x, stFallback.y, stFallback.z] : [20, 20, 20]);
+    const heightZ = Math.max(0.2, sizeMm[2] || 0.2);
+    const prof = SPEED_PROFILES[pr ? pr.id : 'custom'] || SPEED_PROFILES.custom;
+    const matObj = Mass.matOf(cfg.material) || Mass.matOf('PLA');
+    const rho = matObj ? matObj.rho : 1.24;
+
+    const lineW = cfg.nozzle * 1.05;
+    const wallT = cfg.walls * lineW;
+    const tbLayers = Math.max(2, Math.round(0.8 / cfg.layerHeight));
+    const tbT = tbLayers * cfg.layerHeight;
+    const shellT = (2 * wallT + tbT) / 3;
+    const u = clamp((areaMm2 * shellT) / (3 * volumeMm3), 0, 1);
+    const shellVolumeMm3 = volumeMm3 * (1 - Math.pow(1 - u, 3));
+    const infillVolumeMm3 = Math.max(0, volumeMm3 - shellVolumeMm3) * (cfg.infill / 100);
+    const printVolumeMm3 = shellVolumeMm3 + infillVolumeMm3;
+
+    const printVolumeCm3 = printVolumeMm3 / 1000;
+    const filamentG = printVolumeCm3 * rho;
+    const filamentM = (printVolumeMm3 / FILAMENT_AREA) / 1000;
+    const costEur = (filamentG / 1000) * cfg.pricePerKg;
+
+    const beadArea = lineW * cfg.layerHeight;
+    const pathLen = printVolumeMm3 / Math.max(1e-4, beadArea);
+    const effSpeed = Math.min(prof.speed, prof.maxFlow / Math.max(1e-4, beadArea)) * 0.62;
+    const extSec = pathLen / Math.max(5, effSpeed);
+    const layers = Math.max(1, Math.ceil(heightZ / cfg.layerHeight));
+    const timeSec = prof.warmupMin * 60 + extSec + layers * prof.layerSec;
+    const timeMin = round(timeSec / 60, 1);
+
+    return {
+      ok: true,
+      estimated: true,
+      ...cfg,
+      printerName: pr ? pr.name : T('printCost.printerCustom'),
+      profileLabel: prof.label,
+      rho,
+      volumeMm3,
+      areaMm2,
+      shellVolumeMm3,
+      infillVolumeMm3,
+      printVolumeMm3,
+      filamentG,
+      filamentM,
+      costEur,
+      timeSec,
+      timeMin,
+      timeText: formatDuration(timeSec),
+      layers,
+      sizeMm,
+      excludedFixed,
+      partsCount,
+    };
+  }
+  async function estimatePrint(opts = {}) {
+    const m = await Mass.measure();
+    return computePrintEstimate(m, opts);
+  }
+  async function costDialog() {
+    if (!App.doc || !App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) {
+      UI.toast(T('printCost.empty'), { icon: 'info' });
+      return null;
+    }
+    const st = { ...printCostSettings(App.doc) };
+    const body = h('div', { class: 'pc-dlg', id: 'print-cost-dlg' });
+
+    const printerOpts = [
+      ...(PRINTERS || []).map((p) => [p.id, `${p.name} (${p.x}×${p.y}×${p.z} mm)`]),
+      ['custom', T('printCost.printerCustom')],
+    ];
+    const matOpts = PRINT_FILAMENTS.map((k) => {
+      const m = Mass.matOf(k);
+      return [k, m ? `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³` : k];
+    });
+    const layerChoices = ['0.12', '0.16', '0.2', '0.28'];
+    const curLayerStr = String(round(st.layerHeight, 2));
+    if (!layerChoices.includes(curLayerStr)) layerChoices.push(curLayerStr);
+    layerChoices.sort((a, b) => parseFloat(a) - parseFloat(b));
+
+    let mRes = null;
+    const filValEl = h('div', { class: 'pc-val mono', id: 'pc-res-filament' }, '…');
+    const filSubEl = h('div', { class: 'pc-sub', id: 'pc-res-filament-sub' }, '…');
+    const costValEl = h('div', { class: 'pc-val mono', id: 'pc-res-cost' }, '…');
+    const costSubEl = h('div', { class: 'pc-sub', id: 'pc-res-cost-sub' }, '…');
+    const timeValEl = h('div', { class: 'pc-val mono', id: 'pc-res-time' }, '…');
+    const timeSubEl = h('div', { class: 'pc-sub', id: 'pc-res-time-sub' }, '…');
+
+    const cards = h('div', { class: 'pc-cards' },
+      h('div', { class: 'pc-card' }, h('div', { class: 'pc-lbl' }, T('printCost.filament')), filValEl, filSubEl),
+      h('div', { class: 'pc-card accent' }, h('div', { class: 'pc-lbl' }, T('printCost.cost')), costValEl, costSubEl),
+      h('div', { class: 'pc-card' }, h('div', { class: 'pc-lbl' }, T('printCost.time')), timeValEl, timeSubEl)
+    );
+
+    const volEl = h('b', { class: 'mono', id: 'pc-res-vol' }, '…');
+    const pvolEl = h('b', { class: 'mono', id: 'pc-res-pvol' }, '…');
+    const sizeEl = h('b', { class: 'mono', id: 'pc-res-size' }, '…');
+    const nozEl = h('b', { class: 'mono', id: 'pc-res-nozzle' }, `${fmtFixed(st.nozzle, 2)} mm`);
+    const details = h('div', { class: 'mini-list' },
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('printCost.modelVol')), volEl),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('printCost.printVol')), pvolEl),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('printCost.size')), sizeEl),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('printCost.nozzle')), nozEl)
+    );
+    const exclNote = h('div', { class: 'hint-box warn', id: 'pc-excluded-note', hidden: true });
+    const emptyNote = h('div', { class: 'hint-box warn', id: 'pc-empty-note', hidden: true });
+
+    const refresh = () => {
+      if (!mRes) return;
+      const est = computePrintEstimate(mRes, st);
+      nozEl.textContent = `${fmtFixed(est.nozzle, 2)} mm`;
+      if (!est.ok) {
+        filValEl.textContent = costValEl.textContent = timeValEl.textContent = '–';
+        filSubEl.textContent = costSubEl.textContent = timeSubEl.textContent = '';
+        volEl.textContent = pvolEl.textContent = sizeEl.textContent = '–';
+        emptyNote.hidden = false;
+        emptyNote.textContent = est.reason === 'onlyFixed' ? T('printCost.onlyFixed') : T('printCost.empty');
+        exclNote.hidden = true;
+        return;
+      }
+      emptyNote.hidden = true;
+      filValEl.textContent = Mass.gText(est.filamentG);
+      filSubEl.textContent = `${fmtFixed(est.filamentM, 2)} m · Ø 1,75 mm`;
+      costValEl.textContent = Mass.priceText(est.costEur);
+      costSubEl.textContent = T('printCost.atPrice', { price: Mass.priceText(est.pricePerKg) });
+      timeValEl.textContent = `ca. ${est.timeText}`;
+      timeSubEl.textContent = T('printCost.layersMeta', { n: est.layers, profile: est.profileLabel });
+      volEl.textContent = Units.fmtVolU(est.volumeMm3, 3);
+      pvolEl.textContent = `${Units.fmtVolU(est.printVolumeMm3, 3)} (${Math.round((est.printVolumeMm3 / est.volumeMm3) * 100)} %)`;
+      sizeEl.textContent = est.sizeMm ? `${Units.fmtLen(est.sizeMm[0], 1)} × ${Units.fmtLen(est.sizeMm[1], 1)} × ${Units.fmtLen(est.sizeMm[2], 1)} ${Units.label()}` : '–';
+      if (est.excludedFixed > 0) {
+        exclNote.hidden = false;
+        exclNote.textContent = T('printCost.excludedNote', { n: est.excludedFixed });
+      } else {
+        exclNote.hidden = true;
+      }
+    };
+
+    const printerSel = UI.selectField({
+      id: 'pc-printer', label: T('printCost.printer'), value: st.printer, options: printerOpts,
+      onChange: (v) => {
+        st.printer = v;
+        const pr = findPrinter(v);
+        if (pr && pr.nozzle) st.nozzle = pr.nozzle;
+        setPrintCostSettings({ printer: st.printer, nozzle: st.nozzle });
+        refresh();
+      },
+    });
+    const matSel = UI.selectField({
+      id: 'pc-material', label: T('printCost.material'), value: st.material, options: matOpts,
+      onChange: (v) => {
+        st.material = v;
+        setPrintCostSettings({ material: st.material });
+        refresh();
+      },
+    });
+
+    const infRange = h('input', { type: 'range', id: 'pc-infill-range', min: 0, max: 100, step: 5, value: st.infill, 'aria-label': T('printCost.infill') });
+    const infNum = h('input', { type: 'number', id: 'pc-infill', min: 0, max: 100, step: 5, value: st.infill, 'aria-label': T('printCost.infill') });
+    const applyInfill = (raw, commit) => {
+      const v = parseNum(String(raw));
+      if (!Number.isFinite(v)) return;
+      st.infill = clamp(Math.round(v), 0, 100);
+      if (document.activeElement !== infRange) infRange.value = String(st.infill);
+      if (document.activeElement !== infNum) infNum.value = String(st.infill);
+      if (commit) setPrintCostSettings({ infill: st.infill });
+      refresh();
+    };
+    infRange.oninput = () => applyInfill(infRange.value, false);
+    infRange.onchange = () => applyInfill(infRange.value, true);
+    infNum.oninput = () => applyInfill(infNum.value, false);
+    infNum.onchange = () => applyInfill(infNum.value, true);
+    infNum.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { applyInfill(infNum.value, true); infNum.blur(); } };
+    const infField = h('div', { class: 'field' },
+      h('label', { for: 'pc-infill' }, T('printCost.infill')),
+      h('div', { class: 'pc-infill-row' },
+        infRange,
+        h('div', { class: 'inp pc-infill-num' }, infNum, h('span', { class: 'unit' }, '%')))
+    );
+
+    const priceInp = h('input', { type: 'number', id: 'pc-price', min: 0, max: 1000, step: 1, value: st.pricePerKg, 'aria-label': T('printCost.pricePerKg') });
+    const applyPrice = (raw, commit) => {
+      const v = parseNum(String(raw));
+      if (!Number.isFinite(v)) return;
+      st.pricePerKg = clamp(round(v, 2), 0, 1000);
+      if (commit) {
+        priceInp.value = String(st.pricePerKg);
+        setPrintCostSettings({ pricePerKg: st.pricePerKg });
+      }
+      refresh();
+    };
+    priceInp.oninput = () => applyPrice(priceInp.value, false);
+    priceInp.onchange = () => applyPrice(priceInp.value, true);
+    priceInp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { applyPrice(priceInp.value, true); priceInp.blur(); } };
+    const priceField = h('div', { class: 'field' },
+      h('label', { for: 'pc-price' }, T('printCost.pricePerKg')),
+      h('div', { class: 'inp' }, priceInp, h('span', { class: 'unit' }, '€/kg'))
+    );
+
+    const layerSel = UI.selectField({
+      id: 'pc-layer', label: T('printCost.layerHeight'), value: curLayerStr,
+      options: layerChoices.map((v) => [v, `${fmtFixed(parseFloat(v), 2)} mm`]),
+      onChange: (v) => {
+        st.layerHeight = clamp(parseFloat(v) || 0.2, 0.05, 1.2);
+        setPrintCostSettings({ layerHeight: st.layerHeight });
+        refresh();
+      },
+    });
+    const wallsSel = UI.selectField({
+      id: 'pc-walls', label: T('printCost.walls'), value: String(st.walls),
+      options: [1, 2, 3, 4, 5, 6].map((n) => [String(n), String(n)]),
+      onChange: (v) => {
+        st.walls = clamp(parseInt(v, 10) || 2, 1, 8);
+        setPrintCostSettings({ walls: st.walls });
+        refresh();
+      },
+    });
+
+    body.append(
+      h('div', { class: 'fields' }, printerSel, matSel),
+      h('div', { class: 'fields' }, infField, priceField),
+      h('div', { class: 'fields' }, layerSel, wallsSel),
+      cards,
+      emptyNote,
+      details,
+      exclNote,
+      h('div', { class: 'hint-box', id: 'pc-hint' }, T('printCost.disclaimer'))
+    );
+
+    UI.modal({
+      title: T('printCost.title'),
+      body,
+      wide: true,
+      actions: [
+        { id: 'pc-open-report', label: T('printCost.reportBtn'), run: () => { setTimeout(() => Measure.reportDialog(), 0); } },
+        { label: T('common.close'), primary: true },
+      ],
+    });
+
+    mRes = await Mass.measure();
+    refresh();
+    return body;
+  }
+
   function init() {
     App.on('results', () => { wallCache = null; updateAmpel(); });
     App.on('doc', debounce(() => { wallCache = null; updateAmpel(); }, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { PRINTERS, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, buildAMF, buildPLY, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, PRINT_FILAMENTS, SPEED_PROFILES, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, printCostSettings, setPrintCostSettings, computePrintEstimate, estimatePrint, costDialog, formatDuration, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, buildAMF, buildPLY, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------

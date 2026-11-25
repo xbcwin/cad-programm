@@ -26717,6 +26717,313 @@ def t_a136_aufkleber_texturen(p):
     return [ok_ui, ok_place, ok_xform, ok_tex, ok_reload, bool(gone and restored), bool(meta_ok)]
 
 
+def t_a135_boden_licht(p):
+    import struct, zlib
+    p.empty()
+    p.ev("""
+      App.change('a135-box', d => {
+        const b = Model.newItem('box', { w: 30, d: 20, h: 15 }, { name: 'StudioBlock' });
+        b.mat = 'Alu 6061';
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("ViewPrefs.set({ level: 'simple', look: 'studio', mood: 'studio', shadows: true, floorReflect: false, floorReflectStrength: 45, manualLights: false, envImageName: '', envImageData: '' }); ViewPrefs.closeLookPanel()")
+    p.wait(250)
+
+    # 1. Einfach & Profi Zugang: in Einfach über #t-more & #proj-look-open, in Profi über #t-views
+    p.pg.click('#t-more')
+    p.wait(200)
+    has_more_entry = p.pg.locator('#more-look-panel').count() == 1
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    p.ev("App.select([])")
+    p.wait(200)
+    proj_btn_vis = sichtbar(p, '#proj-look-open')
+    p.pg.click('#proj-look-open')
+    p.pg.locator('#look-panel').wait_for(state='visible', timeout=5000)
+    p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(250)
+    p.pg.click('#t-views')
+    p.wait(200)
+    has_views_entry = p.pg.locator('#look-studio-panel').count() == 1
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    ok1 = bool(has_more_entry and proj_btn_vis and sichtbar(p, '#look-panel') and has_views_entry)
+
+    # 2. Studio-Boden mit Spiegelung: Anfangs aus (reflectivity == 0), einschalten -> > 0, Stärke auf 85 -> > 0.8
+    floor_off = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity, cc:f.material.clearcoat} : null")
+    p.pg.click('#look-floor-reflect')
+    p.wait(250)
+    floor_on = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity, cc:f.material.clearcoat} : null")
+    p.pg.locator('#look-floor-strength').fill('85')
+    p.wait(250)
+    floor_hi = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity, cc:f.material.clearcoat} : null")
+    p.pg.click('#look-floor-reflect')
+    p.wait(250)
+    floor_off2 = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity} : null")
+    p.pg.click('#look-floor-reflect')
+    p.wait(200)
+    ok2 = (
+        floor_off is not None and floor_off['vis'] is False and floor_off['ref'] == 0
+        and floor_on is not None and floor_on['vis'] is True and floor_on['ref'] > 0 and floor_on['cc'] > 0
+        and floor_hi is not None and floor_hi['vis'] is True and floor_hi['ref'] > 0.8 and floor_hi['ref'] > floor_on['ref']
+        and floor_off2 is not None and floor_off2['vis'] is False and floor_off2['ref'] == 0
+    )
+
+    # 3. Eigenes Umgebungsbild aus Datei laden (PNG & Radiance HDR) und wieder entfernen
+    def make_png(w, h):
+        raw = b''.join(b'\x00' + bytes([255, 180, 90, 255] * w) for _ in range(h))
+        def chunk(tag, data):
+            c = tag + data
+            return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+        ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
+        return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+    png_bytes = make_png(8, 4)
+    p.pg.locator('#look-env-input').set_input_files([{'name': 'studio-test.png', 'mimeType': 'image/png', 'buffer': png_bytes}])
+    p.wait(500)
+    env_png = p.ev("return {has:Viewer.hasCustomEnv, name:Viewer.envImageName, env:!!Viewer.scene.environment}")
+    env_png_txt = (p.pg.locator('#look-env-status').text_content() or '')
+
+    hdr_bytes = b'#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 4\n' + bytes([132, 110, 90, 128] * 8)
+    p.pg.locator('#look-env-input').set_input_files([{'name': 'studio-test.hdr', 'mimeType': 'application/octet-stream', 'buffer': hdr_bytes}])
+    p.wait(500)
+    env_hdr = p.ev("return {has:Viewer.hasCustomEnv, name:Viewer.envImageName, env:!!Viewer.scene.environment}")
+
+    p.pg.click('#look-env-clear')
+    p.wait(350)
+    env_clr = p.ev("return {has:Viewer.hasCustomEnv, name:Viewer.envImageName, env:!!Viewer.scene.environment}")
+    ok3 = (
+        env_png['has'] is True and env_png['name'] == 'studio-test.png' and env_png['env'] is True and 'studio-test.png' in env_png_txt
+        and env_hdr['has'] is True and env_hdr['name'] == 'studio-test.hdr' and env_hdr['env'] is True
+        and env_clr['has'] is False and env_clr['name'] == '' and env_clr['env'] is True
+    )
+
+    # 4. Lichter von Hand: 1 -> 2 -> 3 Lichter, Richtung/Farbe/Stärke, Löschen & Reset
+    p.pg.click('#look-manual-lights')
+    p.wait(250)
+    cnt1 = p.ev("return Viewer.scene.children.filter(o=>o.isDirectionalLight).length")
+    p.pg.click('#look-light-add')
+    p.wait(250)
+    p.pg.locator('#look-light-color-1').fill('#ff6600')
+    p.pg.locator('#look-light-az-1').fill('-90')
+    p.pg.locator('#look-light-el-1').fill('40')
+    p.pg.locator('#look-light-int-1').fill('3.2')
+    p.wait(250)
+    st2 = p.ev("""
+      const ls = Viewer.scene.children.filter(o => o.isDirectionalLight);
+      const l2 = ls[1];
+      const dir = l2 ? l2.position.clone().sub(l2.target.position).normalize() : null;
+      return {
+        count: ls.length,
+        color: l2 ? ('#' + l2.color.getHexString()) : null,
+        intensity: l2 ? l2.intensity : null,
+        dir: dir ? [dir.x, dir.y, dir.z] : null
+      };
+    """)
+    p.pg.click('#look-light-add')
+    p.wait(250)
+    st3 = p.ev("return {count: Viewer.scene.children.filter(o=>o.isDirectionalLight).length, addDis: document.querySelector('#look-light-add').disabled}")
+    p.pg.click('#look-light-del-2')
+    p.wait(250)
+    cnt_after_del = p.ev("return Viewer.scene.children.filter(o=>o.isDirectionalLight).length")
+    p.pg.click('#look-light-reset')
+    p.wait(250)
+    after_reset = p.ev("return {man: ViewPrefs.get().manualLights, count: Viewer.scene.children.filter(o=>o.isDirectionalLight).length}")
+    ok4 = (
+        cnt1 == 1
+        and st2['count'] == 2 and st2['color'] == '#ff6600' and abs(st2['intensity'] - 3.2) < 0.05
+        and st2['dir'] is not None and st2['dir'][0] < -0.5 and st2['dir'][2] > 0.5
+        and st3['count'] == 3 and st3['addDis'] is True
+        and cnt_after_del == 2
+        and after_reset['man'] is False and after_reset['count'] == 3
+    )
+
+    # 5. Persistenz/Export, Hilfetexte, DE/EN-Schlüsselgleichheit & Befehle
+    p.pg.click('#look-light-add')
+    p.wait(200)
+    p.pg.hover('#proj-look-open')
+    p.wait(1700)
+    tip_look = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    meta = p.pg.evaluate("""async () => {
+      const { ViewPrefs, Commands } = window.__M;
+      const exp = ViewPrefs.exportData();
+      ViewPrefs.set({ floorReflect: false, manualLights: false });
+      const imp = ViewPrefs.importData(exp, { silent: true });
+      const cur = ViewPrefs.get();
+      const [hilfen, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hKeys = ['studioFloorLight', 'studioFloor', 'customEnv', 'manualLights'];
+      const helpOk = hKeys.every(k => hilfen[k] && hilfen[k].tip && hilfen[k].hilfe && hilfen[k].tipp && document.querySelectorAll(`[data-help="${k}"]`).length >= 1);
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nEq = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      const cmdOk = Commands.search('spiegelung').some(c => c.id === 'floor-reflect')
+        && Commands.search('licht').some(c => c.id === 'look-panel')
+        && Commands.search('lichter').some(c => c.id === 'manual-lights');
+      return { impOk: !!imp.ok, floorOn: !!cur.floorReflect, strength: cur.floorReflectStrength, man: !!cur.manualLights, lLen: cur.lights.length, helpOk, i18nEq, cmdOk };
+    }""")
+    p.pg.click('#look-panel-close')
+    p.wait(150)
+    p.ev("ViewPrefs.set({ floorReflect: false, floorReflectStrength: 45, manualLights: false, lights: [{ azimuth: 35, elevation: 52, color: '#ffffff', intensity: 2.1 }], envImageName: '', envImageData: '' })")
+    ok5 = (
+        meta['impOk'] and meta['floorOn'] and meta['strength'] == 85 and meta['man'] and meta['lLen'] == 2
+        and meta['helpOk'] and 'Studio-Boden' in tip_look and meta['i18nEq'] and meta['cmdOk']
+        and p.pg.locator('#look-panel').count() == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a134_druckkosten_pruefbericht(p):
+    p.empty()
+    p.ev("""
+    ViewPrefs.setLevel('pro');
+    App.change('Würfel 20 mm PLA', d => {
+      d.settings.material = 'PLA';
+      d.items.push(Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Prüfwürfel' }));
+    });
+    App.clearSelection();
+    """)
+    warte_rechnen(p)
+
+    # 1. 3D-Druck-Kosten-Schätzung: Würfel 20 mm, 20 % Füllung, 25 €/kg
+    p.pg.locator('#proj-print-cost').click()
+    p.pg.wait_for_selector('#print-cost-dlg', timeout=10000)
+    p.pg.wait_for_function("() => { const el = document.querySelector('#pc-res-cost'); return el && el.textContent && el.textContent !== '…' && el.textContent !== '–'; }", timeout=15000)
+    p.wait(200)
+
+    est20 = p.ev("return Print.estimatePrint({ infill: 20, pricePerKg: 25, material: 'PLA', printer: 'bambu-a1' })")
+    ui_init = p.ev("""return {
+      infill: document.querySelector('#pc-infill').value,
+      price: document.querySelector('#pc-price').value,
+      costText: document.querySelector('#pc-res-cost').textContent,
+      filText: document.querySelector('#pc-res-filament').textContent,
+      timeText: document.querySelector('#pc-res-time').textContent,
+    }""")
+
+    # Füllung auf 100 %, Preis auf 50 €/kg, Drucker auf Ender 3 testen
+    p.pg.locator('#pc-infill').fill('100')
+    p.pg.locator('#pc-infill').dispatch_event('change')
+    p.wait(150)
+    est100 = p.ev("return Print.estimatePrint({ printer: 'bambu-a1' })")
+
+    p.pg.locator('#pc-price').fill('50')
+    p.pg.locator('#pc-price').dispatch_event('change')
+    p.wait(150)
+    est50 = p.ev("return Print.estimatePrint({ printer: 'bambu-a1' })")
+
+    p.pg.locator('#pc-printer').select_option('ender-3')
+    p.wait(150)
+    est_ender = p.ev("return Print.estimatePrint()")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # Zurück auf 20 % / 25 €/kg / Bambu A1 für den Prüfbericht
+    p.ev("Print.setPrintCostSettings({ infill: 20, pricePerKg: 25, printer: 'bambu-a1', material: 'PLA' })")
+
+    ok1 = (
+        est20 and est20.get('ok') is True
+        and abs(est20.get('volumeMm3', 0) - 8000) < 1
+        and 2.0 < est20.get('filamentG', 0) < 7.0
+        and est20.get('filamentM', 0) > 0.5
+        and 0.04 < est20.get('costEur', 0) < 0.25
+        and est20.get('timeMin', 0) > 3
+        and ui_init.get('infill') == '20'
+        and ui_init.get('price') == '25'
+        and '€' in ui_init.get('costText', '')
+        and 'g' in ui_init.get('filText', '')
+        and est100.get('filamentG', 0) > est20.get('filamentG', 0) * 1.8
+        and est100.get('costEur', 0) > est20.get('costEur', 0) * 1.8
+        and abs(est50.get('costEur', 0) - est100.get('costEur', 0) * 2) < 0.01
+        and est_ender.get('timeMin', 0) > est100.get('timeMin', 0) * 1.3
+    )
+
+    # 2. Prüfbericht als PDF: Dialog, Vorschau-Daten, 3D-Bild & PDF-Download
+    p.pg.locator('#proj-report-pdf').click()
+    p.pg.wait_for_selector('#report-pdf-dlg', timeout=10000)
+    p.pg.wait_for_selector('#rep-summary', timeout=15000)
+    p.wait(250)
+
+    rep_ui = p.ev("""return {
+      dims: document.querySelector('#rep-val-dims')?.textContent || '',
+      vol: document.querySelector('#rep-val-vol')?.textContent || '',
+      mass: document.querySelector('#rep-val-mass')?.textContent || '',
+      wall: document.querySelector('#rep-val-wall')?.textContent || '',
+      cost: document.querySelector('#rep-val-cost')?.textContent || '',
+      imgSrc: document.querySelector('#rep-preview-img')?.getAttribute('src') || '',
+    }""")
+
+    with p.pg.expect_download(timeout=30000) as dl_info:
+        p.pg.locator('#rep-download').click()
+    dl = dl_info.value
+    pdf_bytes = open(dl.path(), 'rb').read()
+
+    ok2 = (
+        '20' in rep_ui.get('dims', '')
+        and 'cm' in rep_ui.get('vol', '')
+        and 'g' in rep_ui.get('mass', '')
+        and '20' in rep_ui.get('wall', '')
+        and '€' in rep_ui.get('cost', '')
+        and rep_ui.get('imgSrc', '').startswith('data:image/jpeg')
+        and dl.suggested_filename.lower().endswith('.pdf')
+        and pdf_bytes.startswith(b'%PDF-1.4')
+        and b'xref' in pdf_bytes
+        and b'%%EOF' in pdf_bytes
+        and b'Volumen' in pdf_bytes
+        and b'Masse' in pdf_bytes
+        and b'Wandst' in pdf_bytes
+        and b'/Subtype /Image' in pdf_bytes
+        and b'/Filter /DCTDecode' in pdf_bytes
+    )
+
+    # 3. In Einfach und Profi über Panel und Menüs erreichbar
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_panel_ok = sichtbar(p, '#proj-print-cost') and sichtbar(p, '#proj-report-pdf')
+    p.pg.locator('#t-more').click(); p.wait(200)
+    simple_menu_ok = sichtbar(p, '#more-print-cost') and sichtbar(p, '#more-report-pdf')
+    p.ev("UI.closeMenu()"); p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.locator('#t-check').click(); p.wait(200)
+    pro_menu_ok = sichtbar(p, '#check-print-cost') and sichtbar(p, '#check-report-pdf')
+    p.ev("UI.closeMenu()"); p.wait(150)
+    ok3 = simple_panel_ok and simple_menu_ok and pro_menu_ok
+
+    # 4. Hilfetexte (JSON + eingebettetes HELP via Tooltip), DE/EN-Übersetzung & Befehlssuche
+    p.pg.mouse.move(10, 10)
+    p.pg.wait_for_selector('.tooltip', state='detached', timeout=3000)
+    p.pg.locator('#proj-print-cost').hover()
+    p.pg.wait_for_selector('.tooltip', timeout=5000)
+    tip_cost = p.pg.locator('.tooltip').text_content()
+    p.pg.mouse.move(10, 10)
+    p.pg.wait_for_selector('.tooltip', state='detached', timeout=3000)
+    p.pg.locator('#proj-report-pdf').hover()
+    p.pg.wait_for_selector('.tooltip', timeout=5000)
+    tip_rep = p.pg.locator('.tooltip').text_content()
+
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['printCost', 'reportPdf'].every(k => h[k] && h[k].tip && h[k].hilfe && h[k].tipp)
+        && String(arg[0] || '').includes(h.printCost.tip)
+        && String(arg[1] || '').includes(h.reportPdf.tip);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('druck kosten').some(c => c.id === 'print-cost')
+        && Commands.search('prüfbericht pdf').some(c => c.id === 'report-pdf');
+      return { helpOk, i18nEq, cmdOk };
+    })()""", [tip_cost, tip_rep])
+    ok4 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26959,8 +27266,10 @@ TESTS = [
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('[F-11250536] Volltest-Reparatur: Skizzen-Koordinaten sofort / Befehlssuche „Fläche auf Fläche“ / Drehteller-Video über 2D-Puffer', t_f11250536),
     ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
+    ('[A-134] Druck-Kosten-Schätzung & Prüfbericht als PDF (PF-17, PF-18)', t_a134_druckkosten_pruefbericht),
     ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
     ('[A-136] Aufkleber, Logos und Texturen (AN-15, AN-16)', t_a136_aufkleber_texturen),
+    ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
