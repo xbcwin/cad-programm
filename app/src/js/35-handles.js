@@ -437,6 +437,10 @@ const Handles = (() => {
       state.t0 = Model.tNumeric(c.it);
       state.W0 = Model.worldMatrix(App.doc, c.it.id).clone();
       state.chain0 = typeof Joints !== 'undefined' && Joints.captureChain ? Joints.captureChain(App.doc, c.it.id) : null;
+      if (typeof ClashCheck !== 'undefined' && ClashCheck.stopOnContact && ClashCheck.stopOnContact()) {
+        const movIds = [c.it.id, ...(state.chain0 ? state.chain0.entries.map((ce) => ce.bId) : [])];
+        state.colCtx = ClashCheck.beginDragCheck(movIds);
+      }
     } else if (ud.kind === 'rot') {
       state.center = ud.center.clone();
       const p = Viewer.rayPlane(ev.clientX, ev.clientY, state.center, new THREE.Vector3(0, 0, 1));
@@ -445,6 +449,11 @@ const Handles = (() => {
       state.PW = Model.parentWorld(App.doc, c.it.id);
       state.W0 = Model.worldMatrix(App.doc, c.it.id).clone();
       state.chain0 = typeof Joints !== 'undefined' && Joints.captureChain ? Joints.captureChain(App.doc, c.it.id) : null;
+      state.lastValidDeg = 0;
+      if (typeof ClashCheck !== 'undefined' && ClashCheck.stopOnContact && ClashCheck.stopOnContact()) {
+        const movIds = [c.it.id, ...(state.chain0 ? state.chain0.entries.map((ce) => ce.bId) : [])];
+        state.colCtx = ClashCheck.beginDragCheck(movIds);
+      }
     } else if (ud.kind === 'revAngle') {
       Object.assign(state, { center: ud.center.clone(), axis: ud.axis.clone(), u0: ud.u0.clone(), w0: ud.w0.clone(), rad: ud.rad, param: ud.param, sign: ud.sign, factor: ud.factor });
       state.v0 = Model.num(c.it.p[ud.param], V, 90);
@@ -497,7 +506,12 @@ const Handles = (() => {
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'lift') {
       const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
-      const dz = snap(s - state.s0);
+      let dz = snap(s - state.s0);
+      let contactStop = false;
+      if (state.colCtx) {
+        const cr = ClashCheck.clampDragZ(state.colCtx, dz);
+        dz = cr.dz; contactStop = cr.stopped;
+      }
       c.it.t = { ...state.t0, z: round(state.t0.z + dz, 4) };
       const constrained = Joints.constrain(App.doc, c.it.id);
       if (!constrained && state.chain0 && state.chain0.entries.length) {
@@ -505,7 +519,7 @@ const Handles = (() => {
         Joints.applyChainDelta(App.doc, state.chain0, D, { live: true });
       }
       if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(App.doc, { live: true });
-      showLive(handle, c.it.t.z, 'Höhe über Fläche');
+      showLive(handle, c.it.t.z, 'Höhe über Fläche', '', contactStop);
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'rot') {
       const p = Viewer.rayPlane(ev.clientX, ev.clientY, state.center, new THREE.Vector3(0, 0, 1)); if (!p) return;
@@ -513,10 +527,31 @@ const Handles = (() => {
       let deg = (da * 180) / Math.PI;
       const step = ev.shiftKey ? 1 : 15;
       deg = Math.round(deg / step) * step;
-      const R = new THREE.Matrix4().makeRotationZ((deg * Math.PI) / 180);
-      const T1 = new THREE.Matrix4().makeTranslation(state.center.x, state.center.y, state.center.z);
-      const T2 = new THREE.Matrix4().makeTranslation(-state.center.x, -state.center.y, -state.center.z);
-      const Wn = T1.multiply(R).multiply(T2).multiply(state.W0);
+      const rotMatrixFor = (dg) => {
+        const R = new THREE.Matrix4().makeRotationZ((dg * Math.PI) / 180);
+        const T1 = new THREE.Matrix4().makeTranslation(state.center.x, state.center.y, state.center.z);
+        const T2 = new THREE.Matrix4().makeTranslation(-state.center.x, -state.center.y, -state.center.z);
+        return T1.multiply(R).multiply(T2).multiply(state.W0);
+      };
+      let contactStop = false;
+      if (state.colCtx) {
+        const w0Inv = state.W0.clone().invert();
+        const cr = ClashCheck.clampDragEval(state.colCtx, state.lastValidDeg ?? 0, deg, (dg) => {
+          const Wn = rotMatrixFor(dg);
+          const map = new Map([[c.it.id, Wn]]);
+          if (state.chain0 && state.chain0.entries.length) {
+            const D = Wn.clone().multiply(w0Inv);
+            for (const ce of state.chain0.entries) {
+              if (ce.bW0) map.set(ce.bId, D.clone().multiply(ce.bW0));
+            }
+          }
+          return map;
+        });
+        deg = round(cr.val, 2);
+        state.lastValidDeg = deg;
+        contactStop = cr.stopped;
+      }
+      const Wn = rotMatrixFor(deg);
       const Ln = state.PW.clone().invert().multiply(Wn);
       Model.setFromMatrix(c.it, Ln);
       const constrained = Joints.constrain(App.doc, c.it.id);
@@ -525,7 +560,7 @@ const Handles = (() => {
         Joints.applyChainDelta(App.doc, state.chain0, D, { live: true });
       }
       if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(App.doc, { live: true });
-      showLive(handle, deg, 'Drehung', '°');
+      showLive(handle, deg, 'Drehung', '°', contactStop);
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'revAngle') {
       let degDelta = 0;
@@ -570,7 +605,7 @@ const Handles = (() => {
     }
   }
   let liveEl = null;
-  function showLive(handle, v, label, unit = '') {
+  function showLive(handle, v, label, unit = '', contactStop = false) {
     if (!liveEl) { liveEl = h('div', { class: 'dimlabel live' }); overlayEl.append(liveEl); }
     const valTxt = unit === '°'
       ? fmtAngleU(v)
@@ -579,13 +614,15 @@ const Handles = (() => {
         : unit === ''
           ? (Units.key() === 'mm' ? Units.fmtLen(v) : Units.fmtLenU(v))
           : fmt(v) + unit;
-    liveEl.textContent = (label ? label + ' ' : '') + valTxt;
+    liveEl.classList.toggle('contact-stop', !!contactStop);
+    liveEl.textContent = (label ? label + ' ' : '') + valTxt + (contactStop ? ' · ' + T('clash.contactTag') : '');
     const s = Viewer.toScreen(handle.position);
     liveEl.style.left = s.x + 'px'; liveEl.style.top = s.y - 28 + 'px';
   }
   function end() {
     if (!state) return;
     const st = state; state = null;
+    if (st.colCtx && typeof ClashCheck !== 'undefined' && ClashCheck.endDragCheck) ClashCheck.endDragCheck(st.colCtx);
     if (liveEl) { liveEl.remove(); liveEl = null; }
     if (st.kind === 'fillet') {
       const f = Model.find(App.doc, st.tid); const fin = f && f.item.finishes.find((x) => x.id === st.finId);
@@ -883,7 +920,7 @@ const Interact = (() => {
         }
       }
     }
-    let chains = null, ignoreIds = ids.map((it) => it.id);
+    let chains = null, ignoreIds = ids.map((it) => it.id), colCtx = null, jointLastValid = null;
     if (!joint && typeof Joints !== 'undefined' && Joints.captureChain) {
       chains = new Map();
       const ign = new Set(ignoreIds);
@@ -894,13 +931,67 @@ const Interact = (() => {
       }
       ignoreIds = [...ign];
     }
+    if (typeof ClashCheck !== 'undefined' && ClashCheck.stopOnContact && ClashCheck.stopOnContact()) {
+      if (joint) {
+        const jObj = typeof Joints !== 'undefined' && Joints.list ? Joints.list.find((x) => x.id === joint.id) : null;
+        if (jObj) {
+          const jMov = new Set();
+          const rootId = joint.reverse ? jObj.a : jObj.b;
+          jMov.add(rootId);
+          for (const d of Joints.downstream(App.doc, rootId, { stopAtLocked: true })) jMov.add(d.b);
+          colCtx = ClashCheck.beginDragCheck([...jMov]);
+          jointLastValid = { ...joint.st0 };
+        }
+      } else {
+        colCtx = ClashCheck.beginDragCheck(ignoreIds);
+      }
+    }
     const dockActive = !joint && ids.length === 1 && ids[0].role !== 'hole' && !App.ctx && Snap.beginDockDrag ? Snap.beginDockDrag(ids[0].id) : false;
-    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)), joint, chains, ignoreIds, dockActive, dock: null };
+    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)), joint, chains, ignoreIds, colCtx, jointLastValid, dockActive, dock: null };
     Viewer.canvas.style.cursor = 'grabbing';
     Viewer.clearHover();
   }
   const liveRebuild = throttle(() => App.rebuild(), 90);
   let moveLabel = null;
+  function applyJointDragClamped(m, j, patch, dragOpts) {
+    let st = Joints.applyDrag(j.id, patch, dragOpts);
+    if (!st || !m.colCtx || typeof ClashCheck === 'undefined') return { st, stopped: false };
+    const hits = ClashCheck.checkCurrentWorldHits(m.colCtx);
+    if (!hits.length) {
+      ClashCheck.setDragStopState(m.colCtx, false, []);
+      m.jointLastValid = { ...st };
+      return { st, stopped: false };
+    }
+    const prev = m.jointLastValid || j.st0;
+    const keys = Object.keys(patch || {});
+    const makePatch = (u) => {
+      const p = {};
+      for (const k of keys) {
+        const v0 = prev[k] != null ? prev[k] : 0;
+        const v1 = st[k] != null ? st[k] : v0;
+        p[k] = v0 + (v1 - v0) * u;
+      }
+      return p;
+    };
+    let hitIds = hits;
+    let lo = 0, hi = 1;
+    Joints.applyDrag(j.id, makePatch(0), dragOpts);
+    const hits0 = ClashCheck.checkCurrentWorldHits(m.colCtx);
+    if (!hits0.length) {
+      for (let it = 0; it < 16; it++) {
+        const mid = (lo + hi) * 0.5;
+        Joints.applyDrag(j.id, makePatch(mid), dragOpts);
+        const hMid = ClashCheck.checkCurrentWorldHits(m.colCtx);
+        if (hMid.length) { hi = mid; hitIds = hMid; } else { lo = mid; }
+      }
+      st = Joints.applyDrag(j.id, makePatch(lo), dragOpts);
+    } else {
+      st = Joints.applyDrag(j.id, makePatch(0), dragOpts);
+    }
+    ClashCheck.setDragStopState(m.colCtx, true, hitIds);
+    m.jointLastValid = { ...st };
+    return { st, stopped: true };
+  }
   function doMove(e) {
     if (moving.child) return doMoveChild(e);
     const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
@@ -909,7 +1000,7 @@ const Interact = (() => {
     if (moving.joint) {
       const j = moving.joint, sign = j.reverse ? -1 : 1;
       const dragOpts = j.reverse ? { reverse: true, snap: j.revSnap } : undefined;
-      let txt = '';
+      let txt = '', contactStopped = false;
       if (j.kind === 'rot') {
         let degDelta = 0;
         if (j.usePlane) {
@@ -927,7 +1018,8 @@ const Interact = (() => {
         } else {
           degDelta = ((e.clientX - j.sx) * j.screenTan[0] + (e.clientY - j.sy) * j.screenTan[1]) * j.degPerPx;
         }
-        const st = Joints.applyDrag(j.id, { ang: round(j.st0.ang + sign * degDelta, 2) }, dragOpts);
+        const res = applyJointDragClamped(moving, j, { ang: round(j.st0.ang + sign * degDelta, 2) }, dragOpts);
+        const st = res.st; contactStopped = res.stopped;
         if (st) {
           const atStop = Math.abs(st.ang - j.min) < 1e-4 || Math.abs(st.ang - j.max) < 1e-4;
           txt = `Winkel ${fmtAngleU(st.ang)}${atStop ? ' (Anschlag)' : ''}`;
@@ -937,7 +1029,8 @@ const Interact = (() => {
         if (Math.abs(ray.direction.dot(j.axis)) >= 0.96) return;
         let ds = Joints.projectAxisRay(j.origin, j.axis, ray) - j.s0;
         if (grid) ds = Math.round(ds / grid) * grid;
-        const st = Joints.applyDrag(j.id, { ang: j.st0.ang + sign * ds }, dragOpts);
+        const res = applyJointDragClamped(moving, j, { ang: j.st0.ang + sign * ds }, dragOpts);
+        const st = res.st; contactStopped = res.stopped;
         if (st) {
           const atStop = Math.abs(st.ang - j.min) < 1e-4 || Math.abs(st.ang - j.max) < 1e-4;
           txt = `Weg ${Units.fmtLen(st.ang, 2)}${uSuf}${atStop ? ' (Anschlag)' : ''}`;
@@ -949,7 +1042,8 @@ const Interact = (() => {
         let du = d.dot(j.frame.u), dv = d.dot(j.frame.v);
         if (grid) { du = Math.round(du / grid) * grid; dv = Math.round(dv / grid) * grid; }
         if (e.altKey) { if (Math.abs(du) > Math.abs(dv)) dv = 0; else du = 0; }
-        const st = Joints.applyDrag(j.id, { u: j.st0.u + sign * du, v: j.st0.v + sign * dv }, dragOpts);
+        const res = applyJointDragClamped(moving, j, { u: j.st0.u + sign * du, v: j.st0.v + sign * dv }, dragOpts);
+        const st = res.st; contactStopped = res.stopped;
         if (st) txt = `U ${Units.fmtLen(st.u, 2)}  V ${Units.fmtLen(st.v, 2)}${uSuf}`;
       } else if (j.kind === 'ball') {
         const dx = e.clientX - j.sx, dy = e.clientY - j.sy;
@@ -963,13 +1057,15 @@ const Interact = (() => {
         const Rloc = j.F.clone().transpose().multiply(Rw).multiply(j.F);
         const eu = new THREE.Euler().setFromRotationMatrix(Rloc, 'XYZ');
         const toDeg = (rad) => round((rad * 180) / Math.PI, 2);
-        const st = Joints.applyDrag(j.id, { rx: toDeg(eu.x), ry: toDeg(eu.y), ang: toDeg(eu.z) }, dragOpts);
+        const res = applyJointDragClamped(moving, j, { rx: toDeg(eu.x), ry: toDeg(eu.y), ang: toDeg(eu.z) }, dragOpts);
+        const st = res.st; contactStopped = res.stopped;
         if (st) txt = `X ${fmtAngle(st.rx)}°  Y ${fmtAngle(st.ry)}°  Z ${fmtAngle(st.ang)}°`;
       } else if (j.kind === 'slot') {
         const s = Joints.projectAxisRay(j.frame.o, j.frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
         let ds = s - j.s0;
         if (grid) ds = Math.round(ds / grid) * grid;
-        const st = Joints.applyDrag(j.id, { pos: j.st0.pos + sign * ds }, dragOpts);
+        const res = applyJointDragClamped(moving, j, { pos: j.st0.pos + sign * ds }, dragOpts);
+        const st = res.st; contactStopped = res.stopped;
         if (st) {
           const atStop = Math.abs(st.pos - j.frame.minPos) < 1e-4 || Math.abs(st.pos - j.frame.maxPos) < 1e-4;
           txt = `Weg ${Units.fmtLen(st.pos, 2)}${uSuf}${atStop ? ' (Anschlag)' : ''}`;
@@ -999,11 +1095,13 @@ const Interact = (() => {
             }
           }
         }
-        const st = Joints.applyDrag(j.id, patch, dragOpts);
+        const res = applyJointDragClamped(moving, j, patch, dragOpts);
+        const st = res.st; contactStopped = res.stopped;
         if (st) txt = `Weg ${Units.fmtLen(st.pos, 2)}${uSuf}` + (j.canRot ? ` · ${fmtAngleU(st.ang)}` : '');
       }
       if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
-      moveLabel.textContent = txt;
+      moveLabel.classList.toggle('contact-stop', !!contactStopped);
+      moveLabel.textContent = txt + (contactStopped ? ' · ' + T('clash.contactTag') : '');
       moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 30 + 'px';
       App.emit('doc'); Handles.rebuild(); liveRebuild();
       return;
@@ -1019,6 +1117,17 @@ const Interact = (() => {
     if (moving.dockActive) {
       if (!magOff && Snap.updateDockDrag) dock = Snap.updateDockDrag(moving.ids[0], moving.t0.get(moving.ids[0].id), [dx, dy], e.clientX, e.clientY);
       else if (Snap.setDockVisible) Snap.setDockVisible(false);
+    }
+    if (dock && moving.colCtx && typeof ClashCheck !== 'undefined') {
+      const it = moving.ids[0];
+      const Pb = Model.parentWorld(App.doc, it.id);
+      const Lb = Pb.clone().invert().multiply(dock.worldMatrix);
+      Model.setFromMatrix(it, Lb);
+      if (ClashCheck.checkCurrentWorldHits(moving.colCtx).length) {
+        it.t = { ...moving.t0.get(it.id) };
+        dock = null;
+        if (Snap.setDockVisible) Snap.setDockVisible(false);
+      }
     }
     moving.dock = dock;
     if (dock) {
@@ -1036,13 +1145,21 @@ const Interact = (() => {
       }
       if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(App.doc, { live: true });
       if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
+      moveLabel.classList.remove('contact-stop');
       moveLabel.textContent = dock.label;
       moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 54 + 'px';
       App.emit('doc'); Handles.rebuild(); liveRebuild();
       return;
     }
-    const mag = magOff || !moving.box0 || moving.box0.isEmpty() ? (Snap.clear(), null) : Snap.bodies(moving.box0, [dx, dy], ignIds, moving.box0.min.z);
+    let mag = magOff || !moving.box0 || moving.box0.isEmpty() ? (Snap.clear(), null) : Snap.bodies(moving.box0, [dx, dy], ignIds, moving.box0.min.z);
     if (mag) { dx = round(mag.d[0], 4); dy = round(mag.d[1], 4); }
+    let contactStop = null;
+    if (moving.colCtx && typeof ClashCheck !== 'undefined') {
+      contactStop = ClashCheck.clampDragXY(moving.colCtx, dx, dy);
+      dx = contactStop.dx;
+      dy = contactStop.dy;
+      if (contactStop.stopped) { Snap.clear(); mag = null; }
+    }
     for (const it of moving.ids) {
       const t0 = moving.t0.get(it.id);
       it.t = { ...t0, x: round(t0.x + dx, 4), y: round(t0.y + dy, 4) };
@@ -1071,7 +1188,9 @@ const Interact = (() => {
       const parts = []; if (isFinite(gx)) parts.push('↔ ' + Units.fmtLen(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + Units.fmtLen(gy, 2));
       if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
     }
-    moveLabel.textContent = `X ${Units.fmtLen(dx, 2)}  Y ${Units.fmtLen(dy, 2)}${uSuf}` + gapTxt;
+    const stopped = !!(contactStop && contactStop.stopped);
+    moveLabel.classList.toggle('contact-stop', stopped);
+    moveLabel.textContent = `X ${Units.fmtLen(dx, 2)}  Y ${Units.fmtLen(dy, 2)}${uSuf}` + gapTxt + (stopped ? ' · ' + T('clash.contactTag') : '');
     moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
   }
@@ -1128,6 +1247,7 @@ const Interact = (() => {
     if (moving) {
       const m = moving; moving = null;
       const dock = m.dock || null;
+      if (m.colCtx && typeof ClashCheck !== 'undefined' && ClashCheck.endDragCheck) ClashCheck.endDragCheck(m.colCtx);
       if (moveLabel) { moveLabel.remove(); moveLabel = null; }
       if (typeof Joints !== 'undefined' && Joints.clearDragVis) Joints.clearDragVis();
       if (Snap.endDockDrag) Snap.endDockDrag();
@@ -1169,6 +1289,7 @@ const Interact = (() => {
     if (band) { band.el.remove(); band = null; }
     if (down && down.handle) Handles.end();
     if (moving) {
+      if (moving.colCtx && typeof ClashCheck !== 'undefined' && ClashCheck.endDragCheck) ClashCheck.endDragCheck(moving.colCtx);
       moving = null;
       if (moveLabel) { moveLabel.remove(); moveLabel = null; }
       if (typeof Joints !== 'undefined' && Joints.clearDragVis) Joints.clearDragVis();
@@ -1373,7 +1494,13 @@ const Interact = (() => {
       } else {
         const it0 = m.ids[0], t0 = m.t0.get(it0.id);
         sp = { fields: [{ label: 'X', value: round(it0.t.x - t0.x, 4), unit: 'mm' }, { label: 'Y', value: round(it0.t.y - t0.y, 4), unit: 'mm' }],
+          hint: m.colCtx ? T('clash.dragInputContactHint') : null,
           apply: ([dx, dy]) => {
+            if (m.colCtx && typeof ClashCheck !== 'undefined') {
+              const cr = ClashCheck.clampDragXY(m.colCtx, dx, dy);
+              dx = cr.dx; dy = cr.dy;
+              if (cr.stopped) UI.toast(T('clash.contactStoppedToast'), { icon: 'info' });
+            }
             for (const it of m.ids) {
               const t = m.t0.get(it.id); it.t = { ...t, x: round(t.x + dx, 4), y: round(t.y + dy, 4) };
               const constrained = typeof Joints !== 'undefined' && Joints.constrain ? Joints.constrain(App.doc, it.id) : false;
@@ -1398,9 +1525,10 @@ const Interact = (() => {
     const handleWas = down && down.handle;
     if (!handleWas && Snap.endDockDrag) Snap.endDockDrag();
     down = { kbd: true }; if (!handleWas) moving = null;
-    DragInput.open({ fields: sp.fields, apply: (v) => { sp.apply(v); down = null; Viewer.controls.enabled = true; } }, e.key === ',' ? '0,' : e.key, lastPtr);
+    DragInput.open({ fields: sp.fields, hint: sp.hint, apply: (v) => { sp.apply(v); down = null; Viewer.controls.enabled = true; } }, e.key === ',' ? '0,' : e.key, lastPtr);
   }
   function finishMove(m) {
+    if (m && m.colCtx && typeof ClashCheck !== 'undefined' && ClashCheck.endDragCheck) ClashCheck.endDragCheck(m.colCtx);
     if (moveLabel) { moveLabel.remove(); moveLabel = null; }
     if (typeof Joints !== 'undefined' && Joints.clearDragVis) Joints.clearDragVis();
     if (Snap.endDockDrag) Snap.endDockDrag();

@@ -4,13 +4,15 @@ const GeomCheck = (() => {
 
   function sync() {
     const b = $('#t-check');
-    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing));
+    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && (ClashCheck.active || ClashCheck.clearanceActive)) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing));
   }
 
   function menu(anchor) {
     UI.menu(anchor, [
       { label: T('menu.check.geom'), icon: 'target', id: 'check-geom', help: 'geomCheck', run: () => open() },
       { label: T('menu.check.clashes'), icon: 'boolIntersect', id: 'check-clashes', help: 'clashCheck', run: () => ClashCheck.open() },
+      { label: (typeof ClashCheck !== 'undefined' && ClashCheck.clearanceActive ? '✓ ' : '') + T('menu.check.clearance'), icon: 'clearance', id: 'check-clearance', help: 'clearanceCheck', run: () => ClashCheck.openClearance() },
+      { label: (typeof ClashCheck !== 'undefined' && ClashCheck.stopOnContact && ClashCheck.stopOnContact() ? '✓ ' : '') + T('clash.stopOnContact'), icon: 'warn', id: 'check-drag-stop', help: 'dragCollisionStop', run: () => ClashCheck.toggleStopOnContact() },
       { label: T('menu.check.weak'), icon: 'warn', id: 'check-weak', help: 'weakSpots', run: () => Weak.dialog() },
       '-',
       { label: T('menu.check.thin'), icon: 'ruler', id: 'check-thin', help: 'thinWalls', run: () => Views.thin() },

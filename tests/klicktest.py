@@ -32280,6 +32280,229 @@ def t_a162_baugruppe_spiegeln_muster(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a155_kollision_und_luft(p):
+    # [A-155] Kollision beim Ziehen und Abstands-Prüfung (BG-17, BG-18)
+    p.empty()
+
+    def drag_world(p0, p1, steps=14):
+        s0 = world_screen(p, p0[0], p0[1], p0[2])
+        s1 = world_screen(p, p1[0], p1[1], p1[2])
+        p.pg.mouse.move(s0[0], s0[1])
+        p.pg.mouse.down()
+        p.pg.mouse.move(s1[0], s1[1], steps=steps)
+        p.pg.mouse.up()
+        warte_rechnen(p, 20)
+
+    # 1. BG-17: Teil auf ein anderes zuziehen -> bleibt bei Berührung stehen; Wegziehen geht; Schalter aus -> fährt hinein
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Zwei Quader', (d) => {
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil A' });
+        a.locked = true;
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil B' });
+        b.t.x = 40;
+        d.items.push(a, b);
+      });
+      App.clearSelection();
+    """)
+    warte_rechnen(p, 25)
+    p.pg.locator('#drag-stop-contact').check()
+    p.wait(150)
+    p.ev("const { THREE } = window.__masswerk; Viewer.moveCamera(new THREE.Vector3(20, -60, 120), new THREE.Vector3(20, 0, 5), null, false); Viewer.renderNow();")
+    p.wait(200)
+
+    drag_world([40, 0, 10], [-15, 0, 10], steps=16)
+    st_stop = p.ev("""return (async () => {
+      const b = App.doc.items.find(x => x.name === 'Teil B');
+      const cl = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return { bx: b.t.x, by: b.t.y, clashes: (cl && cl.pairs ? cl.pairs.length : -1), stop: ClashCheck.lastDragStop };
+    })();""")
+
+    # Wegziehen nach +X funktioniert wieder frei
+    p.ev("App.clearSelection();")
+    p.wait(80)
+    drag_world([20, 0, 10], [35, 0, 10], steps=10)
+    bx_away = p.ev("return App.doc.items.find(x => x.name === 'Teil B').t.x;")
+
+    # Schalter aus -> Teil lässt sich durch Teil A hindurchziehen
+    p.ev("App.clearSelection();")
+    p.wait(150)
+    p.pg.locator('#drag-stop-contact').uncheck()
+    p.wait(150)
+    drag_world([35, 0, 10], [0, 0, 10], steps=12)
+    bx_free = p.ev("return App.doc.items.find(x => x.name === 'Teil B').t.x;")
+    ok1 = (
+        abs(st_stop['bx'] - 20.0) < 0.15
+        and abs(st_stop['by']) < 0.15
+        and st_stop['clashes'] == 0
+        and bx_away > 28.0
+        and bx_free < 10.0
+    )
+
+    # 2. BG-17: Schiebegelenk hält ebenfalls an Berührung an; im Einfach-Modus ausgeblendet & aus
+    p.ev("""
+      App.change('Schiebegelenk mit Hindernis', (d) => {
+        d.items = [];
+        d.joints = [];
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Basis' });
+        a.locked = true;
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Schlitten' });
+        b.t.x = 25;
+        const c = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Anschlag' });
+        c.t.x = 60;
+        c.locked = true;
+        d.items.push(a, b, c);
+      });
+      Joints.add(App.doc.items[0].id, App.doc.items[1].id, [15, 0, 5], [1, 0, 0], { kind: 'slide', min: -5, max: 50 });
+      App.clearSelection();
+    """)
+    warte_rechnen(p, 25)
+    p.pg.locator('#drag-stop-contact').check()
+    p.wait(150)
+    p.ev("const { THREE } = window.__masswerk; Viewer.moveCamera(new THREE.Vector3(40, -65, 130), new THREE.Vector3(40, 0, 5), null, false); Viewer.renderNow();")
+    p.wait(200)
+    drag_world([25, 0, 10], [72, 0, 10], steps=16)
+    slide_res = p.ev("""
+      const b = App.doc.items.find(x => x.name === 'Schlitten');
+      return { bx: b.t.x, ang: (App.doc.joints[0] && App.doc.joints[0].ang) ?? null };
+    """)
+    simple_res = p.ev("""return (async () => {
+      App.clearSelection();
+      ViewPrefs.setLevel('simple');
+      const stopInSimple = ClashCheck.stopOnContact();
+      const openInSimple = await ClashCheck.openClearance();
+      const chkEl = document.querySelector('#drag-stop-contact');
+      const btnEl = document.querySelector('#proj-clearance');
+      const chkHidden = !chkEl || getComputedStyle(chkEl.closest('label')).display === 'none'
+        || getComputedStyle(chkEl.closest('.section')).display === 'none';
+      const btnHidden = !btnEl || getComputedStyle(btnEl).display === 'none';
+      ViewPrefs.setLevel('pro');
+      return { stopInSimple, openInSimple, chkHidden, btnHidden, stopBackPro: ClashCheck.stopOnContact() };
+    })();""")
+    ok2 = (
+        abs(slide_res['bx'] - 40.0) < 0.25
+        and slide_res['ang'] is not None and abs(slide_res['ang'] - 15.0) < 0.25
+        and not simple_res['stopInSimple']
+        and simple_res['openInSimple'] is None
+        and simple_res['chkHidden']
+        and simple_res['btnHidden']
+        and simple_res['stopBackPro']
+    )
+
+    # 3. BG-18: „Luft prüfen“ mit 1 mm findet ein Paar mit 0,5 mm Abstand & Anspringen
+    p.ev("""
+      App.change('Drei Teile Abstand', (d) => {
+        d.items = [];
+        d.joints = [];
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil A' });
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil B' });
+        b.t.x = 20.5;
+        const c = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil C' });
+        c.t.x = 45;
+        d.items.push(a, b, c);
+      });
+      App.clearSelection();
+    """)
+    warte_rechnen(p, 25)
+    p.pg.locator('#proj-clearance').click()
+    p.pg.locator('#cl-min-gap').wait_for(state='visible', timeout=10000)
+    p.pg.locator('#cl-min-gap').fill('1')
+    p.pg.locator('#cl-go').click()
+    p.pg.locator('#clearance-check-list button').first.wait_for(state='visible', timeout=15000)
+
+    cl_cnt = p.pg.locator('#clearance-check-list button').count()
+    cl_txt = (p.pg.locator('#clearance-check-list button').first.text_content() or '').lower()
+    cl_st = p.ev("""const r = ClashCheck.clearanceLast;
+      return r ? { checked: r.checkedCount, n: r.pairs.length, d: r.pairs[0] ? r.pairs[0].d : -1, minGap: r.minGap } : null;""")
+
+    p.ev("const { THREE } = window.__masswerk; Viewer.moveCamera(new THREE.Vector3(120, -140, 110), new THREE.Vector3(80, 40, 20), null, false);")
+    p.wait(120)
+    p.pg.locator('#clearance-check-list button').first.click()
+    p.wait(800)
+    cl_focus = p.ev("""
+      const t = Viewer.saveCamera().t;
+      const tag = document.querySelector('.dimlabel.clearance-tag');
+      return {
+        focused: ClashCheck.clearanceFocused,
+        has: ClashCheck.hasClearanceHighlight,
+        selCount: App.sel.length,
+        tagTxt: tag ? tag.textContent : '',
+        tx: t.x, ty: t.y, tz: t.z,
+      };
+    """)
+    ok3 = (
+        cl_cnt == 1
+        and cl_st is not None and cl_st['checked'] == 3 and cl_st['n'] == 1
+        and abs(cl_st['d'] - 0.5) < 0.02
+        and 'teil a' in cl_txt and 'teil b' in cl_txt and '0,5' in cl_txt
+        and cl_focus['focused'] == 0 and cl_focus['has'] and cl_focus['selCount'] == 2
+        and '0,5' in cl_focus['tagTxt']
+        and abs(cl_focus['tx'] - 10.25) < 0.6 and abs(cl_focus['ty']) <= 10.5 and -0.5 <= cl_focus['tz'] <= 10.5
+    )
+
+    # 4. Grenzwert 0,3 mm -> alles ok; echte Baugruppe mit ref-Teilen & Schließen
+    p.pg.locator('#cl-min-gap').fill('0,3')
+    p.pg.locator('#cl-go').click()
+    p.pg.locator('#clearance-check-ok').wait_for(state='visible', timeout=15000)
+    ok_gap_txt = (p.pg.locator('#clearance-check-bar').text_content() or '').lower()
+
+    p.ev("""return (async () => {
+      const partDoc = Model.newDoc('Platte', { docType: 'part' });
+      partDoc.items.push(Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Platte' }));
+      await Store.saveProject(partDoc, 1, { keepLast: true });
+      const asm = Model.newAssemblyDoc('Luft-Baugruppe');
+      const r1 = Model.newItem('ref', { docId: partDoc.id, docName: 'Platte' }, { name: 'Körper 1' });
+      const r2 = Model.newItem('ref', { docId: partDoc.id, docName: 'Platte' }, { name: 'Körper 2' });
+      r2.t.x = 20.5;
+      asm.items.push(r1, r2);
+      App.setDoc(asm, { fit: true });
+    })();""")
+    warte_rechnen(p, 30)
+    p.pg.locator('#t-clearance').click()
+    p.pg.locator('#cl-min-gap').fill('1')
+    p.pg.locator('#cl-go').click()
+    p.pg.locator('#clearance-check-list button').first.wait_for(state='visible', timeout=15000)
+    asm_cl_txt = (p.pg.locator('#clearance-check-list button').first.text_content() or '').lower()
+    asm_d = p.ev("return ClashCheck.clearanceLast?.pairs?.[0]?.d ?? -1;")
+    p.pg.locator('#clearance-check-list button').first.click(); p.wait(250)
+    p.pg.locator('#cl-close').click(); p.wait(200)
+    cl_closed = p.ev("return { active: ClashCheck.clearanceActive, has: ClashCheck.hasClearanceHighlight, bar: !!document.querySelector('#clearance-check-bar'), tag: !!document.querySelector('.dimlabel.clearance-tag') };")
+    ok4 = (
+        'genug luft' in ok_gap_txt
+        and 'körper 1' in asm_cl_txt and 'körper 2' in asm_cl_txt
+        and abs(asm_d - 0.5) < 0.02
+        and not cl_closed['active'] and not cl_closed['has'] and not cl_closed['bar'] and not cl_closed['tag']
+    )
+
+    # 5. Projekt-Validierung, Undo, Prüfen-Menü, Befehlssuche, Hilfetexte, i18n-Schlüssel & keine Fehler
+    p.pg.locator('#t-check').click(); p.wait(200)
+    has_menu = p.pg.locator('#check-clearance').count() == 1 and p.pg.locator('#check-drag-stop').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(100)
+    meta = p.ev("""return (async () => {
+      App.clearSelection();
+      ClashCheck.setStopOnContact(true);
+      const on1 = ClashCheck.stopOnContact();
+      const val = Store.validateProject(App.doc);
+      App.undo();
+      const off1 = !ClashCheck.stopOnContact();
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['dragCollisionStop', 'clearanceCheck'].every(k =>
+        wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp && document.querySelectorAll('[data-help="' + k + '"]').length >= 1
+      );
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('luft prüfen').some(c => c.id === 'clearance-check')
+        && Commands.search('beim ziehen anhalten').some(c => c.id === 'drag-stop-contact');
+      return { on1, off1, valOk: val.ok, helpOk, i18nOk, cmds, errs: App.errors.length === 0 };
+    })();""")
+    ok5 = bool(has_menu and all(meta.values()) and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a164_leichtmodus_huelle(p):
     # 1. Profi-only Sichtbarkeit in einer Baugruppe
     p.empty()
@@ -33364,6 +33587,7 @@ TESTS = [
     ('[A-161] Bohrung durch Stapel und Baugruppen-Schnitt (BG-24, BG-25)', t_a161_bohrung_stapel_baugruppe),
     ('[A-160] Schrauben automatisch einsetzen: Bohrungen erkennen, M5-Schrauben & Stückliste (BG-23)', t_a160_schrauben_einsetzen),
     ('[A-162] Baugruppe: Teile spiegeln, Rechteck- und Kreismuster als verknüpfte Kopien', t_a162_baugruppe_spiegeln_muster),
+    ('[A-155] Kollision beim Ziehen und Abstands-Prüfung (BG-17, BG-18)', t_a155_kollision_und_luft),
     ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),

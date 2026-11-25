@@ -2581,6 +2581,16 @@ const HELP = {
   "tip": "Skelett-Skizze (Profi): eine Hauptskizze steuert mehrere Teile der Baugruppe",
   "hilfe": "In einer Skelett-Skizze zeichnest du die wichtigen Linien und Maße der gesamten Baugruppe an einer zentralen Stelle. Jedes benannte Maß wird automatisch als verknüpfter Parameter bereitgestellt – änderst du später ein Maß in der Hauptskizze, rechnen alle damit verbundenen Teile sofort neu.",
   "tipp": "Auch eingesetzte Bauteile aus eigenen Dokumenten lassen sich im Skelett-Panel direkt über „Verknüpfen“ mit einem Steuer-Maß verbinden."
+ },
+ "dragCollisionStop": {
+  "tip": "Beim Ziehen anhalten, wenn sich Teile berühren (Profi)",
+  "hilfe": "Prüft beim Verschieben, Anheben, Drehen oder Ziehen an Gelenken laufend, ob das bewegte Teil auf ein anderes Teil stößt. Sobald die Oberflächen sich berühren, hält das Teil genau dort an, statt hindurchzufahren.",
+  "tipp": "Ziehst du ein Teil schräg gegen eine Wand, gleitet es an der Fläche entlang weiter. Zum Durchziehen einfach kurz den Schalter wieder ausmachen."
+ },
+ "clearanceCheck": {
+  "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
+  "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
+  "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
  }
 };
 
