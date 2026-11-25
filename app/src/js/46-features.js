@@ -3610,9 +3610,67 @@ const Features = (() => {
         delete p.path;
         delete p.rail;
         delete p.rail2;
+        delete p.startCond;
+        delete p.endCond;
+        delete p.startFace;
+        delete p.endFace;
       } else {
         delete p.closed;
       }
+    });
+    return true;
+  }
+  function setLoftContinuity(itemId, end = 'start', opts = {}) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'loft') return false;
+    const n = (f.item.p && Array.isArray(f.item.p.sketches)) ? f.item.p.sketches.length : 0;
+    if (n < 2) {
+      UI.toast(T('panel.loft.needTwoCont'), { icon: 'info' });
+      return false;
+    }
+    const isEnd = end === 'end';
+    const condKey = isEnd ? 'endCond' : 'startCond';
+    const weightKey = isEnd ? 'endWeight' : 'startWeight';
+    const faceKey = isEnd ? 'endFace' : 'startFace';
+    const mode = opts.mode != null ? (opts.mode === 'tangent' || opts.mode === 'curvature' ? opts.mode : 'none') : null;
+    const weight = opts.weight != null ? round(clamp(Number(opts.weight) || 1, 0.1, 3), 2) : null;
+    App.change('Übergang-Anschluss geändert', (doc) => {
+      const fn = Model.find(doc, itemId);
+      if (!fn || fn.item.kind !== 'loft') return false;
+      const p = fn.item.p || (fn.item.p = {});
+      if (mode != null) {
+        if (mode === 'none') delete p[condKey];
+        else {
+          p[condKey] = mode;
+          p.ruled = false;
+          delete p.closed;
+          delete p.path;
+          delete p.rail;
+          delete p.rail2;
+          if (isEnd) p.tip = 0;
+          if (p[weightKey] == null) p[weightKey] = 1;
+        }
+      }
+      if (weight != null && Number.isFinite(weight)) p[weightKey] = weight;
+      if (opts.clearFace) delete p[faceKey];
+      else if (opts.face) p[faceKey] = opts.face;
+    }, opts.merge ? { merge: opts.merge } : undefined);
+    return true;
+  }
+  function pickLoftFace(itemId, end = 'start') {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'loft') return false;
+    const curMode = (f.item.p && f.item.p[end === 'end' ? 'endCond' : 'startCond']) || 'none';
+    pickFaceThen((ref) => {
+      if (!ref || ref.datumId) {
+        UI.toast('Bitte wähle eine Fläche eines benachbarten Körpers.', { icon: 'info' });
+        return;
+      }
+      setLoftContinuity(itemId, end, { face: ref, mode: curMode === 'none' ? 'tangent' : curMode });
+      UI.toast('Anschlussfläche gewählt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, {
+      exclude: new Set([itemId, '__preview']),
+      hint: '<b>Anschlussfläche wählen:</b> Klick auf eine Fläche des benachbarten Körpers. <b>Esc</b> bricht ab.',
     });
     return true;
   }
@@ -3620,11 +3678,31 @@ const Features = (() => {
     const n = (it.p.sketches || []).length;
     const hasPath = !!it.p.path, hasRail1 = !!it.p.rail, hasRail2 = !!it.p.rail2, hasRail = hasRail1 || hasRail2;
     const isClosed = !!it.p.closed && !hasPath && !hasRail;
+    const sCond = (it.p.startCond === 'tangent' || it.p.startCond === 'curvature') ? it.p.startCond : 'none';
+    const eCond = (it.p.endCond === 'tangent' || it.p.endCond === 'curvature') ? it.p.endCond : 'none';
+    const hasCont = !isClosed && !hasPath && !hasRail && (sCond !== 'none' || eCond !== 'none');
     sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.loft.profiles')), h('b', { class: 'mono' }, String(n))));
     if (!hasPath && !hasRail) {
       const fl = h('div', { class: 'fields' });
-      if (!isClosed) fl.append(UI.numField({ id: 'p-tip', label: T('panel.loft.extendTip'), value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
-      fl.append(UI.selectField({ id: 'p-ruled', label: T('kind.loft'), value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', T('panel.loft.smooth')], ['ruled', T('panel.loft.ruled')]], onChange: (v) => setP('ruled', v === 'ruled') }));
+      if (!isClosed && eCond === 'none') fl.append(UI.numField({ id: 'p-tip', label: T('panel.loft.extendTip'), value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
+      const rf = UI.selectField({
+        id: 'p-ruled',
+        label: T('kind.loft'),
+        value: it.p.ruled && !hasCont ? 'ruled' : 'smooth',
+        options: [['smooth', T('panel.loft.smooth')], ['ruled', T('panel.loft.ruled')]],
+        onChange: (v) => {
+          if (v === 'ruled') {
+            App.change('Übergang mit geraden Flächen', (doc) => {
+              const fn = Model.find(doc, it.id);
+              if (!fn) return false;
+              fn.item.p.ruled = true;
+              delete fn.item.p.startCond;
+              delete fn.item.p.endCond;
+            });
+          } else setP('ruled', false);
+        },
+      });
+      fl.append(rf);
       sec.append(fl);
       const chk = h('input', { type: 'checkbox', id: 'p-closed', checked: isClosed });
       if (n < 3 && !isClosed) chk.disabled = true;
@@ -3632,6 +3710,78 @@ const Features = (() => {
       const cl = h('label', { class: 'check pro', 'data-help': 'loftClosed', title: n < 3 && !isClosed ? T('panel.loft.needThreeClosed') : '', style: { marginTop: '6px' } }, chk, T('panel.loft.closed'));
       sec.append(cl);
       sec.append(h('div', { class: 'hint-box', html: isClosed ? T('panel.loft.closedHint') : T('panel.loft.tipHint') }));
+    }
+    // Weicher Anschluss (KP-31): Start und Ende tangential (G1) oder krümmungsglatt (G2) mit Stärke
+    const contSec = h('div', { class: 'section pro', id: 'loft-cont', 'data-help': 'loftContinuity' }, h('div', { class: 'section-h' }, T('panel.loft.continuity')));
+    if (isClosed) {
+      contSec.append(h('div', { class: 'hint-box', html: T('panel.loft.contBlockedClosed') }));
+    } else if (hasPath) {
+      contSec.append(h('div', { class: 'hint-box', html: T('panel.loft.contBlockedPath') }));
+    } else if (hasRail) {
+      contSec.append(h('div', { class: 'hint-box', html: T('panel.loft.contBlockedRail') }));
+    } else if (n < 2) {
+      contSec.append(h('div', { class: 'hint-box', html: T('panel.loft.needTwoCont') }));
+    } else {
+      const resInfo = App.resolvedOf ? App.resolvedOf(it.id) : null;
+      const renderEndCard = (end, labelKey) => {
+        const isEnd = end === 'end';
+        const cond = isEnd ? eCond : sCond;
+        const wRaw = isEnd ? it.p.endWeight : it.p.startWeight;
+        const wVal = round(clamp(Number(wRaw != null ? wRaw : 1) || 1, 0.1, 3), 2);
+        const faceRef = isEnd ? it.p.endFace : it.p.startFace;
+        const card = h('div', { class: 'loft-cont-card', id: `loft-${end}-card` });
+        card.append(UI.selectField({
+          id: `loft-${end}-mode`,
+          label: T(labelKey),
+          value: cond,
+          options: [
+            ['none', T('panel.loft.condNone')],
+            ['tangent', T('panel.loft.condTangent')],
+            ['curvature', T('panel.loft.condCurvature')],
+          ],
+          onChange: (v) => setLoftContinuity(it.id, end, { mode: v }),
+        }));
+        if (cond !== 'none') {
+          const valEl = h('span', { class: 'mono loft-weight-val', id: `loft-${end}-weight-val` }, fmt(wVal, 2));
+          const rng = h('input', { type: 'range', id: `loft-${end}-weight`, min: '0.1', max: '3', step: '0.05', value: String(wVal), 'aria-label': `${T(labelKey)} ${T('panel.loft.strength')}` });
+          let wTimer = null;
+          rng.oninput = () => {
+            const wv = round(clamp(parseFloat(rng.value) || 1, 0.1, 3), 2);
+            valEl.textContent = fmt(wv, 2);
+            clearTimeout(wTimer);
+            wTimer = setTimeout(() => setLoftContinuity(it.id, end, { weight: wv, merge: 'loft-w-' + end }), 80);
+          };
+          rng.onchange = () => {
+            clearTimeout(wTimer);
+            const wv = round(clamp(parseFloat(rng.value) || 1, 0.1, 3), 2);
+            valEl.textContent = fmt(wv, 2);
+            setLoftContinuity(it.id, end, { weight: wv, merge: 'loft-w-' + end });
+          };
+          card.append(h('div', { class: 'loft-weight-row' }, h('span', null, T('panel.loft.strength')), rng, valEl));
+
+          const endRes = resInfo && resInfo[end];
+          let faceTxt = T('panel.loft.connNormal');
+          if (faceRef && faceRef.id) {
+            const bf = Model.find(App.doc, faceRef.id);
+            faceTxt = T('panel.loft.connExplicit', { body: bf ? Model.label(bf.item) : (faceRef.label || 'Fläche') });
+          } else if (endRes && endRes.source === 'face' && endRes.bodyId) {
+            const bf = Model.find(App.doc, endRes.bodyId);
+            faceTxt = T('panel.loft.connDetected', { body: bf ? Model.label(bf.item) : 'Körper' });
+          }
+          const pb = h('button', { type: 'button', class: 'btn small', id: `loft-${end}-pick` }, T('panel.loft.pickFace'));
+          pb.onclick = () => pickLoftFace(it.id, end);
+          const fRow = h('div', { class: 'loft-face-row' }, h('span', { class: 'grow', id: `loft-${end}-face-info` }, faceTxt), pb);
+          if (faceRef && faceRef.id) {
+            const cb = h('button', { type: 'button', class: 'btn small', id: `loft-${end}-clear` }, T('panel.loft.autoFace'));
+            cb.onclick = () => setLoftContinuity(it.id, end, { clearFace: true });
+            fRow.append(cb);
+          }
+          card.append(fRow);
+        }
+        return card;
+      };
+      contSec.append(renderEndCard('start', 'panel.loft.startEnd'), renderEndCard('end', 'panel.loft.endEnd'));
+      contSec.append(h('div', { class: 'hint-box', html: T('panel.loft.contHint') }));
     }
     // Mittellinie: der Übergang folgt einer gebogenen Linie statt dem kürzesten Weg
     const ml = h('div', { class: 'section', id: 'loft-path' }, h('div', { class: 'section-h' }, T('panel.loft.centerline')));
@@ -3680,9 +3830,9 @@ const Features = (() => {
       fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? T('panel.loft.rail2ActiveHint') : T('panel.loft.rail2IdleHint') }));
     }
     if (!isClosed && hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, T('panel.loft.centerline')), h('div', { class: 'hint-box', html: T('panel.loft.pathBlockedRail') })); }
-    w.append(sec, ml, fk); if (fk2) w.append(fk2);
+    w.append(sec, contSec, ml, fk); if (fk2) w.append(fk2);
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
 })();

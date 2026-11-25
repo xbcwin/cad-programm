@@ -119,10 +119,17 @@ const Explain = (() => {
     }
     if (it.kind === 'loft') {
       const p = it.p || {}, n = (p.sketches || []).length;
+      const condName = (c) => (c === 'curvature' ? 'krümmungsglatt (G2)' : c === 'tangent' ? 'tangential (G1)' : '');
+      const cParts = [];
+      if (!p.closed && !p.path && !p.rail && !p.rail2) {
+        if (p.startCond === 'tangent' || p.startCond === 'curvature') cParts.push(`Start ${condName(p.startCond)}, Stärke ${fmt(Model.num(p.startWeight, V, 1), 2)}`);
+        if (p.endCond === 'tangent' || p.endCond === 'curvature') cParts.push(`Ende ${condName(p.endCond)}, Stärke ${fmt(Model.num(p.endWeight, V, 1), 2)}`);
+      }
+      const contInfo = cParts.length ? ` mit weichem Anschluss (${cParts.join('; ')})` : '';
       const style = p.closed ? 'geschlossen als Ring' : p.path ? 'entlang einer Mittellinie' : (p.rail || p.rail2) ? 'mit Führungskurve' : Model.num(p.tip, V, 0) > 0 ? `zur Spitze (${Units.fmtLenU(Model.num(p.tip, V, 0), 2, doc)})` : (p.ruled ? 'mit geraden Flächen' : 'weich');
       const tf = it.op && it.op.target ? Model.find(doc, it.op.target) : null;
       const opTxt = it.op && it.op.type === 'cut' ? ` – wird von „${tf ? Model.label(tf.item) : 'Zielkörper'}“ als Schnitt abgezogen` : it.op && it.op.type === 'join' ? ` – wird mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ vereinigt` : it.op && it.op.type === 'common' ? ` – bildet mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ die Schnittmenge` : '';
-      lines.push({ k: 'op', t: `Verbindet ${n} Umrisse ${style}${opTxt}.` });
+      lines.push({ k: 'op', t: `Verbindet ${n} Umrisse ${style}${contInfo}${opTxt}.` });
     }
     if (it.kind === 'sweep') {
       const p = it.p || {};

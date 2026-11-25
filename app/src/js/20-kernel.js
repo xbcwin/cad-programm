@@ -587,7 +587,7 @@ const Kernel = (() => {
         break;
       }
       case 'loft': {
-        if (p.path || p.sections3 || !Array.isArray(p.profiles) || !p.profiles.length) return null;
+        if (p.path || p.sections3 || (p.startCond && p.startCond !== 'none') || (p.endCond && p.endCond !== 'none') || !Array.isArray(p.profiles) || !p.profiles.length) return null;
         let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
         const add3 = (pt) => {
           if (!Array.isArray(pt) || pt.length < 3) return;
@@ -692,7 +692,17 @@ const Kernel = (() => {
       if (x.kind === 'extrude' && x.p && x.p.extent === 'toNext') return true;
       return Array.isArray(x.children) && x.children.some(hasToNext);
     };
-    if (visible.some(hasToNext)) return { components: [visible], hiddenStubs, visible };
+    const hasAutoLoftContinuity = (x) => {
+      if (!x || x.hidden) return false;
+      if (x.kind === 'loft' && x.p && !x.p.closed && !x.p.path && !x.p.sections3) {
+        const prs = Array.isArray(x.p.profiles) ? x.p.profiles : [];
+        const needS = (x.p.startCond === 'tangent' || x.p.startCond === 'curvature') && !(x.p.startFace && x.p.startFace.id) && !(prs[0] && prs[0].planeRef && prs[0].planeRef.id);
+        const needE = (x.p.endCond === 'tangent' || x.p.endCond === 'curvature') && !(x.p.endFace && x.p.endFace.id) && !(prs[prs.length - 1] && prs[prs.length - 1].planeRef && prs[prs.length - 1].planeRef.id);
+        if (needS || needE) return true;
+      }
+      return Array.isArray(x.children) && x.children.some(hasAutoLoftContinuity);
+    };
+    if (visible.some(hasToNext) || visible.some(hasAutoLoftContinuity)) return { components: [visible], hiddenStubs, visible };
 
     const topIndexById = new Map();
     const indexItem = (x, topIdx) => {
@@ -729,6 +739,11 @@ const Kernel = (() => {
       if (x.kind === 'sweep' && p.wrapId) unionRef(topIdx, p.wrapId);
       if (x.kind === 'extrude' && p.extent === 'toFace' && p.toFace && p.toFace.id) unionRef(topIdx, p.toFace.id);
       if (x.kind === 'revolve' && p.dir === 'toFace' && p.toFace && p.toFace.targetId) unionRef(topIdx, p.toFace.targetId);
+      if (x.kind === 'loft') {
+        if (p.startFace && p.startFace.id) unionRef(topIdx, p.startFace.id);
+        if (p.endFace && p.endFace.id) unionRef(topIdx, p.endFace.id);
+        if (Array.isArray(p.profiles)) for (const pr of p.profiles) if (pr && pr.planeRef && pr.planeRef.id) unionRef(topIdx, pr.planeRef.id);
+      }
       if (p.planeRef && p.planeRef.kind === 'face' && p.planeRef.id) unionRef(topIdx, p.planeRef.id);
       if (isTop && x.kind === 'mirrorStep') {
         if (p.faceRef && p.faceRef.id) unionRef(topIdx, p.faceRef.id);
