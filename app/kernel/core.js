@@ -13938,6 +13938,183 @@ export function createKernel(R, oc) {
       for (const s of solids) safeDelete(s.shape);
     }
   }
+  // ---------- Vergleich zweier Körper oder Stände (PF-12): neu (grün), weg (rot), gleich (grau) ----------
+  function compareSolids(args = {}) {
+    const { sceneA, sceneB, onlyA = null, onlyB = null, align = 'world' } = args || {};
+    if (sceneA) ingestBlobs(sceneA);
+    if (sceneB && sceneB !== sceneA) ingestBlobs(sceneB);
+    const errors = [];
+    const evalSide = (scene, only) => {
+      if (!scene) return [];
+      const raw = evaluateShapes(scene, errors);
+      if (!Array.isArray(only) || !only.length) return raw;
+      const keep = new Set(only);
+      const out = [];
+      for (const s of raw) {
+        if (keep.has(s.id)) out.push(s);
+        else safeDelete(s.shape);
+      }
+      return out;
+    };
+    const solidsA = evalSide(sceneA, onlyA);
+    const solidsB = evalSide(sceneB, onlyB);
+
+    const safeVolume = (sh) => {
+      if (!sh) return 0;
+      try {
+        const v = R.measureVolume(sh);
+        return Number.isFinite(v) && v > 0 ? v : 0;
+      } catch (_) {
+        return 0;
+      }
+    };
+    const safeBbox = (sh) => {
+      if (!sh) return null;
+      try {
+        const b = bboxOf(sh);
+        return b && Number.isFinite(b[0]) && b[3] >= b[0] - 1e-6 ? b : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const boxesOverlap = (a, b) => !!(
+      a && b
+      && a[0] < b[3] + 1e-4 && b[0] < a[3] + 1e-4
+      && a[1] < b[4] + 1e-4 && b[1] < a[4] + 1e-4
+      && a[2] < b[5] + 1e-4 && b[2] < a[5] + 1e-4
+    );
+    const combineSide = (solids) => {
+      if (!solids.length) return { shape: null, owns: false };
+      if (solids.length === 1) return { shape: solids[0].shape, owns: false };
+      const shapes = solids.map((s) => s.shape);
+      try {
+        return { shape: fuseAll(shapes, false), owns: true };
+      } catch (_) {
+        return { shape: R.makeCompound(shapes), owns: true };
+      }
+    };
+    const meshShape = (sh) => {
+      if (!sh) return null;
+      try {
+        const bb = safeBbox(sh);
+        if (!bb) return null;
+        const tol = Math.max(0.02, Math.min(meshTol(bb), 0.35));
+        const ang = Math.min(Q.ang, 0.25);
+        const m = sh.mesh({ tolerance: tol, angularTolerance: ang });
+        const e = sh.meshEdges({ tolerance: tol, angularTolerance: ang });
+        if (m && m.vertices && m.vertices.length && m.triangles && m.triangles.length) {
+          return {
+            vertices: new Float32Array(m.vertices),
+            normals: new Float32Array(m.normals),
+            triangles: new Uint32Array(m.triangles),
+            lines: new Float32Array(e && e.lines ? e.lines : []),
+            bbox: bb,
+          };
+        }
+      } catch (_) {}
+      return null;
+    };
+    const safeBool = (fn) => {
+      try { return fn(); } catch (_) { return null; }
+    };
+
+    let shapeA = null, ownsA = false;
+    let shapeB = null, ownsB = false;
+    let addedShape = null, ownsAdded = false;
+    let removedShape = null, ownsRemoved = false;
+    let sameShape = null, ownsSame = false;
+
+    try {
+      ({ shape: shapeA, owns: ownsA } = combineSide(solidsA));
+      ({ shape: shapeB, owns: ownsB } = combineSide(solidsB));
+      const bboxA = safeBbox(shapeA);
+      let bboxB = safeBbox(shapeB);
+      const volA = safeVolume(shapeA);
+      const volB = safeVolume(shapeB);
+
+      let shift = [0, 0, 0];
+      let aligned = false;
+      if (shapeA && shapeB && bboxA && bboxB && (align === 'center' || (align === 'auto' && !boxesOverlap(bboxA, bboxB)))) {
+        const s = [
+          (bboxA[0] + bboxA[3]) / 2 - (bboxB[0] + bboxB[3]) / 2,
+          (bboxA[1] + bboxA[4]) / 2 - (bboxB[1] + bboxB[4]) / 2,
+          (bboxA[2] + bboxA[5]) / 2 - (bboxB[2] + bboxB[5]) / 2,
+        ];
+        if (Math.hypot(s[0], s[1], s[2]) > 1e-6) {
+          const shifted = applyMatrix(shapeB, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, s[0], s[1], s[2], 1]);
+          if (ownsB) safeDelete(shapeB);
+          shapeB = shifted;
+          ownsB = true;
+          bboxB = safeBbox(shapeB);
+          shift = s;
+          aligned = true;
+        }
+      }
+
+      const overlaps = !!(shapeA && shapeB && bboxA && bboxB && boxesOverlap(bboxA, bboxB));
+      if (!shapeA && !shapeB) {
+        // beide leer
+      } else if (!shapeA) {
+        addedShape = shapeB;
+      } else if (!shapeB) {
+        removedShape = shapeA;
+      } else if (!overlaps) {
+        addedShape = shapeB;
+        removedShape = shapeA;
+      } else {
+        addedShape = safeBool(() => shapeB.cut(shapeA));
+        ownsAdded = !!addedShape;
+        removedShape = safeBool(() => shapeA.cut(shapeB));
+        ownsRemoved = !!removedShape;
+        sameShape = safeBool(() => shapeA.intersect(shapeB));
+        ownsSame = !!sameShape;
+      }
+
+      const EPS_VOL = 1e-3;
+      const rawAdded = safeVolume(addedShape);
+      const rawRemoved = safeVolume(removedShape);
+      const rawSame = safeVolume(sameShape);
+      const addedVolume = rawAdded > EPS_VOL ? rawAdded : 0;
+      const removedVolume = rawRemoved > EPS_VOL ? rawRemoved : 0;
+      const sameVolume = rawSame > EPS_VOL ? rawSame : 0;
+
+      const addedMesh = addedVolume > 0 ? meshShape(addedShape) : null;
+      const removedMesh = removedVolume > 0 ? meshShape(removedShape) : null;
+      const sameMesh = sameVolume > 0 ? meshShape(sameShape) : null;
+
+      const identical = addedVolume <= EPS_VOL && removedVolume <= EPS_VOL;
+      const unionVol = sameVolume + addedVolume + removedVolume;
+      const similarity = unionVol > 1e-6 ? Math.max(0, Math.min(100, (sameVolume / unionVol) * 100)) : 100;
+
+      return {
+        volA,
+        volB,
+        addedVolume,
+        removedVolume,
+        sameVolume,
+        identical,
+        similarity,
+        aligned,
+        shift,
+        bboxA,
+        bboxB,
+        addedMesh,
+        removedMesh,
+        sameMesh,
+        countA: solidsA.length,
+        countB: solidsB.length,
+        errors,
+      };
+    } finally {
+      if (ownsSame) safeDelete(sameShape);
+      if (ownsRemoved) safeDelete(removedShape);
+      if (ownsAdded) safeDelete(addedShape);
+      if (ownsB) safeDelete(shapeB);
+      if (ownsA) safeDelete(shapeA);
+      for (const s of solidsB) safeDelete(s.shape);
+      for (const s of solidsA) safeDelete(s.shape);
+    }
+  }
   // ---------- Import prüfen & heilen (IO-10: BRepCheck, ShapeFix, Nähen mit Toleranz) ----------
   function uniqueShapes(raw, shapeEnum) {
     const TA = oc.TopAbs_ShapeEnum;
@@ -14354,5 +14531,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
 }

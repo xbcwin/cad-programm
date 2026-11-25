@@ -2482,6 +2482,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Muster aus CSV-Tabelle (`pt: 'table'`)**: Quader `6×6×6` über `Features.patternTable` mit 3 CSV-Zeilen (`x;y;z`) → exakt 3 getrennte Kopien mit Gesamtvolumen `648 mm³` (`GeomCheck` 0 Funde), Relativ-Modus (`dX/dY/dZ/rot`), Hilfetexte (`werkzeug-hilfen.json`/`HELP`), DE/EN-Schlüsselgleichheit und Befehlssuche ohne Fehler.
 - [ ] **Von Hand**: Im Browser auf eine beliebige Fläche mit Durchbruch ein gedrehtes Waben-Füllmuster setzen, eine Schraube an eigenen Skizzenpunkten vervielfachen und eine `.csv`-Datei über „CSV laden …“ einlesen.
 
+## Vergleich zweier Versionen/Körper & Schattenriss-Fläche (Auto [A-133], PF-12, PF-15)
+
+- [x] **Profi-Menü & Befehlssuche**: `#t-check` bleibt im Modus „Einfach“ ausgeblendet; im Profi-Modus öffnet das Prüfen-Menü `#check-compare` und `#check-silhouette` (`t_a133_vergleich_schattenriss`).
+- [x] **Versionen-Vergleich (Quader vs Quader mit Bohrung)**: Quader `20×20×20` als Version gespeichert, anschließend Bohrung `Ø6` (`V = π·9·20 ≈ 565,49 mm³`) ergänzt → `Versions.compare` zeigt entfernte Bohrung rot (`removedVolume ≈ 565,49 mm³`), unveränderten Rest grau (`sameVolume ≈ 7434,51 mm³`), `addedVolume < 0,1` sowie funktionierendes Ausblenden über `#cmp-show` (`t_a133_vergleich_schattenriss`).
+- [x] **Körper-Vergleich & Zwei gespeicherte Versionen**: Quader `20×20×20` und Quader `20×20×20` mit Bohrung `Ø8` (`V ≈ 1005,31 mm³`) im selben Projekt verglichen (automatische Mitten-Ausrichtung, Tauschen über `#cmp-swap` kehrt rot/grün sauber um) sowie zwei gespeicherte Versionen mit `Versions.compareVersions` verglichen (`t_a133_vergleich_schattenriss`).
+- [x] **Schattenriss-Fläche in Blickrichtung (`mm²`)**: Würfel `10×10×10` von vorn (`camera` / `front`) misst `≈ 100 mm²` (`99,88 mm²` bei `1024×1024`), schräge Ansicht (`iso`) steigt auf `> 130 mm²`, Würfel mit Durchgangsbohrung `Ø4` sinkt auf `≈ 100 − 4π mm²`; Hilfetexte (`werkzeug-hilfen.json`/`HELP`) und DE/EN-Schlüsselgleichheit geprüft (`t_a133_vergleich_schattenriss`).
+- [ ] **Von Hand**: Im Browser zwei leicht unterschiedliche Bauteile übereinanderlegen, einzelne Farb-Chips (`Neu` / `Weg` / `Gleich`) ein- und ausblenden sowie die Schattenriss-Fläche auf einer schräg angeklickten Fläche prüfen.
+
 ## Fehler melden
 
 ```
