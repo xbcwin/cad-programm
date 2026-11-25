@@ -36618,6 +36618,255 @@ def t_a175_zeichnung_oberflaechen_symbole(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a181_pmi_3d_und_zeichnung(p):
+    # [A-181] Maße, Toleranzen und Hinweise am 3D-Modell (PMI, ZE-35) & Übernahme in die Zeichnung
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      ViewPrefs.set({ pmi: true });
+      const b = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Gehaeuse' });
+      const h = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bohrung', role: 'hole', t: { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } });
+      App.change('Quader 40x30x20 mit Bohrung', d => { d.items.push(b, h); });
+      Viewer.setView('iso');
+      Viewer.fit();
+      Viewer.renderNow();
+    """)
+    warte_rechnen(p)
+
+    # 1. PMI-Leiste starten, ±0,1 wählen und Kante (40 mm) im 3D anklicken
+    p.ev("""
+      Viewer.setView('iso');
+      Viewer.fit();
+      Viewer.renderNow();
+      Measure.pmiStart('dim');
+    """)
+    p.wait(80)
+    p.pg.select_option('#pmi-bar-tol-mode', 'sym')
+    p.pg.fill('#pmi-bar-tol-val', '0,1')
+    p.pg.dispatch_event('#pmi-bar-tol-val', 'change')
+    p.wait(50)
+
+    sx, sy = world_screen(p, 0, -15, 20)
+    p.pg.mouse.click(sx, sy)
+    p.wait(120)
+
+    # Falls ISO-Klick wegen Kameraauflösung knapp daneben lag, prüfen wir ob der Klick getroffen hat
+    hit_ok = p.ev("return Measure.pmiList().length === 1")
+    if not hit_ok:
+        # Exakte 40mm-Kante am fertigen Körper finden und anklicken
+        pt_edge = p.ev("""return (() => {
+          const id = App.doc.items[0].id;
+          const r = App.results.get(id);
+          const e = r && r.data && r.data.edges.find(x => x.t === 'LINE' && Math.abs((x.l || 0) - 40) < 0.1 && Math.abs(x.m[2] - 20) < 0.1);
+          if (!e) return null;
+          const W = Model.worldMatrix(App.doc, id);
+          const m = new THREE.Vector3(...e.m).applyMatrix4(W);
+          return Viewer.toScreen(m);
+        })()""")
+        if pt_edge:
+            p.pg.mouse.click(pt_edge['x'], pt_edge['y'])
+            p.wait(120)
+
+    # Ø10-Loch mit Passung H7 und 3D-Hinweis setzen
+    p.ev("""
+      Measure.pmiStop();
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const cIdx = r.data.edges.findIndex(e => e.t === 'CIRCLE' && Math.abs(e.r - 5) < 0.2 && Math.abs(e.c[2] - 20) < 0.2);
+      const fIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      Measure.addPmiDim({ itemId: id, edgeIdx: cIdx, dimType: 'dia', tol: { mode: 'fit', fit: 'H7', fitShow: 'both' }, name: 'Passbohrung' });
+      Measure.addPmiNote({ itemId: id, faceIdx: fIdx, p: [10, 5, 20], text: 'Kanten brechen 0,5x45', name: 'Kantenhinweis' });
+    """)
+    p.wait(120)
+
+    st_3d = p.ev("""return (() => {
+      const tags = [...document.querySelectorAll('.dimlabel.pmi-tag')];
+      const visTags = tags.filter(el => {
+        const r = el.getBoundingClientRect();
+        return getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0;
+      });
+      const texts = visTags.map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim());
+      const rows = document.querySelectorAll('#pmi-tree .pmi-row').length;
+      const eyeVis = !document.getElementById('vc-pmi')?.hidden;
+      const objs = Viewer.groups.measures ? Viewer.groups.measures.children.length : 0;
+      return { nTags: visTags.length, texts, rows, eyeVis, objs, listLen: Measure.pmiList().length };
+    })()""")
+
+    ok1 = bool(
+        st_3d['listLen'] == 3
+        and st_3d['nTags'] == 3
+        and st_3d['rows'] == 3
+        and st_3d['eyeVis']
+        and st_3d['objs'] >= 4
+        and any('40' in t and '±0,1' in t for t in st_3d['texts'])
+        and any('Ø10' in t and 'H7' in t for t in st_3d['texts'])
+        and any('Kanten brechen 0,5x45' in t for t in st_3d['texts'])
+    )
+
+    # 2. Global ein-/ausblenden, einzeln ausblenden, und Toleranz im Panel ändern
+    p.pg.click('#vc-pmi')
+    p.wait(100)
+    hidden_all = p.ev("return document.querySelectorAll('.dimlabel.pmi-tag').length === 0 && !Measure.pmiVisible()")
+    p.pg.click('#vc-pmi')
+    p.wait(100)
+    shown_all = p.ev("return document.querySelectorAll('.dimlabel.pmi-tag').length === 3 && Measure.pmiVisible()")
+
+    p.ev("""
+      const first = Measure.pmiList()[0];
+      Measure.setPmiHidden(first.id, true);
+    """)
+    p.wait(80)
+    hidden_one = p.ev("return document.querySelectorAll('.dimlabel.pmi-tag').length === 2")
+    p.ev("""
+      const first = Measure.pmiList()[0];
+      Measure.setPmiHidden(first.id, false);
+      Measure.selectPmi(first.id);
+    """)
+    p.wait(100)
+    p.pg.fill('#pmi-tol-sym', '0,2')
+    p.pg.dispatch_event('#pmi-tol-sym', 'change')
+    p.wait(80)
+    panel_upd = p.ev("return [...document.querySelectorAll('.dimlabel.pmi-tag')].some(el => (el.textContent || '').includes('±0,2'))")
+    p.pg.fill('#pmi-tol-sym', '0,1')
+    p.pg.dispatch_event('#pmi-tol-sym', 'change')
+    p.wait(80)
+
+    ok2 = bool(hidden_all and shown_all and hidden_one and panel_upd)
+
+    # 3. Neue Zeichnung öffnen -> übernimmt Maße mit Toleranz und Hinweis automatisch
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    st_dwg = p.ev("""return (async () => {
+      const dims = Drawing.dims();
+      const notes = Drawing.notes();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dimTexts = [...svg.querySelectorAll('text.dimtext')].map(t => (t.textContent || '').trim());
+      const noteTexts = [...svg.querySelectorAll('text.notetext')].map(t => (t.textContent || '').trim());
+      const svgStr = await Drawing.buildSVGString();
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      const pmi40 = dims.filter(d => d.fromPmi && Math.abs(d.nominalMm - 40) < 0.2);
+      const auto40 = dims.filter(d => d.auto && Math.abs(d.nominalMm - 40) < 0.2);
+      const pmiDia = dims.filter(d => d.fromPmi && d.type === 'dia' && Math.abs(d.nominalMm - 10) < 0.2);
+      return {
+        pmi40Count: pmi40.length,
+        pmi40Tol: pmi40[0] && pmi40[0].tol ? pmi40[0].tol : null,
+        auto40Count: auto40.length,
+        pmiDiaCount: pmiDia.length,
+        pmiDiaTol: pmiDia[0] && pmiDia[0].tol ? pmiDia[0].tol : null,
+        lostCount: Drawing.lostDims().length,
+        hasSvgSym: svgStr.includes('±0,1') && svgStr.includes('H7') && svgStr.includes('Kanten brechen 0,5x45'),
+        hasPdf: pdfStr.includes('0,1') && pdfStr.includes('H7') && pdfStr.includes('Kanten brechen') && !pdfStr.includes('(?)'),
+        hasDxf: !!(dxf && dxf.text && dxf.text.includes('0,1') && dxf.text.includes('H7') && dxf.text.includes('Kanten brechen')),
+        dimTexts,
+        noteTexts,
+        notesPmi: notes.filter(n => n.fromPmi).length,
+      };
+    })()""")
+
+    # Zusätzliches 30-mm-PMI nachträglich am Modell ergänzen & über #dw-import-pmi übernehmen
+    p.pg.click('#tab-model')
+    p.wait(100)
+    p.ev("""
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const e30 = r.data.edges.findIndex(e => e.t === 'LINE' && Math.abs((e.l || 0) - 30) < 0.1 && Math.abs(e.m[2] - 20) < 0.1);
+      Measure.addPmiDim({ itemId: id, edgeIdx: e30, tol: { mode: 'dev', upper: 0.05, lower: -0.02 }, name: 'Breite' });
+    """)
+    p.wait(100)
+    p.pg.click('#tab-drawing')
+    p.ev("return Drawing.waitReady()")
+    p.wait(100)
+    p.pg.click('#dw-import-pmi')
+    p.wait(120)
+    after_reimport = p.ev("""return (() => {
+      const dims = Drawing.dims();
+      return {
+        pmiCount: dims.filter(d => d.fromPmi).length,
+        has30: dims.some(d => d.fromPmi && Math.abs(d.nominalMm - 30) < 0.2 && d.tol && d.tol.mode === 'dev'),
+        noDup40: dims.filter(d => d.fromPmi && Math.abs(d.nominalMm - 40) < 0.2).length === 1,
+      };
+    })()""")
+    p.pg.click('#dw-model-dims')
+    p.wait(120)
+    after_model_dims = p.ev("return Drawing.dims().some(d => d.fromPmi && Math.abs(d.nominalMm - 40) < 0.2 && d.tol && d.tol.sym === 0.1)")
+
+    ok3 = bool(
+        st_dwg['pmi40Count'] == 1
+        and st_dwg['pmi40Tol'] and st_dwg['pmi40Tol']['mode'] == 'sym' and abs(st_dwg['pmi40Tol']['sym'] - 0.1) < 1e-6
+        and st_dwg['auto40Count'] == 0
+        and st_dwg['pmiDiaCount'] == 1
+        and st_dwg['pmiDiaTol'] and st_dwg['pmiDiaTol']['mode'] == 'fit' and st_dwg['pmiDiaTol']['fit'] == 'H7'
+        and st_dwg['lostCount'] == 0
+        and st_dwg['notesPmi'] == 1
+        and st_dwg['hasSvgSym'] and st_dwg['hasPdf'] and st_dwg['hasDxf']
+        and after_reimport['pmiCount'] == 3 and after_reimport['has30'] and after_reimport['noDup40']
+        and after_model_dims
+    )
+
+    # 4. Profi-Schutz, Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.pg.click('#tab-model')
+    p.wait(100)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(80)
+    simple_chk = p.ev("""return {
+      startBlocked: Measure.pmiStart() === false,
+      addBlocked: Measure.addPmiDim({ a: [0,0,0], b: [10,0,0] }) === null,
+      treeAbsent: !document.getElementById('pmi-tree'),
+      cmdsBlocked: Commands.search('pmi').length === 0,
+    }""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(80)
+
+    val_and_reload = p.ev("""return (async () => {
+      const raw = await Start.projectPayload();
+      const vr = Store.validateProject(raw);
+      const countBefore = Measure.pmiList().length;
+      const lastId = Measure.pmiList()[countBefore - 1].id;
+      Measure.removePmi(lastId);
+      const afterDel = Measure.pmiList().length;
+      App.undo();
+      const afterUndo = Measure.pmiList().length;
+      const parsed = Model.migrate(JSON.parse(raw));
+      App.setDoc(parsed, { fit: false, noAutosave: true });
+      return {
+        valid: vr.ok,
+        countBefore,
+        afterDel,
+        afterUndo,
+        reloadedCount: Measure.pmiList().length,
+      };
+    })()""")
+
+    meta_chk = p.ev("""return (async () => {
+      const hJson = await fetch('data/werkzeug-hilfen.json').then(r => r.json());
+      const de = await fetch('data/texte-de.json').then(r => r.json());
+      const en = await fetch('data/texte-en.json').then(r => r.json());
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nOk = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const desc = Explain.describeElement(document.querySelector('[data-help="pmi3d"]'));
+      const helpOk = !!(hJson.pmi3d && hJson.pmi3d.tip && hJson.pmi3d.hilfe && hJson.pmi3d.tipp && desc && desc.text === hJson.pmi3d.hilfe && desc.tip === hJson.pmi3d.tipp);
+      const cmds = Commands.search('pmi').some(c => c.id === 'pmi-dim') && Commands.search('pmi').some(c => c.id === 'drawingImportPmi');
+      return i18nOk && helpOk && cmds;
+    })()""")
+
+    ok4 = bool(
+        simple_chk['startBlocked'] and simple_chk['addBlocked'] and simple_chk['treeAbsent'] and simple_chk['cmdsBlocked']
+        and val_and_reload['valid']
+        and val_and_reload['afterDel'] == val_and_reload['countBefore'] - 1
+        and val_and_reload['afterUndo'] == val_and_reload['countBefore']
+        and val_and_reload['reloadedCount'] == val_and_reload['countBefore']
+        and meta_chk
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -36911,6 +37160,7 @@ TESTS = [
     ('[A-178] Zeichnung: Schriftfeld-Editor und Vorlagen (ISO, DIN, ANSI & eigene Vorlage)', t_a178_zeichnung_schriftfeld),
     ('[A-177] Zeichnung: Linienarten, Ebenen (Layer) und Bild auf dem Blatt (ZE-29, ZE-31)', t_a177_zeichnung_ebenen_bild),
     ('[A-175] Zeichnung: Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)', t_a175_zeichnung_oberflaechen_symbole),
+    ('[A-181] Maße und Toleranzen am 3D-Modell (PMI) & Übernahme in Zeichnung (ZE-35)', t_a181_pmi_3d_und_zeichnung),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

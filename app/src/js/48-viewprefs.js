@@ -11,7 +11,7 @@ const ViewPrefs = (() => {
   const DEF = {
     grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal',
     adaptive: true, multiWorker: true, theme: 'system', highContrast: false, decimals: 2, angleDecimals: 1,
-    notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true,
+    notes: true, pmi: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true,
     display: 'edges', lang: 'auto', mouse: 'tracery', gestures: true, uiScale: 100,
     floorReflect: false, floorReflectStrength: 45, envImageName: '', envImageData: '',
     manualLights: false, lights: [{ ...LIGHT_PRESETS[0] }],
@@ -191,6 +191,7 @@ const ViewPrefs = (() => {
       planes: ['dlg.settings.tPlanesOn', 'dlg.settings.tPlanesOff'],
       axes: ['dlg.settings.tAxesOn', 'dlg.settings.tAxesOff'],
       notes: ['dlg.settings.tNotesOn', 'dlg.settings.tNotesOff'],
+      pmi: ['dlg.settings.tPmiOn', 'dlg.settings.tPmiOff'],
       highContrast: ['dlg.settings.tHighContrastOn', 'dlg.settings.tHighContrastOff'],
       gestures: ['dlg.settings.tGesturesOn', 'dlg.settings.tGesturesOff'],
     }[k];
@@ -246,7 +247,7 @@ const ViewPrefs = (() => {
     const out = { ...DEF, lights: normLights(DEF.lights) };
     if (!src || typeof src !== 'object') return out;
     if (src.grid === 'auto' || (typeof src.grid === 'number' && isFinite(src.grid) && src.grid > 0)) out.grid = src.grid;
-    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows', 'floorReflect', 'manualLights', 'highContrast', 'gestures']) {
+    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'pmi', 'cog', 'shadows', 'floorReflect', 'manualLights', 'highContrast', 'gestures']) {
       if (typeof src[k] === 'boolean') out[k] = src[k];
     }
     if (VALID_QUALITY.has(src.quality)) out.quality = src.quality;

@@ -1958,5 +1958,10 @@
     "tip": "Symbol-Sammlung mit Normzeichen für Geometrie, Bohrungen, Toleranzen und Fertigung (Profi)",
     "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
     "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
+  },
+  "pmi3d": {
+    "tip": "Maße, Toleranzen und Hinweise direkt am 3D-Modell anbringen (PMI, Profi)",
+    "hilfe": "Setzt bleibende Maße (Kanten, Durchmesser, Radien, Abstände, Winkel), Toleranzen (±, Abmaße, Grenzmaße, ISO-Passungen wie H7) und Hinweislinien direkt ans 3D-Modell. Über das Auge am Ansichtswürfel oder im Verlauf blendest du alle 3D-Maße gemeinsam oder einzeln aus, und neue Zeichnungen übernehmen sie automatisch samt Toleranz.",
+    "tipp": "Klicke auf ein 3D-Maßschildchen im Bild, um rechts im Panel jederzeit seine Toleranz oder den Abstand zu ändern."
   }
 }

@@ -16,6 +16,7 @@ const Toolbar = (() => {
       { id: 'sketch3d', group: 'Grundwerkzeuge', domId: 't-sketch3d', icon: 'sketch3d', label: T('kind.sketch3d'), tip: T('sk3.toolbarTip'), cls: 'minor pro', help: 'sketch3d', run: () => Sketch.start3d() },
       { id: 'parts', group: 'Grundwerkzeuge', domId: 't-parts', icon: 'parts', label: T('tool.parts'), tip: T('tool.partsTip'), kbd: 'B', run: (e) => Panels.toggleFlyout('parts', e.currentTarget) },
       { id: 'measure', group: 'Grundwerkzeuge', domId: 't-measure', icon: 'measure', label: T('tool.measure'), tip: T('tool.measureTip'), kbd: 'M', cls: 'minor pro', help: 'measure', run: () => Measure.toggle() },
+      { id: 'pmi', group: 'Grundwerkzeuge', domId: 't-pmi', icon: 'dim', label: T('pmi.toolLabel'), tip: T('pmi.toolTip'), cls: 'minor pro', help: 'pmi3d', run: () => Measure.pmiToggle() },
       { id: 'notes', group: 'Grundwerkzeuge', domId: 't-notes', icon: 'noteDraw', label: T('tool.notes'), tip: T('tool.notesTip'), kbd: 'N', cls: 'minor pro', run: () => Notes.toggle() },
       { id: 'views', group: 'Grundwerkzeuge', domId: 't-views', icon: 'xray', label: T('tool.views'), tip: T('tool.viewsTip'), cls: 'minor pro', run: (e) => Views.menu(e.currentTarget) },
       { id: 'check', group: 'Grundwerkzeuge', domId: 't-check', icon: 'target', label: T('tool.check'), tip: T('tool.checkTip'), cls: 'minor pro', run: (e) => GeomCheck.menu(e.currentTarget) },
@@ -291,6 +292,7 @@ const Toolbar = (() => {
     b.innerHTML = icon(def.icon) + labelHtml + starHtml;
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
+    if (def.id === 'pmi' && typeof Measure !== 'undefined' && Measure.pmiActive) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
     if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && (ClashCheck.active || ClashCheck.clearanceActive)) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive || Measure.tolChainActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
     if (def.id === 'clashes' && typeof ClashCheck !== 'undefined' && ClashCheck.active) b.classList.add('active');
