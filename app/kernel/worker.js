@@ -53,6 +53,15 @@ self.onmessage = async (ev) => {
     else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene, args.only, args.originMat).arrayBuffer() };
     else if (cmd === 'exportIGES') result = { data: await kernel.exportIGES(args.scene, args.only, args.originMat).arrayBuffer() };
     else if (cmd === 'exportBREP') result = { data: await kernel.exportBREP(args.scene, args.only, args.originMat).arrayBuffer() };
+    else if (cmd === 'exportSingleBody') {
+      const r = kernel.exportSingleBody(args.scene, args.opts || args);
+      if (r && r.blob) {
+        const data = await r.blob.arrayBuffer();
+        result = { data, sourceCount: r.sourceCount, solidCount: r.solidCount, objectCount: r.objectCount, volume: r.volume, bbox: r.bbox };
+      } else {
+        result = r;
+      }
+    }
     else if (cmd === 'measure') result = kernel.measure(args.scene);
     else if (cmd === 'distance') result = kernel.minDistance(args.scene, args.ids);
     else if (cmd === 'project') result = kernel.project(args.scene, args.views, args.sections);

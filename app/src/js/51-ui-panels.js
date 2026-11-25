@@ -1587,6 +1587,13 @@ const Panels = (() => {
       pbBtn.innerHTML = icon('patternRect') + esc(T('asm.patToolBtn'));
       pbBtn.onclick = (e) => Assembly.patternMenu(e.currentTarget);
       w.append(h('div', { class: 'btn-row' }, pbBtn, sb));
+      const oneBtn = h('button', { type: 'button', class: 'btn', id: 'proj-single-body', 'data-help': 'asmSingleBody' });
+      oneBtn.innerHTML = icon('cube') + esc(T('asm.singleBodyShort'));
+      oneBtn.onclick = () => Assembly.singleBodyDialog();
+      const tcBtn = h('button', { type: 'button', class: 'btn', id: 'proj-tol-chain', 'data-help': 'tolChain' });
+      tcBtn.innerHTML = icon('ruler') + esc(T('tc.title'));
+      tcBtn.onclick = () => Measure.tolChain();
+      w.append(h('div', { class: 'btn-row pro' }, oneBtn, tcBtn));
     }
     const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
     if (poseSec) w.append(poseSec);

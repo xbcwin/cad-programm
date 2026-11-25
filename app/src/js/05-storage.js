@@ -883,7 +883,7 @@ const Store = (() => {
   const OPTIONAL_ARRAY_FIELDS = [
     'notes', 'blocks', 'fonts', 'variants', 'folders',
     'datums', 'axes', 'points', 'csys', 'joints', 'couplings', 'poses', 'measures', 'views', 'selSets', 'pointClouds', 'explodeSteps', 'asmPatterns',
-    'displayStates', 'asmVariants',
+    'displayStates', 'asmVariants', 'tolChains',
   ];
 
   function validateProject(input, opts = {}) {

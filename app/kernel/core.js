@@ -15069,7 +15069,7 @@ export function createKernel(R, oc) {
       for (const s of ownedShapes) safeDelete(s);
     }
   }
-  function collectExportShape(scene, only, originMat = null) {
+  function collectExportSolids(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
     let solids = evaluateShapes(scene, errors);
@@ -15103,6 +15103,10 @@ export function createKernel(R, oc) {
         s.shape = tr;
       }
     }
+    return solids;
+  }
+  function collectExportShape(scene, only, originMat = null) {
+    const solids = collectExportSolids(scene, only, originMat);
     const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
     return { comp, solids };
   }
@@ -15121,6 +15125,158 @@ export function createKernel(R, oc) {
       if (!str || !str.length) throw new Error('BREP-Export fehlgeschlagen.');
       return new Blob([str], { type: 'text/plain' });
     } finally { freeExportShape(ex); }
+  }
+  function collectSingleBodyShape(scene, only, originMat = null) {
+    const solids = collectExportSolids(scene, only, originMat);
+    let merged = solids[0].shape;
+    if (solids.length > 1) {
+      for (let i = 1; i < solids.length; i++) {
+        const next = solids[i].shape;
+        let builder = null;
+        let fusedShape = null;
+        try {
+          builder = new oc.BRepAlgoAPI_Fuse(merged.wrapped, next.wrapped);
+          builder.Build();
+          builder.SimplifyResult(true, true, 1e-3);
+          const raw = R.cast(builder.Shape());
+          if (raw && R.isShape3D(raw)) fusedShape = raw;
+          else safeDelete(raw);
+        } catch (_) {
+          fusedShape = null;
+        } finally {
+          if (builder && builder.delete) try { builder.delete(); } catch (_) {}
+        }
+        if (fusedShape) {
+          if (merged !== solids[0].shape) safeDelete(merged);
+          merged = fusedShape;
+        } else {
+          const prevMerged = merged;
+          const comp = R.makeCompound([merged, next]);
+          if (prevMerged !== solids[0].shape) safeDelete(prevMerged);
+          merged = comp;
+        }
+      }
+      for (const s of solids) {
+        if (s.shape && s.shape !== merged) safeDelete(s.shape);
+      }
+    }
+    const parts = sortedSolids(merged);
+    const solidCount = Math.max(1, parts.length);
+    for (const p of parts) safeDelete(p.shape);
+    const bbox = bboxOf(merged);
+    let volume = 0;
+    try {
+      const pr = R.measureShapeVolumeProperties(merged);
+      volume = pr.volume || 0;
+      pr.delete && pr.delete();
+    } catch (_) {}
+    return { shape: merged, sourceCount: solids.length, solidCount, volume, bbox };
+  }
+  function exportSingleBody(scene, opts = {}) {
+    const fmt = String(opts.fmt || 'step').toLowerCase();
+    const name = String(opts.name || 'Baugruppe');
+    const color = String(opts.color || '#2f9e91');
+    const res = collectSingleBodyShape(scene, opts.only || null, opts.originMat || null);
+    try {
+      if (fmt === 'brep') {
+        const str = oc.BRepToolsWrapper.Write(res.shape.wrapped);
+        if (!str || !str.length) throw new Error('BREP-Export fehlgeschlagen.');
+        return {
+          blob: new Blob([str], { type: 'text/plain' }),
+          sourceCount: res.sourceCount,
+          solidCount: res.solidCount,
+          objectCount: 1,
+          volume: res.volume,
+          bbox: res.bbox,
+        };
+      }
+      if (fmt === 'mesh') {
+        const fine = opts.fine !== false;
+        const f = Math.max(0.05, Math.min(4, +opts.q || 1));
+        const hc = Number(opts.holeComp) > 0 ? Math.min(2, Number(opts.holeComp)) : 0;
+        let workShape = res.shape;
+        let compensatedHoles = 0;
+        if (hc > 0) {
+          const comp = applyHoleCompensation(res.shape, hc);
+          workShape = comp.shape;
+          compensatedHoles = comp.count || 0;
+        }
+        try {
+          const b = bboxOf(workShape);
+          const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
+          const m = workShape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
+          return {
+            objects: [{
+              id: 'single-body',
+              name,
+              color,
+              vertices: new Float32Array(m.vertices),
+              normals: new Float32Array(m.normals),
+              triangles: new Uint32Array(m.triangles),
+            }],
+            errors: [],
+            compensatedHoles,
+            sourceCount: res.sourceCount,
+            solidCount: res.solidCount,
+            objectCount: 1,
+            volume: res.volume,
+            bbox: res.bbox,
+          };
+        } finally {
+          if (workShape !== res.shape) safeDelete(workShape);
+        }
+      }
+      const wrapStr = (s) => new oc.TCollection_ExtendedString(String(s || ''), true);
+      const toRelease = [];
+      const track = (x) => { if (x) toRelease.push(x); return x; };
+      const fn = 'export_single_' + Math.random().toString(36).slice(2) + '.step';
+      try {
+        const docStr = track(wrapStr('XmlOcaf'));
+        const doc = track(new oc.TDocStd_Document(docStr));
+        oc.XCAFDoc_ShapeTool.SetAutoNaming(false);
+        const mainLabel = track(doc.Main());
+        const st = track(oc.XCAFDoc_DocumentTool.ShapeTool(mainLabel));
+        const ct = track(oc.XCAFDoc_DocumentTool.ColorTool(mainLabel));
+        const surfType = oc.XCAFDoc_ColorType.XCAFDoc_ColorSurf;
+        const lbl = track(st.NewShape());
+        st.SetShape(lbl, res.shape.wrapped);
+        const nStr = track(wrapStr(name));
+        oc.TDataStd_Name.Set(lbl, nStr);
+        const rgba = track(hexToLinearRGBA(color, 1));
+        ct.SetColor(lbl, rgba, surfType);
+        st.UpdateAssemblies();
+
+        const dummy = track(new oc.STEPCAFControl_Writer());
+        oc.Interface_Static.SetCVal('xstep.cascade.unit', 'MM');
+        oc.Interface_Static.SetCVal('write.step.unit', 'MM');
+        const session = track(new oc.XSControl_WorkSession());
+        const writer = track(new oc.STEPCAFControl_Writer(session, false));
+        writer.SetColorMode(true);
+        writer.SetLayerMode(true);
+        writer.SetNameMode(true);
+        oc.Interface_Static.SetIVal('write.surfacecurve.mode', 1);
+        oc.Interface_Static.SetIVal('write.precision.mode', 0);
+        oc.Interface_Static.SetIVal('write.step.assembly', 2);
+        oc.Interface_Static.SetIVal('write.step.schema', 5);
+        const progress = track(new oc.Message_ProgressRange());
+        const ok = writer.Perform(doc, fn, progress);
+        if (!ok) throw new Error('Die STEP-Datei konnte nicht geschrieben werden.');
+        const file = oc.FS.readFile('/' + fn);
+        return {
+          blob: new Blob([file], { type: 'application/STEP' }),
+          sourceCount: res.sourceCount,
+          solidCount: res.solidCount,
+          objectCount: 1,
+          volume: res.volume,
+          bbox: res.bbox,
+        };
+      } finally {
+        try { oc.FS.unlink('/' + fn); } catch (_) {}
+        for (let i = toRelease.length - 1; i >= 0; i--) safeDelete(toRelease[i]);
+      }
+    } finally {
+      safeDelete(res.shape);
+    }
   }
   // Volumen, Oberfläche und Schwerpunkt – je Teil der obersten Ebene und gesamt
   function measure(scene) {
@@ -16799,5 +16955,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, exportSingleBody, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
 }

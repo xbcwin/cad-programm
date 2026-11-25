@@ -4,7 +4,7 @@ const GeomCheck = (() => {
 
   function sync() {
     const b = $('#t-check');
-    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing));
+    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive || Measure.tolChainActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing));
   }
 
   function menu(anchor) {
@@ -24,6 +24,7 @@ const GeomCheck = (() => {
       '-',
       { label: (typeof Versions !== 'undefined' && Versions.comparing ? '✓ ' : '') + T('menu.check.compare'), icon: 'compare', id: 'check-compare', help: 'compareBodies', run: () => Versions.openCompare() },
       { label: (typeof Measure !== 'undefined' && Measure.silhouetteActive ? '✓ ' : '') + T('menu.check.silhouette'), icon: 'silhouette2d', id: 'check-silhouette', help: 'silhouetteArea', run: () => Measure.silhouette() },
+      { label: (typeof Measure !== 'undefined' && Measure.tolChainActive ? '✓ ' : '') + T('menu.check.tolChain'), icon: 'ruler', id: 'check-tol-chain', help: 'tolChain', run: () => Measure.tolChain() },
     ]);
   }
 

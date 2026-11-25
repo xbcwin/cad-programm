@@ -46,6 +46,9 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
     { id: 'pm-export-bundle', label: T('menu.proj.exportBundle'), icon: 'export', help: 'exportBundle', run: () => Print.exportBundle() },
+    ...(Model.isAssembly(App.doc) && (typeof ViewPrefs === 'undefined' || !ViewPrefs.simple) ? [
+      { id: 'pm-single-body', label: T('asm.singleBodyShort'), icon: 'cube', help: 'asmSingleBody', run: () => Assembly.singleBodyDialog() },
+    ] : []),
     ...(Start.folderSupported() ? (Start.folderInfo() ? [
       { label: T('menu.proj.saveInFolderNow', { name: Start.folderInfo().name }), icon: 'save', id: 'pm-folder-now', help: 'saveFolder', run: () => Start.saveToFolderNow() },
       { label: T('menu.proj.changeFolder'), icon: 'folder', id: 'pm-folder-change', help: 'saveFolder', run: () => Start.saveToFolder() },

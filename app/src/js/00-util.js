@@ -2566,6 +2566,16 @@ const HELP = {
   "tip": "Varianten für Baugruppen: verschiedene Längen, aktive Teile oder Ersatz-Bauteile umschalten (Profi)",
   "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
   "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
+ },
+ "asmSingleBody": {
+  "tip": "Baugruppe als einen Körper speichern: verschmilzt alle Teile zu einem einzigen Körper für Export, 3D-Druck oder Weiterarbeit (Profi)",
+  "hilfe": "Fasst alle sichtbaren Teile einer Baugruppe über den CAD-Kern zu einem einzigen Körper zusammen und speichert ihn als STEP, STL, 3MF, BREP oder als neues Bauteil im eigenen Tab. So kannst du eine fertige Baugruppe wie ein einzelnes Teil weitergeben oder drucken.",
+  "tipp": "Im Export-Fenster gibt es zusätzlich das Häkchen „Als einen Körper“, wenn du mehrere Formate auf einmal als Einzelkörper in eine ZIP-Datei packen willst."
+ },
+ "tolChain": {
+  "tip": "Toleranzkette in einer Richtung rechnen: Maße mit ± auswählen, schlimmster Fall und Mittelwert werden berechnet (Profi)",
+  "hilfe": "Misst gewählte Teile der Baugruppe entlang einer Achse (X, Y, Z oder senkrecht zu einer gewählten Fläche) und rechnet die Toleranzkette sofort aus: sowohl den schlimmsten Fall (Summe aller ± Toleranzen) als auch den wahrscheinlichen Bereich um den Mittelwert (Wurzelsumme der Quadrate).",
+  "tipp": "Mit dem Knopf „+“ vor einer Zeile wechselst du das Vorzeichen auf „−“, um ein Spiel oder einen Spalt (Schließmaß) gegen die übrigen Maße zu prüfen."
  }
 };
 

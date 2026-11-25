@@ -4228,6 +4228,234 @@ const Assembly = (() => {
     return sec;
   }
 
+  // ================= Baugruppe als ein Körper (BG-31) =================
+  let lastSingleBody = null;
+  function singleBodyTargets(onlySel = false) {
+    if (!App.doc || !Array.isArray(App.doc.items)) return [];
+    const visible = App.doc.items.filter((it) => it && it.role !== 'hole' && !it.hidden && !it.suppressed);
+    if (!onlySel || typeof Print === 'undefined' || !Print.exportSelection) return visible;
+    const selIds = new Set(Print.exportSelection());
+    if (!selIds.size) return visible;
+    return visible.filter((it) => selIds.has(it.id));
+  }
+  function firstSolidColor(items) {
+    for (const it of items || []) {
+      if (it && it.color) return it.color;
+      if (it && Array.isArray(it.children)) {
+        const c = it.children.find((x) => x && x.role !== 'hole' && x.color);
+        if (c && c.color) return c.color;
+      }
+    }
+    return '#2f9e91';
+  }
+  async function exportSingleBody(opts = {}) {
+    if (!isProMode() || !App.doc) return null;
+    const onlySel = !!opts.onlySel;
+    const targets = singleBodyTargets(onlySel);
+    if (!targets.length) {
+      UI.toast(T('asm.singleBodyEmpty'), { icon: 'info' });
+      return null;
+    }
+    const fmt = ['step', 'stl', '3mf', 'brep'].includes(String(opts.fmt || 'step').toLowerCase())
+      ? String(opts.fmt || 'step').toLowerCase()
+      : 'step';
+    const rawName = String(opts.name || `${App.doc.name || T('asm.defaultName')} – 1 Körper`).trim() || 'Baugruppe';
+    const only = Array.isArray(opts.only) ? opts.only : (onlySel ? targets.map((t) => t.id) : null);
+    const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+    const color = String(opts.color || firstSolidColor(targets));
+    const scene = Model.kernelScene(App.doc);
+    const tst = UI.toast(T('asm.singleBodyBuilding'), { icon: 'export', ms: 20000 });
+    try {
+      let bytes, filename, mime, r;
+      if (fmt === 'stl' || fmt === '3mf') {
+        const hc = opts.holeComp != null ? Math.max(0, Math.min(1, Number(opts.holeComp) || 0)) : (typeof Print !== 'undefined' && Print.holeComp ? Print.holeComp() : 0);
+        r = await Kernel.call('exportSingleBody', {
+          scene,
+          opts: { fmt: 'mesh', only, originMat, name: rawName, color, fine: true, q: opts.q || 1, holeComp: hc },
+        });
+        if (!r || !Array.isArray(r.objects) || !r.objects.length) throw new Error(T('asm.singleBodyEmpty'));
+        const safe = typeof Print !== 'undefined' && Print.safeName ? Print.safeName(rawName) : rawName.replace(/[^\w.-]+/g, '_');
+        if (fmt === '3mf') {
+          bytes = new Uint8Array(await Print.build3MF(r.objects, safe));
+          filename = safe + '.3mf';
+          mime = 'model/3mf';
+        } else {
+          const stlRes = opts.stlText ? Print.buildSTLText(r.objects, safe) : Print.buildSTL(r.objects, safe);
+          bytes = stlRes instanceof Uint8Array ? stlRes : new TextEncoder().encode(String(stlRes));
+          filename = safe + '.stl';
+          mime = 'model/stl';
+        }
+      } else {
+        r = await Kernel.call('exportSingleBody', {
+          scene,
+          opts: { fmt, only, originMat, name: rawName, color },
+        });
+        bytes = new Uint8Array(r.data);
+        const safe = typeof Print !== 'undefined' && Print.safeName ? Print.safeName(rawName) : rawName.replace(/[^\w.-]+/g, '_');
+        filename = safe + (fmt === 'brep' ? '.brep' : '.step');
+        mime = fmt === 'brep' ? 'text/plain' : 'application/STEP';
+      }
+      const out = {
+        fmt,
+        name: rawName,
+        filename,
+        bytes: bytes.byteLength,
+        data: bytes,
+        sourceCount: r.sourceCount || targets.length,
+        solidCount: r.solidCount || 1,
+        objectCount: r.objectCount || 1,
+        volume: r.volume || 0,
+        bbox: r.bbox || null,
+      };
+      lastSingleBody = out;
+      tst.remove();
+      if (opts.save !== false && typeof Print !== 'undefined' && Print.save) {
+        await Print.save(filename, new Blob([bytes], { type: mime }));
+      }
+      UI.toast(
+        out.solidCount > 1
+          ? T('asm.singleBodyDisjointToast', { n: out.solidCount })
+          : T('asm.singleBodyDoneToast', { n: out.sourceCount }),
+        { icon: out.solidCount > 1 ? 'info' : 'check', ms: 3200 }
+      );
+      return out;
+    } catch (e) {
+      tst.remove();
+      UI.toast(T('asm.singleBodyErr', { msg: e && e.message ? e.message : String(e) }), { kind: 'bad' });
+      return null;
+    }
+  }
+  async function saveAsSingleBodyPart(opts = {}) {
+    if (!isProMode() || !App.doc) return null;
+    const onlySel = !!opts.onlySel;
+    const targets = singleBodyTargets(onlySel);
+    if (!targets.length) {
+      UI.toast(T('asm.singleBodyEmpty'), { icon: 'info' });
+      return null;
+    }
+    const cleanName = String(opts.name || `${App.doc.name || T('asm.defaultName')} – 1 Körper`).trim() || 'Bauteil';
+    const only = Array.isArray(opts.only) ? opts.only : (onlySel ? targets.map((t) => t.id) : null);
+    const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+    const color = String(opts.color || firstSolidColor(targets));
+    const mat = (App.doc.settings && App.doc.settings.material) || undefined;
+    const scene = Model.kernelScene(App.doc);
+    const tst = UI.toast(T('asm.singleBodyBuilding'), { icon: 'parts', ms: 20000 });
+    try {
+      const r = await Kernel.call('exportSingleBody', {
+        scene,
+        opts: { fmt: 'brep', only, originMat, name: cleanName, color },
+      });
+      const bytes = new Uint8Array(r.data);
+      const blobId = typeof Store !== 'undefined' && Store.putBlob ? await Store.putBlob(bytes) : null;
+      const safe = typeof Print !== 'undefined' && Print.safeName ? Print.safeName(cleanName) : cleanName.replace(/[^\w.-]+/g, '_');
+      const partDoc = Model.newDoc(cleanName, { docType: 'part' });
+      if (App.doc.settings && App.doc.settings.material) partDoc.settings.material = App.doc.settings.material;
+      if (App.doc.settings && App.doc.settings.unit) partDoc.settings.unit = App.doc.settings.unit;
+      const imp = Model.newItem(
+        'import',
+        {
+          fmt: 'brep',
+          frozen: true,
+          file: safe + '.brep',
+          ...(blobId ? { blobId } : {}),
+          size: bytes.byteLength,
+          ...(!blobId && typeof Store !== 'undefined' && Store.bytesToBase64 ? { data: Store.bytesToBase64(bytes) } : {}),
+        },
+        { name: cleanName, color, mat }
+      );
+      imp.t = Model.T0();
+      partDoc.items = [imp];
+      if (typeof Store !== 'undefined' && Store.saveProject) {
+        await Store.saveProject(partDoc, 1, { keepLast: true });
+      }
+      if (opts.openTab !== false) {
+        App.openTab(partDoc, { saved: true });
+      }
+      lastSingleBody = {
+        fmt: 'part',
+        name: cleanName,
+        docId: partDoc.id,
+        itemCount: 1,
+        sourceCount: r.sourceCount || targets.length,
+        solidCount: r.solidCount || 1,
+        objectCount: 1,
+        volume: r.volume || 0,
+        bbox: r.bbox || null,
+        bytes: bytes.byteLength,
+      };
+      tst.remove();
+      UI.toast(T('asm.singleBodyPartToast', { name: cleanName }), { icon: 'check', ms: 3000 });
+      return { doc: partDoc, ...lastSingleBody };
+    } catch (e) {
+      tst.remove();
+      UI.toast(T('asm.singleBodyErr', { msg: e && e.message ? e.message : String(e) }), { kind: 'bad' });
+      return null;
+    }
+  }
+  function singleBodyDialog() {
+    if (!isProMode() || !App.doc) return null;
+    if (document.getElementById('asm-single-body-dlg')) return null;
+    const allTargets = singleBodyTargets(false);
+    if (!allTargets.length) {
+      UI.toast(T('asm.singleBodyEmpty'), { icon: 'info' });
+      return null;
+    }
+    const selTargets = typeof Print !== 'undefined' && Print.exportSelection ? Print.exportSelection() : [];
+    const st = {
+      name: `${App.doc.name || T('asm.defaultName')} – 1 Körper`,
+      fmt: 'step',
+      onlySel: false,
+    };
+    const body = h('div', { id: 'asm-single-body-dlg', class: 'sb-dlg' });
+    body.append(h('div', { class: 'hint-box' }, T('asm.singleBodyHint')));
+    const sumEl = h('div', { class: 'sb-summary mono', id: 'sb-summary' });
+    const updateSummary = () => {
+      const n = st.onlySel && selTargets.length ? selTargets.length : allTargets.length;
+      sumEl.textContent = T('asm.singleBodySummary', { n });
+    };
+    updateSummary();
+    const nameInp = h('input', { type: 'text', id: 'sb-name', value: st.name, 'aria-label': T('common.name') });
+    nameInp.oninput = () => { st.name = nameInp.value; };
+    nameInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const nameField = h('div', { class: 'field' }, h('label', { for: 'sb-name' }, T('common.name')), h('div', { class: 'inp' }, nameInp));
+    const fmtField = UI.selectField({
+      id: 'sb-fmt',
+      label: T('asm.singleBodyFmt'),
+      value: st.fmt,
+      options: [
+        ['step', T('asm.singleBodyFmtStep')],
+        ['stl', T('asm.singleBodyFmtStl')],
+        ['3mf', T('asm.singleBodyFmt3mf')],
+        ['brep', T('asm.singleBodyFmtBrep')],
+      ],
+      onChange: (v) => { st.fmt = v; },
+    });
+    body.append(sumEl, h('div', { class: 'fields' }, nameField, fmtField));
+    if (selTargets.length) {
+      const selCb = h('input', { type: 'checkbox', id: 'sb-only-sel' });
+      selCb.onchange = () => { st.onlySel = selCb.checked; updateSummary(); };
+      body.append(h('label', { class: 'check' }, selCb, T('asm.singleBodyOnlySel', { n: selTargets.length })));
+    }
+    return UI.modal({
+      title: T('asm.singleBodyTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel') },
+        {
+          id: 'sb-save-part',
+          label: T('asm.singleBodyPartBtn'),
+          run: () => { saveAsSingleBodyPart({ name: st.name, onlySel: st.onlySel }); },
+        },
+        {
+          id: 'sb-export',
+          label: T('asm.singleBodyExportBtn'),
+          primary: true,
+          run: () => { exportSingleBody({ name: st.name, fmt: st.fmt, onlySel: st.onlySel }); },
+        },
+      ],
+    });
+  }
+
   return {
     init,
     isAssembly,
@@ -4344,5 +4572,9 @@ const Assembly = (() => {
     asmVariantDialog,
     asmVariantTreeSection,
     asmVariantSection,
+    exportSingleBody,
+    saveAsSingleBodyPart,
+    singleBodyDialog,
+    get lastSingleBody() { return lastSingleBody; },
   };
 })();
