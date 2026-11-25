@@ -147,7 +147,7 @@ const Measure = (() => {
     if (!App.doc || !Array.isArray(App.doc.params) || !App.doc.params.length) { syncParamRounds = 0; return; }
     const jobs = [];
     for (const p of App.doc.params) {
-      if (!p || !p.measure || p.measure.kind !== 'edgeLen') continue;
+      if (!p || !p.measure || p.measure.kind !== 'edgeLen' || p.measure.frozen) continue;
       const res = resolveMeasuredEdge(p.measure);
       if (!res) {
         if (!p.measure.lost) jobs.push({ id: p.id, lost: true });

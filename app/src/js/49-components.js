@@ -549,6 +549,225 @@ const Comp = (() => {
     if (!f || f.item.kind !== 'ref' || !f.item.p || !f.item.p.docId) return Promise.resolve(false);
     return openPart(f.item.p.docId);
   }
+  // ================= Bezüge zwischen Teilen verwalten (BG-22) =================
+  function partRefs(itemId, doc = App.doc) {
+    if (typeof RefFix === 'undefined' || !RefFix.partRefs) return [];
+    return RefFix.partRefs(itemId, doc);
+  }
+  function allPartRefs(doc = App.doc) {
+    if (typeof RefFix === 'undefined' || !RefFix.allPartRefs) return [];
+    return RefFix.allPartRefs(doc);
+  }
+  function freezeRef(refOrId, frozen = true) {
+    if (typeof RefFix === 'undefined' || !RefFix.setPartRefFrozen) return false;
+    const on = !!frozen;
+    const ref = RefFix.findPartRef ? RefFix.findPartRef(refOrId) : null;
+    const ok = RefFix.setPartRefFrozen(refOrId, on);
+    if (ok) {
+      const target = (ref && ref.targetName) || '';
+      UI.toast(T(on ? 'partRefs.freezeToast' : 'partRefs.unfreezeToast', { target }), { icon: on ? 'freeze' : 'check', ms: 2600 });
+    }
+    return ok;
+  }
+  function unfreezeRef(refOrId) {
+    return freezeRef(refOrId, false);
+  }
+  function toggleFreezeRef(refOrId) {
+    const ref = typeof RefFix !== 'undefined' && RefFix.findPartRef ? RefFix.findPartRef(refOrId) : null;
+    if (!ref) return false;
+    return freezeRef(ref, !ref.frozen);
+  }
+  function breakRef(refOrId) {
+    if (typeof RefFix === 'undefined' || !RefFix.breakPartRef) return false;
+    const ref = RefFix.findPartRef ? RefFix.findPartRef(refOrId) : null;
+    const ok = RefFix.breakPartRef(refOrId);
+    if (ok) {
+      const target = (ref && ref.targetName) || '';
+      UI.toast(T('partRefs.breakToast', { target }), { icon: 'ungroup', ms: 2600 });
+    }
+    return ok;
+  }
+  function freezeAllRefs(itemId = null, frozen = true) {
+    if (typeof RefFix === 'undefined' || !RefFix.freezeAllPartRefs) return 0;
+    const on = !!frozen;
+    const n = RefFix.freezeAllPartRefs(itemId, on);
+    if (n > 0) {
+      UI.toast(T(on ? 'partRefs.freezeAllToast' : 'partRefs.unfreezeAllToast', { n }), { icon: on ? 'freeze' : 'check', ms: 2600 });
+    }
+    return n;
+  }
+  function unfreezeAllRefs(itemId = null) {
+    return freezeAllRefs(itemId, false);
+  }
+  function breakAllRefs(itemId = null) {
+    if (typeof RefFix === 'undefined' || !RefFix.breakAllPartRefs) return 0;
+    const n = RefFix.breakAllPartRefs(itemId);
+    if (n > 0) {
+      UI.toast(T('partRefs.breakAllToast', { n }), { icon: 'ungroup', ms: 2600 });
+    }
+    return n;
+  }
+  function renderRefRow(r, opts = {}) {
+    const onChanged = opts.onChanged || null;
+    const row = h('div', {
+      class: 'part-ref-row' + (r.frozen ? ' frozen' : r.lost ? ' lost' : ''),
+      dataset: {
+        refId: r.id,
+        refKind: r.kind,
+        refFrozen: r.frozen ? '1' : '0',
+        refTarget: r.targetTopId || '',
+      },
+    });
+    const statusCls = r.frozen ? 'frozen' : r.lost ? 'lost' : 'active';
+    const statusLabel = T(r.frozen ? 'partRefs.statusFrozen' : r.lost ? 'partRefs.statusLost' : 'partRefs.statusActive');
+    const canPickTarget = !!(r.targetTopId && Model.find(App.doc, r.targetTopId));
+    const targetEl = canPickTarget
+      ? h('button', { type: 'button', class: 'part-ref-target lk', 'data-tip': T('partRefs.selectTargetTip') }, r.targetName)
+      : h('span', { class: 'part-ref-target missing' }, r.targetName);
+    if (canPickTarget) {
+      targetEl.onclick = (e) => {
+        e.stopPropagation();
+        App.select([r.targetTopId]);
+      };
+    }
+    const topLine = h('div', { class: 'part-ref-top' },
+      h('span', { class: 'part-ref-what' }, r.what + ' '),
+      targetEl,
+      h('span', { class: 'part-ref-badge ' + statusCls }, statusLabel)
+    );
+    const subParts = [];
+    if (opts.showSource && r.sourceName) subParts.push(r.sourceName);
+    if (r.detail) subParts.push(r.detail);
+    const info = h('div', { class: 'part-ref-info' }, topLine);
+    if (subParts.length) info.append(h('div', { class: 'part-ref-sub' }, subParts.join(' · ')));
+
+    const fBtn = h('button', {
+      type: 'button',
+      class: 'btn small' + (r.frozen ? ' primary' : ''),
+      dataset: { refFreeze: r.id },
+      'data-tip': T(r.frozen ? 'partRefs.unfreezeTip' : 'partRefs.freezeTip'),
+    });
+    fBtn.innerHTML = icon(r.frozen ? 'unlock' : 'freeze') + esc(T(r.frozen ? 'partRefs.unfreezeBtn' : 'partRefs.freezeBtn'));
+    fBtn.onclick = (e) => {
+      e.stopPropagation();
+      freezeRef(r.id, !r.frozen);
+      if (onChanged) onChanged();
+    };
+
+    const bBtn = h('button', {
+      type: 'button',
+      class: 'btn small ghost',
+      dataset: { refBreak: r.id },
+      'data-tip': T('partRefs.breakTip'),
+    });
+    bBtn.innerHTML = icon('ungroup') + esc(T('partRefs.breakBtn'));
+    bBtn.onclick = (e) => {
+      e.stopPropagation();
+      breakRef(r.id);
+      if (onChanged) onChanged();
+    };
+
+    row.append(info, h('div', { class: 'part-ref-acts' }, fBtn, bBtn));
+    return row;
+  }
+  function refsSection(item) {
+    if (!item || !item.id || !App.doc) return null;
+    const refs = partRefs(item.id);
+    if (!refs.length) return null;
+    const frozenCount = refs.filter((r) => r.frozen).length;
+    const activeCount = refs.length - frozenCount;
+    const sum = h('summary', { class: 'section-h' },
+      T('partRefs.panelTitle', { n: refs.length }),
+      frozenCount ? h('span', { class: 'part-ref-sum-frozen' }, ' · ' + T('partRefs.frozenCount', { n: frozenCount })) : null
+    );
+    const sec = h('details', { class: 'section pro part-refs-sec', id: 'part-refs-sec', 'data-help': 'partRefs', open: true }, sum);
+    const list = h('div', { class: 'part-ref-list' });
+    for (const r of refs) list.append(renderRefRow(r, { showSource: false }));
+    sec.append(list);
+
+    const bulk = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    if (refs.length >= 2) {
+      if (activeCount > 0) {
+        const fa = h('button', { type: 'button', class: 'btn small', id: 'part-refs-freeze-all' });
+        fa.innerHTML = icon('freeze') + esc(T('partRefs.freezeAllBtn'));
+        fa.onclick = () => freezeAllRefs(item.id, true);
+        bulk.append(fa);
+      }
+      if (frozenCount > 0) {
+        const ua = h('button', { type: 'button', class: 'btn small', id: 'part-refs-unfreeze-all' });
+        ua.innerHTML = icon('unlock') + esc(T('partRefs.unfreezeAllBtn'));
+        ua.onclick = () => unfreezeAllRefs(item.id);
+        bulk.append(ua);
+      }
+      const ba = h('button', { type: 'button', class: 'btn small ghost', id: 'part-refs-break-all' });
+      ba.innerHTML = icon('ungroup') + esc(T('partRefs.breakAllBtn'));
+      ba.onclick = () => breakAllRefs(item.id);
+      bulk.append(ba);
+    }
+    const dlgBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'part-refs-open-dlg' });
+    dlgBtn.innerHTML = icon('link') + esc(T('partRefs.openAllBtn'));
+    dlgBtn.onclick = () => refsDialog(item.id);
+    bulk.append(dlgBtn);
+    sec.append(bulk);
+    return sec;
+  }
+  function refsDialog(itemId = null) {
+    let scopeId = itemId || null;
+    const wrap = h('div', { id: 'part-refs-dialog', class: 'part-refs-dlg' });
+    const renderBody = () => {
+      wrap.replaceChildren();
+      const scopedItem = scopeId ? Model.find(App.doc, scopeId)?.item : null;
+      if (!scopedItem) scopeId = null;
+      const refs = scopeId ? partRefs(scopeId) : allPartRefs();
+      const allCount = scopeId ? allPartRefs().length : refs.length;
+      const introTxt = scopedItem
+        ? T('partRefs.dlgIntroPart', { name: Model.label(scopedItem) })
+        : T('partRefs.dlgIntroAll');
+      const topBar = h('div', { class: 'part-refs-dlg-head' }, h('p', { class: 'asm-insert-intro' }, introTxt));
+      if (scopeId && allCount > refs.length) {
+        const allBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'dlg-refs-show-all' }, T('partRefs.showAllPartsBtn', { n: allCount }));
+        allBtn.onclick = () => { scopeId = null; renderBody(); };
+        topBar.append(allBtn);
+      }
+      wrap.append(topBar);
+      if (!refs.length) {
+        wrap.append(h('div', { class: 'hint-box' }, T('partRefs.empty')));
+        return;
+      }
+      const frozenCount = refs.filter((r) => r.frozen).length;
+      const activeCount = refs.length - frozenCount;
+      const list = h('div', { class: 'part-ref-list' });
+      for (const r of refs) list.append(renderRefRow(r, { showSource: true, onChanged: renderBody }));
+      wrap.append(list);
+
+      const bulk = h('div', { class: 'btn-row' });
+      if (activeCount > 0) {
+        const fa = h('button', { type: 'button', class: 'btn small', id: 'dlg-refs-freeze-all' });
+        fa.innerHTML = icon('freeze') + esc(T('partRefs.freezeAllBtn'));
+        fa.onclick = () => { freezeAllRefs(scopeId, true); renderBody(); };
+        bulk.append(fa);
+      }
+      if (frozenCount > 0) {
+        const ua = h('button', { type: 'button', class: 'btn small', id: 'dlg-refs-unfreeze-all' });
+        ua.innerHTML = icon('unlock') + esc(T('partRefs.unfreezeAllBtn'));
+        ua.onclick = () => { unfreezeAllRefs(scopeId); renderBody(); };
+        bulk.append(ua);
+      }
+      const ba = h('button', { type: 'button', class: 'btn small ghost', id: 'dlg-refs-break-all' });
+      ba.innerHTML = icon('ungroup') + esc(T('partRefs.breakAllBtn'));
+      ba.onclick = () => { breakAllRefs(scopeId); renderBody(); };
+      bulk.append(ba);
+      wrap.append(bulk);
+    };
+    renderBody();
+    return UI.modal({
+      title: T('partRefs.dlgTitle'),
+      body: wrap,
+      wide: true,
+      actions: [{ label: T('common.close'), primary: true }],
+    });
+  }
+
   function render() {
     if (banner) { banner.remove(); banner = null; }
     if (App.mode !== 'model') return;
@@ -558,6 +777,14 @@ const Comp = (() => {
     banner = h('div', { class: 'ctx-banner' + (ctx ? '' : ' iso'), role: 'status' });
     const ic = h('span'); ic.innerHTML = icon(ctx ? 'edit' : 'focusView');
     banner.append(ic, h('span', null, ctx ? `Bauteil bearbeiten: ${Model.label(ctx)}` : `Isoliert: ${Model.label(iso)}`));
+    if (ctx) {
+      const refs = partRefs(ctx.id);
+      if (refs.length) {
+        const rb = h('button', { type: 'button', id: 'ctx-part-refs-btn', class: 'pro', 'data-help': 'partRefs' }, T('partRefs.ctxBtn', { n: refs.length }));
+        rb.onclick = () => refsDialog(ctx.id);
+        banner.append(rb);
+      }
+    }
     const b = h('button', { type: 'button' }, ctx ? 'Fertig' : 'Alle zeigen');
     b.onclick = () => (ctx ? App.setCtx(null) : App.setIso(null));
     banner.append(b);
@@ -589,6 +816,12 @@ const Comp = (() => {
     }
     App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30));
   }
-  return { init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts, insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef, canReplace, insertFromBlob, insertFromFile, replacePart, replacePartWithFile, replacePartDialog };
+  return {
+    init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts,
+    insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef,
+    canReplace, insertFromBlob, insertFromFile, replacePart, replacePartWithFile, replacePartDialog,
+    partRefs, allPartRefs, freezeRef, unfreezeRef, toggleFreezeRef, breakRef, freezeAllRefs, unfreezeAllRefs, breakAllRefs,
+    refsSection, refsDialog,
+  };
 })();
 

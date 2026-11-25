@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -31096,6 +31096,499 @@ def t_f11251236(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- [A-159] Bezüge zwischen Teilen verwalten (BG-22) ----------
+def t_a159_bezuege_verwalten(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(200)
+
+    def warte_idle():
+        for _ in range(80):
+            if not p.ev("return App.busy"):
+                break
+            p.wait(100)
+        p.wait(250)
+
+    # 1. Teil B übernimmt Maß von Teil A → A ändern → B folgt; einfrieren → A ändern → B bleibt; auftauen → folgt; lösen → bleibt + Undo
+    p.ev("""App.change('A-159 Mess-Test', d => {
+      const a = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Teil A' });
+      const b = Model.newItem('box', { w: 15, d: 15, h: 10 }, { name: 'Teil B' });
+      b.t.x = 60;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+    a_id, b_id = p.ev("return App.doc.items.map(x => x.id)")
+    p.ev("Viewer.setView('iso'); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(400)
+    p.ev("App.select([arg])", b_id)
+    p.wait(300)
+
+    p.pg.locator('#p-h-meas').click()
+    p.wait(200)
+    pt_40 = p.ev("""
+      const r = App.results.get(arg);
+      const node = Viewer.nodes.get(arg);
+      if (!r || !node) return null;
+      const rect = Viewer.canvas.getBoundingClientRect();
+      for (let idx = 0; idx < r.data.edges.length; idx++) {
+        const e = r.data.edges[idx];
+        if (Math.abs((e.l || 0) - 40) > 0.1) continue;
+        const w = Viewer.camera.position.clone().set(e.m[0], e.m[1], e.m[2]).applyMatrix4(node.obj.matrixWorld);
+        const s = Viewer.toScreen(w);
+        const sx = rect.left + s.x, sy = rect.top + s.y;
+        const hit = Viewer.pick(sx, sy, { edgePx: 11 });
+        if (hit && hit.id === arg && hit.edgeIdx === idx) return [sx, sy];
+      }
+      return null;
+    """, a_id)
+    if pt_40:
+        p.pg.mouse.move(pt_40[0], pt_40[1])
+        p.wait(150)
+        p.pg.mouse.click(pt_40[0], pt_40[1])
+    warte_rechnen(p)
+
+    # A auf 55 ändern → B folgt auf 55
+    p.ev("App.select([arg])", a_id)
+    p.wait(250)
+    p.pg.fill('#p-w', '55')
+    p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_follow = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    # B wählen → Liste im Panel zeigt den Bezug
+    p.ev("App.select([arg])", b_id)
+    p.wait(300)
+    sec_vis = p.pg.locator('#part-refs-sec').is_visible()
+    sec_txt = (p.pg.locator('#part-refs-sec').text_content() or '').lower()
+    refs_active = p.ev("return Comp.partRefs(arg)", b_id)
+
+    # Bezug einfrieren
+    p.pg.locator('#part-refs-sec [data-ref-freeze]').first.click()
+    warte_idle()
+    refs_frozen = p.ev("return Comp.partRefs(arg)", b_id)
+    frozen_badge = (p.pg.locator('#part-refs-sec .part-ref-badge.frozen').first.text_content() or '').lower()
+
+    # A auf 75 ändern → B bleibt bei 55
+    p.ev("App.select([arg])", a_id)
+    p.wait(250)
+    p.pg.fill('#p-w', '75')
+    p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_frozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    # Bezug auftauen → B folgt sofort auf 75
+    p.ev("App.select([arg])", b_id)
+    p.wait(250)
+    p.pg.locator('#part-refs-sec [data-ref-freeze]').first.click()
+    warte_idle()
+    b_h_unfrozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+    refs_unfrozen = p.ev("return Comp.partRefs(arg)", b_id)
+
+    # Bezug lösen → Liste leer, B bleibt bei 75; Undo stellt Bezug wieder her
+    p.pg.locator('#part-refs-sec [data-ref-break]').first.click()
+    warte_idle()
+    refs_broken = p.ev("return Comp.partRefs(arg)", b_id)
+    sec_after_break = p.pg.locator('#part-refs-sec').count()
+    p.ev("App.select([arg])", a_id)
+    p.wait(250)
+    p.pg.fill('#p-w', '90')
+    p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_after_break = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    # 2× Undo (A=90 rückgängig, Lösen rückgängig) → Bezug wieder aktiv und folgt auf 90
+    p.ev("App.undo()"); warte_idle()
+    p.ev("App.undo()"); warte_idle()
+    refs_undone = p.ev("return Comp.partRefs(arg)", b_id)
+    p.ev("App.select([arg])", a_id); p.wait(200)
+    p.pg.fill('#p-w', '90'); p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_undone_follow = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    ok1 = (
+        pt_40 is not None
+        and abs(b_h_follow - 55) < 0.05
+        and sec_vis
+        and 'teil a' in sec_txt
+        and len(refs_active) == 1
+        and refs_active[0]['kind'] == 'measure'
+        and refs_active[0]['frozen'] is False
+        and len(refs_frozen) == 1
+        and refs_frozen[0]['frozen'] is True
+        and 'eingefroren' in frozen_badge
+        and abs(b_h_frozen - 55) < 0.05
+        and abs(b_h_unfrozen - 75) < 0.05
+        and len(refs_unfrozen) == 1
+        and refs_unfrozen[0]['frozen'] is False
+        and len(refs_broken) == 0
+        and sec_after_break == 0
+        and abs(b_h_after_break - 75) < 0.05
+        and len(refs_undone) == 1
+        and abs(b_h_undone_follow - 90) < 0.05
+    )
+
+    # 2. Bauteil im Kontext: Skizzen-Fläche & Hochziehen bis Fläche auf Basis-Teil
+    p.ev("App.setDoc(Model.newDoc())")
+    p.wait(400)
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.ev("""App.change('A-159 Kontext-Test', d => {
+      const basis = Model.newItem('box', { w: 30, d: 30, h: 12 }, { name: 'Basis' });
+      const sk = {
+        plane: { o: [0, 0, 12], x: [1, 0, 0], n: [0, 0, 1] },
+        planeRef: { kind: 'face', id: basis.id, c: [0, 0, 12], n: [0, 0, 1], size: 30 },
+        ents: [{ id: 'e1', type: 'rect', a: [-5, -5], b: [5, 5] }],
+        dims: [], cons: []
+      };
+      const extChild = Model.newItem('extrude', { sketch: sk, dist: 8, dir: 'normal' }, { name: 'Aufsatz' });
+      const comp = Model.newItem('group', {}, { name: 'Deckel' });
+      comp.comp = true;
+      comp.children = [extChild];
+
+      const sk2 = {
+        plane: { o: [40, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [{ id: 'e2', type: 'rect', a: [-4, -4], b: [4, 4] }],
+        dims: [], cons: []
+      };
+      const toFace = Model.newItem('extrude', {
+        sketch: sk2, dist: 12, dir: 'normal', extent: 'toFace',
+        toFace: { id: basis.id, t: 'PLANE', c: [0, 0, 12], n: [0, 0, 1], wc: [0, 0, 12], wn: [0, 0, 1], label: 'Basis · Fläche' }
+      }, { name: 'Anschlag' });
+      d.items.push(basis, comp, toFace);
+    })""")
+    warte_rechnen(p)
+    basis_id, comp_id, tf_id = p.ev("return App.doc.items.map(x => x.id)")
+    child_id = p.ev("return Model.find(App.doc, arg).item.children[0].id", comp_id)
+
+    comp_refs = p.ev("return Comp.partRefs(arg)", comp_id)
+    tf_refs = p.ev("return Comp.partRefs(arg)", tf_id)
+
+    # Basis-Höhe auf 20 ändern → Deckel wandert auf z=20, Anschlag wächst auf h=20
+    p.ev("App.select([arg])", basis_id); p.wait(200)
+    p.pg.fill('#p-h', '20'); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    comp_z_20 = p.ev("return App.results.get(arg).data.bbox[2]", comp_id)
+    tf_h_20 = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    # Über Dialog einfrieren
+    p.ev("Comp.refsDialog(arg)", comp_id)
+    p.wait(250)
+    dlg_open = p.pg.locator('#part-refs-dialog').is_visible()
+    p.pg.locator('#part-refs-dialog [data-ref-freeze]').first.click()
+    warte_idle()
+    p.pg.locator('.modal .actions button').first.click()
+    p.wait(200)
+    p.ev("Comp.freezeRef(arg, true)", tf_refs[0]['id'])
+    warte_idle()
+
+    # Basis unterdrücken → keine RefFix-Warnung an eingefrorenen Bezügen!
+    p.ev("Timeline.toggleSuppress(arg)", basis_id)
+    warte_idle()
+    issues_frozen_suppressed = p.ev("return RefFix.issuesOf(arg[0]).length + RefFix.issuesOf(arg[1]).length", [child_id, tf_id])
+    p.ev("Timeline.toggleSuppress(arg)", basis_id)
+    warte_idle()
+
+    # Basis auf 30 ändern → beide bleiben bei 20
+    p.ev("App.select([arg])", basis_id); p.wait(200)
+    p.pg.fill('#p-h', '30'); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    comp_z_frozen = p.ev("return App.results.get(arg).data.bbox[2]", comp_id)
+    tf_h_frozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    # Beide auftauen → beide folgen auf 30
+    p.ev("Comp.unfreezeRef(arg[0]); Comp.unfreezeRef(arg[1]);", [comp_refs[0]['id'], tf_refs[0]['id']])
+    warte_idle()
+    comp_z_unfrozen = p.ev("return App.results.get(arg).data.bbox[2]", comp_id)
+    tf_h_unfrozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    # Anschlag lösen → Basis auf 42 ändern → Anschlag bleibt auf 30
+    p.ev("Comp.breakRef(arg)", tf_refs[0]['id'])
+    warte_idle()
+    tf_extent_broken = p.ev("return Model.find(App.doc, arg).item.p.extent", tf_id)
+    p.ev("App.select([arg])", basis_id); p.wait(200)
+    p.pg.fill('#p-h', '42'); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    tf_h_broken = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    ok2 = (
+        len(comp_refs) == 1 and comp_refs[0]['kind'] == 'sketch-plane'
+        and len(tf_refs) == 1 and tf_refs[0]['kind'] == 'extrude-toFace'
+        and abs(comp_z_20 - 20) < 0.05
+        and abs(tf_h_20 - 20) < 0.05
+        and dlg_open
+        and issues_frozen_suppressed == 0
+        and abs(comp_z_frozen - 20) < 0.05
+        and abs(tf_h_frozen - 20) < 0.05
+        and abs(comp_z_unfrozen - 30) < 0.05
+        and abs(tf_h_unfrozen - 30) < 0.05
+        and tf_extent_broken == 'dist'
+        and abs(tf_h_broken - 30) < 0.05
+    )
+
+    # 3. Bauteil-Kontext-Banner, Projekt-Panel, Einfach/Profi, Validierung, Hilfetexte, DE/EN & Befehlssuche
+    p.ev("Comp.freezeRef(arg, true)", comp_refs[0]['id'])
+    warte_idle()
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+
+    p.ev("Comp.edit(arg)", comp_id); p.wait(250)
+    ctx_btn_vis = p.pg.locator('#ctx-part-refs-btn').is_visible()
+    p.pg.locator('#ctx-part-refs-btn').click(); p.wait(200)
+    ctx_dlg_vis = p.pg.locator('#part-refs-dialog').is_visible()
+    p.pg.locator('.modal .actions button').first.click(); p.wait(200)
+    p.ev("App.setCtx(null)"); p.wait(200)
+
+    p.ev("App.clearSelection()"); p.wait(250)
+    proj_sec_vis = p.pg.locator('#proj-part-refs-sec').is_visible()
+
+    # Einfach-Modus blendet Profi-UI & Befehl aus
+    p.ev("ViewPrefs.setLevel('simple'); App.select([arg]);", comp_id); p.wait(250)
+    simple_panel_vis = p.pg.locator('#part-refs-sec').is_visible() if p.pg.locator('#part-refs-sec').count() else False
+    simple_cmd_ok = p.ev("return !Commands.search('bezüge').some(c => c.id === 'part-refs')")
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'partRefs';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.partRefs && wh.partRefs.tip && wh.partRefs.hilfe && wh.partRefs.tipp && desc && desc.text === wh.partRefs.hilfe && desc.tip === wh.partRefs.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('bezüge').some(c => c.id === 'part-refs') && Commands.search('einfrieren').some(c => c.id === 'part-refs');
+      return { hOk, i18nOk, cmdOk };
+    })()""")
+
+    ok3 = bool(
+        val_ok is True
+        and ctx_btn_vis
+        and ctx_dlg_vis
+        and proj_sec_vis
+        and not simple_panel_vis
+        and simple_cmd_ok
+        and meta['hOk']
+        and meta['i18nOk']
+        and meta['cmdOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3]
+
+
+# ---------- [A-158] Bewegungs-Studie mit Motoren und Zeitachse (BG-21) ----------
+def t_a158_bewegungs_studie(p):
+    # 1. Profi-Modus: Drehgelenk + Motor 60°/s -> nach 1,5 s exakt 90° (und bei 2,5 s -> 150°), Reset & Abspielen
+    p.empty()
+    info = p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.setDoc(Assembly.newAssembly('Bewegungs-Test'));
+      App.change('Baugruppe anlegen', (d) => {
+        const base = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Basis' });
+        base.locked = true;
+        const arm = Model.newItem('box', { w: 40, d: 10, h: 10 }, { name: 'Arm' });
+        arm.t.x = 20;
+        d.items.push(base, arm);
+      });
+      const [bId, aId] = App.doc.items.map(x => x.id);
+      const j = Joints.add(bId, aId, [0, 0, 5], [0, 0, 1], { kind: 'rot' });
+      Panels.renderLeft();
+      Panels.renderRight();
+      return { bId, aId, jid: j.id, ok: !!j.ok };
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#btn-motion-tree')
+    p.wait(200)
+    p.pg.fill('#mot-add-speed', '60')
+    p.pg.click('#mot-add-btn')
+    p.wait(200)
+
+    p.pg.fill('#mot-time-inp', '1,5')
+    p.pg.press('#mot-time-inp', 'Enter')
+    p.wait(200)
+    at_15 = p.ev("""
+      const j = App.doc.joints.find(x => x.id === arg.jid);
+      const W = Model.worldMatrix(App.doc, arg.aId);
+      const e = W.elements;
+      const tip = [e[0] * 20 + e[12], e[1] * 20 + e[13], e[2] * 20 + e[14]];
+      return {
+        ang: j ? j.ang : null,
+        tip,
+        t: Motion.time,
+        lbl: document.querySelector('#mot-time-lbl')?.textContent || '',
+      };
+    """, info)
+
+    p.ev("Motion.setTime(2.5)")
+    p.wait(150)
+    ang_25 = p.ev("return App.doc.joints.find(x => x.id === arg)?.ang", info['jid'])
+
+    p.pg.click('#mot-reset')
+    p.wait(150)
+    ang_reset = p.ev("return { ang: App.doc.joints.find(x => x.id === arg)?.ang, t: Motion.time }", info['jid'])
+
+    p.pg.click('#mot-play')
+    p.wait(350)
+    play_state = p.ev("return { playing: Motion.playing, t: Motion.time, ang: App.doc.joints.find(x => x.id === arg)?.ang }", info['jid'])
+    if play_state['playing']:
+        p.pg.click('#mot-play')
+        p.wait(100)
+
+    ok1 = (
+        info['ok'] is True
+        and abs(at_15['ang'] - 90.0) < 1e-3
+        and abs(at_15['t'] - 1.5) < 1e-3
+        and abs(at_15['tip'][0] - 0.0) < 0.05
+        and abs(at_15['tip'][1] - 40.0) < 0.05
+        and abs(at_15['tip'][2] - 0.0) < 0.05
+        and abs(ang_25 - 150.0) < 1e-3
+        and abs(ang_reset['ang']) < 1e-3
+        and abs(ang_reset['t']) < 1e-3
+        and play_state['t'] > 0.05
+        and play_state['ang'] > 3.0
+    )
+
+    # 2. Weg über Zeit (Stützpunkte) an Schiebegelenk
+    slide_info = p.ev("""
+      Motion.resetTime();
+      App.change('Schlitten anlegen', (d) => {
+        const s = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Schlitten' });
+        s.t.y = 30;
+        d.items.push(s);
+      });
+      const sId = App.doc.items[2].id;
+      const js = Joints.add(arg.bId, sId, [0, 30, 5], [1, 0, 0], { kind: 'slide' });
+      Motion.addMotor(js.id, {
+        mode: 'profile',
+        interp: 'linear',
+        keys: [{ t: 0, v: 0 }, { t: 1, v: 20 }, { t: 2, v: 5 }],
+      });
+      Motion.setTime(0.5);
+      const p05 = App.doc.joints.find(x => x.id === js.id)?.ang;
+      const x05 = Model.find(App.doc, sId).item.t.x;
+      Motion.setTime(1.5);
+      const p15 = App.doc.joints.find(x => x.id === js.id)?.ang;
+      Motion.setTime(2.0);
+      const p20 = App.doc.joints.find(x => x.id === js.id)?.ang;
+      return { ok: !!js.ok, sId, jsId: js.id, p05, x05, p15, p20 };
+    """, info)
+    warte_rechnen(p, 30)
+
+    ok2 = (
+        slide_info['ok'] is True
+        and abs(slide_info['p05'] - 10.0) < 1e-3
+        and abs(slide_info['x05'] - 10.0) < 0.05
+        and abs(slide_info['p15'] - 12.5) < 1e-3
+        and abs(slide_info['p20'] - 5.0) < 1e-3
+    )
+
+    # 3. Punkt-Kurve als 3D-Bahn + 2D-SVG-Diagramm (Viertelkreis R=40 mm bei 60°/s über 1,5 s -> ~62,83 mm)
+    p.pg.fill('#mot-dur-inp', '1,5')
+    p.pg.press('#mot-dur-inp', 'Enter')
+    p.wait(200)
+    trace_info = p.ev("""
+      const tr = Motion.addTrace(arg.aId, [20, 0, 0], { name: 'Armspitze' });
+      Motion.setTime(1.5);
+      const data = tr ? Motion.traces[tr.id] : null;
+      const p0 = data && data.points.length ? data.points[0].p : null;
+      const pEnd = data && data.points.length ? data.points[data.points.length - 1].p : null;
+      const svgCurve = document.querySelector('#motion-chart path.mot-curve');
+      const hasOverlay = Viewer.groups.overlay.children.some(ch => ch.isGroup && ch.children.some(c => c.isLineSegments2 || c.type === 'Mesh'));
+      return {
+        hasTr: !!tr,
+        len: data ? data.totalLength : 0,
+        p0,
+        pEnd,
+        hasSvg: !!(svgCurve && svgCurve.getAttribute('d')),
+        hasOverlay,
+      };
+    """, info)
+
+    ok3 = (
+        trace_info['hasTr'] is True
+        and trace_info['hasSvg'] is True
+        and trace_info['hasOverlay'] is True
+        and trace_info['p0'] is not None
+        and trace_info['pEnd'] is not None
+        and abs(trace_info['p0'][0] - 40.0) < 0.1
+        and abs(trace_info['p0'][1] - 0.0) < 0.1
+        and abs(trace_info['pEnd'][0] - 0.0) < 0.1
+        and abs(trace_info['pEnd'][1] - 40.0) < 0.1
+        and abs(trace_info['len'] - 62.83185) < 0.6
+    )
+
+    # 4. Profi-Schutz, Validierung, Speichern/Laden, Rückgängig, Hilfe, DE/EN & Suche
+    p.ev("ViewPrefs.setLevel('simple'); Panels.renderLeft(); Panels.renderRight();")
+    p.wait(200)
+    simple_check = p.ev("""
+      const openRes = Motion.open();
+      const panelGone = !document.querySelector('#motion-panel');
+      const treeBtn = document.querySelector('#btn-motion-tree');
+      const projSec = document.querySelector('#proj-motion-sec');
+      return {
+        openRes,
+        panelGone,
+        treeHidden: !treeBtn || treeBtn.offsetParent === null,
+        projHidden: !projSec || projSec.offsetParent === null,
+      };
+    """)
+
+    p.ev("ViewPrefs.setLevel('pro'); Panels.renderLeft(); Panels.renderRight();")
+    p.wait(150)
+    meta = p.ev("""return (async () => {
+      const raw = await Start.projectPayload();
+      const val = Store.validateProject(raw);
+      const parsed = Model.migrate(JSON.parse(raw));
+      App.setDoc(parsed, { fit: false, noAutosave: true });
+      Motion.open();
+      Motion.setTime(1.5);
+      const angReload = App.doc.joints.find(x => x.id === arg.jid)?.ang;
+      const beforeUndoM = Motion.getStudy().motors.length;
+      Motion.addMotor(arg.jid, { speed: 15 });
+      const addedM = Motion.getStudy().motors.length;
+      App.undo();
+      const afterUndoM = Motion.getStudy().motors.length;
+
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'motionStudy';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.motionStudy && wh.motionStudy.tip && wh.motionStudy.hilfe && wh.motionStudy.tipp && desc && desc.text === wh.motionStudy.hilfe && desc.tip === wh.motionStudy.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('bewegung').some(c => c.id === 'motion-study');
+      return {
+        valOk: val.ok,
+        angReload,
+        motorsCount: App.doc.motion ? App.doc.motion.motors.length : 0,
+        tracesCount: App.doc.motion ? App.doc.motion.traces.length : 0,
+        undoOk: addedM === beforeUndoM + 1 && afterUndoM === beforeUndoM,
+        hOk,
+        i18nOk,
+        cmdOk,
+      };
+    })()""", info)
+
+    ok4 = (
+        simple_check == {'openRes': False, 'panelGone': True, 'treeHidden': True, 'projHidden': True}
+        and meta['valOk'] is True
+        and abs(meta['angReload'] - 90.0) < 1e-3
+        and meta['motorsCount'] == 2
+        and meta['tracesCount'] == 1
+        and meta['undoOk'] is True
+        and meta['hOk'] is True
+        and meta['i18nOk'] is True
+        and meta['cmdOk'] is True
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -31365,6 +31858,8 @@ TESTS = [
     ('[A-156] Explosion in Schritten: Schritte / nacheinander abspielen / Wegen-Linien / Video-Export / Einfach & Profi', t_a156_explosion_schritte_video),
     ('[A-157] Benannte Stellungen: speichern, einnehmen, Einfach/Profi & Speichern/Laden (BG-20)', t_a157_benannte_stellungen),
     ('[F-11251236] Volltest-Reparatur: Linke Leiste überlappt Skizzen-Lineal nicht / Beispiel-Galerie im I18n-Testmodus / Gelenk-Anschlag, Körper-Zeile & Tooltip', t_f11251236),
+    ('[A-159] Bezüge zwischen Teilen verwalten: Liste, Einfrieren, Auftauen & Lösen (BG-22)', t_a159_bezuege_verwalten),
+    ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

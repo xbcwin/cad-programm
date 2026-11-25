@@ -278,7 +278,7 @@ const Features = (() => {
       const pp = it.kind === 'sweep' && it.p && it.p.path3d; if (!pp || !Array.isArray(pp.bind) || !pp.bind.some(Boolean)) return;
       const WI = Model.worldMatrix(App.doc, it.id).invert();
       pp.bind.forEach((b, i) => {
-        if (!b || !pp.pts[i]) return;
+        if (!b || b.frozen || !pp.pts[i]) return;
         if (!Model.find(App.doc, b.id)) { jobs.push({ id: it.id, i, drop: true }); return; }
         const w = new THREE.Vector3(...b.lp).applyMatrix4(Model.worldMatrix(App.doc, b.id)).applyMatrix4(WI);
         if (pp.pts[i].some((v, k) => !(typeof v === 'number' && Math.abs(v - w.getComponent(k)) < 1e-3))) jobs.push({ id: it.id, i, p: w.toArray().map((v) => round(v, 4)) });
@@ -435,6 +435,7 @@ const Features = (() => {
     Model.walk(App.doc.items, (it) => {
       if (it.kind !== 'revolve' || !it.p || it.p.dir !== 'toFace' || !it.p.toFace) return;
       const tf = it.p.toFace;
+      if (tf.frozen) return;
       const inv = Model.worldMatrix(App.doc, it.id).invert();
       if (tf.kind === 'datum') {
         const d = typeof Datums !== 'undefined' ? Datums.find(tf.datumId) : null;
@@ -3352,6 +3353,7 @@ const Features = (() => {
     Model.walk(App.doc.items, (it) => {
       if (it.kind !== 'mirrorStep' || !it.p || it.p.plane !== 'FACE' || !it.p.faceRef) return;
       const fr = it.p.faceRef;
+      if (fr.frozen) return;
       const rId = App.results.has(fr.id) ? fr.id : (App.mergedInto(fr.id) || fr.id);
       const r = App.results.get(rId), tgt = Model.find(App.doc, fr.id);
       if (r && r.data && tgt) {
@@ -3755,7 +3757,7 @@ const Features = (() => {
       it.p.sketch3d.ents.forEach((e, i) => {
         for (const [bk, pk] of [['bindA', 'a'], ['bindM', 'm'], ['bindB', 'b']]) {
           const b = e[bk];
-          if (!b || !b.id || !e[pk]) continue;
+          if (!b || b.frozen || !b.id || !e[pk]) continue;
           if (!Model.find(App.doc, b.id)) { jobs.push({ id: it.id, i, bk, drop: true }); continue; }
           const w = new THREE.Vector3(...b.lp).applyMatrix4(Model.worldMatrix(App.doc, b.id)).applyMatrix4(WI);
           const cur = e[pk];

@@ -351,7 +351,7 @@ const Model = (() => {
   function syncLinks(doc) {
     let n = 0;
     walk(doc.items, (it) => {
-      if (!it.link) return;
+      if (!it.link || it.linkFrozen) return;
       const f = find(doc, it.link);
       if (!f || f.item === it || f.item.link || f.item.kind === 'group') { it.linkLost = true; return; }
       delete it.linkLost;
@@ -878,7 +878,7 @@ const Model = (() => {
       if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
       out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
     }
-    if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face') {
+    if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face' && !p.sketch.planeRef.frozen) {
       out.planeRef = {
         kind: 'face',
         id: p.sketch.planeRef.id,
@@ -890,7 +890,9 @@ const Model = (() => {
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
-      if (p.extent === 'toNext' || p.extent === 'toFace') {
+      if (p.extent === 'toFace' && p.toFace && p.toFace.frozen) {
+        if (typeof p.toFace.frozenDist === 'number' && isFinite(p.toFace.frozenDist)) out.dist = p.toFace.frozenDist;
+      } else if (p.extent === 'toNext' || p.extent === 'toFace') {
         out.extent = p.extent;
         if (p.extent === 'toFace' && p.toFace) {
           if (p.toFace.datumId) {
@@ -1469,7 +1471,7 @@ const Model = (() => {
       if (!regs.length) continue;
       const L = regs[0].outer; let cx = 0, cy = 0; for (const q of L.poly) { cx += q[0]; cy += q[1]; } cx /= L.poly.length || 1; cy /= L.poly.length || 1;
       const prof = { plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly };
-      if (sk.planeRef && sk.planeRef.kind === 'face' && sk.planeRef.id) {
+      if (sk.planeRef && sk.planeRef.kind === 'face' && sk.planeRef.id && !sk.planeRef.frozen) {
         prof.planeRef = {
           kind: 'face',
           id: sk.planeRef.id,
@@ -2379,6 +2381,54 @@ const Model = (() => {
           name: ps.name.trim(),
           states: ps.states && typeof ps.states === 'object' && !Array.isArray(ps.states) ? ps.states : {},
         }));
+    }
+    if (doc.motion != null) {
+      if (typeof doc.motion !== 'object' || Array.isArray(doc.motion)) {
+        delete doc.motion;
+      } else {
+        const m = doc.motion;
+        const dur = Number(m.duration);
+        const fps = Number(m.fps);
+        const motors = Array.isArray(m.motors) ? m.motors
+          .filter((mt) => mt && typeof mt === 'object' && typeof mt.jointId === 'string' && mt.jointId)
+          .map((mt) => ({
+            id: typeof mt.id === 'string' && mt.id ? mt.id : uid('mot'),
+            jointId: mt.jointId,
+            dof: typeof mt.dof === 'string' && mt.dof ? mt.dof : 'ang',
+            mode: mt.mode === 'profile' ? 'profile' : 'speed',
+            speed: Number.isFinite(Number(mt.speed)) ? Number(mt.speed) : 60,
+            startVal: Number.isFinite(Number(mt.startVal)) ? Number(mt.startVal) : 0,
+            tStart: Number.isFinite(Number(mt.tStart)) ? Math.max(0, Number(mt.tStart)) : 0,
+            tEnd: mt.tEnd != null && Number.isFinite(Number(mt.tEnd)) ? Math.max(0, Number(mt.tEnd)) : null,
+            interp: mt.interp === 'smooth' ? 'smooth' : 'linear',
+            keys: Array.isArray(mt.keys)
+              ? mt.keys
+                .filter((k) => k && typeof k === 'object' && Number.isFinite(Number(k.t)) && Number.isFinite(Number(k.v)))
+                .map((k) => ({ t: Math.max(0, Number(k.t)), v: Number(k.v) }))
+                .sort((a, b) => a.t - b.t)
+              : [],
+            enabled: mt.enabled !== false,
+          })) : [];
+        const traces = Array.isArray(m.traces) ? m.traces
+          .filter((tr) => tr && typeof tr === 'object' && typeof tr.itemId === 'string' && tr.itemId)
+          .map((tr) => ({
+            id: typeof tr.id === 'string' && tr.id ? tr.id : uid('tr'),
+            itemId: tr.itemId,
+            name: typeof tr.name === 'string' && tr.name.trim() ? tr.name.trim() : 'Punkt',
+            localPt: Array.isArray(tr.localPt) && tr.localPt.length >= 3
+              ? [Number(tr.localPt[0]) || 0, Number(tr.localPt[1]) || 0, Number(tr.localPt[2]) || 0]
+              : [0, 0, 0],
+            color: typeof tr.color === 'string' && tr.color ? tr.color : '#e03131',
+            visible: tr.visible !== false,
+          })) : [];
+        doc.motion = {
+          duration: Number.isFinite(dur) && dur > 0 ? clamp(dur, 0.1, 3600) : 4,
+          fps: Number.isFinite(fps) ? clamp(Math.round(fps), 10, 120) : 30,
+          loop: !!m.loop,
+          motors,
+          traces,
+        };
+      }
     }
     if (doc.blocks != null && !Array.isArray(doc.blocks)) doc.blocks = [];
     if (Array.isArray(doc.blocks)) {

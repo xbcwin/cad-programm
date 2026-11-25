@@ -4342,6 +4342,7 @@ const Sketch = (() => {
   function isLinkLost(it, e) {
     if (!e || !e.link || !e.link.id || !App.doc) return false;
     const L = e.link;
+    if (L.frozen) return false;
     if (L.kind === 'silhouette') {
       const rf = Model.find(App.doc, L.id);
       if (!rf || rf.item.suppressed) return true;
@@ -4412,7 +4413,7 @@ const Sketch = (() => {
       const own = Model.topOf(App.doc, it.id), F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
       const offGroups = new Map();
       for (const e of sk.ents) {
-        if (!e.link || e.link.kind === 'silhouette' || e.link.kind === 'faceIntersect' || (own && own.id === e.link.id)) continue;
+        if (!e.link || e.link.frozen || e.link.kind === 'silhouette' || e.link.kind === 'faceIntersect' || (own && own.id === e.link.id)) continue;
         if (e.link.off && e.link.fl) {
           if (!offGroups.has(e.link.fl)) offGroups.set(e.link.fl, []);
           offGroups.get(e.link.fl).push(e);
@@ -4423,7 +4424,7 @@ const Sketch = (() => {
       }
       for (const grp of offGroups.values()) {
         const ref0 = grp[0].link;
-        if (ref0.fn && grp.length !== ref0.fn) continue;
+        if (ref0.frozen || (ref0.fn && grp.length !== ref0.fn)) continue;
         grp.sort((a, b) => (a.link.fi || 0) - (b.link.fi || 0));
         const resList = [];
         let ok = true;
@@ -4464,7 +4465,7 @@ const Sketch = (() => {
       const seenGrp = new Set();
       for (const e of sk.ents || []) {
         const L = e.link;
-        if (!L || (L.kind !== 'silhouette' && L.kind !== 'faceIntersect') || !L.grp) continue;
+        if (!L || L.frozen || (L.kind !== 'silhouette' && L.kind !== 'faceIntersect') || !L.grp) continue;
         if (own && (own.id === L.id || (L.id2 && own.id === L.id2))) continue;
         if (seenGrp.has(L.grp)) continue;
         seenGrp.add(L.grp);
@@ -4608,7 +4609,7 @@ const Sketch = (() => {
     Model.walk(App.doc.items, (it) => {
       const sk = it.p && it.p.sketch;
       const pr = sk && sk.planeRef;
-      if (!sk || !sk.plane || !pr || pr.kind !== 'face') return;
+      if (!sk || !sk.plane || !pr || pr.kind !== 'face' || pr.frozen) return;
       if (!Model.isActive(App.doc, it.id)) return;
       const resInfo = App.resolvedOf(it.id);
       if (resInfo && resInfo.planeRefOk === true && resInfo.plane) {
