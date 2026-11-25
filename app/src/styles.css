@@ -1021,6 +1021,10 @@ body.presenting .pat-dot{display:none!important}
 .pat-chip{min-width:28px;height:26px;padding:0 7px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font:600 12px/1 var(--font-mono);cursor:pointer;transition:border-color .12s,background .12s}
 .pat-chip:hover{border-color:var(--accent);color:var(--accent)}
 .pat-chip.skipped{border-style:dashed;border-color:var(--bad);background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+.pat-grow-box{display:grid;gap:6px;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.pat-grow-head{font-size:12px;font-weight:600;color:var(--muted)}
+.pat-grow-grid{display:grid;grid-template-columns:1fr 78px;gap:6px;align-items:end}
+.pat-grow-info{font-size:11.5px;color:var(--muted);font-family:var(--font-mono)}
 
 /* Nachschlagetabellen unter „Maße“ & Formel-Fehleranzeige (KP-22) */
 .inp .fx.bad{color:var(--bad);font-weight:600}

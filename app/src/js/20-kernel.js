@@ -630,8 +630,14 @@ const Kernel = (() => {
         }
         if (!base) return null;
         if (!p.op) { box = base; break; }
-        if (p.op === 'split' || p.op === 'intersect') { box = base; break; }
+        if (p.op === 'intersect') { box = base; break; }
+        if (p.op === 'split') {
+          if (p.plane === 'FACE' || p.plane === 'SKETCH' || numOr(p.gap, 0) > 0) return null;
+          box = base;
+          break;
+        }
         if (p.op === 'pattern') {
+          if (Math.abs(numOr(p.scaleStep, 0)) > 1e-9 || Math.abs(numOr(p.distStep, 0)) > 1e-9) return null;
           if (p.pt === 'rect') {
             const nx = Math.max(1, Math.min(60, Math.round(numOr(p.nx, 1))));
             const ny = Math.max(1, Math.min(60, Math.round(numOr(p.ny, 1))));
@@ -725,7 +731,7 @@ const Kernel = (() => {
       if (ti != null) union(idx, ti);
     };
 
-    const TARGET_KINDS = new Set(['transform', 'scale', 'deform', 'thicken', 'rib', 'vent', 'fins', 'web', 'wrap', 'emboss', 'splitFace', 'dome', 'deleteBody', 'boss', 'lipGroove']);
+    const TARGET_KINDS = new Set(['transform', 'scale', 'deform', 'thicken', 'rib', 'vent', 'fins', 'fillPattern', 'web', 'wrap', 'emboss', 'splitFace', 'dome', 'deleteBody', 'boss', 'lipGroove']);
     const walkDeps = (x, topIdx, isTop) => {
       if (!x || x.hidden) return;
       const p = x.p || {};
@@ -745,6 +751,7 @@ const Kernel = (() => {
         if (Array.isArray(p.profiles)) for (const pr of p.profiles) if (pr && pr.planeRef && pr.planeRef.id) unionRef(topIdx, pr.planeRef.id);
       }
       if (p.planeRef && p.planeRef.kind === 'face' && p.planeRef.id) unionRef(topIdx, p.planeRef.id);
+      if (x.kind === 'group' && p.op === 'split' && p.plane === 'FACE' && p.faceRef && p.faceRef.id) unionRef(topIdx, p.faceRef.id);
       if (isTop && x.kind === 'mirrorStep') {
         if (p.faceRef && p.faceRef.id) unionRef(topIdx, p.faceRef.id);
         const fids = Array.isArray(p.features) ? p.features : [];

@@ -2466,6 +2466,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Modus, Hilfetexte, DE/EN & Befehle**: `#btn-face-fillet` und `#btn-parting-draft` nur im Profi-Modus sichtbar; `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit, `Commands.search` und `Explain.local` geprüft.
 - [ ] **Von Hand**: Im Browser zwei nicht benachbarte Flächen über eine größere Fase und an einem geschwungenen Formteil eine Trennlinien-Schräge mit Bezugsebene optisch auf glatte Übergänge prüfen.
 
+## Muster mit wachsender Größe & Teilen mit Fläche oder Skizze (Auto [A-129], KP-46, KP-47)
+
+- [x] **5 Zylinder mit +10 % je Kopie**: Rechteckmuster (`nx = 5, dx = 25`) auf Zylinder (`Ø10 × 10`) mit `#op-scaleStep = 10` (`%`) → 5 Körper ohne Fehler (`GeomCheck` 0 Funde), letzter Zylinder ist `1,464`-mal so groß (`Ø ≈ 14,64 mm`, `h ≈ 14,64 mm`).
+- [x] **Wachsender Abstand & mm-Schritte (Profi)**: `#op-distStep = 5` (`mm`) vergrößert die Abstände zwischen aufeinanderfolgenden Kopien um +5 mm (`25, 30, 35, 40 mm`); `#op-scaleUnit = 'mm'`, `#op-scaleStep = 2` lässt den letzten Zylinder auf `18 mm` (1,8×) wachsen; Kreismuster mit wachsender Größe sowie Ausblenden von `#op-grow-wrap` im Einfach-Modus geprüft.
+- [x] **Quader mit gebogener Skizze teilen**: Quader `20×20×20` mit einem Skizzen-Bogen (`plane: 'SKETCH'`) geteilt → 2 gültige Körper ohne Fehler (`GeomCheck` 0 Funde), Gesamtvolumen bleibt `8 000 mm³`, gekrümmte Trennfläche vorhanden; „Behalten“ und „Spalt“ (`4 mm`) funktionieren.
+- [x] **Quader an Fläche & Bezugsebene teilen + Hilfen**: Teilen an schräger Bezugsebene sowie an gekrümmter Zylindermantelfläche (`plane: 'FACE'`) erzeugt jeweils 2 gültige Körper mit erhaltenem Gesamtvolumen; Profi-Schaltflächen im Einfach-Modus verborgen; `HELP.patternGrowth`, `HELP.splitAdvanced` und Rückgängig geprüft.
+- [ ] **Von Hand**: Im Browser beim Teilen „Mit Skizze teilen“ anklicken, einen freien S-Spline quer durch einen Quader zeichnen, „Fertig“ klicken und beide Hälften mit „Spalt“ auseinanderrücken.
+
+## Füllmuster auf Fläche, Muster an Skizzenpunkten und aus Tabelle (Auto [A-128], KP-44, KP-45)
+
+- [x] **Waben-Füllmuster in Platte 60×40×5 (`fillPattern`)**: Im Profi-Modus über `#ctx-fill-pattern` (in „Einfach“ ausgeblendet) angelegt → Waben (`SW 6`, Abstand `8`, Randabstand `4`) erzeugen gültige Durchbrüche ohne Rand-Schnitt (`outerSides == 4`, alle Lochwände strikt innerhalb des Randabstands, `GeomCheck` 0 Funde); Umschalten auf Raster/Versetzt, Randabstand `8`, Sackloch-Tiefe `2 mm` und Unterdrücken funktionieren fehlerfrei.
+- [x] **Muster an 4 Skizzenpunkten (`pt: 'points'`)**: Bohrung über `Features.patternPoints` mit 4 Punkten im Punkt-Skizzenmodus → exakt 4 zylindrische Bohrungen exakt an den 4 Skizzenpunkten (`GeomCheck` 0 Funde), Skip-Chips lassen einzelne Punkte aus, und `#op-points-source` übernimmt Punkte einer bestehenden Skizze.
+- [x] **Muster aus CSV-Tabelle (`pt: 'table'`)**: Quader `6×6×6` über `Features.patternTable` mit 3 CSV-Zeilen (`x;y;z`) → exakt 3 getrennte Kopien mit Gesamtvolumen `648 mm³` (`GeomCheck` 0 Funde), Relativ-Modus (`dX/dY/dZ/rot`), Hilfetexte (`werkzeug-hilfen.json`/`HELP`), DE/EN-Schlüsselgleichheit und Befehlssuche ohne Fehler.
+- [ ] **Von Hand**: Im Browser auf eine beliebige Fläche mit Durchbruch ein gedrehtes Waben-Füllmuster setzen, eine Schraube an eigenen Skizzenpunkten vervielfachen und eine `.csv`-Datei über „CSV laden …“ einlesen.
+
 ## Fehler melden
 
 ```

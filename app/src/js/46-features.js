@@ -4,7 +4,7 @@
 // ihre Lage. Der CAD-Kern rechnet die Vorschrift nach jeder Änderung neu – ändert man das Original,
 // ziehen alle Kopien mit. So lässt sich auch ein Loch in einer Platte im Kreis vervielfachen.
 const Features = (() => {
-  const NAMES = { rect: 'Rechteckmuster', circ: 'Kreismuster', path: 'Muster entlang Kurve', mirror: 'Spiegelung', split: 'Geteilt', intersect: 'Schnittmenge' };
+  const NAMES = { rect: 'Rechteckmuster', circ: 'Kreismuster', path: 'Muster entlang Kurve', points: 'Muster an Punkten', table: 'Muster aus Tabelle', mirror: 'Spiegelung', split: 'Geteilt', intersect: 'Schnittmenge' };
   // gewählte Objekte, die alle auf derselben Ebene liegen (sonst leer)
   function siblings(ids) {
     const fs = (ids || App.sel).map((id) => Model.find(App.doc, id)).filter(Boolean);
@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -117,6 +117,70 @@ const Features = (() => {
     const G = wrap(items, NAMES.path, { op: 'pattern', pt: 'path', n: 5, d: 0, align: true, sketch }, sop.ok ? sop.op : null);
     UI.toast('Muster entlang der Kurve angelegt. Rechts stellst du Anzahl, Abstand und Mitdrehen ein.', { icon: 'check' });
     return G;
+  }
+  function refCenterOf(items) {
+    const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
+    const sop = sharedFeatureOp(items);
+    const b = sop.ok && sop.op ? ownBoxOf(items) : Actions.selBox(items.map((x) => x.id));
+    if (b.isEmpty()) return [0, 0, 0];
+    const c = b.getCenter(new THREE.Vector3()).applyMatrix4(inv);
+    return [round(c.x, 4), round(c.y, 4), round(c.z, 4)];
+  }
+  function patternPoints(ids, opts = {}) {
+    const items = need(ids); if (!items.length) return null;
+    const sop = sharedFeatureOp(items); if (!sop.ok) return null;
+    if (opts.sketch) return pointsFromSketch(items.map((x) => x.id), opts.sketch, opts);
+    if (opts.sourceId) {
+      const ref = refCenterOf(items);
+      const G = wrap(items, NAMES.points, { op: 'pattern', pt: 'points', sourceId: opts.sourceId, ref, ...(opts.keepOrigin ? { keepOrigin: true } : {}) }, sop.op);
+      UI.toast('Muster an Skizzenpunkten angelegt.', { icon: 'check' });
+      return G;
+    }
+    const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
+    const b = sop.op ? ownBoxOf(items) : Actions.selBox(items.map((x) => x.id));
+    const top = b.isEmpty() ? 0 : new THREE.Vector3(b.getCenter(new THREE.Vector3()).x, b.getCenter(new THREE.Vector3()).y, b.max.z).applyMatrix4(inv).z;
+    Sketch.startPoints({ plane: { o: [0, 0, round(top, 4)], x: [1, 0, 0], n: [0, 0, 1] }, W, ents: [], ids: items.map((x) => x.id), viewSize: b.isEmpty() ? 100 : Math.max(100, 5 * Math.max(b.max.x - b.min.x, b.max.y - b.min.y)) });
+    return true;
+  }
+  function pointsFromSketch(ids, sketch, opts = {}) {
+    const items = siblings(ids);
+    if (!items.length) { UI.toast('Die gewählten Objekte gibt es nicht mehr.', { kind: 'bad' }); return null; }
+    const sop = sharedFeatureOp(items);
+    if (!sop.ok) return null;
+    const ref = refCenterOf(items);
+    const G = wrap(items, NAMES.points, { op: 'pattern', pt: 'points', sketch: deepClone(sketch), ref, ...(opts.keepOrigin ? { keepOrigin: true } : {}) }, sop.op);
+    UI.toast('Muster an Skizzenpunkten angelegt. Rechts wählst du eine andere Skizze oder bearbeitest die Punkte.', { icon: 'check' });
+    return G;
+  }
+  const DEFAULT_TABLE_CSV = 'x;y\n0;0\n20;0\n20;15';
+  function patternTable(ids, opts = {}) {
+    const items = need(ids); if (!items.length) return null;
+    const sop = sharedFeatureOp(items); if (!sop.ok) return null;
+    const ref = refCenterOf(items);
+    const csv = opts.csv != null ? String(opts.csv) : DEFAULT_TABLE_CSV;
+    const mode = opts.mode === 'rel' ? 'rel' : 'abs';
+    const G = wrap(items, NAMES.table, { op: 'pattern', pt: 'table', csv, mode, ref }, sop.op);
+    UI.toast('Muster aus Tabelle angelegt. Rechts fügst du Koordinaten ein oder lädst eine CSV-Datei.', { icon: 'check' });
+    return G;
+  }
+  function setPatternTableCSV(id, csvText) {
+    const f = Model.find(App.doc, id);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'pattern' || f.item.p.pt !== 'table') return false;
+    const txt = String(csvText ?? '');
+    const parsed = Model.parsePatternCSV(txt, Model.vars(App.doc).v);
+    if (!parsed.ok) {
+      UI.toast(parsed.error || 'Die CSV-Tabelle enthält keine gültigen Zeilen.', { kind: 'bad' });
+      return false;
+    }
+    App.change('Muster-Tabelle geändert', (doc) => {
+      const fn = Model.find(doc, id); if (!fn) return false;
+      fn.item.p.csv = txt;
+      if (Array.isArray(fn.item.p.skip)) {
+        fn.item.p.skip = fn.item.p.skip.filter((k) => k >= 0 && k < parsed.rows.length);
+        if (!fn.item.p.skip.length) delete fn.item.p.skip;
+      }
+    });
+    return true;
   }
   // ---------- Drehachse im Bild wählen (Kreismuster) ----------
   // Gerade Kante → Achse entlang der Kante; runde Kante → Achse durch ihre Mitte, senkrecht dazu; Zylinderfläche → ihre Achse
@@ -602,6 +666,114 @@ const Features = (() => {
     const z = b.isEmpty() ? 0 : round((b.min.z + b.max.z) / 2, 2);
     const G = wrap(items, NAMES.split, { op: 'split', plane: 'XY', off: z, keep: 'both', gap: 0 });
     UI.toast('Geteilt. Rechts wählst du die Schnittebene, ihre Lage und welche Hälfte bleibt.', { icon: 'check' });
+    return G;
+  }
+  function defaultSplitSketchPlane(items, planeOpt = null) {
+    const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
+    const b = Actions.selBox(items.map((x) => x.id));
+    const bl = b.isEmpty() ? new THREE.Box3(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10)) : b.clone().applyMatrix4(inv);
+    const sz = bl.getSize(new THREE.Vector3());
+    const c = bl.getCenter(new THREE.Vector3());
+    const viewSize = Math.max(80, 3 * Math.max(sz.x, sz.y, sz.z, 10));
+    let plane;
+    if (planeOpt === 'XZ') plane = { o: [0, round(c.y, 4), 0], x: [1, 0, 0], n: [0, 1, 0] };
+    else if (planeOpt === 'YZ') plane = { o: [round(c.x, 4), 0, 0], x: [0, 1, 0], n: [1, 0, 0] };
+    else plane = { o: [0, 0, round(c.z, 4)], x: [1, 0, 0], n: [0, 0, 1] };
+    return { plane, W, viewSize };
+  }
+  function setSplitFace(gid, ref) {
+    const f = Model.find(App.doc, gid);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'split' || !ref) return false;
+    App.change('Schnittfläche gewählt', (doc) => {
+      const fn = Model.find(doc, gid); if (!fn) return false;
+      fn.item.p.plane = 'FACE';
+      fn.item.p.faceRef = deepClone(ref);
+    });
+    App.select([gid]);
+    return true;
+  }
+  function pickSplitToolFace(gid) {
+    const f = Model.find(App.doc, gid);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'split') return false;
+    pickFaceThen((ref) => {
+      setSplitFace(gid, ref);
+      UI.toast('Schnittfläche gesetzt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, { exclude: new Set([gid, '__preview']), hint: '<b>Schnittfläche wählen:</b> Klick auf eine ebene oder gekrümmte Fläche eines anderen Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.' });
+    return true;
+  }
+  function splitWithFace(ids = null, faceRef = null) {
+    const list = ids || App.sel;
+    if (list.length === 1) {
+      const f = Model.find(App.doc, list[0]);
+      if (f && isOp(f.item) && f.item.p.op === 'split') {
+        if (faceRef) return setSplitFace(f.item.id, faceRef);
+        return pickSplitToolFace(f.item.id);
+      }
+    }
+    const items = need(list); if (!items.length) return null;
+    if (faceRef) {
+      const G = wrap(items, NAMES.split, { op: 'split', plane: 'FACE', faceRef: deepClone(faceRef), keep: 'both', gap: 0 });
+      UI.toast('Geteilt an der gewählten Fläche.', { icon: 'check' });
+      return G;
+    }
+    pickFaceThen((ref) => {
+      const still = siblings(items.map((x) => x.id));
+      if (!still.length) return;
+      wrap(still, NAMES.split, { op: 'split', plane: 'FACE', faceRef: deepClone(ref), keep: 'both', gap: 0 });
+      UI.toast('Geteilt an der gewählten Fläche.', { icon: 'check' });
+    }, { exclude: new Set([...items.map((x) => x.id), '__preview']), hint: '<b>Schnittfläche wählen:</b> Klick auf eine ebene oder gekrümmte Fläche eines anderen Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.' });
+    return true;
+  }
+  function startSplitSketch(gidOrIds = null, planeOpt = null) {
+    if (typeof gidOrIds === 'string') {
+      const f = Model.find(App.doc, gidOrIds);
+      if (!f || !isOp(f.item) || f.item.p.op !== 'split') return false;
+      if (f.item.p.sketch && !planeOpt) { Sketch.editItem(gidOrIds); return true; }
+      const kids = (f.item.children || []).filter((c) => !c.suppressed);
+      const { plane, W, viewSize } = defaultSplitSketchPlane(kids.length ? kids : [f.item], planeOpt);
+      Sketch.startSplitCurve({ plane, W, ents: [], gid: gidOrIds, viewSize });
+      return true;
+    }
+    const list = gidOrIds || App.sel;
+    if (list.length === 1) {
+      const f = Model.find(App.doc, list[0]);
+      if (f && isOp(f.item) && f.item.p.op === 'split') return startSplitSketch(f.item.id, planeOpt);
+    }
+    const items = need(list); if (!items.length) return false;
+    const { plane, W, viewSize } = defaultSplitSketchPlane(items, planeOpt);
+    Sketch.startSplitCurve({ plane, W, ents: [], ids: items.map((x) => x.id), viewSize });
+    return true;
+  }
+  function splitFromSketch(target, sketch) {
+    if (!sketch) return null;
+    if (target && target.gid) {
+      const gid = target.gid;
+      App.change('Schnitt-Skizze gesetzt', (doc) => {
+        const fn = Model.find(doc, gid); if (!fn || !fn.item.p) return false;
+        fn.item.p.plane = 'SKETCH';
+        fn.item.p.sketch = deepClone(sketch);
+      });
+      App.select([gid]);
+      UI.toast('Körper mit Skizze geteilt. Rechts kannst du die Kurve bearbeiten, eine Hälfte wählen oder einen Spalt setzen.', { icon: 'check' });
+      return Model.find(App.doc, gid)?.item || null;
+    }
+    const items = siblings(target && target.ids);
+    if (!items.length) { UI.toast('Die gewählten Objekte gibt es nicht mehr.', { kind: 'bad' }); return null; }
+    const G = wrap(items, NAMES.split, { op: 'split', plane: 'SKETCH', sketch: deepClone(sketch), keep: 'both', gap: 0 });
+    UI.toast('Körper mit Skizze geteilt. Rechts kannst du die Kurve bearbeiten, eine Hälfte wählen oder einen Spalt setzen.', { icon: 'check' });
+    return G;
+  }
+  function splitWithSketch(ids = null, sketch = null, opts = {}) {
+    if (!sketch) return startSplitSketch(ids, opts.plane || null);
+    const items = need(ids); if (!items.length) return null;
+    const G = splitFromSketch({ ids: items.map((x) => x.id) }, sketch);
+    if (G && (opts.keep || opts.gap != null)) {
+      App.change('Schnitt-Einstellungen', (doc) => {
+        const fn = Model.find(doc, G.id); if (!fn) return false;
+        if (opts.keep) fn.item.p.keep = opts.keep;
+        if (opts.gap != null) fn.item.p.gap = opts.gap;
+      }, { amend: true });
+    }
     return G;
   }
   // Boolesch: vereinigen, abziehen (der erste bleibt, die anderen schneiden), Schnittmenge
@@ -1249,7 +1421,7 @@ const Features = (() => {
   if (typeof window !== 'undefined') window.addEventListener('resize', placePatternMarkers);
   function renderSkipUI(it, sec) {
     const p = it.p || {};
-    if (p.op !== 'pattern' || (p.pt !== 'rect' && p.pt !== 'circ' && p.pt !== 'path')) return;
+    if (p.op !== 'pattern' || (p.pt !== 'rect' && p.pt !== 'circ' && p.pt !== 'path' && p.pt !== 'points' && p.pt !== 'table')) return;
     const V = Model.vars(App.doc).v, inst = Model.patternInstances(it, V);
     if (inst.length < 2) return;
     const active = inst.filter((x) => !x.skipped).length;
@@ -1273,6 +1445,37 @@ const Features = (() => {
       chips.append(ch);
     }
     box.append(head, chips);
+    sec.append(box);
+  }
+  function renderPatternGrowthUI(it, sec, setP) {
+    const p = it.p || {};
+    if (p.op !== 'pattern' || (p.pt !== 'rect' && p.pt !== 'circ' && p.pt !== 'path')) return;
+    const sUnit = p.scaleUnit === 'mm' ? 'mm' : 'pct';
+    const dUnit = p.distUnit === 'mm' ? 'mm' : 'pct';
+    const isCirc = p.pt === 'circ';
+    const box = h('div', { class: 'pat-grow-box pro', id: 'op-grow-wrap', 'data-help': 'patternGrowth' });
+    box.append(h('div', { class: 'pat-grow-head' }, 'Wachstum je Kopie'));
+    const g1 = h('div', { class: 'pat-grow-grid' });
+    g1.append(
+      UI.numField({ id: 'op-scaleStep', label: 'Größe je Kopie', value: p.scaleStep ?? 0, unit: sUnit === 'mm' ? 'mm' : '%', len: sUnit === 'mm', onCommit: (v) => setP('scaleStep', v) }),
+      UI.selectField({ id: 'op-scaleUnit', label: 'Einheit', value: sUnit, options: [['pct', '%'], ['mm', 'mm']], onChange: (v) => setP('scaleUnit', v) })
+    );
+    const g2 = h('div', { class: 'pat-grow-grid' });
+    g2.append(
+      UI.numField({ id: 'op-distStep', label: isCirc ? 'Winkel je Kopie' : 'Abstand je Kopie', value: p.distStep ?? 0, unit: dUnit === 'mm' ? (isCirc ? '°' : 'mm') : '%', len: dUnit === 'mm' && !isCirc, onCommit: (v) => setP('distStep', v) }),
+      UI.selectField({ id: 'op-distUnit', label: 'Einheit', value: dUnit, options: [['pct', '%'], ['mm', isCirc ? '°' : 'mm']], onChange: (v) => setP('distUnit', v) })
+    );
+    box.append(g1, g2);
+    const V = Model.vars(App.doc).v;
+    const scaleVal = Model.num(p.scaleStep, V, 0);
+    if (Math.abs(scaleVal) > 1e-9) {
+      const inst = Model.patternInstances(it, V);
+      const maxStep = Math.max(0, ...inst.filter((x) => !x.skipped).map((x) => x.stepIdx ?? x.idx ?? 0));
+      const bb = App.baseBox(it.id) || Model.itemLocalBox(it, V) || App.localBox(it.id);
+      const refSize = bb ? Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2], 1e-3) : 10;
+      const lastScale = Model.patternScaleFactor(maxStep, scaleVal, sUnit, refSize);
+      box.append(h('div', { class: 'pat-grow-info', id: 'op-grow-info' }, `Letzte Kopie: ${fmt(lastScale, 2)}× so groß`));
+    }
     sec.append(box);
   }
   // ---------- Rechte Leiste ----------
@@ -1312,6 +1515,7 @@ const Features = (() => {
       hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).';
       sec.append(f); if (info) sec.append(info);
       sec.append(h('div', { class: 'btn-row' }, pb));
+      renderPatternGrowthUI(it, sec, setP);
       renderSkipUI(it, sec);
       sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
@@ -1326,6 +1530,103 @@ const Features = (() => {
       const eb = h('button', { type: 'button', class: 'btn', id: 'op-editpath' }); eb.innerHTML = icon('sketch') + 'Kurve bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
       sec.append(f, h('div', { class: 'btn-row' }, eb));
+      renderPatternGrowthUI(it, sec, setP);
+      renderSkipUI(it, sec);
+      sec.append(h('div', { class: 'hint-box', html: hint }));
+      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
+      ub.onclick = () => Actions.ungroup(it.id);
+      sec.append(h('div', { class: 'btn-row' }, ub));
+      return;
+    }
+    else if (p.op === 'pattern' && p.pt === 'points') {
+      const ownIds = new Set([it.id]);
+      Model.walk(it.children || [], (c) => ownIds.add(c.id));
+      const srcOpts = [['', 'Eigene Punkt-Skizze']];
+      Model.walk(App.doc.items || [], (x) => {
+        if (ownIds.has(x.id)) return;
+        const ents = x.p && x.p.sketch && x.p.sketch.ents;
+        if (Array.isArray(ents) && ents.some((e) => e && e.type === 'point')) {
+          srcOpts.push([x.id, Model.label(x)]);
+        }
+      });
+      const curSrc = p.sourceId && srcOpts.some((o) => o[0] === p.sourceId) ? p.sourceId : '';
+      f.append(UI.selectField({
+        id: 'op-points-source', label: 'Punkt-Quelle', value: curSrc, options: srcOpts,
+        onChange: (v) => App.change('Punkt-Quelle geändert', (doc) => {
+          const fn = Model.find(doc, it.id); if (!fn) return false;
+          if (v) fn.item.p.sourceId = v;
+          else {
+            delete fn.item.p.sourceId;
+            if (!fn.item.p.sketch) {
+              const ref = fn.item.p.ref || [0, 0, 0];
+              fn.item.p.sketch = { plane: { o: [0, 0, ref[2] || 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [], dims: [], cons: [] };
+            }
+          }
+          delete fn.item.p.skip;
+        }),
+      }));
+      const V = Model.vars(App.doc).v;
+      const inst = Model.patternInstances(it, V);
+      const ptsCnt = (Model.pointsPatternParams(it, V).places || []).length;
+      const eb = h('button', { type: 'button', class: 'btn', id: 'op-editpoints' });
+      eb.innerHTML = icon('sketch') + 'Punkte bearbeiten';
+      eb.onclick = () => {
+        if (curSrc && Model.find(App.doc, curSrc)) { Sketch.editItem(curSrc); return; }
+        if (!it.p.sketch) {
+          App.change('Punkt-Skizze angelegt', (doc) => {
+            const fn = Model.find(doc, it.id); if (!fn) return false;
+            const ref = fn.item.p.ref || [0, 0, 0];
+            fn.item.p.sketch = { plane: { o: [0, 0, ref[2] || 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [], dims: [], cons: [] };
+          }, { amend: true });
+        }
+        Sketch.editItem(it.id);
+      };
+      const koL = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'op-keep-origin', checked: !!p.keepOrigin }), 'Original zusätzlich behalten');
+      koL.querySelector('input').onchange = (e) => App.change('Original-Kopie umgeschaltet', (doc) => {
+        const fn = Model.find(doc, it.id); if (!fn) return false;
+        if (e.target.checked) fn.item.p.keepOrigin = true; else delete fn.item.p.keepOrigin;
+      });
+      hint = 'Setzt an jedem Punkt der gewählten Skizze eine Kopie (ohne zusätzliches Original). Klick im Bild oder rechts auf eine Kopie, um sie auszulassen.';
+      sec.append(f, h('div', { class: 'mini-row', id: 'op-points-count' }, h('span', { class: 'grow' }, 'Kopien an Punkten'), h('b', { class: 'mono' }, String(ptsCnt || inst.length))), h('div', { class: 'btn-row' }, eb), koL);
+      renderSkipUI(it, sec);
+      sec.append(h('div', { class: 'hint-box', html: hint }));
+      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
+      ub.onclick = () => Actions.ungroup(it.id);
+      sec.append(h('div', { class: 'btn-row' }, ub));
+      return;
+    }
+    else if (p.op === 'pattern' && p.pt === 'table') {
+      f.append(UI.selectField({
+        id: 'op-table-mode', label: 'Koordinaten', value: p.mode === 'rel' ? 'rel' : 'abs',
+        options: [['abs', 'Zielposition (X, Y, Z)'], ['rel', 'Versatz zum Original (dX, dY, dZ)']],
+        onChange: (v) => App.change('Tabellen-Modus geändert', (doc) => { Model.find(doc, it.id).item.p.mode = v; }),
+      }));
+      const ta = h('textarea', { id: 'op-table-csv', class: 'inp mono', rows: 5, placeholder: 'x;y;z;rot\n0;0;0;0\n20;0;0;0', style: { width: '100%', fontSize: '12px', resize: 'vertical', marginTop: '6px' } });
+      ta.value = p.csv || '';
+      const applyBtn = h('button', { type: 'button', class: 'btn small primary', id: 'op-table-apply' });
+      applyBtn.innerHTML = icon('check') + 'Übernehmen';
+      applyBtn.onclick = () => setPatternTableCSV(it.id, ta.value);
+      const fileInp = h('input', { type: 'file', id: 'op-table-file', accept: '.csv,.txt', style: { display: 'none' } });
+      fileInp.onchange = async () => {
+        const fl = fileInp.files && fileInp.files[0];
+        if (!fl) return;
+        const txt = await fl.text();
+        ta.value = txt;
+        setPatternTableCSV(it.id, txt);
+        fileInp.value = '';
+      };
+      const loadBtn = h('button', { type: 'button', class: 'btn small', id: 'op-table-load' });
+      loadBtn.innerHTML = icon('folder') + 'CSV laden …';
+      loadBtn.onclick = () => fileInp.click();
+      const parsed = Model.parsePatternCSV(p.csv || '', Model.vars(App.doc).v);
+      const stTxt = parsed.ok
+        ? (parsed.rows.length === 1 ? '1 Zeile erkannt' : `${parsed.rows.length} Zeilen erkannt`) + (parsed.skipped ? ` (${parsed.skipped} übersprungen)` : '')
+        : (parsed.error || 'Ungültige Tabelle');
+      const stBox = h('div', { class: parsed.ok ? 'mini-row' : 'err-box', id: 'op-table-status' });
+      if (parsed.ok) stBox.append(h('span', { class: 'grow' }, 'Gültige Einträge'), h('b', { class: 'mono' }, stTxt));
+      else stBox.textContent = stTxt;
+      hint = 'Jede Zeile erzeugt eine Kopie – Spalten: <b>X, Y</b> (optional <b>Z</b> und Drehung <b>rot</b> in °), getrennt durch Semikolon, Komma oder Tab. Auch Maßnamen und Formeln sind möglich.';
+      sec.append(f, ta, h('div', { class: 'btn-row', style: { marginTop: '6px' } }, applyBtn, loadBtn), fileInp, stBox);
       renderSkipUI(it, sec);
       sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
@@ -1337,11 +1638,66 @@ const Features = (() => {
     else if (p.op === 'pattern' && p.pt === 'mirror') { f.append(sel('plane', 'Spiegeln', [['YZ', 'Links ↔ rechts'], ['XZ', 'Vorne ↔ hinten'], ['XY', 'Oben ↔ unten']]), num('off', 'Lage der Ebene')); hint = 'Original und Spiegelbild werden ein Körper. Die Ebene geht durch den Nullpunkt, „Lage“ verschiebt sie.'; }
     else if (p.op === 'split') {
       const pl = p.plane || 'XY';
-      const sides = { XY: ['Oben', 'Unten'], XZ: ['Hinten', 'Vorne'], YZ: ['Rechts', 'Links'] }[pl];
-      f.append(sel('plane', 'Schnitt', [['XY', 'Waagerecht (XY)'], ['XZ', 'Von vorne (XZ)'], ['YZ', 'Von der Seite (YZ)']]), num('off', 'Lage der Ebene'), sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', sides[0]], ['negative', sides[1]]]), num('gap', 'Spalt'));
+      const isSimple = typeof ViewPrefs !== 'undefined' && ViewPrefs.simple;
+      const planeOpts = [['XY', 'Waagerecht (XY)'], ['XZ', 'Von vorne (XZ)'], ['YZ', 'Von der Seite (YZ)']];
+      if (!isSimple || pl === 'FACE' || pl === 'SKETCH') {
+        planeOpts.push(['FACE', 'Fläche (Profi)'], ['SKETCH', 'Skizze / Kurve (Profi)']);
+      }
+      f.append(UI.selectField({
+        id: 'op-plane', label: 'Schnitt', value: pl, options: planeOpts,
+        onChange: (v) => {
+          if (v === 'FACE') { if (p.faceRef) setP('plane', 'FACE'); else pickSplitToolFace(it.id); }
+          else if (v === 'SKETCH') { if (p.sketch) setP('plane', 'SKETCH'); else startSplitSketch(it.id); }
+          else setP('plane', v);
+        },
+      }));
+      if (pl === 'FACE') {
+        const refLbl = p.faceRef && p.faceRef.label ? p.faceRef.label : 'Keine Fläche gewählt';
+        const faceInfo = h('div', { class: 'mini-row', id: 'op-split-faceinfo' }, h('span', { class: 'grow' }, 'Schnittfläche'), h('b', { class: 'mono' }, refLbl));
+        f.append(sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', 'Seite A'], ['negative', 'Seite B']]), num('gap', 'Spalt', 'mm', { min: 0 }));
+        sec.append(f, faceInfo);
+        const pb = h('button', { type: 'button', class: 'btn', id: 'op-split-face' });
+        pb.innerHTML = icon('cursor') + (p.faceRef ? 'Andere Fläche wählen' : 'Fläche wählen');
+        pb.onclick = () => pickSplitToolFace(it.id);
+        sec.append(h('div', { class: 'btn-row', 'data-help': 'splitAdvanced' }, pb));
+        hint = 'Teilt den Körper an einer ebenen oder gekrümmten Fläche eines anderen Körpers oder einer Bezugsebene.';
+        sec.append(h('div', { class: 'hint-box', html: hint }));
+        const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen';
+        ub.onclick = () => Actions.ungroup(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ub));
+        return;
+      }
+      if (pl === 'SKETCH') {
+        f.append(sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', 'Seite A'], ['negative', 'Seite B']]), num('gap', 'Spalt', 'mm', { min: 0 }));
+        sec.append(f);
+        const sb = h('button', { type: 'button', class: 'btn', id: 'op-split-sketch' });
+        sb.innerHTML = icon('sketch') + (p.sketch ? 'Schnitt-Skizze bearbeiten' : 'Schnitt-Skizze zeichnen');
+        sb.onclick = () => startSplitSketch(it.id);
+        sec.append(h('div', { class: 'btn-row', 'data-help': 'splitAdvanced' }, sb));
+        hint = 'Zieht die gezeichnete Kurve (Linie, Bogen, Spline oder Umriss) als Schnittfläche durch den Körper.';
+        sec.append(h('div', { class: 'hint-box', html: hint }));
+        const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen';
+        ub.onclick = () => Actions.ungroup(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ub));
+        return;
+      }
+      const sides = { XY: ['Oben', 'Unten'], XZ: ['Hinten', 'Vorne'], YZ: ['Rechts', 'Links'] }[pl] || ['Seite A', 'Seite B'];
+      f.append(num('off', 'Lage der Ebene'), sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', sides[0]], ['negative', sides[1]]]), num('gap', 'Spalt'));
       hint = 'Mit „Spalt“ rücken die Hälften auseinander – praktisch zum Drucken in zwei Teilen.';
+      sec.append(f);
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'op-split-face' }); fb.innerHTML = icon('cursor') + 'An Fläche teilen';
+      fb.onclick = () => pickSplitToolFace(it.id);
+      const sb = h('button', { type: 'button', class: 'btn small', id: 'op-split-sketch' }); sb.innerHTML = icon('sketch') + 'Mit Skizze teilen';
+      sb.onclick = () => startSplitSketch(it.id);
+      sec.append(h('div', { class: 'btn-row pro', id: 'op-split-pro-row', 'data-help': 'splitAdvanced' }, fb, sb));
+      sec.append(h('div', { class: 'hint-box', html: hint }));
+      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen';
+      ub.onclick = () => Actions.ungroup(it.id);
+      sec.append(h('div', { class: 'btn-row' }, ub));
+      return;
     } else if (p.op === 'intersect') hint = 'Übrig bleibt nur, was in allen Körpern dieser Gruppe zugleich liegt.';
     sec.append(f);
+    renderPatternGrowthUI(it, sec, setP);
     renderSkipUI(it, sec);
     if (hint) sec.append(h('div', { class: 'hint-box', html: hint }));
     const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + (p.op === 'pattern' ? 'Auflösen (nur Original behalten)' : 'Auflösen');
@@ -1364,6 +1720,12 @@ const Features = (() => {
     }
     if (p.op === 'pattern' && p.pt === 'path') {
       return total ? (hasSkip ? `${active}/${total}× entlang Kurve` : `${total}× entlang Kurve`) : 'Kurve fehlt';
+    }
+    if (p.op === 'pattern' && p.pt === 'points') {
+      return total ? (hasSkip ? `${active}/${total}× an Punkten` : `${total}× an Punkten`) : 'Punkte fehlen';
+    }
+    if (p.op === 'pattern' && p.pt === 'table') {
+      return total ? (hasSkip ? `${active}/${total}× aus Tabelle` : `${total}× aus Tabelle`) : 'Tabelle leer';
     }
     if (p.op === 'pattern' && p.pt === 'mirror') return 'gespiegelt';
     if (p.op === 'split') return { both: 'beide Hälften', positive: 'eine Hälfte', negative: 'eine Hälfte' }[p.keep] || '';
@@ -1654,7 +2016,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2284,6 +2646,81 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: T('panel.fins.hint') }));
   }
+  function fillPattern(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Füllmuster gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig || (face.info && face.info.t !== 'PLANE')) {
+      startFillPattern(opts);
+      return null;
+    }
+    const p = {
+      target: tgt.id,
+      face: sig,
+      kind: opts.kind === 'staggered' || opts.kind === 'hex' ? opts.kind : 'grid',
+      size: opts.size ?? 5,
+      pitch: opts.pitch ?? 8,
+      margin: opts.margin ?? 4,
+      angle: opts.angle ?? 0,
+      depth: opts.depth ?? 0,
+    };
+    let step;
+    App.change('Füllmuster angelegt', (doc) => {
+      step = Model.newItem('fillPattern', p, { name: opts.name || T('kind.fillPattern'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.fillPatternAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startFillPattern(opts = {}) {
+    if (App.ctx) { UI.toast('Füllmuster gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für ein Füllmuster braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') { fillPattern(f, opts); return true; }
+    pickPlanarBodyFace('<b>Füllmuster:</b> Klick auf eine ebene Fläche, die mit Löchern oder Waben gefüllt werden soll. <b>Esc</b> bricht ab.', (picked) => { fillPattern(picked, opts); });
+    return true;
+  }
+  function pickFillPatternFace(stepId) {
+    pickPlanarStepFace(stepId, 'Fläche für Füllmuster gewählt', 'Fläche aktualisiert.');
+  }
+  function renderFillPattern(it, sec, setP) {
+    const p = it.p || {};
+    const kind = p.kind === 'staggered' || p.kind === 'hex' ? p.kind : 'grid';
+    const V = Model.vars(App.doc).v;
+    const res = App.resolvedOf ? App.resolvedOf(it.id) : null;
+    const sizeVal = Model.num(p.size, V, 5);
+    const pitchVal = Model.num(p.pitch, V, 8);
+    const wall = round(pitchVal - sizeVal, 3);
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'fp-kind', label: T('panel.fillPattern.kind'), value: kind,
+      options: [['grid', T('panel.fillPattern.grid')], ['staggered', T('panel.fillPattern.staggered')], ['hex', T('panel.fillPattern.hex')]],
+      onChange: (v) => App.change('Füllmuster-Art geändert', (doc) => { Model.find(doc, it.id).item.p.kind = v; }),
+    }));
+    fl.append(UI.numField({ id: 'fp-size', label: kind === 'hex' ? T('panel.fillPattern.sizeHex') : T('panel.fillPattern.size'), value: p.size ?? 5, min: 0.2, unit: 'mm', onCommit: (v) => setP('size', v) }));
+    fl.append(UI.numField({ id: 'fp-pitch', label: T('panel.fillPattern.pitch'), value: p.pitch ?? 8, min: 0.3, unit: 'mm', onCommit: (v) => setP('pitch', v) }));
+    fl.append(UI.numField({ id: 'fp-margin', label: T('panel.fillPattern.margin'), value: p.margin ?? 4, min: 0, unit: 'mm', onCommit: (v) => setP('margin', v) }));
+    fl.append(UI.numField({ id: 'fp-angle', label: T('panel.fillPattern.angle'), value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }));
+    fl.append(UI.numField({ id: 'fp-depth', label: T('panel.fillPattern.depth'), value: p.depth ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('depth', v) }));
+    sec.append(fl);
+    const cntTxt = (res && res.count != null ? `${res.count}×` : '–') + (isFinite(wall) ? ` · ${T('panel.fillPattern.wall')} ${Units.fmtLenU(Math.max(0, wall), 2)}` : '');
+    sec.append(h('div', { class: 'mini-row', id: 'fp-count' }, h('span', { class: 'grow' }, T('panel.fillPattern.holes')), h('b', { class: 'mono' }, cntTxt)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'fp-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickFillPatternFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'fp-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.fillPattern.hint') }));
+  }
   function startWeb(face) {
     if (App.ctx) { UI.toast('Steg-Netze gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
     if (!ribTargets().length) { UI.toast('Für ein Steg-Netz braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
@@ -2672,7 +3109,7 @@ const Features = (() => {
   function canMirrorStep(it, parent) {
     if (!it) return false;
     if (it.op && it.op.target) return true;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'dome') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'dome') return true;
     if (it.kind === 'wrap' && (!it.p || it.p.mode !== 'line')) return true;
     if (it.kind === 'emboss') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
@@ -2720,7 +3157,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -4317,5 +4754,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
 })();

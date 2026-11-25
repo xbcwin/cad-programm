@@ -25488,6 +25488,348 @@ def t_a126_flaechenrundung_trennlinie(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze (KP-46, KP-47) ----------
+def t_a129_muster_wachstum_teilen(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+
+    # 1. KP-46: 5 Zylinder (Ø10 × 10), Rechteckmuster mit +10 % Größe je Kopie → letzter ~1,464-mal so groß
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 10, h: 10 }, pos: [0, 0] })")
+    warte_rechnen(p, 25); p.wait(300)
+    p.ev("Features.pattern('rect', [App.doc.items[0].id])")
+    warte_rechnen(p, 30); p.wait(300)
+    field(p, '#op-nx', 5)
+    field(p, '#op-dx', 25)
+    field(p, '#op-scaleStep', 10)
+    warte_rechnen(p, 35); p.wait(300)
+    gc1 = p.ev("return GeomCheck.run({ silent: true })")
+    st1 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const bs = (r && r.data && r.data.bodies || []).slice().sort((a, b) => a.c[0] - b.c[0]);
+      const sz = (b) => [b.bbox[3] - b.bbox[0], b.bbox[4] - b.bbox[1], b.bbox[5] - b.bbox[2]];
+      return {
+        errs: App.errors.length,
+        count: bs.length,
+        centers: bs.map(b => b.c[0]),
+        first: bs[0] ? sz(bs[0]) : null,
+        last: bs[4] ? sz(bs[4]) : null,
+        info: document.querySelector('#op-grow-info')?.textContent || '',
+      };""")
+    ok1 = (
+        st1['errs'] == 0 and st1['count'] == 5
+        and gc1 and len(gc1.get('issues', [1])) == 0
+        and abs(st1['first'][0] - 10) < 0.15 and abs(st1['first'][2] - 10) < 0.05
+        and 1.45 <= st1['last'][0] / st1['first'][0] <= 1.48
+        and 1.45 <= st1['last'][2] / st1['first'][2] <= 1.48
+        and '1,46' in st1['info']
+    )
+
+    # 2. KP-46: Wachsender Abstand (+5 mm je Schritt) & Größe in mm (+2 mm je Kopie → 18 mm) & Kreismuster & Einfach-Modus
+    p.pg.select_option('#op-distUnit', 'mm'); p.wait(200)
+    field(p, '#op-distStep', 5)
+    warte_rechnen(p, 35); p.wait(300)
+    cs = p.ev("const r=App.results.get(App.doc.items[0].id); return (r.data.bodies||[]).map(b=>b.c[0]).sort((a,b)=>a-b);")
+    gaps = [cs[i + 1] - cs[i] for i in range(len(cs) - 1)] if len(cs) == 5 else []
+
+    p.pg.select_option('#op-scaleUnit', 'mm'); p.wait(200)
+    field(p, '#op-scaleStep', 2)
+    warte_rechnen(p, 35); p.wait(300)
+    st_mm = p.ev("""const r=App.results.get(App.doc.items[0].id);
+      const bs=(r.data.bodies||[]).slice().sort((a,b)=>a.c[0]-b.c[0]);
+      const h0=bs[0].bbox[5]-bs[0].bbox[2], h4=bs[4].bbox[5]-bs[4].bbox[2];
+      return { errs: App.errors.length, h0, h4 };""")
+
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_grow_simple = not p.pg.locator('#op-grow-wrap').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    shown_grow_pro = p.pg.locator('#op-grow-wrap').is_visible()
+
+    # Kreismuster mit +15 % je Kopie
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 8, h: 8 }, pos: [20, 0] })")
+    warte_rechnen(p, 25); p.wait(250)
+    p.ev("Features.pattern('circ', [App.doc.items[0].id])")
+    warte_rechnen(p, 25); p.wait(250)
+    field(p, '#op-n', 4)
+    field(p, '#op-scaleStep', 15)
+    warte_rechnen(p, 35); p.wait(300)
+    st_circ = p.ev("""const r=App.results.get(App.doc.items[0].id);
+      const bs=(r.data.bodies||[]).slice().sort((a,b)=>(a.bbox[5]-a.bbox[2])-(b.bbox[5]-b.bbox[2]));
+      return { errs: App.errors.length, n: bs.length, h0: bs[0] ? bs[0].bbox[5]-bs[0].bbox[2] : 0, h3: bs[3] ? bs[3].bbox[5]-bs[3].bbox[2] : 0 };""")
+    ok2 = (
+        len(gaps) == 4 and all(abs(gaps[i] - (25 + 5 * i)) < 0.25 for i in range(4))
+        and st_mm['errs'] == 0 and abs(st_mm['h0'] - 10) < 0.05 and abs(st_mm['h4'] - 18) < 0.1
+        and hidden_grow_simple and shown_grow_pro
+        and st_circ['errs'] == 0 and st_circ['n'] == 4 and abs(st_circ['h3'] / st_circ['h0'] - 1.15 ** 3) < 0.03
+    )
+
+    # 3. KP-47: Quader (20×20×20) mit gebogener Skizze teilen → zwei Körper
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 25); p.wait(250)
+    v0_box = volumen(p)
+    p.ev("""Features.splitWithSketch([App.doc.items[0].id], {
+      plane: { o: [0, 0, 10], x: [1, 0, 0], n: [0, 0, 1] },
+      ents: [{ id: 'a1', type: 'arc', a: [-10, 0], m: [0, 4], b: [10, 0] }],
+      dims: [], cons: []
+    })""")
+    warte_rechnen(p, 35); p.wait(300)
+    gc_sk = p.ev("return GeomCheck.run({ silent: true })")
+    v1_sk = volumen(p)
+    st_sk = p.ev("""const r=App.results.get(App.doc.items[0].id);
+      return {
+        errs: App.errors.length,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        curved: r.data.faces.some(f => f.t !== 'PLANE'),
+        bbox: r.data.bbox,
+      };""")
+    field(p, '#op-gap', 4)
+    warte_rechnen(p, 35); p.wait(300)
+    st_gap = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1, dy: r.data.bbox[4]-r.data.bbox[1] };")
+    p.pg.select_option('#op-keep', 'positive')
+    warte_rechnen(p, 35); p.wait(300)
+    st_keep = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1 };")
+    v_keep = volumen(p)
+    ok3 = (
+        st_sk['errs'] == 0 and st_sk['bodies'] == 2 and st_sk['curved']
+        and gc_sk and len(gc_sk.get('issues', [1])) == 0
+        and v0_box is not None and v1_sk is not None and abs(v1_sk - v0_box) < 25
+        and st_gap['errs'] == 0 and st_gap['bodies'] == 2 and st_gap['dy'] > 23.5
+        and st_keep['errs'] == 0 and st_keep['bodies'] == 1 and v_keep is not None and 500 < v_keep < v0_box - 500
+    )
+
+    # 4. KP-47: Teilen an gekrümmter Körperfläche (Zylinder) & schräger Bezugsebene + Einfach-Modus + Undo + Hilfe
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("""Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] });
+      Actions.addPrimitive('cylinder', { p: { d: 12, h: 24 }, pos: [0, 0] });""")
+    warte_rechnen(p, 30); p.wait(300)
+    p.ev("""const boxId = App.doc.items[0].id, cylId = App.doc.items[1].id;
+      const r = App.results.get(cylId);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      const ref = Features.makeFaceRef({ id: cylId, faceIdx: fi, node: Viewer.nodes.get(cylId) });
+      Features.splitWithFace([boxId], ref);""")
+    warte_rechnen(p, 35); p.wait(300)
+    st_face = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1, curved: r.data.faces.some(f => f.t === 'CYLINDRE') };""")
+    v_face = volumen(p)
+
+    # Schräge Bezugsebene als Schnittfläche
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 25); p.wait(250)
+    p.ev("""const n = [0, -Math.sin(Math.PI / 6), Math.cos(Math.PI / 6)];
+      const x = [1, 0, 0];
+      const dm = { id: 'dm_split', name: 'Schräg 30°', base: { type: 'fixed' }, plane: { o: [0, 0, 10], x, n }, size: 40 };
+      App.change('Bezugsebene', (doc) => { doc.datums = doc.datums || []; doc.datums.push(dm); });
+      Features.splitWithFace([App.doc.items[0].id], { datumId: 'dm_split', label: 'Bezugsebene „Schräg 30°“' });""")
+    warte_rechnen(p, 35); p.wait(300)
+    st_datum = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1 };")
+    v_datum = volumen(p)
+
+    # Einfach-Modus versteckt Profi-Schaltflächen
+    p.ev("Features.split([App.doc.items[0].id])")
+    warte_rechnen(p, 25); p.wait(250)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_no_pro = not p.pg.locator('#op-split-pro-row').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    pro_has_row = p.pg.locator('#op-split-pro-row').is_visible()
+    p.ev("App.undo()"); warte_rechnen(p, 25); p.wait(200)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('patternGrowth', 'splitAdvanced'))
+    ok4 = (
+        st_face['errs'] == 0 and st_face['bodies'] == 2 and st_face['curved'] and v_face is not None and abs(v_face - (8000 + math.pi * 36 * 24)) < 40
+        and st_datum['errs'] == 0 and st_datum['bodies'] == 2 and v_datum is not None and abs(v_datum - 8000) < 25
+        and simple_no_pro and pro_has_row and help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a128_fuellmuster_punkte_tabelle(p):
+    # 1. KP-44: Waben-Füllmuster in Platte 60×40×5 → kein Loch schneidet den Rand
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro'); Actions.addPrimitive('box', { p: { w: 60, d: 40, h: 5 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(300)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_simple = not p.pg.locator('#ctx-fill-pattern').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    btn_fp = p.pg.locator('#ctx-fill-pattern')
+    has_fp_btn = btn_fp.count() == 1 and btn_fp.is_visible() and btn_fp.get_attribute('data-help') == 'fillPattern'
+    btn_fp.click()
+    warte_rechnen(p, 40); p.wait(300)
+
+    p.pg.select_option('#fp-kind', 'hex'); p.wait(200)
+    p.pg.fill('#fp-size', '6'); p.pg.press('#fp-size', 'Enter')
+    warte_rechnen(p, 50); p.wait(400)
+    gc1 = p.ev("return GeomCheck.run({ silent: true })")
+    vol_hex = volumen(p)
+    st1 = p.ev("""const id = App.doc.items[0].id, fpid = App.doc.items[1].id;
+      const r = App.results.get(id), res = App.resolvedOf(fpid);
+      const outerSides = (r.data.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[2]) < 0.1 && (Math.abs(Math.abs(f.c[0]) - 30) < 0.05 || Math.abs(Math.abs(f.c[1]) - 20) < 0.05));
+      const innerWalls = (r.data.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[2]) < 0.1 && !(Math.abs(Math.abs(f.c[0]) - 30) < 0.05 || Math.abs(Math.abs(f.c[1]) - 20) < 0.05));
+      const insideMargin = innerWalls.length > 0 && innerWalls.every(f => Math.abs(f.c[0]) <= 26.05 && Math.abs(f.c[1]) <= 16.05);
+      return {
+        errs: App.errors.length,
+        count: res ? res.count : 0,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        bbox: r.data.bbox,
+        outerSides: outerSides.length,
+        innerWalls: innerWalls.length,
+        insideMargin,
+        info: Explain.local(fpid).lines.map(l => l.t).join(' '),
+      };""")
+    exp_hex_vol = 60 * 40 * 5 - st1['count'] * (3 ** 0.5 / 2 * 36) * 5
+    ok1 = (
+        hidden_simple and has_fp_btn
+        and st1['errs'] == 0 and st1['count'] >= 12 and st1['bodies'] == 1
+        and st1['outerSides'] == 4 and st1['innerWalls'] == st1['count'] * 6 and st1['insideMargin'] is True
+        and all(abs(a - b) < 0.05 for a, b in zip(st1['bbox'], [-30, -20, 0, 30, 20, 5]))
+        and vol_hex is not None and abs(vol_hex - exp_hex_vol) < 5
+        and gc1 and len(gc1.get('issues', [])) == 0
+        and 'waben' in st1['info'].lower()
+    )
+
+    # 2. KP-44: Raster, Versetzt, größerer Randabstand, Sackloch & Unterdrücken
+    p.pg.select_option('#fp-kind', 'grid')
+    warte_rechnen(p, 45); p.wait(300)
+    cnt_grid = p.ev("return (App.resolvedOf(App.doc.items[1].id) || {}).count || 0")
+    p.pg.select_option('#fp-kind', 'staggered')
+    warte_rechnen(p, 45); p.wait(300)
+    cnt_stag = p.ev("return (App.resolvedOf(App.doc.items[1].id) || {}).count || 0")
+    vol_stag_thru = volumen(p)
+    p.pg.fill('#fp-margin', '8'); p.pg.press('#fp-margin', 'Enter')
+    warte_rechnen(p, 45); p.wait(300)
+    cnt_m8 = p.ev("return (App.resolvedOf(App.doc.items[1].id) || {}).count || 0")
+    p.pg.fill('#fp-margin', '4'); p.pg.press('#fp-margin', 'Enter')
+    warte_rechnen(p, 45); p.wait(250)
+    p.pg.fill('#fp-depth', '2'); p.pg.press('#fp-depth', 'Enter')
+    warte_rechnen(p, 45); p.wait(300)
+    vol_blind = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20); p.wait(250)
+    vol_sup = volumen(p)
+    ok2 = (
+        cnt_grid >= 10 and cnt_stag >= 10 and cnt_m8 < cnt_stag
+        and vol_stag_thru is not None and vol_blind is not None
+        and abs((12000 - vol_blind) - 0.4 * (12000 - vol_stag_thru)) < 5
+        and vol_sup is not None and abs(vol_sup - 12000) < 1
+    )
+
+    # 3. KP-45: Bohrung an 4 Skizzenpunkten → exakt 4 Bohrungen (+ Skip & Punkt-Quelle)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    hid = p.ev("""let pid, hid;
+      App.change('Platte und Bohrung', d => {
+        const pl = Model.newItem('box', { w: 60, d: 40, h: 5 }, { name: 'Platte' });
+        const hole = Model.newItem('extrude', {
+          sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'e_hole1', type: 'circle', c: [0, 0], r: 2.5 }], dims: [], cons: [] },
+          dist: 5, dir: 'normal',
+        }, { name: 'Bohrung' });
+        hole.op = { type: 'cut', target: pl.id };
+        d.items.push(pl, hole);
+        pid = pl.id; hid = hole.id;
+      });
+      return hid;""")
+    warte_rechnen(p, 25); p.wait(300)
+    p.ev("Features.patternPoints([arg])", hid); p.wait(600)
+    sk_pts_active = p.ev("return Sketch.active && Sketch.state.tool === 'point'")
+    p.ev("Sketch.insertEnts([{ type: 'point', a: [-18, -10] }, { type: 'point', a: [18, -10] }, { type: 'point', a: [18, 10] }, { type: 'point', a: [-18, 10] }]);")
+    p.wait(300)
+    pts_cnt_ui = p.pg.locator('#points-count').text_content()
+    p.pg.locator('.sketchbar .tool.primary').click()
+    warte_rechnen(p, 40); p.wait(400)
+    gc3 = p.ev("return GeomCheck.run({ silent: true })")
+    vol_4h = volumen(p)
+    st3 = p.ev("""const pid = App.doc.items[0].id, gid = App.doc.items[1].id;
+      const g = Model.find(App.doc, gid).item;
+      const r = App.results.get(pid);
+      const cyls = (r.data.faces || []).filter(f => f.t === 'CYLINDRE');
+      const exp = [[-18, -10], [18, -10], [18, 10], [-18, 10]];
+      const matched = exp.every(([ex, ey]) => cyls.some(c => Math.hypot(c.c[0] - ex, c.c[1] - ey) < 0.05));
+      return {
+        errs: App.errors.length,
+        instLen: Model.patternInstances(g, Model.vars(App.doc).v).length,
+        cylCount: cyls.length,
+        matched,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        info: Explain.local(gid).lines.map(l => l.t).join(' '),
+      };""")
+    exp_4h_vol = 12000 - 4 * 3.141592653589793 * 2.5 * 2.5 * 5
+    p.pg.locator('#op-skip-wrap .pat-chip[data-idx="1"]').click()
+    warte_rechnen(p, 35); p.wait(300)
+    cyls_skip = p.ev("return (App.results.get(App.doc.items[0].id).data.faces || []).filter(f => f.t === 'CYLINDRE').length")
+    p.pg.locator('#op-skip-reset').click()
+    warte_rechnen(p, 35); p.wait(300)
+    cyls_reset = p.ev("return (App.results.get(App.doc.items[0].id).data.faces || []).filter(f => f.t === 'CYLINDRE').length")
+
+    # Vorhandene Skizze mit 2 Punkten als Punkt-Quelle wählen
+    src_id = p.ev("""let sid;
+      App.change('Punkt-Skizze', d => {
+        const s = Model.newItem('extrude', {
+          sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'e_pt1', type: 'point', a: [-10, 0] }, { id: 'e_pt2', type: 'point', a: [10, 0] }], dims: [], cons: [] },
+          dist: 1,
+        }, { name: 'Lochpunkte' });
+        s.suppressed = true;
+        d.items.unshift(s);
+        sid = s.id;
+      });
+      return sid;""")
+    p.ev("App.select([App.doc.items[2].id])"); p.wait(300)
+    p.pg.select_option('#op-points-source', src_id)
+    warte_rechnen(p, 35); p.wait(300)
+    cyls_src = p.ev("return (App.results.get(App.doc.items[1].id).data.faces || []).filter(f => f.t === 'CYLINDRE').length")
+
+    ok3 = (
+        sk_pts_active is True and pts_cnt_ui == '4'
+        and st3['errs'] == 0 and st3['instLen'] == 4 and st3['cylCount'] == 4
+        and st3['matched'] is True and st3['bodies'] == 1
+        and vol_4h is not None and abs(vol_4h - exp_4h_vol) < 2
+        and gc3 and len(gc3.get('issues', [])) == 0
+        and 'punkt' in st3['info'].lower()
+        and cyls_skip == 3 and cyls_reset == 4 and cyls_src == 2
+    )
+
+    # 4. KP-45: CSV mit 3 Zeilen → 3 Kopien + Relativ-Modus + Hilfen/DE-EN/Befehle
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    bid = p.ev("Actions.addPrimitive('box', { p: { w: 6, d: 6, h: 6 }, pos: [0, 0] }); return App.doc.items[0].id")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("Features.patternTable([arg])", bid)
+    warte_rechnen(p, 30); p.wait(300)
+    p.pg.fill('#op-table-csv', 'x;y;z\n0;0;3\n20;0;3\n10;15;3')
+    p.pg.locator('#op-table-apply').click()
+    warte_rechnen(p, 35); p.wait(350)
+    gc4 = p.ev("return GeomCheck.run({ silent: true })")
+    vol_csv = volumen(p)
+    st4 = p.ev("""const gid = App.doc.items[0].id, g = Model.find(App.doc, gid).item;
+      const r = App.results.get(gid);
+      return {
+        errs: App.errors.length,
+        instLen: Model.patternInstances(g, Model.vars(App.doc).v).length,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        bbox: r.data.bbox,
+        status: document.querySelector('#op-table-status')?.textContent || '',
+        info: Explain.local(gid).lines.map(l => l.t).join(' '),
+      };""")
+    p.pg.select_option('#op-table-mode', 'rel')
+    p.pg.fill('#op-table-csv', 'dx;dy;dz;rot\n0;0;0;0\n15;0;0;45\n0;15;0;90')
+    p.pg.locator('#op-table-apply').click()
+    warte_rechnen(p, 35); p.wait(300)
+    vol_rel = volumen(p)
+    rel_bodies = p.ev("return (App.results.get(App.doc.items[0].id).data.bodies || []).length")
+    meta_res = p.ev("return (async () => { const [h, de, en] = await Promise.all([fetch('data/werkzeug-hilfen.json').then(r => r.json()), fetch('data/texte-de.json').then(r => r.json()), fetch('data/texte-en.json').then(r => r.json())]); const helpOk = ['fillPattern', 'patternPoints', 'patternTable'].every(k => h[k] && h[k].tip && h[k].hilfe && h[k].tipp); const deK = Object.keys(de).sort(), enK = Object.keys(en).sort(); const i18nEq = deK.length === enK.length && deK.every((k, i) => k === enK[i]); const cmdOk = Commands.search('füllmuster').some(c => c.id === 'fill-pattern') && Commands.search('skizzenpunkten').some(c => c.id === 'pattern-points') && Commands.search('tabelle').some(c => c.id === 'pattern-table'); return { helpOk, i18nEq, cmdOk }; })()")
+    ok4 = (
+        st4['errs'] == 0 and st4['instLen'] == 3 and st4['bodies'] == 3
+        and '3' in st4['status'] and 'tabelle' in st4['info'].lower()
+        and all(abs(a - b) < 0.05 for a, b in zip(st4['bbox'], [-3, -3, 0, 23, 18, 6]))
+        and vol_csv is not None and abs(vol_csv - 3 * 216) < 1
+        and gc4 and len(gc4.get('issues', [])) == 0
+        and rel_bodies == 3 and vol_rel is not None and abs(vol_rel - 3 * 216) < 1
+        and meta_res['helpOk'] and meta_res['i18nEq'] and meta_res['cmdOk']
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25725,6 +26067,8 @@ TESTS = [
     ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
     ('[A-126] Flächen-Rundung und Schräge an Trennlinie (KP-39, KP-42)', t_a126_flaechenrundung_trennlinie),
+    ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),
+    ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
