@@ -2595,7 +2595,7 @@ function partSVG(def) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[def.icon] || IC.parts}</svg>`;
 }
 
-// Parametrischer Gehäuse-Generator (BI-20): Kasten mit Deckel, Lippe/Nut und 4 Schraubdomen
+// Parametrischer Gehäuse-Generator (BI-20, BI-21): Kasten mit Deckel, Lippe/Nut, Schraubdomen oder Schnapphaken, Lüftungsschlitzen und Kabeldurchführung
 function enclosureMetrics(opts = {}) {
   const numOpt = (v, def) => {
     if (v === null || v === undefined || v === '') return def;
@@ -2615,7 +2615,20 @@ function enclosureMetrics(opts = {}) {
   const rawLipW = numOpt(opts.lipW, 0);
   const autoLipW = round(Math.max(0.4, Math.min(wall * 0.5, wall - clearance - 0.5)), 3);
   const lipW = rawLipW > 0 ? round(rawLipW, 3) : autoLipW;
-  const withBosses = opts.withBosses !== false && opts.withBosses !== 'nein';
+
+  let fastening;
+  if (opts.fastening === 'snaps' || opts.fastening === 'bosses' || opts.fastening === 'none') {
+    fastening = opts.fastening;
+  } else if (opts.withSnaps === true || opts.withSnaps === 'ja') {
+    fastening = 'snaps';
+  } else if (opts.withBosses === false || opts.withBosses === 'nein') {
+    fastening = 'none';
+  } else {
+    fastening = 'bosses';
+  }
+  const withBosses = fastening === 'bosses';
+  const withSnaps = fastening === 'snaps';
+
   const bossOuterD = round(numOpt(opts.bossOuterD, 7), 3);
   const bossHoleD = round(numOpt(opts.bossHoleD, 3), 3);
   const rawBossH = numOpt(opts.bossH, 0);
@@ -2638,7 +2651,79 @@ function enclosureMetrics(opts = {}) {
     { idx: 4, x: -bossX, y: bossY, u: -bossY, v: -bossX },
   ];
 
+  // Schnapphaken statt Schrauben (4 federnde Haken am Deckel + 4 Rastfenster im Kasten)
+  const snapW = round(numOpt(opts.snapW, 8), 3);
+  const snapT = round(numOpt(opts.snapT, 1.6), 3);
+  const snapHook = round(numOpt(opts.snapHook, 1.2), 3);
+  const rawSnapLen = numOpt(opts.snapLen, 0);
+  const snapGap = round(Math.max(0.2, clearance), 3);
+  const snapWinClear = round(Math.max(0.25, clearance + 0.05), 3);
+  const snapOverlapZ = round(Math.min(0.5, lidH * 0.4), 3);
+  const estBarbA = Math.min(5, snapHook * 2.2);
+  const minAutoSnap = (withLip ? lipH + clearance : 0) + estBarbA + snapWinClear + 1.2;
+  const autoSnapLen = round(clamp(innerH * 0.38, Math.max(7, minAutoSnap), Math.min(10, Math.max(7, innerH - 1.5))), 3);
+  const snapLen = rawSnapLen > 0 ? round(rawSnapLen, 3) : autoSnapLen;
+  const snapLBuild = round(snapLen + snapOverlapZ, 3);
+  const snapBarbA = round(Math.min(snapLBuild * 0.5, snapHook * 2.2), 4);
+  const snapWinZ0 = round(boxH - snapLen - snapWinClear, 3);
+  const snapWinZ1 = round(boxH - snapLen + snapBarbA + snapWinClear, 3);
+  const snapWinH = round(snapWinZ1 - snapWinZ0, 3);
+  const snapWinW = round(snapW + 2 * snapWinClear, 3);
+  const snapX = round(Math.max(snapW * 0.75 + 2, Math.min(innerW / 2 - snapW / 2 - 4, innerW * 0.28)), 3);
+  const snapWinD = round(wall + 1.0, 3);
+  const snapWallMidY = round((outerD / 2 + innerD / 2) / 2, 3);
+  const snapZ = round(boxH + snapOverlapZ, 3);
+  const snapYNeg = round(-(innerD / 2) + snapGap + snapT, 3);
+  const snapYPos = round((innerD / 2) - snapGap - snapT, 3);
+  const snapPositions = [
+    { idx: 1, side: '-y', x: -snapX, y: snapYNeg, z: snapZ, rx: 180, ry: 0, rz: 90, winX: -snapX, winY: -snapWallMidY, winW: snapWinW, winD: snapWinD, winZ0: snapWinZ0, winH: snapWinH },
+    { idx: 2, side: '-y', x: snapX, y: snapYNeg, z: snapZ, rx: 180, ry: 0, rz: 90, winX: snapX, winY: -snapWallMidY, winW: snapWinW, winD: snapWinD, winZ0: snapWinZ0, winH: snapWinH },
+    { idx: 3, side: '+y', x: snapX, y: snapYPos, z: snapZ, rx: 180, ry: 0, rz: -90, winX: snapX, winY: snapWallMidY, winW: snapWinW, winD: snapWinD, winZ0: snapWinZ0, winH: snapWinH },
+    { idx: 4, side: '+y', x: -snapX, y: snapYPos, z: snapZ, rx: 180, ry: 0, rz: -90, winX: -snapX, winY: snapWallMidY, winW: snapWinW, winD: snapWinD, winZ0: snapWinZ0, winH: snapWinH },
+  ];
+
+  // Lüftungsschlitze (echte vent-Schritte auf Kastenwänden oder Deckel)
+  const withVent = opts.withVent === true || opts.withVent === 'ja';
+  const ventSide = ['sides', 'frontBack', 'lid', 'left', 'right'].includes(opts.ventSide) ? opts.ventSide : 'sides';
+  const ventCount = Math.max(1, Math.min(30, Math.round(numOpt(opts.ventCount, 5))));
+  const ventSlotW = round(numOpt(opts.ventSlotW, 2.5), 3);
+  const ventFrame = round(numOpt(opts.ventFrame, 6), 3);
+  const ventAngle = Number(opts.ventAngle) === 90 ? 90 : 0;
+  const ventDepth = ventSide === 'lid' ? round(lidH + 0.3, 3) : round(wall + 0.25, 3);
+  const ventFaces = [];
+  if (ventSide === 'sides' || ventSide === 'left') {
+    ventFaces.push({ name: 'Lüftung links', targetKey: 'box', face: { c: [-outerW / 2, 0, boxH / 2], n: [-1, 0, 0], t: 'PLANE' }, depth: ventDepth });
+  }
+  if (ventSide === 'sides' || ventSide === 'right') {
+    ventFaces.push({ name: 'Lüftung rechts', targetKey: 'box', face: { c: [outerW / 2, 0, boxH / 2], n: [1, 0, 0], t: 'PLANE' }, depth: ventDepth });
+  }
+  if (ventSide === 'frontBack') {
+    ventFaces.push({ name: 'Lüftung vorne', targetKey: 'box', face: { c: [0, -outerD / 2, boxH / 2], n: [0, -1, 0], t: 'PLANE' }, depth: ventDepth });
+    ventFaces.push({ name: 'Lüftung hinten', targetKey: 'box', face: { c: [0, outerD / 2, boxH / 2], n: [0, 1, 0], t: 'PLANE' }, depth: ventDepth });
+  }
+  if (ventSide === 'lid') {
+    ventFaces.push({ name: 'Lüftung Deckel', targetKey: 'lid', face: { c: [0, 0, lidH], n: [0, 0, 1], t: 'PLANE' }, depth: ventDepth });
+  }
+  const ventFaceW = ventSide === 'frontBack' || ventSide === 'lid' ? outerW : outerD;
+  const ventFaceH = ventSide === 'lid' ? outerD : boxH;
+
+  // Kabeldurchführung mit außenliegender Zugentlastungs-Lasche und Kabelbinder-Schlitz (BI-21)
+  const withCable = opts.withCable === true || opts.withCable === 'ja';
+  const cableSide = ['front', 'back', 'left', 'right'].includes(opts.cableSide) ? opts.cableSide : 'front';
+  const cableD = round(numOpt(opts.cableD, 6), 3);
+  const cableTabLen = round(numOpt(opts.cableTabLen, 10), 3);
+  const cableTabW = round(Math.max(cableD + 6, 10), 3);
+  const cableSlotH = 2.0;
+  const cableSlotW = round(Math.max(3.0, Math.min(5.0, cableTabLen * 0.42)), 3);
+  const cableHoleBot = round(Math.max(wall + 1.5, 5.0), 3);
+  const cableZ = round(cableHoleBot + cableD / 2, 3);
+  const cableTabH = round(cableHoleBot + cableD * 0.28, 3);
+  const cableSlotZ0 = round((cableHoleBot - cableSlotH) / 2, 3);
+  const cableOverlapIn = 0.5;
+  const cableCutLen = round(wall + cableTabLen + 2.0, 3);
+
   let error = '';
+  const topWallLimit = (withLip ? boxH - lipH - clearance : boxH) - 0.8;
   if (!(innerW >= 12 && innerD >= 12 && innerH >= 6)) {
     error = 'Die Innenmaße müssen mindestens 12 × 12 × 6 mm betragen.';
   } else if (!(wall >= 0.8)) {
@@ -2653,6 +2738,31 @@ function enclosureMetrics(opts = {}) {
     error = 'Das Domloch muss mindestens 0,6 mm kleiner als der Außendurchmesser sein.';
   } else if (withBosses && !(bossX > bossOuterD / 2 + 0.5 && bossY > bossOuterD / 2 + 0.5)) {
     error = 'Der Innenraum ist zu klein für vier Schraubdome in den Ecken.';
+  } else if (withSnaps && !(snapW >= 3 && snapT >= 0.8 && snapHook >= 0.4 && snapHook <= wall + 1.0 && snapLen >= 5)) {
+    error = 'Ungültige Schnapphaken-Maße (Breite ≥ 3 mm, Dicke ≥ 0,8 mm, Länge ≥ 5 mm, Haken 0,4 mm bis Wand+1 mm).';
+  } else if (withSnaps && !(snapWinZ0 >= wall + 0.4)) {
+    error = 'Schnapphaken sind zu lang für die Innenhöhe.';
+  } else if (withSnaps && !(snapWinZ1 <= topWallLimit)) {
+    error = 'Für die Schnapphaken bleibt oben nicht genug Wandsteg.';
+  } else if (withSnaps && !(snapT + snapGap < innerD / 2 - 1.0)) {
+    error = 'Das Gehäuse ist zu schmal für gegenüberliegende Schnapphaken.';
+  } else if (withSnaps && !(snapX - snapW / 2 >= 1.5 && snapX + snapW / 2 <= innerW / 2 - 1.5)) {
+    error = 'Die Innenbreite reicht nicht für zwei Schnapphaken je Seite.';
+  } else if (withVent && !(ventSlotW >= 0.8 && ventFrame >= 2)) {
+    error = 'Die Lüftung erfordert mindestens 0,8 mm Schlitzbreite und 2 mm Rahmen.';
+  } else if (withVent && !(((ventAngle === 90 ? ventFaceH : ventFaceW) - 2 * ventFrame) >= Math.max(2, ventSlotW + 0.5))) {
+    error = 'Die gewählte Wand ist zu klein für den Lüftungs-Rahmen.';
+  } else if (withVent && (() => {
+    const span = (ventAngle === 90 ? ventFaceW : ventFaceH) - 2 * ventFrame - ventSlotW;
+    return ventCount === 1 ? !(span >= 0) : !(span / (ventCount - 1) >= ventSlotW + 0.4);
+  })()) {
+    error = 'Zu viele oder zu breite Lüftungsschlitze für diese Wandhöhe.';
+  } else if (withCable && !(cableD >= 2 && cableTabLen >= 6)) {
+    error = 'Kabel-Durchmesser ≥ 2 mm und Laschenlänge ≥ 6 mm erforderlich.';
+  } else if (withCable && !(cableZ + cableD / 2 <= topWallLimit)) {
+    error = 'Die Kabeldurchführung ist zu groß für die Gehäusehöhe.';
+  } else if (withCable && !(cableTabW <= ((cableSide === 'left' || cableSide === 'right') ? innerD : innerW) - 2)) {
+    error = 'Die Kabel-Lasche ist zu breit für diese Wand.';
   }
 
   return {
@@ -2661,8 +2771,15 @@ function enclosureMetrics(opts = {}) {
     innerW, innerD, innerH, wall, lidH,
     outerW, outerD, boxH, totalH,
     withLip, lipH, lipW, clearance,
+    fastening,
     withBosses, bossOuterD, bossHoleD, bossH, bossHoleDepth,
     bossInset, bossX, bossY, corners,
+    withSnaps, snapLen, snapW, snapT, snapHook, snapGap, snapWinClear,
+    snapOverlapZ, snapLBuild, snapBarbA, snapWinZ0, snapWinZ1, snapWinH, snapWinW,
+    snapX, snapPositions,
+    withVent, ventSide, ventCount, ventSlotW, ventFrame, ventAngle, ventDepth, ventFaces,
+    withCable, cableSide, cableD, cableTabLen, cableTabW, cableTabH,
+    cableSlotH, cableSlotW, cableHoleBot, cableZ, cableSlotZ0, cableOverlapIn, cableCutLen,
   };
 }
 
@@ -2684,8 +2801,11 @@ const Enclosure = (() => {
       return null;
     }
 
-    let box = null, lid = null, lip = null;
+    let box = null, lid = null, lip = null, cable = null;
     const bosses = [];
+    const snaps = [];
+    const snapWindows = [];
+    const vents = [];
     const createdIds = [];
     App.change(T('undo.enclosure'), (doc) => {
       const mat = (doc.settings && doc.settings.material) || 'PLA';
@@ -2761,6 +2881,143 @@ const Enclosure = (() => {
           createdIds.push(b.id);
         }
       }
+
+      if (m.withSnaps) {
+        for (const sp of m.snapPositions) {
+          const hItem = Model.newItem('part', {
+            lib: 'snapHook',
+            length: m.snapLBuild,
+            w: m.snapW,
+            t: m.snapT,
+            hook: m.snapHook,
+          }, {
+            name: `Schnapphaken ${sp.idx}`,
+            color: lid.color,
+            role: 'solid',
+            mat,
+          });
+          hItem.t.x = sp.x;
+          hItem.t.y = sp.y;
+          hItem.t.z = sp.z;
+          hItem.t.rx = sp.rx;
+          hItem.t.ry = sp.ry;
+          hItem.t.rz = sp.rz;
+          hItem.op = { type: 'join', target: lid.id };
+          insertAtMarker(doc, hItem);
+          snaps.push(hItem);
+          createdIds.push(hItem.id);
+
+          const wItem = Model.newItem('box', { w: sp.winW, d: sp.winD, h: sp.winH }, {
+            name: `Rastfenster ${sp.idx}`,
+            color: box.color,
+            role: 'solid',
+            mat,
+          });
+          wItem.t.x = sp.winX;
+          wItem.t.y = sp.winY;
+          wItem.t.z = sp.winZ0;
+          wItem.op = { type: 'cut', target: box.id };
+          insertAtMarker(doc, wItem);
+          snapWindows.push(wItem);
+          createdIds.push(wItem.id);
+        }
+      }
+
+      if (m.withVent) {
+        for (const vf of m.ventFaces) {
+          const vItem = Model.newItem('vent', {
+            target: vf.targetKey === 'lid' ? lid.id : box.id,
+            face: vf.face,
+            count: m.ventCount,
+            slotW: m.ventSlotW,
+            frame: m.ventFrame,
+            angle: m.ventAngle,
+            depth: vf.depth,
+            roundEnds: true,
+          }, {
+            name: vf.name,
+            color: vf.targetKey === 'lid' ? lid.color : box.color,
+            role: 'solid',
+            mat,
+          });
+          insertAtMarker(doc, vItem);
+          vents.push(vItem);
+          createdIds.push(vItem.id);
+        }
+      }
+
+      if (m.withCable) {
+        const side = m.cableSide;
+        const ov = m.cableOverlapIn;
+        const tabReach = m.cableTabLen + ov;
+        const tabExtY = m.outerD / 2 + m.cableTabLen / 2 - ov / 2;
+        const tabExtX = m.outerW / 2 + m.cableTabLen / 2 - ov / 2;
+        const slotOffY = m.outerD / 2 + m.cableTabLen * 0.55;
+        const slotOffX = m.outerW / 2 + m.cableTabLen * 0.55;
+        let tabDims, tabPos, holePos, holeRot, slotDims, slotPos;
+        if (side === 'front') {
+          tabDims = { w: m.cableTabW, d: tabReach, h: m.cableTabH };
+          tabPos = { x: 0, y: -tabExtY, z: 0 };
+          holePos = { x: 0, y: -(m.innerD / 2) + ov, z: m.cableZ };
+          holeRot = { rx: 90, ry: 0, rz: 0 };
+          slotDims = { w: m.cableTabW + 2, d: m.cableSlotW, h: m.cableSlotH };
+          slotPos = { x: 0, y: -slotOffY, z: m.cableSlotZ0 };
+        } else if (side === 'back') {
+          tabDims = { w: m.cableTabW, d: tabReach, h: m.cableTabH };
+          tabPos = { x: 0, y: tabExtY, z: 0 };
+          holePos = { x: 0, y: (m.innerD / 2) - ov, z: m.cableZ };
+          holeRot = { rx: -90, ry: 0, rz: 0 };
+          slotDims = { w: m.cableTabW + 2, d: m.cableSlotW, h: m.cableSlotH };
+          slotPos = { x: 0, y: slotOffY, z: m.cableSlotZ0 };
+        } else if (side === 'left') {
+          tabDims = { w: tabReach, d: m.cableTabW, h: m.cableTabH };
+          tabPos = { x: -tabExtX, y: 0, z: 0 };
+          holePos = { x: -(m.innerW / 2) + ov, y: 0, z: m.cableZ };
+          holeRot = { rx: 0, ry: -90, rz: 0 };
+          slotDims = { w: m.cableSlotW, d: m.cableTabW + 2, h: m.cableSlotH };
+          slotPos = { x: -slotOffX, y: 0, z: m.cableSlotZ0 };
+        } else {
+          tabDims = { w: tabReach, d: m.cableTabW, h: m.cableTabH };
+          tabPos = { x: tabExtX, y: 0, z: 0 };
+          holePos = { x: (m.innerW / 2) - ov, y: 0, z: m.cableZ };
+          holeRot = { rx: 0, ry: 90, rz: 0 };
+          slotDims = { w: m.cableSlotW, d: m.cableTabW + 2, h: m.cableSlotH };
+          slotPos = { x: slotOffX, y: 0, z: m.cableSlotZ0 };
+        }
+
+        const tab = Model.newItem('box', tabDims, {
+          name: 'Zugentlastungs-Lasche',
+          color: box.color,
+          role: 'solid',
+          mat,
+        });
+        Object.assign(tab.t, tabPos);
+        tab.op = { type: 'join', target: box.id };
+
+        const hole = Model.newItem('cylinder', { d: m.cableD, h: m.cableCutLen }, {
+          name: 'Kabeldurchführung',
+          color: box.color,
+          role: 'solid',
+          mat,
+        });
+        Object.assign(hole.t, holePos, holeRot);
+        hole.op = { type: 'cut', target: box.id };
+
+        const slot = Model.newItem('box', slotDims, {
+          name: 'Kabelbinder-Schlitz',
+          color: box.color,
+          role: 'solid',
+          mat,
+        });
+        Object.assign(slot.t, slotPos);
+        slot.op = { type: 'cut', target: box.id };
+
+        insertAtMarker(doc, tab);
+        insertAtMarker(doc, hole);
+        insertAtMarker(doc, slot);
+        cable = { tab, hole, slot };
+        createdIds.push(tab.id, hole.id, slot.id);
+      }
     });
 
     if (box) {
@@ -2771,7 +3028,7 @@ const Enclosure = (() => {
         totalH: fmt(m.totalH, 1),
       }), { icon: 'check' });
     }
-    return { box, lid, lip, bosses, metrics: m, ids: createdIds };
+    return { box, lid, lip, bosses, snaps, snapWindows, vents, cable, metrics: m, ids: createdIds };
   }
 
   function openDialog(initial = {}) {
@@ -2780,7 +3037,11 @@ const Enclosure = (() => {
       return null;
     }
     const def = enclosureMetrics(initial);
-    const body = h('div', { id: 'enclosure-gen-dlg', class: 'fields' });
+    const body = h('div', {
+      id: 'enclosure-gen-dlg',
+      class: 'fields',
+      style: { maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' },
+    });
 
     const mkNum = (id, label, val, unit = 'mm') => {
       const wrap = h('div', { class: 'field' });
@@ -2791,6 +3052,20 @@ const Enclosure = (() => {
       if (unit) box.append(h('span', { class: 'unit' }, unit));
       wrap.append(box);
       return { wrap, inp };
+    };
+    const mkSel = (id, label, options, value, fullWidth = false) => {
+      const wrap = h('div', { class: 'field', ...(fullWidth ? { style: { gridColumn: '1 / -1' } } : {}) });
+      wrap.append(h('label', { for: id }, label));
+      const box = h('div', { class: 'inp' });
+      const sel = h('select', { id });
+      for (const [val, txt] of options) {
+        const opt = h('option', { value: val }, txt);
+        if (String(val) === String(value)) opt.selected = true;
+        sel.append(opt);
+      }
+      box.append(sel);
+      wrap.append(box);
+      return { wrap, inp: sel };
     };
     const mkChk = (id, label, checked) => {
       const lbl = h('label', { class: 'chk', for: id, style: { gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '4px' } });
@@ -2811,16 +3086,56 @@ const Enclosure = (() => {
     const fLipW = mkNum('enc-lip-w', T('dlg.enclosure.lipW'), initial.lipW > 0 ? fmt(def.lipW, 2) : '0');
     const fClear = mkNum('enc-clear', T('dlg.enclosure.clearance'), fmt(def.clearance, 2));
 
-    const cBoss = mkChk('enc-with-bosses', T('dlg.enclosure.withBosses'), def.withBosses);
+    const sFast = mkSel('enc-fastening', T('dlg.enclosure.fastening'), [
+      ['bosses', T('dlg.enclosure.fastBosses')],
+      ['snaps', T('dlg.enclosure.fastSnaps')],
+      ['none', T('dlg.enclosure.fastNone')],
+    ], def.fastening, true);
+
     const fBossOD = mkNum('enc-boss-od', T('dlg.enclosure.bossOuterD'), fmt(def.bossOuterD, 2));
     const fBossHD = mkNum('enc-boss-hd', T('dlg.enclosure.bossHoleD'), fmt(def.bossHoleD, 2));
     const fBossH = mkNum('enc-boss-h', T('dlg.enclosure.bossH'), initial.bossH > 0 ? fmt(def.bossH, 2) : '0');
+
+    const fSnapLen = mkNum('enc-snap-len', T('dlg.enclosure.snapLen'), initial.snapLen > 0 ? fmt(def.snapLen, 2) : '0');
+    const fSnapW = mkNum('enc-snap-w', T('dlg.enclosure.snapW'), fmt(def.snapW, 2));
+    const fSnapT = mkNum('enc-snap-t', T('dlg.enclosure.snapT'), fmt(def.snapT, 2));
+    const fSnapHook = mkNum('enc-snap-hook', T('dlg.enclosure.snapHook'), fmt(def.snapHook, 2));
+
+    const cVent = mkChk('enc-with-vent', T('dlg.enclosure.withVent'), def.withVent);
+    const sVentSide = mkSel('enc-vent-side', T('dlg.enclosure.ventSide'), [
+      ['sides', T('dlg.enclosure.ventSides')],
+      ['frontBack', T('dlg.enclosure.ventFrontBack')],
+      ['lid', T('dlg.enclosure.ventLid')],
+      ['left', T('dlg.enclosure.ventLeft')],
+      ['right', T('dlg.enclosure.ventRight')],
+    ], def.ventSide);
+    const fVentCount = mkNum('enc-vent-count', T('dlg.enclosure.ventCount'), String(def.ventCount), '');
+    const fVentSlotW = mkNum('enc-vent-slotw', T('dlg.enclosure.ventSlotW'), fmt(def.ventSlotW, 2));
+    const fVentFrame = mkNum('enc-vent-frame', T('dlg.enclosure.ventFrame'), fmt(def.ventFrame, 2));
+    const sVentAngle = mkSel('enc-vent-angle', T('dlg.enclosure.ventAngle'), [
+      ['0', T('dlg.enclosure.ventHoriz')],
+      ['90', T('dlg.enclosure.ventVert')],
+    ], String(def.ventAngle));
+
+    const cCable = mkChk('enc-with-cable', T('dlg.enclosure.withCable'), def.withCable);
+    const sCableSide = mkSel('enc-cable-side', T('dlg.enclosure.cableSide'), [
+      ['front', T('dlg.enclosure.sideFront')],
+      ['back', T('dlg.enclosure.sideBack')],
+      ['left', T('dlg.enclosure.sideLeft')],
+      ['right', T('dlg.enclosure.sideRight')],
+    ], def.cableSide);
+    const fCableD = mkNum('enc-cable-d', T('dlg.enclosure.cableD'), fmt(def.cableD, 2));
+    const fCableTabLen = mkNum('enc-cable-tablen', T('dlg.enclosure.cableTabLen'), fmt(def.cableTabLen, 2));
 
     const summary = h('div', { id: 'enc-preview-summary', class: 'hint-box', style: { gridColumn: '1 / -1' } });
     body.append(
       fW.wrap, fD.wrap, fH.wrap, fWall.wrap, fLidH.wrap,
       cLip.wrap, fLipH.wrap, fLipW.wrap, fClear.wrap,
-      cBoss.wrap, fBossOD.wrap, fBossHD.wrap, fBossH.wrap,
+      sFast.wrap,
+      fBossOD.wrap, fBossHD.wrap, fBossH.wrap,
+      fSnapLen.wrap, fSnapW.wrap, fSnapT.wrap, fSnapHook.wrap,
+      cVent.wrap, sVentSide.wrap, fVentCount.wrap, fVentSlotW.wrap, fVentFrame.wrap, sVentAngle.wrap,
+      cCable.wrap, sCableSide.wrap, fCableD.wrap, fCableTabLen.wrap,
       summary,
     );
 
@@ -2841,30 +3156,60 @@ const Enclosure = (() => {
       lipH: parseRaw(fLipH.inp, 2),
       lipW: parseRaw(fLipW.inp, 0),
       clearance: parseRaw(fClear.inp, 0.2),
-      withBosses: !!cBoss.inp.checked,
+      fastening: sFast.inp.value || 'bosses',
       bossOuterD: parseRaw(fBossOD.inp, 7),
       bossHoleD: parseRaw(fBossHD.inp, 3),
       bossH: parseRaw(fBossH.inp, 0),
+      snapLen: parseRaw(fSnapLen.inp, 0),
+      snapW: parseRaw(fSnapW.inp, 8),
+      snapT: parseRaw(fSnapT.inp, 1.6),
+      snapHook: parseRaw(fSnapHook.inp, 1.2),
+      withVent: !!cVent.inp.checked,
+      ventSide: sVentSide.inp.value || 'sides',
+      ventCount: parseRaw(fVentCount.inp, 5),
+      ventSlotW: parseRaw(fVentSlotW.inp, 2.5),
+      ventFrame: parseRaw(fVentFrame.inp, 6),
+      ventAngle: parseRaw(sVentAngle.inp, 0),
+      withCable: !!cCable.inp.checked,
+      cableSide: sCableSide.inp.value || 'front',
+      cableD: parseRaw(fCableD.inp, 6),
+      cableTabLen: parseRaw(fCableTabLen.inp, 10),
     });
+
+    const toggleGroup = (els, show) => {
+      for (const el of els) {
+        el.inp.disabled = !show;
+        el.wrap.style.display = show ? '' : 'none';
+      }
+    };
 
     const syncUI = () => {
       const lipOn = !!cLip.inp.checked;
-      const bossOn = !!cBoss.inp.checked;
+      const fast = sFast.inp.value || 'bosses';
+      const ventOn = !!cVent.inp.checked;
+      const cableOn = !!cCable.inp.checked;
       for (const el of [fLipH, fLipW, fClear]) {
         el.inp.disabled = !lipOn;
         el.wrap.style.opacity = lipOn ? '' : '0.45';
       }
-      for (const el of [fBossOD, fBossHD, fBossH]) {
-        el.inp.disabled = !bossOn;
-        el.wrap.style.opacity = bossOn ? '' : '0.45';
-      }
+      toggleGroup([fBossOD, fBossHD, fBossH], fast === 'bosses');
+      toggleGroup([fSnapLen, fSnapW, fSnapT, fSnapHook], fast === 'snaps');
+      toggleGroup([sVentSide, fVentCount, fVentSlotW, fVentFrame, sVentAngle], ventOn);
+      toggleGroup([sCableSide, fCableD, fCableTabLen], cableOn);
+
       const m = enclosureMetrics(readValues());
       if (!m.ok) {
         summary.innerHTML = `<span style="color:var(--bad)">${esc(m.error)}</span>`;
         return m;
       }
       const lipInfo = m.withLip ? ` · Lippe ${fmt(m.lipW, 2)}×${fmt(m.lipH, 2)} mm (Spiel ${fmt(m.clearance, 2)})` : '';
-      const bossInfo = m.withBosses ? ` · 4× Dom Ø ${fmt(m.bossOuterD, 1)} / Loch Ø ${fmt(m.bossHoleD, 1)} mm` : '';
+      const bossInfo = m.withBosses
+        ? ` · 4× Dom Ø ${fmt(m.bossOuterD, 1)} / Loch Ø ${fmt(m.bossHoleD, 1)} mm`
+        : m.withSnaps
+          ? ` · 4× Schnapphaken (${fmt(m.snapW, 1)}×${fmt(m.snapLen, 1)} mm)`
+          : '';
+      const ventInfo = m.withVent ? ` · Lüftung ${m.ventCount}× ${fmt(m.ventSlotW, 1)} mm` : '';
+      const cableInfo = m.withCable ? ` · Kabel Ø ${fmt(m.cableD, 1)} mm + Zugentlastung` : '';
       summary.innerHTML = T('dlg.enclosure.summary', {
         outW: fmt(m.outerW, 1),
         outD: fmt(m.outerD, 1),
@@ -2876,16 +3221,24 @@ const Enclosure = (() => {
         inH: fmt(m.innerH, 1),
         lipInfo,
         bossInfo,
+        extraInfo: ventInfo + cableInfo,
       });
       return m;
     };
 
-    for (const el of [fW.inp, fD.inp, fH.inp, fWall.inp, fLidH.inp, fLipH.inp, fLipW.inp, fClear.inp, fBossOD.inp, fBossHD.inp, fBossH.inp]) {
+    for (const el of [
+      fW.inp, fD.inp, fH.inp, fWall.inp, fLidH.inp, fLipH.inp, fLipW.inp, fClear.inp,
+      fBossOD.inp, fBossHD.inp, fBossH.inp,
+      fSnapLen.inp, fSnapW.inp, fSnapT.inp, fSnapHook.inp,
+      fVentCount.inp, fVentSlotW.inp, fVentFrame.inp,
+      fCableD.inp, fCableTabLen.inp,
+    ]) {
       el.addEventListener('input', syncUI);
       el.addEventListener('change', syncUI);
     }
-    cLip.inp.addEventListener('change', syncUI);
-    cBoss.inp.addEventListener('change', syncUI);
+    for (const el of [cLip.inp, sFast.inp, cVent.inp, sVentSide.inp, sVentAngle.inp, cCable.inp, sCableSide.inp]) {
+      el.addEventListener('change', syncUI);
+    }
     syncUI();
 
     return UI.modal({

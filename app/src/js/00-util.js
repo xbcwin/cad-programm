@@ -2855,9 +2855,9 @@ const HELP = {
   "tipp": "Lass „Spiel Ø“ und „Kontakt-Zugabe“ leer für geprüfte Standardwerte mit Metall-Blattfedern, oder wähle unter Druck-Passung „gleitend“, falls die Zellen enger oder lockerer sitzen sollen."
  },
  "enclosureGen": {
-  "tip": "Gehäuse-Generator: Kasten mit Deckel, umlaufender Lippe/Nut und 4 Schraubdomen",
-  "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit echten, einzeln bearbeitbaren Schritten in der Zeitleiste: den ausgehöhlten Kasten, den passenden Deckel, eine umlaufende Stecklippe mit Nut und einstellbarem Spiel sowie vier Schraubdome in den Innenecken.",
-  "tipp": "Alle erzeugten Schritte (Kasten, Deckel, Lippe & Nut und jeder einzelne Schraubdom) bleiben rechts und in der Zeitleiste jederzeit einzeln anpassbar."
+  "tip": "Gehäuse-Generator: Kasten mit Deckel, Lippe/Nut, Schraubdomen oder Schnapphaken, Lüftung & Kabeldurchführung",
+  "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit einzeln bearbeitbaren Schritten in der Zeitleiste: Kasten, Deckel, umlaufende Stecklippe mit Nut und wahlweise 4 Eck-Schraubdomen oder 4 federnden Schnapphaken am Deckel samt Rastfenstern in der Wand. Optional schneidet der Generator Lüftungsschlitze in die Seitenwände, Vorder-/Rückwand oder den Deckel und ergänzt eine Kabeldurchführung mit außenliegender Zugentlastungs-Lasche und Kabelbinder-Schlitz.",
+  "tipp": "Für werkzeugloses Öffnen wähle unter „Befestigung“ die Schnapphaken statt Schraubdomen; alle erzeugten Schritte (Haken, Rastfenster, Lüftung, Kabel-Lasche) lassen sich danach in der Zeitleiste einzeln anpassen."
  },
  "pullHandle": {
   "tip": "Parametrischer Griff (Bügelgriff, Brückengriff mit Flansch oder T-Griff)",
