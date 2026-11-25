@@ -33479,6 +33479,247 @@ def t_a165_baugruppe_einkoerper_toleranzkette(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a168_schnittarten(p):
+    # [A-168] Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit 3 versetzten Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' }));
+        const hA = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Loch A', role: 'hole' });
+        hA.t.x = -15; hA.t.y = 8; hA.t.z = -2;
+        const hB = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Loch B', role: 'hole' });
+        hB.t.x = 15; hB.t.y = -8; hB.t.z = -2;
+        const hC = Model.newItem('cylinder', { d: 8, h: 24 }, { name: 'Loch C', role: 'hole' });
+        hC.t.z = -2;
+        d.items.push(hA, hB, hC);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    def view_pt(view_name, u, v):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const vw = Drawing.layout.views[arg.view];
+          const pt = svg.createSVGPoint();
+          pt.x = vw.ox + arg.u * vw.s;
+          pt.y = vw.oy - arg.v * vw.s;
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, {'view': view_name, 'u': u, 'v': v})
+
+    def read_hatch_uv(sec_idx):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[arg];
+          const v = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+          const hatches = sec && v ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)].map(el => {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const u0 = (pts[0][0] - v.ox) / v.s, v0 = (v.oy - pts[0][1]) / v.s;
+            const u1 = (pts[1][0] - v.ox) / v.s, v1 = (v.oy - pts[1][1]) / v.s;
+            return { u0, v0, u1, v1, uMin: Math.min(u0, u1), uMax: Math.max(u0, u1), vMin: Math.min(v0, v1), vMax: Math.max(v0, v1) };
+          }) : [];
+          return {
+            sec,
+            hasView: !!v,
+            hatches,
+            cutlines: sec ? svg.querySelectorAll(`polyline.cutline[data-sec="${sec.id}"]`).length : 0,
+            cutends: sec ? svg.querySelectorAll(`polyline.cutend[data-sec="${sec.id}"]`).length : 0,
+            breaklines: sec ? svg.querySelectorAll(`polyline.breakline[data-sec="${sec.id}"]`).length : 0,
+            ctrs: v ? svg.querySelectorAll(`polyline.ctr[data-sec="${sec.id}"]`).length : 0,
+            cutPts: sec ? [...svg.querySelectorAll(`polyline.cutline[data-sec="${sec.id}"]`)].map(el => el.getAttribute('points').trim().split(/\\s+/).length) : [],
+            txt: svg.textContent || '',
+          };
+        """, sec_idx)
+
+    # 1. Halbschnitt: Draufsicht bei y = 0 schneiden -> rechte Hälfte schraffiert, dann auf linke Hälfte umschalten
+    p.pg.select_option('#dw-sec-type', 'half'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    p0 = view_pt('top', -32, 0)
+    p1 = view_pt('top', 32, 0)
+    p.pg.mouse.move(p0[0], p0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(p1[0], p1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    h_right = read_hatch_uv(0)
+    right_ok = (
+        h_right['hasView'] and h_right['sec'] and h_right['sec']['type'] == 'half'
+        and 'Halbschnitt A–A' in h_right['txt']
+        and h_right['ctrs'] >= 1
+        and len(h_right['hatches']) >= 4
+        and all(h['uMin'] >= -0.05 for h in h_right['hatches'])
+        and not any(h['uMin'] < 0 and h['uMax'] > 0 for h in h_right['hatches'])
+        and not any(h['uMin'] < -3.5 and h['uMax'] > -3.5 for h in h_right['hatches'])
+    )
+
+    # Auf linke Hälfte umschalten
+    p.pg.select_option('#dw-sel-half-side', 'left'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    h_left = read_hatch_uv(0)
+    left_ok = (
+        len(h_left['hatches']) >= 4
+        and all(h['uMax'] <= 0.05 for h in h_left['hatches'])
+        and not any(h['uMin'] > 0.05 for h in h_left['hatches'])
+    )
+    ok1 = bool(right_ok and left_ok)
+
+    # 2. Abgesetzter Schnitt: 4-Punkt-Linie mit 90°-Knicken (-32,8) -> (0,8) -> (0,-8) -> (32,-8)
+    p.pg.select_option('#dw-sec-type', 'stepped'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    for (u, v) in [(-32, 8), (0, 8), (0, -8), (32, -8)]:
+        sp = view_pt('top', u, v)
+        p.pg.mouse.move(sp[0], sp[1])
+        p.pg.mouse.click(sp[0], sp[1])
+        p.wait(100)
+    p.pg.keyboard.press('Enter')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    st_res = read_hatch_uv(1)
+    st_hatches = st_res['hatches']
+    ok2 = bool(
+        st_res['hasView'] and st_res['sec'] and st_res['sec']['type'] == 'stepped'
+        and 'Schnitt B–B (abgesetzt)' in st_res['txt']
+        and st_res['cutlines'] == 1
+        and st_res['cutPts'] and st_res['cutPts'][0] >= 4
+        and st_res['cutends'] >= 6
+        and len(st_hatches) >= 8
+        and any(h['uMax'] < -20 for h in st_hatches)
+        and any(h['uMin'] > -10 and h['uMax'] < 10 for h in st_hatches)
+        and any(h['uMin'] > 20 for h in st_hatches)
+        and not any(h['uMin'] < -15 and h['uMax'] > -15 for h in st_hatches)
+        and not any(h['uMin'] < 15 and h['uMax'] > 15 for h in st_hatches)
+    )
+
+    # 3. Ausbruch: Bereich [-12, 3] .. [12, 17] in Vorderansicht aufziehen
+    p.pg.select_option('#dw-sec-type', 'breakout'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    b0 = view_pt('front', -12, 3)
+    b1 = view_pt('front', 12, 17)
+    p.pg.mouse.move(b0[0], b0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(b1[0], b1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    br1 = read_hatch_uv(2)
+    br1_h = br1['hatches']
+    br_mid_ok = (
+        br1['hasView'] and br1['sec'] and br1['sec']['type'] == 'breakout'
+        and 'Ausbruch C–C' in br1['txt']
+        and br1['breaklines'] >= 2
+        and len(br1_h) >= 4
+        and all(h['uMin'] >= -12.05 and h['uMax'] <= 12.05 and h['vMin'] >= 2.95 and h['vMax'] <= 17.05 for h in br1_h)
+        and not any(h['uMin'] < 0 and h['uMax'] > 0 for h in br1_h)
+    )
+
+    # Schnitttiefe auf 12 mm setzen (schneidet bei y = -8 vor Loch C -> durchgehende Schraffur über u = 0)
+    p.pg.fill('#dw-sel-sec-depth', '12')
+    p.pg.locator('#dw-sel-sec-depth').dispatch_event('change')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    br2 = read_hatch_uv(2)
+    br2_h = br2['hatches']
+    br_depth_ok = (
+        len(br2_h) >= 4
+        and all(h['uMin'] >= -12.05 and h['uMax'] <= 12.05 and h['vMin'] >= 2.95 and h['vMax'] <= 17.05 for h in br2_h)
+        and any(h['uMin'] < 0 and h['uMax'] > 0 for h in br2_h)
+    )
+    ok3 = bool(br_mid_ok and br_depth_ok)
+
+    # 4. Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & I18n
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(150)
+    simple_chk = p.ev("""return (() => {
+      const tSel = document.querySelector('#dw-sec-type');
+      const tBtn = document.querySelector('#t-section-kind');
+      const hidden = (!tSel || tSel.offsetParent === null) && (!tBtn || tBtn.offsetParent === null);
+      const blocked = Drawing.setSectionMode('half') === false;
+      const cmdsBlocked = Commands.search('halbschnitt').length === 0 && Commands.search('abgesetzter schnitt').length === 0 && Commands.search('ausbruch').length === 0;
+      return { hidden, blocked, cmdsBlocked };
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    exp_chk = p.ev("""return (async () => {
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('Halbschnitt A-A') && pdfStr.includes('Schnitt B-B') && pdfStr.includes('Ausbruch C-C'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('SCHRAFFUR') && dxf.text.includes('SCHNITTLINIE') && dxf.stats.lines > 20),
+      };
+    })()""")
+
+    p.pg.locator('#right-body .sec-del').nth(2).click(); p.wait(200)
+    n_del = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    n_undo = p.ev("return Drawing.sections().length")
+    p.ev("App.redo()"); p.wait(250)
+    n_redo = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    re_chk = p.ev("""
+      const secs = Drawing.sections();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        n: secs.length,
+        types: secs.map(s => s.type),
+        hatches: svg.querySelectorAll('polyline.hatch').length,
+        txt: svg.textContent || '',
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h = wh['drawingSectionKinds'];
+      const tKind = document.querySelector('#t-section-kind');
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('halbschnitt').length >= 1 && Commands.search('abgesetzter schnitt').length >= 1 && Commands.search('ausbruch').length >= 1;
+      return !!(h && h.tip && h.hilfe && h.tipp && tKind && tKind.dataset.help === 'drawingSectionKinds' && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdsBlocked']
+        and exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and n_del == 2 and n_undo == 3 and n_redo == 2
+        and val_ok and re_chk['n'] == 3 and re_chk['types'] == ['half', 'stepped', 'breakout']
+        and re_chk['hatches'] >= 12
+        and 'Halbschnitt A–A' in re_chk['txt']
+        and 'Schnitt B–B (abgesetzt)' in re_chk['txt']
+        and 'Ausbruch C–C' in re_chk['txt']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -33758,6 +33999,7 @@ TESTS = [
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
+    ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

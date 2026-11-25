@@ -427,6 +427,9 @@ const Panels = (() => {
       const secBtn = btn('t-section', 'section', T('tool.dsection'), T('tool.dsectionTip'), 'S', () => Drawing.tool('section'), Drawing.activeTool === 'section' ? 'active' : '');
       secBtn.dataset.help = 'drawingSection';
       secBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'section'));
+      const secKindBtn = btn('t-section-kind', 'section', T('tool.dsectionKinds'), T('tool.dsectionKindsTip'), '', (e) => Drawing.sectionMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'section' && Drawing.sectionMode !== 'full' ? ' active' : ''), T('tool.dsectionKindsShort'));
+      secKindBtn.dataset.help = 'drawingSectionKinds';
+      secKindBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'section' && Drawing.sectionMode !== 'full'));
       const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
       detBtn.dataset.help = 'drawingDetail';
       detBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'detail'));

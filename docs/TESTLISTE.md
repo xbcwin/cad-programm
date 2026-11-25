@@ -2785,6 +2785,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject` akzeptiert `doc.tolChains`, `HELP.asmSingleBody`/`HELP.tolChain`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-single-body`, `tol-chain`) laufen ohne JS-Fehler (`t_a165_baugruppe_einkoerper_toleranzkette`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe aus mehreren verschraubten oder gestapelten Teilen öffnen, über „Prüfen → Toleranzkette“ per „Fläche“ oder „Im Bild wählen“ eine gemischte `+`/`−`-Kette mit Spielprüfung rechnen und die Baugruppe über „Als 1 Körper“ als STEP sowie als STL in einen Slicer laden.
 
+## Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (Auto [A-168], ZE-15)
+
+- [x] **Halbschnitt (halb Ansicht, halb Schnitt)**: Schnittlinie A–A durch die Draufsicht im Modus `half` erzeugt `Halbschnitt A–A` mit strichpunktierter Trennlinie; Schraffurlinien liegen ausschließlich in der geschnittenen Hälfte (`u >= 0` bei „Rechts“ bzw. `u <= 0` nach Umschalten auf „Links“) und sparen die Mittelbohrung aus (`t_a168_schnittarten`).
+- [x] **Abgesetzter Schnitt (mit Knicken)**: Mehrpunkt-Schnittlinie `(-32, 8) → (0, 8) → (0, -8) → (32, -8)` erzeugt Knick-Schnittverlauf samt `Schnitt B–B (abgesetzt)`; Schraffur erscheint in linker Wand, Mittelsteg und rechter Wand und spart beide versetzten Bohrungen (`x = -15` und `x = +15`) aus (`t_a168_schnittarten`).
+- [x] **Ausbruch (Teilschnitt im Bereich)**: Aufgezogener Bereich `[-12, 3] .. [12, 17]` in der Vorderansicht erzeugt `Ausbruch C–C` mit Wellen-Bruchlinie (`polyline.breakline`); Schraffur bleibt strikt innerhalb des Bereichs, spart in Tiefenmitte die Bohrung aus und füllt bei geänderter Schnitttiefe `12 mm` die volle Ausbruch-Fläche (`t_a168_schnittarten`).
+- [x] **Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & i18n**: Im Einfach-Modus verborgen und gesperrt; PDF (`%PDF-1.4`) und DXF (`SCHRAFFUR`, `SCHNITTLINIE`), Rückgängig/Wiederholen, Speichern/Laden (`Store.validateProject`), `HELP.drawingSectionKinds`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a168_schnittarten`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ über „Schnitt-Art“ nacheinander Halbschnitt, abgesetzten Schnitt mit mehreren Knicken sowie Ausbruch (sowohl Rechteck-Ziehen als auch Polygon-Klicken) an einem Bauteil anlegen und Schnitthälfte bzw. Schnitttiefe rechts anpassen.
+
 ## Fehler melden
 
 ```

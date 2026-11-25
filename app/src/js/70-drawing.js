@@ -29,12 +29,21 @@ const Drawing = (() => {
     { key: 'dia', get label() { return T('draw.dimMode.dia'); }, get short() { return T('draw.dimMode.dia'); }, get hint() { return T('draw.dimHint.dia'); } },
     { key: 'chamfer', get label() { return T('draw.dimMode.chamfer'); }, get short() { return T('draw.dimMode.chamfer'); }, get hint() { return T('draw.dimHint.chamfer'); } },
   ];
+  const SECTION_MODES = [
+    { key: 'full', get label() { return T('draw.secMode.full'); }, get hint() { return T('draw.hint.section'); } },
+    { key: 'half', pro: true, get label() { return T('draw.secMode.half'); }, get hint() { return T('draw.hint.sectionHalf'); } },
+    { key: 'stepped', pro: true, get label() { return T('draw.secMode.stepped'); }, get hint() { return T('draw.hint.sectionStepped'); } },
+    { key: 'breakout', pro: true, get label() { return T('draw.secMode.breakout'); }, get hint() { return T('draw.hint.sectionBreakout'); } },
+  ];
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
+  const isSimpleMode = () => typeof ViewPrefs !== 'undefined' && ViewPrefs.level === 'simple';
   let proj = null, projRev = -1, projSceneKey = null, loadingProjPromise = null, projId = 0;
   const projSigs = new Map(), shadeCache = new Map();
   let bomData = null, bomMeasure = null, bomCacheKey = null;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null, selView = null;
   let dimMode = 'lin';
+  let sectionMode = 'full';
+  let sectionDraft = { halfAxis: 'v', halfSide: 'right', depth: null };
   let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null;
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
@@ -42,6 +51,41 @@ const Drawing = (() => {
   let balloonViewPref = 'auto';
   let centersListOpen = false;
   let lastLostKey = '';
+  function normalizeSection(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const type = raw.type === 'half' || raw.type === 'stepped' || raw.type === 'breakout' ? raw.type : 'full';
+    const parent = raw.parent === 'front' || raw.parent === 'left' ? raw.parent : 'top';
+    const normPt = (p) => (Array.isArray(p) && p.length >= 2 ? [Number(p[0]) || 0, Number(p[1]) || 0] : [0, 0]);
+    const out = {
+      id: raw.id || uid('sec'),
+      label: String(raw.label || 'A'),
+      parent,
+      type,
+      flip: !!raw.flip,
+      pos: Array.isArray(raw.pos) && raw.pos.length >= 2 ? [Number(raw.pos[0]) || 0, Number(raw.pos[1]) || 0] : null,
+    };
+    if (type === 'stepped') {
+      const pts = Array.isArray(raw.pts) ? raw.pts.map(normPt) : [normPt(raw.a), normPt(raw.b)];
+      out.pts = pts;
+      out.a = pts[0] ? [...pts[0]] : [0, 0];
+      out.b = pts[pts.length - 1] ? [...pts[pts.length - 1]] : [10, 0];
+    } else if (type === 'breakout') {
+      out.region = Array.isArray(raw.region) ? raw.region.map(normPt) : [];
+      out.depth = raw.depth != null && Number.isFinite(Number(raw.depth)) && Number(raw.depth) > 0 ? Number(raw.depth) : null;
+    } else {
+      out.a = normPt(raw.a);
+      out.b = normPt(raw.b);
+      if (type === 'half') {
+        const ax = raw.halfAxis === 'h' ? 'h' : 'v';
+        out.halfAxis = ax;
+        out.halfSide = ax === 'h'
+          ? (raw.halfSide === 'top' || raw.halfSide === 'bottom' ? raw.halfSide : 'bottom')
+          : (raw.halfSide === 'left' || raw.halfSide === 'right' ? raw.halfSide : 'right');
+        if (raw.split != null && Number.isFinite(Number(raw.split))) out.split = Number(raw.split);
+      }
+    }
+    return out;
+  }
   function normDimStyle(raw, tpl = null) {
     const t = (tpl && tpl.dimStyle) || DEFAULT_DIM_STYLE;
     const rawArrow = raw && raw.arrow;
@@ -120,7 +164,7 @@ const Drawing = (() => {
       dims: opts.dims || defaultAutoDims(),
       free: opts.free || [],
       details: opts.details ? opts.details.map((x) => ({ ...x, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null })) : [],
-      sections: Array.isArray(opts.sections) ? opts.sections : [],
+      sections: Array.isArray(opts.sections) ? opts.sections.map(normalizeSection).filter(Boolean) : [],
       dimStyle: normDimStyle(opts.dimStyle, tpl),
       notes: Array.isArray(opts.notes) ? opts.notes.map((n) => ({ ...n, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] })) : [],
       balloons: Array.isArray(opts.balloons) ? opts.balloons.map((b) => ({ ...b, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] })) : [],
@@ -192,6 +236,7 @@ const Drawing = (() => {
     for (let i = 0; i < d.drawing.sheets.length; i++) {
       const cur = d.drawing.sheets[i];
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
+      else if (cur) cur.sections = cur.sections.map(normalizeSection).filter(Boolean);
       if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
       if (cur && !Array.isArray(cur.notes)) cur.notes = [];
       if (cur && !Array.isArray(cur.balloons)) cur.balloons = [];
@@ -472,12 +517,20 @@ const Drawing = (() => {
   function dirSig(v) {
     return (v.dir || []).concat(v.x || []).map((n) => Math.round(n * 10000)).join(',');
   }
+  function sectionTitle(sec) {
+    if (!sec) return T('draw.view.section');
+    const a = sec.label, b = sec.label;
+    if (sec.type === 'half') return T('draw.view.halfSectionNamed', { a, b });
+    if (sec.type === 'stepped') return T('draw.view.steppedSectionNamed', { a, b });
+    if (sec.type === 'breakout') return T('draw.view.breakoutSectionNamed', { a, b });
+    return T('draw.view.sectionNamed', { a, b });
+  }
   function viewLabel(vName, sh = dwg()) {
     if (VIEW_NAMES[vName]) return VIEW_NAMES[vName];
     if (vName === 'iso') return T('draw.view.iso');
     if (String(vName).startsWith('sec_')) {
       const sec = (sh.sections || []).find((x) => 'sec_' + x.id === vName);
-      return sec ? T('draw.view.sectionNamed', { a: sec.label, b: sec.label }) : T('draw.view.section');
+      return sectionTitle(sec);
     }
     const det = (sh.details || []).find((x) => x.id === vName);
     if (det) return T('draw.view.detailNamed', { lbl: det.label });
@@ -601,6 +654,13 @@ const Drawing = (() => {
       for (const ev of s.extraViews || []) {
         addSpec(ev.id, { key: ev.id, dir: ev.dir, x: ev.x }, dirSig(ev));
       }
+      for (const sec of s.sections || []) {
+        if (sec.type === 'half') {
+          const sp = sectionPlaneSpec(sec);
+          const vk = secUncutViewKey(sp);
+          addSpec(vk, { key: vk, dir: sp.dir, x: sp.x }, dirSig(sp));
+        }
+      }
     }
     return specs;
   }
@@ -610,12 +670,47 @@ const Drawing = (() => {
     left: { dir: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
   };
   const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const vCross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const vNorm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  function modelDepthRange(dir) {
+    let bb = proj && Array.isArray(proj.bbox) && proj.bbox.length >= 6 ? proj.bbox : null;
+    if (!bb && typeof App !== 'undefined' && App.results) {
+      let b0 = Infinity, b1 = Infinity, b2 = Infinity, b3 = -Infinity, b4 = -Infinity, b5 = -Infinity;
+      for (const r of Object.values(App.results)) {
+        if (!r || !Array.isArray(r.bbox) || r.bbox.length < 6) continue;
+        b0 = Math.min(b0, r.bbox[0]); b1 = Math.min(b1, r.bbox[1]); b2 = Math.min(b2, r.bbox[2]);
+        b3 = Math.max(b3, r.bbox[3]); b4 = Math.max(b4, r.bbox[4]); b5 = Math.max(b5, r.bbox[5]);
+      }
+      if (isFinite(b0)) bb = [b0, b1, b2, b3, b4, b5];
+    }
+    if (!bb) bb = [-10, -10, -10, 10, 10, 10];
+    let wMin = Infinity, wMax = -Infinity;
+    for (const x of [bb[0], bb[3]]) for (const y of [bb[1], bb[4]]) for (const z of [bb[2], bb[5]]) {
+      const w = x * dir[0] + y * dir[1] + z * dir[2];
+      if (w < wMin) wMin = w;
+      if (w > wMax) wMax = w;
+    }
+    return [wMin, wMax];
+  }
+  function breakoutPlaneSpec(sec) {
+    const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+    const [wMin, wMax] = modelDepthRange(vf.dir);
+    const thick = Math.max(0.1, wMax - wMin);
+    const dVal = (sec.depth != null && Number.isFinite(Number(sec.depth)) && Number(sec.depth) > 0)
+      ? clamp(Number(sec.depth), 0.05, thick - 0.05)
+      : thick * 0.5;
+    const wCut = wMax - dVal;
+    const o = [vf.dir[0] * wCut, vf.dir[1] * wCut, vf.dir[2] * wCut];
+    return { o, dir: vf.dir, x: vf.x, y: vf.y, wMin, wMax, depth: dVal, thick };
+  }
   function sectionPlaneSpec(sec) {
+    if (sec && sec.type === 'breakout') return breakoutPlaneSpec(sec);
     const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
     const ex = vf.x, ey = vf.y;
-    const a = sec.a || [0, 0], b = sec.b || [10, 0];
+    const pts = (sec && sec.type === 'stepped' && Array.isArray(sec.pts) && sec.pts.length >= 2) ? sec.pts : null;
+    const a = pts ? pts[0] : (sec.a || [0, 0]);
+    const b = pts ? pts[1] : (sec.b || [10, 0]);
     const du = b[0] - a[0], dv = b[1] - a[1], L = Math.hypot(du, dv) || 1;
     const t2 = [du / L, dv / L];
     const look2 = sec.flip ? [t2[1], -t2[0]] : [-t2[1], t2[0]];
@@ -634,7 +729,56 @@ const Drawing = (() => {
     }
     return { o, dir, x: secX, y: secY, look2, t2 };
   }
+  const secUncutViewKey = (sp) => '__secv_' + dirSig(sp);
+  function steppedSegments(sec) {
+    const pts = (sec && Array.isArray(sec.pts) && sec.pts.length >= 4) ? sec.pts : null;
+    if (!pts) return null;
+    const sp = sectionPlaneSpec(sec);
+    const vf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+    const ex = vf.x, ey = vf.y, t2 = sp.t2;
+    const T3 = vNorm([ex[0] * t2[0] + ey[0] * t2[1], ex[1] * t2[0] + ey[1] * t2[1], ex[2] * t2[0] + ey[2] * t2[1]]);
+    const axLen = Math.hypot(dot3(T3, sp.x), dot3(T3, sp.y)) || 1;
+    const ax2 = [dot3(T3, sp.x) / axLen, dot3(T3, sp.y) / axLen];
+    const sig = dirSig(sp);
+    const segs = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const A = pts[i], B = pts[i + 1];
+      const du = B[0] - A[0], dv = B[1] - A[1], L = Math.hypot(du, dv);
+      if (L < 1e-3) continue;
+      const align = Math.abs((du * t2[0] + dv * t2[1]) / L);
+      if (align <= 0.7) continue;
+      const mu = (A[0] + B[0]) * 0.5, mv = (A[1] + B[1]) * 0.5;
+      const o = [ex[0] * mu + ey[0] * mv, ex[1] * mu + ey[1] * mv, ex[2] * mu + ey[2] * mv];
+      const PA3 = [ex[0] * A[0] + ey[0] * A[1], ex[1] * A[0] + ey[1] * A[1], ex[2] * A[0] + ey[2] * A[1]];
+      const PB3 = [ex[0] * B[0] + ey[0] * B[1], ex[1] * B[0] + ey[1] * B[1], ex[2] * B[0] + ey[2] * B[1]];
+      const sA = dot3(PA3, sp.x) * ax2[0] + dot3(PA3, sp.y) * ax2[1];
+      const sB = dot3(PB3, sp.x) * ax2[0] + dot3(PB3, sp.y) * ax2[1];
+      const sLoRaw = Math.min(sA, sB), sHiRaw = Math.max(sA, sB);
+      segs.push({
+        o,
+        sLoRaw,
+        sHiRaw,
+        sMid: (sLoRaw + sHiRaw) * 0.5,
+        key: `st|${sec.parent}|${r4(o[0])},${r4(o[1])},${r4(o[2])}|${sig}`,
+      });
+    }
+    if (!segs.length) return null;
+    segs.sort((p, q) => p.sMid - q.sMid);
+    for (let i = 0; i < segs.length; i++) {
+      segs[i].lo = i === 0 ? -Infinity : (segs[i - 1].sHiRaw + segs[i].sLoRaw) * 0.5;
+      segs[i].hi = i === segs.length - 1 ? Infinity : (segs[i].sHiRaw + segs[i + 1].sLoRaw) * 0.5;
+    }
+    return { sp, ax2, segments: segs };
+  }
   function secCacheKey(sec) {
+    if (sec && sec.type === 'breakout') {
+      const bp = breakoutPlaneSpec(sec);
+      return `br|${sec.parent}|${r4(bp.o[0])},${r4(bp.o[1])},${r4(bp.o[2])}`;
+    }
+    if (sec && sec.type === 'stepped') {
+      const st = steppedSegments(sec);
+      return st ? 'st|' + st.segments.map((g) => g.key).join(';') : 'st|invalid';
+    }
     const a = sec.a || [0, 0], b = sec.b || [10, 0];
     return `${sec.parent}|${r4(a[0])},${r4(a[1])}|${r4(b[0])},${r4(b[1])}|${sec.flip ? 1 : 0}`;
   }
@@ -642,6 +786,14 @@ const Drawing = (() => {
     const map = new Map();
     for (const sh of sheets()) {
       for (const sec of sh.sections || []) {
+        if (sec.type === 'stepped') {
+          const st = steppedSegments(sec);
+          if (!st) continue;
+          for (const seg of st.segments) {
+            if (!map.has(seg.key)) map.set(seg.key, { key: seg.key, o: seg.o, dir: st.sp.dir, x: st.sp.x, y: st.sp.y });
+          }
+          continue;
+        }
         const key = secCacheKey(sec);
         if (!map.has(key)) {
           const sp = sectionPlaneSpec(sec);
@@ -740,6 +892,11 @@ const Drawing = (() => {
           projId++;
           geoCache.clear();
           shadeCache.clear();
+          const afterSecs = collectNeededSections().filter((s) => !(proj.sections && proj.sections[s.key]));
+          if (afterSecs.length) {
+            const res2 = await Kernel.call('project', { scene, views: [], sections: afterSecs });
+            proj.sections = { ...(proj.sections || {}), ...((res2 && res2.sections) || {}) };
+          }
         } else {
           const res = await Kernel.call('project', {
             scene,
@@ -1074,38 +1231,368 @@ const Drawing = (() => {
     }
     return { polys, tangents, hidden, circles, points, allCenters, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
+  function clipSegStrip(a, b, ax, ay, lo, hi) {
+    const d0 = a[0] * ax + a[1] * ay;
+    const d1 = b[0] * ax + b[1] * ay;
+    const dd = d1 - d0;
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dd) < 1e-9) {
+      if (d0 < lo - 1e-5 || d0 > hi + 1e-5) return null;
+    } else {
+      if (isFinite(lo)) {
+        const t = (lo - d0) / dd;
+        if (dd > 0) t0 = Math.max(t0, t);
+        else t1 = Math.min(t1, t);
+      }
+      if (isFinite(hi)) {
+        const t = (hi - d0) / dd;
+        if (dd > 0) t1 = Math.min(t1, t);
+        else t0 = Math.max(t0, t);
+      }
+      if (t1 - t0 <= 1e-7) return null;
+    }
+    const P0 = [a[0] + t0 * (b[0] - a[0]), a[1] + t0 * (b[1] - a[1])];
+    const P1 = [a[0] + t1 * (b[0] - a[0]), a[1] + t1 * (b[1] - a[1])];
+    if (Math.hypot(P1[0] - P0[0], P1[1] - P0[1]) <= 1e-6) return null;
+    return [P0, P1];
+  }
+  function clipPolyStrip(pts, ax, ay, lo, hi) {
+    const out = [];
+    let run = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const seg = clipSegStrip(pts[i], pts[i + 1], ax, ay, lo, hi);
+      if (!seg) {
+        if (run && run.length > 1) out.push({ pts: run });
+        run = null;
+        continue;
+      }
+      if (run && Math.hypot(run[run.length - 1][0] - seg[0][0], run[run.length - 1][1] - seg[0][1]) <= 1e-5) {
+        run.push(seg[1]);
+      } else {
+        if (run && run.length > 1) out.push({ pts: run });
+        run = [seg[0], seg[1]];
+      }
+    }
+    if (run && run.length > 1) out.push({ pts: run });
+    return out;
+  }
+  function clipEdgeItemStrip(item, ax, ay, lo, hi) {
+    if (item.c && item.pts && item.pts.length >= 2) {
+      const allIn = item.pts.every((p) => {
+        const d = p[0] * ax + p[1] * ay;
+        return d >= lo - 1e-5 && d <= hi + 1e-5;
+      });
+      if (allIn) {
+        if (item.arc) return [item];
+        const cd = item.c[0] * ax + item.c[1] * ay;
+        if (cd - item.r >= lo - 1e-5 && cd + item.r <= hi + 1e-5) return [item];
+      }
+    }
+    return clipPolyStrip(item.pts || [], ax, ay, lo, hi);
+  }
+  function polySignedArea2D(poly) {
+    let a = 0;
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const p = poly[i], q = poly[(i + 1) % n];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return a * 0.5;
+  }
+  function pointInPoly2D(pt, poly) {
+    let inside = false;
+    const x = pt[0], y = pt[1];
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function clipSegPolygon(a, b, poly, keepInside = true) {
+    if (!poly || poly.length < 3) return keepInside ? [] : [[a, b]];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    if (Math.hypot(dx, dy) < 1e-7) return [];
+    const hits = [];
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const p0 = poly[i], p1 = poly[(i + 1) % n];
+      const ex = p1[0] - p0[0], ey = p1[1] - p0[1];
+      const det = dx * ey - dy * ex;
+      if (Math.abs(det) < 1e-9) continue;
+      const qx = p0[0] - a[0], qy = p0[1] - a[1];
+      const t = (qx * ey - qy * ex) / det;
+      const u = (qx * dy - qy * dx) / det;
+      if (t > 1e-6 && t < 1 - 1e-6 && u >= -1e-6 && u <= 1 + 1e-6) hits.push(t);
+    }
+    hits.sort((p, q) => p - q);
+    const ts = [0];
+    for (const t of hits) if (t - ts[ts.length - 1] > 1e-6) ts.push(t);
+    if (1 - ts[ts.length - 1] > 1e-6) ts.push(1);
+    else ts[ts.length - 1] = 1;
+    const kept = [];
+    for (let k = 0; k < ts.length - 1; k++) {
+      const s0 = ts[k], s1 = ts[k + 1];
+      if (s1 - s0 <= 1e-6) continue;
+      const tm = (s0 + s1) * 0.5;
+      const pm = [a[0] + tm * dx, a[1] + tm * dy];
+      if (pointInPoly2D(pm, poly) === !!keepInside) {
+        if (kept.length && Math.abs(kept[kept.length - 1][1] - s0) <= 1e-6) kept[kept.length - 1][1] = s1;
+        else kept.push([s0, s1]);
+      }
+    }
+    const out = [];
+    for (const [s0, s1] of kept) {
+      const P0 = [a[0] + s0 * dx, a[1] + s0 * dy];
+      const P1 = [a[0] + s1 * dx, a[1] + s1 * dy];
+      if (Math.hypot(P1[0] - P0[0], P1[1] - P0[1]) > 1e-5) out.push([P0, P1]);
+    }
+    return out;
+  }
+  function clipPolyPolygon(pts, poly, keepInside = true) {
+    const out = [];
+    let run = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const segs = clipSegPolygon(pts[i], pts[i + 1], poly, keepInside);
+      if (!segs.length) {
+        if (run && run.length > 1) out.push({ pts: run });
+        run = null;
+        continue;
+      }
+      for (const seg of segs) {
+        if (run && Math.hypot(run[run.length - 1][0] - seg[0][0], run[run.length - 1][1] - seg[0][1]) <= 1e-5) {
+          run.push(seg[1]);
+        } else {
+          if (run && run.length > 1) out.push({ pts: run });
+          run = [seg[0], seg[1]];
+        }
+      }
+    }
+    if (run && run.length > 1) out.push({ pts: run });
+    return out;
+  }
+  function clipEdgeItemPolygon(item, poly, keepInside = true) {
+    if (item.c && item.pts && item.pts.length >= 2) {
+      let crosses = false;
+      for (let i = 0; i < item.pts.length - 1; i++) {
+        const segs = clipSegPolygon(item.pts[i], item.pts[i + 1], poly, keepInside);
+        if (segs.length !== 1 || Math.hypot(segs[0][0][0] - item.pts[i][0], segs[0][0][1] - item.pts[i][1]) > 1e-4 || Math.hypot(segs[0][1][0] - item.pts[i + 1][0], segs[0][1][1] - item.pts[i + 1][1]) > 1e-4) {
+          crosses = true;
+          break;
+        }
+      }
+      if (!crosses && item.pts.every((p) => pointInPoly2D(p, poly) === !!keepInside)) return [item];
+    }
+    return clipPolyPolygon(item.pts || [], poly, keepInside);
+  }
+  function makeBreakPoly(region) {
+    if (!Array.isArray(region) || region.length < 3) return [];
+    if (region.length >= 10) return region.map((p) => [p[0], p[1]]);
+    const ccw = polySignedArea2D(region) >= 0 ? 1 : -1;
+    let minL = Infinity;
+    for (let i = 0; i < region.length; i++) {
+      const A = region[i], B = region[(i + 1) % region.length];
+      const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+      if (L > 1e-4 && L < minL) minL = L;
+    }
+    if (!isFinite(minL)) minL = 10;
+    const amp = clamp(minL * 0.035, 0.15, 0.65);
+    const out = [];
+    for (let i = 0; i < region.length; i++) {
+      const A = region[i], B = region[(i + 1) % region.length];
+      const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+      out.push([A[0], A[1]]);
+      if (L < 0.8) continue;
+      const ux = dx / L, uy = dy / L;
+      const inX = ccw >= 0 ? -uy : uy;
+      const inY = ccw >= 0 ? ux : -ux;
+      const steps = clamp(Math.round(L / 2.2), 4, 24);
+      const cycles = Math.max(1, Math.round(L / 6));
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        const w = amp * 0.5 * (1 - Math.cos(t * TWO_PI * cycles)) * Math.sin(t * Math.PI);
+        out.push([A[0] + dx * t + inX * w, A[1] + dy * t + inY * w]);
+      }
+    }
+    return out;
+  }
+  function parseRawEdges(v, showHidden, withTangents = false) {
+    const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
+    const sharpVis = (v.visible || []).map(raw).filter(Boolean);
+    const tanVis = withTangents ? (v.tangentVisible || []).map(raw).filter(Boolean) : [];
+    const sharpHid = (v.hidden || []).map(raw).filter(Boolean);
+    const tanHid = withTangents ? (v.tangentHidden || []).map(raw).filter(Boolean) : [];
+    const cg1 = cleanGeom(sharpVis, tanVis);
+    let hid = [];
+    if (showHidden) {
+      const allVis = withTangents ? [...sharpVis, ...tanVis] : sharpVis;
+      const allHid = withTangents ? [...sharpHid, ...tanHid] : sharpHid;
+      hid = cleanGeom(allVis, allHid).hid;
+    }
+    return { vis: cg1.vis, tan: withTangents ? cg1.hid : [], hid };
+  }
+  function finalizeSectionGeom(polys, tangents, hidden, caps, allCenters, extra = {}) {
+    const circles = [], points = [];
+    for (const arr of [polys, tangents]) for (const p of arr) {
+      if (!p.pts || !p.pts.length) continue;
+      points.push(p.pts[0], p.pts[p.pts.length - 1]);
+      if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
+    }
+    for (const p of hidden) if (p.pts && p.pts.length) points.push(p.pts[0], p.pts[p.pts.length - 1]);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const arr of [polys, tangents, hidden]) for (const p of arr) for (const q of p.pts || []) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+    for (const cap of caps) {
+      if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
+      for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    }
+    if (!isFinite(x0)) return null;
+    return { polys, tangents, hidden, caps, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0, ...extra };
+  }
   function sectionGeom(sec, sh = dwg()) {
+    const type = sec.type || 'full';
     const key = secCacheKey(sec);
-    if (!proj || !proj.sections || !proj.sections[key]) return null;
     const viewName = 'sec_' + sec.id;
+    if (type === 'half') {
+      const sp = sectionPlaneSpec(sec);
+      const vk = secUncutViewKey(sp);
+      if (!proj || !proj.sections || !proj.sections[key] || !proj.views || !proj.views[vk]) return null;
+      const ck = 'half|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden + '|' + (sec.halfAxis || 'v') + '|' + (sec.halfSide || 'right') + '|' + (sec.split ?? '');
+      let g = geoCache.get(ck);
+      if (!g) {
+        if (geoCache.size > 32) geoCache.clear();
+        const secRaw = proj.sections[key], fullRaw = proj.views[vk];
+        const sc = parseRawEdges(secRaw, !!sh.hidden, false);
+        const fc = parseRawEdges(fullRaw, !!sh.hidden, true);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const arr of [fc.vis, fc.tan, fc.hid, sc.vis, sc.hid]) for (const p of arr) for (const q of p.pts || []) {
+          x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+        }
+        for (const cap of secRaw.caps || []) {
+          if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
+        }
+        if (!isFinite(x0)) return null;
+        const isH = sec.halfAxis === 'h';
+        const splitVal = (sec.split != null && Number.isFinite(Number(sec.split))) ? Number(sec.split) : (isH ? (y0 + y1) * 0.5 : (x0 + x1) * 0.5);
+        const side = sec.halfSide || (isH ? 'bottom' : 'right');
+        const ax = isH ? 0 : 1, ay = isH ? 1 : 0;
+        const cutPosHalf = (!isH && side === 'right') || (isH && side === 'top');
+        const cutStrip = cutPosHalf ? { ax, ay, lo: splitVal, hi: Infinity } : { ax, ay, lo: -Infinity, hi: splitVal };
+        const uncutStrip = cutPosHalf ? { ax, ay, lo: -Infinity, hi: splitVal } : { ax, ay, lo: splitVal, hi: Infinity };
+        const polys = [], tangents = [], hidden = [];
+        for (const p of fc.vis) polys.push(...clipEdgeItemStrip(p, uncutStrip.ax, uncutStrip.ay, uncutStrip.lo, uncutStrip.hi));
+        for (const p of fc.tan) tangents.push(...clipEdgeItemStrip(p, uncutStrip.ax, uncutStrip.ay, uncutStrip.lo, uncutStrip.hi));
+        for (const p of fc.hid) hidden.push(...clipEdgeItemStrip(p, uncutStrip.ax, uncutStrip.ay, uncutStrip.lo, uncutStrip.hi));
+        for (const p of sc.vis) polys.push(...clipEdgeItemStrip(p, cutStrip.ax, cutStrip.ay, cutStrip.lo, cutStrip.hi));
+        for (const p of sc.hid) hidden.push(...clipEdgeItemStrip(p, cutStrip.ax, cutStrip.ay, cutStrip.lo, cutStrip.hi));
+        const caps = [];
+        for (const cap of secRaw.caps || []) {
+          if (cap.bbox) {
+            const cLo = Math.min(cap.bbox[0] * ax + cap.bbox[1] * ay, cap.bbox[2] * ax + cap.bbox[3] * ay);
+            const cHi = Math.max(cap.bbox[0] * ax + cap.bbox[1] * ay, cap.bbox[2] * ax + cap.bbox[3] * ay);
+            if (cHi < cutStrip.lo - 1e-4 || cLo > cutStrip.hi + 1e-4) continue;
+          }
+          caps.push({ ...cap, strip: cutStrip });
+        }
+        const splitLine = isH ? { a: [x0, splitVal], b: [x1, splitVal] } : { a: [splitVal, y0], b: [splitVal, y1] };
+        const allCenters = computeViewCenters(viewName, fullRaw);
+        g = finalizeSectionGeom(polys, tangents, hidden, caps, allCenters, { splitLine, halfClip: cutStrip });
+        if (!g) return null;
+        geoCache.set(ck, g);
+      }
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    }
+    if (type === 'stepped') {
+      const st = steppedSegments(sec);
+      if (!st || !st.segments.length || !proj || !proj.sections) return null;
+      for (const seg of st.segments) if (!proj.sections[seg.key]) return null;
+      const ck = 'step|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden;
+      let g = geoCache.get(ck);
+      if (!g) {
+        if (geoCache.size > 32) geoCache.clear();
+        const polys = [], hidden = [], caps = [];
+        const [ax, ay] = st.ax2;
+        for (const seg of st.segments) {
+          const v = proj.sections[seg.key];
+          const sc = parseRawEdges(v, !!sh.hidden, false);
+          for (const p of sc.vis) polys.push(...clipEdgeItemStrip(p, ax, ay, seg.lo, seg.hi));
+          for (const p of sc.hid) hidden.push(...clipEdgeItemStrip(p, ax, ay, seg.lo, seg.hi));
+          for (const cap of v.caps || []) {
+            if (cap.bbox) {
+              const vals = [
+                cap.bbox[0] * ax + cap.bbox[1] * ay,
+                cap.bbox[2] * ax + cap.bbox[1] * ay,
+                cap.bbox[0] * ax + cap.bbox[3] * ay,
+                cap.bbox[2] * ax + cap.bbox[3] * ay,
+              ];
+              if (Math.max(...vals) < seg.lo - 1e-4 || Math.min(...vals) > seg.hi + 1e-4) continue;
+            }
+            caps.push({ ...cap, strip: { ax, ay, lo: seg.lo, hi: seg.hi } });
+          }
+        }
+        const allCenters = computeViewCenters(viewName, st.sp);
+        g = finalizeSectionGeom(polys, [], hidden, caps, allCenters);
+        if (!g) return null;
+        geoCache.set(ck, g);
+      }
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    }
+    if (type === 'breakout') {
+      if (!proj || !proj.sections || !proj.sections[key] || !proj.views || !proj.views[sec.parent]) return null;
+      if (!Array.isArray(sec.region) || sec.region.length < 3) return null;
+      const regSig = sec.region.map((p) => `${r4(p[0])},${r4(p[1])}`).join(';');
+      const ck = 'brk|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden + '|' + (sec.depth ?? '') + '|' + regSig;
+      let g = geoCache.get(ck);
+      if (!g) {
+        if (geoCache.size > 32) geoCache.clear();
+        const secRaw = proj.sections[key], fullRaw = proj.views[sec.parent];
+        const fc = parseRawEdges(fullRaw, !!sh.hidden, true);
+        const sc = parseRawEdges(secRaw, !!sh.hidden, false);
+        const breakPoly = makeBreakPoly(sec.region);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const arr of [fc.vis, fc.tan, fc.hid, sc.vis, sc.hid]) for (const p of arr) for (const q of p.pts || []) {
+          x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+        }
+        if (!isFinite(x0)) return null;
+        const polys = [], tangents = [], hidden = [];
+        for (const p of fc.vis) polys.push(...clipEdgeItemPolygon(p, breakPoly, false));
+        for (const p of fc.tan) tangents.push(...clipEdgeItemPolygon(p, breakPoly, false));
+        for (const p of fc.hid) hidden.push(...clipEdgeItemPolygon(p, breakPoly, false));
+        for (const p of sc.vis) polys.push(...clipEdgeItemPolygon(p, breakPoly, true));
+        for (const p of sc.hid) hidden.push(...clipEdgeItemPolygon(p, breakPoly, true));
+        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+        for (const p of breakPoly) { bx0 = Math.min(bx0, p[0]); by0 = Math.min(by0, p[1]); bx1 = Math.max(bx1, p[0]); by1 = Math.max(by1, p[1]); }
+        const caps = [];
+        for (const cap of secRaw.caps || []) {
+          if (cap.bbox && (cap.bbox[2] < bx0 - 1e-4 || cap.bbox[0] > bx1 + 1e-4 || cap.bbox[3] < by0 - 1e-4 || cap.bbox[1] > by1 + 1e-4)) continue;
+          caps.push({ ...cap, clipPoly: breakPoly });
+        }
+        const closedLoop = [...breakPoly, breakPoly[0]];
+        const clipX = clipPolyStrip(closedLoop, 1, 0, x0 - 0.01, x1 + 0.01);
+        const breakLines = [];
+        for (const item of clipX) breakLines.push(...clipPolyStrip(item.pts, 0, 1, y0 - 0.01, y1 + 0.01));
+        const allCenters = computeViewCenters(viewName, fullRaw);
+        g = finalizeSectionGeom(polys, tangents, hidden, caps, allCenters, { breakPoly, breakLines });
+        if (!g) return null;
+        g.box = [x0, y0, x1, y1];
+        g.w = x1 - x0;
+        g.h = y1 - y0;
+        geoCache.set(ck, g);
+      }
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    }
+    if (!proj || !proj.sections || !proj.sections[key]) return null;
     const ck = 'sec|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden;
     let g = geoCache.get(ck);
     if (!g) {
       if (geoCache.size > 32) geoCache.clear();
       const v = proj.sections[key];
-      const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
-      const cg = cleanGeom((v.visible || []).map(raw).filter(Boolean), sh.hidden ? (v.hidden || []).map(raw).filter(Boolean) : []);
-      const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
-      for (const p of polys) {
-        points.push(p.pts[0], p.pts[p.pts.length - 1]);
-        if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
-      }
-      for (const p of hidden) points.push(p.pts[0], p.pts[p.pts.length - 1]);
+      const sc = parseRawEdges(v, !!sh.hidden, false);
       const caps = v.caps || [];
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
-      for (const cap of caps) {
-        if (cap.bbox) { x0 = Math.min(x0, cap.bbox[0]); y0 = Math.min(y0, cap.bbox[1]); x1 = Math.max(x1, cap.bbox[2]); y1 = Math.max(y1, cap.bbox[3]); }
-        for (const p of cap.outer || []) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
-      }
-      if (!isFinite(x0)) return null;
       const sDir = new THREE.Vector3(...v.dir), oVec = new THREE.Vector3(...(v.o || [0, 0, 0]));
       const allCenters = computeViewCenters(viewName, v, (a, o, d) => {
         const p0 = o.clone().addScaledVector(d, a.t0), p1 = o.clone().addScaledVector(d, a.t1);
         const w0 = p0.sub(oVec).dot(sDir), w1 = p1.sub(oVec).dot(sDir);
         return Math.min(w0, w1) <= a.r + 0.5;
       });
-      g = { polys, hidden, caps, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+      g = finalizeSectionGeom(sc.vis, [], sc.hid, caps, allCenters);
+      if (!g) return null;
       geoCache.set(ck, g);
     }
     return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
@@ -2629,21 +3116,101 @@ const Drawing = (() => {
           if (a1 - a0 < 1e-5) continue;
           const P0 = [a0 * tx + b0 * nx, a0 * ty + b0 * ny];
           const P1 = [a1 * tx + b0 * nx, a1 * ty + b0 * ny];
-          lines.push({ pts: [toSheet(v, P0), toSheet(v, P1)], cls: 'hatch', id: sec.id, secId: sec.id, capIdx });
+          const emitSeg = (S0, S1) => {
+            if (Math.hypot(S1[0] - S0[0], S1[1] - S0[1]) > 1e-4) {
+              lines.push({ pts: [toSheet(v, S0), toSheet(v, S1)], cls: 'hatch', id: sec.id, secId: sec.id, capIdx, secType: sec.type || 'full' });
+            }
+          };
+          if (cap.strip) {
+            const clipped = clipSegStrip(P0, P1, cap.strip.ax, cap.strip.ay, cap.strip.lo, cap.strip.hi);
+            if (clipped) emitSeg(clipped[0], clipped[1]);
+          } else if (cap.clipPoly) {
+            for (const sub of clipSegPolygon(P0, P1, cap.clipPoly, true)) emitSeg(sub[0], sub[1]);
+          } else {
+            emitSeg(P0, P1);
+          }
         }
       }
     }
   }
   function drawSectionLine(v, sec, lines, texts) {
+    const type = (sec && sec.type) || 'full';
+    const secType = type;
+    if (type === 'breakout') {
+      if (!Array.isArray(sec.region) || sec.region.length < 3) return;
+      const bPoly = makeBreakPoly(sec.region);
+      if (bPoly.length < 3) return;
+      const pts = bPoly.map((p) => toSheet(v, p));
+      pts.push([...pts[0]]);
+      lines.push({ pts, cls: 'breakline', id: sec.id, secId: sec.id, secType });
+      let tr = pts[0];
+      for (const p of pts) if (p[0] - p[1] > tr[0] - tr[1]) tr = p;
+      texts.push({ x: tr[0] + 3.2, y: tr[1] - 1.5, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel', secType });
+      return;
+    }
     const vf = sectionPlaneSpec(sec);
+    const lookSheet = [vf.look2[0], -vf.look2[1]];
+    const b = v.geo.box;
+    const TL = toSheet(v, [b[0], b[3]]), BR = toSheet(v, [b[2], b[1]]);
+    const corners = [TL, [BR[0], TL[1]], BR, [TL[0], BR[1]]];
+    const endLen = 5;
+    const shaft = 8;
+    const drawArrowEnd = (EP, ux, uy, outU) => {
+      const tail = [EP[0] - lookSheet[0] * shaft, EP[1] - lookSheet[1] * shaft];
+      lines.push({ pts: [tail, EP], cls: 'dim', id: sec.id, secId: sec.id, secType });
+      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id, 'filled');
+      const lx = tail[0] - lookSheet[0] * 1.2 + ux * outU * 3.2;
+      const ly = tail[1] - lookSheet[1] * 1.2 + uy * outU * 3.2 + 1.5;
+      texts.push({ x: lx, y: ly, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel', secType });
+    };
+    if (type === 'stepped') {
+      const rawPts = Array.isArray(sec.pts) && sec.pts.length >= 2 ? sec.pts : [sec.a, sec.b];
+      const S = rawPts.map((p) => toSheet(v, p));
+      if (S.length < 2) return;
+      const s0 = S[0], s1 = S[1];
+      let d0x = s1[0] - s0[0], d0y = s1[1] - s0[1], L0 = Math.hypot(d0x, d0y);
+      if (L0 < 1e-3) return;
+      const u0x = d0x / L0, u0y = d0y / L0;
+      const sn1 = S[S.length - 2], sn2 = S[S.length - 1];
+      let dnx = sn2[0] - sn1[0], dny = sn2[1] - sn1[1], Ln = Math.hypot(dnx, dny);
+      if (Ln < 1e-3) { dnx = d0x; dny = d0y; Ln = L0; }
+      const unx = dnx / Ln, uny = dny / Ln;
+      let tMin0 = Infinity, tMaxN = -Infinity;
+      for (const c of corners) {
+        const t0 = (c[0] - s0[0]) * u0x + (c[1] - s0[1]) * u0y;
+        if (t0 < tMin0) tMin0 = t0;
+        const tn = (c[0] - sn1[0]) * unx + (c[1] - sn1[1]) * uny;
+        if (tn > tMaxN) tMaxN = tn;
+      }
+      const sStart = Math.min(0, tMin0 - 5), sEnd = Math.max(Ln, tMaxN + 5);
+      const E1 = [s0[0] + u0x * sStart, s0[1] + u0y * sStart];
+      const E2 = [sn1[0] + unx * sEnd, sn1[1] + uny * sEnd];
+      const poly = [E1, ...S.slice(1, -1), E2];
+      lines.push({ pts: poly, cls: 'cutline', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [E1, [E1[0] + u0x * endLen, E1[1] + u0y * endLen]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [[E2[0] - unx * endLen, E2[1] - uny * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      for (let k = 1; k < poly.length - 1; k++) {
+        const P = poly[k], prev = poly[k - 1], next = poly[k + 1];
+        const lA = Math.hypot(prev[0] - P[0], prev[1] - P[1]);
+        const lB = Math.hypot(next[0] - P[0], next[1] - P[1]);
+        if (lA > 1e-3) {
+          const kA = Math.min(3.5, lA * 0.45) / lA;
+          lines.push({ pts: [[P[0] + (prev[0] - P[0]) * kA, P[1] + (prev[1] - P[1]) * kA], P], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+        }
+        if (lB > 1e-3) {
+          const kB = Math.min(3.5, lB * 0.45) / lB;
+          lines.push({ pts: [P, [P[0] + (next[0] - P[0]) * kB, P[1] + (next[1] - P[1]) * kB]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+        }
+      }
+      drawArrowEnd(E1, u0x, u0y, -1);
+      drawArrowEnd(E2, unx, uny, 1);
+      return;
+    }
     const A0 = toSheet(v, sec.a), B0 = toSheet(v, sec.b);
     const dx = B0[0] - A0[0], dy = B0[1] - A0[1];
     const L = Math.hypot(dx, dy);
     if (L < 1e-3) return;
     const ux = dx / L, uy = dy / L;
-    const b = v.geo.box;
-    const TL = toSheet(v, [b[0], b[3]]), BR = toSheet(v, [b[2], b[1]]);
-    const corners = [TL, [BR[0], TL[1]], BR, [TL[0], BR[1]]];
     let tMin = Infinity, tMax = -Infinity;
     for (const c of corners) {
       const t = (c[0] - A0[0]) * ux + (c[1] - A0[1]) * uy;
@@ -2653,20 +3220,34 @@ const Drawing = (() => {
     const sStart = Math.min(0, tMin - 5), sEnd = Math.max(L, tMax + 5);
     const E1 = [A0[0] + ux * sStart, A0[1] + uy * sStart];
     const E2 = [A0[0] + ux * sEnd, A0[1] + uy * sEnd];
-    const lookSheet = [vf.look2[0], -vf.look2[1]];
-    const endLen = 5;
-    lines.push({ pts: [E1, E2], cls: 'cutline', id: sec.id, secId: sec.id });
-    lines.push({ pts: [E1, [E1[0] + ux * endLen, E1[1] + uy * endLen]], cls: 'cutend', id: sec.id, secId: sec.id });
-    lines.push({ pts: [[E2[0] - ux * endLen, E2[1] - uy * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id });
-    const shaft = 8;
-    for (const [EP, outU] of [[E1, -1], [E2, 1]]) {
-      const tail = [EP[0] - lookSheet[0] * shaft, EP[1] - lookSheet[1] * shaft];
-      lines.push({ pts: [tail, EP], cls: 'dim', id: sec.id, secId: sec.id });
-      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id, 'filled');
-      const lx = tail[0] - lookSheet[0] * 1.2 + ux * outU * 3.2;
-      const ly = tail[1] - lookSheet[1] * 1.2 + uy * outU * 3.2 + 1.5;
-      texts.push({ x: lx, y: ly, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel' });
+    if (type === 'half' && sec.halfAxis !== 'h') {
+      const pvf = (proj && proj.views && proj.views[sec.parent]) || VIEW_FRAMES[sec.parent] || VIEW_FRAMES.top;
+      const p3 = (p) => [pvf.x[0] * p[0] + pvf.y[0] * p[1], pvf.x[1] * p[0] + pvf.y[1] * p[1], pvf.x[2] * p[0] + pvf.y[2] * p[1]];
+      const uA = dot3(p3(sec.a), vf.x), uB = dot3(p3(sec.b), vf.x);
+      const cutRight = (sec.halfSide || 'right') !== 'left';
+      const cutIsE2 = cutRight ? uB >= uA : uA > uB;
+      const E_cut = cutIsE2 ? E2 : E1;
+      const uDir = cutIsE2 ? [ux, uy] : [-ux, -uy];
+      const M = [(E1[0] + E2[0]) * 0.5, (E1[1] + E2[1]) * 0.5];
+      let turnLen = 10;
+      for (const c of corners) {
+        const d = (c[0] - M[0]) * (-lookSheet[0]) + (c[1] - M[1]) * (-lookSheet[1]);
+        if (d + 5 > turnLen) turnLen = d + 5;
+      }
+      const E_turn = [M[0] - lookSheet[0] * turnLen, M[1] - lookSheet[1] * turnLen];
+      lines.push({ pts: [E_cut, M, E_turn], cls: 'cutline', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [E_cut, [E_cut[0] - uDir[0] * endLen, E_cut[1] - uDir[1] * endLen]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [[M[0] + uDir[0] * 3.5, M[1] + uDir[1] * 3.5], M, [M[0] - lookSheet[0] * 3.5, M[1] - lookSheet[1] * 3.5]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      lines.push({ pts: [[E_turn[0] + lookSheet[0] * endLen, E_turn[1] + lookSheet[1] * endLen], E_turn], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+      drawArrowEnd(E_cut, uDir[0], uDir[1], 1);
+      texts.push({ x: E_turn[0] - lookSheet[0] * 3.5, y: E_turn[1] - lookSheet[1] * 3.5 + 1.5, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel', secType });
+      return;
     }
+    lines.push({ pts: [E1, E2], cls: 'cutline', id: sec.id, secId: sec.id, secType });
+    lines.push({ pts: [E1, [E1[0] + ux * endLen, E1[1] + uy * endLen]], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+    lines.push({ pts: [[E2[0] - ux * endLen, E2[1] - uy * endLen], E2], cls: 'cutend', id: sec.id, secId: sec.id, secType });
+    drawArrowEnd(E1, ux, uy, -1);
+    drawArrowEnd(E2, ux, uy, 1);
   }
 
   // ---------- Zeichnen ----------
@@ -2813,10 +3394,21 @@ const Drawing = (() => {
       for (const p of v.geo.polys) lines.push(asLine(p, 'vis'));
       for (const p of v.geo.tangents || []) lines.push(asLine(p, 'tan'));
       for (const p of v.geo.hidden) lines.push(asLine(p, 'hid'));
+      if (v.isSection && v.geo.splitLine) {
+        const A = toSheet(v, v.geo.splitLine.a), B = toSheet(v, v.geo.splitLine.b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1;
+        const e = 2.5;
+        lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name, id: v.section.id, secId: v.section.id });
+      }
+      if (v.isSection && v.geo.breakLines) {
+        for (const bl of v.geo.breakLines) {
+          lines.push({ pts: bl.pts.map((q) => toSheet(v, q)), cls: 'breakline', view: name, id: v.section.id, secId: v.section.id, secType: 'breakout' });
+        }
+      }
       if (v.isSection && v.section) {
         const b = v.geo.box;
         const TL = toSheet(v, [b[0], b[3]]), BR = toSheet(v, [b[2], b[1]]);
-        texts.push({ x: (TL[0] + BR[0]) * 0.5, y: BR[1] + 6, t: `Schnitt ${v.section.label}–${v.section.label}`, size: 4, anchor: 'middle', id: v.section.id, secId: v.section.id, cls: 'viewlabel' });
+        texts.push({ x: (TL[0] + BR[0]) * 0.5, y: BR[1] + 6, t: sectionTitle(v.section), size: 4, anchor: 'middle', id: v.section.id, secId: v.section.id, cls: 'viewlabel', secType: v.section.type || 'full' });
       }
       for (const c of v.geo.centers) {
         if (c.type === 'cross') {
@@ -2978,7 +3570,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -3011,6 +3603,7 @@ const Drawing = (() => {
         if (l.view) el.dataset.view = l.view;
         if (l.ctrType) el.dataset.ctr = l.ctrType;
         if (l.secId) el.dataset.sec = l.secId;
+        if (l.secType) el.dataset.secType = l.secType;
         if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
         if (l.noteTip) el.dataset.tipKind = l.noteTip;
         if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
@@ -3043,6 +3636,7 @@ const Drawing = (() => {
         if (t.lost) el.dataset.lost = '1';
         if (t.view) el.dataset.view = t.view;
         if (t.secId) el.dataset.sec = t.secId;
+        if (t.secType) el.dataset.secType = t.secType;
         if (t.tolPart) el.dataset.tol = t.tolPart;
         if (t.balloonPos != null) el.dataset.pos = String(t.balloonPos);
         if (t.bomRow != null) el.dataset.bomRow = String(t.bomRow);
@@ -4106,7 +4700,26 @@ const Drawing = (() => {
       const P = sheetPt(e);
       toolState = toolState || { stage: 0 };
       toolState.P = P;
-      if (toolState.stage === 1 && toolState.view) {
+      if (sectionMode === 'stepped') {
+        if (toolState.stage === 1 && toolState.view && toolState.pts && toolState.pts.length === 1) {
+          toolState.cur = snapSectionPt(toolState.view, P, toolState.pts[0], e.shiftKey, e.altKey);
+        } else if (toolState.stage === 2 && toolState.view) {
+          toolState.cur = snapSteppedNext(toolState, P);
+        } else {
+          const name = sectionParentAt(P);
+          toolState.hoverView = name;
+          toolState.snapPt = name ? snapSectionPt(name, P, null, e.shiftKey, e.altKey) : null;
+        }
+      } else if (sectionMode === 'breakout') {
+        if (toolState.stage >= 1 && toolState.view) {
+          const v = layout && layout.views && layout.views[toolState.view];
+          if (v) toolState.cur = toView(v, P);
+        } else {
+          const name = sectionParentAt(P);
+          toolState.hoverView = name;
+          toolState.snapPt = name ? snapSectionPt(name, P, null, e.shiftKey, e.altKey) : null;
+        }
+      } else if (toolState.stage === 1 && toolState.view) {
         toolState.b = snapSectionPt(toolState.view, P, toolState.a, e.shiftKey, e.altKey);
       } else {
         const name = sectionParentAt(P);
@@ -4241,13 +4854,40 @@ const Drawing = (() => {
       return;
     }
     if (!e || e.button !== 0 || tool !== 'section' || !toolState || toolState.stage !== 1 || !svg) return;
+    if (sectionMode === 'breakout') {
+      if (toolState.dragging && Array.isArray(toolState.pts) && toolState.pts.length === 1) {
+        toolState.dragging = false;
+        const P = sheetPt(e);
+        const downP = toolState.downSheet || P;
+        if (Math.hypot(P[0] - downP[0], P[1] - downP[1]) >= 4) {
+          const v = layout && layout.views && layout.views[toolState.view];
+          if (v) {
+            const p0 = toolState.pts[0];
+            const p1 = toView(v, P);
+            if (Math.abs(p1[0] - p0[0]) >= 1 && Math.abs(p1[1] - p0[1]) >= 1) {
+              addSection({ type: 'breakout', parent: toolState.view, region: [p0, [p1[0], p0[1]], p1, [p0[0], p1[1]]], depth: sectionDraft.depth });
+              return;
+            }
+          }
+        }
+        render(); Panels.renderRight();
+      }
+      return;
+    }
+    if (sectionMode === 'stepped') return;
     const P = sheetPt(e);
     const downP = toolState.downSheet || P;
     if (Math.hypot(P[0] - downP[0], P[1] - downP[1]) < 4) return;
     const a = toolState.a;
     const b = snapSectionPt(toolState.view, P, a, e.shiftKey, e.altKey);
     if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 2) {
-      addSection({ parent: toolState.view, a, b });
+      addSection({
+        type: sectionMode === 'half' ? 'half' : 'full',
+        parent: toolState.view,
+        a,
+        b,
+        ...(sectionMode === 'half' ? { halfAxis: sectionDraft.halfAxis, halfSide: sectionDraft.halfSide } : {}),
+      });
     } else {
       toolState = { stage: 0 };
       render();
@@ -4291,8 +4931,99 @@ const Drawing = (() => {
       texts.push({ x: st.P[0], y: st.P[1] - DR - 3, t: `Detail ${detailDraft.label} (${scaleText(ds)})`, size: 4, anchor: 'middle', cls: 'detail-lbl' });
     }
   }
+  function snapSteppedNext(st, P) {
+    const v = layout && layout.views && layout.views[st.view];
+    if (!v || !st.pts || !st.pts.length) return [0, 0];
+    const q = toView(v, P);
+    const last = st.pts[st.pts.length - 1];
+    const t2 = st.t2 || [1, 0];
+    const n2 = [-t2[1], t2[0]];
+    if (st.pts.length % 2 === 0) {
+      const proj = (q[0] - last[0]) * n2[0] + (q[1] - last[1]) * n2[1];
+      return [last[0] + n2[0] * proj, last[1] + n2[1] * proj];
+    }
+    const proj = (q[0] - last[0]) * t2[0] + (q[1] - last[1]) * t2[1];
+    return [last[0] + t2[0] * proj, last[1] + t2[1] * proj];
+  }
+  function finishSectionTool() {
+    if (tool !== 'section' || !toolState || !toolState.view) return false;
+    if (sectionMode === 'stepped') {
+      const pts = (toolState.pts || []).map((p) => [...p]);
+      if (pts.length === 3 && toolState.cur) {
+        const last = pts[pts.length - 1];
+        if (Math.hypot(toolState.cur[0] - last[0], toolState.cur[1] - last[1]) >= 1) pts.push([...toolState.cur]);
+      } else if (pts.length >= 5 && pts.length % 2 === 1) {
+        const last = pts[pts.length - 1];
+        if (toolState.cur && Math.hypot(toolState.cur[0] - last[0], toolState.cur[1] - last[1]) >= 1) pts.push([...toolState.cur]);
+        else pts.pop();
+      }
+      if (pts.length < 4) { UI.toast('Klicke mindestens 4 Punkte für einen abgesetzten Schnitt.', { icon: 'info', ms: 2200 }); return false; }
+      addSection({ type: 'stepped', parent: toolState.view, pts });
+      return true;
+    }
+    if (sectionMode === 'breakout') {
+      const region = (toolState.pts || []).map((p) => [...p]);
+      if (region.length < 3) { UI.toast('Klicke mindestens 3 Punkte oder ziehe ein Rechteck auf.', { icon: 'info', ms: 2200 }); return false; }
+      addSection({ type: 'breakout', parent: toolState.view, region, depth: sectionDraft.depth });
+      return true;
+    }
+    return false;
+  }
   function sectionDown(P, e) {
     const st = toolState || { stage: 0 };
+    if (sectionMode === 'stepped') {
+      if (st.stage === 0) {
+        const name = sectionParentAt(P);
+        if (!name) { UI.toast('Klicke den Startpunkt des abgesetzten Schnitts in der Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
+        const a = snapSectionPt(name, P, null, e.shiftKey, e.altKey);
+        toolState = { stage: 1, view: name, pts: [a], cur: a };
+        render(); Panels.renderRight();
+      } else if (st.stage === 1) {
+        const b = snapSectionPt(st.view, P, st.pts[0], e.shiftKey, e.altKey);
+        const L = Math.hypot(b[0] - st.pts[0][0], b[1] - st.pts[0][1]);
+        if (L < 1.5) return;
+        const t2 = [(b[0] - st.pts[0][0]) / L, (b[1] - st.pts[0][1]) / L];
+        toolState = { stage: 2, view: st.view, pts: [st.pts[0], b], cur: b, t2 };
+        render(); Panels.renderRight();
+      } else if (st.stage === 2) {
+        const nextPt = snapSteppedNext(st, P);
+        const last = st.pts[st.pts.length - 1];
+        if (st.pts.length >= 4 && (e.detail === 2 || Math.hypot(nextPt[0] - last[0], nextPt[1] - last[1]) < 1.0)) {
+          finishSectionTool();
+          return;
+        }
+        if (Math.hypot(nextPt[0] - last[0], nextPt[1] - last[1]) < 0.8) return;
+        st.pts.push(nextPt);
+        st.cur = nextPt;
+        render(); Panels.renderRight();
+      }
+      return;
+    }
+    if (sectionMode === 'breakout') {
+      if (st.stage === 0) {
+        const name = sectionParentAt(P);
+        if (!name) { UI.toast('Zieh ein Rechteck oder klicke einen Umriss in der Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
+        const v = layout.views[name];
+        const p0 = toView(v, P);
+        toolState = { stage: 1, view: name, pts: [p0], cur: p0, downSheet: P, dragging: true };
+        render(); Panels.renderRight();
+      } else if (st.stage === 1 && !st.dragging) {
+        const v = layout.views[st.view];
+        if (!v) return;
+        const q = toView(v, P);
+        const closeTol = Math.max(2, 5 / zoom / v.s);
+        if (st.pts.length >= 3 && (e.detail === 2 || Math.hypot(q[0] - st.pts[0][0], q[1] - st.pts[0][1]) <= closeTol)) {
+          finishSectionTool();
+          return;
+        }
+        const last = st.pts[st.pts.length - 1];
+        if (Math.hypot(q[0] - last[0], q[1] - last[1]) < 0.5) return;
+        st.pts.push(q);
+        st.cur = q;
+        render(); Panels.renderRight();
+      }
+      return;
+    }
     if (st.stage === 0) {
       const name = sectionParentAt(P);
       if (!name) { UI.toast('Zieh oder klick eine Schnittlinie durch die Vorder-, Drauf- oder Seitenansicht.', { icon: 'info', ms: 2200 }); return; }
@@ -4302,7 +5033,13 @@ const Drawing = (() => {
     } else if (st.stage === 1) {
       const b = snapSectionPt(st.view, P, st.a, e.shiftKey, e.altKey);
       if (Math.hypot(b[0] - st.a[0], b[1] - st.a[1]) < 2) return;
-      addSection({ parent: st.view, a: st.a, b });
+      addSection({
+        type: sectionMode === 'half' ? 'half' : 'full',
+        parent: st.view,
+        a: st.a,
+        b,
+        ...(sectionMode === 'half' ? { halfAxis: sectionDraft.halfAxis, halfSide: sectionDraft.halfSide } : {}),
+      });
     }
   }
   function previewSection(lines, texts) {
@@ -4316,6 +5053,38 @@ const Drawing = (() => {
       }
       return;
     }
+    if (sectionMode === 'stepped' && st.stage >= 1 && st.view && Array.isArray(st.pts)) {
+      const v = layout.views[st.view];
+      if (!v) return;
+      const pts = st.cur ? [...st.pts, st.cur] : st.pts.slice();
+      if (pts.length >= 2) {
+        const S = pts.map((p) => toSheet(v, p));
+        if (pts.length >= 2 && Math.hypot(S[1][0] - S[0][0], S[1][1] - S[0][1]) >= 0.5) {
+          drawSectionLine(v, { id: '__secprev', type: 'stepped', label: nextSectionLabel(), parent: st.view, pts, flip: false }, lines, texts);
+        }
+      }
+      return;
+    }
+    if (sectionMode === 'breakout' && st.stage >= 1 && st.view && Array.isArray(st.pts)) {
+      const v = layout.views[st.view];
+      if (!v) return;
+      if (st.dragging && st.pts.length === 1 && st.cur) {
+        const p0 = st.pts[0], p1 = st.cur;
+        const reg = [p0, [p1[0], p0[1]], p1, [p0[0], p1[1]]];
+        const S = reg.map((p) => toSheet(v, p));
+        S.push([...S[0]]);
+        lines.push({ pts: S, cls: 'prev' });
+      } else {
+        const pts = st.cur ? [...st.pts, st.cur] : st.pts.slice();
+        if (pts.length >= 2) lines.push({ pts: pts.map((p) => toSheet(v, p)), cls: 'prev' });
+        if (st.pts.length >= 3 && st.cur) {
+          lines.push({ pts: [toSheet(v, st.cur), toSheet(v, st.pts[0])], cls: 'prev' });
+          const S0 = toSheet(v, st.pts[0]);
+          lines.push({ circle: [S0[0], S0[1], (1.4 / zoom) * 1.4], cls: 'snap' });
+        }
+      }
+      return;
+    }
     if (st.stage === 1 && st.view && st.a && st.b) {
       const v = layout.views[st.view];
       if (!v) return;
@@ -4325,7 +5094,16 @@ const Drawing = (() => {
         return;
       }
       const lbl = nextSectionLabel();
-      drawSectionLine(v, { id: '__secprev', label: lbl, parent: st.view, a: st.a, b: st.b, flip: false }, lines, texts);
+      drawSectionLine(v, {
+        id: '__secprev',
+        type: sectionMode === 'half' ? 'half' : 'full',
+        label: lbl,
+        parent: st.view,
+        a: st.a,
+        b: st.b,
+        flip: false,
+        ...(sectionMode === 'half' ? { halfAxis: sectionDraft.halfAxis, halfSide: sectionDraft.halfSide } : {}),
+      }, lines, texts);
     }
   }
   function nextSectionLabel(sh = dwg()) {
@@ -4337,21 +5115,39 @@ const Drawing = (() => {
     return 'A' + n;
   }
   async function addSection(opts) {
-    if (!opts || !opts.parent || !opts.a || !opts.b) return null;
-    if (Math.hypot(opts.b[0] - opts.a[0], opts.b[1] - opts.a[1]) < 1e-3) return null;
+    if (!opts || !opts.parent) return null;
+    const type = opts.type === 'half' || opts.type === 'stepped' || opts.type === 'breakout' ? opts.type : 'full';
+    if (type !== 'full' && isSimpleMode()) {
+      UI.toast(T('draw.secProOnly'), { icon: 'info' });
+      return null;
+    }
+    if (type === 'stepped') {
+      if (!Array.isArray(opts.pts) || opts.pts.length < 4) return null;
+    } else if (type === 'breakout') {
+      if (!Array.isArray(opts.region) || opts.region.length < 3) return null;
+    } else {
+      if (!opts.a || !opts.b || Math.hypot(opts.b[0] - opts.a[0], opts.b[1] - opts.a[1]) < 1e-3) return null;
+    }
     let sec = null;
     App.change('Schnittansicht hinzugefügt', () => {
       const d = dwg();
       if (!Array.isArray(d.sections)) d.sections = [];
-      sec = {
+      sec = normalizeSection({
         id: uid('sec'),
         label: opts.label || nextSectionLabel(d),
         parent: opts.parent,
-        a: [opts.a[0], opts.a[1]],
-        b: [opts.b[0], opts.b[1]],
+        type,
+        a: opts.a,
+        b: opts.b,
+        pts: opts.pts,
+        region: opts.region,
+        halfAxis: opts.halfAxis,
+        halfSide: opts.halfSide,
+        split: opts.split,
+        depth: opts.depth,
         flip: !!opts.flip,
         pos: opts.pos || null,
-      };
+      });
       d.sections.push(sec);
     });
     selDim = sec.id;
@@ -4364,6 +5160,54 @@ const Drawing = (() => {
     render();
     Panels.renderRight();
     return sec;
+  }
+  async function updateSection(id, patch = {}) {
+    const cur = (dwg().sections || []).find((x) => x.id === id);
+    if (!cur || !patch || typeof patch !== 'object') return false;
+    let changed = false;
+    App.change('Schnittansicht geändert', () => {
+      const s = (dwg().sections || []).find((x) => x.id === id);
+      if (!s) return;
+      if (patch.label != null) {
+        const lbl = String(patch.label).trim().slice(0, 3);
+        if (lbl && lbl !== s.label) { s.label = lbl; changed = true; }
+      }
+      if (patch.flip != null && !!patch.flip !== !!s.flip) { s.flip = !!patch.flip; changed = true; }
+      if (patch.halfAxis === 'v' || patch.halfAxis === 'h') {
+        if (s.halfAxis !== patch.halfAxis) {
+          s.halfAxis = patch.halfAxis;
+          if (!patch.halfSide) {
+            s.halfSide = patch.halfAxis === 'h'
+              ? (s.halfSide === 'left' ? 'top' : 'bottom')
+              : (s.halfSide === 'top' ? 'left' : 'right');
+          }
+          changed = true;
+        }
+      }
+      if (patch.halfSide === 'left' || patch.halfSide === 'right' || patch.halfSide === 'top' || patch.halfSide === 'bottom') {
+        if (s.halfSide !== patch.halfSide) { s.halfSide = patch.halfSide; changed = true; }
+      }
+      if ('split' in patch) {
+        const spVal = patch.split === null || patch.split === '' ? undefined : Number(patch.split);
+        if (spVal === undefined) { if (s.split !== undefined) { delete s.split; changed = true; } }
+        else if (Number.isFinite(spVal) && spVal !== s.split) { s.split = spVal; changed = true; }
+      }
+      if ('depth' in patch) {
+        const dVal = patch.depth === null || patch.depth === '' ? null : Number(patch.depth);
+        if (dVal === null) { if (s.depth !== null) { s.depth = null; changed = true; } }
+        else if (Number.isFinite(dVal) && dVal > 0 && dVal !== s.depth) { s.depth = dVal; changed = true; }
+      }
+      if (patch.pos === null) { if (s.pos !== null) { s.pos = null; changed = true; } }
+      else if (Array.isArray(patch.pos) && patch.pos.length >= 2) {
+        s.pos = [Number(patch.pos[0]) || 0, Number(patch.pos[1]) || 0];
+        changed = true;
+      }
+    });
+    if (!changed) return false;
+    await ensureProjections();
+    render();
+    Panels.renderRight();
+    return true;
   }
   async function flipSection(id) {
     const cur = (dwg().sections || []).find((x) => x.id === id);
@@ -4731,6 +5575,16 @@ const Drawing = (() => {
       render(); Panels.renderRight();
       return true;
     }
+    if (e.key === 'Enter' && tool === 'section' && (sectionMode === 'stepped' || sectionMode === 'breakout')) {
+      return finishSectionTool();
+    }
+    if (e.key === 'Backspace' && tool === 'section' && (sectionMode === 'stepped' || sectionMode === 'breakout') && toolState && Array.isArray(toolState.pts) && toolState.pts.length > 0) {
+      toolState.pts.pop();
+      if (!toolState.pts.length) toolState = { stage: 0 };
+      else if (sectionMode === 'stepped' && toolState.pts.length === 1) toolState.stage = 1;
+      render(); Panels.renderRight();
+      return true;
+    }
     if (e.key === 'Enter' && tool === 'detail' && toolState && toolState.stage === 2) {
       addDetail({ source: toolState.source, c: toolState.c, r: toolState.r, scale: detailDraft.scale, label: detailDraft.label, pos: null });
       setTool(null);
@@ -4875,10 +5729,38 @@ const Drawing = (() => {
       run: () => setDimMode(m.key),
     })));
   }
+  function sectionHint(mode) {
+    const m = SECTION_MODES.find((x) => x.key === mode);
+    return m ? m.hint : SECTION_MODES[0].hint;
+  }
+  function setSectionMode(mode) {
+    if (!mode) { setTool(null); return false; }
+    const m = SECTION_MODES.find((x) => x.key === mode) || SECTION_MODES[0];
+    if (m.pro && isSimpleMode()) { UI.toast(T('draw.secProOnly'), { icon: 'info' }); return false; }
+    sectionMode = m.key;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    tool = 'section';
+    toolState = { stage: 0 };
+    if (svg) svg.style.cursor = 'crosshair';
+    UI.hint(sectionHint(sectionMode));
+    Panels.renderTools(); Panels.renderRight(); render();
+    return true;
+  }
+  function sectionMenu(anchor) {
+    const simple = isSimpleMode();
+    UI.menu(anchor, SECTION_MODES.filter((m) => !simple || !m.pro).map((m) => ({
+      label: m.label,
+      icon: 'section',
+      help: 'drawingSectionKinds',
+      checked: tool === 'section' && sectionMode === m.key,
+      run: () => setSectionMode(m.key),
+    })));
+  }
   function setTool(t) {
     dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
+    if (t === 'section' && (!SECTION_MODES.some((x) => x.key === sectionMode) || (sectionMode !== 'full' && isSimpleMode()))) sectionMode = 'full';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
@@ -4889,7 +5771,7 @@ const Drawing = (() => {
     UI.hint(
       t === 'dim' ? dimHint(dimMode)
         : t === 'detail' ? T('draw.hint.detail')
-          : t === 'section' ? T('draw.hint.section')
+          : t === 'section' ? sectionHint(sectionMode)
             : t === 'note' ? T('draw.hint.note')
               : t === 'balloon' ? T('draw.hint.balloon')
                 : t && t.startsWith('free-') ? freeHint(t) : null
@@ -5097,6 +5979,7 @@ const Drawing = (() => {
       hatch: [0.22, null],
       cutline: [0.35, [7, 1.2, 0.7, 1.2]],
       cutend: [0.7, null],
+      breakline: [0.25, null],
       dim: [0.25, null],
       'arrow-open': [0.3, null],
       'arrow-slash': [0.45, null],
@@ -5294,7 +6177,7 @@ const Drawing = (() => {
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
     const layer = {
       vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE',
-      hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE',
+      hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', breakline: 'SCHNITTLINIE',
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
       'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
@@ -5304,16 +6187,17 @@ const Drawing = (() => {
     const stats = { lines: 0, circles: 0, arcs: 0, polylines: 0, solids: 0, texts: 0, byLayer: {} };
     const bumpLayer = (ly) => { stats.byLayer[ly] = (stats.byLayer[ly] || 0) + 1; };
     const Y = (y) => H - y;
-    const line = (a, b, ly) => {
-      P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
+    const line = (a, b, ly, lt = null) => {
+      P(0, 'LINE', 8, ly, ...(lt ? [6, lt] : []), 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
       stats.lines++; bumpLayer(ly);
     };
     for (const l of cur.lines || []) {
       const ly = layer[l.cls]; if (!ly) continue;
+      const lt = l.cls === 'breakline' ? 'CONTINUOUS' : null;
       if (l.rect) {
         const [x, y, w, hh] = l.rect;
         const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]];
-        for (let i = 0; i < 4; i++) line(c[i], c[(i + 1) % 4], ly);
+        for (let i = 0; i < 4; i++) line(c[i], c[(i + 1) % 4], ly, lt);
       } else if (l.circle) {
         P(0, 'CIRCLE', 8, ly);
         if (l.cls === 'detail-border') P(6, 'DASHED');
@@ -5329,7 +6213,7 @@ const Drawing = (() => {
             13, q[2][0].toFixed(4), 23, Y(q[2][1]).toFixed(4), 33, 0);
           stats.solids++; bumpLayer(ly);
         } else {
-          for (let i = 0; i < q.length; i++) line(q[i], q[(i + 1) % q.length], ly);
+          for (let i = 0; i < q.length; i++) line(q[i], q[(i + 1) % q.length], ly, lt);
         }
       } else if (l.arc) {
         // echter Bogen (gegen den Uhrzeigersinn); die Winkel der Ansicht gelten unverändert, weil DXF wie die Ansicht nach oben zählt
@@ -5337,9 +6221,9 @@ const Drawing = (() => {
         P(0, 'ARC', 8, ly, 10, l.arc.c[0].toFixed(4), 20, Y(l.arc.c[1]).toFixed(4), 30, 0, 40, l.arc.r.toFixed(4), 50, deg(l.arc.a[0]).toFixed(4), 51, deg(l.arc.a[1]).toFixed(4));
         stats.arcs++; bumpLayer(ly);
       } else if (l.pts && l.pts.length === 2) {
-        line(l.pts[0], l.pts[1], ly);
+        line(l.pts[0], l.pts[1], ly, lt);
       } else if (l.pts && l.pts.length > 2) {
-        P(0, 'POLYLINE', 8, ly, 66, 1, 10, 0, 20, 0, 30, 0, 70, 0);
+        P(0, 'POLYLINE', 8, ly, ...(lt ? [6, lt] : []), 66, 1, 10, 0, 20, 0, 30, 0, 70, 0);
         for (const q of l.pts) P(0, 'VERTEX', 8, ly, 10, q[0].toFixed(4), 20, Y(q[1]).toFixed(4), 30, 0);
         P(0, 'SEQEND', 8, ly);
         stats.polylines++; bumpLayer(ly);
@@ -5871,24 +6755,98 @@ const Drawing = (() => {
     w.append(bomSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, T('draw.panel.sectionsSec')));
+    if (!isSimpleMode()) {
+      const modeSel = UI.selectField({
+        id: 'dw-sec-type',
+        label: T('draw.panel.secType'),
+        value: sectionMode,
+        options: SECTION_MODES.map((m) => [m.key, m.label]),
+        onChange: (v) => {
+          sectionMode = SECTION_MODES.some((m) => m.key === v) ? v : 'full';
+          if (tool === 'section') setSectionMode(sectionMode);
+          else { Panels.renderTools(); Panels.renderRight(); }
+        },
+      });
+      modeSel.classList.add('pro');
+      modeSel.dataset.help = 'drawingSectionKinds';
+      secBox.append(modeSel);
+      if (sectionMode === 'half') {
+        const hRow = h('div', { class: 'fields pro' });
+        const ax = sectionDraft.halfAxis === 'h' ? 'h' : 'v';
+        const sideOpts = ax === 'h'
+          ? [['bottom', T('draw.panel.secHalfBottom')], ['top', T('draw.panel.secHalfTop')]]
+          : [['right', T('draw.panel.secHalfRight')], ['left', T('draw.panel.secHalfLeft')]];
+        hRow.append(
+          UI.selectField({
+            id: 'dw-sec-half-axis',
+            label: T('draw.panel.secHalfAxis'),
+            value: ax,
+            options: [['v', T('draw.panel.secHalfAxisV')], ['h', T('draw.panel.secHalfAxisH')]],
+            onChange: (v) => {
+              sectionDraft.halfAxis = v === 'h' ? 'h' : 'v';
+              sectionDraft.halfSide = sectionDraft.halfAxis === 'h' ? 'bottom' : 'right';
+              Panels.renderRight();
+            },
+          }),
+          UI.selectField({
+            id: 'dw-sec-half-side',
+            label: T('draw.panel.secHalfSide'),
+            value: sideOpts.some((o) => o[0] === sectionDraft.halfSide) ? sectionDraft.halfSide : sideOpts[0][0],
+            options: sideOpts,
+            onChange: (v) => { sectionDraft.halfSide = v; },
+          }),
+        );
+        secBox.append(hRow);
+      } else if (sectionMode === 'breakout') {
+        const dInp = h('input', {
+          type: 'number',
+          id: 'dw-sec-depth',
+          step: '0.5',
+          min: '0.1',
+          placeholder: T('draw.panel.secDepthAuto'),
+          value: sectionDraft.depth != null ? String(sectionDraft.depth) : '',
+        });
+        dInp.addEventListener('keydown', (e) => e.stopPropagation());
+        dInp.addEventListener('change', () => {
+          const val = dInp.value.trim();
+          const num = val === '' ? null : Number(val);
+          sectionDraft.depth = num != null && Number.isFinite(num) && num > 0 ? num : null;
+        });
+        secBox.append(h('div', { class: 'field pro' }, h('label', { for: 'dw-sec-depth' }, T('draw.panel.secDepth')), dInp));
+      }
+    }
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
     bSec.innerHTML = icon('section') + esc(T('draw.panel.drawSection'));
-    bSec.onclick = () => tool_('section');
-    secBox.append(bSec);
+    bSec.onclick = () => {
+      if (tool === 'section') setTool(null);
+      else setSectionMode(isSimpleMode() ? 'full' : sectionMode);
+    };
+    const secBtnRow = h('div', { class: 'btn-row' }, bSec);
+    if (tool === 'section' && toolState && Array.isArray(toolState.pts)
+      && ((sectionMode === 'stepped' && toolState.pts.length >= 4) || (sectionMode === 'breakout' && toolState.pts.length >= 3))) {
+      const fBtn = h('button', { type: 'button', class: 'btn primary', id: 'dw-sec-finish' }, T('draw.panel.secFinish'));
+      fBtn.onclick = () => finishSectionTool();
+      secBtnRow.append(fBtn);
+    }
+    secBox.append(secBtnRow);
     if (secs.length) {
       const lst = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
       const pName = { front: T('draw.panel.pFront'), top: T('draw.panel.pTop'), left: T('draw.panel.pLeft') };
       for (const sec of secs) {
-        const row = h('div', { class: 'mini-row sec-row', 'data-sec-id': sec.id });
-        const lbl = h('span', { class: 'grow' }, T('draw.panel.secRow', { a: sec.label, b: sec.label, parent: pName[sec.parent] || sec.parent }));
+        const row = h('div', { class: 'mini-row sec-row', 'data-sec-id': sec.id, 'data-sec-type': sec.type || 'full' });
+        const lbl = h('span', { class: 'grow' }, `${sectionTitle(sec)} (${pName[sec.parent] || sec.parent})`);
         lbl.style.cursor = 'pointer';
         lbl.onclick = () => { selDim = sec.id; render(); Panels.renderRight(); };
-        const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secFlipTip') }, T('draw.panel.secFlipShort'));
-        fb.onclick = () => flipSection(sec.id);
+        row.append(lbl);
+        if (sec.type !== 'breakout') {
+          const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secFlipTip') }, T('draw.panel.secFlipShort'));
+          fb.onclick = () => flipSection(sec.id);
+          row.append(fb);
+        }
         const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secDelTip'), 'aria-label': T('draw.panel.secDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = () => removeSection(sec.id);
-        row.append(lbl, fb, db);
+        row.append(db);
         lst.append(row);
       }
       secBox.append(lst);
@@ -5974,15 +6932,16 @@ const Drawing = (() => {
     w.append(ctrSec);
     if (selDim) {
       const selDet = detList.find((x) => x.id === selDim);
-      const isSec = secs.some((x) => x.id === selDim);
+      const selSecObj = secs.find((x) => x.id === selDim);
+      const isSec = !!selSecObj;
       const selD = d.dims.find((x) => x.id === selDim);
       const selNote = (d.notes || []).find((x) => x.id === selDim);
       const selBalloon = (d.balloons || []).find((x) => x.id === selDim);
       const isBomSel = selDim === '__bom__';
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
       const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
       if (selBalloon) {
         const curPos = resolveBalloonPos(selBalloon, bomData);
         const posOpts = bomRowsList.length
@@ -6175,7 +7134,47 @@ const Drawing = (() => {
         rb.onclick = () => { if (isRb) setTool(null); else startRebind(selResolved.id); };
         row.append(rb);
       }
-      if (isSec) {
+      if (selSecObj && selSecObj.type === 'half') {
+        const ax = selSecObj.halfAxis === 'h' ? 'h' : 'v';
+        const sideOpts = ax === 'h'
+          ? [['bottom', T('draw.panel.secHalfBottom')], ['top', T('draw.panel.secHalfTop')]]
+          : [['right', T('draw.panel.secHalfRight')], ['left', T('draw.panel.secHalfLeft')]];
+        const hFields = h('div', { class: 'fields' });
+        hFields.append(
+          UI.selectField({
+            id: 'dw-sel-half-axis',
+            label: T('draw.panel.secHalfAxis'),
+            value: ax,
+            options: [['v', T('draw.panel.secHalfAxisV')], ['h', T('draw.panel.secHalfAxisH')]],
+            onChange: (v) => updateSection(selSecObj.id, { halfAxis: v }),
+          }),
+          UI.selectField({
+            id: 'dw-sel-half-side',
+            label: T('draw.panel.secHalfSide'),
+            value: sideOpts.some((o) => o[0] === selSecObj.halfSide) ? selSecObj.halfSide : sideOpts[0][0],
+            options: sideOpts,
+            onChange: (v) => updateSection(selSecObj.id, { halfSide: v }),
+          }),
+        );
+        selSec.append(hFields);
+      }
+      if (selSecObj && selSecObj.type === 'breakout') {
+        const dInp = h('input', {
+          type: 'number',
+          id: 'dw-sel-sec-depth',
+          step: '0.5',
+          min: '0.1',
+          placeholder: T('draw.panel.secDepthAuto'),
+          value: selSecObj.depth != null ? String(selSecObj.depth) : '',
+        });
+        dInp.addEventListener('keydown', (e) => e.stopPropagation());
+        dInp.addEventListener('change', () => {
+          const val = dInp.value.trim();
+          updateSection(selSecObj.id, { depth: val === '' ? null : Number(val) });
+        });
+        selSec.append(h('div', { class: 'field' }, h('label', { for: 'dw-sel-sec-depth' }, T('draw.panel.secDepth')), dInp));
+      }
+      if (isSec && selSecObj && selSecObj.type !== 'breakout') {
         const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, T('draw.panel.secFlipBtn'));
         fl.onclick = () => flipSection(selDim);
         row.append(fl);
@@ -6235,7 +7234,9 @@ const Drawing = (() => {
     autoBalloons, addBalloon, updateBalloon, removeBalloon, clearBalloons,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
     get selectedId() { return selDim; },
-    addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
+    SECTION_MODES, setSectionMode, sectionMenu, finishSectionTool,
+    addSection, updateSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
+    get sectionMode() { return sectionMode; },
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),

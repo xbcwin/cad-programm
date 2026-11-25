@@ -2601,6 +2601,11 @@ const HELP = {
   "tip": "Toleranzkette in einer Richtung rechnen: Maße mit ± auswählen, schlimmster Fall und Mittelwert werden berechnet (Profi)",
   "hilfe": "Misst gewählte Teile der Baugruppe entlang einer Achse (X, Y, Z oder senkrecht zu einer gewählten Fläche) und rechnet die Toleranzkette sofort aus: sowohl den schlimmsten Fall (Summe aller ± Toleranzen) als auch den wahrscheinlichen Bereich um den Mittelwert (Wurzelsumme der Quadrate).",
   "tipp": "Mit dem Knopf „+“ vor einer Zeile wechselst du das Vorzeichen auf „−“, um ein Spiel oder einen Spalt (Schließmaß) gegen die übrigen Maße zu prüfen."
+ },
+ "drawingSectionKinds": {
+  "tip": "Weitere Schnittarten in der Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt und Ausbruch",
+  "hilfe": "Im Profi-Modus stehen dir neben dem normalen Vollschnitt drei weitere Schnittarten zur Wahl: Beim Halbschnitt siehst du die eine Hälfte als Außenansicht und die andere als Schnitt (ideal für runde oder symmetrische Teile). Beim abgesetzten Schnitt knickst du die Schnittlinie im rechten Winkel ab, um versetzte Bohrungen oder Taschen gemeinsam zu schneiden. Beim Ausbruch brichst du nur einen gezeichneten Bereich bis zur gewünschten Tiefe auf.",
+  "tipp": "Beim Halbschnitt kannst du die geschnittene Seite jederzeit rechts im Panel wechseln; beim Ausbruch lässt sich die Schnitttiefe dort genau eintippen."
  }
 };
 
