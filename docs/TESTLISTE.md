@@ -2984,6 +2984,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Modus, Befehlssuche, Validierung & Hilfen**: `#add-enclosure-gen` ist in Einfach (bei unveränderter Kachelzahl 5) und Profi sichtbar, Befehlssuche findet `enclosure-gen`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` (`enclosureGen`) und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a191_gehaeuse_generator`).
 - [ ] **Von Hand**: Im Browser über „Bauteile“ → „Gehäuse (Kasten + Deckel)“ ein Gehäuse erzeugen, Deckel ausblenden oder verschieben und Lippe, Nut und die vier Schraubdome von Hand ansehen.
 
+## Bibliothek: Typenschild, QR-Code und Barcode (Auto [A-193], BI-22, BI-23)
+
+- [x] **QR-Code für „tracery“ & Speichern/Laden**: Im Einfach-Modus über `#add-qr-code` erzeugter QR-Code für `tracery` liefert lokal (ohne Netz) einen Version-1-Code (`21 × 21` Module mit allen 3 Finder-Mustern, `> 150` dunklen Quadraten, `> 100` Flächen, `36 × 36 × 2,8 mm`, `GeomCheck` 0 Fehler); nach Speichern (`Start.projectPayload()`) und Neu-Laden bleiben Geometrie, BBox, Volumen, Flächenzahl und Matrix exakt gleich (`t_a193_typenschild_qr_barcode`).
+- [x] **QR-Code vertieft & direkte Prägung**: Umschalten auf `deboss` ergibt vertiefte Quadrate (`2,0 mm` Gesamthöhe, geringeres Volumen, `GeomCheck` 0 Fehler); Modus `relief` als Loch schneidet das QR-Muster sauber in einen Quader (`t_a193_typenschild_qr_barcode`).
+- [x] **Typenschild mit lesbarer Schrift**: `#add-nameplate` erzeugt abgerundetes Schild (`60 × 30 mm`, 4 Ecklöcher Ø 3,2 mm) mit automatisch geladener Schrift `fett` (`Inter Fett`) und erhabenen Buchstaben (`emboss`, Höhe `3,2 mm`, ≥ 15 Buchstaben-Oberflächen, `GeomCheck` 0 Fehler); Umschalten auf `deboss` graviert die Schrift vertieft ein (`2,4 mm` Dicke) und bleibt nach Speichern/Laden gleich (`t_a193_typenschild_qr_barcode`).
+- [x] **Barcode (Code 128, EAN-13, EAN-8)**: `#add-barcode` erzeugt Code 128 (`TRACERY`), EAN-13 (`4006381333931`, 95 Module, Prüfziffer `1`, 30 Balken ohne String-Verfälschung durch `resolveP`) und EAN-8 (`9638507` → `96385074`, 67 Module) als erhabene/vertiefte Platte und als reinen Balken-Körper mit 0 `GeomCheck`-Fehlern (`t_a193_typenschild_qr_barcode`).
+- [x] **Einfach & Profi, Suche, Undo/Redo, Validierung & Hilfen**: Unverändert 5 Kacheln im Einfach-Flyout, 3 neue Kacheln im Profi-Modus, Befehlssuche, `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüsselgleichheit ohne JS-Fehler (`t_a193_typenschild_qr_barcode`).
+- [ ] **Von Hand**: Im Browser ein Typenschild, einen QR-Code und einen EAN-13-/Code-128-Barcode in „Einfach“ und „Profi“ anlegen, den QR-Code mit dem Handy scannen und erhabene sowie vertiefte Ausführung visuell prüfen.
+
 ## Fehler melden
 
 ```

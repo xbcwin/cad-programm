@@ -5104,5 +5104,14 @@
   "dlg.enclosure.summary": "Outer size <b>{outW} × {outD} × {totalH} mm</b> (box {boxH} + lid {lidH} mm) · Inner size {inW} × {inD} × {inH} mm{lipInfo}{bossInfo}",
   "toast.enclosureAdded": "Enclosure created ({outW} × {outD} × {totalH} mm outer).",
   "toast.enclosureMainOnly": "The enclosure generator works at the top level – finish component editing first.",
-  "undo.enclosure": "Enclosure created"
+  "undo.enclosure": "Enclosure created",
+  "tool.fly.nameplate": "Nameplate (text)",
+  "tool.fly.nameplateTip": "Add a parametric nameplate with raised or recessed text",
+  "tool.fly.qrCode": "QR code",
+  "tool.fly.qrCodeTip": "Add a locally generated QR code plate or embossing solid",
+  "tool.fly.barcode": "Barcode (EAN / Code128)",
+  "tool.fly.barcodeTip": "Add a locally generated barcode (Code 128, EAN-13, EAN-8)",
+  "panel.item.nameplateHint": "<b>{w} × {h} × {totalH}</b> · {lines} text line(s) {mode} · {holes}.",
+  "panel.item.qrCodeHint": "<b>QR Version {ver}</b> ({mod}×{mod} modules · EC {ec}) · module {cell} · {w} × {w} × {totalH} · {dark} dark modules.",
+  "panel.item.barcodeHint": "<b>{fmt}</b> (<code>{code}</code>) · {bars} bars ({mods} modules) · {w} × {h} × {totalH}."
 }

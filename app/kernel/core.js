@@ -4575,6 +4575,176 @@ export function createKernel(R, oc) {
 
     return shape;
   }
+  function roundedRectLoop(w, h, cornerR) {
+    const hw = w / 2, hh = h / 2;
+    const r = Math.max(0, Math.min(cornerR, hw - 0.1, hh - 0.1));
+    if (r <= 0.05) {
+      return {
+        segs: [
+          { t: 'line', a: [-hw, -hh], b: [hw, -hh] },
+          { t: 'line', a: [hw, -hh], b: [hw, hh] },
+          { t: 'line', a: [hw, hh], b: [-hw, hh] },
+          { t: 'line', a: [-hw, hh], b: [-hw, -hh] },
+        ],
+      };
+    }
+    const d = r * Math.SQRT1_2;
+    return {
+      segs: [
+        { t: 'line', a: [-hw + r, -hh], b: [hw - r, -hh] },
+        { t: 'arc', a: [hw - r, -hh], m: [hw - r + d, -hh + r - d], b: [hw, -hh + r] },
+        { t: 'line', a: [hw, -hh + r], b: [hw, hh - r] },
+        { t: 'arc', a: [hw, hh - r], m: [hw - r + d, hh - r + d], b: [hw - r, hh] },
+        { t: 'line', a: [hw - r, hh], b: [-hw + r, hh] },
+        { t: 'arc', a: [-hw + r, hh], m: [-hw + r - d, hh - r + d], b: [-hw, hh - r] },
+        { t: 'line', a: [-hw, hh - r], b: [-hw, -hh + r] },
+        { t: 'arc', a: [-hw, -hh + r], m: [-hw + r - d, -hh + r - d], b: [-hw + r, -hh] },
+      ],
+    };
+  }
+  function makeRoundedRectPlate(w, h, thickness, cornerR) {
+    if (cornerR <= 0.05) return R.makeBox([-w / 2, -h / 2, 0], [w / 2, h / 2, thickness]);
+    const M = planeMap({ o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] });
+    const fc = regionFace({ outer: roundedRectLoop(w, h, cornerR), holes: [] }, M);
+    try {
+      return R.basicFaceExtrusion(fc, new R.Vector([0, 0, thickness]));
+    } finally {
+      safeDelete(fc);
+    }
+  }
+  function extrudeRegionsZ(regions, z0, dz) {
+    if (!Array.isArray(regions) || !regions.length) return [];
+    const M = planeMap({ o: [0, 0, z0], x: [1, 0, 0], n: [0, 0, 1] });
+    const vec = new R.Vector([0, 0, dz]);
+    const out = [];
+    for (const rg of regions) {
+      let fc = null;
+      try {
+        fc = regionFace(rg, M);
+        out.push(R.basicFaceExtrusion(fc, vec));
+      } catch (_) {
+      } finally {
+        safeDelete(fc);
+      }
+    }
+    return out;
+  }
+  function batchPlateRelief(base, solids, mode) {
+    if (!solids.length) return base;
+    let cur = base;
+    let tool = null;
+    try {
+      tool = solids.length === 1 ? solids[0] : R.makeCompound(solids);
+      const next = mode === 'deboss' ? cur.cut(tool) : cur.fuse(tool);
+      safeDelete(cur);
+      cur = next;
+      return cur;
+    } catch (_) {
+      // Fallback: gruppenweise verrechnen
+      for (let i = 0; i < solids.length; i += 16) {
+        const chunk = solids.slice(i, i + 16);
+        let cTool = null;
+        try {
+          cTool = chunk.length === 1 ? chunk[0] : R.makeCompound(chunk);
+          const next = mode === 'deboss' ? cur.cut(cTool) : cur.fuse(cTool);
+          safeDelete(cur);
+          cur = next;
+        } finally {
+          if (chunk.length > 1) safeDelete(cTool);
+        }
+      }
+      return cur;
+    } finally {
+      if (solids.length > 1) safeDelete(tool);
+      for (const s of solids) safeDelete(s);
+    }
+  }
+  function buildNameplate(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const w = pos(sp.w, pos(p.w, 60));
+    const h = pos(sp.h, pos(p.h, 30));
+    const thickness = pos(sp.thickness, pos(p.thickness, 2.4));
+    const effDepth = pos(sp.effDepth, pos(p.textDepth, 0.8));
+    const cornerR = Math.max(0, num(sp.cornerR, num(p.cornerR, 2)));
+    const mode = sp.mode === 'deboss' || p.mode === 'deboss' ? 'deboss' : 'emboss';
+    const border = sp.border !== undefined ? !!sp.border : (p.border !== 'nein' && p.border !== false);
+    const borderW = pos(sp.borderW, 1.0);
+    const borderPad = pos(sp.borderPad, 1.5);
+    const holeList = Array.isArray(sp.holeList) ? sp.holeList : [];
+    const holeD = pos(sp.holeD, pos(p.holeD, 3.2));
+
+    let shape = makeRoundedRectPlate(w, h, thickness, cornerR);
+    const regs = Array.isArray(sp.regions) ? sp.regions.slice() : [];
+    if (border) {
+      const bwOut = w - 2 * borderPad, bhOut = h - 2 * borderPad;
+      const bwIn = bwOut - 2 * borderW, bhIn = bhOut - 2 * borderW;
+      if (bwIn > 2 && bhIn > 2) {
+        const rOut = Math.max(0, cornerR - borderPad);
+        const rIn = Math.max(0, rOut - borderW);
+        regs.unshift({ outer: roundedRectLoop(bwOut, bhOut, rOut), holes: [roundedRectLoop(bwIn, bhIn, rIn)] });
+      }
+    }
+    if (regs.length) {
+      const z0 = mode === 'deboss' ? thickness + 0.05 : thickness - 0.05;
+      const dz = mode === 'deboss' ? -(effDepth + 0.05) : effDepth + 0.05;
+      const relief = extrudeRegionsZ(regs, z0, dz);
+      shape = batchPlateRelief(shape, relief, mode);
+    }
+    if (holeList.length && holeD >= 0.4) {
+      const hTotal = thickness + effDepth + 2;
+      const cyls = holeList.map(([hx, hy]) => R.makeCylinder(holeD / 2, hTotal, [hx, hy, -1], [0, 0, 1]));
+      shape = batchPlateRelief(shape, cyls, 'deboss');
+    }
+    return shape;
+  }
+  function buildQrCode(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const regions = Array.isArray(sp.regions) ? sp.regions : [];
+    const mode = sp.mode === 'deboss' || sp.mode === 'relief' ? sp.mode : 'emboss';
+    const outerW = pos(sp.outerW, pos(p.size, 36));
+    const outerH = pos(sp.outerH, outerW);
+    const baseH = pos(sp.baseH, pos(p.baseH, 2));
+    const effRelief = pos(sp.effRelief, pos(p.reliefH, 0.8));
+
+    if (mode === 'relief') {
+      const z0 = sp.asHole ? -effRelief : 0;
+      const dz = sp.asHole ? (effRelief + LIFT) : effRelief;
+      const solids = extrudeRegionsZ(regions, z0, dz);
+      if (!solids.length) throw new Error('QR-Code: Keine Module zum Erzeugen vorhanden.');
+      return solids.length === 1 ? solids[0] : R.makeCompound(solids);
+    }
+
+    const plate = R.makeBox([-outerW / 2, -outerH / 2, 0], [outerW / 2, outerH / 2, baseH]);
+    if (!regions.length) return plate;
+    const z0 = mode === 'deboss' ? baseH + 0.05 : baseH - 0.05;
+    const dz = mode === 'deboss' ? -(effRelief + 0.05) : effRelief + 0.05;
+    const solids = extrudeRegionsZ(regions, z0, dz);
+    return batchPlateRelief(plate, solids, mode);
+  }
+  function buildBarcode(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const rects = Array.isArray(sp.rects) ? sp.rects : [];
+    const mode = sp.mode === 'deboss' || sp.mode === 'relief' ? sp.mode : 'emboss';
+    const outerW = pos(sp.outerW, 50);
+    const outerH = pos(sp.outerH, 24);
+    const baseH = pos(sp.baseH, pos(p.baseH, 2));
+    const effRelief = pos(sp.effRelief, pos(p.reliefH, 0.8));
+
+    if (mode === 'relief') {
+      const zBot = sp.asHole ? -effRelief : 0;
+      const zTop = sp.asHole ? LIFT : effRelief;
+      const bars = rects.map((r) => R.makeBox([r.x0, r.y0, zBot], [r.x1, r.y1, zTop]));
+      if (!bars.length) throw new Error('Barcode: Keine Balken zum Erzeugen vorhanden.');
+      return bars.length === 1 ? bars[0] : R.makeCompound(bars);
+    }
+
+    const plate = R.makeBox([-outerW / 2, -outerH / 2, 0], [outerW / 2, outerH / 2, baseH]);
+    if (!rects.length) return plate;
+    const zBot = mode === 'deboss' ? baseH - effRelief : baseH - 0.05;
+    const zTop = mode === 'deboss' ? baseH + 0.05 : baseH + effRelief;
+    const bars = rects.map((r) => R.makeBox([r.x0, r.y0, zBot], [r.x1, r.y1, zTop]));
+    return batchPlateRelief(plate, bars, mode);
+  }
   function buildStdORing(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
     const d1 = pos(sp.d1, pos(p.d1, 20));
@@ -4804,6 +4974,9 @@ export function createKernel(R, oc) {
     if (lib === 'shaftCollar') return buildShaftCollar(p);
     if (lib === 'shaftCoupling') return buildShaftCoupling(p);
     if (lib === 'batteryHolder') return buildBatteryHolder(p);
+    if (lib === 'nameplate') return buildNameplate(p);
+    if (lib === 'qrCode') return buildQrCode(p);
+    if (lib === 'barcode') return buildBarcode(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {

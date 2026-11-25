@@ -864,6 +864,720 @@ function sprocketMetrics(p = {}) {
     z, pitch, d1, ri, dp, da, df, thickness, bore, hubH, hubD, totalH,
   };
 }
+
+// ---------- Typenschild, QR-Code & Barcode (BI-22, BI-23, lokal ohne Netz) ----------
+const QR_EXP = new Uint8Array(512);
+const QR_LOG = new Uint8Array(256);
+(() => {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    QR_EXP[i] = x;
+    QR_LOG[x] = i;
+    x <<= 1;
+    if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) QR_EXP[i] = QR_EXP[i - 255];
+})();
+function qrGfMul(a, b) {
+  return a === 0 || b === 0 ? 0 : QR_EXP[QR_LOG[a] + QR_LOG[b]];
+}
+function qrRsGenPoly(deg) {
+  let p = new Uint8Array([1]);
+  for (let i = 0; i < deg; i++) {
+    const next = new Uint8Array(p.length + 1);
+    const root = QR_EXP[i];
+    for (let j = 0; j < p.length; j++) {
+      next[j] ^= p[j];
+      next[j + 1] ^= qrGfMul(p[j], root);
+    }
+    p = next;
+  }
+  return p;
+}
+function qrRsRemainder(data, ecLen) {
+  const gen = qrRsGenPoly(ecLen);
+  const buf = new Uint8Array(data.length + ecLen);
+  buf.set(data);
+  for (let i = 0; i < data.length; i++) {
+    const factor = buf[i];
+    if (factor !== 0) {
+      for (let j = 0; j < gen.length; j++) buf[i + j] ^= qrGfMul(gen[j], factor);
+    }
+  }
+  return buf.slice(data.length);
+}
+// ISO/IEC 18004 Tabelle 9 für Versionen 1–10: [ecProBlock, g1Bloecke, g1Daten, g2Bloecke, g2Daten]
+const QR_EC_TABLE = {
+  L: [
+    null,
+    [7, 1, 19, 0, 0], [10, 1, 34, 0, 0], [15, 1, 55, 0, 0], [20, 1, 80, 0, 0], [26, 1, 108, 0, 0],
+    [18, 2, 68, 0, 0], [20, 2, 78, 0, 0], [24, 2, 97, 0, 0], [30, 2, 116, 0, 0], [18, 2, 68, 2, 69],
+  ],
+  M: [
+    null,
+    [10, 1, 16, 0, 0], [16, 1, 28, 0, 0], [26, 1, 44, 0, 0], [18, 2, 32, 0, 0], [24, 2, 43, 0, 0],
+    [16, 4, 27, 0, 0], [18, 4, 31, 0, 0], [22, 2, 38, 2, 39], [22, 3, 36, 2, 37], [26, 4, 43, 1, 44],
+  ],
+  Q: [
+    null,
+    [13, 1, 13, 0, 0], [22, 1, 22, 0, 0], [18, 2, 17, 0, 0], [26, 2, 24, 0, 0], [18, 2, 15, 2, 16],
+    [24, 4, 19, 0, 0], [18, 2, 14, 4, 15], [22, 4, 18, 2, 19], [20, 4, 16, 4, 17], [24, 6, 19, 2, 20],
+  ],
+  H: [
+    null,
+    [17, 1, 9, 0, 0], [28, 1, 16, 0, 0], [22, 2, 13, 0, 0], [16, 4, 9, 0, 0], [22, 2, 11, 2, 12],
+    [28, 4, 15, 0, 0], [26, 4, 13, 1, 14], [26, 4, 14, 2, 15], [24, 4, 12, 4, 13], [28, 6, 15, 2, 16],
+  ],
+};
+const QR_ALIGN_POS = [[], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+const QR_EC_BITS = { L: 1, M: 0, Q: 3, H: 2 };
+
+function qrFormatBits(ec, mask) {
+  const d = ((QR_EC_BITS[ec] ?? 0) << 3) | (mask & 7);
+  let r = d << 10;
+  for (let i = 4; i >= 0; i--) {
+    if ((r >> (i + 10)) & 1) r ^= 0x537 << i;
+  }
+  return ((d << 10) | r) ^ 0x5412;
+}
+function qrVersionBits(ver) {
+  let r = ver << 12;
+  for (let i = 5; i >= 0; i--) {
+    if ((r >> (i + 12)) & 1) r ^= 0x1f25 << i;
+  }
+  return (ver << 12) | r;
+}
+function qrEncode(rawText, ecLevel = 'M') {
+  const ec = QR_EC_TABLE[ecLevel] ? ecLevel : 'M';
+  const raw = rawText == null ? '' : String(rawText);
+  const fallback = raw.trim() === '';
+  const usedText = fallback ? 'tracery' : raw;
+  let bytes = typeof TextEncoder !== 'undefined'
+    ? Array.from(new TextEncoder().encode(usedText))
+    : Array.from(unescape(encodeURIComponent(usedText))).map((c) => c.charCodeAt(0));
+
+  const tbl = QR_EC_TABLE[ec];
+  let ver = 0;
+  for (let v = 1; v <= 10; v++) {
+    const [, g1b, g1d, g2b, g2d] = tbl[v];
+    const dataBytes = g1b * g1d + g2b * g2d;
+    const headerBits = v <= 9 ? 12 : 20;
+    const capBytes = Math.floor((dataBytes * 8 - headerBits) / 8);
+    if (bytes.length <= capBytes) { ver = v; break; }
+  }
+  let truncated = false;
+  if (!ver) {
+    ver = 10;
+    const [, g1b, g1d, g2b, g2d] = tbl[10];
+    const maxBytes = Math.floor(((g1b * g1d + g2b * g2d) * 8 - 20) / 8);
+    bytes = bytes.slice(0, maxBytes);
+    truncated = true;
+  }
+
+  const [ecPerBlock, g1b, g1d, g2b, g2d] = tbl[ver];
+  const totalDataCw = g1b * g1d + g2b * g2d;
+  const bits = [];
+  const pushBits = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+  pushBits(0b0100, 4); // Byte-Modus
+  pushBits(bytes.length, ver <= 9 ? 8 : 16);
+  for (const b of bytes) pushBits(b, 8);
+  const capBits = totalDataCw * 8;
+  const term = Math.min(4, capBits - bits.length);
+  for (let i = 0; i < term; i++) bits.push(0);
+  while (bits.length % 8 !== 0) bits.push(0);
+  const dataCw = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+    dataCw.push(byte);
+  }
+  let padIdx = 0;
+  while (dataCw.length < totalDataCw) {
+    dataCw.push(padIdx % 2 === 0 ? 0xec : 0x11);
+    padIdx++;
+  }
+
+  const blocks = [];
+  const ecBlocks = [];
+  let off = 0;
+  for (let b = 0; b < g1b; b++) {
+    const blk = dataCw.slice(off, off + g1d);
+    off += g1d;
+    blocks.push(blk);
+    ecBlocks.push(qrRsRemainder(blk, ecPerBlock));
+  }
+  for (let b = 0; b < g2b; b++) {
+    const blk = dataCw.slice(off, off + g2d);
+    off += g2d;
+    blocks.push(blk);
+    ecBlocks.push(qrRsRemainder(blk, ecPerBlock));
+  }
+  const codewords = [];
+  const maxD = Math.max(g1d, g2d);
+  for (let i = 0; i < maxD; i++) for (const blk of blocks) if (i < blk.length) codewords.push(blk[i]);
+  for (let i = 0; i < ecPerBlock; i++) for (const eb of ecBlocks) if (i < eb.length) codewords.push(eb[i]);
+
+  const N = ver * 4 + 17;
+  const base = Array.from({ length: N }, () => new Int8Array(N));
+  const func = Array.from({ length: N }, () => new Uint8Array(N));
+  const setFunc = (r, c, v) => {
+    if (r >= 0 && r < N && c >= 0 && c < N) { base[r][c] = v ? 1 : 0; func[r][c] = 1; }
+  };
+  const placeFinder = (r0, c0) => {
+    for (let dr = -1; dr <= 7; dr++) {
+      for (let dc = -1; dc <= 7; dc++) {
+        const r = r0 + dr, c = c0 + dc;
+        if (r < 0 || r >= N || c < 0 || c >= N) continue;
+        const inBox = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+        const dark = inBox && (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4));
+        setFunc(r, c, dark ? 1 : 0);
+      }
+    }
+  };
+  placeFinder(0, 0);
+  placeFinder(0, N - 7);
+  placeFinder(N - 7, 0);
+
+  const align = QR_ALIGN_POS[ver];
+  for (const r of align) {
+    for (const c of align) {
+      if ((r <= 8 && c <= 8) || (r <= 8 && c >= N - 9) || (r >= N - 9 && c <= 8)) continue;
+      for (let dr = -2; dr <= 2; dr++) {
+        for (let dc = -2; dc <= 2; dc++) {
+          const dark = Math.max(Math.abs(dr), Math.abs(dc)) !== 1;
+          setFunc(r + dr, c + dc, dark ? 1 : 0);
+        }
+      }
+    }
+  }
+
+  for (let i = 8; i < N - 8; i++) {
+    setFunc(6, i, i % 2 === 0 ? 1 : 0);
+    setFunc(i, 6, i % 2 === 0 ? 1 : 0);
+  }
+  // Format- und Versionsfelder reservieren
+  for (let i = 0; i <= 8; i++) {
+    if (i !== 6) {
+      if (!func[8][i]) setFunc(8, i, 0);
+      if (!func[i][8]) setFunc(i, 8, 0);
+    }
+    if (i < 8) {
+      setFunc(8, N - 1 - i, 0);
+      if (i < 7) setFunc(N - 1 - i, 8, 0);
+    }
+  }
+  setFunc(4 * ver + 9, 8, 1); // Festes dunkles Modul
+  if (ver >= 7) {
+    const vb = qrVersionBits(ver);
+    for (let i = 0; i < 18; i++) {
+      const bit = (vb >> i) & 1;
+      const a = Math.floor(i / 3), b = N - 11 + (i % 3);
+      setFunc(a, b, bit);
+      setFunc(b, a, bit);
+    }
+  }
+
+  // Datenbits im Zickzack einfüllen
+  const allBits = [];
+  for (const cw of codewords) for (let i = 7; i >= 0; i--) allBits.push((cw >> i) & 1);
+  let bitPtr = 0;
+  let up = true;
+  for (let c = N - 1; c > 0; c -= 2) {
+    if (c === 6) c--;
+    for (let i = 0; i < N; i++) {
+      const r = up ? N - 1 - i : i;
+      for (let dx = 0; dx < 2; dx++) {
+        const cc = c - dx;
+        if (!func[r][cc]) {
+          base[r][cc] = bitPtr < allBits.length ? allBits[bitPtr++] : 0;
+        }
+      }
+    }
+    up = !up;
+  }
+
+  const maskFn = (m, r, c) => {
+    switch (m) {
+      case 0: return (r + c) % 2 === 0;
+      case 1: return r % 2 === 0;
+      case 2: return c % 3 === 0;
+      case 3: return (r + c) % 3 === 0;
+      case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+      case 5: return ((r * c) % 2 + (r * c) % 3) === 0;
+      case 6: return (((r * c) % 2 + (r * c) % 3) % 2) === 0;
+      default: return (((r + c) % 2 + (r * c) % 3) % 2) === 0;
+    }
+  };
+  const applyFormat = (mat, fmt) => {
+    const bit = (idx) => (fmt >> idx) & 1;
+    for (let i = 0; i <= 5; i++) mat[8][i] = bit(14 - i);
+    mat[8][7] = bit(8);
+    mat[8][8] = bit(7);
+    mat[7][8] = bit(6);
+    for (let i = 0; i <= 5; i++) mat[5 - i][8] = bit(5 - i);
+    for (let i = 0; i < 7; i++) mat[N - 1 - i][8] = bit(14 - i);
+    for (let i = 0; i < 8; i++) mat[8][N - 8 + i] = bit(7 - i);
+  };
+  const penaltyScore = (mat) => {
+    let pen = 0;
+    for (let r = 0; r < N; r++) {
+      let runC = 1, runR = 1;
+      for (let c = 1; c < N; c++) {
+        if (mat[r][c] === mat[r][c - 1]) runC++; else { if (runC >= 5) pen += runC - 2; runC = 1; }
+        if (mat[c][r] === mat[c - 1][r]) runR++; else { if (runR >= 5) pen += runR - 2; runR = 1; }
+      }
+      if (runC >= 5) pen += runC - 2;
+      if (runR >= 5) pen += runR - 2;
+    }
+    for (let r = 0; r < N - 1; r++) {
+      for (let c = 0; c < N - 1; c++) {
+        const v = mat[r][c];
+        if (v === mat[r][c + 1] && v === mat[r + 1][c] && v === mat[r + 1][c + 1]) pen += 3;
+      }
+    }
+    const pA = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+    const pB = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c <= N - 11; c++) {
+        let mHA = true, mHB = true, mVA = true, mVB = true;
+        for (let k = 0; k < 11; k++) {
+          if (mat[r][c + k] !== pA[k]) mHA = false;
+          if (mat[r][c + k] !== pB[k]) mHB = false;
+          if (mat[c + k][r] !== pA[k]) mVA = false;
+          if (mat[c + k][r] !== pB[k]) mVB = false;
+        }
+        if (mHA) pen += 40;
+        if (mHB) pen += 40;
+        if (mVA) pen += 40;
+        if (mVB) pen += 40;
+      }
+    }
+    let dark = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (mat[r][c]) dark++;
+    const pct = (dark * 100) / (N * N);
+    pen += Math.min(Math.abs(Math.floor(pct / 5) * 5 - 50) / 5, Math.abs(Math.ceil(pct / 5) * 5 - 50) / 5) * 10;
+    return pen;
+  };
+
+  let bestMask = 0, bestPen = Infinity, bestMat = null;
+  for (let m = 0; m < 8; m++) {
+    const mat = base.map((row, r) => row.map((v, c) => (func[r][c] ? v : (v ^ (maskFn(m, r, c) ? 1 : 0)))));
+    applyFormat(mat, qrFormatBits(ec, m));
+    const p = penaltyScore(mat);
+    if (p < bestPen) { bestPen = p; bestMask = m; bestMat = mat; }
+  }
+  let darkCount = 0;
+  const matrix = bestMat.map((row) => Array.from(row, (v) => { if (v) darkCount++; return v ? 1 : 0; }));
+  return { version: ver, size: N, ec, mask: bestMask, text: usedText, fallback, truncated, darkCount, matrix };
+}
+
+// ---------- Orthogonaler Kontur-Tracer (erzeugt mannigfaltige Regionen ohne Schachbrett-Ecken) ----------
+function gridToRegions(matrix, cellSize, ox = 0, oy = 0) {
+  if (!Array.isArray(matrix) || !matrix.length || !(cellSize > 0)) return [];
+  const rows = matrix.length, cols = matrix[0].length;
+  const isDark = (ix, iy) => ix >= 0 && ix < cols && iy >= 0 && iy < rows && matrix[rows - 1 - iy][ix] === 1;
+  const outMap = new Map();
+  const addEdge = (x0, y0, x1, y1) => {
+    const k = x0 + ',' + y0;
+    let list = outMap.get(k);
+    if (!list) { list = []; outMap.set(k, list); }
+    list.push({ x0, y0, x1, y1, dx: x1 - x0, dy: y1 - y0, used: false });
+  };
+  for (let iy = 0; iy < rows; iy++) {
+    for (let ix = 0; ix < cols; ix++) {
+      if (!isDark(ix, iy)) continue;
+      if (!isDark(ix, iy - 1)) addEdge(ix, iy, ix + 1, iy);
+      if (!isDark(ix + 1, iy)) addEdge(ix + 1, iy, ix + 1, iy + 1);
+      if (!isDark(ix, iy + 1)) addEdge(ix + 1, iy + 1, ix, iy + 1);
+      if (!isDark(ix - 1, iy)) addEdge(ix, iy + 1, ix, iy);
+    }
+  }
+  const chamfer = Math.min(0.18, Math.max(0.005, Math.min(0.02, cellSize * 0.012) / cellSize));
+  const loops = [];
+  for (const edges of outMap.values()) {
+    for (const start of edges) {
+      if (start.used) continue;
+      const chain = [];
+      let cur = start;
+      while (cur && !cur.used) {
+        cur.used = true;
+        chain.push(cur);
+        const nxtList = outMap.get(cur.x1 + ',' + cur.y1) || [];
+        let nxt = null;
+        if (nxtList.length === 1) {
+          nxt = nxtList[0].used ? null : nxtList[0];
+        } else if (nxtList.length > 1) {
+          // Schachbrett-Sattelpunkt: immer links abbiegen, damit Komponenten getrennt bleiben
+          const ldx = -cur.dy, ldy = cur.dx;
+          nxt = nxtList.find((e) => !e.used && e.dx === ldx && e.dy === ldy) || nxtList.find((e) => !e.used) || null;
+        }
+        cur = nxt;
+      }
+      if (chain.length < 4) continue;
+      const rawPts = [];
+      for (let i = 0; i < chain.length; i++) {
+        const ePrev = chain[(i - 1 + chain.length) % chain.length];
+        const eCur = chain[i];
+        const k = eCur.x0 + ',' + eCur.y0;
+        if ((outMap.get(k) || []).length > 1) {
+          rawPts.push([eCur.x0 - ePrev.dx * chamfer, eCur.y0 - ePrev.dy * chamfer]);
+          rawPts.push([eCur.x0 + eCur.dx * chamfer, eCur.y0 + eCur.dy * chamfer]);
+        } else {
+          rawPts.push([eCur.x0, eCur.y0]);
+        }
+      }
+      // Kollineare Punkte vereinfachen
+      const simp = [];
+      for (let i = 0; i < rawPts.length; i++) {
+        const a = rawPts[(i - 1 + rawPts.length) % rawPts.length];
+        const b = rawPts[i];
+        const c = rawPts[(i + 1) % rawPts.length];
+        const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+        if (Math.abs(cross) > 1e-8) simp.push(b);
+      }
+      if (simp.length < 3) continue;
+      const pts = simp.map(([gx, gy]) => [round(ox + gx * cellSize, 5), round(oy + gy * cellSize, 5)]);
+      let area2 = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[(i + 1) % pts.length];
+        area2 += p[0] * q[1] - q[0] * p[1];
+      }
+      const segs = [];
+      for (let i = 0; i < pts.length; i++) segs.push({ t: 'line', a: pts[i], b: pts[(i + 1) % pts.length] });
+      loops.push({ pts, segs, area: area2 / 2 });
+    }
+  }
+  const inRing = (pt, ring) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi + 1e-300) + xi)) inside = !inside;
+    }
+    return inside;
+  };
+  const outers = loops.filter((l) => l.area > 0).sort((a, b) => a.area - b.area);
+  const holes = loops.filter((l) => l.area < 0);
+  const res = outers.map((o) => ({ outer: { segs: o.segs }, holes: [], _pts: o.pts }));
+  for (const hl of holes) {
+    const testPt = [(hl.pts[0][0] + hl.pts[1][0]) * 0.5, (hl.pts[0][1] + hl.pts[2][1]) * 0.5];
+    const parent = res.find((r) => inRing(testPt, r._pts));
+    if (parent) parent.holes.push({ segs: hl.segs });
+  }
+  return res.map((r) => ({ outer: r.outer, holes: r.holes }));
+}
+
+// ---------- Lokaler Barcode-Encoder (Code 128, EAN-13, EAN-8) ----------
+const CODE128_PATTERNS = [
+  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+  '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+  '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+  '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+  '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+  '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+  '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+  '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+  '114131', '311141', '411131', '211412', '211214', '211232', '2331112',
+];
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'];
+const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100'];
+const EAN13_PARITY = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+
+function barcodeEncode(rawCode, format = 'code128') {
+  const fmt = format === 'ean13' || format === 'ean8' ? format : 'code128';
+  const raw = rawCode == null ? '' : String(rawCode).trim();
+  if (fmt === 'ean13' || fmt === 'ean8') {
+    const need = fmt === 'ean13' ? 12 : 7;
+    const digitsOnly = raw.replace(/\D/g, '');
+    const def = fmt === 'ean13' ? '4006381333931' : '96385074';
+    const src = digitsOnly || def;
+    const body = src.slice(0, need).padEnd(need, '0');
+    let sum = 0;
+    for (let i = 0; i < need; i++) {
+      const d = Number(body[i]);
+      const w = fmt === 'ean13' ? (i % 2 === 0 ? 1 : 3) : (i % 2 === 0 ? 3 : 1);
+      sum += d * w;
+    }
+    const check = (10 - (sum % 10)) % 10;
+    const full = body + String(check);
+    const adjusted = digitsOnly.length === need + 1 && digitsOnly !== full;
+    const chunks = [];
+    chunks.push({ bits: '101', guard: true });
+    if (fmt === 'ean13') {
+      const par = EAN13_PARITY[Number(full[0])];
+      for (let i = 1; i <= 6; i++) {
+        const d = Number(full[i]);
+        chunks.push({ bits: par[i - 1] === 'G' ? EAN_G[d] : EAN_L[d], guard: false });
+      }
+      chunks.push({ bits: '01010', guard: true });
+      for (let i = 7; i <= 12; i++) chunks.push({ bits: EAN_R[Number(full[i])], guard: false });
+    } else {
+      for (let i = 0; i < 4; i++) chunks.push({ bits: EAN_L[Number(full[i])], guard: false });
+      chunks.push({ bits: '01010', guard: true });
+      for (let i = 4; i < 8; i++) chunks.push({ bits: EAN_R[Number(full[i])], guard: false });
+    }
+    chunks.push({ bits: '101', guard: true });
+    const bars = [];
+    let pos = 0, bitString = '';
+    for (const ch of chunks) {
+      bitString += ch.bits;
+      let runStart = -1;
+      for (let k = 0; k <= ch.bits.length; k++) {
+        const b = k < ch.bits.length ? ch.bits[k] : '0';
+        if (b === '1' && runStart < 0) runStart = pos + k;
+        else if (b === '0' && runStart >= 0) {
+          bars.push({ x0: runStart, x1: pos + k, guard: ch.guard });
+          runStart = -1;
+        }
+      }
+      pos += ch.bits.length;
+    }
+    return { format: fmt, encoded: full, checkDigit: check, totalModules: pos, bars, bitString, adjusted };
+  }
+
+  // Code 128 (Auto Subset B / C)
+  const ascii = raw
+    .replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE')
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^\x20-\x7e]/g, '');
+  const text = (ascii || 'TRACERY').slice(0, 48);
+  const runDigits = (idx) => {
+    let n = 0;
+    while (idx + n < text.length && text[idx + n] >= '0' && text[idx + n] <= '9') n++;
+    return n;
+  };
+  const syms = [];
+  let i = 0;
+  let subset = runDigits(0) >= 4 ? 'C' : 'B';
+  syms.push(subset === 'C' ? 105 : 104);
+  while (i < text.length) {
+    if (subset === 'C') {
+      if (runDigits(i) >= 2) {
+        syms.push(Number(text.slice(i, i + 2)));
+        i += 2;
+      } else {
+        subset = 'B';
+        syms.push(100); // Code B
+      }
+    } else {
+      const nd = runDigits(i);
+      if (nd >= 4 && (nd % 2 === 0 || i + nd < text.length)) {
+        subset = 'C';
+        syms.push(99); // Code C
+      } else {
+        syms.push(text.charCodeAt(i) - 32);
+        i++;
+      }
+    }
+  }
+  let csum = syms[0];
+  for (let k = 1; k < syms.length; k++) csum += syms[k] * k;
+  const check = csum % 103;
+  syms.push(check, 106);
+
+  const bars = [];
+  let pos = 0, bitString = '';
+  for (const s of syms) {
+    const pat = CODE128_PATTERNS[s];
+    for (let k = 0; k < pat.length; k++) {
+      const w = Number(pat[k]);
+      const isBar = k % 2 === 0;
+      bitString += (isBar ? '1' : '0').repeat(w);
+      if (isBar) bars.push({ x0: pos, x1: pos + w, guard: false });
+      pos += w;
+    }
+  }
+  return { format: 'code128', encoded: text, checkDigit: check, totalModules: pos, bars, bitString, adjusted: false };
+}
+
+function nameplateMetrics(p = {}) {
+  const numV = (v, def) => {
+    const n = Number(v);
+    return isFinite(n) ? n : def;
+  };
+  const title = p.title == null ? 'TRACERY' : String(p.title);
+  const line1 = p.line1 == null ? 'Modell: V1' : String(p.line1);
+  const line2 = p.line2 == null ? 'SN: 2026-001' : String(p.line2);
+  const mode = p.mode === 'deboss' ? 'deboss' : 'emboss';
+  const w = round(Math.max(12, Math.min(400, numV(p.w, 60))), 3);
+  const h = round(Math.max(8, Math.min(300, numV(p.h, 30))), 3);
+  const thickness = round(Math.max(0.8, Math.min(40, numV(p.thickness, 2.4))), 3);
+  const textDepthRaw = round(Math.max(0.2, Math.min(10, numV(p.textDepth, 0.8))), 3);
+  const effDepth = mode === 'deboss' ? round(Math.min(textDepthRaw, Math.max(0.2, thickness - 0.4)), 3) : textDepthRaw;
+  const titleSize = round(Math.max(1.5, Math.min(60, numV(p.titleSize, 6))), 3);
+  const lineSize = round(Math.max(1.2, Math.min(40, numV(p.lineSize, 3.6))), 3);
+  const font = p.font === 'inter' ? 'inter' : 'fett';
+  const cornerR = round(Math.max(0, Math.min(Math.min(w, h) * 0.45, numV(p.cornerR, 2))), 3);
+  const border = p.border !== 'nein' && p.border !== false;
+  const holes = p.holes === 'sides' || p.holes === 'none' ? p.holes : 'corners';
+  const holeD = round(Math.max(1.0, Math.min(Math.min(w, h) * 0.35, numV(p.holeD, 3.2))), 3);
+  const totalH = mode === 'emboss' ? round(thickness + effDepth, 3) : thickness;
+
+  const borderW = border ? round(Math.max(0.6, Math.min(1.8, Math.min(w, h) * 0.045)), 3) : 0;
+  const borderPad = border ? round(Math.max(1.2, Math.min(2.4, Math.min(w, h) * 0.06)), 3) : 0;
+  const holeList = [];
+  const inset = round(Math.max(cornerR + 1.0, holeD / 2 + 2.8, borderPad + borderW + holeD / 2 + 0.8), 3);
+  if (holes === 'corners' && w > 2 * inset + 6 && h > 2 * inset + 4) {
+    const hx = round(w / 2 - inset, 3), hy = round(h / 2 - inset, 3);
+    holeList.push([-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]);
+  } else if (holes === 'sides' && w > 2 * inset + 6) {
+    const hx = round(w / 2 - inset, 3);
+    holeList.push([-hx, 0], [hx, 0]);
+  }
+  const holePadX = holes === 'sides' && holeList.length ? (inset + holeD / 2 + 1.5) : (border ? borderPad + borderW + 1.5 : 2.5);
+  const holePadY = holes === 'corners' && holeList.length ? Math.max(border ? borderPad + borderW + 1.0 : 2.0, inset + holeD / 2 + 0.8) : (border ? borderPad + borderW + 1.2 : 2.0);
+  const innerW = Math.max(4, round(w - 2 * holePadX, 3));
+  const innerH = Math.max(3, round(h - 2 * holePadY, 3));
+
+  const lines = [];
+  if (title.trim()) lines.push({ text: title.trim(), size: titleSize, isTitle: true });
+  if (line1.trim()) lines.push({ text: line1.trim(), size: lineSize, isTitle: false });
+  if (line2.trim()) lines.push({ text: line2.trim(), size: lineSize, isTitle: false });
+
+  return {
+    title, line1, line2, mode, w, h, thickness, textDepth: textDepthRaw, effDepth, totalH,
+    titleSize, lineSize, font, cornerR, border, borderW, borderPad, holes, holeD, holeList,
+    innerW, innerH, lines,
+  };
+}
+
+function nameplateSpec(p = {}) {
+  const m = nameplateMetrics(p);
+  const regions = [];
+  const fittedLines = [];
+  if (typeof SK !== 'undefined' && m.lines.length && SK.FONTS && (SK.FONTS[m.font] || SK.FONTS.inter)) {
+    const gap = Math.max(1.0, Math.min(2.6, m.lineSize * 0.45));
+    const measured = m.lines.map((ln) => {
+      const tb0 = SK.textBox({ id: 'np_m', type: 'text', a: [0, 0], s: ln.text, h: ln.size, font: m.font, align: 'm' });
+      const w0 = tb0 ? tb0.w : ln.text.length * ln.size * 0.65;
+      let effH = ln.size;
+      if (w0 > m.innerW && w0 > 1e-4) effH = Math.max(1.2, ln.size * (m.innerW / w0));
+      return { ...ln, effH };
+    });
+    const sumH = measured.reduce((s, x) => s + x.effH, 0) + gap * Math.max(0, measured.length - 1);
+    const vScale = sumH > m.innerH && sumH > 1e-4 ? Math.max(0.35, m.innerH / sumH) : 1;
+    const effGap = gap * vScale;
+    const totH = measured.reduce((s, x) => s + x.effH * vScale, 0) + effGap * Math.max(0, measured.length - 1);
+    let yCursor = totH / 2;
+    for (let idx = 0; idx < measured.length; idx++) {
+      const ln = measured[idx];
+      const fh = round(ln.effH * vScale, 3);
+      const yBase = round(yCursor - fh, 4);
+      yCursor -= fh + effGap;
+      const ent = { id: 'np_' + idx, type: 'text', a: [0, yBase], s: ln.text, h: fh, font: m.font, align: 'm' };
+      const regs = SK.regions([ent]);
+      for (const r of regs) regions.push({ outer: r.outer.k, holes: r.holes.map((hl) => hl.k) });
+      fittedLines.push({ text: ln.text, h: fh, y: yBase, regions: regs.length });
+    }
+  }
+  return {
+    ...m,
+    regions,
+    glyphCount: regions.length,
+    lineCount: m.lines.length,
+    fittedLines,
+  };
+}
+
+function qrCodeMetrics(p = {}) {
+  const numV = (v, def) => {
+    const n = Number(v);
+    return isFinite(n) ? n : def;
+  };
+  const mode = p.mode === 'deboss' || p.mode === 'relief' ? p.mode : 'emboss';
+  const ec = ['L', 'M', 'Q', 'H'].includes(p.ec) ? p.ec : 'M';
+  const size = round(Math.max(10, Math.min(300, numV(p.size, 36))), 3);
+  const quiet = Math.max(0, Math.min(6, Math.round(numV(p.quiet, 2))));
+  const baseH = round(Math.max(0.8, Math.min(40, numV(p.baseH, 2))), 3);
+  const reliefRaw = round(Math.max(0.2, Math.min(10, numV(p.reliefH, 0.8))), 3);
+  const effRelief = mode === 'deboss' ? round(Math.min(reliefRaw, Math.max(0.2, baseH - 0.4)), 3) : reliefRaw;
+  const qr = qrEncode(p.text, ec);
+  const qEff = mode === 'relief' ? 0 : quiet;
+  const totalMod = qr.size + 2 * qEff;
+  const cellSize = round(size / totalMod, 5);
+  const codeW = round(qr.size * cellSize, 4);
+  const outerW = size, outerH = size;
+  const totalH = mode === 'emboss' ? round(baseH + effRelief, 3) : mode === 'deboss' ? baseH : effRelief;
+  return {
+    text: qr.text, fallback: qr.fallback, truncated: qr.truncated,
+    ec, mode, size, quiet, qEff, baseH, reliefH: reliefRaw, effRelief, totalH,
+    version: qr.version, modules: qr.size, darkCount: qr.darkCount, mask: qr.mask,
+    cellSize, codeW, outerW, outerH, matrix: qr.matrix,
+  };
+}
+
+function qrCodeSpec(p = {}, opts = {}) {
+  const m = qrCodeMetrics(p);
+  const regions = gridToRegions(m.matrix, m.cellSize, -m.codeW / 2, -m.codeW / 2);
+  return {
+    ...m,
+    asHole: !!opts.asHole,
+    regions,
+    regionCount: regions.length,
+  };
+}
+
+function barcodeMetrics(p = {}) {
+  const numV = (v, def) => {
+    const n = Number(v);
+    return isFinite(n) ? n : def;
+  };
+  const format = p.format === 'ean13' || p.format === 'ean8' ? p.format : 'code128';
+  const mode = p.mode === 'deboss' || p.mode === 'relief' ? p.mode : 'emboss';
+  const moduleW = round(Math.max(0.2, Math.min(4, numV(p.moduleW, 0.6))), 4);
+  const barH = round(Math.max(4, Math.min(120, numV(p.barH, 16))), 3);
+  const margin = round(Math.max(0, Math.min(30, numV(p.margin, 4))), 3);
+  const baseH = round(Math.max(0.8, Math.min(40, numV(p.baseH, 2))), 3);
+  const reliefRaw = round(Math.max(0.2, Math.min(10, numV(p.reliefH, 0.8))), 3);
+  const effRelief = mode === 'deboss' ? round(Math.min(reliefRaw, Math.max(0.2, baseH - 0.4)), 3) : reliefRaw;
+  const bc = barcodeEncode(p.code, format);
+  const mEff = mode === 'relief' ? 0 : margin;
+  const codeW = round(bc.totalModules * moduleW, 4);
+  const outerW = round(codeW + 2 * mEff, 3);
+  const outerH = round(barH + 2 * mEff, 3);
+  const totalH = mode === 'emboss' ? round(baseH + effRelief, 3) : mode === 'deboss' ? baseH : effRelief;
+  const formatLabel = format === 'ean13' ? 'EAN-13' : format === 'ean8' ? 'EAN-8' : 'Code 128';
+  return {
+    format, formatLabel, encoded: bc.encoded, checkDigit: bc.checkDigit, adjusted: bc.adjusted,
+    totalModules: bc.totalModules, barCount: bc.bars.length, bars: bc.bars, bitString: bc.bitString,
+    mode, moduleW, barH, margin, mEff, baseH, reliefH: reliefRaw, effRelief, totalH,
+    codeW, outerW, outerH,
+  };
+}
+
+function barcodeSpec(p = {}, opts = {}) {
+  const m = barcodeMetrics(p);
+  const xStart = -m.codeW / 2;
+  const y0Base = -m.barH / 2;
+  const y1 = m.barH / 2;
+  const guardExt = (m.format === 'ean13' || m.format === 'ean8') && m.barH >= 8 && m.mEff >= 1.2
+    ? round(Math.min(1.5, m.mEff * 0.45), 3) : 0;
+  const rects = m.bars.map((b) => ({
+    x0: round(xStart + b.x0 * m.moduleW, 5),
+    x1: round(xStart + b.x1 * m.moduleW, 5),
+    y0: round(b.guard ? y0Base - guardExt : y0Base, 5),
+    y1: round(y1, 5),
+  }));
+  return {
+    ...m,
+    asHole: !!opts.asHole,
+    rects,
+  };
+}
+
+const LabelCodes = {
+  qrEncode,
+  barcodeEncode,
+  gridToRegions,
+  nameplateMetrics,
+  nameplateSpec,
+  qrCodeMetrics,
+  qrCodeSpec,
+  barcodeMetrics,
+  barcodeSpec,
+};
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
@@ -1051,6 +1765,48 @@ const LIB = [
       { k: 'wireHoles', label: 'Kontakt-/Kabellöcher', type: 'select', options: [['ja', 'Ja (beide Enden)'], ['nein', 'Nein (geschlossen)']], def: 'ja' },
       { k: 'mountHoles', label: 'Boden-Schraublöcher', type: 'select', options: [['nein', 'Nein'], ['ja', 'Ja (2× M3)']], def: 'nein' },
       { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
+    ] },
+  { lib: 'nameplate', label: 'Typenschild', role: 'solid', icon: 'nameplate',
+    kw: 'typenschild schild beschriftung text gravur praegung prägung platte plakette seriennummer bi-22',
+    desc: 'Parametrisches Typenschild mit bis zu drei Textzeilen als erhabene oder vertiefte Schrift', params: [
+      { k: 'title', label: 'Überschrift', type: 'text', def: 'TRACERY', wide: true, placeholder: 'z. B. TRACERY' },
+      { k: 'line1', label: 'Zeile 1', type: 'text', def: 'Modell: V1', wide: true, placeholder: 'z. B. Modell, Leistung …' },
+      { k: 'line2', label: 'Zeile 2', type: 'text', def: 'SN: 2026-001', wide: true, placeholder: 'optional (leer lassen = ohne)' },
+      { k: 'mode', label: 'Schrift-Art', type: 'select', options: [['emboss', 'Erhaben (aufgeprägt)'], ['deboss', 'Vertieft (eingraviert)']], def: 'emboss' },
+      { k: 'w', label: 'Breite', type: 'num', def: 60 },
+      { k: 'h', label: 'Höhe', type: 'num', def: 30 },
+      { k: 'thickness', label: 'Plattendicke', type: 'num', def: 2.4 },
+      { k: 'textDepth', label: 'Schrifthöhe/-tiefe', type: 'num', def: 0.8 },
+      { k: 'titleSize', label: 'Größe Überschrift', type: 'num', def: 6 },
+      { k: 'lineSize', label: 'Größe Zeilen', type: 'num', def: 3.6 },
+      { k: 'font', label: 'Schrift', type: 'select', options: [['fett', 'Inter Fett'], ['inter', 'Inter']], def: 'fett' },
+      { k: 'cornerR', label: 'Eckenradius', type: 'num', def: 2 },
+      { k: 'border', label: 'Randlinie', type: 'select', options: [['ja', 'Ja'], ['nein', 'Nein']], def: 'ja' },
+      { k: 'holes', label: 'Befestigungslöcher', type: 'select', options: [['corners', '4 Ecken'], ['sides', '2 seitlich'], ['none', 'Ohne']], def: 'corners' },
+      { k: 'holeD', label: 'Loch Ø', type: 'num', def: 3.2 },
+    ] },
+  { lib: 'qrCode', label: 'QR-Code', role: 'solid', icon: 'qrCode',
+    kw: 'qr qrcode qr-code code matrix 2d link praegung prägung schild bi-23',
+    desc: 'Lokal erzeugter QR-Code als Platte (erhaben/vertieft) oder reine Präge-Module (auch als Loch)', params: [
+      { k: 'text', label: 'Inhalt / Text', type: 'text', def: 'tracery', wide: true, placeholder: 'Text oder Link …' },
+      { k: 'mode', label: 'Ausführung', type: 'select', options: [['emboss', 'Platte + erhaben'], ['deboss', 'Platte + vertieft'], ['relief', 'Nur Module (zum Prägen)']], def: 'emboss' },
+      { k: 'ec', label: 'Fehlerkorrektur', type: 'select', options: [['L', 'L (7 % · kompakt)'], ['M', 'M (15 % · Standard)'], ['Q', 'Q (25 % · robust)'], ['H', 'H (30 % · maximal)']], def: 'M' },
+      { k: 'size', label: 'Größe (Breite)', type: 'num', def: 36 },
+      { k: 'quiet', label: 'Rand (Module)', type: 'num', def: 2, int: true, unit: '' },
+      { k: 'baseH', label: 'Plattendicke', type: 'num', def: 2 },
+      { k: 'reliefH', label: 'Code-Höhe/-Tiefe', type: 'num', def: 0.8 },
+    ] },
+  { lib: 'barcode', label: 'Barcode', role: 'solid', icon: 'barcode',
+    kw: 'barcode strichcode ean ean13 ean-13 ean8 code128 code-128 etikett praegung prägung bi-23',
+    desc: 'Lokal erzeugter Strichcode (Code 128, EAN-13, EAN-8) als Platte oder Präge-Balken', params: [
+      { k: 'format', label: 'Code-Art', type: 'select', options: [['code128', 'Code 128 (Text & Zahlen)'], ['ean13', 'EAN-13 (13 Ziffern)'], ['ean8', 'EAN-8 (8 Ziffern)']], def: 'code128' },
+      { k: 'code', label: 'Inhalt / Nummer', type: 'text', def: 'TRACERY', wide: true, placeholder: 'Code 128 oder Ziffern …' },
+      { k: 'mode', label: 'Ausführung', type: 'select', options: [['emboss', 'Platte + erhaben'], ['deboss', 'Platte + vertieft'], ['relief', 'Nur Balken (zum Prägen)']], def: 'emboss' },
+      { k: 'moduleW', label: 'Balken-Einheit', type: 'num', def: 0.6 },
+      { k: 'barH', label: 'Balkenhöhe', type: 'num', def: 16 },
+      { k: 'margin', label: 'Rand', type: 'num', def: 4 },
+      { k: 'baseH', label: 'Plattendicke', type: 'num', def: 2 },
+      { k: 'reliefH', label: 'Code-Höhe/-Tiefe', type: 'num', def: 0.8 },
     ] },
   { lib: 'goproMount', label: 'GoPro-Halterung', role: 'solid', icon: 'actionMount', drone: true, desc: 'Finger mit M5-Loch für Action-Kameras, auf einer Grundplatte – mit Mutter-Nabe', params: [
     { k: 'n', label: 'Finger', type: 'select', options: ['3', '2'], def: '3' }, { k: 't', label: 'Fingerdicke', type: 'num', def: 3 }, { k: 'gap', label: 'Spalt', type: 'num', def: 3.2 }, { k: 'hole', label: 'Loch Ø', type: 'num', def: 5.2 },

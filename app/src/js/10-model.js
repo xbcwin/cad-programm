@@ -1048,6 +1048,12 @@ const Model = (() => {
         if (it.kind === 'cylinder' && o.p.printFit) o.p.printFitSign = it.role === 'hole' ? 1 : -1;
         if (it.kind === 'part') {
           if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
+          const ldef = typeof LIBMAP !== 'undefined' ? LIBMAP[o.p.lib] : null;
+          if (ldef && Array.isArray(ldef.params)) {
+            for (const q of ldef.params) {
+              if (q.type === 'text' && it.p && it.p[q.k] != null) o.p[q.k] = String(it.p[q.k]);
+            }
+          }
           if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
             const te = threadEntry(o.p.size);
             if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
@@ -1089,6 +1095,12 @@ const Model = (() => {
             o.p.spec = shaftCouplingMetrics(o.p);
           } else if (o.p.lib === 'batteryHolder' && typeof batteryHolderMetrics === 'function') {
             o.p.spec = batteryHolderMetrics(o.p);
+          } else if (o.p.lib === 'nameplate' && typeof nameplateSpec === 'function') {
+            o.p.spec = nameplateSpec(o.p);
+          } else if (o.p.lib === 'qrCode' && typeof qrCodeSpec === 'function') {
+            o.p.spec = qrCodeSpec(o.p, { asHole: it.role === 'hole' });
+          } else if (o.p.lib === 'barcode' && typeof barcodeSpec === 'function') {
+            o.p.spec = barcodeSpec(o.p, { asHole: it.role === 'hole' });
           } else if (o.p.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
             o.p.spec = timingPulleyMetrics(o.p);
           } else if (o.p.lib === 'sprocket' && typeof sprocketMetrics === 'function') {
@@ -2647,6 +2659,9 @@ const Model = (() => {
         if (L === 'shaftCollar') { const m = typeof shaftCollarMetrics === 'function' ? shaftCollarMetrics(p) : { D: 20, b: 10 }; const r = m.D / 2; return [-r, -r, 0, r, r, m.b]; }
         if (L === 'shaftCoupling') { const m = typeof shaftCouplingMetrics === 'function' ? shaftCouplingMetrics(p) : { outerD: 30, L: 45 }; const r = m.outerD / 2; return [-r, -r, 0, r, r, m.L]; }
         if (L === 'batteryHolder') { const m = typeof batteryHolderMetrics === 'function' ? batteryHolderMetrics(p) : { outerW: 35.8, outerL: 57.5, outerH: 16.9 }; return [-m.outerW / 2, -m.outerL / 2, 0, m.outerW / 2, m.outerL / 2, m.outerH]; }
+        if (L === 'nameplate') { const m = typeof nameplateMetrics === 'function' ? nameplateMetrics(p) : { w: 60, h: 30, totalH: 3.2 }; return [-m.w / 2, -m.h / 2, 0, m.w / 2, m.h / 2, m.totalH]; }
+        if (L === 'qrCode') { const m = typeof qrCodeMetrics === 'function' ? qrCodeMetrics(p) : { outerW: 36, outerH: 36, totalH: 2.8 }; return [-m.outerW / 2, -m.outerH / 2, 0, m.outerW / 2, m.outerH / 2, m.totalH]; }
+        if (L === 'barcode') { const m = typeof barcodeMetrics === 'function' ? barcodeMetrics(p) : { outerW: 50, outerH: 24, totalH: 2.8 }; return [-m.outerW / 2, -m.outerH / 2, 0, m.outerW / 2, m.outerH / 2, m.totalH]; }
         if (L === 'timingPulley') { const m = typeof timingPulleyMetrics === 'function' ? timingPulleyMetrics(p) : { outerD: 16, totalH: 14 }; const r = m.outerD / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'sprocket') { const m = typeof sprocketMetrics === 'function' ? sprocketMetrics(p) : { da: 66, totalH: 7.2 }; const r = m.da / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
@@ -2952,6 +2967,9 @@ const Model = (() => {
         if (L === 'shaftCollar' && typeof shaftCollarMetrics === 'function') { const m = shaftCollarMetrics(p); return `Ø ${f(m.d)} × ${f(m.D)} × ${f(m.b)}${u}`; }
         if (L === 'shaftCoupling' && typeof shaftCouplingMetrics === 'function') { const m = shaftCouplingMetrics(p); return `Ø ${f(m.d1)}${Math.abs(m.d1 - m.d2) > 0.01 ? '/' + f(m.d2) : ''} × ${f(m.L)}${u}`; }
         if (L === 'batteryHolder' && typeof batteryHolderMetrics === 'function') { const m = batteryHolderMetrics(p); return `${m.count}×${m.id} · ${f(m.outerW)} × ${f(m.outerL)} × ${f(m.outerH)}${u}`; }
+        if (L === 'nameplate' && typeof nameplateMetrics === 'function') { const m = nameplateMetrics(p); return `${f(m.w)} × ${f(m.h)}${u} · ${m.mode === 'deboss' ? 'vertieft' : 'erhaben'}`; }
+        if (L === 'qrCode' && typeof qrCodeMetrics === 'function') { const m = qrCodeMetrics(p); return `V${m.version} (${m.modules}×${m.modules}) · ${f(m.outerW)}${u}`; }
+        if (L === 'barcode' && typeof barcodeMetrics === 'function') { const m = barcodeMetrics(p); return `${m.formatLabel} · ${f(m.outerW)} × ${f(m.outerH)}${u}`; }
         if (L === 'timingPulley' && typeof timingPulleyMetrics === 'function') { const m = timingPulleyMetrics(p); return `${m.profile} · ${m.z} Z · Ø ${f(m.dp)}${u}`; }
         if (L === 'sprocket' && typeof sprocketMetrics === 'function') { const m = sprocketMetrics(p); return `${m.chainLabelShort} · ${m.z} Z · Ø ${f(m.dp)}${u}`; }
         return p.size || '';

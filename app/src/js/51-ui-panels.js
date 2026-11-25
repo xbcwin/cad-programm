@@ -575,7 +575,16 @@ const Panels = (() => {
       const encBtn = h('button', { type: 'button', class: 'btn small', id: 'add-enclosure-gen', 'data-help': 'enclosureGen', 'data-tip': T('tool.fly.enclosureGenTip') });
       encBtn.innerHTML = icon('enclosure') + esc(T('tool.fly.enclosureGen'));
       encBtn.onclick = () => { closeFlyout(); Enclosure.openDialog(); };
-      stepRow.append(mpBtn, pcBtn, bhBtn, encBtn);
+      const npBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-nameplate', 'data-help': 'nameplate', 'data-tip': T('tool.fly.nameplateTip') });
+      npBtn.innerHTML = icon('nameplate') + esc(T('tool.fly.nameplate'));
+      npBtn.onclick = () => { Actions.addPart(LIBMAP.nameplate, libDefaults(LIBMAP.nameplate)); closeFlyout(); };
+      const qrBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-qr-code', 'data-help': 'qrCode', 'data-tip': T('tool.fly.qrCodeTip') });
+      qrBtn.innerHTML = icon('qrCode') + esc(T('tool.fly.qrCode'));
+      qrBtn.onclick = () => { Actions.addPart(LIBMAP.qrCode, libDefaults(LIBMAP.qrCode)); closeFlyout(); };
+      const bcBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-barcode', 'data-help': 'barcode', 'data-tip': T('tool.fly.barcodeTip') });
+      bcBtn.innerHTML = icon('barcode') + esc(T('tool.fly.barcode'));
+      bcBtn.onclick = () => { Actions.addPart(LIBMAP.barcode, libDefaults(LIBMAP.barcode)); closeFlyout(); };
+      stepRow.append(mpBtn, pcBtn, bhBtn, encBtn, npBtn, qrBtn, bcBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
@@ -2248,7 +2257,10 @@ const Panels = (() => {
         for (const q of def.params) {
           let fld;
           if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
-          else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? T('panel.item.autoFitPh') : '', onCommit: (v) => setP(q.k, v) });
+          else if (q.type === 'text') {
+            fld = UI.textField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', placeholder: q.placeholder || '', onCommit: (v) => setP(q.k, v) });
+            if (q.wide) fld.style.gridColumn = '1 / -1';
+          } else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? T('panel.item.autoFitPh') : '', onCommit: (v) => setP(q.k, v) });
           if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
           fl.append(fld);
         }
@@ -2565,6 +2577,32 @@ const Panels = (() => {
             inW: Units.fmtLenU(m.innerW, 2), inL: Units.fmtLenU(m.innerL, 2), inH: Units.fmtLenU(m.innerH, 2),
             slotW: Units.fmtLenU(m.slotW, 2),
             outW: Units.fmtLenU(m.outerW, 2), outL: Units.fmtLenU(m.outerL, 2), outH: Units.fmtLenU(m.outerH, 2),
+          }) }));
+        } else if (def.lib === 'nameplate' && typeof nameplateMetrics === 'function') {
+          const rp = { ...Model.resolveP(it.p, V), title: it.p.title, line1: it.p.line1, line2: it.p.line2 };
+          const m = nameplateMetrics(rp);
+          sec.append(h('div', { id: 'p-nameplate-hint', class: 'hint-box', html: T('panel.item.nameplateHint', {
+            w: Units.fmtLenU(m.w, 1), h: Units.fmtLenU(m.h, 1), totalH: Units.fmtLenU(m.totalH, 2),
+            lines: m.lines.length,
+            mode: m.mode === 'deboss' ? 'vertieft' : 'erhaben',
+            holes: m.holeList.length ? `${m.holeList.length}× Ø ${Units.fmtLenU(m.holeD, 1)}` : 'ohne Löcher',
+          }) }));
+        } else if (def.lib === 'qrCode' && typeof qrCodeMetrics === 'function') {
+          const rp = { ...Model.resolveP(it.p, V), text: it.p.text };
+          const m = qrCodeMetrics(rp);
+          sec.append(h('div', { id: 'p-qrcode-hint', class: 'hint-box', html: T('panel.item.qrCodeHint', {
+            ver: m.version, mod: m.modules, ec: esc(m.ec),
+            cell: Units.fmtLenU(m.cellSize, 2),
+            w: Units.fmtLenU(m.outerW, 1), totalH: Units.fmtLenU(m.totalH, 2),
+            dark: m.darkCount,
+          }) }));
+        } else if (def.lib === 'barcode' && typeof barcodeMetrics === 'function') {
+          const rp = { ...Model.resolveP(it.p, V), code: it.p.code };
+          const m = barcodeMetrics(rp);
+          sec.append(h('div', { id: 'p-barcode-hint', class: 'hint-box', html: T('panel.item.barcodeHint', {
+            fmt: esc(m.formatLabel), code: esc(m.encoded),
+            bars: m.barCount, mods: m.totalModules,
+            w: Units.fmtLenU(m.outerW, 1), h: Units.fmtLenU(m.outerH, 1), totalH: Units.fmtLenU(m.totalH, 2),
           }) }));
         } else if (def.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
           const rp = Model.resolveP(it.p, V);

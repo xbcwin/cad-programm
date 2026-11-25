@@ -5104,5 +5104,14 @@
   "dlg.enclosure.summary": "Außenmaß <b>{outW} × {outD} × {totalH} mm</b> (Kasten {boxH} + Deckel {lidH} mm) · Innenmaß {inW} × {inD} × {inH} mm{lipInfo}{bossInfo}",
   "toast.enclosureAdded": "Gehäuse erzeugt ({outW} × {outD} × {totalH} mm außen).",
   "toast.enclosureMainOnly": "Der Gehäuse-Generator arbeitet auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.",
-  "undo.enclosure": "Gehäuse erzeugt"
+  "undo.enclosure": "Gehäuse erzeugt",
+  "tool.fly.nameplate": "Typenschild (Text)",
+  "tool.fly.nameplateTip": "Parametrisches Typenschild mit erhabener oder vertiefter Schrift hinzufügen",
+  "tool.fly.qrCode": "QR-Code",
+  "tool.fly.qrCodeTip": "Lokal erzeugten QR-Code als Platte oder Präge-Körper hinzufügen",
+  "tool.fly.barcode": "Barcode (EAN / Code128)",
+  "tool.fly.barcodeTip": "Lokal erzeugten Strichcode (Code 128, EAN-13, EAN-8) hinzufügen",
+  "panel.item.nameplateHint": "<b>{w} × {h} × {totalH}</b> · {lines} Textzeile(n) {mode} · {holes}.",
+  "panel.item.qrCodeHint": "<b>QR Version {ver}</b> ({mod}×{mod} Module · Fehlerkorrektur {ec}) · Modul {cell} · {w} × {w} × {totalH} · {dark} dunkle Felder.",
+  "panel.item.barcodeHint": "<b>{fmt}</b> (<code>{code}</code>) · {bars} Balken ({mods} Module) · {w} × {h} × {totalH}."
 }

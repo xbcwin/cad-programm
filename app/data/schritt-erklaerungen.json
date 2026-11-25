@@ -454,5 +454,20 @@
     "was": "Erzeugt ein parametrisches Batteriefach für ein bis acht Rundzellen (AA, AAA, 18650) mit Innenfach, Trennwänden und Kontakt-/Kabellöchern.",
     "wozu": "Dient als fertiger Batteriehalter in Gehäusen, Robotik- und Elektronikprojekten – passend zu echten Zellenmaßen nach IEC samt Federkontakt-Zugabe.",
     "achtung": "Prüfe bei geschützten 18650-Zellen (mit Schutzschaltung), dass du „18650 geschützt“ auswählst, da sie etwa 4,5 mm länger sind als ungeschützte Zellen."
+  },
+  "nameplate": {
+    "was": "Erzeugt ein Typenschild mit abgerundeten Ecken, optionalem Rand, Befestigungslöchern und bis zu drei Textzeilen als erhabene oder vertiefte 3D-Schrift.",
+    "wozu": "Beschriftet Maschinen, Gehäuse, Geräte oder Schilder dauerhaft mit Modellname, Seriennummer oder Hinweisen.",
+    "achtung": "Achte beim 3D-Druck darauf, dass Buchstaben nicht dünner als deine Düsenbreite sind – die Schrift wird automatisch passend skaliert."
+  },
+  "qrCode": {
+    "was": "Erzeugt lokal einen normgerechten QR-Code nach ISO/IEC 18004 als Platte mit erhabenen/vertieften Quadraten oder als reine Präge-Module.",
+    "wozu": "Verknüpft Bauteile, Typenschilder oder Ersatzteile dauerhaft mit einer Webadresse, Anleitung oder Seriennummer.",
+    "achtung": "Sorge für guten Kontrast (z. B. Zweifarb-Druck beim Filamentwechsel oder dunkle Farbe in Vertiefung), damit Kameras den Code sicher erkennen."
+  },
+  "barcode": {
+    "was": "Erzeugt lokal einen Strichcode (Code 128, EAN-13 oder EAN-8) als Platte mit erhabenen oder vertieften Balken oder als reine Präge-Balken.",
+    "wozu": "Ermöglicht maschinenlesbare Produktnummern, Lageretiketten und Seriennummern direkt auf gedruckten oder gefrästen Teilen.",
+    "achtung": "Lass rund um den Barcode genug ruhigen Rand (Quiet Zone), damit ein Barcodescanner Anfang und Ende sauber erkennt."
   }
 }

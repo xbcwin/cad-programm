@@ -744,6 +744,9 @@ const IC = {
   portCutout: '<rect x="2.5" y="5" width="19" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5" width="19" height="14" rx="2"/><rect x="5.5" y="10" width="8" height="4" rx="2"/><circle cx="16.8" cy="12" r="1.6"/>',
   batteryHolder: '<rect x="3" y="5" width="18" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="5.5" y="7.5" width="5.2" height="9" rx="1"/><rect x="13.3" y="7.5" width="5.2" height="9" rx="1"/><path d="M7.2 7.5V6.3h1.8v1.2M15 7.5V6.3h1.8v1.2"/>',
   enclosure: '<path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z" fill="currentColor" opacity=".14"/><path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z"/><path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h14a1.5 1.5 0 0 1 1.5 1.5v2H3.5z"/><path d="M6.5 7.5v1.5h11V7.5"/><circle cx="7.5" cy="13" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="13" r=".9" fill="currentColor" stroke="none"/>',
+  nameplate: '<rect x="2.5" y="5.5" width="19" height="13" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M7 10h10M7 14h6"/><circle cx="5" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="5" cy="16" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="16" r=".8" fill="currentColor" stroke="none"/>',
+  qrCode: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="5.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="16.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5.2" y="16.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><path d="M14 14h3v3h-3zM18 14h3M14 20h4M19 17v4" stroke-width="2"/>',
+  barcode: '<rect x="2.5" y="4.5" width="19" height="15" rx="1.5" opacity=".35"/><path d="M5.5 7.5v9M8 7.5v9M10.5 7.5v9M12.5 7.5v9M15.5 7.5v9M18.5 7.5v9" stroke-width="1.6"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2850,6 +2853,21 @@ const HELP = {
   "tip": "Gehäuse-Generator: Kasten mit Deckel, umlaufender Lippe/Nut und 4 Schraubdomen",
   "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit echten, einzeln bearbeitbaren Schritten in der Zeitleiste: den ausgehöhlten Kasten, den passenden Deckel, eine umlaufende Stecklippe mit Nut und einstellbarem Spiel sowie vier Schraubdome in den Innenecken.",
   "tipp": "Alle erzeugten Schritte (Kasten, Deckel, Lippe & Nut und jeder einzelne Schraubdom) bleiben rechts und in der Zeitleiste jederzeit einzeln anpassbar."
+ },
+ "nameplate": {
+  "tip": "Parametrisches Typenschild mit erhabener oder vertiefter 3D-Schrift",
+  "hilfe": "Erstellt eine abgerundete Platte mit optionalem Rand und Befestigungslöchern sowie bis zu drei Textzeilen (Überschrift, Zeile 1, Zeile 2). Lange Zeilen werden automatisch in die Breite des Schildes eingepasst. Unter „Schrift-Art“ wählst du zwischen erhabenen Buchstaben (für Mehrfarb-Druck oder Lackieren) und vertiefter Gravur.",
+  "tipp": "Lass „Zeile 1“ oder „Zeile 2“ einfach leer, wenn du nur ein oder zwei Textfelder brauchst."
+ },
+ "qrCode": {
+  "tip": "Lokal erzeugter QR-Code als 3D-Schild oder reiner Präge-Körper",
+  "hilfe": "Erzeugt ohne Internetverbindung einen normgerechten QR-Code (ISO/IEC 18004, Version 1–10) für beliebige Texte oder Links. Du wählst zwischen Platte mit erhabenen Quadraten, Platte mit vertieftem Code oder „Nur Module“, um den Code direkt auf eigene Gehäuse oder Bauteile zu setzen (als Körper oder Loch).",
+  "tipp": "Für den 3D-Druck reicht bei kurzen Texten Fehlerkorrektur „M“ mit 0,6–0,8 mm Prägehöhe, damit die Kanten sauber gedruckt und sicher gescannt werden."
+ },
+ "barcode": {
+  "tip": "Lokal erzeugter Strichcode (Code 128, EAN-13, EAN-8) als Platte oder Präge-Balken",
+  "hilfe": "Erzeugt ohne Internetverbindung einen lesbaren Strichcode: Code 128 für beliebige Texte, Seriennummern und Ziffern oder EAN-13 bzw. EAN-8 mit automatischer Prüfziffer. Wie beim QR-Code kannst du eine Platte mit erhabenen oder vertieften Balken erzeugen oder „Nur Balken“ zum Einprägen in andere Körper wählen.",
+  "tipp": "Bei EAN-13 und EAN-8 berechnet Tracery die letzte Prüfziffer automatisch nach Norm, wenn du 12 bzw. 7 Ziffern eintippst."
  }
 };
 
