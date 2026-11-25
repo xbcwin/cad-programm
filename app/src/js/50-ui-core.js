@@ -555,7 +555,7 @@ const UI = (() => {
     });
   }
   // ---------- Tooltips ----------
-  let tipEl = null, tipTimer = 0, helpTimer = 0;
+  let tipEl = null, tipTarget = null, tipTimer = 0, helpTimer = 0;
   // Hilfe-Schlüssel eines Elements: data-help, sonst nach id oder Beschriftung
   const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist', 'var-new': 'variants', 'var-table': 'variantTable', 'var-cmp': 'variants' };
   const HELP_LABELS = { 'Spiegeln': 'mirror', 'Hochziehen': 'extrude', 'Skizze hierauf': 'sketchFace' };
@@ -565,28 +565,32 @@ const UI = (() => {
       if (whatIsOn) return;
       if (e.pointerType === 'touch') return;
       const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
-      clearTimeout(tipTimer); clearTimeout(helpTimer);
+      if (t && t === tipTarget && (tipTimer || tipEl)) return;
+      clearTimeout(tipTimer); tipTimer = 0; clearTimeout(helpTimer); helpTimer = 0;
       if (!t) { hideTip(); return; }
-      tipTimer = setTimeout(() => showTip(t), 420);
+      tipTarget = t;
+      tipTimer = setTimeout(() => { tipTimer = 0; showTip(t); }, 420);
     });
     document.addEventListener('pointerdown', hideTip, true);
     document.addEventListener('scroll', hideTip, true);
   }
   function showTip(t) {
+    const tgt = t;
     hideTip();
-    if (!document.body.contains(t)) return;
-    const key = helpKey(t);
-    tipEl = h('div', { class: 'tooltip' }, t.dataset.tip || (key ? HELP[key].tip : ''));
-    if (t.dataset.kbd) tipEl.append(h('span', { class: 'kbd' }, t.dataset.kbd));
+    if (!document.body.contains(tgt)) return;
+    tipTarget = tgt;
+    const key = helpKey(tgt);
+    tipEl = h('div', { class: 'tooltip' }, tgt.dataset.tip || (key ? HELP[key].tip : ''));
+    if (tgt.dataset.kbd) tipEl.append(h('span', { class: 'kbd' }, tgt.dataset.kbd));
     if (key) tipEl.append(h('span', { class: 'more' }, T('hint.waitMore')));
-    document.body.append(tipEl); placeTip(t);
+    document.body.append(tipEl); placeTip(tgt);
     // länger drauf bleiben: ausführliche Hilfe
     if (key) helpTimer = setTimeout(() => {
-      if (!tipEl || !document.body.contains(t)) return;
+      if (!tipEl || !document.body.contains(tgt)) return;
       const H = HELP[key]; const m = tipEl.querySelector('.more'); if (m) m.remove();
       tipEl.classList.add('big');
       tipEl.append(h('span', { class: 'hl' }, H.hilfe), h('span', { class: 'tp' }, h('b', null, T('hint.tipPrefix')), H.tipp));
-      placeTip(t);
+      placeTip(tgt);
     }, 1100);
   }
   function placeTip(t) {
@@ -595,7 +599,7 @@ const UI = (() => {
     if (y + tr.height > innerHeight - 8) y = r.top - tr.height - 8;
     tipEl.style.left = clamp(x, 8, innerWidth - tr.width - 8) + 'px'; tipEl.style.top = Math.max(8, y) + 'px';
   }
-  function hideTip() { clearTimeout(helpTimer); if (tipEl) { tipEl.remove(); tipEl = null; } }
+  function hideTip() { clearTimeout(tipTimer); tipTimer = 0; clearTimeout(helpTimer); helpTimer = 0; tipTarget = null; if (tipEl) { tipEl.remove(); tipEl = null; } }
   // ---------- Tablet- & Touch-Erkennung ----------
   let seenTouch = false;
   function hasTouch() {

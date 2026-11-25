@@ -4943,7 +4943,8 @@ const Sketch = (() => {
       return stepMove(e);
     }
     if (S.band) return;
-    const uv0 = mouseUV(e); if (!uv0) return;
+    const uv0 = mouseUV(e);
+    if (!uv0) { if (S.tool === 'select' && isLoftLine()) loftPreview(); return; }
     lastMouse = { e, uv: uv0 };
     if (S.bgDrag) { S.bg.a = [round(S.bgDrag.a0[0] + uv0[0] - S.bgDrag.start[0], 3), round(S.bgDrag.a0[1] + uv0[1] - S.bgDrag.start[1], 3)]; render(); return; }
     if (S.tool === 'bgcal') { S.cursor = { p: uv0 }; render(); return; }
@@ -9647,6 +9648,7 @@ const Sketch = (() => {
       if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2 || isPalmTouch(e))) return;
       if (S && S.guideDrag) { guideDragMove(e); return; }
       if (S && S.band) bandMove(e);
+      else if (S && !S.step && S.tool === 'select' && isLoftLine()) loftPreview();
     });
     window.addEventListener('pointerup', (e) => {
       if (S3) {

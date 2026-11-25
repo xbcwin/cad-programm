@@ -733,7 +733,7 @@ const Panels = (() => {
       eye.onclick = (e) => { e.stopPropagation(); Actions.setBody(it.id, bi, { hidden: !hidden }); };
       acts.append(ren, eye);
       row.append(colBtn, nm, acts);
-      row.addEventListener('click', (e) => { e.stopPropagation(); App.select([it.id]); });
+      row.addEventListener('click', (e) => { e.stopPropagation(); if (!(App.sel.length === 1 && App.sel[0] === it.id)) App.select([it.id]); });
       row.addEventListener('dblclick', (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); });
       row.addEventListener('contextmenu', (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -3653,6 +3653,24 @@ const Panels = (() => {
     placeCtx();
   }
 
+  function syncLeftSelection() {
+    if (leftTab !== 'tree') return false;
+    const body = $('#left-body');
+    if (!body) return false;
+    const topSel = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
+    const needSelBar = topSel.length >= 2 && !App.ctx;
+    if (needSelBar || body.querySelector('#tree-sel-bar')) return false;
+    if (body.querySelector('.node.sel:not([data-id])')) return false;
+    const nodes = body.querySelectorAll('.node[data-id]');
+    if (!nodes.length && App.doc && App.doc.items && App.doc.items.length) return false;
+    const selSet = new Set(App.sel);
+    for (const el of nodes) {
+      const on = selSet.has(el.dataset.id);
+      el.classList.toggle('sel', on);
+      el.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    return true;
+  }
   function init() {
     loadWorkspaces();
     initResizers();
@@ -3697,7 +3715,7 @@ const Panels = (() => {
     };
     App.on('doc', () => { checkDocType(); scheduleRerender(false); });
     App.on('docLoaded', () => { checkDocType(); });
-    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); rerenderLeftHint(); });
+    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); if (syncLeftSelection()) UI.renderHint(); else rerenderLeftHint(); });
     App.on('results', () => scheduleRerender(false));
     DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
     Weak.on('analyzed', () => { if (!App.sel.length) scheduleRerender(false); });

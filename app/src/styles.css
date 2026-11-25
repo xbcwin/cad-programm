@@ -78,14 +78,14 @@ body.sketching .viewcube,body.sketching .view-btns{display:none}
 /* ---------- Arbeitsfläche ---------- */
 .workspace{--col-l:252px;--col-r:292px;display:grid;grid-template-columns:var(--col-l) minmax(0,1fr) var(--col-r);min-height:0;position:relative}
 .workspace.drawing-mode .left{display:none}
-.left,.right{background:var(--surface);min-height:0;display:flex;flex-direction:column;z-index:20;position:relative}
+.left,.right{background:var(--surface);min-width:0;min-height:0;display:flex;flex-direction:column;z-index:20;position:relative}
 .left{grid-column:1;grid-row:1}.center{grid-column:2;grid-row:1}.right{grid-column:3;grid-row:1}
 .left{border-right:1px solid var(--line)}
 .right{border-left:1px solid var(--line)}
-.panel-head{display:flex;align-items:center;gap:6px;padding:10px 12px 8px;border-bottom:1px solid var(--line)}
+.panel-head{display:flex;align-items:center;gap:4px;padding:10px 8px 8px 10px;border-bottom:1px solid var(--line);min-width:0;overflow:hidden}
 .panel-title{font:600 13px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.tabs{display:flex;gap:2px}
-.tabs button{border:0;background:transparent;padding:6px 9px;border-radius:6px;font:600 13px/1 var(--font-cond);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.tabs{display:flex;gap:2px;min-width:0;flex:1 1 auto}
+.tabs button{border:0;background:transparent;padding:6px 7px;border-radius:6px;font:600 12.5px/1 var(--font-cond);letter-spacing:.05em;text-transform:uppercase;color:var(--faint);white-space:nowrap;min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis}
 .tabs button[aria-selected="true"]{color:var(--ink);background:var(--surface-3)}
 .panel-body{flex:1;overflow:auto;min-height:0;padding:8px 0 16px}
 
@@ -1250,7 +1250,7 @@ body.simple .tabbar-add{width:34px;height:34px}
 body.simple .tabbar-add svg{width:18px;height:18px}
 
 /* ---------- Tablet- & Touch-Bedienung (PL-09) ---------- */
-.panel-close{display:none;margin-left:auto}
+.panel-close{display:none;margin-left:auto;flex:none}
 .panel-toggle[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent)}
 @media (max-width: 900px){ .panel-close{display:inline-grid} }
 body.tablet #app{grid-template-rows:auto auto 1fr auto}

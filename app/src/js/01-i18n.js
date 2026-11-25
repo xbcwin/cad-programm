@@ -97,6 +97,7 @@ const I18n = (() => {
 
   return {
     t,
+    mark,
     set,
     use,
     detect,

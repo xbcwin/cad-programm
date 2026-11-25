@@ -30977,6 +30977,125 @@ def t_a157_benannte_stellungen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_f11251236(p):
+    # 1. Linke Panel-Kopfzeile (#lt-log / #btn-left-close) überlappt #sk-ruler-c nicht (auch bei 180 px Breite)
+    p.empty()
+    p.ev("Panels.resetLayout(); ViewPrefs.set({ level: 'pro', firstStart: false }); Sketch.startOnPlane('XY');")
+    p.wait(1200)
+    def check_ruler_clear():
+        return p.ev("""return (() => {
+          const rc = document.querySelector('#sk-ruler-c');
+          const left = document.querySelector('#left');
+          if (!rc || !left) return false;
+          const r = rc.getBoundingClientRect();
+          const lr = left.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          const topEl = document.elementFromPoint(cx, cy);
+          return r.width > 0 && r.left >= lr.right - 0.5 && !!topEl && (topEl === rc || rc.contains(topEl));
+        })()""")
+    clear_std = check_ruler_clear()
+    p.ev("Panels.setPanel('left', { width: 180 });")
+    p.wait(150)
+    clear_narrow = check_ruler_clear()
+    p.ev("Panels.resetLayout();")
+    p.wait(150)
+    p.pg.click('#sk-ruler-c'); p.wait(200)
+    polar_on = p.ev("return Sketch.gridMode === 'polar'")
+    p.pg.click('#sk-ruler-c'); p.wait(200)
+    rect_back = p.ev("return Sketch.gridMode === 'rect'")
+    p.ev("Sketch.cancel(true);")
+    p.wait(200)
+    ok1 = bool(clear_std and clear_narrow and polar_on and rect_back)
+
+    # 2. Beispiel-Galerie markiert im I18n-Testmodus alle Texte und hält DE/EN-Schlüsselgleichheit
+    p.ev("I18n.setTestMode(true); Start.show();")
+    p.wait(400)
+    for _ in range(20):
+        if p.pg.locator('#start-examples .example-card').count() >= 8:
+            break
+        p.wait(150)
+    ex_i18n = p.ev("""return (async () => {
+      const [de, en] = await Promise.all([
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const cards = [...document.querySelectorAll('#start-examples .example-card')];
+      const allMarked = cards.length >= 8 && cards.every(c => {
+        const b = (c.querySelector('b')?.textContent || '').trim();
+        const s = (c.querySelector('span:last-of-type')?.textContent || '').trim();
+        const t = (c.querySelector('.example-badge')?.textContent || '').trim();
+        return b.startsWith('⟦') && b.endsWith('⟧') && s.startsWith('⟦') && s.endsWith('⟧') && (!t || (t.startsWith('⟦') && t.endsWith('⟧')));
+      });
+      return { eq: dk.length === ek.length && dk.every((k, i) => k === ek[i]), allMarked, n: cards.length };
+    })()""")
+    p.ev("I18n.setTestMode(false); Start.hide();")
+    p.wait(200)
+    ok2 = bool(ex_i18n.get('eq') and ex_i18n.get('allMarked'))
+
+    # 3. Joints.setStops aktualisiert #jt-range sofort trotz Fokus; .body-row überlebt Klick-Auswahl; Tooltip-Timer bleibt stabil
+    p.ev("""App.change('f11251236', d => {
+      const a = Model.newItem('box', { w: 20, d: 10, h: 4 }, { name: 'Arm A' });
+      const b = Model.newItem('box', { w: 20, d: 10, h: 4 }, { name: 'Arm B', more: { t: { x: 20, y: 0, z: 0, rx: 0, ry: 0, rz: 0 } } });
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p, 20)
+    jid = p.ev("const r = Joints.add(App.doc.items[0].id, App.doc.items[1].id, [10, 0, 4], [0, 1, 0]); Joints.select(r.id); return r.id")
+    p.wait(200)
+    stop_ok = p.ev("""
+      const ang = document.querySelector('#jt-ang');
+      if (ang) ang.focus();
+      Joints.setStops(arg, -15, 35);
+      const r = document.querySelector('#jt-range');
+      return !!r && Number(r.min) === -15 && Number(r.max) === 35;
+    """, jid)
+    p.ev("""App.change('twoBodies', d => {
+      d.joints = [];
+      d.items = [];
+      const it = Model.newItem('extrude', {}, { name: 'ZweiKoerper' });
+      it.p = {
+        sketch: {
+          plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+          ents: [
+            { id: 'r1', type: 'rect', a: [-25, -10], b: [-5, 10] },
+            { id: 'r2', type: 'rect', a: [5, -10], b: [25, 10] },
+          ],
+          dims: [], cons: [],
+        },
+        dist: 10, dir: 'normal',
+      };
+      d.items.push(it);
+    })""")
+    warte_rechnen(p, 20)
+    p.ev("App.clearSelection();")
+    p.wait(150)
+    row_ref = p.ev("""
+      const row = document.querySelector('.body-row[data-body="1"]');
+      window.__f11251236Row = row;
+      row.click();
+      return !!row;
+    """)
+    p.wait(150)
+    row_kept = p.ev("const ok = window.__f11251236Row === document.querySelector('.body-row[data-body=\"1\"]') && window.__f11251236Row.isConnected; delete window.__f11251236Row; return ok;")
+    p.ev("ViewPrefs.dialog();")
+    p.wait(200)
+    p.ev("""
+      const wrap = document.querySelector('[data-help="language"]');
+      wrap.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+    """)
+    p.wait(300)
+    p.ev("""
+      const sel = document.querySelector('#set-lang');
+      sel.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+    """)
+    p.wait(220)
+    tip_ok = p.ev("return (document.querySelector('.tooltip')?.textContent || '').includes('Deutsch und Englisch');")
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    ok3 = bool(stop_ok and row_ref and row_kept and tip_ok and len(p.errs) == 0)
+    return [ok1, ok2, ok3]
+
+
 # ---------- [A-159] Bezüge zwischen Teilen verwalten (BG-22) ----------
 def t_a159_bezuege_verwalten(p):
     p.empty()
@@ -31941,6 +32060,7 @@ TESTS = [
     ('[A-151] Kopplungen: Zahnrad 1:2 (90° → 45°) & Zahnstange (π·d·Winkel/360) (BG-14)', t_a151_kopplungen_zahnrad_zahnstange),
     ('[A-156] Explosion in Schritten: Schritte / nacheinander abspielen / Wegen-Linien / Video-Export / Einfach & Profi', t_a156_explosion_schritte_video),
     ('[A-157] Benannte Stellungen: speichern, einnehmen, Einfach/Profi & Speichern/Laden (BG-20)', t_a157_benannte_stellungen),
+    ('[F-11251236] Volltest-Reparatur: Linke Leiste überlappt Skizzen-Lineal nicht / Beispiel-Galerie im I18n-Testmodus / Gelenk-Anschlag, Körper-Zeile & Tooltip', t_f11251236),
     ('[A-159] Bezüge zwischen Teilen verwalten: Liste, Einfrieren, Auftauen & Lösen (BG-22)', t_a159_bezuege_verwalten),
     ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
     ('[A-160] Schrauben automatisch einsetzen: Bohrungen erkennen, M5-Schrauben & Stückliste (BG-23)', t_a160_schrauben_einsetzen),
