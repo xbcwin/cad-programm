@@ -445,6 +445,17 @@ const Model = (() => {
       if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.targetId) {
         out.push({ from: me, to: top(it.p.toFace.targetId), what: 'dreht bis Fläche von' });
       }
+      if (it.kind === 'loft' && it.p) {
+        if (it.p.startFace && it.p.startFace.id) out.push({ from: me, to: top(it.p.startFace.id), what: 'weicher Anschluss (Start) an' });
+        if (it.p.endFace && it.p.endFace.id) out.push({ from: me, to: top(it.p.endFace.id), what: 'weicher Anschluss (Ende) an' });
+        const sks = Array.isArray(it.p.sketches) ? it.p.sketches : [];
+        if ((it.p.startCond === 'tangent' || it.p.startCond === 'curvature') && !it.p.startFace && sks[0] && sks[0].planeRef && sks[0].planeRef.id) {
+          out.push({ from: me, to: top(sks[0].planeRef.id), what: 'weicher Anschluss (Start) an' });
+        }
+        if ((it.p.endCond === 'tangent' || it.p.endCond === 'curvature') && !it.p.endFace && sks[sks.length - 1] && sks[sks.length - 1].planeRef && sks[sks.length - 1].planeRef.id) {
+          out.push({ from: me, to: top(sks[sks.length - 1].planeRef.id), what: 'weicher Anschluss (Ende) an' });
+        }
+      }
     });
     for (const d of doc.datums || []) {
       const b = d.base || {};
@@ -951,7 +962,17 @@ const Model = (() => {
       const regs = SK.regions(Solver.cached(sk, V).ents).sort((a, b) => b.area - a.area);
       if (!regs.length) continue;
       const L = regs[0].outer; let cx = 0, cy = 0; for (const q of L.poly) { cx += q[0]; cy += q[1]; } cx /= L.poly.length || 1; cy /= L.poly.length || 1;
-      profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly });
+      const prof = { plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly };
+      if (sk.planeRef && sk.planeRef.kind === 'face' && sk.planeRef.id) {
+        prof.planeRef = {
+          kind: 'face',
+          id: sk.planeRef.id,
+          tid: sk.planeRef.tid || null,
+          c: sk.planeRef.c || null,
+          n: sk.planeRef.n || null,
+        };
+      }
+      profiles.push(prof);
     }
     const out = { profiles, ruled: !!p.ruled };
     if (p.closed) {
@@ -973,7 +994,21 @@ const Model = (() => {
       out.path = { plane: p.path.plane, segs };
       return out;   // mit Mittellinie: keine Spitze, kein „gerade“
     }
+    const normCond = (c) => (c === 'tangent' || c === 'curvature' ? c : 'none');
+    const startCond = normCond(p.startCond);
+    let endCond = normCond(p.endCond);
     const tip = num(p.tip, V, 0);
+    if (tip > 0 && endCond !== 'none') endCond = 'none';
+    if ((startCond !== 'none' || endCond !== 'none') && profiles.length >= 2) {
+      out.ruled = false;
+      out.startCond = startCond;
+      out.endCond = endCond;
+      out.startWeight = clamp(num(p.startWeight, V, 1), 0.1, 3);
+      out.endWeight = clamp(num(p.endWeight, V, 1), 0.1, 3);
+      if (p.startFace && p.startFace.id) out.startFace = p.startFace;
+      if (p.endFace && p.endFace.id) out.endFace = p.endFace;
+      return out;
+    }
     if (tip > 0 && profiles.length) {
       const last = profiles[profiles.length - 1], pl = last.plane;
       const n = pl.n, x = pl.x, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
@@ -1594,8 +1629,11 @@ const Model = (() => {
       case 'loft': {
         const n = (it.p && Array.isArray(it.p.sketches)) ? it.p.sketches.length : 0;
         const base = it.p && it.p.closed ? `Ring (${n} Umrisse)` : `${n} Umrisse`;
+        const sc = it.p && !it.p.closed && !it.p.path && !it.p.rail && !it.p.rail2 ? it.p.startCond : null;
+        const ec = it.p && !it.p.closed && !it.p.path && !it.p.rail && !it.p.rail2 ? it.p.endCond : null;
+        const contTxt = (sc === 'curvature' || ec === 'curvature') ? ' · G2' : (sc === 'tangent' || ec === 'tangent') ? ' · G1' : '';
         const opTxt = it.op && it.op.type === 'cut' ? ' · Schnitt' : it.op && it.op.type === 'join' ? ' · Vereinigen' : it.op && it.op.type === 'common' ? ' · Schnittmenge' : '';
-        return base + opTxt;
+        return base + contTxt + opTxt;
       }
       case 'sweep': {
         const shp = p.shape === 'rect' ? `${f(p.w ?? 6)} × ${f(p.h ?? 4)}${u}` : p.shape === 'sketch' ? 'eigene Form' : `Ø ${f(p.d ?? 6)}${u}`;

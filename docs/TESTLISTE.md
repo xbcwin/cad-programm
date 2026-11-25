@@ -2417,6 +2417,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftClosed` und `loftCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang ring`, `übergang schnitt`) und `Explain.local` vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser 4 leicht unterschiedlich große Kreise im Kreis zeichnen, auf „Übergang (Ring)“ klicken, das nahtlose Schließen rundherum drehen und prüfen sowie den Ring mit „Körper → Abziehen von“ als umlaufende Nut aus einer Platte schneiden.
 
+## Übergang mit weichem Anschluss (Auto [A-123], KP-31)
+
+- [x] **Tangentialer Anschluss an Zylinder-Stirnfläche (< 1°)**: Übergang von Zylinder-Stirnfläche (Ø 20 × 20) zu Kreis (Ø 40) über `#loft-start-mode = 'tangent'` → Normalenwinkel an der Anschlusskante sinkt von > 18° auf unter 1°, Nachbarfläche automatisch erkannt, `GeomCheck` 0 Funde.
+- [x] **Stärke-Regler, G2, schräger Kegel & Kreis→Rechteck**: Stärke-Regler `#loft-start-weight` (0,3 vs. 2,5) hält den knickfreien Anschluss (< 1°) und steuert sichtbar die Bauchigkeit; krümmungsglatt (`curvature`, G2), beidseitiges `G2` + `G1`, Vereinigen mit dem Zylinder, Anschluss an einen schrägen Kegelstumpf (< 1° zur Kegelwand) sowie Kreis→Rechteck tangential samt Rückgängig/Wiederholen und Einfach/Profi-Umschaltung laufen ohne Fehler.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftContinuity` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang tangential`, `krümmungsglatt`) und `Explain.local` vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser auf der Stirnfläche eines Zylinders oder Kegelstumpfs skizzieren, einen Übergang zu einer größeren versetzten Ebene anlegen, rechts zwischen „Frei“, „Tangential (G1)“ und „Krümmungsglatt (G2)“ wechseln, den Stärke-Regler ziehen und im Lichtglanz den nahtlosen Verlauf prüfen.
+
 ## Fehler melden
 
 ```

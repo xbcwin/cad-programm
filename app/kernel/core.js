@@ -1263,10 +1263,15 @@ export function createKernel(R, oc) {
     }
     return fuseAllWithTopo(entries, true, 'Ex');
   }
+  function hasLoftContinuity(p) {
+    if (!p || p.closed || p.path || p.sections3) return false;
+    return p.startCond === 'tangent' || p.startCond === 'curvature' || p.endCond === 'tangent' || p.endCond === 'curvature';
+  }
   function isDynamicExtent(p) { return !!(p && (p.extent === 'toNext' || p.extent === 'toFace')); }
   function hasDynamicExtent(it) {
     if (!it || it.hidden) return false;
     if (it.kind === 'extrude') return isDynamicExtent(it.p);
+    if (it.kind === 'loft') return hasLoftContinuity(it.p);
     if (it.kind === 'group') return (it.children || []).some((c) => !c.hidden && hasDynamicExtent(c));
     return false;
   }
@@ -2125,6 +2130,967 @@ export function createKernel(R, oc) {
       return shape;
     } finally {
       for (const w of wires) safeDelete(w);
+    }
+  }
+  // Übergang mit weichem Anschluss an Nachbarflächen (KP-31): Start/Ende tangential (G1) oder krümmungsglatt (G2) mit Stärke-Regler
+  function buildLoftWithContinuity(it, W, ctx) {
+    const p = it.p || {};
+    const profiles = Array.isArray(p.profiles) ? p.profiles : [];
+    const m = profiles.length;
+    if (m < 2) throw new Error('Für einen Übergang mit weichem Anschluss braucht es mindestens zwei Umrisse.');
+    const startCond = (p.startCond === 'tangent' || p.startCond === 'curvature') ? p.startCond : 'none';
+    const endCond = (p.endCond === 'tangent' || p.endCond === 'curvature') ? p.endCond : 'none';
+    const startW = Math.max(0.1, Math.min(3, num(p.startWeight, 1)));
+    const endW = Math.max(0.1, Math.min(3, num(p.endWeight, 1)));
+
+    const maps = profiles.map((q) => planeMap(q.plane));
+    const centers = profiles.map((q, k) => maps[k].P(q.c || [0, 0]));
+    const dirOf = (k) => {
+      const d = k < m - 1 ? sub(centers[k + 1], centers[k]) : sub(centers[m - 1], centers[m - 2]);
+      return len(d) > 1e-6 ? norm(d) : maps[k].n.slice();
+    };
+    const dir0 = dirOf(0);
+    let uRef = sub(maps[0].x, mul(dir0, dot(maps[0].x, dir0)));
+    if (len(uRef) < 1e-4) {
+      const fb = Math.abs(dir0[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      uRef = cross(fb, dir0);
+    }
+    uRef = norm(uRef);
+
+    const flatKnotsOf = (knots, mults) => {
+      const flat = [];
+      for (let i = 0; i < knots.length; i++) for (let r = 0; r < mults[i]; r++) flat.push(knots[i]);
+      return flat;
+    };
+    const evalRationalBasis = (u, deg, flatK, weights) => {
+      const n = weights.length;
+      const N = new Array(n).fill(0);
+      if (u <= flatK[0] + 1e-12) { N[0] = 1; return N; }
+      if (u >= flatK[flatK.length - 1] - 1e-12) { N[n - 1] = 1; return N; }
+      let span = deg;
+      while (span < n - 1 && u >= flatK[span + 1]) span++;
+      const left = new Array(deg + 1).fill(0), right = new Array(deg + 1).fill(0);
+      const b = new Array(deg + 1).fill(0);
+      b[0] = 1;
+      for (let j = 1; j <= deg; j++) {
+        left[j] = u - flatK[span + 1 - j];
+        right[j] = flatK[span + j] - u;
+        let saved = 0;
+        for (let r = 0; r < j; r++) {
+          const den = right[r + 1] + left[j - r];
+          const temp = Math.abs(den) > 1e-14 ? b[r] / den : 0;
+          b[r] = saved + right[r + 1] * temp;
+          saved = left[j - r] * temp;
+        }
+        b[j] = saved;
+      }
+      let wSum = 0;
+      for (let j = 0; j <= deg; j++) {
+        const idx = span - deg + j;
+        const val = b[j] * weights[idx];
+        N[idx] = val;
+        wSum += val;
+      }
+      if (wSum > 1e-14) for (let j = 0; j <= deg; j++) N[span - deg + j] /= wSum;
+      return N;
+    };
+    const solveLinear = (A, bVec) => {
+      const n = A.length;
+      const M = A.map((row, i) => [...row, ...bVec[i]]);
+      for (let col = 0; col < n; col++) {
+        let piv = col, best = Math.abs(M[col][col]);
+        for (let r = col + 1; r < n; r++) {
+          const v = Math.abs(M[r][col]);
+          if (v > best) { best = v; piv = r; }
+        }
+        if (best < 1e-12) return null;
+        if (piv !== col) { const tmp = M[col]; M[col] = M[piv]; M[piv] = tmp; }
+        const inv = 1 / M[col][col];
+        for (let c = col; c < n + 3; c++) M[col][c] *= inv;
+        for (let r = 0; r < n; r++) {
+          if (r === col || Math.abs(M[r][col]) < 1e-15) continue;
+          const f = M[r][col];
+          for (let c = col; c < n + 3; c++) M[r][c] -= f * M[col][c];
+        }
+      }
+      return M.map((row) => [row[n], row[n + 1], row[n + 2]]);
+    };
+
+    const projectAxisInPlane = (M, dirK, hint) => {
+      const ccw = dot(M.n, dirK) >= 0;
+      let uP = sub(hint, mul(M.n, dot(hint, M.n)));
+      if (len(uP) < 1e-4) uP = M.x.slice();
+      uP = norm(uP);
+      const vP = norm(ccw ? cross(M.n, uP) : cross(uP, M.n));
+      return { ccw, uP, vP };
+    };
+
+    const W2 = Math.SQRT1_2;
+    const CIRCLE_U_KNOTS = [0, 0.25, 0.5, 0.75, 1];
+    const CIRCLE_U_MULTS = [3, 2, 2, 2, 3];
+    const CIRCLE_WEIGHTS = [1, W2, 1, W2, 1, W2, 1, W2, 1];
+    const unitCircleLocal2D = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]];
+
+    const buildCirclePoles = (loop, M, dirK, hint) => {
+      const { uP, vP } = projectAxisInPlane(M, dirK, hint);
+      const C = M.P(loop.circle.c), r = loop.circle.r;
+      return unitCircleLocal2D.map(([a, b]) => add(C, add(mul(uP, a * r), mul(vP, b * r))));
+    };
+
+    const allCircles = profiles.every((q) => q.outer && q.outer.circle);
+    let uDeg = 2;
+    let uKnots = CIRCLE_U_KNOTS.slice();
+    let uMults = CIRCLE_U_MULTS.slice();
+    let profPoles = [];
+    let profWeights = [];
+    let profCurves = [];
+    const ocCleanup = [];
+
+    const readCurveData = (bsp) => {
+      const np = bsp.NbPoles(), nk = bsp.NbKnots();
+      const poles = [], weights = [], knots = [], mults = [];
+      for (let i = 1; i <= np; i++) {
+        const pt = bsp.Pole(i);
+        poles.push([pt.X(), pt.Y(), pt.Z()]);
+        weights.push(bsp.IsRational() ? bsp.Weight(i) : 1);
+        pt.delete();
+      }
+      for (let i = 1; i <= nk; i++) {
+        knots.push(bsp.Knot(i));
+        mults.push(bsp.Multiplicity(i));
+      }
+      return { deg: bsp.Degree(), poles, weights, knots, mults };
+    };
+    const makeBSplineFromData = (poles, weights, knots, mults, deg) => {
+      const gpP = new oc.NCollection_Array1_gp_Pnt(1, poles.length);
+      const wArr = new oc.NCollection_Array1_double(1, weights.length);
+      for (let i = 0; i < poles.length; i++) {
+        const pt = new oc.gp_Pnt(poles[i][0], poles[i][1], poles[i][2]);
+        gpP.SetValue(i + 1, pt);
+        wArr.SetValue(i + 1, weights[i]);
+        pt.delete();
+      }
+      const kArr = makeArr1D(knots), mArr = makeArr1I(mults);
+      const rational = weights.some((w) => Math.abs(w - 1) > 1e-9);
+      const bsp = rational
+        ? new oc.Geom_BSplineCurve(gpP, wArr, kArr, mArr, deg, false)
+        : new oc.Geom_BSplineCurve(gpP, kArr, mArr, deg, false);
+      gpP.delete(); wArr.delete(); kArr.delete(); mArr.delete();
+      return bsp;
+    };
+    const normalizeCurveRange = (bsp) => {
+      const k1 = bsp.Knot(1), kN = bsp.Knot(bsp.NbKnots());
+      const span = kN - k1;
+      if (Math.abs(k1) > 1e-9 || Math.abs(span - 1) > 1e-9) {
+        const nk = bsp.NbKnots();
+        const vals = [];
+        for (let i = 1; i <= nk; i++) vals.push(i === 1 ? 0 : i === nk ? 1 : (bsp.Knot(i) - k1) / (span || 1));
+        for (let i = 1; i <= nk; i++) bsp.SetKnot(i, vals[i - 1]);
+      }
+    };
+    const segToCubicBSpline = (s, M) => {
+      if (s.t === 'bez') {
+        return makeBSplineFromData([M.P(s.a), M.P(s.c1), M.P(s.c2), M.P(s.b)], [1, 1, 1, 1], [0, 1], [4, 4], 3);
+      }
+      if (s.t === 'arc') {
+        let eObj = null, loc = null, trm = null, bsp = null;
+        try {
+          eObj = R.makeThreePointArc(M.P(s.a), M.P(s.m), M.P(s.b));
+          loc = new oc.TopLoc_Location();
+          const cr = oc.BRep_Tool.Curve(eObj.wrapped, loc);
+          trm = new oc.Geom_TrimmedCurve(cr.returnValue, cr.First, cr.Last, true, true);
+          bsp = oc.GeomConvert.CurveToBSplineCurve(trm, oc.Convert_ParameterisationType.Convert_TgtThetaOver2);
+          if (!loc.IsIdentity()) {
+            const trsf = loc.Transformation();
+            bsp.Transform(trsf);
+            trsf.delete();
+          }
+          if (bsp.Degree() < 3) bsp.IncreaseDegree(3);
+          normalizeCurveRange(bsp);
+          return bsp;
+        } catch (_) {
+          if (bsp) try { bsp.delete(); } catch (_2) {}
+        } finally {
+          if (trm) trm.delete();
+          if (loc) loc.delete();
+          safeDelete(eObj);
+        }
+      }
+      const p0 = M.P(s.a), p3 = M.P(s.b);
+      const p1 = add(mul(p0, 2 / 3), mul(p3, 1 / 3));
+      const p2 = add(mul(p0, 1 / 3), mul(p3, 2 / 3));
+      return makeBSplineFromData([p0, p1, p2, p3], [1, 1, 1, 1], [0, 1], [4, 4], 3);
+    };
+
+    try {
+      if (allCircles) {
+        uDeg = 2;
+        uKnots = CIRCLE_U_KNOTS.slice();
+        uMults = CIRCLE_U_MULTS.slice();
+        for (let k = 0; k < m; k++) {
+          const poles = buildCirclePoles(profiles[k].outer, maps[k], dirOf(k), uRef);
+          const weights = CIRCLE_WEIGHTS.slice();
+          profPoles.push(poles);
+          profWeights.push(weights);
+          const bsp = makeBSplineFromData(poles, weights, uKnots, uMults, 2);
+          ocCleanup.push(bsp);
+          profCurves.push(bsp);
+        }
+      } else {
+        const rawCurves = [];
+        let prevStart = null;
+        for (let k = 0; k < m; k++) {
+          const loop = profiles[k].outer, M = maps[k], dirK = dirOf(k);
+          let bsp = null;
+          if (loop.circle) {
+            const poles = buildCirclePoles(loop, M, dirK, uRef);
+            bsp = makeBSplineFromData(poles, CIRCLE_WEIGHTS, CIRCLE_U_KNOTS, CIRCLE_U_MULTS, 2);
+            bsp.IncreaseDegree(3);
+            prevStart = poles[0].slice();
+          } else if (loop.ellipse) {
+            const E = loop.ellipse;
+            const { ccw, uP, vP } = projectAxisInPlane(M, dirK, uRef);
+            const cr = Math.cos(E.rot || 0), sr = Math.sin(E.rot || 0);
+            const ex = add(mul(M.x, cr), mul(M.y, sr));
+            const ey = add(mul(M.x, -sr), mul(M.y, cr));
+            const ax = dot(uP, ex) / Math.max(1e-6, E.rx), ay = dot(uP, ey) / Math.max(1e-6, E.rx);
+            const th0 = Math.atan2(dot(uP, ey) * E.rx, dot(uP, ex) * E.ry);
+            const sgn = ccw ? 1 : -1;
+            const C = M.P(E.c);
+            const poles = unitCircleLocal2D.map(([cx, cy]) => {
+              const ang = th0 + sgn * Math.atan2(cy, cx);
+              const rad = Math.hypot(cx, cy); // 1 on cardinal poles, sqrt(2) on corner poles
+              const lx = E.rx * rad * Math.cos(ang), ly = E.ry * rad * Math.sin(ang);
+              return add(C, add(mul(ex, lx), mul(ey, ly)));
+            });
+            bsp = makeBSplineFromData(poles, CIRCLE_WEIGHTS, CIRCLE_U_KNOTS, CIRCLE_U_MULTS, 2);
+            bsp.IncreaseDegree(3);
+            prevStart = poles[0].slice();
+          } else {
+            const ccw = dot(M.n, dirK) >= 0;
+            let segs = (loop.segs || []).filter((s) => s && (s.t !== 'line' || Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > 1e-6));
+            if ((loopArea(loop) > 0) !== ccw) {
+              segs = segs.slice().reverse().map((s) => (s.t === 'bez' ? { ...s, a: s.b, b: s.a, c1: s.c2, c2: s.c1 } : { ...s, a: s.b, b: s.a }));
+            }
+            let bestI = 0;
+            if (prevStart) {
+              let bestD = Infinity;
+              for (let i = 0; i < segs.length; i++) {
+                const d = len(sub(M.P(segs[i].a), prevStart));
+                if (d < bestD) { bestD = d; bestI = i; }
+              }
+            } else {
+              let bestDot = -Infinity;
+              for (let i = 0; i < segs.length; i++) {
+                const d = dot(sub(M.P(segs[i].a), centers[k]), uRef);
+                if (d > bestDot + 1e-9) { bestDot = d; bestI = i; }
+              }
+            }
+            if (bestI > 0) segs = segs.slice(bestI).concat(segs.slice(0, bestI));
+            prevStart = M.P(segs[0].a);
+
+            const segData = [];
+            let totalL = 0;
+            for (const s of segs) {
+              const sb = segToCubicBSpline(s, M);
+              const sd = readCurveData(sb);
+              sb.delete();
+              let cl = 0;
+              for (let i = 1; i < sd.poles.length; i++) cl += len(sub(sd.poles[i], sd.poles[i - 1]));
+              const sl = Math.max(1e-3, cl);
+              totalL += sl;
+              segData.push({ ...sd, sl });
+            }
+            const cPoles = [], cWeights = [], cKnots = [0], cMults = [4];
+            let acc = 0;
+            for (let si = 0; si < segData.length; si++) {
+              const sd = segData[si];
+              const u0 = acc / totalL;
+              acc += sd.sl;
+              const u1 = si === segData.length - 1 ? 1 : acc / totalL;
+              if (si === 0) {
+                for (let i = 0; i < sd.poles.length; i++) { cPoles.push(sd.poles[i]); cWeights.push(sd.weights[i]); }
+              } else {
+                const lastP = cPoles[cPoles.length - 1];
+                cPoles[cPoles.length - 1] = mul(add(lastP, sd.poles[0]), 0.5);
+                for (let i = 1; i < sd.poles.length; i++) { cPoles.push(sd.poles[i]); cWeights.push(sd.weights[i]); }
+              }
+              for (let ki = 1; ki < sd.knots.length - 1; ki++) {
+                cKnots.push(u0 + sd.knots[ki] * (u1 - u0));
+                cMults.push(sd.mults[ki]);
+              }
+              cKnots.push(u1);
+              cMults.push(si === segData.length - 1 ? 4 : 3);
+            }
+            // End-Pol exakt auf Start-Pol legen, damit die Naht wasserdicht bleibt
+            cPoles[cPoles.length - 1] = cPoles[0].slice();
+            cWeights[cWeights.length - 1] = cWeights[0];
+            bsp = makeBSplineFromData(cPoles, cWeights, cKnots, cMults, 3);
+          }
+          ocCleanup.push(bsp);
+          rawCurves.push(bsp);
+        }
+
+        // Knotenvektoren aller Profile auf eine gemeinsame Knotenfolge vereinheitlichen
+        const rawKnots = [];
+        for (const bsp of rawCurves) {
+          const nk = bsp.NbKnots();
+          for (let i = 2; i < nk; i++) rawKnots.push({ u: bsp.Knot(i), mult: bsp.Multiplicity(i) });
+        }
+        rawKnots.sort((a, b) => a.u - b.u);
+        const clusters = [];
+        for (const rk of rawKnots) {
+          const last = clusters[clusters.length - 1];
+          if (last && rk.u - last.u < 5e-4) {
+            last.mult = Math.max(last.mult, rk.mult);
+          } else {
+            clusters.push({ u: rk.u, mult: rk.mult });
+          }
+        }
+        // Nahe Knoten innerhalb 5e-4 auf den Cluster-Wert ziehen, falls strikt monoton
+        for (const bsp of rawCurves) {
+          const nk = bsp.NbKnots();
+          for (let i = 2; i < nk; i++) {
+            const ku = bsp.Knot(i);
+            const cl = clusters.find((c) => Math.abs(c.u - ku) < 5e-4);
+            if (cl && Math.abs(cl.u - ku) > 1e-12) {
+              const prevU = bsp.Knot(i - 1), nextU = bsp.Knot(i + 1);
+              if (cl.u > prevU + 1e-6 && cl.u < nextU - 1e-6) bsp.SetKnot(i, cl.u);
+            }
+          }
+        }
+        // Exakte Vereinigung nach etwaigem Snapping einsammeln und fehlende Knoten einfügen
+        const unionMap = new Map();
+        for (const bsp of rawCurves) {
+          const nk = bsp.NbKnots();
+          for (let i = 2; i < nk; i++) {
+            const uVal = Math.round(bsp.Knot(i) * 1e9) / 1e9;
+            const mult = bsp.Multiplicity(i);
+            const prev = unionMap.get(uVal) || 0;
+            if (mult > prev) unionMap.set(uVal, mult);
+          }
+        }
+        const unionEntries = [...unionMap.entries()].sort((a, b) => a[0] - b[0]);
+        for (const bsp of rawCurves) {
+          for (const [uVal, targetMult] of unionEntries) {
+            bsp.InsertKnot(uVal, targetMult, 1e-7, false);
+          }
+        }
+        uDeg = 3;
+        const d0 = readCurveData(rawCurves[0]);
+        uKnots = d0.knots;
+        uMults = d0.mults;
+        for (const bsp of rawCurves) {
+          const cd = readCurveData(bsp);
+          profPoles.push(cd.poles);
+          profWeights.push(cd.weights);
+          profCurves.push(bsp);
+        }
+      }
+
+      const nu = profPoles[0].length;
+      const flatU = flatKnotsOf(uKnots, uMults);
+      const greville = [];
+      for (let i = 0; i < nu; i++) {
+        let s = 0;
+        for (let r = 1; r <= uDeg; r++) s += flatU[i + r];
+        greville.push(i === 0 ? 0 : i === nu - 1 ? 1 : s / uDeg);
+      }
+
+      // ---------- Nachbarflächen finden und Tangenten/Krümmungen pro Pol berechnen ----------
+      const WInv = matInvRigid(W);
+      const pool = (ctx && ctx.pool) || [];
+      const resolved = {};
+      const chordSpan = [];
+      for (let s = 0; s < m - 1; s++) {
+        let sum = 0;
+        for (let i = 0; i < nu; i++) sum += len(sub(profPoles[s + 1][i], profPoles[s][i]));
+        chordSpan.push(Math.max(0.01, sum / nu));
+      }
+
+      const resolvePoolEntry = (refId) => {
+        if (!refId) return null;
+        let tid = refId;
+        while (tid && ctx && ctx.consumed && ctx.consumed.has(tid)) tid = ctx.consumed.get(tid);
+        return pool.find((e) => e.id === tid || (e.ids && (e.ids.has(refId) || e.ids.has(tid)))) || null;
+      };
+
+      const profileSamplePtsWorld = (k) => {
+        const pts = [], curve = profCurves[k], pOut = new oc.gp_Pnt();
+        const cnt = 12;
+        for (let i = 0; i < cnt; i++) {
+          curve.D0(i / cnt, pOut);
+          pts.push(transformPoint(W, [pOut.X(), pOut.Y(), pOut.Z()]));
+        }
+        pOut.delete();
+        return pts;
+      };
+
+      const boxContainsPt = (bb, pt, pad = 0.5) => (
+        pt[0] >= bb[0] - pad && pt[0] <= bb[3] + pad
+        && pt[1] >= bb[1] - pad && pt[1] <= bb[4] + pad
+        && pt[2] >= bb[2] - pad && pt[2] <= bb[5] + pad
+      );
+
+      const collectTouchingFaces = (entry, samplePtsW, profNW, explicitRef = null) => {
+        const fl = topoList(entry.worldShape, 'face');
+        const outFaces = [];
+        const vtxs = samplePtsW.map((pt) => {
+          const gp = new oc.gp_Pnt(pt[0], pt[1], pt[2]);
+          const mv = new oc.BRepBuilderAPI_MakeVertex(gp);
+          const v = mv.Vertex();
+          mv.delete(); gp.delete();
+          return R.cast(v);
+        });
+        const faceBbs = fl.map((f) => bboxOf(f.shape));
+        const faceInfos = fl.map((f) => faceInfo(f.shape));
+        const isCoplanar = (fi) => fi.t === 'PLANE' && fi.n && Math.abs(dot(norm(fi.n), profNW)) > 0.99;
+
+        const touchCount = (idx) => {
+          const sh = fl[idx].shape, bb = faceBbs[idx];
+          let cnt = 0;
+          for (let i = 0; i < samplePtsW.length; i++) {
+            if (!boxContainsPt(bb, samplePtsW[i], 0.35)) continue;
+            if (minDistShapes(vtxs[i], sh) < 0.25) cnt++;
+          }
+          return cnt;
+        };
+
+        let explicitUsed = false;
+        if (explicitRef) {
+          const matched = matchFaceOnShape(entry.worldShape, explicitRef, true);
+          if (matched && matched.faceIdx != null && fl[matched.faceIdx]) {
+            const idx = matched.faceIdx;
+            if (!isCoplanar(faceInfos[idx]) && touchCount(idx) >= 2) {
+              outFaces.push({ idx, face: fl[idx].shape, info: faceInfos[idx], bb: faceBbs[idx] });
+              explicitUsed = true;
+            }
+          }
+        }
+        if (!explicitUsed) {
+          for (let idx = 0; idx < fl.length; idx++) {
+            if (isCoplanar(faceInfos[idx])) continue;
+            if (touchCount(idx) >= 1) {
+              outFaces.push({ idx, face: fl[idx].shape, info: faceInfos[idx], bb: faceBbs[idx] });
+            }
+          }
+        }
+        for (const v of vtxs) safeDelete(v);
+        const keptSet = new Set(outFaces.map((x) => x.face));
+        for (const f of fl) if (!keptSet.has(f.shape)) f.shape.delete();
+        return outFaces;
+      };
+
+      const evalSurfaceAtPoint = (faceEntry, ptW) => {
+        const fw = faceEntry.face.wrapped;
+        const loc = new oc.TopLoc_Location();
+        const surf = oc.BRep_Tool.Surface(fw, loc);
+        let gp = new oc.gp_Pnt(ptW[0], ptW[1], ptW[2]);
+        if (!loc.IsIdentity()) {
+          const invT = loc.Transformation().Inverted();
+          const gp2 = gp.Transformed(invT);
+          gp.delete(); invT.delete();
+          gp = gp2;
+        }
+        const proj = new oc.GeomAPI_ProjectPointOnSurf(gp, surf);
+        gp.delete(); loc.delete();
+        try {
+          if (!proj.IsDone() || proj.NbPoints() === 0 || proj.LowerDistance() > 0.25) return null;
+          const uv = proj.LowerDistanceParameters();
+          const ad = new oc.BRepAdaptor_Surface(fw, false);
+          const P = new oc.gp_Pnt(), d1u = new oc.gp_Vec(), d1v = new oc.gp_Vec(), d2u = new oc.gp_Vec(), d2v = new oc.gp_Vec(), d2uv = new oc.gp_Vec();
+          try {
+            ad.D2(uv.U, uv.V, P, d1u, d1v, d2u, d2v, d2uv);
+            const nRaw = d1u.Crossed(d1v);
+            const nl = nRaw.Magnitude();
+            if (!(nl > 1e-12)) { nRaw.delete(); return null; }
+            const sign = fw.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+            const N = [sign * nRaw.X() / nl, sign * nRaw.Y() / nl, sign * nRaw.Z() / nl];
+            nRaw.delete();
+            return {
+              N,
+              d1u: [d1u.X(), d1u.Y(), d1u.Z()],
+              d1v: [d1v.X(), d1v.Y(), d1v.Z()],
+              d2u: [d2u.X(), d2u.Y(), d2u.Z()],
+              d2v: [d2v.X(), d2v.Y(), d2v.Z()],
+              d2uv: [d2uv.X(), d2uv.Y(), d2uv.Z()],
+            };
+          } finally {
+            ad.delete(); P.delete(); d1u.delete(); d1v.delete(); d2u.delete(); d2v.delete(); d2uv.delete();
+          }
+        } finally {
+          proj.delete();
+        }
+      };
+
+      const computeBoundaryPoles = (end) => {
+        const isStart = end === 'start';
+        const cond = isStart ? startCond : endCond;
+        const k = isStart ? 0 : m - 1;
+        const M = maps[k];
+        const inwardL = isStart ? dirOf(0) : mul(dirOf(m - 1), -1);
+        const planeInwardL = dot(M.n, inwardL) >= 0 ? M.n.slice() : mul(M.n, -1);
+        const fallback = {
+          T: Array.from({ length: nu }, () => planeInwardL.slice()),
+          K: Array.from({ length: nu }, () => [0, 0, 0]),
+        };
+        if (cond === 'none') return fallback;
+
+        const inwardW = transformDir(W, inwardL);
+        const planeInwardW = transformDir(W, planeInwardL);
+        const profNW = transformDir(W, M.n);
+        const samplePtsW = profileSamplePtsWorld(k);
+
+        const explicitRef = isStart ? p.startFace : p.endFace;
+        const planeRef = profiles[k] && profiles[k].planeRef;
+
+        let chosenEntry = null, touchFaces = [];
+        const tryEntry = (entry, expRef = null) => {
+          if (!entry || entry.id === it.id || !entry.worldShape) return null;
+          const tf = collectTouchingFaces(entry, samplePtsW, profNW, expRef);
+          return tf.length ? { entry, tf } : null;
+        };
+
+        if (explicitRef && explicitRef.id) {
+          const hit = tryEntry(resolvePoolEntry(explicitRef.id), explicitRef);
+          if (hit) { chosenEntry = hit.entry; touchFaces = hit.tf; }
+        }
+        if (!chosenEntry && planeRef && planeRef.kind === 'face' && planeRef.id) {
+          const hit = tryEntry(resolvePoolEntry(planeRef.id), null);
+          if (hit) { chosenEntry = hit.entry; touchFaces = hit.tf; }
+        }
+        if (!chosenEntry) {
+          let pMin = [Infinity, Infinity, Infinity], pMax = [-Infinity, -Infinity, -Infinity];
+          for (const q of samplePtsW) for (let c = 0; c < 3; c++) { pMin[c] = Math.min(pMin[c], q[c]); pMax[c] = Math.max(pMax[c], q[c]); }
+          const pBb = [pMin[0] - 0.5, pMin[1] - 0.5, pMin[2] - 0.5, pMax[0] + 0.5, pMax[1] + 0.5, pMax[2] + 0.5];
+          let bestScore = 0;
+          for (const entry of pool) {
+            if (!entry || entry.id === it.id || !entry.worldShape) continue;
+            if (entry.wb && !bboxHit(entry.wb, pBb, 0.5)) continue;
+            const tf = collectTouchingFaces(entry, samplePtsW, profNW, null);
+            if (!tf.length) { for (const f of tf) f.face.delete(); continue; }
+            let score = 0;
+            for (const pt of samplePtsW) {
+              const gp = new oc.gp_Pnt(pt[0], pt[1], pt[2]);
+              const mv = new oc.BRepBuilderAPI_MakeVertex(gp);
+              const v = R.cast(mv.Vertex());
+              mv.delete(); gp.delete();
+              const hits = tf.some((f) => boxContainsPt(f.bb, pt, 0.35) && minDistShapes(v, f.face) < 0.25);
+              safeDelete(v);
+              if (hits) score++;
+            }
+            if (score > bestScore && score >= Math.ceil(samplePtsW.length * 0.4)) {
+              for (const f of touchFaces) f.face.delete();
+              bestScore = score;
+              chosenEntry = entry;
+              touchFaces = tf;
+            } else {
+              for (const f of tf) f.face.delete();
+            }
+          }
+        }
+
+        resolved[end] = chosenEntry && touchFaces.length
+          ? { source: 'face', bodyId: chosenEntry.id, faceType: touchFaces[0].info.t }
+          : { source: 'normal' };
+
+        if (!touchFaces.length) return fallback;
+
+        const T_target = [], K_target = [];
+        const bsp = profCurves[k];
+        const gpP = new oc.gp_Pnt(), gpV = new oc.gp_Vec();
+        const Lspan = isStart ? chordSpan[0] : chordSpan[chordSpan.length - 1];
+        const maxKappa = 2 / Math.max(0.5, Lspan);
+
+        try {
+          for (let i = 0; i < nu - 1; i++) {
+            const u = greville[i];
+            bsp.D1(u, gpP, gpV);
+            const pLoc = [gpP.X(), gpP.Y(), gpP.Z()];
+            const eLoc = [gpV.X(), gpV.Y(), gpV.Z()];
+            const pW = transformPoint(W, pLoc);
+            const eW = len(eLoc) > 1e-9 ? transformDir(W, eLoc) : null;
+
+            const gv = new oc.gp_Pnt(pW[0], pW[1], pW[2]);
+            const mv = new oc.BRepBuilderAPI_MakeVertex(gv);
+            const vtx = R.cast(mv.Vertex());
+            mv.delete(); gv.delete();
+            const hits = [];
+            for (const f of touchFaces) {
+              if (!boxContainsPt(f.bb, pW, 0.35)) continue;
+              if (minDistShapes(vtx, f.face) < 0.25) {
+                const ev = evalSurfaceAtPoint(f, pW);
+                if (ev) hits.push(ev);
+              }
+            }
+            safeDelete(vtx);
+
+            let Tw = planeInwardW.slice();
+            let Kw = [0, 0, 0];
+            if (hits.length >= 2) {
+              // Eckkante zweier Nachbarflächen: Schnittlinie der beiden Tangentialebenen
+              let pairDir = null;
+              for (let a = 0; a < hits.length && !pairDir; a++) {
+                for (let b = a + 1; b < hits.length; b++) {
+                  if (Math.abs(dot(hits[a].N, hits[b].N)) < 0.999) {
+                    const cr = cross(hits[a].N, hits[b].N);
+                    if (len(cr) > 1e-6) { pairDir = norm(cr); break; }
+                  }
+                }
+              }
+              if (pairDir) {
+                if (dot(pairDir, inwardW) < 0) pairDir = mul(pairDir, -1);
+                if (dot(pairDir, planeInwardW) > 0.05) Tw = pairDir;
+              } else if (eW) {
+                const ev = hits[0];
+                let t = cross(eW, ev.N);
+                if (len(t) > 1e-6) {
+                  t = norm(t);
+                  if (dot(t, inwardW) < 0) t = mul(t, -1);
+                  if (dot(t, planeInwardW) > 0.05) Tw = t;
+                }
+              }
+            } else if (hits.length === 1 && eW) {
+              const ev = hits[0];
+              let t = cross(eW, ev.N);
+              if (len(t) > 1e-6) {
+                t = norm(t);
+                if (dot(t, inwardW) < 0) t = mul(t, -1);
+                if (dot(t, planeInwardW) > 0.05) {
+                  Tw = t;
+                  if (cond === 'curvature') {
+                    const E = dot(ev.d1u, ev.d1u), F = dot(ev.d1u, ev.d1v), G = dot(ev.d1v, ev.d1v);
+                    const det = E * G - F * F;
+                    if (det > 1e-12) {
+                      const b1 = dot(Tw, ev.d1u), b2 = dot(Tw, ev.d1v);
+                      const du = (G * b1 - F * b2) / det, dv = (E * b2 - F * b1) / det;
+                      const L2 = dot(ev.d2u, ev.N), M2 = dot(ev.d2uv, ev.N), N2 = dot(ev.d2v, ev.N);
+                      const kappaRaw = L2 * du * du + 2 * M2 * du * dv + N2 * dv * dv;
+                      const kappa = Math.max(-maxKappa, Math.min(maxKappa, kappaRaw));
+                      Kw = mul(ev.N, kappa);
+                    }
+                  }
+                }
+              }
+            }
+            T_target.push(transformDir(WInv, Tw));
+            const kLoc = [
+              WInv[0] * Kw[0] + WInv[4] * Kw[1] + WInv[8] * Kw[2],
+              WInv[1] * Kw[0] + WInv[5] * Kw[1] + WInv[9] * Kw[2],
+              WInv[2] * Kw[0] + WInv[6] * Kw[1] + WInv[10] * Kw[2],
+            ];
+            K_target.push(kLoc);
+          }
+        } finally {
+          gpP.delete(); gpV.delete();
+          for (const f of touchFaces) f.face.delete();
+        }
+
+        // Letzten Pol exakt gleich dem ersten setzen (geschlossene Naht)
+        T_target.push(T_target[0].slice());
+        K_target.push(K_target[0].slice());
+
+        const weightsK = profWeights[k];
+        const allTSame = T_target.every((t) => len(sub(t, T_target[0])) < 1e-4);
+        let T_pole;
+        if (allTSame) {
+          T_pole = T_target.map(() => T_target[0].slice());
+        } else {
+          const nFree = nu - 1;
+          const A = Array.from({ length: nFree }, (_, r) => {
+            const bas = evalRationalBasis(greville[r], uDeg, flatU, weightsK);
+            const row = bas.slice(0, nFree);
+            row[0] += bas[nu - 1];
+            return row;
+          });
+          const solT = solveLinear(A, T_target.slice(0, nFree));
+          T_pole = solT ? [...solT, solT[0].slice()] : T_target;
+        }
+
+        const allKZero = cond !== 'curvature' || K_target.every((kv) => len(kv) < 1e-6);
+        let K_pole;
+        if (allKZero) {
+          K_pole = K_target.map(() => [0, 0, 0]);
+        } else {
+          const allKSame = K_target.every((kv) => len(sub(kv, K_target[0])) < 1e-6);
+          if (allKSame) {
+            K_pole = K_target.map(() => K_target[0].slice());
+          } else {
+            const nFree = nu - 1;
+            const A = Array.from({ length: nFree }, (_, r) => {
+              const bas = evalRationalBasis(greville[r], uDeg, flatU, weightsK);
+              const row = bas.slice(0, nFree);
+              row[0] += bas[nu - 1];
+              return row;
+            });
+            const solK = solveLinear(A, K_target.slice(0, nFree));
+            K_pole = solK ? [...solK, solK[0].slice()] : K_target;
+          }
+        }
+
+        return { T: T_pole, K: K_pole };
+      };
+
+      const startB = computeBoundaryPoles('start');
+      const endB = computeBoundaryPoles('end');
+
+      // ---------- B-Spline-Fläche in v-Richtung aufbauen ----------
+      const vDeg = (startCond === 'curvature' || endCond === 'curvature') ? 5 : 3;
+      const totalVLen = chordSpan.reduce((a, b) => a + b, 0) || 1;
+      const tau = [0];
+      let accV = 0;
+      for (let s = 0; s < m - 1; s++) {
+        accV += chordSpan[s];
+        tau.push(s === m - 2 ? 1 : accV / totalVLen);
+      }
+      const vKnots = tau.slice();
+      const vMults = tau.map((_, idx) => (idx === 0 || idx === m - 1 ? vDeg + 1 : vDeg));
+      const nv = (m - 1) * vDeg + 1;
+
+      // Gewichts-Matrix: an Start und Ende konstante Gewichte in Randnähe, damit dW/dv = 0 und d²W/dv² = 0
+      const wGrid = Array.from({ length: nv }, () => new Array(nu).fill(1));
+      for (let s = 0; s < m - 1; s++) {
+        const w0 = profWeights[s], w1 = profWeights[s + 1];
+        const base = s * vDeg;
+        for (let i = 0; i < nu; i++) {
+          if (vDeg === 3) {
+            wGrid[base][i] = w0[i];
+            wGrid[base + 1][i] = s === 0 ? w0[i] : (2 * w0[i] + w1[i]) / 3;
+            wGrid[base + 2][i] = s === m - 2 ? w1[i] : (w0[i] + 2 * w1[i]) / 3;
+            wGrid[base + 3][i] = w1[i];
+          } else {
+            wGrid[base][i] = w0[i];
+            wGrid[base + 1][i] = s === 0 ? w0[i] : (4 * w0[i] + w1[i]) / 5;
+            wGrid[base + 2][i] = s === 0 ? w0[i] : (3 * w0[i] + 2 * w1[i]) / 5;
+            wGrid[base + 3][i] = s === m - 2 ? w1[i] : (2 * w0[i] + 3 * w1[i]) / 5;
+            wGrid[base + 4][i] = s === m - 2 ? w1[i] : (w0[i] + 4 * w1[i]) / 5;
+            wGrid[base + 5][i] = w1[i];
+          }
+        }
+      }
+
+      const poleGrid = Array.from({ length: nv }, () => new Array(nu));
+      if (m === 2) {
+        const L = chordSpan[0];
+        const Q0 = profPoles[0], Q1 = profPoles[1];
+        for (let i = 0; i < nu; i++) {
+          const q0 = Q0[i], q1 = Q1[i];
+          const t0 = startB.T[i], k0 = startB.K[i];
+          const t1 = endB.T[i], k1 = endB.K[i];
+          if (vDeg === 3) {
+            const d0 = Math.min(0.75, 0.28 * startW) * L;
+            const d1 = Math.min(0.75, 0.28 * endW) * L;
+            const p0 = q0.slice(), p3 = q1.slice();
+            let p1, p2;
+            if (startCond !== 'none' && endCond !== 'none') {
+              p1 = add(p0, mul(t0, d0));
+              p2 = add(p3, mul(t1, d1));
+            } else if (startCond !== 'none') {
+              p1 = add(p0, mul(t0, d0));
+              p2 = mul(add(p1, p3), 0.5);
+            } else {
+              p2 = add(p3, mul(t1, d1));
+              p1 = mul(add(p0, p2), 0.5);
+            }
+            poleGrid[0][i] = p0; poleGrid[1][i] = p1; poleGrid[2][i] = p2; poleGrid[3][i] = p3;
+          } else {
+            const bothG2 = startCond === 'curvature' && endCond === 'curvature';
+            const dMax = bothG2 ? 0.39 : 0.42;
+            const d0 = Math.min(dMax, 0.14 * startW) * L;
+            const d1 = Math.min(dMax, 0.14 * endW) * L;
+            const d0G1 = Math.min(0.42, 0.17 * startW) * L;
+            const d1G1 = Math.min(0.42, 0.17 * endW) * L;
+            const p0 = q0.slice(), p5 = q1.slice();
+            let p1 = null, p2 = null, p3 = null, p4 = null;
+            if (startCond === 'curvature') {
+              p1 = add(p0, mul(t0, d0));
+              p2 = add(add(p0, mul(t0, 2 * d0)), mul(k0, (25 * d0 * d0) / 20));
+            } else if (startCond === 'tangent') {
+              p1 = add(p0, mul(t0, d0G1));
+            }
+            if (endCond === 'curvature') {
+              p4 = add(p5, mul(t1, d1));
+              p3 = add(add(p5, mul(t1, 2 * d1)), mul(k1, (25 * d1 * d1) / 20));
+            } else if (endCond === 'tangent') {
+              p4 = add(p5, mul(t1, d1G1));
+            }
+            if (startCond === 'tangent' && endCond === 'curvature') {
+              p2 = mul(add(mul(p1, 2), p3), 1 / 3);
+            } else if (endCond === 'tangent' && startCond === 'curvature') {
+              p3 = mul(add(p2, mul(p4, 2)), 1 / 3);
+            } else if (startCond === 'tangent' && endCond === 'none') {
+              p2 = mul(add(mul(p1, 2), p5), 1 / 3);
+              p3 = mul(add(mul(p2, 2), p5), 1 / 3);
+              p4 = mul(add(p2, mul(p5, 2)), 1 / 3);
+            } else if (endCond === 'tangent' && startCond === 'none') {
+              p1 = mul(add(mul(p0, 2), p4), 1 / 3);
+              p2 = mul(add(p0, mul(p4, 2)), 1 / 3);
+              p3 = mul(add(p2, mul(p4, 2)), 1 / 3);
+            } else if (startCond === 'curvature' && endCond === 'none') {
+              p3 = mul(add(mul(p2, 2), p5), 1 / 3);
+              p4 = mul(add(p2, mul(p5, 2)), 1 / 3);
+            } else if (endCond === 'curvature' && startCond === 'none') {
+              p1 = mul(add(mul(p0, 2), p3), 1 / 3);
+              p2 = mul(add(p0, mul(p3, 2)), 1 / 3);
+            } else if (startCond === 'tangent' && endCond === 'tangent') {
+              p2 = mul(add(mul(p1, 2), p4), 1 / 3);
+              p3 = mul(add(p1, mul(p4, 2)), 1 / 3);
+            }
+            poleGrid[0][i] = p0; poleGrid[1][i] = p1; poleGrid[2][i] = p2;
+            poleGrid[3][i] = p3; poleGrid[4][i] = p4; poleGrid[5][i] = p5;
+          }
+        }
+      } else {
+        // m >= 3: stückweise C1 (oder C2 bei Grad 5) über die Umrisse
+        const dt0 = tau[1] - tau[0], dtLast = tau[m - 1] - tau[m - 2];
+        for (let i = 0; i < nu; i++) {
+          const Q = profPoles.map((row) => row[i]);
+          const D = new Array(m);
+          for (let k = 1; k < m - 1; k++) {
+            D[k] = mul(sub(Q[k + 1], Q[k - 1]), 1 / Math.max(1e-6, tau[k + 1] - tau[k - 1]));
+          }
+          if (startCond === 'none') {
+            D[0] = sub(mul(sub(Q[1], Q[0]), 2 / Math.max(1e-6, dt0)), D[1]);
+          } else {
+            const fac = vDeg === 5
+              ? (startCond === 'curvature' ? Math.min(0.39, 0.14 * startW) : Math.min(0.42, 0.17 * startW))
+              : Math.min(0.75, 0.28 * startW);
+            D[0] = mul(startB.T[i], (vDeg * fac * chordSpan[0]) / Math.max(1e-6, dt0));
+          }
+          if (endCond === 'none') {
+            D[m - 1] = sub(mul(sub(Q[m - 1], Q[m - 2]), 2 / Math.max(1e-6, dtLast)), D[m - 2]);
+          } else {
+            const fac = vDeg === 5
+              ? (endCond === 'curvature' ? Math.min(0.39, 0.14 * endW) : Math.min(0.42, 0.17 * endW))
+              : Math.min(0.75, 0.28 * endW);
+            D[m - 1] = mul(endB.T[i], -(vDeg * fac * chordSpan[m - 2]) / Math.max(1e-6, dtLast));
+          }
+          const A = Array.from({ length: m }, () => [0, 0, 0]);
+          if (vDeg === 5) {
+            if (startCond === 'curvature') {
+              const s0 = len(D[0]);
+              A[0] = mul(startB.K[i], s0 * s0);
+            }
+            if (endCond === 'curvature') {
+              const s1 = len(D[m - 1]);
+              A[m - 1] = mul(endB.K[i], s1 * s1);
+            }
+          }
+          for (let s = 0; s < m - 1; s++) {
+            const dt = tau[s + 1] - tau[s];
+            const base = s * vDeg;
+            const qA = Q[s], qB = Q[s + 1];
+            const dA = mul(D[s], dt), dB = mul(D[s + 1], dt);
+            if (vDeg === 3) {
+              poleGrid[base][i] = qA.slice();
+              poleGrid[base + 1][i] = add(qA, mul(dA, 1 / 3));
+              poleGrid[base + 2][i] = sub(qB, mul(dB, 1 / 3));
+              poleGrid[base + 3][i] = qB.slice();
+            } else {
+              const aA = mul(A[s], dt * dt), aB = mul(A[s + 1], dt * dt);
+              poleGrid[base][i] = qA.slice();
+              poleGrid[base + 1][i] = add(qA, mul(dA, 1 / 5));
+              poleGrid[base + 2][i] = add(add(qA, mul(dA, 2 / 5)), mul(aA, 1 / 20));
+              poleGrid[base + 3][i] = add(sub(qB, mul(dB, 2 / 5)), mul(aB, 1 / 20));
+              poleGrid[base + 4][i] = sub(qB, mul(dB, 1 / 5));
+              poleGrid[base + 5][i] = qB.slice();
+            }
+          }
+        }
+      }
+
+      // Naht-Spalte exakt identisch halten (i = nu - 1 gleich i = 0)
+      for (let j = 0; j < nv; j++) {
+        poleGrid[j][nu - 1] = poleGrid[j][0].slice();
+        wGrid[j][nu - 1] = wGrid[j][0];
+      }
+
+      const polesArr = new oc.NCollection_Array2_gp_Pnt(1, nu, 1, nv);
+      const weightsArr = new oc.NCollection_Array2_double(1, nu, 1, nv);
+      let isRational = false;
+      for (let i = 0; i < nu; i++) {
+        for (let j = 0; j < nv; j++) {
+          const pt = poleGrid[j][i], w = wGrid[j][i];
+          if (Math.abs(w - 1) > 1e-9) isRational = true;
+          const gp = new oc.gp_Pnt(pt[0], pt[1], pt[2]);
+          polesArr.SetValue(i + 1, j + 1, gp);
+          weightsArr.SetValue(i + 1, j + 1, w);
+          gp.delete();
+        }
+      }
+      const uk = makeArr1D(uKnots), um = makeArr1I(uMults);
+      const vk = makeArr1D(vKnots), vm = makeArr1I(vMults);
+      const surf = isRational
+        ? new oc.Geom_BSplineSurface(polesArr, weightsArr, uk, vk, um, vm, uDeg, vDeg, false, false)
+        : new oc.Geom_BSplineSurface(polesArr, uk, vk, um, vm, uDeg, vDeg, false, false);
+      polesArr.delete(); weightsArr.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete();
+
+      let sideFace = null, cap0 = null, cap1 = null, sew = null, sewed = null, ms = null, sfs = null, sol = null;
+      try {
+        const mfSide = new oc.BRepBuilderAPI_MakeFace(surf, 1e-6);
+        sideFace = mfSide.Face(); mfSide.delete();
+        const makeCap = (vVal, mapPl) => {
+          const iso = surf.VIso(vVal);
+          const me = new oc.BRepBuilderAPI_MakeEdge(iso);
+          const edge = me.Edge(); me.delete(); iso.delete();
+          const mw = new oc.BRepBuilderAPI_MakeWire(edge);
+          const wire = mw.Wire(); mw.delete(); safeDelete(edge);
+          const mf = new oc.BRepBuilderAPI_MakeFace(wire, true);
+          let f = mf.IsDone() ? mf.Face() : null;
+          mf.delete();
+          if (!f) {
+            const p0 = new oc.gp_Pnt(mapPl.o[0], mapPl.o[1], mapPl.o[2]);
+            const d0 = new oc.gp_Dir(mapPl.n[0], mapPl.n[1], mapPl.n[2]);
+            const pln = new oc.gp_Pln(p0, d0);
+            const mf2 = new oc.BRepBuilderAPI_MakeFace(pln, wire, true);
+            f = mf2.Face(); mf2.delete(); pln.delete(); p0.delete(); d0.delete();
+          }
+          safeDelete(wire);
+          return f;
+        };
+        cap0 = makeCap(0, maps[0]);
+        cap1 = makeCap(1, maps[m - 1]);
+        sew = new oc.BRepBuilderAPI_Sewing(1e-4, true, true, true, false);
+        sew.Add(sideFace); sew.Add(cap0); sew.Add(cap1);
+        sew.Perform();
+        sewed = sew.SewedShape();
+        let shell = null;
+        if (sewed.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_SHELL) shell = oc.TopoDS.Shell(sewed);
+        else {
+          const exp = new oc.TopExp_Explorer(sewed, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+          if (exp.More()) shell = oc.TopoDS.Shell(exp.Current());
+          exp.delete();
+        }
+        if (!shell) throw new Error('Schale konnte nicht geschlossen werden.');
+        ms = new oc.BRepBuilderAPI_MakeSolid(shell);
+        sol = ms.Solid();
+        sfs = new oc.ShapeFix_Solid(sol); sfs.Perform();
+        const fixed = oc.TopoDS.Solid(sfs.Solid());
+        let res = R.cast(fixed);
+        if (R.measureVolume(res) < 0) {
+          const rev = R.cast(res.wrapped.Reversed());
+          safeDelete(res);
+          res = rev;
+        }
+        const ana = new oc.BRepCheck_Analyzer(res.wrapped, true);
+        const valid = ana.IsValid();
+        ana.delete();
+        if (!valid || !(R.measureVolume(res) > 1e-3)) {
+          safeDelete(res);
+          throw new Error('Ungültige Form beim weichen Übergang.');
+        }
+        return { shape: res, resolved };
+      } finally {
+        surf.delete();
+        safeDelete(sideFace); safeDelete(cap0); safeDelete(cap1);
+        if (sew) sew.delete();
+        safeDelete(sewed);
+        if (ms) ms.delete();
+        if (sfs) sfs.delete();
+        safeDelete(sol);
+      }
+    } finally {
+      for (const c of ocCleanup) try { c.delete(); } catch (_) {}
     }
   }
   // Übergang zwischen mehreren Umrissen (Loft), auf Wunsch mit Spitze – oder entlang einer Mittellinie
@@ -4309,6 +5275,9 @@ export function createKernel(R, oc) {
   }
   function dynamicDepKey(it, ctx) {
     if (!ctx) return '';
+    if (it.kind === 'loft' && hasLoftContinuity(it.p)) {
+      return ctx.poolKey || '';
+    }
     if (it.kind === 'extrude' && it.p && it.p.extent === 'toFace') {
       const tf = it.p.toFace;
       if (tf && tf.datumId) return 'datum';
@@ -4512,7 +5481,14 @@ export function createKernel(R, oc) {
         const res = buildRevolveWithTopo(it.p);
         shape = res.shape; topo = res.topo; ownsTopo = true;
       } else if (it.kind === 'loft') {
-        shape = buildLoft(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+        if (hasLoftContinuity(it.p)) {
+          const res = buildLoftWithContinuity(it, W || it.m, ctx);
+          shape = res.shape; topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+          resolvedInfo = res.resolved || null;
+          if (ctx && ctx.resolved && resolvedInfo) ctx.resolved[it.id] = resolvedInfo;
+        } else {
+          shape = buildLoft(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+        }
       } else if (it.kind === 'sweep') {
         shape = buildSweep(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'helix') {

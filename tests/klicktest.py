@@ -24302,6 +24302,165 @@ def t_a122_uebergang_schnitt_ring(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-123] Übergang mit weichem Anschluss (KP-31) ----------
+def t_a123_uebergang_anschluss(p):
+    warte_idle = lambda: warte_rechnen(p, 35)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+
+    def max_side_angle(item_id, z_target, nz_slope=0.0):
+        return p.ev("""const d = App.results.get(arg.id)?.data;
+          if (!d || !d.vertices || !d.normals || !d.faceGroups) return { ang: 999, cnt: 0 };
+          const { vertices, normals, triangles, faceGroups, faces } = d;
+          let maxA = 0, cnt = 0;
+          for (const [start, count, fi] of faceGroups) {
+            if (fi < 0 || !faces[fi] || faces[fi].t === 'PLANE') continue;
+            const seen = new Set();
+            for (let t = start; t < start + count; t++) {
+              const vi = triangles[t];
+              if (seen.has(vi)) continue;
+              seen.add(vi);
+              const x = vertices[vi * 3], y = vertices[vi * 3 + 1], z = vertices[vi * 3 + 2];
+              if (Math.abs(z - arg.z) > 0.05) continue;
+              const r = Math.hypot(x, y);
+              if (r < 1e-4) continue;
+              const nx = normals[vi * 3], ny = normals[vi * 3 + 1], nz = normals[vi * 3 + 2];
+              const nl = Math.hypot(nx, ny, nz) || 1;
+              const ex = x / r, ey = y / r, ez = arg.nzSlope;
+              const el = Math.hypot(ex, ey, ez) || 1;
+              const dp = Math.max(-1, Math.min(1, (nx * ex + ny * ey + nz * ez) / (nl * el)));
+              const ang = Math.acos(dp) * 180 / Math.PI;
+              if (ang > maxA) maxA = ang;
+              cnt++;
+            }
+          }
+          return { ang: maxA, cnt };""", {'id': item_id, 'z': z_target, 'nzSlope': nz_slope})
+
+    # 1. Zylinder (Ø 20 × 20) + Übergang von Stirnfläche tangential (G1) -> Winkel < 1°
+    ids1 = p.ev("""let cid, lid; App.change('Zylinder + Übergang', d => {
+      const cyl = Model.newItem('cylinder', { d: 20, h: 20 }, { name: 'Zylinder' });
+      d.items.push(cyl); cid = cyl.id;
+      const sk1 = { plane: { o: [0, 0, 20], x: [1, 0, 0], n: [0, 0, 1] }, planeRef: { kind: 'face', id: cyl.id, c: [0, 0, 20], n: [0, 0, 1] }, ents: [{ id: 'c1', type: 'circle', c: [0, 0], r: 10 }], dims: [], cons: [] };
+      const sk2 = { plane: { o: [0, 0, 50], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c2', type: 'circle', c: [0, 0], r: 20 }], dims: [], cons: [] };
+      const lf = Model.newItem('loft', { sketches: [sk1, sk2], ruled: false, tip: 0 }, { name: 'Übergang' });
+      d.items.push(lf); lid = lf.id;
+    }); return { cid, lid };""")
+    warte_idle()
+    ang_free = max_side_angle(ids1['lid'], 20.0)
+    p.ev("App.select([arg])", ids1['lid']); p.wait(300)
+    p.pg.locator('#loft-start-mode').select_option('tangent'); warte_idle()
+    ang_g1 = max_side_angle(ids1['lid'], 20.0)
+    res_g1 = p.ev("return { res: App.resolvedOf(arg), errs: App.errors.length }", ids1['lid'])
+    gc_g1 = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    ok1 = (
+        ang_free['cnt'] > 10 and ang_free['ang'] > 10.0
+        and ang_g1['cnt'] > 10 and ang_g1['ang'] < 1.0
+        and res_g1['errs'] == 0
+        and res_g1['res'] and res_g1['res'].get('start', {}).get('source') == 'face'
+        and res_g1['res'].get('start', {}).get('bodyId') == ids1['cid']
+        and gc_g1['n'] == 2 and gc_g1['iss'] == 0
+    )
+
+    # 2. Stärke-Regler (#loft-start-weight): 0.3 vs 2.5 -> beide tangential (< 1°), Form ändert sich deutlich
+    p.pg.locator('#loft-start-weight').fill('0.3')
+    p.pg.locator('#loft-start-weight').dispatch_event('change')
+    warte_idle()
+    ang_w03 = max_side_angle(ids1['lid'], 20.0)
+    v_w03 = p.ev("return Mass.measureDoc(App.doc).then(r => r && r.parts.find(x => x.id === arg)?.volume)", ids1['lid'])
+
+    p.pg.locator('#loft-start-weight').fill('2.5')
+    p.pg.locator('#loft-start-weight').dispatch_event('change')
+    warte_idle()
+    ang_w25 = max_side_angle(ids1['lid'], 20.0)
+    v_w25 = p.ev("return Mass.measureDoc(App.doc).then(r => r && r.parts.find(x => x.id === arg)?.volume)", ids1['lid'])
+    w_txt = p.pg.locator('#loft-start-weight-val').text_content()
+    ok2 = (
+        ang_w03['cnt'] > 10 and ang_w03['ang'] < 1.0
+        and ang_w25['cnt'] > 10 and ang_w25['ang'] < 1.0
+        and v_w03 is not None and v_w25 is not None and v_w25 < v_w03 * 0.85
+        and ('2,5' in w_txt or '2.5' in w_txt)
+    )
+
+    # 3. Krümmungsglatt (G2) + Ende tangential + Vereinigen mit Zylinder + schräger Kegelstumpf
+    p.pg.locator('#loft-start-weight').fill('1')
+    p.pg.locator('#loft-start-weight').dispatch_event('change')
+    warte_idle()
+    p.pg.locator('#loft-start-mode').select_option('curvature'); warte_idle()
+    p.pg.locator('#loft-end-mode').select_option('tangent'); warte_idle()
+    ang_g2_start = max_side_angle(ids1['lid'], 20.0)
+    ang_g2_end = max_side_angle(ids1['lid'], 50.0)
+    gc_g2 = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+
+    p.pg.locator('#op-type').select_option('join'); warte_idle()
+    join_info = p.ev("return { merged: App.mergedInto(arg), errs: App.errors.length }", ids1['lid'])
+    gc_join = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+
+    # Schräger Kegelstumpf (d1=30, d2=20, h=20 -> Mantelnormale hat Steigung nzSlope = 0.25)
+    cone_lid = p.ev("""let lid; App.change('Kegel + Übergang', d => {
+      d.items = [];
+      const cone = Model.newItem('cone', { d1: 30, d2: 20, h: 20 }, { name: 'Kegel' });
+      d.items.push(cone);
+      const sk1 = { plane: { o: [0, 0, 20], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'kc1', type: 'circle', c: [0, 0], r: 10 }], dims: [], cons: [] };
+      const sk2 = { plane: { o: [0, 0, 50], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'kc2', type: 'circle', c: [0, 0], r: 20 }], dims: [], cons: [] };
+      const lf = Model.newItem('loft', { sketches: [sk1, sk2], ruled: false, tip: 0, startCond: 'tangent', startWeight: 1 }, { name: 'Kegel-Übergang' });
+      d.items.push(lf); lid = lf.id;
+    }); return lid;""")
+    warte_idle()
+    ang_cone = max_side_angle(cone_lid, 20.0, 0.25)
+    cone_errs = p.ev("return App.errors.length")
+    ok3 = (
+        ang_g2_start['cnt'] > 10 and ang_g2_start['ang'] < 1.0
+        and ang_g2_end['cnt'] > 10 and ang_g2_end['ang'] < 1.0
+        and gc_g2['iss'] == 0
+        and join_info['merged'] == ids1['cid'] and join_info['errs'] == 0
+        and gc_join['n'] == 1 and gc_join['iss'] == 0
+        and ang_cone['cnt'] > 10 and ang_cone['ang'] < 1.0 and cone_errs == 0
+    )
+
+    # 4. Gemischter Übergang Kreis -> Rechteck tangential, Rückgängig/Wiederholen & Einfach/Profi
+    mix_lid = p.ev("""let lid; App.change('Zylinder + Kreis->Rechteck', d => {
+      d.items = [];
+      const cyl = Model.newItem('cylinder', { d: 20, h: 20 }, { name: 'Zylinder' });
+      d.items.push(cyl);
+      const sk1 = { plane: { o: [0, 0, 20], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'mc1', type: 'circle', c: [0, 0], r: 10 }], dims: [], cons: [] };
+      const sk2 = { plane: { o: [0, 0, 50], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'mr2', type: 'rect', a: [-15, -10], b: [15, 10] }], dims: [], cons: [] };
+      const lf = Model.newItem('loft', { sketches: [sk1, sk2], ruled: false, tip: 0 }, { name: 'Kreis-Rechteck' });
+      d.items.push(lf); lid = lf.id;
+    }); return lid;""")
+    warte_idle()
+    p.ev("App.select([arg])", mix_lid); p.wait(300)
+    p.pg.locator('#loft-start-mode').select_option('tangent'); warte_idle()
+    ang_mix = max_side_angle(mix_lid, 20.0)
+    gc_mix = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    p.ev("App.undo()"); warte_idle()
+    undone_cond = p.ev("return App.doc.items.find(x => x.id === arg)?.p?.startCond || null", mix_lid)
+    p.ev("App.redo()"); warte_idle()
+    redone_cond = p.ev("return App.doc.items.find(x => x.id === arg)?.p?.startCond || null", mix_lid)
+
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_hidden = p.ev("const el = document.querySelector('#loft-cont'); return !el || getComputedStyle(el).display === 'none'")
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    pro_vis = p.ev("const el = document.querySelector('#loft-cont'); return !!el && getComputedStyle(el).display !== 'none'")
+    ok4 = (
+        ang_mix['cnt'] > 10 and ang_mix['ang'] < 1.0
+        and gc_mix['n'] == 2 and gc_mix['iss'] == 0
+        and undone_cond is None and redone_cond == 'tangent'
+        and simple_hidden and pro_vis
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_attr = p.ev("return document.querySelector('#loft-cont')?.dataset?.help === 'loftContinuity'")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("App.select([arg]); return Commands.search('übergang tangential').some(c => c.id === 'loft-tangent') && Commands.search('krümmungsglatt').some(c => c.id === 'loft-curvature')", mix_lid)
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'op' && /weichem Anschluss/.test(l.t) && /tangential/.test(l.t))", mix_lid)
+    ok5 = (
+        'loftContinuity' in hilfen and all(f in hilfen['loftContinuity'] for f in ('tip', 'hilfe', 'tipp'))
+        and help_attr and i18n_ok and cmds_ok and explain_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -24532,6 +24691,7 @@ TESTS = [
     ('[F-11250121] Volltest-Reparatur: Fokus-Vorschau zeichnet bei rAF-Stau / Meldung überlebt Hauptthread-Hänger', t_f11250121),
     ('[A-121] Lüftungsgitter, Kühlrippen und Steg-Netz (KP-26, KP-27)', t_a121_lueftung_kuehlrippen_stegnetz),
     ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
+    ('[A-123] Übergang mit weichem Anschluss: tangential, krümmungsglatt & Stärke (KP-31)', t_a123_uebergang_anschluss),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
