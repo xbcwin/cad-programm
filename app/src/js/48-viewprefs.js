@@ -227,6 +227,10 @@ const ViewPrefs = (() => {
   function setUiScale(pct) { set({ uiScale: normUiScale(pct) }); }
   function refreshOpenDialog() {
     if (!openDialogState) return;
+    if (!openDialogState.handle || !openDialogState.handle.el || !openDialogState.handle.el.isConnected) {
+      openDialogState = null;
+      return;
+    }
     const tab = openDialogState.tab;
     openDialogState.handle.close();
     dialog(tab);

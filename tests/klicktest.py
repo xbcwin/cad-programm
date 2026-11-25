@@ -12845,7 +12845,7 @@ def t_a062_zeichnung_blaetter(p):
     # 4. PDF-Export: beide Blätter (A4 hoch, A3 quer) → 2 Seiten mit exakten MediaBox-Größen
     p.pg.click('#t-dexport'); p.wait(200)
     with p.pg.expect_download(timeout=30000) as dl_info:
-        p.pg.locator('.menu button', has_text='PDF').click()
+        p.pg.locator('.menu button#dw-exp-pdf', has_text='PDF').click()
     dl = dl_info.value
     pdf_path = dl.path()
     pdf_bytes = open(pdf_path, 'rb').read()
@@ -13819,7 +13819,7 @@ def t_a065_zeichnung_ansichten(p):
 
     p.pg.click('#t-dexport'); p.wait(200)
     with p.pg.expect_download(timeout=30000) as dl_info:
-        p.pg.locator('.menu button', has_text='PDF').click()
+        p.pg.locator('.menu button#dw-exp-pdf', has_text='PDF').click()
     dl = dl_info.value
     pdf_bytes = open(dl.path(), 'rb').read()
     ok3 = (
@@ -21956,7 +21956,7 @@ def t_a108_einstellungen_groesse(p):
     def tool_font_px():
         return p.ev("const el = document.querySelector('#tools .tool'); return el ? parseFloat(getComputedStyle(el).fontSize) : 0;")
 
-    saved_path = os.path.join(tempfile.gettempdir(), 'tracery-a108-settings.json')
+    saved_path = os.path.join(tempfile.gettempdir(), f'tracery-a108-settings-{os.getpid()}.json')
     try:
         p.empty()
         p.ev("ViewPrefs.setLevel('pro');")
@@ -22011,7 +22011,11 @@ def t_a108_einstellungen_groesse(p):
             and after_reset['uiScale'] == 100
         )
 
-        p.pg.locator('#set-import-input').set_input_files(saved_path); p.wait(400)
+        p.pg.locator('#set-import-input').set_input_files(saved_path)
+        p.pg.wait_for_function(
+            "() => window.__M.ViewPrefs.uiScale === 125 && document.querySelector('#set-uiscale-val')?.textContent?.trim() === '125 %'",
+            timeout=10000,
+        )
         after_load = p.ev("""return {
           ortho: Commands.shortcuts().find(s => s.id === 'ortho')?.combo,
           favs: Toolbar.getState().favs,
@@ -22098,7 +22102,7 @@ def t_a108_einstellungen_groesse(p):
         p.ev("ViewPrefs.setLevel('pro'); ViewPrefs.resetAll({ silent: true });"); p.wait(200)
         raw_txt = open(saved_path, encoding='utf-8').read()
         p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'einstellungen.json', { type: 'application/json' }))", raw_txt)
-        p.wait(350)
+        p.pg.wait_for_function("() => window.__M.ViewPrefs.uiScale === 125", timeout=10000)
         via_open = p.ev("""return {
           ortho: Commands.shortcuts().find(s => s.id === 'ortho')?.combo,
           favs: Toolbar.getState().favs,
@@ -40382,6 +40386,75 @@ def t_a195_toleranz_tabellen_iso286(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11252354(p):
+    # 1. Mass.measure() wartet bei kaltem Kern auf laufenden App-Neubau (kein Vorab-Cache-Treffer)
+    p.empty()
+    busy_when_called = p.ev("""
+      App.change('3 Körper anlegen', (d) => {
+        const b1 = Model.newItem('box', { w: 20, d: 20, h: 15 }, { name: 'Klotz 1' });
+        b1.t.x = -40;
+        const b2 = Model.newItem('cylinder', { d: 18, h: 25 }, { name: 'Zylinder 2' });
+        b2.t.x = 0;
+        const sk = {
+          plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+          ents: [{ id: 'r1', type: 'rect', a: [-10, -7.5], b: [10, 7.5] }],
+          dims: [],
+          cons: [],
+        };
+        const b3 = Model.newItem('extrude', { sketch: sk, dist: 10, dir: 'normal' }, { name: 'Skizzenkörper 3' });
+        b3.t.x = 40;
+        d.items.push(b1, b2, b3);
+      });
+      const wasBusy = App.busy;
+      window.__m1125 = Mass.measure();
+      return wasBusy;
+    """)
+    warte_rechnen(p)
+    ids = p.ev("return App.doc.items.map(x => x.id)")
+    st = p.ev("return Kernel.stats()")
+    m_res = p.ev("return window.__m1125")
+    ok1 = (
+        bool(busy_when_called)
+        and len(ids) == 3
+        and all(st['buildsByItem'].get(x) == 1 for x in ids)
+        and st['lastEval']['cached'] == []
+        and bool(m_res) and (m_res.get('mass') or 0) > 0 and len(m_res.get('parts') or []) == 3
+    )
+
+    # 2. Zeichnungs-Exportmenü: Standard-PDF (#dw-exp-pdf) & 1:1-Schablone (#dw-exp-tiled-pdf) eindeutig trennbar
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.pg.click('#t-dexport'); p.wait(200)
+    menu_chk = p.ev("""return {
+      pdfCount: document.querySelectorAll('.menu button#dw-exp-pdf').length,
+      tiledCount: document.querySelectorAll('.menu button#dw-exp-tiled-pdf').length,
+    };""")
+    with p.pg.expect_download(timeout=30000) as dl_info:
+        p.pg.locator('.menu button#dw-exp-pdf', has_text='PDF').click()
+    dl = dl_info.value
+    pdf_bytes = open(dl.path(), 'rb').read()
+    ok2 = (
+        menu_chk['pdfCount'] == 1
+        and menu_chk['tiledCount'] == 1
+        and dl.suggested_filename.lower().endswith('.pdf')
+        and pdf_bytes.startswith(b'%PDF-1.4')
+    )
+
+    # 3. ViewPrefs.refreshOpenDialog() öffnet nach entferntem Modal keinen Geister-Dialog
+    p.pg.click('#tab-model'); p.wait(200)
+    p.ev("ViewPrefs.dialog();")
+    p.pg.wait_for_selector('.modal', timeout=5000)
+    modal_chk = p.ev("""
+      document.querySelectorAll('.modal-back').forEach(b => b.remove());
+      const res = ViewPrefs.importData(ViewPrefs.exportData(), { silent: true });
+      return { ok: !!(res && res.ok), modals: document.querySelectorAll('.modal-back').length };
+    """)
+    ok3 = bool(modal_chk['ok'] and modal_chk['modals'] == 0 and len(p.errs) == 0)
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -40691,6 +40764,7 @@ TESTS = [
     ('[A-192] Bibliothek: Gehäuse-Generator Schritt 2 (Schnapphaken, Lüftung, Kabeldurchführung, BI-20, BI-21)', t_a192_gehaeuse_erweitert),
     ('[A-193] Bibliothek: Typenschild, QR-Code und Barcode (BI-22, BI-23)', t_a193_typenschild_qr_barcode),
     ('[A-195] Bibliothek: Toleranz-Tabellen ISO 286 (BI-26)', t_a195_toleranz_tabellen_iso286),
+    ('[F-11252354] Volltest-Reparatur: Mass.measure wartet auf App-Neubau / Zeichnung-PDF-Menü eindeutig / Einstellungen-Dialog ohne Geister-Reopen', t_f11252354),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

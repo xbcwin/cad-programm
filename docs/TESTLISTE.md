@@ -3016,6 +3016,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Übernehmen an Zeichnungs-Maß & Projekt-Maß, Suche, Validierung & Hilfen**: `#dw-tol-table-btn` setzt am gewählten Zeichnungsmaß `g6` (`App.undo()` geht zurück auf `H7`); unter „Maße“ setzt `#ptol-*` eine Toleranz am Projekt-Parameter; Befehlssuche (`iso286-table`), `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` (`iso286Table`) und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a195_toleranz_tabellen_iso286`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus über „Bauteile → Toleranz-Tabelle (ISO 286)“ sowie über das `±`-Symbol an einem Skizzen-Maß verschiedene Passungspaare (z. B. `H7/k6`, `H7/p6`) prüfen und in eine Zeichnung übernehmen.
 
+## Volltest-Reparatur (Auto [F-11252354])
+
+- [x] **`Mass.measure()` wartet auf laufenden `App`-Neubau (`[A-077]`)**: Beim gleichzeitigen Anlegen dreier unabhängiger Körper im Kaltstart wartet `Mass.measure()` über `waitAppIdle()` auf `App.busy === false`, sodass alle 3 Körper je genau einmal in `Kernel.stats().buildsByItem` gezählt werden (`cached: []`) und anschließend die Gesamtmasse vorliegt (`t_f11252354`).
+- [x] **Zeichnungs-Exportmenü trennt Standard-PDF & 1:1-Schablone (`[A-062]`, `[A-065]`)**: Im Zeichnungs-Exportmenü sind `#dw-exp-pdf` („Als PDF speichern“) und `#dw-exp-tiled-pdf` („Drucken 1:1 (A4-Schablone, PDF) …“) eindeutig vorhanden; Klick auf `#dw-exp-pdf` lädt eine gültige `%PDF-1.4`-Datei (`t_f11252354`).
+- [x] **Einstellungs-Dialog ohne Geister-Modal (`[A-108]`)**: Nach direktem Entfernen von `.modal-back` öffnet `ViewPrefs.refreshOpenDialog()` bei `ViewPrefs.importData()` keinen verwaisten Einstellungsdialog neu; Import-Tests warten ereignisbasiert auf die aktualisierten Einstellungen (`t_f11252354`).
+- [ ] **Von Hand**: Im Browser bei kaltem Start ein mehrteiliges Modell anlegen, anschließend Einstellungen aus einer `.json`-Datei laden und im Zeichnungsbereich beide PDF-Exporte ausführen.
+
 ## Fehler melden
 
 ```
