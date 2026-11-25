@@ -295,6 +295,10 @@ const Snap = (() => {
     stdWasher: 'Scheibenmitte',
     stdBearing: 'Lagermitte',
     stdSleeve: 'Buchsenachse',
+    stdORing: 'O-Ring-Mitte',
+    stdShaftSeal: 'Dichtringachse',
+    stdCompSpring: 'Federachse',
+    stdExtSpring: 'Federachse',
   };
   let dockDrag = null;
 

@@ -2900,6 +2900,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Rückgängig, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind `#t-symbols`, `#dw-sym-sec`, API-Funktionen, Dialog und Befehle gesperrt; Löschen + `App.undo()`, `Store.validateProject` + Neuladen, `werkzeug-hilfen.json` (`drawingSymbols`, `drawingSymbolLibrary`), DE/EN-Schlüsselgleichheit und `Commands.search` bestehen (`t_a175_zeichnung_oberflaechen_symbole`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ ein Oberflächenzeichen mit Rillenrichtung, ein Schweißsymbol (Gegenseite) und zwei Zeichen aus der Symbol-Sammlung auf dem Blatt verschieben und als PDF prüfen.
 
+## Bibliothek: O-Ringe, Wellendichtringe und Federn (Auto [A-182], BI-09, BI-10)
+
+- [x] **O-Ring 20×2 & passende Einbaunut (`stdORing`, `stdORingGroove`)**: O-Ring 20×2 (DIN 3771 / ISO 3601) liefert exakt Außen-Ø `24 mm`, Höhe `2 mm` und Ringvolumen `≈ 217,13 mm³` (Werkstoff TPU 95A); rechts stehen die Nutmaße für statisch, dynamisch und axial; `#btn-add-oring-groove` legt die passende axiale Nut (`2,8 × 1,55 mm`) an, die in einem Quader exakt `≈ 299,96 mm³` ausschneidet; auch radiale Wellen- und Bohrungsnuten bauen fehlerfrei (`t_a182_oringe_und_federn`).
+- [x] **Radial-Wellendichtring (`stdShaftSeal`)**: DIN 3760 `20×35×7` (Bauform AS mit Staublippe und A ohne) liefert exakt Außen-Ø `35 mm`, Breite `7 mm` und Wellen-Radius `10 mm`; rechts erscheinen die Toleranzhinweise `h11` und `H8` (`t_a182_oringe_und_federn`).
+- [x] **Druckfeder & Zugfeder (`stdCompSpring`, `stdExtSpring`)**: Druckfeder mit `d = 2 mm`, `Dm = 16 mm`, `8` Windungen und Steigung `5 mm` (angelegt & geschliffen) liefert Länge `43 mm` und Außen-Ø `18 mm` (offene Enden `42 mm`, feste Länge `50 mm`); Zugfeder `1,5×15-24` (`0°` und `90°` Ösenstellung) baut mit `1/1` deutschen Ösen auf Normlänge `Lges` und berechnet Federrate `R` in `N/mm` (`t_a182_oringe_und_federn`).
+- [x] **Einfach & Profi, Hilfen, I18n, Speichern/Laden & Geometrie-Prüfung**: Alle 5 Normteile erscheinen im `#t-parts`-Flyout (Profi), funktionieren über Befehlssuche, `Actions.addPart` und rechtes Panel in Einfach und Profi, `GeomCheck` findet 0 Fehler bei allen 4 Körpern, `werkzeug-hilfen.json` / `HELP` sowie DE/EN-Texte und `Store.validateProject` sind konsistent (`t_a182_oringe_und_federn`).
+- [ ] **Von Hand**: Im Browser im Bauteile-Flyout einen O-Ring 20×2, einen Wellendichtring, eine Druckfeder und eine Zugfeder anklicken und per Ziehen auf eine Bauteilfläche absetzen.
+
 ## Fehler melden
 
 ```

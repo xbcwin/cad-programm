@@ -36840,6 +36840,214 @@ def t_a175_zeichnung_oberflaechen_symbole(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a182_oringe_und_federn(p):
+    # 1. O-Ring 20x2 (DIN 3771 / ISO 3601) + passende Einbaunut (axial & radial)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(150)
+    p.ev("""App.change('O-Ring 20x2', d => {
+      d.items = [Model.newItem('part', { lib: 'stdORing', size: '20x2' }, { name: 'O-Ring 20x2' })];
+    })""")
+    warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    or_info = p.ev("""
+      const it = App.doc.items[0], res = App.results.get(it.id)?.data, bb = res?.bbox || [];
+      return Mass.measure().then(m => ({
+        errs: App.errors.length,
+        mat: it.mat,
+        w: bb[3] - bb[0], dp: bb[4] - bb[1], h: bb[5] - bb[2],
+        vol: m.parts.find(q => q.id === it.id)?.volume || 0,
+        hint: document.querySelector('#p-stdoring-hint')?.textContent || '',
+      }));
+    """)
+    exp_ring_vol = 2 * (math.pi ** 2) * 11 * 1.0 * 1.0  # R=11 mm, r=1 mm -> ~217.13 mm³
+    ok1 = (
+        or_info['errs'] == 0
+        and or_info['mat'] == 'TPU 95A'
+        and abs(or_info['w'] - 24.0) < 0.03
+        and abs(or_info['dp'] - 24.0) < 0.03
+        and abs(or_info['h'] - 2.0) < 0.03
+        and abs(or_info['vol'] - exp_ring_vol) < 1.5
+        and '20' in or_info['hint'] and '24' in or_info['hint'] and '2,8' in or_info['hint']
+    )
+    # Knopf „Passende Nut anlegen“ + echtes Ausschneiden in einem Quader prüfen
+    p.pg.locator('#btn-add-oring-groove').click(); p.wait(400); warte_rechnen(p, 30)
+    has_gr = p.ev("return App.doc.items.length === 2 && App.doc.items[1].p.lib === 'stdORingGroove' && App.doc.items[1].p.size === '20x2' && App.doc.items[1].role === 'hole'")
+    p.ev("""App.change('Nuttest O-Ring', d => {
+      const blk = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Flansch' });
+      const gr = Model.newItem('part', { lib: 'stdORingGroove', size: '20x2', mode: 'axial', use: 'static', extra: 0.5 }, { name: 'Nut', role: 'hole' });
+      gr.t.z = 10;
+      d.items = [blk, gr];
+    })""")
+    warte_rechnen(p, 30)
+    v_ax = p.ev("return Mass.measure().then(m => ({ errs: App.errors.length, vol: m.parts.find(q => q.id === App.doc.items[0].id)?.volume || 0 }))")
+    exp_ax_cut = math.pi * (12.4 ** 2 - 9.6 ** 2) * 1.55
+    p.ev("""App.change('Nuttest Radial', d => {
+      const g1 = Model.newItem('part', { lib: 'stdORingGroove', size: '20x2', mode: 'radial_shaft', use: 'dynamic' }, { name: 'Welle', role: 'hole' });
+      const g2 = Model.newItem('part', { lib: 'stdORingGroove', size: '20x2', mode: 'radial_bore', use: 'static' }, { name: 'Bohrung', role: 'hole' });
+      g2.t.x = 40;
+      d.items = [g1, g2];
+    })""")
+    warte_rechnen(p, 30)
+    rad_chk = p.ev("""
+      const b1 = App.results.get(App.doc.items[0].id)?.data?.bbox || [];
+      const b2 = App.results.get(App.doc.items[1].id)?.data?.bbox || [];
+      return { errs: App.errors.length, h1: b1[5] - b1[2], h2: b2[5] - b2[2] };
+    """)
+    ok1 = (
+        ok1 and has_gr
+        and v_ax['errs'] == 0 and abs((16000.0 - v_ax['vol']) - exp_ax_cut) < 2.5
+        and rad_chk['errs'] == 0 and abs(rad_chk['h1'] - 2.8) < 0.03 and abs(rad_chk['h2'] - 2.7) < 0.03
+    )
+
+    # 2. Radial-Wellendichtring DIN 3760 (20x35x7 Form AS und Form A)
+    p.ev("""App.change('Wellendichtring', d => {
+      d.items = [Model.newItem('part', { lib: 'stdShaftSeal', size: '20x35x7', form: 'AS' }, { name: 'WDR 20x35x7' })];
+    })""")
+    warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    ws_as = p.ev("""
+      const it = App.doc.items[0], d = App.results.get(it.id)?.data, bb = d?.bbox || [];
+      const radii = (d?.faces || []).map(f => f.r).filter(r => r != null);
+      return {
+        errs: App.errors.length, mat: it.mat,
+        w: bb[3] - bb[0], dp: bb[4] - bb[1], h: bb[5] - bb[2],
+        radii,
+        hint: document.querySelector('#p-stdshaftseal-hint')?.textContent || '',
+      };
+    """)
+    p.ev("App.change('WDR Form A', d => { d.items[0].p.form = 'A'; })")
+    warte_rechnen(p, 30)
+    ws_a = p.ev("""
+      const d = App.results.get(App.doc.items[0].id)?.data, bb = d?.bbox || [];
+      return { errs: App.errors.length, w: bb[3] - bb[0], h: bb[5] - bb[2] };
+    """)
+    ok2 = (
+        ws_as['errs'] == 0 and ws_as['mat'] == 'TPU 95A'
+        and abs(ws_as['w'] - 35.0) < 0.03 and abs(ws_as['dp'] - 35.0) < 0.03 and abs(ws_as['h'] - 7.0) < 0.03
+        and any(abs(r - 17.5) < 0.03 for r in ws_as['radii'])
+        and 'DIN 3760' in ws_as['hint'] and 'h11' in ws_as['hint'] and 'H8' in ws_as['hint']
+        and ws_a['errs'] == 0 and abs(ws_a['w'] - 35.0) < 0.03 and abs(ws_a['h'] - 7.0) < 0.03
+    )
+
+    # 3. Druckfeder mit 8 Windungen (Länge L0 = n * P + 1.5 * d = 8 * 5 + 3 = 43 mm)
+    p.ev("""App.change('Druckfeder', d => {
+      d.items = [Model.newItem('part', { lib: 'stdCompSpring', size: '2x16x33', turns: 8, ends: 'ground' }, { name: 'Druckfeder 8 Wdg' })];
+    })""")
+    warte_rechnen(p, 40)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    cs_g = p.ev("""
+      const it = App.doc.items[0], d = App.results.get(it.id)?.data, bb = d?.bbox || [];
+      return {
+        errs: App.errors.length, mat: it.mat,
+        w: bb[3] - bb[0], dp: bb[4] - bb[1], h: bb[5] - bb[2],
+        hint: document.querySelector('#p-stdcompspring-hint')?.textContent || '',
+      };
+    """)
+    p.ev("App.change('Druckfeder offen', d => { d.items[0].p.ends = 'open'; })")
+    warte_rechnen(p, 40)
+    cs_o = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox || []; return { errs: App.errors.length, h: bb[5] - bb[2] };")
+    p.ev("App.change('Druckfeder Länge 50', d => { d.items[0].p.ends = 'ground'; d.items[0].p.length = 50; })")
+    warte_rechnen(p, 40)
+    cs_l = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox || []; return { errs: App.errors.length, h: bb[5] - bb[2] };")
+    ok3 = (
+        cs_g['errs'] == 0 and cs_g['mat'] == 'Stahl 42CrMo4'
+        and abs(cs_g['w'] - 18.0) < 0.08 and abs(cs_g['dp'] - 18.0) < 0.08 and abs(cs_g['h'] - 43.0) < 0.05
+        and 'DIN EN 13906-1' in cs_g['hint'] and 'N/mm' in cs_g['hint'] and '43' in cs_g['hint']
+        and cs_o['errs'] == 0 and abs(cs_o['h'] - 42.0) < 0.05
+        and cs_l['errs'] == 0 and abs(cs_l['h'] - 50.0) < 0.05
+    )
+
+    # 4. Zugfeder mit 1/1 deutschen Ösen (0° und 90°)
+    p.ev("""App.change('Zugfeder', d => {
+      d.items = [Model.newItem('part', { lib: 'stdExtSpring', size: '1.5x15-24', hookAngle: '0' }, { name: 'Zugfeder' })];
+    })""")
+    warte_rechnen(p, 40)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    es0 = p.ev("""
+      const it = App.doc.items[0], bb = App.results.get(it.id)?.data?.bbox || [];
+      return {
+        errs: App.errors.length, mat: it.mat,
+        w: bb[3] - bb[0], dp: bb[4] - bb[1], h: bb[5] - bb[2],
+        hint: document.querySelector('#p-stdextspring-hint')?.textContent || '',
+      };
+    """)
+    p.ev("App.change('Zugfeder 90', d => { d.items[0].p.hookAngle = '90'; })")
+    warte_rechnen(p, 40)
+    es90 = p.ev("const bb = App.results.get(App.doc.items[0].id)?.data?.bbox || []; return { errs: App.errors.length, w: bb[3] - bb[0], h: bb[5] - bb[2] };")
+    # d=1.5, Dm=15, n=24 -> coilPitch=1.62, rEye=6.75 -> L0=65.88, Lges=68.88
+    ok4 = (
+        es0['errs'] == 0 and es0['mat'] == 'Stahl 42CrMo4'
+        and abs(es0['w'] - 16.5) < 0.1 and abs(es0['dp'] - 16.5) < 0.1 and abs(es0['h'] - 68.88) < 0.2
+        and 'DIN EN 13906-2' in es0['hint'] and 'N/mm' in es0['hint']
+        and es90['errs'] == 0 and abs(es90['w'] - 16.5) < 0.1 and abs(es90['h'] - 68.88) < 0.2
+    )
+
+    # 5. Einfach & Profi, Flyout, Befehle, Hilfen, I18n, Speichern/Laden & Geometrie-Prüfung
+    p.pg.locator('#t-parts').click(); p.wait(350)
+    fly_helps = p.ev("return ['stdORing', 'stdORingGroove', 'stdShaftSeal', 'stdCompSpring', 'stdExtSpring'].every(k => !!document.querySelector(`.flyout [data-help=\"${k}\"]`))")
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    # Einfach-Modus: alle Teile über Befehlssuche und rechtes Panel nutzbar
+    p.ev("App.change('Leeren', d => { d.items = []; });"); p.wait(200)
+    p.ev("ViewPrefs.setLevel('simple');"); p.wait(200)
+    simple_res = p.ev("""
+      const q = ['o-ring', 'wellendichtring', 'druckfeder', 'zugfeder'];
+      const cmds = q.map(s => Commands.search(s).length);
+      const hit = Commands.search('o-ring').find(c => c.id === 'lib-stdORing');
+      if (hit) hit.run();
+      return { cmds, added: App.doc.items.length === 1 && App.doc.items[0].p.lib === 'stdORing' };
+    """)
+    warte_rechnen(p, 30)
+    simple_ui = p.ev("""
+      return {
+        hasHint: !!document.querySelector('#p-stdoring-hint'),
+        hasBtn: !!document.querySelector('#btn-add-oring-groove'),
+        hasField: !!document.querySelector('#lp-size'),
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(150)
+
+    # Alle 4 festen Körper gemeinsam bauen, speichern/validieren & GeomCheck laufen lassen
+    p.ev("""App.change('Alle Dichtungen & Federn', d => {
+      const a = Model.newItem('part', { lib: 'stdORing', size: '20x2' }, { name: 'OR' });
+      const b = Model.newItem('part', { lib: 'stdShaftSeal', size: '20x35x7', form: 'AS' }, { name: 'WDR' }); b.t.x = 40;
+      const c = Model.newItem('part', { lib: 'stdCompSpring', size: '2x16x43', ends: 'ground' }, { name: 'DF' }); c.t.x = 80;
+      const e = Model.newItem('part', { lib: 'stdExtSpring', size: '1.5x15-24', hookAngle: '0' }, { name: 'ZF' }); e.t.x = 120;
+      d.items = [a, b, c, e];
+    })""")
+    warte_rechnen(p, 60)
+    meta = p.ev("""
+      const saved = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      return Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        GeomCheck.run({ silent: true }),
+      ]).then(([helpJson, deJson, enJson, gc]) => {
+        const keys = ['stdORing', 'stdORingGroove', 'stdShaftSeal', 'stdCompSpring', 'stdExtSpring'];
+        const helpOk = keys.every(k => helpJson[k] && helpJson[k].tip && helpJson[k].hilfe && helpJson[k].tipp);
+        const deKeys = Object.keys(deJson).sort(), enKeys = Object.keys(enJson).sort();
+        const i18nOk = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+        return {
+          savedOk: !!(saved && saved.ok),
+          helpOk,
+          i18nOk,
+          gcIssues: gc.issues.length,
+          gcChecked: gc.checkedCount,
+        };
+      });
+    """)
+    ok5 = (
+        bool(fly_helps)
+        and all(n >= 1 for n in simple_res['cmds']) and bool(simple_res['added'])
+        and bool(simple_ui['hasHint'] and simple_ui['hasBtn'] and simple_ui['hasField'])
+        and bool(meta['savedOk'] and meta['helpOk'] and meta['i18nOk'])
+        and meta['gcIssues'] == 0 and meta['gcChecked'] == 4
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -37134,6 +37342,7 @@ TESTS = [
     ('[A-179] Zeichnung: Prüfmaße (Ballons & CSV) und Drucken 1:1 auf A4 (ZE-33, ZE-36)', t_a179_pruefmasse_und_drucken_1zu1),
     ('[A-177] Zeichnung: Linienarten, Ebenen (Layer) und Bild auf dem Blatt (ZE-29, ZE-31)', t_a177_zeichnung_ebenen_bild),
     ('[A-175] Zeichnung: Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)', t_a175_zeichnung_oberflaechen_symbole),
+    ('[A-182] Bibliothek: O-Ringe mit Nut, Wellendichtringe, Druck- & Zugfedern (BI-09, BI-10)', t_a182_oringe_und_federn),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

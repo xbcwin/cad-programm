@@ -2311,6 +2311,47 @@ const Panels = (() => {
             const h7Txt = h7.um != null ? T('panel.item.stdSleeveH7', { d: Units.fmtLenU(se.D_mm, 2) }) : '';
             sec.append(h('div', { id: 'p-stdsleeve-hint', class: 'hint-box', html: T('panel.item.stdSleeveHint', { id: esc(se.id), form: it.p.flange === 'flange' ? T('panel.item.stdSleeveFlange') : T('panel.item.stdSleeveCyl'), d: Units.fmtLenU(se.d_mm, 2), D: Units.fmtLenU(se.D_mm, 2), w: Units.fmtLenU(se.wand_mm, 2), flange: flTxt, h7: h7Txt }) }));
           }
+        } else if (def.lib === 'stdORing' && typeof oringMetrics === 'function') {
+          const m = oringMetrics({ ...it.p, d1: Model.num(it.p.d1, V, 0) || null, d2: Model.num(it.p.d2, V, 0) || null });
+          sec.append(h('div', { id: 'p-stdoring-hint', class: 'hint-box', html: T('panel.item.stdORingHint', {
+            id: esc(m.id), d1: Units.fmtLenU(m.d1, 2), d2: Units.fmtLenU(m.d2, 2), Da: Units.fmtLenU(m.Da, 2),
+            bStat: Units.fmtLenU(m.rule.b_stat_mm, 2), tStat: Units.fmtLenU(m.rule.t_stat_mm, 2),
+            bDyn: Units.fmtLenU(m.rule.b_dyn_mm, 2), tDyn: Units.fmtLenU(m.rule.t_dyn_mm, 2),
+            bAx: Units.fmtLenU(m.rule.b_axial_mm, 2), tAx: Units.fmtLenU(m.rule.t_axial_mm, 2),
+            r1: Units.fmtLenU(m.rule.r1_mm, 2),
+          }) }));
+          const row = h('div', { class: 'btn-row' });
+          const grBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-oring-groove' }, T('panel.item.addORingGroove'));
+          grBtn.onclick = () => Actions.addPart(LIBMAP.stdORingGroove, { size: it.p.size || '20x2', mode: 'axial', use: 'static', d1: it.p.d1 ?? null, d2: it.p.d2 ?? null, extra: 0.5 }, { name: 'O-Ring-Nut ' + m.id });
+          row.append(grBtn); sec.append(row);
+        } else if (def.lib === 'stdORingGroove' && typeof oringGrooveMetrics === 'function') {
+          const m = oringGrooveMetrics({ ...it.p, d1: Model.num(it.p.d1, V, 0) || null, d2: Model.num(it.p.d2, V, 0) || null, extra: Model.num(it.p.extra, V, 0.5) });
+          const modeTxt = m.mode === 'radial_shaft' ? T('panel.item.stdORingGrooveModeShaft') : m.mode === 'radial_bore' ? T('panel.item.stdORingGrooveModeBore') : T('panel.item.stdORingGrooveModeAxial');
+          const useTxt = m.use === 'dynamic' ? T('panel.item.stdORingGrooveUseDyn') : T('panel.item.stdORingGrooveUseStat');
+          sec.append(h('div', { id: 'p-stdoringgroove-hint', class: 'hint-box', html: T('panel.item.stdORingGrooveHint', {
+            id: esc(m.id), mode: modeTxt, use: useTxt,
+            b: Units.fmtLenU(m.b, 2), t: Units.fmtLenU(m.t, 2), dGrund: Units.fmtLenU(m.dGrund, 2), r1: Units.fmtLenU(m.r1, 2),
+          }) }));
+        } else if (def.lib === 'stdShaftSeal' && typeof shaftSealMetrics === 'function') {
+          const m = shaftSealMetrics({ ...it.p, b: Model.num(it.p.b, V, 0) || null });
+          sec.append(h('div', { id: 'p-stdshaftseal-hint', class: 'hint-box', html: T('panel.item.stdShaftSealHint', {
+            id: esc(m.id), form: m.form === 'A' ? T('panel.item.stdShaftSealFormA') : T('panel.item.stdShaftSealFormAS'),
+            d: Units.fmtLenU(m.d, 2), wtol: 'h11', D: Units.fmtLenU(m.D, 2), htol: 'H8', b: Units.fmtLenU(m.b, 2),
+          }) }));
+        } else if (def.lib === 'stdCompSpring' && typeof compSpringMetrics === 'function') {
+          const m = compSpringMetrics({ ...it.p, d: Model.num(it.p.d, V, 0) || null, Dm: Model.num(it.p.Dm, V, 0) || null, turns: Model.num(it.p.turns, V, 0) || null, pitch: Model.num(it.p.pitch, V, 0) || null, length: Model.num(it.p.length, V, 0) || null });
+          sec.append(h('div', { id: 'p-stdcompspring-hint', class: 'hint-box', html: T('panel.item.stdCompSpringHint', {
+            id: esc(m.id), ends: m.ends === 'open' ? T('panel.item.stdSpringEndsOpen') : T('panel.item.stdSpringEndsGround'),
+            d: Units.fmtLenU(m.d, 2), Dm: Units.fmtLenU(m.Dm, 2), De: Units.fmtLenU(m.De, 2), Di: Units.fmtLenU(m.Di, 2),
+            L0: Units.fmtLenU(m.L0, 2), n: fmt(m.n, 1), Lc: Units.fmtLenU(m.Lc, 2), rate: fmt(m.rate, 2),
+          }) }));
+        } else if (def.lib === 'stdExtSpring' && typeof extSpringMetrics === 'function') {
+          const m = extSpringMetrics({ ...it.p, d: Model.num(it.p.d, V, 0) || null, Dm: Model.num(it.p.Dm, V, 0) || null, turns: Model.num(it.p.turns, V, 0) || null });
+          sec.append(h('div', { id: 'p-stdextspring-hint', class: 'hint-box', html: T('panel.item.stdExtSpringHint', {
+            id: esc(m.id), ang: m.hookAngle,
+            d: Units.fmtLenU(m.d, 2), Dm: Units.fmtLenU(m.Dm, 2), De: Units.fmtLenU(m.De, 2),
+            n: fmt(m.n, 1), L0: Units.fmtLenU(m.L0, 2), Lges: Units.fmtLenU(m.Lges, 2), Lk: Units.fmtLenU(m.Lk, 2), rate: fmt(m.rate, 2),
+          }) }));
         } else if (def.lib === 'stdScrew' && typeof screwEntry === 'function') {
           const se = screwEntry(it.p.size);
           if (se) {

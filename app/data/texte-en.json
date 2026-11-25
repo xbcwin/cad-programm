@@ -4964,5 +4964,20 @@
   "draw.symlib.item.pe.label": "Protective Earth (PE)",
   "draw.symlib.item.pe.desc": "Protective earth terminal",
   "draw.symlib.item.northArrow.label": "Orientation",
-  "draw.symlib.item.northArrow.desc": "Mounting direction arrow"
+  "draw.symlib.item.northArrow.desc": "Mounting direction arrow",
+  "panel.item.stdORingHint": "<b>O-Ring {id}</b> (DIN 3771 / ISO 3601)<br>Inner Ø d₁ = <b>{d1}</b> · Cross-section d₂ = <b>{d2}</b> · Outer Ø Dₐ = <b>{Da}</b><br>Groove static: <b>{bStat} × {tStat}</b> · dynamic: <b>{bDyn} × {tDyn}</b> · axial: <b>{bAx} × {tAx}</b> · r₁ = {r1}",
+  "panel.item.addORingGroove": "Create matching groove",
+  "panel.item.stdORingGrooveModeAxial": "Axial (face seal)",
+  "panel.item.stdORingGrooveModeShaft": "Radial (shaft)",
+  "panel.item.stdORingGrooveModeBore": "Radial (bore)",
+  "panel.item.stdORingGrooveUseDyn": "dynamic",
+  "panel.item.stdORingGrooveUseStat": "static",
+  "panel.item.stdORingGrooveHint": "<b>O-Ring groove {id}</b> ({mode}, {use})<br>Width b = <b>{b}</b> · Depth t = <b>{t}</b> · Root Ø {dGrund} · r₁ = {r1}<br><span style=\"color:var(--muted)\">Standard: DIN 3771 / ISO 3601-2</span>",
+  "panel.item.stdShaftSealFormAS": "Form AS (with dust lip)",
+  "panel.item.stdShaftSealFormA": "Form A (without dust lip)",
+  "panel.item.stdShaftSealHint": "<b>Radial shaft seal {id}</b> ({form})<br>Shaft d = <b>{d}</b> ({wtol}) · Housing D = <b>{D}</b> ({htol}) · Width b = <b>{b}</b><br><span style=\"color:var(--muted)\">Standard: DIN 3760 / ISO 6194-1</span>",
+  "panel.item.stdSpringEndsGround": "closed & ground",
+  "panel.item.stdSpringEndsOpen": "open",
+  "panel.item.stdCompSpringHint": "<b>Compression spring {id}</b> ({ends})<br>Wire d = <b>{d}</b> · Dm = <b>{Dm}</b> (Outer Ø {De} / Inner Ø {Di})<br>Free length L₀ = <b>{L0}</b> · {n} coils · Solid height Lc ≈ {Lc} · Rate R ≈ <b>{rate} N/mm</b><br><span style=\"color:var(--muted)\">Standard: DIN EN 13906-1 / DIN 2098 (G = 81 500 N/mm²)</span>",
+  "panel.item.stdExtSpringHint": "<b>Extension spring {id}</b> (1/1 German hook, {ang}°)<br>Wire d = <b>{d}</b> · Dm = <b>{Dm}</b> (Outer Ø {De}) · {n} coils<br>Length inside hooks L₀ = <b>{L0}</b> (Overall {Lges}) · Body Lₖ ≈ {Lk} · R ≈ <b>{rate} N/mm</b><br><span style=\"color:var(--muted)\">Standard: DIN EN 13906-2 / DIN 2097 (G = 81 500 N/mm²)</span>"
 }

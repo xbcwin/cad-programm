@@ -1968,5 +1968,30 @@
     "tip": "Symbol-Sammlung mit Normzeichen für Geometrie, Bohrungen, Toleranzen und Fertigung (Profi)",
     "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
     "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
+  },
+  "stdORing": {
+    "tip": "Norm-O-Ring nach DIN 3771 / ISO 3601 samt passenden Einbaunut-Maßen",
+    "hilfe": "Erzeugt einen O-Ring aus wählbarem Innendurchmesser d₁ und Schnurstärke d₂ (oder eigener Größe) mit dem Werkstoff TPU. Rechts siehst du sofort die passenden Nutbreiten und Nuttiefen für statischen, dynamischen und axialen Einbau.",
+    "tipp": "Klicke rechts auf „Passende Nut anlegen“, um direkt eine passende O-Ring-Nut als Lochkörper zu erzeugen."
+  },
+  "stdORingGroove": {
+    "tip": "Passende Einbaunut für einen O-Ring (axial, Welle oder Bohrung) nach DIN 3771 / ISO 3601-2",
+    "hilfe": "Erzeugt den ringförmigen Schneidkörper für eine O-Ring-Nut als Planflächennut (axial), Wellennut (radial außen) oder Gehäusebohrungsnut (radial innen) mit Normtiefe und Normbreite für statische oder dynamische Abdichtung.",
+    "tipp": "Wähle „Axial (Planfläche)“ für Deckelflansche oder „Radial (Welle)“ für Kolben und Buchsen."
+  },
+  "stdShaftSeal": {
+    "tip": "Radial-Wellendichtring (Simmerring) nach DIN 3760 / ISO 6194-1",
+    "hilfe": "Erzeugt einen Wellendichtring mit Wellen-Ø d (Passung h11), Gehäuse-Ø D (Passung H8) und Breite b wahlweise als Bauform AS (mit Schutz-/Staublippe) oder Bauform A (ohne Staublippe).",
+    "tipp": "Der Hinweis rechts zeigt direkt die empfohlenen Toleranzfelder h11 für die Welle und H8 für die Gehäusebohrung."
+  },
+  "stdCompSpring": {
+    "tip": "Norm-Schrauben-Druckfeder nach DIN EN 13906-1 / DIN 2098 mit berechneter Federrate",
+    "hilfe": "Erzeugt eine zylindrische Druckfeder aus Drahtdurchmesser d, mittlerem Windungsdurchmesser Dm, Windungszahl n und Steigung P (oder freier Länge L₀), wahlweise mit angelegten und geschliffenen oder offenen Enden. Rechts werden Außen-/Innen-Ø, Blocklänge Lc und Federrate R angezeigt.",
+    "tipp": "Ändere die Windungszahl n oder die freie Länge L₀ direkt rechts, um Einbauraum und Federkraft sofort zu prüfen."
+  },
+  "stdExtSpring": {
+    "tip": "Norm-Schrauben-Zugfeder nach DIN EN 13906-2 mit 1/1 deutschen Ösen",
+    "hilfe": "Erzeugt eine eng gewickelte Zugfeder mit beidseitigen 1/1 deutschen Ösen (0° in einer Ebene oder 90° gedreht) und berechnet Gesamtlänge, Abstand zwischen den Ösen L₀ und Federrate R.",
+    "tipp": "Mit „Ösen-Stellung 90°“ richtest du die beiden Einhängeösen um eine Vierteldrehung zueinander aus."
   }
 }
