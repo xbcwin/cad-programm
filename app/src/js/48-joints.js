@@ -3754,10 +3754,10 @@ const Joints = (() => {
   }
 
   // ---------- Freiheitsgrade setzen, Umkehren, Lage einhalten ----------
-  // ---------- Kopplungen: Schraube, Riemen, Linear (BG-14) ----------
+  // ---------- Kopplungen: Zahnrad, Zahnstange, Schraube, Riemen, Linear (BG-14) ----------
   const couplingList = (doc = App.doc) => (doc && Array.isArray(doc.couplings) ? doc.couplings : []);
   const couplingsOf = (jid, doc = App.doc) => couplingList(doc).filter((c) => c.j1 === jid || c.j2 === jid);
-  const isCouplingKind = (k) => k === 'screw' || k === 'belt' || k === 'linear';
+  const isCouplingKind = (k) => k === 'gear' || k === 'rack' || k === 'screw' || k === 'belt' || k === 'linear';
   const rotDofOf = (j) => {
     const k = kindOf(j);
     return (k === 'rot' || k === 'cyl' || k === 'planar' || k === 'slot' || k === 'ball') ? 'ang' : null;
@@ -3801,9 +3801,46 @@ const Joints = (() => {
     if (val < j[loK]) j[loK] = round(Math.floor(val), 2);
     if (val > j[hiK]) j[hiK] = round(Math.ceil(val), 2);
   }
+  function parseRatio(val) {
+    if (typeof val === 'number') return Number.isFinite(val) && val > 0 ? val : NaN;
+    const s = String(val ?? '').trim();
+    if (!s) return NaN;
+    const m = s.match(/^([^:/]+)\s*[:/]\s*([^:/]+)$/);
+    if (m) {
+      const a = parseNum(m[1]), b = parseNum(m[2]);
+      return Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0 ? a / b : NaN;
+    }
+    return parseNum(s);
+  }
+  function rackPitchDia(c) {
+    if (c && c.mode === 'module') {
+      const m = Number(c.module), z = Number(c.z1);
+      if (m > 0 && z > 0) return round(m * z, 6);
+    }
+    const d = Number(c && c.d);
+    return d > 0 ? d : 20;
+  }
+  function couplingHelpKey(k) {
+    if (k === 'gear') return 'coupleGear';
+    if (k === 'rack') return 'coupleRack';
+    if (k === 'belt') return 'coupleBelt';
+    if (k === 'linear') return 'coupleLinear';
+    return 'coupleScrew';
+  }
   function couplingGain(c) {
     if (!c) return 1;
     const dir = c.reverse ? -1 : 1;
+    if (c.kind === 'gear') {
+      if (c.mode === 'ratio') {
+        const r = Number(c.ratio);
+        return dir * (r > 0 ? r : 1);
+      }
+      const a = Number(c.z1), b = Number(c.z2);
+      return dir * (a > 0 && b > 0 ? a / b : 1);
+    }
+    if (c.kind === 'rack') {
+      return dir * ((Math.PI * rackPitchDia(c)) / 360);
+    }
     if (c.kind === 'screw') {
       const p = Number(c.pitch);
       return dir * ((p > 0 ? p : 1) / 360);
@@ -3959,29 +3996,63 @@ const Joints = (() => {
     return doc.couplings.length !== before;
   }
 
-  function autoBeltSpec(j, doc = App.doc) {
-    const inspect = (it) => {
+  function autoGearSpec(j, doc = App.doc) {
+    const baseV = Model.vars(doc).v;
+    const inspect = (it, V) => {
       if (!it) return null;
-      if (it.kind === 'part' && it.p && it.p.lib === 'gear' && Number(it.p.teeth) > 0) {
-        return { mode: 'teeth', val: Number(it.p.teeth) };
+      if (it.kind === 'part' && it.p && it.p.lib === 'gear') {
+        const teeth = Model.num(it.p.teeth, V, 0);
+        const rawMod = Model.num(it.p.module, V, 1.5);
+        const mod = rawMod > 0 ? rawMod : 1.5;
+        if (teeth > 0) return { mode: 'teeth', teeth, module: mod, d: round(teeth * mod, 6) };
       }
-      if ((it.kind === 'cylinder' || it.kind === 'tube') && it.p && Number(it.p.d) > 0) {
-        return { mode: 'diameter', val: Number(it.p.d) };
+      if ((it.kind === 'cylinder' || it.kind === 'tube') && it.p) {
+        const d = Model.num(it.p.d, V, 0);
+        if (d > 0) return { mode: 'diameter', d };
       }
       if (it.kind === 'group' && Array.isArray(it.children)) {
+        const subV = it.partRef ? Model.scopeVars(V, it.partRef) : V;
         for (const ch of it.children) {
-          const r = inspect(ch);
+          const r = inspect(ch, subV);
           if (r) return r;
+        }
+      }
+      if (it.kind === 'ref' && it.p && it.p.docId && Model.resolveDoc) {
+        const rd = Model.resolveDoc(it.p.docId);
+        if (rd && Array.isArray(rd.items)) {
+          const rV = Model.vars(rd).v;
+          for (const ch of rd.items) {
+            const r = inspect(ch, rV);
+            if (r) return r;
+          }
         }
       }
       return null;
     };
     const b = j && top(j.b, doc);
-    return inspect(b);
+    return inspect(b, baseV);
+  }
+  function autoBeltSpec(j, doc = App.doc) {
+    const s = autoGearSpec(j, doc);
+    if (!s) return null;
+    if (s.mode === 'teeth' && s.teeth > 0) return { mode: 'teeth', val: s.teeth };
+    if (s.mode === 'diameter' && s.d > 0) return { mode: 'diameter', val: s.d };
+    return null;
   }
   function couplingSummary(c) {
     if (!c) return '';
     const rev = c.reverse ? ' · ↺' : '';
+    if (c.kind === 'gear') {
+      return c.mode === 'ratio'
+        ? `${T('joint.gearKind')} · ${fmt(c.ratio)}×${rev}`
+        : `${T('joint.gearKind')} · ${fmt(c.z1)}:${fmt(c.z2)}${rev}`;
+    }
+    if (c.kind === 'rack') {
+      const d = rackPitchDia(c);
+      return c.mode === 'module'
+        ? `${T('joint.rackKind')} · m${fmt(c.module)} · ${fmt(c.z1)}Z (Ø ${fmt(d)})${rev}`
+        : `${T('joint.rackKind')} · Ø ${fmt(d)} mm${rev}`;
+    }
     if (c.kind === 'screw') return `${T('joint.screwKind')} · ${fmt(c.pitch)} mm/U${rev}`;
     if (c.kind === 'belt') {
       return c.mode === 'diameter'
@@ -4017,7 +4088,69 @@ const Joints = (() => {
     let j1 = j1Orig, j2 = j2Orig, dof1 = null, dof2 = null;
     const payload = { kind, reverse: !!(opts.reverse ?? opts.flip) };
 
-    if (kind === 'screw') {
+    if (kind === 'gear') {
+      if (j1Orig.id === j2Orig.id) return { ok: false, msg: 'Für eine Zahnrad-Kopplung zwei verschiedene Drehgelenke wählen.' };
+      dof1 = opts.dof1 && hasDof(j1Orig, opts.dof1) ? opts.dof1 : rotDofOf(j1Orig);
+      dof2 = opts.dof2 && hasDof(j2Orig, opts.dof2) ? opts.dof2 : rotDofOf(j2Orig);
+      if (!dof1 || !dof2) return { ok: false, msg: 'Für eine Zahnrad-Kopplung brauchen beide Gelenke eine Drehbewegung.' };
+      const hasTeeth = opts.z1 != null || opts.z2 != null || opts.teeth1 != null || opts.teeth2 != null;
+      const hasRatio = opts.ratio != null && opts.ratio !== '';
+      const mode = opts.mode === 'ratio' || (hasRatio && !hasTeeth && opts.mode !== 'teeth') ? 'ratio' : 'teeth';
+      payload.mode = mode;
+      if (mode === 'ratio') {
+        const ratio = parseRatio(opts.ratio ?? 0.5);
+        if (!Number.isFinite(ratio) || ratio <= 0) {
+          return { ok: false, msg: 'Bitte ein Übersetzungsverhältnis größer als 0 eingeben (z. B. 1:2 oder 0,5).' };
+        }
+        payload.ratio = round(ratio, 6);
+      } else {
+        const s1 = autoGearSpec(j1Orig), s2 = autoGearSpec(j2Orig);
+        const z1 = parseNum(opts.z1 ?? opts.teeth1 ?? (s1 && s1.teeth) ?? 20);
+        const z2 = parseNum(opts.z2 ?? opts.teeth2 ?? (s2 && s2.teeth) ?? 40);
+        if (!Number.isFinite(z1) || z1 <= 0 || !Number.isFinite(z2) || z2 <= 0) {
+          return { ok: false, msg: 'Bitte eine Zähnezahl größer als 0 für beide Zahnräder eingeben.' };
+        }
+        payload.z1 = round(z1, 4);
+        payload.z2 = round(z2, 4);
+      }
+    } else if (kind === 'rack') {
+      if (j1Orig.id === j2Orig.id) return { ok: false, msg: 'Für eine Zahnstangen-Kopplung zwei verschiedene Gelenke (Drehen + Schieben) wählen.' };
+      if (rotDofOf(j1Orig) && linDofOf(j2Orig)) {
+        dof1 = opts.dof1 && hasDof(j1Orig, opts.dof1) ? opts.dof1 : rotDofOf(j1Orig);
+        dof2 = opts.dof2 && hasDof(j2Orig, opts.dof2) ? opts.dof2 : linDofOf(j2Orig);
+      } else if (rotDofOf(j2Orig) && linDofOf(j1Orig)) {
+        j1 = j2Orig; j2 = j1Orig;
+        dof1 = rotDofOf(j1);
+        dof2 = linDofOf(j2);
+      } else {
+        return { ok: false, msg: 'Für eine Zahnstangen-Kopplung braucht ein Gelenk Drehung (Ritzel) und das andere Schieben (Zahnstange).' };
+      }
+      const s1 = autoGearSpec(j1);
+      const hasDia = opts.d != null || opts.diameter != null || opts.pitchDiameter != null;
+      const hasMod = opts.module != null || opts.m != null || opts.z1 != null || opts.teeth != null || opts.z != null;
+      const mode = opts.mode === 'module'
+        || (hasMod && !hasDia && opts.mode !== 'diameter')
+        || (!hasDia && !hasMod && opts.mode !== 'diameter' && s1 && s1.teeth > 0 && s1.module > 0)
+        ? 'module'
+        : 'diameter';
+      payload.mode = mode;
+      if (mode === 'module') {
+        const mod = parseNum(opts.module ?? opts.m ?? (s1 && s1.module) ?? 1.5);
+        const z1 = parseNum(opts.z1 ?? opts.teeth ?? opts.z ?? (s1 && s1.teeth) ?? 20);
+        if (!Number.isFinite(mod) || mod <= 0 || !Number.isFinite(z1) || z1 <= 0) {
+          return { ok: false, msg: 'Bitte Modul und Zähnezahl größer als 0 für das Ritzel eingeben.' };
+        }
+        payload.module = round(mod, 6);
+        payload.z1 = round(z1, 4);
+        payload.d = round(mod * z1, 6);
+      } else {
+        const d = parseNum(opts.d ?? opts.diameter ?? opts.pitchDiameter ?? (s1 && s1.d) ?? 20);
+        if (!Number.isFinite(d) || d <= 0) {
+          return { ok: false, msg: 'Bitte einen Teilkreis-Durchmesser größer als 0 mm eingeben.' };
+        }
+        payload.d = round(d, 6);
+      }
+    } else if (kind === 'screw') {
       const pitch = parseNum(opts.pitch ?? 2);
       if (!Number.isFinite(pitch) || pitch <= 0) return { ok: false, msg: 'Bitte eine Steigung größer als 0 mm eingeben.' };
       if (j1Orig.id === j2Orig.id) {
@@ -4076,7 +4209,10 @@ const Joints = (() => {
     }
 
     let cid = null;
-    const undoLbl = kind === 'screw' ? 'Schrauben-Kopplung angelegt' : kind === 'belt' ? 'Riemen-Kopplung angelegt' : 'Lineare Kopplung angelegt';
+    const undoLbl = kind === 'gear' ? 'Zahnrad-Kopplung angelegt'
+      : kind === 'rack' ? 'Zahnstangen-Kopplung angelegt'
+        : kind === 'screw' ? 'Schrauben-Kopplung angelegt'
+          : kind === 'belt' ? 'Riemen-Kopplung angelegt' : 'Lineare Kopplung angelegt';
     App.change(undoLbl, (doc) => {
       const dj1 = list(doc).find((x) => x.id === j1.id);
       const dj2 = list(doc).find((x) => x.id === j2.id);
@@ -4084,14 +4220,17 @@ const Joints = (() => {
       doc.couplings = doc.couplings || [];
       cid = uid('c');
       const idx = doc.couplings.length + 1;
-      const baseName = kind === 'screw' ? `Schraube ${idx}` : kind === 'belt' ? `Riemen ${idx}` : `Linear ${idx}`;
+      const baseName = kind === 'gear' ? `Zahnrad ${idx}`
+        : kind === 'rack' ? `Zahnstange ${idx}`
+          : kind === 'screw' ? `Schraube ${idx}`
+            : kind === 'belt' ? `Riemen ${idx}` : `Linear ${idx}`;
       const ref1 = round(stateOf(dj1)[dof1] || 0, 5);
       const ref2 = round(stateOf(dj2)[dof2] || 0, 5);
-      if ((kind === 'screw' || kind === 'belt') && !dj1.stopsLocked && dof1 === 'ang' && !slide(dj1)) {
+      if ((kind === 'screw' || kind === 'belt' || kind === 'gear' || kind === 'rack') && !dj1.stopsLocked && dof1 === 'ang' && !slide(dj1)) {
         dj1.min = Math.min(dj1.min ?? -180, -360);
         dj1.max = Math.max(dj1.max ?? 180, 360);
       }
-      if (kind === 'belt' && !dj2.stopsLocked && dof2 === 'ang' && !slide(dj2)) {
+      if ((kind === 'belt' || kind === 'gear') && !dj2.stopsLocked && dof2 === 'ang' && !slide(dj2)) {
         dj2.min = Math.min(dj2.min ?? -180, -360);
         dj2.max = Math.max(dj2.max ?? 180, 360);
       }
@@ -4110,6 +4249,8 @@ const Joints = (() => {
     if (cid) drawSelectedJoint();
     return cid ? { ok: true, id: cid } : { ok: false, msg: 'Die Kopplung ließ sich nicht anlegen.' };
   }
+  function addGear(j1Id, j2Id, opts = {}) { return addCoupling('gear', j1Id, j2Id, opts); }
+  function addRack(j1Id, j2Id, opts = {}) { return addCoupling('rack', j1Id, j2Id, opts); }
   function addScrew(j1Id, j2IdOrOpts, maybeOpts) { return addCoupling('screw', j1Id, j2IdOrOpts, maybeOpts); }
   function addBelt(j1Id, j2Id, opts = {}) { return addCoupling('belt', j1Id, j2Id, opts); }
   function addLinear(j1Id, j2Id, opts = {}) { return addCoupling('linear', j1Id, j2Id, opts); }
@@ -4130,7 +4271,11 @@ const Joints = (() => {
       if (p == null) return false;
       nextPatch.pitch = round(p, 6);
     }
-    if ('mode' in patch) nextPatch.mode = patch.mode === 'diameter' ? 'diameter' : 'teeth';
+    if ('mode' in patch) {
+      if (cur.kind === 'gear') nextPatch.mode = patch.mode === 'ratio' ? 'ratio' : 'teeth';
+      else if (cur.kind === 'rack') nextPatch.mode = patch.mode === 'module' ? 'module' : 'diameter';
+      else nextPatch.mode = patch.mode === 'diameter' ? 'diameter' : 'teeth';
+    }
     if ('z1' in patch) {
       const z = checkPos(patch.z1, 'Bitte eine Zähnezahl größer als 0 eingeben.');
       if (z == null) return false;
@@ -4151,9 +4296,22 @@ const Joints = (() => {
       if (d == null) return false;
       nextPatch.d2 = round(d, 6);
     }
+    if ('d' in patch) {
+      const d = checkPos(patch.d, 'Bitte einen Teilkreis-Durchmesser größer als 0 mm eingeben.');
+      if (d == null) return false;
+      nextPatch.d = round(d, 6);
+    }
+    if ('module' in patch) {
+      const m = checkPos(patch.module, 'Bitte einen Modul größer als 0 mm eingeben.');
+      if (m == null) return false;
+      nextPatch.module = round(m, 6);
+    }
     if ('ratio' in patch) {
-      const r = checkPos(patch.ratio, 'Bitte ein Übersetzungsverhältnis größer als 0 eingeben.');
-      if (r == null) return false;
+      const r = parseRatio(patch.ratio);
+      if (!Number.isFinite(r) || r <= 0) {
+        UI.toast('Bitte ein Übersetzungsverhältnis größer als 0 eingeben.', { kind: 'bad' });
+        return false;
+      }
       nextPatch.ratio = round(r, 6);
     }
     const label = opts.label || ('reverse' in nextPatch ? 'Kopplungs-Richtung geändert' : 'name' in nextPatch ? 'Kopplung umbenannt' : 'Kopplung geändert');
@@ -4162,7 +4320,22 @@ const Joints = (() => {
       const c = couplingList(doc).find((x) => x.id === cid);
       if (!c) return false;
       Object.assign(c, nextPatch);
-      if (c.kind === 'belt' && c.mode === 'diameter') {
+      if (c.kind === 'gear') {
+        if (c.mode === 'ratio') {
+          if (!(c.ratio > 0)) c.ratio = c.z1 > 0 && c.z2 > 0 ? round(c.z1 / c.z2, 6) : 0.5;
+        } else {
+          if (!(c.z1 > 0)) c.z1 = 20;
+          if (!(c.z2 > 0)) c.z2 = c.ratio > 0 ? round(c.z1 / c.ratio, 4) : 40;
+        }
+      } else if (c.kind === 'rack') {
+        if (c.mode === 'module') {
+          if (!(c.module > 0)) c.module = 1.5;
+          if (!(c.z1 > 0)) c.z1 = c.d > 0 ? round(c.d / c.module, 4) : 20;
+          c.d = round(c.module * c.z1, 6);
+        } else {
+          if (!(c.d > 0)) c.d = c.module > 0 && c.z1 > 0 ? round(c.module * c.z1, 6) : 20;
+        }
+      } else if (c.kind === 'belt' && c.mode === 'diameter') {
         if (!(c.d1 > 0)) c.d1 = c.z1 > 0 ? c.z1 : 20;
         if (!(c.d2 > 0)) c.d2 = c.z2 > 0 ? c.z2 : 40;
       } else if (c.kind === 'belt') {
@@ -4189,16 +4362,16 @@ const Joints = (() => {
     return ok;
   }
 
-  function startCoupling(defaultKind = 'screw', opts = {}) {
+  function startCoupling(defaultKind = 'gear', opts = {}) {
     stopPick();
     stopPlay();
     const kinJoints = list().filter((j) => !isConstraint(j) && !isLoose(j) && top(j.a) && top(j.b));
-    let kind = isCouplingKind(defaultKind) ? defaultKind : 'screw';
+    let kind = isCouplingKind(defaultKind) ? defaultKind : 'gear';
     const selItemId = App.sel.length === 1 ? App.sel[0] : null;
     const selItemJoint = selItemId ? drivingOf(selItemId) : null;
     const preJ1 = opts.j1 || (selJoint && list().some((x) => x.id === selJoint) ? selJoint : null) || (selItemJoint && !isConstraint(selItemJoint) ? selItemJoint.id : null);
 
-    const wrap = h('div', { id: 'coupling-dialog', 'data-help': kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : 'coupleScrew', style: { display: 'grid', gap: '10px' } });
+    const wrap = h('div', { id: 'coupling-dialog', 'data-help': couplingHelpKey(kind), style: { display: 'grid', gap: '10px' } });
     if (!kinJoints.length) {
       wrap.append(h('div', { class: 'hint-box' }, 'Lege zuerst mindestens ein bewegliches Gelenk an (z. B. Drehen, Schieben oder Zylindrisch), bevor du Bewegungen koppelst.'));
       UI.modal({
@@ -4214,11 +4387,13 @@ const Joints = (() => {
       label: 'Kopplungsart',
       value: kind,
       options: [
+        ['gear', 'Zahnrad – Zahnrad (Drehen → Drehen)'],
+        ['rack', 'Zahnrad – Zahnstange (Drehen → Schieben)'],
         ['screw', 'Schraube (Drehen → Vorschub je Umdrehung)'],
         ['belt', 'Riemen (gleiche Umfangsgeschwindigkeit)'],
         ['linear', 'Linear (Schieben → Schieben im Verhältnis)'],
       ],
-      onChange: (v) => { kind = v; wrap.dataset.help = kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : 'coupleScrew'; refreshForm(); },
+      onChange: (v) => { kind = v; wrap.dataset.help = couplingHelpKey(kind); refreshForm(); },
     });
     const j1SelWrap = UI.selectField({ id: 'cp-j1', label: 'Antrieb (Gelenk 1)', value: preJ1 || '', options: [], onChange: () => { populateJ2(); autoDefaults(); updatePreview(); } });
     const j2SelWrap = UI.selectField({ id: 'cp-j2', label: 'Mitlauf (Gelenk 2)', value: opts.j2 || '', options: [], onChange: () => { autoDefaults(); updatePreview(); } });
@@ -4226,6 +4401,51 @@ const Joints = (() => {
     const j2Sel = j2SelWrap.querySelector('select');
 
     const paramsBox = h('div', { style: { display: 'grid', gap: '8px' } });
+
+    const gearInitMode = opts.mode === 'ratio' || (opts.ratio != null && opts.z1 == null && opts.teeth1 == null) ? 'ratio' : 'teeth';
+    const gearSubBox = h('div', { style: { display: 'grid', gap: '8px' } });
+    const gearModeWrap = UI.selectField({
+      id: 'cp-gear-mode',
+      label: T('joint.gearModeLabel'),
+      value: gearInitMode,
+      options: [
+        ['teeth', T('joint.gearModeTeeth')],
+        ['ratio', T('joint.gearModeRatio')],
+      ],
+      onChange: () => { syncGearFields(); updatePreview(); },
+    });
+    const gearModeSel = gearModeWrap.querySelector('select');
+    const z1Inp = h('input', { id: 'cp-z1', type: 'text', inputmode: 'decimal', value: String(opts.z1 ?? opts.teeth1 ?? 20) });
+    const z2Inp = h('input', { id: 'cp-z2', type: 'text', inputmode: 'decimal', value: String(opts.z2 ?? opts.teeth2 ?? 40) });
+    const gearTeethFields = h('div', { class: 'fields' },
+      h('div', { class: 'field' }, h('label', { for: 'cp-z1' }, 'Zahnrad 1 (Zähne)'), h('div', { class: 'inp' }, z1Inp, h('span', { class: 'unit' }, 'Z'))),
+      h('div', { class: 'field' }, h('label', { for: 'cp-z2' }, 'Zahnrad 2 (Zähne)'), h('div', { class: 'inp' }, z2Inp, h('span', { class: 'unit' }, 'Z')))
+    );
+    const gearRatioInp = h('input', { id: 'cp-gear-ratio', type: 'text', value: String(opts.ratio ?? '1:2') });
+    const gearRatioWrap = h('div', { class: 'field' }, h('label', { for: 'cp-gear-ratio' }, 'Übersetzung (z. B. 1:2 oder 0,5)'), h('div', { class: 'inp' }, gearRatioInp, h('span', { class: 'unit' }, '×')));
+
+    const rackInitMode = opts.mode === 'module' ? 'module' : 'diameter';
+    const rackSubBox = h('div', { style: { display: 'grid', gap: '8px' } });
+    const rackModeWrap = UI.selectField({
+      id: 'cp-rack-mode',
+      label: T('joint.rackModeLabel'),
+      value: rackInitMode,
+      options: [
+        ['diameter', T('joint.rackModeDia')],
+        ['module', T('joint.rackModeMod')],
+      ],
+      onChange: () => { syncRackFields(); updatePreview(); },
+    });
+    const rackModeSel = rackModeWrap.querySelector('select');
+    const rackDInp = h('input', { id: 'cp-rack-d', type: 'text', inputmode: 'decimal', value: String(opts.d ?? 20) });
+    const rackDiaWrap = h('div', { class: 'field' }, h('label', { for: 'cp-rack-d' }, `Teilkreis-Ø (${Units.label()})`), h('div', { class: 'inp' }, rackDInp, h('span', { class: 'unit' }, 'mm')));
+    const rackModInp = h('input', { id: 'cp-rack-mod', type: 'text', inputmode: 'decimal', value: String(opts.module ?? 1.5) });
+    const rackZInp = h('input', { id: 'cp-rack-z', type: 'text', inputmode: 'decimal', value: String(opts.z1 ?? opts.teeth ?? 20) });
+    const rackModFields = h('div', { class: 'fields' },
+      h('div', { class: 'field' }, h('label', { for: 'cp-rack-mod' }, 'Modul (mm)'), h('div', { class: 'inp' }, rackModInp, h('span', { class: 'unit' }, 'mm'))),
+      h('div', { class: 'field' }, h('label', { for: 'cp-rack-z' }, 'Ritzel (Zähne)'), h('div', { class: 'inp' }, rackZInp, h('span', { class: 'unit' }, 'Z')))
+    );
+
     const pitchInp = h('input', { id: 'cp-pitch', type: 'text', inputmode: 'decimal', value: String(opts.pitch ?? 2) });
     const pitchWrap = h('div', { class: 'field' }, h('label', { for: 'cp-pitch' }, T('joint.pitchLabel') + ` (${Units.label()}/U)`), h('div', { class: 'inp' }, pitchInp, h('span', { class: 'unit' }, 'mm/U')));
 
@@ -4259,12 +4479,20 @@ const Joints = (() => {
     const revWrap = h('label', { class: 'check' }, revChk, revTxt);
     const previewEl = h('div', { class: 'hint-box', id: 'cp-preview' });
 
-    for (const inp of [pitchInp, v1Inp, v2Inp, ratioInp]) {
+    for (const inp of [z1Inp, z2Inp, gearRatioInp, rackDInp, rackModInp, rackZInp, pitchInp, v1Inp, v2Inp, ratioInp]) {
       inp.addEventListener('keydown', (e) => e.stopPropagation());
       inp.addEventListener('input', () => updatePreview());
     }
     revChk.addEventListener('change', () => updatePreview());
 
+    const syncGearFields = () => {
+      gearSubBox.innerHTML = '';
+      gearSubBox.append(gearModeSel.value === 'ratio' ? gearRatioWrap : gearTeethFields);
+    };
+    const syncRackFields = () => {
+      rackSubBox.innerHTML = '';
+      rackSubBox.append(rackModeSel.value === 'module' ? rackModFields : rackDiaWrap);
+    };
     const syncBeltUnit = () => {
       const dia = beltModeSel.value === 'diameter';
       v1Lbl.textContent = dia ? 'Rad 1 Ø (mm)' : 'Rad 1 (Zähne)';
@@ -4285,9 +4513,9 @@ const Joints = (() => {
     };
 
     const populateJ1 = () => {
-      const cand1 = kind === 'belt' ? kinJoints.filter((j) => !!rotDofOf(j))
-        : kind === 'linear' ? kinJoints.filter((j) => !!linDofOf(j))
-          : kinJoints.filter((j) => !!rotDofOf(j));
+      const cand1 = kind === 'linear'
+        ? kinJoints.filter((j) => !!linDofOf(j))
+        : kinJoints.filter((j) => !!rotDofOf(j));
       setSelectOpts(j1Sel, cand1.map((j) => [j.id, `${jointLabel(j)} (${isCyl(j) ? 'Zylindrisch' : slide(j) ? 'Schieben' : isPlanar(j) ? 'Eben' : isSlot(j) ? 'Langloch' : 'Drehen'})`]), preJ1);
       populateJ2();
     };
@@ -4301,7 +4529,12 @@ const Joints = (() => {
           if (j1 && j.id === j1.id) continue;
           if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (${slide(j) ? 'Schieben' : isCyl(j) ? 'Zylindrisch' : isSlot(j) ? 'Langloch' : 'Eben'})`]);
         }
-      } else if (kind === 'belt') {
+      } else if (kind === 'rack') {
+        for (const j of kinJoints) {
+          if (j1 && j.id === j1.id) continue;
+          if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (${slide(j) ? 'Schieben' : isCyl(j) ? 'Zylindrisch' : isSlot(j) ? 'Langloch' : 'Eben'})`]);
+        }
+      } else if (kind === 'belt' || kind === 'gear') {
         for (const j of kinJoints) {
           if (j1 && j.id === j1.id) continue;
           if (rotDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (Drehen)`]);
@@ -4312,13 +4545,41 @@ const Joints = (() => {
           if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (Schieben)`]);
         }
       }
-      setSelectOpts(j2Sel, cand2, opts.j2);
+      const pref2 = opts.j2 || (kind === 'rack' && preJ1 && preJ1 !== j1Sel.value ? preJ1 : '');
+      setSelectOpts(j2Sel, cand2, pref2);
     };
 
     const autoDefaults = () => {
-      if (kind !== 'belt' || opts.z1 != null || opts.d1 != null) return;
       const j1 = kinJoints.find((j) => j.id === j1Sel.value);
       const j2 = kinJoints.find((j) => j.id === j2Sel.value);
+      if (kind === 'gear') {
+        if (opts.z1 != null || opts.z2 != null || opts.ratio != null || opts.mode) return;
+        const s1 = autoGearSpec(j1), s2 = autoGearSpec(j2);
+        if (s1 && s2 && s1.teeth > 0 && s2.teeth > 0) {
+          gearModeSel.value = 'teeth';
+          z1Inp.value = String(s1.teeth);
+          z2Inp.value = String(s2.teeth);
+          syncGearFields();
+        }
+        return;
+      }
+      if (kind === 'rack') {
+        if (opts.d != null || opts.module != null || opts.z1 != null || opts.teeth != null || opts.mode) return;
+        const s1 = autoGearSpec(j1);
+        if (s1 && s1.teeth > 0 && s1.module > 0) {
+          rackModeSel.value = 'module';
+          rackModInp.value = String(s1.module);
+          rackZInp.value = String(s1.teeth);
+          rackDInp.value = String(s1.d);
+          syncRackFields();
+        } else if (s1 && s1.d > 0) {
+          rackModeSel.value = 'diameter';
+          rackDInp.value = String(s1.d);
+          syncRackFields();
+        }
+        return;
+      }
+      if (kind !== 'belt' || opts.z1 != null || opts.d1 != null) return;
       const s1 = autoBeltSpec(j1), s2 = autoBeltSpec(j2);
       if (s1 && s2 && s1.mode === s2.mode) {
         beltModeSel.value = s1.mode;
@@ -4333,17 +4594,43 @@ const Joints = (() => {
       const j2 = kinJoints.find((j) => j.id === j2Sel.value);
       const btn = document.getElementById('cp-submit');
       if (!j1 || !j2) {
-        previewEl.textContent = kind === 'screw'
-          ? 'Es fehlt noch ein passendes Gelenk mit Dreh- oder Schiebebewegung.'
-          : kind === 'belt'
-            ? 'Für eine Riemen-Kopplung werden zwei verschiedene Drehgelenke benötigt.'
-            : 'Für eine lineare Kopplung werden zwei verschiedene Schiebegelenke benötigt.';
+        previewEl.textContent = kind === 'gear'
+          ? 'Für eine Zahnrad-Kopplung werden zwei verschiedene Drehgelenke benötigt.'
+          : kind === 'rack'
+            ? 'Für eine Zahnstangen-Kopplung werden ein Drehgelenk (Ritzel) und ein Schiebegelenk (Zahnstange) benötigt.'
+            : kind === 'screw'
+              ? 'Es fehlt noch ein passendes Gelenk mit Dreh- oder Schiebebewegung.'
+              : kind === 'belt'
+                ? 'Für eine Riemen-Kopplung werden zwei verschiedene Drehgelenke benötigt.'
+                : 'Für eine lineare Kopplung werden zwei verschiedene Schiebegelenke benötigt.';
         if (btn) btn.disabled = true;
         return;
       }
       if (btn) btn.disabled = false;
       const rev = revChk.checked;
-      if (kind === 'screw') {
+      if (kind === 'gear') {
+        if (gearModeSel.value === 'ratio') {
+          const r = parseRatio(gearRatioInp.value);
+          previewEl.textContent = Number.isFinite(r) && r > 0
+            ? `Zahnrad 2 dreht mit ${fmt(round(r * 100, 1))} % (${fmt(r)}×) von Zahnrad 1${rev ? ' (gegenläufig)' : ''}.`
+            : 'Bitte ein gültiges Verhältnis > 0 eingeben (z. B. 1:2 oder 0,5).';
+        } else {
+          const a = parseNum(z1Inp.value), b = parseNum(z2Inp.value);
+          previewEl.textContent = Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0
+            ? `Zahnrad 2 dreht mit ${fmt(round((a / b) * 100, 1))} % (${fmt(a)} / ${fmt(b)}) von Zahnrad 1${rev ? ' (gegenläufig)' : ''}.`
+            : 'Bitte Zähnezahlen > 0 für beide Zahnräder eingeben.';
+        }
+      } else if (kind === 'rack') {
+        const d = rackModeSel.value === 'module' ? parseNum(rackModInp.value) * parseNum(rackZInp.value) : parseNum(rackDInp.value);
+        if (Number.isFinite(d) && d > 0) {
+          const s90 = (Math.PI * d * 90) / 360;
+          previewEl.textContent = `Drehen um 90° (Ø ${fmt(d)} mm) → Zahnstange bewegt sich um ${rev ? '−' : '+'}${fmt(s90)} mm (π·d·Winkel/360).`;
+        } else {
+          previewEl.textContent = rackModeSel.value === 'module'
+            ? 'Bitte Modul und Zähnezahl > 0 eingeben.'
+            : 'Bitte einen Teilkreis-Durchmesser > 0 mm eingeben.';
+        }
+      } else if (kind === 'screw') {
         const p = parseNum(pitchInp.value);
         previewEl.textContent = Number.isFinite(p) && p > 0
           ? `1 Umdrehung (360°) → ${rev ? '−' : '+'}${fmt(p)} mm Vorschub (${rev ? 'Linksgewinde' : 'Rechtsgewinde'}).`
@@ -4366,7 +4653,15 @@ const Joints = (() => {
 
     const refreshForm = () => {
       paramsBox.innerHTML = '';
-      if (kind === 'screw') {
+      if (kind === 'gear') {
+        revTxt.textContent = T('joint.gearRevLabel');
+        syncGearFields();
+        paramsBox.append(gearModeWrap, gearSubBox);
+      } else if (kind === 'rack') {
+        revTxt.textContent = T('joint.rackRevLabel');
+        syncRackFields();
+        paramsBox.append(rackModeWrap, rackSubBox);
+      } else if (kind === 'screw') {
         revTxt.textContent = T('joint.screwRevLabel');
         paramsBox.append(pitchWrap);
       } else if (kind === 'belt') {
@@ -4397,7 +4692,15 @@ const Joints = (() => {
           run: () => {
             const j1 = j1Sel.value, j2 = j2Sel.value;
             const copts = { reverse: revChk.checked };
-            if (kind === 'screw') copts.pitch = pitchInp.value;
+            if (kind === 'gear') {
+              copts.mode = gearModeSel.value;
+              if (copts.mode === 'ratio') copts.ratio = gearRatioInp.value;
+              else { copts.z1 = z1Inp.value; copts.z2 = z2Inp.value; }
+            } else if (kind === 'rack') {
+              copts.mode = rackModeSel.value;
+              if (copts.mode === 'module') { copts.module = rackModInp.value; copts.z1 = rackZInp.value; }
+              else copts.d = rackDInp.value;
+            } else if (kind === 'screw') copts.pitch = pitchInp.value;
             else if (kind === 'belt') {
               copts.mode = beltModeSel.value;
               if (copts.mode === 'diameter') { copts.d1 = v1Inp.value; copts.d2 = v2Inp.value; }
@@ -4416,6 +4719,8 @@ const Joints = (() => {
     updatePreview();
     return true;
   }
+  function startGear(opts = {}) { return startCoupling('gear', opts); }
+  function startRack(opts = {}) { return startCoupling('rack', opts); }
   function startScrew(opts = {}) { return startCoupling('screw', opts); }
   function startBelt(opts = {}) { return startCoupling('belt', opts); }
   function startLinear(opts = {}) { return startCoupling('linear', opts); }
@@ -5491,10 +5796,12 @@ const Joints = (() => {
     const head = h('div', { class: 'section-h', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, h('span', null, T('joint.treeHeading')));
     const kinCount = js.filter((j) => !isConstraint(j) && !isLoose(j)).length;
     if (kinCount > 0) {
-      const addCBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-add-coupling', 'data-help': 'coupleScrew' }, T('joint.addCouplingBtn'));
+      const addCBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-add-coupling', 'data-help': 'coupleGear' }, T('joint.addCouplingBtn'));
       addCBtn.onclick = (e) => {
         e.stopPropagation();
         UI.menu(addCBtn, [
+          { icon: 'gear', label: T('ctx.coupleGear'), help: 'coupleGear', run: () => startGear() },
+          { icon: 'moveStep', label: T('ctx.coupleRack'), help: 'coupleRack', run: () => startRack() },
           { icon: 'helix', label: T('ctx.coupleScrew'), help: 'coupleScrew', run: () => startScrew() },
           { icon: 'link', label: T('ctx.coupleBelt'), help: 'coupleBelt', run: () => startBelt() },
           { icon: 'moveStep', label: T('ctx.coupleLinear'), help: 'coupleLinear', run: () => startLinear() },
@@ -5535,7 +5842,7 @@ const Joints = (() => {
     }
     for (const c of cs) {
       const row = h('div', { class: 'tree-row coupling-row pro' + (c.id === selJoint ? ' sel' : ''), 'data-coupling': c.id });
-      const icName = c.kind === 'screw' ? 'helix' : c.kind === 'belt' ? 'link' : 'moveStep';
+      const icName = c.kind === 'gear' ? 'gear' : c.kind === 'screw' ? 'helix' : c.kind === 'belt' ? 'link' : 'moveStep';
       const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(icName);
       const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
       del.innerHTML = icon('trash');
@@ -5561,7 +5868,7 @@ const Joints = (() => {
     const j1 = list().find((x) => x.id === c.j1);
     const j2 = list().find((x) => x.id === c.j2);
     if (!j1 || !j2) return false;
-    const helpKey = c.kind === 'belt' ? 'coupleBelt' : c.kind === 'linear' ? 'coupleLinear' : 'coupleScrew';
+    const helpKey = couplingHelpKey(c.kind);
     const w = h('div', { class: 'props', id: 'coupling-edit-panel', 'data-help': helpKey });
     const nm = h('input', { id: 'cp-edit-name', value: couplingLabel(c), 'aria-label': T('common.name') });
     nm.addEventListener('change', () => {
@@ -5582,15 +5889,65 @@ const Joints = (() => {
     links.append(mkJRow('Antrieb', j1, c.dof1), mkJRow('Mitlauf', j2, c.dof2));
     w.append(links);
 
-    const hintTxt = c.kind === 'screw'
-      ? `Drehen um 360° an <b>${esc(jointLabel(j1))}</b> verschiebt um <b class="mono">${c.reverse ? '−' : '+'}${esc(Units.fmtLenU(c.pitch, 2))}</b>.`
-      : c.kind === 'belt'
-        ? `<b>${esc(jointLabel(j2))}</b> dreht mit <b class="mono">${esc(fmt(Math.abs(couplingGain(c)) * 100))} %</b> der Drehzahl von <b>${esc(jointLabel(j1))}</b>${c.reverse ? ' (gegenläufig)' : ''}.`
-        : `<b>${esc(jointLabel(j2))}</b> bewegt sich mit Faktor <b class="mono">${c.reverse ? '−' : '+'}${esc(fmt(c.ratio))}×</b> zu <b>${esc(jointLabel(j1))}</b>.`;
+    const hintTxt = c.kind === 'gear'
+      ? `<b>${esc(jointLabel(j2))}</b> dreht mit <b class="mono">${esc(fmt(Math.abs(couplingGain(c)) * 100))} %</b> der Drehzahl von <b>${esc(jointLabel(j1))}</b>${c.reverse ? ' (gegenläufig)' : ''}.`
+      : c.kind === 'rack'
+        ? `Drehen um 90° an <b>${esc(jointLabel(j1))}</b> (Ø ${esc(fmt(rackPitchDia(c)))} mm) schiebt <b>${esc(jointLabel(j2))}</b> um <b class="mono">${c.reverse ? '−' : '+'}${esc(Units.fmtLenU(Math.abs(couplingGain(c)) * 90, 2))}</b>.`
+        : c.kind === 'screw'
+          ? `Drehen um 360° an <b>${esc(jointLabel(j1))}</b> verschiebt um <b class="mono">${c.reverse ? '−' : '+'}${esc(Units.fmtLenU(c.pitch, 2))}</b>.`
+          : c.kind === 'belt'
+            ? `<b>${esc(jointLabel(j2))}</b> dreht mit <b class="mono">${esc(fmt(Math.abs(couplingGain(c)) * 100))} %</b> der Drehzahl von <b>${esc(jointLabel(j1))}</b>${c.reverse ? ' (gegenläufig)' : ''}.`
+            : `<b>${esc(jointLabel(j2))}</b> bewegt sich mit Faktor <b class="mono">${c.reverse ? '−' : '+'}${esc(fmt(c.ratio))}×</b> zu <b>${esc(jointLabel(j1))}</b>.`;
     w.append(h('div', { class: 'hint-box', id: 'cp-edit-readout', html: hintTxt }));
 
     const fl = h('div', { class: 'fields' });
-    if (c.kind === 'screw') {
+    if (c.kind === 'gear') {
+      w.append(UI.selectField({
+        id: 'cp-edit-mode', label: T('joint.gearModeLabel'), value: c.mode === 'ratio' ? 'ratio' : 'teeth',
+        options: [['teeth', T('joint.gearModeTeeth')], ['ratio', T('joint.gearModeRatio')]],
+        onChange: (v) => updateCoupling(c.id, { mode: v }),
+      }));
+      if (c.mode === 'ratio') {
+        fl.append(UI.numField({
+          id: 'cp-edit-ratio', label: 'Übersetzung', value: c.ratio ?? 0.5, unit: '×', len: false, expr: false, min: 0.001,
+          onCommit: (v) => updateCoupling(c.id, { ratio: v }, { merge: 'cp:' + c.id }),
+        }));
+      } else {
+        fl.append(
+          UI.numField({
+            id: 'cp-edit-z1', label: 'Zahnrad 1 (Zähne)', value: c.z1 ?? 20, unit: 'Z', len: false, expr: false, min: 0.001,
+            onCommit: (v) => updateCoupling(c.id, { z1: v }, { merge: 'cp:' + c.id }),
+          }),
+          UI.numField({
+            id: 'cp-edit-z2', label: 'Zahnrad 2 (Zähne)', value: c.z2 ?? 40, unit: 'Z', len: false, expr: false, min: 0.001,
+            onCommit: (v) => updateCoupling(c.id, { z2: v }, { merge: 'cp:' + c.id }),
+          })
+        );
+      }
+    } else if (c.kind === 'rack') {
+      w.append(UI.selectField({
+        id: 'cp-edit-mode', label: T('joint.rackModeLabel'), value: c.mode === 'module' ? 'module' : 'diameter',
+        options: [['diameter', T('joint.rackModeDia')], ['module', T('joint.rackModeMod')]],
+        onChange: (v) => updateCoupling(c.id, { mode: v }),
+      }));
+      if (c.mode === 'module') {
+        fl.append(
+          UI.numField({
+            id: 'cp-edit-mod', label: 'Modul', value: c.module ?? 1.5, unit: 'mm', len: false, expr: false, min: 0.001,
+            onCommit: (v) => updateCoupling(c.id, { module: v }, { merge: 'cp:' + c.id }),
+          }),
+          UI.numField({
+            id: 'cp-edit-z1', label: 'Ritzel (Zähne)', value: c.z1 ?? 20, unit: 'Z', len: false, expr: false, min: 0.001,
+            onCommit: (v) => updateCoupling(c.id, { z1: v }, { merge: 'cp:' + c.id }),
+          })
+        );
+      } else {
+        fl.append(UI.numField({
+          id: 'cp-edit-d', label: 'Teilkreis-Ø', value: c.d ?? 20, unit: 'mm', len: true, expr: false, min: 0.001,
+          onCommit: (v) => updateCoupling(c.id, { d: v }, { merge: 'cp:' + c.id }),
+        }));
+      }
+    } else if (c.kind === 'screw') {
       fl.append(UI.numField({
         id: 'cp-edit-pitch', label: T('joint.pitchLabel') + ' (mm/U)', value: c.pitch ?? 2, unit: 'mm/U', len: false, expr: false, min: 0.001,
         onCommit: (v) => updateCoupling(c.id, { pitch: v }, { merge: 'cp:' + c.id }),
@@ -5620,13 +5977,17 @@ const Joints = (() => {
     }
     w.append(fl);
 
-    const revLbl = c.kind === 'screw' ? T('joint.screwRevLabel') : c.kind === 'belt' ? T('joint.beltRevLabel') : T('joint.linearRevLabel');
+    const revLbl = c.kind === 'gear' ? T('joint.gearRevLabel')
+      : c.kind === 'rack' ? T('joint.rackRevLabel')
+        : c.kind === 'screw' ? T('joint.screwRevLabel')
+          : c.kind === 'belt' ? T('joint.beltRevLabel') : T('joint.linearRevLabel');
     const revChk = h('input', { type: 'checkbox', id: 'cp-edit-reverse', checked: !!c.reverse });
     revChk.onchange = () => updateCoupling(c.id, { reverse: revChk.checked });
     w.append(h('label', { class: 'check' }, revChk, revLbl));
 
     const pb = h('button', { type: 'button', class: 'btn', id: 'cp-play' });
-    pb.innerHTML = icon(anim && anim.jid === j1.id ? 'close' : 'play') + (anim && anim.jid === j1.id ? 'Stopp' : 'Bewegung abspielen');
+    const isPlaying = !!(anim && (anim.jid === c.id || anim.jid === j1.id));
+    pb.innerHTML = icon(isPlaying ? 'close' : 'play') + (isPlaying ? 'Stopp' : 'Bewegung abspielen');
     pb.onclick = () => play(c.id, pb);
     const del = h('button', { type: 'button', class: 'btn danger', id: 'cp-del' });
     del.innerHTML = icon('ungroup') + esc(T('joint.coupleRemoveBtn'));
@@ -5689,8 +6050,8 @@ const Joints = (() => {
     }
     const kinJ = js.find((j) => !isConstraint(j) && !isLoose(j));
     if (kinJ) {
-      const addBtn = h('button', { type: 'button', class: 'btn small pro', id: 'jt-add-coupling', 'data-help': 'coupleScrew' }, T('joint.addCouplingBtn'));
-      addBtn.onclick = () => startCoupling(isCyl(kinJ) ? 'screw' : slide(kinJ) ? 'linear' : 'belt', { j1: kinJ.id });
+      const addBtn = h('button', { type: 'button', class: 'btn small pro', id: 'jt-add-coupling', 'data-help': 'coupleGear' }, T('joint.addCouplingBtn'));
+      addBtn.onclick = () => startCoupling(isCyl(kinJ) ? 'screw' : slide(kinJ) ? 'rack' : 'gear', { j1: kinJ.id });
       sec.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, addBtn));
     }
     return sec;
@@ -5738,6 +6099,8 @@ const Joints = (() => {
     startAngle,
     startCenter,
     startCoupling,
+    startGear,
+    startRack,
     startScrew,
     startBelt,
     startLinear,
@@ -5766,6 +6129,8 @@ const Joints = (() => {
     addTangent,
     addDistance,
     addCoupling,
+    addGear,
+    addRack,
     addScrew,
     addBelt,
     addLinear,

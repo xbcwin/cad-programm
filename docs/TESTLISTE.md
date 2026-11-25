@@ -2664,6 +2664,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert beide gekoppelten Teile live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-screw`, `couple-belt`, `couple-linear`) und Hilfetexte (`coupleScrew`, `coupleBelt`, `coupleLinear`) laufen fehlerfrei (`t_a152_kopplungen_schraube_riemen_linear`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus ein zylindrisches Bolzen-Gelenk mit Steigung `2 mm` sowie zwei Zahnräder (`20` und `40` Zähne) per Kontextleiste → „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild mit der Maus ziehen und das gleichzeitige Mitdrehen bzw. Verschieben optisch prüfen.
 
+## Kopplungen Zahnrad und Zahnstange (Auto [A-151], BG-14)
+
+- [x] **Zahnrad – Zahnrad 1:2 (Zähnezahlen & Verhältnis)**: Zwei Drehgelenke an Zahnrädern (`20` / `40` Zähne, automatisch aus `#coupling-dialog` übernommen) drehen Zahnrad 2 bei `90°` an Zahnrad 1 exakt auf `+45,0°` (auch im 3D-Raum geprüft); Gegenlauf kehrt auf `-45,0°` um, im Verhältnis-Modus (`0,5` und `'1:2'`) wirkt die Kopplung bidirektional (`30° → 60°`) (`t_a151_kopplungen_zahnrad_zahnstange`).
+- [x] **Zahnrad – Zahnstange (`π·d·Winkel/360`)**: Ritzel (`20` Zähne, Modul `1,5` → Teilkreis-Ø `30 mm`) und Schieber werden über `#coupling-dialog` automatisch erkannt; bei `90°` verschiebt sich die Zahnstange um `π·30·90/360 ≈ 23,5619 mm`, im Durchmesser-Modus (`d = 20 mm`) bei `180°` um `10π ≈ 31,4159 mm` (Gegenrichtung `-10π`) sowie rückwärts vom Weg zurück auf `90,0°` (`t_a151_kopplungen_zahnrad_zahnstange`).
+- [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert Ritzel und Zahnstange live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-gear`, `couple-rack`) und Hilfetexte (`coupleGear`, `coupleRack`) laufen ohne JS-Fehler (`t_a151_kopplungen_zahnrad_zahnstange`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus das Beispiel „Zahnrad-Paar“ mit zwei Drehgelenken sowie ein Ritzel mit Zahnstange per „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild ziehen und das gleichzeitige Mitdrehen bzw. Verschieben prüfen.
+
 ## Fehler melden
 
 ```

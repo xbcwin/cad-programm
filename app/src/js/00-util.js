@@ -2489,6 +2489,16 @@ const HELP = {
   "tip": "Lineare Kopplung: Zwei Schiebebewegungen im festen Verhältnis koppeln (Profi)",
   "hilfe": "Verbindet zwei Schiebegelenke (oder Schubrichtungen) so, dass sich das zweite Teil immer im eingestellten Verhältnis mitbewegt – zum Beispiel 1:1 synchron, 2:1 doppelt so weit oder gegenläufig bei umgekehrter Richtung.",
   "tipp": "Die Kopplung wirkt in beide Richtungen: Egal welches der beiden Teile du schiebst oder ziehst, das andere folgt sofort."
+ },
+ "coupleGear": {
+  "tip": "Zahnrad-Kopplung: Zwei Drehgelenke über Zähnezahl oder Verhältnis koppeln (Profi)",
+  "hilfe": "Verbindet zwei Drehgelenke wie ein Zahnradpaar. Aus den Zähnezahlen (z. B. 20 : 40) oder einem eigenen Verhältnis (z. B. 1:2) dreht sich das zweite Zahnrad im passenden Verhältnis mit – und zwar in beide Richtungen.",
+  "tipp": "Wenn beide Teile Zahnräder aus der Bibliothek sind, übernimmt Tracery die Zähnezahlen automatisch."
+ },
+ "coupleRack": {
+  "tip": "Zahnstangen-Kopplung: Drehen eines Ritzels schiebt die Zahnstange um π · d · Winkel / 360 (Profi)",
+  "hilfe": "Verbindet ein Drehgelenk (Ritzel) mit einem Schiebegelenk (Zahnstange). Aus dem Teilkreis-Durchmesser d (oder aus Modul × Zähnezahl) schiebt jede Drehung die Zahnstange genau um den abgerollten Umfang π · d · Winkel / 360 weiter.",
+  "tipp": "Auch Ziehen an der Zahnstange dreht das Ritzel sofort im passenden Winkel zurück."
  }
 };
 

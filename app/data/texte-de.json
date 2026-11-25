@@ -3761,5 +3761,17 @@
   "joint.beltModeDia": "Durchmesser (Ø 1 : Ø 2)",
   "joint.beltRevLabel": "Gekreuzter Riemen (Gegenrichtung)",
   "joint.linearRatioLabel": "Verhältnis",
-  "joint.linearRevLabel": "Gegenläufig (Richtung umkehren)"
+  "joint.linearRevLabel": "Gegenläufig (Richtung umkehren)",
+  "ctx.coupleGear": "Kopplung: Zahnrad – Zahnrad",
+  "ctx.coupleRack": "Kopplung: Zahnrad – Zahnstange",
+  "joint.gearKind": "Zahnrad",
+  "joint.rackKind": "Zahnstange",
+  "joint.gearModeLabel": "Übersetzung nach",
+  "joint.gearModeTeeth": "Zähnezahl (Rad 1 : Rad 2)",
+  "joint.gearModeRatio": "Verhältnis (z. B. 1:2 oder 0,5)",
+  "joint.gearRevLabel": "Gegenläufig (Außenverzahnung / Richtung umkehren)",
+  "joint.rackModeLabel": "Wälzkreis nach",
+  "joint.rackModeDia": "Teilkreis-Durchmesser (mm)",
+  "joint.rackModeMod": "Modul & Zähnezahl (Zahnrad)",
+  "joint.rackRevLabel": "Richtung umkehren (−)"
 }
