@@ -234,6 +234,7 @@ const Commands = (() => {
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
     add('move-step', 'Verschieben/Drehen als Schritt', 'moveStep', 'verschieben drehen kopieren schritt transform versetzen bewegen lage verlauf', () => Features.transform(), { group: 'Bearbeiten' });
     add('scale-body', 'Körper skalieren (als Schritt)', 'scaleBody', 'skalieren groesser kleiner faktor achse strecken stauchen verlauf', () => Features.scale(), { group: 'Bearbeiten' });
+    add('deform-body', 'Körper verformen (Biegen, Verdrehen, Verjüngen)', 'deform', 'verformen biegen verdrehen verjuengen verjüngen bogen torsion konisch schritt profi', () => Features.deform(), { group: 'Bearbeiten' });
     add('delete-body', 'Körper als Schritt löschen', 'deleteBody', 'koerper loeschen entfernen schritt verlauf unterdruecken rueckgaengig', () => Features.deleteBody(), { group: 'Bearbeiten' });
     add('thicken-face', 'Fläche aufdicken (als Schritt)', 'thicken', 'aufdicken flaeche platte dicke schale wand aussen innen mittig verlauf', () => { const f = Actions.selectedFace(); if (f) Features.thicken(f); else UI.toast('Klick zuerst eine Fläche an, die aufgedickt werden soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('bool-sub', 'Abziehen (Boolesch)', 'boolSubtract', 'boolesch abziehen differenz', () => Features.boolean('subtract'), { group: 'Bearbeiten' });
@@ -247,6 +248,8 @@ const Commands = (() => {
     add('web', 'Steg-Netz aus Skizze (viele Rippen)', 'web', 'steg stegnetz steg-netz rippen rippennetz kreuz gitter schale versteifung skizze', () => Features.startWeb(), { group: 'Bearbeiten' });
     add('wrap-cyl', 'Um Zylinder wickeln (Prägung oder Linie)', 'wrap', 'wickeln zylinder prägen prägung erhaben vertieft gravieren linie kurve mantel abwickeln', () => Features.startWrap(), { group: 'Bearbeiten' });
     add('emboss', 'Prägen auf Fläche (Text / Logo)', 'emboss', 'praegen prägen text logo gravur gravieren erhaben vertieft zylinder kugel flaeche gewölbt emboss deboss', () => { const f = Actions.selectedFace(); if (f) Features.startEmboss(f); else UI.toast('Klick zuerst eine Fläche an (z. B. einen Zylindermantel oder eine Kugel).', { icon: 'info' }); }, { group: 'Bearbeiten' });
+    add('split-face', 'Fläche teilen (Kurve auf Fläche projizieren)', 'splitFace', 'flaeche fläche teilen projizieren kurve kreis linie trennen farbe zylinder kugel kp-35', () => Features.startSplitFace(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('dome', 'Kuppel auf ebener Fläche', 'dome', 'kuppel wölbung dom haube rundung flaeche höhe höhe kugelkappe kp-36', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'PLANE') Features.dome(f); else Features.startDome(); }, { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('reffix', 'Kaputten Bezug neu wählen', 'warn', 'kaputt bezug neu wählen kante fläche warnung gelb rundung fase skizze', () => {
       const selIssue = App.sel.length ? RefFix.issuesOf(App.sel[0])[0] : null;
       const iss = selIssue || RefFix.allIssues()[0];

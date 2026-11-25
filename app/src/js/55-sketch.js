@@ -251,6 +251,11 @@ const Sketch = (() => {
     const W = tid ? Model.worldMatrix(App.doc, tid) : new THREE.Matrix4();
     begin({ plane: deepClone(plane), W, ents: [], refs: [], ctx: { mode: 'new', targetId: tid, embossMode: true, embossFace: opts.faceSig || null, embossOpt: opts } });
   }
+  function startSplitFace(face, plane, opts = {}) {
+    const tid = opts.targetId || (face && face.id) || null;
+    const W = tid ? Model.worldMatrix(App.doc, tid) : new THREE.Matrix4();
+    begin({ plane: deepClone(plane), W, ents: [], refs: [], ctx: { mode: 'new', targetId: tid, splitFaceMode: true, splitFaceSig: opts.faceSig || null, splitFaceOpt: opts } });
+  }
   function editItem(id) {
     const f = Model.find(App.doc, id);
     if (f && f.item.kind === 'sketch3d') { edit3d(id); return; }
@@ -258,7 +263,7 @@ const Sketch = (() => {
     const W = Model.worldMatrix(App.doc, id);
     const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
     begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), blockInsts: deepClone(f.item.p.sketch.blockInsts || []), guides: deepClone(f.item.p.sketch.guides || []), gridMode: f.item.p.sketch.gridMode || 'rect', polar: f.item.p.sketch.polar ? deepClone(f.item.p.sketch.polar) : null, bg: f.item.p.sketch.bg, locked: !!f.item.p.sketch.locked, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
-    if (f.item.kind === 'group' || f.item.kind === 'rib' || f.item.kind === 'web' || f.item.kind === 'wrap' || f.item.kind === 'emboss') return;   // Muster entlang Kurve, Rippe, Steg-Netz, Wickeln & Prägen: Zielkörper bleibt sichtbar
+    if (f.item.kind === 'group' || f.item.kind === 'rib' || f.item.kind === 'web' || f.item.kind === 'wrap' || f.item.kind === 'emboss' || f.item.kind === 'splitFace') return;   // Muster entlang Kurve, Rippe, Steg-Netz, Wickeln, Prägen & Fläche teilen: Zielkörper bleibt sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id);
@@ -400,7 +405,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode || init.ctx.webMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, icPick: null, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, blockInsts: Array.isArray(init.blockInsts) ? deepClone(init.blockInsts) : [], blocks0: App.doc && Array.isArray(App.doc.blocks) ? deepClone(App.doc.blocks) : [], selBlockInst: null, blockActive: (App.doc && Array.isArray(App.doc.blocks) && App.doc.blocks[0]) ? App.doc.blocks[0].id : null, blockEdit: null, blockRot: 0, blockLibOpen: false, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : init.ctx.splitFaceMode ? 'circle' : (init.ctx.mode === 'patpath' || init.ctx.ribMode || init.ctx.webMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, icPick: null, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, blockInsts: Array.isArray(init.blockInsts) ? deepClone(init.blockInsts) : [], blocks0: App.doc && Array.isArray(App.doc.blocks) ? deepClone(App.doc.blocks) : [], selBlockInst: null, blockActive: (App.doc && Array.isArray(App.doc.blocks) && App.doc.blocks[0]) ? App.doc.blocks[0].id : null, blockEdit: null, blockRot: 0, blockLibOpen: false, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -7967,6 +7972,11 @@ const Sketch = (() => {
       extrudeStep({ dist: 1, dir: 'normal', emboss: true });
       return;
     }
+    if (S.ctx.splitFaceMode) {
+      if (!regs.length && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneSplitFaceNeed'), { kind: 'bad', icon: 'info' }); return; }
+      extrudeStep({ dist: 1, dir: 'normal', splitFace: true, openOnly: !regs.length });
+      return;
+    }
     const hasWeb = SK.webPaths && SK.webPaths(S.ents).length;
     if (!regs.length && (SK.chains(S.ents).length || hasWeb)) {
       const onlyWeb = !SK.chains(S.ents).length;
@@ -8019,9 +8029,10 @@ const Sketch = (() => {
     const useWrap = !!opts.wrap && !!wrapTarget;
     const wrapMode = openOnly ? 'line' : (opts.wrapMode || 'emboss');
     const useEmboss = !!opts.emboss;
+    const useSplitFace = !!opts.splitFace;
     const revLine = S.ents.find((x) => x.type === 'line' && x.revAxis) || null;
-    const autoRev = !!revLine && !openOnly && !opts.fromPushPull && !useRib && !useWeb && !useWrap && !useEmboss;
-    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: autoRev, sweep: false, sweepShape: 'circle', sweepD: 6, sweepW: 6, sweepH: 4, sweepWall: 0, sweepTwist: 0, sweepProfId: null, sweepOp: 'new', sweepTarget: ribTarget, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, web: useWeb, webTarget: ribTarget, webThickness: 2, webDepth: 0, webDraft: 0, webExtend: true, webFlip: false, wrap: useWrap, wrapTarget, wrapFace, wrapMode, wrapDepth: 2, wrapAngle: 0, wrapShiftY: 0, wrapRot: 0, wrapFlip: false, emboss: useEmboss, embossTarget: S.ctx.embossMode ? S.ctx.targetId : (ctxTop ? ctxTop.id : null), embossFace: S.ctx.embossFace ? deepClone(S.ctx.embossFace) : null, embossHeight: (S.ctx.embossOpt && S.ctx.embossOpt.height) || 1, embossMode: (S.ctx.embossOpt && S.ctx.embossOpt.mode === 'deboss') ? 'deboss' : 'emboss', embossFlip: !!(S.ctx.embossOpt && S.ctx.embossOpt.flip), openOnly, thin: openOnly ? (!useRib && !useWeb && !useWrap) : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: revLine ? 'line' : 'y', axisLine: revLine ? revLine.id : null, angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    const autoRev = !!revLine && !openOnly && !opts.fromPushPull && !useRib && !useWeb && !useWrap && !useEmboss && !useSplitFace;
+    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: autoRev, sweep: false, sweepShape: 'circle', sweepD: 6, sweepW: 6, sweepH: 4, sweepWall: 0, sweepTwist: 0, sweepProfId: null, sweepOp: 'new', sweepTarget: ribTarget, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, web: useWeb, webTarget: ribTarget, webThickness: 2, webDepth: 0, webDraft: 0, webExtend: true, webFlip: false, wrap: useWrap, wrapTarget, wrapFace, wrapMode, wrapDepth: 2, wrapAngle: 0, wrapShiftY: 0, wrapRot: 0, wrapFlip: false, emboss: useEmboss, embossTarget: S.ctx.embossMode ? S.ctx.targetId : (ctxTop ? ctxTop.id : null), embossFace: S.ctx.embossFace ? deepClone(S.ctx.embossFace) : null, embossHeight: (S.ctx.embossOpt && S.ctx.embossOpt.height) || 1, embossMode: (S.ctx.embossOpt && S.ctx.embossOpt.mode === 'deboss') ? 'deboss' : 'emboss', embossFlip: !!(S.ctx.embossOpt && S.ctx.embossOpt.flip), splitFace: useSplitFace, splitFaceTarget: S.ctx.splitFaceMode ? S.ctx.targetId : (ctxTop ? ctxTop.id : null), splitFaceSig: S.ctx.splitFaceSig ? deepClone(S.ctx.splitFaceSig) : null, splitFaceSide: (S.ctx.splitFaceOpt && S.ctx.splitFaceOpt.side) || 'front', openOnly, thin: openOnly ? (!useRib && !useWeb && !useWrap && !useSplitFace) : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: revLine ? 'line' : 'y', axisLine: revLine ? revLine.id : null, angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
@@ -8045,36 +8056,44 @@ const Sketch = (() => {
     const st = S.step; stepBox.innerHTML = '';
     const ribTargets = typeof Features !== 'undefined' && Features.ribTargets ? Features.ribTargets() : [];
     const cylTargets = typeof Features !== 'undefined' && Features.cylTargets ? Features.cylTargets() : [];
-    UI.hint(T(st.pickingFace ? 'sk.step.pickFaceHint' : st.wrap ? 'sk.step.wrapHint' : st.emboss ? 'sk.step.embossHint' : st.web ? 'sk.step.webHint' : st.rib ? 'sk.step.ribHint' : st.sweep ? 'sk.step.sweepHint' : st.revolve ? 'sk.step.revHint' : st.thin ? 'sk.step.thinHint' : 'sk.step.extHint'));
-    stepBox.append(h('h3', null, T(st.wrap ? 'sk.step.titleWrap' : st.emboss ? 'kind.emboss' : st.web ? 'kind.web' : st.rib ? 'kind.rib' : st.sweep ? 'kind.sweep' : st.revolve ? 'sk.step.titleRevolve' : st.dir === 'reverse' ? 'sk.step.titlePush' : st.thin ? 'sk.step.titleThin' : 'sk.step.titleExtrude')));
+    UI.hint(T(st.pickingFace ? 'sk.step.pickFaceHint' : st.wrap ? 'sk.step.wrapHint' : st.emboss ? 'sk.step.embossHint' : st.splitFace ? 'sk.step.splitFaceHint' : st.web ? 'sk.step.webHint' : st.rib ? 'sk.step.ribHint' : st.sweep ? 'sk.step.sweepHint' : st.revolve ? 'sk.step.revHint' : st.thin ? 'sk.step.thinHint' : 'sk.step.extHint'));
+    stepBox.append(h('h3', null, T(st.wrap ? 'sk.step.titleWrap' : st.emboss ? 'kind.emboss' : st.splitFace ? 'kind.splitFace' : st.web ? 'kind.web' : st.rib ? 'kind.rib' : st.sweep ? 'kind.sweep' : st.revolve ? 'sk.step.titleRevolve' : st.dir === 'reverse' ? 'sk.step.titlePush' : st.thin ? 'sk.step.titleThin' : 'sk.step.titleExtrude')));
     const seg = h('div', { class: 'role-switch' });
     if (st.openOnly) {
       const hasChain = SK.chains(S.ents).length > 0;
-      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib && !st.web && !st.wrap ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + esc(T('sk.step.titleThin')); a.onclick = () => { st.sweep = false; st.rib = false; st.web = false; st.wrap = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib && !st.web && !st.wrap ? 'true' : 'false' }); b.innerHTML = icon('sweep') + esc(T('kind.sweep')); b.onclick = () => { st.sweep = true; st.rib = false; st.web = false; st.wrap = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + esc(T('kind.rib')); c.onclick = () => { st.rib = true; st.web = false; st.sweep = false; st.wrap = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const wb = h('button', { type: 'button', id: 'st-mode-web', 'data-help': 'web', 'aria-pressed': st.web ? 'true' : 'false' }); wb.innerHTML = icon('web') + esc(T('kind.web')); wb.onclick = () => { st.web = true; st.rib = false; st.sweep = false; st.wrap = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib && !st.web && !st.wrap && !st.splitFace ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + esc(T('sk.step.titleThin')); a.onclick = () => { st.sweep = false; st.rib = false; st.web = false; st.wrap = false; st.splitFace = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib && !st.web && !st.wrap && !st.splitFace ? 'true' : 'false' }); b.innerHTML = icon('sweep') + esc(T('kind.sweep')); b.onclick = () => { st.sweep = true; st.rib = false; st.web = false; st.wrap = false; st.splitFace = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + esc(T('kind.rib')); c.onclick = () => { st.rib = true; st.web = false; st.sweep = false; st.wrap = false; st.splitFace = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const wb = h('button', { type: 'button', id: 'st-mode-web', 'data-help': 'web', 'aria-pressed': st.web ? 'true' : 'false' }); wb.innerHTML = icon('web') + esc(T('kind.web')); wb.onclick = () => { st.web = true; st.rib = false; st.sweep = false; st.wrap = false; st.splitFace = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       if (hasChain) seg.append(a, b, c, wb);
       else seg.append(wb);
       if (cylTargets.length && hasChain) {
-        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + esc(T('kind.wrap')); wBtn.onclick = () => { st.wrap = true; st.wrapMode = 'line'; st.rib = false; st.web = false; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + esc(T('kind.wrap')); wBtn.onclick = () => { st.wrap = true; st.wrapMode = 'line'; st.rib = false; st.web = false; st.sweep = false; st.splitFace = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(wBtn);
+      }
+      if ((st.splitFace || (!isSimpleMode() && ribTargets.length)) && hasChain) {
+        const sfBtn = h('button', { type: 'button', class: 'pro', id: 'st-mode-splitFace', 'data-help': 'splitFace', 'aria-pressed': st.splitFace ? 'true' : 'false' }); sfBtn.innerHTML = icon('splitFace') + esc(T('kind.splitFace')); sfBtn.onclick = () => { st.splitFace = true; st.wrap = false; st.rib = false; st.web = false; st.sweep = false; st.thin = false; st.pickingFace = !st.splitFaceSig; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        seg.append(sfBtn);
       }
       stepBox.append(seg);
     } else if (!st.fromPushPull) {
-      const a = h('button', { type: 'button', id: 'st-mode-extrude', 'aria-pressed': !st.revolve && !st.wrap && !st.emboss && !st.web ? 'true' : 'false' }); a.innerHTML = icon('lift') + esc(T('sk.step.titleExtrude')); a.onclick = () => { st.revolve = false; st.wrap = false; st.emboss = false; st.web = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', id: 'st-mode-revolve', 'aria-pressed': st.revolve && !st.wrap && !st.emboss && !st.web ? 'true' : 'false' }); b.innerHTML = icon('rotate') + esc(T('sk.step.titleRevolve')); b.onclick = () => { st.revolve = true; st.wrap = false; st.emboss = false; st.web = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', id: 'st-mode-extrude', 'aria-pressed': !st.revolve && !st.wrap && !st.emboss && !st.splitFace && !st.web ? 'true' : 'false' }); a.innerHTML = icon('lift') + esc(T('sk.step.titleExtrude')); a.onclick = () => { st.revolve = false; st.wrap = false; st.emboss = false; st.splitFace = false; st.web = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-revolve', 'aria-pressed': st.revolve && !st.wrap && !st.emboss && !st.splitFace && !st.web ? 'true' : 'false' }); b.innerHTML = icon('rotate') + esc(T('sk.step.titleRevolve')); b.onclick = () => { st.revolve = true; st.wrap = false; st.emboss = false; st.splitFace = false; st.web = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b);
       if (st.web || ((SK.webPaths && SK.webPaths(S.ents).length > 0) && ribTargets.length)) {
-        const wb = h('button', { type: 'button', id: 'st-mode-web', 'data-help': 'web', 'aria-pressed': st.web ? 'true' : 'false' }); wb.innerHTML = icon('web') + esc(T('kind.web')); wb.onclick = () => { st.web = true; st.revolve = false; st.wrap = false; st.emboss = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const wb = h('button', { type: 'button', id: 'st-mode-web', 'data-help': 'web', 'aria-pressed': st.web ? 'true' : 'false' }); wb.innerHTML = icon('web') + esc(T('kind.web')); wb.onclick = () => { st.web = true; st.revolve = false; st.wrap = false; st.emboss = false; st.splitFace = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(wb);
       }
       if (st.emboss || ribTargets.length) {
-        const c = h('button', { type: 'button', id: 'st-mode-emboss', 'data-help': 'emboss', 'aria-pressed': st.emboss ? 'true' : 'false' }); c.innerHTML = icon('emboss') + esc(T('kind.emboss')); c.onclick = () => { st.emboss = true; st.web = false; st.wrap = false; st.revolve = false; st.pickingFace = !st.embossFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const c = h('button', { type: 'button', id: 'st-mode-emboss', 'data-help': 'emboss', 'aria-pressed': st.emboss ? 'true' : 'false' }); c.innerHTML = icon('emboss') + esc(T('kind.emboss')); c.onclick = () => { st.emboss = true; st.splitFace = false; st.web = false; st.wrap = false; st.revolve = false; st.pickingFace = !st.embossFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(c);
       }
+      if (st.splitFace || (!isSimpleMode() && ribTargets.length)) {
+        const sf = h('button', { type: 'button', class: 'pro', id: 'st-mode-splitFace', 'data-help': 'splitFace', 'aria-pressed': st.splitFace ? 'true' : 'false' }); sf.innerHTML = icon('splitFace') + esc(T('kind.splitFace')); sf.onclick = () => { st.splitFace = true; st.emboss = false; st.web = false; st.wrap = false; st.revolve = false; st.pickingFace = !st.splitFaceSig; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        seg.append(sf);
+      }
       if (cylTargets.length) {
-        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + esc(T('kind.wrap')); wBtn.onclick = () => { st.wrap = true; st.web = false; st.emboss = false; st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + esc(T('kind.wrap')); wBtn.onclick = () => { st.wrap = true; st.web = false; st.emboss = false; st.splitFace = false; st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
         seg.append(wBtn);
       }
       stepBox.append(seg);
@@ -8132,6 +8151,18 @@ const Sketch = (() => {
       const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-emb-flip', checked: !!st.embossFlip }), T('sk.panel.otherSide'));
       flp.querySelector('input').onchange = (e) => { st.embossFlip = e.target.checked; updatePreview(); };
       stepBox.append(flp);
+    } else if (st.splitFace) {
+      stepBox.append(UI.selectField({
+        id: 'st-sf-side', label: T('panel.splitFace.side'), value: st.splitFaceSide || 'front',
+        options: [['front', T('panel.splitFace.front')], ['back', T('panel.splitFace.back')], ['both', T('panel.splitFace.both')]],
+        onChange: (v) => { st.splitFaceSide = v; updatePreview(); },
+      }));
+      const tgt = st.splitFaceTarget ? Model.find(App.doc, st.splitFaceTarget) : null;
+      stepBox.append(h('div', { class: 'mini-row', id: 'st-sf-face-info' }, h('span', { class: 'grow' }, st.splitFaceSig && tgt ? T('sk.step.embossFaceInfo', { name: Model.label(tgt.item) }) : T('sk.step.noTargetFace'))));
+      const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' accent' : ''), id: 'st-sf-pick' });
+      pb.innerHTML = icon('cursor') + esc(T(st.pickingFace ? 'sk.step.pickFaceClick' : st.splitFaceSig ? 'panel.ext.pickOtherFace' : 'panel.ext.pickFace'));
+      pb.onclick = () => { st.pickingFace = !st.pickingFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); };
+      stepBox.append(pb);
     } else if (st.rib) {
       if (!ribTargets.length) {
         stepBox.append(h('div', { class: 'hint-box' }, T('sk.step.ribNeedBody')));
@@ -8163,7 +8194,7 @@ const Sketch = (() => {
         stepBox.append(ex, fl);
       }
     } else if (st.sweep) {
-      const sweepTargets = !App.ctx ? App.doc.items.filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'boss' && x.kind !== 'lipGroove' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target)) : [];
+      const sweepTargets = !App.ctx ? App.doc.items.filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'boss' && x.kind !== 'lipGroove' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target)) : [];
       if (sweepTargets.length) {
         if (!st.sweepTarget || !sweepTargets.some((x) => x.id === st.sweepTarget)) st.sweepTarget = sweepTargets[sweepTargets.length - 1].id;
         const opF = UI.selectField({
@@ -8326,13 +8357,13 @@ const Sketch = (() => {
         if (st.pickingFace) UI.hint(T('sk.step.revPickHint'));
       }
     }
-    if (!st.sweep && !st.rib && !st.web && !st.wrap && !st.emboss) {
+    if (!st.sweep && !st.rib && !st.web && !st.wrap && !st.emboss && !st.splitFace) {
       const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
       stepBox.append(h('p', null, T(hole ? 'sk.step.resHole' : S.ctx.targetId ? 'sk.step.resJoin' : 'sk.step.resNew')));
     }
     const row = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } });
     const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? esc(T('common.cancel')) : icon('undo') + esc(T('sk.bar.title')); back.dataset.tip = st.fromPushPull ? '' : T('sk.step.backTip'); back.onclick = () => stepBack();
-    const ok = h('button', { type: 'button', class: 'btn primary', disabled: (st.rib && !ribTargets.length) || (st.web && !ribTargets.length) || (st.wrap && !cylTargets.length) || (st.emboss && (!st.embossTarget || !st.embossFace)) }); ok.innerHTML = icon('check') + esc(T('common.done')); ok.onclick = () => stepOK();
+    const ok = h('button', { type: 'button', class: 'btn primary', disabled: (st.rib && !ribTargets.length) || (st.web && !ribTargets.length) || (st.wrap && !cylTargets.length) || (st.emboss && (!st.embossTarget || !st.embossFace)) || (st.splitFace && (!st.splitFaceTarget || !st.splitFaceSig)) }); ok.innerHTML = icon('check') + esc(T('common.done')); ok.onclick = () => stepOK();
     row.append(back, ok); stepBox.append(row);
   }
   function stepItem() {
@@ -8367,6 +8398,17 @@ const Sketch = (() => {
         mode: st.embossMode === 'deboss' ? 'deboss' : 'emboss',
         flip: !!st.embossFlip,
       }, { name: 'Prägen', color: st.color });
+    }
+    if (st.splitFace) {
+      const regs = SK.regions(S.ents);
+      const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
+      return Model.newItem('splitFace', {
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...bi, ...pr, ...lk, ...gd, ...pg },
+        sel,
+        target: st.splitFaceTarget,
+        face: st.splitFaceSig ? deepClone(st.splitFaceSig) : null,
+        side: st.splitFaceSide || 'front',
+      }, { name: T('kind.splitFace'), color: st.color });
     }
     if (st.rib) {
       return Model.newItem('rib', {
@@ -8520,19 +8562,20 @@ const Sketch = (() => {
   Viewer.on('camera', () => { if (!S) return; if (S.step && !S.step.dragging) placeArrow(); else if (!S.step) updateRulers(); });
   function stepDown(e) {
     if (e.button !== 0 || !S.step) return;
-    if (S.step.emboss && S.step.pickingFace) {
+    if ((S.step.emboss || S.step.splitFace) && S.step.pickingFace) {
       e.preventDefault(); e.stopPropagation();
       const hits = Viewer.pickAll(e.clientX, e.clientY).filter((h) => h.id !== '__preview');
       const hit = hits[0] || null;
       const top = hit ? Model.topOf(App.doc, hit.id) : null;
       const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
       if (top && top.role !== 'hole' && fi && Array.isArray(fi.c)) {
-        S.step.embossTarget = top.id;
-        S.step.embossFace = {
+        const sig = {
           c: fi.c.map((v) => round(v, 6)),
           n: Array.isArray(fi.n) ? fi.n.map((v) => round(v, 6)) : null,
           t: fi.t || null,
         };
+        if (S.step.emboss) { S.step.embossTarget = top.id; S.step.embossFace = sig; }
+        else { S.step.splitFaceTarget = top.id; S.step.splitFaceSig = sig; }
         S.step.pickingFace = false;
         Viewer.canvas.style.cursor = '';
         Viewer.highlightFace('hover', null, null);
@@ -8636,16 +8679,17 @@ const Sketch = (() => {
     if (S.step && S.step.web && !S.step.webTarget) { UI.toast(T('sk.toast.stepNeedWebTarget'), { kind: 'bad' }); return; }
     if (S.step && S.step.wrap && !S.step.wrapTarget) { UI.toast(T('sk.toast.stepNeedWrapTarget'), { kind: 'bad' }); return; }
     if (S.step && S.step.emboss && (!S.step.embossTarget || !S.step.embossFace)) { UI.toast(T('sk.toast.stepNeedEmbossFace'), { kind: 'bad' }); return; }
-    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib && !S.step.web && !S.step.wrap && !S.step.emboss) { UI.toast(T('sk.toast.stepNeedTargetFace'), { icon: 'info' }); return; }
+    if (S.step && S.step.splitFace && (!S.step.splitFaceTarget || !S.step.splitFaceSig)) { UI.toast(T('sk.toast.stepNeedSplitFace'), { kind: 'bad' }); return; }
+    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib && !S.step.web && !S.step.wrap && !S.step.emboss && !S.step.splitFace) { UI.toast(T('sk.toast.stepNeedTargetFace'), { icon: 'info' }); return; }
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
-    const lbl = it.kind === 'wrap' ? 'Um Zylinder gewickelt' : it.kind === 'emboss' ? 'Prägen erstellt' : it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'web' ? 'Steg-Netz erstellt' : it.kind === 'sweep' ? (it.op && it.op.type === 'cut' ? 'Nut entlang Pfad geschnitten' : 'Entlang Pfad gezogen') : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    const lbl = it.kind === 'wrap' ? 'Um Zylinder gewickelt' : it.kind === 'emboss' ? 'Prägen erstellt' : it.kind === 'splitFace' ? 'Fläche geteilt' : it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'web' ? 'Steg-Netz erstellt' : it.kind === 'sweep' ? (it.op && it.op.type === 'cut' ? 'Nut entlang Pfad geschnitten' : 'Entlang Pfad gezogen') : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
     const hideProfId = it.kind === 'sweep' && S.step.sweepShape === 'sketch' ? S.step.sweepProfId : null;
     const commitBlocks = docBlocksForCommit();
     App.change(lbl, (doc) => {
       doc.blocks = commitBlocks;
-      if (it.kind !== 'rib' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'sweep' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
+      if (it.kind !== 'rib' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'sweep' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
       if (hideProfId) { const sp = doc.items.find((x) => x.id === hideProfId); if (sp) sp.hidden = true; }
     });
@@ -8654,7 +8698,7 @@ const Sketch = (() => {
     App.select([top ? top.id : it.id]);
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
-    UI.toast(T(it.kind === 'wrap' ? 'sk.toast.stepWrapOk' : it.kind === 'emboss' ? 'sk.toast.stepEmbossOk' : it.kind === 'rib' ? 'sk.toast.stepRibOk' : it.kind === 'web' ? 'sk.toast.stepWebOk' : it.kind === 'sweep' ? 'sk.toast.stepSweepOk' : it.role === 'hole' ? 'sk.toast.stepHoleOk' : 'sk.toast.stepDoneOk'), { icon: 'check' });
+    UI.toast(T(it.kind === 'wrap' ? 'sk.toast.stepWrapOk' : it.kind === 'emboss' ? 'sk.toast.stepEmbossOk' : it.kind === 'splitFace' ? 'sk.toast.stepSplitFaceOk' : it.kind === 'rib' ? 'sk.toast.stepRibOk' : it.kind === 'web' ? 'sk.toast.stepWebOk' : it.kind === 'sweep' ? 'sk.toast.stepSweepOk' : it.role === 'hole' ? 'sk.toast.stepHoleOk' : 'sk.toast.stepDoneOk'), { icon: 'check' });
   }
   // ---------- 3D-Skizze (SK-51): Linien und Bögen frei im Raum ----------
   let sk3Labels = [];
@@ -9565,6 +9609,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

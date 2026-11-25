@@ -309,5 +309,20 @@
     "was": "Verbindet zwei oder mehr Querschnitts-Skizzen zu einem glatten oder geradflächigen Körper – wahlweise geschlossen als Ring und auch als Schnitt in einem Körper.",
     "wozu": "Ideal für Übergänge zwischen verschiedenen Formen, konische Kanäle, Düsen, Griffe sowie nahtlose Ringe und umlaufende Nuten.",
     "achtung": "Für einen geschlossenen Ring brauchst du mindestens drei Umrisse; als Schnitt wählst du unter „Körper“ den Modus „Abziehen von“."
+  },
+  "deform": {
+    "was": "Verformt einen bestehenden Körper als eigenen Schritt im Verlauf – durch Biegen um eine Achse, Verdrehen über die Länge oder Verjüngen bis zu einem Endfaktor.",
+    "wozu": "Ideal für gebogene Halter, tordierte Streben, konische Griffe und verjüngte Gehäuse ohne umständliches Neuzeichnen.",
+    "achtung": "Der Biegewinkel darf den Körper nicht in sich selbst knicken; im Verlauf bleibt der Schritt jederzeit änderbar und unterdrückbar."
+  },
+  "splitFace": {
+    "was": "Projiziert eine Skizzen-Kurve oder einen Umriss auf eine ebene oder gekrümmte Körperfläche und teilt diese Fläche entlang der Kurve.",
+    "wozu": "Nützlich, um einzelne Bereiche auf einer Fläche (z. B. Logos, Grifffelder oder Deckelbereiche) getrennt einzufärben oder gezielt auszuwählen, ohne den Körper zu zerschneiden.",
+    "achtung": "Prüfe bei Fehlern, ob die gezeichnete Kurve innerhalb der gewählten Fläche liegt und sie auf der gewählten Projektionsseite trifft."
+  },
+  "dome": {
+    "was": "Setzt eine gewölbte oder flach gewölbte Kuppel über den Außenrand einer ebenen Körperfläche und verschmilzt sie mit dem Körper (oder schneidet sie nach innen).",
+    "wozu": "Ideal für abgerundete Deckel, Kappen, Griffe, Drucktasten oder konkave Griffmulden, ohne Hilfsschnitte von Hand aufbauen zu müssen.",
+    "achtung": "Wenn die Kuppel nach innen geschaltet ist und tiefer reicht als das Bauteil dick ist, durchstößt sie die Rückseite."
   }
 }

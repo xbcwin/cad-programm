@@ -24909,6 +24909,375 @@ def t_a127_wandstaerke_flaechen(p):
     return [ok_in, ok_out, ok_mid, ok_two, ok_del_undo, ok_cyl_in, ok_cyl_out, ok_meta]
 
 
+# ---------- [A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37) ----------
+def t_a125_verformen(p):
+    warte_idle = lambda: warte_rechnen(p, 35)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+
+    # 1. Biegen: Stab 100x10x10 um 90° gebogen -> Enden stehen senkrecht zueinander
+    box_id = p.ev("""let id; App.change('Stab 100x10x10', d => {
+      const b = Model.newItem('box', { w: 100, d: 10, h: 10 }, { name: 'Stab' });
+      d.items.push(b); id = b.id;
+    }); App.select([id]); return id;""")
+    warte_idle()
+    p.pg.locator('#ctx-deform').click(); warte_idle()
+
+    bend_info = p.ev("""const bid = arg;
+      const df = App.doc.items.find(x => x.kind === 'deform');
+      const r = App.results.get(bid);
+      const ends = (r && r.data && r.data.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[1]) < 0.2);
+      let dot = null;
+      if (ends.length === 2) {
+        const a = ends[0].n, b = ends[1].n;
+        dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+      }
+      return {
+        kind: df && df.kind,
+        mode: df && df.p && df.p.mode,
+        axis: df && df.p && df.p.axis,
+        merged: df && App.mergedInto(df.id),
+        errs: App.errors.length,
+        endCount: ends.length,
+        dot,
+      };""", box_id)
+    v_bend = volumen(p)
+    gc_bend = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+
+    # 180° prüfen -> Endflächen antiparallel
+    p.pg.locator('#df-angle').fill('180')
+    p.pg.locator('#df-angle').press('Enter'); warte_idle()
+    dot_180 = p.ev("""const r = App.results.get(arg);
+      const ends = (r && r.data && r.data.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[1]) < 0.2);
+      if (ends.length !== 2) return null;
+      const a = ends[0].n, b = ends[1].n;
+      return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];""", box_id)
+    ok1 = (
+        bend_info['kind'] == 'deform'
+        and bend_info['mode'] == 'bend'
+        and bend_info['axis'] == 'x'
+        and bend_info['merged'] == box_id
+        and bend_info['errs'] == 0
+        and bend_info['endCount'] == 2
+        and bend_info['dot'] is not None and abs(bend_info['dot']) < 0.02
+        and v_bend is not None and abs(v_bend - 10000.0) < 50.0
+        and gc_bend['n'] == 1 and gc_bend['iss'] == 0
+        and dot_180 is not None and dot_180 > 0.98
+    )
+
+    # 2. Verdrehen: Stab 20x10x40 um 90° -> obere Fläche um 90° gedreht
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    tw_id = p.ev("""let id; App.change('Stab 20x10x40', d => {
+      const b = Model.newItem('box', { w: 20, d: 10, h: 40 }, { name: 'Drehstab' });
+      d.items.push(b); id = b.id;
+    }); App.select([id]); return id;""")
+    warte_idle()
+    p.pg.locator('#ctx-deform').click(); warte_idle()
+    p.pg.locator('#df-mode').select_option('twist'); warte_idle()
+    p.pg.locator('#df-axis').select_option('z'); warte_idle()
+    p.pg.locator('#df-angle').fill('90')
+    p.pg.locator('#df-angle').press('Enter'); warte_idle()
+
+    tw_spans = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      const span = (cond) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cnt = 0;
+        if (pos) for (let i = 0; i < pos.length; i += 3) {
+          const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+          if (!cond(z)) continue;
+          cnt++;
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        return cnt ? { sx: x1 - x0, sy: y1 - y0 } : null;
+      };
+      return { bot: span(z => z < 0.5), top: span(z => z > 39.5), errs: App.errors.length };""", tw_id)
+    v_twist = volumen(p)
+    gc_twist = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    ok2 = (
+        tw_spans['errs'] == 0
+        and tw_spans['bot'] is not None and abs(tw_spans['bot']['sx'] - 20.0) < 0.3 and abs(tw_spans['bot']['sy'] - 10.0) < 0.3
+        and tw_spans['top'] is not None and abs(tw_spans['top']['sx'] - 10.0) < 0.3 and abs(tw_spans['top']['sy'] - 20.0) < 0.3
+        and v_twist is not None and abs(v_twist - 8000.0) < 40.0
+        and gc_twist['n'] == 1 and gc_twist['iss'] == 0
+    )
+
+    # 3. Verjüngen: Stab 20x20x40 mit Faktor 0,5 -> oben halb so breit, Umkehren dreht unten/oben
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    tp_id = p.ev("""let id; App.change('Saeule 20x20x40', d => {
+      const b = Model.newItem('box', { w: 20, d: 20, h: 40 }, { name: 'Saeule' });
+      d.items.push(b); id = b.id;
+    }); App.select([id]); return id;""")
+    warte_idle()
+    p.pg.locator('#ctx-deform').click(); warte_idle()
+    p.pg.locator('#df-mode').select_option('taper'); warte_idle()
+    p.pg.locator('#df-axis').select_option('z'); warte_idle()
+    p.pg.locator('#df-factor').fill('0,5')
+    p.pg.locator('#df-factor').press('Enter'); warte_idle()
+
+    tp_spans = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      const span = (cond) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cnt = 0;
+        if (pos) for (let i = 0; i < pos.length; i += 3) {
+          const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+          if (!cond(z)) continue;
+          cnt++;
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        return cnt ? { sx: x1 - x0, sy: y1 - y0 } : null;
+      };
+      return { bot: span(z => z < 0.5), top: span(z => z > 39.5), errs: App.errors.length };""", tp_id)
+    v_taper = volumen(p)
+    gc_taper = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+
+    p.pg.locator('#df-flip').check(); warte_idle()
+    tp_flip = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      const span = (cond) => {
+        let x0 = Infinity, x1 = -Infinity, cnt = 0;
+        if (pos) for (let i = 0; i < pos.length; i += 3) {
+          if (!cond(pos[i + 2])) continue;
+          cnt++; if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i];
+        }
+        return cnt ? (x1 - x0) : null;
+      };
+      return { bot: span(z => z < 0.5), top: span(z => z > 39.5) };""", tp_id)
+    p.pg.locator('#df-flip').uncheck(); warte_idle()
+
+    ok3 = (
+        tp_spans['errs'] == 0
+        and tp_spans['bot'] is not None and abs(tp_spans['bot']['sx'] - 20.0) < 0.2 and abs(tp_spans['bot']['sy'] - 20.0) < 0.2
+        and tp_spans['top'] is not None and abs(tp_spans['top']['sx'] - 10.0) < 0.2 and abs(tp_spans['top']['sy'] - 10.0) < 0.2
+        and v_taper is not None and abs(v_taper - 9333.33) < 25.0
+        and gc_taper['n'] == 1 and gc_taper['iss'] == 0
+        and tp_flip['bot'] is not None and abs(tp_flip['bot'] - 10.0) < 0.2
+        and tp_flip['top'] is not None and abs(tp_flip['top'] - 20.0) < 0.2
+    )
+
+    # 4. Profi-Sichtbarkeit, Zeitleiste (Unterdrücken), Rückgängig/Wiederholen, Formel, Bezüge & Hilfe
+    df_id = p.ev("return App.doc.items.find(x => x.kind === 'deform').id")
+    p.ev("Timeline.toggleSuppress(arg)", df_id); p.wait(1500)
+    sup_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+    p.ev("Timeline.toggleSuppress(arg)", df_id); warte_idle()
+    re_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+
+    # Formel im Factor
+    p.ev("App.change('Maß', d => { d.params.push({ id: 'pm_df', name: 'verj', expr: '0.25' }); })")
+    p.ev("App.select([arg])", df_id); p.wait(300)
+    p.pg.locator('#df-factor').fill('verj')
+    p.pg.locator('#df-factor').press('Enter'); warte_idle()
+    f_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+    p.ev("App.undo()"); warte_idle()
+    u_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+
+    # Profi-Sichtbarkeit (#ctx-deform & #add-deform)
+    p.ev("App.select([arg]); ViewPrefs.setLevel('simple')", tp_id); p.wait(300)
+    simple_ctx_hidden = p.ev("const el = document.querySelector('#ctx-deform'); return !el || getComputedStyle(el).display === 'none'")
+    p.pg.locator('#t-body').click(); p.wait(250)
+    simple_fly_hidden = p.ev("const el = document.querySelector('#add-deform'); return !el || getComputedStyle(el).display === 'none'")
+    p.ev("Panels.closeFlyout(); ViewPrefs.setLevel('pro')"); p.wait(300)
+    pro_ctx_vis = p.ev("const el = document.querySelector('#ctx-deform'); return !!el && getComputedStyle(el).display !== 'none'")
+
+    p.pg.locator('#ctx-deform').hover(); p.wait(1700)
+    tip_deform = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    meta = p.ev("""const deps = Model.dependencies(App.doc);
+      const exp = Explain.local(arg);
+      return {
+        hasDep: deps.some(d => d.from === arg && d.what === 'verformt'),
+        hasExp: !!(exp && exp.title && exp.lines && exp.lines.some(l => /Verjüngt/.test(l.t))),
+      };""", df_id)
+
+    ok4 = (
+        abs(sup_top - 20.0) < 0.2
+        and abs(re_top - 10.0) < 0.2
+        and abs(f_top - 5.0) < 0.2
+        and abs(u_top - 10.0) < 0.2
+        and simple_ctx_hidden and simple_fly_hidden and pro_ctx_vis
+        and meta['hasDep'] and meta['hasExp'] and ('biegen' in tip_deform.lower() or 'verformen' in tip_deform.lower())
+    )
+
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a124_flaeche_teilen_kuppel(p):
+    # 1. KP-35: Kreis auf Zylindermantel (Ø 30 × 40) projizieren und Fläche teilen (nur Profi)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro'); Actions.addPrimitive('cylinder', { p: { d: 30, h: 40 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    st0 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([id], { face: { id, faceIdx: fi } });
+      return { faces0: r.data.faces.length, fi };""")
+    p.wait(300)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_simple_sf = not p.pg.locator('#ctx-split-face').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    btn_sf = p.pg.locator('#ctx-split-face')
+    has_sf_btn = btn_sf.count() == 1 and btn_sf.is_visible() and btn_sf.get_attribute('data-help') == 'splitFace'
+    btn_sf.click(); p.wait(1000)
+    sk_active = p.ev("return Sketch.active && Sketch.state.tool === 'circle'")
+    p.ev("Sketch.insertEnts([{ type: 'circle', c: [0, 0], r: 5 }]);")
+    p.wait(300)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(700)
+    has_side_sel = p.pg.locator('#st-sf-side').count() == 1
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 35); p.wait(400)
+    gc1 = p.ev("return GeomCheck.run({ silent: true })")
+    v1_sf = volumen(p)
+    st1 = p.ev("""const id = App.doc.items[0].id, sfid = App.doc.items[1].id, r = App.results.get(id);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      let colorOk = false;
+      if (cyls.length === 2) {
+        const fcA = { c: cyls[0].c, col: '#e8833a' };
+        const fcB = { c: cyls[1].c, col: '#3f7fd6' };
+        App.change('Flächen färben', (doc) => { Model.find(doc, id).item.faceColors = [fcA, fcB]; });
+        const iA = Viewer.faceIndexOf(id, fcA), iB = Viewer.faceIndexOf(id, fcB);
+        colorOk = iA >= 0 && iB >= 0 && iA !== iB;
+      }
+      return {
+        errs: App.errors.length,
+        items: App.doc.items.length,
+        kind: App.doc.items[1].kind,
+        merged: App.mergedInto(sfid) === id,
+        faces: r.data.faces.length,
+        cyls: cyls.length,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        colorOk,
+      };""")
+    v0 = 3.141592653589793 * 15 * 15 * 40
+    ok1 = (
+        hidden_simple_sf and has_sf_btn and sk_active is True and has_side_sel
+        and st0['faces0'] == 3 and st1['errs'] == 0 and st1['items'] == 2
+        and st1['kind'] == 'splitFace' and st1['merged'] is True
+        and st1['faces'] == st0['faces0'] + 1 and st1['cyls'] == 2
+        and st1['bodies'] == 1 and v1_sf is not None and abs(v1_sf - v0) < 2
+        and gc1 and len(gc1.get('issues', [])) == 0 and st1['colorOk'] is True
+    )
+
+    # 2. KP-35: „Beide Seiten“ teilt vorn & hinten (5 Flächen), Unterdrücken & Zeitleisten-Marker
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.select_option('#sf-side', 'both')
+    warte_rechnen(p, 35); p.wait(300)
+    f_both = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20); p.wait(250)
+    f_sup = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 30); p.wait(250)
+    p.ev("Timeline.setMarker(1)")
+    warte_rechnen(p, 20); p.wait(250)
+    f_mk1 = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    p.ev("Timeline.setMarker(2)")
+    warte_rechnen(p, 30); p.wait(250)
+    f_mk2 = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    info_sf = p.ev("return Explain.local(App.doc.items[1].id).lines.map(l => l.t).join(' ')")
+    ok2 = (
+        f_both == 5 and f_sup == 3 and f_mk1 == 3 and f_mk2 == 5
+        and 'teilt' in info_sf.lower()
+    )
+
+    # 3. KP-36: Kuppel 5 mm auf Quader-Oberseite (20×20×20) → Höhe +5 (zMax = 25)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    b0_vol = volumen(p)
+    b0 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });
+      return { zMax: r.data.bbox[5] };""")
+    p.wait(300)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_simple_dm = not p.pg.locator('#ctx-dome').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    btn_dm = p.pg.locator('#ctx-dome')
+    has_dm_btn = btn_dm.count() == 1 and btn_dm.is_visible() and btn_dm.get_attribute('data-help') == 'dome'
+    btn_dm.click()
+    warte_rechnen(p, 35); p.wait(400)
+    gc3 = p.ev("return GeomCheck.run({ silent: true })")
+    dm_vol = volumen(p)
+    st_dm = p.ev("""const id = App.doc.items[0].id, did = App.doc.items[1].id, r = App.results.get(id);
+      return {
+        errs: App.errors.length,
+        items: App.doc.items.length,
+        kind: App.doc.items[1].kind,
+        merged: App.mergedInto(did) === id,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        zMax: r.data.bbox[5],
+      };""")
+    ok3 = (
+        hidden_simple_dm and has_dm_btn
+        and st_dm['errs'] == 0 and st_dm['items'] == 2
+        and st_dm['kind'] == 'dome' and st_dm['merged'] is True
+        and st_dm['bodies'] == 1
+        and abs(b0['zMax'] - 20) < 0.05 and abs(st_dm['zMax'] - (b0['zMax'] + 5)) < 0.05
+        and b0_vol is not None and dm_vol is not None and dm_vol > b0_vol + 1000
+        and gc3 and len(gc3.get('issues', [])) == 0
+    )
+
+    # 4. KP-36: Höhe 8 mm, Kugelkappe, nach innen, Unterdrücken, Zylinder-Kuppel & Hilfetexte
+    p.pg.fill('#dome-h', '8'); p.pg.press('#dome-h', 'Enter')
+    warte_rechnen(p, 35); p.wait(300)
+    dm_h8_vol = volumen(p)
+    dm_h8 = p.ev("const r=App.results.get(App.doc.items[0].id); return { zMax: r.data.bbox[5], errs: App.errors.length };")
+    p.pg.select_option('#dome-shape', 'spherical')
+    warte_rechnen(p, 35); p.wait(300)
+    dm_sph_vol = volumen(p)
+    dm_sph = p.ev("const r=App.results.get(App.doc.items[0].id); return { zMax: r.data.bbox[5], errs: App.errors.length };")
+    p.pg.locator('#dome-flip').click()
+    warte_rechnen(p, 35); p.wait(300)
+    dm_in_vol = volumen(p)
+    dm_in = p.ev("const r=App.results.get(App.doc.items[0].id); return { zMax: r.data.bbox[5], errs: App.errors.length };")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20); p.wait(250)
+    v_sup_dm = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 30); p.wait(250)
+    info_dm = p.ev("return Explain.local(App.doc.items[1].id).lines.map(l => l.t).join(' ')")
+
+    # Kuppel 5 mm auf Zylinder-Oberseite
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(250)
+    p.pg.locator('#ctx-dome').click()
+    warte_rechnen(p, 35); p.wait(300)
+    dm_cyl = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, zMax: r.data.bbox[5], bodies: r.data.bodies ? r.data.bodies.length : 1 };")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('splitFace', 'dome'))
+    ok4 = (
+        dm_h8['errs'] == 0 and abs(dm_h8['zMax'] - 28) < 0.05
+        and dm_sph['errs'] == 0 and abs(dm_sph['zMax'] - 28) < 0.05
+        and dm_sph_vol is not None and dm_h8_vol is not None and b0_vol < dm_sph_vol < dm_h8_vol
+        and dm_in['errs'] == 0 and abs(dm_in['zMax'] - 20) < 0.05 and dm_in_vol is not None and dm_in_vol < b0_vol - 100
+        and v_sup_dm is not None and abs(v_sup_dm - b0_vol) < 1
+        and ('kuppel' in info_dm.lower() or 'kugelkappe' in info_dm.lower())
+        and dm_cyl['errs'] == 0 and dm_cyl['bodies'] == 1 and abs(dm_cyl['zMax'] - 25) < 0.05
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25143,6 +25512,8 @@ TESTS = [
     ('[A-123] Übergang mit weichem Anschluss: tangential, krümmungsglatt & Stärke (KP-31)', t_a123_uebergang_anschluss),
     ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
     ('[A-127] Wandstärke je Fläche & Richtung innen/außen/mittig (KP-43)', t_a127_wandstaerke_flaechen),
+    ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
+    ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

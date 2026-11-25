@@ -29,6 +29,7 @@ const KINDS = {
   part: { get label() { return T('kind.part'); }, params: [] },
   transform: { get label() { return T('kind.transform'); }, params: [] },
   scale: { get label() { return T('kind.scale'); }, params: [] },
+  deform: { get label() { return T('kind.deform'); }, params: [] },
   thicken: { get label() { return T('kind.thicken'); }, params: [] },
   rib: { get label() { return T('kind.rib'); }, params: [] },
   vent: { get label() { return T('kind.vent'); }, params: [] },
@@ -36,6 +37,8 @@ const KINDS = {
   web: { get label() { return T('kind.web'); }, params: [] },
   wrap: { get label() { return T('kind.wrap'); }, params: [] },
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
+  splitFace: { get label() { return T('kind.splitFace'); }, params: [] },
+  dome: { get label() { return T('kind.dome'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
   boss: { get label() { return T('kind.boss'); }, params: [] },
@@ -388,6 +391,7 @@ const Model = (() => {
       if (it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) out.push({ from: me, to: top(it.p.toFace.id), what: 'hochgezogen bis Fläche von' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
+      if (it.kind === 'deform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'verformt' });
       if (it.kind === 'deleteBody' && it.p) {
         const tgs = Array.isArray(it.p.targets) ? it.p.targets : (it.p.target ? [it.p.target] : []);
         for (const tid of tgs) if (tid) out.push({ from: me, to: top(tid), what: 'löscht Körper' });
@@ -424,6 +428,8 @@ const Model = (() => {
         }
       }
       if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
+      if (it.kind === 'splitFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'teilt Fläche von' });
+      if (it.kind === 'dome' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kuppel auf' });
       if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
       if (it.kind === 'lipGroove' && it.p) {
         if (it.p.lipTarget) out.push({ from: me, to: top(it.p.lipTarget), what: 'Lippe an' });
@@ -578,6 +584,8 @@ const Model = (() => {
       else if (it.kind === 'web') o.p = webParams(it, ownV);
       else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
+      else if (it.kind === 'splitFace') o.p = splitFaceParams(it, ownV);
+      else if (it.kind === 'dome') o.p = domeParams(it, ownV);
       else if (it.kind === 'sketch3d') o.p = { sketch3d: sketch3dResolve(it.p && it.p.sketch3d, ownV) };
       else if (it.kind === 'import') {
         o.p = { fmt: it.p.fmt, scale: num(it.p.scale, ownV, 1) };
@@ -603,6 +611,21 @@ const Model = (() => {
           s: num(p.s, ownV, 1),
           sx: num(p.sx, ownV, 1), sy: num(p.sy, ownV, 1), sz: num(p.sz, ownV, 1),
           pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
+        };
+      } else if (it.kind === 'deform') {
+        const p = it.p || {};
+        const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+        const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+        const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis ? p.bendAxis : (axis === 'y' ? 'x' : 'y');
+        o.p = {
+          target: p.target || null,
+          mode,
+          axis,
+          bendAxis,
+          angle: num(p.angle, ownV, 90),
+          factor: num(p.factor, ownV, 0.5),
+          anchor: p.anchor === 'start' || p.anchor === 'end' || p.anchor === 'center' ? p.anchor : null,
+          flip: !!p.flip,
         };
       } else if (it.kind === 'thicken') {
         const p = it.p || {};
@@ -906,6 +929,33 @@ const Model = (() => {
       regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })),
       height: num(p.height, V, 1),
       mode: p.mode === 'deboss' ? 'deboss' : 'emboss',
+      flip: !!p.flip,
+    };
+  }
+  function splitFaceParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+    const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      plane,
+      regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })),
+      chains,
+      side: p.side === 'back' || p.side === 'both' ? p.side : 'front',
+    };
+  }
+  function domeParams(it, V) {
+    const p = it.p || {};
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      height: num(p.height, V, 5),
+      shape: p.shape === 'spherical' ? 'spherical' : 'elliptical',
       flip: !!p.flip,
     };
   }
@@ -1571,7 +1621,7 @@ const Model = (() => {
     V = scopeItemVars(V, it);
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
-    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'revolve') && it.p && it.p.sketch) {
       const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
       const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
       if (b) {
@@ -1738,12 +1788,20 @@ const Model = (() => {
         return `${parts.join(', ')} · ${f(res.totalLength)}${u}`;
       }
       case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
+      case 'splitFace': return p.side === 'both' ? 'beide Seiten' : p.side === 'back' ? 'Rückseite' : 'Vorderseite';
+      case 'dome': return `${it.p && it.p.flip ? '−' : '+'}${f(p.height ?? 5)}${u}${it.p && it.p.shape === 'spherical' ? ' · Kugelkappe' : ''}`;
       case 'boss': {
         const ribs = Math.max(0, Math.min(6, Math.round(p.ribs ?? 4)));
         return `Ø ${f(p.outerD ?? 8)}/${f(p.holeD ?? 3)}${u} · H ${f(p.height ?? 10)}${u}${ribs > 0 ? ` · ${ribs} Rippen` : ''}`;
       }
       case 'lipGroove': return `H ${f(p.height ?? 2)}${u} · Spiel ${f(p.clearance ?? 0.2)}${u}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
+      case 'deform': {
+        const dm = (it.p && it.p.mode) || 'bend';
+        if (dm === 'taper') return `${T('panel.deform.taper')} ×${fmt(p.factor ?? 0.5, 2)}`;
+        if (dm === 'twist') return `${T('panel.deform.twist')} ${fmtAngleU(p.angle ?? 90)}`;
+        return `${T('panel.deform.bend')} ${fmtAngleU(p.angle ?? 90)}`;
+      }
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'mirrorStep': {
         const mp = it.p || {};
@@ -1936,7 +1994,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

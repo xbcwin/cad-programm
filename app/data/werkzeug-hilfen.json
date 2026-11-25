@@ -1513,5 +1513,20 @@
     "tip": "Einer einzelnen Fläche eine eigene Wandstärke geben",
     "hilfe": "Klick nach diesem Knopf eine geschlossene Fläche deines ausgehöhlten Körpers an (z. B. den Boden oder eine Seitenwand). Sie bekommt rechts ein eigenes Eingabefeld für ihre Wandstärke – auch mit Formeln – während alle übrigen Wände bei der Standard-Wandstärke bleiben.",
     "tipp": "So baust du zum Beispiel ein Gehäuse mit 1,5 mm dünnen Seitenwänden und einem 3 mm dicken, stabilen Boden."
+  },
+  "deform": {
+    "tip": "Körper biegen, verdrehen oder verjüngen (Profi)",
+    "hilfe": "Wähle einen Körper und klicke auf „Verformen“ (im Profi-Modus in der Kontextleiste, unter Körper oder per Rechtsklick im Verlauf). Rechts wählst du zwischen „Biegen“ (Winkel um eine Achse), „Verdrehen“ (Grad über die Länge) und „Verjüngen“ (Faktor am Ende, z. B. 0,5 für halb so breit).",
+    "tipp": "Alle Winkel und Faktoren akzeptieren Formeln. Beim Biegen wählst du die Längs- und die Biegeachse getrennt; mit „Richtung umkehren“ biegst oder verjüngst du zur anderen Seite."
+  },
+  "splitFace": {
+    "tip": "Kurve auf eine Fläche projizieren und die Fläche daran teilen (Profi)",
+    "hilfe": "Wähle eine ebene oder gekrümmte Fläche (z. B. einen Zylindermantel oder eine Kugel) und klicke auf „Fläche teilen“. Zeichne eine geschlossene Form oder eine offene Kurve und bestätige mit „Fertig“. Tracery projiziert die Kurve auf die Fläche und teilt nur diese Oberfläche – der Körper bleibt ein einzelnes Stück.",
+    "tipp": "Jede entstandene Teilfläche kannst du anschließend einzeln anklicken, mit einer eigenen Farbe versehen oder gezielt weiterbearbeiten."
+  },
+  "dome": {
+    "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
+    "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
+    "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
   }
 }

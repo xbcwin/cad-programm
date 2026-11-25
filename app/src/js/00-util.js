@@ -681,6 +681,7 @@ const IC = {
   thread: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 8l12-2M6 12l12-2M6 16l12-2M6 19l8-1.3"/>',
   moveStep: '<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />',
   scaleBody: '<rect x="3" y="13" width="8" height="8" rx="1" opacity=".5"/><rect x="7" y="3" width="14" height="14" rx="1.5" fill="currentColor" opacity=".18"/><rect x="7" y="3" width="14" height="14" rx="1.5"/><path d="M11 13l7-7M14 6h4v4" />',
+  deform: '<path d="M5 18C5 10.5 10.5 5 18 5v4.5C13 9.5 9.5 13 9.5 18z" fill="currentColor" opacity=".2"/><path d="M5 18C5 10.5 10.5 5 18 5v4.5C13 9.5 9.5 13 9.5 18zM14 14l4 4M18 14v4h-4" />',
   thicken: '<path d="M4 15l8 4 8-4-8-4z" opacity=".45" stroke-dasharray="2.5 2"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM4 9v6l8 4 8-4V9" />',
   rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
   wrap: '<ellipse cx="12" cy="5.5" rx="6.5" ry="2.2"/><path d="M5.5 5.5v13c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-13"/><path d="M5.5 10.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v4.5c0 1.2-2.9 2.2-6.5 2.2s-6.5-1-6.5-2.2z" fill="currentColor" opacity=".25"/>',
@@ -705,6 +706,8 @@ const IC = {
   vent: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6.5 8h11M6.5 12h11M6.5 16h11" stroke-width="2.1"/>',
   fins: '<path d="M3 19h18"/><path d="M5 19V7M9.5 19V7M14.5 19V7M19 19V7" stroke-width="2"/><path d="M5 7v12M9.5 7v12M14.5 7v12M19 7v12" opacity=".3"/>',
   web: '<rect x="3" y="3" width="18" height="18" rx="1.5" opacity=".45"/><path d="M3 12h18M12 3v18M6 6l12 12M18 6L6 18" />',
+  splitFace: '<path d="M4 17c4-3 12-3 16 0V7c-4-3-12-3-16 0z" opacity=".35" fill="currentColor"/><path d="M4 17c4-3 12-3 16 0V7c-4-3-12-3-16 0z"/><circle cx="12" cy="11.5" r="3.4" stroke-dasharray="2 1.5"/>',
+  dome: '<path d="M3 16h18v4H3z" opacity=".35" fill="currentColor"/><path d="M3 16h18v4H3z"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10" fill="currentColor" opacity=".2"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2246,6 +2249,21 @@ const HELP = {
   "tip": "Einer einzelnen Fläche eine eigene Wandstärke geben",
   "hilfe": "Klick nach diesem Knopf eine geschlossene Fläche deines ausgehöhlten Körpers an (z. B. den Boden oder eine Seitenwand). Sie bekommt rechts ein eigenes Eingabefeld für ihre Wandstärke – auch mit Formeln – während alle übrigen Wände bei der Standard-Wandstärke bleiben.",
   "tipp": "So baust du zum Beispiel ein Gehäuse mit 1,5 mm dünnen Seitenwänden und einem 3 mm dicken, stabilen Boden."
+ },
+ "deform": {
+  "tip": "Körper biegen, verdrehen oder verjüngen (Profi)",
+  "hilfe": "Wähle einen Körper und klicke auf „Verformen“ (im Profi-Modus in der Kontextleiste, unter Körper oder per Rechtsklick im Verlauf). Rechts wählst du zwischen „Biegen“ (Winkel um eine Achse), „Verdrehen“ (Grad über die Länge) und „Verjüngen“ (Faktor am Ende, z. B. 0,5 für halb so breit).",
+  "tipp": "Alle Winkel und Faktoren akzeptieren Formeln. Beim Biegen wählst du die Längs- und die Biegeachse getrennt; mit „Richtung umkehren“ biegst oder verjüngst du zur anderen Seite."
+ },
+ "splitFace": {
+  "tip": "Kurve auf eine Fläche projizieren und die Fläche daran teilen (Profi)",
+  "hilfe": "Wähle eine ebene oder gekrümmte Fläche (z. B. einen Zylindermantel oder eine Kugel) und klicke auf „Fläche teilen“. Zeichne eine geschlossene Form oder eine offene Kurve und bestätige mit „Fertig“. Tracery projiziert die Kurve auf die Fläche und teilt nur diese Oberfläche – der Körper bleibt ein einzelnes Stück.",
+  "tipp": "Jede entstandene Teilfläche kannst du anschließend einzeln anklicken, mit einer eigenen Farbe versehen oder gezielt weiterbearbeiten."
+ },
+ "dome": {
+  "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
+  "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
  }
 };
 

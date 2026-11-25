@@ -525,6 +525,381 @@ export function createKernel(R, oc) {
     }
     return scaleNonUniform(shape, center, [sx, sy, sz]);
   }
+  const deformBasisInvMemo = new Map();
+  function bsplineBasisInv(n) {
+    if (deformBasisInvMemo.has(n)) return deformBasisInvMemo.get(n);
+    const deg = Math.min(3, n - 1);
+    const ts = Array.from({ length: n }, (_, i) => i / (n - 1));
+    const knots = [0], mults = [deg + 1];
+    if (deg === 3 && n > 4) {
+      for (let i = 2; i <= n - 3; i++) { knots.push(ts[i]); mults.push(1); }
+    } else if (deg === 2 && n > 3) {
+      for (let i = 1; i <= n - 2; i++) { knots.push((ts[i] + ts[i + 1]) / 2); mults.push(1); }
+    }
+    knots.push(1); mults.push(deg + 1);
+    const U = [];
+    for (let i = 0; i < knots.length; i++) for (let k = 0; k < mults[i]; k++) U.push(knots[i]);
+    const evalBasis = (t) => {
+      const B = new Array(n).fill(0);
+      if (t <= 0) { B[0] = 1; return B; }
+      if (t >= 1) { B[n - 1] = 1; return B; }
+      let span = deg;
+      while (span < n - 1 && t >= U[span + 1]) span++;
+      const N = new Array(deg + 1).fill(0);
+      N[0] = 1;
+      for (let d = 1; d <= deg; d++) {
+        for (let r = d; r >= 0; r--) {
+          const j = span - d + r;
+          let v = 0;
+          if (r > 0 && U[j + d] > U[j]) v += ((t - U[j]) / (U[j + d] - U[j])) * N[r - 1];
+          if (r < d && U[j + d + 1] > U[j + 1]) v += ((U[j + d + 1] - t) / (U[j + d + 1] - U[j + 1])) * N[r];
+          N[r] = v;
+        }
+      }
+      for (let r = 0; r <= deg; r++) B[span - deg + r] = N[r];
+      return B;
+    };
+    const A = ts.map((t) => evalBasis(t));
+    const I = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+    for (let col = 0; col < n; col++) {
+      let piv = col;
+      for (let r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+      if (piv !== col) { [A[col], A[piv]] = [A[piv], A[col]]; [I[col], I[piv]] = [I[piv], I[col]]; }
+      const diag = A[col][col];
+      for (let j = 0; j < n; j++) { A[col][j] /= diag; I[col][j] /= diag; }
+      for (let r = 0; r < n; r++) {
+        if (r === col) continue;
+        const f = A[r][col];
+        if (Math.abs(f) < 1e-15) continue;
+        for (let j = 0; j < n; j++) { A[r][j] -= f * A[col][j]; I[r][j] -= f * I[col][j]; }
+      }
+    }
+    const entry = { deg, knots, mults, inv: I };
+    deformBasisInvMemo.set(n, entry);
+    return entry;
+  }
+  function makeBSplineCurveFromPoints(pts) {
+    const n = pts.length, b = bsplineBasisInv(n);
+    const poles = new oc.NCollection_Array1_gp_Pnt(1, n);
+    for (let i = 0; i < n; i++) {
+      const row = b.inv[i];
+      let x = 0, y = 0, z = 0;
+      for (let k = 0; k < n; k++) { const w = row[k], q = pts[k]; x += w * q[0]; y += w * q[1]; z += w * q[2]; }
+      const gp = new oc.gp_Pnt(x, y, z);
+      poles.SetValue(i + 1, gp);
+      gp.delete();
+    }
+    const uk = makeArr1D(b.knots), um = makeArr1I(b.mults);
+    const crv = new oc.Geom_BSplineCurve(poles, uk, um, b.deg, false);
+    poles.delete(); uk.delete(); um.delete();
+    return crv;
+  }
+  function fitCoplanarPlane(Q, nu, nv) {
+    const p0 = Q[0][0];
+    const d1 = [Q[nu - 1][nv - 1][0] - p0[0], Q[nu - 1][nv - 1][1] - p0[1], Q[nu - 1][nv - 1][2] - p0[2]];
+    let d2 = [Q[nu - 1][0][0] - Q[0][nv - 1][0], Q[nu - 1][0][1] - Q[0][nv - 1][1], Q[nu - 1][0][2] - Q[0][nv - 1][2]];
+    let nx = d1[1] * d2[2] - d1[2] * d2[1], ny = d1[2] * d2[0] - d1[0] * d2[2], nz = d1[0] * d2[1] - d1[1] * d2[0];
+    let nl = Math.hypot(nx, ny, nz);
+    if (nl < 1e-6) {
+      const pm = Q[Math.floor(nu / 2)][Math.floor(nv / 2)];
+      d2 = [pm[0] - p0[0], pm[1] - p0[1], pm[2] - p0[2]];
+      nx = d1[1] * d2[2] - d1[2] * d2[1]; ny = d1[2] * d2[0] - d1[0] * d2[2]; nz = d1[0] * d2[1] - d1[1] * d2[0];
+      nl = Math.hypot(nx, ny, nz);
+    }
+    if (nl < 1e-8) return null;
+    nx /= nl; ny /= nl; nz /= nl;
+    const c = Q[Math.floor(nu / 2)][Math.floor(nv / 2)];
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+      const q = Q[i][j];
+      const err = Math.abs((q[0] - c[0]) * nx + (q[1] - c[1]) * ny + (q[2] - c[2]) * nz);
+      if (err > 1e-4) return null;
+    }
+    return { o: c, n: [nx, ny, nz] };
+  }
+  function deformFace(face, mapPt, gridN = 17) {
+    const fw = oc.TopoDS.Face(face.wrapped);
+    const fOri = fw.Orientation();
+    const loc = new oc.TopLoc_Location();
+    const surf = oc.BRep_Tool.Surface(fw, loc);
+    const trsf = !loc.IsIdentity() ? loc.Transformation() : null;
+    const uv = oc.BRepTools.UVBounds(fw);
+    const wires = collectWires(fw);
+    const uSpan = uv.UMax - uv.UMin, vSpan = uv.VMax - uv.VMin;
+    const isFullPerU = surf.IsUPeriodic() && Math.abs(uSpan - surf.UPeriod()) < 1e-4;
+    const isFullPerV = surf.IsVPeriodic() && Math.abs(vSpan - surf.VPeriod()) < 1e-4;
+    const nu = isFullPerU ? Math.max(gridN, 25) : gridN;
+    const nv = isFullPerV ? Math.max(gridN, 25) : gridN;
+    const du = uSpan / (nu - 1), dv = vSpan / (nv - 1);
+    const Q = Array.from({ length: nu }, (_, iu) => {
+      const u = iu === nu - 1 ? uv.UMax : uv.UMin + iu * du;
+      return Array.from({ length: nv }, (_, iv) => {
+        const v = iv === nv - 1 ? uv.VMax : uv.VMin + iv * dv;
+        const pt = surf.Value(u, v);
+        let x = pt.X(), y = pt.Y(), z = pt.Z();
+        if (trsf) { const p2 = pt.Transformed(trsf); x = p2.X(); y = p2.Y(); z = p2.Z(); p2.delete(); }
+        pt.delete();
+        return mapPt([x, y, z]);
+      });
+    });
+
+    const pln = face.geomType === 'PLANE' ? fitCoplanarPlane(Q, nu, nv) : null;
+    if (pln) {
+      let gpPln = null, mf = null;
+      try {
+        const origN = face.normalAt(), origC = face.center;
+        const pA = mapPt([origC.x, origC.y, origC.z]);
+        const pB = mapPt([origC.x + origN.x * 0.01, origC.y + origN.y * 0.01, origC.z + origN.z * 0.01]);
+        const dotN = (pB[0] - pA[0]) * pln.n[0] + (pB[1] - pA[1]) * pln.n[1] + (pB[2] - pA[2]) * pln.n[2];
+        const nn = dotN < 0 ? [-pln.n[0], -pln.n[1], -pln.n[2]] : pln.n;
+        const gpO = new oc.gp_Pnt(pln.o[0], pln.o[1], pln.o[2]);
+        const gpD = new oc.gp_Dir(nn[0], nn[1], nn[2]);
+        gpPln = new oc.gp_Pln(gpO, gpD); gpO.delete(); gpD.delete();
+        const proj = (q) => {
+          const d = (q[0] - pln.o[0]) * nn[0] + (q[1] - pln.o[1]) * nn[1] + (q[2] - pln.o[2]) * nn[2];
+          return [q[0] - d * nn[0], q[1] - d * nn[1], q[2] - d * nn[2]];
+        };
+        const buildPlaneWire = (w) => {
+          const neList = [];
+          for (const ew of collectEdges(w)) {
+            if (oc.BRep_Tool.Degenerated(ew)) continue;
+            const ad = new oc.BRepAdaptor_Curve(ew);
+            const f0 = ad.FirstParameter(), f1 = ad.LastParameter();
+            const isLine = ad.GetType() === oc.GeomAbs_CurveType.GeomAbs_Line;
+            const M = isLine ? gridN : Math.max(gridN, 25);
+            const pts = [];
+            for (let k = 0; k < M; k++) {
+              const t = k === M - 1 ? f1 : f0 + (f1 - f0) * (k / (M - 1));
+              const pt = ad.Value(t);
+              pts.push(proj(mapPt([pt.X(), pt.Y(), pt.Z()])));
+              pt.delete();
+            }
+            ad.delete();
+            const a = pts[0], b = pts[M - 1];
+            const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+            const abL = Math.hypot(ab[0], ab[1], ab[2]);
+            let straight = abL > 1e-7;
+            if (straight) {
+              for (let k = 1; k < M - 1; k++) {
+                const ap = [pts[k][0] - a[0], pts[k][1] - a[1], pts[k][2] - a[2]];
+                const cx = ap[1] * ab[2] - ap[2] * ab[1], cy = ap[2] * ab[0] - ap[0] * ab[2], cz = ap[0] * ab[1] - ap[1] * ab[0];
+                if (Math.hypot(cx, cy, cz) / abL > 1e-4) { straight = false; break; }
+              }
+            }
+            let ne;
+            if (straight) {
+              const p0 = new oc.gp_Pnt(a[0], a[1], a[2]), p1 = new oc.gp_Pnt(b[0], b[1], b[2]);
+              const me = new oc.BRepBuilderAPI_MakeEdge(p0, p1);
+              ne = me.Edge(); me.delete(); p0.delete(); p1.delete();
+            } else {
+              const crv = makeBSplineCurveFromPoints(pts);
+              const me = new oc.BRepBuilderAPI_MakeEdge(crv);
+              ne = me.Edge(); me.delete(); crv.delete();
+            }
+            if (ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+            neList.push(ne);
+          }
+          return makeWireFromEdges(neList);
+        };
+        mf = new oc.BRepBuilderAPI_MakeFace(gpPln, buildPlaneWire(wires[0]), true);
+        for (let i = 1; i < wires.length; i++) mf.Add(buildPlaneWire(wires[i]));
+        if (mf.IsDone()) {
+          let nf = mf.Face();
+          mf.delete(); mf = null; gpPln.delete(); gpPln = null;
+          if (trsf) trsf.delete();
+          loc.delete();
+          const sff = new oc.ShapeFix_Face(nf); sff.FixOrientation(); sff.Perform(); nf = sff.Face(); sff.delete();
+          return nf;
+        }
+      } catch (_) {
+      } finally {
+        if (mf) try { mf.delete(); } catch (_) {}
+        if (gpPln) try { gpPln.delete(); } catch (_) {}
+      }
+    }
+
+    const bu = bsplineBasisInv(nu), bv = bsplineBasisInv(nv);
+    const tmp = Array.from({ length: nu }, (_, iu) => {
+      const row = bu.inv[iu];
+      return Array.from({ length: nv }, (_, iv) => {
+        let x = 0, y = 0, z = 0;
+        for (let k = 0; k < nu; k++) { const w = row[k], q = Q[k][iv]; x += w * q[0]; y += w * q[1]; z += w * q[2]; }
+        return [x, y, z];
+      });
+    });
+    const poles = new oc.NCollection_Array2_gp_Pnt(1, nu, 1, nv);
+    for (let iu = 0; iu < nu; iu++) for (let iv = 0; iv < nv; iv++) {
+      const row = bv.inv[iv];
+      let x = 0, y = 0, z = 0;
+      for (let k = 0; k < nv; k++) { const w = row[k], q = tmp[iu][k]; x += w * q[0]; y += w * q[1]; z += w * q[2]; }
+      const gp = new oc.gp_Pnt(x, y, z);
+      poles.SetValue(iu + 1, iv + 1, gp);
+      gp.delete();
+    }
+    const uKnots = bu.knots.map((t, i) => i === 0 ? uv.UMin : i === bu.knots.length - 1 ? uv.UMax : uv.UMin + t * uSpan);
+    const vKnots = bv.knots.map((t, i) => i === 0 ? uv.VMin : i === bv.knots.length - 1 ? uv.VMax : uv.VMin + t * vSpan);
+    const uk = makeArr1D(uKnots), vk = makeArr1D(vKnots), um = makeArr1I(bu.mults), vm = makeArr1I(bv.mults);
+    const bsp = new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, bu.deg, bv.deg, false, false);
+    poles.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete();
+    if (trsf) trsf.delete();
+    loc.delete();
+    const isFullNatural = wires.length === 1 && (
+      face.geomType === 'SPHERE' || face.geomType === 'TORUS' ||
+      ((face.geomType === 'CYLINDRE' || face.geomType === 'CONE') && isFullPerU && collectEdges(wires[0]).length <= 4)
+    );
+    let nf;
+    if (isFullNatural) {
+      const mf = new oc.BRepBuilderAPI_MakeFace(bsp, 1e-6);
+      nf = mf.Face(); mf.delete();
+      if (fOri === oc.TopAbs_Orientation.TopAbs_REVERSED) nf = oc.TopoDS.Face(nf.Reversed());
+    } else {
+      const buildW = (w) => {
+        const neList = [];
+        for (const ew of collectEdges(w)) {
+          const ad = new oc.BRepAdaptor_Curve2d(ew, fw);
+          const pc = ad.Curve();
+          const me = new oc.BRepBuilderAPI_MakeEdge(pc, bsp, ad.FirstParameter(), ad.LastParameter());
+          let ne = me.Edge();
+          if (ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+          neList.push(ne); me.delete(); ad.delete();
+        }
+        return makeWireFromEdges(neList);
+      };
+      const mf = new oc.BRepBuilderAPI_MakeFace(bsp, buildW(wires[0]), true);
+      for (let i = 1; i < wires.length; i++) mf.Add(buildW(wires[i]));
+      nf = mf.Face(); mf.delete();
+      if (fOri === oc.TopAbs_Orientation.TopAbs_REVERSED) nf = oc.TopoDS.Face(nf.Reversed());
+    }
+    bsp.delete();
+    oc.BRepLib.BuildCurves3d(nf);
+    const sff = new oc.ShapeFix_Face(nf); sff.Perform(); nf = sff.Face(); sff.delete();
+    return nf;
+  }
+  function deformSolid(shape, mapPt, gridN = 17) {
+    const outSolids = [];
+    for (const solIn of shape.solids) {
+      const faces = solIn.faces;
+      if (faces.length === 1 && (faces[0].geomType === 'SPHERE' || faces[0].geomType === 'TORUS')) {
+        const nf = deformFace(faces[0], mapPt, gridN);
+        const sf = oc.BRep_Tool.Surface(nf);
+        const sh = R.cast(new oc.BRepBuilderAPI_MakeShell(sf, false).Shell());
+        let res = R.makeSolid([sh]);
+        if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+        outSolids.push(res);
+        continue;
+      }
+      const newFaces = faces.map((f) => deformFace(f, mapPt, gridN));
+      let sewed = null;
+      for (const tol of [1e-2, 5e-2]) {
+        const sew = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+        for (const nf of newFaces) sew.Add(nf);
+        sew.Perform();
+        const cand = sew.SewedShape();
+        sew.delete();
+        if (cand && cand.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_SHELL) { sewed = cand; break; }
+        const sExp = new oc.TopExp_Explorer(cand, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+        if (sExp.More()) { sewed = oc.TopoDS.Shell(sExp.Current()); sExp.delete(); safeDelete(cand); break; }
+        sExp.delete();
+        safeDelete(cand);
+      }
+      for (const nf of newFaces) safeDelete(nf);
+      if (!sewed) throw new Error('Verformen: Flächen konnten nicht zu einem geschlossenen Körper vernäht werden.');
+      const sh = oc.TopoDS.Shell(sewed);
+      const ms = new oc.BRepBuilderAPI_MakeSolid(sh);
+      let sol = ms.Solid(); ms.delete(); safeDelete(sewed);
+      const sfs = new oc.ShapeFix_Solid(sol); sfs.Perform(); sol = oc.TopoDS.Solid(sfs.Solid()); sfs.delete();
+      let res = R.cast(sol);
+      if (R.measureVolume(res) < 0) res = R.cast(sol.Reversed());
+      outSolids.push(res);
+    }
+    return outSolids.length === 1 ? outSolids[0] : R.makeCompound(outSolids);
+  }
+  function applyDeform(shape, p, wb) {
+    const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+    const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+    const IDX = { x: 0, y: 1, z: 2 };
+    const uIdx = IDX[axis];
+    const b = wb || bboxOf(shape);
+    const u0 = b[uIdx], u1 = b[uIdx + 3], L = u1 - u0;
+    if (!(L > 1e-5)) throw new Error('Verformen: Der Körper hat entlang dieser Achse keine Ausdehnung.');
+
+    let mapPt, gridN = 17;
+    if (mode === 'bend') {
+      const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis
+        ? p.bendAxis
+        : (axis === 'y' ? 'x' : 'y');
+      const aIdx = IDX[bendAxis];
+      const bAx = ['x', 'y', 'z'].find((k) => k !== axis && k !== bendAxis);
+      const bIdx = IDX[bAx];
+      const angleDeg = num(p.angle, 90) * (p.flip ? -1 : 1);
+      if (!isFinite(angleDeg) || Math.abs(angleDeg) > 360) {
+        throw new Error('Verformen (Biegen): Der Biegewinkel darf höchstens ±360° betragen.');
+      }
+      if (Math.abs(angleDeg) < 1e-6) return shape.clone();
+      const theta = (angleDeg * Math.PI) / 180;
+      const R_bend = L / theta;
+      const anchor = p.anchor === 'start' || p.anchor === 'end' ? p.anchor : 'center';
+      const uRef = anchor === 'start' ? u0 : anchor === 'end' ? u1 : (u0 + u1) / 2;
+      const vCenter = (b[bIdx] + b[bIdx + 3]) / 2;
+      const vHalf = (b[bIdx + 3] - b[bIdx]) / 2;
+      if (Math.abs(R_bend) <= vHalf * 1.01 + 1e-4) {
+        throw new Error('Verformen (Biegen): Der Biegewinkel ist für die Dicke dieses Körpers zu groß (er würde sich selbst durchdringen).');
+      }
+      mapPt = (pt) => {
+        const s = pt[uIdx] - uRef;
+        const v = pt[bIdx] - vCenter;
+        const phi = s / R_bend;
+        const out = [0, 0, 0];
+        out[uIdx] = uRef + (R_bend - v) * Math.sin(phi);
+        out[bIdx] = vCenter + R_bend - (R_bend - v) * Math.cos(phi);
+        out[aIdx] = pt[aIdx];
+        return out;
+      };
+      gridN = Math.max(15, Math.min(45, Math.ceil(Math.abs(angleDeg) / 10) + 8));
+    } else if (mode === 'twist') {
+      const angleDeg = num(p.angle, 90) * (p.flip ? -1 : 1);
+      if (!isFinite(angleDeg) || Math.abs(angleDeg) > 1080) {
+        throw new Error('Verformen (Verdrehen): Der Verdrehwinkel darf höchstens ±1080° (3 Umdrehungen) betragen.');
+      }
+      if (Math.abs(angleDeg) < 1e-6) return shape.clone();
+      const [i1, i2] = uIdx === 2 ? [0, 1] : uIdx === 0 ? [1, 2] : [2, 0];
+      const c1 = (b[i1] + b[i1 + 3]) / 2;
+      const c2 = (b[i2] + b[i2 + 3]) / 2;
+      const anchor = p.anchor === 'center' || p.anchor === 'end' ? p.anchor : 'start';
+      const uRef = anchor === 'center' ? (u0 + u1) / 2 : anchor === 'end' ? u1 : u0;
+      const theta = (angleDeg * Math.PI) / 180;
+      mapPt = (pt) => {
+        const phi = theta * ((pt[uIdx] - uRef) / L);
+        const dx = pt[i1] - c1, dy = pt[i2] - c2;
+        const cs = Math.cos(phi), sn = Math.sin(phi);
+        const out = [0, 0, 0];
+        out[i1] = c1 + dx * cs - dy * sn;
+        out[i2] = c2 + dx * sn + dy * cs;
+        out[uIdx] = pt[uIdx];
+        return out;
+      };
+      gridN = Math.max(15, Math.min(49, Math.ceil(Math.abs(angleDeg) / 10) + 8));
+    } else {
+      const factor = num(p.factor, 0.5);
+      if (!isFinite(factor) || factor <= 0.01 || factor > 100) {
+        throw new Error('Verformen (Verjüngen): Der Faktor muss zwischen 0,02 und 100 liegen.');
+      }
+      if (Math.abs(factor - 1) < 1e-6) return shape.clone();
+      const [i1, i2] = uIdx === 2 ? [0, 1] : uIdx === 0 ? [1, 2] : [2, 0];
+      const c1 = (b[i1] + b[i1 + 3]) / 2;
+      const c2 = (b[i2] + b[i2 + 3]) / 2;
+      mapPt = (pt) => {
+        const t = p.flip ? (u1 - pt[uIdx]) / L : (pt[uIdx] - u0) / L;
+        const s = 1 + (factor - 1) * t;
+        const out = [0, 0, 0];
+        out[i1] = c1 + (pt[i1] - c1) * s;
+        out[i2] = c2 + (pt[i2] - c2) * s;
+        out[uIdx] = pt[uIdx];
+        return out;
+      };
+      gridN = 11;
+    }
+    return deformSolid(shape, mapPt, gridN);
+  }
   function matchFace(shape, spec) {
     if (!spec || !Array.isArray(spec.c)) return null;
     const b = bboxOf(shape), tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
@@ -5558,7 +5933,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -7807,6 +8182,256 @@ export function createKernel(R, oc) {
       for (const st of stamps) safeDelete(st);
     }
   }
+  function buildSplitFaceOn(baseShape, rel, p) {
+    const regions = Array.isArray(p.regions) ? p.regions : [];
+    const chains = Array.isArray(p.chains) ? p.chains : [];
+    if (!regions.length && !chains.length) {
+      throw new Error('Fläche teilen: Die Skizze enthält keine Kurve und keinen Umriss.');
+    }
+    const side = p.side === 'back' || p.side === 'both' ? p.side : 'front';
+
+    let f = matchFace(baseShape, p.face);
+    if (!f && p.face && p.face.t && Array.isArray(p.face.c)) {
+      const sameT = baseShape.faces.filter((fc) => fc.geomType === p.face.t);
+      let bd = Infinity;
+      for (const fc of sameT) {
+        const c = vec(fc.center);
+        const d = Math.hypot(c[0] - p.face.c[0], c[1] - p.face.c[1], c[2] - p.face.c[2]);
+        if (d < bd) { bd = d; f = fc; }
+      }
+    }
+    if (!f) throw new Error('Fläche teilen: Die gewählte Fläche gibt es nicht mehr.');
+
+    const pl = p.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const M = planeMap({
+      o: transformPoint(rel, pl.o || [0, 0, 0]),
+      x: norm(transformDir(rel, pl.x || [1, 0, 0])),
+      n: norm(transformDir(rel, pl.n || [0, 0, 1])),
+    });
+
+    const wires = [];
+    const secShapes = [];
+    const cleanup = [];
+    try {
+      for (const rg of regions) {
+        if (rg.outer) wires.push(loopWire(rg.outer, M, true));
+        for (const h of rg.holes || []) wires.push(loopWire(h, M, true));
+      }
+      for (const ch of chains) {
+        if (!ch || !Array.isArray(ch.segs) || !ch.segs.length) continue;
+        const eds = segEdges(ch.segs, M);
+        try {
+          if (eds.length) wires.push(R.assembleWire(eds));
+        } finally {
+          for (const e of eds) safeDelete(e);
+        }
+      }
+      if (!wires.length) throw new Error('Fläche teilen: Aus der Skizze ließ sich keine Kurve erzeugen.');
+
+      let refCenter;
+      if (regions.length) {
+        refCenter = sampleRegionsLocal(regions, M).center;
+      } else {
+        let sx = 0, sy = 0, cnt = 0;
+        const addUV = (uv) => { if (uv) { sx += uv[0]; sy += uv[1]; cnt++; } };
+        for (const ch of chains) for (const s of ch.segs || []) { addUV(s.a); addUV(s.m); addUV(s.b); }
+        refCenter = cnt ? M.P([sx / cnt, sy / cnt]) : M.o.slice();
+      }
+
+      const fInfo = faceInfo(f);
+      const fBbox = bboxOf(f);
+      const diagF = Math.hypot(fBbox[3] - fBbox[0], fBbox[4] - fBbox[1], fBbox[5] - fBbox[2]);
+
+      let projDir, t0, t1;
+      const setSpan = (centerPt, rVal) => {
+        const dC = dot(sub(centerPt, M.o), M.n);
+        const toward = Math.abs(dC) > 1e-3 ? (dC > 0 ? 1 : -1) : 1;
+        projDir = mul(M.n, toward);
+        const D = dot(sub(centerPt, M.o), projDir);
+        if (side === 'both') {
+          t0 = Math.min(0, D - rVal) - 2;
+          t1 = Math.max(0, D + rVal) + 2;
+        } else if (side === 'back') {
+          t0 = D;
+          t1 = D + rVal + 2;
+        } else {
+          t0 = Math.min(0, D - rVal) - 2;
+          t1 = D;
+        }
+      };
+
+      if ((f.geomType === 'CYLINDRE' || f.geomType === 'CONE') && Array.isArray(fInfo.axis)) {
+        const axO = fInfo.axis.slice(0, 3), axD = norm(fInfo.axis.slice(3, 6));
+        const closestOnAxis = add(axO, mul(axD, dot(sub(refCenter, axO), axD)));
+        setSpan(closestOnAxis, fInfo.r || diagF / 2);
+      } else if (f.geomType === 'SPHERE' && Array.isArray(fInfo.sc)) {
+        setSpan(fInfo.sc, fInfo.r || diagF / 2);
+      } else {
+        const fc = fInfo.c || [(fBbox[0] + fBbox[3]) / 2, (fBbox[1] + fBbox[4]) / 2, (fBbox[2] + fBbox[5]) / 2];
+        const dF = dot(sub(fc, refCenter), M.n);
+        const baseSign = Math.abs(dF) > 1e-4 ? (dF > 0 ? 1 : -1) : (fInfo.n && dot(M.n, fInfo.n) >= 0 ? -1 : 1);
+        projDir = mul(M.n, side === 'back' ? -baseSign : baseSign);
+        let uMin = Infinity, uMax = -Infinity;
+        for (const q of cornersOf(fBbox)) {
+          const u = dot(sub(q, M.o), projDir);
+          if (u < uMin) uMin = u;
+          if (u > uMax) uMax = u;
+        }
+        t0 = Math.min(0, uMin) - 2;
+        t1 = Math.max(0, uMax) + 2;
+      }
+
+      const span = t1 - t0;
+      if (!(span > 1e-4)) throw new Error('Fläche teilen: Ungültiger Projektionsbereich.');
+      const vecArg = new oc.gp_Vec(projDir[0] * span, projDir[1] * span, projDir[2] * span);
+      cleanup.push(vecArg);
+
+      for (const w of wires) {
+        let wCur = w, shifted = null;
+        if (Math.abs(t0) > 1e-7) {
+          shifted = w.translate(mul(projDir, t0));
+          wCur = shifted;
+        }
+        const pr = new oc.BRepPrimAPI_MakePrism(wCur.wrapped, vecArg, false, true);
+        let sheet = null, sec = null, exp = null;
+        try {
+          pr.Build();
+          sheet = pr.Shape();
+          sec = new oc.BRepAlgoAPI_Section(f.wrapped, sheet, false);
+          sec.ComputePCurveOn1(true);
+          sec.Approximation(true);
+          sec.Build();
+          if (!sec.HasErrors()) {
+            const ss = sec.Shape();
+            exp = new oc.TopExp_Explorer(ss, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+            if (exp.More()) {
+              secShapes.push(ss);
+              cleanup.push(ss);
+            } else {
+              safeDelete(ss);
+            }
+          }
+        } finally {
+          if (exp) try { exp.delete(); } catch (_) {}
+          if (sec) try { sec.delete(); } catch (_) {}
+          safeDelete(sheet);
+          try { pr.delete(); } catch (_) {}
+          safeDelete(shifted);
+        }
+      }
+
+      if (!secShapes.length) {
+        throw new Error('Fläche teilen: Die projizierte Kurve trifft die gewählte Fläche nicht – prüf Lage, Größe oder Seite.');
+      }
+
+      const args = new oc.NCollection_List_TopoDS_Shape();
+      const tools = new oc.NCollection_List_TopoDS_Shape();
+      const spl = new oc.BRepAlgoAPI_Splitter();
+      try {
+        args.Append(baseShape.wrapped);
+        for (const ss of secShapes) tools.Append(ss);
+        spl.SetArguments(args);
+        spl.SetTools(tools);
+        spl.Build();
+        if (spl.HasErrors()) throw new Error('Fläche teilen: Die Fläche ließ sich an dieser Kurve nicht teilen.');
+        const out = R.cast(spl.Shape());
+        if (!out || !R.isShape3D(out)) { safeDelete(out); throw new Error('Fläche teilen: Das Ergebnis ist kein gültiger Körper.'); }
+        return out;
+      } finally {
+        try { spl.delete(); } catch (_) {}
+        try { args.delete(); } catch (_) {}
+        try { tools.delete(); } catch (_) {}
+      }
+    } finally {
+      for (const w of wires) safeDelete(w);
+      for (const c of cleanup) try { if (c && c.delete) c.delete(); } catch (_) {}
+    }
+  }
+  function buildDomeOn(baseShape, p, topo = null, tid = null) {
+    const height = num(p.height, 5);
+    if (!(height >= 0.1 && isFinite(height))) throw new Error('Kuppel: Die Höhe muss mindestens 0,1 mm sein.');
+    const flip = !!p.flip;
+    const isSpherical = p.shape === 'spherical';
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    const cleanup = [];
+    let ts = null, sol = null;
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Kuppel: Wähle eine ebene Körperfläche.');
+      const nv = f.normalAt();
+      const nl = Math.hypot(nv.x, nv.y, nv.z) || 1;
+      const nDir = [nv.x / nl, nv.y / nl, nv.z / nl];
+      const dir = flip ? mul(nDir, -1) : nDir;
+
+      const F = planarFaceFrame(f);
+      const { outer } = sampleFaceLoops2D(f, F);
+      let c3 = vec(f.center);
+      if (outer.length >= 3) {
+        let a2 = 0, cx = 0, cy = 0;
+        for (let i = 0; i < outer.length; i++) {
+          const p0 = outer[i], p1 = outer[(i + 1) % outer.length];
+          const cr = p0[0] * p1[1] - p1[0] * p0[1];
+          a2 += cr;
+          cx += (p0[0] + p1[0]) * cr;
+          cy += (p0[1] + p1[1]) * cr;
+        }
+        if (Math.abs(a2) > 1e-6) c3 = F.P([cx / (3 * a2), cy / (3 * a2)]);
+      }
+
+      const ow = oc.BRepTools.OuterWire(f.wrapped);
+      cleanup.push(ow);
+      ts = new oc.BRepOffsetAPI_ThruSections(true, false, 1e-4);
+      const steps = [0, 0.22, 0.45, 0.68, 0.86];
+      const gpC = new oc.gp_Pnt(c3[0], c3[1], c3[2]);
+      cleanup.push(gpC);
+      for (const frac of steps) {
+        if (frac === 0) {
+          ts.AddWire(ow);
+          continue;
+        }
+        const th = (frac * Math.PI) / 2;
+        const sc = isSpherical ? (1 - frac) : Math.cos(th);
+        const dz = isSpherical ? (height * (1 - sc * sc)) : (height * Math.sin(th));
+        const t1 = new oc.gp_Trsf();
+        t1.SetScale(gpC, sc);
+        const gpV = new oc.gp_Vec(dir[0] * dz, dir[1] * dz, dir[2] * dz);
+        const t2 = new oc.gp_Trsf();
+        t2.SetTranslation(gpV);
+        t2.Multiply(t1);
+        const tr = new oc.BRepBuilderAPI_Transform(ow, t2, true, false);
+        const w = oc.TopoDS.Wire(tr.ModifiedShape(ow));
+        ts.AddWire(w);
+        cleanup.push(t1, gpV, t2, tr, w);
+      }
+      const gpA = new oc.gp_Pnt(c3[0] + dir[0] * height, c3[1] + dir[1] * height, c3[2] + dir[2] * height);
+      const mv = new oc.BRepBuilderAPI_MakeVertex(gpA);
+      const apex = mv.Vertex();
+      ts.AddVertex(apex);
+      cleanup.push(gpA, mv, apex);
+      ts.Build();
+      sol = R.cast(ts.Shape());
+      if (R.measureVolume(sol) < 0) {
+        const rev = R.cast(sol.wrapped.Reversed());
+        safeDelete(sol);
+        sol = rev;
+      }
+      if (flip) {
+        const ext = R.basicFaceExtrusion(f, new R.Vector(mul(nDir, 0.05)));
+        const fused = sol.fuse(ext);
+        safeDelete(ext);
+        safeDelete(sol);
+        sol = fused;
+      }
+      const out = sol;
+      sol = null;
+      return { tool: out, op: flip ? 'cut' : 'fuse' };
+    } finally {
+      safeDelete(sol);
+      if (ts && ts.delete) try { ts.delete(); } catch (_) {}
+      for (const c of cleanup) try { if (c && c.delete) c.delete(); } catch (_) {}
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
 
   function basisFromNormal(fn) {
     const n = norm(fn);
@@ -8400,6 +9025,58 @@ export function createKernel(R, oc) {
         }
         continue;
       }
+      if (it.kind === 'deform') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape) {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Verformen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+        const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+        const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis ? p.bendAxis : (axis === 'y' ? 'x' : 'y');
+        const angle = num(p.angle, 90);
+        const factor = num(p.factor, 0.5);
+        const anchor = p.anchor === 'start' || p.anchor === 'end' || p.anchor === 'center' ? p.anchor : '';
+        const flip = !!p.flip;
+        consumed.set(it.id, tid);
+        const isNoop = (mode === 'taper' && Math.abs(factor - 1) < 1e-6) || (mode !== 'taper' && Math.abs(angle) < 1e-6);
+        if (!isNoop) {
+          const r6 = (v) => Math.round(v * 1e6) / 1e6;
+          const k = keyOf([src.key, 'deform', mode, axis, bendAxis, r6(angle), r6(factor), anchor, flip ? 1 : 0, src.m.map(r6)]);
+          const ce = cacheEntry(k);
+          let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+          if (!next) {
+            if (track) track.rebuilt.add(it.id);
+            try {
+              const idM = isIdentity(src.m);
+              const wShape = idM ? src.shape : applyMatrix(src.shape, src.m);
+              const wDeformed = applyDeform(wShape, { mode, axis, bendAxis, angle, factor, anchor, flip }, bboxOf(wShape));
+              if (!idM) safeDelete(wShape);
+              if (idM) {
+                next = wDeformed;
+              } else {
+                next = applyMatrix(wDeformed, matInvRigid(src.m));
+                safeDelete(wDeformed);
+              }
+              nextTopo = ensureTopoComplete(next, createTopoMap(), src.it.id);
+              cachePut(k, next, null, null, null, nextTopo);
+            } catch (err) {
+              errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              continue;
+            }
+          }
+          src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+          bodies.set(tid, src);
+          if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        } else if (track && track.stepKeys) {
+          track.stepKeys.set(it.id, keyOf([src.key, 'deform', 'id']));
+        }
+        continue;
+      }
       if (it.kind === 'thicken') {
         const p = it.p || {};
         let tid = p.target;
@@ -8703,6 +9380,78 @@ export function createKernel(R, oc) {
           }
           if (delta) featureOps.set(it.id, { targetId: tid, opType: isDeb ? 'cut' : 'join', tools: [{ shape: delta, m: src.m, key: kDelta }] });
         }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'splitFace') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Fläche teilen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const rel = matMul(matInvRigid(src.m), it.m);
+        const k = keyOf([src.key, 'splitFace', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+        const ceS = cacheEntry(k);
+        let next = ceS ? ceS.shape : null, nextTopo = ceS ? ceS.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try { next = buildSplitFaceOn(src.shape, rel, p); nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, null, null, nextTopo); }
+          catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'dome') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Kuppel: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Kuppel: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, 'dome', p]);
+        const kTool = keyOf([src.key, 'domeTool', p]);
+        const ceD = cacheEntry(k);
+        let next = ceD ? ceD.shape : null, nextTopo = ceD ? ceD.topo : null;
+        let tool = anyMirror ? cacheGet(kTool) : null;
+        const opType = p.flip ? 'cut' : 'join';
+        if (!next || (anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildDomeOn(src.shape, p, src.topo, src.it.id);
+            tool = built.tool;
+            if (!next) {
+              const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
+              const br = boolWithTopo(built.op, src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Dm:' + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(toolTopo);
+              cachePut(k, next, null, null, null, nextTopo);
+            }
+            if (anyMirror) cachePut(kTool, tool);
+            else safeDelete(tool);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType, tools: [{ shape: tool, m: src.m, key: kTool }] });
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         if (track && track.stepKeys) track.stepKeys.set(it.id, k);
