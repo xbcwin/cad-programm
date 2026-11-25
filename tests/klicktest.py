@@ -33685,6 +33685,312 @@ def t_a167_kabel_schlaeuche(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a169_zeichnung_bruch_hilfsansicht(p):
+    # 1. Welle 500 mm lang in der Zeichnung mit Bruchlinien kürzen -> Ansicht kürzer, Maße zeigen 500
+    p.empty()
+    p.ev("""
+      App.change('Welle 500 mm', d => {
+        const welle = Model.newItem('cylinder', { d: 20, h: 500 }, { name: 'Welle' });
+        welle.t = { x: -250, y: 0, z: 0, rx: 0, ry: 90, rz: 0 };
+        d.items.push(welle);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    before_w = p.ev("return Drawing.layout.views.front.geo.w")
+    brk_pts = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.front;
+      const toScreen = (u, vv) => {
+        const pt = svg.createSVGPoint();
+        pt.x = v.ox + u * v.s;
+        pt.y = v.oy - vv * v.s;
+        const q = pt.matrixTransform(svg.getScreenCTM());
+        return [q.x, q.y];
+      };
+      return [toScreen(-190, 0), toScreen(190, 0)];
+    """)
+    p.pg.click('#t-break'); p.wait(150)
+    p.pg.mouse.click(brk_pts[0][0], brk_pts[0][1]); p.wait(120)
+    p.pg.mouse.click(brk_pts[1][0], brk_pts[1][1]); p.wait(200)
+
+    # Manuelles Maß von linkem Ende (-250, 10) zu rechtem Ende (250, 10) in der gekürzten Ansicht setzen
+    man_pts = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.front;
+      const mp = (p) => v.geo.breakMap ? v.geo.breakMap.mapPt(p) : p;
+      const toScreen = (p) => {
+        const q = mp(p);
+        const pt = svg.createSVGPoint();
+        pt.x = v.ox + q[0] * v.s;
+        pt.y = v.oy - q[1] * v.s;
+        const r = pt.matrixTransform(svg.getScreenCTM());
+        return [r.x, r.y];
+      };
+      return [toScreen([-250, 10]), toScreen([250, 10]), toScreen([0, 26])];
+    """)
+    p.pg.click('#t-dim'); p.wait(120)
+    p.pg.mouse.click(man_pts[0][0], man_pts[0][1]); p.wait(120)
+    p.pg.mouse.click(man_pts[1][0], man_pts[1][1]); p.wait(120)
+    p.pg.mouse.click(man_pts[2][0], man_pts[2][1]); p.wait(200)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    # Stil auf Welle & Spalt auf 10 mm im Panel umstellen
+    brk_id = p.ev("return Drawing.breaks()[0]?.id")
+    p.ev("Drawing.select(arg)", brk_id); p.wait(120)
+    p.pg.select_option('#dw-brk-style', 'wave'); p.wait(120)
+    p.pg.fill('#dw-brk-gap', '10')
+    p.pg.press('#dw-brk-gap', 'Enter'); p.wait(150)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.front;
+      const brks = Drawing.breaks();
+      const brkLines = [...svg.querySelectorAll('polyline.breakline[data-view="front"]')];
+      const dimTexts = [...svg.querySelectorAll('text.dimtext[data-view="front"]')].map(e => e.textContent);
+      const dims500 = Drawing.dims().filter(d => d.view === 'front' && d.type === 'lin' && Math.abs(d.nominalMm - 500) < 0.2);
+      const maxPts = brkLines.reduce((m, el) => Math.max(m, el.getAttribute('points').trim().split(/\\s+/).length), 0);
+      return {
+        nBrk: brks.length,
+        beforeW: arg.bw,
+        afterW: v?.geo?.w || 0,
+        trueW: v?.geo?.trueBox ? (v.geo.trueBox[2] - v.geo.trueBox[0]) : 0,
+        brkCount: brkLines.length,
+        maxPts,
+        style: brks[0]?.style,
+        gap: brks[0]?.gap,
+        dimTexts,
+        dims500Count: dims500.length,
+      };
+    """, {'bw': before_w})
+
+    # PDF & DXF enthalten 500; Rückgängig / Wiederherstellen & Speichern / Laden
+    exp1 = p.ev("""
+      return Promise.all([Drawing.buildPDFBytes(), Drawing.buildDXF()]).then(([pdfBytes, dxf]) => {
+        const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+        return { pdfHas500: pdfStr.includes('500'), dxfHas500: dxf.text.includes('500') };
+      });
+    """)
+    p.ev("App.undo()"); p.wait(150)
+    gap_after_undo = p.ev("return Drawing.breaks()[0]?.gap")
+    p.ev("App.redo()"); p.wait(150)
+    gap_after_redo = p.ev("return Drawing.breaks()[0]?.gap")
+    saved1 = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved1); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload1 = p.ev("return { n: Drawing.breaks().length, w: Drawing.layout.views.front.geo.w, texts: [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext[data-view=\"front\"]')].map(e => e.textContent) }")
+
+    ok1 = (
+        abs(before_w - 500.0) < 0.5
+        and s1['nBrk'] == 1
+        and s1['afterW'] < 150
+        and abs(s1['trueW'] - 500.0) < 0.5
+        and s1['brkCount'] == 2
+        and s1['maxPts'] >= 10
+        and s1['style'] == 'wave'
+        and abs(s1['gap'] - 10.0) < 0.1
+        and s1['dims500Count'] >= 2
+        and s1['dimTexts'].count('500') >= 2
+        and exp1['pdfHas500'] and exp1['dxfHas500']
+        and gap_after_undo is not None and abs(gap_after_undo - 6.0) < 0.1
+        and gap_after_redo is not None and abs(gap_after_redo - 10.0) < 0.1
+        and reload1['n'] == 1 and reload1['w'] < 150 and reload1['texts'].count('500') >= 2
+    )
+
+    # 2. Hilfsansicht senkrecht zu 30°-Fläche (40 × 30 mm) zeigt die Fläche unverzerrt
+    p.ev("""
+      Commands.setMode('model');
+      App.setDoc(Model.newDoc('Schraegblock'), { fit: false, forceReplace: true });
+      const dx = 40 * Math.cos(Math.PI / 6);
+      const dy = 40 * Math.sin(Math.PI / 6);
+      const pts = [[0, 0], [50, 0], [50, 10], [50 - dx, 10 + dy], [0, 30]];
+      const ents = pts.map((pt, i) => ({ id: 'e' + i, type: 'line', a: pt, b: pts[(i + 1) % pts.length] }));
+      App.change('Prisma mit 30-Grad-Flaeche', d => {
+        d.items.push(Model.newItem('extrude', {
+          sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents, dims: [], cons: [] },
+          dist: 30, dir: 1,
+        }, { name: 'Schraegblock' }));
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    # In Vorderansicht ist die 40 mm lange 30°-Kante verkürzt (~34,64 mm); in Draufsicht anklicken -> Hilfsansicht A
+    aux_pick = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const vTop = Drawing.layout.views.top;
+      const dx = 40 * Math.cos(Math.PI / 6);
+      const dy = 40 * Math.sin(Math.PI / 6);
+      const mx = 50 - dx * 0.5, my = 10 + dy * 0.5;
+      const pt = svg.createSVGPoint();
+      pt.x = vTop.ox + mx * vTop.s;
+      pt.y = vTop.oy - my * vTop.s;
+      const q = pt.matrixTransform(svg.getScreenCTM());
+      const frontHorizLens = (Drawing.layout.views.front.geo.polys || []).filter(p => !p.c && p.pts.length >= 2).map(p => Math.hypot(p.pts[1][0] - p.pts[0][0], p.pts[1][1] - p.pts[0][1]));
+      return { screen: [q.x, q.y], frontHas40: frontHorizLens.some(L => Math.abs(L - 40) < 0.2) };
+    """)
+    p.pg.click('#t-aux'); p.wait(150)
+    p.pg.mouse.click(aux_pick['screen'][0], aux_pick['screen'][1]); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const auxs = Drawing.auxViews();
+      const aux = auxs[0];
+      const v = aux ? Drawing.layout.views['aux_' + aux.id] : null;
+      const segs = v ? (v.geo.polys || []).filter(p => !p.c && p.pts.length >= 2).flatMap(p => {
+        const out = [];
+        for (let i = 0; i < p.pts.length - 1; i++) {
+          const dx = p.pts[i + 1][0] - p.pts[i][0], dy = p.pts[i + 1][1] - p.pts[i][1];
+          out.push({ a: p.pts[i], b: p.pts[i + 1], dx: Math.abs(dx), dy: Math.abs(dy), len: Math.hypot(dx, dy) });
+        }
+        return out;
+      }) : [];
+      const verts30 = segs.filter(s => Math.abs(s.len - 30) < 0.2 && s.dx < 0.2);
+      const xs = verts30.map(s => (s.a[0] + s.b[0]) * 0.5).sort((a, b) => a - b);
+      let pair40 = null;
+      for (let i = 0; i < xs.length; i++) {
+        for (let j = i + 1; j < xs.length; j++) {
+          if (Math.abs((xs[j] - xs[i]) - 40) < 0.2) {
+            const topY = Math.max(verts30[0].a[1], verts30[0].b[1]);
+            pair40 = [[xs[i], topY], [xs[j], topY]];
+            break;
+          }
+        }
+        if (pair40) break;
+      }
+      return {
+        n: auxs.length,
+        label: aux?.label,
+        parent: aux?.parent,
+        hasView: !!v,
+        hasEdge40: !!pair40,
+        hasEdge30: verts30.length >= 2,
+        edge40Pts: pair40,
+        auxArrows: svg.querySelectorAll('polyline.auxarrow').length,
+        auxLabels: [...svg.querySelectorAll('text.auxlabel')].map(e => e.textContent),
+        txt: svg.textContent || '',
+      };
+    """)
+
+    # 40 mm-Kante direkt in der Hilfsansicht bemaßen -> zeigt 40
+    dim40_ok = False
+    if s2['edge40Pts']:
+        d_pts = p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const aux = Drawing.auxViews()[0];
+          const v = Drawing.layout.views['aux_' + aux.id];
+          const toScreen = (p) => {
+            const pt = svg.createSVGPoint();
+            pt.x = v.ox + p[0] * v.s;
+            pt.y = v.oy - p[1] * v.s;
+            const r = pt.matrixTransform(svg.getScreenCTM());
+            return [r.x, r.y];
+          };
+          const [pA, pB] = arg;
+          const my = (pA[1] + pB[1]) * 0.5 + 10;
+          return [toScreen(pA), toScreen(pB), toScreen([(pA[0] + pB[0]) * 0.5, my])];
+        """, s2['edge40Pts'])
+        p.pg.click('#t-dim'); p.wait(120)
+        p.pg.mouse.click(d_pts[0][0], d_pts[0][1]); p.wait(120)
+        p.pg.mouse.click(d_pts[1][0], d_pts[1][1]); p.wait(120)
+        p.pg.mouse.click(d_pts[2][0], d_pts[2][1]); p.wait(200)
+        p.pg.keyboard.press('Escape'); p.wait(120)
+        dim40_res = p.ev("""
+          const aux = Drawing.auxViews()[0];
+          const key = 'aux_' + aux.id;
+          const texts = [...document.querySelectorAll(`#sheet .sheet-holder svg text.dimtext[data-view="${key}"]`)].map(e => e.textContent);
+          const nom = Drawing.dims().find(d => d.view === key && d.type === 'lin')?.nominalMm || 0;
+          return { texts, nom };
+        """)
+        dim40_ok = ('40' in dim40_res['texts'] and abs(dim40_res['nom'] - 40.0) < 0.2)
+
+    ok2 = (
+        not aux_pick['frontHas40']
+        and s2['n'] == 1 and s2['label'] == 'A' and s2['parent'] == 'top'
+        and s2['hasView'] and s2['hasEdge40'] and s2['hasEdge30']
+        and s2['auxArrows'] == 1 and s2['auxLabels'] == ['A']
+        and 'Ansicht A' in s2['txt']
+        and dim40_ok
+    )
+
+    # 3. Richtungsumkehr (.aux-flip), Verschieben, PDF/DXF, Löschen/Rückgängig & Speichern/Laden
+    dir_before = p.ev("const a = Drawing.auxViews()[0]; return Drawing.auxViewSpec(a).dir;")
+    p.pg.locator('#right-body .aux-flip').first.click(); p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    dir_after = p.ev("const a = Drawing.auxViews()[0]; return { flip: a.flip, dir: Drawing.auxViewSpec(a).dir };")
+    dot_flip = sum(dir_before[i] * dir_after['dir'][i] for i in range(3))
+
+    p.ev("const a = Drawing.auxViews()[0]; Drawing.moveView('aux_' + a.id, 15, -8);"); p.wait(120)
+    moved_pos = p.ev("return Drawing.auxViews()[0]?.pos;")
+
+    exp2 = p.ev("""
+      return Promise.all([Drawing.buildPDFBytes(), Drawing.buildDXF()]).then(([pdfBytes, dxf]) => {
+        const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+        return { pdfHasAux: pdfStr.includes('Ansicht A'), dxfHasAux: dxf.text.includes('Ansicht A') };
+      });
+    """)
+
+    saved2 = p.ev("return JSON.stringify(App.doc)")
+    p.pg.locator('#right-body .aux-del').first.click(); p.wait(150)
+    n_aux_del = p.ev("return Drawing.auxViews().length")
+    p.ev("App.undo()"); p.wait(200); p.ev("return Drawing.waitReady()")
+    n_aux_undo = p.ev("return Drawing.auxViews().length")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved2); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    after_reload2 = p.ev("return { n: Drawing.auxViews().length, txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' };")
+
+    ok3 = (
+        dir_after['flip'] is True and dot_flip < -0.99
+        and isinstance(moved_pos, list) and len(moved_pos) == 2
+        and exp2['pdfHasAux'] and exp2['dxfHasAux']
+        and n_aux_del == 0 and n_aux_undo == 1
+        and after_reload2['n'] == 1 and 'Ansicht A' in after_reload2['txt']
+    )
+
+    # 4. Profi-Trennung, Hilfetexte, DE/EN-Schlüsselgleichheit & Befehlssuche
+    meta = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const keys = ['drawingBreakView', 'drawingAuxView'];
+        const helpOk = keys.every(k => hj[k] && hj[k].tip && hj[k].hilfe && hj[k].tipp)
+          && UI.helpKey(document.querySelector('#t-break')) === 'drawingBreakView'
+          && UI.helpKey(document.querySelector('#t-aux')) === 'drawingAuxView';
+        const domOk = Boolean(
+          document.querySelector('#t-break')?.dataset.help === 'drawingBreakView'
+          && document.querySelector('#t-aux')?.dataset.help === 'drawingAuxView'
+          && document.querySelector('#dw-add-break')?.dataset.help === 'drawingBreakView'
+          && document.querySelector('#dw-add-aux')?.dataset.help === 'drawingAuxView'
+        );
+        const cmdOk = Commands.search('unterbrechen').some(c => c.id === 'drawingBreakView')
+          && Commands.search('hilfsansicht').some(c => c.id === 'drawingAuxView');
+        ViewPrefs.setLevel('simple');
+        const simpleHidden = document.querySelector('#tab-drawing').offsetParent === null;
+        ViewPrefs.setLevel('pro');
+        const proShown = document.querySelector('#tab-drawing').offsetParent !== null;
+        return { helpOk, domOk, cmdOk, simpleHidden, proShown };
+      });
+    """)
+    i18n_ok = p.ev("""
+      return Promise.all([fetch('data/texte-de.json').then(r => r.json()), fetch('data/texte-en.json').then(r => r.json())]).then(([de, en]) => {
+        const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+        return dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      });
+    """)
+
+    ok4 = bool(meta['helpOk'] and meta['domOk'] and meta['cmdOk'] and meta['simpleHidden'] and meta['proShown'] and i18n_ok and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -33965,6 +34271,7 @@ TESTS = [
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
+    ('[A-169] Zeichnung: unterbrochene Ansicht (500 mm Welle) & Hilfsansicht (30°-Fläche unverzerrt)', t_a169_zeichnung_bruch_hilfsansicht),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -2606,6 +2606,16 @@ const HELP = {
   "tip": "Skelett-Skizze (Profi): eine Hauptskizze steuert mehrere Teile der Baugruppe",
   "hilfe": "In einer Skelett-Skizze zeichnest du die wichtigen Linien und Maße der gesamten Baugruppe an einer zentralen Stelle. Jedes benannte Maß wird automatisch als verknüpfter Parameter bereitgestellt – änderst du später ein Maß in der Hauptskizze, rechnen alle damit verbundenen Teile sofort neu.",
   "tipp": "Auch eingesetzte Bauteile aus eigenen Dokumenten lassen sich im Skelett-Panel direkt über „Verknüpfen“ mit einem Steuer-Maß verbinden."
+ },
+ "drawingBreakView": {
+  "tip": "Lange Teile mit Bruchlinien verkürzen (Profi): Maße zeigen trotzdem die echte Länge",
+  "hilfe": "Klicke in einer Zeichnungsansicht zuerst auf die erste Bruchstelle und dann auf die zweite. Das lange Zwischenstück wird mit Zickzack- oder Wellenlinien auf einen kurzen Restspalt zusammengeschoben. Alle automatischen und von Hand gesetzten Maße zeigen weiterhin die ungekürzte, echte Modelllänge.",
+  "tipp": "Mit gedrückter Umschalt-Taste wechselst du beim ersten Klick zwischen waagerechtem und senkrechtem Kürzen; im rechten Panel stellst du Spaltbreite und Linienart nachträglich um."
+ },
+ "drawingAuxView": {
+  "tip": "Hilfsansicht senkrecht zu einer schrägen Kante (Profi): zeigt schräge Flächen unverzerrt",
+  "hilfe": "Klicke im Werkzeug „Hilfsansicht“ auf eine schräge oder gerade Kante einer Zeichnungsansicht. Tracery legt genau senkrecht zu dieser Kante eine neue Ansicht („Ansicht A“) mit Blickpfeil an der Kante an, sodass schräge Flächen in wahrer Größe und Form erscheinen und sich direkt bemaßen lassen.",
+  "tipp": "Wenn die Hilfsansicht von der falschen Seite auf die Kante schaut, drehst du den Blick im rechten Panel mit „Umkehren“."
  }
 };
 

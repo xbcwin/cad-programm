@@ -430,6 +430,12 @@ const Panels = (() => {
       const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
       detBtn.dataset.help = 'drawingDetail';
       detBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'detail'));
+      const brkBtn = btn('t-break', 'split', T('tool.dbreak'), T('tool.dbreakTip'), 'U', () => Drawing.tool('break'), Drawing.activeTool === 'break' ? 'active' : '', T('tool.dbreakShort'));
+      brkBtn.dataset.help = 'drawingBreakView';
+      brkBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'break'));
+      const auxBtn = btn('t-aux', 'arrowR', T('tool.daux'), T('tool.dauxTip'), 'H', () => Drawing.tool('aux'), Drawing.activeTool === 'aux' ? 'active' : '', T('tool.dauxShort'));
+      auxBtn.dataset.help = 'drawingAuxView';
+      auxBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'aux'));
       const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' && Drawing.dimMode === 'lin' ? 'active' : '');
       dimBtn.dataset.help = 'drawingDimTypes';
       dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode === 'lin'));
