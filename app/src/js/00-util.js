@@ -721,6 +721,9 @@ const IC = {
   illustration: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z M4 7.5 12 12l8-4.5 M12 12v9" stroke-width="1.9" />',
   quadView: '<rect x="3" y="3" width="8" height="8" rx="1.2"/><rect x="13" y="3" width="8" height="8" rx="1.2"/><rect x="3" y="13" width="8" height="8" rx="1.2"/><rect x="13" y="13" width="8" height="8" rx="1.2"/>',
   gdt: '<rect x="2.5" y="6.5" width="19" height="11" rx="1"/><path d="M9 6.5v11 M15.5 6.5v11 M4.7 14.5l1.6-5 M6.8 14.5l1.6-5 M12.2 12a1.3 1.3 0 1 0 0 .01 M17.2 14.5l1.3-5 1.3 5 M17.7 13.1h1.6"/>',
+  surface: '<path d="M4 13l4.5 6.5L15.5 5H21M6.3 16.3h6.2"/>',
+  weld: '<path d="M3 18l5-6h13M11 12v-5l5 5"/>',
+  symbols: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.2"/><path d="M5.5 8l1.2-2.8L8 8M15.8 6.8h3M17.3 5.3v3"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2687,6 +2690,16 @@ const HELP = {
   "tip": "Schriftfeld-Vorlage wählen (ISO, DIN, ANSI) oder eigene Felder, Logo und Linien gestalten",
   "hilfe": "Über die Vorlagen wechselst du mit einem Klick zwischen ISO 7200, DIN EN ISO 7200 und ANSI/ASME Y14.1. Mit „Schriftfeld gestalten …“ passt du Breite, Höhe, beliebige Text- und Automatik-Felder, Trennlinien sowie ein Firmenlogo an und speicherst deinen Entwurf als eigene Vorlage für alle künftigen Zeichnungen.",
   "tipp": "Klicke in der Live-Vorschau des Schriftfeld-Editors direkt auf ein Feld, um Beschriftung, Lage oder Größe sofort zu ändern."
+ },
+ "drawingSymbols": {
+  "tip": "Oberflächenzeichen (Ra), Schweißsymbole, Kantenzustand und Symbol-Sammlung auf dem Blatt (Profi)",
+  "hilfe": "Setzt normgerechte Oberflächenzeichen nach ISO 1302 (z. B. Ra 1,6 mit spanend/ohne Abtrag und Rillenrichtung), Schweißsymbole nach ISO 2553 (Kehlnaht, V-Naht, Rundum, Baustelle), Kantenzustände nach ISO 13715 (Grat/Entgraten) sowie Norm-Symbole aus der Sammlung direkt an Kanten oder frei aufs Blatt.",
+  "tipp": "Alle Symbole lassen sich nachträglich per Ziehen verschieben, rechts im Panel anpassen und werden in SVG, PDF und DXF als echte Vektoren ausgegeben."
+ },
+ "drawingSymbolLibrary": {
+  "tip": "Symbol-Sammlung mit Normzeichen für Geometrie, Bohrungen, Toleranzen und Fertigung (Profi)",
+  "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
+  "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
  }
 };
 

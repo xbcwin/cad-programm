@@ -36103,6 +36103,243 @@ def t_a178_zeichnung_schriftfeld(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a175_zeichnung_oberflaechen_symbole(p):
+    # [A-175] Zeichnung (Profi): Oberflächenzeichen (Ra), Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' }));
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(150)
+    p.pg.click('#t-sheet'); p.wait(150)
+    p.pg.select_option('#dw-scale', '2')
+    p.pg.click('#sheet-tabs'); p.wait(200)
+
+    pts = p.ev("""
+      const v = Drawing.layout.views.front;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      const top = toS([(b[0] + b[2]) * 0.5, b[3]]);
+      const bot = toS([(b[0] + b[2]) * 0.5, b[1]]);
+      const right = toS([b[2], (b[1] + b[3]) * 0.5]);
+      return {
+        topHit: top,
+        topPlace: [top[0] + 15, top[1] - 10],
+        botHit: bot,
+        botPlace: [bot[0] + 16, bot[1] + 12],
+        rightHit: right,
+        rightPlace: [right[0] + 14, right[1] - 8],
+        stampPt: [right[0] + 42, right[1] + 22],
+      };
+    """)
+
+    # 1. Oberflächenzeichen Ra 1,6 an obere Kante setzen + Schweißsymbol a4 + Kantenzustand -0,2
+    p.pg.click('#dw-srf-btn'); p.wait(150)
+    p.pg.select_option('#dw-srf-new-removal', 'machined'); p.wait(80)
+    p.pg.select_option('#dw-srf-new-param', 'Ra'); p.wait(80)
+    p.pg.fill('#dw-srf-new-val', '1,6')
+    p.pg.dispatch_event('#dw-srf-new-val', 'change'); p.wait(100)
+    for k in ('topHit', 'topPlace'):
+        pt = sheet_screen(*pts[k])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    p.pg.click('#dw-wld-btn'); p.wait(150)
+    p.pg.select_option('#dw-wld-new-type', 'fillet'); p.wait(80)
+    p.pg.fill('#dw-wld-new-size', 'a4')
+    p.pg.dispatch_event('#dw-wld-new-size', 'change'); p.wait(80)
+    p.pg.check('#dw-wld-new-allaround'); p.wait(80)
+    p.pg.check('#dw-wld-new-field'); p.wait(80)
+    for k in ('botHit', 'botPlace'):
+        pt = sheet_screen(*pts[k])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    p.pg.click('#dw-edg-btn'); p.wait(150)
+    p.pg.select_option('#dw-edg-new-state', 'burrFree'); p.wait(80)
+    p.pg.fill('#dw-edg-new-max', '0,2')
+    p.pg.dispatch_event('#dw-edg-new-max', 'change'); p.wait(80)
+    for k in ('rightHit', 'rightPlace'):
+        pt = sheet_screen(*pts[k])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const srfs = Drawing.surfaces(), wlds = Drawing.welds(), edgs = Drawing.edges();
+      const s0 = srfs[0], w0 = wlds[0], e0 = edgs[0];
+      const sTxt = s0 ? [...svg.querySelectorAll(`text.sym-text[data-id="${s0.id}"]`)].map(x => x.textContent) : [];
+      const wTxt = w0 ? [...svg.querySelectorAll(`text.sym-text[data-id="${w0.id}"]`)].map(x => x.textContent) : [];
+      const eTxt = e0 ? [...svg.querySelectorAll(`text.sym-text[data-id="${e0.id}"]`)].map(x => x.textContent) : [];
+      return {
+        nSrf: srfs.length,
+        sAttach: s0?.attachType,
+        sView: s0?.view,
+        sSym: s0 ? svg.querySelectorAll(`polyline.sym-sym[data-id="${s0.id}"]`).length : 0,
+        sArr: s0 ? svg.querySelectorAll(`polygon.sym-arrow[data-id="${s0.id}"]`).length : 0,
+        sTxt,
+        nWld: wlds.length,
+        wSym: w0 ? svg.querySelectorAll(`.sym-sym[data-id="${w0.id}"]`).length : 0,
+        wFill: w0 ? svg.querySelectorAll(`polygon.sym-fill[data-id="${w0.id}"]`).length : 0,
+        wTxt,
+        nEdg: edgs.length,
+        eSym: e0 ? svg.querySelectorAll(`polyline.sym-sym[data-id="${e0.id}"]`).length : 0,
+        eTxt,
+      };
+    """)
+    ok1 = bool(
+        s1['nSrf'] == 1 and s1['sAttach'] == 'edge' and s1['sView'] == 'front'
+        and s1['sSym'] >= 2 and s1['sArr'] == 1 and 'Ra 1,6' in s1['sTxt']
+        and s1['nWld'] == 1 and s1['wSym'] >= 2 and s1['wFill'] == 1 and 'a4' in s1['wTxt']
+        and s1['nEdg'] == 1 and s1['eSym'] >= 1 and '-0,2' in s1['eTxt']
+    )
+
+    # 2. Symbol-Sammlung (>= 10 Symbole), Filter/Suche, Einfügen & Bearbeiten
+    p.pg.click('#dw-symlib-btn')
+    p.pg.wait_for_selector('#dw-symlib-dialog', timeout=5000)
+    p.wait(120)
+    lib_info = p.ev("""
+      const cards = document.querySelectorAll('#dw-symlib-dialog .dw-symlib-card');
+      const svgs = document.querySelectorAll('#dw-symlib-dialog .dw-symlib-prev svg');
+      return { cardCount: cards.length, svgCount: svgs.length, libLen: Drawing.SYMBOL_LIBRARY.length };
+    """)
+    p.pg.fill('#dw-symlib-search', 'senkung'); p.wait(120)
+    filtered_cnt = p.ev("return document.querySelectorAll('#dw-symlib-dialog .dw-symlib-card').length")
+    p.pg.click('#dw-symlib-dialog .dw-symlib-card[data-sym-key="countersink"]'); p.wait(150)
+    tool_after_pick = p.ev("return Drawing.activeTool")
+    pt_stamp = sheet_screen(*pts['stampPt'])
+    p.pg.mouse.move(pt_stamp[0], pt_stamp[1]); p.wait(80)
+    p.pg.mouse.click(pt_stamp[0], pt_stamp[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    # Rechts im Panel Begleittext ändern
+    p.pg.fill('#dw-sel-sym-text', '120°')
+    p.pg.dispatch_event('#dw-sel-sym-text', 'change'); p.wait(120)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const syms = Drawing.symbols();
+      const y0 = syms[0];
+      const yTxt = y0 ? [...svg.querySelectorAll(`text.sym-text[data-id="${y0.id}"]`)].map(x => x.textContent) : [];
+      const yPoly = y0 ? svg.querySelectorAll(`polyline.sym-sym[data-id="${y0.id}"]`).length : 0;
+      return { nSym: syms.length, key: y0?.key, yTxt, yPoly };
+    """)
+    ok2 = bool(
+        lib_info['cardCount'] >= 10 and lib_info['svgCount'] == lib_info['cardCount'] and lib_info['libLen'] >= 10
+        and filtered_cnt >= 1 and filtered_cnt < lib_info['cardCount']
+        and tool_after_pick == 'symbol'
+        and s2['nSym'] == 1 and s2['key'] == 'countersink' and s2['yPoly'] >= 1 and '120°' in s2['yTxt']
+    )
+
+    # 3. SVG-, PDF- und DXF-Export prüfen
+    exp_chk = p.ev("""return (async () => {
+      const svgStr = await Drawing.buildSVGString();
+      const bytes = await Drawing.buildPDFBytes();
+      let pdfStr = '';
+      for (let i = 0; i < bytes.length; i++) pdfStr += String.fromCharCode(bytes[i]);
+      const dxf = await Drawing.buildDXF();
+      return {
+        svgOk: svgStr.includes('sym-sym') && svgStr.includes('Ra 1,6') && svgStr.includes('a4') && svgStr.includes('-0,2') && svgStr.includes('120°'),
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('(Ra 1,6)') && pdfStr.includes('(a4)') && pdfStr.includes('(-0,2)') && !pdfStr.includes('(?)'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('Ra 1,6') && dxf.text.includes('a4') && dxf.text.includes('-0,2') && dxf.text.includes('BEMASSUNG') && dxf.stats.solids >= 2),
+      };
+    })()""")
+    ok3 = bool(exp_chk['svgOk'] and exp_chk['pdfOk'] and exp_chk['dxfOk'])
+
+    # 4. Profi-Schutz, Löschen + Undo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple');"); p.wait(150)
+    simple_chk = p.ev("""
+      const btn = document.querySelector('#t-symbols');
+      const sec = document.querySelector('#dw-sym-sec');
+      return {
+        btnHidden: !btn || !btn.offsetParent,
+        secAbsent: !sec,
+        addSrfNull: Drawing.addSurface({ value: '0,8' }) === null,
+        addWldNull: Drawing.addWeld({ size: 'a3' }) === null,
+        addEdgNull: Drawing.addEdgeSym({ maxVal: '0,1' }) === null,
+        addSymNull: Drawing.addSymbol({ key: 'ground' }) === null,
+        toolBlocked: Drawing.tool('surface') === false && Drawing.activeTool !== 'surface',
+        libBlocked: Drawing.openSymbolLibrary() === null && !document.querySelector('#dw-symlib-dialog'),
+        cmdsBlocked: Commands.search('oberflächenzeichen').length === 0 && Commands.search('symbol-sammlung').length === 0,
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    srf_id = p.ev("const s = Drawing.surfaces()[0]; Drawing.select(s.id); return s.id;")
+    p.wait(120)
+    p.pg.click('#dw-del-sel'); p.wait(150)
+    after_del = p.ev("return Drawing.surfaces().length")
+    p.ev("App.undo()"); p.wait(150)
+    after_undo = p.ev("return Drawing.surfaces().some(x => x.id === arg)", srf_id)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const texts = [...svg.querySelectorAll('text.sym-text')].map(e => e.textContent);
+      return {
+        nSrf: Drawing.surfaces().length,
+        nWld: Drawing.welds().length,
+        nEdg: Drawing.edges().length,
+        nSym: Drawing.symbols().length,
+        hasRa: texts.includes('Ra 1,6'),
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h1 = wh['drawingSymbols'], h2 = wh['drawingSymbolLibrary'];
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('oberflächenzeichen').some(c => c.id === 'drawingSurface')
+        && Commands.search('schweißsymbol').some(c => c.id === 'drawingWeld')
+        && Commands.search('kantenzustand').some(c => c.id === 'drawingEdgeSym')
+        && Commands.search('symbol-sammlung').some(c => c.id === 'drawingSymbolLibrary');
+      return !!(h1 && h1.tip && h1.hilfe && h1.tipp && h2 && h2.tip && h2.hilfe && h2.tipp && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        simple_chk['btnHidden'] and simple_chk['secAbsent']
+        and simple_chk['addSrfNull'] and simple_chk['addWldNull'] and simple_chk['addEdgNull'] and simple_chk['addSymNull']
+        and simple_chk['toolBlocked'] and simple_chk['libBlocked'] and simple_chk['cmdsBlocked']
+        and after_del == 0 and after_undo
+        and val_ok and reload_chk['nSrf'] == 1 and reload_chk['nWld'] == 1 and reload_chk['nEdg'] == 1 and reload_chk['nSym'] == 1 and reload_chk['hasRa']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -36394,6 +36631,7 @@ TESTS = [
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('[A-176] Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)', t_a176_zeichnung_tabellen),
     ('[A-178] Zeichnung: Schriftfeld-Editor und Vorlagen (ISO, DIN, ANSI & eigene Vorlage)', t_a178_zeichnung_schriftfeld),
+    ('[A-175] Zeichnung: Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)', t_a175_zeichnung_oberflaechen_symbole),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

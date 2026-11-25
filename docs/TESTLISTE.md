@@ -2876,6 +2876,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Rückgängig, Speichern/Laden, Hilfen & I18n**: Schriftfeld-Auswahl und Editor funktionieren in Einfach und Profi, `App.undo()`/`redo()` und `Store.validateProject` bleiben stabil, `HELP.drawingTitleBlock` ist mit `werkzeug-hilfen.json` synchron, DE/EN-Schlüssel sind deckungsgleich und `Commands.search('schriftfeld')` findet Editor & Vorlagen (`t_a178_zeichnung_schriftfeld`).
 - [ ] **Von Hand**: Im Browser in „Zeichnung“ die Vorlage auf „DIN EN ISO 7200“ stellen, über „Schriftfeld gestalten …“ ein Firmenlogo und ein eigenes Feld hinzufügen, als eigene Vorlage speichern und in einem neuen Projekt laden.
 
+## Zeichnung: Oberflächenzeichen und Symbol-Sammlung (Auto [A-175], ZE-25, ZE-27)
+
+- [x] **Oberflächenzeichen Ra 1,6, Schweißsymbol & Kantenzustand (ZE-25)**: Im Profi-Modus setzt `#dw-srf-btn` ein spanendes Oberflächenzeichen `Ra 1,6` an die obere Kante der Vorderansicht (`.sym-sym`, `.sym-arrow`, `Ra 1,6` in `text.sym-text`), `#dw-wld-btn` eine Kehlnaht `a4` mit Rundum-Kreis und Montagenaht-Fähnchen an die untere Kante und `#dw-edg-btn` einen Kantenzustand `-0,2` an die rechte Kante (`t_a175_zeichnung_oberflaechen_symbole`).
+- [x] **Symbol-Sammlung mit 16 Normzeichen (ZE-27)**: `#dw-symlib-btn` öffnet `#dw-symlib-dialog` mit 16 Vektor-Symbolen (>= 10), Live-Suche filtert die Karten, Auswahl von `countersink` aktiviert das Stempel-Werkzeug und setzt das Symbol aufs Blatt; Begleittext lässt sich rechts im Panel live ändern (`t_a175_zeichnung_oberflaechen_symbole`).
+- [x] **SVG-, PDF- und DXF-Export**: `buildSVGString()`, `buildPDFBytes()` und `buildDXF()` enthalten alle Symbole und Texte (`Ra 1,6`, `a4`, `-0,2`) als Vektoren auf Layer `BEMASSUNG`, PDF enthält kein `(?)` (`t_a175_zeichnung_oberflaechen_symbole`).
+- [x] **Profi-Schutz, Rückgängig, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind `#t-symbols`, `#dw-sym-sec`, API-Funktionen, Dialog und Befehle gesperrt; Löschen + `App.undo()`, `Store.validateProject` + Neuladen, `werkzeug-hilfen.json` (`drawingSymbols`, `drawingSymbolLibrary`), DE/EN-Schlüsselgleichheit und `Commands.search` bestehen (`t_a175_zeichnung_oberflaechen_symbole`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ ein Oberflächenzeichen mit Rillenrichtung, ein Schweißsymbol (Gegenseite) und zwei Zeichen aus der Symbol-Sammlung auf dem Blatt verschieben und als PDF prüfen.
+
 ## Fehler melden
 
 ```

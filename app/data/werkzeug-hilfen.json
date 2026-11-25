@@ -1938,5 +1938,15 @@
     "tip": "Schriftfeld-Vorlage wählen (ISO, DIN, ANSI) oder eigene Felder, Logo und Linien gestalten",
     "hilfe": "Über die Vorlagen wechselst du mit einem Klick zwischen ISO 7200, DIN EN ISO 7200 und ANSI/ASME Y14.1. Mit „Schriftfeld gestalten …“ passt du Breite, Höhe, beliebige Text- und Automatik-Felder, Trennlinien sowie ein Firmenlogo an und speicherst deinen Entwurf als eigene Vorlage für alle künftigen Zeichnungen.",
     "tipp": "Klicke in der Live-Vorschau des Schriftfeld-Editors direkt auf ein Feld, um Beschriftung, Lage oder Größe sofort zu ändern."
+  },
+  "drawingSymbols": {
+    "tip": "Oberflächenzeichen (Ra), Schweißsymbole, Kantenzustand und Symbol-Sammlung auf dem Blatt (Profi)",
+    "hilfe": "Setzt normgerechte Oberflächenzeichen nach ISO 1302 (z. B. Ra 1,6 mit spanend/ohne Abtrag und Rillenrichtung), Schweißsymbole nach ISO 2553 (Kehlnaht, V-Naht, Rundum, Baustelle), Kantenzustände nach ISO 13715 (Grat/Entgraten) sowie Norm-Symbole aus der Sammlung direkt an Kanten oder frei aufs Blatt.",
+    "tipp": "Alle Symbole lassen sich nachträglich per Ziehen verschieben, rechts im Panel anpassen und werden in SVG, PDF und DXF als echte Vektoren ausgegeben."
+  },
+  "drawingSymbolLibrary": {
+    "tip": "Symbol-Sammlung mit Normzeichen für Geometrie, Bohrungen, Toleranzen und Fertigung (Profi)",
+    "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
+    "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
   }
 }

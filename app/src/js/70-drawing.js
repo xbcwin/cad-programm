@@ -61,6 +61,44 @@ const Drawing = (() => {
     { key: 'totalRunout', group: 'runout', glyph: '⌰', needsDatum: true, defaultDia: false, get label() { return T('draw.gdt.sym.totalRunout'); } },
   ];
   const gdtSymMeta = (key) => GDT_SYMBOLS.find((x) => x.key === key) || GDT_SYMBOLS[6];
+  const SURFACE_REMOVALS = ['any', 'machined', 'prohibited'];
+  const SURFACE_PARAMS = ['Ra', 'Rz', 'Rmax', 'Rt'];
+  const SURFACE_PRESETS = ['0,1', '0,2', '0,4', '0,8', '1,6', '3,2', '6,3', '12,5', '25'];
+  const SURFACE_LAYS = ['', '=', 'perp', 'X', 'M', 'C', 'R', 'P'];
+  const WELD_TYPES = [
+    { key: 'fillet', get label() { return T('draw.weld.type.fillet'); } },
+    { key: 'vButt', get label() { return T('draw.weld.type.vButt'); } },
+    { key: 'squareButt', get label() { return T('draw.weld.type.squareButt'); } },
+    { key: 'bevel', get label() { return T('draw.weld.type.bevel'); } },
+    { key: 'uButt', get label() { return T('draw.weld.type.uButt'); } },
+    { key: 'plug', get label() { return T('draw.weld.type.plug'); } },
+    { key: 'spot', get label() { return T('draw.weld.type.spot'); } },
+    { key: 'seam', get label() { return T('draw.weld.type.seam'); } },
+  ];
+  const WELD_SIDES = ['arrow', 'other', 'both'];
+  const WELD_CONTOURS = ['', 'flat', 'convex', 'concave'];
+  const EDGE_STATES = ['burrFree', 'overhang', 'undercut', 'unspecified'];
+  const EDGE_SIDES = ['any', 'external', 'internal'];
+  const SYMBOL_CATS = ['all', 'geo', 'hole', 'tol', 'mfg', 'elec'];
+  const SYMBOL_LIBRARY = [
+    { key: 'centerline', cat: 'geo', defaultText: '', get label() { return T('draw.symlib.item.centerline.label'); }, get desc() { return T('draw.symlib.item.centerline.desc'); } },
+    { key: 'diameter', cat: 'geo', defaultText: '', get label() { return T('draw.symlib.item.diameter.label'); }, get desc() { return T('draw.symlib.item.diameter.desc'); } },
+    { key: 'slope', cat: 'geo', defaultText: '1:10', get label() { return T('draw.symlib.item.slope.label'); }, get desc() { return T('draw.symlib.item.slope.desc'); } },
+    { key: 'taper', cat: 'geo', defaultText: '1:5', get label() { return T('draw.symlib.item.taper.label'); }, get desc() { return T('draw.symlib.item.taper.desc'); } },
+    { key: 'countersink', cat: 'hole', defaultText: '90°', get label() { return T('draw.symlib.item.countersink.label'); }, get desc() { return T('draw.symlib.item.countersink.desc'); } },
+    { key: 'counterbore', cat: 'hole', defaultText: '', get label() { return T('draw.symlib.item.counterbore.label'); }, get desc() { return T('draw.symlib.item.counterbore.desc'); } },
+    { key: 'depth', cat: 'hole', defaultText: '10', get label() { return T('draw.symlib.item.depth.label'); }, get desc() { return T('draw.symlib.item.depth.desc'); } },
+    { key: 'between', cat: 'tol', defaultText: '', get label() { return T('draw.symlib.item.between.label'); }, get desc() { return T('draw.symlib.item.between.desc'); } },
+    { key: 'allAround', cat: 'tol', defaultText: '', get label() { return T('draw.symlib.item.allAround.label'); }, get desc() { return T('draw.symlib.item.allAround.desc'); } },
+    { key: 'envelope', cat: 'tol', defaultText: '', get label() { return T('draw.symlib.item.envelope.label'); }, get desc() { return T('draw.symlib.item.envelope.desc'); } },
+    { key: 'critical', cat: 'tol', defaultText: 'SC', get label() { return T('draw.symlib.item.critical.label'); }, get desc() { return T('draw.symlib.item.critical.desc'); } },
+    { key: 'partingLine', cat: 'mfg', defaultText: '', get label() { return T('draw.symlib.item.partingLine.label'); }, get desc() { return T('draw.symlib.item.partingLine.desc'); } },
+    { key: 'weldAllAround', cat: 'mfg', defaultText: '', get label() { return T('draw.symlib.item.weldAllAround.label'); }, get desc() { return T('draw.symlib.item.weldAllAround.desc'); } },
+    { key: 'ground', cat: 'elec', defaultText: '', get label() { return T('draw.symlib.item.ground.label'); }, get desc() { return T('draw.symlib.item.ground.desc'); } },
+    { key: 'pe', cat: 'elec', defaultText: '', get label() { return T('draw.symlib.item.pe.label'); }, get desc() { return T('draw.symlib.item.pe.desc'); } },
+    { key: 'northArrow', cat: 'elec', defaultText: 'OBEN', get label() { return T('draw.symlib.item.northArrow.label'); }, get desc() { return T('draw.symlib.item.northArrow.desc'); } },
+  ];
+  const symLibMeta = (key) => SYMBOL_LIBRARY.find((x) => x.key === key) || SYMBOL_LIBRARY[0];
   const THREAD_ARC_START = Math.PI / 12;
   const THREAD_ARC_SPAN = Math.PI * 1.5;
   const HATCH_PATTERNS = {
@@ -82,7 +120,7 @@ const Drawing = (() => {
   let dimMode = 'lin';
   let sectionMode = 'full';
   let sectionDraft = { halfAxis: 'v', halfSide: 'right', depth: null };
-  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null, dragTable = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null, dragTable = null, dragSurface = null, dragWeld = null, dragEdgeSym = null, dragSymbol = null;
   let lastDimAnchors = new Map();
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
@@ -90,6 +128,10 @@ const Drawing = (() => {
   let breakDraft = { dir: 'auto', gap: 6, style: 'zigzag' };
   let datumDraft = { label: 'A' };
   let gdtDraft = { symbol: 'parallelism', tol: 0.05, dia: false, mod: '', d1: '', d2: '', d3: '' };
+  let surfaceDraft = { removal: 'machined', param: 'Ra', value: '1,6', method: '', lay: '', allAround: false };
+  let weldDraft = { type: 'fillet', side: 'arrow', size: 'a4', length: '', allAround: false, field: false, contour: '', tail: '' };
+  let edgeDraft = { state: 'burrFree', maxVal: '0,2', minVal: '', side: 'any', allAround: false };
+  let symbolDraft = { key: 'centerline', text: '', scale: 1, rot: 0, withLeader: false };
   let balloonViewPref = 'auto';
   let centersListOpen = false;
   let lastLostKey = '';
@@ -157,6 +199,112 @@ const Drawing = (() => {
       dimId: attachType === 'dim' && raw.dimId ? String(raw.dimId) : null,
       anchor: a,
       elbow: elb,
+    };
+  }
+  function cleanSurfaceVal(raw) {
+    if (raw == null) return '';
+    let s = typeof raw === 'number' ? String(raw) : String(raw).trim();
+    s = s.replace(/\./g, ',');
+    return s.slice(0, 16);
+  }
+  function normalizeSurface(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const removal = SURFACE_REMOVALS.includes(raw.removal) ? raw.removal : 'machined';
+    const param = SURFACE_PARAMS.includes(raw.param) ? raw.param : 'Ra';
+    const value = cleanSurfaceVal(raw.value !== undefined ? raw.value : '1,6');
+    const method = String(raw.method ?? '').trim().slice(0, 28);
+    const rawLay = raw.lay === '⊥' ? 'perp' : raw.lay;
+    const lay = SURFACE_LAYS.includes(rawLay) ? rawLay : '';
+    const view = raw.view ? String(raw.view) : null;
+    const attachType = raw.attachType === 'edge' || view ? 'edge' : 'free';
+    const anchor = Array.isArray(raw.anchor) && raw.anchor.length >= 2 ? [Number(raw.anchor[0]) || 0, Number(raw.anchor[1]) || 0] : [0, 0];
+    let edgeDir = null;
+    if (Array.isArray(raw.edgeDir) && raw.edgeDir.length >= 2) {
+      const L = Math.hypot(Number(raw.edgeDir[0]) || 0, Number(raw.edgeDir[1]) || 0);
+      if (L > 1e-6) edgeDir = [(Number(raw.edgeDir[0]) || 0) / L, (Number(raw.edgeDir[1]) || 0) / L];
+    }
+    const elbow = Array.isArray(raw.elbow) && raw.elbow.length >= 2 ? [Number(raw.elbow[0]) || 0, Number(raw.elbow[1]) || 0] : [10, -10];
+    return {
+      id: raw.id || uid('srf'),
+      removal,
+      param,
+      value,
+      method,
+      lay,
+      allAround: !!raw.allAround,
+      view,
+      attachType,
+      anchor,
+      edgeDir,
+      elbow,
+    };
+  }
+  function normalizeWeld(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const type = WELD_TYPES.some((w) => w.key === raw.type) ? raw.type : 'fillet';
+    const side = WELD_SIDES.includes(raw.side) ? raw.side : 'arrow';
+    const contour = WELD_CONTOURS.includes(raw.contour) ? raw.contour : '';
+    const view = raw.view ? String(raw.view) : null;
+    const attachType = raw.attachType === 'edge' || view ? 'edge' : 'free';
+    const anchor = Array.isArray(raw.anchor) && raw.anchor.length >= 2 ? [Number(raw.anchor[0]) || 0, Number(raw.anchor[1]) || 0] : [0, 0];
+    const elbow = Array.isArray(raw.elbow) && raw.elbow.length >= 2 ? [Number(raw.elbow[0]) || 0, Number(raw.elbow[1]) || 0] : [14, -10];
+    return {
+      id: raw.id || uid('wld'),
+      type,
+      side,
+      size: String(raw.size ?? 'a4').trim().slice(0, 14),
+      length: String(raw.length ?? '').trim().slice(0, 18),
+      allAround: !!raw.allAround,
+      field: !!raw.field,
+      contour,
+      tail: String(raw.tail ?? '').trim().slice(0, 18),
+      view,
+      attachType,
+      anchor,
+      elbow,
+    };
+  }
+  function normalizeEdgeSym(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const state = EDGE_STATES.includes(raw.state) ? raw.state : 'burrFree';
+    const side = EDGE_SIDES.includes(raw.side) ? raw.side : 'any';
+    const view = raw.view ? String(raw.view) : null;
+    const attachType = raw.attachType === 'edge' || view ? 'edge' : 'free';
+    const anchor = Array.isArray(raw.anchor) && raw.anchor.length >= 2 ? [Number(raw.anchor[0]) || 0, Number(raw.anchor[1]) || 0] : [0, 0];
+    const elbow = Array.isArray(raw.elbow) && raw.elbow.length >= 2 ? [Number(raw.elbow[0]) || 0, Number(raw.elbow[1]) || 0] : [12, -10];
+    return {
+      id: raw.id || uid('edg'),
+      state,
+      maxVal: cleanSurfaceVal(raw.maxVal !== undefined ? raw.maxVal : '0,2'),
+      minVal: cleanSurfaceVal(raw.minVal !== undefined ? raw.minVal : ''),
+      side,
+      allAround: !!raw.allAround,
+      view,
+      attachType,
+      anchor,
+      elbow,
+    };
+  }
+  function normalizePlacedSymbol(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const key = SYMBOL_LIBRARY.some((s) => s.key === raw.key) ? raw.key : 'centerline';
+    const view = raw.view ? String(raw.view) : null;
+    const attachType = raw.attachType === 'edge' || view ? 'edge' : 'free';
+    const anchor = Array.isArray(raw.anchor) && raw.anchor.length >= 2 ? [Number(raw.anchor[0]) || 0, Number(raw.anchor[1]) || 0] : [0, 0];
+    const offset = Array.isArray(raw.offset) && raw.offset.length >= 2 ? [Number(raw.offset[0]) || 0, Number(raw.offset[1]) || 0] : (raw.withLeader ? [12, -10] : [0, 0]);
+    const sc = Number(raw.scale);
+    const rot = Number(raw.rot);
+    return {
+      id: raw.id || uid('sym'),
+      key,
+      text: String(raw.text ?? '').trim().slice(0, 24),
+      scale: Number.isFinite(sc) ? round(clamp(sc, 0.5, 3.0), 2) : 1,
+      rot: Number.isFinite(rot) ? round(clamp(rot, -180, 180), 1) : 0,
+      withLeader: !!raw.withLeader,
+      view,
+      attachType,
+      anchor,
+      offset,
     };
   }
   function normalizeHoleTable(raw) {
@@ -695,6 +843,10 @@ const Drawing = (() => {
       balloons: Array.isArray(opts.balloons) ? opts.balloons.map((b) => ({ ...b, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] })) : [],
       datums: Array.isArray(opts.datums) ? opts.datums.map(normalizeDatum).filter(Boolean) : [],
       gdtFrames: Array.isArray(opts.gdtFrames) ? opts.gdtFrames.map(normalizeGdtFrame).filter(Boolean) : [],
+      surfaces: Array.isArray(opts.surfaces) ? opts.surfaces.map(normalizeSurface).filter(Boolean) : [],
+      welds: Array.isArray(opts.welds) ? opts.welds.map(normalizeWeld).filter(Boolean) : [],
+      edges: Array.isArray(opts.edges) ? opts.edges.map(normalizeEdgeSym).filter(Boolean) : [],
+      symbols: Array.isArray(opts.symbols) ? opts.symbols.map(normalizePlacedSymbol).filter(Boolean) : [],
       bomTable: {
         show: !!(opts.bomTable && opts.bomTable.show),
         pos: Array.isArray(opts.bomTable && opts.bomTable.pos) && opts.bomTable.pos.length >= 2
@@ -745,6 +897,10 @@ const Drawing = (() => {
       balloons: raw && Array.isArray(raw.balloons) ? raw.balloons : undefined,
       datums: raw && Array.isArray(raw.datums) ? raw.datums : undefined,
       gdtFrames: raw && Array.isArray(raw.gdtFrames) ? raw.gdtFrames : undefined,
+      surfaces: raw && Array.isArray(raw.surfaces) ? raw.surfaces : undefined,
+      welds: raw && Array.isArray(raw.welds) ? raw.welds : undefined,
+      edges: raw && Array.isArray(raw.edges) ? raw.edges : undefined,
+      symbols: raw && Array.isArray(raw.symbols) ? raw.symbols : undefined,
       bomTable: raw && raw.bomTable && typeof raw.bomTable === 'object' ? raw.bomTable : undefined,
       holeTable: raw && raw.holeTable && typeof raw.holeTable === 'object' ? raw.holeTable : undefined,
       revTable: raw && raw.revTable && typeof raw.revTable === 'object' ? raw.revTable : undefined,
@@ -791,6 +947,14 @@ const Drawing = (() => {
       else if (cur) cur.datums = cur.datums.map(normalizeDatum).filter(Boolean);
       if (cur && !Array.isArray(cur.gdtFrames)) cur.gdtFrames = [];
       else if (cur) cur.gdtFrames = cur.gdtFrames.map(normalizeGdtFrame).filter(Boolean);
+      if (cur && !Array.isArray(cur.surfaces)) cur.surfaces = [];
+      else if (cur) cur.surfaces = cur.surfaces.map(normalizeSurface).filter(Boolean);
+      if (cur && !Array.isArray(cur.welds)) cur.welds = [];
+      else if (cur) cur.welds = cur.welds.map(normalizeWeld).filter(Boolean);
+      if (cur && !Array.isArray(cur.edges)) cur.edges = [];
+      else if (cur) cur.edges = cur.edges.map(normalizeEdgeSym).filter(Boolean);
+      if (cur && !Array.isArray(cur.symbols)) cur.symbols = [];
+      else if (cur) cur.symbols = cur.symbols.map(normalizePlacedSymbol).filter(Boolean);
       if (cur && (!cur.bomTable || typeof cur.bomTable !== 'object')) cur.bomTable = { show: false, pos: null };
       else if (cur) cur.bomTable = {
         show: !!cur.bomTable.show,
@@ -842,8 +1006,8 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin' || tool === 'surface' || tool === 'weld' || tool === 'edge' || tool === 'symbol') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -858,8 +1022,8 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin' || tool === 'surface' || tool === 'weld' || tool === 'edge' || tool === 'symbol') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -962,6 +1126,10 @@ const Drawing = (() => {
       view: remapView(fr.view),
       dimId: remapDimId(fr.dimId),
     })).filter(Boolean);
+    clone.surfaces = (clone.surfaces || []).map((sr) => normalizeSurface({ ...sr, id: uid('srf'), view: remapView(sr.view) })).filter(Boolean);
+    clone.welds = (clone.welds || []).map((wl) => normalizeWeld({ ...wl, id: uid('wld'), view: remapView(wl.view) })).filter(Boolean);
+    clone.edges = (clone.edges || []).map((ed) => normalizeEdgeSym({ ...ed, id: uid('edg'), view: remapView(ed.view) })).filter(Boolean);
+    clone.symbols = (clone.symbols || []).map((sy) => normalizePlacedSymbol({ ...sy, id: uid('sym'), view: remapView(sy.view) })).filter(Boolean);
     clone.bomTable = {
       show: !!(src.bomTable && src.bomTable.show),
       pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
@@ -1048,7 +1216,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -1488,6 +1656,10 @@ const Drawing = (() => {
       s.balloons = (s.balloons || []).filter((b) => b.view !== key);
       s.datums = (s.datums || []).filter((dt) => dt.view !== key);
       s.gdtFrames = (s.gdtFrames || []).filter((fr) => fr.view !== key);
+      s.surfaces = (s.surfaces || []).filter((sr) => sr.view !== key);
+      s.welds = (s.welds || []).filter((wl) => wl.view !== key);
+      s.edges = (s.edges || []).filter((ed) => ed.view !== key);
+      s.symbols = (s.symbols || []).filter((sy) => sy.view !== key);
     });
     selView = currentViewKey();
     render(); Panels.renderRight();
@@ -3154,6 +3326,10 @@ const Drawing = (() => {
       d.balloons = (d.balloons || []).filter((x) => x.view !== id);
       d.datums = (d.datums || []).filter((x) => x.view !== id);
       d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== id);
+      d.surfaces = (d.surfaces || []).filter((x) => x.view !== id);
+      d.welds = (d.welds || []).filter((x) => x.view !== id);
+      d.edges = (d.edges || []).filter((x) => x.view !== id);
+      d.symbols = (d.symbols || []).filter((x) => x.view !== id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -5632,6 +5808,321 @@ const Drawing = (() => {
       curX += dc.cw;
     }
   }
+  // ---------- Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27) ----------
+  function drawSurface(srf, lines, texts, lay = layout, sh = dwg()) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (srf.view) {
+      const v = lay.views[srf.view];
+      if (!v) return;
+      A = toSheet(v, srf.anchor);
+    } else {
+      A = [srf.anchor[0], srf.anchor[1]];
+    }
+    const elb = (dragSurface && dragSurface.id === srf.id && dragSurface.curElbow) ? dragSurface.curElbow : (srf.elbow || [10, -10]);
+    const FS = clamp(st.fontSize * 0.92, 2.5, 6.8);
+    const H = clamp(FS * 2.25, 6.2, 11.5);
+    const h1 = H * 0.46;
+    const k = 0.57735;
+    const meta = { id: srf.id, view: srf.view || undefined, symKind: 'surface', symKey: srf.param, symVal: srf.value };
+    let cx, cy;
+    const elbLen = Math.hypot(elb[0], elb[1]);
+    if (elbLen > 2.5) {
+      const E = [A[0] + elb[0], A[1] + elb[1]];
+      const dir = E[0] >= A[0] ? 1 : -1;
+      const S = [E[0] + dir * 4.0, E[1]];
+      lines.push({ pts: [A, E, S], cls: 'sym-line', ...meta });
+      arrowHead(lines, A, E, clamp(FS * 0.82, 2.0, 5.2), true, srf.id, null, 'filled', 'sym-arrow', srf.view || undefined);
+      if (srf.allAround) lines.push({ circle: [E[0], E[1], clamp(FS * 0.36, 0.9, 1.8)], cls: 'sym-sym', ...meta });
+      cx = dir >= 0 ? S[0] + h1 * k + 1.2 : S[0] - H * k - 1.2;
+      cy = S[1];
+    } else {
+      cx = A[0];
+      cy = A[1];
+      if (srf.allAround) lines.push({ circle: [cx, cy, clamp(FS * 0.36, 0.9, 1.8)], cls: 'sym-sym', ...meta });
+    }
+    const pL = [cx - h1 * k, cy - h1];
+    const pR1 = [cx + h1 * k, cy - h1];
+    const pT = [cx + H * k, cy - H];
+    lines.push({ pts: [pL, [cx, cy], pT], cls: 'sym-sym', ...meta });
+    if (srf.removal === 'machined') {
+      lines.push({ pts: [pL, pR1], cls: 'sym-sym', ...meta });
+    } else if (srf.removal === 'prohibited') {
+      lines.push({ circle: [cx, cy - h1 * 0.62, h1 * 0.34], cls: 'sym-sym', ...meta });
+    }
+    const valLabel = srf.value ? `${srf.param} ${srf.value}` : '';
+    const hasMeth = !!srf.method;
+    let maxRight = pT[0] + 1.5;
+    if (valLabel || hasMeth) {
+      const wVal = valLabel ? textW(valLabel, FS) + 2.8 : 0;
+      const wMeth = hasMeth ? textW(srf.method, FS * 0.86) + 2.8 : 0;
+      const barW = Math.max(8, wVal, wMeth);
+      lines.push({ pts: [pT, [pT[0] + barW, pT[1]]], cls: 'sym-sym', ...meta });
+      if (valLabel) {
+        texts.push({ x: pT[0] + 1.1, y: pT[1] + FS * 1.12, t: valLabel, size: FS, rot: 0, anchor: 'start', cls: 'sym-text', ...meta });
+      }
+      if (hasMeth) {
+        texts.push({ x: pT[0] + 1.1, y: pT[1] - 1.1, t: srf.method, size: FS * 0.86, rot: 0, anchor: 'start', cls: 'sym-text', ...meta });
+      }
+      maxRight = pT[0] + barW;
+    }
+    if (srf.lay) {
+      const lx = cx + h1 * k + 1.6;
+      const ly = cy - FS * 0.15;
+      if (srf.lay === 'perp') {
+        const s0 = FS * 0.42;
+        lines.push({ pts: [[lx - s0, ly], [lx + s0, ly]], cls: 'sym-sym', ...meta });
+        lines.push({ pts: [[lx, ly], [lx, ly - s0 * 1.85]], cls: 'sym-sym', ...meta });
+      } else {
+        texts.push({ x: lx, y: cy, t: srf.lay, size: FS * 0.9, rot: 0, anchor: 'middle', cls: 'sym-text', ...meta });
+      }
+      maxRight = Math.max(maxRight, lx + FS);
+    }
+    const hitX = pL[0] - 1.0, hitY = pT[1] - (hasMeth ? FS + 1.8 : 1.0);
+    lines.push({ rect: [hitX, hitY, Math.max(6, maxRight - hitX + 1.0), (cy - hitY) + 1.0], cls: 'sym-hit', ...meta });
+  }
+  function drawWeldGlyph(type, cx, cy, sz, isTop, lines, meta) {
+    const s = isTop ? -1 : 1;
+    const seg = (pts) => lines.push({ pts, cls: 'sym-sym', ...meta });
+    if (type === 'fillet') {
+      seg([[cx - sz * 0.55, cy], [cx - sz * 0.55, cy + s * sz], [cx + sz * 0.65, cy], [cx - sz * 0.55, cy]]);
+    } else if (type === 'vButt') {
+      seg([[cx - sz * 0.6, cy + s * sz], [cx, cy], [cx + sz * 0.6, cy + s * sz]]);
+    } else if (type === 'squareButt') {
+      seg([[cx - sz * 0.25, cy], [cx - sz * 0.25, cy + s * sz]]);
+      seg([[cx + sz * 0.25, cy], [cx + sz * 0.25, cy + s * sz]]);
+    } else if (type === 'bevel') {
+      seg([[cx - sz * 0.45, cy], [cx - sz * 0.45, cy + s * sz]]);
+      seg([[cx - sz * 0.45, cy], [cx + sz * 0.55, cy + s * sz]]);
+    } else if (type === 'uButt') {
+      seg([[cx, cy], [cx, cy + s * sz * 0.35]]);
+      seg([[cx - sz * 0.55, cy + s * sz], [cx - sz * 0.42, cy + s * sz * 0.48], [cx, cy + s * sz * 0.35], [cx + sz * 0.42, cy + s * sz * 0.48], [cx + sz * 0.55, cy + s * sz]]);
+    } else if (type === 'plug') {
+      seg([[cx - sz * 0.55, cy], [cx - sz * 0.42, cy + s * sz], [cx + sz * 0.42, cy + s * sz], [cx + sz * 0.55, cy]]);
+    } else if (type === 'spot') {
+      lines.push({ circle: [cx, cy + s * sz * 0.5, sz * 0.45], cls: 'sym-sym', ...meta });
+    } else if (type === 'seam') {
+      lines.push({ circle: [cx, cy + s * sz * 0.5, sz * 0.45], cls: 'sym-sym', ...meta });
+      seg([[cx - sz * 0.65, cy + s * sz * 0.28], [cx + sz * 0.65, cy + s * sz * 0.28]]);
+      seg([[cx - sz * 0.65, cy + s * sz * 0.72], [cx + sz * 0.65, cy + s * sz * 0.72]]);
+    }
+  }
+  function drawWeld(wld, lines, texts, lay = layout, sh = dwg()) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (wld.view) {
+      const v = lay.views[wld.view];
+      if (!v) return;
+      A = toSheet(v, wld.anchor);
+    } else {
+      A = [wld.anchor[0], wld.anchor[1]];
+    }
+    const elb = (dragWeld && dragWeld.id === wld.id && dragWeld.curElbow) ? dragWeld.curElbow : (wld.elbow || [14, -10]);
+    const E = [A[0] + elb[0], A[1] + elb[1]];
+    const dir = E[0] >= A[0] ? 1 : -1;
+    const FS = clamp(st.fontSize * 0.9, 2.4, 6.4);
+    const sz = clamp(FS * 1.15, 3.0, 6.2);
+    const wSize = wld.size ? textW(wld.size, FS) + 1.8 : 0;
+    const wLen = wld.length ? textW(wld.length, FS) + 1.8 : 0;
+    const refLen = Math.max(12, wSize + sz * 1.6 + wLen + 4);
+    const R = [E[0] + dir * refLen, E[1]];
+    const meta = { id: wld.id, view: wld.view || undefined, symKind: 'weld', symKey: wld.type, symVal: wld.size };
+    lines.push({ pts: [A, E, R], cls: 'sym-line', ...meta });
+    arrowHead(lines, A, E, clamp(FS * 0.85, 2.0, 5.2), true, wld.id, null, 'filled', 'sym-arrow', wld.view || undefined);
+    if (wld.side === 'other' || wld.side === 'both') {
+      lines.push({ pts: [[E[0], E[1] + 1.5], [R[0], R[1] + 1.5]], cls: 'sym-dash', ...meta });
+    }
+    if (wld.allAround) lines.push({ circle: [E[0], E[1], clamp(FS * 0.38, 1.0, 1.9)], cls: 'sym-sym', ...meta });
+    if (wld.field) {
+      const mastTop = [E[0], E[1] - sz * 1.45];
+      lines.push({ pts: [E, mastTop], cls: 'sym-sym', ...meta });
+      lines.push({ poly: [mastTop, [E[0] + dir * sz * 0.9, E[1] - sz * 1.15], [E[0], E[1] - sz * 0.85]], cls: 'sym-fill', ...meta });
+    }
+    const midX = (E[0] + R[0]) * 0.5;
+    const drawSide = (isTop, baseY) => {
+      drawWeldGlyph(wld.type, midX, baseY, sz, isTop, lines, meta);
+      const s = isTop ? -1 : 1;
+      if (wld.contour === 'flat') {
+        lines.push({ pts: [[midX - sz * 0.5, baseY + s * (sz + 1.1)], [midX + sz * 0.5, baseY + s * (sz + 1.1)]], cls: 'sym-sym', ...meta });
+      } else if (wld.contour === 'convex') {
+        const y0 = baseY + s * (sz + 0.7);
+        lines.push({ pts: [[midX - sz * 0.5, y0], [midX, y0 + s * 1.1], [midX + sz * 0.5, y0]], cls: 'sym-sym', ...meta });
+      } else if (wld.contour === 'concave') {
+        const y0 = baseY + s * (sz + 1.4);
+        lines.push({ pts: [[midX - sz * 0.5, y0], [midX, y0 - s * 1.0], [midX + sz * 0.5, y0]], cls: 'sym-sym', ...meta });
+      }
+      const txtY = isTop ? baseY - 0.9 : baseY + FS + 0.9;
+      if (wld.size) texts.push({ x: midX - sz * 0.85, y: txtY, t: wld.size, size: FS, rot: 0, anchor: 'end', cls: 'sym-text', ...meta });
+      if (wld.length) texts.push({ x: midX + sz * 0.95, y: txtY, t: wld.length, size: FS, rot: 0, anchor: 'start', cls: 'sym-text', ...meta });
+    };
+    if (wld.side === 'arrow' || wld.side === 'both') drawSide(true, E[1]);
+    if (wld.side === 'other' || wld.side === 'both') drawSide(false, wld.side === 'both' ? E[1] + 1.5 : E[1]);
+    if (wld.tail) {
+      const f = sz * 0.75;
+      lines.push({ pts: [[R[0] + dir * f, R[1] - f], R, [R[0] + dir * f, R[1] + f]], cls: 'sym-sym', ...meta });
+      texts.push({ x: R[0] + dir * (f + 1.2), y: R[1] + FS * 0.34, t: wld.tail, size: FS * 0.92, rot: 0, anchor: dir >= 0 ? 'start' : 'end', cls: 'sym-text', ...meta });
+    }
+    const minX = Math.min(E[0], R[0]) - 2, maxX = Math.max(E[0], R[0]) + (wld.tail ? textW(wld.tail, FS) + 5 : 2);
+    lines.push({ rect: [minX, E[1] - sz * 1.6, Math.max(10, maxX - minX), sz * 3.2 + 2], cls: 'sym-hit', ...meta });
+  }
+  function drawEdgeSym(edg, lines, texts, lay = layout, sh = dwg()) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (edg.view) {
+      const v = lay.views[edg.view];
+      if (!v) return;
+      A = toSheet(v, edg.anchor);
+    } else {
+      A = [edg.anchor[0], edg.anchor[1]];
+    }
+    const elb = (dragEdgeSym && dragEdgeSym.id === edg.id && dragEdgeSym.curElbow) ? dragEdgeSym.curElbow : (edg.elbow || [12, -10]);
+    const E = [A[0] + elb[0], A[1] + elb[1]];
+    const dir = E[0] >= A[0] ? 1 : -1;
+    const FS = clamp(st.fontSize * 0.9, 2.4, 6.4);
+    const hStem = clamp(FS * 1.45, 3.8, 7.6);
+    const sign = edg.state === 'burrFree' ? '-' : edg.state === 'overhang' ? '+' : edg.state === 'undercut' ? '±' : '';
+    const line1 = edg.maxVal ? `${sign}${edg.maxVal}` : sign;
+    const line2 = edg.minVal ? `${sign}${edg.minVal}` : '';
+    const refW = Math.max(7.5, textW(line1, FS) + 3.5, textW(line2, FS) + 3.5);
+    const cornerX = dir >= 0 ? E[0] + 3.0 : E[0] - 3.0 - refW;
+    const cornerY = E[1];
+    const meta = { id: edg.id, view: edg.view || undefined, symKind: 'edge', symKey: edg.state, symVal: line1 };
+    lines.push({ pts: [A, E, [cornerX, cornerY]], cls: 'sym-line', ...meta });
+    arrowHead(lines, A, E, clamp(FS * 0.85, 2.0, 5.2), true, edg.id, null, 'filled', 'sym-arrow', edg.view || undefined);
+    lines.push({ pts: [[cornerX, cornerY - hStem], [cornerX, cornerY], [cornerX + refW, cornerY]], cls: 'sym-sym', ...meta });
+    if (edg.allAround) lines.push({ circle: [cornerX, cornerY, clamp(FS * 0.36, 0.9, 1.8)], cls: 'sym-sym', ...meta });
+    if (edg.side === 'external') {
+      lines.push({ pts: [[cornerX + 1.2, cornerY - hStem * 0.4], [cornerX + 2.4, cornerY - hStem * 0.4]], cls: 'sym-sym', ...meta });
+    } else if (edg.side === 'internal') {
+      lines.push({ pts: [[cornerX + 1.8, cornerY - hStem * 0.65], [cornerX + 1.8, cornerY - hStem * 0.15]], cls: 'sym-sym', ...meta });
+    }
+    if (line1) {
+      texts.push({ x: cornerX + 2.8, y: cornerY - 1.0, t: line1, size: FS, rot: 0, anchor: 'start', cls: 'sym-text', ...meta });
+    }
+    if (line2) {
+      texts.push({ x: cornerX + 2.8, y: cornerY + FS + 0.6, t: line2, size: FS, rot: 0, anchor: 'start', cls: 'sym-text', ...meta });
+    }
+    lines.push({ rect: [cornerX - 1.5, cornerY - hStem - 1.5, refW + 3.0, hStem + (line2 ? FS + 3.0 : 3.0)], cls: 'sym-hit', ...meta });
+  }
+  function drawLibSymbolGlyph(key, cx, cy, sz, rotDeg, lines, texts, meta = {}, extraText = '') {
+    const rad = ((rotDeg || 0) * Math.PI) / 180;
+    const cs = Math.cos(rad), sn = Math.sin(rad);
+    const rp = (lx, ly) => [cx + lx * cs - ly * sn, cy + lx * sn + ly * cs];
+    const seg = (pts) => lines.push({ pts: pts.map(([x, y]) => rp(x, y)), cls: 'sym-sym', ...meta });
+    const polyFill = (pts) => lines.push({ poly: pts.map(([x, y]) => rp(x, y)), cls: 'sym-fill', ...meta });
+    const circ = (lx, ly, r) => {
+      const [gx, gy] = rp(lx, ly);
+      lines.push({ circle: [gx, gy, r], cls: 'sym-sym', ...meta });
+    };
+    const r = sz * 0.46;
+    const FS = clamp(sz * 0.56, 2.2, 8.0);
+    if (key === 'centerline') {
+      const a = r * 0.42;
+      seg([[-a * 0.4, -r * 0.85], [-a * 1.15, -r * 0.85], [-a * 1.15, r * 0.35], [-a * 0.4, r * 0.35]]);
+      seg([[a * 0.25, -r * 0.35], [a * 0.25, r * 0.85], [a * 1.15, r * 0.85]]);
+    } else if (key === 'diameter') {
+      circ(0, 0, r * 0.68);
+      seg([[-r * 0.72, r * 0.85], [r * 0.72, -r * 0.85]]);
+    } else if (key === 'slope') {
+      seg([[-r * 0.9, r * 0.45], [r * 0.9, r * 0.45], [-r * 0.9, -r * 0.45], [-r * 0.9, r * 0.45]]);
+    } else if (key === 'taper') {
+      seg([[-r * 0.9, -r * 0.52], [r * 0.9, -r * 0.16], [r * 0.9, r * 0.16], [-r * 0.9, r * 0.52], [-r * 0.9, -r * 0.52]]);
+      seg([[-r * 1.1, 0], [r * 1.1, 0]]);
+    } else if (key === 'countersink') {
+      seg([[-r * 0.85, -r * 0.55], [0, r * 0.65], [r * 0.85, -r * 0.55]]);
+    } else if (key === 'counterbore') {
+      seg([[-r * 0.75, -r * 0.6], [-r * 0.75, r * 0.55], [r * 0.75, r * 0.55], [r * 0.75, -r * 0.6]]);
+    } else if (key === 'depth') {
+      seg([[-r * 0.75, -r * 0.55], [r * 0.75, -r * 0.55]]);
+      seg([[0, -r * 0.55], [0, r * 0.72]]);
+      seg([[-r * 0.45, r * 0.22], [0, r * 0.72], [r * 0.45, r * 0.22]]);
+    } else if (key === 'between') {
+      seg([[-r * 0.85, 0], [r * 0.85, 0]]);
+      polyFill([[-r * 0.95, 0], [-r * 0.38, -r * 0.3], [-r * 0.38, r * 0.3]]);
+      polyFill([[r * 0.95, 0], [r * 0.38, -r * 0.3], [r * 0.38, r * 0.3]]);
+    } else if (key === 'allAround') {
+      circ(0, 0, r * 0.66);
+      seg([[-r * 1.05, 0], [-r * 0.66, 0]]);
+      seg([[r * 0.66, 0], [r * 1.05, 0]]);
+    } else if (key === 'envelope') {
+      circ(0, 0, r * 0.78);
+      texts.push({ x: cx, y: cy + FS * 0.34, t: 'E', size: FS * 0.92, rot: rotDeg || 0, anchor: 'middle', cls: 'sym-text', ...meta });
+    } else if (key === 'critical') {
+      seg([[0, -r * 0.92], [r * 0.88, 0], [0, r * 0.92], [-r * 0.88, 0], [0, -r * 0.92]]);
+    } else if (key === 'partingLine') {
+      seg([[-r * 0.95, 0], [r * 0.95, 0]]);
+      seg([[-r * 0.45, -r * 0.5], [-r * 0.45, r * 0.5]]);
+      seg([[r * 0.45, -r * 0.5], [r * 0.45, r * 0.5]]);
+    } else if (key === 'weldAllAround') {
+      circ(0, 0, r * 0.52);
+      seg([[0, 0], [r * 0.95, -r * 0.75], [r * 0.95, 0], [0, 0]]);
+    } else if (key === 'ground') {
+      seg([[0, -r * 0.82], [0, r * 0.08]]);
+      seg([[-r * 0.85, r * 0.08], [r * 0.85, r * 0.08]]);
+      seg([[-r * 0.55, r * 0.42], [r * 0.55, r * 0.42]]);
+      seg([[-r * 0.25, r * 0.76], [r * 0.25, r * 0.76]]);
+    } else if (key === 'pe') {
+      circ(0, 0, r * 0.85);
+      seg([[0, -r * 0.58], [0, r * 0.05]]);
+      seg([[-r * 0.52, r * 0.05], [r * 0.52, r * 0.05]]);
+      seg([[-r * 0.32, r * 0.32], [r * 0.32, r * 0.32]]);
+      seg([[-r * 0.14, r * 0.56], [r * 0.14, r * 0.56]]);
+    } else if (key === 'northArrow') {
+      seg([[0, r * 0.85], [0, -r * 0.85]]);
+      polyFill([[0, -r * 0.95], [-r * 0.36, -r * 0.25], [r * 0.36, -r * 0.25]]);
+      seg([[-r * 0.55, r * 0.85], [r * 0.55, r * 0.85]]);
+    }
+    if (extraText) {
+      texts.push({ x: cx + r + 1.5, y: cy + FS * 0.34, t: extraText, size: FS * 0.95, rot: 0, anchor: 'start', cls: 'sym-text', ...meta });
+    }
+  }
+  function drawPlacedSymbol(sym, lines, texts, lay = layout, sh = dwg()) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (sym.view) {
+      const v = lay.views[sym.view];
+      if (!v) return;
+      A = toSheet(v, sym.anchor);
+    } else {
+      A = [sym.anchor[0], sym.anchor[1]];
+    }
+    const off = (dragSymbol && dragSymbol.id === sym.id && dragSymbol.curOffset) ? dragSymbol.curOffset : (sym.offset || [0, 0]);
+    const liveA = (dragSymbol && dragSymbol.id === sym.id && dragSymbol.curSheetPt && !sym.withLeader) ? dragSymbol.curSheetPt : A;
+    const sz = clamp(st.fontSize * 2.1 * (sym.scale || 1), 4.2, 24);
+    const meta = { id: sym.id, view: sym.view || undefined, symKind: 'symbol', symKey: sym.key, symVal: sym.text || '' };
+    let cx, cy;
+    if (sym.withLeader) {
+      const elb = Math.hypot(off[0], off[1]) > 2.5 ? off : [12, -10];
+      const E = [A[0] + elb[0], A[1] + elb[1]];
+      const dir = E[0] >= A[0] ? 1 : -1;
+      const tipX = E[0] + dir * (sz * 0.65);
+      lines.push({ pts: [A, E], cls: 'sym-line', ...meta });
+      arrowHead(lines, A, E, clamp(st.fontSize * 0.85, 2.0, 5.2), true, sym.id, null, 'filled', 'sym-arrow', sym.view || undefined);
+      cx = tipX;
+      cy = E[1];
+    } else {
+      cx = liveA[0];
+      cy = liveA[1];
+    }
+    drawLibSymbolGlyph(sym.key, cx, cy, sz, sym.rot || 0, lines, texts, meta, sym.text || '');
+    const tw = sym.text ? textW(sym.text, clamp(sz * 0.56, 2.2, 8.0)) + 2.5 : 0;
+    lines.push({ rect: [cx - sz * 0.58, cy - sz * 0.58, sz * 1.16 + tw, sz * 1.16], cls: 'sym-hit', ...meta });
+  }
+  function renderLibSymbolPreviewSVG(key) {
+    const tmpL = [], tmpT = [];
+    drawLibSymbolGlyph(key, 16, 16, 20, 0, tmpL, tmpT, {}, '');
+    const f = (n) => (Math.round(n * 100) / 100).toString();
+    const parts = [];
+    for (const l of tmpL) {
+      if (l.circle) parts.push(`<circle cx="${f(l.circle[0])}" cy="${f(l.circle[1])}" r="${f(l.circle[2])}" fill="none" stroke="#111" stroke-width="1.35" stroke-linecap="round"/>`);
+      else if (l.poly) parts.push(`<polygon points="${l.poly.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')}" fill="#111"/>`);
+      else if (l.pts) parts.push(`<polyline points="${l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')}" fill="none" stroke="#111" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>`);
+    }
+    for (const t of tmpT) {
+      parts.push(`<text x="${f(t.x)}" y="${f(t.y)}" font-size="${f(t.size)}" text-anchor="${t.anchor || 'middle'}" font-weight="600" fill="#111">${esc(t.t)}</text>`);
+    }
+    return `<svg viewBox="0 0 32 32" aria-hidden="true">${parts.join('')}</svg>`;
+  }
   function drawBalloon(bl, lines, texts, lay = layout, sh = dwg(), bom = bomData) {
     const st = sheetDimStyle(sh);
     let A;
@@ -6156,6 +6647,11 @@ const Drawing = (() => {
     // Form- und Lagetoleranzen & Bezüge (ZE-24)
     for (const dat of sh.datums || []) drawDatum(dat, lines, texts, lay, sh, dimAnchors);
     for (const fr of sh.gdtFrames || []) drawGdtFrame(fr, lines, texts, lay, sh, dimAnchors);
+    // Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)
+    for (const srf of sh.surfaces || []) drawSurface(srf, lines, texts, lay, sh);
+    for (const wld of sh.welds || []) drawWeld(wld, lines, texts, lay, sh);
+    for (const edg of sh.edges || []) drawEdgeSym(edg, lines, texts, lay, sh);
+    for (const sym of sh.symbols || []) drawPlacedSymbol(sym, lines, texts, lay, sh);
     // Schriftfeld, Stückliste & Tabellen
     titleBlock(sh, lay, idx, total, lines, texts, images);
     drawBomTable(sh, lay, lines, texts);
@@ -6187,6 +6683,10 @@ const Drawing = (() => {
     if (tool === 'aux' && toolState) previewAux(cur.lines, cur.texts);
     if (tool === 'datum' && toolState) previewDatum(cur.lines, cur.texts);
     if (tool === 'gdt' && toolState) previewGdt(cur.lines, cur.texts);
+    if (tool === 'surface' && toolState) previewSurface(cur.lines, cur.texts);
+    if (tool === 'weld' && toolState) previewWeld(cur.lines, cur.texts);
+    if (tool === 'edge' && toolState) previewEdgeSym(cur.lines, cur.texts);
+    if (tool === 'symbol' && toolState) previewSymbol(cur.lines, cur.texts);
     if (tool === 'hole-origin' && toolState) previewHoleOrigin(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts, cur.images);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
@@ -6371,7 +6871,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}text.tb-bold{font-weight:700}.tb-logo{pointer-events:none}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow,.sym-arrow,.sym-fill{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line,.sym-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.sym-dash{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:1.6 1;cursor:pointer}.sym-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;cursor:grab}.sym-hit{fill:transparent;stroke:none;cursor:grab}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel,.sym-arrow.sel,.sym-fill.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text,text.sym-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}text.tb-bold{font-weight:700}.tb-logo{pointer-events:none}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -6421,6 +6921,9 @@ const Drawing = (() => {
         if (l.gdtKind) el.dataset.gdtKind = l.gdtKind;
         if (l.gdtSym) el.dataset.gdtSym = l.gdtSym;
         if (l.gdtLabel) el.dataset.gdtLabel = l.gdtLabel;
+        if (l.symKind) el.dataset.symKind = l.symKind;
+        if (l.symKey) el.dataset.symKey = l.symKey;
+        if (l.symVal != null) el.dataset.symVal = String(l.symVal);
         if (l.dimId) el.dataset.dimId = l.dimId;
         if (l.tableKind) el.dataset.tableKind = l.tableKind;
         if (l.htTag) el.dataset.htTag = l.htTag;
@@ -6465,6 +6968,9 @@ const Drawing = (() => {
         if (t.gdtKind) el.dataset.gdtKind = t.gdtKind;
         if (t.gdtSym) el.dataset.gdtSym = t.gdtSym;
         if (t.gdtLabel) el.dataset.gdtLabel = t.gdtLabel;
+        if (t.symKind) el.dataset.symKind = t.symKind;
+        if (t.symKey) el.dataset.symKey = t.symKey;
+        if (t.symVal != null) el.dataset.symVal = String(t.symVal);
         if (t.dimId) el.dataset.dimId = t.dimId;
         if (t.tableKind) el.dataset.tableKind = t.tableKind;
         if (t.htRow != null) el.dataset.htRow = String(t.htRow);
@@ -7414,6 +7920,422 @@ const Drawing = (() => {
       { label: `↗ ${T('draw.gdt.sym.runout')}`, icon: 'gdt', run: () => startSym('runout') },
     ]);
   }
+  // ---------- Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27) ----------
+  function surfaces(sh = dwg()) { return (sh.surfaces || []).slice(); }
+  function welds(sh = dwg()) { return (sh.welds || []).slice(); }
+  function edges(sh = dwg()) { return (sh.edges || []).slice(); }
+  function symbols(sh = dwg()) { return (sh.symbols || []).slice(); }
+  function pickSymTarget(P) {
+    const name = leaderViewAt(P);
+    if (name && layout && layout.views[name]) {
+      const v = layout.views[name];
+      const tol = Math.max(2.8, 4.2 / zoom);
+      let bestPt = null, bestDir = [1, 0], bd = tol;
+      for (const seg of straightSegsOf(v, false)) {
+        const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+        if (L2 < 1e-6) continue;
+        const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+        const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+        if (d < bd) {
+          bd = d;
+          bestPt = [seg.a[0] + t * (seg.b[0] - seg.a[0]), seg.a[1] + t * (seg.b[1] - seg.a[1])];
+          bestDir = [(seg.b[0] - seg.a[0]) / seg.L, (seg.b[1] - seg.a[1]) / seg.L];
+        }
+      }
+      const q = toView(v, P);
+      for (const c of v.geo.circles || []) {
+        const dist = Math.hypot(q[0] - c.c[0], q[1] - c.c[1]);
+        const d = Math.abs(dist - c.r) * v.s;
+        if (d >= bd) continue;
+        let ang = dist > 1e-6 ? angOf(c.c, q) : 0;
+        if (c.arc) {
+          let a = ang;
+          if (a < c.arc[0] - 0.08) a += TWO_PI;
+          if (a > c.arc[1] + 0.08) continue;
+        }
+        bd = d;
+        bestPt = [c.c[0] + Math.cos(ang) * c.r, c.c[1] + Math.sin(ang) * c.r];
+        bestDir = [-Math.sin(ang), Math.cos(ang)];
+      }
+      for (const p of v.geo.polys || []) {
+        if (p.c || !p.pts || p.pts.length <= 2) continue;
+        for (let i = 0; i < p.pts.length - 1; i++) {
+          const a = p.pts[i], b = p.pts[i + 1];
+          const A = toSheet(v, a), B = toSheet(v, b);
+          const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+          if (L2 < 1e-6) continue;
+          const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+          const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+          if (d < bd) {
+            bd = d;
+            bestPt = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+            const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+            bestDir = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+          }
+        }
+      }
+      if (bestPt) {
+        return { attachType: 'edge', view: name, anchor: bestPt, sheetPt: toSheet(v, bestPt), edgeDir: bestDir };
+      }
+    }
+    return { attachType: 'free', view: null, anchor: [P[0], P[1]], sheetPt: [P[0], P[1]], edgeDir: [1, 0] };
+  }
+  function addSurface(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return null; }
+    const srf = normalizeSurface({ ...opts, id: uid('srf') });
+    if (!srf) return null;
+    App.change('Oberflächenzeichen hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.surfaces)) d.surfaces = [];
+      d.surfaces.push(srf);
+    });
+    selDim = srf.id;
+    render(); Panels.renderRight();
+    return srf;
+  }
+  function updateSurface(id, patch = {}) {
+    let changed = false;
+    App.change('Oberflächenzeichen geändert', () => {
+      const srf = (dwg().surfaces || []).find((x) => x.id === id);
+      if (!srf) return;
+      const merged = normalizeSurface({ ...srf, ...patch, id: srf.id });
+      if (!merged) return;
+      Object.assign(srf, merged);
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeSurface(id) {
+    const cur = (dwg().surfaces || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Oberflächenzeichen gelöscht', () => {
+      const d = dwg();
+      d.surfaces = (d.surfaces || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addWeld(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return null; }
+    const wld = normalizeWeld({ ...opts, id: uid('wld') });
+    if (!wld) return null;
+    App.change('Schweißsymbol hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.welds)) d.welds = [];
+      d.welds.push(wld);
+    });
+    selDim = wld.id;
+    render(); Panels.renderRight();
+    return wld;
+  }
+  function updateWeld(id, patch = {}) {
+    let changed = false;
+    App.change('Schweißsymbol geändert', () => {
+      const wld = (dwg().welds || []).find((x) => x.id === id);
+      if (!wld) return;
+      const merged = normalizeWeld({ ...wld, ...patch, id: wld.id });
+      if (!merged) return;
+      Object.assign(wld, merged);
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeWeld(id) {
+    const cur = (dwg().welds || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Schweißsymbol gelöscht', () => {
+      const d = dwg();
+      d.welds = (d.welds || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addEdgeSym(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return null; }
+    const edg = normalizeEdgeSym({ ...opts, id: uid('edg') });
+    if (!edg) return null;
+    App.change('Kantenzustand hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.edges)) d.edges = [];
+      d.edges.push(edg);
+    });
+    selDim = edg.id;
+    render(); Panels.renderRight();
+    return edg;
+  }
+  function updateEdgeSym(id, patch = {}) {
+    let changed = false;
+    App.change('Kantenzustand geändert', () => {
+      const edg = (dwg().edges || []).find((x) => x.id === id);
+      if (!edg) return;
+      const merged = normalizeEdgeSym({ ...edg, ...patch, id: edg.id });
+      if (!merged) return;
+      Object.assign(edg, merged);
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeEdgeSym(id) {
+    const cur = (dwg().edges || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Kantenzustand gelöscht', () => {
+      const d = dwg();
+      d.edges = (d.edges || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addSymbol(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return null; }
+    const sym = normalizePlacedSymbol({ ...opts, id: uid('sym') });
+    if (!sym) return null;
+    App.change('Symbol hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.symbols)) d.symbols = [];
+      d.symbols.push(sym);
+    });
+    selDim = sym.id;
+    render(); Panels.renderRight();
+    return sym;
+  }
+  function updateSymbol(id, patch = {}) {
+    let changed = false;
+    App.change('Symbol geändert', () => {
+      const sym = (dwg().symbols || []).find((x) => x.id === id);
+      if (!sym) return;
+      const merged = normalizePlacedSymbol({ ...sym, ...patch, id: sym.id });
+      if (!merged) return;
+      Object.assign(sym, merged);
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeSymbol(id) {
+    const cur = (dwg().symbols || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Symbol gelöscht', () => {
+      const d = dwg();
+      d.symbols = (d.symbols || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function surfaceClick(P) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickSymTarget(P);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let elbow = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [10, -10];
+    toolState = { stage: 0 };
+    addSurface({ ...surfaceDraft, view: target.view, attachType: target.attachType, anchor: target.anchor, edgeDir: target.edgeDir, elbow });
+  }
+  function weldClick(P) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickSymTarget(P);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let elbow = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [14, -10];
+    toolState = { stage: 0 };
+    addWeld({ ...weldDraft, view: target.view, attachType: target.attachType, anchor: target.anchor, elbow });
+  }
+  function edgeClick(P) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickSymTarget(P);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let elbow = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [12, -10];
+    toolState = { stage: 0 };
+    addEdgeSym({ ...edgeDraft, view: target.view, attachType: target.attachType, anchor: target.anchor, elbow });
+  }
+  function symbolClick(P) {
+    const st = toolState || { stage: 0 };
+    if (!symbolDraft.withLeader) {
+      const target = pickSymTarget(P);
+      addSymbol({ ...symbolDraft, withLeader: false, view: target.view, attachType: target.attachType, anchor: target.anchor, offset: [0, 0] });
+      return;
+    }
+    if (st.stage === 0) {
+      const target = pickSymTarget(P);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let offset = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(offset[0], offset[1]) < 3) offset = [12, -10];
+    toolState = { stage: 0 };
+    addSymbol({ ...symbolDraft, withLeader: true, view: target.view, attachType: target.attachType, anchor: target.anchor, offset });
+  }
+  function previewSurface(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      lines.push({ circle: [st.target.sheetPt[0], st.target.sheetPt[1], (1.3 / zoom) * 1.5], cls: 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let elbow = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [10, -10];
+      drawSurface({ ...surfaceDraft, id: '__srfprev', view: st.target.view, attachType: st.target.attachType, anchor: st.target.anchor, elbow }, lines, texts, layout, dwg());
+    }
+  }
+  function previewWeld(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      lines.push({ circle: [st.target.sheetPt[0], st.target.sheetPt[1], (1.3 / zoom) * 1.5], cls: 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let elbow = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [14, -10];
+      drawWeld({ ...weldDraft, id: '__wldprev', view: st.target.view, attachType: st.target.attachType, anchor: st.target.anchor, elbow }, lines, texts, layout, dwg());
+    }
+  }
+  function previewEdgeSym(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      lines.push({ circle: [st.target.sheetPt[0], st.target.sheetPt[1], (1.3 / zoom) * 1.5], cls: 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let elbow = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [12, -10];
+      drawEdgeSym({ ...edgeDraft, id: '__edgprev', view: st.target.view, attachType: st.target.attachType, anchor: st.target.anchor, elbow }, lines, texts, layout, dwg());
+    }
+  }
+  function previewSymbol(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (!symbolDraft.withLeader) {
+      if (st.target && st.target.sheetPt) {
+        drawPlacedSymbol({ ...symbolDraft, withLeader: false, id: '__symprev', view: st.target.view, attachType: st.target.attachType, anchor: st.target.anchor, offset: [0, 0] }, lines, texts, layout, dwg());
+      }
+      return;
+    }
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      lines.push({ circle: [st.target.sheetPt[0], st.target.sheetPt[1], (1.3 / zoom) * 1.5], cls: 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let offset = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(offset[0], offset[1]) < 3) offset = [12, -10];
+      drawPlacedSymbol({ ...symbolDraft, withLeader: true, id: '__symprev', view: st.target.view, attachType: st.target.attachType, anchor: st.target.anchor, offset }, lines, texts, layout, dwg());
+    }
+  }
+  function symbolsMenu(anchor) {
+    if (isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return; }
+    UI.menu(anchor, [
+      { id: 'dw-menu-surface', label: T('menu.draw.surface'), icon: 'surface', help: 'drawingSymbols', checked: tool === 'surface', run: () => setTool(tool === 'surface' ? null : 'surface') },
+      { id: 'dw-menu-weld', label: T('menu.draw.weld'), icon: 'weld', help: 'drawingSymbols', checked: tool === 'weld', run: () => setTool(tool === 'weld' ? null : 'weld') },
+      { id: 'dw-menu-edge-sym', label: T('menu.draw.edgeSym'), icon: 'surface', help: 'drawingSymbols', checked: tool === 'edge', run: () => setTool(tool === 'edge' ? null : 'edge') },
+      '-',
+      { id: 'dw-menu-symlib', label: T('menu.draw.symbolLib'), icon: 'symbols', help: 'drawingSymbolLibrary', run: () => openSymbolLibrary() },
+    ]);
+  }
+  function openSymbolLibrary() {
+    if (isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return null; }
+    let activeCat = 'all';
+    let query = '';
+    const wrapEl = h('div', { class: 'dw-symlib-wrap' });
+    const searchInp = h('input', { type: 'text', id: 'dw-symlib-search', placeholder: T('draw.symlib.searchPh'), autocomplete: 'off' });
+    searchInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const catsEl = h('div', { class: 'dw-symlib-cats', id: 'dw-symlib-cats' });
+    const gridEl = h('div', { class: 'dw-symlib-grid', id: 'dw-symlib-grid' });
+    let modalRef = null;
+    const renderCats = () => {
+      catsEl.innerHTML = '';
+      for (const c of SYMBOL_CATS) {
+        const b = h('button', { type: 'button', class: 'btn dw-symlib-cat' + (activeCat === c ? ' active' : ''), 'data-cat': c }, T('draw.symlib.cat.' + c));
+        b.onclick = () => { activeCat = c; renderCats(); renderGrid(); };
+        catsEl.append(b);
+      }
+    };
+    const renderGrid = () => {
+      gridEl.innerHTML = '';
+      const q = query.trim().toLowerCase();
+      const list = SYMBOL_LIBRARY.filter((item) => {
+        if (activeCat !== 'all' && item.cat !== activeCat) return false;
+        if (!q) return true;
+        return item.label.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q) || item.key.toLowerCase().includes(q);
+      });
+      if (!list.length) {
+        gridEl.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('draw.symlib.empty')));
+        return;
+      }
+      for (const item of list) {
+        const card = h('button', {
+          type: 'button',
+          class: 'dw-symlib-card' + (symbolDraft.key === item.key ? ' active' : ''),
+          'data-sym-key': item.key,
+          'data-sym-cat': item.cat,
+        });
+        const prev = h('div', { class: 'dw-symlib-prev' });
+        prev.innerHTML = renderLibSymbolPreviewSVG(item.key);
+        card.append(prev, h('div', { class: 'dw-symlib-name' }, item.label), h('div', { class: 'dw-symlib-desc' }, item.desc));
+        card.onclick = () => {
+          symbolDraft.key = item.key;
+          symbolDraft.text = item.defaultText || '';
+          if (modalRef && modalRef.close) modalRef.close();
+          setTool('symbol');
+        };
+        gridEl.append(card);
+      }
+    };
+    searchInp.addEventListener('input', () => { query = searchInp.value; renderGrid(); });
+    wrapEl.append(h('div', { class: 'dw-symlib-bar' }, searchInp, catsEl), gridEl);
+    renderCats();
+    renderGrid();
+    modalRef = UI.modal({
+      title: T('draw.symlib.title'),
+      body: wrapEl,
+      wide: true,
+      actions: [{ label: T('common.close') }],
+    });
+    if (modalRef && modalRef.el) modalRef.el.id = 'dw-symlib-dialog';
+    return modalRef;
+  }
   // ---------- Positionsnummern & Stückliste auf dem Blatt (ZE-12) ----------
   function viewBasis(viewName, sh = dwg()) {
     if (!proj) return null;
@@ -8211,6 +9133,38 @@ const Drawing = (() => {
       render();
       return;
     }
+    if (dragSurface) {
+      const P = sheetPt(e);
+      dragSurface.curElbow = [dragSurface.origElbow[0] + (P[0] - dragSurface.startP[0]), dragSurface.origElbow[1] + (P[1] - dragSurface.startP[1])];
+      if (Math.hypot(P[0] - dragSurface.startP[0], P[1] - dragSurface.startP[1]) > 0.5) dragSurface.moved = true;
+      render();
+      return;
+    }
+    if (dragWeld) {
+      const P = sheetPt(e);
+      dragWeld.curElbow = [dragWeld.origElbow[0] + (P[0] - dragWeld.startP[0]), dragWeld.origElbow[1] + (P[1] - dragWeld.startP[1])];
+      if (Math.hypot(P[0] - dragWeld.startP[0], P[1] - dragWeld.startP[1]) > 0.5) dragWeld.moved = true;
+      render();
+      return;
+    }
+    if (dragEdgeSym) {
+      const P = sheetPt(e);
+      dragEdgeSym.curElbow = [dragEdgeSym.origElbow[0] + (P[0] - dragEdgeSym.startP[0]), dragEdgeSym.origElbow[1] + (P[1] - dragEdgeSym.startP[1])];
+      if (Math.hypot(P[0] - dragEdgeSym.startP[0], P[1] - dragEdgeSym.startP[1]) > 0.5) dragEdgeSym.moved = true;
+      render();
+      return;
+    }
+    if (dragSymbol) {
+      const P = sheetPt(e);
+      if (dragSymbol.withLeader) {
+        dragSymbol.curOffset = [dragSymbol.origOffset[0] + (P[0] - dragSymbol.startP[0]), dragSymbol.origOffset[1] + (P[1] - dragSymbol.startP[1])];
+      } else {
+        dragSymbol.curSheetPt = [dragSymbol.origSheetPt[0] + (P[0] - dragSymbol.startP[0]), dragSymbol.origSheetPt[1] + (P[1] - dragSymbol.startP[1])];
+      }
+      if (Math.hypot(P[0] - dragSymbol.startP[0], P[1] - dragSymbol.startP[1]) > 0.5) dragSymbol.moved = true;
+      render();
+      return;
+    }
     if (dragBom) {
       const P = sheetPt(e);
       dragBom.curPos = [dragBom.origPos[0] + (P[0] - dragBom.startP[0]), dragBom.origPos[1] + (P[1] - dragBom.startP[1])];
@@ -8261,6 +9215,14 @@ const Drawing = (() => {
       toolState = toolState || { stage: 0 };
       toolState.P = P;
       if (toolState.stage === 0) toolState.target = pickGdtTarget(P, e);
+      render();
+      return;
+    }
+    if (tool === 'surface' || tool === 'weld' || tool === 'edge' || tool === 'symbol') {
+      const P = sheetPt(e);
+      toolState = toolState || { stage: 0 };
+      toolState.P = P;
+      if (toolState.stage === 0 || (tool === 'symbol' && !symbolDraft.withLeader)) toolState.target = pickSymTarget(P);
       render();
       return;
     }
@@ -8396,6 +9358,10 @@ const Drawing = (() => {
     if (tool === 'aux') { auxClick(P); return; }
     if (tool === 'datum') { datumClick(P, e); return; }
     if (tool === 'gdt') { gdtClick(P, e); return; }
+    if (tool === 'surface') { surfaceClick(P); return; }
+    if (tool === 'weld') { weldClick(P); return; }
+    if (tool === 'edge') { edgeClick(P); return; }
+    if (tool === 'symbol') { symbolClick(P); return; }
     if (tool === 'hole-origin') { holeOriginClick(P); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
@@ -8415,6 +9381,30 @@ const Drawing = (() => {
     } else if (selDim && (dwg().gdtFrames || []).some((x) => x.id === selDim)) {
       const frObj = dwg().gdtFrames.find((x) => x.id === selDim);
       dragGdt = { id: selDim, startP: P, origElbow: [...(frObj.elbow || [14, -10])], curElbow: null, moved: false };
+    } else if (selDim && (dwg().surfaces || []).some((x) => x.id === selDim)) {
+      const srfObj = dwg().surfaces.find((x) => x.id === selDim);
+      dragSurface = { id: selDim, startP: P, origElbow: [...(srfObj.elbow || [10, -10])], curElbow: null, moved: false };
+    } else if (selDim && (dwg().welds || []).some((x) => x.id === selDim)) {
+      const wldObj = dwg().welds.find((x) => x.id === selDim);
+      dragWeld = { id: selDim, startP: P, origElbow: [...(wldObj.elbow || [14, -10])], curElbow: null, moved: false };
+    } else if (selDim && (dwg().edges || []).some((x) => x.id === selDim)) {
+      const edgObj = dwg().edges.find((x) => x.id === selDim);
+      dragEdgeSym = { id: selDim, startP: P, origElbow: [...(edgObj.elbow || [12, -10])], curElbow: null, moved: false };
+    } else if (selDim && (dwg().symbols || []).some((x) => x.id === selDim)) {
+      const symObj = dwg().symbols.find((x) => x.id === selDim);
+      const v = symObj.view && layout && layout.views && layout.views[symObj.view];
+      const A = v ? toSheet(v, symObj.anchor) : symObj.anchor;
+      dragSymbol = {
+        id: selDim,
+        withLeader: !!symObj.withLeader,
+        view: symObj.view,
+        startP: P,
+        origOffset: [...(symObj.offset || [12, -10])],
+        curOffset: null,
+        origSheetPt: [A[0], A[1]],
+        curSheetPt: null,
+        moved: false,
+      };
     } else if (selDim === '__bom__' && layout && layout.bomRect) {
       dragBom = { startP: P, origPos: [layout.bomRect.x, layout.bomRect.y], curPos: null, moved: false };
     } else if (selDim === '__holetable__' && layout && layout.holeRect) {
@@ -8472,6 +9462,37 @@ const Drawing = (() => {
       const d = dragGdt;
       dragGdt = null;
       if (d.moved && d.curElbow) updateGdtFrame(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragSurface) {
+      const d = dragSurface;
+      dragSurface = null;
+      if (d.moved && d.curElbow) updateSurface(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragWeld) {
+      const d = dragWeld;
+      dragWeld = null;
+      if (d.moved && d.curElbow) updateWeld(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragEdgeSym) {
+      const d = dragEdgeSym;
+      dragEdgeSym = null;
+      if (d.moved && d.curElbow) updateEdgeSym(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragSymbol) {
+      const d = dragSymbol;
+      dragSymbol = null;
+      if (d.moved) {
+        if (d.withLeader && d.curOffset) updateSymbol(d.id, { offset: d.curOffset });
+        else if (!d.withLeader && d.curSheetPt) {
+          const v = d.view && layout && layout.views && layout.views[d.view];
+          const nextAnchor = v ? toView(v, d.curSheetPt) : d.curSheetPt;
+          updateSymbol(d.id, { anchor: nextAnchor });
+        }
+      }
       return;
     }
     if (dragBom) {
@@ -8913,6 +9934,10 @@ const Drawing = (() => {
       d.balloons = (d.balloons || []).filter((x) => x.view !== 'sec_' + id);
       d.datums = (d.datums || []).filter((x) => x.view !== 'sec_' + id);
       d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== 'sec_' + id);
+      d.surfaces = (d.surfaces || []).filter((x) => x.view !== 'sec_' + id);
+      d.welds = (d.welds || []).filter((x) => x.view !== 'sec_' + id);
+      d.edges = (d.edges || []).filter((x) => x.view !== 'sec_' + id);
+      d.symbols = (d.symbols || []).filter((x) => x.view !== 'sec_' + id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|sec_' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -9143,6 +10168,10 @@ const Drawing = (() => {
       d.balloons = (d.balloons || []).filter((x) => x.view !== key);
       d.datums = (d.datums || []).filter((x) => x.view !== key);
       d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== key);
+      d.surfaces = (d.surfaces || []).filter((x) => x.view !== key);
+      d.welds = (d.welds || []).filter((x) => x.view !== key);
+      d.edges = (d.edges || []).filter((x) => x.view !== key);
+      d.symbols = (d.symbols || []).filter((x) => x.view !== key);
       d.breaks = (d.breaks || []).filter((x) => x.view !== key);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + key + '|'));
       if (d.viewOpts) delete d.viewOpts[key];
@@ -9763,6 +10792,10 @@ const Drawing = (() => {
     if ((dwg().balloons || []).some((x) => x.id === id)) { removeBalloon(id); return; }
     if ((dwg().datums || []).some((x) => x.id === id)) { removeDatum(id); return; }
     if ((dwg().gdtFrames || []).some((x) => x.id === id)) { removeGdtFrame(id); return; }
+    if ((dwg().surfaces || []).some((x) => x.id === id)) { removeSurface(id); return; }
+    if ((dwg().welds || []).some((x) => x.id === id)) { removeWeld(id); return; }
+    if ((dwg().edges || []).some((x) => x.id === id)) { removeEdgeSym(id); return; }
+    if ((dwg().symbols || []).some((x) => x.id === id)) { removeSymbol(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
@@ -9772,6 +10805,10 @@ const Drawing = (() => {
         d.balloons = (d.balloons || []).filter((x) => x.view !== id);
         d.datums = (d.datums || []).filter((x) => x.view !== id);
         d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== id);
+        d.surfaces = (d.surfaces || []).filter((x) => x.view !== id);
+        d.welds = (d.welds || []).filter((x) => x.view !== id);
+        d.edges = (d.edges || []).filter((x) => x.view !== id);
+        d.symbols = (d.symbols || []).filter((x) => x.view !== id);
         d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
         return;
       }
@@ -9799,7 +10836,7 @@ const Drawing = (() => {
     const m = DIM_MODES.find((x) => x.key === mode) || DIM_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
     dimMode = m.key;
-    dragDetail = null; dragDatum = null; dragGdt = null;
+    dragDetail = null; dragDatum = null; dragGdt = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     tool = 'dim';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -9827,7 +10864,7 @@ const Drawing = (() => {
     const m = SECTION_MODES.find((x) => x.key === mode) || SECTION_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.secProOnly'), { icon: 'info' }); return false; }
     sectionMode = m.key;
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     tool = 'section';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -9847,8 +10884,9 @@ const Drawing = (() => {
   }
   function setTool(t) {
     if ((t === 'datum' || t === 'gdt') && isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return false; }
+    if ((t === 'surface' || t === 'weld' || t === 'edge' || t === 'symbol') && isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return false; }
     if (t === 'hole-origin' && isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return false; }
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'section' && (!SECTION_MODES.some((x) => x.key === sectionMode) || (sectionMode !== 'full' && isSimpleMode()))) sectionMode = 'full';
@@ -9864,7 +10902,7 @@ const Drawing = (() => {
       }
       toolState = { stage: 0 };
     } else {
-      toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon' || t === 'break' || t === 'aux' || t === 'hole-origin') ? { stage: 0 } : t ? {} : null;
+      toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon' || t === 'break' || t === 'aux' || t === 'hole-origin' || t === 'surface' || t === 'weld' || t === 'edge' || t === 'symbol') ? { stage: 0 } : t ? {} : null;
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
@@ -9877,8 +10915,12 @@ const Drawing = (() => {
                   : t === 'aux' ? T('draw.hint.aux')
                     : t === 'datum' ? T('draw.hint.datum')
                       : t === 'gdt' ? T('draw.hint.gdt')
-                        : t === 'hole-origin' ? T('draw.hint.holeOrigin')
-                          : t && t.startsWith('free-') ? freeHint(t) : null
+                        : t === 'surface' ? T('draw.hint.surface')
+                          : t === 'weld' ? T('draw.hint.weld')
+                            : t === 'edge' ? T('draw.hint.edge')
+                              : t === 'symbol' ? T(symbolDraft.withLeader ? 'draw.hint.symbolLeader' : 'draw.hint.symbol')
+                                : t === 'hole-origin' ? T('draw.hint.holeOrigin')
+                                  : t && t.startsWith('free-') ? freeHint(t) : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
     return true;
@@ -11062,6 +12104,9 @@ const Drawing = (() => {
       'gdt-frame': [0.3, null],
       'gdt-line': [0.25, null],
       'gdt-sym': [0.3, null],
+      'sym-line': [0.25, null],
+      'sym-dash': [0.25, [1.6, 1.0]],
+      'sym-sym': [0.3, null],
       'bom-frame': [0.5, null],
       'bom-head-line': [0.35, null],
       'bom-grid': [0.22, null],
@@ -11085,9 +12130,14 @@ const Drawing = (() => {
         out.push(`1 g ${px(rx)} ${py(ry + rh)} ${pf(rw * PT)} ${pf(rh * PT)} re f`);
         continue;
       }
-      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri' || l.cls === 'ht-tag-arrow') {
-        const [a, b, c] = l.poly;
-        out.push(`${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
+      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri' || l.cls === 'ht-tag-arrow' || l.cls === 'sym-arrow' || l.cls === 'sym-fill') {
+        const pts = l.poly || [];
+        if (pts.length >= 3) {
+          const path = [`${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${px(pts[0][0])} ${py(pts[0][1])} m`];
+          for (let i = 1; i < pts.length; i++) path.push(`${px(pts[i][0])} ${py(pts[i][1])} l`);
+          path.push('h f');
+          out.push(path.join(' '));
+        }
         continue;
       }
       if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot' || l.cls === 'balloon-dot') && l.circle) {
@@ -11266,6 +12316,7 @@ const Drawing = (() => {
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
       'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
       'gdt-frame': 'BEMASSUNG', 'gdt-line': 'BEMASSUNG', 'gdt-sym': 'BEMASSUNG', 'gdt-arrow': 'BEMASSUNG', 'gdt-datum-tri': 'BEMASSUNG',
+      'sym-line': 'BEMASSUNG', 'sym-dash': 'BEMASSUNG', 'sym-sym': 'BEMASSUNG', 'sym-arrow': 'BEMASSUNG', 'sym-fill': 'BEMASSUNG',
       'ht-origin': 'BEMASSUNG', 'ht-tag-line': 'BEMASSUNG', 'ht-tag-arrow': 'BEMASSUNG',
       'detail-border': 'RAHMEN', breakline: 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN',
       'bom-frame': 'RAHMEN', 'bom-head-line': 'RAHMEN', 'bom-grid': 'RAHMEN',
@@ -11280,7 +12331,7 @@ const Drawing = (() => {
     };
     for (const l of cur.lines || []) {
       const ly = l.tbLine ? 'RAHMEN' : (l.thread || l.threadEnd) ? 'GEWINDE' : (l.cls === 'breakline' && l.secId ? 'SCHNITTLINIE' : layer[l.cls]); if (!ly) continue;
-      const lt = l.tbLine ? (l.cls === 'hid' ? 'DASHED' : null) : l.cls === 'breakline' ? 'CONTINUOUS' : ((l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
+      const lt = l.tbLine ? (l.cls === 'hid' ? 'DASHED' : null) : l.cls === 'breakline' ? 'CONTINUOUS' : (l.cls === 'sym-dash' || (l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
       if (l.rect) {
         const [x, y, w, hh] = l.rect;
         const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]];
@@ -11292,7 +12343,7 @@ const Drawing = (() => {
         stats.circles++; bumpLayer(ly);
       } else if (l.poly) {
         const q = l.poly;
-        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri' || l.cls === 'ht-tag-arrow')) {
+        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri' || l.cls === 'ht-tag-arrow' || l.cls === 'sym-arrow' || l.cls === 'sym-fill')) {
           P(0, 'SOLID', 8, ly,
             10, q[0][0].toFixed(4), 20, Y(q[0][1]).toFixed(4), 30, 0,
             11, q[1][0].toFixed(4), 21, Y(q[1][1]).toFixed(4), 31, 0,
@@ -11319,7 +12370,7 @@ const Drawing = (() => {
     for (const t of cur.texts || []) {
       if (t.cls === 'note') continue;
       const cls = String(t.cls || '');
-      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel' || cls === 'gdt-text' || cls === 'ht-tag-text') ? 'BEMASSUNG'
+      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel' || cls === 'gdt-text' || cls === 'ht-tag-text' || cls === 'sym-text') ? 'BEMASSUNG'
         : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
@@ -11613,6 +12664,186 @@ const Drawing = (() => {
         UI.selectField({ id: prefix + 'd3', label: T('draw.panel.gdtDatum3'), value: d3Val, options: gdtDatumOptions(sh, d3Val), onChange: (v) => onUpdate({ d3: v, datums: emitDatums(d1Val, d2Val, v) }, true) }),
       ));
     }
+    return box;
+  }
+  function renderSurfaceFields({ prefix, val, onUpdate }) {
+    const box = h('div', { style: { display: 'grid', gap: '6px', marginTop: '6px' } });
+    const remFld = UI.selectField({
+      id: prefix + 'removal',
+      label: T('draw.srf.removal'),
+      value: val.removal || 'machined',
+      options: [
+        ['any', T('draw.srf.remAny')],
+        ['machined', T('draw.srf.remMachined')],
+        ['prohibited', T('draw.srf.remProhibited')],
+      ],
+      onChange: (v) => onUpdate({ removal: v }, false),
+    });
+    const parFld = UI.selectField({
+      id: prefix + 'param',
+      label: T('draw.srf.param'),
+      value: val.param || 'Ra',
+      options: SURFACE_PARAMS.map((p) => [p, p]),
+      onChange: (v) => onUpdate({ param: v }, false),
+    });
+    const valFld = UI.textField({
+      id: prefix + 'val',
+      label: T('draw.srf.value'),
+      value: val.value ?? '1,6',
+      onCommit: (v) => onUpdate({ value: cleanSurfaceVal(v) }, false),
+    });
+    const valInp = valFld.querySelector('input');
+    if (valInp) valInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const presets = h('div', { class: 'dw-srf-presets' });
+    for (const p of ['0,4', '0,8', '1,6', '3,2', '6,3', '12,5']) {
+      const b = h('button', { type: 'button', class: 'btn' + (val.value === p ? ' active' : ''), 'data-srf-val': p }, p);
+      b.onclick = () => {
+        if (valInp) valInp.value = p;
+        onUpdate({ value: p }, true);
+      };
+      presets.append(b);
+    }
+    const methFld = UI.textField({
+      id: prefix + 'method',
+      label: T('draw.srf.method'),
+      value: val.method || '',
+      placeholder: T('draw.srf.methodPh'),
+      onCommit: (v) => onUpdate({ method: v }, false),
+    });
+    const methInp = methFld.querySelector('input');
+    if (methInp) methInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const layFld = UI.selectField({
+      id: prefix + 'lay',
+      label: T('draw.srf.lay'),
+      value: val.lay || '',
+      options: [
+        ['', T('draw.srf.layNone')],
+        ['=', T('draw.srf.layPar')],
+        ['perp', T('draw.srf.layPerp')],
+        ['X', T('draw.srf.layCross')],
+        ['M', T('draw.srf.layMulti')],
+        ['C', T('draw.srf.layCirc')],
+        ['R', T('draw.srf.layRad')],
+        ['P', T('draw.srf.layPart')],
+      ],
+      onChange: (v) => onUpdate({ lay: v }, false),
+    });
+    const aaChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: prefix + 'allaround', checked: !!val.allAround }), T('draw.srf.allAround'));
+    aaChk.querySelector('input').onchange = (e) => onUpdate({ allAround: e.target.checked }, false);
+    box.append(remFld, h('div', { class: 'fields' }, parFld, valFld), presets, methFld, layFld, aaChk);
+    return box;
+  }
+  function renderWeldFields({ prefix, val, onUpdate }) {
+    const box = h('div', { style: { display: 'grid', gap: '6px', marginTop: '6px' } });
+    const typeFld = UI.selectField({
+      id: prefix + 'type',
+      label: T('draw.weld.type'),
+      value: val.type || 'fillet',
+      options: WELD_TYPES.map((w) => [w.key, w.label]),
+      onChange: (v) => onUpdate({ type: v }, false),
+    });
+    const sideFld = UI.selectField({
+      id: prefix + 'side',
+      label: T('draw.weld.side'),
+      value: val.side || 'arrow',
+      options: [
+        ['arrow', T('draw.weld.sideArrow')],
+        ['other', T('draw.weld.sideOther')],
+        ['both', T('draw.weld.sideBoth')],
+      ],
+      onChange: (v) => onUpdate({ side: v }, false),
+    });
+    const sizeFld = UI.textField({ id: prefix + 'size', label: T('draw.weld.size'), value: val.size ?? 'a4', placeholder: T('draw.weld.sizePh'), onCommit: (v) => onUpdate({ size: v }, false) });
+    const lenFld = UI.textField({ id: prefix + 'length', label: T('draw.weld.length'), value: val.length ?? '', placeholder: T('draw.weld.lengthPh'), onCommit: (v) => onUpdate({ length: v }, false) });
+    const contFld = UI.selectField({
+      id: prefix + 'contour',
+      label: T('draw.weld.contour'),
+      value: val.contour || '',
+      options: [
+        ['', T('draw.weld.contNone')],
+        ['flat', T('draw.weld.contFlat')],
+        ['convex', T('draw.weld.contConvex')],
+        ['concave', T('draw.weld.contConcave')],
+      ],
+      onChange: (v) => onUpdate({ contour: v }, false),
+    });
+    const tailFld = UI.textField({ id: prefix + 'tail', label: T('draw.weld.tail'), value: val.tail ?? '', placeholder: T('draw.weld.tailPh'), onCommit: (v) => onUpdate({ tail: v }, false) });
+    for (const f of [sizeFld, lenFld, tailFld]) {
+      const inp = f.querySelector('input');
+      if (inp) inp.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+    const aaChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: prefix + 'allaround', checked: !!val.allAround }), T('draw.weld.allAround'));
+    aaChk.querySelector('input').onchange = (e) => onUpdate({ allAround: e.target.checked }, false);
+    const fldChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: prefix + 'field', checked: !!val.field }), T('draw.weld.field'));
+    fldChk.querySelector('input').onchange = (e) => onUpdate({ field: e.target.checked }, false);
+    box.append(h('div', { class: 'fields' }, typeFld, sideFld), h('div', { class: 'fields' }, sizeFld, lenFld), h('div', { class: 'fields' }, contFld, tailFld), aaChk, fldChk);
+    return box;
+  }
+  function renderEdgeSymFields({ prefix, val, onUpdate }) {
+    const box = h('div', { style: { display: 'grid', gap: '6px', marginTop: '6px' } });
+    const stFld = UI.selectField({
+      id: prefix + 'state',
+      label: T('draw.edge.state'),
+      value: val.state || 'burrFree',
+      options: [
+        ['burrFree', T('draw.edge.burrFree')],
+        ['overhang', T('draw.edge.overhang')],
+        ['undercut', T('draw.edge.undercut')],
+        ['unspecified', T('draw.edge.unspecified')],
+      ],
+      onChange: (v) => onUpdate({ state: v }, false),
+    });
+    const maxFld = UI.textField({ id: prefix + 'max', label: T('draw.edge.maxVal'), value: val.maxVal ?? '0,2', onCommit: (v) => onUpdate({ maxVal: cleanSurfaceVal(v) }, false) });
+    const minFld = UI.textField({ id: prefix + 'min', label: T('draw.edge.minVal'), value: val.minVal ?? '', onCommit: (v) => onUpdate({ minVal: cleanSurfaceVal(v) }, false) });
+    for (const f of [maxFld, minFld]) {
+      const inp = f.querySelector('input');
+      if (inp) inp.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+    const sideFld = UI.selectField({
+      id: prefix + 'side',
+      label: T('draw.edge.side'),
+      value: val.side || 'any',
+      options: [
+        ['any', T('draw.edge.sideAny')],
+        ['external', T('draw.edge.sideExt')],
+        ['internal', T('draw.edge.sideInt')],
+      ],
+      onChange: (v) => onUpdate({ side: v }, false),
+    });
+    const aaChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: prefix + 'allaround', checked: !!val.allAround }), T('draw.edge.allAround'));
+    aaChk.querySelector('input').onchange = (e) => onUpdate({ allAround: e.target.checked }, false);
+    box.append(stFld, h('div', { class: 'fields' }, maxFld, minFld), sideFld, aaChk);
+    return box;
+  }
+  function renderPlacedSymFields({ prefix, val, isNew, onUpdate }) {
+    const box = h('div', { style: { display: 'grid', gap: '6px', marginTop: '6px' } });
+    const meta = symLibMeta(val.key);
+    const head = h('div', { class: 'mini-row' }, h('b', { class: 'grow' }, meta.label));
+    if (isNew) {
+      const chg = h('button', { type: 'button', class: 'btn', id: prefix + 'pick', style: { padding: '2px 7px', fontSize: '11.5px' } }, T('draw.symlib.change'));
+      chg.onclick = () => openSymbolLibrary();
+      head.append(chg);
+    }
+    const txtFld = UI.textField({ id: prefix + 'text', label: T('draw.symlib.text'), value: val.text ?? '', placeholder: T('draw.symlib.textPh'), onCommit: (v) => onUpdate({ text: v }, false) });
+    const txtInp = txtFld.querySelector('input');
+    if (txtInp) txtInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const scFld = UI.selectField({
+      id: prefix + 'scale',
+      label: T('draw.symlib.scale'),
+      value: String(val.scale || 1),
+      options: [['0.75', '0,75×'], ['1', '1×'], ['1.25', '1,25×'], ['1.5', '1,5×'], ['2', '2×']],
+      onChange: (v) => onUpdate({ scale: +v || 1 }, false),
+    });
+    const rotFld = UI.selectField({
+      id: prefix + 'rot',
+      label: T('draw.symlib.rot'),
+      value: String(val.rot || 0),
+      options: [['0', '0°'], ['90', '90°'], ['180', '180°'], ['-90', '-90°']],
+      onChange: (v) => onUpdate({ rot: +v || 0 }, false),
+    });
+    const ldrChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: prefix + 'leader', checked: !!val.withLeader }), T('draw.symlib.withLeader'));
+    ldrChk.querySelector('input').onchange = (e) => onUpdate({ withLeader: e.target.checked }, true);
+    box.append(head, txtFld, h('div', { class: 'fields' }, scFld, rotFld), ldrChk);
     return box;
   }
   function tolNumField({ id, label, value, min = null, placeholder = '0', onCommit }) {
@@ -12051,6 +13282,91 @@ const Drawing = (() => {
         gdtSec.append(fl);
       }
       w.append(gdtSec);
+      // Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27, Profi)
+      const symSec = h('div', { class: 'section pro', id: 'dw-sym-sec', 'data-help': 'drawingSymbols' }, h('div', { class: 'section-h' }, T('draw.panel.symSec')));
+      const bSrf = h('button', { type: 'button', class: 'btn' + (tool === 'surface' ? ' active' : ''), id: 'dw-srf-btn', 'data-help': 'drawingSymbols' });
+      bSrf.innerHTML = icon('surface') + esc(T(tool === 'surface' ? 'draw.panel.srfActive' : 'draw.panel.srfBtn'));
+      bSrf.onclick = () => tool_('surface');
+      const bWld = h('button', { type: 'button', class: 'btn' + (tool === 'weld' ? ' active' : ''), id: 'dw-wld-btn', 'data-help': 'drawingSymbols' });
+      bWld.innerHTML = icon('weld') + esc(T(tool === 'weld' ? 'draw.panel.weldActive' : 'draw.panel.weldBtn'));
+      bWld.onclick = () => tool_('weld');
+      const bEdg = h('button', { type: 'button', class: 'btn' + (tool === 'edge' ? ' active' : ''), id: 'dw-edg-btn', 'data-help': 'drawingSymbols' });
+      bEdg.innerHTML = icon('surface') + esc(T(tool === 'edge' ? 'draw.panel.edgeActive' : 'draw.panel.edgeBtn'));
+      bEdg.onclick = () => tool_('edge');
+      const bLib = h('button', { type: 'button', class: 'btn' + (tool === 'symbol' ? ' active' : ''), id: 'dw-symlib-btn', 'data-help': 'drawingSymbolLibrary' });
+      bLib.innerHTML = icon('symbols') + esc(T('draw.panel.symlibBtn'));
+      bLib.onclick = () => openSymbolLibrary();
+      symSec.append(h('div', { class: 'btn-row' }, bSrf, bWld), h('div', { class: 'btn-row', style: { marginTop: '4px' } }, bEdg, bLib));
+      if (tool === 'surface') {
+        symSec.append(renderSurfaceFields({
+          prefix: 'dw-srf-new-',
+          val: surfaceDraft,
+          onUpdate: (patch, needPanel) => {
+            Object.assign(surfaceDraft, patch);
+            render();
+            if (needPanel) Panels.renderRight();
+          },
+        }));
+      } else if (tool === 'weld') {
+        symSec.append(renderWeldFields({
+          prefix: 'dw-wld-new-',
+          val: weldDraft,
+          onUpdate: (patch, needPanel) => {
+            Object.assign(weldDraft, patch);
+            render();
+            if (needPanel) Panels.renderRight();
+          },
+        }));
+      } else if (tool === 'edge') {
+        symSec.append(renderEdgeSymFields({
+          prefix: 'dw-edg-new-',
+          val: edgeDraft,
+          onUpdate: (patch, needPanel) => {
+            Object.assign(edgeDraft, patch);
+            render();
+            if (needPanel) Panels.renderRight();
+          },
+        }));
+      } else if (tool === 'symbol') {
+        symSec.append(renderPlacedSymFields({
+          prefix: 'dw-sym-new-',
+          val: symbolDraft,
+          isNew: true,
+          onUpdate: (patch, needPanel) => {
+            Object.assign(symbolDraft, patch);
+            if (patch.withLeader !== undefined) {
+              toolState = { stage: 0 };
+              UI.hint(T(symbolDraft.withLeader ? 'draw.hint.symbolLeader' : 'draw.hint.symbol'));
+            }
+            render();
+            if (needPanel) Panels.renderRight();
+          },
+        }));
+      }
+      const addSymMiniList = (items, listId, delTip, onDel, fmtBadge, fmtLabel) => {
+        if (!items || !items.length) return;
+        const ml = h('div', { class: 'mini-list', id: listId, style: { marginTop: '6px' } });
+        for (const it of items) {
+          const row = h('div', {
+            class: 'mini-row',
+            'data-sym-id': it.id,
+            style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === it.id ? 'var(--accent-soft)' : '' },
+          });
+          const vw = it.view ? viewLabel(it.view, d) : T('draw.tb.sheet');
+          const db = h('button', { type: 'button', class: 'btn danger', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': delTip, 'aria-label': delTip });
+          db.innerHTML = icon('trash');
+          db.onclick = (e) => { e.stopPropagation(); onDel(it.id); };
+          row.append(h('b', { class: 'mono' }, fmtBadge(it)), h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, fmtLabel(it)), h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, vw), db);
+          row.onclick = () => { selDim = it.id; render(); Panels.renderRight(); };
+          ml.append(row);
+        }
+        symSec.append(ml);
+      };
+      addSymMiniList(d.surfaces, 'dw-srf-list', T('draw.panel.srfDelTip'), removeSurface, (x) => x.param, (x) => (x.value ? `${x.param} ${x.value}` : x.param));
+      addSymMiniList(d.welds, 'dw-wld-list', T('draw.panel.weldDelTip'), removeWeld, () => 'W', (x) => ((WELD_TYPES.find((w) => w.key === x.type)?.label) || x.type) + (x.size ? ' · ' + x.size : ''));
+      addSymMiniList(d.edges, 'dw-edg-list', T('draw.panel.edgeDelTip'), removeEdgeSym, (x) => (x.state === 'burrFree' ? '−' : x.state === 'overhang' ? '+' : '±'), (x) => x.maxVal || '—');
+      addSymMiniList(d.symbols, 'dw-sym-list', T('draw.panel.symDelTip'), removeSymbol, () => '◆', (x) => symLibMeta(x.key).label + (x.text ? ' · ' + x.text : ''));
+      w.append(symSec);
     }
     // Positionsnummern & Stückliste auf dem Blatt (ZE-12)
     const bomSec = h('div', { class: 'section', id: 'dw-bom-sec', 'data-help': 'drawingBom' }, h('div', { class: 'section-h' }, T('draw.panel.bomSec')));
@@ -12599,14 +13915,19 @@ const Drawing = (() => {
       const selBalloon = (d.balloons || []).find((x) => x.id === selDim);
       const selDatum = (d.datums || []).find((x) => x.id === selDim);
       const selGdt = (d.gdtFrames || []).find((x) => x.id === selDim);
+      const selSurface = (d.surfaces || []).find((x) => x.id === selDim);
+      const selWeld = (d.welds || []).find((x) => x.id === selDim);
+      const selEdgeSym = (d.edges || []).find((x) => x.id === selDim);
+      const selPlacedSym = (d.symbols || []).find((x) => x.id === selDim);
       const isBomSel = selDim === '__bom__';
       const isHoleTblSel = selDim === '__holetable__';
       const isRevTblSel = selDim === '__rev__';
       const selFreeTbl = (d.freeTables || []).find((x) => x.id === selDim) || null;
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selDimInfo = !selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !selDatum && !selGdt && !isBomSel && !isHoleTblSel && !isRevTblSel && !selFreeTbl && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selBrk && !selAux && !selNote && !selBalloon && !selDatum && !selGdt && !isBomSel && !isHoleTblSel && !isRevTblSel && !selFreeTbl && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const hasNonDimSel = selDet || isSec || selBrk || selAux || selNote || selBalloon || selDatum || selGdt || selSurface || selWeld || selEdgeSym || selPlacedSym || isBomSel || isHoleTblSel || isRevTblSel || selFreeTbl || selCtr;
+      const selDimInfo = !hasNonDimSel ? findDimById(selDim, d, layout) : null;
+      const selResolved = selDimInfo ? selDimInfo.dim : (!hasNonDimSel && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : selSurface ? T('draw.panel.selSurface', { val: selSurface.value ? `${selSurface.param} ${selSurface.value}` : selSurface.param }) : selWeld ? T('draw.panel.selWeld', { type: (WELD_TYPES.find((w) => w.key === selWeld.type)?.label) || selWeld.type }) : selEdgeSym ? T('draw.panel.selEdgeSym', { state: selEdgeSym.maxVal || selEdgeSym.state }) : selPlacedSym ? T('draw.panel.selPlacedSym', { name: symLibMeta(selPlacedSym.key).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
       if (selBrk) {
         selSec.append(
           UI.selectField({
@@ -12715,6 +14036,35 @@ const Drawing = (() => {
             updateGdtFrame(selGdt.id, up);
             if (needPanel) Panels.renderRight();
           },
+        }));
+      }
+      if (selSurface) {
+        selSec.append(renderSurfaceFields({
+          prefix: 'dw-sel-srf-',
+          val: selSurface,
+          onUpdate: (patch, needPanel) => { updateSurface(selSurface.id, patch); if (needPanel) Panels.renderRight(); },
+        }));
+      }
+      if (selWeld) {
+        selSec.append(renderWeldFields({
+          prefix: 'dw-sel-wld-',
+          val: selWeld,
+          onUpdate: (patch, needPanel) => { updateWeld(selWeld.id, patch); if (needPanel) Panels.renderRight(); },
+        }));
+      }
+      if (selEdgeSym) {
+        selSec.append(renderEdgeSymFields({
+          prefix: 'dw-sel-edg-',
+          val: selEdgeSym,
+          onUpdate: (patch, needPanel) => { updateEdgeSym(selEdgeSym.id, patch); if (needPanel) Panels.renderRight(); },
+        }));
+      }
+      if (selPlacedSym) {
+        selSec.append(renderPlacedSymFields({
+          prefix: 'dw-sel-sym-',
+          val: selPlacedSym,
+          isNew: false,
+          onUpdate: (patch, needPanel) => { updateSymbol(selPlacedSym.id, patch); if (needPanel) Panels.renderRight(); },
         }));
       }
       if (selBalloon) {
@@ -13690,6 +15040,12 @@ const Drawing = (() => {
     DIM_ARROWS, DIM_FONT_SIZES, DIM_MODES, dimStyle: () => sheetDimStyle(), setDimStyle, setDualDims,
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
     GDT_SYMBOLS, gdtMenu, datums, gdtFrames, addDatum, updateDatum, removeDatum, nextDatumLabel, addGdtFrame, updateGdtFrame, removeGdtFrame,
+    SURFACE_REMOVALS, SURFACE_PARAMS, SURFACE_PRESETS, WELD_TYPES, EDGE_STATES, SYMBOL_LIBRARY,
+    symbolsMenu, openSymbolLibrary,
+    surfaces, addSurface, updateSurface, removeSurface,
+    welds, addWeld, updateWeld, removeWeld,
+    edges, addEdgeSym, updateEdgeSym, removeEdgeSym,
+    symbols, addSymbol, updateSymbol, removeSymbol,
     bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
     holeTable: () => normalizeHoleTable(dwg().holeTable), setHoleTable, updateHoleTable, resetHoleTablePos, holeTableRows,
     revTable: () => normalizeRevTable(dwg().revTable), setRevTable, addRevRow, updateRevRow, removeRevRow, resetRevTablePos,

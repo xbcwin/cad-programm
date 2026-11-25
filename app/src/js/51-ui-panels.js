@@ -457,6 +457,9 @@ const Panels = (() => {
       const gdtBtn = btn('t-gdt', 'gdt', T('tool.gdt'), T('tool.gdtTip'), '', (e) => Drawing.gdtMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'datum' || Drawing.activeTool === 'gdt' ? ' active' : ''), T('tool.gdtShort'));
       gdtBtn.dataset.help = 'drawingGdt';
       gdtBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'datum' || Drawing.activeTool === 'gdt'));
+      const symBtn = btn('t-symbols', 'surface', T('tool.symbols'), T('tool.symbolsTip'), '', (e) => Drawing.symbolsMenu(e.currentTarget), 'pro' + (['surface', 'weld', 'edge', 'symbol'].includes(Drawing.activeTool) ? ' active' : ''), T('tool.symbolsShort'));
+      symBtn.dataset.help = 'drawingSymbols';
+      symBtn.setAttribute('aria-pressed', String(['surface', 'weld', 'edge', 'symbol'].includes(Drawing.activeTool)));
       const tblBtn = btn('t-tables', 'layout', T('tool.tables'), T('tool.tablesTip'), '', (e) => Drawing.tablesMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'hole-origin' ? ' active' : ''), T('tool.tablesShort'));
       tblBtn.dataset.help = 'drawingTables';
       tblBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'hole-origin'));
