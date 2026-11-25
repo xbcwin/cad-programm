@@ -5136,5 +5136,14 @@
   "panel.item.pullHandleHint": "Hole spacing <b>{dist}</b> · Height {h} · Grip Ø {d} · Mounting hole {hole}.",
   "panel.item.rotaryKnobHint": "Rotary knob <b>Ø {D} × {h}</b> · Shaft bore {shaft} ({dep} deep).",
   "panel.item.thumbScrewHint": "<b>{norm} {size} × {L}</b> · Head Ø {headD} × {headH}.",
-  "panel.item.deviceFootHint": "Device foot <b>Ø {D} × {h}</b> · Screw {screw}."
+  "panel.item.deviceFootHint": "Device foot <b>Ø {D} × {h}</b> · Screw {screw}.",
+  "tool.fly.nameplate": "Nameplate (text)",
+  "tool.fly.nameplateTip": "Add a parametric nameplate with raised or recessed text",
+  "tool.fly.qrCode": "QR code",
+  "tool.fly.qrCodeTip": "Add a locally generated QR code plate or embossing solid",
+  "tool.fly.barcode": "Barcode (EAN / Code128)",
+  "tool.fly.barcodeTip": "Add a locally generated barcode (Code 128, EAN-13, EAN-8)",
+  "panel.item.nameplateHint": "<b>{w} × {h} × {totalH}</b> · {lines} text line(s) {mode} · {holes}.",
+  "panel.item.qrCodeHint": "<b>QR Version {ver}</b> ({mod}×{mod} modules · EC {ec}) · module {cell} · {w} × {w} × {totalH} · {dark} dark modules.",
+  "panel.item.barcodeHint": "<b>{fmt}</b> (<code>{code}</code>) · {bars} bars ({mods} modules) · {w} × {h} × {totalH}."
 }

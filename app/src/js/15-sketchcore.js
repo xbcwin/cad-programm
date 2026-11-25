@@ -501,6 +501,10 @@ const SK = (() => {
       for (const it of list || []) {
         if (!it) continue;
         const p = it.p || {};
+        if (it.kind === 'part' && p.lib === 'nameplate') {
+          const fid = p.font && BUILTIN_FONT_URLS[p.font] ? p.font : 'fett';
+          if (!FONTS[fid]) need.add(fid);
+        }
         scanSketch(p.sketch);
         if (Array.isArray(p.sketches)) for (const sk of p.sketches) scanSketch(sk);
         scanSketch(p.prof);

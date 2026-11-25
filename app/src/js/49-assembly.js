@@ -4576,7 +4576,7 @@ const Assembly = (() => {
       return KINDS[it.kind].params.filter((q) => q && q.k && !ASM_SKIP_P_KEYS.has(q.k)).slice(0, 4);
     }
     if (it.kind === 'part' && it.p && it.p.lib && typeof LIBMAP !== 'undefined' && LIBMAP[it.p.lib] && Array.isArray(LIBMAP[it.p.lib].params)) {
-      return LIBMAP[it.p.lib].params.filter((q) => q && q.k && q.type !== 'select' && !ASM_SKIP_P_KEYS.has(q.k)).slice(0, 3);
+      return LIBMAP[it.p.lib].params.filter((q) => q && q.k && q.type !== 'select' && q.type !== 'text' && !ASM_SKIP_P_KEYS.has(q.k)).slice(0, 3);
     }
     if (it.kind === 'extrude' && it.p) return [{ k: 'dist', label: T('asm.varFieldLen'), unit: 'mm' }];
     if (it.kind === 'revolve' && it.p) return [{ k: 'angle', label: T('asm.varFieldAngle'), unit: '°' }];

@@ -749,6 +749,9 @@ const IC = {
   thumbScrew: '<rect x="5" y="4" width="14" height="5" rx="1" fill="currentColor" opacity=".18"/><rect x="5" y="4" width="14" height="5" rx="1"/><path d="M8 4v5M12 4v5M16 4v5M8 9h8v3H8zM10 12h4v8.5l-2 1-2-1z"/>',
   deviceFoot: '<path d="M7 5h10l2.5 13.5H4.5z" fill="currentColor" opacity=".18"/><path d="M7 5h10l2.5 13.5H4.5z"/><path d="M10.5 5v5h3V5M12 10v8.5" stroke-dasharray="2 1.2"/>',
   magnetPocket: '<rect x="3" y="10" width="18" height="10" rx="1.5" fill="currentColor" opacity=".14"/><path d="M3 10h4.5v5.5h9V10H21v10H3z"/><circle cx="12" cy="7.2" r="3.2" fill="currentColor" opacity=".25"/><circle cx="12" cy="7.2" r="3.2"/>',
+  nameplate: '<rect x="2.5" y="5.5" width="19" height="13" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M7 10h10M7 14h6"/><circle cx="5" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="5" cy="16" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="16" r=".8" fill="currentColor" stroke="none"/>',
+  qrCode: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="5.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="16.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5.2" y="16.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><path d="M14 14h3v3h-3zM18 14h3M14 20h4M19 17v4" stroke-width="2"/>',
+  barcode: '<rect x="2.5" y="4.5" width="19" height="15" rx="1.5" opacity=".35"/><path d="M5.5 7.5v9M8 7.5v9M10.5 7.5v9M12.5 7.5v9M15.5 7.5v9M18.5 7.5v9" stroke-width="1.6"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2880,6 +2883,21 @@ const HELP = {
   "tip": "Magnet-Tasche mit Spiel in eine ebene Fläche schneiden (rund oder eckig)",
   "hilfe": "Schneidet eine maßhaltige Tasche für Scheibenmagnete (z. B. Ø 10 × 3 mm) oder Quadermagnete als eigenen Formschritt in eine ebene Körperfläche. Das eingestellte Spiel wird beidseitig zum Durchmesser bzw. zur Breite/Länge addiert (2 × Spiel) sowie einfach zur Tiefe addiert – z. B. ergibt 10 × 3 mm mit 0,1 mm Spiel eine Tasche mit Ø 10,2 mm und 3,1 mm Tiefe.",
   "tipp": "Gib bei „Abdeckung (Einbetten)“ z. B. 0,6 mm an, um den Magnet beim 3D-Druck unsichtbar im Bauteil einzuschließen."
+ },
+ "nameplate": {
+  "tip": "Parametrisches Typenschild mit erhabener oder vertiefter 3D-Schrift",
+  "hilfe": "Erstellt eine abgerundete Platte mit optionalem Rand und Befestigungslöchern sowie bis zu drei Textzeilen (Überschrift, Zeile 1, Zeile 2). Lange Zeilen werden automatisch in die Breite des Schildes eingepasst. Unter „Schrift-Art“ wählst du zwischen erhabenen Buchstaben (für Mehrfarb-Druck oder Lackieren) und vertiefter Gravur.",
+  "tipp": "Lass „Zeile 1“ oder „Zeile 2“ einfach leer, wenn du nur ein oder zwei Textfelder brauchst."
+ },
+ "qrCode": {
+  "tip": "Lokal erzeugter QR-Code als 3D-Schild oder reiner Präge-Körper",
+  "hilfe": "Erzeugt ohne Internetverbindung einen normgerechten QR-Code (ISO/IEC 18004, Version 1–10) für beliebige Texte oder Links. Du wählst zwischen Platte mit erhabenen Quadraten, Platte mit vertieftem Code oder „Nur Module“, um den Code direkt auf eigene Gehäuse oder Bauteile zu setzen (als Körper oder Loch).",
+  "tipp": "Für den 3D-Druck reicht bei kurzen Texten Fehlerkorrektur „M“ mit 0,6–0,8 mm Prägehöhe, damit die Kanten sauber gedruckt und sicher gescannt werden."
+ },
+ "barcode": {
+  "tip": "Lokal erzeugter Strichcode (Code 128, EAN-13, EAN-8) als Platte oder Präge-Balken",
+  "hilfe": "Erzeugt ohne Internetverbindung einen lesbaren Strichcode: Code 128 für beliebige Texte, Seriennummern und Ziffern oder EAN-13 bzw. EAN-8 mit automatischer Prüfziffer. Wie beim QR-Code kannst du eine Platte mit erhabenen oder vertieften Balken erzeugen oder „Nur Balken“ zum Einprägen in andere Körper wählen.",
+  "tipp": "Bei EAN-13 und EAN-8 berechnet Tracery die letzte Prüfziffer automatisch nach Norm, wenn du 12 bzw. 7 Ziffern eintippst."
  }
 };
 

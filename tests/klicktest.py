@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure,LabelCodes}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -4710,6 +4710,305 @@ def t_a024_winkelfang(p):
                and bool(h_as.get('tip') and h_as.get('hilfe') and h_as.get('tipp')))
     ok5 = off_ok and abs(a5 - 45) > 0.35 and persisted and re_on and help_ok
     return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a193_typenschild_qr_barcode(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+
+    # 1. Einfach-Modus & QR-Code für "tracery"
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    fly_st = p.ev("""return {
+      tiles: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      np: !!document.querySelector('#add-nameplate')?.offsetParent,
+      qr: !!document.querySelector('#add-qr-code')?.offsetParent,
+      bc: !!document.querySelector('#add-barcode')?.offsetParent,
+    }""")
+    p.pg.locator('#add-qr-code').click()
+    warte_rechnen(p, 45)
+
+    qr1 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const m = LabelCodes.qrEncode('tracery', 'M');
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      const chkFinder = (r0, c0) => {
+        for (let dr = 0; dr < 7; dr++) for (let dc = 0; dc < 7; dc++) {
+          const exp = (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4)) ? 1 : 0;
+          if (m.matrix[r0 + dr][c0 + dc] !== exp) return false;
+        }
+        return true;
+      };
+      return {
+        errs: App.errors.length,
+        kind: it.kind, lib: it.p.lib, text: it.p.text,
+        ver: m.version, size: m.size, dark: m.darkCount,
+        finders: chkFinder(0, 0) && chkFinder(0, m.size - 7) && chkFinder(m.size - 7, 0),
+        faces: r && r.data && r.data.faces ? r.data.faces.length : 0,
+        dx: bb ? bb[3] - bb[0] : 0, dy: bb ? bb[4] - bb[1] : 0, dz: bb ? bb[5] - bb[2] : 0,
+        vol: ms && ms.parts && ms.parts[0] ? ms.parts[0].volume : 0,
+        gcIssues: gc.issues.length,
+        hint: document.querySelector('#p-qrcode-hint')?.textContent || '',
+      };
+    })()""")
+    ok1 = bool(
+        fly_st['tiles'] == 5 and fly_st['np'] and fly_st['qr'] and fly_st['bc']
+        and qr1['errs'] == 0 and qr1['kind'] == 'part' and qr1['lib'] == 'qrCode' and qr1['text'] == 'tracery'
+        and qr1['ver'] == 1 and qr1['size'] == 21 and qr1['dark'] > 150 and qr1['finders']
+        and qr1['faces'] > 100
+        and abs(qr1['dx'] - 36.0) < 0.05 and abs(qr1['dy'] - 36.0) < 0.05 and abs(qr1['dz'] - 2.8) < 0.05
+        and qr1['vol'] > 2592.0 and qr1['gcIssues'] == 0
+        and 'Version 1' in qr1['hint'] and '21×21' in qr1['hint']
+    )
+
+    # 2. Speichern & Neu-Laden -> identische Geometrie
+    saved = p.ev("""return (async () => {
+      const payload = await Start.projectPayload();
+      const parsed = JSON.parse(payload);
+      const val = Store.validateProject(parsed);
+      return { payload, valOk: !!(val && val.ok) };
+    })()""")
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("App.setDoc(Model.migrate(JSON.parse(arg)))", saved['payload'])
+    warte_rechnen(p, 45)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(200)
+    qr_rel = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        text: it.p.text,
+        faces: r && r.data && r.data.faces ? r.data.faces.length : 0,
+        dx: bb ? bb[3] - bb[0] : 0, dy: bb ? bb[4] - bb[1] : 0, dz: bb ? bb[5] - bb[2] : 0,
+        vol: ms && ms.parts && ms.parts[0] ? ms.parts[0].volume : 0,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+    ok2 = bool(
+        saved['valOk']
+        and qr_rel['errs'] == 0 and qr_rel['text'] == 'tracery'
+        and qr_rel['faces'] == qr1['faces']
+        and abs(qr_rel['dx'] - qr1['dx']) < 1e-3 and abs(qr_rel['dy'] - qr1['dy']) < 1e-3 and abs(qr_rel['dz'] - qr1['dz']) < 1e-3
+        and abs(qr_rel['vol'] - qr1['vol']) < 0.05 and qr_rel['gcIssues'] == 0
+    )
+
+    # 3. QR-Code vertieft (deboss) & direkte Prägung (relief als Loch auf Quader)
+    p.pg.locator('#lp-mode').select_option('deboss')
+    warte_rechnen(p, 45)
+    qr_deb = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const bb = App.results.get(it.id).data.bbox;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return { errs: App.errors.length, dz: bb[5] - bb[2], vol: ms.parts[0].volume, gcIssues: gc.issues.length };
+    })()""")
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""App.change('QR auf Quader prägen', (doc) => {
+      doc.items.push(Model.newItem('box', { w: 50, d: 50, h: 6 }, { name: 'Gehäusewand' }));
+      const qr = Model.newItem('part', { lib: 'qrCode', text: 'tracery', mode: 'relief', ec: 'M', size: 32, quiet: 2, baseH: 2, reliefH: 0.8 }, { name: 'QR-Prägung', role: 'hole' });
+      qr.t.z = 6;
+      doc.items.push(qr);
+    })""")
+    warte_rechnen(p, 45)
+    qr_cut = p.ev("""return (async () => {
+      const r = App.results.get(App.doc.items[0].id);
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return { errs: App.errors.length, faces: r.data.faces.length, vol: ms.parts[0].volume, gcIssues: gc.issues.length };
+    })()""")
+    ok3 = bool(
+        qr_deb['errs'] == 0 and abs(qr_deb['dz'] - 2.0) < 0.05 and qr_deb['vol'] < 2592.0 and qr_deb['gcIssues'] == 0
+        and qr_cut['errs'] == 0 and qr_cut['faces'] > 80 and 14000.0 < qr_cut['vol'] < 14950.0 and qr_cut['gcIssues'] == 0
+    )
+
+    # 4. Typenschild mit lesbarer Schrift (emboss & deboss + Speichern/Laden)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(250)
+    p.pg.locator('#add-nameplate').click()
+    warte_rechnen(p, 45)
+    p.pg.locator('#lp-title').fill('TRACERY CAD')
+    p.pg.locator('#lp-title').press('Enter')
+    warte_rechnen(p, 45)
+    p.pg.locator('#lp-line1').fill('Typ A-193')
+    p.pg.locator('#lp-line1').press('Enter')
+    warte_rechnen(p, 45)
+
+    np_emb = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r.data.bbox;
+      const faces = r.data.faces || [];
+      const topLetters = faces.filter(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && f.c && Math.abs(f.c[2] - 3.2) < 0.05);
+      const holes = faces.filter(f => f.t === 'CYLINDRE' && f.r && Math.abs(f.r - 1.6) < 0.05);
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        fontLoaded: SK.isFontLoaded('fett'),
+        dx: bb[3] - bb[0], dy: bb[4] - bb[1], dz: bb[5] - bb[2],
+        faces: faces.length,
+        topLetters: topLetters.length,
+        holes: holes.length,
+        vol: ms.parts[0].volume,
+        gcIssues: gc.issues.length,
+        hint: document.querySelector('#p-nameplate-hint')?.textContent || '',
+      };
+    })()""")
+
+    p.pg.locator('#lp-mode').select_option('deboss')
+    warte_rechnen(p, 45)
+    np_deb = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r.data.bbox;
+      const faces = r.data.faces || [];
+      const recLetters = faces.filter(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && f.c && Math.abs(f.c[2] - 1.6) < 0.05);
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        dz: bb[5] - bb[2],
+        faces: faces.length,
+        recLetters: recLetters.length,
+        vol: ms.parts[0].volume,
+        gcIssues: gc.issues.length,
+        payload: await Start.projectPayload(),
+      };
+    })()""")
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("App.setDoc(Model.migrate(JSON.parse(arg)))", np_deb['payload'])
+    warte_rechnen(p, 45)
+    np_rel = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const ms = await Mass.measure();
+      return { errs: App.errors.length, line2: it.p.line2, faces: r.data.faces.length, vol: ms.parts[0].volume };
+    })()""")
+    ok4 = bool(
+        np_emb['errs'] == 0 and np_emb['fontLoaded']
+        and abs(np_emb['dx'] - 60.0) < 0.05 and abs(np_emb['dy'] - 30.0) < 0.05 and abs(np_emb['dz'] - 3.2) < 0.05
+        and np_emb['topLetters'] >= 15 and np_emb['holes'] == 4 and np_emb['gcIssues'] == 0
+        and '60' in np_emb['hint'] and '30' in np_emb['hint']
+        and np_deb['errs'] == 0 and abs(np_deb['dz'] - 2.4) < 0.05 and np_deb['recLetters'] >= 10
+        and np_deb['vol'] < np_emb['vol'] and np_deb['gcIssues'] == 0
+        and np_rel['errs'] == 0 and np_rel['line2'] == 'SN: 2026-001'
+        and np_rel['faces'] == np_deb['faces'] and abs(np_rel['vol'] - np_deb['vol']) < 0.05
+    )
+
+    # 5. Barcode (Code 128, EAN-13, EAN-8)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(250)
+    p.pg.locator('#add-barcode').click()
+    warte_rechnen(p, 45)
+    bc128 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = LabelCodes.barcodeMetrics(it.p);
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length, fmt: m.format, bars: m.barCount, mods: m.totalModules,
+        gcIssues: gc.issues.length, hint: document.querySelector('#p-barcode-hint')?.textContent || '',
+      };
+    })()""")
+
+    p.pg.locator('#lp-format').select_option('ean13')
+    warte_rechnen(p, 45)
+    p.pg.locator('#lp-code').fill('4006381333931')
+    p.pg.locator('#lp-code').press('Enter')
+    warte_rechnen(p, 45)
+    bc_ean13 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const m = LabelCodes.barcodeMetrics({ ...it.p, code: it.p.code });
+      const mLead = LabelCodes.barcodeEncode('001234567890', 'ean13');
+      const mEan8 = LabelCodes.barcodeEncode('9638507', 'ean8');
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return {
+        errs: App.errors.length,
+        rawCode: it.p.code,
+        encoded: m.encoded, checkDigit: m.checkDigit, mods: m.totalModules, bars: m.barCount,
+        leadOk: mLead.encoded.startsWith('001234567890') && mLead.encoded.length === 13,
+        ean8Ok: mEan8.encoded === '96385074' && mEan8.totalModules === 67,
+        vol: ms.parts[0].volume,
+        plateVol: m.outerW * m.outerH * m.baseH,
+        gcIssues: gc.issues.length,
+      };
+    })()""")
+
+    p.pg.locator('#lp-mode').select_option('deboss')
+    warte_rechnen(p, 45)
+    bc_deb = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const bb = App.results.get(it.id).data.bbox;
+      const ms = await Mass.measure();
+      const gc = await GeomCheck.run({ silent: true });
+      return { errs: App.errors.length, dz: bb[5] - bb[2], vol: ms.parts[0].volume, gcIssues: gc.issues.length };
+    })()""")
+    p.pg.locator('#lp-mode').select_option('relief')
+    warte_rechnen(p, 45)
+    bc_rel = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const bb = App.results.get(it.id).data.bbox;
+      const gc = await GeomCheck.run({ silent: true });
+      return { errs: App.errors.length, dz: bb[5] - bb[2], gcIssues: gc.issues.length };
+    })()""")
+    ok5 = bool(
+        bc128['errs'] == 0 and bc128['fmt'] == 'code128' and bc128['bars'] >= 20 and bc128['gcIssues'] == 0
+        and 'Code 128' in bc128['hint'] and 'TRACERY' in bc128['hint']
+        and bc_ean13['errs'] == 0 and bc_ean13['rawCode'] == '4006381333931'
+        and bc_ean13['encoded'] == '4006381333931' and bc_ean13['checkDigit'] == 1
+        and bc_ean13['mods'] == 95 and bc_ean13['bars'] == 30
+        and bc_ean13['leadOk'] and bc_ean13['ean8Ok']
+        and bc_ean13['vol'] > bc_ean13['plateVol'] and bc_ean13['gcIssues'] == 0
+        and bc_deb['errs'] == 0 and abs(bc_deb['dz'] - 2.0) < 0.05 and bc_deb['vol'] < bc_ean13['plateVol'] and bc_deb['gcIssues'] == 0
+        and bc_rel['errs'] == 0 and abs(bc_rel['dz'] - 0.8) < 0.05 and bc_rel['gcIssues'] == 0
+    )
+
+    # 6. Profi-Modus, Befehlssuche, Undo/Redo, Hilfen, Erklärungen & DE/EN
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.locator('#t-parts').click(); p.wait(250)
+    pro_st = p.ev("""return {
+      npTile: !!document.querySelector('.flyout .tile[data-lib="nameplate"]')?.offsetParent,
+      qrTile: !!document.querySelector('.flyout .tile[data-lib="qrCode"]')?.offsetParent,
+      bcTile: !!document.querySelector('.flyout .tile[data-lib="barcode"]')?.offsetParent,
+      cNp: Commands.search('typenschild').map(c => c.id),
+      cQr: Commands.search('qr-code').map(c => c.id),
+      cBc: Commands.search('barcode').map(c => c.id),
+      exp: Explain.local(App.doc.items[0].id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    p.ev("App.undo()")
+    warte_rechnen(p, 45)
+    mode_undo = p.ev("return App.doc.items[0].p.mode")
+    p.ev("App.redo()")
+    warte_rechnen(p, 45)
+    mode_redo = p.ev("return App.doc.items[0].p.mode")
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = ['nameplate', 'qrCode', 'barcode'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { hOk, i18nOk };
+    })()""")
+    exp_keys = {l.get('k'): l.get('t') for l in (pro_st['exp'] or {}).get('lines', [])}
+    ok6 = bool(
+        pro_st['npTile'] and pro_st['qrTile'] and pro_st['bcTile']
+        and 'lib-nameplate' in pro_st['cNp'] and 'lib-qrCode' in pro_st['cQr'] and 'lib-barcode' in pro_st['cBc']
+        and exp_keys.get('was') and exp_keys.get('wozu') and exp_keys.get('achtung')
+        and mode_undo == 'deboss' and mode_redo == 'relief'
+        and meta['hOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
 # KI verrechnet Körper (vereinigen / abziehen)
@@ -39989,6 +40288,7 @@ TESTS = [
     ('[A-189] Bibliothek: Lochbilder Platinen & Batteriefächer (BI-17, BI-19)', t_a189_platinen_batteriefaecher),
     ('[A-191] Bibliothek: Gehäuse-Generator (Kasten mit Deckel, Lippe & 4 Schraubdome, BI-20)', t_a191_gehaeuse_generator),
     ('[A-187] Bibliothek: Griffe, Knöpfe, Füße, Magnet-Taschen (BI-14, BI-15)', t_a187_griffe_knoepfe_fuesse_magnettaschen),
+    ('[A-193] Bibliothek: Typenschild, QR-Code und Barcode (BI-22, BI-23)', t_a193_typenschild_qr_barcode),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
