@@ -3157,7 +3157,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importAMF, parseAMF, importPLY, parsePLY, importPoints, parsePointsFile, openPointsFile, importDXF, parseDXF, parseSVG, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importAMF, parseAMF, importPLY, parsePLY, importPoints, parsePointsFile, openPointsFile, importDXF, parseDXF, parseSVG, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile, projectPayload,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,

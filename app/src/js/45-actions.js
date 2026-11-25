@@ -864,6 +864,198 @@ const Actions = (() => {
     });
     return true;
   }
-  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter, setGrounded, toggleGround };
+  // ---------- Texturen & Aufkleber (AN-15, AN-16) ----------
+  function setTexture(ids, spec, opts = {}) {
+    ids = Array.isArray(ids) ? ids : ids ? [ids] : App.sel;
+    if (!ids.length) return false;
+    const label = spec ? 'Textur geändert' : 'Textur entfernt';
+    App.change(label, (doc) => {
+      for (const id of ids) {
+        const f = Model.find(doc, id);
+        if (!f || f.item.role === 'hole') continue;
+        const tgt = f.item;
+        if (!spec) { delete tgt.texture; continue; }
+        const base = typeof spec === 'string'
+          ? { ...(tgt.texture || {}), kind: spec }
+          : { ...(tgt.texture || {}), ...spec };
+        const nt = Model.normalizeTexture(base);
+        if (nt) tgt.texture = nt;
+        else delete tgt.texture;
+      }
+    }, opts);
+    return true;
+  }
+
+  function defaultDecalWidth(itemId, faceIdx) {
+    const r = App.results.get(itemId);
+    const data = r && r.data;
+    const face = data && data.faces && data.faces[faceIdx];
+    const g = data && data.faceGroups && data.faceGroups.find((x) => x[2] === faceIdx);
+    if (!face || !face.n || !g || !data.vertices || !data.triangles) return 20;
+    const fr = faceFrame(face);
+    const ux = fr.x, uy = fr.y;
+    const P = data.vertices, T = data.triangles;
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (let i = g[0]; i < g[0] + g[1]; i++) {
+      const vi = T[i] * 3;
+      const px = P[vi], py = P[vi + 1], pz = P[vi + 2];
+      const u = px * ux[0] + py * ux[1] + pz * ux[2];
+      const v = px * uy[0] + py * uy[1] + pz * uy[2];
+      if (u < u0) u0 = u; if (u > u1) u1 = u;
+      if (v < v0) v0 = v; if (v > v1) v1 = v;
+    }
+    const span = Math.min(u1 - u0, v1 - v0);
+    return Number.isFinite(span) && span > 0.5 ? clamp(round(span * 0.55, 2), 4, 200) : 20;
+  }
+
+  function parseSvgDim(val) {
+    if (!val) return NaN;
+    const m = String(val).trim().match(/^([0-9]*\.?[0-9]+)/);
+    return m ? Number(m[1]) : NaN;
+  }
+
+  async function parseDecalFile(file) {
+    if (!file) throw new Error('Keine Datei gewählt.');
+    const name = file.name || 'Aufkleber';
+    const type = (file.type || '').toLowerCase();
+    const isSvg = type.includes('svg') || /\.svg$/i.test(name);
+    const isPng = type === 'image/png' || /\.png$/i.test(name);
+    const isJpg = type === 'image/jpeg' || type === 'image/jpg' || /\.(jpe?g)$/i.test(name);
+    if (!isSvg && !isPng && !isJpg) throw new Error(T('decal.badFile'));
+    if (isSvg) {
+      const raw = await file.text();
+      const doc = new DOMParser().parseFromString(raw, 'image/svg+xml');
+      const root = doc && doc.documentElement;
+      if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) {
+        throw new Error(T('decal.badFile'));
+      }
+      let vw = NaN, vh = NaN;
+      const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+      if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) { vw = vb[2]; vh = vb[3]; }
+      const aw = parseSvgDim(root.getAttribute('width')), ah = parseSvgDim(root.getAttribute('height'));
+      const w0 = (aw > 0 ? aw : vw) || 256;
+      const h0 = (ah > 0 ? ah : vh) || 256;
+      const aspect = clamp(round(w0 / Math.max(1e-3, h0), 4), 0.05, 20);
+      const maxDim = 512;
+      const scale = maxDim / Math.max(w0, h0);
+      const outW = Math.max(16, Math.round(w0 * (scale < 1 ? scale : Math.min(2, scale))));
+      const outH = Math.max(16, Math.round(h0 * (scale < 1 ? scale : Math.min(2, scale))));
+      if (!root.getAttribute('viewBox') && w0 > 0 && h0 > 0) root.setAttribute('viewBox', `0 0 ${w0} ${h0}`);
+      root.setAttribute('width', String(outW));
+      root.setAttribute('height', String(outH));
+      if (!root.getAttribute('xmlns')) root.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      const ser = new XMLSerializer().serializeToString(root);
+      const b64 = btoa(unescape(encodeURIComponent(ser)));
+      return { src: 'data:image/svg+xml;base64,' + b64, aspect, name };
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onload = () => resolve(String(rd.result || ''));
+      rd.onerror = () => reject(new Error(T('decal.badFile')));
+      rd.readAsDataURL(file);
+    });
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const iw = img.naturalWidth || img.width || 1, ih = img.naturalHeight || img.height || 1;
+        const aspect = clamp(round(iw / Math.max(1, ih), 4), 0.05, 20);
+        const MAX = 1024;
+        if (Math.max(iw, ih) <= MAX && (isPng ? dataUrl.startsWith('data:image/png') : dataUrl.startsWith('data:image/jpeg'))) {
+          resolve({ src: dataUrl, aspect, name });
+          return;
+        }
+        const s = Math.min(1, MAX / Math.max(iw, ih));
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(iw * s));
+        cv.height = Math.max(1, Math.round(ih * s));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        const out = isPng ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.9);
+        resolve({ src: out, aspect, name });
+      };
+      img.onerror = () => reject(new Error(T('decal.badFile')));
+      img.src = dataUrl;
+    });
+  }
+
+  function addDecal(itemId, faceSpec, decalData) {
+    const face = faceSpec || selectedFace();
+    if (!face || !face.info || face.info.t !== 'PLANE') return null;
+    const tid = itemId || face.id;
+    const wDef = decalData && decalData.w > 0 ? decalData.w : defaultDecalWidth(tid, face.idx);
+    const norm = Model.normalizeDecal({
+      ...(decalData || {}),
+      w: wDef,
+      face: {
+        n: face.info.n ? face.info.n.slice() : [0, 0, 1],
+        c: face.info.c ? face.info.c.slice() : [0, 0, 0],
+        t: face.info.t || 'PLANE',
+      },
+    });
+    if (!norm) return null;
+    App.change('Aufkleber aufgelegt', (doc) => {
+      const f = Model.find(doc, tid);
+      if (!f || f.item.role === 'hole') return false;
+      f.item.decals = Array.isArray(f.item.decals) ? f.item.decals : [];
+      f.item.decals.push(norm);
+    });
+    return norm.id;
+  }
+
+  function updateDecal(itemId, decalId, patch, opts = {}) {
+    if (!itemId || !decalId || !patch) return false;
+    App.change('Aufkleber angepasst', (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f || !Array.isArray(f.item.decals)) return false;
+      const idx = f.item.decals.findIndex((d) => d.id === decalId);
+      if (idx < 0) return false;
+      const merged = Model.normalizeDecal({ ...f.item.decals[idx], ...patch, id: decalId, face: f.item.decals[idx].face });
+      if (!merged) return false;
+      const next = f.item.decals.slice();
+      next[idx] = merged;
+      f.item.decals = next;
+    }, opts);
+    return true;
+  }
+
+  function removeDecal(itemId, decalId) {
+    if (!itemId || !decalId) return false;
+    App.change('Aufkleber entfernt', (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f || !Array.isArray(f.item.decals)) return false;
+      const next = f.item.decals.filter((d) => d.id !== decalId);
+      if (next.length) f.item.decals = next;
+      else delete f.item.decals;
+    });
+    return true;
+  }
+
+  function pickDecalFile(face, onDone) {
+    const sf = face || selectedFace();
+    if (!sf || !sf.info || sf.info.t !== 'PLANE') {
+      UI.toast(T('decal.needPlane'), { icon: 'info' });
+      return;
+    }
+    const inp = h('input', { type: 'file', accept: '.png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml', style: { display: 'none' } });
+    inp.onchange = async () => {
+      const file = inp.files && inp.files[0];
+      inp.remove();
+      if (!file) return;
+      try {
+        const parsed = await parseDecalFile(file);
+        const id = addDecal(sf.id, sf, parsed);
+        if (id) {
+          UI.toast(T('decal.addedToast', { name: parsed.name }), { icon: 'check' });
+          onDone && onDone(id);
+        }
+      } catch (e) {
+        UI.toast((e && e.message) || T('decal.badFile'), { kind: 'bad', icon: 'warn' });
+      }
+    };
+    document.body.append(inp);
+    inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+  }
+
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter, setGrounded, toggleGround, setTexture, parseDecalFile, defaultDecalWidth, addDecal, updateDecal, removeDecal, pickDecalFile };
 })();
 

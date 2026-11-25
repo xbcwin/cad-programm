@@ -1603,5 +1603,15 @@
     "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
     "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
     "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
+  },
+  "decal": {
+    "tip": "Bild oder Logo (PNG, JPG, SVG) als Aufkleber auf eine ebene Fläche legen",
+    "hilfe": "Wähle eine ebene Körperfläche und lade eine PNG-, JPG- oder SVG-Datei. Der Aufkleber wird direkt auf der Fläche angezeigt, im Projekt gespeichert und lässt sich rechts verschieben, drehen, skalieren und spiegeln.",
+    "tipp": "PNG- und SVG-Dateien behalten ihren durchsichtigen Hintergrund – ideal für Logos, Typenschilder und Beschriftungen."
+  },
+  "bodyTexture": {
+    "tip": "Oberflächen-Textur (Holz, Metall gebürstet, Karbon) auf den Körper legen",
+    "hilfe": "Überzieht alle Flächen des ausgewählten Körpers nahtlos mit einer lokalen Textur (Holzmaserung, gebürstetes Metall oder Karbon-Gewebe) inkl. einstellbarer Größe und Drehung.",
+    "tipp": "Kombiniere eine Textur mit einer eigenen Körperfarbe, um Holz oder gebürstetes Metall einzufärben."
   }
 }

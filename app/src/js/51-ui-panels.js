@@ -2387,6 +2387,62 @@ const Panels = (() => {
         op.append(UI.numField({ id: 'item-opacity', label: T('panel.item.opacity'), value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const tgt = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete tgt.opacity; else tgt.opacity = o; }, { merge: 'op:' + it.id }) }));
         w.lastChild.append(op);
       }
+      // Textur je Körper (AN-16)
+      if (it.role !== 'hole') {
+        const curTex = it.texture && it.texture.kind ? it.texture : null;
+        const txSec = h('div', { class: 'section', id: 'texture-sec', 'data-help': 'bodyTexture' }, h('div', { class: 'section-h' }, T('panel.tex.title')));
+        txSec.append(UI.selectField({
+          id: 'item-texture',
+          label: T('panel.tex.label'),
+          value: curTex ? curTex.kind : '',
+          options: [['', T('tex.none')], ['wood', T('tex.wood')], ['brushed', T('tex.brushed')], ['carbon', T('tex.carbon')]],
+          onChange: (v) => Actions.setTexture([it.id], v || null),
+        }));
+        if (curTex) {
+          const tf = h('div', { class: 'fields', style: { marginTop: '6px' } });
+          tf.append(UI.numField({ id: 'item-tex-scale', label: T('panel.tex.scale'), value: Math.round((curTex.scale || 1) * 100), unit: '%', expr: false, min: 10, onCommit: (v) => Actions.setTexture([it.id], { scale: clamp(v, 10, 2000) / 100 }, { merge: 'texs:' + it.id }) }));
+          tf.append(UI.numField({ id: 'item-tex-rot', label: T('panel.tex.rot'), value: curTex.rot || 0, unit: '°', expr: false, onCommit: (v) => Actions.setTexture([it.id], { rot: v }, { merge: 'texr:' + it.id }) }));
+          txSec.append(tf);
+          txSec.append(h('div', { class: 'hint-box' }, T('panel.tex.hint')));
+        }
+        w.append(txSec);
+      }
+      // Aufkleber & Logos auf Flächen (AN-15)
+      const isPlaneFace = !isRef && sf && sf.id === it.id && sf.info.t === 'PLANE';
+      if (!isRef && it.role !== 'hole' && (isPlaneFace || (it.decals && it.decals.length))) {
+        const dsec = h('div', { class: 'section', id: 'decal-sec', 'data-help': 'decal' }, h('div', { class: 'section-h' }, T('panel.decal.title')));
+        if (isPlaneFace) {
+          const ab = h('button', { type: 'button', class: 'btn small', id: 'btn-add-decal' });
+          ab.innerHTML = icon('image') + esc(T('panel.decal.addBtn'));
+          ab.onclick = () => Actions.pickDecalFile(sf);
+          dsec.append(h('div', { class: 'btn-row' }, ab));
+        }
+        for (const dc of it.decals || []) {
+          const itemBox = h('div', { class: 'decal-item', dataset: { decalId: dc.id } });
+          const delBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'dc-del-' + dc.id, 'aria-label': T('panel.decal.removeAria'), 'data-tip': T('common.remove') });
+          delBtn.innerHTML = icon('trash');
+          delBtn.onclick = () => Actions.removeDecal(it.id, dc.id);
+          itemBox.append(h('div', { class: 'decal-head' },
+            h('img', { class: 'decal-thumb', src: dc.src, alt: dc.name || 'Aufkleber' }),
+            h('b', { class: 'grow' }, dc.name || 'Aufkleber'),
+            delBtn,
+          ));
+          const df = h('div', { class: 'fields' });
+          df.append(UI.numField({ id: 'dc-u-' + dc.id, label: T('panel.decal.moveX'), value: dc.u || 0, unit: 'mm', expr: false, onCommit: (v) => Actions.updateDecal(it.id, dc.id, { u: v }, { merge: 'dcu:' + dc.id }) }));
+          df.append(UI.numField({ id: 'dc-v-' + dc.id, label: T('panel.decal.moveY'), value: dc.v || 0, unit: 'mm', expr: false, onCommit: (v) => Actions.updateDecal(it.id, dc.id, { v: v }, { merge: 'dcv:' + dc.id }) }));
+          df.append(UI.numField({ id: 'dc-rot-' + dc.id, label: T('panel.decal.rot'), value: dc.rot || 0, unit: '°', expr: false, onCommit: (v) => Actions.updateDecal(it.id, dc.id, { rot: v }, { merge: 'dcrot:' + dc.id }) }));
+          df.append(UI.numField({ id: 'dc-scale-' + dc.id, label: T('panel.decal.scale'), value: Math.round((dc.scale || 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => Actions.updateDecal(it.id, dc.id, { scale: clamp(v, 5, 5000) / 100 }, { merge: 'dcsc:' + dc.id }) }));
+          df.append(UI.numField({ id: 'dc-w-' + dc.id, label: T('panel.decal.width'), value: dc.w || 20, unit: 'mm', expr: false, min: 0.5, onCommit: (v) => Actions.updateDecal(it.id, dc.id, { w: Math.max(0.5, v) }, { merge: 'dcw:' + dc.id }) }));
+          df.append(UI.numField({ id: 'dc-op-' + dc.id, label: T('panel.decal.opacity'), value: Math.round((dc.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => Actions.updateDecal(it.id, dc.id, { opacity: clamp(v, 5, 100) / 100 }, { merge: 'dcop:' + dc.id }) }));
+          itemBox.append(df);
+          const flipInp = h('input', { type: 'checkbox', id: 'dc-flip-' + dc.id, checked: !!dc.flipX });
+          flipInp.onchange = (e) => Actions.updateDecal(it.id, dc.id, { flipX: e.target.checked });
+          itemBox.append(h('label', { class: 'check' }, flipInp, h('span', null, T('panel.decal.flipX'))));
+          dsec.append(itemBox);
+        }
+        dsec.append(h('div', { class: 'hint-box' }, T('panel.decal.hint')));
+        w.append(dsec);
+      }
     }
     // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
     if (!f.parent && it.role !== 'hole' && !isMoveOnly) {
@@ -2761,6 +2817,10 @@ const Panels = (() => {
         dmb.id = 'ctx-dome'; dmb.dataset.help = 'dome';
       }
       b('section', T('ctx.sectionHere'), () => Views.section(true, { face }), '', T('ctx.sectionHereTip'), true);
+      if (items[0].item.role !== 'hole') {
+        const dcb = b('image', T('ctx.decal'), () => Actions.pickDecalFile(face), '', T('ctx.decalTip'), true);
+        dcb.id = 'ctx-decal'; dcb.dataset.help = 'decal';
+      }
       if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
       pf.dataset.help = 'datumPoint';

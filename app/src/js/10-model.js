@@ -2251,9 +2251,47 @@ const Model = (() => {
     return '';
   }
   function countItems(doc) { let n = 0; walk(doc.items, () => { n++; }); return n; }
+  const TEXTURE_KINDS = ['wood', 'brushed', 'carbon'];
+  function normalizeTexture(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      return TEXTURE_KINDS.includes(raw) ? { kind: raw, scale: 1, rot: 0 } : null;
+    }
+    if (typeof raw !== 'object' || !TEXTURE_KINDS.includes(raw.kind)) return null;
+    const sc = Number(raw.scale);
+    const rt = Number(raw.rot);
+    return {
+      kind: raw.kind,
+      scale: Number.isFinite(sc) && sc > 0 ? clamp(round(sc, 4), 0.1, 20) : 1,
+      rot: Number.isFinite(rt) ? round(rt, 2) : 0,
+    };
+  }
+  function normalizeDecal(raw) {
+    if (!raw || typeof raw !== 'object' || typeof raw.src !== 'string' || !raw.src.startsWith('data:image/') || !raw.face || typeof raw.face !== 'object') return null;
+    const asp = Number(raw.aspect), w = Number(raw.w), sc = Number(raw.scale), u = Number(raw.u), v = Number(raw.v), rot = Number(raw.rot), op = Number(raw.opacity);
+    return {
+      id: typeof raw.id === 'string' && raw.id ? raw.id : uid('dc'),
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Aufkleber',
+      src: raw.src,
+      aspect: Number.isFinite(asp) && asp > 0.05 && asp < 20 ? round(asp, 4) : 1,
+      face: {
+        n: Array.isArray(raw.face.n) && raw.face.n.length >= 3 ? raw.face.n.slice(0, 3).map((x) => round(Number(x) || 0, 6)) : null,
+        c: Array.isArray(raw.face.c) && raw.face.c.length >= 3 ? raw.face.c.slice(0, 3).map((x) => round(Number(x) || 0, 6)) : [0, 0, 0],
+        t: typeof raw.face.t === 'string' ? raw.face.t : 'PLANE',
+      },
+      u: Number.isFinite(u) ? round(u, 4) : 0,
+      v: Number.isFinite(v) ? round(v, 4) : 0,
+      w: Number.isFinite(w) && w > 0.1 ? round(w, 4) : 20,
+      scale: Number.isFinite(sc) && sc > 0.05 ? clamp(round(sc, 4), 0.05, 50) : 1,
+      rot: Number.isFinite(rot) ? round(rot, 2) : 0,
+      opacity: Number.isFinite(op) ? clamp(round(op, 3), 0.05, 1) : 1,
+      flipX: !!raw.flipX,
+    };
+  }
   function reId(it) {
     it.id = uid('i');
     if (it.finishes) it.finishes = it.finishes.map((f) => ({ ...f, id: uid('f') }));
+    if (Array.isArray(it.decals)) it.decals = it.decals.map((d) => ({ ...d, id: uid('dc') }));
     if (it.children) it.children.forEach(reId);
     return it;
   }
@@ -2296,7 +2334,13 @@ const Model = (() => {
         if (!Array.isArray(b.cons)) b.cons = [];
       }
     }
-    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
+    walk(doc.items, (it) => {
+      it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || [];
+      if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies;
+      if ('texture' in it) { const nt = normalizeTexture(it.texture); if (nt) it.texture = nt; else delete it.texture; }
+      if ('decals' in it) { const dl = Array.isArray(it.decals) ? it.decals.map(normalizeDecal).filter(Boolean) : []; if (dl.length) it.decals = dl; else delete it.decals; }
+      if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor();
+    });
     cleanFolders(doc);
     return doc;
   }
@@ -2592,6 +2636,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

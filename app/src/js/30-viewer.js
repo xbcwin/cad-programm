@@ -449,22 +449,191 @@ const Viewer = (() => {
     listeners.emit('afterRender');
   }
 
+  // ---------- Körper-Texturen (AN-16) & Aufkleber (AN-15) ----------
+  const BODY_TEXTURES = {
+    wood: { id: 'wood', file: 'assets/textures/holz.png', rough: 0.72, metal: 0.0, clear: 0.08, bumpScale: 0.18, tile: 50 },
+    brushed: { id: 'brushed', file: 'assets/textures/metall-gebuerstet.png', rough: 0.30, metal: 0.88, clear: 0.12, bumpScale: 0.08, tile: 40 },
+    carbon: { id: 'carbon', file: 'assets/textures/karbon.png', rough: 0.34, metal: 0.06, clear: 0.85, bumpScale: 0.14, tile: 18 },
+  };
+  const bodyTexCache = new Map();
+  const decalTexCache = new Map();
+
+  function drawFallbackTexture(kind) {
+    const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
+    const g = c.getContext('2d');
+    if (kind === 'wood') {
+      g.fillStyle = '#b6814e'; g.fillRect(0, 0, N, N);
+      for (let y = 0; y < N; y += 2) {
+        g.fillStyle = y % 6 === 0 ? 'rgba(110,65,28,0.28)' : 'rgba(220,175,118,0.16)';
+        g.fillRect(0, y, N, 2);
+      }
+    } else if (kind === 'brushed') {
+      g.fillStyle = '#c8cdd3'; g.fillRect(0, 0, N, N);
+      for (let y = 0; y < N; y++) {
+        const v = 185 + ((y * 37) % 45);
+        g.fillStyle = `rgb(${v},${v + 2},${v + 5})`;
+        g.fillRect(0, y, N, 1);
+      }
+    } else {
+      g.fillStyle = '#202329'; g.fillRect(0, 0, N, N);
+      for (let y = 0; y < N; y += 8) for (let x = 0; x < N; x += 8) {
+        g.fillStyle = ((x + y) / 8) % 2 === 0 ? '#383d46' : '#1b1e23';
+        g.fillRect(x, y, 7, 7);
+      }
+    }
+    return c;
+  }
+
+  function getBodyTexBase(kind) {
+    const def = BODY_TEXTURES[kind];
+    if (!def) return null;
+    if (bodyTexCache.has(kind)) return bodyTexCache.get(kind);
+    const entry = { tex: null, clones: new Set(), loaded: false, def };
+    const loader = new THREE.TextureLoader();
+    const tex = loader.load(
+      def.file,
+      (loaded) => {
+        entry.loaded = true;
+        for (const cl of entry.clones) { cl.image = loaded.image; cl.needsUpdate = true; }
+        needsRender = true;
+      },
+      undefined,
+      () => {
+        const fb = drawFallbackTexture(kind);
+        tex.image = fb; tex.needsUpdate = true; entry.loaded = true;
+        for (const cl of entry.clones) { cl.image = fb; cl.needsUpdate = true; }
+        needsRender = true;
+      },
+    );
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    if (renderer && renderer.capabilities) tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 1);
+    entry.tex = tex;
+    bodyTexCache.set(kind, entry);
+    return entry;
+  }
+
+  function acquireBodyTexture(texSpec) {
+    if (!texSpec || !texSpec.kind) return null;
+    const entry = getBodyTexBase(texSpec.kind);
+    if (!entry) return null;
+    const t = entry.tex.clone();
+    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    if (renderer && renderer.capabilities) t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 1);
+    const scale = Math.max(0.1, Number(texSpec.scale) || 1);
+    const rep = 1 / (entry.def.tile * scale);
+    t.repeat.set(rep, rep);
+    t.center.set(0, 0);
+    t.rotation = ((Number(texSpec.rot) || 0) * Math.PI) / 180;
+    if (entry.loaded && entry.tex.image) { t.image = entry.tex.image; t.needsUpdate = true; }
+    t.userData = { _ownedBodyTex: true, _entry: entry };
+    entry.clones.add(t);
+    return { map: t, def: entry.def };
+  }
+
+  function disposeNodeMaterial(mat) {
+    if (!mat) return;
+    if (mat.map && mat.map.userData && mat.map.userData._ownedBodyTex) {
+      mat.map.userData._entry.clones.delete(mat.map);
+      mat.map.dispose();
+    }
+    mat.dispose();
+  }
+
+  function ensureMeshUVs(n) {
+    const g = n && n.mesh && n.mesh.geometry;
+    if (!g || g.getAttribute('uv')) return;
+    const pos = g.getAttribute('position');
+    if (!pos) return;
+    const cnt = pos.count;
+    const P = pos.array;
+    const Nrm = g.getAttribute('normal') ? g.getAttribute('normal').array : null;
+    const uv = new Float32Array(cnt * 2);
+    const seen = new Uint8Array(cnt);
+    const tri = n.data && n.data.triangles;
+    const faces = (n.data && n.data.faces) || [];
+    const groupsList = (n.data && n.data.faceGroups) || [];
+    if (tri && groupsList.length) {
+      for (const [start, count, fi] of groupsList) {
+        const f = fi >= 0 ? faces[fi] : null;
+        if (!f) continue;
+        if (f.t === 'PLANE' && Array.isArray(f.n) && f.n.length >= 3) {
+          const nv = new THREE.Vector3(f.n[0], f.n[1], f.n[2]).normalize();
+          let ux = Math.abs(nv.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1).cross(nv).normalize();
+          if (ux.lengthSq() < 1e-6) ux.set(1, 0, 0);
+          if (nv.z < -0.9) ux.set(1, 0, 0);
+          const uy = new THREE.Vector3().crossVectors(nv, ux).normalize();
+          for (let i = start; i < start + count; i++) {
+            const vi = tri[i];
+            if (seen[vi]) continue;
+            const px = P[vi * 3], py = P[vi * 3 + 1], pz = P[vi * 3 + 2];
+            uv[vi * 2] = px * ux.x + py * ux.y + pz * ux.z;
+            uv[vi * 2 + 1] = px * uy.x + py * uy.y + pz * uy.z;
+            seen[vi] = 1;
+          }
+        } else if (f.t === 'CYLINDRE' && Array.isArray(f.axis) && f.axis.length >= 6 && f.r > 0) {
+          const o = new THREE.Vector3(f.axis[0], f.axis[1], f.axis[2]);
+          const d = new THREE.Vector3(f.axis[3], f.axis[4], f.axis[5]).normalize();
+          const ref = Math.abs(d.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+          const e1 = new THREE.Vector3().crossVectors(ref, d).normalize();
+          const e2 = new THREE.Vector3().crossVectors(d, e1).normalize();
+          for (let i = start; i < start + count; i++) {
+            const vi = tri[i];
+            if (seen[vi]) continue;
+            const rx = P[vi * 3] - o.x, ry = P[vi * 3 + 1] - o.y, rz = P[vi * 3 + 2] - o.z;
+            const vv = rx * d.x + ry * d.y + rz * d.z;
+            const a1 = rx * e1.x + ry * e1.y + rz * e1.z;
+            const a2 = rx * e2.x + ry * e2.y + rz * e2.z;
+            uv[vi * 2] = Math.atan2(a2, a1) * f.r;
+            uv[vi * 2 + 1] = vv;
+            seen[vi] = 1;
+          }
+        }
+      }
+    }
+    for (let vi = 0; vi < cnt; vi++) {
+      if (seen[vi]) continue;
+      const px = P[vi * 3], py = P[vi * 3 + 1], pz = P[vi * 3 + 2];
+      const nx = Nrm ? Math.abs(Nrm[vi * 3]) : 0;
+      const ny = Nrm ? Math.abs(Nrm[vi * 3 + 1]) : 0;
+      const nz = Nrm ? Math.abs(Nrm[vi * 3 + 2]) : 1;
+      if (nz >= nx && nz >= ny) { uv[vi * 2] = px; uv[vi * 2 + 1] = py; }
+      else if (nx >= ny) { uv[vi * 2] = py; uv[vi * 2 + 1] = pz; }
+      else { uv[vi * 2] = px; uv[vi * 2 + 1] = pz; }
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  }
+
   // ---------- Objekte ----------
-  function makeMaterial(role, color, look) {
+  function makeMaterial(role, color, look, texture) {
     const clip = vis.clips.length ? vis.clips : null;
     if (role !== 'hole' && (LOOK.look === 'clay' || LOOK.look === 'chrome')) {
       const m = new THREE.MeshMatcapMaterial({ matcap: matcap(LOOK.look), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
       if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, '#9c8370'); }
       return m;
     }
+    const bt = role !== 'hole' && texture && BODY_TEXTURES[texture.kind] ? acquireBodyTexture(texture) : null;
     if (role !== 'hole' && LOOK.look === 'studio') {
       const L = look || PLASTIC; color = L.matCol || color;
+      if (bt) {
+        const baseCol = (look && look.customColor) ? (color || '#ffffff') : '#ffffff';
+        const m = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(baseCol), map: bt.map, bumpMap: bt.map, bumpScale: bt.def.bumpScale, metalness: bt.def.metal, roughness: bt.def.rough, clearcoat: bt.def.clear, clearcoatRoughness: 0.2, envMapIntensity: bt.def.metal > 0.5 ? 1.15 : 0.65, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
+        if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, baseCol); }
+        return m;
+      }
       const m = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color || '#2f9e91'), metalness: L.metal || 0, roughness: L.rough != null ? L.rough : 0.45, clearcoat: L.clear || 0, clearcoatRoughness: L.clearRough != null ? L.clearRough : 0.2, envMapIntensity: L.metal ? 1.15 : L.nat ? 0.55 : 0.7, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
       if (L.glass) { m.transparent = true; m.opacity = L.glass; m.depthWrite = false; }
       if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, color); }
       return m;
     }
     if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip });
+    if (bt) {
+      const baseCol = (look && look.customColor) ? (color || '#ffffff') : '#ffffff';
+      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(baseCol), map: bt.map, roughness: bt.def.rough, metalness: bt.def.metal * 0.5, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
+      if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, baseCol); }
+      return m;
+    }
     const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
     if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, color); }
     return m;
@@ -482,11 +651,13 @@ const Viewer = (() => {
   }
   function styleNode(n) {
     const sel = n.selected, hov = n.hover;
-    if (n.mesh.material) n.mesh.material.dispose();
-    n.mesh.material = makeMaterial(n.role, n.color, n.look);
+    if (n.texture && BODY_TEXTURES[n.texture.kind] && n.role !== 'hole') ensureMeshUVs(n);
+    disposeNodeMaterial(n.mesh.material);
+    n.mesh.material = makeMaterial(n.role, n.color, n.look, n.texture);
     n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole';
     applyFaceColors(n);
     applyThreads(n);
+    applyDecals(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
       const clip = vis.clips.length ? vis.clips : null;
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
@@ -522,8 +693,8 @@ const Viewer = (() => {
     n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
     if (n.edges) { n.edges.renderOrder = xr ? 5 : 0; n.edges.visible = disp !== 'shaded' || sel || n.role === 'hole'; if (disp === 'wire' && n.role !== 'hole' && !sel) { n.edges.material.opacity = 0.9; n.edges.material.color = new THREE.Color(theme.edge).lerp(new THREE.Color(n.color || '#2f9e91'), 0.5); } }
     if (disp === 'wire' || disp === 'hidden') n.mesh.castShadow = false;
-    if (n.allBodiesHidden) { n.mesh.visible = false; if (n.edges) n.edges.visible = false; }
-    else n.mesh.visible = true;
+    if (n.allBodiesHidden) { n.mesh.visible = false; if (n.edges) n.edges.visible = false; if (n.decalGroup) n.decalGroup.visible = false; }
+    else { n.mesh.visible = true; if (n.decalGroup) n.decalGroup.visible = true; }
     needsRender = true;
   }
   function applyBodies(n) {
@@ -768,6 +939,111 @@ const Viewer = (() => {
     }
     if (tg.children.length) { n.threadGroup = tg; n.obj.add(tg); }
   }
+  // Aufkleber & Logos auf ebenen Flächen (AN-15)
+  function getDecalTexture(src) {
+    if (!src) return null;
+    if (decalTexCache.has(src)) return decalTexCache.get(src);
+    const tex = new THREE.Texture();
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (renderer && renderer.capabilities) tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 1);
+    const entry = { tex, loaded: false };
+    decalTexCache.set(src, entry);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const iw = img.naturalWidth || img.width || 512;
+      const ih = img.naturalHeight || img.height || 512;
+      const maxD = 1024;
+      const s = Math.min(1, maxD / Math.max(iw, ih));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(iw * s));
+      cv.height = Math.max(1, Math.round(ih * s));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      tex.image = cv;
+      tex.needsUpdate = true;
+      entry.loaded = true;
+      needsRender = true;
+    };
+    img.src = src;
+    return entry;
+  }
+  function decalFaceFrame(n, dc) {
+    if (!dc || !dc.face) return null;
+    const fi = n.data && n.data.faces ? faceIndexOf(n, dc.face) : -1;
+    if (fi >= 0 && n.hiddenBodies && n.hiddenBodies.size && n.data.faceBody && n.hiddenBodies.has(n.data.faceBody[fi])) return null;
+    const f = fi >= 0 ? n.data.faces[fi] : dc.face;
+    const fn = (f && Array.isArray(f.n) && f.n.length >= 3) ? f.n : (dc.face.n || [0, 0, 1]);
+    const fc = (f && Array.isArray(f.c) && f.c.length >= 3) ? f.c : (dc.face.c || [0, 0, 0]);
+    const nv = new THREE.Vector3(fn[0], fn[1], fn[2]).normalize();
+    let x = Math.abs(nv.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1).cross(nv).normalize();
+    if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
+    if (nv.z < -0.9) x.set(1, 0, 0);
+    const y = new THREE.Vector3().crossVectors(nv, x).normalize();
+    return { o: new THREE.Vector3(fc[0], fc[1], fc[2]), x, y, n: nv };
+  }
+  function disposeDecals(n) {
+    if (!n || !n.decalGroup) return;
+    n.obj.remove(n.decalGroup);
+    n.decalGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) o.material.dispose();
+    });
+    n.decalGroup = null;
+  }
+  function applyDecals(n) {
+    disposeDecals(n);
+    if (!n.decals || !n.decals.length || n.role === 'hole') return;
+    const dg = new THREE.Group();
+    dg.userData.decalGroup = true;
+    const clip = vis.clips.length ? vis.clips : null;
+    const baseOp = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 1);
+    for (const dc of n.decals) {
+      if (!dc || !dc.src) continue;
+      const fr = decalFaceFrame(n, dc);
+      if (!fr) continue;
+      const entry = getDecalTexture(dc.src);
+      if (!entry) continue;
+      const w = Math.max(0.2, (Number(dc.w) || 20) * (Number(dc.scale) || 1));
+      const hgt = w / Math.max(0.05, Number(dc.aspect) || 1);
+      const geo = new THREE.PlaneGeometry(w, hgt);
+      if (dc.flipX) {
+        const uvAttr = geo.getAttribute('uv');
+        for (let i = 0; i < uvAttr.count; i++) uvAttr.setX(i, 1 - uvAttr.getX(i));
+        uvAttr.needsUpdate = true;
+      }
+      const mat = new THREE.MeshStandardMaterial({
+        map: entry.tex,
+        transparent: true,
+        opacity: baseOp * clamp(Number(dc.opacity ?? 1), 0.05, 1),
+        alphaTest: 0.01,
+        roughness: 0.45,
+        metalness: 0.02,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+        side: THREE.FrontSide,
+        clippingPlanes: clip,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      const rad = ((Number(dc.rot) || 0) * Math.PI) / 180;
+      const cs = Math.cos(rad), sn = Math.sin(rad);
+      const rx = fr.x.clone().multiplyScalar(cs).addScaledVector(fr.y, sn);
+      const ry = fr.y.clone().multiplyScalar(cs).addScaledVector(fr.x, -sn);
+      const basis = new THREE.Matrix4().makeBasis(rx, ry, fr.n);
+      mesh.quaternion.setFromRotationMatrix(basis);
+      mesh.position.copy(fr.o)
+        .addScaledVector(fr.x, Number(dc.u) || 0)
+        .addScaledVector(fr.y, Number(dc.v) || 0)
+        .addScaledVector(fr.n, 0.03);
+      mesh.userData = { decalId: dc.id, noPick: true };
+      mesh.renderOrder = 3;
+      dg.add(mesh);
+    }
+    if (dg.children.length) { n.decalGroup = dg; n.obj.add(dg); }
+  }
   function restyleAll() { for (const n of nodes.values()) styleNode(n); }
   function setClip(planes, opts = {}) {
     const arr = !planes ? [] : Array.isArray(planes) ? planes.filter(Boolean) : [planes];
@@ -813,7 +1089,7 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, bodies: info.bodies || null, hiddenBodies: null, bodyColors: null, visFaceGroups: null, visEdgeGroups: null, visLines: null, allBodiesHidden: false, _filtered: false, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, texture: info.texture ? { ...info.texture } : null, _texJson: JSON.stringify(info.texture || null), decals: info.decals ? info.decals.map((d) => ({ ...d })) : null, _decalsJson: JSON.stringify(info.decals || null), decalGroup: null, bodies: info.bodies || null, hiddenBodies: null, bodyColors: null, visFaceGroups: null, visEdgeGroups: null, visLines: null, allBodiesHidden: false, _filtered: false, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
     nodes.set(id, n); applyBodies(n); styleNode(n);
     fitShadowSoon();
@@ -830,6 +1106,14 @@ const Viewer = (() => {
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
     if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
+    if (info.texture !== undefined) {
+      const tj = JSON.stringify(info.texture || null);
+      if (tj !== n._texJson) { n.texture = info.texture ? { ...info.texture } : null; n._texJson = tj; restyle = true; }
+    }
+    if (info.decals !== undefined) {
+      const dj = JSON.stringify(info.decals || null);
+      if (dj !== n._decalsJson) { n.decals = info.decals ? info.decals.map((d) => ({ ...d })) : null; n._decalsJson = dj; restyle = true; }
+    }
     if (info.bodies !== undefined && (info.forceBodies || JSON.stringify(info.bodies) !== JSON.stringify(n.bodies))) { n.bodies = info.bodies; applyBodies(n); restyle = true; fitShadowSoon(); }
     else if (info.forceBodies) { applyBodies(n); restyle = true; }
     if (info.matrix) fitShadowSoon();
@@ -844,8 +1128,9 @@ const Viewer = (() => {
   function removeNode(id, keepMap) {
     const n = nodes.get(id); if (!n) return;
     disposeThreads(n);
+    disposeDecals(n);
     groups.nodes.remove(n.obj);
-    n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
+    n.mesh.geometry.dispose(); disposeNodeMaterial(n.mesh.material); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
     if (hoverFace && hoverFace.id === id) clearHover();
     if (hoverBody && hoverBody.id === id) highlightBody(null, null);
@@ -2317,7 +2602,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, TEXTURES: BODY_TEXTURES, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },

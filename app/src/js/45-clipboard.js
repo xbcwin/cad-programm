@@ -471,8 +471,25 @@ const Clipboard = (() => {
     if (root.colorSet) imp.colorSet = true;
     if (root.opacity != null) imp.opacity = root.opacity;
     if (root.massG != null) imp.massG = root.massG;
+    if (root.texture) imp.texture = deepClone(root.texture);
     if (Array.isArray(root.faceColors) && root.faceColors.length) {
       imp.faceColors = transformFaceColors(root.faceColors, Model.worldMatrix(doc, root.id));
+    }
+    if (Array.isArray(root.decals) && root.decals.length) {
+      const wm = Model.worldMatrix(doc, root.id);
+      const nMat = new THREE.Matrix3().getNormalMatrix(wm);
+      imp.decals = root.decals.map((dc) => {
+        const out = deepClone(dc);
+        if (out.face) {
+          if (Array.isArray(out.face.c) && out.face.c.length >= 3) {
+            out.face.c = new THREE.Vector3(out.face.c[0], out.face.c[1], out.face.c[2]).applyMatrix4(wm).toArray().map((v) => round(v, 6));
+          }
+          if (Array.isArray(out.face.n) && out.face.n.length >= 3) {
+            out.face.n = new THREE.Vector3(out.face.n[0], out.face.n[1], out.face.n[2]).applyMatrix3(nMat).normalize().toArray().map((v) => round(v, 6));
+          }
+        }
+        return out;
+      });
     }
     return imp;
   }

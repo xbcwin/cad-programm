@@ -2512,6 +2512,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Schattenriss-Fläche in Blickrichtung (`mm²`)**: Würfel `10×10×10` von vorn (`camera` / `front`) misst `≈ 100 mm²` (`99,88 mm²` bei `1024×1024`), schräge Ansicht (`iso`) steigt auf `> 130 mm²`, Würfel mit Durchgangsbohrung `Ø4` sinkt auf `≈ 100 − 4π mm²`; Hilfetexte (`werkzeug-hilfen.json`/`HELP`) und DE/EN-Schlüsselgleichheit geprüft (`t_a133_vergleich_schattenriss`).
 - [ ] **Von Hand**: Im Browser zwei leicht unterschiedliche Bauteile übereinanderlegen, einzelne Farb-Chips (`Neu` / `Weg` / `Gleich`) ein- und ausblenden sowie die Schattenriss-Fläche auf einer schräg angeklickten Fläche prüfen.
 
+## Aufkleber, Logos und Texturen (Auto [A-136], AN-15, AN-16)
+
+- [x] **Aufkleber auf Fläche (PNG, JPG, SVG)**: Auf der Oberseite eines Quaders werden `#decal-sec`, `#btn-add-decal` und `#ctx-decal` angezeigt; SVG und PNG werden über `Actions.parseDecalFile` ohne Verlust der Transparenz geladen und auf die Fläche gelegt (`decalGroup` im 3D-Bild, `t_a136_aufkleber_texturen`).
+- [x] **Verschieben, Drehen, Skalieren & Löschen**: `#dc-u-*`, `#dc-v-*`, `#dc-rot-*` und `#dc-scale-*` verschieben, drehen und skalieren den Aufkleber im Modell und am Three.js-Mesh synchron; Entfernen über `#dc-del-*` und `App.undo()` stellen ihn wieder her (`t_a136_aufkleber_texturen`).
+- [x] **Körper-Texturen (Holz, Metall gebürstet, Karbon)**: `#item-texture` lädt die lokalen Dateien `holz.png`, `metall-gebuerstet.png` und `karbon.png` aus `app/assets/textures/`, erzeugt automatische UV-Koordinaten (`ensureMeshUVs`) und übernimmt Skalierung und Drehung (`t_a136_aufkleber_texturen`).
+- [x] **Speichern, Laden, Hilfe & Übersetzung**: Nach Speichern über `Start.projectPayload()` und Laden über `Start.openBlob()` bleiben Aufkleber samt Lage/Drehung/Skalierung sowie Holz-Textur samt geladener `THREE.Texture` vollständig erhalten; `HELP.decal`, `HELP.bodyTexture`, Befehle und DE/EN-Texte sind vorhanden (`t_a136_aufkleber_texturen`).
+- [ ] **Von Hand**: Im Browser ein eigenes PNG-Logo mit durchsichtigem Hintergrund auf eine Quader-Fläche legen, verschieben/drehen, anschließend auf Karbon-Textur umschalten und per Auge die Nahtlosigkeit an den Kanten prüfen.
+
 ## Fehler melden
 
 ```

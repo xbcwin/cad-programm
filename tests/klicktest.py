@@ -26494,6 +26494,229 @@ def t_a133_vergleich_schattenriss(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a136_aufkleber_texturen(p):
+    p.empty()
+    p.ev("Actions.addPrimitive('box')")
+    warte_rechnen(p)
+    p.ev("App.change('Box 40x40x20', (doc) => { const it = doc.items[0]; it.p.w = 40; it.p.d = 40; it.p.h = 20; })")
+    warte_rechnen(p)
+
+    # Oberseite waehlen
+    top_idx = p.ev("""
+      const { THREE } = window.__masswerk;
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const idx = (r.data.faces || []).findIndex((f) => f && f.n && f.n[2] > 0.99);
+      const f = r.data.faces[idx];
+      App.select([it.id], { face: { id: it.id, faceIdx: idx, point: new THREE.Vector3(...f.c), normal: new THREE.Vector3(...f.n) } });
+      return idx;
+    """)
+    p.wait(300)
+
+    ok_ui = (
+        top_idx >= 0
+        and p.pg.locator('#texture-sec').count() == 1
+        and p.pg.locator('#item-texture').count() == 1
+        and p.pg.locator('#decal-sec').count() == 1
+        and p.pg.locator('#btn-add-decal').count() == 1
+        and p.pg.locator('#ctx-decal').count() == 1
+    )
+
+    # PNG- und SVG-Einlesen pruefen + SVG-Aufkleber auf Oberseite legen
+    decal_res = p.pg.evaluate("""async () => {
+      const { Actions, App, Viewer } = window.__M;
+      const cv = document.createElement('canvas'); cv.width = 40; cv.height = 20;
+      const g = cv.getContext('2d'); g.fillStyle = '#e03131'; g.fillRect(0, 0, 40, 20);
+      const pngBlob = await new Promise((res) => cv.toBlob(res, 'image/png'));
+      const pngFile = new File([pngBlob], 'logo.png', { type: 'image/png' });
+      const parsedPng = await Actions.parseDecalFile(pngFile);
+
+      const svgTxt = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60"><rect x="4" y="4" width="112" height="52" rx="8" fill="#0c7a70"/><circle cx="30" cy="30" r="14" fill="#ffffff"/></svg>';
+      const svgFile = new File([svgTxt], 'marke.svg', { type: 'image/svg+xml' });
+      const parsedSvg = await Actions.parseDecalFile(svgFile);
+
+      const sf = Actions.selectedFace();
+      const id = Actions.addDecal(sf.id, sf, parsedSvg);
+      return {
+        pngOk: parsedPng.src.startsWith('data:image/png') && Math.abs(parsedPng.aspect - 2) < 0.05,
+        svgOk: parsedSvg.src.startsWith('data:image/svg+xml;base64,') && Math.abs(parsedSvg.aspect - 2) < 0.05,
+        id,
+      };
+    }""")
+    p.wait(500)
+    dc_id = decal_res['id']
+
+    dc_init = p.ev("""
+      const it = App.doc.items[0];
+      const dc = (it.decals || []).find((d) => d.id === arg);
+      const n = Viewer.nodes.get(it.id);
+      const mesh = n && n.decalGroup ? n.decalGroup.children[0] : null;
+      return {
+        hasDc: !!dc,
+        grpCount: n && n.decalGroup ? n.decalGroup.children.length : 0,
+        posZ: mesh ? mesh.position.z : null,
+      };
+    """, dc_id)
+    ok_place = (
+        decal_res['pngOk'] and decal_res['svgOk'] and bool(dc_id)
+        and dc_init['hasDc'] and dc_init['grpCount'] == 1
+        and dc_init['posZ'] is not None and abs(dc_init['posZ'] - 20.03) < 0.05
+    )
+
+    # Verschieben (X=5, Y=-3), Drehen (45°), Skalieren (150 %) ueber die Felder
+    field(p, f'#dc-u-{dc_id}', 5)
+    field(p, f'#dc-v-{dc_id}', -3)
+    field(p, f'#dc-rot-{dc_id}', 45)
+    field(p, f'#dc-scale-{dc_id}', 150)
+    p.wait(400)
+
+    dc_xform = p.ev("""
+      const { THREE } = window.__masswerk;
+      const it = App.doc.items[0];
+      const dc = (it.decals || []).find((d) => d.id === arg);
+      const n = Viewer.nodes.get(it.id);
+      const mesh = n && n.decalGroup ? n.decalGroup.children[0] : null;
+      const eul = mesh ? new THREE.Euler().setFromQuaternion(mesh.quaternion, 'XYZ') : null;
+      return {
+        dc,
+        px: mesh ? mesh.position.x : null,
+        py: mesh ? mesh.position.y : null,
+        rzDeg: eul ? (eul.z * 180) / Math.PI : null,
+        geoW: mesh && mesh.geometry.parameters ? mesh.geometry.parameters.width : null,
+      };
+    """, dc_id)
+    ok_xform = (
+        dc_xform['dc']['u'] == 5 and dc_xform['dc']['v'] == -3
+        and dc_xform['dc']['rot'] == 45 and abs(dc_xform['dc']['scale'] - 1.5) < 1e-4
+        and abs(dc_xform['px'] - 5) < 0.1 and abs(dc_xform['py'] - (-3)) < 0.1
+        and abs(abs(dc_xform['rzDeg']) - 45) < 1.0
+        and abs(dc_xform['geoW'] - dc_xform['dc']['w'] * 1.5) < 0.05
+    )
+
+    # Texturen pruefen: Holz, Metall gebuerstet, Karbon, dann Holz mit 120 % und 30°
+    tex_results = {}
+    for kind in ('wood', 'brushed', 'carbon'):
+        p.pg.select_option('#item-texture', kind)
+        p.pg.wait_for_function("""(k) => {
+          const { App, Viewer } = window.__M;
+          const it = App.doc.items[0];
+          const n = Viewer.nodes.get(it.id);
+          const m = n && n.mesh && n.mesh.material;
+          return !!(m && m.map && m.map.image && (m.map.image.naturalWidth || m.map.image.width) > 0 && it.texture && it.texture.kind === k);
+        }""", arg=kind, timeout=20000)
+        tex_results[kind] = p.ev("""
+          const it = App.doc.items[0];
+          const n = Viewer.nodes.get(it.id);
+          const m = n.mesh.material;
+          const uv = n.mesh.geometry.getAttribute('uv');
+          return {
+            kind: it.texture && it.texture.kind,
+            hasUv: !!(uv && uv.count > 0),
+            hasTex: !!(m && m.map && m.map.isTexture),
+            imgW: m && m.map && m.map.image ? (m.map.image.naturalWidth || m.map.image.width || 0) : 0,
+          };
+        """)
+
+    p.pg.select_option('#item-texture', 'wood')
+    p.wait(300)
+    field(p, '#item-tex-scale', 120)
+    field(p, '#item-tex-rot', 30)
+    p.wait(300)
+
+    ok_tex = all(
+        tex_results[k]['kind'] == k and tex_results[k]['hasUv'] and tex_results[k]['hasTex'] and tex_results[k]['imgW'] >= 256
+        for k in ('wood', 'brushed', 'carbon')
+    )
+
+    # Speichern & Laden im Projekt
+    p.pg.evaluate("""async () => {
+      const { Start, App, Model } = window.__M;
+      window.__a136Payload = await Start.projectPayload();
+      App.setDoc(Model.newDoc('Zwischenstand'));
+    }""")
+    p.wait(500)
+    p.pg.evaluate("""async () => {
+      const { Start } = window.__M;
+      const f = new File([window.__a136Payload], 'a136.tracery.json', { type: 'application/json' });
+      await Start.openBlob(f);
+    }""")
+    warte_rechnen(p)
+    p.pg.wait_for_function("""() => {
+      const { App, Viewer } = window.__M;
+      const it = App.doc.items[0];
+      if (!it) return false;
+      const n = Viewer.nodes.get(it.id);
+      const m = n && n.mesh && n.mesh.material;
+      return !!(n && n.decalGroup && n.decalGroup.children.length === 1 && m && m.map && m.map.image && (m.map.image.naturalWidth || m.map.image.width) > 0);
+    }""", timeout=20000)
+
+    reloaded = p.ev("""
+      const it = App.doc.items[0];
+      const dc = (it.decals || []).find((d) => d.id === arg);
+      const n = Viewer.nodes.get(it.id);
+      const m = n.mesh.material;
+      const mesh = n.decalGroup ? n.decalGroup.children[0] : null;
+      return {
+        dc,
+        tex: it.texture,
+        hasUv: !!n.mesh.geometry.getAttribute('uv'),
+        hasTex: !!(m && m.map && m.map.isTexture),
+        imgW: m && m.map && m.map.image ? (m.map.image.naturalWidth || m.map.image.width || 0) : 0,
+        grpCount: n.decalGroup ? n.decalGroup.children.length : 0,
+        px: mesh ? mesh.position.x : null,
+        py: mesh ? mesh.position.y : null,
+      };
+    """, dc_id)
+    ok_reload = (
+        reloaded['dc'] is not None
+        and reloaded['dc']['u'] == 5 and reloaded['dc']['v'] == -3
+        and reloaded['dc']['rot'] == 45 and abs(reloaded['dc']['scale'] - 1.5) < 1e-4
+        and reloaded['grpCount'] == 1
+        and abs(reloaded['px'] - 5) < 0.1 and abs(reloaded['py'] - (-3)) < 0.1
+        and reloaded['tex'] is not None and reloaded['tex']['kind'] == 'wood'
+        and abs(reloaded['tex']['scale'] - 1.2) < 1e-4 and reloaded['tex']['rot'] == 30
+        and reloaded['hasUv'] and reloaded['hasTex'] and reloaded['imgW'] >= 256
+    )
+
+    # Koerper nach dem Laden auswaehlen, Aufkleber loeschen und per Rueckgaengig wiederherstellen
+    p.ev("App.select([App.doc.items[0].id])")
+    p.wait(300)
+    p.pg.locator(f'#dc-del-{dc_id}').click()
+    warte_rechnen(p)
+    gone = p.ev("return !(App.doc.items[0].decals && App.doc.items[0].decals.length)")
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    restored = p.ev("return !!(App.doc.items[0].decals && App.doc.items[0].decals.length === 1)")
+
+    # Hilfetexte (JSON + eingebettetes HELP per Tooltip), Uebersetzungen und Befehlssuche
+    p.pg.mouse.move(10, 10)
+    p.wait(100)
+    p.pg.locator('#texture-sec .section-h').scroll_into_view_if_needed()
+    p.pg.locator('#texture-sec .section-h').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=5000)
+        tip_txt = p.pg.locator('.tooltip').text_content()
+    except Exception:
+        tip_txt = ''
+    meta_ok = p.pg.evaluate("""async (tipTxt) => {
+      const [hilfen, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['decal', 'bodyTexture'].every((k) => hilfen[k] && hilfen[k].tip && hilfen[k].hilfe && hilfen[k].tipp)
+        && String(tipTxt || '').includes(hilfen.bodyTexture.tip);
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nEq = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      const { Commands } = window.__M;
+      const cmdOk = Commands.search('aufkleber').some((c) => c.id === 'decal')
+        && Commands.search('textur holz').some((c) => c.id === 'tex-wood');
+      return helpOk && i18nEq && cmdOk;
+    }""", tip_txt)
+
+    return [ok_ui, ok_place, ok_xform, ok_tex, ok_reload, bool(gone and restored), bool(meta_ok)]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26737,6 +26960,7 @@ TESTS = [
     ('[F-11250536] Volltest-Reparatur: Skizzen-Koordinaten sofort / Befehlssuche „Fläche auf Fläche“ / Drehteller-Video über 2D-Puffer', t_f11250536),
     ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
     ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
+    ('[A-136] Aufkleber, Logos und Texturen (AN-15, AN-16)', t_a136_aufkleber_texturen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -986,7 +986,7 @@ const App = (() => {
   function lookFor(it) {
     const mat = it.mat || (S.doc.settings && S.doc.settings.material) || null;
     const L = Viewer.lookOf(mat);
-    return { ...L, mat, matCol: L.nat && !it.colorSet ? L.col : null };
+    return { ...L, mat, matCol: L.nat && !it.colorSet ? L.col : null, customColor: !!it.colorSet };
   }
   function topItem(id) { return S.doc.items.find((x) => x.id === id) || S.extra.find((x) => x.id === id); }
   // Rechenzeit je Schritt: zuletzt gemessen, als er wirklich neu gerechnet wurde (BE-26)
@@ -1030,7 +1030,7 @@ const App = (() => {
       if (n.baseBox) S.baseBoxes.set(n.id, n.baseBox);
       if (n.ownBox) S.ownBoxes.set(n.id, n.ownBox);
       const it = topItem(n.id); if (!it) continue;
-      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key: n.key };
+      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, texture: it.texture || null, decals: it.decals || null, bodies: it.bodies || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
       if (n.same && S.results.has(n.id)) {
         if (n.bodies) { S.results.get(n.id).data.bodies = n.bodies; Viewer.updateNode(n.id, { ...info, forceBodies: true }); }
@@ -1127,7 +1127,7 @@ const App = (() => {
       for (const f of payload.faces || []) if (f && f.tid && f.tid.startsWith('$self/')) f.tid = id + '/' + f.tid.slice(6);
       for (const e of payload.edges || []) if (e && e.tid && e.tid.startsWith('$self/')) e.tid = id + '/' + e.tid.slice(6);
     }
-    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key });
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, texture: it.texture || null, decals: it.decals || null, bodies: it.bodies || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
