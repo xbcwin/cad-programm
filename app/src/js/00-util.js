@@ -741,6 +741,7 @@ const IC = {
   timingPulley: '<circle cx="12" cy="12" r="9.5" stroke-dasharray="2.4 1.6"/><circle cx="12" cy="12" r="6.8"/><circle cx="12" cy="12" r="2.8"/><path d="M12 5.2V3.5M16.8 7.2l1.2-1.2M18.8 12h1.7M16.8 16.8l1.2 1.2M12 18.8v1.7M7.2 16.8L6 18M5.2 12H3.5M7.2 7.2L6 6"/>',
   sprocket: '<circle cx="12" cy="12" r="3.4"/><path d="M10.8 2.8h2.4l.7 2.7a6.6 6.6 0 0 1 2.2.9l2.1-1.8 1.7 1.7-1.8 2.1a6.6 6.6 0 0 1 .9 2.2l2.7.7v2.4l-2.7.7a6.6 6.6 0 0 1-.9 2.2l1.8 2.1-1.7 1.7-2.1-1.8a6.6 6.6 0 0 1-2.2.9l-.7 2.7h-2.4l-.7-2.7a6.6 6.6 0 0 1-2.2-.9l-2.1 1.8-1.7-1.7 1.8-2.1a6.6 6.6 0 0 1-.9-2.2l-2.7-.7v-2.4l2.7-.7a6.6 6.6 0 0 1 .9-2.2L4.2 6.3l1.7-1.7 2.1 1.8a6.6 6.6 0 0 1 2.2-.9z"/>',
   mountPattern: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="currentColor" opacity=".14"/><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="17" r="1.2" fill="currentColor" stroke="none"/>',
+  portCutout: '<rect x="2.5" y="5" width="19" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5" width="19" height="14" rx="2"/><rect x="5.5" y="10" width="8" height="4" rx="2"/><circle cx="16.8" cy="12" r="1.6"/>',
   batteryHolder: '<rect x="3" y="5" width="18" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="5.5" y="7.5" width="5.2" height="9" rx="1"/><rect x="13.3" y="7.5" width="5.2" height="9" rx="1"/><path d="M7.2 7.5V6.3h1.8v1.2M15 7.5V6.3h1.8v1.2"/>',
   enclosure: '<path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z" fill="currentColor" opacity=".14"/><path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z"/><path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h14a1.5 1.5 0 0 1 1.5 1.5v2H3.5z"/><path d="M6.5 7.5v1.5h11V7.5"/><circle cx="7.5" cy="13" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="13" r=".9" fill="currentColor" stroke="none"/>',
 };
@@ -2834,6 +2835,11 @@ const HELP = {
   "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23), Servos und Platinen (Raspberry Pi, Arduino, ESP32)",
   "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt optionalem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23), gängige Servos sowie Platinen-Lochbilder für Raspberry Pi (4/3/5, Zero, Pico), Arduino (Uno R3/R4, Nano) und ESP32 (DevKit V1, Feather). Alle Durchmesser, Lage (X/Y), Drehung, Tiefe und eine 3D-Druck-Passung lassen sich rechts anpassen.",
   "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du bei Lüftern oder Motoren nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben nach dem 3D-Druck sauber passen."
+ },
+ "portCutout": {
+  "tip": "Ausschnitte für Stecker, Buchsen, Schalter, Taster und kleine Displays",
+  "hilfe": "Schneidet fertige Öffnungen für gängige Anschlüsse und Bedienelemente als eigenen Formschritt in eine ebene Wand oder Gehäusefläche: USB-C (Buchse mit runden Enden oder Stecker-Durchgang), USB-A, Micro-USB, HDMI / Mini-HDMI / Micro-HDMI mit schrägen Ecken, Klinke 3,5 & 6,35 mm, RJ45-Netzwerk, SD & microSD, Wipp-, Kipp- und Druckschalter sowie OLED/LCD-Displays samt passenden Befestigungslöchern.",
+  "tipp": "Für den 3D-Druck wählst du rechts unter „Druck-Passung“ einfach „gleitend“ (+0,2 mm) oder für Stecker hinter einer dickeren Wand die Vorlage „USB-C (Stecker-Durchgang)“."
  },
  "batteryHolder": {
   "tip": "Parametrisches Batteriefach für AA-, AAA- und 18650-Zellen (1–8 Zellen)",

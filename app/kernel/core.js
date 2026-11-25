@@ -8912,7 +8912,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -10728,6 +10728,146 @@ export function createKernel(R, oc) {
         return { tool, holeCount: holes.length, hasCenter, preset: p.preset || '' };
       } catch (err) {
         if (!overlapsCenter) for (const s of holeSolids) safeDelete(s);
+        throw err;
+      }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function buildPortCutoutOn(baseShape, p, topo = null, tid = null) {
+    const shape = p.shape === 'circle' || p.shape === 'slot' || p.shape === 'hdmi' ? p.shape : 'rect';
+    const d = num(p.d, 6.3);
+    const w = num(p.w, 9);
+    const h = num(p.h, 3.5);
+    if (shape === 'circle') {
+      if (!(d >= 0.2 && isFinite(d))) throw new Error('Ausschnitt: Der Durchmesser muss mindestens 0,2 mm sein.');
+    } else {
+      if (!(w >= 0.2 && h >= 0.2 && isFinite(w) && isFinite(h))) throw new Error('Ausschnitt: Breite und Höhe müssen mindestens 0,2 mm sein.');
+    }
+    const u = num(p.u, 0);
+    const v = num(p.v, 0);
+    const angle = num(p.angle, 0);
+    const depth = Math.max(0, num(p.depth, 0));
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Ausschnitt: Wähle eine ebene Körperfläche.');
+      const F = planarFaceFrame(f);
+      const centerO = add(F.o, add(mul(F.x, u), mul(F.y, v)));
+      const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+      const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+      const Muv = {
+        o: centerO, x: U, y: V, n: F.n,
+        P: (uv) => [centerO[0] + U[0] * uv[0] + V[0] * uv[1], centerO[1] + U[1] * uv[0] + V[1] * uv[1], centerO[2] + U[2] * uv[0] + V[2] * uv[1]],
+      };
+      const bb = bboxOf(baseShape);
+      let sMax = 0;
+      for (const q of cornersOf(bb)) sMax = Math.max(sMax, dot(sub(q, centerO), mul(F.n, -1)));
+      let Hcut;
+      if (depth > 1e-4) {
+        Hcut = depth;
+      } else {
+        const probed = probeWallDepth(baseShape, Muv, [{ uA: -0.2, uB: 0.2, v: 0 }], Math.max(1, sMax));
+        Hcut = Math.max(0.2, probed);
+      }
+
+      const solids = [];
+      let overlaps = false;
+      try {
+        const extrudeLoop2D = (loop) => {
+          const fc = regionFace({ outer: loop, holes: [] }, Muv);
+          const fcTop = fc.translate(mul(F.n, 0.05));
+          safeDelete(fc);
+          const sol = R.basicFaceExtrusion(fcTop, new R.Vector(mul(F.n, -(Hcut + 0.05))));
+          safeDelete(fcTop);
+          return sol;
+        };
+
+        if (shape === 'circle') {
+          solids.push(R.makeCylinder(d / 2, Hcut + 0.05, add(centerO, mul(F.n, 0.05)), mul(F.n, -1)));
+        } else if (shape === 'slot') {
+          if (Math.abs(w - h) <= 0.05) {
+            solids.push(R.makeCylinder(Math.min(w, h) / 2, Hcut + 0.05, add(centerO, mul(F.n, 0.05)), mul(F.n, -1)));
+          } else if (w > h) {
+            solids.push(extrudeLoop2D(slotLoop2D(-w / 2, w / 2, 0, h, true)));
+          } else {
+            const r = w / 2, cA = -(h / 2 - r), cB = h / 2 - r;
+            solids.push(extrudeLoop2D({
+              segs: [
+                { t: 'line', a: [r, cA], b: [r, cB] },
+                { t: 'arc', a: [r, cB], m: [0, h / 2], b: [-r, cB] },
+                { t: 'line', a: [-r, cB], b: [-r, cA] },
+                { t: 'arc', a: [-r, cA], m: [0, -h / 2], b: [r, cA] },
+              ],
+            }));
+          }
+        } else if (shape === 'hdmi') {
+          const hw = w / 2, hh = h / 2;
+          const ch = Math.max(0, Math.min(num(p.chamfer, 0), w * 0.35, h * 0.65));
+          const segs = ch <= 0.05
+            ? [
+              { t: 'line', a: [-hw, -hh], b: [hw, -hh] },
+              { t: 'line', a: [hw, -hh], b: [hw, hh] },
+              { t: 'line', a: [hw, hh], b: [-hw, hh] },
+              { t: 'line', a: [-hw, hh], b: [-hw, -hh] },
+            ]
+            : [
+              { t: 'line', a: [-hw + ch, -hh], b: [hw - ch, -hh] },
+              { t: 'line', a: [hw - ch, -hh], b: [hw, -hh + ch] },
+              { t: 'line', a: [hw, -hh + ch], b: [hw, hh] },
+              { t: 'line', a: [hw, hh], b: [-hw, hh] },
+              { t: 'line', a: [-hw, hh], b: [-hw, -hh + ch] },
+              { t: 'line', a: [-hw, -hh + ch], b: [-hw + ch, -hh] },
+            ];
+          solids.push(extrudeLoop2D({ segs }));
+        } else {
+          const hw = w / 2, hh = h / 2;
+          const cr = Math.max(0, Math.min(num(p.r, 0), Math.min(w, h) / 2 - 0.02));
+          let segs;
+          if (cr <= 0.05) {
+            segs = [
+              { t: 'line', a: [-hw, -hh], b: [hw, -hh] },
+              { t: 'line', a: [hw, -hh], b: [hw, hh] },
+              { t: 'line', a: [hw, hh], b: [-hw, hh] },
+              { t: 'line', a: [-hw, hh], b: [-hw, -hh] },
+            ];
+          } else {
+            const cx = hw - cr, cy = hh - cr, S = Math.SQRT1_2;
+            segs = [
+              { t: 'line', a: [-cx, -hh], b: [cx, -hh] },
+              { t: 'arc', a: [cx, -hh], m: [cx + cr * S, -cy - cr * S], b: [hw, -cy] },
+              { t: 'line', a: [hw, -cy], b: [hw, cy] },
+              { t: 'arc', a: [hw, cy], m: [cx + cr * S, cy + cr * S], b: [cx, hh] },
+              { t: 'line', a: [cx, hh], b: [-cx, hh] },
+              { t: 'arc', a: [-cx, hh], m: [-cx - cr * S, cy + cr * S], b: [-hw, cy] },
+              { t: 'line', a: [-hw, cy], b: [-hw, -cy] },
+              { t: 'arc', a: [-hw, -cy], m: [-cx - cr * S, -cy - cr * S], b: [-cx, -hh] },
+            ];
+          }
+          solids.push(extrudeLoop2D({ segs }));
+        }
+
+        const holes = p.includeHoles && Array.isArray(p.holes) ? p.holes : [];
+        const holeD = num(p.holeD, 0);
+        let holeCount = 0;
+        if (holes.length && holeD >= 0.2) {
+          const holeR = holeD / 2;
+          const mainHalfW = shape === 'circle' ? d / 2 : w / 2;
+          const mainHalfH = shape === 'circle' ? d / 2 : h / 2;
+          for (const q of holes) {
+            if (!Array.isArray(q) || q.length < 2) continue;
+            const hx = Number(q[0]) || 0, hy = Number(q[1]) || 0;
+            solids.push(R.makeCylinder(holeR, Hcut + 0.05, add(Muv.P([hx, hy]), mul(F.n, 0.05)), mul(F.n, -1)));
+            holeCount++;
+            if (Math.abs(hx) < mainHalfW + holeR + 0.05 && Math.abs(hy) < mainHalfH + holeR + 0.05) overlaps = true;
+          }
+        }
+        const tool = overlaps
+          ? fuseAll(solids, true)
+          : (solids.length === 1 ? solids[0] : R.makeCompound(solids));
+        return { tool, shape, preset: p.preset || '', holeCount };
+      } catch (err) {
+        if (!overlaps) for (const s of solids) safeDelete(s);
         throw err;
       }
     } finally {
@@ -13722,6 +13862,55 @@ export function createKernel(R, oc) {
             if (!next) {
               const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
               const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Mp:' + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(toolTopo);
+              cachePut(k, next, null, resMeta, null, nextTopo);
+            }
+            if (anyMirror) cachePut(kTool, tool);
+            else safeDelete(tool);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (resolved && resMeta) resolved[it.id] = resMeta;
+        if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType: 'cut', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'portCutout') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Ausschnitt: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Ausschnitt: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, 'portCutout', p]);
+        const kTool = keyOf([src.key, 'portCutoutTool', p]);
+        const ce = cacheEntry(k);
+        let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+        let resMeta = ce ? ce.resolved : null;
+        let tool = anyMirror ? cacheGet(kTool) : null;
+        if (!next || (anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildPortCutoutOn(src.shape, p, src.topo, src.it.id);
+            tool = built.tool;
+            resMeta = { shape: built.shape, preset: built.preset, holeCount: built.holeCount };
+            if (!next) {
+              const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
+              const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Pc:' + it.id);
               next = br.shape; nextTopo = br.topo;
               freeTopoMap(toolTopo);
               cachePut(k, next, null, resMeta, null, nextTopo);

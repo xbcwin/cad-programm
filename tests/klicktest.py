@@ -38734,6 +38734,237 @@ def t_a188_lochbilder_luefter_motoren_servos(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a190_ausschnitte_stecker_schalter(p):
+    p.empty()
+
+    # 1. USB-C-Ausschnitt in vertikaler Gehäusewand (60×4×30 mm) -> Öffnung ca. 9×3,5 mm mit runden Enden
+    p.ev("""
+      App.change('Wand 60x4x30', (doc) => {
+        const b = Model.newItem('box', { w: 60, d: 4, h: 30 }, { name: 'Gehäusewand' });
+        doc.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 45)
+    p.ev("""
+      const wall = App.doc.items[0];
+      const r = App.results.get(wall.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[1] < -0.99);
+      Features.portCutout({ id: wall.id, idx: fi, info: r.data.faces[fi] }, { preset: 'usbc' });
+    """)
+    warte_rechnen(p, 45)
+
+    def wall_stats():
+        return p.ev("""return (() => {
+          const wall = App.doc.items[0];
+          const step = App.doc.items[1];
+          const r = App.results.get(wall.id);
+          const faces = (r && r.data && r.data.faces) || [];
+          const cyls = faces.filter(f => f.t === 'CYLINDRE' && f.axis).map(f => ({
+            r: Math.round(f.r * 1000) / 1000,
+            d: Math.round(f.r * 2000) / 1000,
+            x: Math.round(f.axis[0] * 1000) / 1000,
+            y: Math.round(f.axis[1] * 1000) / 1000,
+            z: Math.round(f.axis[2] * 1000) / 1000,
+          }));
+          const wallH = Model.num(wall.p.h, Model.vars(App.doc).v, 30);
+          const innerPlanes = faces.filter(f => f.t === 'PLANE' && f.c && Math.abs(f.c[1]) < 0.25 && Math.abs(f.c[0]) < 29.5 && f.c[2] > 0.2 && f.c[2] < wallH - 0.2).map(f => ({
+            nx: Math.round(f.n[0] * 1000) / 1000,
+            ny: Math.round(f.n[1] * 1000) / 1000,
+            nz: Math.round(f.n[2] * 1000) / 1000,
+            x: Math.round(f.c[0] * 1000) / 1000,
+            y: Math.round(f.c[1] * 1000) / 1000,
+            z: Math.round(f.c[2] * 1000) / 1000,
+          }));
+          return {
+            errs: App.errors.length,
+            cylCount: cyls.length,
+            cyls,
+            innerPlanes,
+            info: document.querySelector('#pc-info')?.textContent || '',
+            stepKind: step ? step.kind : null,
+          };
+        })()""")
+
+    usbc = wall_stats()
+    gc_usbc = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    usbc_hplanes = sorted([f for f in usbc['innerPlanes'] if abs(f['nz']) > 0.99], key=lambda f: f['z'])
+    usbc_cyls = sorted(usbc['cyls'], key=lambda c: c['x'])
+    usbc_ax_span = abs(usbc_cyls[1]['x'] - usbc_cyls[0]['x']) if len(usbc_cyls) == 2 else 0
+    usbc_total_w = usbc_ax_span + (usbc_cyls[0]['d'] if usbc_cyls else 0)
+    usbc_total_h = abs(usbc_hplanes[1]['z'] - usbc_hplanes[0]['z']) if len(usbc_hplanes) == 2 else 0
+    ok1 = (
+        usbc['errs'] == 0
+        and usbc['stepKind'] == 'portCutout'
+        and usbc['cylCount'] == 2
+        and all(abs(c['r'] - 1.75) < 0.05 for c in usbc_cyls)
+        and abs(usbc_ax_span - 5.5) < 0.05
+        and abs(usbc_total_w - 9.0) < 0.05
+        and len(usbc_hplanes) == 2
+        and abs(usbc_total_h - 3.5) < 0.05
+        and '9' in usbc['info'] and '3,5' in usbc['info']
+        and gc_usbc['issues'] == 0 and gc_usbc['checked'] >= 1
+    )
+
+    # 2. RJ45-Ausschnitt in derselben Wand -> Rechteck 16,2 × 13,8 mm ohne Fehler
+    p.pg.locator('#pc-preset').select_option('rj45')
+    warte_rechnen(p, 45)
+    rj45 = wall_stats()
+    gc_rj45 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length }))")
+    rj_v = sorted([f for f in rj45['innerPlanes'] if abs(f['nx']) > 0.99], key=lambda f: f['x'])
+    rj_h = sorted([f for f in rj45['innerPlanes'] if abs(f['nz']) > 0.99], key=lambda f: f['z'])
+    rj_w = abs(rj_v[1]['x'] - rj_v[0]['x']) if len(rj_v) == 2 else 0
+    rj_h_dim = abs(rj_h[1]['z'] - rj_h[0]['z']) if len(rj_h) == 2 else 0
+    ok2 = (
+        rj45['errs'] == 0
+        and rj45['cylCount'] == 0
+        and len(rj45['innerPlanes']) == 4
+        and len(rj_v) == 2 and len(rj_h) == 2
+        and abs(rj_w - 16.2) < 0.05
+        and abs(rj_h_dim - 13.8) < 0.05
+        and '16,2' in rj45['info'] and '13,8' in rj45['info']
+        and gc_rj45['issues'] == 0
+    )
+
+    # 3. HDMI, Klinke, SD, Wippschalter, Drucktaster, OLED-Display mit Befestigungslöchern & Druck-Passung
+    p.pg.locator('#pc-preset').select_option('hdmi')
+    warte_rechnen(p, 45)
+    hdmi = wall_stats()
+    hdmi_v = sorted([f for f in hdmi['innerPlanes'] if abs(f['nx']) > 0.99], key=lambda f: f['x'])
+    hdmi_h = sorted([f for f in hdmi['innerPlanes'] if abs(f['nz']) > 0.99], key=lambda f: f['z'])
+    hdmi_bev = [f for f in hdmi['innerPlanes'] if abs(f['nx']) > 0.5 and abs(f['nz']) > 0.5]
+
+    p.pg.locator('#pc-preset').select_option('jack35')
+    warte_rechnen(p, 45)
+    jack = wall_stats()
+
+    p.pg.locator('#pc-preset').select_option('sd')
+    warte_rechnen(p, 45)
+    sd = wall_stats()
+    sd_v = sorted([f for f in sd['innerPlanes'] if abs(f['nx']) > 0.99], key=lambda f: f['x'])
+    sd_h = sorted([f for f in sd['innerPlanes'] if abs(f['nz']) > 0.99], key=lambda f: f['z'])
+
+    p.pg.locator('#pc-preset').select_option('rockerSmall')
+    warte_rechnen(p, 45)
+    rocker = wall_stats()
+    rk_v = sorted([f for f in rocker['innerPlanes'] if abs(f['nx']) > 0.99], key=lambda f: f['x'])
+    rk_h = sorted([f for f in rocker['innerPlanes'] if abs(f['nz']) > 0.99], key=lambda f: f['z'])
+
+    p.pg.locator('#pc-preset').select_option('button12')
+    warte_rechnen(p, 45)
+    btn12 = wall_stats()
+
+    # Wand vergrößern für OLED 0,96" (mit 4 M2-Befestigungslöchern 23×23 mm)
+    p.ev("App.change('Wand 60x4x40', d => { d.items[0].p.h = 40; })")
+    warte_rechnen(p, 45)
+    p.ev("App.select([App.doc.items[1].id])")
+    p.wait(300)
+    p.pg.locator('#pc-preset').select_option('oled096')
+    warte_rechnen(p, 45)
+    oled = wall_stats()
+    oled_holes = [c for c in oled['cyls'] if abs(c['r'] - 1.1) < 0.08]
+    oled_corners = [c for c in oled['cyls'] if abs(c['r'] - 0.5) < 0.08]
+
+    p.pg.locator('#pc-holes').uncheck()
+    warte_rechnen(p, 45)
+    oled_noholes = wall_stats()
+
+    # Zurück auf USB-C: Druck-Passung 'slide' (+0,2 mm -> 9,2×3,7 mm) und Versatz u=8, v=-3
+    p.pg.locator('#pc-preset').select_option('usbc')
+    warte_rechnen(p, 45)
+    p.pg.locator('#pc-printFit').select_option('slide')
+    warte_rechnen(p, 45)
+    fit_st = wall_stats()
+
+    p.ev("App.change('Versatz', d => { const s = d.items[1]; s.p.printFit = ''; s.p.u = 8; s.p.v = -3; })")
+    warte_rechnen(p, 45)
+    shift_st = wall_stats()
+    shift_mid_x = sum(c['x'] for c in shift_st['cyls']) / 2 if len(shift_st['cyls']) == 2 else 0
+    shift_mid_z = sum(c['z'] for c in shift_st['cyls']) / 2 if len(shift_st['cyls']) == 2 else 0
+
+    ok3 = (
+        hdmi['errs'] == 0 and len(hdmi['innerPlanes']) == 6 and len(hdmi_bev) == 2
+        and len(hdmi_v) == 2 and abs(abs(hdmi_v[1]['x'] - hdmi_v[0]['x']) - 15.0) < 0.05
+        and len(hdmi_h) == 2 and abs(abs(hdmi_h[1]['z'] - hdmi_h[0]['z']) - 5.5) < 0.05
+        and jack['errs'] == 0 and jack['cylCount'] == 1 and abs(jack['cyls'][0]['d'] - 6.3) < 0.05
+        and sd['errs'] == 0 and len(sd_v) == 2 and abs(abs(sd_v[1]['x'] - sd_v[0]['x']) - 25.0) < 0.05
+        and len(sd_h) == 2 and abs(abs(sd_h[1]['z'] - sd_h[0]['z']) - 2.8) < 0.05
+        and rocker['errs'] == 0 and len(rk_v) == 2 and abs(abs(rk_v[1]['x'] - rk_v[0]['x']) - 19.2) < 0.05
+        and len(rk_h) == 2 and abs(abs(rk_h[1]['z'] - rk_h[0]['z']) - 13.0) < 0.05
+        and btn12['errs'] == 0 and btn12['cylCount'] == 1 and abs(btn12['cyls'][0]['d'] - 12.2) < 0.05
+        and oled['errs'] == 0 and len(oled_holes) == 4 and len(oled_corners) == 4
+        and oled_noholes['errs'] == 0 and oled_noholes['cylCount'] == 4
+        and fit_st['errs'] == 0 and fit_st['cylCount'] == 2
+        and all(abs(c['d'] - 3.7) < 0.05 for c in fit_st['cyls'])
+        and shift_st['errs'] == 0 and shift_st['cylCount'] == 2
+        and abs(abs(shift_mid_x) - 8.0) < 0.05 and abs(shift_mid_z - 17.0) < 0.05
+    )
+
+    # 4. Einfach & Profi, Kontextleiste, Befehlssuche, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    simple_fly = p.ev("""return {
+      tileCount: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      pcBtn: !!document.querySelector('#add-port-cutout') && !!document.querySelector('#add-port-cutout').offsetParent,
+      cmds: Commands.search('usb-c').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("""
+      const wall = App.doc.items[0];
+      const r = App.results.get(wall.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[1] < -0.99);
+      App.select([wall.id], { face: { id: wall.id, faceIdx: fi, info: r.data.faces[fi] } });
+    """); p.wait(200)
+    simple_ctx = p.ev("return !!document.querySelector('#ctx-port-cutout') && !!document.querySelector('#ctx-port-cutout').offsetParent")
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    pro_fly = p.ev("""return {
+      pcBtn: !!document.querySelector('#add-port-cutout') && !!document.querySelector('#add-port-cutout').offsetParent,
+      cmds: Commands.search('rj45').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(200)
+    while p.ev("return App.doc.items.length") > 1:
+        p.ev("App.undo()")
+    warte_rechnen(p, 35)
+    undo_cyls = p.ev("return App.results.get(App.doc.items[0].id).data.faces.filter(f => f.t === 'CYLINDRE').length")
+    p.ev("App.redo()"); warte_rechnen(p, 35)
+    redo_cyls = p.ev("return App.results.get(App.doc.items[0].id).data.faces.filter(f => f.t === 'CYLINDRE').length")
+    p.ev("if (App.doc.items[1]) App.select([App.doc.items[1].id])"); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = !!(wh.portCutout && wh.portCutout.tip && wh.portCutout.hilfe && wh.portCutout.tipp && document.querySelector('[data-help="portCutout"]'));
+      const sOk = !!(se.portCutout && se.portCutout.was && se.portCutout.wozu && se.portCutout.achtung);
+      const step = App.doc.items.find(x => x.kind === 'portCutout');
+      const exp = step ? Explain.local(step.id) : null;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return {
+        valOk: !!(val && val.ok),
+        hOk, sOk, i18nOk,
+        expOk: !!(exp && exp.lines && exp.lines.some(l => l.k === 'op' && l.t.includes('USB-C'))),
+      };
+    })()""")
+
+    ok4 = bool(
+        simple_fly['tileCount'] == 5 and simple_fly['pcBtn'] and 'port-cutout' in simple_fly['cmds']
+        and simple_ctx
+        and pro_fly['pcBtn'] and 'port-cutout' in pro_fly['cmds']
+        and undo_cyls == 0 and redo_cyls == 2
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk'] and meta['expOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a189_platinen_batteriefaecher(p):
     p.empty()
 
@@ -39493,6 +39724,7 @@ TESTS = [
     ('[A-186] Bibliothek: Wellen, Stellringe & Kupplungen (BI-13)', t_a186_wellen_stellringe_kupplungen),
     ('[A-185] Bibliothek: Zahnriemenscheiben (GT2, HTD) & Kettenräder nach Teilung (BI-12)', t_a185_zahnriemenscheiben_kettenraeder),
     ('[A-188] Bibliothek: Lochbilder für Lüfter, Motoren, Servos (BI-16)', t_a188_lochbilder_luefter_motoren_servos),
+    ('[A-190] Bibliothek: Ausschnitte für Stecker und Schalter (BI-18)', t_a190_ausschnitte_stecker_schalter),
     ('[A-189] Bibliothek: Lochbilder Platinen & Batteriefächer (BI-17, BI-19)', t_a189_platinen_batteriefaecher),
     ('[A-191] Bibliothek: Gehäuse-Generator (Kasten mit Deckel, Lippe & 4 Schraubdome, BI-20)', t_a191_gehaeuse_generator),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

@@ -36,6 +36,7 @@ const KINDS = {
   fins: { get label() { return T('kind.fins'); }, params: [] },
   fillPattern: { get label() { return T('kind.fillPattern'); }, params: [] },
   mountPattern: { get label() { return T('kind.mountPattern'); }, params: [] },
+  portCutout: { get label() { return T('kind.portCutout'); }, params: [] },
   web: { get label() { return T('kind.web'); }, params: [] },
   wrap: { get label() { return T('kind.wrap'); }, params: [] },
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
@@ -554,6 +555,7 @@ const Model = (() => {
       if (it.kind === 'fins' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kühlrippen auf' });
       if (it.kind === 'fillPattern' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Füllmuster in' });
       if (it.kind === 'mountPattern' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Lochbild in' });
+      if (it.kind === 'portCutout' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Ausschnitt in' });
       if (it.kind === 'group' && it.p && it.p.op === 'pattern' && it.p.pt === 'points' && it.p.sourceId) out.push({ from: me, to: top(it.p.sourceId), what: 'Muster an Punkten von' });
       if (it.kind === 'web' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Steg-Netz an' });
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
@@ -815,6 +817,7 @@ const Model = (() => {
       else if (it.kind === 'fins') o.p = finsParams(it, ownV);
       else if (it.kind === 'fillPattern') o.p = fillPatternParams(it, ownV);
       else if (it.kind === 'mountPattern') o.p = mountPatternParams(it, ownV);
+      else if (it.kind === 'portCutout') o.p = portCutoutParams(it, ownV);
       else if (it.kind === 'web') o.p = webParams(it, ownV);
       else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
@@ -1272,6 +1275,44 @@ const Model = (() => {
       centerD: m.centerDEff,
       cutW: m.cutWEff,
       cutH: m.cutHEff,
+      u: m.u,
+      v: m.v,
+      angle: m.angle,
+      depth: m.depth,
+    };
+  }
+  function portCutoutParams(it, V) {
+    const p = it.p || {};
+    const optNum = (val) => (val == null || val === '' ? null : num(val, V, null));
+    const resolvedP = {
+      ...p,
+      w: optNum(p.w),
+      h: optNum(p.h),
+      d: optNum(p.d),
+      r: optNum(p.r),
+      chamfer: optNum(p.chamfer),
+      holeD: optNum(p.holeD),
+      u: num(p.u, V, 0),
+      v: num(p.v, V, 0),
+      angle: num(p.angle, V, 0),
+      depth: Math.max(0, num(p.depth, V, 0)),
+    };
+    const m = typeof portCutoutMetrics === 'function'
+      ? portCutoutMetrics(resolvedP)
+      : { id: p.preset || 'usbc', shape: 'slot', wEff: 9, hEff: 3.5, dEff: 0, rEff: 1.75, chamferEff: 0, hasHoles: false, includeHoles: false, holeDEff: 0, holes: [], u: resolvedP.u, v: resolvedP.v, angle: resolvedP.angle, depth: resolvedP.depth };
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      preset: m.id,
+      shape: m.shape,
+      w: m.wEff,
+      h: m.hEff,
+      d: m.dEff,
+      r: m.rEff,
+      chamfer: m.chamferEff,
+      includeHoles: m.hasHoles && m.includeHoles,
+      holeD: m.holeDEff,
+      holes: m.hasHoles && m.includeHoles ? m.holes : [],
       u: m.u,
       v: m.v,
       angle: m.angle,
@@ -2782,6 +2823,14 @@ const Model = (() => {
         const ctr = m.includeCenter && m.centerKind !== 'none' ? (m.centerKind === 'circle' ? ` · Ø ${f(m.centerDEff)}${u}` : ` · ${f(m.cutWEff)}×${f(m.cutHEff)}${u}`) : '';
         return `${short} · ${m.holes.length}× Ø ${f(m.holeDEff)}${u}${ctr}`;
       }
+      case 'portCutout': {
+        const m = typeof portCutoutMetrics === 'function' ? portCutoutMetrics(p) : null;
+        if (!m) return p.preset || 'Ausschnitt';
+        const short = m.label.split(' (')[0];
+        const dim = m.shape === 'circle' ? `Ø ${f(m.dEff)}${u}` : `${f(m.wEff)}×${f(m.hEff)}${u}`;
+        const hTxt = m.hasHoles && m.includeHoles ? ` · ${m.holes.length}× Ø ${f(m.holeDEff)}${u}` : '';
+        return `${short} · ${dim}${hTxt}`;
+      }
       case 'web': {
         const t = f(p.thickness ?? 2);
         const dep = (p.depth || 0) > 1e-4 ? ` · ${f(p.depth)}${u}` : '';
@@ -3315,7 +3364,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'mountPattern' || s.item.kind === 'portCutout' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || s.item.kind === 'stackHole' || s.item.kind === 'asmCut' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
@@ -3522,6 +3571,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, cableGeometry, cableMetrics, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, mountPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, withPartVariant, withSkeletonOverrides, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, cableGeometry, cableMetrics, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, mountPatternParams, portCutoutParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, withPartVariant, withSkeletonOverrides, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -1508,6 +1508,110 @@ function mountPatternMetrics(p = {}) {
   };
 }
 
+// Ausschnitte für Stecker, Buchsen, Schalter, Taster & kleine Displays (BI-18)
+const PORT_CUTOUT_GROUPS = [
+  { id: 'usb', label: 'USB & Daten' },
+  { id: 'av', label: 'HDMI & Audio (Klinke)' },
+  { id: 'net', label: 'Netzwerk & Karten (RJ45, SD)' },
+  { id: 'switch', label: 'Schalter & Taster' },
+  { id: 'display', label: 'Kleine Displays' },
+];
+const PORT_CUTOUTS = [
+  { id: 'usbc', group: 'usb', label: 'USB-C (Buchse)', shape: 'slot', w: 9.0, h: 3.5, source: 'USB Type-C Spec (IEC 62680-1-3)' },
+  { id: 'usbcPlug', group: 'usb', label: 'USB-C (Stecker-Durchgang)', shape: 'rect', w: 13.0, h: 7.0, r: 1.5, source: 'USB Type-C Spec (Stecker-Kappe)' },
+  { id: 'usba', group: 'usb', label: 'USB-A (Buchse)', shape: 'rect', w: 14.0, h: 6.5, r: 0, source: 'USB 2.0 / 3.0 Spec Typ A' },
+  { id: 'microUsb', group: 'usb', label: 'Micro-USB (Typ B)', shape: 'rect', w: 8.2, h: 3.3, r: 0.6, source: 'USB 2.0 Micro-B Spec' },
+  { id: 'hdmi', group: 'av', label: 'HDMI (Typ A, Standard)', shape: 'hdmi', w: 15.0, h: 5.5, chamfer: 1.5, source: 'HDMI Spec Typ A' },
+  { id: 'miniHdmi', group: 'av', label: 'Mini-HDMI (Typ C)', shape: 'hdmi', w: 11.4, h: 3.4, chamfer: 0.9, source: 'HDMI Spec Typ C' },
+  { id: 'microHdmi', group: 'av', label: 'Micro-HDMI (Typ D)', shape: 'hdmi', w: 7.2, h: 3.4, chamfer: 0.8, source: 'HDMI Spec Typ D' },
+  { id: 'jack35', group: 'av', label: 'Klinke 3,5 mm (Einbau)', shape: 'circle', d: 6.3, source: 'IEC 60603-11 / M6 Einbaubuchse' },
+  { id: 'jack635', group: 'av', label: 'Klinke 6,35 mm (1/4" Einbau)', shape: 'circle', d: 9.8, source: 'IEC 60603-11 / 3/8"-Buchse' },
+  { id: 'rj45', group: 'net', label: 'RJ45 (Ethernet / LAN)', shape: 'rect', w: 16.2, h: 13.8, r: 0, source: 'IEC 60603-7 / Amphenol RJHSE' },
+  { id: 'sd', group: 'net', label: 'SD-Karte (Standard)', shape: 'rect', w: 25.0, h: 2.8, r: 0, source: 'SD Card Spec (24 × 2,1 mm)' },
+  { id: 'microSd', group: 'net', label: 'microSD-Karte', shape: 'rect', w: 12.5, h: 2.0, r: 0, source: 'SD Card Spec (11 × 1,0 mm)' },
+  { id: 'rockerSmall', group: 'switch', label: 'Wippschalter klein (KCD1)', shape: 'rect', w: 19.2, h: 13.0, r: 0, source: 'KCD1-101 Datenblatt' },
+  { id: 'rockerStd', group: 'switch', label: 'Wippschalter groß (KCD4)', shape: 'rect', w: 28.5, h: 22.0, r: 0, source: 'KCD4 / Marquardt 1830' },
+  { id: 'toggle6', group: 'switch', label: 'Kippschalter M6 (Mini)', shape: 'circle', d: 6.3, source: 'MTS-102 / M6-Buchse' },
+  { id: 'toggle12', group: 'switch', label: 'Kippschalter M12 (Standard)', shape: 'circle', d: 12.2, source: 'DIN / M12-Kippschalter' },
+  { id: 'button12', group: 'switch', label: 'Drucktaster Ø 12 mm', shape: 'circle', d: 12.2, source: 'PBS-33B / Ø 12 mm Einbautaster' },
+  { id: 'button16', group: 'switch', label: 'Drucktaster Ø 16 mm', shape: 'circle', d: 16.2, source: 'M16 Einbautaster' },
+  { id: 'tact6', group: 'switch', label: 'Kurzhubtaster 6×6 mm (Stößel)', shape: 'circle', d: 4.0, source: 'Omron B3F (6×6 mm Taster)' },
+  { id: 'oled096', group: 'display', label: 'OLED 0,96" (128×64)', shape: 'rect', w: 24.5, h: 13.5, r: 0.5, pitchX: 23.0, pitchY: 23.0, holeD: 2.2, screw: 'M2', source: 'SSD1306 0,96" I2C-Modul' },
+  { id: 'oled130', group: 'display', label: 'OLED 1,3" (128×64)', shape: 'rect', w: 31.5, h: 17.5, r: 0.5, pitchX: 30.5, pitchY: 28.5, holeD: 2.2, screw: 'M2', source: 'SH1106 1,3" I2C-Modul' },
+  { id: 'lcd1602', group: 'display', label: 'LCD 1602 (16×2)', shape: 'rect', w: 71.5, h: 24.5, r: 0, pitchX: 75.0, pitchY: 31.0, holeD: 3.2, screw: 'M3', source: 'HD44780 1602 Datenblatt' },
+  { id: 'lcd2004', group: 'display', label: 'LCD 2004 (20×4)', shape: 'rect', w: 77.0, h: 26.5, r: 0, pitchX: 93.0, pitchY: 55.0, holeD: 3.2, screw: 'M3', source: 'HD44780 2004 Datenblatt' },
+];
+const PORT_CUTOUT_BY_ID = new Map(PORT_CUTOUTS.map((x) => [x.id, x]));
+function portCutoutDimSummary(e) {
+  const f = (v) => String(v).replace('.', ',');
+  let base;
+  if (e.shape === 'circle') base = `Ø ${f(e.d)} mm`;
+  else if (e.shape === 'slot') base = `${f(e.w)} × ${f(e.h)} mm · rund`;
+  else if (e.shape === 'hdmi') base = `${f(e.w)} × ${f(e.h)} mm · Fase`;
+  else base = `${f(e.w)} × ${f(e.h)} mm`;
+  return e.pitchX > 0 && e.pitchY > 0 ? `${base} · 4× ${e.screw || 'M2'}` : base;
+}
+const PORT_CUTOUT_GROUPED_OPTIONS = PORT_CUTOUT_GROUPS.map((g) => ({
+  group: g.label,
+  options: PORT_CUTOUTS.filter((x) => x.group === g.id).map((x) => [x.id, `${x.label} (${portCutoutDimSummary(x)})`]),
+}));
+function portCutoutEntry(id) {
+  return PORT_CUTOUT_BY_ID.get(String(id || 'usbc')) || PORT_CUTOUT_BY_ID.get('usbc') || PORT_CUTOUTS[0];
+}
+function portCutoutMetrics(p = {}) {
+  const e = portCutoutEntry(p.preset);
+  const pf = printFitMm(p.printFit);
+  const shape = e.shape;
+  let d = 0, dEff = 0, w = 0, h = 0, wEff = 0, hEff = 0, r = 0, rEff = 0, chamfer = 0, chamferEff = 0;
+  if (shape === 'circle') {
+    const rawD = Number(p.d);
+    d = p.d != null && p.d !== '' && isFinite(rawD) && rawD > 0 ? rawD : e.d;
+    dEff = round(d + pf, 3);
+  } else {
+    const rawW = Number(p.w), rawH = Number(p.h);
+    w = p.w != null && p.w !== '' && isFinite(rawW) && rawW > 0 ? rawW : e.w;
+    h = p.h != null && p.h !== '' && isFinite(rawH) && rawH > 0 ? rawH : e.h;
+    wEff = round(w + pf, 3);
+    hEff = round(h + pf, 3);
+    if (shape === 'slot') {
+      r = round(Math.min(w, h) / 2, 4);
+      rEff = round(Math.min(wEff, hEff) / 2, 4);
+    } else if (shape === 'rect') {
+      const rawR = Number(p.r);
+      r = Math.max(0, p.r != null && p.r !== '' && isFinite(rawR) ? rawR : (e.r || 0));
+      rEff = r > 0.05 ? round(Math.min(r, Math.min(wEff, hEff) / 2 - 0.02), 4) : 0;
+    } else if (shape === 'hdmi') {
+      const rawC = Number(p.chamfer);
+      chamfer = Math.max(0, p.chamfer != null && p.chamfer !== '' && isFinite(rawC) ? rawC : (e.chamfer || 1.5));
+      chamferEff = chamfer > 0.05 ? round(Math.min(chamfer, wEff * 0.35, hEff * 0.65), 4) : 0;
+    }
+  }
+  const hasHoles = !!(e.pitchX > 0 && e.pitchY > 0);
+  const includeHoles = hasHoles && p.includeHoles !== false;
+  let holeD = 0, holeDEff = 0, holes = [];
+  if (hasHoles) {
+    const rawHD = Number(p.holeD);
+    holeD = p.holeD != null && p.holeD !== '' && isFinite(rawHD) && rawHD > 0 ? rawHD : e.holeD;
+    holeDEff = round(holeD + pf, 3);
+    const hx = e.pitchX / 2, hy = e.pitchY / 2;
+    holes = [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
+  }
+  return {
+    ...e,
+    d, dEff,
+    w, h, wEff, hEff,
+    r, rEff,
+    chamfer, chamferEff,
+    hasHoles, includeHoles,
+    holeD, holeDEff, holes,
+    pf,
+    u: Number(p.u) || 0,
+    v: Number(p.v) || 0,
+    angle: Number(p.angle) || 0,
+    depth: Math.max(0, Number(p.depth) || 0),
+  };
+}
+
 // kleine Vorschaubilder der Grundkörper (isometrisch)
 function primitiveSVG(kind) {
   const A = 'var(--accent)', ink = 'var(--ink)';
