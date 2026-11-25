@@ -1898,5 +1898,10 @@
     "tip": "Doppelmaße in Millimetern und Zoll [eckige Klammer] je Blatt einblenden (Profi)",
     "hilfe": "Schreibt auf dem aktuellen Blatt hinter jedes Maß zusätzlich den umgerechneten Wert in Zoll in eckigen Klammern, zum Beispiel 25,4 [1.000]. Steht das Projekt auf Zoll, erscheint umgekehrt der Wert in Millimetern in Klammern.",
     "tipp": "Die Nachkommastellen der Zoll-Angabe (2, 3 oder 4 Stellen) kannst du direkt darunter unter „Maß-Stil“ wählen."
+  },
+  "drawingGdt": {
+    "tip": "Form- und Lagetoleranzen: Toleranzrahmen und Bezugsbuchstaben (A, B, C …) an Kanten oder Maßen (Profi)",
+    "hilfe": "Legt normgerechte Toleranzrahmen nach ISO 1101 für Geradheit, Ebenheit, Rundheit, Zylindrizität, Parallelität, Rechtwinkligkeit, Neigung, Position, Konzentrizität, Symmetrie sowie Rund- und Gesamtlauf auf das Blatt. Zuerst kannst du mit „Bezug setzen“ eine Kante oder ein Maß als Bezug A (B, C …) festlegen und danach den passenden Toleranzrahmen anhängen.",
+    "tipp": "Wählst du ein bestehendes Maß an, kannst du rechts direkt mit „+ Bezug“ oder „+ Rahmen“ einen Bezugsbuchstaben oder Toleranzrahmen genau unter das Maß hängen."
   }
 }
