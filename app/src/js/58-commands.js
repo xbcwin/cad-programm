@@ -445,6 +445,7 @@ const Commands = (() => {
     add('settings-scale', 'Oberflächen-Größe einstellen (80–150 %)', 'sliders', 'oberflaeche groesse skalierung zoom schrift groesser kleiner prozent 80 125 150 einstellungen', () => ViewPrefs.dialog('general', { focus: 'set-uiscale' }), { group: 'Ansicht' });
     add('install-app', 'Als App installieren (ohne Internet nutzen)', 'logo', 'app installieren pwa offline ohne internet homescreen dock einstellungen', () => ViewPrefs.dialog('general', { focus: 'set-pwa-box' }), { group: 'Ansicht' });
     add('high-contrast', 'Hoher Kontrast ein/aus', 'sun', 'kontrast hoher kontrast barrierefreiheit lesbarkeit a11y fokus be-24', () => ViewPrefs.toggle('highContrast'), { group: 'Ansicht' });
+    add('toggle-gestures', 'Trackpad-, Touch- und Stift-Gesten ein/aus', 'sliders', 'trackpad touch gesten stift pen pinch zoom langes druecken tablet ipad be-21', () => ViewPrefs.toggle('gestures'), { group: 'Ansicht' });
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer vorlage vorlagen zoll 3d-druck laser gehäuse anfangen', () => Start.newProjectDialog(), { group: 'Projekt' });
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });

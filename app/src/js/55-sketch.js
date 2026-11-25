@@ -866,10 +866,11 @@ const Sketch = (() => {
     if (d.a && !d.b && (S.tool === 'arc' || S.tool === 'slot')) return d.a;
     return null;
   }
+  let lastPtrType = 'mouse', penDown = false, lastPenAt = 0, skTouchDraft = null;
   function snap(uv, opts = {}) {
     if (opts.off) return { p: uv.slice(), guides: [], kind: null };
     const set = S.snapSet || defaultSnapSet();
-    const tol = pxSize() * 11;
+    const tol = pxSize() * (opts.pen ? 8 : opts.touch ? 15 : 11);
     const list = S.ents.filter((e) => !opts.exclude || !opts.exclude.includes(e.id));
     const pts = SK.snapPoints(list, S.refs);
     if (S.draft && S.draft.pts) for (const p of S.draft.pts) pts.push({ p, type: 'end' });
@@ -971,11 +972,12 @@ const Sketch = (() => {
   }
   function linePoint(uv0, e) {
     const shift = !!(e && e.shiftKey), alt = !!(e && e.altKey);
+    const pt = (e && e.pointerType) || lastPtrType;
     if (alt) return snap(uv0, { off: true });
     const a = S.draft.pts[S.draft.pts.length - 1];
     const prev = S.draft.last && ent(S.draft.last.id);
     const prevTan = prev && prev.type === 'arc' ? endTangent(prev, S.draft.last.end) : null;
-    const sn = snap(uv0, { fine: shift, off: false, noGrid: shift, noAlign: shift });
+    const sn = snap(uv0, { fine: shift, off: false, noGrid: shift, noAlign: shift, pen: pt === 'pen', touch: pt === 'touch' });
     const isGeomSnap = !!(sn.kind && sn.kind !== 'grid');
     if (isGeomSnap) return sn;
     if (prevTan) {
@@ -2122,7 +2124,7 @@ const Sketch = (() => {
     return true;
   }
   // ---------- Trimmen ----------
-  const tolPx = () => pxSize() * 9;
+  const tolPx = (pt = lastPtrType) => pxSize() * (pt === 'pen' ? 6 : pt === 'touch' ? 16 : 9);
   const SIMPLE = ['line', 'arc', 'circle', 'spline'];
   // Teilstück unter dem Mauszeiger als einfaches Element (bei Rechteck, Vieleck, Langloch nur die eine Kante bzw. der eine Bogen)
   function trimPart(hit, uv) {
@@ -2985,8 +2987,10 @@ const Sketch = (() => {
   function onDown(e) {
     if (!S || S.step) return stepDown(e);
     if (e.button !== 0) return;
+    lastPtrType = e.pointerType || 'mouse';
     const uv0 = mouseUV(e); if (!uv0) return;
-    const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey });
+    const hadDraft = !!S.draft;
+    const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, pen: lastPtrType === 'pen', touch: lastPtrType === 'touch' });
     let p = sn.p;
     const t = S.tool;
     if (S.locked && t !== 'select') { guardLocked(); return; }
@@ -3122,7 +3126,7 @@ const Sketch = (() => {
     }
     if (t.startsWith('c:')) { consPick(t === 'c:project' ? null : pickAt(uv0, { points: t !== 'c:curvature' }), e); return; }
     if (t === 'select') {
-      const tol = pxSize() * (e.pointerType === 'touch' ? 16 : 9);
+      const tol = tolPx(e.pointerType || 'mouse');
       if (S.locked) {
         const hit = SK.hit(S.ents, uv0, tol);
         if (hit) {
@@ -3408,6 +3412,13 @@ const Sketch = (() => {
         S.conicRho = rho;
         addEnt({ type: 'conic', a: S.draft.a, m: S.draft.m, b: S.draft.b, rho });
         S.draft = null; hideEntry(); UI.hint(hintFor('conic'));
+      }
+    }
+    if (!hadDraft && S.draft) {
+      if (e.pointerType === 'pen' && Viewer.gestures && ((t === 'rect' && !S.rect3) || (t === 'circle' && (!S.circMode || S.circMode === 'center')) || t === 'poly' || (t === 'line' && S.lineMode !== 'tan2'))) {
+        S.penStroke = { tool: t, x: e.clientX, y: e.clientY, id: e.pointerId };
+      } else if (e.pointerType === 'touch') {
+        skTouchDraft = { t: performance.now(), id: e.pointerId };
       }
     }
     reapply(); render(); Panels.renderRight();
@@ -4922,6 +4933,7 @@ const Sketch = (() => {
   let lastMouse = null;
   function onMove(e) {
     if (!S) return;
+    if (e.pointerType) lastPtrType = e.pointerType;
     if (S.step) {
       if (S.step.pickingFace) {
         const h2 = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: new Set(['__preview']) });
@@ -4944,7 +4956,7 @@ const Sketch = (() => {
     if (S.drag) {
       if (S.locked) { S.drag = null; S.dragPins = null; return; }
       if (S.drag.blockInst) {
-        const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, noLot: true, exclude: instEnts(S.drag.blockInst).map((x) => x.id) });
+        const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, noLot: true, pen: lastPtrType === 'pen', touch: lastPtrType === 'touch', exclude: instEnts(S.drag.blockInst).map((x) => x.id) });
         const dx = round(sn.p[0] - S.drag.start[0], 4), dy = round(sn.p[1] - S.drag.start[1], 4);
         if (Math.hypot(dx, dy) > 1e-6) S.dragged = true;
         updateBlockInst(S.drag.blockInst, { x: round(S.drag.orig.x + dx, 4), y: round(S.drag.orig.y + dy, 4) }, { noUndo: true, fast: true });
@@ -4977,7 +4989,7 @@ const Sketch = (() => {
         S.dragged = true;
         dragFrame(); return;
       }
-      const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, noLot: true, exclude: S.drag.move ? [S.drag.move] : S.drag.points.map(([en]) => en.id) });
+      const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, noLot: true, pen: lastPtrType === 'pen', touch: lastPtrType === 'touch', exclude: S.drag.move ? [S.drag.move] : S.drag.points.map(([en]) => en.id) });
       // Wunschlage festhalten, der Löser bewegt den Rest – Maße und Regeln gehen vor
       const pins = [];
       if (S.drag.points) for (const [en, k] of S.drag.points) pins.push([en.id, k + '0', sn.p[0]], [en.id, k + '1', sn.p[1]]);
@@ -5007,7 +5019,7 @@ const Sketch = (() => {
     if (S.tool === 'offset' || S.tool === 'mirror' || S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'patcurve' || S.tool === 'xmove') {
       const hv = SK.hit(S.ents, uv0, pxSize() * 9);
       S.hoverEnt = hv && !(S.tool === 'patcurve' && S.patPickCurve && !SKO.isCurveEnt(hv)) ? hv.id : null;
-      S.cursor = (S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick ? snap(uv0, { fine: e.shiftKey, off: e.altKey }) : null;
+      S.cursor = (S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick ? snap(uv0, { fine: e.shiftKey, off: e.altKey, pen: lastPtrType === 'pen', touch: lastPtrType === 'touch' }) : null;
       render(); return;
     }
     if (S.tool === 'project') {
@@ -5035,7 +5047,7 @@ const Sketch = (() => {
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
     } else {
-      S.cursor = snap(uv0, { fine: e.shiftKey, off: e.altKey });
+      S.cursor = snap(uv0, { fine: e.shiftKey, off: e.altKey, pen: lastPtrType === 'pen', touch: lastPtrType === 'touch' });
     }
     render();
   }
@@ -5046,6 +5058,15 @@ const Sketch = (() => {
     dragRaf = requestAnimationFrame(() => { dragRaf = 0; if (!S || !S.dragPins) return; reapply({ fast: true, pins: S.dragPins }); render(); });
   }
   function onUp(e) {
+    if (S && S.penStroke && e && e.pointerType === 'pen' && S.penStroke.id === e.pointerId) {
+      const ps = S.penStroke;
+      S.penStroke = null;
+      if (Viewer.gestures && S.draft && S.tool === ps.tool && Math.hypot(e.clientX - ps.x, e.clientY - ps.y) > 8) {
+        onDown({ clientX: e.clientX, clientY: e.clientY, button: 0, pointerId: e.pointerId, pointerType: 'pen', shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault() {} });
+        if (ps.tool === 'line' && S && S.draft) { S.draft = null; hideEntry(); updateLineHint(); render(); }
+        return;
+      }
+    }
     if (dimBox && dimBox._inp && document.body.contains(dimBox) && !dimBox.contains(e && e.target)) {
       if (document.activeElement !== dimBox._inp) {
         dimBox._inp.focus();
@@ -9583,17 +9604,24 @@ const Sketch = (() => {
     const cv = Viewer.canvas;
     const skTouches = new Set();
     let skTouchMulti = false;
+    const isPalmTouch = (e) => e.pointerType === 'touch' && Viewer.gestures && skTouches.size <= 1 && (penDown || performance.now() - lastPenAt < 450);
     cv.addEventListener('pointerdown', (e) => {
       if (S3) {
         if (e.button === 0) S3.downAt = [e.clientX, e.clientY];
         else if (e.button === 2) S3.rDownAt = [e.clientX, e.clientY];
         return;
       }
-      if (e.pointerType === 'touch') {
+      if (e.pointerType === 'pen') {
+        penDown = true; lastPenAt = performance.now(); lastPtrType = 'pen';
+        if (S && !S.step && e.button === 0) e.stopPropagation();
+      } else if (e.pointerType === 'touch') {
         skTouches.add(e.pointerId);
-        if (skTouches.size >= 2) {
+        if (Viewer.gestures && skTouches.size >= 2) {
           skTouchMulti = true;
           clearBand();
+          if (S && skTouchDraft && performance.now() - skTouchDraft.t < 220) {
+            S.draft = null; skTouchDraft = null; hideEntry(); render();
+          }
           if (S && S.drag) {
             if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
             if (!S.dragged && S.undo.length) S.undo.pop();
@@ -9601,17 +9629,21 @@ const Sketch = (() => {
           }
           return;
         }
+        if (isPalmTouch(e)) { e.stopPropagation(); e.preventDefault(); return; }
         if (skTouchMulti) return;
       }
       if (S) { onDown(e); }
     }, true);
     cv.addEventListener('pointermove', (e) => {
       if (S3) { onMove3d(e); return; }
+      if (e.pointerType === 'pen') { lastPenAt = performance.now(); lastPtrType = 'pen'; }
+      if (isPalmTouch(e)) { e.stopPropagation(); return; }
       if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2)) return;
       if (S) onMove(e);
     });
     window.addEventListener('pointermove', (e) => {
-      if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2)) return;
+      if (e.pointerType === 'pen') { lastPenAt = performance.now(); lastPtrType = 'pen'; }
+      if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2 || isPalmTouch(e))) return;
       if (S && S.guideDrag) { guideDragMove(e); return; }
       if (S && S.band) bandMove(e);
     });
@@ -9624,9 +9656,13 @@ const Sketch = (() => {
         }
         return;
       }
+      if (e.pointerType === 'pen') { penDown = false; lastPenAt = performance.now(); }
       if (e.pointerType === 'touch') {
+        const palm = isPalmTouch(e);
         skTouches.delete(e.pointerId);
+        if (skTouchDraft && skTouchDraft.id === e.pointerId) skTouchDraft = null;
         if (skTouchMulti) { if (skTouches.size === 0) skTouchMulti = false; return; }
+        if (palm) { e.stopPropagation(); return; }
       }
       if (S && S.guideDrag) { guideDragUp(e); return; }
       if (S) { onUp(e); stepUp(e); }
@@ -9638,10 +9674,13 @@ const Sketch = (() => {
       if (moved < 5 && S3.draft) { e.preventDefault(); e.stopPropagation(); end3dChain(); }
     }, true);
     window.addEventListener('pointercancel', (e) => {
+      if (e.pointerType === 'pen') { penDown = false; lastPenAt = performance.now(); }
       if (e.pointerType === 'touch') {
         skTouches.delete(e.pointerId);
+        if (skTouchDraft && skTouchDraft.id === e.pointerId) skTouchDraft = null;
         if (skTouchMulti) { if (skTouches.size === 0) skTouchMulti = false; return; }
       }
+      if (S && S.penStroke && S.penStroke.id === e.pointerId) S.penStroke = null;
       if (S && S.guideDrag) S.guideDrag = null;
       if (S && S.band) clearBand();
     });

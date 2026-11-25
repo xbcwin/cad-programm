@@ -631,7 +631,7 @@ const Handles = (() => {
 const Interact = (() => {
   let down = null, moving = null, hoverTimer = 0, lastHover = null, rdown = null, band = null;
   const activeTouches = new Map();
-  let touchMulti = false, longPressTimer = 0;
+  let touchMulti = false, longPressTimer = 0, longPressOpened = null;
   const clearLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = 0; } };
   function init() {
     const cv = Viewer.canvas;
@@ -731,16 +731,18 @@ const Interact = (() => {
       const dctx = top && typeof Joints !== 'undefined' && Joints.dragContext ? Joints.dragContext(App.doc, top.id) : null;
       if (top && !top.locked && !(dctx && dctx.blocked)) Viewer.controls.enabled = false; // Körper ziehen statt Ansicht drehen
     }
-    if (isTouch) {
+    if (isTouch && Viewer.gestures) {
       clearLongPress();
       const lx = e.clientX, ly = e.clientY, pid = e.pointerId;
       longPressTimer = setTimeout(() => {
         longPressTimer = 0;
-        if (!touchMulti && down && down.touch && down.id === pid && !down.moved && modelActive()) {
+        if (Viewer.gestures && !touchMulti && down && down.touch && down.id === pid && !down.moved && modelActive()) {
           down = null;
+          longPressOpened = pid;
+          Viewer.controls.enabled = false;
           contextMenu(lx, ly);
         }
-      }, 550);
+      }, 500);
     }
   }
   function onMove(e) {
@@ -1097,6 +1099,12 @@ const Interact = (() => {
     if (e.pointerType === 'touch') {
       activeTouches.delete(e.pointerId);
       clearLongPress();
+      if (longPressOpened != null && longPressOpened === e.pointerId) {
+        longPressOpened = null;
+        down = null;
+        Viewer.controls.enabled = true;
+        return;
+      }
       if (touchMulti) {
         if (activeTouches.size === 0) touchMulti = false;
         down = null; Viewer.controls.enabled = true;
@@ -1150,6 +1158,7 @@ const Interact = (() => {
     if (e.pointerType === 'touch') {
       activeTouches.delete(e.pointerId);
       if (activeTouches.size === 0) touchMulti = false;
+      if (longPressOpened === e.pointerId) longPressOpened = null;
     }
     clearLongPress();
     if (rdown) { if (rdown.timer) clearTimeout(rdown.timer); rdown = null; }
