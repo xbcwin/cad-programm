@@ -15587,7 +15587,7 @@ export function createKernel(R, oc) {
                 const inRem = remPolys.some((rp) => pointInPoly2D(pt, rp.outer) && !rp.holes.some((h) => pointInPoly2D(pt, h)));
                 if (!inRem) continue;
               }
-              caps.push({ ...poly, partIdx });
+              caps.push({ ...poly, partIdx, partId: s.id });
             } catch (_) {}
           }
         }

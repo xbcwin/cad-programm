@@ -34051,6 +34051,340 @@ def t_a167_kabel_schlaeuche(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a171_gewinde_und_materialschraffur(p):
+    # [A-171] Zeichnung (Profi): Gewinde-Darstellung nach Norm (ZE-20) und Schraffur je Material (ZE-28)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit Gewindebohrung M6', d => {
+        const box = Model.newItem('box', { w: 40, d: 30, h: 12 }, { name: 'Platte' });
+        d.items.push(box);
+        const tap = Model.newItem('part', { lib: 'screwHole', size: 'M6', head: 'none', fit: 'tap', length: 12 }, { name: 'Gewinde M6', role: 'hole' });
+        tap.t.z = 12;
+        Actions.attach(d, box.id, tap);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    def view_pt(view_name, u, v):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const vw = Drawing.layout.views[arg.view];
+          const pt = svg.createSVGPoint();
+          pt.x = vw.ox + arg.u * vw.s;
+          pt.y = vw.oy - arg.v * vw.s;
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, {'view': view_name, 'u': u, 'v': v})
+
+    # 1. Gewindebohrung M6: Dreiviertelkreis (270°) in Draufsicht, dünne Linien im Schnitt, Umschalter & DXF
+    p.pg.click('#t-section'); p.wait(150)
+    s0 = view_pt('top', -24, 0)
+    s1 = view_pt('top', 24, 0)
+    p.pg.mouse.move(s0[0], s0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(s1[0], s1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    th1 = p.ev("""return (async () => {
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tv = Drawing.layout.views.top;
+      const sec = Drawing.sections()[0];
+      const sv = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+      const ends = [...svg.querySelectorAll('polyline.thin.thread[data-view="top"][data-thread="end"]')].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const rs = pts.map(pt => Math.hypot(pt[0] - tv.ox, pt[1] - tv.oy));
+        const a0 = Math.atan2(-(pts[0][1] - tv.oy), pts[0][0] - tv.ox);
+        const a1 = Math.atan2(-(pts[pts.length - 1][1] - tv.oy), pts[pts.length - 1][0] - tv.ox);
+        let span = ((a1 - a0) * 180 / Math.PI + 360) % 360;
+        return {
+          kind: el.dataset.threadKind,
+          size: el.dataset.threadSize,
+          rExp: 3.0 * tv.s,
+          rMin: Math.min(...rs),
+          rMax: Math.max(...rs),
+          span,
+          nPts: pts.length,
+        };
+      });
+      const secSides = sec && sv ? [...svg.querySelectorAll(`polyline.thin.thread[data-view="sec_${sec.id}"][data-thread="side"]`)].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        return {
+          xDist: Math.abs(((pts[0][0] + pts[1][0]) * 0.5) - sv.ox),
+          expR: 3.0 * sv.s,
+        };
+      }) : [];
+      const dxf = await Drawing.buildDXF();
+      return {
+        ends,
+        secSides,
+        txt: svg.textContent || '',
+        summary: document.getElementById('dw-threads-summary')?.textContent || '',
+        dxfHasThread: !!(dxf && dxf.text && dxf.text.includes('GEWINDE') && dxf.text.includes('ARC')),
+      };
+    })()""")
+
+    p.pg.uncheck('#dw-norm-threads'); p.wait(250)
+    off_threads = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.thread').length")
+    p.ev("App.undo()"); p.wait(250)
+    p.ev("return Drawing.waitReady()"); p.wait(100)
+    undo_threads = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.thread').length")
+
+    ok1 = bool(
+        len(th1['ends']) == 1
+        and th1['ends'][0]['kind'] == 'int' and th1['ends'][0]['size'] == 'M6'
+        and abs(th1['ends'][0]['rMin'] - th1['ends'][0]['rExp']) < 0.25
+        and abs(th1['ends'][0]['rMax'] - th1['ends'][0]['rExp']) < 0.25
+        and 264 <= th1['ends'][0]['span'] <= 276
+        and 'M6' in th1['txt'] and 'M6' in th1['summary']
+        and len(th1['secSides']) == 2
+        and all(abs(x['xDist'] - x['expR']) < 0.25 for x in th1['secSides'])
+        and th1['dxfHasThread']
+        and off_threads == 0 and undo_threads >= 3
+    )
+
+    # 2. Außengewinde (stdScrew M6) & Normmutter (stdNut M6) sowie threadRod/threadHole-Erkennung
+    p.ev("""
+      App.change('Normschraube und Mutter M6', d => {
+        d.items = [];
+        d.drawing = null;
+        const scr = Model.newItem('part', { lib: 'stdScrew', size: 'M6', head: 'zyl', length: 14 }, { name: 'Schraube' });
+        scr.t.z = 14;
+        const nut = Model.newItem('part', { lib: 'stdNut', size: 'M6' }, { name: 'Mutter' });
+        nut.t.x = 24;
+        d.items.push(scr, nut);
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    ext_res = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tv = Drawing.layout.views.top;
+      const extEnds = [...svg.querySelectorAll('polyline.thin.thread[data-view="top"][data-thread="end"][data-thread-kind="ext"]')].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const cx = tv.ox, cy = tv.oy;
+        const rs = pts.map(pt => Math.hypot(pt[0] - cx, pt[1] - cy));
+        const a0 = Math.atan2(-(pts[0][1] - cy), pts[0][0] - cx);
+        const a1 = Math.atan2(-(pts[pts.length - 1][1] - cy), pts[pts.length - 1][0] - cx);
+        const span = ((a1 - a0) * 180 / Math.PI + 360) % 360;
+        return { rMin: Math.min(...rs), rMax: Math.max(...rs), rExp: 2.5 * tv.s, span };
+      });
+      const intEnds = [...svg.querySelectorAll('polyline.thin.thread[data-view="top"][data-thread="end"][data-thread-kind="int"]')].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const cx = tv.ox + 24 * tv.s, cy = tv.oy;
+        const rs = pts.map(pt => Math.hypot(pt[0] - cx, pt[1] - cy));
+        return { rMin: Math.min(...rs), rMax: Math.max(...rs), rExp: 3.0 * tv.s };
+      });
+      const frontSides = svg.querySelectorAll('polyline.thin.thread[data-view="front"][data-thread="side"][data-thread-kind="ext"]').length;
+      return { extEnds, intEnds, frontSides };
+    """)
+    rod_hole_chk = p.ev("""
+      const d0 = App.doc;
+      const box = Model.newItem('box', { w: 20, d: 20, h: 12 });
+      const rod = Model.newItem('part', { lib: 'threadRod', size: 'M6', length: 12 });
+      const hole = Model.newItem('part', { lib: 'threadHole', size: 'M6', length: 10 }, { role: 'hole' });
+      hole.t.z = 12;
+      const savedItems = d0.items;
+      d0.items = [box, rod, hole];
+      const ths = Drawing.threads();
+      d0.items = savedItems;
+      return {
+        hasRod: ths.some(t => t.source === 'threadRod' && t.kind === 'ext' && Math.abs(t.r - 3) < 0.05 && Math.abs(t.rThread - 2.5) < 0.05),
+        hasHole: ths.some(t => t.source === 'threadHole' && t.kind === 'int' && Math.abs(t.r - 2.5) < 0.05 && Math.abs(t.rThread - 3) < 0.05),
+      };
+    """)
+    ok2 = bool(
+        len(ext_res['extEnds']) == 1
+        and abs(ext_res['extEnds'][0]['rMin'] - ext_res['extEnds'][0]['rExp']) < 0.25
+        and abs(ext_res['extEnds'][0]['rMax'] - ext_res['extEnds'][0]['rExp']) < 0.25
+        and 264 <= ext_res['extEnds'][0]['span'] <= 276
+        and len(ext_res['intEnds']) == 1
+        and abs(ext_res['intEnds'][0]['rMin'] - ext_res['intEnds'][0]['rExp']) < 0.25
+        and abs(ext_res['intEnds'][0]['rMax'] - ext_res['intEnds'][0]['rExp']) < 0.25
+        and ext_res['frontSides'] >= 2
+        and rod_hole_chk['hasRod'] and rod_hole_chk['hasHole']
+    )
+
+    # 3. Schraffur je Werkstoff: Alu 6061 (Doppellinien) vs. PLA Kunststoff (Kreuzschraffur)
+    p.ev("""
+      App.change('Alu und Kunststoff', d => {
+        d.items = [];
+        d.drawing = null;
+        const alu = Model.newItem('box', { w: 30, d: 30, h: 16 }, { name: 'Alu-Block', mat: 'Alu 6061' });
+        alu.t.x = -20;
+        const pla = Model.newItem('box', { w: 30, d: 30, h: 16 }, { name: 'Kunststoff-Block', mat: 'PLA' });
+        pla.t.x = 20;
+        d.items.push(alu, pla);
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    p.pg.click('#t-section'); p.wait(150)
+    a0 = view_pt('top', -38, 0)
+    a1 = view_pt('top', 38, 0)
+    p.pg.mouse.move(a0[0], a0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(a1[0], a1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()"); p.wait(150)
+
+    def read_mat_hatches():
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[0];
+          const byMat = {};
+          const lines = sec ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)] : [];
+          for (const el of lines) {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const dx = pts[1][0] - pts[0][0], dy = pts[1][1] - pts[0][1];
+            const mx = (pts[0][0] + pts[1][0]) * 0.5, my = (pts[0][1] + pts[1][1]) * 0.5;
+            const mat = el.dataset.mat || 'none';
+            const rec = {
+              pat: el.dataset.hatchPat || '',
+              dash: el.classList.contains('hatch-dash'),
+              dx, dy, mx, my,
+              slope: Math.atan2(dy, dx),
+              pos: dx * dy < 0,
+              neg: dx * dy > 0,
+            };
+            (byMat[mat] = byMat[mat] || []).push(rec);
+          }
+          const gapStats = (arr) => {
+            if (!arr || arr.length < 3) return null;
+            const ref = arr[0];
+            const L = Math.hypot(ref.dx, ref.dy) || 1;
+            const nx = -ref.dy / L, ny = ref.dx / L;
+            const bs = arr.map(x => x.mx * nx + x.my * ny).sort((p, q) => p - q);
+            const diffs = [];
+            for (let i = 1; i < bs.length; i++) if (bs[i] - bs[i - 1] > 0.05) diffs.push(bs[i] - bs[i - 1]);
+            if (diffs.length < 2) return null;
+            return { min: Math.min(...diffs), max: Math.max(...diffs), ratio: Math.max(...diffs) / Math.min(...diffs) };
+          };
+          return {
+            byMat,
+            aluGaps: gapStats(byMat['Alu 6061']),
+            steelGaps: gapStats(byMat['Baustahl']),
+            legend: document.getElementById('dw-hatch-legend')?.textContent || '',
+          };
+        """)
+
+    h3 = read_mat_hatches()
+    alu_l = h3['byMat'].get('Alu 6061') or []
+    pla_l = h3['byMat'].get('PLA') or []
+    ok3 = bool(
+        len(alu_l) >= 6 and len(pla_l) >= 6
+        and all(x['pat'] == 'alu' for x in alu_l)
+        and (all(x['pos'] for x in alu_l) or all(x['neg'] for x in alu_l))
+        and h3['aluGaps'] and h3['aluGaps']['ratio'] > 2.2
+        and all(x['pat'] == 'plastic' for x in pla_l)
+        and any(x['pos'] for x in pla_l) and any(x['neg'] for x in pla_l)
+        and 'Alu 6061' in h3['legend'] and 'PLA' in h3['legend']
+    )
+
+    # 4. Weitere Werkstoffe (Baustahl, Messing, Buche) und Umschalter #dw-mat-hatch
+    p.ev("""
+      App.change('Stahl und Messing', d => {
+        d.items[0].mat = 'Baustahl';
+        d.items[1].mat = 'Messing';
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    h4a = read_mat_hatches()
+    st_l = h4a['byMat'].get('Baustahl') or []
+    br_l = h4a['byMat'].get('Messing') or []
+
+    p.ev("App.change('Buche', d => { d.items[1].mat = 'Buche'; })")
+    warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    h4b = read_mat_hatches()
+    wd_l = h4b['byMat'].get('Buche') or []
+
+    p.pg.uncheck('#dw-mat-hatch'); p.wait(250)
+    off_mat = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const hs = [...svg.querySelectorAll('polyline.hatch')];
+      return { n: hs.length, allSteel: hs.every(el => el.dataset.hatchPat === 'steel'), anyDash: hs.some(el => el.classList.contains('hatch-dash')) };
+    """)
+    p.ev("App.undo()"); p.wait(250)
+    p.ev("return Drawing.waitReady()"); p.wait(100)
+    undo_mat = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg polyline.hatch')].some(el => el.dataset.hatchPat === 'wood')")
+
+    ok4 = bool(
+        len(st_l) >= 4 and all(x['pat'] == 'steel' and not x['dash'] for x in st_l)
+        and h4a['steelGaps'] and h4a['steelGaps']['ratio'] < 1.25
+        and len(br_l) >= 4 and all(x['pat'] == 'brass' for x in br_l)
+        and any(x['dash'] for x in br_l) and any(not x['dash'] for x in br_l)
+        and len(wd_l) >= 4 and all(x['pat'] == 'wood' for x in wd_l)
+        and any(x['dash'] for x in wd_l)
+        and all(abs(x['dx']) > abs(x['dy']) * 1.4 for x in wd_l)
+        and off_mat['n'] >= 6 and off_mat['allSteel'] and not off_mat['anyDash']
+        and undo_mat
+    )
+
+    # 5. Profi-Trennung, PDF/DXF, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_chk = p.ev("""
+      return {
+        hasNormSec: !!document.getElementById('dw-norm-sec'),
+        cmdT: Commands.search('gewinde nach norm').some(c => c.id === 'drawingNormThreads'),
+        cmdH: Commands.search('schraffur je werkstoff').some(c => c.id === 'drawingMaterialHatch'),
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      return {
+        normSec: !!document.getElementById('dw-norm-sec'),
+        shFlags: Drawing.activeSheet().normThreads === true && Drawing.activeSheet().materialHatch === true,
+        valOk: Store.validateProject(App.doc).ok,
+        pdfOk: pdfStr.startsWith('%PDF-1.4'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('SCHRAFFUR') && dxf.stats.lines > 10),
+        helpOk: !!(wh.drawingNormThreads?.tip && wh.drawingNormThreads?.hilfe && wh.drawingNormThreads?.tipp
+          && wh.drawingMaterialHatch?.tip && wh.drawingMaterialHatch?.hilfe && wh.drawingMaterialHatch?.tipp),
+        i18nOk: deK.length === enK.length && deK.every((k, i) => k === enK[i]),
+        cmdsOk: Commands.search('gewinde nach norm').some(c => c.id === 'drawingNormThreads')
+          && Commands.search('schraffur je werkstoff').some(c => c.id === 'drawingMaterialHatch'),
+      };
+    })()""")
+
+    ok5 = bool(
+        not simple_chk['hasNormSec'] and not simple_chk['cmdT'] and not simple_chk['cmdH']
+        and meta['normSec'] and meta['shFlags'] and meta['valOk']
+        and meta['pdfOk'] and meta['dxfOk']
+        and meta['helpOk'] and meta['i18nOk'] and meta['cmdsOk']
+        and len(p.errs) == 0
+    )
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a170_zeichnung_explosion_projektion(p):
     # [A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)
     p.empty()
@@ -34814,6 +35148,7 @@ TESTS = [
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
+    ('[A-171] Zeichnung: Gewinde-Darstellung und Schraffur je Material', t_a171_gewinde_und_materialschraffur),
     ('[A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)', t_a170_zeichnung_explosion_projektion),
     ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

@@ -1659,6 +1659,16 @@
     "hilfe": "Wähle den Außenmantel eines Zylinders oder einer Welle und klicke auf „Rändel“. Du kannst zwischen gekreuztem Rändel (Diamantmuster), geraden Rillen und schrägen Rillen wählen sowie Teilung, Tiefe, Winkel und Länge exakt festlegen.",
     "tipp": "Der maximale Außendurchmesser bleibt beim Rändeln erhalten – die Spitzen liegen genau auf dem ursprünglichen Zylindermantel."
   },
+  "drawingNormThreads": {
+    "tip": "Gewinde in der Zeichnung nach Norm als Dreiviertelkreis und dünne Linien darstellen (Profi)",
+    "hilfe": "Zeichnet alle Gewinde im Modell (Gewindebohrungen, gedruckte Innengewinde, Gewindebolzen, Normschrauben, Muttern und kosmetische Gewinde) nach DIN ISO 6410-1: In der Draufsicht erscheint ein dünner Dreiviertelkreis (270°), in der Seiten- und Schnittansicht dünne parallele Linien samt Gewindegrenze.",
+    "tipp": "Bei Durchgangs- und Sacklochgewinden steht in der Bemaßung automatisch das Gewindemaß wie „M6“ statt nur der Bohrloch-Durchmesser."
+  },
+  "drawingMaterialHatch": {
+    "tip": "Schnittflächen in der Zeichnung je nach Werkstoff unterschiedlich schraffieren (Profi)",
+    "hilfe": "Passt die Schraffur jeder geschnittenen Fläche automatisch an den zugewiesenen Werkstoff des Bauteils an (z. B. einfache 45°-Linien für Stahl, Doppellinien für Aluminium, abwechselnde Strichlinien für Messing/Kupfer und Kreuzschraffur für Kunststoffe).",
+    "tipp": "Eine kleine Legende direkt darunter zeigt dir alle im Modell verwendeten Werkstoffe und ihre Schraffur-Muster auf einen Blick."
+  },
   "gripPattern": {
     "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
     "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",

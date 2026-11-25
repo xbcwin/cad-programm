@@ -2809,6 +2809,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject`, `HELP.asmCable`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-cable`, `asm-cable-pick`) laufen ohne JS-Fehler (`t_a167_kabel_schlaeuche`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus zwei Bauteile in einer Baugruppe platzieren, über „Kabel / Schlauch → Im 3D-Bild wählen“ beide Anschlüsse direkt auf Flächen klicken, Durchhang oder Zwischenpunkt hinzufügen, ein Bauteil verschieben und die aktualisierte Länge in der Stückliste prüfen.
 
+## Zeichnung: Gewinde nach Norm und Schraffur je Material (Auto [A-171], ZE-20, ZE-28)
+
+- [x] **Gewindebohrung & Außengewinde nach Norm (ZE-20)**: Gewindebohrung `M6` (`screwHole`, `fit: 'tap'`) zeigt in der Draufsicht einen dünnen Dreiviertelkreis (270°, Ø 6 mm) und im Schnitt dünne parallele Linien samt `M6`-Bemaßung; `threadRod` und `stdScrew` M6 zeigen in der Draufsicht den inneren Dreiviertelkreis (Ø 5 mm) und in der Vorderansicht dünne Seitenlinien; `#dw-norm-threads` schaltet aus und per `App.undo()` wieder ein (`t_a171_gewinde_und_materialschraffur`).
+- [x] **Schraffur je Werkstoff (ZE-28)**: Schnitt A–A durch ein Teil aus `Alu 6061` und eines aus `PLA` schraffiert Aluminium mit 45°-Doppellinien-Paaren und Kunststoff mit 45°/135°-Kreuzschraffur; `Baustahl` zeigt einfache 45°-Linien, `Messing` abwechselnd Voll-/Strichlinien, `Buche` 30°-Linien mit Strich-Voll-Wechsel; `#dw-hatch-legend` und `#dw-mat-hatch` (inkl. Undo) arbeiten korrekt (`t_a171_gewinde_und_materialschraffur`).
+- [x] **Profi-Trennung, PDF/DXF, Speichern/Laden, Hilfen & i18n**: Im Einfach-Modus verborgen; PDF (`%PDF-1.4`) und DXF (Layer `GEWINDE` mit `ARC` sowie `SCHRAFFUR`), `Store.validateProject`, `HELP.drawingNormThreads`/`HELP.drawingMaterialHatch`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a171_gewinde_und_materialschraffur`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe aus Aluminium-Platte (mit M6-Gewindebohrung und Zylinderschraube) und Kunststoff-Deckel schneiden, die Werkstoff-Legende prüfen und die Zeichnung als PDF und DXF öffnen.
+
 ## Zeichnung: Explosionsansicht und Projektion umschalten (Auto [A-170], ZE-18, ZE-19)
 
 - [x] **Explosionsansicht auf dem Blatt (ZE-18)**: Baugruppe aus drei Teilen legt über `#dw-add-explode` eine Explosionsansicht mit deutlich größerer Bounding-Box als die normale Isometrie und gestrichelten Wegen-Linien (`.explode-trail`) an; Abstand (`130 %`) vergrößert den Versatz weiter, Wegen-Linien sind ein-/ausblendbar (`t_a170_zeichnung_explosion_projektion`).
