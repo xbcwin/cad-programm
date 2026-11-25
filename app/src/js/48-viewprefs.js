@@ -584,13 +584,60 @@ const ViewPrefs = (() => {
     }
     lightsSec.append(manChk, listWrap, lightActs, h('div', { class: 'vb-hint' }, T('look.lightMaxHint')));
 
+    const dsSec = (!simple() && typeof Assembly !== 'undefined' && Assembly.displayStates && (Assembly.isAssembly() || Assembly.displayStates().length))
+      ? (() => {
+        const list = Assembly.displayStates();
+        const act = Assembly.activeDisplayState ? Assembly.activeDisplayState() : null;
+        const sec = h('div', { class: 'look-sec pro', id: 'look-ds-sec', 'data-help': 'displayStates' },
+          h('div', { class: 'look-sec-h' }, T('asm.dsHeading')),
+        );
+        if (list.length) {
+          const chips = h('div', { class: 'ds-chips' });
+          for (const ds of list) {
+            const on = act && act.id === ds.id;
+            const b = h('button', {
+              type: 'button',
+              class: 'btn small ds-chip' + (on ? ' primary' : ''),
+              'aria-pressed': on ? 'true' : 'false',
+              dataset: { dsApply: ds.id, dsName: ds.name },
+            }, ds.name);
+            b.onclick = () => Assembly.applyDisplayState(ds.id);
+            chips.append(b);
+          }
+          sec.append(chips);
+        } else {
+          sec.append(h('div', { class: 'vb-hint' }, T('asm.dsEmptyHint')));
+        }
+        const saveBtn = h('button', { type: 'button', class: 'btn small', id: 'look-ds-save' }, T('asm.dsSaveShort'));
+        saveBtn.onclick = () => Assembly.promptSaveDisplayState();
+        const manBtn = h('button', { type: 'button', class: 'btn small', id: 'look-ds-manage' }, T('asm.dsManageBtn'));
+        manBtn.onclick = () => Assembly.displayStateDialog();
+        sec.append(h('div', { class: 'btn-row' }, saveBtn, manBtn));
+        return sec;
+      })()
+      : null;
+
     lookPanel.append(head, floorSec, envSec, lightsSec);
+    if (dsSec) lookPanel.append(dsSec);
+  }
+  function applyDisplayState(ds) {
+    if (ds && ds.display && VALID_DISPLAY.has(ds.display) && v.display !== ds.display) {
+      set({ display: ds.display });
+      return true;
+    }
+    return false;
+  }
+  function refreshLookPanel() {
+    if (lookPanel && lookPanel.isConnected) renderLookPanel();
   }
   function openLookPanel() {
     if (!lookPanelHooksBound) {
       lookPanelHooksBound = true;
       if (typeof I18n !== 'undefined' && I18n.on) I18n.on('change', () => { if (lookPanel && lookPanel.isConnected) renderLookPanel(); });
-      if (typeof App !== 'undefined' && App.on) App.on('mode', () => { if (App.mode !== 'model') closeLookPanel(); });
+      if (typeof App !== 'undefined' && App.on) {
+        App.on('mode', () => { if (App.mode !== 'model') closeLookPanel(); });
+        App.on('doc', () => { if (lookPanel && lookPanel.isConnected) renderLookPanel(); });
+      }
     }
     if (lookPanel && lookPanel.isConnected) {
       renderLookPanel();
@@ -883,6 +930,6 @@ const ViewPrefs = (() => {
     openDialogState = { handle: modalHandle, get tab() { return curTab; } };
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
-  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, get highContrast() { return !!v.highContrast; }, setHighContrast, get gestures() { return v.gestures !== false; }, setGestures, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, get highContrast() { return !!v.highContrast; }, setHighContrast, get gestures() { return v.gestures !== false; }, setGestures, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, applyDisplayState, refreshLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 

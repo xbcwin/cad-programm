@@ -1798,5 +1798,15 @@
     "tip": "Teil in der Baugruppe spiegeln (verknüpfte Kopie)",
     "hilfe": "Erzeugt eine gespiegelte, verknüpfte Kopie des gewählten Teils an einer Grund- oder Bezugsebene. Änderungen an der Vorlage übernehmen sich automatisch auf das Spiegelbild.",
     "tipp": "Verschiebst du die Spiegelebene über den Abstand, wandert die gespiegelte Kopie direkt mit."
+  },
+  "displayStates": {
+    "tip": "Anzeige-Zustände: speichern, welche Teile sichtbar, durchsichtig oder farbig sind (Profi)",
+    "hilfe": "Merkt sich für jedes Teil der Baugruppe Sichtbarkeit, Durchsichtigkeit, eigene Farbe sowie die Darstellungsart unter einem Namen wie „ohne Deckel“ oder „Innenleben“. Ein Klick schaltet die ganze Ansicht sofort um, ohne am Modell etwas zu ändern.",
+    "tipp": "Du findest die Anzeige-Zustände im Verlauf, rechts im Projekt-Panel, im Ansichtsmenü und im Studio-Licht-Panel."
+  },
+  "asmVariants": {
+    "tip": "Varianten für Baugruppen: verschiedene Längen, aktive Teile oder Ersatz-Bauteile umschalten (Profi)",
+    "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
+    "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
   }
 }

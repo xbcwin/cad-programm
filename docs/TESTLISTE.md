@@ -2740,6 +2740,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Auflösen, Entfernen, Validierung, i18n, Hilfen & Befehlssuche**: `dissolvePattern`, `removePattern`, `Store.validateProject`, Speichern/Laden mit `doc.asmPatterns`, DE/EN-Schlüsselgleichheit, `HELP.asmPattern`/`HELP.asmMirror` und Befehlssuche (`asm-pattern-rect`, `asm-pattern-circ`, `asm-mirror-part`) laufen ohne Fehler (`t_a162_baugruppe_spiegeln_muster`).
 - [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus in einer Baugruppe ein Bauteil einsetzen, über „Muster / Spiegeln“ ein Rechteck-, Kreis- und Spiegelmuster anlegen, Abstände rechts ändern und das Original im Bauteil-Tab umbauen.
 
+## Anzeige-Zustände und Varianten für Baugruppen (Auto [A-163], BG-27, BG-28)
+
+- [x] **Anzeige-Zustand „ohne Deckel“ speichern & umschalten (BG-27)**: Im Profi-Modus lassen sich Sichtbarkeit (`hidden`), Durchsichtigkeit (`opacity`) und eigene Farbe (`colorSet`/`color`) sowie die Darstellungsart (`ViewPrefs.display` über `48-viewprefs.js`) als Anzeige-Zustand speichern (`#proj-ds-save`, `#ds-tree`, `#look-ds-sec`) und umschalten; in „ohne Deckel“ wird der Deckel sofort unsichtbar (`obj.visible === false`), das Gehäuse durchsichtig und die Platine farbig, und `Strg+Z` macht das Umschalten rückgängig (`t_a163_anzeige_zustaende_varianten`).
+- [x] **Baugruppen-Varianten mit anderen Maßen & Teilen (BG-28)**: Variante „Standard“ (`Laenge = 60`) und Variante „lang“ (`Laenge = 120`, Teil unterdrückt) ändern die 3D-Länge des Gehäuses exakt zwischen `60 mm` und `120 mm`; im `asmVariantDialog` lassen sich außerdem eingesetzte `ref`-Teile gegen andere Bauteile („Schiene kurz“ ↔ „Schiene lang“) sowie Bauteil-Varianten (`variantId` in `10-model.js`) umschalten (`t_a163_anzeige_zustaende_varianten`).
+- [x] **Profi-Schutz, Validierung, Speichern/Laden, i18n, Hilfen & Befehlssuche**: Im Einfach-Modus sind die Bereiche ausgeblendet und Dialoge/Prompts geben `null` zurück; `Store.validateProject`, Speichern/Laden mit `displayStates` und `asmVariants`, `HELP.displayStates`/`HELP.asmVariants`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-display-state-save`, `asm-variant-save` …) laufen ohne JS-Fehler (`t_a163_anzeige_zustaende_varianten`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Teilen öffnen, einen Anzeige-Zustand mit ausgeblendetem Deckel und durchsichtigem Gehäuse anlegen, eine Baugruppen-Variante mit geändertem Maß oder Ersatzteil über „Verwalten“ einrichten und im Studio-Licht-Panel sowie Ansichtsmenü umschalten.
+
 ## Fehler melden
 
 ```

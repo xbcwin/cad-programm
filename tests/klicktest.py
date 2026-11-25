@@ -32058,6 +32058,288 @@ def t_a162_baugruppe_spiegeln_muster(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a163_anzeige_zustaende_varianten(p):
+    # [A-163] Baugruppe (Profi): Anzeige-Zustände (BG-27) und Varianten (BG-28)
+    p.empty()
+    p.ev("""
+      ViewPrefs.set({ level: 'pro', firstStart: false, display: 'edges' });
+      const d = Model.newDoc('Gehäuse-Baugruppe', { docType: 'assembly' });
+      d.params.push({ id: 'm_laenge', name: 'Laenge', expr: 60 });
+      const g = Model.newItem('box', { w: 'Laenge', d: 40, h: 20 }, { name: 'Gehäuse' });
+      const l = Model.newItem('box', { w: 60, d: 40, h: 4 }, { name: 'Deckel', more: { t: { x: 0, y: 0, z: 20, rx: 0, ry: 0, rz: 0 } } });
+      const b = Model.newItem('box', { w: 40, d: 30, h: 2 }, { name: 'Platine', more: { t: { x: 0, y: 0, z: 2, rx: 0, ry: 0, rz: 0 } } });
+      d.items.push(g, l, b);
+      App.setDoc(d);
+    """)
+    warte_rechnen(p, 30)
+    ids = p.ev("""
+      const items = App.doc.items;
+      return {
+        housingId: items.find(x => x.name === 'Gehäuse').id,
+        lidId: items.find(x => x.name === 'Deckel').id,
+        pcbId: items.find(x => x.name === 'Platine').id,
+      };
+    """)
+    housing_id, lid_id, pcb_id = ids['housingId'], ids['lidId'], ids['pcbId']
+
+    # 1. Anzeige-Zustände (BG-27): "Standard" & "ohne Deckel" speichern, umschalten, Look-Panel & Undo
+    p.ev("App.clearSelection();"); p.wait(150)
+    p.pg.fill('#proj-ds-name', 'Standard'); p.wait(80)
+    p.pg.click('#proj-ds-save'); p.wait(250)
+
+    p.ev("""App.change('Ohne Deckel vorbereiten', d => {
+      const h = d.items.find(x => x.id === arg.housingId);
+      const l = d.items.find(x => x.id === arg.lidId);
+      const p = d.items.find(x => x.id === arg.pcbId);
+      l.hidden = true;
+      h.opacity = 0.35;
+      p.color = '#d93838';
+      p.colorSet = true;
+    });""", ids)
+    warte_rechnen(p, 20)
+    p.pg.fill('#proj-ds-name', 'ohne Deckel'); p.wait(80)
+    p.pg.click('#proj-ds-save'); p.wait(250)
+
+    p.pg.click('#proj-ds-sec .ds-chip[data-ds-name="Standard"]'); p.wait(300)
+    st_std = p.ev("""
+      const h = App.doc.items.find(x => x.id === arg.housingId);
+      const l = App.doc.items.find(x => x.id === arg.lidId);
+      const b = App.doc.items.find(x => x.id === arg.pcbId);
+      const nl = Viewer.nodes.get(arg.lidId);
+      return {
+        lidHidden: !!l.hidden,
+        lidVisible: !!(nl && nl.obj.visible),
+        housingOp: h.opacity ?? null,
+        pcbColorSet: !!b.colorSet,
+      };
+    """, ids)
+
+    p.pg.click('#proj-ds-sec .ds-chip[data-ds-name="ohne Deckel"]'); p.wait(300)
+    st_no_lid = p.ev("""
+      const h = App.doc.items.find(x => x.id === arg.housingId);
+      const l = App.doc.items.find(x => x.id === arg.lidId);
+      const b = App.doc.items.find(x => x.id === arg.pcbId);
+      const nl = Viewer.nodes.get(arg.lidId);
+      const nh = Viewer.nodes.get(arg.housingId);
+      return {
+        lidHidden: !!l.hidden,
+        lidVisible: !!(nl && nl.obj.visible),
+        housingOp: h.opacity ?? null,
+        housingMatOp: nh && nh.mesh && nh.mesh.material ? nh.mesh.material.opacity : 1,
+        pcbColorSet: !!b.colorSet,
+        pcbColor: b.color,
+      };
+    """, ids)
+
+    p.ev("ViewPrefs.openLookPanel();"); p.wait(200)
+    look_has = p.ev("return !!document.querySelector('#look-ds-sec .ds-chip[data-ds-name=\"Standard\"]');")
+    p.pg.click('#look-ds-sec .ds-chip[data-ds-name="Standard"]'); p.wait(250)
+    after_look = p.ev("""
+      const l = App.doc.items.find(x => x.id === arg);
+      const nl = Viewer.nodes.get(arg);
+      return { lidHidden: !!l.hidden, lidVisible: !!(nl && nl.obj.visible) };
+    """, lid_id)
+    p.ev("ViewPrefs.closeLookPanel(); App.undo();"); p.wait(250)
+    after_undo_ds = p.ev("""
+      const l = App.doc.items.find(x => x.id === arg);
+      return !!l.hidden;
+    """, lid_id)
+
+    ok1 = (
+        st_std['lidHidden'] is False and st_std['lidVisible'] is True
+        and st_std['housingOp'] is None and st_std['pcbColorSet'] is False
+        and st_no_lid['lidHidden'] is True and st_no_lid['lidVisible'] is False
+        and abs((st_no_lid['housingOp'] or 0) - 0.35) < 0.02
+        and st_no_lid['housingMatOp'] < 0.5
+        and st_no_lid['pcbColorSet'] is True and str(st_no_lid['pcbColor']).lower() == '#d93838'
+        and bool(look_has)
+        and after_look['lidHidden'] is False and after_look['lidVisible'] is True
+        and after_undo_ds is True
+    )
+
+    # 2. Dialog & Darstellungsart (48-viewprefs.js)
+    p.pg.click('#proj-ds-manage'); p.wait(200)
+    p.pg.select_option('#ds-dlg-sel', label='ohne Deckel'); p.wait(150)
+    p.pg.select_option('#ds-dlg-mode', 'shaded'); p.wait(200)
+    p.pg.click('.modal .actions .btn.primary'); p.wait(200)
+    disp_shaded = p.ev("return ViewPrefs.get().display;")
+    p.pg.click('#ds-tree .ds-row[data-ds-name="Standard"]'); p.wait(200)
+    disp_edges = p.ev("return ViewPrefs.get().display;")
+    p.pg.click('#ds-tree .ds-row[data-ds-name="ohne Deckel"]'); p.wait(200)
+    disp_shaded2 = p.ev("return ViewPrefs.get().display;")
+    p.pg.click('#ds-tree .ds-row[data-ds-name="Standard"]'); p.wait(200)
+    ok2 = (disp_shaded == 'shaded' and disp_edges == 'edges' and disp_shaded2 == 'shaded')
+
+    # 3. Baugruppen-Variante "lang" zeigt andere Länge + Teil unterdrücken (BG-28)
+    p.pg.fill('#proj-av-name', 'Standard'); p.wait(80)
+    p.pg.click('#proj-av-save'); p.wait(200)
+    p.pg.fill('#proj-av-name', 'lang'); p.wait(80)
+    p.pg.click('#proj-av-save'); p.wait(200)
+
+    p.pg.click('#proj-av-manage'); p.wait(200)
+    p.pg.select_option('#av-dlg-sel', label='lang'); p.wait(150)
+    p.pg.fill('#av-dlg-params input.av-param-inp[data-av-param="Laenge"]', '120')
+    p.pg.dispatch_event('#av-dlg-params input.av-param-inp[data-av-param="Laenge"]', 'change'); p.wait(150)
+    p.pg.click(f'#av-parts-table input.av-act-chk[data-item-id="{pcb_id}"]'); p.wait(150)
+    p.pg.click('.modal .actions .btn.primary'); p.wait(250)
+    warte_rechnen(p, 30)
+
+    var_long = p.ev("""
+      const wb = Actions.worldBox(arg.housingId);
+      const pcb = App.doc.items.find(x => x.id === arg.pcbId);
+      return { lenX: wb ? wb.max.x - wb.min.x : 0, pcbSup: !!(pcb && pcb.suppressed) };
+    """, ids)
+
+    p.pg.click('#proj-av-sec .av-chip[data-av-name="Standard"]'); p.wait(250)
+    warte_rechnen(p, 30)
+    var_std = p.ev("""
+      const wb = Actions.worldBox(arg.housingId);
+      const pcb = App.doc.items.find(x => x.id === arg.pcbId);
+      return { lenX: wb ? wb.max.x - wb.min.x : 0, pcbSup: !!(pcb && pcb.suppressed) };
+    """, ids)
+
+    p.pg.click('#proj-av-sec .av-chip[data-av-name="lang"]'); p.wait(250)
+    warte_rechnen(p, 30)
+    var_long2 = p.ev("""
+      const wb = Actions.worldBox(arg.housingId);
+      return wb ? wb.max.x - wb.min.x : 0;
+    """, ids)
+    p.ev("App.undo();"); p.wait(250); warte_rechnen(p, 25)
+    var_undo = p.ev("""
+      const wb = Actions.worldBox(arg.housingId);
+      return wb ? wb.max.x - wb.min.x : 0;
+    """, ids)
+
+    ok3 = (
+        abs(var_long['lenX'] - 120.0) < 0.2 and var_long['pcbSup'] is True
+        and abs(var_std['lenX'] - 60.0) < 0.2 and var_std['pcbSup'] is False
+        and abs(var_long2 - 120.0) < 0.2
+        and abs(var_undo - 60.0) < 0.2
+    )
+
+    # 4. Andere Teile in Variante tauschen (ref) & Bauteil-Variante je ref umschalten
+    ref_ids = p.ev("""return (async () => {
+      const pShort = Model.newDoc('Schiene kurz', { docType: 'part' });
+      pShort.items.push(Model.newItem('box', { w: 40, d: 10, h: 10 }, { name: 'Schiene kurz' }));
+      await Store.saveProject(pShort, 1, { keepLast: true });
+
+      const pLong = Model.newDoc('Schiene lang', { docType: 'part' });
+      pLong.items.push(Model.newItem('box', { w: 100, d: 10, h: 10 }, { name: 'Schiene lang' }));
+      await Store.saveProject(pLong, 1, { keepLast: true });
+
+      const pHolder = Model.newDoc('Halter', { docType: 'part' });
+      pHolder.params.push({ id: 'm_breite', name: 'Breite', expr: 30 });
+      pHolder.items.push(Model.newItem('box', { w: 'Breite', d: 12, h: 8 }, { name: 'Halter' }));
+      pHolder.variants = [
+        { id: 'v_schmal', name: 'schmal', values: { Breite: 30 }, suppressed: [] },
+        { id: 'v_breit', name: 'breit', values: { Breite: 70 }, suppressed: [] },
+      ];
+      pHolder.variant = 'v_schmal';
+      await Store.saveProject(pHolder, 1, { keepLast: true });
+
+      const railItem = await Comp.insertPart(pShort.id, { pos: [0, 60, 0] });
+      const holderItem = await Comp.insertPart(pHolder.id, { pos: [0, -60, 0] });
+      Assembly.updateAsmVariant('Standard');
+      App.clearSelection();
+      return {
+        shortDocId: pShort.id,
+        longDocId: pLong.id,
+        railRefId: railItem.id,
+        holderRefId: holderItem.id,
+      };
+    })();""")
+    warte_rechnen(p, 35)
+
+    p.pg.click('#proj-av-sec .av-chip[data-av-name="lang"]'); p.wait(250)
+    warte_rechnen(p, 25)
+    p.pg.click('#proj-av-manage'); p.wait(200)
+    p.pg.select_option(f'#av-parts-table select.av-ref-doc[data-item-id="{ref_ids["railRefId"]}"]', ref_ids['longDocId']); p.wait(150)
+    p.pg.select_option(f'#av-parts-table select.av-ref-var[data-item-id="{ref_ids["holderRefId"]}"]', 'v_breit'); p.wait(150)
+    p.pg.click('.modal .actions .btn.primary'); p.wait(300)
+    warte_rechnen(p, 35)
+
+    ref_long = p.ev("""
+      const rb = Actions.worldBox(arg.railRefId);
+      const hb = Actions.worldBox(arg.holderRefId);
+      return {
+        railX: rb ? rb.max.x - rb.min.x : 0,
+        holderX: hb ? hb.max.x - hb.min.x : 0,
+      };
+    """, ref_ids)
+
+    p.pg.click('#asm-var-tree .av-row[data-av-name="Standard"]'); p.wait(300)
+    warte_rechnen(p, 35)
+    ref_std = p.ev("""
+      const rb = Actions.worldBox(arg.railRefId);
+      const hb = Actions.worldBox(arg.holderRefId);
+      return {
+        railX: rb ? rb.max.x - rb.min.x : 0,
+        holderX: hb ? hb.max.x - hb.min.x : 0,
+      };
+    """, ref_ids)
+
+    p.pg.click('#asm-var-tree .av-row[data-av-name="lang"]'); p.wait(300)
+    warte_rechnen(p, 35)
+    ref_long2 = p.ev("""
+      const rb = Actions.worldBox(arg.railRefId);
+      const hb = Actions.worldBox(arg.holderRefId);
+      return {
+        railX: rb ? rb.max.x - rb.min.x : 0,
+        holderX: hb ? hb.max.x - hb.min.x : 0,
+      };
+    """, ref_ids)
+
+    ok4 = (
+        abs(ref_long['railX'] - 100.0) < 0.3 and abs(ref_long['holderX'] - 70.0) < 0.3
+        and abs(ref_std['railX'] - 40.0) < 0.3 and abs(ref_std['holderX'] - 30.0) < 0.3
+        and abs(ref_long2['railX'] - 100.0) < 0.3 and abs(ref_long2['holderX'] - 70.0) < 0.3
+    )
+
+    # 5. Profi-Schutz, Validierung, Speichern/Laden, i18n, Hilfen & Befehlssuche
+    meta = p.ev("""return (async () => {
+      ViewPrefs.setLevel('simple');
+      const hiddenIds = ['#ds-tree', '#asm-var-tree', '#proj-ds-sec', '#proj-av-sec'];
+      const allHidden = hiddenIds.every(sel => {
+        const el = document.querySelector(sel);
+        return !el || el.offsetParent === null;
+      });
+      const dlgSimpleBlocked = Assembly.displayStateDialog() === null && Assembly.asmVariantDialog() === null;
+      const cmdsSimpleBlocked = Commands.search('anzeige zustand').length === 0 && Commands.search('baugruppen variante').length === 0;
+
+      ViewPrefs.setLevel('pro');
+      const val = Store.validateProject(App.doc);
+      const saved = await Store.saveProject(App.doc, Model.countItems(App.doc));
+      const loaded = await Store.loadProject(App.doc.id);
+      const dsLoaded = loaded && Array.isArray(loaded.displayStates) ? loaded.displayStates.length : 0;
+      const avLoaded = loaded && Array.isArray(loaded.asmVariants) ? loaded.asmVariants.length : 0;
+
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = ['displayStates', 'asmVariants'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('anzeige zustand speichern').some(c => c.id === 'asm-display-state-save');
+      const c2 = Commands.search('anzeige zustaende verwalten').some(c => c.id === 'asm-display-state-manage');
+      const c3 = Commands.search('baugruppe variante speichern').some(c => c.id === 'asm-variant-save');
+      const c4 = Commands.search('baugruppe varianten verwalten').some(c => c.id === 'asm-variant-manage');
+      return {
+        allHidden, dlgSimpleBlocked, cmdsSimpleBlocked,
+        valOk: val.ok, saved, dsLoaded, avLoaded,
+        hOk, i18nOk, cmds: c1 && c2 && c3 && c4,
+      };
+    })();""")
+    ok5 = bool(
+        meta['allHidden'] and meta['dlgSimpleBlocked'] and meta['cmdsSimpleBlocked']
+        and meta['valOk'] and meta['saved'] and meta['dsLoaded'] == 2 and meta['avLoaded'] == 2
+        and meta['hOk'] and meta['i18nOk'] and meta['cmds']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -32331,6 +32613,7 @@ TESTS = [
     ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
     ('[A-160] Schrauben automatisch einsetzen: Bohrungen erkennen, M5-Schrauben & Stückliste (BG-23)', t_a160_schrauben_einsetzen),
     ('[A-162] Baugruppe: Teile spiegeln, Rechteck- und Kreismuster als verknüpfte Kopien', t_a162_baugruppe_spiegeln_muster),
+    ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
