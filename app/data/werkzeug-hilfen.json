@@ -1728,5 +1728,20 @@
     "tip": "Beispiel-Galerie: fertige CAD-Projekte als eigene Kopie zum Ausprobieren öffnen",
     "hilfe": "Hier findest du eine Sammlung fertiger Projekte – vom Handyhalter über Zahnräder und eine gedrehte Vase bis hin zur beweglichen Scharnier-Baugruppe und einer technischen Zeichnung. Ein Klick öffnet immer eine frische Kopie für dich, sodass du nach Lust und Laune ändern kannst.",
     "tipp": "Schau bei den Beispielen in den Verlauf und unter „Maße“ – dort siehst du, wie andere Teile sauber und änderbar aufgebaut sind."
+  },
+  "coupleScrew": {
+    "tip": "Schrauben-Kopplung: Drehen erzeugt Vorschub je Umdrehung (Profi)",
+    "hilfe": "Koppelt eine Drehbewegung mit einer Schiebebewegung – entweder direkt an einem zylindrischen Gelenk (Schraube im Gewinde) oder zwischen einer Gewindespindel und einem Schlitten. Bei 360° Drehung bewegt sich das Teil genau um die eingestellte Steigung in Millimetern weiter.",
+    "tipp": "Aktiviere „Linksgewinde“, wenn sich das Teil beim Drehen in die entgegengesetzte Richtung verschieben soll."
+  },
+  "coupleBelt": {
+    "tip": "Riemen-Kopplung: Zwei Räder drehen mit gleicher Umfangsgeschwindigkeit (Profi)",
+    "hilfe": "Verbindet zwei Drehgelenke über Zähnezahlen oder Raddurchmesser wie bei einem Zahn- oder Keilriemen. Hat Rad 1 beispielsweise 20 Zähne und Rad 2 40 Zähne, dreht Rad 2 genau halb so schnell wie Rad 1 – und beim Drehen von Rad 2 läuft Rad 1 doppelt so schnell mit.",
+    "tipp": "Schalte „Gekreuzter Riemen“ ein, damit sich das zweite Rad entgegengesetzt dreht."
+  },
+  "coupleLinear": {
+    "tip": "Lineare Kopplung: Zwei Schiebebewegungen im festen Verhältnis koppeln (Profi)",
+    "hilfe": "Verbindet zwei Schiebegelenke (oder Schubrichtungen) so, dass sich das zweite Teil immer im eingestellten Verhältnis mitbewegt – zum Beispiel 1:1 synchron, 2:1 doppelt so weit oder gegenläufig bei umgekehrter Richtung.",
+    "tipp": "Die Kopplung wirkt in beide Richtungen: Egal welches der beiden Teile du schiebst oder ziehst, das andere folgt sofort."
   }
 }
