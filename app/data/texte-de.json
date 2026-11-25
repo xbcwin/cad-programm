@@ -4971,5 +4971,9 @@
   "draw.panel.finishBtn": "Zeichnung fertig machen",
   "draw.finishToast": "Zeichnung fertig: {views} Ansichten, {dims} Maße, Maßstab {scale}.",
   "draw.finishEmptyToast": "Noch kein Modell vorhanden – bau zuerst etwas im Reiter „Modell“.",
-  "draw.finishDefaultTitle": "Bauteil"
+  "draw.finishDefaultTitle": "Bauteil",
+  "panel.item.helicalGearHint": "Teilkreis <b>{d}</b> · Kopfkreis <b>{da}</b> · Fußkreis <b>{df}</b> · Normalmodul {mn} · Schrägung {beta} (Verdrehung {twist}).",
+  "panel.item.addHelicalMate": "Passendes Gegenrad hinzufügen",
+  "panel.item.bevelGearHint": "Teilkreis <b>{d}</b> · Kopfkreis außen <b>{da}</b> · Kegelwinkel <b>{delta}</b> (Gegenrad {delta2}) · Kegeldistanz R<sub>e</sub> = {re} · Breite {b} · Spitzenmaß {apex}.",
+  "panel.item.addBevelMate": "Passendes Gegenrad hinzufügen"
 }

@@ -1973,5 +1973,15 @@
     "tip": "Zeichnung auf Knopfdruck mit Ansichten, Maßstab, Maßen, Mittellinien und Schriftfeld fertig machen",
     "hilfe": "Schaltet Vorder-, Drauf-, Seiten- und isometrische Ansicht ein, wählt einen passenden Standard-Maßstab ohne Überlauf über den Blattrand, übernimmt die Maße aus dem Modell ohne Überlappen, blendet Mittellinien an allen Bohrungen und Zylindern ein und füllt leere Felder im Schriftfeld automatisch aus.",
     "tipp": "Du kannst jederzeit einzelne Maße, Ansichten oder Schriftfeld-Angaben nachträglich ändern – und mit Rückgängig stellst du den vorherigen Stand wieder her."
+  },
+  "helicalGear": {
+    "tip": "Schrägverzahntes Stirnrad oder Pfeilverzahnung mit Modul, Zähnezahl und Schrägungswinkel (Profi)",
+    "hilfe": "Erzeugt ein Stirnrad mit schrägen Evolventen-Zähnen (rechtssteigend, linkssteigend oder als Pfeilverzahnung). Kopfkreis (m · (z + 2)) und Teilkreis (m · z) stimmen exakt mit geraden Stirnrädern desselben Stirnmoduls überein; über „Passendes Gegenrad hinzufügen“ setzt Tracery direkt ein gegensinnig schräges Rad im richtigen Achsabstand.",
+    "tipp": "Schrägzahnräder brauchen für parallele Wellen eine entgegengesetzte Steigung (rechts ↔ links) – mit „Pfeilverzahnung“ heben sich axiale Kräfte ganz auf."
+  },
+  "bevelGear": {
+    "tip": "Geradverzahntes Kegelrad für abgewinkelte Wellen (z. B. 90°-Winkelgetriebe, Profi)",
+    "hilfe": "Erzeugt ein Kegelrad nach der Tredgold-Näherung mit wählbarem Modul, eigener Zähnezahl, Gegenrad-Zähnezahl und Achswinkel (Standard 90°). Der Kegelwinkel wird automatisch passend zur Übersetzung berechnet, und über „Passendes Gegenrad hinzufügen“ entsteht sofort das im Achswinkel greifende Paar mit gemeinsamer Kegelspitze.",
+    "tipp": "Lass „Kegelwinkel“, „Zahnbreite“ und „Rückenhöhe“ leer für automatische Normwerte – oder trag eigene Maße ein, wenn du ein bestehendes Gehäuse nachbaust."
   }
 }

@@ -384,5 +384,15 @@
     "was": "Schneidet einen geschlossenen Skizzen-Umriss als Schritt der Baugruppe gleichzeitig durch mehrere Teile.",
     "wozu": "Ideal für gemeinsame Aussparungen, Kabeldurchführungen oder Fenster über mehrere gestapelte Baugruppen-Teile hinweg.",
     "achtung": "Wie bei der Stapelbohrung bleiben alle geschnittenen Teile eigene Körper, und die verknüpften Bauteil-Dokumente bleiben unverändert."
+  },
+  "helicalGear": {
+    "was": "Erzeugt ein Stirnrad mit schrägen Evolventen-Zähnen (rechtssteigend, linkssteigend oder als Pfeilverzahnung) nach Stirnmodul, Zähnezahl und Schrägungswinkel.",
+    "wozu": "Läuft ruhiger und trägt höhere Kräfte als ein gerades Zahnrad; über „Passendes Gegenrad hinzufügen“ entsteht direkt ein kämmendes Paar im richtigen Achsabstand.",
+    "achtung": "Auf parallelen Wellen muss das Gegenrad denselben Modul und Schrägungswinkel, aber die entgegengesetzte Steigungsrichtung (rechts ↔ links) haben."
+  },
+  "bevelGear": {
+    "was": "Erzeugt ein geradverzahntes Kegelrad mit berechneten Kegelwinkeln für abgewinkelte Antriebswellen (Standard 90°).",
+    "wozu": "Überträgt Drehbewegungen über Eck, z. B. im Winkelgetriebe, Differential oder Handrad-Antrieb.",
+    "achtung": "Beide Kegelräder müssen denselben Modul und abgestimmte Zähnezahlen haben und ihre Kegelspitzen am Schnittpunkt der Achsen treffen."
   }
 }

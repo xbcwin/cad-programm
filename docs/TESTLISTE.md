@@ -2907,6 +2907,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export, Validierung, Hilfen, I18n & Befehlssuche**: `buildPDFBytes()`, `buildSVGString()`, `buildDXF()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP.drawingFinish`, DE/EN-Schlüsselgleichheit und `Commands.search('zeichnung fertig machen')` bestehen ohne JS-Fehler (`t_a180_zeichnung_fertig_machen`).
 - [ ] **Von Hand**: Im Browser ein beliebiges Bauteil mit mehreren Bohrungen in „Zeichnung“ öffnen, auf „Zeichnung fertig machen“ klicken und die gedruckte/gespeicherte PDF-Vorschau auf Vollständigkeit und Ränder prüfen.
 
+## Bibliothek: Zahnräder schräg und Kegel (Auto [A-183], BI-11)
+
+- [x] **Profi-Trennung & Oberfläche**: Im Profi-Modus sind die Kacheln `helicalGear` („Schrägzahnrad“) und `bevelGear` („Kegelrad“) im Bauteile-Menü `#t-parts` sichtbar (mit `.pro` und `data-help`) und über die Befehlssuche (`Commands.search`) auffindbar; im Einfach-Modus bleiben Kacheln und Befehle ausgeblendet (`t_a183_zahnraeder_schraeg_kegel`).
+- [x] **Schrägzahnrad (Modul 1, 20 Zähne → Kopfkreis 22 mm)**: Baut fehlerfrei mit positivem Volumen, exakten Hüllmaßen `dx ≈ 22,0 mm`, `dy ≈ 22,0 mm` und `dz ≈ 8,0 mm`, zeigt `22 mm` Kopfkreis in `#p-helicalgear-hint`, unterstützt Pfeilverzahnung (`hand: 'double'`) und erzeugt per `#btn-add-helical-mate` ein linkssteigendes Gegenrad im Achsabstand 20 mm ohne Durchdringung (`t_a183_zahnraeder_schraeg_kegel`).
+- [x] **Kegelrad-Paar 90° ohne Durchdringung**: Kegelrad (`teeth: 20, mateTeeth: 20, module: 1.5, shaftAngle: 90`) und per `#btn-add-bevel-mate` angelegtes 90°-Gegenrad greifen räumlich ineinander (überlappende Hüllboxen) und bestehen `Kernel.clashes` mit `0` Durchdringungen – sowohl beim 1:1-Paar (20/20 Zähne, 45°) als auch beim asymmetrischen 90°-Paar (16/24 Zähne) (`t_a183_zahnraeder_schraeg_kegel`).
+- [x] **Rückgängig, Validierung, Hilfen, Erklärungen & I18n**: `App.undo()`/`redo()`, `Store.validateProject()`, Synchronität von `werkzeug-hilfen.json`/`HELP`, Einträge in `schritt-erklaerungen.json`, DE/EN-Schlüsselgleichheit und Ausführung ohne JS-Konsolenfehler sind geprüft (`t_a183_zahnraeder_schraeg_kegel`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus über „Bauteile“ ein Schrägzahnrad und ein Kegelrad einfügen, per „Passendes Gegenrad hinzufügen“ paaren, aus verschiedenen Blickwinkeln das Ineinandergreifen der Zähne ansehen und optional über Kopplungen drehen.
+
 ## Fehler melden
 
 ```
