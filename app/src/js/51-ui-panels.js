@@ -2446,6 +2446,46 @@ const Panels = (() => {
             App.select([wm.id]);
           };
           row.append(wBtn); sec.append(row);
+        } else if (def.lib === 'helicalGear' && typeof helicalGearMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const g = helicalGearMetrics(rp);
+          sec.append(h('div', { id: 'p-helicalgear-hint', class: 'hint-box', html: T('panel.item.helicalGearHint', { d: Units.fmtLenU(g.d, 2), da: Units.fmtLenU(g.da, 2), df: Units.fmtLenU(g.df, 2), mn: Units.fmtLenU(g.mn, 3), beta: fmtAngleU(g.betaDeg), twist: fmtAngleU(g.twistDeg) }) }));
+          const row = h('div', { class: 'btn-row' });
+          const mateBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-helical-mate' }, T('panel.item.addHelicalMate'));
+          mateBtn.onclick = () => {
+            const mate = helicalGearMateTransform(rp, it.t);
+            let added = null;
+            App.change('Gegenrad (Schrägzahnrad) hinzugefügt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              const col = it.color === '#e2b53a' ? '#5b9f55' : '#e2b53a';
+              added = Model.newItem('part', { lib: 'helicalGear', ...mate.params }, { name: 'Schrägzahnrad (Gegenrad)', role: 'solid', color: col, mat: it.mat });
+              Object.assign(added.t, mate.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          row.append(mateBtn); sec.append(row);
+        } else if (def.lib === 'bevelGear' && typeof bevelGearMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const g = bevelGearMetrics(rp);
+          sec.append(h('div', { id: 'p-bevelgear-hint', class: 'hint-box', html: T('panel.item.bevelGearHint', { d: Units.fmtLenU(g.d, 2), da: Units.fmtLenU(g.da, 2), delta: fmtAngleU(g.deltaDeg), delta2: fmtAngleU(g.mateDeltaDeg), re: Units.fmtLenU(g.Re, 2), b: Units.fmtLenU(g.b, 2), apex: Units.fmtLenU(g.zApex, 2) }) }));
+          const row = h('div', { class: 'btn-row' });
+          const mateBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-bevel-mate' }, T('panel.item.addBevelMate'));
+          mateBtn.onclick = () => {
+            const mate = bevelGearMateTransform(rp, it.t);
+            let added = null;
+            App.change('Gegenrad (Kegelrad) hinzugefügt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              const col = it.color === '#e2b53a' ? '#5b9f55' : '#e2b53a';
+              added = Model.newItem('part', { lib: 'bevelGear', ...mate.params }, { name: `Kegelrad (${mate.m2.z} Zähne)`, role: 'solid', color: col, mat: it.mat });
+              Object.assign(added.t, mate.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          row.append(mateBtn); sec.append(row);
         }
         w.append(sec);
       }

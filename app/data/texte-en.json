@@ -5023,5 +5023,9 @@
   "draw.panel.finishBtn": "Auto-complete drawing",
   "draw.finishToast": "Drawing ready: {views} views, {dims} dimensions, scale {scale}.",
   "draw.finishEmptyToast": "No model yet – build something in the Model tab first.",
-  "draw.finishDefaultTitle": "Part"
+  "draw.finishDefaultTitle": "Part",
+  "panel.item.helicalGearHint": "Pitch Ø <b>{d}</b> · Tip Ø <b>{da}</b> · Root Ø <b>{df}</b> · Normal module {mn} · Helix {beta} (twist {twist}).",
+  "panel.item.addHelicalMate": "Add mating helical gear",
+  "panel.item.bevelGearHint": "Pitch Ø <b>{d}</b> · Outer tip Ø <b>{da}</b> · Cone angle <b>{delta}</b> (mate {delta2}) · Cone distance R<sub>e</sub> = {re} · Face width {b} · Apex height {apex}.",
+  "panel.item.addBevelMate": "Add mating bevel gear"
 }

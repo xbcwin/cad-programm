@@ -2023,5 +2023,15 @@
     "tip": "Schrägverzahntes Schneckenrad passend zu Modul und Schnecke (Profi)",
     "hilfe": "Erzeugt ein Zahnrad, dessen Zähne genau um den Steigungswinkel γ der zugehörigen Schnecke geneigt sind. Stelle denselben Modul, Schnecken-Durchmesser, Gangzahl und Steigungsrichtung ein – rechts siehst du sofort Übersetzung und Achsabstand a = (d₁ + d₂) / 2.",
     "tipp": "Nutze den Knopf „Passende Schnecke hinzufügen“ im Panel rechts, um beide Teile sofort passend auszurichten."
+  },
+  "helicalGear": {
+    "tip": "Schrägverzahntes Stirnrad oder Pfeilverzahnung mit Modul, Zähnezahl und Schrägungswinkel (Profi)",
+    "hilfe": "Erzeugt ein Stirnrad mit schrägen Evolventen-Zähnen (rechtssteigend, linkssteigend oder als Pfeilverzahnung). Kopfkreis (m · (z + 2)) und Teilkreis (m · z) stimmen exakt mit geraden Stirnrädern desselben Stirnmoduls überein; über „Passendes Gegenrad hinzufügen“ setzt Tracery direkt ein gegensinnig schräges Rad im richtigen Achsabstand.",
+    "tipp": "Schrägzahnräder brauchen für parallele Wellen eine entgegengesetzte Steigung (rechts ↔ links) – mit „Pfeilverzahnung“ heben sich axiale Kräfte ganz auf."
+  },
+  "bevelGear": {
+    "tip": "Geradverzahntes Kegelrad für abgewinkelte Wellen (z. B. 90°-Winkelgetriebe, Profi)",
+    "hilfe": "Erzeugt ein Kegelrad nach der Tredgold-Näherung mit wählbarem Modul, eigener Zähnezahl, Gegenrad-Zähnezahl und Achswinkel (Standard 90°). Der Kegelwinkel wird automatisch passend zur Übersetzung berechnet, und über „Passendes Gegenrad hinzufügen“ entsteht sofort das im Achswinkel greifende Paar mit gemeinsamer Kegelspitze.",
+    "tipp": "Lass „Kegelwinkel“, „Zahnbreite“ und „Rückenhöhe“ leer für automatische Normwerte – oder trag eigene Maße ein, wenn du ein bestehendes Gehäuse nachbaust."
   }
 }

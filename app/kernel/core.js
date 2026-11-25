@@ -4666,6 +4666,12 @@ export function createKernel(R, oc) {
     if (lib === 'gearRack') return buildGearRack(p);
     if (lib === 'worm') return buildWorm(p);
     if (lib === 'wormWheel') return buildWormWheel(p);
+    if (lib === 'helicalGear') {
+      return buildHelicalGear(p);
+    }
+    if (lib === 'bevelGear') {
+      return buildBevelGear(p);
+    }
     if (lib === 'aeroBody') return buildAeroBody(p);
     if (lib === 'armFairing') return buildArmFairing(p);
     if (lib === 'motorFairing') return buildMotorFairing(p);
@@ -5205,6 +5211,295 @@ export function createKernel(R, oc) {
         safeDelete(g);
         g = cut;
       } finally { safeDelete(cyl); }
+    }
+    return g;
+  }
+  function buildInvoluteGearWire(z, m, alphaDeg = 20, backlash = 0, zPlane = 0) {
+    const alpha = (alphaDeg * Math.PI) / 180;
+    const rp = (m * z) / 2, rb = rp * Math.cos(alpha), ra = rp + m, rf = Math.max(0.5, rp - 1.25 * m);
+    const inv = (a) => Math.tan(a) - a;
+    const tooth = (2 * Math.PI) / z;
+    const half = Math.PI / (2 * z) - backlash / rp + inv(alpha);
+    const rStart = Math.max(rb, rf);
+    const P = (r, a) => [r * Math.cos(a), r * Math.sin(a), zPlane];
+    const flankAng = (r) => Math.max(0, half - inv(Math.acos(Math.min(1, rb / r))));
+    const N = 7;
+    const edges = [];
+    for (let i = 0; i < z; i++) {
+      const c = i * tooth;
+      const right = [], left = [];
+      for (let k = 0; k <= N; k++) { const r = rStart + ((ra - rStart) * k) / N; right.push(P(r, c - flankAng(r))); }
+      for (let k = N; k >= 0; k--) { const r = rStart + ((ra - rStart) * k) / N; left.push(P(r, c + flankAng(r))); }
+      if (rf < rStart - 1e-6) edges.push(R.makeLine(P(rf, c - flankAng(rStart)), right[0]));
+      edges.push(R.makeBSplineApproximation(right, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const tipA = c - flankAng(ra), tipB = c + flankAng(ra);
+      if (tipB - tipA > 1e-4) edges.push(R.makeThreePointArc(right[N], P(ra, c), left[0]));
+      else if (Math.hypot(right[N][0] - left[0][0], right[N][1] - left[0][1]) > 1e-5) edges.push(R.makeLine(right[N], left[0]));
+      edges.push(R.makeBSplineApproximation(left, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const rootA = c + flankAng(rStart);
+      const endL = rf < rStart - 1e-6 ? P(rf, rootA) : left[N];
+      if (rf < rStart - 1e-6) edges.push(R.makeLine(left[N], endL));
+      const nextA = c + tooth - flankAng(rStart);
+      const nextStart = P(rf < rStart - 1e-6 ? rf : rStart, nextA);
+      if (nextA - rootA > 1e-4) edges.push(R.makeThreePointArc(endL, P(rf < rStart - 1e-6 ? rf : rStart, (rootA + nextA) / 2), nextStart));
+      else if (Math.hypot(endL[0] - nextStart[0], endL[1] - nextStart[1]) > 1e-5) edges.push(R.makeLine(endL, nextStart));
+    }
+    try {
+      return R.assembleWire(edges);
+    } catch (_) {
+      for (const e of edges) safeDelete(e);
+      const pts = [];
+      for (let i = 0; i < z; i++) {
+        const c = i * tooth;
+        for (let k = 0; k <= 5; k++) { const r = rStart + ((ra - rStart) * k) / 5; pts.push(P(r, c - flankAng(r))); }
+        for (let k = 5; k >= 0; k--) { const r = rStart + ((ra - rStart) * k) / 5; pts.push(P(r, c + flankAng(r))); }
+      }
+      const lineEdges = pts.map((pt, i) => R.makeLine(pt, pts[(i + 1) % pts.length]));
+      return R.assembleWire(lineEdges);
+    }
+  }
+  function buildHelicalGear(p) {
+    const z = Math.max(6, Math.min(120, Math.round(num(p.teeth, 20))));
+    const m = Math.max(0.2, num(p.module, 1.5));
+    const h = Math.max(0.5, num(p.h, 8));
+    const betaDeg = Math.max(0, Math.min(45, num(p.helixAngle, 20)));
+    const betaRad = (betaDeg * Math.PI) / 180;
+    const hand = p.hand === 'left' || p.hand === 'double' ? p.hand : 'right';
+    const bore = Math.max(0, num(p.bore, 5));
+    const rp = (m * z) / 2;
+    const rf = Math.max(0.5, rp - 1.25 * m);
+    const baseWire = buildInvoluteGearWire(z, m, 20, 0.03 * m, 0);
+    let g = null;
+    if (betaDeg < 0.05) {
+      let face = null;
+      try {
+        face = R.makeFace(baseWire);
+        g = R.basicFaceExtrusion(face, new R.Vector([0, 0, h]));
+      } finally {
+        safeDelete(face);
+        safeDelete(baseWire);
+      }
+    } else {
+      const ow = baseWire.wrapped;
+      const maxStepDeg = Math.min(4.5, 45 / z);
+      const buildLoftedHelix = (slices, isRuled) => {
+        const cleanup = [];
+        let ts = null;
+        try {
+          ts = new oc.BRepOffsetAPI_ThruSections(true, isRuled, 1e-4);
+          if (typeof ts.CheckCompatibility === 'function') ts.CheckCompatibility(false);
+          for (const [dz, ang] of slices) {
+            const c = Math.cos(ang), s = Math.sin(ang);
+            const trsf = new oc.gp_Trsf();
+            trsf.SetValues(c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, dz);
+            const tr = new oc.BRepBuilderAPI_Transform(ow, trsf, true, false);
+            const w = oc.TopoDS.Wire(tr.ModifiedShape(ow));
+            ts.AddWire(w);
+            cleanup.push(trsf, tr, w);
+          }
+          ts.Build();
+          if (!ts.IsDone()) throw new Error('ThruSections failed');
+          let sol = R.cast(ts.Shape());
+          if (!sol || !R.isShape3D(sol)) { safeDelete(sol); throw new Error('Not 3D'); }
+          if (R.measureVolume(sol) < 0) {
+            const rev = R.cast(sol.wrapped.Reversed());
+            safeDelete(sol);
+            sol = rev;
+          }
+          return sol;
+        } finally {
+          for (const obj of cleanup) { try { obj.delete(); } catch (_) {} }
+          if (ts) { try { ts.delete(); } catch (_) {} }
+        }
+      };
+      try {
+        if (hand === 'double') {
+          const halfTwistRad = (0.5 * h * Math.tan(betaRad)) / rp;
+          const halfDeg = (Math.abs(halfTwistRad) * 180) / Math.PI;
+          const mHalf = Math.max(3, Math.min(12, Math.ceil(halfDeg / maxStepDeg) + 1));
+          const slices = [];
+          for (let i = 0; i <= mHalf; i++) {
+            const t = i / mHalf;
+            slices.push([(h * 0.5) * t, halfTwistRad * t]);
+          }
+          for (let i = 1; i <= mHalf; i++) {
+            const t = i / mHalf;
+            slices.push([h * 0.5 + (h * 0.5) * t, halfTwistRad * (1 - t)]);
+          }
+          g = buildLoftedHelix(slices, true);
+        } else {
+          const sgn = hand === 'left' ? -1 : 1;
+          const totalTwistRad = (sgn * h * Math.tan(betaRad)) / rp;
+          const totalDeg = (Math.abs(totalTwistRad) * 180) / Math.PI;
+          const mSlices = Math.max(4, Math.min(24, Math.ceil(totalDeg / maxStepDeg) + 1));
+          const slices = [];
+          for (let i = 0; i <= mSlices; i++) {
+            const t = i / mSlices;
+            slices.push([h * t, totalTwistRad * t]);
+          }
+          try { g = buildLoftedHelix(slices, false); }
+          catch (_) { g = buildLoftedHelix(slices, true); }
+        }
+      } finally {
+        safeDelete(baseWire);
+      }
+    }
+    if (bore > 0.1 && bore < rf * 2 - 0.5) {
+      const cyl = R.makeCylinder(bore / 2, h + 2, [0, 0, -1]);
+      const cutRes = g.cut(cyl);
+      safeDelete(cyl); safeDelete(g);
+      g = cutRes;
+    }
+    return g;
+  }
+  function buildBevelGear(p) {
+    const z = Math.max(6, Math.min(120, Math.round(num(p.teeth, 20))));
+    const z2 = Math.max(6, Math.min(120, Math.round(num(p.mateTeeth, z))));
+    const m = Math.max(0.2, num(p.module, 1.5));
+    const sigmaDeg = Math.max(20, Math.min(160, num(p.shaftAngle, 90)));
+    const sigmaRad = (sigmaDeg * Math.PI) / 180;
+    const autoDeltaDeg = (Math.atan2(Math.sin(sigmaRad), z2 / z + Math.cos(sigmaRad)) * 180) / Math.PI;
+    const rawCone = p.coneAngle != null && p.coneAngle !== '' && isFinite(Number(p.coneAngle)) ? Number(p.coneAngle) : autoDeltaDeg;
+    const deltaDeg = Math.max(10, Math.min(80, rawCone));
+    const deltaRad = (deltaDeg * Math.PI) / 180;
+    const rp = (m * z) / 2;
+    const Re = rp / Math.sin(deltaRad);
+    const minB = Math.max(0.5, 0.08 * Re);
+    const maxB = 0.42 * Re;
+    const defB = Math.min(Re / 3, 10 * m);
+    const rawB = p.faceWidth != null && p.faceWidth !== '' && isFinite(Number(p.faceWidth)) ? Number(p.faceWidth) : defB;
+    const b = Math.max(minB, Math.min(maxB, rawB));
+    const scaleIn = (Re - b) / Re;
+    const deltaF = Math.min(deltaRad - (3 * Math.PI) / 180, Math.atan((1.25 * m) / Re));
+    const rRootOut = Math.max(0.5, rp - 1.25 * m * Math.cos(deltaRad));
+    const zetaRootOut = Re * Math.cos(deltaRad) + 1.25 * m * Math.sin(deltaRad);
+    const defHub = Math.max(2, Math.round(1.5 * m * 10) / 10);
+    const rawHub = p.hubH != null && p.hubH !== '' && isFinite(Number(p.hubH)) ? Number(p.hubH) : defHub;
+    const hubH = Math.max(0.5, rawHub);
+    const zApex = zetaRootOut + hubH;
+    const bore = Math.max(0, num(p.bore, 5));
+
+    const zetaLo = zetaRootOut + 0.25 * m;
+    const zLo = zApex - zetaLo;
+    const zetaTipIn = scaleIn * (Re * Math.cos(deltaRad) - m * Math.sin(deltaRad));
+    const zetaHi = Math.max(0.05, Math.min(0.85 * Math.max(0.1, zetaTipIn), zetaTipIn - 0.25 * m));
+
+    // Virtuelles Stirnrad auf dem Ergänzungskegel (Tredgold-Näherung)
+    const rv = rp / Math.cos(deltaRad);
+    const zv = z / Math.cos(deltaRad);
+    const alpha = (20 * Math.PI) / 180;
+    const rbv = rv * Math.cos(alpha);
+    const rav = rv + m;
+    const rfv = Math.max(0.5, rv - 1.25 * m);
+    const rStartV = Math.max(rbv, rfv);
+    const inv = (a) => Math.tan(a) - a;
+    const tooth = (2 * Math.PI) / z;
+    const halfV = Math.PI / (2 * zv) - (0.04 * m) / rv + inv(alpha);
+    const flankAngV = (r) => Math.max(0, halfV - inv(Math.acos(Math.min(1, rbv / r))));
+    const P3 = (r, phi) => {
+      const gamma = Math.max((2 * Math.PI) / 180, Math.min((84 * Math.PI) / 180, deltaRad + Math.atan((r - rv) / Re)));
+      const rPlane = zetaLo * Math.tan(gamma);
+      return [rPlane * Math.cos(phi), rPlane * Math.sin(phi), zLo];
+    };
+    const dPhi = (r) => flankAngV(r) / Math.cos(deltaRad);
+    const N = 7;
+    const edges = [];
+    for (let i = 0; i < z; i++) {
+      const c = i * tooth;
+      const right = [], left = [];
+      for (let k = 0; k <= N; k++) { const r = rStartV + ((rav - rStartV) * k) / N; right.push(P3(r, c - dPhi(r))); }
+      for (let k = N; k >= 0; k--) { const r = rStartV + ((rav - rStartV) * k) / N; left.push(P3(r, c + dPhi(r))); }
+      if (rfv < rStartV - 1e-6) edges.push(R.makeLine(P3(rfv, c - dPhi(rStartV)), right[0]));
+      edges.push(R.makeBSplineApproximation(right, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const tipA = c - dPhi(rav), tipB = c + dPhi(rav);
+      if (tipB - tipA > 1e-4) edges.push(R.makeThreePointArc(right[N], P3(rav, c), left[0]));
+      else if (Math.hypot(right[N][0] - left[0][0], right[N][1] - left[0][1]) > 1e-5) edges.push(R.makeLine(right[N], left[0]));
+      edges.push(R.makeBSplineApproximation(left, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const rootA = c + dPhi(rStartV);
+      const endL = rfv < rStartV - 1e-6 ? P3(rfv, rootA) : left[N];
+      if (rfv < rStartV - 1e-6) edges.push(R.makeLine(left[N], endL));
+      const nextA = c + tooth - dPhi(rStartV);
+      const nextStart = P3(rfv < rStartV - 1e-6 ? rfv : rStartV, nextA);
+      if (nextA - rootA > 1e-4) edges.push(R.makeThreePointArc(endL, P3(rfv < rStartV - 1e-6 ? rfv : rStartV, (rootA + nextA) / 2), nextStart));
+      else if (Math.hypot(endL[0] - nextStart[0], endL[1] - nextStart[1]) > 1e-5) edges.push(R.makeLine(endL, nextStart));
+    }
+
+    let outerWire = null;
+    try {
+      outerWire = R.assembleWire(edges);
+    } catch (_) {
+      for (const e of edges) safeDelete(e);
+      const pts = [];
+      for (let i = 0; i < z; i++) {
+        const c = i * tooth;
+        for (let k = 0; k <= 5; k++) { const r = rStartV + ((rav - rStartV) * k) / 5; pts.push(P3(r, c - dPhi(r))); }
+        for (let k = 5; k >= 0; k--) { const r = rStartV + ((rav - rStartV) * k) / 5; pts.push(P3(r, c + dPhi(r))); }
+      }
+      outerWire = R.assembleWire(pts.map((pt, i) => R.makeLine(pt, pts[(i + 1) % pts.length])));
+    }
+
+    let coneSol = null;
+    const cleanup = [];
+    let ts = null;
+    try {
+      const ow = outerWire.wrapped;
+      const gpApex = new oc.gp_Pnt(0, 0, zApex);
+      const trsf = new oc.gp_Trsf();
+      trsf.SetScale(gpApex, zetaHi / zetaLo);
+      const tr = new oc.BRepBuilderAPI_Transform(ow, trsf, true, false);
+      const innerWire = oc.TopoDS.Wire(tr.ModifiedShape(ow));
+      cleanup.push(gpApex, trsf, tr, innerWire);
+      ts = new oc.BRepOffsetAPI_ThruSections(true, true, 1e-4);
+      if (typeof ts.CheckCompatibility === 'function') ts.CheckCompatibility(false);
+      ts.AddWire(ow);
+      ts.AddWire(innerWire);
+      ts.Build();
+      if (!ts.IsDone()) throw new Error('Kegelrad-Loft fehlgeschlagen');
+      coneSol = R.cast(ts.Shape());
+      if (R.measureVolume(coneSol) < 0) {
+        const rev = R.cast(coneSol.wrapped.Reversed());
+        safeDelete(coneSol);
+        coneSol = rev;
+      }
+    } finally {
+      for (const obj of cleanup) { try { obj.delete(); } catch (_) {} }
+      if (ts) { try { ts.delete(); } catch (_) {} }
+      safeDelete(outerWire);
+    }
+
+    // Exaktes Trimmen am äußeren und inneren Ergänzungskegel
+    const rTipPad = rp + 2.0 * m * Math.cos(deltaRad);
+    const zetaTipPad = Re * Math.cos(deltaRad) - 2.0 * m * Math.sin(deltaRad);
+    const trimCone = revolveProfile([
+      [0, zApex - zetaRootOut],
+      [rRootOut, zApex - zetaRootOut],
+      [rTipPad, zApex - zetaTipPad],
+      [scaleIn * rTipPad, zApex - scaleIn * zetaTipPad],
+      [scaleIn * rRootOut, zApex - scaleIn * zetaRootOut],
+      [0, zApex - scaleIn * zetaRootOut],
+    ]);
+    let trimmed = coneSol.intersect(trimCone);
+    safeDelete(coneSol); safeDelete(trimCone);
+
+    // Rückenkörper (Nabe/Flansch bis unter den Zahnfuß)
+    const ov = Math.min(0.3, 0.25 * b * Math.cos(deltaRad));
+    const rOv = Math.max(0.2, rRootOut - ov * Math.tan(deltaF) - 0.08);
+    const hub = revolveProfile([
+      [0, 0],
+      [rRootOut, 0],
+      [rRootOut, hubH],
+      [rOv, hubH + ov],
+      [0, hubH + ov],
+    ]);
+    let g = trimmed.fuse(hub);
+    safeDelete(trimmed); safeDelete(hub);
+
+    if (bore > 0.1 && bore < 2 * scaleIn * rRootOut - 0.4) {
+      const totalH = zApex - Math.min(zetaTipIn, scaleIn * zetaRootOut);
+      const cyl = R.makeCylinder(bore / 2, totalH + 4, [0, 0, -2]);
+      const cutRes = g.cut(cyl);
+      safeDelete(cyl); safeDelete(g);
+      g = cutRes;
     }
     return g;
   }

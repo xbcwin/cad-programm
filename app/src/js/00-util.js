@@ -721,6 +721,8 @@ const IC = {
   knurl: '<rect x="5" y="4" width="14" height="16" rx="1.5" fill="currentColor" opacity=".15"/><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M5 9l5-5M5 15l10-10M8 20L19 9M14 20l5-5M19 9l-5-5M19 15L9 5M16 20L5 9M10 20l-5-5" opacity=".75"/>',
   gripPattern: '<rect x="3" y="4" width="18" height="16" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="7.5" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.5" cy="9" r="1.2" fill="currentColor" stroke="none"/><path d="M6 13.5h12M6 16.5h12" stroke-width="1.8"/>',
   splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
+  helicalGear: '<circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M9.5 3l3.2 1.8M15.5 4.2l1.8 3.2M19.8 9.2l-.5 3.6M19 15.8l-2.7 2.5M14.2 20.4l-3.6.3M8.5 19.6l-2.8-2.4M4.2 14.8l.5-3.6M5 8.2L7.7 5.7"/><path d="M8.5 7.5l7 9" opacity=".45" stroke-dasharray="2 1.5"/>',
+  bevelGear: '<ellipse cx="12" cy="16.5" rx="9" ry="3.5" fill="currentColor" opacity=".2"/><ellipse cx="12" cy="16.5" rx="9" ry="3.5"/><ellipse cx="12" cy="7.5" rx="4.5" ry="1.8"/><path d="M3 16.5L7.5 7.5M21 16.5L16.5 7.5M7 19l2.6-10M12 20V9.3M17 19l-2.6-10"/>',
   commentPin: '<path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" fill="currentColor" opacity=".18"/><path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.2" />',
   layout: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8.5 4v16 M15.5 4v16" />',
   illustration: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z M4 7.5 12 12l8-4.5 M12 12v9" stroke-width="1.9" />',
@@ -2784,6 +2786,16 @@ const HELP = {
   "tip": "Schrägverzahntes Schneckenrad passend zu Modul und Schnecke (Profi)",
   "hilfe": "Erzeugt ein Zahnrad, dessen Zähne genau um den Steigungswinkel γ der zugehörigen Schnecke geneigt sind. Stelle denselben Modul, Schnecken-Durchmesser, Gangzahl und Steigungsrichtung ein – rechts siehst du sofort Übersetzung und Achsabstand a = (d₁ + d₂) / 2.",
   "tipp": "Nutze den Knopf „Passende Schnecke hinzufügen“ im Panel rechts, um beide Teile sofort passend auszurichten."
+ },
+ "helicalGear": {
+  "tip": "Schrägverzahntes Stirnrad oder Pfeilverzahnung mit Modul, Zähnezahl und Schrägungswinkel (Profi)",
+  "hilfe": "Erzeugt ein Stirnrad mit schrägen Evolventen-Zähnen (rechtssteigend, linkssteigend oder als Pfeilverzahnung). Kopfkreis (m · (z + 2)) und Teilkreis (m · z) stimmen exakt mit geraden Stirnrädern desselben Stirnmoduls überein; über „Passendes Gegenrad hinzufügen“ setzt Tracery direkt ein gegensinnig schräges Rad im richtigen Achsabstand.",
+  "tipp": "Schrägzahnräder brauchen für parallele Wellen eine entgegengesetzte Steigung (rechts ↔ links) – mit „Pfeilverzahnung“ heben sich axiale Kräfte ganz auf."
+ },
+ "bevelGear": {
+  "tip": "Geradverzahntes Kegelrad für abgewinkelte Wellen (z. B. 90°-Winkelgetriebe, Profi)",
+  "hilfe": "Erzeugt ein Kegelrad nach der Tredgold-Näherung mit wählbarem Modul, eigener Zähnezahl, Gegenrad-Zähnezahl und Achswinkel (Standard 90°). Der Kegelwinkel wird automatisch passend zur Übersetzung berechnet, und über „Passendes Gegenrad hinzufügen“ entsteht sofort das im Achswinkel greifende Paar mit gemeinsamer Kegelspitze.",
+  "tipp": "Lass „Kegelwinkel“, „Zahnbreite“ und „Rückenhöhe“ leer für automatische Normwerte – oder trag eigene Maße ein, wenn du ein bestehendes Gehäuse nachbaust."
  }
 };
 

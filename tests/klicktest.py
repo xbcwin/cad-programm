@@ -37769,6 +37769,239 @@ def t_a184_bibliothek_schnecke_innenzahnrad_zahnstange(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a183_zahnraeder_schraeg_kegel(p):
+    p.empty()
+
+    # 1. Profi vs. Einfach: Kacheln im Bauteile-Menü und Befehlssuche
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts [data-lib="helicalGear"]', timeout=5000)
+    pro_vis = p.ev("""return (() => {
+      const h = document.querySelector('.flyout.parts [data-lib="helicalGear"]');
+      const b = document.querySelector('.flyout.parts [data-lib="bevelGear"]');
+      const c1 = Commands.search('schrägzahnrad').some(c => c.id === 'lib-helicalGear');
+      const c2 = Commands.search('kegelrad').some(c => c.id === 'lib-bevelGear');
+      return !!(
+        h && b && h.offsetParent !== null && b.offsetParent !== null
+        && h.classList.contains('pro') && b.classList.contains('pro')
+        && h.getAttribute('data-help') === 'helicalGear' && b.getAttribute('data-help') === 'bevelGear'
+        && c1 && c2
+      );
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts', timeout=5000)
+    simple_hidden = p.ev("""return (() => {
+      const h = document.querySelector('.flyout.parts [data-lib="helicalGear"]');
+      const b = document.querySelector('.flyout.parts [data-lib="bevelGear"]');
+      const c1 = Commands.search('schrägzahnrad').some(c => c.id === 'lib-helicalGear');
+      const c2 = Commands.search('kegelrad').some(c => c.id === 'lib-bevelGear');
+      return !!(h && b && h.offsetParent === null && b.offsetParent === null && !c1 && !c2);
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    ok1 = bool(pro_vis and simple_hidden)
+
+    # 2. Schrägzahnrad: Modul 1, 20 Zähne -> Kopfkreis 22 mm, Pfeilverzahnung & Gegenrad ohne Durchdringung
+    p.ev("""
+      App.change('Schrägzahnrad m1 z20', (doc) => {
+        const g = Model.newItem('part', { lib: 'helicalGear', teeth: 20, module: 1, h: 8, helixAngle: 20, hand: 'right', bore: 5 }, { name: 'Schrägzahnrad 1' });
+        doc.items.push(g);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    hel1 = p.ev("""return (() => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const hint = document.querySelector('#p-helicalgear-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        ok: !!(r && r.data && bb && r.data.vertices && r.data.vertices.length > 0),
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        hint,
+      };
+    })()""")
+    hel_vol1 = p.ev("return Mass.measure().then(r => (r.parts && r.parts[0] && r.parts[0].volume) || 0)")
+
+    # Umschalten auf Pfeilverzahnung (double) mit demselben Kopfkreis 22 mm
+    p.ev("""
+      App.change('Pfeilverzahnung', (doc) => { doc.items[0].p.hand = 'double'; });
+    """)
+    warte_rechnen(p, 45)
+    hel_dbl = p.ev("""return (() => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      return {
+        errs: App.errors.length,
+        ok: !!(r && r.data && bb && r.data.vertices && r.data.vertices.length > 0),
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+      };
+    })()""")
+
+    # Zurück auf rechtssteigend + Gegenrad per Knopf hinzufügen -> 0 Durchdringung
+    p.ev("App.change('Rechtssteigend', (doc) => { doc.items[0].p.hand = 'right'; }); App.select([App.doc.items[0].id]);")
+    warte_rechnen(p, 45)
+    p.pg.click('#btn-add-helical-mate')
+    warte_rechnen(p, 45)
+    hel_pair = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const b0 = wb(items[0].id);
+      const b1 = wb(items[1].id);
+      return {
+        count: items.length,
+        hand0: items[0].p.hand,
+        hand1: items[1].p.hand,
+        x1: items[1].t.x,
+        errs: App.errors.length,
+        b0, b1,
+        checked: res.checkedCount,
+        clashes: (res.pairs || []).length,
+        clashErrs: (res.errors || []).length,
+      };
+    })()""")
+    ok2 = bool(
+        hel1['errs'] == 0 and hel1['ok'] and hel_vol1 > 500
+        and abs(hel1['dx'] - 22.0) < 0.15 and abs(hel1['dy'] - 22.0) < 0.15 and abs(hel1['dz'] - 8.0) < 0.05
+        and '22' in hel1['hint']
+        and hel_dbl['errs'] == 0 and hel_dbl['ok']
+        and abs(hel_dbl['dx'] - 22.0) < 0.15 and abs(hel_dbl['dy'] - 22.0) < 0.15
+        and hel_pair['count'] == 2 and hel_pair['hand0'] == 'right' and hel_pair['hand1'] == 'left'
+        and abs(hel_pair['x1'] - 20.0) < 0.01 and hel_pair['errs'] == 0
+        and hel_pair['checked'] == 2 and hel_pair['clashes'] == 0 and hel_pair['clashErrs'] == 0
+        and hel_pair['b0'] and hel_pair['b1'] and hel_pair['b0'][3] > hel_pair['b1'][0] + 0.5
+    )
+
+    # 3. Kegelrad-Paar 90° (20/20 Zähne, Modul 1,5) + asymmetrisches 90°-Paar (16/24 Zähne) ohne Durchdringung
+    p.ev("""
+      App.setDoc(Model.newDoc('Kegelrad-Test'));
+      App.change('Kegelrad 90°', (doc) => {
+        const bg = Model.newItem('part', { lib: 'bevelGear', teeth: 20, mateTeeth: 20, module: 1.5, shaftAngle: 90, coneAngle: null, faceWidth: null, hubH: null, bore: 5 }, { name: 'Kegelrad 1' });
+        doc.items.push(bg);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    bev1 = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[0].id);
+      const hint = document.querySelector('#p-bevelgear-hint')?.textContent || '';
+      return { errs: App.errors.length, ok: !!(r && r.data && r.data.bbox && r.data.vertices && r.data.vertices.length > 0), hint };
+    })()""")
+    p.pg.click('#btn-add-bevel-mate')
+    warte_rechnen(p, 45)
+    bev_pair = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const b0 = wb(items[0].id);
+      const b1 = wb(items[1].id);
+      const boxOverlap = !!(b0 && b1
+        && b0[0] < b1[3] - 0.5 && b1[0] < b0[3] - 0.5
+        && b0[1] < b1[4] - 0.5 && b1[1] < b0[4] - 0.5
+        && b0[2] < b1[5] - 0.5 && b1[2] < b0[5] - 0.5);
+      const m = await Mass.measure();
+      const vols = (m.parts || []).map(q => q.volume);
+      return {
+        count: items.length,
+        ry1: items[1]?.t?.ry,
+        errs: App.errors.length,
+        boxOverlap,
+        vols,
+        checked: res.checkedCount,
+        clashes: (res.pairs || []).length,
+        clashErrs: (res.errors || []).length,
+      };
+    })()""")
+
+    # Zweites, asymmetrisches 90°-Kegelrad-Paar (16 : 24 Zähne, Modul 1,5)
+    p.ev("""
+      App.setDoc(Model.newDoc('Kegelrad-16-24'));
+      App.change('Kegelrad 16/24', (doc) => {
+        const bg = Model.newItem('part', { lib: 'bevelGear', teeth: 16, mateTeeth: 24, module: 1.5, shaftAngle: 90, coneAngle: null, faceWidth: null, hubH: null, bore: 4 }, { name: 'Ritzel' });
+        doc.items.push(bg);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    p.pg.click('#btn-add-bevel-mate')
+    warte_rechnen(p, 45)
+    bev_asym = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const b0 = wb(items[0].id);
+      const b1 = wb(items[1].id);
+      const boxOverlap = !!(b0 && b1
+        && b0[0] < b1[3] - 0.5 && b1[0] < b0[3] - 0.5
+        && b0[1] < b1[4] - 0.5 && b1[1] < b0[4] - 0.5
+        && b0[2] < b1[5] - 0.5 && b1[2] < b0[5] - 0.5);
+      return {
+        count: items.length,
+        z0: items[0].p.teeth,
+        z1: items[1].p.teeth,
+        ry1: items[1].t.ry,
+        errs: App.errors.length,
+        boxOverlap,
+        checked: res.checkedCount,
+        clashes: (res.pairs || []).length,
+        clashErrs: (res.errors || []).length,
+      };
+    })()""")
+    ok3 = bool(
+        bev1['errs'] == 0 and bev1['ok'] and '45' in bev1['hint']
+        and bev_pair['count'] == 2 and abs(bev_pair['ry1'] + 90) < 0.01
+        and bev_pair['errs'] == 0 and bev_pair['boxOverlap']
+        and len(bev_pair['vols']) == 2 and all(v > 200 for v in bev_pair['vols'])
+        and bev_pair['checked'] == 2 and bev_pair['clashes'] == 0 and bev_pair['clashErrs'] == 0
+        and bev_asym['count'] == 2 and bev_asym['z0'] == 16 and bev_asym['z1'] == 24
+        and abs(bev_asym['ry1'] + 90) < 0.01 and bev_asym['errs'] == 0
+        and bev_asym['boxOverlap'] and bev_asym['checked'] == 2
+        and bev_asym['clashes'] == 0 and bev_asym['clashErrs'] == 0
+    )
+
+    # 4. Undo/Redo, Validierung, Hilfen, Schritt-Erklärungen, I18n & 0 JS-Fehler
+    p.ev("App.undo();")
+    warte_rechnen(p, 30)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 30)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(App.doc);
+      const hOk = ['helicalGear', 'bevelGear'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = ['helicalGear', 'bevelGear'].every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, i18nOk };
+    })()""")
+    ok4 = bool(
+        undo_len == 1 and redo_len == 2
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -38067,6 +38300,7 @@ TESTS = [
     ('[A-181] Maße und Toleranzen am 3D-Modell (PMI) & Übernahme in Zeichnung (ZE-35)', t_a181_pmi_3d_und_zeichnung),
     ('[A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)', t_a180_zeichnung_fertig_machen),
     ('[A-184] Bibliothek (Profi): Zahnstange (π·10 mm), Innenzahnrad (40 Zähne geschlossen), Schnecke & Schneckenrad (BI-11)', t_a184_bibliothek_schnecke_innenzahnrad_zahnstange),
+    ('[A-183] Bibliothek: Schrägzahnrad & Kegelrad-Paar 90°', t_a183_zahnraeder_schraeg_kegel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

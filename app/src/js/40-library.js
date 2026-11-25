@@ -785,6 +785,24 @@ const LIB = [
       { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 6 },
       { k: 'dir', label: 'Steigung', type: 'select', options: [['right', 'Rechtsgängig'], ['left', 'Linksgängig']], def: 'right' },
     ] },
+  { lib: 'helicalGear', label: 'Schrägzahnrad', role: 'solid', icon: 'helicalGear', pro: true, kw: 'schraegzahnrad schrägzahnrad zahnrad helical pfeilverzahnung schraeg getriebe bi-11', desc: 'Stirnrad mit schrägen Evolventen-Zähnen (rechts, links oder Pfeil)', params: [
+    { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' },
+    { k: 'module', label: 'Modul', type: 'num', def: 1.5 },
+    { k: 'h', label: 'Breite', type: 'num', def: 8 },
+    { k: 'helixAngle', label: 'Schrägungswinkel', type: 'num', def: 20, unit: '°' },
+    { k: 'hand', label: 'Steigung', type: 'select', options: [['right', 'Rechtssteigend'], ['left', 'Linkssteigend'], ['double', 'Pfeilverzahnung']], def: 'right' },
+    { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
+  ] },
+  { lib: 'bevelGear', label: 'Kegelrad', role: 'solid', icon: 'bevelGear', pro: true, kw: 'kegelrad kegelzahnrad bevel winkelgetriebe 90 grad getriebe zahnrad bi-11', desc: 'Geradverzahntes Kegelrad für abgewinkelte Wellen (Standard 90°)', params: [
+    { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' },
+    { k: 'mateTeeth', label: 'Gegenrad-Zähne', type: 'num', def: 20, int: true, unit: '' },
+    { k: 'module', label: 'Modul', type: 'num', def: 1.5 },
+    { k: 'shaftAngle', label: 'Achswinkel', type: 'num', def: 90, unit: '°' },
+    { k: 'coneAngle', label: 'Kegelwinkel', type: 'num', def: null, auto: true, unit: '°' },
+    { k: 'faceWidth', label: 'Zahnbreite', type: 'num', def: null, auto: true },
+    { k: 'hubH', label: 'Rückenhöhe', type: 'num', def: null, auto: true },
+    { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
+  ] },
 ];
 // Kaufteile mit ihrer echten Form (kommen über die Drohnen-Bibliothek, nicht ins Fenster „Bauteile“)
 const N = (k, label, def, unit) => ({ k, label, type: 'num', def, ...(unit ? { unit } : {}) });
@@ -804,6 +822,155 @@ LIB.push(
 );
 const LIBMAP = Object.fromEntries(LIB.map((d) => [d.lib, d]));
 function libDefaults(def) { const p = {}; for (const q of def.params) p[q.k] = q.def; return p; }
+
+// Kennwerte für Schrägzahnräder (Stirnmodul m_t = m)
+function helicalGearMetrics(p = {}) {
+  const z = Math.max(6, Math.min(120, Math.round(Number(p.teeth ?? 20) || 20)));
+  const m = Math.max(0.2, Number(p.module ?? 1.5) || 1.5);
+  const h = Math.max(0.5, Number(p.h ?? 8) || 8);
+  const rawBeta = Number(p.helixAngle ?? 20);
+  const betaDeg = Math.max(0, Math.min(45, isFinite(rawBeta) ? rawBeta : 20));
+  const betaRad = (betaDeg * Math.PI) / 180;
+  const hand = p.hand === 'left' || p.hand === 'double' ? p.hand : 'right';
+  const bore = Math.max(0, Number(p.bore ?? 5) || 0);
+  const d = m * z;
+  const rp = d / 2;
+  const da = d + 2 * m;
+  const ra = da / 2;
+  const df = Math.max(1, d - 2.5 * m);
+  const rf = df / 2;
+  const mn = m * Math.cos(betaRad);
+  const twistRad = (h * Math.tan(betaRad)) / rp;
+  const twistDeg = (twistRad * 180) / Math.PI;
+  return { z, m, mn, h, betaDeg, hand, bore, d, da, df, rp, ra, rf, twistRad, twistDeg };
+}
+
+// Kennwerte für geradverzahnte Kegelräder (DIN 3971 / Tredgold)
+function bevelGearMetrics(p = {}) {
+  const z = Math.max(6, Math.min(120, Math.round(Number(p.teeth ?? 20) || 20)));
+  const z2 = Math.max(6, Math.min(120, Math.round(Number(p.mateTeeth ?? z) || z)));
+  const m = Math.max(0.2, Number(p.module ?? 1.5) || 1.5);
+  const rawSigma = Number(p.shaftAngle ?? 90);
+  const sigmaDeg = Math.max(20, Math.min(160, isFinite(rawSigma) ? rawSigma : 90));
+  const sigmaRad = (sigmaDeg * Math.PI) / 180;
+  const autoDeltaDeg = (Math.atan2(Math.sin(sigmaRad), z2 / z + Math.cos(sigmaRad)) * 180) / Math.PI;
+  const hasManualCone = p.coneAngle != null && p.coneAngle !== '' && isFinite(Number(p.coneAngle));
+  const deltaDeg = Math.max(10, Math.min(80, hasManualCone ? Number(p.coneAngle) : autoDeltaDeg));
+  const deltaRad = (deltaDeg * Math.PI) / 180;
+  const d = m * z;
+  const rp = d / 2;
+  const Re = rp / Math.sin(deltaRad);
+  const minB = Math.max(0.5, 0.08 * Re);
+  const maxB = 0.42 * Re;
+  const defB = Math.min(Re / 3, 10 * m);
+  const hasManualB = p.faceWidth != null && p.faceWidth !== '' && isFinite(Number(p.faceWidth));
+  const b = Math.max(minB, Math.min(maxB, hasManualB ? Number(p.faceWidth) : defB));
+  const Ri = Re - b;
+  const scaleIn = Ri / Re;
+  const thetaADeg = (Math.atan(m / Re) * 180) / Math.PI;
+  const thetaFDeg = (Math.min(deltaRad - (3 * Math.PI) / 180, Math.atan((1.25 * m) / Re)) * 180) / Math.PI;
+  const da = d + 2 * m * Math.cos(deltaRad);
+  const df = Math.max(1, d - 2.5 * m * Math.cos(deltaRad));
+  const rRootOut = Math.max(0.5, rp - 1.25 * m * Math.cos(deltaRad));
+  const zetaRootOut = Re * Math.cos(deltaRad) + 1.25 * m * Math.sin(deltaRad);
+  const defHub = Math.max(2, round(1.5 * m, 1));
+  const hasManualHub = p.hubH != null && p.hubH !== '' && isFinite(Number(p.hubH));
+  const hubH = Math.max(0.5, hasManualHub ? Number(p.hubH) : defHub);
+  const zApex = zetaRootOut + hubH;
+  const zetaTipIn = scaleIn * (Re * Math.cos(deltaRad) - m * Math.sin(deltaRad));
+  const zetaRootIn = scaleIn * zetaRootOut;
+  const totalH = zApex - Math.min(zetaTipIn, zetaRootIn);
+  const mateDeltaDeg = Math.max(10, Math.min(80, sigmaDeg - deltaDeg));
+  const bore = Math.max(0, Number(p.bore ?? 5) || 0);
+  return { z, z2, m, sigmaDeg, deltaDeg, mateDeltaDeg, d, da, df, rp, Re, Ri, b, scaleIn, thetaADeg, thetaFDeg, rRootOut, zetaRootOut, hubH, zApex, totalH, bore };
+}
+
+function gearComposeWorldTransform(t1, rel) {
+  const base = t1 || { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+  const hasBaseRot = Math.abs(Number(base.rx) || 0) > 1e-6 || Math.abs(Number(base.ry) || 0) > 1e-6 || Math.abs(Number(base.rz) || 0) > 1e-6;
+  if (!hasBaseRot || typeof THREE === 'undefined') {
+    return {
+      x: round((Number(base.x) || 0) + rel.x, 6),
+      y: round((Number(base.y) || 0) + rel.y, 6),
+      z: round((Number(base.z) || 0) + rel.z, 6),
+      rx: round(rel.rx, 6),
+      ry: round(rel.ry, 6),
+      rz: round(rel.rz, 6),
+    };
+  }
+  const D = Math.PI / 180;
+  const m1 = new THREE.Matrix4().compose(
+    new THREE.Vector3(Number(base.x) || 0, Number(base.y) || 0, Number(base.z) || 0),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler((Number(base.rx) || 0) * D, (Number(base.ry) || 0) * D, (Number(base.rz) || 0) * D, 'XYZ')),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const mRel = new THREE.Matrix4().compose(
+    new THREE.Vector3(rel.x, rel.y, rel.z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(rel.rx * D, rel.ry * D, rel.rz * D, 'XYZ')),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const m2 = m1.multiply(mRel);
+  const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3();
+  m2.decompose(pos, quat, scl);
+  const eul = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+  return {
+    x: round(pos.x, 6),
+    y: round(pos.y, 6),
+    z: round(pos.z, 6),
+    rx: round((eul.x * 180) / Math.PI, 6),
+    ry: round((eul.y * 180) / Math.PI, 6),
+    rz: round((eul.z * 180) / Math.PI, 6),
+  };
+}
+
+// Passendes Gegenrad zu einem Schrägzahnrad (umgekehrte Steigung, Achsabstand = Teilkreis-Ø)
+function helicalGearMateTransform(p1 = {}, t1 = null) {
+  const m1 = helicalGearMetrics(p1);
+  const mateHand = m1.hand === 'right' ? 'left' : m1.hand === 'left' ? 'right' : 'double';
+  const p2 = {
+    teeth: m1.z,
+    module: m1.m,
+    h: m1.h,
+    helixAngle: m1.betaDeg,
+    hand: mateHand,
+    bore: m1.bore,
+  };
+  const rz2 = m1.z % 2 === 0 ? 180 / m1.z : 0;
+  const rel = m1.hand === 'double'
+    ? { x: m1.d, y: 0, z: m1.h, rx: 180, ry: 0, rz: rz2 }
+    : { x: m1.d, y: 0, z: 0, rx: 0, ry: 0, rz: rz2 };
+  return { params: p2, t: gearComposeWorldTransform(t1, rel), metrics: m1 };
+}
+
+// Passendes Gegenrad zu einem Kegelrad (gemeinsame Kegelspitze, eingreifende Verzahnung)
+function bevelGearMateTransform(p1 = {}, t1 = null) {
+  const m1 = bevelGearMetrics(p1);
+  const hasManualCone = p1 && p1.coneAngle != null && p1.coneAngle !== '' && isFinite(Number(p1.coneAngle));
+  const hasManualB = p1 && p1.faceWidth != null && p1.faceWidth !== '' && isFinite(Number(p1.faceWidth));
+  const hasManualHub = p1 && p1.hubH != null && p1.hubH !== '' && isFinite(Number(p1.hubH));
+  const p2 = {
+    teeth: m1.z2,
+    mateTeeth: m1.z,
+    module: m1.m,
+    shaftAngle: m1.sigmaDeg,
+    coneAngle: hasManualCone ? round(m1.mateDeltaDeg, 4) : null,
+    faceWidth: hasManualB ? p1.faceWidth : round(m1.b, 3),
+    hubH: hasManualHub ? p1.hubH : null,
+    bore: m1.bore,
+  };
+  const m2 = bevelGearMetrics(p2);
+  const sigmaRad = (m1.sigmaDeg * Math.PI) / 180;
+  const rz2 = m2.z % 2 === 0 ? 180 / m2.z : 0;
+  const rel = {
+    x: m2.zApex * Math.sin(sigmaRad),
+    y: 0,
+    z: m1.zApex - m2.zApex * Math.cos(sigmaRad),
+    rx: 0,
+    ry: -m1.sigmaDeg,
+    rz: rz2,
+  };
+  return { params: p2, t: gearComposeWorldTransform(t1, rel), m1, m2 };
+}
 
 // kleine Vorschaubilder der Grundkörper (isometrisch)
 function primitiveSVG(kind) {
