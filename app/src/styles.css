@@ -1460,4 +1460,13 @@ body.simple:not(.tablet) .panel-body{font-size:calc(14.5px * var(--ui-scale,1))}
 .sym-dot.orig{background:#e0483b}
 .sym-dot.mirr{background:#2b7de9}
 #sym-pick-face.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+/* 3D-Skizze (SK-51) */
+.dimlabel.sk3-dim{pointer-events:auto;cursor:pointer;z-index:5;padding:2px 6px}
+.dimlabel.sk3-dim.fixed{border-color:var(--accent);color:var(--accent);font-weight:600}
+.dimlabel.sk3-dim.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.sk3-ent-card{display:grid;gap:6px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.sk3-ent-card.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--surface-2))}
+.sk3-ent-head{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.sk3-ent-head .grow{font-weight:600}
+
 

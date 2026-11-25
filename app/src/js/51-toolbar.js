@@ -13,6 +13,7 @@ const Toolbar = (() => {
       // Grundwerkzeuge
       { id: 'body', group: 'Grundwerkzeuge', domId: 't-body', icon: 'cube', label: T('tool.body'), tip: T('tool.bodyTip'), kbd: 'K', run: (e) => Panels.toggleFlyout('bodies', e.currentTarget) },
       { id: 'sketch', group: 'Grundwerkzeuge', domId: 't-sketch', icon: 'sketch', label: T('tool.sketch'), tip: T('tool.sketchTip'), kbd: 'S', help: 'sketchFace', run: () => Sketch.chooseAndStart() },
+      { id: 'sketch3d', group: 'Grundwerkzeuge', domId: 't-sketch3d', icon: 'sketch3d', label: T('kind.sketch3d'), tip: T('sk3.toolbarTip'), cls: 'minor pro', help: 'sketch3d', run: () => Sketch.start3d() },
       { id: 'parts', group: 'Grundwerkzeuge', domId: 't-parts', icon: 'parts', label: T('tool.parts'), tip: T('tool.partsTip'), kbd: 'B', run: (e) => Panels.toggleFlyout('parts', e.currentTarget) },
       { id: 'measure', group: 'Grundwerkzeuge', domId: 't-measure', icon: 'measure', label: T('tool.measure'), tip: T('tool.measureTip'), kbd: 'M', cls: 'minor pro', help: 'measure', run: () => Measure.toggle() },
       { id: 'notes', group: 'Grundwerkzeuge', domId: 't-notes', icon: 'noteDraw', label: T('tool.notes'), tip: T('tool.notesTip'), kbd: 'N', cls: 'minor pro', run: () => Notes.toggle() },

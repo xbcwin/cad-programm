@@ -1,6 +1,7 @@
 // ================= Skizzen-Modus (Zeichnen auf einer Ebene) =================
 const Sketch = (() => {
   let S = null;
+  let S3 = null;
   const TOOLS = [
     { id: 'select', icon: 'cursor', get label() { return T('sk.tool.select'); }, key: 'V', get tip() { return T('sk.toolTip.select'); } },
     { id: 'line', icon: 'line', get label() { return T('sk.tool.line'); }, key: 'L', get tip() { return T('sk.toolTip.line'); } },
@@ -102,6 +103,12 @@ const Sketch = (() => {
     const row2 = h('div', { class: 'btn-row' });
     const pk = (id, label, kind) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); startPlanePick(kind, opts.ribMode ? (pl) => startOnPlaneObj(pl, opts) : undefined); }; return b; };
     row2.append(pk('sk-mid', T('sk.start.mid'), 'mid'), pk('sk-3p', T('sk.start.p3'), '3p'));
+    if (!opts.ribMode) {
+      const b3d = h('button', { type: 'button', class: 'btn pro', id: 'sk-3d', 'data-help': 'sketch3d' });
+      b3d.innerHTML = icon('sketch3d') + esc(T('kind.sketch3d'));
+      b3d.onclick = () => { UI.closePop(); start3d(); };
+      row2.append(b3d);
+    }
     box.append(row2);
     // eigene Bezugsebenen des Projekts
     const ds = Datums.list().filter((d) => !d.hidden);
@@ -243,7 +250,9 @@ const Sketch = (() => {
     begin({ plane: deepClone(plane), W, ents: [], refs: [], ctx: { mode: 'new', targetId: tid, embossMode: true, embossFace: opts.faceSig || null, embossOpt: opts } });
   }
   function editItem(id) {
-    const f = Model.find(App.doc, id); if (!f || !f.item.p.sketch) return;
+    const f = Model.find(App.doc, id);
+    if (f && f.item.kind === 'sketch3d') { edit3d(id); return; }
+    if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
     const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
     begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, locked: !!f.item.p.sketch.locked, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
@@ -4615,6 +4624,7 @@ const Sketch = (() => {
   }
   // ---------- Tastatur ----------
   function onKey(e) {
+    if (S3) return onKey3d(e);
     if (!S) return false;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
@@ -4708,6 +4718,7 @@ const Sketch = (() => {
   }
   let rendering = false, renderAgain = false;
   function render() {
+    if (S3) { render3d(); return; }
     if (!S) return;
     if (rendering) { renderAgain = true; return; }
     rendering = true;
@@ -6064,6 +6075,7 @@ const Sketch = (() => {
 
   // ---------- Rechte Leiste ----------
   function renderPanel(body) {
+    if (S3) { renderPanel3d(body); return; }
     if (!S) return;
     const w = h('div', { class: 'props' });
     if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: T('sk.panel.patPathHint') }));
@@ -7784,8 +7796,786 @@ const Sketch = (() => {
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
     UI.toast(T(it.kind === 'wrap' ? 'sk.toast.stepWrapOk' : it.kind === 'emboss' ? 'sk.toast.stepEmbossOk' : it.kind === 'rib' ? 'sk.toast.stepRibOk' : it.kind === 'sweep' ? 'sk.toast.stepSweepOk' : it.role === 'hole' ? 'sk.toast.stepHoleOk' : 'sk.toast.stepDoneOk'), { icon: 'check' });
   }
+  // ---------- 3D-Skizze (SK-51): Linien und Bögen frei im Raum ----------
+  let sk3Labels = [];
+  const sk3Tools = () => [
+    { id: 'select', icon: 'cursor', label: T('sk.tool.select'), key: 'V', tip: T('sk3.toolTip.select') },
+    { id: 'line', icon: 'line', label: T('sk.tool.line'), key: 'L', tip: T('sk3.toolTip.line') },
+    { id: 'arc', icon: 'arc', label: T('sk.tool.arc'), key: 'A', tip: T('sk3.toolTip.arc') },
+    { id: 'dim', icon: 'dim', label: T('sk3.tool.dim'), key: 'D', tip: T('sk3.toolTip.dim'), sep: true },
+  ];
+  function hint3dFor(tool) {
+    if (!S3) return null;
+    if (tool === 'line') return T(S3.draft && S3.draft.pts.length ? 'sk3.hint.lineNext' : 'sk3.hint.line');
+    if (tool === 'arc') {
+      const n = S3.draft && S3.draft.kind === 'arc' ? S3.draft.pts.length : 0;
+      return T(n === 0 ? 'sk3.hint.arc0' : n === 1 ? 'sk3.hint.arc1' : 'sk3.hint.arc2');
+    }
+    if (tool === 'dim') return T('sk3.hint.dim');
+    return T('sk3.hint.select');
+  }
+  function disposeThreeGroup(g) {
+    if (!g) return;
+    for (const o of [...g.children]) {
+      g.remove(o);
+      o.traverse((x) => {
+        if (x.geometry) x.geometry.dispose();
+        if (x.material) {
+          if (x.isLineSegments2 || x.isLine2) Viewer.disposeFat(x);
+          else x.material.dispose();
+        }
+      });
+    }
+  }
+  function clearSk3Labels() {
+    for (const l of sk3Labels) l.remove();
+    sk3Labels = [];
+  }
+  function place3dLabels() {
+    for (const l of sk3Labels) {
+      if (!l._pos3) continue;
+      const sc = Viewer.toScreen(l._pos3);
+      l.style.left = sc.x + 'px';
+      l.style.top = sc.y + 'px';
+    }
+  }
+  function addSk3Dot(g, pt, radius, color, depthTest = true, order = 26) {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 12, 8),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(color), depthTest })
+    );
+    m.position.set(pt[0], pt[1], pt[2]);
+    m.renderOrder = order;
+    g.add(m);
+    return m;
+  }
+  function drawSk3Entity(g, e, color, width, opts = {}) {
+    const dt = opts.depthTest !== false;
+    const ord = opts.order || 24;
+    if (e.type === 'arc' && e.m) {
+      const ai = Model.sketch3dArcInfo(e.a, e.m, e.b);
+      const pts = ai ? ai.sample(32) : [e.a, e.b];
+      const pos = [];
+      for (let i = 0; i < pts.length - 1; i++) pos.push(pts[i][0], pts[i][1], pts[i][2], pts[i + 1][0], pts[i + 1][1], pts[i + 1][2]);
+      if (pos.length) g.add(Viewer.makeFat(pos, color, width, { depthTest: dt, order: ord, dashed: !!e.con, dashSize: 2, gapSize: 1.5 }));
+      return ai;
+    }
+    if (Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1], e.b[2] - e.a[2]) > 1e-6) {
+      g.add(Viewer.makeFat([e.a[0], e.a[1], e.a[2], e.b[0], e.b[1], e.b[2]], color, width, { depthTest: dt, order: ord, dashed: !!e.con, dashSize: 2, gapSize: 1.5 }));
+    }
+    return null;
+  }
+  function render3dScene() {
+    const g = Viewer.groups && Viewer.groups.sketch3d;
+    if (!g) return;
+    disposeThreeGroup(g);
+    if (!App.doc || App.mode !== 'model') { Viewer.requestRender(); return; }
+    const V = Model.vars(App.doc).v;
+    const rawItems = App.peeking != null ? (App.doc.items || []).slice(0, App.peeking) : null;
+    const activeList = rawItems ? rawItems.filter((x) => !x.suppressed) : Model.activeItems(App.doc);
+    const th = Viewer.theme;
+    const baseCol = th.dark ? '#4dabf7' : '#2a80d0';
+    for (const it of activeList) {
+      if (it.kind !== 'sketch3d' || it.hidden) continue;
+      if (App.iso && App.iso !== it.id) continue;
+      if (S3 && S3.editId === it.id) continue;
+      const sel = App.sel.includes(it.id);
+      const col = sel ? th.accent : baseCol;
+      const w = sel ? 3.2 : 2.2;
+      const res = Model.sketch3dResolve(it.p && it.p.sketch3d, V);
+      const M = Model.worldMatrix(App.doc, it.id);
+      const wp = (q) => new THREE.Vector3(q[0], q[1], q[2]).applyMatrix4(M).toArray();
+      const seenPts = [];
+      for (const e of res.ents || []) {
+        const we = { ...e, a: wp(e.a), b: wp(e.b), ...(e.m ? { m: wp(e.m) } : {}) };
+        drawSk3Entity(g, we, col, w, { depthTest: true, order: 18 });
+        seenPts.push(we.a, we.b);
+      }
+      for (const pt of seenPts) {
+        const r = Math.max(0.45, Math.min(1.6, Viewer.pixelSizeAt(new THREE.Vector3(...pt)) * 3.5));
+        addSk3Dot(g, pt, r, col, true, 19);
+      }
+    }
+    Viewer.requestRender();
+  }
+  function push3dUndo() {
+    if (!S3) return;
+    S3.undo.push({ ents: deepClone(S3.ents), dims: deepClone(S3.dims) });
+    if (S3.undo.length > 80) S3.undo.shift();
+  }
+  function undo3d() {
+    if (!S3 || !S3.undo.length) return false;
+    const prev = S3.undo.pop();
+    S3.ents = prev.ents;
+    S3.dims = prev.dims;
+    S3.draft = null;
+    if (S3.sel && !S3.ents.some((e) => e.id === S3.sel)) S3.sel = null;
+    hideDimBox();
+    render3d();
+    Panels.renderRight();
+    return true;
+  }
+  function snap3dAt(cx, cy) {
+    const r = Viewer.canvas.getBoundingClientRect();
+    const V = Model.vars(App.doc).v;
+    const res = S3 ? Model.sketch3dResolve({ ents: S3.ents, dims: S3.dims }, V) : { ents: [] };
+    // 1. Punkte der aktuellen 3D-Skizze
+    let bestSk = null;
+    const testSkPt = (pt) => {
+      if (!pt) return;
+      const v = new THREE.Vector3(pt[0], pt[1], pt[2]);
+      const sc = Viewer.toScreen(v);
+      const d = Math.hypot(sc.x + r.left - cx, sc.y + r.top - cy);
+      if (d < 14 && (!bestSk || d < bestSk.d)) bestSk = { p: pt.slice(), d };
+    };
+    for (const e of res.ents) { testSkPt(e.a); testSkPt(e.b); if (e.m) testSkPt(e.m); }
+    if (S3 && S3.draft) for (const q of S3.draft.pts) testSkPt(q.map((v) => Model.num(v, V, 0)));
+    if (bestSk) return { p: bestSk.p.map((v) => round(v, 4)), kind: 'point', label: T('sk3.snapPoint'), bind: null };
+
+    // 2. Körperecken und Kantenmitten an allen sichtbaren Körpern
+    const nodes = Viewer.nodes;
+    let bestBody = null;
+    const camPos = Viewer.camera.position;
+    if (nodes && nodes.values) {
+      for (const n of nodes.values()) {
+        if (!n || !n.obj || !n.obj.visible || n.allBodiesHidden || n.ctxDim || n.role === 'hole') continue;
+        const eds = (n.data && n.data.edges) || [];
+        const inv = n.obj.matrixWorld.clone().invert();
+        const tryNodePt = (raw, isMid) => {
+          if (!raw) return;
+          const w = new THREE.Vector3(raw[0], raw[1], raw[2]).applyMatrix4(n.obj.matrixWorld);
+          const sc = Viewer.toScreen(w);
+          const d = Math.hypot(sc.x + r.left - cx, sc.y + r.top - cy);
+          const score = d + (isMid ? 2.5 : 0);
+          if (d < 14) {
+            const camD = camPos.distanceTo(w);
+            if (!bestBody || score < bestBody.score - 1 || (Math.abs(score - bestBody.score) <= 1 && camD < bestBody.camD)) {
+              const lp = w.clone().applyMatrix4(inv).toArray().map((v) => round(v, 4));
+              bestBody = { p: w.toArray().map((v) => round(v, 4)), score, camD, isMid, bind: { id: n.id, lp } };
+            }
+          }
+        };
+        for (const g of eds) {
+          tryNodePt(g.a, false);
+          tryNodePt(g.b, false);
+          tryNodePt(g.m, true);
+        }
+      }
+    }
+    if (bestBody) {
+      return {
+        p: bestBody.p,
+        kind: bestBody.isMid ? 'mid' : 'corner',
+        label: T(bestBody.isMid ? 'sk3.snapMid' : 'sk3.snapCorner'),
+        bind: bestBody.bind,
+      };
+    }
+
+    // 3. Ursprung (0, 0, 0)
+    const sc0 = Viewer.toScreen(new THREE.Vector3(0, 0, 0));
+    if (Math.hypot(sc0.x + r.left - cx, sc0.y + r.top - cy) < 14) {
+      return { p: [0, 0, 0], kind: 'origin', label: T('sk3.snapOrigin'), bind: null };
+    }
+
+    // 4. Fallback: waagerechte Ebene auf Z-Höhe des letzten Punkts (oder 0)
+    let zRef = 0;
+    if (S3 && S3.draft && S3.draft.pts.length) {
+      const lp = S3.draft.pts[S3.draft.pts.length - 1];
+      zRef = Model.num(lp[2], V, 0);
+    } else if (res.ents.length) {
+      zRef = res.ents[res.ents.length - 1].b[2];
+    }
+    const wp = Viewer.pickPlane(cx, cy, zRef);
+    if (!wp) return null;
+    const step = 0.5;
+    return {
+      p: [round(Math.round(wp.x / step) * step, 3), round(Math.round(wp.y / step) * step, 3), round(zRef, 3)],
+      kind: 'plane',
+      label: '',
+      bind: null,
+    };
+  }
+  function parse3dVal(raw, V) {
+    if (typeof raw === 'number' && isFinite(raw)) return round(raw, 4);
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    const normS = s.replace(',', '.');
+    if (/^-?\d+(\.\d+)?$/.test(normS)) {
+      const n = parseFloat(normS);
+      return isFinite(n) ? round(n, 4) : null;
+    }
+    const v = Model.num(s, V, NaN);
+    return isFinite(v) ? s : null;
+  }
+  function add3dPoint(pt, bind = null) {
+    if (!S3 || !Array.isArray(pt) || pt.length !== 3) return false;
+    const V = Model.vars(App.doc).v;
+    const cp = pt.map((v) => { const p = parse3dVal(v, V); return p == null ? 0 : p; });
+    const np = cp.map((v) => Model.num(v, V, 0));
+    const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    if (S3.tool === 'arc') {
+      if (!S3.draft || S3.draft.kind !== 'arc') {
+        S3.draft = { kind: 'arc', pts: [cp], binds: [bind] };
+      } else if (S3.draft.pts.length === 1) {
+        const p0 = S3.draft.pts[0].map((v) => Model.num(v, V, 0));
+        if (d3(p0, np) < 1e-4) return false;
+        S3.draft.pts.push(cp);
+        S3.draft.binds.push(bind);
+      } else {
+        const p0 = S3.draft.pts[0].map((v) => Model.num(v, V, 0));
+        const p1 = S3.draft.pts[1].map((v) => Model.num(v, V, 0));
+        if (d3(p0, np) < 1e-4 || d3(p1, np) < 1e-4) return false;
+        push3dUndo();
+        const ent = {
+          id: uid('e'), type: 'arc',
+          a: S3.draft.pts[0], m: S3.draft.pts[1], b: cp,
+          con: !!S3.con,
+          ...(S3.draft.binds[0] ? { bindA: S3.draft.binds[0] } : {}),
+          ...(S3.draft.binds[1] ? { bindM: S3.draft.binds[1] } : {}),
+          ...(bind ? { bindB: bind } : {}),
+        };
+        S3.ents.push(ent);
+        S3.sel = ent.id;
+        S3.draft = null;
+      }
+    } else {
+      if (S3.tool !== 'line') S3.tool = 'line';
+      if (!S3.draft || S3.draft.kind !== 'line') {
+        S3.draft = { kind: 'line', pts: [cp], binds: [bind] };
+      } else {
+        const aRaw = S3.draft.pts[0];
+        const aNum = aRaw.map((v) => Model.num(v, V, 0));
+        if (d3(aNum, np) < 1e-4) return false;
+        push3dUndo();
+        const ent = {
+          id: uid('e'), type: 'line',
+          a: aRaw, b: cp,
+          con: !!S3.con,
+          ...(S3.draft.binds[0] ? { bindA: S3.draft.binds[0] } : {}),
+          ...(bind ? { bindB: bind } : {}),
+        };
+        S3.ents.push(ent);
+        S3.sel = ent.id;
+        S3.draft = { kind: 'line', pts: [cp], binds: [bind] };
+      }
+    }
+    UI.hint(hint3dFor(S3.tool));
+    showBar3d();
+    render3d();
+    Panels.renderRight();
+    return true;
+  }
+  function add3dLine(a, b, opts = {}) {
+    if (!S3) return null;
+    push3dUndo();
+    const ent = {
+      id: uid('e'), type: 'line', a: a.slice(), b: b.slice(), con: !!opts.con,
+      ...(opts.bindA ? { bindA: opts.bindA } : {}),
+      ...(opts.bindB ? { bindB: opts.bindB } : {}),
+    };
+    S3.ents.push(ent);
+    S3.sel = ent.id;
+    render3d();
+    Panels.renderRight();
+    return ent.id;
+  }
+  function add3dArc(a, m, b, opts = {}) {
+    if (!S3) return null;
+    push3dUndo();
+    const ent = {
+      id: uid('e'), type: 'arc', a: a.slice(), m: m.slice(), b: b.slice(), con: !!opts.con,
+      ...(opts.bindA ? { bindA: opts.bindA } : {}),
+      ...(opts.bindM ? { bindM: opts.bindM } : {}),
+      ...(opts.bindB ? { bindB: opts.bindB } : {}),
+    };
+    S3.ents.push(ent);
+    S3.sel = ent.id;
+    render3d();
+    Panels.renderRight();
+    return ent.id;
+  }
+  function end3dChain() {
+    if (!S3 || !S3.draft) return false;
+    S3.draft = null;
+    UI.hint(hint3dFor(S3.tool));
+    render3d();
+    Panels.renderRight();
+    return true;
+  }
+  function set3dLength(entId, val) {
+    if (!S3) return false;
+    const entObj = S3.ents.find((x) => x.id === entId);
+    if (!entObj) return false;
+    const V = Model.vars(App.doc).v;
+    push3dUndo();
+    const idx = S3.dims.findIndex((d) => d.e === entId && d.k === 'len');
+    if (val == null || val === '' || val === 0 || (typeof val === 'number' && val <= 0)) {
+      if (idx >= 0) S3.dims.splice(idx, 1);
+    } else {
+      const parsed = parse3dVal(val, V);
+      if (parsed == null || Model.num(parsed, V, 0) <= 0) {
+        S3.undo.pop();
+        UI.toast(T('sk3.toast.invalidLen'), { icon: 'info', kind: 'bad' });
+        return false;
+      }
+      if (idx >= 0) S3.dims[idx].v = parsed;
+      else S3.dims.push({ id: uid('d'), e: entId, k: 'len', v: parsed });
+    }
+    render3d();
+    Panels.renderRight();
+    return true;
+  }
+  function delete3dEnt(entId) {
+    if (!S3) return false;
+    const i = S3.ents.findIndex((x) => x.id === entId);
+    if (i < 0) return false;
+    push3dUndo();
+    S3.ents.splice(i, 1);
+    S3.dims = S3.dims.filter((d) => d.e !== entId);
+    if (S3.sel === entId) S3.sel = null;
+    render3d();
+    Panels.renderRight();
+    return true;
+  }
+  function ask3dDim(entObj, curLen, clientX, clientY) {
+    hideDimBox();
+    const dm = S3.dims.find((d) => d.e === entObj.id && d.k === 'len');
+    const curVal = dm ? dm.v : round(curLen, 3);
+    const inp = h('input', { type: 'text', value: Units.fmtInput(curVal, 3) });
+    dimBox = h('div', { class: 'dimlabel editing', style: { left: clientX + 'px', top: clientY + 'px', zIndex: '30' } }, inp);
+    dimBox._inp = inp;
+    dimBox._typed = false;
+    dimBox._commit = () => {
+      const raw = inp.value.trim();
+      hideDimBox();
+      if (!raw) return;
+      const V = Model.vars(App.doc).v;
+      const parsed = parse3dVal(raw, V);
+      if (parsed == null) { UI.toast(T('sk3.toast.invalidLen'), { icon: 'info', kind: 'bad' }); return; }
+      const val = typeof parsed === 'number' ? Units.toMM(parsed) : parsed;
+      set3dLength(entObj.id, val);
+    };
+    inp.addEventListener('input', () => { dimBox._typed = true; });
+    inp.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); dimBox._commit(); Viewer.canvas.focus(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); hideDimBox(); Viewer.canvas.focus(); }
+    });
+    inp.addEventListener('blur', () => { setTimeout(() => { if (dimBox && dimBox._inp === inp) hideDimBox(); }, 120); });
+    $('#overlay').append(dimBox);
+    setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  }
+  function pick3dEntAt(cx, cy) {
+    if (!S3) return null;
+    const r = Viewer.canvas.getBoundingClientRect();
+    const V = Model.vars(App.doc).v;
+    const res = Model.sketch3dResolve({ ents: S3.ents, dims: S3.dims }, V);
+    const distToSeg2 = (px, py, ax, ay, bx, by) => {
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      const t = l2 > 1e-6 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+      return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    };
+    let best = null;
+    for (const e of res.ents) {
+      const pts = e.type === 'arc' && e.m ? (Model.sketch3dArcInfo(e.a, e.m, e.b)?.sample(24) || [e.a, e.b]) : [e.a, e.b];
+      let minD = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const s0 = Viewer.toScreen(new THREE.Vector3(...pts[i]));
+        const s1 = Viewer.toScreen(new THREE.Vector3(...pts[i + 1]));
+        const d = distToSeg2(cx - r.left, cy - r.top, s0.x, s0.y, s1.x, s1.y);
+        if (d < minD) minD = d;
+      }
+      if (minD < 14 && (!best || minD < best.d)) best = { ent: e, d: minD };
+    }
+    return best ? best.ent : null;
+  }
+  function render3d() {
+    if (!S3) return;
+    const g = Viewer.groups.sketch;
+    disposeThreeGroup(g);
+    clearSk3Labels();
+    const V = Model.vars(App.doc).v;
+    const res = Model.sketch3dResolve({ ents: S3.ents, dims: S3.dims }, V);
+    const th = Viewer.theme;
+    const acc = th.accent;
+    const baseCol = th.dark ? '#5aa9ff' : '#1c6fd1';
+    const dimMap = new Map(res.dims.filter((d) => d.k === 'len').map((d) => [d.e, d]));
+    const ptsAll = [];
+    for (const e of res.ents) {
+      const isSel = S3.sel === e.id;
+      const col = isSel ? acc : baseCol;
+      const ai = drawSk3Entity(g, e, col, isSel ? 3.5 : 2.5, { depthTest: false, order: 24 });
+      ptsAll.push(e.a, e.b);
+      if (e.m) ptsAll.push(e.m);
+      const mid3 = ai ? ai.mid3d : [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2, (e.a[2] + e.b[2]) / 2];
+      const hasDim = dimMap.has(e.id);
+      const txt = (hasDim ? '🔒 ' : '') + Units.fmtLenU(e.length || 0, 2);
+      const lbl = h('div', { class: 'dimlabel sk3-dim' + (hasDim ? ' fixed' : '') + (isSel ? ' sel' : ''), dataset: { entId: e.id } }, txt);
+      lbl._pos3 = new THREE.Vector3(mid3[0], mid3[1], mid3[2]);
+      lbl.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      lbl.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        S3.sel = e.id;
+        render3d();
+        Panels.renderRight();
+        const rect = lbl.getBoundingClientRect();
+        ask3dDim(e, e.length || 0, rect.left + rect.width / 2, rect.top + rect.height / 2);
+      });
+      $('#overlay').append(lbl);
+      sk3Labels.push(lbl);
+    }
+    for (const pt of ptsAll) {
+      const r = Math.max(0.5, Math.min(1.8, Viewer.pixelSizeAt(new THREE.Vector3(...pt)) * 4));
+      addSk3Dot(g, pt, r, acc, false, 26);
+    }
+    if (S3.draft && S3.draft.pts.length) {
+      const dPts = S3.draft.pts.map((q) => q.map((v) => Model.num(v, V, 0)));
+      for (const pt of dPts) {
+        const r = Math.max(0.6, Math.min(2, Viewer.pixelSizeAt(new THREE.Vector3(...pt)) * 4.5));
+        addSk3Dot(g, pt, r, '#e0457b', false, 27);
+      }
+      const cur = S3.hoverSnap ? S3.hoverSnap.p : null;
+      if (cur) {
+        if (S3.draft.kind === 'arc') {
+          if (dPts.length === 1) {
+            drawSk3Entity(g, { type: 'line', a: dPts[0], b: cur, con: true }, acc, 1.8, { depthTest: false, order: 25 });
+          } else if (dPts.length === 2) {
+            drawSk3Entity(g, { type: 'arc', a: dPts[0], m: dPts[1], b: cur, con: false }, acc, 2.4, { depthTest: false, order: 25 });
+            const ai = Model.sketch3dArcInfo(dPts[0], dPts[1], cur);
+            const len = ai ? ai.length : Math.hypot(cur[0] - dPts[0][0], cur[1] - dPts[0][1], cur[2] - dPts[0][2]);
+            const live = h('div', { class: 'dimlabel live' }, Units.fmtLenU(len, 2));
+            live._pos3 = new THREE.Vector3(...cur);
+            $('#overlay').append(live);
+            sk3Labels.push(live);
+          }
+        } else {
+          const p0 = dPts[dPts.length - 1];
+          drawSk3Entity(g, { type: 'line', a: p0, b: cur, con: !!S3.con }, acc, 2.4, { depthTest: false, order: 25 });
+          const len = Math.hypot(cur[0] - p0[0], cur[1] - p0[1], cur[2] - p0[2]);
+          const live = h('div', { class: 'dimlabel live' }, Units.fmtLenU(len, 2));
+          live._pos3 = new THREE.Vector3((p0[0] + cur[0]) / 2, (p0[1] + cur[1]) / 2, (p0[2] + cur[2]) / 2);
+          $('#overlay').append(live);
+          sk3Labels.push(live);
+        }
+      }
+    }
+    if (S3.hoverSnap) {
+      const hs = S3.hoverSnap;
+      const r = Math.max(0.65, Math.min(2.2, Viewer.pixelSizeAt(new THREE.Vector3(...hs.p)) * 5.2));
+      const snapCol = hs.kind === 'corner' || hs.kind === 'mid' ? '#e8833a' : hs.kind === 'point' || hs.kind === 'origin' ? '#0ca678' : acc;
+      addSk3Dot(g, hs.p, r, snapCol, false, 28);
+      if (hs.label) {
+        const tag = h('div', { class: 'snaptip' }, `${hs.label} (${hs.p.map((v) => Units.fmtLen(v, 1)).join(', ')})`);
+        tag._pos3 = new THREE.Vector3(...hs.p);
+        tag.style.transform = 'translate(10px,-18px)';
+        $('#overlay').append(tag);
+        sk3Labels.push(tag);
+      }
+    }
+    place3dLabels();
+    Viewer.requestRender();
+  }
+  function showBar3d() {
+    hideBar();
+    if (!S3) return;
+    bar = h('div', { class: 'sketchbar', id: 'sk3-bar', role: 'toolbar', 'aria-label': T('kind.sketch3d') });
+    bar.append(h('span', { class: 'title' }, T('kind.sketch3d')));
+    const vsep = () => h('span', { class: 'vsep', style: { width: '1px', alignSelf: 'stretch', background: 'var(--line)', margin: '4px 4px' } });
+    for (const t of sk3Tools()) {
+      if (t.sep) bar.append(vsep());
+      const b = h('button', { type: 'button', class: 'tool' + (S3.tool === t.id ? ' active' : ''), 'data-tip': t.tip, 'data-kbd': t.key || null, 'aria-label': t.label, dataset: { tool3d: t.id } });
+      b.innerHTML = icon(t.icon) + `<span>${esc(t.label)}</span>`;
+      b.onclick = () => set3dTool(t.id);
+      bar.append(b);
+    }
+    const cb = h('button', { type: 'button', class: 'tool conmode' + (S3.con ? ' active' : ''), id: 'sk3-con', 'aria-pressed': S3.con ? 'true' : 'false', 'data-tip': T('sk.bar.conTip'), 'data-kbd': 'X', 'aria-label': T('sk.bar.con') });
+    cb.innerHTML = icon('construct') + `<span>${esc(T('sk.bar.con'))}</span>`;
+    cb.onclick = () => { if (!S3) return; S3.con = !S3.con; showBar3d(); };
+    bar.append(vsep(), cb, vsep());
+    const un = h('button', { type: 'button', class: 'tool', id: 'sk3-undo', 'data-tip': T('topbar.undo'), 'data-kbd': 'Strg Z', 'aria-label': T('topbar.undo') });
+    un.innerHTML = icon('undo');
+    un.onclick = () => undo3d();
+    const cn = h('button', { type: 'button', class: 'tool', id: 'sk3-cancel', 'data-tip': T('sk.bar.cancelTip'), 'aria-label': T('common.cancel') });
+    cn.innerHTML = icon('close');
+    cn.onclick = () => cancel3d();
+    const ok = h('button', { type: 'button', class: 'tool primary', id: 'sk3-done', 'data-tip': T('sk3.doneTip'), 'data-kbd': 'Enter' });
+    ok.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`;
+    ok.onclick = () => finish3d();
+    bar.append(un, cn, ok);
+    bars = h('div', { class: 'skbars' });
+    bars.append(bar);
+    $('#overlay').append(bars);
+  }
+  function set3dTool(id) {
+    if (!S3) return;
+    S3.tool = id;
+    S3.draft = null;
+    hideDimBox();
+    showBar3d();
+    UI.hint(hint3dFor(id));
+    render3d();
+    Panels.renderRight();
+  }
+  function renderPanel3d(body) {
+    if (!S3) return;
+    const V = Model.vars(App.doc).v;
+    const res = Model.sketch3dResolve({ ents: S3.ents, dims: S3.dims }, V);
+    const w = h('div', { class: 'props' });
+    // Punkt-Eingabe (X, Y, Z)
+    const ptSec = h('div', { class: 'section', id: 'sk3-pt-sec' }, h('div', { class: 'section-h' }, T('sk3.pointInput')));
+    const ptRow = h('div', { class: 'fields three' });
+    const defPt = S3.draft && S3.draft.pts.length
+      ? S3.draft.pts[S3.draft.pts.length - 1].map((v) => Model.num(v, V, 0))
+      : res.ents.length ? res.ents[res.ents.length - 1].b : [0, 0, 0];
+    const inps = {};
+    for (const [k, ax] of [[0, 'x'], [1, 'y'], [2, 'z']]) {
+      const f = UI.numField({ id: 'sk3-in-' + ax, label: ax.toUpperCase(), value: round(defPt[k], 3), onCommit: () => {} });
+      inps[ax] = f.querySelector('input');
+      ptRow.append(f);
+    }
+    const commitPtInput = () => {
+      const coords = ['x', 'y', 'z'].map((ax) => parse3dVal(inps[ax].value, Model.vars(App.doc).v));
+      if (coords.some((v) => v == null)) { UI.toast(T('sk3.toast.invalidCoord'), { icon: 'info', kind: 'bad' }); return; }
+      add3dPoint(coords, null);
+    };
+    for (const ax of ['x', 'y', 'z']) {
+      inps[ax].addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); commitPtInput(); }
+      });
+    }
+    const ptBtns = h('div', { class: 'btn-row', style: { marginTop: '6px' } });
+    const addBtn = h('button', { type: 'button', class: 'btn primary', id: 'sk3-pt-add' });
+    addBtn.innerHTML = icon('plus') + esc(T('sk3.addPoint'));
+    addBtn.onclick = commitPtInput;
+    ptBtns.append(addBtn);
+    if (S3.draft && S3.draft.pts.length) {
+      const endBtn = h('button', { type: 'button', class: 'btn', id: 'sk3-chain-end' });
+      endBtn.innerHTML = icon('check') + esc(T('sk3.endChain'));
+      endBtn.onclick = () => end3dChain();
+      ptBtns.append(endBtn);
+    }
+    ptSec.append(ptRow, ptBtns);
+    if (S3.draft && S3.draft.pts.length) {
+      const pTxt = S3.draft.pts.map((q) => `(${q.map((v) => Units.fmtLen(Model.num(v, V, 0), 1)).join(', ')})`).join(' → ');
+      ptSec.append(h('div', { class: 'hint-box', id: 'sk3-draft-info' }, T('sk3.draftInfo', { pts: pTxt })));
+    }
+    w.append(ptSec);
+
+    // Elemente & Längenmaße
+    const elSec = h('div', { class: 'section', id: 'sk3-ents-sec' }, h('div', { class: 'section-h' }, T('sk3.elementsTitle')));
+    elSec.append(h('div', { class: 'mini-row', id: 'sk3-total-len' },
+      h('span', { class: 'grow' }, T('sk3.totalLen')),
+      h('b', { class: 'mono' }, Units.fmtLenU(res.totalLength, 2))));
+    const list = h('div', { id: 'sk3-ents-list', style: { display: 'grid', gap: '6px', marginTop: '6px' } });
+    if (!res.ents.length) {
+      list.append(h('div', { class: 'hint-box' }, T('sk3.emptyHint')));
+    } else {
+      const rawMap = new Map(S3.ents.map((x) => [x.id, x]));
+      const dimMap = new Map(S3.dims.filter((d) => d.k === 'len').map((d) => [d.e, d]));
+      res.ents.forEach((e, i) => {
+        const rawE = rawMap.get(e.id) || e;
+        const dm = dimMap.get(e.id);
+        const card = h('div', { class: 'sk3-ent-card' + (S3.sel === e.id ? ' sel' : ''), dataset: { entId: e.id } });
+        const head = h('div', { class: 'sk3-ent-head' });
+        const title = h('span', { class: 'grow' }, `${i + 1}. ${e.type === 'arc' ? T('sk3.arc') : T('sk3.line')}${e.con ? ' (' + T('sk3.conShort') + ')' : ''}`);
+        title.style.cursor = 'pointer';
+        title.onclick = () => { S3.sel = e.id; render3d(); Panels.renderRight(); };
+        const lenTag = h('span', { class: 'mono sk3-len', id: `sk3-len-val-${i}` }, Units.fmtLenU(e.length || 0, 2));
+        const del = h('button', { type: 'button', class: 'btn ghost small', id: `sk3-del-${i}`, 'aria-label': T('common.delete') });
+        del.innerHTML = icon('trash');
+        del.onclick = () => delete3dEnt(e.id);
+        head.append(title, lenTag, del);
+        const fmtP = (q) => `(${q.map((v) => Units.fmtLen(v, 1)).join(', ')})`;
+        const coordsTxt = e.type === 'arc' && e.m
+          ? `${fmtP(e.a)} → ${fmtP(e.m)} → ${fmtP(e.b)}`
+          : `${fmtP(e.a)} → ${fmtP(e.b)}`;
+        const sub = h('div', { class: 'muted mono', style: { fontSize: '11.5px' } }, coordsTxt);
+        const lf = UI.numField({
+          id: `sk3-len-${i}`,
+          label: dm ? T('sk3.lenFixed') : T('sk3.lenOpt'),
+          value: dm ? dm.v : '',
+          min: 0,
+          onCommit: (v) => set3dLength(rawE.id, v),
+        });
+        card.append(head, sub, lf);
+        list.append(card);
+      });
+    }
+    elSec.append(list);
+    w.append(elSec);
+    w.append(h('div', { class: 'hint-box', html: T('sk3.panelHint') }));
+    body.append(w);
+  }
+  function onClick3d(e) {
+    if (!S3) return;
+    if (S3.tool === 'select') {
+      const hit = pick3dEntAt(e.clientX, e.clientY);
+      S3.sel = hit ? hit.id : null;
+      render3d();
+      Panels.renderRight();
+      return;
+    }
+    if (S3.tool === 'dim') {
+      const hit = pick3dEntAt(e.clientX, e.clientY);
+      if (!hit) { UI.toast(T('sk3.toast.pickEntForDim'), { icon: 'info', ms: 1600 }); return; }
+      S3.sel = hit.id;
+      render3d();
+      Panels.renderRight();
+      ask3dDim(hit, hit.length || 0, e.clientX, e.clientY);
+      return;
+    }
+    const sn = snap3dAt(e.clientX, e.clientY);
+    if (sn) add3dPoint(sn.p, sn.bind);
+  }
+  function onMove3d(e) {
+    if (!S3) return;
+    if (S3.tool === 'line' || S3.tool === 'arc') {
+      const sn = snap3dAt(e.clientX, e.clientY);
+      const prev = S3.hoverSnap;
+      const same = (!sn && !prev) || (sn && prev && sn.kind === prev.kind && [0, 1, 2].every((k) => Math.abs(sn.p[k] - prev.p[k]) < 1e-4));
+      if (!same) {
+        S3.hoverSnap = sn;
+        render3d();
+      }
+    } else if (S3.hoverSnap) {
+      S3.hoverSnap = null;
+      render3d();
+    }
+  }
+  function onKey3d(e) {
+    if (!S3) return false;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
+    if (dimBox && dimBox._inp && document.body.contains(dimBox)) {
+      if (e.key === 'Enter') { e.preventDefault(); dimBox._commit(); return true; }
+      if (e.key === 'Escape') { e.preventDefault(); hideDimBox(); Viewer.canvas.focus(); return true; }
+      return false;
+    }
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo3d(); return true; }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (S3.draft) end3dChain();
+      else cancel3d();
+      return true;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (S3.draft) end3dChain();
+      else finish3d();
+      return true;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && S3.sel) {
+      e.preventDefault();
+      delete3dEnt(S3.sel);
+      return true;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (k === 'v') { set3dTool('select'); return true; }
+      if (k === 'l') { set3dTool('line'); return true; }
+      if (k === 'a') { set3dTool('arc'); return true; }
+      if (k === 'd') { set3dTool('dim'); return true; }
+      if (k === 'x') { S3.con = !S3.con; showBar3d(); return true; }
+    }
+    return false;
+  }
+  function finish3dSession() {
+    if (!S3) return;
+    disposeThreeGroup(Viewer.groups.sketch);
+    clearSk3Labels();
+    hideBar();
+    hideDimBox();
+    Viewer.canvas.style.cursor = '';
+    S3 = null;
+    document.body.classList.remove('sketching');
+    Viewer.useButtons('model');
+    UI.hint(null);
+    App.emit('mode');
+    render3dScene();
+    Panels.renderRight();
+    Handles.rebuild();
+  }
+  function cancel3d(silent) {
+    if (!S3) return;
+    finish3dSession();
+    if (!silent) UI.toast(T('sk3.toast.cancelled'), { icon: 'close', ms: 1800 });
+  }
+  function finish3d() {
+    if (!S3) return null;
+    S3.draft = null;
+    if (!S3.ents.length) {
+      UI.toast(T('sk3.toast.empty'), { icon: 'info' });
+      return null;
+    }
+    const payload = { ents: deepClone(S3.ents), dims: deepClone(S3.dims) };
+    const editId = S3.editId;
+    let outId = editId;
+    App.change(editId ? '3D-Skizze geändert' : '3D-Skizze angelegt', (doc) => {
+      if (editId) {
+        const f = Model.find(doc, editId);
+        if (!f) return false;
+        f.item.p.sketch3d = payload;
+      } else {
+        const it = Model.newItem('sketch3d', { sketch3d: payload });
+        const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
+        doc.items.splice(at, 0, it);
+        if (doc.rollback != null) doc.rollback = at + 1;
+        outId = it.id;
+      }
+    });
+    finish3dSession();
+    if (outId) App.select([outId]);
+    UI.toast(T('sk3.toast.done'), { icon: 'check' });
+    return outId;
+  }
+  function start3d(opts = {}) {
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      UI.toast(T('sk3.toast.proOnly'), { icon: 'info' });
+      return false;
+    }
+    stopPlanePick();
+    if (S) cancel(true);
+    if (S3) finish3dSession();
+    if (typeof Features !== 'undefined' && Features.stopRoute) Features.stopRoute();
+    if (App.mode !== 'model' && typeof Commands !== 'undefined' && Commands.setMode) Commands.setMode('model');
+    let ents = [], dims = [];
+    if (opts.editId) {
+      const f = Model.find(App.doc, opts.editId);
+      if (!f || f.item.kind !== 'sketch3d') return false;
+      const sk = (f.item.p && f.item.p.sketch3d) || {};
+      ents = deepClone(sk.ents || []);
+      dims = deepClone(sk.dims || []);
+    }
+    S3 = {
+      editId: opts.editId || null,
+      ents,
+      dims,
+      tool: 'line',
+      sel: null,
+      con: false,
+      draft: null,
+      hoverSnap: null,
+      undo: [],
+      downAt: null,
+      rDownAt: null,
+    };
+    document.body.classList.add('sketching');
+    Viewer.useButtons('model');
+    Viewer.canvas.style.cursor = 'crosshair';
+    showBar3d();
+    UI.hint(hint3dFor(S3.tool));
+    App.emit('mode');
+    render3dScene();
+    render3d();
+    Panels.renderRight();
+    return true;
+  }
+  function edit3d(id) {
+    return start3d({ editId: id });
+  }
   // ---------- Beenden ----------
   function cancel(silent) {
+    if (S3) { cancel3d(silent); return; }
     if (!S) return;
     App.extra = []; App.rebuild();
     finishSession();
@@ -7818,12 +8608,23 @@ const Sketch = (() => {
       if (note && S.txt && SK.isFontLoaded && SK.isFontLoaded(S.txt.font || 'inter')) note.remove();
       Panels.renderRight({ preserveFocus: true });
     });
-    App.on('results', () => { relinkAll(); relinkSketchPlanes(); relinkAsync(); if (S && S.step) updateStepExtInfo(); });
+    App.on('results', () => { relinkAll(); relinkSketchPlanes(); relinkAsync(); if (S && S.step) updateStepExtInfo(); render3dScene(); });
+    App.on('doc', () => render3dScene());
+    App.on('selection', () => render3dScene());
+    App.on('mode', () => render3dScene());
+    App.on('peek', () => render3dScene());
+    App.on('ctx', () => render3dScene());
+    Viewer.on('camera', () => { if (S3) place3dLabels(); });
     App.on('docLoaded', () => { relinkSigMemo.clear(); lostLinkGroups.clear(); asyncRelinkGen++; asyncRelinkRounds = 0; });
     const cv = Viewer.canvas;
     const skTouches = new Set();
     let skTouchMulti = false;
     cv.addEventListener('pointerdown', (e) => {
+      if (S3) {
+        if (e.button === 0) S3.downAt = [e.clientX, e.clientY];
+        else if (e.button === 2) S3.rDownAt = [e.clientX, e.clientY];
+        return;
+      }
       if (e.pointerType === 'touch') {
         skTouches.add(e.pointerId);
         if (skTouches.size >= 2) {
@@ -7841,6 +8642,7 @@ const Sketch = (() => {
       if (S) { onDown(e); }
     }, true);
     cv.addEventListener('pointermove', (e) => {
+      if (S3) { onMove3d(e); return; }
       if (e.pointerType === 'touch' && (skTouchMulti || skTouches.size >= 2)) return;
       if (S) onMove(e);
     });
@@ -7849,12 +8651,26 @@ const Sketch = (() => {
       if (S && S.band) bandMove(e);
     });
     window.addEventListener('pointerup', (e) => {
+      if (S3) {
+        if (e.button === 0 && S3.downAt) {
+          const moved = Math.hypot(e.clientX - S3.downAt[0], e.clientY - S3.downAt[1]);
+          S3.downAt = null;
+          if (moved < 5 && e.target === cv) onClick3d(e);
+        }
+        return;
+      }
       if (e.pointerType === 'touch') {
         skTouches.delete(e.pointerId);
         if (skTouchMulti) { if (skTouches.size === 0) skTouchMulti = false; return; }
       }
       if (S) { onUp(e); stepUp(e); }
     });
+    cv.addEventListener('contextmenu', (e) => {
+      if (!S3) return;
+      const moved = S3.rDownAt ? Math.hypot(e.clientX - S3.rDownAt[0], e.clientY - S3.rDownAt[1]) : 0;
+      S3.rDownAt = null;
+      if (moved < 5 && S3.draft) { e.preventDefault(); e.stopPropagation(); end3dChain(); }
+    }, true);
     window.addEventListener('pointercancel', (e) => {
       if (e.pointerType === 'touch') {
         skTouches.delete(e.pointerId);
@@ -7873,6 +8689,7 @@ const Sketch = (() => {
     window.addEventListener('keyup', onModKey);
   }
   function refreshUI() {
+    if (S3) { showBar3d(); UI.hint(hint3dFor(S3.tool)); Panels.renderRight(); return; }
     if (!S) return;
     if (S.step) { renderStep(); return; }
     if (isSimpleMode()) {
@@ -7883,6 +8700,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

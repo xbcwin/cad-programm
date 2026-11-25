@@ -2097,7 +2097,10 @@ export function createKernel(R, oc) {
     if (Math.abs(twist) > 3600) throw new Error('Die Verdrehung darf höchstens ±3600° (10 Umdrehungen) betragen.');
     const wall = num(p.wall, 0);
     if (Math.abs(twist) < 1e-6) {
-      const sweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
+      const sweep = (w) => {
+        try { return R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true }); }
+        catch (_) { return R.genericSweep(w, spine, { transitionMode: 'right', forceProfileSpineOthogonality: true }); }
+      };
       const wOuter = profAt(0, P0, T, V, N);
       let shape;
       try { shape = sweep(wOuter); }
@@ -2182,6 +2185,7 @@ export function createKernel(R, oc) {
 
   // Querschnitt entlang eines offenen Pfads (Sweep): Rohr, Kabelkanal, Leiste
   function buildSweep(p) {
+    if (p.sketch3dMissing) throw new Error(p.sketch3dMissing);
     let spine, P0, T, N;
     const P3 = p.path3d && Array.isArray(p.path3d.pts) ? p.path3d.pts.filter((q) => Array.isArray(q) && q.length === 3 && q.every((v) => isFinite(v))) : null;
     if (P3) {
@@ -2200,6 +2204,24 @@ export function createKernel(R, oc) {
       }
       P0 = pts[0];
       const up = Math.abs(T[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0], d = T[0] * up[0] + T[1] * up[1] + T[2] * up[2];
+      N = norm([up[0] - T[0] * d, up[1] - T[1] * d, up[2] - T[2] * d]);
+    } else if (Array.isArray(p.segs3d) && p.segs3d.length) {
+      const ed = [];
+      for (const s of p.segs3d) {
+        if (!s || !s.a || !s.b) continue;
+        if (s.t === 'arc' && s.m) {
+          const cr = cross(sub(s.m, s.a), sub(s.b, s.a));
+          if (len(cr) > 1e-6) ed.push(R.makeThreePointArc(s.a, s.m, s.b));
+          else if (len(sub(s.b, s.a)) > 1e-6) ed.push(R.makeLine(s.a, s.b));
+        } else if (len(sub(s.b, s.a)) > 1e-6) {
+          ed.push(R.makeLine(s.a, s.b));
+        }
+      }
+      if (!ed.length) throw new Error('Die 3D-Skizze enthält keinen gültigen Pfad.');
+      try { spine = R.assembleWire(ed); } finally { ed.forEach(safeDelete); }
+      P0 = p.p0 || p.segs3d[0].a;
+      T = norm(p.t0 || sub(p.segs3d[0].b, p.segs3d[0].a));
+      const up = Math.abs(T[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0], d = dot(T, up);
       N = norm([up[0] - T[0] * d, up[1] - T[1] * d, up[2] - T[2] * d]);
     } else {
       const segs = p.segs || [];
@@ -4147,7 +4169,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -5782,6 +5804,10 @@ export function createKernel(R, oc) {
     const NAMES = { join: 'Vereinigen', cut: 'Abziehen', common: 'Schnittmenge' };
     for (let i = 0; i < evald.length; i++) {
       const e = evald[i], it = e.it;
+      if (it.kind === 'sketch3d') {
+        if (track && track.stepKeys) track.stepKeys.set(it.id, e.key);
+        continue;
+      }
       if (it.kind === 'deleteBody') {
         const p = it.p || {};
         const targets = Array.isArray(p.targets) ? p.targets.filter(Boolean) : (p.target ? [p.target] : []);

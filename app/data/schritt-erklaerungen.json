@@ -274,5 +274,10 @@
     "was": "Zieht einen runden, rechteckigen oder eigenen Skizzen-Querschnitt entlang eines offenen Pfads – auf Wunsch mit Verdrehung über die Länge und als Schnitt (Nut) in einem Körper.",
     "wozu": "Ideal für Kabelkanäle, Rohre, Bügel, gedrehte Streben sowie Nuten und Rillen entlang gebogener Kurven.",
     "achtung": "Für eine Nut wählst du unter „Körper“ den Modus „Schneiden“ (oder „Abziehen von …“) und lässt die Kurve sauber durch den Zielkörper laufen."
+  },
+  "sketch3d": {
+    "was": "Speichert eine räumliche 3D-Skizze aus Linien und 3-Punkt-Bögen samt Punkt-Bindungen an Körperecken und Längenmaßen.",
+    "wozu": "Dient als dreidimensionaler Pfad für „Entlang Pfad“, um Rohre, Bügel, Gestelle oder Kabelkanäle frei durch den Raum zu führen.",
+    "achtung": "Hilfslinien werden in der 3D-Ansicht gestrichelt gezeichnet und beim Ziehen „Entlang Pfad“ übersprungen."
   }
 }

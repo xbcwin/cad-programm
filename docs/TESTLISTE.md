@@ -2377,6 +2377,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `silhouette2d` und `intersectCurve2d` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`umriss`, `schnittkurve`) ohne Fehler.
 - [ ] **Von Hand**: Im Browser die Silhouette eines gedrehten Körpers mit Bohrung sowie die Schnittkurve zweier schräger Freiform-/Zylinderflächen auf einer geneigten Skizzenebene prüfen und mit `RefFix` auf eine neue Fläche umhängen.
 
+## 3D-Skizze: Linien und Bögen im Raum (Auto [A-119], SK-51)
+- [x] **Profi-Modus**: Knopf `#sk-3d` („3D-Skizze“) im Skizzen-Startmenü sowie Werkzeug `#t-sketch3d` sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Linienzug & Längenmaße**: Linienzug `(0,0,0) → (20,0,0) → (20,20,10)` über Punkt-Eingabe `#sk3-in-x/y/z` + `#sk3-pt-add` ergibt zwei Linien mit exakten Längen `20` und `≈ 22,36` samt Längen-Schildchen `.sk3-dim`; festes Längenmaß (`25`) zieht den verbundenen Folgepunkt mit, `Strg+Z` stellt den Ausgangszustand wieder her.
+- [x] **Entlang Pfad (Kreis-Profil)**: Nach Fertigstellen (`#sk3-done`) liegt `sketch3d` im Verlauf und wird in `Viewer.groups.sketch3d` angezeigt; Klick auf `#sk3-to-sweep` erzeugt einen geschlossenen, geometrisch gültigen 3D-Körper ohne Rechenfehler.
+- [x] **Fangen an Körperecke & 3D-Bogen**: `Sketch.snap3dAt` fängt exakt an der Ecke eines Quaders samt Bindung; 3-Punkt-3D-Bogen `(0,0,0) → (10,10,10) → (20,0,0)` ergibt exakte Bogenlänge und lässt sich fehlerfrei entlang des Pfads ziehen; Hilfetext `sketch3d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`3d-skizze`) vollständig.
+- [ ] **Von Hand**: Im Browser eine 3D-Skizze aus mehreren Linien und Bögen frei an Körperecken eines Modells fangen, dabei die Kamera drehen, ein Längenmaß über das 3D-Schildchen ändern und danach den Körper entlang des Pfads verschieben (prüfen, dass die gefangenen Punkte mitwandern).
+
 ## Fehler melden
 
 ```

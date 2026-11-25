@@ -23507,6 +23507,147 @@ def t_a113_kegelschnitt_bruecke(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_skizze_3d(p):
+    def warte_koerper(n_solids=1, secs=30):
+        for _ in range(secs):
+            p.wait(500)
+            if p.ev("return !App.busy && App.results.size >= arg", n_solids):
+                break
+        p.wait(500)
+
+    p.empty()
+    # 1. Sichtbarkeit: in Einfach ausgeblendet, in Profi sichtbar
+    p.ev("ViewPrefs.setLevel('simple');"); p.wait(250)
+    p.pg.locator('#t-sketch').click(); p.wait(250)
+    vis_simple = p.pg.locator('#sk-3d').is_visible()
+    p.ev("UI.closePop(); ViewPrefs.setLevel('pro');"); p.wait(250)
+    p.pg.locator('#t-sketch').click(); p.wait(250)
+    vis_pro = p.pg.locator('#sk-3d').is_visible()
+    p.pg.locator('#sk-3d').click(); p.wait(300)
+    active1 = p.ev("return Sketch.active3d && !!document.querySelector('#sk3-bar')")
+
+    # 2. Linienzug (0,0,0) -> (20,0,0) -> (20,20,10) über Punkt-Eingabe
+    def put_pt(x, y, z):
+        p.pg.locator('#sk3-in-x').fill(str(x))
+        p.pg.locator('#sk3-in-y').fill(str(y))
+        p.pg.locator('#sk3-in-z').fill(str(z))
+        p.pg.locator('#sk3-pt-add').click()
+        p.wait(150)
+
+    put_pt(0, 0, 0)
+    put_pt(20, 0, 0)
+    put_pt(20, 20, 10)
+    p.pg.locator('#sk3-chain-end').click(); p.wait(200)
+
+    info1 = p.ev("""
+      const r = Model.sketch3dResolve({ ents: Sketch.state3d.ents, dims: Sketch.state3d.dims }, Model.vars(App.doc).v);
+      return {
+        n: r.ents.length,
+        l0: r.ents[0] && r.ents[0].length,
+        l1: r.ents[1] && r.ents[1].length,
+        tot: r.totalLength,
+        dimLabels: document.querySelectorAll('.sk3-dim').length,
+      };
+    """)
+    lbl0 = p.pg.locator('#sk3-len-val-0').text_content()
+    lbl1 = p.pg.locator('#sk3-len-val-1').text_content()
+
+    # Längenmaß auf 25 mm setzen -> Folgepunkt wandert mit; Undo stellt 20 & ~22,36 wieder her
+    p.pg.locator('#sk3-len-0').fill('25')
+    p.pg.locator('#sk3-len-0').press('Enter')
+    p.wait(250)
+    info_dim = p.ev("""
+      const r = Model.sketch3dResolve({ ents: Sketch.state3d.ents, dims: Sketch.state3d.dims }, Model.vars(App.doc).v);
+      return { l0: r.ents[0].length, l1: r.ents[1].length, b1: r.ents[1].b };
+    """)
+    p.pg.locator('#sk3-undo').click(); p.wait(250)
+    info_undo = p.ev("""
+      const r = Model.sketch3dResolve({ ents: Sketch.state3d.ents, dims: Sketch.state3d.dims }, Model.vars(App.doc).v);
+      return { l0: r.ents[0].length, l1: r.ents[1].length, b1: r.ents[1].b };
+    """)
+    exp_l1 = math.hypot(0, 20, 10)
+    ok1 = bool(
+        not vis_simple and vis_pro and active1
+        and info1['n'] == 2
+        and abs(info1['l0'] - 20.0) < 1e-4
+        and abs(info1['l1'] - exp_l1) < 1e-4
+        and info1['dimLabels'] == 2
+        and '20' in lbl0 and ('22,36' in lbl1 or '22.36' in lbl1)
+        and abs(info_dim['l0'] - 25.0) < 1e-4 and abs(info_dim['l1'] - exp_l1) < 1e-4
+        and abs(info_dim['b1'][0] - 25.0) < 1e-4
+        and abs(info_undo['l0'] - 20.0) < 1e-4 and abs(info_undo['b1'][0] - 20.0) < 1e-4
+    )
+
+    # 3. Abschließen und als Pfad für „Entlang Pfad“ mit Kreis-Profil ziehen
+    p.pg.locator('#sk3-done').click(); p.wait(400)
+    sk_done = p.ev("""
+      return {
+        active3d: Sketch.active3d,
+        nItems: App.doc.items.length,
+        kind: App.doc.items[0] && App.doc.items[0].kind,
+        groupKids: Viewer.groups.sketch3d.children.length,
+        tlCount: document.querySelectorAll('.tl-chip').length,
+      };
+    """)
+    p.pg.locator('#sk3-to-sweep').click()
+    warte_koerper(1)
+    vol1 = volumen(p)
+    sw1 = p.ev("""
+      const it = App.doc.items[1];
+      return { nItems: App.doc.items.length, kind: it && it.kind, skId: it && it.p && it.p.sketch3dId, errs: App.errors.length };
+    """)
+    gc1 = p.ev("return GeomCheck.run().then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    ok2 = bool(
+        not sk_done['active3d'] and sk_done['nItems'] == 1 and sk_done['kind'] == 'sketch3d'
+        and sk_done['groupKids'] > 0 and sk_done['tlCount'] == 1
+        and sw1['nItems'] == 2 and sw1['kind'] == 'sweep' and sw1['errs'] == 0
+        and 1000 < vol1 < 1400
+        and gc1['n'] >= 1 and gc1['iss'] == 0
+    )
+
+    # 4. Körperecke fangen + 3D-Bogen + Sweep
+    p.ev("App.change('Reset', d => { d.items = []; }); Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 } });")
+    warte_koerper(1)
+    box_id = p.ev("return App.doc.items[0].id")
+    c_scr = world_screen(p, 10, -10, 20)
+    p.ev("Sketch.start3d()"); p.wait(200)
+    snap_res = p.ev("return Sketch.snap3dAt(arg[0], arg[1])", [c_scr[0], c_scr[1]])
+    p.ev("Sketch.cancel3d(true); App.change('Reset', d => { d.items = []; });"); p.wait(200)
+
+    p.ev("Sketch.start3d()"); p.wait(200)
+    p.pg.locator('[data-tool3d="arc"]').click(); p.wait(150)
+    p.ev("Sketch.add3dPoint([0, 0, 0]); Sketch.add3dPoint([10, 10, 10]); Sketch.add3dPoint([20, 0, 0]);"); p.wait(200)
+    arc_info = p.ev("""
+      const r = Model.sketch3dResolve({ ents: Sketch.state3d.ents, dims: Sketch.state3d.dims }, Model.vars(App.doc).v);
+      return { n: r.ents.length, type: r.ents[0] && r.ents[0].type, len: r.ents[0] && r.ents[0].length };
+    """)
+    p.pg.locator('#sk3-done').click(); p.wait(300)
+    p.pg.locator('#sk3-to-sweep').click()
+    warte_koerper(1)
+    vol2 = volumen(p)
+    sw2_errs = p.ev("return App.errors.map(e => e.message)")
+    gc2 = p.ev("return GeomCheck.run().then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    ok3 = bool(
+        snap_res and snap_res['kind'] == 'corner'
+        and snap_res.get('bind') and snap_res['bind']['id'] == box_id
+        and math.hypot(snap_res['p'][0] - 10, snap_res['p'][1] + 10, snap_res['p'][2] - 20) < 0.05
+        and arc_info['n'] == 1 and arc_info['type'] == 'arc' and abs(arc_info['len'] - 40.53065) < 0.01
+        and len(sw2_errs) == 0 and vol2 and abs(vol2 - 1145.98) < 50 and gc2['n'] >= 1 and gc2['iss'] == 0
+    )
+
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    erkl = json.load(open('app/data/schritt-erklaerungen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("return Commands.search('3d-skizze').some(c => c.id === 'sketch3d')")
+    ok4 = bool(
+        'sketch3d' in hilfen and all(k in hilfen['sketch3d'] for k in ('tip', 'hilfe', 'tipp'))
+        and 'sketch3d' in erkl
+        and de_keys == en_keys and cmd_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -23731,6 +23872,7 @@ TESTS = [
     ('[A-114] Silhouette und Schnittkurve in die Skizze (SK-42, SK-43)', t_a114_silhouette_schnittkurve),
     ('[A-115] Muster entlang Kurve und Füllmuster in der Skizze (SK-44, SK-45)', t_a115_kurvenmuster_fuellmuster),
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
+    ('[A-119] 3D-Skizze: Linien und Bögen im Raum, Längenmaße, Entlang Pfad', t_skizze_3d),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
