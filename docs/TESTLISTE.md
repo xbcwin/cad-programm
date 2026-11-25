@@ -2717,6 +2717,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Speichern/Laden, Rückgängig & Hilfen**: Im Einfach-Modus ausgeblendet und gesperrt; `doc.motion` besteht `Store.validateProject`, bleibt nach JSON-Reload erhalten; `App.undo()`, `HELP.motionStudy`, DE/EN-Schlüsselgleichheit und Befehlssuche (`motion-study`) funktionieren ohne JS-Fehler (`t_a158_bewegungs_studie`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Gelenken öffnen, einen Punkt über „Im Bild wählen“ direkt am 3D-Teil anklicken, die Zeitachse über „Abspielen“ und durch Ziehen im Weg-Zeit-Diagramm prüfen.
 
+## Schrauben automatisch einsetzen (Auto [A-160], BG-23)
+
+- [x] **Einfach-Modus & M5-Schrauben aus 5,5-mm-Löchern**: Platte (`80 × 60 × 10 mm`) mit 4 Durchgangslöchern Ø `5,5 mm` in einer Baugruppe erkennt alle 4 Bohrungen (`#t-auto-screws` und `#proj-auto-screws` im Einfach-Modus sichtbar), schlägt `M5` mit passender Normlänge (`≥ 12 mm`) vor und setzt 4 `stdScrew`-Schrauben exakt an den 4 Lochpositionen ein (`t_a160_schrauben_einsetzen`).
+- [x] **Stückliste, Doppel-Schutz & Rückgängig**: Die 4 M5-Schrauben erscheinen zusammengefasst in `Mass.bom()` und `#bom`; erneutes Suchen markiert sie als besetzt (`hasScrew`); `App.undo()` entfernt alle 4 Schrauben in einem Schritt (`t_a160_schrauben_einsetzen`).
+- [x] **Profi-Modus: Stapel, Senkkopf & Mutter/Scheibe**: Zwei gestapelte Platten (`6 + 6 = 12 mm`) mit ausgerichteten `5,5 mm`-Löchern werden zu 2 Bohrungen (`12 mm` Stärke) zusammengefasst und mit längeren M5-Schrauben samt Scheiben und Muttern bestückt; ein M4-Senkloch schlägt `senk` vor (`t_a160_schrauben_einsetzen`).
+- [x] **Validierung, i18n, Hilfe & Befehlssuche**: `Store.validateProject`, DE/EN-Schlüsselgleichheit, `HELP.autoScrews` und Befehlssuche (`auto-screws`) laufen ohne JS-Fehler (`t_a160_schrauben_einsetzen`).
+- [ ] **Von Hand**: Im Browser eine Baugruppe aus zwei verschraubten Platten im Einfach- und Profi-Modus öffnen, „Schrauben einsetzen“ klicken, über die Tabellenzeilen fahren (3D-Lochmarkierung prüfen) und wahlweise Senkkopf sowie Scheiben/Muttern testen.
+
 ## Fehler melden
 
 ```

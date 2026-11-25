@@ -4,6 +4,94 @@ const SCREW_DATA = /*JSON:schrauben.json*/null;
 const SCREW_LIST = (SCREW_DATA && SCREW_DATA.schrauben) || [];
 const SCREW_BY_ID = new Map(SCREW_LIST.map((x) => [String(x.groesse), x]));
 function screwEntry(size) { return SCREW_BY_ID.get(String(size || 'M3')) || SCREW_BY_ID.get('M3') || SCREW_LIST[0] || null; }
+const SCREW_LENGTHS = [4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200];
+function screwNominalDia(size) {
+  return parseFloat(String(size || 'M3').replace(/^M/i, '')) || 3;
+}
+function matchScrewForHole(diaMm, opts = {}) {
+  const d = Number(diaMm);
+  if (!(d >= 1.1 && d <= 29.0)) return null;
+  let best = null;
+  let bestScore = Infinity;
+  for (const se of SCREW_LIST) {
+    const nomD = screwNominalDia(se.groesse);
+    const candidates = [
+      [se.durchgang_mittel_mm, 'medium', 'through', 0.0],
+      [se.durchgang_fein_mm, 'fine', 'through', 0.02],
+      [se.durchgang_grob_mm, 'coarse', 'through', 0.05],
+      [se.kernloch_mm, 'tap', 'tap', opts.preferTap ? -0.02 : 0.08],
+    ];
+    for (const [targetDia, fit, fitKind, penalty] of candidates) {
+      if (!(targetDia > 0)) continue;
+      if (fitKind === 'through' && d < nomD - 0.05) continue;
+      const tol = Math.min(0.85, Math.max(0.25, targetDia * 0.045));
+      const diff = Math.abs(d - targetDia);
+      if (diff > tol) continue;
+      const score = diff + penalty;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { size: se.groesse, entry: se, nomD, fitKind, fit, targetDia, diff };
+      }
+    }
+  }
+  return best;
+}
+function suggestScrewLength(size, thicknessMm, opts = {}) {
+  const se = screwEntry(size);
+  const d = screwNominalDia(size);
+  const pitch = (se && se.steigung_mm) || 0.8;
+  const head = opts.head || 'zyl';
+  const cbDepth = Math.max(0, Number(opts.cbDepth) || 0);
+  const washerH = (se && se.scheibe && se.scheibe.dicke_mm) || 0;
+  const nutH = (se && se.mutter && se.mutter.hoehe_mm) || 0;
+  const t = Math.max(1, Number(thicknessMm) || 10);
+  const eff = head === 'senk' ? t : Math.max(1, t - cbDepth);
+  const minLen = head === 'senk'
+    ? Math.max(4, Math.ceil(((se && se.senkkopf && se.senkkopf.kopf_h_mm) || d) + 2))
+    : Math.max(4, Math.ceil(d * 1.2));
+  if (opts.isBlind) {
+    const maxL = Math.max(1, eff - Math.max(0.5, pitch));
+    let chosen = null;
+    for (const L of SCREW_LENGTHS) {
+      if (L <= maxL + 1e-6) chosen = L;
+    }
+    if (chosen != null) return chosen;
+    return Math.max(2, round(maxL, 1));
+  }
+  const wExtra = opts.withWasher
+    ? (head === 'senk' ? (opts.withNut ? washerH : 0) : (opts.withNut ? 2 * washerH : washerH))
+    : 0;
+  const extra = opts.withNut
+    ? nutH + Math.max(1.5, 2 * pitch)
+    : (opts.fitKind === 'tap' ? Math.max(1.0, 2 * pitch) : Math.max(2, Math.round(d * 0.6)));
+  const req = Math.max(minLen, eff + wExtra + extra);
+  const hit = SCREW_LENGTHS.find((L) => L >= req - 1e-6);
+  if (hit != null) return hit;
+  return Math.ceil(req / 10) * 10;
+}
+function screwNormName(size, head = 'zyl', length = 10) {
+  const s = String(size || 'M3');
+  const L = String(round(Number(length) || 10, 1)).replace('.', ',');
+  if (head === 'hex') {
+    return {
+      name: `Sechskantschraube ${s}×${L}`,
+      partNo: `ISO 4017 ${s}×${L}`,
+      desc: `Sechskantschraube ${s} × ${L} mm (ISO 4017)`,
+    };
+  }
+  if (head === 'senk') {
+    return {
+      name: `Senkschraube ${s}×${L}`,
+      partNo: `ISO 10642 ${s}×${L}`,
+      desc: `Senkschraube ${s} × ${L} mm (ISO 10642)`,
+    };
+  }
+  return {
+    name: `Schraube ${s}×${L}`,
+    partNo: `ISO 4762 ${s}×${L}`,
+    desc: `Zylinderschraube ${s} × ${L} mm (ISO 4762)`,
+  };
+}
 const THREAD_DATA = /*JSON:gewinde.json*/null;
 const PIN_DATA = /*JSON:passstifte.json*/null;
 const KEY_DATA = /*JSON:passfedern.json*/null;

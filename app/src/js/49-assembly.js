@@ -1000,6 +1000,759 @@ const Assembly = (() => {
     return { offsets, paths, stepProgress, activeStep };
   }
 
+  // ================= Schrauben automatisch einsetzen (BG-23) =================
+  const NORM_FASTENER_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdPin', 'stdKey', 'stdBearing', 'stdSleeve']);
+  function isNormFastener(it) {
+    return !!(it && it.kind === 'part' && it.p && NORM_FASTENER_LIBS.has(it.p.lib));
+  }
+  function canonicalDir(v) {
+    const d = v.clone();
+    if (d.lengthSq() < 1e-12) return new THREE.Vector3(0, 0, 1);
+    d.normalize();
+    const ax = Math.abs(d.z) >= Math.abs(d.x) && Math.abs(d.z) >= Math.abs(d.y) ? 2 : Math.abs(d.y) >= Math.abs(d.x) ? 1 : 0;
+    if (d.getComponent(ax) < 0) d.negate();
+    return d;
+  }
+  function axisPerpDist(p1, p2, d) {
+    const v = p1.clone().sub(p2);
+    return v.addScaledVector(d, -v.dot(d)).length();
+  }
+  function quatFromZ(dir) {
+    const d = dir.clone().normalize();
+    if (d.z < -0.999999) return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+    return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+  }
+  function extractInternalCyls(data, W) {
+    const faces = (data && data.faces) || [];
+    const groups = (data && data.faceGroups) || [];
+    const P = data && data.vertices;
+    const N = data && data.normals;
+    const T = data && data.triangles;
+    if (!faces.length || !groups.length || !P || !N || !T) return [];
+
+    const byFace = new Map();
+    for (const g of groups) {
+      let arr = byFace.get(g[2]);
+      if (!arr) { arr = []; byFace.set(g[2], arr); }
+      arr.push(g);
+    }
+
+    const raw = [];
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi];
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6 || !(f.r > 0.4)) continue;
+      const fGroups = byFace.get(fi);
+      if (!fGroups || !fGroups.length) continue;
+
+      const oLoc = new THREE.Vector3(f.axis[0], f.axis[1], f.axis[2]);
+      const dLoc = new THREE.Vector3(f.axis[3], f.axis[4], f.axis[5]);
+      if (dLoc.lengthSq() < 1e-12) continue;
+      dLoc.normalize();
+
+      let dotSum = 0;
+      const ptsW = [];
+      for (const g of fGroups) {
+        for (let i = g[0]; i < g[0] + g[1]; i++) {
+          const vi = T[i] * 3;
+          const vx = P[vi] - oLoc.x, vy = P[vi + 1] - oLoc.y, vz = P[vi + 2] - oLoc.z;
+          const t = vx * dLoc.x + vy * dLoc.y + vz * dLoc.z;
+          const rx = vx - dLoc.x * t, ry = vy - dLoc.y * t, rz = vz - dLoc.z * t;
+          dotSum += N[vi] * rx + N[vi + 1] * ry + N[vi + 2] * rz;
+          ptsW.push(new THREE.Vector3(P[vi], P[vi + 1], P[vi + 2]).applyMatrix4(W));
+        }
+      }
+      if (dotSum >= 0 || !ptsW.length) continue; // nur Innenzylinder (Bohrungen)
+
+      const oW = oLoc.clone().applyMatrix4(W);
+      const dW = canonicalDir(dLoc.clone().transformDirection(W));
+      const u = Math.abs(dW.z) < 0.9
+        ? new THREE.Vector3(0, 0, 1).cross(dW).normalize()
+        : new THREE.Vector3(1, 0, 0).cross(dW).normalize();
+      const v = new THREE.Vector3().crossVectors(dW, u).normalize();
+
+      let t0 = Infinity, t1 = -Infinity;
+      let sectorMask = 0;
+      for (const p of ptsW) {
+        const rel = p.clone().sub(oW);
+        const t = rel.dot(dW);
+        if (t < t0) t0 = t;
+        if (t > t1) t1 = t;
+        const px = rel.dot(u), py = rel.dot(v);
+        if (px * px + py * py > 1e-6) {
+          let ang = Math.atan2(py, px);
+          if (ang < 0) ang += Math.PI * 2;
+          const sec = Math.min(11, Math.floor((ang / (Math.PI * 2)) * 12));
+          sectorMask |= (1 << sec);
+        }
+      }
+      if (!isFinite(t0) || !isFinite(t1) || t1 - t0 < 0.15) continue;
+      raw.push({ fi, o: oW, d: dW, r: f.r, t0, t1, sectorMask, ptsW });
+    }
+
+    // Koaxiale Teilflächen (z. B. zwei 180°-Halbzylinder) zusammenfassen
+    const merged = [];
+    for (const c of raw) {
+      let hit = null;
+      for (const m of merged) {
+        if (Math.abs(m.r - c.r) > 0.05) continue;
+        if (Math.abs(m.d.dot(c.d)) < 0.995) continue;
+        if (axisPerpDist(m.o, c.o, m.d) > 0.15) continue;
+        const cT0 = c.t0 + c.o.clone().sub(m.o).dot(m.d);
+        const cT1 = c.t1 + c.o.clone().sub(m.o).dot(m.d);
+        if (cT1 < m.t0 - 0.2 || cT0 > m.t1 + 0.2) continue;
+        hit = m;
+        m.t0 = Math.min(m.t0, cT0);
+        m.t1 = Math.max(m.t1, cT1);
+        m.sectorMask |= c.sectorMask;
+        break;
+      }
+      if (!hit) {
+        merged.push({ o: c.o.clone(), d: c.d.clone(), r: c.r, t0: c.t0, t1: c.t1, sectorMask: c.sectorMask });
+      }
+    }
+
+    const countBits = (mask) => {
+      let k = 0;
+      for (let b = 0; b < 12; b++) if (mask & (1 << b)) k++;
+      return k;
+    };
+
+    const cyls = merged
+      .filter((m) => countBits(m.sectorMask) >= 10 && m.t1 - m.t0 >= 0.3)
+      .map((m) => ({
+        o: m.o,
+        d: m.d,
+        r: m.r,
+        t0: m.t0,
+        t1: m.t1,
+        len: m.t1 - m.t0,
+        hasCounterbore: false,
+        cbDepth: 0,
+        cbSide: 0,
+        hasCountersink: false,
+        csSide: 0,
+        isBlind: false,
+        openSide: 0,
+        absorbed: false,
+      }));
+
+    // Zylindersenkungen (Counterbore) erkennen und dem Hauptloch zuschlagen
+    cyls.sort((a, b) => a.r - b.r);
+    for (let i = 0; i < cyls.length; i++) {
+      const small = cyls[i];
+      if (small.absorbed) continue;
+      const smallMatch = typeof matchScrewForHole === 'function' ? matchScrewForHole(small.r * 2) : null;
+      if (!smallMatch) continue;
+      const cbNomD = smallMatch.entry && smallMatch.entry.zylinderkopf && smallMatch.entry.zylinderkopf.senkung_d_mm;
+      for (let j = i + 1; j < cyls.length; j++) {
+        const big = cyls[j];
+        if (big.absorbed) continue;
+        if (big.r <= small.r * 1.1 || big.r > small.r * 2.35) continue;
+        if (Math.abs(small.d.dot(big.d)) < 0.995) continue;
+        if (axisPerpDist(small.o, big.o, small.d) > 0.2) continue;
+        const bShift = big.o.clone().sub(small.o).dot(small.d);
+        const bt0 = big.t0 + bShift, bt1 = big.t1 + bShift;
+        const atTop = Math.abs(bt0 - small.t1) < 0.25 && bt1 > small.t1 + 0.2;
+        const atBot = Math.abs(bt1 - small.t0) < 0.25 && bt0 < small.t0 - 0.2;
+        if (!atTop && !atBot) continue;
+        const bigDia = big.r * 2;
+        const diaFitsCb = cbNomD ? (bigDia >= cbNomD * 0.75 && bigDia <= cbNomD * 1.35) : (big.len <= small.len * 1.6);
+        if (!diaFitsCb) continue;
+        big.absorbed = true;
+        small.hasCounterbore = true;
+        small.cbDepth = round(bt1 - bt0, 3);
+        small.cbSide = atTop ? 1 : -1;
+        small.t0 = Math.min(small.t0, bt0);
+        small.t1 = Math.max(small.t1, bt1);
+        small.len = small.t1 - small.t0;
+        break;
+      }
+    }
+
+    const holes = cyls.filter((c) => !c.absorbed);
+
+    // Ebene Flächen & Kegel (Senkung / Bohrspitze) je Loch auswerten
+    const faceBounds = (fi) => {
+      const fGroups = byFace.get(fi);
+      if (!fGroups || !fGroups.length) return null;
+      const pts = [];
+      for (const g of fGroups) {
+        for (let i = g[0]; i < g[0] + g[1]; i++) {
+          const vi = T[i] * 3;
+          pts.push(new THREE.Vector3(P[vi], P[vi + 1], P[vi + 2]).applyMatrix4(W));
+        }
+      }
+      return pts;
+    };
+
+    const cones = [];
+    const planes = [];
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi];
+      if (!f) continue;
+      if (f.t === 'CONE' && Array.isArray(f.axis) && f.axis.length >= 6) {
+        const pts = faceBounds(fi);
+        if (!pts || !pts.length) continue;
+        const co = new THREE.Vector3(f.axis[0], f.axis[1], f.axis[2]).applyMatrix4(W);
+        const cd = canonicalDir(new THREE.Vector3(f.axis[3], f.axis[4], f.axis[5]).transformDirection(W));
+        cones.push({ o: co, d: cd, pts });
+      } else if (f.t === 'PLANE' && Array.isArray(f.c) && Array.isArray(f.n)) {
+        const pts = faceBounds(fi);
+        if (!pts || !pts.length) continue;
+        const pc = new THREE.Vector3(...f.c).applyMatrix4(W);
+        const pn = new THREE.Vector3(...f.n).transformDirection(W).normalize();
+        planes.push({ c: pc, n: pn, pts });
+      }
+    }
+
+    for (const h0 of holes) {
+      let minClose = false, maxClose = false;
+      for (const cn of cones) {
+        if (Math.abs(cn.d.dot(h0.d)) < 0.99 || axisPerpDist(cn.o, h0.o, h0.d) > 0.25) continue;
+        let ct0 = Infinity, ct1 = -Infinity, maxR = 0;
+        for (const p of cn.pts) {
+          const rel = p.clone().sub(h0.o);
+          const t = rel.dot(h0.d);
+          const rr = rel.addScaledVector(h0.d, -t).length();
+          if (t < ct0) ct0 = t;
+          if (t > ct1) ct1 = t;
+          if (rr > maxR) maxR = rr;
+        }
+        const nearTop = Math.abs(ct0 - h0.t1) < 0.35 || (ct0 <= h0.t1 + 0.25 && ct1 >= h0.t1 - 0.25);
+        const nearBot = Math.abs(ct1 - h0.t0) < 0.35 || (ct0 <= h0.t0 + 0.25 && ct1 >= h0.t0 - 0.25);
+        if (maxR > h0.r * 1.12) {
+          if (nearTop) {
+            h0.hasCountersink = true;
+            h0.csSide = 1;
+            h0.t1 = Math.max(h0.t1, ct1);
+          } else if (nearBot) {
+            h0.hasCountersink = true;
+            h0.csSide = -1;
+            h0.t0 = Math.min(h0.t0, ct0);
+          }
+          h0.len = h0.t1 - h0.t0;
+        } else if (maxR <= h0.r + 0.25) {
+          if (Math.abs(ct1 - h0.t0) < Math.max(0.3, h0.r * 1.2) || Math.abs(ct0 - h0.t0) < 0.3) minClose = true;
+          if (Math.abs(ct0 - h0.t1) < Math.max(0.3, h0.r * 1.2) || Math.abs(ct1 - h0.t1) < 0.3) maxClose = true;
+        }
+      }
+      for (const pl of planes) {
+        if (Math.abs(pl.n.dot(h0.d)) < 0.99) continue;
+        let maxR = 0, ptMin = Infinity, ptMax = -Infinity;
+        for (const p of pl.pts) {
+          const rel = p.clone().sub(h0.o);
+          const t = rel.dot(h0.d);
+          const rr = rel.addScaledVector(h0.d, -t).length();
+          if (rr > maxR) maxR = rr;
+          if (t < ptMin) ptMin = t;
+          if (t > ptMax) ptMax = t;
+        }
+        if (maxR <= h0.r + 0.25) {
+          const tMid = (ptMin + ptMax) / 2;
+          if (Math.abs(tMid - h0.t0) < 0.2) minClose = true;
+          if (Math.abs(tMid - h0.t1) < 0.2) maxClose = true;
+        }
+      }
+      if (minClose !== maxClose) {
+        h0.isBlind = true;
+        h0.openSide = minClose ? 1 : -1;
+      }
+    }
+
+    return holes;
+  }
+
+  function findHoles(doc = App.doc) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    const V = Model.vars(doc).v;
+    const activeTop = Model.activeItems(doc);
+
+    // Vorhandene Schrauben im Modell zum Schutz vor Doppel-Einsetzen sammeln
+    const existingScrews = [];
+    for (const it of activeTop) {
+      if (!it || it.hidden || it.suppressed) continue;
+      if (it.kind === 'part' && it.p && it.p.lib === 'stdScrew') {
+        const W = Model.worldMatrix(doc, it.id);
+        const o = new THREE.Vector3(0, 0, 0).applyMatrix4(W);
+        const d = new THREE.Vector3(0, 0, 1).transformDirection(W).normalize();
+        const L = Model.num(it.p.length, V, 10);
+        existingScrews.push({ id: it.id, o, d, L, size: String(it.p.size || 'M3') });
+      }
+    }
+
+    // Pro Körper alle passenden normgerechten Bohrungen einsammeln
+    const rawHoles = [];
+    for (const it of activeTop) {
+      if (!it || it.hidden || it.suppressed || it.role === 'hole' || isStepMod(it) || isNormFastener(it)) continue;
+      if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)) continue;
+      const res = typeof App !== 'undefined' && App.results ? App.results.get(it.id) : null;
+      if (!res || !res.data) continue;
+      const W = Model.worldMatrix(doc, it.id);
+      const partName = Model.label(it);
+      const cyls = extractInternalCyls(res.data, W);
+      for (const c of cyls) {
+        const match = typeof matchScrewForHole === 'function'
+          ? matchScrewForHole(c.r * 2, { preferTap: c.isBlind })
+          : null;
+        if (!match) continue;
+        rawHoles.push({
+          partId: it.id,
+          partName,
+          o: c.o,
+          d: c.d,
+          r: c.r,
+          dia: round(c.r * 2, 2),
+          t0: c.t0,
+          t1: c.t1,
+          match,
+          hasCounterbore: c.hasCounterbore,
+          cbDepth: c.cbDepth,
+          cbSide: c.cbSide,
+          hasCountersink: c.hasCountersink,
+          csSide: c.csSide,
+          isBlind: c.isBlind,
+          openSide: c.openSide,
+        });
+      }
+    }
+
+    // Koaxiale Bohrungen über mehrere gestapelte Teile zu einem Schrauben-Platz zusammenführen
+    const clusters = [];
+    for (const h0 of rawHoles) {
+      let target = null;
+      const maxGap = Math.max(5, h0.match.nomD * 1.5);
+      for (const cl of clusters) {
+        if (cl.size !== h0.match.size) continue;
+        if (Math.abs(cl.d.dot(h0.d)) < 0.995) continue;
+        if (axisPerpDist(cl.o, h0.o, cl.d) > 0.35) continue;
+        const shift = h0.o.clone().sub(cl.o).dot(cl.d);
+        const ht0 = h0.t0 + shift, ht1 = h0.t1 + shift;
+        if (ht1 < cl.t0 - maxGap || ht0 > cl.t1 + maxGap) continue;
+        target = cl;
+        cl.t0 = Math.min(cl.t0, ht0);
+        cl.t1 = Math.max(cl.t1, ht1);
+        cl.entries.push({ ...h0, t0: ht0, t1: ht1 });
+        break;
+      }
+      if (!target) {
+        clusters.push({
+          o: h0.o.clone(),
+          d: h0.d.clone(),
+          size: h0.match.size,
+          nomD: h0.match.nomD,
+          t0: h0.t0,
+          t1: h0.t1,
+          entries: [{ ...h0 }],
+        });
+      }
+    }
+
+    const out = [];
+    for (let idx = 0; idx < clusters.length; idx++) {
+      const cl = clusters[idx];
+      const thickness = round(Math.max(0.5, cl.t1 - cl.t0), 3);
+      const partIds = [...new Set(cl.entries.map((e) => e.partId))];
+      const partNames = [...new Set(cl.entries.map((e) => e.partName))];
+      const dia = cl.entries[0].dia;
+      const hasCountersink = cl.entries.some((e) => e.hasCountersink);
+      const cbEntry = cl.entries.find((e) => e.hasCounterbore);
+      const hasCounterbore = !!cbEntry;
+      const cbDepth = cbEntry ? cbEntry.cbDepth : 0;
+      const isBlind = cl.entries.length === 1
+        ? cl.entries[0].isBlind
+        : cl.entries.some((e) => e.isBlind && (Math.abs(e.t0 - cl.t0) < 0.25 || Math.abs(e.t1 - cl.t1) < 0.25));
+      const allTap = cl.entries.every((e) => e.match.fitKind === 'tap');
+      const fitKind = allTap ? 'tap' : 'through';
+
+      // Kopfseite bestimmen: 1) Senkung, 2) offene Seite bei Sackloch, 3) Durchgang vor Gewinde, 4) +Z/+Y/+X
+      let headSide = 0;
+      const csEnt = cl.entries.find((e) => e.hasCountersink && e.csSide);
+      if (csEnt) headSide = csEnt.csSide;
+      if (!headSide && cbEntry && cbEntry.cbSide) headSide = cbEntry.cbSide;
+      if (!headSide) {
+        const blindEnt = cl.entries.find((e) => e.isBlind && e.openSide);
+        if (blindEnt) headSide = blindEnt.openSide;
+      }
+      if (!headSide && cl.entries.length > 1) {
+        const sorted = [...cl.entries].sort((a, b) => a.t0 - b.t0);
+        const low = sorted[0], high = sorted[sorted.length - 1];
+        if (low.match.fitKind === 'tap' && high.match.fitKind !== 'tap') headSide = 1;
+        else if (high.match.fitKind === 'tap' && low.match.fitKind !== 'tap') headSide = -1;
+      }
+      if (!headSide) headSide = 1; // canonicalDir hat bereits dominante Achse positiv
+
+      const headDirVec = cl.d.clone().multiplyScalar(headSide);
+      const entryPt = cl.o.clone().addScaledVector(cl.d, headSide > 0 ? cl.t1 : cl.t0);
+      const exitPt = cl.o.clone().addScaledVector(cl.d, headSide > 0 ? cl.t0 : cl.t1);
+
+      const se = typeof screwEntry === 'function' ? screwEntry(cl.size) : null;
+      const head = hasCountersink && se && se.senkkopf && se.senkkopf.kopf_h_mm ? 'senk' : 'zyl';
+      const length = typeof suggestScrewLength === 'function'
+        ? suggestScrewLength(cl.size, thickness, { head, isBlind, cbDepth, fitKind, withNut: false, withWasher: false })
+        : 12;
+
+      // Prüfen, ob schon eine Normschraube auf dieser Achse sitzt
+      const hasScrew = existingScrews.some((s) => {
+        if (Math.abs(s.d.dot(cl.d)) < 0.99) return false;
+        if (axisPerpDist(s.o, cl.o, cl.d) > Math.max(0.5, cl.nomD * 0.25)) return false;
+        const sHeadT = s.o.clone().sub(cl.o).dot(cl.d);
+        const sDir = s.d.dot(cl.d);
+        const sTipT = sHeadT - sDir * s.L;
+        const sMin = Math.min(sHeadT, sTipT), sMax = Math.max(sHeadT, sTipT);
+        return sMax >= cl.t0 - 1.5 && sMin <= cl.t1 + 1.5;
+      });
+
+      out.push({
+        id: 'hole_' + (idx + 1),
+        partIds,
+        partName: partNames.join(' + '),
+        size: cl.size,
+        nomD: cl.nomD,
+        dia,
+        thickness,
+        head,
+        length,
+        fitKind,
+        hasCounterbore,
+        cbDepth,
+        hasCountersink,
+        isBlind,
+        withWasher: false,
+        withNut: false,
+        flip: false,
+        hasScrew,
+        selected: !hasScrew,
+        entryPt: [round(entryPt.x, 4), round(entryPt.y, 4), round(entryPt.z, 4)],
+        exitPt: [round(exitPt.x, 4), round(exitPt.y, 4), round(exitPt.z, 4)],
+        headDir: [round(headDirVec.x, 6), round(headDirVec.y, 6), round(headDirVec.z, 6)],
+      });
+    }
+
+    out.sort((a, b) => a.nomD - b.nomD || a.partName.localeCompare(b.partName, 'de')
+      || a.entryPt[0] - b.entryPt[0] || a.entryPt[1] - b.entryPt[1] || a.entryPt[2] - b.entryPt[2]);
+    return out;
+  }
+
+  function insertAutoScrews(specs, opts = {}) {
+    const list = Array.isArray(specs) ? specs : findHoles(App.doc).filter((h0) => !h0.hasScrew);
+    const active = list.filter((s) => s && Array.isArray(s.entryPt) && Array.isArray(s.headDir));
+    if (!active.length) {
+      if (!opts.silent) UI.toast(T('asm.autoScrewsNoneSelected'), { icon: 'info' });
+      return { screws: [], washers: [], nuts: [], count: 0 };
+    }
+
+    const screws = [];
+    const washers = [];
+    const nuts = [];
+    const newItems = [];
+
+    for (const spec of active) {
+      const size = String(spec.size || 'M3');
+      const se = typeof screwEntry === 'function' ? screwEntry(size) : null;
+      const head = spec.head === 'hex' || spec.head === 'senk' ? spec.head : 'zyl';
+      const length = Math.max(2, Number(spec.length) || 10);
+      const flip = !!spec.flip;
+
+      let dir = new THREE.Vector3(...spec.headDir).normalize();
+      let entry = new THREE.Vector3(...spec.entryPt);
+      let exit = Array.isArray(spec.exitPt)
+        ? new THREE.Vector3(...spec.exitPt)
+        : entry.clone().addScaledVector(dir, -(Number(spec.thickness) || length));
+      if (flip) {
+        dir.negate();
+        const tmp = entry; entry = exit; exit = tmp;
+      }
+
+      const q = quatFromZ(dir);
+      const washerH = (se && se.scheibe && se.scheibe.dicke_mm) || 0;
+      const cbDepth = !flip && spec.cbDepth > 0 ? Number(spec.cbDepth) : 0;
+      const useHeadWasher = !!spec.withWasher && head !== 'senk' && cbDepth <= 0 && washerH > 0;
+
+      let seatPt = entry.clone();
+      if (head !== 'senk' && cbDepth > 0) {
+        seatPt = entry.clone().addScaledVector(dir, -cbDepth);
+      } else if (useHeadWasher) {
+        const wMeta = {
+          name: `Scheibe ${size}`,
+          partNo: `ISO 7089 ${size}`,
+          desc: `Unterlegscheibe ${size} (ISO 7089)`,
+        };
+        const wItem = Model.newItem('part', { lib: 'stdWasher', size }, { name: wMeta.name, role: 'solid' });
+        wItem.props = { partNo: wMeta.partNo, desc: wMeta.desc };
+        Model.setFromMatrix(wItem, new THREE.Matrix4().compose(entry, q, new THREE.Vector3(1, 1, 1)));
+        newItems.push(wItem);
+        washers.push(wItem);
+        seatPt = entry.clone().addScaledVector(dir, washerH);
+      }
+
+      const meta = typeof screwNormName === 'function'
+        ? screwNormName(size, head, length)
+        : { name: `Schraube ${size}×${length}`, partNo: `ISO 4762 ${size}×${length}`, desc: '' };
+      const scItem = Model.newItem('part', { lib: 'stdScrew', size, head, length }, { name: meta.name, role: 'solid' });
+      scItem.props = { partNo: meta.partNo, desc: meta.desc };
+      Model.setFromMatrix(scItem, new THREE.Matrix4().compose(seatPt, q, new THREE.Vector3(1, 1, 1)));
+      newItems.push(scItem);
+      screws.push(scItem);
+
+      if (spec.withNut && !spec.isBlind) {
+        const nutDir = dir.clone().negate();
+        const qNut = quatFromZ(nutDir);
+        let nutSeat = exit.clone();
+        if (spec.withWasher && washerH > 0) {
+          const wItem = Model.newItem('part', { lib: 'stdWasher', size }, { name: `Scheibe ${size}`, role: 'solid' });
+          wItem.props = { partNo: `ISO 7089 ${size}`, desc: `Unterlegscheibe ${size} (ISO 7089)` };
+          Model.setFromMatrix(wItem, new THREE.Matrix4().compose(exit, qNut, new THREE.Vector3(1, 1, 1)));
+          newItems.push(wItem);
+          washers.push(wItem);
+          nutSeat = exit.clone().addScaledVector(nutDir, washerH);
+        }
+        const nItem = Model.newItem('part', { lib: 'stdNut', size }, { name: `Mutter ${size}`, role: 'solid' });
+        nItem.props = { partNo: `ISO 4032 ${size}`, desc: `Sechskantmutter ${size} (ISO 4032)` };
+        Model.setFromMatrix(nItem, new THREE.Matrix4().compose(nutSeat, qNut, new THREE.Vector3(1, 1, 1)));
+        newItems.push(nItem);
+        nuts.push(nItem);
+      }
+    }
+
+    App.change(T('asm.autoScrewsUndo', { n: screws.length }), (doc) => {
+      if (opts.asAssembly) doc.docType = 'assembly';
+      for (const it of newItems) doc.items.push(it);
+    });
+    const screwIds = screws.map((s) => s.id);
+    if (screwIds.length) App.select(screwIds);
+    if (!opts.silent) {
+      UI.toast(T('asm.autoScrewsToast', { n: screws.length }), { icon: 'check', ms: 3200 });
+    }
+    return { screws, washers, nuts, count: screws.length };
+  }
+
+  function autoScrewsDialog() {
+    const holes = findHoles(App.doc);
+    const body = h('div', { id: 'auto-screws-dialog', class: 'as-dlg' });
+
+    let hoverObj = null;
+    const clearHover = () => {
+      if (!hoverObj) return;
+      if (typeof Viewer !== 'undefined' && Viewer.groups && Viewer.groups.overlay) {
+        Viewer.groups.overlay.remove(hoverObj);
+      }
+      hoverObj.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      hoverObj = null;
+      if (typeof Viewer !== 'undefined' && Viewer.requestRender) Viewer.requestRender();
+    };
+    const showHover = (hole) => {
+      clearHover();
+      if (!hole || typeof Viewer === 'undefined' || !Viewer.groups || !Viewer.groups.overlay) return;
+      const g = new THREE.Group();
+      const mat = new THREE.LineBasicMaterial({ color: new THREE.Color('#0c7a70'), depthTest: false, transparent: true, opacity: 0.95 });
+      let dir = new THREE.Vector3(...hole.headDir).normalize();
+      let entry = new THREE.Vector3(...hole.entryPt);
+      let exit = new THREE.Vector3(...hole.exitPt);
+      if (hole.flip) { dir.negate(); const t = entry; entry = exit; exit = t; }
+      const u = Math.abs(dir.z) < 0.9 ? new THREE.Vector3(0, 0, 1).cross(dir).normalize() : new THREE.Vector3(1, 0, 0).cross(dir).normalize();
+      const v = new THREE.Vector3().crossVectors(dir, u).normalize();
+      const r = Math.max(1.2, hole.dia / 2 + 0.8);
+      const ringPts = [];
+      for (let i = 0; i <= 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        ringPts.push(entry.clone().addScaledVector(u, Math.cos(a) * r).addScaledVector(v, Math.sin(a) * r));
+      }
+      const rg = new THREE.BufferGeometry().setFromPoints(ringPts);
+      const rl = new THREE.Line(rg, mat); rl.renderOrder = 45;
+      const tip = entry.clone().addScaledVector(dir, -hole.length);
+      const headTop = entry.clone().addScaledVector(dir, hole.nomD * 1.1);
+      const ag = new THREE.BufferGeometry().setFromPoints([tip, headTop]);
+      const al = new THREE.Line(ag, mat); al.renderOrder = 45;
+      g.add(rl, al);
+      Viewer.groups.overlay.add(g);
+      hoverObj = g;
+      Viewer.requestRender();
+    };
+
+    if (!holes.length) {
+      body.append(h('div', { class: 'hint-box', id: 'as-empty-hint' }, T('asm.autoScrewsEmpty')));
+      return UI.modal({
+        title: T('asm.autoScrewsTitle'),
+        body,
+        actions: [{ label: T('common.close'), primary: true }],
+      });
+    }
+
+    const headOpts = [
+      ['zyl', T('asm.autoScrewsHeadZyl')],
+      ['hex', T('asm.autoScrewsHeadHex')],
+      ['senk', T('asm.autoScrewsHeadSenk')],
+    ];
+    const lensFor = (cur) => {
+      const base = typeof SCREW_LENGTHS !== 'undefined' ? SCREW_LENGTHS.slice() : [6, 8, 10, 12, 16, 20, 25, 30, 40, 50];
+      if (!base.some((x) => Math.abs(x - cur) < 0.05)) base.push(cur);
+      base.sort((a, b) => a - b);
+      return base;
+    };
+
+    const bySize = new Map();
+    for (const h0 of holes) bySize.set(h0.size, (bySize.get(h0.size) || 0) + 1);
+    const sizeSummary = [...bySize.entries()].map(([s, n]) => `${n}× ${s}`).join(', ');
+    const summaryEl = h('div', { class: 'as-summary', id: 'as-summary' }, T('asm.autoScrewsSummary', { n: holes.length, sizes: sizeSummary }));
+
+    const allHeadSel = h('select', { id: 'as-all-head', 'aria-label': T('asm.autoScrewsHeadAll') });
+    for (const [val, lbl] of headOpts) allHeadSel.append(h('option', { value: val }, lbl));
+    const allWasherChk = h('input', { type: 'checkbox', id: 'as-all-washer' });
+    const allNutChk = h('input', { type: 'checkbox', id: 'as-all-nut' });
+
+    const bar = h('div', { class: 'as-bar' },
+      h('label', { class: 'as-bar-lbl' }, T('asm.autoScrewsHeadAll'), allHeadSel),
+      h('label', { class: 'check' }, allWasherChk, T('asm.autoScrewsWasher')),
+      h('label', { class: 'check' }, allNutChk, T('asm.autoScrewsNut'))
+    );
+
+    const tbl = h('table', { class: 'vtable as-table', id: 'auto-screws-table' },
+      h('tr', null,
+        h('th', null, ''),
+        h('th', null, T('asm.autoScrewsColPart')),
+        h('th', null, T('asm.autoScrewsColHole')),
+        h('th', null, T('asm.autoScrewsColSize')),
+        h('th', null, T('asm.autoScrewsColHead')),
+        h('th', null, T('asm.autoScrewsColLen')),
+        h('th', null, T('asm.autoScrewsColDir'))
+      )
+    );
+
+    const rowRefs = [];
+    const syncApplyBtn = () => {
+      const btn = document.getElementById('as-apply');
+      if (!btn) return;
+      const cnt = holes.filter((x) => x.selected).length;
+      btn.textContent = T('asm.autoScrewsApply', { n: cnt });
+      btn.disabled = cnt === 0;
+    };
+
+    const recalcRowLen = (h0, ref) => {
+      if (typeof suggestScrewLength === 'function') {
+        h0.length = suggestScrewLength(h0.size, h0.thickness, {
+          head: h0.head,
+          isBlind: h0.isBlind,
+          cbDepth: h0.flip ? 0 : h0.cbDepth,
+          fitKind: h0.fitKind,
+          withNut: h0.withNut,
+          withWasher: h0.withWasher,
+        });
+      }
+      ref.lenSel.innerHTML = '';
+      for (const L of lensFor(h0.length)) {
+        ref.lenSel.append(h('option', { value: String(L), selected: Math.abs(L - h0.length) < 0.05 }, `${String(L).replace('.', ',')} mm`));
+      }
+      ref.lenSel.value = String(h0.length);
+    };
+
+    for (const h0 of holes) {
+      const chk = h('input', { type: 'checkbox', class: 'as-chk', checked: h0.selected });
+      const sizeSel = h('select', { class: 'as-size' });
+      for (const s of (typeof SIZES !== 'undefined' ? SIZES : ['M3', 'M4', 'M5', 'M6', 'M8'])) {
+        sizeSel.append(h('option', { value: s, selected: s === h0.size }, s));
+      }
+      const headSel = h('select', { class: 'as-head' });
+      for (const [val, lbl] of headOpts) headSel.append(h('option', { value: val, selected: val === h0.head }, lbl));
+      const lenSel = h('select', { class: 'as-len' });
+      for (const L of lensFor(h0.length)) {
+        lenSel.append(h('option', { value: String(L), selected: Math.abs(L - h0.length) < 0.05 }, `${String(L).replace('.', ',')} mm`));
+      }
+      const flipBtn = h('button', { type: 'button', class: 'btn small as-flip', title: T('asm.autoScrewsFlipTip'), 'aria-label': T('asm.autoScrewsFlipTip') }, '⇅');
+
+      const badges = [];
+      if (h0.hasCountersink) badges.push(h('span', { class: 'as-badge' }, T('asm.autoScrewsCsk')));
+      if (h0.hasCounterbore) badges.push(h('span', { class: 'as-badge' }, T('asm.autoScrewsCb')));
+      if (h0.isBlind) badges.push(h('span', { class: 'as-badge' }, T('asm.autoScrewsBlind')));
+      if (h0.fitKind === 'tap') badges.push(h('span', { class: 'as-badge' }, T('asm.autoScrewsTap')));
+      if (h0.hasScrew) badges.push(h('span', { class: 'as-badge warn' }, T('asm.autoScrewsUsed')));
+
+      const holeInfo = h('div', { class: 'as-hole-cell' },
+        h('span', { class: 'mono' }, `Ø ${Units.fmtLenU(h0.dia, 1)} · ${Units.fmtLenU(h0.thickness, 1)}`),
+        badges.length ? h('div', { class: 'as-badges' }, ...badges) : ''
+      );
+
+      const tr = h('tr', { class: 'as-row' + (h0.hasScrew ? ' as-row-used' : ''), dataset: { holeId: h0.id } },
+        h('td', null, chk),
+        h('td', { class: 'as-part', title: h0.partName }, h0.partName),
+        h('td', null, holeInfo),
+        h('td', null, sizeSel),
+        h('td', null, headSel),
+        h('td', null, lenSel),
+        h('td', null, flipBtn)
+      );
+
+      const ref = { chk, sizeSel, headSel, lenSel, tr };
+      rowRefs.push({ h0, ref });
+
+      chk.onchange = () => { h0.selected = chk.checked; syncApplyBtn(); };
+      sizeSel.onchange = () => { h0.size = sizeSel.value; recalcRowLen(h0, ref); };
+      headSel.onchange = () => { h0.head = headSel.value; recalcRowLen(h0, ref); };
+      lenSel.onchange = () => { h0.length = Number(lenSel.value) || h0.length; };
+      flipBtn.onclick = () => {
+        h0.flip = !h0.flip;
+        flipBtn.classList.toggle('primary', h0.flip);
+        recalcRowLen(h0, ref);
+        showHover(h0);
+      };
+      tr.addEventListener('pointerenter', () => showHover(h0));
+      tbl.append(tr);
+    }
+
+    allHeadSel.onchange = () => {
+      const val = allHeadSel.value;
+      for (const { h0, ref } of rowRefs) {
+        h0.head = val;
+        ref.headSel.value = val;
+        recalcRowLen(h0, ref);
+      }
+    };
+    const syncHardware = () => {
+      const w = allWasherChk.checked;
+      const n = allNutChk.checked;
+      for (const { h0, ref } of rowRefs) {
+        h0.withWasher = w;
+        h0.withNut = n && !h0.isBlind;
+        recalcRowLen(h0, ref);
+      }
+    };
+    allWasherChk.onchange = syncHardware;
+    allNutChk.onchange = syncHardware;
+
+    body.append(summaryEl, bar, h('div', { class: 'as-table-wrap' }, tbl));
+    body.addEventListener('pointerleave', clearHover);
+
+    const initCnt = holes.filter((x) => x.selected).length;
+    const modalRef = UI.modal({
+      title: T('asm.autoScrewsTitle'),
+      body,
+      wide: true,
+      actions: [
+        { label: T('common.cancel'), value: false, run: () => { clearHover(); } },
+        {
+          id: 'as-apply',
+          label: T('asm.autoScrewsApply', { n: initCnt }),
+          primary: true,
+          disabled: initCnt === 0,
+          run: () => {
+            clearHover();
+            const chosen = holes.filter((x) => x.selected);
+            insertAutoScrews(chosen);
+          },
+        },
+      ],
+    });
+    if (modalRef && modalRef.overlay) {
+      const observer = new MutationObserver(() => {
+        if (!document.body.contains(body)) { clearHover(); observer.disconnect(); }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+    return modalRef;
+  }
+
   return {
     init,
     isAssembly,
@@ -1047,5 +1800,8 @@ const Assembly = (() => {
     closeMotion: () => typeof Motion !== 'undefined' && Motion.close(),
     toggleMotion: () => typeof Motion !== 'undefined' && Motion.toggle(),
     setMotionTime: (t, o) => typeof Motion !== 'undefined' ? Motion.setTime(t, o) : 0,
+    findHoles,
+    insertAutoScrews,
+    autoScrewsDialog,
   };
 })();
