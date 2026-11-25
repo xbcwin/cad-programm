@@ -1359,6 +1359,26 @@ body.tablet .inp .meas-btn svg{width:17px;height:17px}
 .meas-param-info svg{width:13px;height:13px;color:var(--accent);flex:none}
 .meas-param-info.lost{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
 .meas-param-info.lost svg{color:var(--bad)}
+.meas-param-info.frozen{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--ink)}
+.part-ref-list{display:grid;gap:6px}
+.part-ref-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:var(--radius-s);border:1px solid var(--line);background:var(--surface-2)}
+.part-ref-row.frozen{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 7%,var(--surface-2))}
+.part-ref-row.lost{border-color:var(--bad);background:var(--bad-soft)}
+.part-ref-info{min-width:0;flex:1;display:grid;gap:2px}
+.part-ref-top{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:12.5px;line-height:1.35}
+.part-ref-what{color:var(--muted)}
+.part-ref-target{font-weight:600;padding:0;border:0;background:none;color:var(--ink);font:inherit;cursor:pointer;text-align:left}
+.part-ref-target.lk:hover{color:var(--accent);text-decoration:underline}
+.part-ref-target.missing{cursor:default;color:var(--muted)}
+.part-ref-sub{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.part-ref-badge{font-size:10.5px;line-height:1.2;padding:1px 6px;border-radius:999px;font-weight:600;border:1px solid var(--line)}
+.part-ref-badge.active{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.part-ref-badge.frozen{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.part-ref-badge.lost{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
+.part-ref-acts{display:flex;flex:none;gap:4px;align-items:center}
+.part-ref-sum-frozen{color:var(--accent);font-weight:500}
+.part-refs-dlg{display:grid;gap:10px}
+.part-refs-dlg-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .meas-param-info .btn{padding:2px 6px;min-height:22px;font-size:11.5px}
 .db-list{display:grid;gap:4px}
 

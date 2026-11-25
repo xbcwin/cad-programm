@@ -351,7 +351,7 @@ const Model = (() => {
   function syncLinks(doc) {
     let n = 0;
     walk(doc.items, (it) => {
-      if (!it.link) return;
+      if (!it.link || it.linkFrozen) return;
       const f = find(doc, it.link);
       if (!f || f.item === it || f.item.link || f.item.kind === 'group') { it.linkLost = true; return; }
       delete it.linkLost;
@@ -878,7 +878,7 @@ const Model = (() => {
       if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
       out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
     }
-    if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face') {
+    if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face' && !p.sketch.planeRef.frozen) {
       out.planeRef = {
         kind: 'face',
         id: p.sketch.planeRef.id,
@@ -890,7 +890,9 @@ const Model = (() => {
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
-      if (p.extent === 'toNext' || p.extent === 'toFace') {
+      if (p.extent === 'toFace' && p.toFace && p.toFace.frozen) {
+        if (typeof p.toFace.frozenDist === 'number' && isFinite(p.toFace.frozenDist)) out.dist = p.toFace.frozenDist;
+      } else if (p.extent === 'toNext' || p.extent === 'toFace') {
         out.extent = p.extent;
         if (p.extent === 'toFace' && p.toFace) {
           if (p.toFace.datumId) {
@@ -1469,7 +1471,7 @@ const Model = (() => {
       if (!regs.length) continue;
       const L = regs[0].outer; let cx = 0, cy = 0; for (const q of L.poly) { cx += q[0]; cy += q[1]; } cx /= L.poly.length || 1; cy /= L.poly.length || 1;
       const prof = { plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly };
-      if (sk.planeRef && sk.planeRef.kind === 'face' && sk.planeRef.id) {
+      if (sk.planeRef && sk.planeRef.kind === 'face' && sk.planeRef.id && !sk.planeRef.frozen) {
         prof.planeRef = {
           kind: 'face',
           id: sk.planeRef.id,

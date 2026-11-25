@@ -7,7 +7,7 @@ const RefFix = (() => {
   const hardErrorsFor = (itemId) => App.errorsFor(itemId).filter((e) => !isRefError(e));
 
   function planeRefLost(pr, itemId) {
-    if (!pr) return false;
+    if (!pr || pr.frozen) return false;
     if (pr.kind === 'datum') {
       if (typeof Datums === 'undefined') return false;
       const d = Datums.find(pr.datumId);
@@ -102,7 +102,7 @@ const RefFix = (() => {
     if (it.p && it.p.sketch && typeof Sketch !== 'undefined' && Sketch.isLinkLost) {
       const seenGrp = new Set();
       for (const e of it.p.sketch.ents || []) {
-        if (e.link && Sketch.isLinkLost(it, e)) {
+        if (e.link && !e.link.frozen && Sketch.isLinkLost(it, e)) {
           if (e.link.kind === 'silhouette' && e.link.grp) {
             if (seenGrp.has('sil:' + e.link.grp)) continue;
             seenGrp.add('sil:' + e.link.grp);
@@ -146,7 +146,7 @@ const RefFix = (() => {
       }
     }
 
-    if (it.kind === 'extrude' && it.p && it.p.extent === 'toFace') {
+    if (it.kind === 'extrude' && it.p && it.p.extent === 'toFace' && !(it.p.toFace && it.p.toFace.frozen)) {
       const refErr = errs.find((e) => e.code === 'ref');
       if (refErr) {
         out.push({
@@ -160,7 +160,7 @@ const RefFix = (() => {
       }
     }
 
-    if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.lost) {
+    if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && !it.p.toFace.frozen && it.p.toFace.lost) {
       out.push({
         key: `${it.id}:revface`,
         kind: 'revolve-toFace',
@@ -781,6 +781,698 @@ const RefFix = (() => {
     return true;
   }
 
+  // ================= Bezüge zwischen Teilen verwalten (BG-22) =================
+  function collectDirectExprNames(item) {
+    const names = new Set();
+    if (!item || typeof Expr === 'undefined' || !Expr.names) return names;
+    const scanStr = (s) => {
+      if (typeof s !== 'string') return;
+      for (const nm of Expr.names(s)) names.add(String(nm).toLowerCase());
+    };
+    const scanObj = (obj, skipSketch) => {
+      if (!obj || typeof obj !== 'object') return;
+      for (const k of Object.keys(obj)) {
+        if (skipSketch && (k === 'sketch' || k === 'sketches' || k === 'rail' || k === 'rail2' || k === 'path' || k === 'sketch3d')) continue;
+        const v = obj[k];
+        if (typeof v === 'string') scanStr(v);
+        else if (Array.isArray(v)) {
+          for (const x of v) {
+            if (typeof x === 'string') scanStr(x);
+            else if (x && typeof x === 'object') scanObj(x, false);
+          }
+        }
+      }
+    };
+    Model.walk([item], (it) => {
+      scanObj(it.t, false);
+      scanObj(it.p, true);
+      for (const f of it.finishes || []) scanObj(f, false);
+      if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) if (typeof d.v === 'string') scanStr(d.v);
+      for (const sk of (it.p && it.p.sketches) || []) for (const d of sk.dims || []) if (typeof d.v === 'string') scanStr(d.v);
+      if (it.userPart && Array.isArray(it.userPart.params)) {
+        for (const qp of it.userPart.params) if (typeof qp.expr === 'string') scanStr(qp.expr);
+      }
+    });
+    return names;
+  }
+
+  function expandParamNames(doc, initialNames) {
+    const out = new Set(initialNames);
+    const byName = new Map();
+    for (const p of (doc && doc.params) || []) {
+      if (p && p.name) byName.set(String(p.name).toLowerCase(), p);
+    }
+    const queue = [...out];
+    while (queue.length) {
+      const nm = queue.shift();
+      const p = byName.get(nm);
+      if (!p || typeof p.expr !== 'string' || typeof Expr === 'undefined' || !Expr.names) continue;
+      for (const dep of Expr.names(p.expr)) {
+        const low = String(dep).toLowerCase();
+        if (!out.has(low)) { out.add(low); queue.push(low); }
+      }
+    }
+    return out;
+  }
+
+  function replaceExprIdent(expr, ident, numVal) {
+    if (typeof expr !== 'string') return expr;
+    const trimmed = expr.trim();
+    const lowIdent = String(ident || '').toLowerCase();
+    if (trimmed.toLowerCase() === lowIdent) return numVal;
+    const isIdCh = (ch) => !!ch && /[A-Za-zÄÖÜäöüß_0-9]/.test(ch);
+    const rep = String(numVal);
+    let out = '';
+    let i = 0;
+    let q = null;
+    while (i < expr.length) {
+      const ch = expr[i];
+      if (q) {
+        out += ch;
+        if (ch === '\\' && i + 1 < expr.length) { out += expr[i + 1]; i += 2; continue; }
+        if (ch === q) q = null;
+        i++;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { q = ch; out += ch; i++; continue; }
+      if (/[A-Za-zÄÖÜäöüß_]/.test(ch)) {
+        let j = i;
+        while (j < expr.length && isIdCh(expr[j])) j++;
+        const tok = expr.slice(i, j);
+        out += tok.toLowerCase() === lowIdent ? rep : tok;
+        i = j;
+        continue;
+      }
+      out += ch;
+      i++;
+    }
+    return out;
+  }
+
+  function inlineParamInItem(item, ident, numVal) {
+    const patchVal = (v) => (typeof v === 'string' ? replaceExprIdent(v, ident, numVal) : v);
+    const scanObj = (obj, skipSketch) => {
+      if (!obj || typeof obj !== 'object') return;
+      for (const k of Object.keys(obj)) {
+        if (skipSketch && (k === 'sketch' || k === 'sketches' || k === 'rail' || k === 'rail2' || k === 'path' || k === 'sketch3d')) continue;
+        const v = obj[k];
+        if (typeof v === 'string') obj[k] = patchVal(v);
+        else if (Array.isArray(v)) {
+          for (let idx = 0; idx < v.length; idx++) {
+            if (typeof v[idx] === 'string') v[idx] = patchVal(v[idx]);
+            else if (v[idx] && typeof v[idx] === 'object') scanObj(v[idx], false);
+          }
+        }
+      }
+    };
+    Model.walk([item], (it) => {
+      scanObj(it.t, false);
+      scanObj(it.p, true);
+      for (const f of it.finishes || []) scanObj(f, false);
+      if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) if (typeof d.v === 'string') d.v = patchVal(d.v);
+      for (const sk of (it.p && it.p.sketches) || []) for (const d of sk.dims || []) if (typeof d.v === 'string') d.v = patchVal(d.v);
+      if (it.userPart && Array.isArray(it.userPart.params)) {
+        for (const qp of it.userPart.params) if (typeof qp.expr === 'string') qp.expr = patchVal(qp.expr);
+      }
+    });
+  }
+
+  function partRefs(itemId, doc = App.doc) {
+    if (!doc || !itemId) return [];
+    const f = Model.find(doc, itemId);
+    if (!f) return [];
+    const sourceTop = Model.topOf(doc, itemId) || f.item;
+    const sourceTopId = sourceTop.id;
+    const sourceTopLabel = Model.label(sourceTop);
+    const out = [];
+    const seenIds = new Set();
+    const resolveTop = (tid) => {
+      if (!tid) return null;
+      const tf = Model.find(doc, tid);
+      if (!tf) return { topId: tid, item: null, name: null };
+      const top = Model.topOf(doc, tid) || tf.item;
+      return { topId: top.id, item: top, name: Model.label(top) };
+    };
+    const pushRef = (ref) => {
+      if (!ref || !ref.id || seenIds.has(ref.id)) return;
+      if (ref.targetTopId === sourceTopId) return;
+      seenIds.add(ref.id);
+      out.push(ref);
+    };
+
+    const usedNames = expandParamNames(doc, collectDirectExprNames(f.item));
+    for (const mp of doc.params || []) {
+      if (!mp || !mp.measure || mp.measure.kind !== 'edgeLen' || !mp.measure.id || !mp.name) continue;
+      if (!usedNames.has(String(mp.name).toLowerCase())) continue;
+      const tgt = resolveTop(mp.measure.id);
+      if (!tgt || tgt.topId === sourceTopId) continue;
+      const frozen = !!mp.measure.frozen;
+      const val = typeof mp.expr === 'number' ? mp.expr : Model.num(mp.expr, Model.vars(doc).v, 0);
+      const valTxt = typeof Units !== 'undefined' && Units.fmtLenU ? Units.fmtLenU(val, 2) : `${round(val, 2)} mm`;
+      pushRef({
+        id: `meas:${sourceTopId}:${mp.id}`,
+        kind: 'measure',
+        sourceTopId,
+        sourceItemId: f.item.id,
+        sourceName: sourceTopLabel,
+        targetTopId: tgt.topId,
+        targetItemId: mp.measure.id,
+        targetName: tgt.name || mp.measure.label || T('partRefs.deletedPart'),
+        what: T('partRefs.kind.measure'),
+        detail: `${mp.name} (${valTxt})`,
+        frozen,
+        lost: !frozen && (!!mp.measure.lost || !tgt.item),
+        paramId: mp.id,
+        paramName: mp.name,
+      });
+    }
+
+    Model.walk([f.item], (it) => {
+      const stepName = it.id === sourceTopId ? sourceTopLabel : `${sourceTopLabel} · ${Model.label(it)}`;
+      const pushPlaneRef = (pr, sketchIdx = null) => {
+        if (!pr || pr.kind !== 'face' || !pr.id) return;
+        const tgt = resolveTop(pr.id);
+        if (!tgt || tgt.topId === sourceTopId) return;
+        const frozen = !!pr.frozen;
+        const lost = !frozen && (!tgt.item || planeRefLost(pr, it.id));
+        pushRef({
+          id: sketchIdx == null ? `skplane:${it.id}` : `skplane:${it.id}:${sketchIdx}`,
+          kind: 'sketch-plane',
+          sourceTopId,
+          sourceItemId: it.id,
+          sourceName: stepName,
+          targetTopId: tgt.topId,
+          targetItemId: pr.id,
+          targetName: tgt.name || T('partRefs.deletedPart'),
+          what: T('partRefs.kind.sketchPlane'),
+          detail: it.id === sourceTopId ? '' : Model.label(it),
+          frozen,
+          lost,
+          sketchIdx,
+        });
+      };
+
+      if (it.p && it.p.sketch) {
+        if (it.p.sketch.planeRef) pushPlaneRef(it.p.sketch.planeRef, null);
+        const seenFl = new Set();
+        const seenGrp = new Set();
+        for (const e of it.p.sketch.ents || []) {
+          if (!e || !e.link || !e.link.id) continue;
+          const L = e.link;
+          if (L.kind === 'silhouette' && L.grp) {
+            if (seenGrp.has('sil:' + L.grp)) continue;
+            seenGrp.add('sil:' + L.grp);
+            const tgt = resolveTop(L.id);
+            if (!tgt || tgt.topId === sourceTopId) continue;
+            const frozen = !!L.frozen;
+            const lost = !frozen && (!tgt.item || (typeof Sketch !== 'undefined' && Sketch.isLinkLost ? Sketch.isLinkLost(it, e) : false));
+            pushRef({
+              id: `skgrp:${it.id}:${L.grp}`,
+              kind: 'sketch-silhouette',
+              sourceTopId,
+              sourceItemId: it.id,
+              sourceName: stepName,
+              targetTopId: tgt.topId,
+              targetItemId: L.id,
+              targetName: tgt.name || T('partRefs.deletedPart'),
+              what: T('partRefs.kind.sketchSilhouette'),
+              detail: it.id === sourceTopId ? '' : Model.label(it),
+              frozen,
+              lost,
+              grp: L.grp,
+            });
+            continue;
+          }
+          if (L.kind === 'faceIntersect' && L.grp) {
+            if (seenGrp.has('ic:' + L.grp)) continue;
+            seenGrp.add('ic:' + L.grp);
+            const tgtA = resolveTop(L.id);
+            const tgtB = L.id2 ? resolveTop(L.id2) : null;
+            const tgt = (tgtA && tgtA.topId !== sourceTopId) ? tgtA : (tgtB && tgtB.topId !== sourceTopId ? tgtB : null);
+            if (!tgt) continue;
+            const frozen = !!L.frozen;
+            const lost = !frozen && (typeof Sketch !== 'undefined' && Sketch.isLinkLost ? Sketch.isLinkLost(it, e) : false);
+            pushRef({
+              id: `skgrp:${it.id}:${L.grp}`,
+              kind: 'sketch-intersect',
+              sourceTopId,
+              sourceItemId: it.id,
+              sourceName: stepName,
+              targetTopId: tgt.topId,
+              targetItemId: tgt.item ? tgt.item.id : tgt.topId,
+              targetName: tgt.name || T('partRefs.deletedPart'),
+              what: T('partRefs.kind.sketchIntersect'),
+              detail: it.id === sourceTopId ? '' : Model.label(it),
+              frozen,
+              lost,
+              grp: L.grp,
+            });
+            continue;
+          }
+          const tgt = resolveTop(L.id);
+          if (!tgt || tgt.topId === sourceTopId) continue;
+          const frozen = !!L.frozen;
+          const lost = !frozen && (!tgt.item || (typeof Sketch !== 'undefined' && Sketch.isLinkLost ? Sketch.isLinkLost(it, e) : false));
+          if (L.fl) {
+            if (seenFl.has(L.fl)) continue;
+            seenFl.add(L.fl);
+            pushRef({
+              id: `skfl:${it.id}:${L.fl}`,
+              kind: 'sketch-link',
+              sourceTopId,
+              sourceItemId: it.id,
+              sourceName: stepName,
+              targetTopId: tgt.topId,
+              targetItemId: L.id,
+              targetName: tgt.name || T('partRefs.deletedPart'),
+              what: T('partRefs.kind.sketchLink'),
+              detail: it.id === sourceTopId ? '' : Model.label(it),
+              frozen,
+              lost,
+              fl: L.fl,
+            });
+          } else {
+            pushRef({
+              id: `sklink:${it.id}:${e.id}`,
+              kind: 'sketch-link',
+              sourceTopId,
+              sourceItemId: it.id,
+              sourceName: stepName,
+              targetTopId: tgt.topId,
+              targetItemId: L.id,
+              targetName: tgt.name || T('partRefs.deletedPart'),
+              what: T('partRefs.kind.sketchLink'),
+              detail: it.id === sourceTopId ? '' : Model.label(it),
+              frozen,
+              lost,
+              entId: e.id,
+            });
+          }
+        }
+      }
+
+      if (it.kind === 'loft' && it.p && Array.isArray(it.p.sketches)) {
+        it.p.sketches.forEach((sk, k) => {
+          if (sk && sk.planeRef) pushPlaneRef(sk.planeRef, k);
+        });
+      }
+
+      if (it.kind === 'extrude' && it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) {
+        const tgt = resolveTop(it.p.toFace.id);
+        if (tgt && tgt.topId !== sourceTopId) {
+          const frozen = !!it.p.toFace.frozen;
+          const hasErr = !frozen && App.errorsFor(it.id).some((e) => e.code === 'ref');
+          pushRef({
+            id: `extface:${it.id}`,
+            kind: 'extrude-toFace',
+            sourceTopId,
+            sourceItemId: it.id,
+            sourceName: stepName,
+            targetTopId: tgt.topId,
+            targetItemId: it.p.toFace.id,
+            targetName: tgt.name || it.p.toFace.label || T('partRefs.deletedPart'),
+            what: T('partRefs.kind.extrudeToFace'),
+            detail: it.id === sourceTopId ? '' : Model.label(it),
+            frozen,
+            lost: !frozen && (!tgt.item || hasErr),
+          });
+        }
+      }
+
+      if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.kind === 'face' && it.p.toFace.targetId) {
+        const tgt = resolveTop(it.p.toFace.targetId);
+        if (tgt && tgt.topId !== sourceTopId) {
+          const frozen = !!it.p.toFace.frozen;
+          pushRef({
+            id: `revface:${it.id}`,
+            kind: 'revolve-toFace',
+            sourceTopId,
+            sourceItemId: it.id,
+            sourceName: stepName,
+            targetTopId: tgt.topId,
+            targetItemId: it.p.toFace.targetId,
+            targetName: tgt.name || it.p.toFace.name || T('partRefs.deletedPart'),
+            what: T('partRefs.kind.revolveToFace'),
+            detail: it.id === sourceTopId ? '' : Model.label(it),
+            frozen,
+            lost: !frozen && (!tgt.item || !!it.p.toFace.lost),
+          });
+        }
+      }
+
+      if (it.link) {
+        const tgt = resolveTop(it.link);
+        if (tgt && tgt.topId !== sourceTopId) {
+          const frozen = !!it.linkFrozen;
+          pushRef({
+            id: `linkcopy:${it.id}`,
+            kind: 'linked-copy',
+            sourceTopId,
+            sourceItemId: it.id,
+            sourceName: stepName,
+            targetTopId: tgt.topId,
+            targetItemId: it.link,
+            targetName: tgt.name || T('partRefs.deletedPart'),
+            what: T('partRefs.kind.linkedCopy'),
+            detail: it.id === sourceTopId ? '' : Model.label(it),
+            frozen,
+            lost: !frozen && (!tgt.item || !!it.linkLost),
+          });
+        }
+      }
+
+      if (it.kind === 'sweep' && it.p && it.p.path3d && Array.isArray(it.p.path3d.bind)) {
+        it.p.path3d.bind.forEach((b, i) => {
+          if (!b || !b.id) return;
+          const tgt = resolveTop(b.id);
+          if (!tgt || tgt.topId === sourceTopId) return;
+          const frozen = !!b.frozen;
+          pushRef({
+            id: `path3d:${it.id}:${i}`,
+            kind: 'path3d-bind',
+            sourceTopId,
+            sourceItemId: it.id,
+            sourceName: stepName,
+            targetTopId: tgt.topId,
+            targetItemId: b.id,
+            targetName: tgt.name || T('partRefs.deletedPart'),
+            what: T('partRefs.kind.path3dBind'),
+            detail: T('partRefs.pointIdx', { n: i + 1 }),
+            frozen,
+            lost: !frozen && !tgt.item,
+            bindIdx: i,
+          });
+        });
+      }
+
+      if (it.kind === 'sketch3d' && it.p && it.p.sketch3d && Array.isArray(it.p.sketch3d.ents)) {
+        it.p.sketch3d.ents.forEach((e, ei) => {
+          if (!e) return;
+          for (const bk of ['bindA', 'bindM', 'bindB']) {
+            const b = e[bk];
+            if (!b || !b.id) continue;
+            const tgt = resolveTop(b.id);
+            if (!tgt || tgt.topId === sourceTopId) continue;
+            const frozen = !!b.frozen;
+            pushRef({
+              id: `sk3bind:${it.id}:${ei}:${bk}`,
+              kind: 'sketch3d-bind',
+              sourceTopId,
+              sourceItemId: it.id,
+              sourceName: stepName,
+              targetTopId: tgt.topId,
+              targetItemId: b.id,
+              targetName: tgt.name || T('partRefs.deletedPart'),
+              what: T('partRefs.kind.sketch3dBind'),
+              detail: it.id === sourceTopId ? '' : Model.label(it),
+              frozen,
+              lost: !frozen && !tgt.item,
+              entIdx: ei,
+              bindKey: bk,
+            });
+          }
+        });
+      }
+
+      if (it.kind === 'mirrorStep' && it.p && it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) {
+        const tgt = resolveTop(it.p.faceRef.id);
+        if (tgt && tgt.topId !== sourceTopId) {
+          const frozen = !!it.p.faceRef.frozen;
+          pushRef({
+            id: `mirface:${it.id}`,
+            kind: 'mirror-face',
+            sourceTopId,
+            sourceItemId: it.id,
+            sourceName: stepName,
+            targetTopId: tgt.topId,
+            targetItemId: it.p.faceRef.id,
+            targetName: tgt.name || it.p.faceRef.name || T('partRefs.deletedPart'),
+            what: T('partRefs.kind.mirrorFace'),
+            detail: it.id === sourceTopId ? '' : Model.label(it),
+            frozen,
+            lost: !frozen && (!tgt.item || !!it.p.faceRef.lost),
+          });
+        }
+      }
+    });
+
+    return out;
+  }
+
+  function allPartRefs(doc = App.doc) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const it of doc.items) {
+      for (const r of partRefs(it.id, doc)) {
+        if (!seen.has(r.id)) { seen.add(r.id); out.push(r); }
+      }
+    }
+    return out;
+  }
+
+  function findPartRef(refOrId, doc = App.doc) {
+    if (!doc || !refOrId) return null;
+    if (typeof refOrId === 'string') return allPartRefs(doc).find((r) => r.id === refOrId) || null;
+    return allPartRefs(doc).find((r) => r.id === refOrId.id) || refOrId;
+  }
+
+  function applyFreezeInDoc(doc, ref, frozen) {
+    if (!doc || !ref) return false;
+    const on = !!frozen;
+    if (ref.kind === 'measure') {
+      const mp = (doc.params || []).find((p) => p && p.id === ref.paramId);
+      if (!mp || !mp.measure) return false;
+      if (!!mp.measure.frozen === on) return false;
+      if (on) {
+        mp.measure.frozen = true;
+      } else {
+        delete mp.measure.frozen;
+        if (typeof Measure !== 'undefined' && Measure.resolveMeasuredEdge) {
+          const res = Measure.resolveMeasuredEdge(mp.measure);
+          if (res) {
+            mp.expr = res.len;
+            delete mp.measure.lost;
+          }
+        }
+      }
+      return true;
+    }
+    const f = Model.find(doc, ref.sourceItemId);
+    if (!f) return false;
+    const it = f.item;
+    if (ref.kind === 'sketch-plane') {
+      const sk = ref.sketchIdx != null ? (it.p && it.p.sketches && it.p.sketches[ref.sketchIdx]) : (it.p && it.p.sketch);
+      if (!sk || !sk.planeRef || !!sk.planeRef.frozen === on) return false;
+      if (on) sk.planeRef.frozen = true;
+      else delete sk.planeRef.frozen;
+      return true;
+    }
+    if (ref.kind === 'sketch-link' || ref.kind === 'sketch-silhouette' || ref.kind === 'sketch-intersect') {
+      const ents = (it.p && it.p.sketch && it.p.sketch.ents) || [];
+      let changed = false;
+      for (const e of ents) {
+        if (!e || !e.link) continue;
+        const match = ref.grp ? e.link.grp === ref.grp : ref.fl ? e.link.fl === ref.fl : e.id === ref.entId;
+        if (!match) continue;
+        if (!!e.link.frozen !== on) {
+          if (on) e.link.frozen = true;
+          else delete e.link.frozen;
+          changed = true;
+        }
+      }
+      return changed;
+    }
+    if (ref.kind === 'extrude-toFace') {
+      if (!it.p || !it.p.toFace || !!it.p.toFace.frozen === on) return false;
+      if (on) {
+        const curDist = (typeof App !== 'undefined' && App.resolvedDist && App.resolvedDist(it.id))
+          ?? Model.num(it.p.dist, Model.itemVars(doc, it.id), 10);
+        it.p.toFace.frozen = true;
+        it.p.toFace.frozenDist = round(curDist, 4);
+      } else {
+        delete it.p.toFace.frozen;
+        delete it.p.toFace.frozenDist;
+      }
+      return true;
+    }
+    if (ref.kind === 'revolve-toFace') {
+      if (!it.p || !it.p.toFace || !!it.p.toFace.frozen === on) return false;
+      if (on) it.p.toFace.frozen = true;
+      else delete it.p.toFace.frozen;
+      return true;
+    }
+    if (ref.kind === 'linked-copy') {
+      if (!it.link || !!it.linkFrozen === on) return false;
+      if (on) it.linkFrozen = true;
+      else delete it.linkFrozen;
+      return true;
+    }
+    if (ref.kind === 'path3d-bind') {
+      const b = it.p && it.p.path3d && it.p.path3d.bind && it.p.path3d.bind[ref.bindIdx];
+      if (!b || !!b.frozen === on) return false;
+      if (on) b.frozen = true;
+      else delete b.frozen;
+      return true;
+    }
+    if (ref.kind === 'sketch3d-bind') {
+      const e = it.p && it.p.sketch3d && it.p.sketch3d.ents && it.p.sketch3d.ents[ref.entIdx];
+      const b = e && e[ref.bindKey];
+      if (!b || !!b.frozen === on) return false;
+      if (on) b.frozen = true;
+      else delete b.frozen;
+      return true;
+    }
+    if (ref.kind === 'mirror-face') {
+      if (!it.p || !it.p.faceRef || !!it.p.faceRef.frozen === on) return false;
+      if (on) it.p.faceRef.frozen = true;
+      else delete it.p.faceRef.frozen;
+      return true;
+    }
+    return false;
+  }
+
+  function applyBreakInDoc(doc, ref) {
+    if (!doc || !ref) return false;
+    if (ref.kind === 'measure') {
+      const mp = (doc.params || []).find((p) => p && p.id === ref.paramId);
+      if (!mp || !mp.measure) return false;
+      const lowName = String(mp.name || '').toLowerCase();
+      const otherTops = (doc.items || []).filter((x) => x && x.id !== ref.sourceTopId);
+      const usedElsewhere = otherTops.some((x) => expandParamNames(doc, collectDirectExprNames(x)).has(lowName));
+      if (!usedElsewhere) {
+        delete mp.measure;
+        return true;
+      }
+      const V = Model.vars(doc).v;
+      const numVal = round(typeof mp.expr === 'number' ? mp.expr : Model.num(mp.expr, V, 0), 4);
+      const srcTop = (doc.items || []).find((x) => x && x.id === ref.sourceTopId);
+      if (srcTop) inlineParamInItem(srcTop, mp.name, numVal);
+      const otherDirect = new Set();
+      for (const x of otherTops) for (const nm of expandParamNames(doc, collectDirectExprNames(x))) otherDirect.add(nm);
+      for (const p of doc.params || []) {
+        if (!p || p.id === mp.id || typeof p.expr !== 'string') continue;
+        if (!otherDirect.has(String(p.name || '').toLowerCase())) {
+          p.expr = replaceExprIdent(p.expr, mp.name, numVal);
+        }
+      }
+      return true;
+    }
+    const f = Model.find(doc, ref.sourceItemId);
+    if (!f) return false;
+    const it = f.item;
+    if (ref.kind === 'sketch-plane') {
+      const sk = ref.sketchIdx != null ? (it.p && it.p.sketches && it.p.sketches[ref.sketchIdx]) : (it.p && it.p.sketch);
+      if (!sk || !sk.planeRef) return false;
+      delete sk.planeRef;
+      return true;
+    }
+    if (ref.kind === 'sketch-link' || ref.kind === 'sketch-silhouette' || ref.kind === 'sketch-intersect') {
+      const ents = (it.p && it.p.sketch && it.p.sketch.ents) || [];
+      let changed = false;
+      for (const e of ents) {
+        if (!e || !e.link) continue;
+        const match = ref.grp ? e.link.grp === ref.grp : ref.fl ? e.link.fl === ref.fl : e.id === ref.entId;
+        if (match) { delete e.link; changed = true; }
+      }
+      return changed;
+    }
+    if (ref.kind === 'extrude-toFace') {
+      if (!it.p || !it.p.toFace) return false;
+      const curDist = (it.p.toFace.frozen && typeof it.p.toFace.frozenDist === 'number')
+        ? it.p.toFace.frozenDist
+        : ((typeof App !== 'undefined' && App.resolvedDist && App.resolvedDist(it.id))
+          ?? Model.num(it.p.dist, Model.itemVars(doc, it.id), 10));
+      it.p.dist = round(curDist, 4);
+      it.p.extent = 'dist';
+      delete it.p.toFace;
+      return true;
+    }
+    if (ref.kind === 'revolve-toFace') {
+      if (!it.p || !it.p.toFace) return false;
+      const V = Model.itemVars(doc, it.id);
+      const fr = Model.revolveFrame(it.p, V);
+      const hitAng = fr && Array.isArray(it.p.toFace.o) && Array.isArray(it.p.toFace.fn)
+        ? Model.revolveHitAngle(fr, it.p.toFace.o, it.p.toFace.fn, !!it.p.toFaceFlip)
+        : null;
+      const ang = hitAng != null ? hitAng : Model.num(it.p.angle, V, 90);
+      it.p.dir = 'normal';
+      it.p.angle = round(ang, 3);
+      delete it.p.toFace;
+      delete it.p.toFaceFlip;
+      return true;
+    }
+    if (ref.kind === 'linked-copy') {
+      if (!it.link) return false;
+      delete it.link;
+      delete it.linkLost;
+      delete it.linkFrozen;
+      return true;
+    }
+    if (ref.kind === 'path3d-bind') {
+      const pp = it.p && it.p.path3d;
+      if (!pp || !Array.isArray(pp.bind) || !pp.bind[ref.bindIdx]) return false;
+      pp.bind[ref.bindIdx] = null;
+      if (!pp.bind.some(Boolean)) delete pp.bind;
+      return true;
+    }
+    if (ref.kind === 'sketch3d-bind') {
+      const e = it.p && it.p.sketch3d && it.p.sketch3d.ents && it.p.sketch3d.ents[ref.entIdx];
+      if (!e || !e[ref.bindKey]) return false;
+      delete e[ref.bindKey];
+      return true;
+    }
+    if (ref.kind === 'mirror-face') {
+      if (!it.p || !it.p.faceRef) return false;
+      delete it.p.faceRef;
+      return true;
+    }
+    return false;
+  }
+
+  function setPartRefFrozen(refOrId, frozen = true) {
+    const ref = findPartRef(refOrId);
+    if (!ref) return false;
+    const on = !!frozen;
+    const ok = App.change(on ? T('partRefs.freezeUndo') : T('partRefs.unfreezeUndo'), (doc) => {
+      if (!applyFreezeInDoc(doc, ref, on)) return false;
+    });
+    return ok !== false;
+  }
+
+  function breakPartRef(refOrId) {
+    const ref = findPartRef(refOrId);
+    if (!ref) return false;
+    const ok = App.change(T('partRefs.breakUndo'), (doc) => {
+      if (!applyBreakInDoc(doc, ref)) return false;
+    });
+    return ok !== false;
+  }
+
+  function freezeAllPartRefs(itemId = null, frozen = true) {
+    const refs = itemId ? partRefs(itemId) : allPartRefs();
+    const on = !!frozen;
+    const todo = refs.filter((r) => !!r.frozen !== on);
+    if (!todo.length) return 0;
+    let count = 0;
+    App.change(on ? T('partRefs.freezeAllUndo') : T('partRefs.unfreezeAllUndo'), (doc) => {
+      for (const r of todo) if (applyFreezeInDoc(doc, r, on)) count++;
+      if (!count) return false;
+    });
+    return count;
+  }
+
+  function breakAllPartRefs(itemId = null) {
+    const refs = itemId ? partRefs(itemId) : allPartRefs();
+    if (!refs.length) return 0;
+    let count = 0;
+    App.change(T('partRefs.breakAllUndo'), (doc) => {
+      for (const r of refs) if (applyBreakInDoc(doc, r)) count++;
+      if (!count) return false;
+    });
+    return count;
+  }
+
   function init() {
     App.on('mode', () => { if (state && App.mode !== 'model') stop({ keepToast: true }); });
     App.on('doc', () => {
@@ -791,6 +1483,7 @@ const RefFix = (() => {
   return {
     init, isRefError, hardErrorsFor, issuesOf, firstDescendantIssue, hasBrokenRef, allIssues,
     buildGhostSpecs, start, stop, applyMulti,
+    partRefs, allPartRefs, findPartRef, setPartRefFrozen, breakPartRef, freezeAllPartRefs, breakAllPartRefs,
     get active() { return !!state; },
     get picking() { return !!state; },
   };

@@ -30977,6 +30977,286 @@ def t_a157_benannte_stellungen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-159] Bezüge zwischen Teilen verwalten (BG-22) ----------
+def t_a159_bezuege_verwalten(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(200)
+
+    def warte_idle():
+        for _ in range(80):
+            if not p.ev("return App.busy"):
+                break
+            p.wait(100)
+        p.wait(250)
+
+    # 1. Teil B übernimmt Maß von Teil A → A ändern → B folgt; einfrieren → A ändern → B bleibt; auftauen → folgt; lösen → bleibt + Undo
+    p.ev("""App.change('A-159 Mess-Test', d => {
+      const a = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Teil A' });
+      const b = Model.newItem('box', { w: 15, d: 15, h: 10 }, { name: 'Teil B' });
+      b.t.x = 60;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+    a_id, b_id = p.ev("return App.doc.items.map(x => x.id)")
+    p.ev("Viewer.setView('iso'); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(400)
+    p.ev("App.select([arg])", b_id)
+    p.wait(300)
+
+    p.pg.locator('#p-h-meas').click()
+    p.wait(200)
+    pt_40 = p.ev("""
+      const r = App.results.get(arg);
+      const node = Viewer.nodes.get(arg);
+      if (!r || !node) return null;
+      const rect = Viewer.canvas.getBoundingClientRect();
+      for (let idx = 0; idx < r.data.edges.length; idx++) {
+        const e = r.data.edges[idx];
+        if (Math.abs((e.l || 0) - 40) > 0.1) continue;
+        const w = Viewer.camera.position.clone().set(e.m[0], e.m[1], e.m[2]).applyMatrix4(node.obj.matrixWorld);
+        const s = Viewer.toScreen(w);
+        const sx = rect.left + s.x, sy = rect.top + s.y;
+        const hit = Viewer.pick(sx, sy, { edgePx: 11 });
+        if (hit && hit.id === arg && hit.edgeIdx === idx) return [sx, sy];
+      }
+      return null;
+    """, a_id)
+    if pt_40:
+        p.pg.mouse.move(pt_40[0], pt_40[1])
+        p.wait(150)
+        p.pg.mouse.click(pt_40[0], pt_40[1])
+    warte_rechnen(p)
+
+    # A auf 55 ändern → B folgt auf 55
+    p.ev("App.select([arg])", a_id)
+    p.wait(250)
+    p.pg.fill('#p-w', '55')
+    p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_follow = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    # B wählen → Liste im Panel zeigt den Bezug
+    p.ev("App.select([arg])", b_id)
+    p.wait(300)
+    sec_vis = p.pg.locator('#part-refs-sec').is_visible()
+    sec_txt = (p.pg.locator('#part-refs-sec').text_content() or '').lower()
+    refs_active = p.ev("return Comp.partRefs(arg)", b_id)
+
+    # Bezug einfrieren
+    p.pg.locator('#part-refs-sec [data-ref-freeze]').first.click()
+    warte_idle()
+    refs_frozen = p.ev("return Comp.partRefs(arg)", b_id)
+    frozen_badge = (p.pg.locator('#part-refs-sec .part-ref-badge.frozen').first.text_content() or '').lower()
+
+    # A auf 75 ändern → B bleibt bei 55
+    p.ev("App.select([arg])", a_id)
+    p.wait(250)
+    p.pg.fill('#p-w', '75')
+    p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_frozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    # Bezug auftauen → B folgt sofort auf 75
+    p.ev("App.select([arg])", b_id)
+    p.wait(250)
+    p.pg.locator('#part-refs-sec [data-ref-freeze]').first.click()
+    warte_idle()
+    b_h_unfrozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+    refs_unfrozen = p.ev("return Comp.partRefs(arg)", b_id)
+
+    # Bezug lösen → Liste leer, B bleibt bei 75; Undo stellt Bezug wieder her
+    p.pg.locator('#part-refs-sec [data-ref-break]').first.click()
+    warte_idle()
+    refs_broken = p.ev("return Comp.partRefs(arg)", b_id)
+    sec_after_break = p.pg.locator('#part-refs-sec').count()
+    p.ev("App.select([arg])", a_id)
+    p.wait(250)
+    p.pg.fill('#p-w', '90')
+    p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_after_break = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    # 2× Undo (A=90 rückgängig, Lösen rückgängig) → Bezug wieder aktiv und folgt auf 90
+    p.ev("App.undo()"); warte_idle()
+    p.ev("App.undo()"); warte_idle()
+    refs_undone = p.ev("return Comp.partRefs(arg)", b_id)
+    p.ev("App.select([arg])", a_id); p.wait(200)
+    p.pg.fill('#p-w', '90'); p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    b_h_undone_follow = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", b_id)
+
+    ok1 = (
+        pt_40 is not None
+        and abs(b_h_follow - 55) < 0.05
+        and sec_vis
+        and 'teil a' in sec_txt
+        and len(refs_active) == 1
+        and refs_active[0]['kind'] == 'measure'
+        and refs_active[0]['frozen'] is False
+        and len(refs_frozen) == 1
+        and refs_frozen[0]['frozen'] is True
+        and 'eingefroren' in frozen_badge
+        and abs(b_h_frozen - 55) < 0.05
+        and abs(b_h_unfrozen - 75) < 0.05
+        and len(refs_unfrozen) == 1
+        and refs_unfrozen[0]['frozen'] is False
+        and len(refs_broken) == 0
+        and sec_after_break == 0
+        and abs(b_h_after_break - 75) < 0.05
+        and len(refs_undone) == 1
+        and abs(b_h_undone_follow - 90) < 0.05
+    )
+
+    # 2. Bauteil im Kontext: Skizzen-Fläche & Hochziehen bis Fläche auf Basis-Teil
+    p.ev("App.setDoc(Model.newDoc())")
+    p.wait(400)
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.ev("""App.change('A-159 Kontext-Test', d => {
+      const basis = Model.newItem('box', { w: 30, d: 30, h: 12 }, { name: 'Basis' });
+      const sk = {
+        plane: { o: [0, 0, 12], x: [1, 0, 0], n: [0, 0, 1] },
+        planeRef: { kind: 'face', id: basis.id, c: [0, 0, 12], n: [0, 0, 1], size: 30 },
+        ents: [{ id: 'e1', type: 'rect', a: [-5, -5], b: [5, 5] }],
+        dims: [], cons: []
+      };
+      const extChild = Model.newItem('extrude', { sketch: sk, dist: 8, dir: 'normal' }, { name: 'Aufsatz' });
+      const comp = Model.newItem('group', {}, { name: 'Deckel' });
+      comp.comp = true;
+      comp.children = [extChild];
+
+      const sk2 = {
+        plane: { o: [40, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [{ id: 'e2', type: 'rect', a: [-4, -4], b: [4, 4] }],
+        dims: [], cons: []
+      };
+      const toFace = Model.newItem('extrude', {
+        sketch: sk2, dist: 12, dir: 'normal', extent: 'toFace',
+        toFace: { id: basis.id, t: 'PLANE', c: [0, 0, 12], n: [0, 0, 1], wc: [0, 0, 12], wn: [0, 0, 1], label: 'Basis · Fläche' }
+      }, { name: 'Anschlag' });
+      d.items.push(basis, comp, toFace);
+    })""")
+    warte_rechnen(p)
+    basis_id, comp_id, tf_id = p.ev("return App.doc.items.map(x => x.id)")
+    child_id = p.ev("return Model.find(App.doc, arg).item.children[0].id", comp_id)
+
+    comp_refs = p.ev("return Comp.partRefs(arg)", comp_id)
+    tf_refs = p.ev("return Comp.partRefs(arg)", tf_id)
+
+    # Basis-Höhe auf 20 ändern → Deckel wandert auf z=20, Anschlag wächst auf h=20
+    p.ev("App.select([arg])", basis_id); p.wait(200)
+    p.pg.fill('#p-h', '20'); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    comp_z_20 = p.ev("return App.results.get(arg).data.bbox[2]", comp_id)
+    tf_h_20 = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    # Über Dialog einfrieren
+    p.ev("Comp.refsDialog(arg)", comp_id)
+    p.wait(250)
+    dlg_open = p.pg.locator('#part-refs-dialog').is_visible()
+    p.pg.locator('#part-refs-dialog [data-ref-freeze]').first.click()
+    warte_idle()
+    p.pg.locator('.modal .actions button').first.click()
+    p.wait(200)
+    p.ev("Comp.freezeRef(arg, true)", tf_refs[0]['id'])
+    warte_idle()
+
+    # Basis unterdrücken → keine RefFix-Warnung an eingefrorenen Bezügen!
+    p.ev("Timeline.toggleSuppress(arg)", basis_id)
+    warte_idle()
+    issues_frozen_suppressed = p.ev("return RefFix.issuesOf(arg[0]).length + RefFix.issuesOf(arg[1]).length", [child_id, tf_id])
+    p.ev("Timeline.toggleSuppress(arg)", basis_id)
+    warte_idle()
+
+    # Basis auf 30 ändern → beide bleiben bei 20
+    p.ev("App.select([arg])", basis_id); p.wait(200)
+    p.pg.fill('#p-h', '30'); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    comp_z_frozen = p.ev("return App.results.get(arg).data.bbox[2]", comp_id)
+    tf_h_frozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    # Beide auftauen → beide folgen auf 30
+    p.ev("Comp.unfreezeRef(arg[0]); Comp.unfreezeRef(arg[1]);", [comp_refs[0]['id'], tf_refs[0]['id']])
+    warte_idle()
+    comp_z_unfrozen = p.ev("return App.results.get(arg).data.bbox[2]", comp_id)
+    tf_h_unfrozen = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    # Anschlag lösen → Basis auf 42 ändern → Anschlag bleibt auf 30
+    p.ev("Comp.breakRef(arg)", tf_refs[0]['id'])
+    warte_idle()
+    tf_extent_broken = p.ev("return Model.find(App.doc, arg).item.p.extent", tf_id)
+    p.ev("App.select([arg])", basis_id); p.wait(200)
+    p.pg.fill('#p-h', '42'); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    tf_h_broken = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", tf_id)
+
+    ok2 = (
+        len(comp_refs) == 1 and comp_refs[0]['kind'] == 'sketch-plane'
+        and len(tf_refs) == 1 and tf_refs[0]['kind'] == 'extrude-toFace'
+        and abs(comp_z_20 - 20) < 0.05
+        and abs(tf_h_20 - 20) < 0.05
+        and dlg_open
+        and issues_frozen_suppressed == 0
+        and abs(comp_z_frozen - 20) < 0.05
+        and abs(tf_h_frozen - 20) < 0.05
+        and abs(comp_z_unfrozen - 30) < 0.05
+        and abs(tf_h_unfrozen - 30) < 0.05
+        and tf_extent_broken == 'dist'
+        and abs(tf_h_broken - 30) < 0.05
+    )
+
+    # 3. Bauteil-Kontext-Banner, Projekt-Panel, Einfach/Profi, Validierung, Hilfetexte, DE/EN & Befehlssuche
+    p.ev("Comp.freezeRef(arg, true)", comp_refs[0]['id'])
+    warte_idle()
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+
+    p.ev("Comp.edit(arg)", comp_id); p.wait(250)
+    ctx_btn_vis = p.pg.locator('#ctx-part-refs-btn').is_visible()
+    p.pg.locator('#ctx-part-refs-btn').click(); p.wait(200)
+    ctx_dlg_vis = p.pg.locator('#part-refs-dialog').is_visible()
+    p.pg.locator('.modal .actions button').first.click(); p.wait(200)
+    p.ev("App.setCtx(null)"); p.wait(200)
+
+    p.ev("App.clearSelection()"); p.wait(250)
+    proj_sec_vis = p.pg.locator('#proj-part-refs-sec').is_visible()
+
+    # Einfach-Modus blendet Profi-UI & Befehl aus
+    p.ev("ViewPrefs.setLevel('simple'); App.select([arg]);", comp_id); p.wait(250)
+    simple_panel_vis = p.pg.locator('#part-refs-sec').is_visible() if p.pg.locator('#part-refs-sec').count() else False
+    simple_cmd_ok = p.ev("return !Commands.search('bezüge').some(c => c.id === 'part-refs')")
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'partRefs';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.partRefs && wh.partRefs.tip && wh.partRefs.hilfe && wh.partRefs.tipp && desc && desc.text === wh.partRefs.hilfe && desc.tip === wh.partRefs.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('bezüge').some(c => c.id === 'part-refs') && Commands.search('einfrieren').some(c => c.id === 'part-refs');
+      return { hOk, i18nOk, cmdOk };
+    })()""")
+
+    ok3 = bool(
+        val_ok is True
+        and ctx_btn_vis
+        and ctx_dlg_vis
+        and proj_sec_vis
+        and not simple_panel_vis
+        and simple_cmd_ok
+        and meta['hOk']
+        and meta['i18nOk']
+        and meta['cmdOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -31245,6 +31525,7 @@ TESTS = [
     ('[A-151] Kopplungen: Zahnrad 1:2 (90° → 45°) & Zahnstange (π·d·Winkel/360) (BG-14)', t_a151_kopplungen_zahnrad_zahnstange),
     ('[A-156] Explosion in Schritten: Schritte / nacheinander abspielen / Wegen-Linien / Video-Export / Einfach & Profi', t_a156_explosion_schritte_video),
     ('[A-157] Benannte Stellungen: speichern, einnehmen, Einfach/Profi & Speichern/Laden (BG-20)', t_a157_benannte_stellungen),
+    ('[A-159] Bezüge zwischen Teilen verwalten: Liste, Einfrieren, Auftauen & Lösen (BG-22)', t_a159_bezuege_verwalten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1773,5 +1773,10 @@
     "tip": "Benannte Stellungen: Gelenk-Positionen wie „auf“, „zu“ oder „halb“ speichern und per Klick einnehmen",
     "hilfe": "Merkt sich die aktuellen Winkel und Wege aller beweglichen Gelenke unter einem Namen wie „auf“, „zu“ oder „halb“. Ein Klick auf eine gespeicherte Stellung fährt alle zugehörigen Teile sofort wieder genau dorthin – auch über ganze Gelenk-Ketten hinweg und dauerhaft mit dem Projekt gespeichert.",
     "tipp": "Über das Speichern-Symbol an einer vorhandenen Stellung überschreibst du sie mit der aktuellen Lage; per Rechtsklick kannst du sie umbenennen."
+  },
+  "partRefs": {
+    "tip": "Bezüge zwischen Teilen verwalten: übernommene Maße, Kanten und Flächen einfrieren oder lösen (Profi)",
+    "hilfe": "Zeigt alle Bezüge eines Teils auf andere Teile in der Baugruppe (z. B. übernommene Messwerte, Skizzen-Flächen, übernommene Kanten, Umrisse oder „bis Fläche“-Ziele). Eingefrorene Bezüge behalten ihren aktuellen Stand und rechnen nicht mehr mit; gelöste Bezüge werden dauerhaft getrennt.",
+    "tipp": "Friere Bezüge kurz ein, wenn du ein Nachbarteil frei umbauen willst – danach taust du den Bezug mit einem Klick wieder auf."
   }
 }

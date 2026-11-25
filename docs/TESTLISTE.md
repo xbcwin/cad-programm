@@ -2702,6 +2702,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Speichern & Laden, Validierung & Hilfen**: `doc.poses` besteht `Store.validateProject`, bleibt nach `Store.saveProject`/`loadProject` sowie `.tracery.json`-Export und erneutem Laden erhalten und fährt „auf“ wieder auf `90°`; `HELP.namedPoses`, DE/EN-Texte und Befehlssuche (`save-pose`) sind vollständig (`t_a157_benannte_stellungen`).
 - [ ] **Von Hand**: Im Browser das Beispiel „Baugruppe Scharnier“ im Modus „Einfach“ und „Profi“ öffnen, Stellungen wie „auf“ (90°) und „zu“ (0°) über den Verlauf „Stellungen“ und die Eigenschaften speichern, per Klick umschalten und nach „Projekt als Datei speichern“ und erneutem Öffnen prüfen.
 
+## Bezüge zwischen Teilen verwalten (Auto [A-159], BG-22)
+
+- [x] **Messwert-Bezug Liste, Einfrieren, Auftauen, Lösen & Rückgängig**: Teil B übernimmt eine Kantenlänge von Teil A über `#p-h-meas`; bei Änderung von A (`40 → 55 mm`) folgt B, `#part-refs-sec` zeigt den Bezug zu Teil A (`kind: 'measure'`); nach „Einfrieren“ bleibt B bei Änderung von A (`55 → 75 mm`) unverändert, nach „Auftauen“ folgt B sofort auf `75 mm`, nach „Lösen“ bleibt B unabhängig (`90 mm`) und `App.undo()` stellt den Bezug wieder her (`t_a159_bezuege_verwalten`).
+- [x] **Bauteil im Kontext (Skizzen-Fläche & „bis Fläche“)**: Bauteil-Gruppe (`comp: true`) mit Skizze auf Fläche von „Basis“ und Extrusion `extent: 'toFace'` erscheinen in `Comp.partRefs`, folgen von `12 → 20 mm`, bleiben nach dem Einfrieren selbst beim Unterdrücken von „Basis“ ohne `RefFix`-Warnung und beim Ändern (`20 → 30 mm`) fest, folgen nach dem Auftauen auf `30 mm` und bleiben nach dem Lösen (`extent: 'dist'`) unabhängig (`t_a159_bezuege_verwalten`).
+- [x] **Dialog, Kontext-Banner, Profi-Trennung, Validierung & Hilfen**: `#ctx-part-refs-btn`, `Comp.refsDialog` (`#part-refs-dialog`), `#proj-part-refs-sec`, Ausblenden im Einfach-Modus, `Store.validateProject`, `HELP.partRefs`, DE/EN-Schlüsselgleichheit und Befehlssuche (`part-refs` für „bezüge“ / „einfrieren“) laufen ohne JS-Fehler (`t_a159_bezuege_verwalten`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Skizze auf die Fläche eines anderen Teils legen oder ein Maß per Pipette übernehmen, im rechten Panel unter „Bezüge auf andere Teile“ sowie im Dialog „Bezüge zwischen Teilen verwalten“ einzelne Bezüge einfrieren, das Ausgangsteil ändern, danach auftauen und dauerhaft lösen.
+
 ## Fehler melden
 
 ```

@@ -949,6 +949,7 @@ const Panels = (() => {
           ...(typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc) ? [{ icon: 'replace', label: T('asm.replacePart'), id: 'tm-replace-part', help: 'replacePart', run: () => Comp.replacePartDialog(it.id) }] : []),
           ...(topIdx >= 0 ? [{ icon: it.locked ? 'unlock' : 'lock', label: it.locked ? T('asm.unground') : T('asm.ground'), id: 'tm-ground', help: 'groundPart', run: () => Actions.toggleGround([it.id]) }] : []),
           ...(refIssues.length ? [{ icon: 'warn', label: T('left.tree.refFixMenu'), id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
+          ...(typeof Comp !== 'undefined' && Comp.partRefs && !ViewPrefs.simple && Comp.partRefs(it.id).length ? [{ icon: 'link', label: T('partRefs.menuLabel', { n: Comp.partRefs(it.id).length }), id: 'tm-part-refs', help: 'partRefs', run: () => Comp.refsDialog(it.id) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
@@ -1246,13 +1247,23 @@ const Panels = (() => {
       f.append(nameIn, valF);
       row.append(f);
       if (p.measure) {
-        const mInfo = h('div', { class: 'meas-param-info' + (p.measure.lost ? ' lost' : '') });
-        const mTxt = h('span', { class: 'grow' }, p.measure.lost ? T('measure.paramLost') : T('measure.paramFrom', { src: p.measure.label || 'Kante' }));
-        const mPick = h('button', { type: 'button', class: 'btn ghost small', id: 'pm-repick-' + p.id, 'data-tip': T('measure.paramRepick') }, T('measure.paramRepick'));
-        mPick.onclick = () => Measure.pickEdgeForField({ repickParamId: p.id });
+        const mInfo = h('div', { class: 'meas-param-info' + (p.measure.frozen ? ' frozen' : p.measure.lost ? ' lost' : '') });
+        const mTxt = h('span', { class: 'grow' }, p.measure.frozen ? T('partRefs.paramFrozen', { src: p.measure.label || 'Kante' }) : p.measure.lost ? T('measure.paramLost') : T('measure.paramFrom', { src: p.measure.label || 'Kante' }));
         const mUnlink = h('button', { type: 'button', class: 'btn ghost small', id: 'pm-unlink-' + p.id, 'data-tip': T('measure.paramUnlink') }, T('measure.paramUnlink'));
         mUnlink.onclick = () => Measure.unlinkMeasuredParam(p.id);
-        mInfo.append(iconEl('measure'), mTxt, mPick, mUnlink);
+        if (p.measure.frozen) {
+          const mUnfreeze = h('button', { type: 'button', class: 'btn ghost small', id: 'pm-unfreeze-' + p.id }, T('partRefs.unfreezeBtn'));
+          mUnfreeze.onclick = () => {
+            const ref = (typeof Comp !== 'undefined' && Comp.allPartRefs ? Comp.allPartRefs() : []).find((r) => r.kind === 'measure' && r.paramId === p.id);
+            if (ref) Comp.unfreezeRef(ref.id);
+            else App.change(T('partRefs.unfreezeUndo'), (doc) => { const x = (doc.params || []).find((q) => q.id === p.id); if (!x || !x.measure) return false; delete x.measure.frozen; });
+          };
+          mInfo.append(iconEl('freeze'), mTxt, mUnfreeze, mUnlink);
+        } else {
+          const mPick = h('button', { type: 'button', class: 'btn ghost small', id: 'pm-repick-' + p.id, 'data-tip': T('measure.paramRepick') }, T('measure.paramRepick'));
+          mPick.onclick = () => Measure.pickEdgeForField({ repickParamId: p.id });
+          mInfo.append(iconEl('measure'), mTxt, mPick, mUnlink);
+        }
         row.append(mInfo);
       }
       const info = h('div', { class: 'btn-row', style: { justifyContent: 'space-between', alignItems: 'center' } });
@@ -1745,6 +1756,21 @@ const Panels = (() => {
       pinSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, pinAdd, pinList));
       w.append(pinSec);
     }
+    if (typeof Comp !== 'undefined' && Comp.allPartRefs) {
+      const allRefs = Comp.allPartRefs();
+      if (allRefs.length) {
+        const frz = allRefs.filter((r) => r.frozen).length;
+        const rSec = h('div', { class: 'section pro', id: 'proj-part-refs-sec', 'data-help': 'partRefs' },
+          h('div', { class: 'section-h' }, T('partRefs.projTitle')),
+          h('div', { class: 'mini-list' },
+            h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('partRefs.projSummary', { total: allRefs.length, active: allRefs.length - frz, frozen: frz })))));
+        const rBtn = h('button', { type: 'button', class: 'btn small', id: 'proj-part-refs-btn' });
+        rBtn.innerHTML = icon('link') + esc(T('partRefs.manageBtn'));
+        rBtn.onclick = () => Comp.refsDialog(null);
+        rSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, rBtn));
+        w.append(rSec);
+      }
+    }
     w.append(h('div', { class: 'hint-box', html: T('panel.proj.tipHtml') }));
     body.append(w);
   }
@@ -1935,6 +1961,10 @@ const Panels = (() => {
         if (down.length) ds.open = true;
         w.append(ds);
       }
+    }
+    if (typeof Comp !== 'undefined' && Comp.refsSection) {
+      const prs = Comp.refsSection(it);
+      if (prs) w.append(prs);
     }
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));

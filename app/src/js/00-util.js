@@ -632,6 +632,7 @@ const IC = {
   actionMount: '<rect x="4" y="17" width="16" height="4" rx="1"/><path d="M7 17v-6a2.5 2.5 0 0 1 5 0v6M12 17v-6a2.5 2.5 0 0 1 5 0v6"/><circle cx="12" cy="11" r="1.2"/>',
   plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
+  freeze: '<path d="M12 2v20M4.2 7.5l15.6 9M19.8 7.5 4.2 16.5M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5M6.2 10.6 7.5 7.5 4.4 6.2M17.8 13.4l-1.3 3.1 3.1 1.3"/>',
   projectEdge: '<path d="M7 3h10l4 4v6" opacity=".45"/><path d="M7 3v6M17 3v6" opacity=".45"/><path d="M12 11v6" stroke-dasharray="2 2"/><path d="M8 15l4 4 4-4"/><path d="M3 21h18" />',
   compare: '<rect x="3.5" y="4.5" width="11" height="11" rx="1.5" opacity=".6"/><rect x="9.5" y="8.5" width="11" height="11" rx="1.5"/>',
   silhouette2d: '<ellipse cx="12" cy="7" rx="6.5" ry="3" opacity=".45"/><path d="M5.5 7v5c0 1.6 2.9 3 6.5 3s6.5-1.4 6.5-3V7" opacity=".45"/><path d="M12 15v3" stroke-dasharray="2 2"/><rect x="4" y="18" width="16" height="3.5" rx="1"/>',
@@ -2520,6 +2521,11 @@ const HELP = {
   "tip": "Benannte Stellungen: Gelenk-Positionen wie „auf“, „zu“ oder „halb“ speichern und per Klick einnehmen",
   "hilfe": "Merkt sich die aktuellen Winkel und Wege aller beweglichen Gelenke unter einem Namen wie „auf“, „zu“ oder „halb“. Ein Klick auf eine gespeicherte Stellung fährt alle zugehörigen Teile sofort wieder genau dorthin – auch über ganze Gelenk-Ketten hinweg und dauerhaft mit dem Projekt gespeichert.",
   "tipp": "Über das Speichern-Symbol an einer vorhandenen Stellung überschreibst du sie mit der aktuellen Lage; per Rechtsklick kannst du sie umbenennen."
+ },
+ "partRefs": {
+  "tip": "Bezüge zwischen Teilen verwalten: übernommene Maße, Kanten und Flächen einfrieren oder lösen (Profi)",
+  "hilfe": "Zeigt alle Bezüge eines Teils auf andere Teile in der Baugruppe (z. B. übernommene Messwerte, Skizzen-Flächen, übernommene Kanten, Umrisse oder „bis Fläche“-Ziele). Eingefrorene Bezüge behalten ihren aktuellen Stand und rechnen nicht mehr mit; gelöste Bezüge werden dauerhaft getrennt.",
+  "tipp": "Friere Bezüge kurz ein, wenn du ein Nachbarteil frei umbauen willst – danach taust du den Bezug mit einem Klick wieder auf."
  }
 };
 
