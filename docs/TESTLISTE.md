@@ -3001,6 +3001,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Suche, Undo/Redo, Validierung & Hilfen**: Unverändert 5 Kacheln im Einfach-Flyout, 3 neue Kacheln im Profi-Modus, Befehlssuche, `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüsselgleichheit ohne JS-Fehler (`t_a193_typenschild_qr_barcode`).
 - [ ] **Von Hand**: Im Browser ein Typenschild, einen QR-Code und einen EAN-13-/Code-128-Barcode in „Einfach“ und „Profi“ anlegen, den QR-Code mit dem Handy scannen und erhabene sowie vertiefte Ausführung visuell prüfen.
 
+## Volltest-Reparatur (Auto [F-11252354])
+
+- [x] **`Mass.measure()` wartet auf laufenden `App`-Neubau (`[A-077]`)**: Beim gleichzeitigen Anlegen dreier unabhängiger Körper im Kaltstart wartet `Mass.measure()` über `waitAppIdle()` auf `App.busy === false`, sodass alle 3 Körper je genau einmal in `Kernel.stats().buildsByItem` gezählt werden (`cached: []`) und anschließend die Gesamtmasse vorliegt (`t_f11252354`).
+- [x] **Zeichnungs-Exportmenü trennt Standard-PDF & 1:1-Schablone (`[A-062]`, `[A-065]`)**: Im Zeichnungs-Exportmenü sind `#dw-exp-pdf` („Als PDF speichern“) und `#dw-exp-tiled-pdf` („Drucken 1:1 (A4-Schablone, PDF) …“) eindeutig vorhanden; Klick auf `#dw-exp-pdf` lädt eine gültige `%PDF-1.4`-Datei (`t_f11252354`).
+- [x] **Einstellungs-Dialog ohne Geister-Modal (`[A-108]`)**: Nach direktem Entfernen von `.modal-back` öffnet `ViewPrefs.refreshOpenDialog()` bei `ViewPrefs.importData()` keinen verwaisten Einstellungsdialog neu; Import-Tests warten ereignisbasiert auf die aktualisierten Einstellungen (`t_f11252354`).
+- [ ] **Von Hand**: Im Browser bei kaltem Start ein mehrteiliges Modell anlegen, anschließend Einstellungen aus einer `.json`-Datei laden und im Zeichnungsbereich beide PDF-Exporte ausführen.
+
 ## Fehler melden
 
 ```
