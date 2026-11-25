@@ -4457,5 +4457,19 @@
   "asm.cableDlgTitle": "Route cable or hose",
   "asm.cableDlgHint": "Connect two ports with a smooth curve and minimum bend radius. Enter coordinates directly or pick the points in the 3D view.",
   "asm.cablePick3dBtn": "Pick in 3D view",
-  "asm.cableCreateBtn": "Create"
+  "asm.cableCreateBtn": "Create",
+  "draw.view.explode": "Exploded view",
+  "menu.draw.addExplode": "Exploded view",
+  "menu.draw.addExplodeShaded": "Exploded view (shaded)",
+  "draw.panel.addExplode": "Exploded view",
+  "draw.panel.exAmount": "Explode distance",
+  "draw.panel.exMode": "Explode mode",
+  "draw.panel.exModeAuto": "Automatic",
+  "draw.panel.exModeSteps": "Explode steps",
+  "draw.panel.exTrails": "Show explode trails",
+  "draw.proj.eu": "Europe (ISO E · First angle)",
+  "draw.proj.us": "USA (ISO A · Third angle)",
+  "draw.tb.method3": "Third angle (ISO A)",
+  "draw.tb.method1Iso": "First angle (ISO E)",
+  "draw.explodeNeedTwo": "An exploded view needs at least two parts — currently shown assembled."
 }

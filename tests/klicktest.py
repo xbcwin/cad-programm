@@ -33926,6 +33926,222 @@ def t_a167_kabel_schlaeuche(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a170_zeichnung_explosion_projektion(p):
+    # [A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)
+    p.empty()
+    ids = p.ev("""
+      const base = Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Grundplatte' });
+      const top = Model.newItem('box', { w: 30, d: 20, h: 12 }, { name: 'Deckel' });
+      top.t.z = 10;
+      const pin = Model.newItem('cylinder', { d: 14, h: 16 }, { name: 'Bolzen' });
+      pin.t.x = 25;
+      App.change('Baugruppe für Zeichnung', d => { d.docType = 'assembly'; d.items.push(base, top, pin); });
+      return { base: base.id, top: top.id, pin: pin.id };
+    """)
+    warte_rechnen(p)
+
+    # In Zeichnung wechseln
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    # 1. Explosionsansicht anlegen und gegen normale Isometrie vergleichen
+    iso_id = p.ev("return Drawing.addView('iso').then(v => v ? v.id : null)")
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    p.pg.click('#dw-add-explode')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    ex_id = p.ev("""
+      const v = Drawing.activeViews().find(x => x.kind === 'explode');
+      return v ? v.id : null;
+    """)
+    ex1 = p.ev("""return (({ exId, isoId }) => {
+      const lay = Drawing.layout;
+      const isoV = lay && lay.views && isoId && lay.views[isoId];
+      const exV = lay && lay.views && exId && lay.views[exId];
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const info = exId ? Drawing.explodeViewInfo(exId) : null;
+      return {
+        hasEx: !!(exV && exV.geo),
+        hasIso: !!(isoV && isoV.geo),
+        isoW: isoV ? isoV.geo.w : 0,
+        isoH: isoV ? isoV.geo.h : 0,
+        exW: exV ? exV.geo.w : 0,
+        exH: exV ? exV.geo.h : 0,
+        visCount: exId ? svg.querySelectorAll('.vis[data-view="' + exId + '"]').length : 0,
+        trailCount: exId ? svg.querySelectorAll('.explode-trail[data-view="' + exId + '"]').length : 0,
+        info,
+      };
+    })(arg)""", {'exId': ex_id, 'isoId': iso_id})
+
+    # Abstand auf 130 % erhöhen -> Bounding-Box wächst weiter; Wegen-Linien aus-/einschalten
+    p.pg.locator('#dw-v-ex-amount').fill('130')
+    p.pg.locator('#dw-v-ex-amount').dispatch_event('change')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    ex2 = p.ev("""return ((exId) => {
+      const exV = Drawing.layout && Drawing.layout.views && Drawing.layout.views[exId];
+      return { exW: exV ? exV.geo.w : 0, exH: exV ? exV.geo.h : 0 };
+    })(arg)""", ex_id)
+
+    p.pg.uncheck('#dw-v-ex-trails'); p.wait(150)
+    trails_off = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg .explode-trail[data-view=\"' + arg + '\"]').length", ex_id)
+    p.pg.check('#dw-v-ex-trails'); p.wait(150)
+    trails_on = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg .explode-trail[data-view=\"' + arg + '\"]').length", ex_id)
+
+    ex_offs = (ex1['info'] or {}).get('offsets') or {}
+    pin_off = ex_offs.get(ids['pin'], [0, 0, 0])
+    top_off1 = ex_offs.get(ids['top'], [0, 0, 0])
+    ok1 = bool(
+        ex_id and iso_id and ex1['hasEx'] and ex1['hasIso']
+        and ex1['visCount'] >= 6 and ex1['trailCount'] >= 2
+        and ex1['info'] and ex1['info']['partCount'] >= 3
+        and pin_off[0] > 5 and top_off1[2] > 5
+        and (ex1['exW'] > ex1['isoW'] + 2 or ex1['exH'] > ex1['isoH'] + 2)
+        and (ex2['exW'] > ex1['exW'] + 2 or ex2['exH'] > ex1['exH'] + 2)
+        and trails_off == 0 and trails_on == ex1['trailCount']
+    )
+
+    # 2. Explosions-Schritte nutzen & Einfach-Modus prüfen
+    p.ev("""
+      Assembly.addExplodeStep({ partIds: [arg.top], dir: '+Z', dist: 45 });
+      Panels.renderRight();
+    """, ids)
+    p.wait(150)
+    p.pg.select_option('#dw-v-ex-mode', 'steps')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    step_info = p.ev("return Drawing.explodeViewInfo(arg)", ex_id)
+
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    simple_ok = p.ev("""return (() => {
+      const bEx = document.querySelector('#dw-add-explode');
+      const pSel = document.querySelector('#dw-panel-projection');
+      const cmdsOk = Commands.search('explosionsansicht').some(c => c.id === 'drawingAddExplode')
+        && Commands.search('iso a').some(c => c.id === 'drawingProjUs');
+      return !!(bEx && bEx.offsetParent !== null && pSel && pSel.offsetParent !== null && cmdsOk);
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    top_off = (step_info and step_info.get('offsets') or {}).get(ids['top'], [0, 0, 0])
+    ok2 = bool(step_info and step_info['mode'] == 'steps' and top_off[2] >= 40 and simple_ok)
+
+    # 3. Projektion Europa (ISO E) <-> USA (ISO A) umschalten & Schriftfeld-Symbol prüfen
+    def read_proj_state():
+        return p.ev("""return (() => {
+          const lay = Drawing.layout;
+          const v = lay && lay.views ? lay.views : {};
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const cone = svg.querySelector('[data-proj-sym="cone"]');
+          const cirs = [...svg.querySelectorAll('[data-proj-sym="circles"]')];
+          let coneCx = null, cirCx = null;
+          if (cone) {
+            const pts = (cone.getAttribute('points') || '').trim().split(/\\s+/).map(s => Number(s.split(',')[0])).filter(Number.isFinite);
+            if (pts.length) coneCx = (Math.min(...pts) + Math.max(...pts)) * 0.5;
+          }
+          if (cirs.length) {
+            cirCx = Number(cirs[0].getAttribute('cx'));
+          }
+          return {
+            mode: Drawing.projection(),
+            front: v.front ? v.front.rect : null,
+            left: v.left ? v.left.rect : null,
+            top: v.top ? v.top.rect : null,
+            coneCx,
+            cirCx,
+            txt: svg.textContent || '',
+          };
+        })()""")
+
+    eu = read_proj_state()
+    p.pg.select_option('#dw-panel-projection', 'us')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    us = read_proj_state()
+
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    eu_undo = read_proj_state()
+    p.ev("App.redo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    us_redo = read_proj_state()
+
+    eu_ok = (
+        eu['mode'] == 'eu'
+        and eu['front'] and eu['left'] and eu['top']
+        and eu['left'][0] > eu['front'][2]
+        and eu['top'][1] > eu['front'][3]
+        and eu['coneCx'] is not None and eu['cirCx'] is not None and eu['coneCx'] < eu['cirCx']
+        and 'ISO 5456-2 (E)' in eu['txt']
+    )
+    us_ok = (
+        us['mode'] == 'us'
+        and us['front'] and us['left'] and us['top']
+        and us['left'][2] < us['front'][0]
+        and us['top'][3] < us['front'][1]
+        and us['coneCx'] is not None and us['cirCx'] is not None and us['cirCx'] < us['coneCx']
+        and 'ISO 5456-2 (A)' in us['txt']
+    )
+    undo_ok = (
+        eu_undo['mode'] == 'eu' and eu_undo['left'][0] > eu_undo['front'][2] and eu_undo['top'][1] > eu_undo['front'][3]
+        and us_redo['mode'] == 'us' and us_redo['left'][2] < us_redo['front'][0] and us_redo['top'][3] < us_redo['front'][1]
+    )
+    ok3 = bool(eu_ok and us_ok and undo_ok)
+
+    # 4. PDF/DXF-Export, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    exp_chk = p.ev("""return (async () => {
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfBytes.length > 1500,
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('ISO 5456-2 (A)') && dxf.text.includes('MITTELLINIE')),
+      };
+    })()""")
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const v = Drawing.activeViews().find(x => x.kind === 'explode');
+      return { proj: Drawing.projection(), hasEx: !!v };
+    """)
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h1 = wh['drawingExplode'], h2 = wh['drawingProjection'];
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('explosionsansicht').some(c => c.id === 'drawingAddExplode')
+        && Commands.search('iso e').some(c => c.id === 'drawingProjEu')
+        && Commands.search('iso a').some(c => c.id === 'drawingProjUs');
+      return !!(h1 && h1.tip && h1.hilfe && h1.tipp && h2 && h2.tip && h2.hilfe && h2.tipp && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and val_ok and reload_chk['proj'] == 'us' and reload_chk['hasEx']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -34207,6 +34423,7 @@ TESTS = [
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
+    ('[A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)', t_a170_zeichnung_explosion_projektion),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

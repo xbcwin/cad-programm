@@ -4457,5 +4457,19 @@
   "asm.cableDlgTitle": "Kabel oder Schlauch verlegen",
   "asm.cableDlgHint": "Verbinde zwei Anschlusspunkte mit einer weichen Kurve samt Biegeradius. Du kannst die Maße direkt eingeben oder die Punkte im 3D-Bild anklicken.",
   "asm.cablePick3dBtn": "Im 3D-Bild wählen",
-  "asm.cableCreateBtn": "Anlegen"
+  "asm.cableCreateBtn": "Anlegen",
+  "draw.view.explode": "Explosionsansicht",
+  "menu.draw.addExplode": "Explosionsansicht",
+  "menu.draw.addExplodeShaded": "Explosionsansicht (schattiert)",
+  "draw.panel.addExplode": "Explosionsansicht",
+  "draw.panel.exAmount": "Auseinanderziehen",
+  "draw.panel.exMode": "Explosions-Art",
+  "draw.panel.exModeAuto": "Automatisch",
+  "draw.panel.exModeSteps": "Explosions-Schritte",
+  "draw.panel.exTrails": "Wegen-Linien zeigen",
+  "draw.proj.eu": "Europa (ISO E · Methode 1)",
+  "draw.proj.us": "USA (ISO A · Methode 3)",
+  "draw.tb.method3": "Methode 3 (ISO A)",
+  "draw.tb.method1Iso": "Methode 1 (ISO E)",
+  "draw.explodeNeedTwo": "Für eine Explosionsansicht braucht die Baugruppe mindestens zwei Teile – aktuell werden sie normal gezeigt."
 }

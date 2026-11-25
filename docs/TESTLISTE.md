@@ -2802,6 +2802,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject`, `HELP.asmCable`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-cable`, `asm-cable-pick`) laufen ohne JS-Fehler (`t_a167_kabel_schlaeuche`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus zwei Bauteile in einer Baugruppe platzieren, über „Kabel / Schlauch → Im 3D-Bild wählen“ beide Anschlüsse direkt auf Flächen klicken, Durchhang oder Zwischenpunkt hinzufügen, ein Bauteil verschieben und die aktualisierte Länge in der Stückliste prüfen.
 
+## Zeichnung: Explosionsansicht und Projektion umschalten (Auto [A-170], ZE-18, ZE-19)
+
+- [x] **Explosionsansicht auf dem Blatt (ZE-18)**: Baugruppe aus drei Teilen legt über `#dw-add-explode` eine Explosionsansicht mit deutlich größerer Bounding-Box als die normale Isometrie und gestrichelten Wegen-Linien (`.explode-trail`) an; Abstand (`130 %`) vergrößert den Versatz weiter, Wegen-Linien sind ein-/ausblendbar (`t_a170_zeichnung_explosion_projektion`).
+- [x] **Explosions-Schritte & Einfach-Modus**: Umschalten auf `steps` übernimmt eigene `Assembly.explodeSteps`-Verschiebungen; Explosionsansicht und Projektionswahl bleiben im Einfach-Modus sichtbar und bedienbar (`t_a170_zeichnung_explosion_projektion`).
+- [x] **Projektion Europa / USA (ZE-19)**: Standard `eu` (ISO E, Draufsicht unter und Seitenansicht rechts der Vorderansicht, Kegelstumpf links der Kreise) schaltet über `#dw-panel-projection` auf `us` (ISO A, Draufsicht über und Seitenansicht links der Vorderansicht, Kreise links des Kegelstumpfs, `ISO 5456-2 (A)`) samt Rückgängig/Wiederholen (`t_a170_zeichnung_explosion_projektion`).
+- [x] **Export, Speichern/Laden, Hilfen & I18n**: PDF (`%PDF-1.4`), DXF (`ISO 5456-2 (A)`, `MITTELLINIE`), `Store.validateProject`, `HELP.drawingExplode`/`HELP.drawingProjection`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a170_zeichnung_explosion_projektion`).
+- [ ] **Von Hand**: Im Browser in „Zeichnung“ eine Explosionsansicht schattiert anlegen, den Blickwinkel aus dem 3D-Modell übernehmen, Positionsnummern automatisch setzen und ein Blatt im Format USA (ISO A) als PDF exportieren.
+
 ## Fehler melden
 
 ```
