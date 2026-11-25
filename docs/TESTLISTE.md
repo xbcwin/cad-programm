@@ -2695,6 +2695,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Speichern & Laden, Validierung & Hilfen**: `doc.poses` besteht `Store.validateProject`, bleibt nach `Store.saveProject`/`loadProject` sowie `.tracery.json`-Export und erneutem Laden erhalten und fährt „auf“ wieder auf `90°`; `HELP.namedPoses`, DE/EN-Texte und Befehlssuche (`save-pose`) sind vollständig (`t_a157_benannte_stellungen`).
 - [ ] **Von Hand**: Im Browser das Beispiel „Baugruppe Scharnier“ im Modus „Einfach“ und „Profi“ öffnen, Stellungen wie „auf“ (90°) und „zu“ (0°) über den Verlauf „Stellungen“ und die Eigenschaften speichern, per Klick umschalten und nach „Projekt als Datei speichern“ und erneutem Öffnen prüfen.
 
+## Bewegungs-Studie mit Motoren und Zeitachse (Auto [A-158], BG-21)
+
+- [x] **Motor `60°/s` & Zeitachse**: Im Profi-Modus öffnet `#btn-motion-tree` das Panel „Bewegung“ (`#motion-panel`); ein Motor mit `60°/s` am Drehgelenk fährt das Gelenk bei `1,5 s` (`#mot-time-inp`) exakt auf `90°` (3D-Armspitze `< 0,05 mm` am Ziel) und bei `2,5 s` auf `150°`; `#mot-reset` setzt auf `0°` zurück und `#mot-play` animiert live vorwärts (`t_a158_bewegungs_studie`).
+- [x] **Weg über Zeit (Stützpunkte)**: Ein Profil-Motor `[{t:0,v:0},{t:1,v:20},{t:2,v:5}]` an einem Schiebegelenk fährt bei `0,5 s` auf `10 mm`, bei `1,5 s` auf `12,5 mm` und bei `2,0 s` auf `5 mm` (`t_a158_bewegungs_studie`).
+- [x] **Punkt-Kurven in 3D & SVG-Diagramm**: Ein Verfolgungspunkt an der Armspitze (`R = 40 mm`) zeichnet den Viertelkreis über `1,5 s` als 3D-Bahnkurve in `Viewer.groups.overlay` und als `#motion-chart path.mot-curve` mit Bogenlänge `≈ 62,83 mm` (`t_a158_bewegungs_studie`).
+- [x] **Profi-Schutz, Speichern/Laden, Rückgängig & Hilfen**: Im Einfach-Modus ausgeblendet und gesperrt; `doc.motion` besteht `Store.validateProject`, bleibt nach JSON-Reload erhalten; `App.undo()`, `HELP.motionStudy`, DE/EN-Schlüsselgleichheit und Befehlssuche (`motion-study`) funktionieren ohne JS-Fehler (`t_a158_bewegungs_studie`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Gelenken öffnen, einen Punkt über „Im Bild wählen“ direkt am 3D-Teil anklicken, die Zeitachse über „Abspielen“ und durch Ziehen im Weg-Zeit-Diagramm prüfen.
+
 ## Fehler melden
 
 ```

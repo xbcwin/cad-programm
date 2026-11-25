@@ -971,6 +971,21 @@ const Store = (() => {
     if (doc.drawing !== undefined && doc.drawing !== null && !isPlainObj(doc.drawing)) {
       errors.push('Feld „drawing“ muss ein Objekt oder null sein.');
     }
+    if (doc.motion !== undefined && doc.motion !== null) {
+      if (!isPlainObj(doc.motion)) {
+        errors.push('Feld „motion“ muss ein Objekt oder null sein.');
+      } else {
+        if (doc.motion.duration !== undefined && doc.motion.duration !== null && (typeof doc.motion.duration !== 'number' || !Number.isFinite(doc.motion.duration) || doc.motion.duration <= 0)) {
+          errors.push('Feld „motion.duration“ muss eine positive Zahl in Sekunden sein.');
+        }
+        if (doc.motion.motors !== undefined && doc.motion.motors !== null && !Array.isArray(doc.motion.motors)) {
+          errors.push('Feld „motion.motors“ muss eine Liste (Array) sein.');
+        }
+        if (doc.motion.traces !== undefined && doc.motion.traces !== null && !Array.isArray(doc.motion.traces)) {
+          errors.push('Feld „motion.traces“ muss eine Liste (Array) sein.');
+        }
+      }
+    }
     if (doc.params !== undefined && doc.params !== null) {
       if (!Array.isArray(doc.params)) {
         errors.push('Feld „params“ muss eine Liste (Array) sein.');

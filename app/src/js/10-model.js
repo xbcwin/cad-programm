@@ -2380,6 +2380,54 @@ const Model = (() => {
           states: ps.states && typeof ps.states === 'object' && !Array.isArray(ps.states) ? ps.states : {},
         }));
     }
+    if (doc.motion != null) {
+      if (typeof doc.motion !== 'object' || Array.isArray(doc.motion)) {
+        delete doc.motion;
+      } else {
+        const m = doc.motion;
+        const dur = Number(m.duration);
+        const fps = Number(m.fps);
+        const motors = Array.isArray(m.motors) ? m.motors
+          .filter((mt) => mt && typeof mt === 'object' && typeof mt.jointId === 'string' && mt.jointId)
+          .map((mt) => ({
+            id: typeof mt.id === 'string' && mt.id ? mt.id : uid('mot'),
+            jointId: mt.jointId,
+            dof: typeof mt.dof === 'string' && mt.dof ? mt.dof : 'ang',
+            mode: mt.mode === 'profile' ? 'profile' : 'speed',
+            speed: Number.isFinite(Number(mt.speed)) ? Number(mt.speed) : 60,
+            startVal: Number.isFinite(Number(mt.startVal)) ? Number(mt.startVal) : 0,
+            tStart: Number.isFinite(Number(mt.tStart)) ? Math.max(0, Number(mt.tStart)) : 0,
+            tEnd: mt.tEnd != null && Number.isFinite(Number(mt.tEnd)) ? Math.max(0, Number(mt.tEnd)) : null,
+            interp: mt.interp === 'smooth' ? 'smooth' : 'linear',
+            keys: Array.isArray(mt.keys)
+              ? mt.keys
+                .filter((k) => k && typeof k === 'object' && Number.isFinite(Number(k.t)) && Number.isFinite(Number(k.v)))
+                .map((k) => ({ t: Math.max(0, Number(k.t)), v: Number(k.v) }))
+                .sort((a, b) => a.t - b.t)
+              : [],
+            enabled: mt.enabled !== false,
+          })) : [];
+        const traces = Array.isArray(m.traces) ? m.traces
+          .filter((tr) => tr && typeof tr === 'object' && typeof tr.itemId === 'string' && tr.itemId)
+          .map((tr) => ({
+            id: typeof tr.id === 'string' && tr.id ? tr.id : uid('tr'),
+            itemId: tr.itemId,
+            name: typeof tr.name === 'string' && tr.name.trim() ? tr.name.trim() : 'Punkt',
+            localPt: Array.isArray(tr.localPt) && tr.localPt.length >= 3
+              ? [Number(tr.localPt[0]) || 0, Number(tr.localPt[1]) || 0, Number(tr.localPt[2]) || 0]
+              : [0, 0, 0],
+            color: typeof tr.color === 'string' && tr.color ? tr.color : '#e03131',
+            visible: tr.visible !== false,
+          })) : [];
+        doc.motion = {
+          duration: Number.isFinite(dur) && dur > 0 ? clamp(dur, 0.1, 3600) : 4,
+          fps: Number.isFinite(fps) ? clamp(Math.round(fps), 10, 120) : 30,
+          loop: !!m.loop,
+          motors,
+          traces,
+        };
+      }
+    }
     if (doc.blocks != null && !Array.isArray(doc.blocks)) doc.blocks = [];
     if (Array.isArray(doc.blocks)) {
       doc.blocks = doc.blocks.filter((b) => b && b.id && Array.isArray(b.ents));

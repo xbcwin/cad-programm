@@ -7257,6 +7257,7 @@ const Joints = (() => {
     return { legs, T };
   }
   function play(jid, btn) {
+    if (typeof Motion !== 'undefined' && Motion.stop) Motion.stop();
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
     let j = list().find((x) => x.id === jid);
     const cpPlay = !j ? (couplingList().find((c) => c.id === jid) || null) : null;
@@ -8102,6 +8103,12 @@ const Joints = (() => {
       const ps = Assembly.poseSection('joint');
       if (ps) w.append(ps);
     }
+    if (!isConstraint(j) && !isLoose(j) && typeof Motion !== 'undefined' && Motion.open) {
+      const mb = h('button', { type: 'button', class: 'btn small pro', id: 'jt-motion-btn', 'data-help': 'motionStudy' });
+      mb.innerHTML = icon('play') + esc(T('motion.jointOpenBtn'));
+      mb.onclick = () => Motion.open({ jointId: j.id });
+      w.append(h('div', { class: 'btn-row pro' }, mb));
+    }
     body.append(w);
     return true;
   }
@@ -8213,7 +8220,7 @@ const Joints = (() => {
         const seedDofs = pickPrimaryDofs(doc, driveJ, drivePatch, prev);
         const driveDofs = seedDofs.length ? [...seedDofs] : Object.keys(drivePatch).filter((d) => hasDof(driveJ, d));
         const tmpJ = { ...driveJ };
-        if (couplingsOf(driveJ.id, doc).length && !tmpJ.stopsLocked) {
+        if ((opts.expandRange || couplingsOf(driveJ.id, doc).length) && !tmpJ.stopsLocked) {
           for (const d of driveDofs) {
             const val = Number(drivePatch[d]);
             if (Number.isFinite(val)) ensureRangeFor(tmpJ, d, val);
@@ -8270,7 +8277,7 @@ const Joints = (() => {
       const prev = stateOf(j);
       const seedDofs = pickPrimaryDofs(doc, j, patch, prev);
       const effDofs = seedDofs.length ? seedDofs : Object.keys(patch).filter((d) => hasDof(j, d));
-      if (couplingsOf(j.id, doc).length && !j.stopsLocked) {
+      if ((opts.expandRange || couplingsOf(j.id, doc).length) && !j.stopsLocked) {
         for (const d of effDofs) {
           const val = Number(patch[d]);
           if (Number.isFinite(val)) ensureRangeFor(j, d, val);

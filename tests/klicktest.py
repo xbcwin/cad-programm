@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -30798,6 +30798,219 @@ def t_a157_benannte_stellungen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-158] Bewegungs-Studie mit Motoren und Zeitachse (BG-21) ----------
+def t_a158_bewegungs_studie(p):
+    # 1. Profi-Modus: Drehgelenk + Motor 60°/s -> nach 1,5 s exakt 90° (und bei 2,5 s -> 150°), Reset & Abspielen
+    p.empty()
+    info = p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.setDoc(Assembly.newAssembly('Bewegungs-Test'));
+      App.change('Baugruppe anlegen', (d) => {
+        const base = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Basis' });
+        base.locked = true;
+        const arm = Model.newItem('box', { w: 40, d: 10, h: 10 }, { name: 'Arm' });
+        arm.t.x = 20;
+        d.items.push(base, arm);
+      });
+      const [bId, aId] = App.doc.items.map(x => x.id);
+      const j = Joints.add(bId, aId, [0, 0, 5], [0, 0, 1], { kind: 'rot' });
+      Panels.renderLeft();
+      Panels.renderRight();
+      return { bId, aId, jid: j.id, ok: !!j.ok };
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#btn-motion-tree')
+    p.wait(200)
+    p.pg.fill('#mot-add-speed', '60')
+    p.pg.click('#mot-add-btn')
+    p.wait(200)
+
+    p.pg.fill('#mot-time-inp', '1,5')
+    p.pg.press('#mot-time-inp', 'Enter')
+    p.wait(200)
+    at_15 = p.ev("""
+      const j = App.doc.joints.find(x => x.id === arg.jid);
+      const W = Model.worldMatrix(App.doc, arg.aId);
+      const e = W.elements;
+      const tip = [e[0] * 20 + e[12], e[1] * 20 + e[13], e[2] * 20 + e[14]];
+      return {
+        ang: j ? j.ang : null,
+        tip,
+        t: Motion.time,
+        lbl: document.querySelector('#mot-time-lbl')?.textContent || '',
+      };
+    """, info)
+
+    p.ev("Motion.setTime(2.5)")
+    p.wait(150)
+    ang_25 = p.ev("return App.doc.joints.find(x => x.id === arg)?.ang", info['jid'])
+
+    p.pg.click('#mot-reset')
+    p.wait(150)
+    ang_reset = p.ev("return { ang: App.doc.joints.find(x => x.id === arg)?.ang, t: Motion.time }", info['jid'])
+
+    p.pg.click('#mot-play')
+    p.wait(350)
+    play_state = p.ev("return { playing: Motion.playing, t: Motion.time, ang: App.doc.joints.find(x => x.id === arg)?.ang }", info['jid'])
+    if play_state['playing']:
+        p.pg.click('#mot-play')
+        p.wait(100)
+
+    ok1 = (
+        info['ok'] is True
+        and abs(at_15['ang'] - 90.0) < 1e-3
+        and abs(at_15['t'] - 1.5) < 1e-3
+        and abs(at_15['tip'][0] - 0.0) < 0.05
+        and abs(at_15['tip'][1] - 40.0) < 0.05
+        and abs(at_15['tip'][2] - 0.0) < 0.05
+        and abs(ang_25 - 150.0) < 1e-3
+        and abs(ang_reset['ang']) < 1e-3
+        and abs(ang_reset['t']) < 1e-3
+        and play_state['t'] > 0.05
+        and play_state['ang'] > 3.0
+    )
+
+    # 2. Weg über Zeit (Stützpunkte) an Schiebegelenk
+    slide_info = p.ev("""
+      Motion.resetTime();
+      App.change('Schlitten anlegen', (d) => {
+        const s = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Schlitten' });
+        s.t.y = 30;
+        d.items.push(s);
+      });
+      const sId = App.doc.items[2].id;
+      const js = Joints.add(arg.bId, sId, [0, 30, 5], [1, 0, 0], { kind: 'slide' });
+      Motion.addMotor(js.id, {
+        mode: 'profile',
+        interp: 'linear',
+        keys: [{ t: 0, v: 0 }, { t: 1, v: 20 }, { t: 2, v: 5 }],
+      });
+      Motion.setTime(0.5);
+      const p05 = App.doc.joints.find(x => x.id === js.id)?.ang;
+      const x05 = Model.find(App.doc, sId).item.t.x;
+      Motion.setTime(1.5);
+      const p15 = App.doc.joints.find(x => x.id === js.id)?.ang;
+      Motion.setTime(2.0);
+      const p20 = App.doc.joints.find(x => x.id === js.id)?.ang;
+      return { ok: !!js.ok, sId, jsId: js.id, p05, x05, p15, p20 };
+    """, info)
+    warte_rechnen(p, 30)
+
+    ok2 = (
+        slide_info['ok'] is True
+        and abs(slide_info['p05'] - 10.0) < 1e-3
+        and abs(slide_info['x05'] - 10.0) < 0.05
+        and abs(slide_info['p15'] - 12.5) < 1e-3
+        and abs(slide_info['p20'] - 5.0) < 1e-3
+    )
+
+    # 3. Punkt-Kurve als 3D-Bahn + 2D-SVG-Diagramm (Viertelkreis R=40 mm bei 60°/s über 1,5 s -> ~62,83 mm)
+    p.pg.fill('#mot-dur-inp', '1,5')
+    p.pg.press('#mot-dur-inp', 'Enter')
+    p.wait(200)
+    trace_info = p.ev("""
+      const tr = Motion.addTrace(arg.aId, [20, 0, 0], { name: 'Armspitze' });
+      Motion.setTime(1.5);
+      const data = tr ? Motion.traces[tr.id] : null;
+      const p0 = data && data.points.length ? data.points[0].p : null;
+      const pEnd = data && data.points.length ? data.points[data.points.length - 1].p : null;
+      const svgCurve = document.querySelector('#motion-chart path.mot-curve');
+      const hasOverlay = Viewer.groups.overlay.children.some(ch => ch.isGroup && ch.children.some(c => c.isLineSegments2 || c.type === 'Mesh'));
+      return {
+        hasTr: !!tr,
+        len: data ? data.totalLength : 0,
+        p0,
+        pEnd,
+        hasSvg: !!(svgCurve && svgCurve.getAttribute('d')),
+        hasOverlay,
+      };
+    """, info)
+
+    ok3 = (
+        trace_info['hasTr'] is True
+        and trace_info['hasSvg'] is True
+        and trace_info['hasOverlay'] is True
+        and trace_info['p0'] is not None
+        and trace_info['pEnd'] is not None
+        and abs(trace_info['p0'][0] - 40.0) < 0.1
+        and abs(trace_info['p0'][1] - 0.0) < 0.1
+        and abs(trace_info['pEnd'][0] - 0.0) < 0.1
+        and abs(trace_info['pEnd'][1] - 40.0) < 0.1
+        and abs(trace_info['len'] - 62.83185) < 0.6
+    )
+
+    # 4. Profi-Schutz, Validierung, Speichern/Laden, Rückgängig, Hilfe, DE/EN & Suche
+    p.ev("ViewPrefs.setLevel('simple'); Panels.renderLeft(); Panels.renderRight();")
+    p.wait(200)
+    simple_check = p.ev("""
+      const openRes = Motion.open();
+      const panelGone = !document.querySelector('#motion-panel');
+      const treeBtn = document.querySelector('#btn-motion-tree');
+      const projSec = document.querySelector('#proj-motion-sec');
+      return {
+        openRes,
+        panelGone,
+        treeHidden: !treeBtn || treeBtn.offsetParent === null,
+        projHidden: !projSec || projSec.offsetParent === null,
+      };
+    """)
+
+    p.ev("ViewPrefs.setLevel('pro'); Panels.renderLeft(); Panels.renderRight();")
+    p.wait(150)
+    meta = p.ev("""return (async () => {
+      const raw = await Start.projectPayload();
+      const val = Store.validateProject(raw);
+      const parsed = Model.migrate(JSON.parse(raw));
+      App.setDoc(parsed, { fit: false, noAutosave: true });
+      Motion.open();
+      Motion.setTime(1.5);
+      const angReload = App.doc.joints.find(x => x.id === arg.jid)?.ang;
+      const beforeUndoM = Motion.getStudy().motors.length;
+      Motion.addMotor(arg.jid, { speed: 15 });
+      const addedM = Motion.getStudy().motors.length;
+      App.undo();
+      const afterUndoM = Motion.getStudy().motors.length;
+
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'motionStudy';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.motionStudy && wh.motionStudy.tip && wh.motionStudy.hilfe && wh.motionStudy.tipp && desc && desc.text === wh.motionStudy.hilfe && desc.tip === wh.motionStudy.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('bewegung').some(c => c.id === 'motion-study');
+      return {
+        valOk: val.ok,
+        angReload,
+        motorsCount: App.doc.motion ? App.doc.motion.motors.length : 0,
+        tracesCount: App.doc.motion ? App.doc.motion.traces.length : 0,
+        undoOk: addedM === beforeUndoM + 1 && afterUndoM === beforeUndoM,
+        hOk,
+        i18nOk,
+        cmdOk,
+      };
+    })()""", info)
+
+    ok4 = (
+        simple_check == {'openRes': False, 'panelGone': True, 'treeHidden': True, 'projHidden': True}
+        and meta['valOk'] is True
+        and abs(meta['angReload'] - 90.0) < 1e-3
+        and meta['motorsCount'] == 2
+        and meta['tracesCount'] == 1
+        and meta['undoOk'] is True
+        and meta['hOk'] is True
+        and meta['i18nOk'] is True
+        and meta['cmdOk'] is True
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -31065,6 +31278,7 @@ TESTS = [
     ('[A-153] Kurvenscheibe / Nocken: Exzentrische Scheibe (5 mm → 10 mm Hub) & Weg-Kurve-Diagramm (BG-15)', t_a153_kurvenscheibe_nocken),
     ('[A-151] Kopplungen: Zahnrad 1:2 (90° → 45°) & Zahnstange (π·d·Winkel/360) (BG-14)', t_a151_kopplungen_zahnrad_zahnstange),
     ('[A-157] Benannte Stellungen: speichern, einnehmen, Einfach/Profi & Speichern/Laden (BG-20)', t_a157_benannte_stellungen),
+    ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

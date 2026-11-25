@@ -599,6 +599,7 @@ const Assembly = (() => {
   function applyPose(idOrName, opts = {}) {
     const ps = findPose(idOrName);
     if (!ps) return false;
+    if (typeof Motion !== 'undefined' && Motion.stop) Motion.stop();
     if (typeof Joints !== 'undefined' && Joints.stopPlay) Joints.stopPlay();
     const mj = movableJoints(App.doc);
     if (!mj.some((j) => ps.states && ps.states[j.id])) {
@@ -647,8 +648,15 @@ const Assembly = (() => {
     if (mjs.length) {
       const addBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-pose-save', 'data-help': 'namedPoses' });
       addBtn.innerHTML = icon('plus') + esc(T('asm.poseSaveShort'));
+      const acts = h('span', { style: { display: 'inline-flex', gap: '4px', alignItems: 'center' } }, addBtn);
+      if (typeof Motion !== 'undefined' && Motion.toggle) {
+        const motBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-motion-tree', 'data-help': 'motionStudy' });
+        motBtn.innerHTML = icon('play') + esc(T('motion.title'));
+        motBtn.onclick = (e) => { e.stopPropagation(); Motion.toggle(); };
+        acts.append(motBtn);
+      }
       addBtn.onclick = (e) => { e.stopPropagation(); promptSavePose(); };
-      head.append(addBtn);
+      head.append(acts);
     }
     const sec = h('div', { class: 'datum-tree pose-tree', id: 'pose-tree', 'data-help': 'namedPoses' }, head);
     if (!psList.length) {
@@ -741,6 +749,22 @@ const Assembly = (() => {
     return sec;
   }
 
+  function motionSection(ctx = 'proj') {
+    if (typeof Motion === 'undefined') return null;
+    const mjs = movableJoints();
+    if (!isAssembly() && !mjs.length) return null;
+    const st = Motion.getStudy();
+    const sec = h('div', { class: 'section pro motion-sec', id: ctx + '-motion-sec', 'data-help': 'motionStudy' },
+      h('div', { class: 'section-h' }, T('motion.title'))
+    );
+    const btn = h('button', { type: 'button', class: 'btn small' + (Motion.active ? ' primary' : ''), id: 'btn-motion-open' });
+    btn.innerHTML = icon(Motion.active ? 'close' : 'play') + esc(Motion.active ? T('motion.closeBtn') : T('motion.openBtn'));
+    btn.onclick = () => { Motion.toggle(); if (typeof Panels !== 'undefined' && Panels.renderRight) Panels.renderRight({ preserveFocus: true }); };
+    const info = h('span', { class: 'sub mono' }, T('motion.summary', { m: st.motors.length, t: st.traces.length }));
+    sec.append(h('div', { class: 'btn-row', style: { alignItems: 'center' } }, btn, info));
+    return sec;
+  }
+
   function init() {
     App.on('clean', () => {
       if (App.doc) syncPartDoc(App.doc);
@@ -808,5 +832,10 @@ const Assembly = (() => {
     promptSavePose,
     poseTreeSection,
     poseSection,
+    motionSection,
+    openMotion: (o) => typeof Motion !== 'undefined' && Motion.open(o),
+    closeMotion: () => typeof Motion !== 'undefined' && Motion.close(),
+    toggleMotion: () => typeof Motion !== 'undefined' && Motion.toggle(),
+    setMotionTime: (t, o) => typeof Motion !== 'undefined' ? Motion.setTime(t, o) : 0,
   };
 })();

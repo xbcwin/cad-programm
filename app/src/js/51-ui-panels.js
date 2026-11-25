@@ -1544,6 +1544,8 @@ const Panels = (() => {
     }
     const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
     if (poseSec) w.append(poseSec);
+    const motSec = typeof Assembly !== 'undefined' && Assembly.motionSection ? Assembly.motionSection('proj') : null;
+    if (motSec) w.append(motSec);
     const unitF = UI.selectField({ id: 'proj-unit', label: T('panel.proj.unit'), value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
     unitF.dataset.help = 'projectUnit';
     w.append(unitF);

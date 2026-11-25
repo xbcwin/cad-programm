@@ -1763,5 +1763,10 @@
     "tip": "Benannte Stellungen: Gelenk-Positionen wie „auf“, „zu“ oder „halb“ speichern und per Klick einnehmen",
     "hilfe": "Merkt sich die aktuellen Winkel und Wege aller beweglichen Gelenke unter einem Namen wie „auf“, „zu“ oder „halb“. Ein Klick auf eine gespeicherte Stellung fährt alle zugehörigen Teile sofort wieder genau dorthin – auch über ganze Gelenk-Ketten hinweg und dauerhaft mit dem Projekt gespeichert.",
     "tipp": "Über das Speichern-Symbol an einer vorhandenen Stellung überschreibst du sie mit der aktuellen Lage; per Rechtsklick kannst du sie umbenennen."
+  },
+  "motionStudy": {
+    "tip": "Bewegungs-Studie: Motoren an Gelenken über eine Zeitachse abspielen und Punkt-Kurven zeichnen (Profi)",
+    "hilfe": "Treibt deine Baugruppe über eine echte Zeitachse an. Jeder Motor steuert ein Gelenk mit fester Drehzahl oder Geschwindigkeit (z. B. 60°/s) oder über eine Stützpunkt-Kurve (Weg über Zeit). Gleichzeitig verfolgt Tracery auf Wunsch den Weg einzelner Punkte am Bauteil als 3D-Bahnkurve im Bild und als Weg-Zeit-Diagramm.",
+    "tipp": "Ziehe am Zeitschieber oder klicke direkt ins Weg-Zeit-Diagramm, um jede Zwischenstellung sofort im 3D-Modell zu prüfen."
   }
 }

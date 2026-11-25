@@ -1159,6 +1159,7 @@ const Views = (() => {
       { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.view.draft'), icon: 'chamfer', help: 'draftAnalysis', id: 'view-draft', run: () => Measure.draft() },
       { label: T('menu.view.present'), icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
       { label: T('menu.view.turntable'), icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
+      { label: (typeof Motion !== 'undefined' && Motion.active ? '✓ ' : '') + T('motion.menuLabel'), icon: 'play', help: 'motionStudy', id: 'view-motion', hidden: ViewPrefs.simple, run: () => Motion.toggle() },
       '-', ...lookItems(),
     ]);
   }
