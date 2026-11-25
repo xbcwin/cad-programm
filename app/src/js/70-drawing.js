@@ -5,6 +5,12 @@ const Drawing = (() => {
   const SCALES = [20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
   const DETAIL_SCALES = [1, 2, 2.5, 3, 4, 5, 10, 20];
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
+  const PROJECTIONS = ['eu', 'us'];
+  function normProjection(val, fallback = 'eu') {
+    if (val === 'us' || val === 'iso-a' || val === 'third') return 'us';
+    if (val === 'eu' || val === 'iso-e' || val === 'first') return 'eu';
+    return fallback === 'us' ? 'us' : 'eu';
+  }
   const VIEW_NAMES = { get front() { return T('draw.view.front'); }, get top() { return T('draw.view.top'); }, get left() { return T('draw.view.left'); } };
   const DIM_ARROWS = [
     { key: 'filled', get label() { return T('draw.arrow.filled'); } },
@@ -140,16 +146,23 @@ const Drawing = (() => {
   };
   function normalizeExtraView(v) {
     if (!v || typeof v !== 'object') return null;
-    const kind = v.kind === 'free' ? 'free' : 'iso';
+    const kind = v.kind === 'free' ? 'free' : v.kind === 'explode' ? 'explode' : 'iso';
     const dir = norm3(v.dir, ISO_DIR);
     const x = orthoX3(v.x, dir);
-    return {
+    const defaultName = kind === 'free' ? 'Freie Ansicht' : kind === 'explode' ? (T('draw.view.explode') || 'Explosionsansicht') : 'Isometrie';
+    const out = {
       id: v.id || uid('v'),
       kind,
-      name: String(v.name || (kind === 'free' ? 'Freie Ansicht' : 'Isometrie')),
+      name: String(v.name || defaultName),
       dir,
       x,
     };
+    if (kind === 'explode') {
+      out.explodeAmount = Number.isFinite(Number(v.explodeAmount)) ? clamp(Number(v.explodeAmount), 0.1, 1.5) : 0.7;
+      out.explodeMode = v.explodeMode === 'steps' ? 'steps' : 'auto';
+      out.explodeTrails = v.explodeTrails !== false;
+    }
+    return out;
   }
   function defaultAutoDims() {
     return [
@@ -166,6 +179,7 @@ const Drawing = (() => {
       name: opts.name || 'Blatt 1',
       sheet: SHEETS[opts.sheet] ? opts.sheet : (tpl && SHEETS[tpl.sheet] ? tpl.sheet : 'A4'),
       orient: opts.orient === 'portrait' || opts.orient === 'landscape' ? opts.orient : (tpl && tpl.orient ? tpl.orient : 'landscape'),
+      projection: normProjection(opts.projection, tpl ? tpl.projection : 'eu'),
       scale: opts.scale != null ? opts.scale : 'auto',
       views: opts.views ? { ...opts.views } : { front: true, top: true, left: true, iso: false },
       viewOpts: opts.viewOpts && typeof opts.viewOpts === 'object' ? JSON.parse(JSON.stringify(opts.viewOpts)) : {},
@@ -206,6 +220,7 @@ const Drawing = (() => {
       name: raw && raw.name ? String(raw.name) : fallbackName,
       sheet: raw && raw.sheet,
       orient: raw && raw.orient,
+      projection: raw && raw.projection,
       scale: raw && raw.scale != null ? raw.scale : 'auto',
       views: raw && raw.views,
       viewOpts: raw && raw.viewOpts,
@@ -266,12 +281,16 @@ const Drawing = (() => {
           : null,
       };
       if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
-      if (cur) cur.dimStyle = normDimStyle(cur.dimStyle);
+      if (cur) {
+        cur.dimStyle = normDimStyle(cur.dimStyle);
+        cur.projection = normProjection(cur.projection);
+      }
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
       } else {
         if (!cur.viewOpts || typeof cur.viewOpts !== 'object') cur.viewOpts = {};
         if (!Array.isArray(cur.extraViews)) cur.extraViews = [];
+        else cur.extraViews = cur.extraViews.map(normalizeExtraView).filter(Boolean);
         if (!Array.isArray(cur.details)) cur.details = [];
       }
     }
@@ -577,7 +596,10 @@ const Drawing = (() => {
       if (sh.views && sh.views[k]) out.push({ id: k, kind: k, name: viewLabel(k, sh), is3d: k === 'iso', custom: false, removable: k === 'iso' });
     }
     for (const ev of sh.extraViews || []) {
-      out.push({ id: ev.id, kind: ev.kind, name: ev.name, is3d: true, custom: true, removable: true, dir: ev.dir, x: ev.x });
+      out.push({
+        id: ev.id, kind: ev.kind, name: ev.name, is3d: true, custom: true, removable: true, dir: ev.dir, x: ev.x,
+        ...(ev.kind === 'explode' ? { explodeAmount: ev.explodeAmount, explodeMode: ev.explodeMode, explodeTrails: ev.explodeTrails } : {}),
+      });
     }
     return out;
   }
@@ -598,17 +620,215 @@ const Drawing = (() => {
     });
     render(); Panels.renderRight();
   }
+  function setProjection(mode) {
+    const next = normProjection(mode);
+    App.change('Projektion geändert', () => {
+      dwg().projection = next;
+    });
+    render();
+    Panels.renderRight();
+    return next;
+  }
+  function itemWorldBox(it, doc = App.doc) {
+    if (!it) return null;
+    if (typeof Viewer !== 'undefined' && Viewer.baseBox) {
+      const vb = Viewer.baseBox(it.id);
+      if (vb && !vb.isEmpty()) return [vb.min.x, vb.min.y, vb.min.z, vb.max.x, vb.max.y, vb.max.z];
+    }
+    const r = typeof App !== 'undefined' && App.results && typeof App.results.get === 'function' ? App.results.get(it.id) : null;
+    const b = r && r.data && Array.isArray(r.data.bbox) && r.data.bbox.length >= 6 ? r.data.bbox : null;
+    if (b && typeof Model !== 'undefined' && Model.localMatrix) {
+      const box = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5])).applyMatrix4(Model.localMatrix(it));
+      if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+    }
+    return null;
+  }
+  function approxChildWorldBox(parent, child, idx) {
+    const pb = typeof Model !== 'undefined' && Model.primitiveBox ? Model.primitiveBox(child.kind, child.p || {}) : null;
+    if (pb && pb.length >= 6 && typeof Model !== 'undefined' && Model.localMatrix) {
+      const M = Model.localMatrix(parent, new THREE.Matrix4()).multiply(Model.localMatrix(child, new THREE.Matrix4()));
+      const b3 = new THREE.Box3(new THREE.Vector3(pb[0], pb[1], pb[2]), new THREE.Vector3(pb[3], pb[4], pb[5])).applyMatrix4(M);
+      if (!b3.isEmpty()) return [b3.min.x, b3.min.y, b3.min.z, b3.max.x, b3.max.y, b3.max.z];
+    }
+    const z0 = idx * 12;
+    return [-5, -5, z0, 5, 5, z0 + 10];
+  }
+  function computeExplodeData(ev, doc = App.doc) {
+    const active = Model.activeItems(doc);
+    const candidates = active.filter((it) => it && !it.hidden && it.role !== 'hole' && !(typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)));
+    const boxes = [];
+    let splitGroupId = null;
+    let splitChildren = [];
+    if (candidates.length === 1 && candidates[0].kind === 'group' && !(candidates[0].p && candidates[0].p.op)) {
+      const g = candidates[0];
+      const kids = (g.children || []).filter((c) => c && !c.suppressed && !c.hidden);
+      const solids = kids.filter((c) => c.role !== 'hole');
+      if (solids.length >= 2) {
+        splitGroupId = g.id;
+        const holes = kids.filter((c) => c.role === 'hole');
+        splitChildren = solids.map((c, idx) => {
+          const exId = '__ex:' + c.id;
+          const bb = (typeof Viewer !== 'undefined' && Viewer.baseBox && Viewer.baseBox(exId))
+            ? (() => { const vb = Viewer.baseBox(exId); return [vb.min.x, vb.min.y, vb.min.z, vb.max.x, vb.max.y, vb.max.z]; })()
+            : approxChildWorldBox(g, c, idx);
+          boxes.push([exId, bb]);
+          return { id: exId, child: c, holes, parent: g };
+        });
+      }
+    }
+    if (!splitGroupId) {
+      for (const it of candidates) {
+        const bb = itemWorldBox(it, doc);
+        if (bb) boxes.push([it.id, bb]);
+      }
+    }
+    const offsets = new Map();
+    const trails3d = [];
+    const partBoxes = new Map();
+    const centerOf = (b) => [(b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5];
+    const hasSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps(doc).length > 0;
+    const mode = ev && ev.explodeMode === 'steps' && hasSteps ? 'steps' : 'auto';
+    if (mode === 'steps') {
+      const f = clamp(Number(ev.explodeAmount ?? 1), 0, 1);
+      const evalRes = Assembly.evalExplodeSteps(f, doc);
+      const boxMap = new Map(boxes);
+      for (const [pid, arr] of evalRes.offsets.entries()) {
+        const off = [Number(arr[0]) || 0, Number(arr[1]) || 0, Number(arr[2]) || 0];
+        offsets.set(pid, off);
+        if (splitGroupId) {
+          for (const sc of splitChildren) offsets.set(sc.id, off);
+        }
+      }
+      if (evalRes.paths) {
+        for (const [pid, pts] of evalRes.paths.entries()) {
+          const bb = boxMap.get(pid);
+          if (!bb || !pts || pts.length < 2) continue;
+          const c0 = centerOf(bb);
+          trails3d.push({
+            partId: pid,
+            pts: pts.map(([dx, dy, dz]) => [c0[0] + dx, c0[1] + dy, c0[2] + dz]),
+          });
+        }
+      }
+    } else if (boxes.length >= 2) {
+      const f = clamp(Number(ev && ev.explodeAmount != null ? ev.explodeAmount : 0.7), 0.1, 1.5);
+      let b0 = Infinity, b1 = Infinity, b2 = Infinity, b3 = -Infinity, b4 = -Infinity, b5 = -Infinity;
+      for (const [, b] of boxes) {
+        b0 = Math.min(b0, b[0]); b1 = Math.min(b1, b[1]); b2 = Math.min(b2, b[2]);
+        b3 = Math.max(b3, b[3]); b4 = Math.max(b4, b[4]); b5 = Math.max(b5, b[5]);
+      }
+      const C = [(b0 + b3) * 0.5, (b1 + b4) * 0.5, (b2 + b5) * 0.5];
+      const S = Math.max(10, Math.hypot(b3 - b0, b4 - b1, b5 - b2));
+      const sorted = boxes.slice().sort((a, b) => a[1][2] - b[1][2]);
+      const layerOf = new Map();
+      const layers = [];
+      for (const [id, b] of sorted) {
+        let L = layers[layers.length - 1];
+        if (!L || b[2] - L.z > 0.5) { L = { z: b[2], h: 0 }; layers.push(L); }
+        L.h = Math.max(L.h, b[5] - b[2]);
+        layerOf.set(id, layers.length - 1);
+      }
+      const lift = [0];
+      for (let i = 1; i < layers.length; i++) lift[i] = lift[i - 1] + layers[i - 1].h + S * 0.08;
+      let maxOff = 0;
+      for (const [id, b] of boxes) {
+        const c = centerOf(b);
+        const off = [(c[0] - C[0]) * f * 1.2, (c[1] - C[1]) * f * 1.2, lift[layerOf.get(id)] * f];
+        offsets.set(id, off);
+        maxOff = Math.max(maxOff, Math.hypot(off[0], off[1], off[2]));
+      }
+      if (maxOff < 0.1) {
+        boxes.forEach(([id], idx) => {
+          offsets.set(id, [0, 0, idx * (S * 0.35) * f]);
+        });
+      }
+      for (const [id, b] of boxes) {
+        const off = offsets.get(id);
+        if (!off || Math.hypot(off[0], off[1], off[2]) <= 0.1) continue;
+        const c = centerOf(b);
+        trails3d.push({ partId: id, pts: [c, [c[0] + off[0], c[1] + off[1], c[2] + off[2]]] });
+      }
+    }
+    for (const [id, b] of boxes) {
+      const off = offsets.get(id) || [0, 0, 0];
+      partBoxes.set(id, [b[0] + off[0], b[1] + off[1], b[2] + off[2], b[3] + off[0], b[4] + off[1], b[5] + off[2]]);
+    }
+    return { offsets, trails3d, partBoxes, partCount: boxes.length, splitGroupId, splitChildren };
+  }
+  function buildExplodedScene(baseScene, exData, doc = App.doc) {
+    const scene = JSON.parse(JSON.stringify(baseScene));
+    if (!exData) return scene;
+    const shiftMatrix = (m, off) => {
+      if (!off || !Array.isArray(m) || m.length < 16) return;
+      m[12] += off[0];
+      m[13] += off[1];
+      m[14] += off[2];
+    };
+    if (exData.splitGroupId) {
+      const idx = scene.items.findIndex((it) => it && it.id === exData.splitGroupId);
+      if (idx >= 0) {
+        const orig = scene.items[idx];
+        const splitItems = [];
+        for (const sc of exData.splitChildren || []) {
+          const itemObj = {
+            id: sc.id,
+            kind: 'group',
+            name: Model.label(sc.child),
+            role: 'solid',
+            color: sc.child.color || orig.color,
+            mat: sc.child.mat || orig.mat,
+            t: deepClone(sc.parent.t || Model.T0()),
+            p: {},
+            finishes: [],
+            children: [deepClone(sc.child), ...sc.holes.map(deepClone)],
+          };
+          const kItem = Model.kernelItem(itemObj, Model.vars(doc).v);
+          shiftMatrix(kItem.m, exData.offsets.get(sc.id));
+          splitItems.push(kItem);
+        }
+        scene.items.splice(idx, 1, ...splitItems);
+      }
+      return scene;
+    }
+    const boxesHit = (a, b) => a && b && a[0] <= b[3] && a[3] >= b[0] && a[1] <= b[4] && a[4] >= b[1] && a[2] <= b[5] && a[5] >= b[2];
+    const solidBoxes = [];
+    for (const [id] of exData.offsets.entries()) {
+      const it = Model.find(doc, id);
+      const bb = it ? itemWorldBox(it, doc) : null;
+      if (bb) solidBoxes.push([id, bb]);
+    }
+    for (const it of scene.items || []) {
+      if (!it) continue;
+      let off = exData.offsets.get(it.id);
+      if (!off && typeof App !== 'undefined' && App.mergedInto) {
+        const hostId = App.mergedInto(it.id);
+        if (hostId) off = exData.offsets.get(hostId);
+      }
+      if (!off && it.role === 'hole') {
+        const docIt = Model.find(doc, it.id);
+        const hb = docIt ? itemWorldBox(docIt, doc) : null;
+        const host = hb ? solidBoxes.find(([, b]) => boxesHit(hb, b)) : null;
+        if (host) off = exData.offsets.get(host[0]);
+      }
+      if (off) shiftMatrix(it.m, off);
+    }
+    return scene;
+  }
+  function explodeSig(ev, doc = App.doc) {
+    const stepsSig = ev.explodeMode === 'steps' && typeof Assembly !== 'undefined' ? JSON.stringify(Assembly.explodeSteps(doc)) : '';
+    return dirSig(ev) + '|ex|' + (ev.explodeMode || 'auto') + '|' + round(Number(ev.explodeAmount ?? 0.7), 3) + '|' + stepsSig;
+  }
   async function addView(kind = 'iso', opts = {}) {
-    const k = kind === 'free' ? 'free' : 'iso';
+    const k = kind === 'free' ? 'free' : kind === 'explode' ? 'explode' : 'iso';
     let dir, x;
-    if (k === 'free') {
+    if (k === 'free' || (k === 'explode' && opts.fromCamera)) {
       if (opts.dir) { dir = norm3(opts.dir, ISO_DIR); x = orthoX3(opts.x, dir); }
       else if (typeof Viewer !== 'undefined' && Viewer.cameraBasis) { const cb = Viewer.cameraBasis(); dir = norm3(cb.dir, ISO_DIR); x = orthoX3(cb.x, dir); }
       else { dir = ISO_DIR; x = ISO_X; }
     } else {
       dir = norm3(opts.dir, ISO_DIR); x = orthoX3(opts.x, dir);
     }
-    const base = k === 'free' ? 'Freie Ansicht' : 'Isometrie';
+    const base = k === 'free' ? 'Freie Ansicht' : k === 'explode' ? T('draw.view.explode') : 'Isometrie';
     const used = new Set(activeViews(dwg()).map((v) => v.name));
     let name = opts.name || base;
     if (!opts.name && used.has(name)) {
@@ -617,22 +837,77 @@ const Drawing = (() => {
       name = base + ' ' + n;
     }
     const nv = { id: uid('v'), kind: k, name, dir, x };
+    if (k === 'explode') {
+      const hasSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps().length > 0;
+      nv.explodeMode = (opts.explodeMode === 'steps' || opts.explodeMode === 'auto') ? opts.explodeMode : (hasSteps ? 'steps' : 'auto');
+      nv.explodeAmount = opts.explodeAmount != null ? clamp(Number(opts.explodeAmount), 0.1, 1.5) : (nv.explodeMode === 'steps' ? 1 : 0.7);
+      nv.explodeTrails = opts.explodeTrails !== false;
+    }
     const vOpts = {
       scale: typeof opts.scale === 'number' && opts.scale > 0 ? opts.scale : 'sheet',
       hidden: opts.hidden != null ? !!opts.hidden : false,
       tangent: opts.tangent != null ? !!opts.tangent : true,
       shaded: !!opts.shaded,
     };
-    App.change(k === 'free' ? 'Freie Ansicht hinzugefügt' : 'Isometrische Ansicht hinzugefügt', () => {
+    const undoLbl = k === 'free' ? 'Freie Ansicht hinzugefügt' : k === 'explode' ? 'Explosionsansicht hinzugefügt' : 'Isometrische Ansicht hinzugefügt';
+    App.change(undoLbl, () => {
       const s = dwg();
       s.extraViews = s.extraViews || [];
       s.extraViews.push(nv);
       s.viewOpts = s.viewOpts || {};
       s.viewOpts[nv.id] = vOpts;
     });
+    if (k === 'explode' && computeExplodeData(nv, App.doc).partCount < 2) {
+      UI.toast(T('draw.explodeNeedTwo'), { icon: 'info', ms: 3800 });
+    }
     selView = nv.id; selDim = null;
     await refresh(); Panels.renderRight();
     return nv;
+  }
+  async function updateExplodeView(key, patch = {}) {
+    let changed = false;
+    App.change('Explosionsansicht geändert', () => {
+      const s = dwg();
+      const ev = (s.extraViews || []).find((v) => v.id === key && v.kind === 'explode');
+      if (!ev) return;
+      if (patch.explodeAmount != null && Number.isFinite(Number(patch.explodeAmount))) {
+        ev.explodeAmount = clamp(Number(patch.explodeAmount), 0.1, 1.5);
+        changed = true;
+      }
+      if (patch.explodeMode === 'auto' || patch.explodeMode === 'steps') {
+        ev.explodeMode = patch.explodeMode;
+        changed = true;
+      }
+      if (patch.explodeTrails !== undefined) {
+        ev.explodeTrails = !!patch.explodeTrails;
+        changed = true;
+      }
+      if (patch.dir) {
+        ev.dir = norm3(patch.dir, ISO_DIR);
+        ev.x = orthoX3(patch.x || ev.x, ev.dir);
+        changed = true;
+      }
+    });
+    if (!changed) return false;
+    for (const ck of [...shadeCache.keys()]) if (ck.startsWith(key + '|')) shadeCache.delete(ck);
+    await refresh();
+    Panels.renderRight();
+    return true;
+  }
+  function explodeViewInfo(key) {
+    const sh = dwg();
+    const ev = (sh.extraViews || []).find((v) => v.id === key && v.kind === 'explode');
+    if (!ev) return null;
+    const meta = (proj && proj.explodeMeta && proj.explodeMeta[key]) || computeExplodeData(ev, App.doc);
+    return {
+      id: ev.id,
+      amount: ev.explodeAmount,
+      mode: ev.explodeMode,
+      trails: ev.explodeTrails !== false,
+      offsets: Object.fromEntries(meta.offsets || []),
+      trailCount: (meta.trails3d || []).length,
+      partCount: meta.partCount || 0,
+    };
   }
   function removeView(key) {
     App.change('Ansicht entfernt', () => {
@@ -672,6 +947,7 @@ const Drawing = (() => {
     if (all.some((s) => s.views && s.views.iso)) addSpec('iso', 'iso', 'std');
     for (const s of all) {
       for (const ev of s.extraViews || []) {
+        if (ev.kind === 'explode') continue;
         addSpec(ev.id, { key: ev.id, dir: ev.dir, x: ev.x }, dirSig(ev));
       }
       for (const sec of s.sections || []) {
@@ -680,6 +956,18 @@ const Drawing = (() => {
           const vk = secUncutViewKey(sp);
           addSpec(vk, { key: vk, dir: sp.dir, x: sp.x }, dirSig(sp));
         }
+      }
+    }
+    return specs;
+  }
+  function collectNeededExplodeViews() {
+    const specs = [];
+    const seen = new Set();
+    for (const s of sheets()) {
+      for (const ev of s.extraViews || []) {
+        if (ev.kind !== 'explode' || seen.has(ev.id)) continue;
+        seen.add(ev.id);
+        specs.push({ key: ev.id, ev, sig: explodeSig(ev) });
       }
     }
     return specs;
@@ -888,15 +1176,17 @@ const Drawing = (() => {
       return ensureProjections();
     }
     const specs = collectNeededViews();
+    const exSpecs = collectNeededExplodeViews();
     const allSecs = collectNeededSections();
     const scene = Model.kernelScene(App.doc);
     const sceneKey = JSON.stringify(scene);
     const rev = App.revision;
     const needFull = !proj || sceneKey !== projSceneKey;
     const missingViews = needFull ? specs : specs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
+    const missingEx = needFull ? exSpecs : exSpecs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
     const existingSecs = (proj && proj.sections) || {};
     const missingSecs = needFull ? allSecs : allSecs.filter((s) => !existingSecs[s.key]);
-    if (!needFull && !missingViews.length && !missingSecs.length) {
+    if (!needFull && !missingViews.length && !missingSecs.length && !missingEx.length) {
       await ensureBom(sceneKey);
       projRev = rev;
       return;
@@ -905,6 +1195,7 @@ const Drawing = (() => {
       try {
         if (needFull) {
           proj = await Kernel.call('project', { scene, views: specs.map((s) => s.spec), sections: allSecs });
+          proj.explodeMeta = {};
           projSceneKey = sceneKey;
           projRev = rev;
           projSigs.clear();
@@ -918,24 +1209,41 @@ const Drawing = (() => {
             proj.sections = { ...(proj.sections || {}), ...((res2 && res2.sections) || {}) };
           }
         } else {
-          const res = await Kernel.call('project', {
-            scene,
-            views: missingViews.map((s) => s.spec),
-            sections: missingSecs,
-          });
-          if (missingViews.length) {
-            proj.views = proj.views || {};
-            if (res && res.views) Object.assign(proj.views, res.views);
-            for (const s of missingViews) {
-              projSigs.set(s.key, s.sig);
-              for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
+          if (missingViews.length || missingSecs.length) {
+            const res = await Kernel.call('project', {
+              scene,
+              views: missingViews.map((s) => s.spec),
+              sections: missingSecs,
+            });
+            if (missingViews.length) {
+              proj.views = proj.views || {};
+              if (res && res.views) Object.assign(proj.views, res.views);
+              for (const s of missingViews) {
+                projSigs.set(s.key, s.sig);
+                for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
+              }
             }
-          }
-          if (missingSecs.length) {
-            proj.sections = { ...(proj.sections || {}), ...((res && res.sections) || {}) };
+            if (missingSecs.length) {
+              proj.sections = { ...(proj.sections || {}), ...((res && res.sections) || {}) };
+            }
           }
           projRev = rev;
           projId++;
+        }
+        for (const s of missingEx) {
+          const exData = computeExplodeData(s.ev, App.doc);
+          const exScene = buildExplodedScene(scene, exData, App.doc);
+          const exRes = await Kernel.call('project', {
+            scene: exScene,
+            views: [{ key: s.key, dir: s.ev.dir, x: s.ev.x }],
+            sections: [],
+          });
+          proj.views = proj.views || {};
+          proj.explodeMeta = proj.explodeMeta || {};
+          if (exRes && exRes.views && exRes.views[s.key]) proj.views[s.key] = exRes.views[s.key];
+          proj.explodeMeta[s.key] = exData;
+          projSigs.set(s.key, s.sig);
+          for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
         }
         await ensureBom(sceneKey);
       } finally {
@@ -1192,8 +1500,10 @@ const Drawing = (() => {
     if (!proj || !proj.views || !proj.views[name]) return null;
     const opts = viewOpts(sh, name);
     const is3d = is3dView(sh, name);
+    const ev = (sh.extraViews || []).find((x) => x.id === name && x.kind === 'explode');
+    const exTag = ev ? ('|ex:' + (ev.explodeTrails !== false ? 1 : 0)) : '';
     // beim Bemaßen wird bei jeder Mausbewegung neu gezeichnet – die aufgeräumten Kanten merken
-    const ck = name + '|' + projId + '|' + !!opts.hidden + '|' + !!opts.tangent + '|' + is3d;
+    const ck = name + '|' + projId + '|' + !!opts.hidden + '|' + !!opts.tangent + '|' + is3d + exTag;
     let g = geoCache.get(ck);
     if (!g) {
       if (geoCache.size > 32) geoCache.clear();
@@ -1230,7 +1540,19 @@ const Drawing = (() => {
     if (!isFinite(x0)) return null;
     // Mittellinien (KP-20/ZE-06); Gewinde werden ungecached in viewGeom() projiziert
     const allCenters = is3d ? [] : computeViewCenters(name, v);
-    return { polys, tangents, hidden, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    const explodeTrails = [];
+    const exView = (sh.extraViews || []).find((x) => x.id === name && x.kind === 'explode');
+    if (exView && exView.explodeTrails !== false && proj && proj.explodeMeta && proj.explodeMeta[name]) {
+      const vx = v.x || [1, 0, 0], vy = v.y || [0, 1, 0];
+      for (const tr of proj.explodeMeta[name].trails3d || []) {
+        if (!tr || !Array.isArray(tr.pts) || tr.pts.length < 2) continue;
+        explodeTrails.push({
+          partId: tr.partId,
+          pts: tr.pts.map((p) => [dot3(p, vx), dot3(p, vy)]),
+        });
+      }
+    }
+    return { polys, tangents, hidden, circles, points, allCenters, threads: [], explodeTrails, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
   function clipSegStrip(a, b, ax, ay, lo, hi) {
     const d0 = a[0] * ax + a[1] * ay;
@@ -2263,27 +2585,35 @@ const Drawing = (() => {
       const py = ry + (ah - ex.geo.h * si) / 2;
       place(ex.id, ex.geo, si, px, py, ex.opts, ex.label, true, 4, 4);
     };
-    let x0 = area.x + 12, y0 = area.y + 12, fw = 0, fh = 0, lw = 0, th = 0;
+    const isUS = normProjection(sh.projection) === 'us';
+    let x0 = area.x + 12, y0 = area.y + 12, fw = 0, fh = 0, lw = 0, th = 0, totalW = 0, totalH = 0;
+    let frontX = x0, frontY = y0;
     if (main) {
       const sf = scOf(oF, s), st = scOf(oT, s), sl = scOf(oL, s);
-      fw = G.front ? G.front.w * sf : G.top.w * st; fh = G.front ? G.front.h * sf : 0;
+      fw = G.front ? G.front.w * sf : (G.top ? G.top.w * st : 0); fh = G.front ? G.front.h * sf : 0;
       lw = G.left ? G.left.w * sl : 0; th = G.top ? G.top.h * st : 0;
-      const totalW = fw + (G.left ? gap + lw : 0), totalH = fh + (G.top ? gap + th : 0);
+      const gapX = G.left && fw > 0 ? gap : 0;
+      const gapY = G.top && fh > 0 ? gap : 0;
+      totalW = fw + gapX + lw; totalH = fh + gapY + th;
       const room = extras.length ? 0.68 : secGeos.length ? 0.72 : 1;
       x0 = area.x + Math.max(12, (area.w * room - totalW) / 2);
       y0 = area.y + Math.max(12, (area.h - totalH) / 2);
-      if (G.front) place('front', G.front, sf, x0, y0, oF, viewLabel('front', sh), false);
+      frontX = x0 + (isUS && G.left ? lw + gapX : 0);
+      frontY = y0 + (isUS && G.top ? th + gapY : 0);
+      if (G.front) place('front', G.front, sf, frontX, frontY, oF, viewLabel('front', sh), false);
       if (G.left) {
-        const py = G.front ? (sl === sf ? y0 + (G.front.box[3] - G.left.box[3]) * sf : y0 + (fh - G.left.h * sl) / 2) : y0;
-        place('left', G.left, sl, x0 + fw + gap, py, oL, viewLabel('left', sh), false);
+        const lx = isUS ? x0 : x0 + fw + gapX;
+        const ly = G.front ? (sl === sf ? frontY + (G.front.box[3] - G.left.box[3]) * sf : frontY + (fh - G.left.h * sl) / 2) : frontY;
+        place('left', G.left, sl, lx, ly, oL, viewLabel('left', sh), false);
         if (G.front && sl === sf) views.left.oy = views.front.oy;
       }
       if (G.top) {
-        const px = G.front && st !== sf ? x0 + (fw - G.top.w * st) / 2 : x0;
-        place('top', G.top, st, px, y0 + fh + (G.front ? gap : 0), oT, viewLabel('top', sh), false);
+        const tx = G.front && st !== sf ? frontX + (fw - G.top.w * st) / 2 : frontX;
+        const ty = isUS ? y0 : y0 + fh + gapY;
+        place('top', G.top, st, tx, ty, oT, viewLabel('top', sh), false);
         if (G.front && st === sf) views.top.ox = views.front.ox;
       }
-      if (extras.length === 1 && G.front && G.left && G.top && !secGeos.length) {
+      if (!isUS && extras.length === 1 && G.front && G.left && G.top && !secGeos.length) {
         const rx = x0 + fw + gap, ry = y0 + fh + gap;
         const rawH = area.y + area.h - ry - 10;
         const maxH = bomRect ? Math.min(rawH, bomRect.y - ry - 6) : rawH;
@@ -2315,10 +2645,15 @@ const Drawing = (() => {
         const pcx = pv ? pv.ox + ((pv.geo.box[0] + pv.geo.box[2]) * 0.5) * pv.s : area.x + area.w * 0.5;
         const pcy = pv ? pv.oy - ((pv.geo.box[1] + pv.geo.box[3]) * 0.5) * pv.s : area.y + area.h * 0.5;
         const cands = [];
-        if (G.left) cands.push([x0 + fw + gap + lw + gap, y0]);
-        if (G.front || G.top) cands.push([x0 + fw + gap, y0 + fh + gap]);
-        if (G.top) cands.push([x0, y0 + fh + gap + th + gap]);
-        cands.push([x0 + fw + gap, y0]);
+        if (isUS) {
+          cands.push([x0 + totalW + gap, y0]);
+          if (G.top && G.left) cands.push([x0, y0]);
+        } else {
+          if (G.left) cands.push([x0 + fw + gap + lw + gap, y0]);
+          if (G.front || G.top) cands.push([x0 + fw + gap, y0 + fh + gap]);
+          if (G.top) cands.push([x0, y0 + fh + gap + th + gap]);
+          cands.push([x0 + fw + gap, y0]);
+        }
         for (let gy = area.y + 8; gy <= area.y + area.h - vh - 14; gy += 14) {
           for (let gx = area.x + 8; gx <= area.x + area.w - vw - 8; gx += 14) cands.push([gx, gy]);
         }
@@ -2376,7 +2711,8 @@ const Drawing = (() => {
     const gap = 22;
     const needW = (sc) => (G.front ? G.front.w * scOf(oF, sc) : G.top ? G.top.w * scOf(oT, sc) : 0) + (G.left ? gap + G.left.w * scOf(oL, sc) : 0);
     const needH = (sc) => (G.front ? G.front.h * scOf(oF, sc) : G.left ? G.left.h * scOf(oL, sc) : 0) + (G.top ? gap + G.top.h * scOf(oT, sc) : 0);
-    const extraRoom = extras.length > 1 || (extras.length && !G.top) ? 0.35 : 0;
+    const isUS = normProjection(sh.projection) === 'us';
+    const extraRoom = extras.length > 1 || (extras.length && (!G.top || isUS)) ? 0.35 : 0;
     let views = {};
     if (!secGeos.length) {
       if (sh.scale === 'auto') {
@@ -3704,9 +4040,36 @@ const Drawing = (() => {
   function getShadedImage(name, v) {
     if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
     const pv = proj.views[name];
-    const ck = name + '|' + projSceneKey + '|' + dirSig(pv) + '|' + v.geo.box.map((n) => Math.round(n * 100)).join(',');
+    const sig = projSigs.get(name) || '';
+    const ck = name + '|' + projSceneKey + '|' + dirSig(pv) + '|' + sig + '|' + v.geo.box.map((n) => Math.round(n * 100)).join(',');
     if (shadeCache.has(ck)) return shadeCache.get(ck);
-    const img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+    const exMeta = proj.explodeMeta && proj.explodeMeta[name];
+    let img = null;
+    if (exMeta && exMeta.offsets && Viewer.setOffsets && Viewer.nodes) {
+      const prevOffsets = new Map();
+      for (const [nid, node] of Viewer.nodes.entries()) {
+        if (node && node.off) prevOffsets.set(nid, node.off.clone());
+      }
+      const exVecMap = new Map();
+      for (const [pid, arr] of exMeta.offsets.entries()) {
+        exVecMap.set(pid, new THREE.Vector3(arr[0], arr[1], arr[2]));
+      }
+      if (typeof App !== 'undefined' && App.mergedInto) {
+        for (const nid of Viewer.nodes.keys()) {
+          if (exVecMap.has(nid)) continue;
+          const hostId = App.mergedInto(nid);
+          if (hostId && exVecMap.has(hostId)) exVecMap.set(nid, exVecMap.get(hostId).clone());
+        }
+      }
+      try {
+        Viewer.setOffsets(exVecMap.size ? exVecMap : null);
+        img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+      } finally {
+        Viewer.setOffsets(prevOffsets.size ? prevOffsets : null);
+      }
+    } else {
+      img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+    }
     if (img) {
       if (shadeCache.size > 24) shadeCache.clear();
       shadeCache.set(ck, img);
@@ -3741,6 +4104,9 @@ const Drawing = (() => {
       for (const p of v.geo.polys) lines.push(asLine(p, 'vis'));
       for (const p of v.geo.tangents || []) lines.push(asLine(p, 'tan'));
       for (const p of v.geo.hidden) lines.push(asLine(p, 'hid'));
+      for (const tr of v.geo.explodeTrails || []) {
+        if (tr.pts && tr.pts.length >= 2) lines.push({ pts: tr.pts.map((q) => toSheet(v, q)), cls: 'explode-trail', view: name });
+      }
       if (v.isSection && v.geo.splitLine) {
         const A = toSheet(v, v.geo.splitLine.a), B = toSheet(v, v.geo.splitLine.b);
         const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1;
@@ -3919,16 +4285,33 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
     texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: Units.label() }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
-    // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
+    // Projektionssymbol nach ISO 5456-2: Methode 1 (Europa / ISO E) oder Methode 3 (USA / ISO A)
+    const projMode = normProjection(sh.projection);
     lab(cD, rows[0], T('draw.tb.projection'));
-    const sx = cD + 4.5, cy = y0 + 11.5;
-    lines.push({ pts: [[sx, cy - 1.6], [sx + 10, cy - 3], [sx + 10, cy + 3], [sx, cy + 1.6], [sx, cy - 1.6]], cls: 'thin' });
-    lines.push({ pts: [[sx - 1.5, cy], [sx + 11.5, cy]], cls: 'ctr' });
-    const ccx = sx + 18.5;
-    lines.push({ circle: [ccx, cy, 1.6], cls: 'thin' }, { circle: [ccx, cy, 3], cls: 'thin' });
-    lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
-    texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2', size: 2, anchor: 'start', cls: 'lab' });
-    texts.push({ x: cD + 1.2, y: y0 + 30.4, t: T('draw.tb.method1'), size: 2.5, anchor: 'start', cls: 'val' });
+    const cy = y0 + 11.5;
+    if (projMode === 'us') {
+      const ccx = cD + 8.5;
+      lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
+      lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+      const tx = cD + 16.5;
+      lines.push({ pts: [[tx, cy - 1.6], [tx + 10, cy - 3], [tx + 10, cy + 3], [tx, cy + 1.6], [tx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
+      lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr' });
+      texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2 (A)', size: 2, anchor: 'start', cls: 'lab', projMode: 'us' });
+      const mTxt = T('draw.tb.method3');
+      const mSz = fitSize(mTxt, 29.6, 2.5, 1.8);
+      texts.push({ x: cD + 1.2, y: y0 + 30.4, t: clipText(mTxt, 29.6, mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'us' });
+    } else {
+      const sx = cD + 4.5;
+      lines.push({ pts: [[sx, cy - 1.6], [sx + 10, cy - 3], [sx + 10, cy + 3], [sx, cy + 1.6], [sx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
+      lines.push({ pts: [[sx - 1.5, cy], [sx + 11.5, cy]], cls: 'ctr' });
+      const ccx = sx + 18.5;
+      lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
+      lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+      texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2 (E)', size: 2, anchor: 'start', cls: 'lab', projMode: 'eu' });
+      const mTxt = T('draw.tb.method1Iso');
+      const mSz = fitSize(mTxt, 29.6, 2.5, 1.8);
+      texts.push({ x: cD + 1.2, y: y0 + 30.4, t: clipText(mTxt, 29.6, mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'eu' });
+    }
   }
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
   // Die Standardschrift im PDF kennt nur Latin-1: typografische Zeichen ersetzen
@@ -3938,7 +4321,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -3982,6 +4365,7 @@ const Drawing = (() => {
         if (l.noteTip) el.dataset.tipKind = l.noteTip;
         if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
         if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
+        if (l.projSym) el.dataset.projSym = l.projSym;
       }
       g.append(el);
     };
@@ -4015,6 +4399,7 @@ const Drawing = (() => {
         if (t.balloonPos != null) el.dataset.pos = String(t.balloonPos);
         if (t.bomRow != null) el.dataset.bomRow = String(t.bomRow);
         if (t.bomCol) el.dataset.bomCol = t.bomCol;
+        if (t.projMode) el.dataset.projMode = t.projMode;
       }
       el.textContent = t.t;
       g.append(el);
@@ -4589,9 +4974,12 @@ const Drawing = (() => {
     if (ev) return { dir: ev.dir, x: ev.x, y: vNorm(vCross(ev.dir, ev.x)) };
     return null;
   }
-  function projectPartInView(part, basis) {
+  function projectPartInView(part, basis, offset = null) {
     if (!part || !part.bbox || !basis) return null;
-    const b = part.bbox;
+    const ox = offset ? (Number(offset[0]) || 0) : 0;
+    const oy = offset ? (Number(offset[1]) || 0) : 0;
+    const oz = offset ? (Number(offset[2]) || 0) : 0;
+    const b = [part.bbox[0] + ox, part.bbox[1] + oy, part.bbox[2] + oz, part.bbox[3] + ox, part.bbox[4] + oy, part.bbox[5] + oz];
     const ex = basis.x, ey = basis.y, d = basis.dir;
     let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
     let dMin = Infinity, dMax = -Infinity;
@@ -4603,12 +4991,17 @@ const Drawing = (() => {
       if (v < vMin) vMin = v; if (v > vMax) vMax = v;
       if (dp < dMin) dMin = dp; if (dp > dMax) dMax = dp;
     }
-    const c = Array.isArray(part.com) && part.com.length >= 3
+    const cRaw = Array.isArray(part.com) && part.com.length >= 3
       ? part.com
-      : [(b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5];
+      : [(part.bbox[0] + part.bbox[3]) * 0.5, (part.bbox[1] + part.bbox[4]) * 0.5, (part.bbox[2] + part.bbox[5]) * 0.5];
+    const c = [cRaw[0] + ox, cRaw[1] + oy, cRaw[2] + oz];
     const cu = clamp(c[0] * ex[0] + c[1] * ex[1] + c[2] * ex[2], uMin, uMax);
     const cv = clamp(c[0] * ey[0] + c[1] * ey[1] + c[2] * ey[2], vMin, vMax);
     return { box2: [uMin, vMin, uMax, vMax], center2: [cu, cv], minDepth: dMin, maxDepth: dMax };
+  }
+  function explodePartOffset(vk, partId) {
+    const exMeta = proj && proj.explodeMeta && proj.explodeMeta[vk];
+    return exMeta && exMeta.offsets ? (exMeta.offsets.get(partId) || null) : null;
   }
   function chooseBalloonView(sh, lay, rows, partsById) {
     const avail = Object.keys(lay.views || {}).filter((k) => k !== 'free' && lay.views[k] && lay.views[k].geo && lay.views[k].geo.box);
@@ -4625,7 +5018,7 @@ const Drawing = (() => {
         let chosen = null, bestD = -Infinity;
         for (const id of row.ids) {
           const p = partsById.get(id);
-          const pr = projectPartInView(p, basis);
+          const pr = projectPartInView(p, basis, explodePartOffset(vk, id));
           if (!pr) continue;
           if (pr.maxDepth > bestD) { bestD = pr.maxDepth; chosen = pr; }
         }
@@ -4669,7 +5062,7 @@ const Drawing = (() => {
     const cands = [];
     for (const id of row.ids) {
       const part = partsById.get(id);
-      const pr = projectPartInView(part, basis);
+      const pr = projectPartInView(part, basis, explodePartOffset(vName, id));
       if (pr) cands.push({ id, pr });
     }
     if (!cands.length) {
@@ -4729,7 +5122,7 @@ const Drawing = (() => {
     const basis = viewBasis(vName, simSh);
     const allProjected = [];
     for (const [id, part] of partsById.entries()) {
-      const pr = projectPartInView(part, basis);
+      const pr = projectPartInView(part, basis, explodePartOffset(vName, id));
       if (pr) allProjected.push({ id, pr });
     }
     const st = sheetDimStyle(sh);
@@ -6253,6 +6646,9 @@ const Drawing = (() => {
     f.append(UI.selectField({ id: 'dw-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); Panels.renderRight(); renderTabs(); } }));
     box.append(f);
     box.append(UI.selectField({ id: 'dw-scale', label: T('menu.draw.scale'), value: String(d.scale), options: [['auto', T('menu.draw.scaleAuto')], ...SCALES.map((s) => [String(s), scaleText(s)])], onChange: (v) => set((x) => { x.scale = v === 'auto' ? 'auto' : +v; }) }));
+    const projMenuFld = UI.selectField({ id: 'dw-projection', label: T('draw.tb.projection'), value: normProjection(d.projection), options: [['eu', T('draw.proj.eu')], ['us', T('draw.proj.us')]], onChange: (v) => setProjection(v) });
+    projMenuFld.dataset.help = 'drawingProjection';
+    box.append(projMenuFld);
     box.append(h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     for (const [k, l] of [['front', T('menu.draw.vFront')], ['top', T('menu.draw.vTop')], ['left', T('menu.draw.vLeft')], ['iso', T('menu.draw.vIso')]]) {
       const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-' + k, checked: !!d.views[k] }), l);
@@ -6283,6 +6679,9 @@ const Drawing = (() => {
       '-',
       { label: T('menu.draw.addFree'), icon: 'eye', run: () => addView('free') },
       { label: T('menu.draw.addFreeShaded'), icon: 'eye', run: () => addView('free', { shaded: true }) },
+      '-',
+      { id: 'dw-menu-add-explode', label: T('menu.draw.addExplode'), icon: 'explode', help: 'drawingExplode', run: () => addView('explode') },
+      { id: 'dw-menu-add-explode-shaded', label: T('menu.draw.addExplodeShaded'), icon: 'explode', help: 'drawingExplode', run: () => addView('explode', { shaded: true }) },
     ]);
   }
   function bomMenu(anchor) {
@@ -6364,6 +6763,7 @@ const Drawing = (() => {
       tan: [0.2, null],
       hid: [0.25, [2.4, 1.2]],
       ctr: [0.25, [5, 1.2, 0.6, 1.2]],
+      'explode-trail': [0.22, [3, 1.4]],
       hatch: [0.22, null],
       cutline: [0.35, [7, 1.2, 0.7, 1.2]],
       cutend: [0.7, null],
@@ -6566,7 +6966,7 @@ const Drawing = (() => {
     for (const [n, lt, col] of DXF_LAYERS) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
     const layer = {
-      vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE',
+      vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE', 'explode-trail': 'MITTELLINIE',
       hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', breakline: 'SCHNITTLINIE',
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
@@ -6933,7 +7333,10 @@ const Drawing = (() => {
     const bFree = h('button', { type: 'button', class: 'btn', id: 'dw-add-free', 'data-help': 'drawingViews' });
     bFree.innerHTML = icon('eye') + esc(T('draw.panel.addFree'));
     bFree.onclick = () => addView('free');
-    vSec.append(h('div', { class: 'btn-row' }, bIso, bFree));
+    const bEx = h('button', { type: 'button', class: 'btn', id: 'dw-add-explode', 'data-help': 'drawingExplode' });
+    bEx.innerHTML = icon('explode') + esc(T('draw.panel.addExplode'));
+    bEx.onclick = () => addView('explode');
+    vSec.append(h('div', { class: 'btn-row' }, bIso, bFree), h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bEx));
     const avList = activeViews(d);
     const curKey = currentViewKey(d);
     if (avList.length) {
@@ -6972,7 +7375,30 @@ const Drawing = (() => {
         chk.querySelector('input').onchange = (e) => setViewOpt(curKey, { [ok]: e.target.checked }, 'Ansichtseinstellung geändert');
         vp.append(chk);
       }
-      if (curMeta && curMeta.kind === 'free') {
+      if (curMeta && curMeta.kind === 'explode') {
+        const pctVal = Math.round((curMeta.explodeAmount ?? 0.7) * 100);
+        const pctEl = h('b', { class: 'mono', id: 'dw-v-ex-pct' }, pctVal + ' %');
+        const rng = h('input', { type: 'range', id: 'dw-v-ex-amount', min: '10', max: '150', step: '5', value: String(pctVal), style: { flex: '1' } });
+        rng.addEventListener('input', () => { pctEl.textContent = rng.value + ' %'; });
+        rng.addEventListener('change', () => updateExplodeView(curKey, { explodeAmount: Number(rng.value) / 100 }));
+        vp.append(h('div', { class: 'field' },
+          h('div', { class: 'mini-row' }, h('label', { for: 'dw-v-ex-amount', class: 'grow' }, T('draw.panel.exAmount')), pctEl),
+          rng));
+        const hasExSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps().length > 0;
+        if (hasExSteps || curMeta.explodeMode === 'steps') {
+          vp.append(UI.selectField({
+            id: 'dw-v-ex-mode',
+            label: T('draw.panel.exMode'),
+            value: curMeta.explodeMode === 'steps' ? 'steps' : 'auto',
+            options: [['auto', T('draw.panel.exModeAuto')], ['steps', T('draw.panel.exModeSteps')]],
+            onChange: (v) => updateExplodeView(curKey, { explodeMode: v }),
+          }));
+        }
+        const trChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-ex-trails', checked: curMeta.explodeTrails !== false }), T('draw.panel.exTrails'));
+        trChk.querySelector('input').onchange = (e) => updateExplodeView(curKey, { explodeTrails: e.target.checked });
+        vp.append(trChk);
+      }
+      if (curMeta && (curMeta.kind === 'free' || curMeta.kind === 'explode')) {
         const recam = h('button', { type: 'button', class: 'btn', id: 'dw-v-recam' });
         recam.innerHTML = icon('eye') + esc(T('draw.panel.recam'));
         recam.onclick = () => updateFreeViewCamera(curKey);
@@ -6995,7 +7421,9 @@ const Drawing = (() => {
     const flds = h('div', { class: 'fields', 'data-help': 'drawingFormat' });
     flds.append(UI.selectField({ id: 'dw-panel-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: sheetOptions(), onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); renderTabs(); } }));
     flds.append(UI.selectField({ id: 'dw-panel-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); renderTabs(); } }));
-    info.append(flds);
+    const projFld = UI.selectField({ id: 'dw-panel-projection', label: T('draw.tb.projection'), value: normProjection(d.projection), options: [['eu', T('draw.proj.eu')], ['us', T('draw.proj.us')]], onChange: (v) => setProjection(v) });
+    projFld.dataset.help = 'drawingProjection';
+    info.append(flds, projFld);
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + esc(T('draw.panel.sheetAndViews')); b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + esc(T('draw.panel.newSheet')); bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd));
@@ -7689,7 +8117,8 @@ const Drawing = (() => {
   return {
     open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
-    addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera,
+    PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
+    addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera, updateExplodeView, explodeViewInfo,
     get selectedView() { return currentViewKey(); },
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     DIM_ARROWS, DIM_FONT_SIZES, dimStyle: () => sheetDimStyle(), setDimStyle,

@@ -2621,6 +2621,16 @@ const HELP = {
   "tip": "Kabel oder Schlauch zwischen zwei Anschlusspunkten mit Durchmesser und Biegeradius verlegen (Profi)",
   "hilfe": "Erzeugt eine weiche 3D-Kurve zwischen zwei Punkten (direkt eingeben oder auf Bauteilflächen anklicken) mit frei wählbarem Durchmesser, Wandstärke (bei Schläuchen) und Biegeradius. Werden die Anschlusspunkte auf Bauteile geklickt, wandert das Kabel beim Verschieben mit, und die exakte Länge erscheint in der Stückliste.",
   "tipp": "Wähle „Schlauch (hohl)“, um einen Innenhohlraum über die Wandstärke zu erhalten, oder füge rechts im Panel Zwischenpunkte hinzu."
+ },
+ "drawingExplode": {
+  "tip": "Explosionsansicht der Baugruppe auf das Blatt legen",
+  "hilfe": "Zieht alle Teile der Baugruppe auseinander und zeigt sie als 3D-Ansicht samt gestrichelten Wegen-Linien auf der Zeichnung. Du kannst den Abstand stufenlos verstellen, eigene Explosions-Schritte nutzen und den Blickwinkel aus dem 3D-Modell übernehmen.",
+  "tipp": "Mit „Positionsnummern automatisch“ wandern die Nummernkreise direkt an die auseinandergezogenen Teile."
+ },
+ "drawingProjection": {
+  "tip": "Projektion zwischen Europa (ISO E) und USA (ISO A) umschalten",
+  "hilfe": "Bestimmt, wo Draufsicht und Seitenansicht rund um die Vorderansicht liegen: Bei Europa (ISO E, Methode 1) stehen Draufsicht unten und Seitenansicht rechts; bei USA (ISO A, Methode 3) stehen Draufsicht oben und Seitenansicht links. Das Normsymbol im Schriftfeld wechselt automatisch mit.",
+  "tipp": "Die Einstellung gilt pro Blatt – so kannst du bei Bedarf auch internationale Fertigungsblätter kombinieren."
  }
 };
 
