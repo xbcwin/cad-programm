@@ -29852,6 +29852,264 @@ def t_a152_kopplungen_schraube_riemen_linear(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a154_geschlossene_mechanismen(p):
+    # [A-154] Geschlossene Mechanismen lösen (BG-16): Viergelenk, Kurbeltrieb, Klemmen-Meldung, Profi-Schutz, Ziehen & Abspielen
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(200)
+
+    # 1. Grashof-Viergelenk (L0=60, L1=20, L2=55, L3=45): 4 Stäbe + 4 Drehgelenke, Kurbel 360° drehen
+    setup_4bar = p.ev("""
+      const L0 = 60, L1 = 20, L2 = 55, L3 = 45;
+      const Ax = 0, Ay = 0, Dx = L0, Dy = 0;
+      const Bx = 0, By = L1;
+      const dx = Dx - Bx, dy = Dy - By, d = Math.hypot(dx, dy);
+      const a = (L2 * L2 - L3 * L3 + d * d) / (2 * d);
+      const h = Math.sqrt(L2 * L2 - a * a);
+      const Cx = Bx + (a * dx) / d - (h * dy) / d;
+      const Cy = By + (a * dy) / d + (h * dx) / d;
+      const placeBar = (name, x1, y1, x2, y2, z, locked) => {
+        const len = Math.hypot(x2 - x1, y2 - y1);
+        const it = Model.newItem('box', { w: len, d: 6, h: 6 }, { name });
+        it.t.x = (x1 + x2) / 2;
+        it.t.y = (y1 + y2) / 2;
+        it.t.z = z;
+        it.t.rz = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+        if (locked) it.locked = true;
+        return it;
+      };
+      App.change('Viergelenk bauen', (doc) => {
+        doc.items.push(
+          placeBar('Gestell', Ax, Ay, Dx, Dy, 0, true),
+          placeBar('Kurbel', Ax, Ay, Bx, By, 6, false),
+          placeBar('Koppel', Bx, By, Cx, Cy, 12, false),
+          placeBar('Schwinge', Cx, Cy, Dx, Dy, 6, false)
+        );
+      });
+      const ids = App.doc.items.map((x) => x.id);
+      const r1 = Joints.add(ids[0], ids[1], [Ax, Ay, 3], [0, 0, 1]);
+      const r2 = Joints.add(ids[1], ids[2], [Bx, By, 9], [0, 0, 1]);
+      const r3 = Joints.add(ids[2], ids[3], [Cx, Cy, 9], [0, 0, 1]);
+      const r4 = Joints.add(ids[3], ids[0], [Dx, Dy, 3], [0, 0, 1]);
+      return {
+        ids,
+        okAdd: [r1.ok, r2.ok, r3.ok, r4.ok],
+        jIds: [r1.id, r2.id, r3.id, r4.id],
+        isLoop: [r1.id, r2.id, r3.id, r4.id].every((id) => Joints.isClosedLoop(id)),
+      };
+    """)
+    warte_rechnen(p, 20)
+    p.ev("App.select([arg])", setup_4bar['ids'][1])
+    p.wait(300)
+    hint_txt = p.pg.locator('#joint-sec .loop-hint').first.inner_text().lower()
+
+    def measure_4bar_gaps(ids):
+        return p.ev("""
+          const V3 = window.__masswerk.THREE.Vector3;
+          const [g, k, c, s] = arg.map((id) => Model.worldMatrix(App.doc, id));
+          const pt = (W, x, y, z = 0) => new V3(x, y, z).applyMatrix4(W);
+          const d1 = pt(g, -30, 0, 3).distanceTo(pt(k, -10, 0, -3));
+          const d2 = pt(k, 10, 0, 3).distanceTo(pt(c, -27.5, 0, -3));
+          const d3 = pt(c, 27.5, 0, -3).distanceTo(pt(s, -22.5, 0, 3));
+          const d4 = pt(s, 22.5, 0, -3).distanceTo(pt(g, 30, 0, 3));
+          const l1 = pt(k, -10, 0, 0).distanceTo(pt(k, 10, 0, 0));
+          const l2 = pt(c, -27.5, 0, 0).distanceTo(pt(c, 27.5, 0, 0));
+          const l3 = pt(s, -22.5, 0, 0).distanceTo(pt(s, 22.5, 0, 0));
+          const le = Joints.loopErrors().map((e) => e.posErr);
+          return { maxGap: Math.max(d1, d2, d3, d4), gaps: [d1, d2, d3, d4], lens: [l1, l2, l3], loopErrs: le };
+        """, ids)
+
+    ok_angles = True
+    for ang in (30, 90, 180, 270, 360):
+        res_set = p.ev("return Joints.setAngle(arg.jid, arg.ang)", {'jid': setup_4bar['jIds'][0], 'ang': ang})
+        m = measure_4bar_gaps(setup_4bar['ids'])
+        if not res_set or m['maxGap'] >= 0.01 or max(m['loopErrs']) >= 0.01:
+            ok_angles = False
+        if abs(m['lens'][0] - 20) >= 0.01 or abs(m['lens'][1] - 55) >= 0.01 or abs(m['lens'][2] - 45) >= 0.01:
+            ok_angles = False
+    ok1 = (
+        setup_4bar['okAdd'] == [True, True, True, True]
+        and setup_4bar['isLoop'] is True
+        and 'geschlossener mechanismus' in hint_txt
+        and ok_angles
+    )
+
+    # 2. Unmögliche Stellung -> Meldung „Dieser Mechanismus klemmt hier“, keine zerrissenen Gelenke + Nicht-Grashof-Kette
+    p.ev("Joints.setAngle(arg, 45)", setup_4bar['jIds'][0])
+    before_jam = measure_4bar_gaps(setup_4bar['ids'])
+    jam_rocker = p.ev("return Joints.setAngle(arg, 120)", setup_4bar['jIds'][3])
+    p.wait(150)
+    toast_jam1 = p.pg.locator('#toasts').inner_text()
+    after_jam = measure_4bar_gaps(setup_4bar['ids'])
+
+    # Nicht-Grashof-Viergelenk (L0=60, L1=40, L2=30, L3=30): bei 150° unmöglich (Abstand BD > 60)
+    p.ev("Start.openNewTab(Model.newDoc('NichtGrashof'))")
+    p.wait(300)
+    ng = p.ev("""
+      const L0 = 60, L1 = 40, L2 = 30, L3 = 30;
+      const Ax = 0, Ay = 0, Dx = L0, Dy = 0;
+      const Bx = L1, By = 0; // 0° Start: d = 20
+      const a = (L2 * L2 - L3 * L3 + 20 * 20) / (2 * 20);
+      const h = Math.sqrt(L2 * L2 - a * a);
+      const Cx = Bx + a, Cy = h;
+      const placeBar = (name, x1, y1, x2, y2, z, locked) => {
+        const len = Math.hypot(x2 - x1, y2 - y1);
+        const it = Model.newItem('box', { w: len, d: 6, h: 6 }, { name });
+        it.t.x = (x1 + x2) / 2; it.t.y = (y1 + y2) / 2; it.t.z = z;
+        it.t.rz = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+        if (locked) it.locked = true;
+        return it;
+      };
+      App.change('Nicht-Grashof', (doc) => {
+        doc.items.push(
+          placeBar('Gestell', Ax, Ay, Dx, Dy, 0, true),
+          placeBar('Kurbel', Ax, Ay, Bx, By, 6, false),
+          placeBar('Koppel', Bx, By, Cx, Cy, 12, false),
+          placeBar('Schwinge', Cx, Cy, Dx, Dy, 6, false)
+        );
+      });
+      const ids = App.doc.items.map((x) => x.id);
+      const r1 = Joints.add(ids[0], ids[1], [Ax, Ay, 3], [0, 0, 1]);
+      const r2 = Joints.add(ids[1], ids[2], [Bx, By, 9], [0, 0, 1]);
+      const r3 = Joints.add(ids[2], ids[3], [Cx, Cy, 9], [0, 0, 1]);
+      const r4 = Joints.add(ids[3], ids[0], [Dx, Dy, 3], [0, 0, 1]);
+      const okValid = Joints.setAngle(r1.id, 30);
+      const errValid = Math.max(...Joints.loopErrors().map((e) => e.posErr));
+      const okFail = Joints.setAngle(r1.id, 150);
+      const errAfter = Math.max(...Joints.loopErrors().map((e) => e.posErr));
+      return { okValid, errValid, okFail, errAfter, j1: r1.id, jamMsg: Joints.lastJam && Joints.lastJam.msg };
+    """)
+    p.wait(150)
+    toast_jam2 = p.pg.locator('#toasts').inner_text()
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    ang_undo = p.ev("return App.doc.joints[0].ang")
+    ok2 = (
+        jam_rocker is False
+        and 'Dieser Mechanismus klemmt hier' in toast_jam1
+        and after_jam['maxGap'] < 0.01
+        and ng['okValid'] is True
+        and ng['errValid'] < 0.01
+        and ng['okFail'] is False
+        and ng['errAfter'] < 0.01
+        and ng['jamMsg'] == 'Dieser Mechanismus klemmt hier'
+        and 'Dieser Mechanismus klemmt hier' in toast_jam2
+        and abs(ang_undo) < 0.01
+    )
+
+    # 3. Kurbeltrieb (R-R-R-P, L1=20, L2=50): analytische Kolbenposition bei 90° (sqrt(2100)) & 180° (30 mm) + Klemmen über Totpunkt
+    p.ev("Start.openNewTab(Model.newDoc('Kurbeltrieb'))")
+    p.wait(300)
+    cs = p.ev("""
+      const L1 = 20, L2 = 50;
+      const mkBar = (name, x1, y1, x2, y2, z, locked) => {
+        const it = Model.newItem('box', { w: Math.hypot(x2 - x1, y2 - y1), d: 6, h: 6 }, { name });
+        it.t.x = (x1 + x2) / 2; it.t.y = (y1 + y2) / 2; it.t.z = z;
+        if (locked) it.locked = true;
+        return it;
+      };
+      App.change('Kurbeltrieb', (doc) => {
+        const g = Model.newItem('box', { w: 120, d: 20, h: 6 }, { name: 'Schiene' });
+        g.t.x = 50; g.locked = true;
+        const k = mkBar('Kurbel', 0, 0, L1, 0, 6, false);
+        const p = mkBar('Pleuel', L1, 0, L1 + L2, 0, 12, false);
+        const s = Model.newItem('box', { w: 14, d: 12, h: 6 }, { name: 'Kolben' });
+        s.t.x = L1 + L2; s.t.z = 6;
+        doc.items.push(g, k, p, s);
+      });
+      const ids = App.doc.items.map((x) => x.id);
+      const r1 = Joints.add(ids[0], ids[1], [0, 0, 3], [0, 0, 1]);
+      const r2 = Joints.add(ids[1], ids[2], [20, 0, 9], [0, 0, 1]);
+      const r3 = Joints.add(ids[2], ids[3], [70, 0, 9], [0, 0, 1]);
+      const r4 = Joints.add(ids[0], ids[3], [70, 0, 3], [1, 0, 0], { kind: 'slide', min: -100, max: 100 });
+      const ok90 = Joints.setAngle(r1.id, 90);
+      const x90 = App.doc.items[3].t.x, y90 = App.doc.items[3].t.y;
+      const err90 = Math.max(...Joints.loopErrors().map((e) => e.posErr));
+      const ok180 = Joints.setAngle(r1.id, 180);
+      const x180 = App.doc.items[3].t.x, y180 = App.doc.items[3].t.y;
+      const err180 = Math.max(...Joints.loopErrors().map((e) => e.posErr));
+      const okPastDead = Joints.setState(r4.id, { ang: 20 });
+      const errAfter = Math.max(...Joints.loopErrors().map((e) => e.posErr));
+      return {
+        addOk: [r1.ok, r2.ok, r3.ok, r4.ok],
+        ok90, x90, y90, err90,
+        ok180, x180, y180, err180,
+        okPastDead, errAfter,
+      };
+    """)
+    p.wait(150)
+    toast_jam3 = p.pg.locator('#toasts').inner_text()
+    ok3 = (
+        cs['addOk'] == [True, True, True, True]
+        and cs['ok90'] is True
+        and abs(cs['x90'] - math.sqrt(2100)) < 0.01
+        and abs(cs['y90']) < 0.01
+        and cs['err90'] < 0.01
+        and cs['ok180'] is True
+        and abs(cs['x180'] - 30.0) < 0.01
+        and abs(cs['y180']) < 0.01
+        and cs['err180'] < 0.01
+        and cs['okPastDead'] is False
+        and cs['errAfter'] < 0.01
+        and 'Dieser Mechanismus klemmt hier' in toast_jam3
+    )
+
+    # 4. Einfach-Modus lehnt geschlossene Kreise ab; Live-Ziehen (applyDrag) & Abspielen im Profi-Modus
+    simple_rej = p.ev("""
+      ViewPrefs.setLevel('simple');
+      Start.openNewTab(Model.newDoc('EinfachKreis'));
+      const mk = (n, x1, y1, x2, y2, z, lk) => {
+        const it = Model.newItem('box', { w: Math.hypot(x2-x1, y2-y1), d: 6, h: 6 }, { name: n });
+        it.t.x = (x1+x2)/2; it.t.y = (y1+y2)/2; it.t.z = z;
+        it.t.rz = Math.atan2(y2-y1, x2-x1) * 180 / Math.PI;
+        if (lk) it.locked = true;
+        return it;
+      };
+      App.change('4bar', d => d.items.push(
+        mk('G', 0, 0, 60, 0, 0, true),
+        mk('K', 0, 0, 0, 20, 6, false),
+        mk('P', 0, 20, 45, 25, 12, false),
+        mk('S', 45, 25, 60, 0, 6, false)
+      ));
+      const ids = App.doc.items.map(x => x.id);
+      Joints.add(ids[0], ids[1], [0, 0, 3], [0, 0, 1]);
+      Joints.add(ids[1], ids[2], [0, 20, 9], [0, 0, 1]);
+      Joints.add(ids[2], ids[3], [45, 25, 9], [0, 0, 1]);
+      const r4 = Joints.add(ids[3], ids[0], [60, 0, 3], [0, 0, 1]);
+      ViewPrefs.setLevel('pro');
+      return r4;
+    """)
+    warte_rechnen(p, 20)
+    # Zurück zum ersten Tab (Grashof-Viergelenk) für applyDrag & play
+    p.ev("App.switchTab(App.tabs[0].tabId)")
+    p.wait(300)
+    drag_res = p.ev("""
+      const j1 = App.doc.joints[0].id;
+      const dctx = Joints.dragContext(App.doc, App.doc.items[1].id);
+      const st = Joints.applyDrag(j1, { ang: 135 });
+      const maxErr = Math.max(...Joints.loopErrors().map((e) => e.posErr));
+      const rev0 = App.revision;
+      Joints.play(j1);
+      const playing = !!Joints.playing;
+      return { closedCtx: !!(dctx && dctx.closedLoop), ang: st && st.ang, maxErr, playing, rev0 };
+    """)
+    p.wait(200)
+    rev1 = p.ev("Joints.stopPlay(); return App.revision;")
+    errs = p.ev("return App.errors.length")
+    ok4 = (
+        simple_rej['ok'] is False
+        and 'profi' in simple_rej['msg'].lower()
+        and drag_res['closedCtx'] is True
+        and abs(drag_res['ang'] - 135) < 0.01
+        and drag_res['maxErr'] < 0.01
+        and drag_res['playing'] is True
+        and rev1 == drag_res['rev0']
+        and errs == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -30115,6 +30373,7 @@ TESTS = [
     ('[A-150] Dateiformat offen beschreiben: DATEIFORMAT.md, Beispiel-Projekt gültig & kaputte Datei deutsch gemeldet (PL-12)', t_a150_dateiformat),
     ('[F-11251012] Volltest-Reparatur: Automatisches Raster bei rAF-Stau & Kamera-Schutz beim Neubau', t_f11251012),
     ('[A-152] Kopplungen: Schraube (2 mm/U), Riemen (20/40 Zähne) & linear (BG-14)', t_a152_kopplungen_schraube_riemen_linear),
+    ('[A-154] Geschlossene Mechanismen: Viergelenk, Kurbeltrieb & Klemmen (BG-16)', t_a154_geschlossene_mechanismen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

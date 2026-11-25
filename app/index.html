@@ -33581,10 +33581,12 @@ const Joints = (() => {
   function downstream(doc, rootId, opts = {}) {
     const js = list(doc), out = [], seen = new Set([rootId]);
     const stopAtLocked = !!(opts && opts.stopAtLocked);
+    const skipJointIds = opts && opts.skipJointIds;
     const q = [rootId];
     while (q.length) {
       const a = q.shift();
       for (const j of js) {
+        if (skipJointIds && skipJointIds.has(j.id)) continue;
         if (j.a === a && !seen.has(j.b)) {
           if (stopAtLocked) {
             const kb = top(j.b, doc);
@@ -33632,7 +33634,7 @@ const Joints = (() => {
   }
   // Hintere Glieder der Kette samt ihren Gelenkachsen um die Bewegung D mitnehmen
   function moveChain(doc, rootId, D, opts = {}) {
-    const ks = downstream(doc, rootId, { stopAtLocked: true }), moved = new Set([rootId, ...ks.map((k) => k.b)]);
+    const ks = downstream(doc, rootId, { stopAtLocked: true, skipJointIds: opts && opts.skipJointIds }), moved = new Set([rootId, ...ks.map((k) => k.b)]);
     const V = Model.vars(doc).v;
     for (const k of ks) {
       const kb = top(k.b, doc);
@@ -33690,6 +33692,18 @@ const Joints = (() => {
     if (!it) return { blocked: true, reason: 'missing', name: '' };
     if (it.locked) return { blocked: true, reason: 'grounded', name: Model.label(it) };
     if (isFixedPart(itemId, doc)) return { blocked: true, reason: 'fixed', name: Model.label(it) };
+    const core = cyclicCore(doc, itemId, false);
+    if (core && core.partIds.has(itemId)) {
+      const inc = core.joints.filter((k) => (k.a === itemId || k.b === itemId) && !isConstraint(k) && !isLoose(k));
+      if (inc.length) {
+        const mj0 = drivingOf(itemId, doc);
+        const bestJ = inc.find((k) => {
+          const other = top(k.a === itemId ? k.b : k.a, doc);
+          return !!(other && other.locked);
+        }) || (mj0 && inc.includes(mj0) ? mj0 : inc[0]);
+        return { blocked: false, mode: 'joint', joint: bestJ, kind: kindOf(bestJ), reverse: bestJ.a === itemId, itemId, closedLoop: true };
+      }
+    }
     const mj = drivingOf(itemId, doc);
     const groundedChildren = list(doc).filter((k) => k.a === itemId && !isLoose(k) && subtreeHasLocked(doc, k.b));
     if (groundedChildren.length > 1) return { blocked: true, reason: 'groundedChain', name: Model.label(it) };
@@ -33804,6 +33818,856 @@ const Joints = (() => {
       aW0: Model.worldMatrix(doc, A.id).clone(),
       sideChain: captureChain(doc, A.id, { excludeBranch: B.id }),
     };
+  }
+
+  // ---------- Geschlossene Mechanismen (BG-16) ----------
+  const JAM_MSG = 'Dieser Mechanismus klemmt hier';
+  const LOOP_POS_TOL = 0.005;
+  const LOOP_ANG_TOL = 0.002;
+  const LOOP_ROT_SCALE = 50;
+  let lastJam = null, lastJamToastAt = 0;
+
+  function notifyJam(info, throttle = false) {
+    lastJam = { ...(info || {}), msg: JAM_MSG, time: Date.now() };
+    const now = Date.now();
+    if (!throttle || now - lastJamToastAt > 1200) {
+      UI.toast(JAM_MSG, { kind: 'bad' });
+      lastJamToastAt = now;
+    }
+  }
+
+  function jointDof(kind) {
+    if (kind === 'fixed' || kind === 'angle' || kind === 'center') return 0;
+    if (kind === 'cyl' || kind === 'slot') return 2;
+    if (kind === 'planar' || kind === 'ball') return 3;
+    return 1;
+  }
+
+  function directlyConnected(doc, idA, idB) {
+    return list(doc).some((j) => !isLoose(j) && ((j.a === idA && j.b === idB) || (j.a === idB && j.b === idA)));
+  }
+
+  function minDofPath(doc, idA, idB) {
+    const js = list(doc).filter((j) => !isLoose(j));
+    const adj = new Map();
+    for (const j of js) {
+      if (!adj.has(j.a)) adj.set(j.a, []);
+      if (!adj.has(j.b)) adj.set(j.b, []);
+      const w = jointDof(kindOf(j));
+      adj.get(j.a).push({ to: j.b, w });
+      adj.get(j.b).push({ to: j.a, w });
+    }
+    const dist = new Map([[idA, { dof: 0, edges: 0 }]]);
+    const done = new Set();
+    const pq = [{ id: idA, dof: 0, edges: 0 }];
+    while (pq.length) {
+      pq.sort((x, y) => x.dof - y.dof || x.edges - y.edges);
+      const cur = pq.shift();
+      if (done.has(cur.id)) continue;
+      done.add(cur.id);
+      if (cur.id === idB) return { found: true, edges: cur.edges, dofSum: cur.dof };
+      for (const e of adj.get(cur.id) || []) {
+        if (done.has(e.to)) continue;
+        const nd = cur.dof + e.w, ne = cur.edges + 1;
+        const prev = dist.get(e.to);
+        if (!prev || nd < prev.dof || (nd === prev.dof && ne < prev.edges)) {
+          dist.set(e.to, { dof: nd, edges: ne });
+          pq.push({ id: e.to, dof: nd, edges: ne });
+        }
+      }
+    }
+    return { found: false, edges: 0, dofSum: 0 };
+  }
+
+  function canAddKinematicJoint(doc, A, B, kind) {
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile für die Verbindung.' };
+    const why = refuse(doc, A, B); if (why) return { ok: false, msg: why };
+    if (A.locked && B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }), locked: true };
+    if (!connected(doc, A.id, B.id)) {
+      if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }), locked: true };
+      if (list(doc).some((j) => j.b === B.id && !isLoose(j))) {
+        return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+      }
+      return { ok: true, closing: false };
+    }
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      return { ok: false, msg: 'Das ergäbe einen Kreis – geschlossene Mechanismen gibt es im Profi-Modus.' };
+    }
+    if (directlyConnected(doc, A.id, B.id)) {
+      return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon direkt verbunden – das ergäbe einen Kreis.` };
+    }
+    const path = minDofPath(doc, A.id, B.id);
+    if (!path.found || path.edges < 2 || path.dofSum + jointDof(kind) < 4) {
+      return { ok: false, msg: 'Das ergäbe einen starren Kreis ohne Bewegung – für einen geschlossenen Mechanismus (z. B. Viergelenk oder Kurbeltrieb) braucht der Kreis mindestens 4 Freiheitsgrade.' };
+    }
+    return { ok: true, closing: true };
+  }
+
+  function kinComponent(doc, seedId, isJointId = false) {
+    const js = list(doc).filter((j) => !isLoose(j));
+    let startPart = seedId;
+    if (isJointId) {
+      const sj = js.find((x) => x.id === seedId);
+      if (!sj) return { partIds: new Set(), joints: [] };
+      startPart = sj.a;
+    }
+    const partIds = new Set([startPart]);
+    const q = [startPart];
+    while (q.length) {
+      const x = q.shift();
+      for (const j of js) {
+        if (j.a === x && !partIds.has(j.b)) { partIds.add(j.b); q.push(j.b); }
+        if (j.b === x && !partIds.has(j.a)) { partIds.add(j.a); q.push(j.a); }
+      }
+    }
+    const joints = js.filter((j) => partIds.has(j.a) && partIds.has(j.b));
+    return { partIds, joints };
+  }
+
+  function cyclicCore(doc, seedId, isJointId = false) {
+    const comp = kinComponent(doc, seedId, isJointId);
+    if (comp.joints.length < 3 || comp.joints.length < comp.partIds.size) return null;
+    const activeParts = new Set(comp.partIds);
+    let activeJoints = comp.joints.slice();
+    const peeledParts = new Set();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const deg = new Map();
+      for (const p of activeParts) deg.set(p, 0);
+      for (const j of activeJoints) {
+        deg.set(j.a, (deg.get(j.a) || 0) + 1);
+        deg.set(j.b, (deg.get(j.b) || 0) + 1);
+      }
+      for (const p of [...activeParts]) {
+        const it = top(p, doc);
+        if ((deg.get(p) || 0) <= 1 && !(it && it.locked)) {
+          activeParts.delete(p);
+          peeledParts.add(p);
+          activeJoints = activeJoints.filter((j) => j.a !== p && j.b !== p);
+          changed = true;
+        }
+      }
+    }
+    if (activeJoints.length < 3 || activeJoints.length < activeParts.size) return null;
+    if (isJointId && !activeJoints.some((j) => j.id === seedId)) return null;
+    return { partIds: activeParts, joints: activeJoints, peeledParts };
+  }
+
+  function isInClosedLoop(doc, jid) {
+    return !!cyclicCore(doc || App.doc, jid, true);
+  }
+  function isPartInClosedLoop(doc, itemId) {
+    const c = cyclicCore(doc || App.doc, itemId, false);
+    return !!(c && c.partIds.has(itemId));
+  }
+
+  function mat4ToPose(M) {
+    const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    M.decompose(p, q, s);
+    return { p, q: q.normalize() };
+  }
+  function poseToMat4(ps) {
+    return new THREE.Matrix4().compose(ps.p, ps.q, new THREE.Vector3(1, 1, 1));
+  }
+  function vecTransformPose(v, ps) {
+    return v.clone().applyQuaternion(ps.q).add(ps.p);
+  }
+  function dirTransformPose(v, ps) {
+    return v.clone().applyQuaternion(ps.q).normalize();
+  }
+
+  function captureLocalFrames(doc, j, explicit = null) {
+    if (!j || isLoose(j)) return null;
+    const Wa = Model.worldMatrix(doc, j.a), Wb = Model.worldMatrix(doc, j.b);
+    const invWa = Wa.clone().invert(), invWb = Wb.clone().invert();
+    let oAw, dAw, uAw, oBw, dBw, uBw;
+    if (explicit) {
+      oAw = explicit.oA.clone();
+      dAw = explicit.dA.clone().normalize();
+      uAw = planeBasis(dAw, explicit.uA || null).u;
+      oBw = explicit.oB.clone();
+      dBw = explicit.dB.clone().normalize();
+      uBw = planeBasis(dBw, explicit.uB || null).u;
+    } else {
+      oAw = new THREE.Vector3(...(j.ao || [0, 0, 0]));
+      dAw = new THREE.Vector3(...(j.ad || [0, 0, 1])).normalize();
+      uAw = planeBasis(dAw, Array.isArray(j.au) ? new THREE.Vector3(...j.au) : null).u;
+      const Trel = stateMatrix(j, stateOf(j));
+      oBw = oAw.clone().applyMatrix4(Trel);
+      dBw = dAw.clone().transformDirection(Trel).normalize();
+      uBw = uAw.clone().transformDirection(Trel).normalize();
+    }
+    j.locA = {
+      o: r6(oAw.clone().applyMatrix4(invWa).toArray()),
+      d: r9(dAw.clone().transformDirection(invWa).normalize().toArray()),
+      u: r9(uAw.clone().transformDirection(invWa).normalize().toArray()),
+    };
+    j.locB = {
+      o: r6(oBw.clone().applyMatrix4(invWb).toArray()),
+      d: r9(dBw.clone().transformDirection(invWb).normalize().toArray()),
+      u: r9(uBw.clone().transformDirection(invWb).normalize().toArray()),
+    };
+    return j;
+  }
+
+  function ensureLocalFrames(doc, joints) {
+    for (const j of joints) {
+      if (!j.locA || !j.locB) captureLocalFrames(doc, j);
+    }
+  }
+
+  function worldJointFrames(j, poseA, poseB) {
+    const la = j.locA, lb = j.locB;
+    const PA = vecTransformPose(new THREE.Vector3(...la.o), poseA);
+    const DA = dirTransformPose(new THREE.Vector3(...la.d), poseA);
+    const UA = planeBasis(DA, dirTransformPose(new THREE.Vector3(...la.u), poseA)).u;
+    const VA = new THREE.Vector3().crossVectors(DA, UA).normalize();
+    const PB = vecTransformPose(new THREE.Vector3(...lb.o), poseB);
+    const DB = dirTransformPose(new THREE.Vector3(...lb.d), poseB);
+    const UB = planeBasis(DB, dirTransformPose(new THREE.Vector3(...lb.u), poseB)).u;
+    const VB = new THREE.Vector3().crossVectors(DB, UB).normalize();
+    return { PA, DA, UA, VA, PB, DB, UB, VB };
+  }
+
+  function unwrapDegNear(deg, refDeg) {
+    if (!Number.isFinite(refDeg)) return deg;
+    let d = deg;
+    while (d - refDeg > 180) d -= 360;
+    while (d - refDeg < -180) d += 360;
+    return d;
+  }
+
+  function extractJointState(j, poseA, poseB, prevSt = null) {
+    const k = kindOf(j);
+    const prev = prevSt || stateOf(j);
+    const fr = worldJointFrames(j, poseA, poseB);
+    const dp = fr.PB.clone().sub(fr.PA);
+    const out = { ...prev };
+    if (k === 'rot') {
+      const ang = (Math.atan2(fr.UB.dot(fr.VA), fr.UB.dot(fr.UA)) * 180) / Math.PI;
+      out.ang = round(unwrapDegNear(ang, prev.ang), 4);
+    } else if (k === 'slide') {
+      out.ang = round(dp.dot(fr.DA), 4);
+    } else if (k === 'cyl') {
+      out.pos = round(dp.dot(fr.DA), 4);
+      const ang = (Math.atan2(fr.UB.dot(fr.VA), fr.UB.dot(fr.UA)) * 180) / Math.PI;
+      out.ang = round(unwrapDegNear(ang, prev.ang), 4);
+    } else if (k === 'planar') {
+      out.u = round(dp.dot(fr.UA), 4);
+      out.v = round(dp.dot(fr.VA), 4);
+      const ang = (Math.atan2(fr.UB.dot(fr.VA), fr.UB.dot(fr.UA)) * 180) / Math.PI;
+      out.ang = round(unwrapDegNear(ang, prev.ang), 4);
+    } else if (k === 'ball') {
+      const FA = new THREE.Matrix4().makeBasis(fr.UA, fr.VA, fr.DA);
+      const FB = new THREE.Matrix4().makeBasis(fr.UB, fr.VB, fr.DB);
+      const Rloc = FA.clone().transpose().multiply(FB);
+      const e = new THREE.Euler().setFromRotationMatrix(Rloc, 'XYZ');
+      const toD = (rad, ref) => round(unwrapDegNear((rad * 180) / Math.PI, ref), 4);
+      out.rx = toD(e.x, prev.rx);
+      out.ry = toD(e.y, prev.ry);
+      out.ang = toD(e.z, prev.ang);
+    } else if (k === 'slot') {
+      out.pos = round(dp.dot(fr.DA), 4);
+      const vaRot = new THREE.Vector3().crossVectors(fr.UA, fr.DA).normalize();
+      const ang = (Math.atan2(fr.DB.dot(vaRot), fr.DB.dot(fr.DA)) * 180) / Math.PI;
+      out.ang = round(unwrapDegNear(ang, prev.ang), 4);
+    }
+    return out;
+  }
+
+  function jointGapError(doc, j, posesOpt = null) {
+    if (!j || isLoose(j)) return { posErr: 0, angErr: 0, ok: true };
+    const pA = posesOpt ? posesOpt.get(j.a) : mat4ToPose(Model.worldMatrix(doc, j.a));
+    const pB = posesOpt ? posesOpt.get(j.b) : mat4ToPose(Model.worldMatrix(doc, j.b));
+    if (!pA || !pB) return { posErr: 0, angErr: 0, ok: true };
+    if (!j.locA || !j.locB) captureLocalFrames(doc, j);
+    const fr = worldJointFrames(j, pA, pB);
+    const dp = fr.PB.clone().sub(fr.PA);
+    const k = kindOf(j);
+    let posErr = 0, angErr = 0;
+    if (k === 'rot') {
+      posErr = dp.length();
+      angErr = Math.acos(clamp(fr.DB.dot(fr.DA), -1, 1));
+    } else if (k === 'slide') {
+      posErr = Math.hypot(dp.dot(fr.UA), dp.dot(fr.VA));
+      const a1 = Math.acos(clamp(fr.DB.dot(fr.DA), -1, 1));
+      const a2 = Math.abs(Math.atan2(fr.UB.dot(fr.VA), fr.UB.dot(fr.UA)));
+      angErr = Math.max(a1, a2);
+    } else if (k === 'cyl') {
+      posErr = Math.hypot(dp.dot(fr.UA), dp.dot(fr.VA));
+      angErr = Math.acos(clamp(fr.DB.dot(fr.DA), -1, 1));
+    } else if (k === 'planar') {
+      posErr = Math.abs(dp.dot(fr.DA));
+      angErr = Math.acos(clamp(fr.DB.dot(fr.DA), -1, 1));
+    } else if (k === 'ball') {
+      posErr = dp.length();
+    } else if (k === 'slot') {
+      posErr = Math.hypot(dp.dot(fr.UA), dp.dot(fr.VA));
+      angErr = Math.acos(clamp(fr.UB.dot(fr.UA), -1, 1));
+    } else if (k === 'fixed') {
+      posErr = dp.length();
+      const a1 = Math.acos(clamp(fr.DB.dot(fr.DA), -1, 1));
+      const a2 = Math.abs(Math.atan2(fr.UB.dot(fr.VA), fr.UB.dot(fr.UA)));
+      angErr = Math.max(a1, a2);
+    }
+    return {
+      posErr: round(posErr, 6),
+      angErr: round(angErr, 6),
+      ok: posErr <= LOOP_POS_TOL && angErr <= LOOP_ANG_TOL,
+    };
+  }
+
+  function solveSPD(A, b, n) {
+    const L = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j <= i; j++) {
+        let s = A[i * n + j];
+        for (let k = 0; k < j; k++) s -= L[i * n + k] * L[j * n + k];
+        if (i === j) {
+          if (!(s > 1e-18)) return null;
+          L[i * n + j] = Math.sqrt(s);
+        } else {
+          L[i * n + j] = s / L[j * n + j];
+        }
+      }
+    }
+    const y = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let s = b[i];
+      for (let k = 0; k < i; k++) s -= L[i * n + k] * y[k];
+      y[i] = s / L[i * n + i];
+    }
+    const x = new Float64Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      let s = y[i];
+      for (let k = i + 1; k < n; k++) s -= L[k * n + i] * x[k];
+      x[i] = s / L[i * n + i];
+    }
+    return x;
+  }
+
+  function buildResidualAndJacobian(core, poses, bodyIdx, driveMap) {
+    const nFree = bodyIdx.size;
+    const N = 6 * nFree;
+    const rows = [];
+    const L = LOOP_ROT_SCALE;
+
+    const pushRow = (val, colA, gTA, gWA, colB, gTB, gWB) => {
+      const row = new Float64Array(N + 1);
+      row[N] = val;
+      if (colA >= 0) {
+        if (gTA) { row[colA] += gTA.x; row[colA + 1] += gTA.y; row[colA + 2] += gTA.z; }
+        if (gWA) { row[colA + 3] += gWA.x; row[colA + 4] += gWA.y; row[colA + 5] += gWA.z; }
+      }
+      if (colB >= 0) {
+        if (gTB) { row[colB] += gTB.x; row[colB + 1] += gTB.y; row[colB + 2] += gTB.z; }
+        if (gWB) { row[colB + 3] += gWB.x; row[colB + 4] += gWB.y; row[colB + 5] += gWB.z; }
+      }
+      rows.push(row);
+    };
+
+    for (const j of core.joints) {
+      const pA = poses.get(j.a), pB = poses.get(j.b);
+      const colA = bodyIdx.has(j.a) ? bodyIdx.get(j.a) * 6 : -1;
+      const colB = bodyIdx.has(j.b) ? bodyIdx.get(j.b) * 6 : -1;
+      const fr = worldJointFrames(j, pA, pB);
+      const rA = fr.PA.clone().sub(pA.p);
+      const rB = fr.PB.clone().sub(pB.p);
+      const dp = fr.PB.clone().sub(fr.PA);
+      const pbMinPa = fr.PB.clone().sub(pA.p);
+
+      const addPointCoincide = () => {
+        const e1 = new THREE.Vector3(1, 0, 0), e2 = new THREE.Vector3(0, 1, 0), e3 = new THREE.Vector3(0, 0, 1);
+        pushRow(dp.x, colA, new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, -rA.z, rA.y), colB, e1, new THREE.Vector3(0, rB.z, -rB.y));
+        pushRow(dp.y, colA, new THREE.Vector3(0, -1, 0), new THREE.Vector3(rA.z, 0, -rA.x), colB, e2, new THREE.Vector3(-rB.z, 0, rB.x));
+        pushRow(dp.z, colA, new THREE.Vector3(0, 0, -1), new THREE.Vector3(-rA.y, rA.x, 0), colB, e3, new THREE.Vector3(rB.y, -rB.x, 0));
+      };
+      const addProjA = (axisA, target = 0) => {
+        const val = dp.dot(axisA) - target;
+        const gTA = axisA.clone().negate();
+        const gWA = new THREE.Vector3().crossVectors(axisA, pbMinPa);
+        const gTB = axisA;
+        const gWB = new THREE.Vector3().crossVectors(rB, axisA);
+        pushRow(val, colA, gTA, gWA, colB, gTB, gWB);
+      };
+      const addDot = (vecA, vecB) => {
+        const val = L * vecB.dot(vecA);
+        const gWA = new THREE.Vector3().crossVectors(vecA, vecB).multiplyScalar(L);
+        const gWB = new THREE.Vector3().crossVectors(vecB, vecA).multiplyScalar(L);
+        pushRow(val, colA, null, gWA, colB, null, gWB);
+      };
+      const addAngleAround = (refA0, refA90, vecB, deg) => {
+        const rad = (deg * Math.PI) / 180;
+        const cs = Math.cos(rad), sn = Math.sin(rad);
+        const tgt0 = refA0.clone().multiplyScalar(cs).addScaledVector(refA90, sn);
+        const tgt90 = refA0.clone().multiplyScalar(-sn).addScaledVector(refA90, cs);
+        const c = vecB.dot(tgt0), s = vecB.dot(tgt90);
+        const val = L * Math.atan2(s, c);
+        const n2 = c * c + s * s;
+        if (n2 > 1e-8) {
+          const w = tgt90.clone().multiplyScalar(c).addScaledVector(tgt0, -s);
+          const gWB = new THREE.Vector3().crossVectors(vecB, w).multiplyScalar(L / n2);
+          const gWA = gWB.clone().negate();
+          pushRow(val, colA, null, gWA, colB, null, gWB);
+        } else {
+          pushRow(val, colA, null, null, colB, null, null);
+        }
+      };
+
+      const k = kindOf(j);
+      const drv = driveMap ? driveMap.get(j.id) : null;
+      if (k === 'rot') {
+        addPointCoincide();
+        addDot(fr.UA, fr.DB);
+        addDot(fr.VA, fr.DB);
+        if (drv && 'ang' in drv) addAngleAround(fr.UA, fr.VA, fr.UB, drv.ang);
+      } else if (k === 'slide') {
+        addProjA(fr.UA, 0);
+        addProjA(fr.VA, 0);
+        addDot(fr.UA, fr.DB);
+        addDot(fr.VA, fr.DB);
+        addAngleAround(fr.UA, fr.VA, fr.UB, 0);
+        if (drv && 'ang' in drv) addProjA(fr.DA, drv.ang);
+      } else if (k === 'cyl') {
+        addProjA(fr.UA, 0);
+        addProjA(fr.VA, 0);
+        addDot(fr.UA, fr.DB);
+        addDot(fr.VA, fr.DB);
+        if (drv && 'pos' in drv) addProjA(fr.DA, drv.pos);
+        if (drv && 'ang' in drv) addAngleAround(fr.UA, fr.VA, fr.UB, drv.ang);
+      } else if (k === 'planar') {
+        addProjA(fr.DA, 0);
+        addDot(fr.UA, fr.DB);
+        addDot(fr.VA, fr.DB);
+        if (drv && 'u' in drv) addProjA(fr.UA, drv.u);
+        if (drv && 'v' in drv) addProjA(fr.VA, drv.v);
+        if (drv && 'ang' in drv) addAngleAround(fr.UA, fr.VA, fr.UB, drv.ang);
+      } else if (k === 'ball') {
+        addPointCoincide();
+        if (drv && 'rx' in drv && 'ry' in drv && 'ang' in drv) {
+          const Rloc = new THREE.Matrix4().makeRotationFromEuler(
+            new THREE.Euler((drv.rx * Math.PI) / 180, (drv.ry * Math.PI) / 180, (drv.ang * Math.PI) / 180, 'XYZ')
+          );
+          const FA = new THREE.Matrix4().makeBasis(fr.UA, fr.VA, fr.DA);
+          const Ftgt = FA.multiply(Rloc);
+          const Ut = new THREE.Vector3().setFromMatrixColumn(Ftgt, 0).normalize();
+          const Vt = new THREE.Vector3().setFromMatrixColumn(Ftgt, 1).normalize();
+          addDot(Ut, fr.DB);
+          addDot(Vt, fr.DB);
+          addAngleAround(Ut, Vt, fr.UB, 0);
+        } else {
+          if (drv && 'ry' in drv) {
+            const val = L * (fr.UA.dot(fr.DB) - Math.sin((drv.ry * Math.PI) / 180));
+            const gWA = new THREE.Vector3().crossVectors(fr.UA, fr.DB).multiplyScalar(L);
+            const gWB = new THREE.Vector3().crossVectors(fr.DB, fr.UA).multiplyScalar(L);
+            pushRow(val, colA, null, gWA, colB, null, gWB);
+          }
+          if (drv && 'rx' in drv) addAngleAround(fr.DA, fr.VA.clone().negate(), fr.DB, drv.rx);
+          if (drv && 'ang' in drv) addAngleAround(fr.UA, fr.VA, fr.UB, drv.ang);
+        }
+      } else if (k === 'slot') {
+        addProjA(fr.UA, 0);
+        addProjA(fr.VA, 0);
+        addDot(fr.DA, fr.UB);
+        addDot(fr.VA, fr.UB);
+        if (drv && 'pos' in drv) addProjA(fr.DA, drv.pos);
+        if (drv && 'ang' in drv) {
+          const vaRot = new THREE.Vector3().crossVectors(fr.UA, fr.DA).normalize();
+          addAngleAround(fr.DA, vaRot, fr.DB, drv.ang);
+        }
+      } else if (k === 'fixed') {
+        addPointCoincide();
+        addDot(fr.UA, fr.DB);
+        addDot(fr.VA, fr.DB);
+        addAngleAround(fr.UA, fr.VA, fr.UB, 0);
+      }
+    }
+
+    const m = rows.length;
+    const J = new Float64Array(m * N);
+    const r = new Float64Array(m);
+    for (let i = 0; i < m; i++) {
+      const rw = rows[i];
+      J.set(rw.subarray(0, N), i * N);
+      r[i] = rw[N];
+    }
+    return { m, N, J, r };
+  }
+
+  function applyStepToPoses(poses, bodyIdx, dx, scale = 1) {
+    const out = new Map();
+    for (const [id, ps] of poses) out.set(id, { p: ps.p.clone(), q: ps.q.clone() });
+    let s = scale;
+    let maxT = 0, maxW = 0;
+    for (const bi of bodyIdx.values()) {
+      const o = bi * 6;
+      maxT = Math.max(maxT, Math.hypot(dx[o] * s, dx[o + 1] * s, dx[o + 2] * s));
+      maxW = Math.max(maxW, Math.hypot(dx[o + 3] * s, dx[o + 4] * s, dx[o + 5] * s));
+    }
+    if (maxW > 0.35) s *= 0.35 / maxW;
+    if (maxT > 20) s *= 20 / maxT;
+    for (const [id, bi] of bodyIdx) {
+      const o = bi * 6;
+      const ps = out.get(id);
+      ps.p.x += dx[o] * s;
+      ps.p.y += dx[o + 1] * s;
+      ps.p.z += dx[o + 2] * s;
+      const wx = dx[o + 3] * s, wy = dx[o + 4] * s, wz = dx[o + 5] * s;
+      const ang = Math.hypot(wx, wy, wz);
+      if (ang > 1e-12) {
+        const dq = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(wx / ang, wy / ang, wz / ang), ang);
+        ps.q.premultiply(dq).normalize();
+      }
+    }
+    return out;
+  }
+
+  function verifyCorePoses(doc, core, poses, driveMap, refStates = null) {
+    for (const j of core.joints) {
+      const pA = poses.get(j.a), pB = poses.get(j.b);
+      if (!pA || !pB) return false;
+      const fr = worldJointFrames(j, pA, pB);
+      const gap = jointGapError(doc, j, poses);
+      if (!gap.ok) return false;
+      const k = kindOf(j);
+      if ((k === 'rot' || k === 'slide' || k === 'cyl' || k === 'planar' || k === 'fixed') && fr.DB.dot(fr.DA) < 0.999) return false;
+      if (k === 'slot' && fr.UB.dot(fr.UA) < 0.999) return false;
+      const st = extractJointState(j, pA, pB, refStates ? refStates.get(j.id) : null);
+      const drv = driveMap ? driveMap.get(j.id) : null;
+      if (drv) {
+        for (const [d, tgt] of Object.entries(drv)) {
+          const isLin = isLenDof(j, d);
+          const diff = isLin ? Math.abs(st[d] - tgt) : Math.abs(unwrapDegNear(st[d], tgt) - tgt) * (Math.PI / 180);
+          if (diff > (isLin ? LOOP_POS_TOL : LOOP_ANG_TOL)) return false;
+        }
+      }
+      if (j.stopsLocked) {
+        for (const d of ['ang', 'pos', 'u', 'v', 'rx', 'ry']) {
+          if (!hasDof(j, d)) continue;
+          const [loK, hiK, dLo, dHi] = rangeKeysFor(j, d);
+          const lo = Number.isFinite(j[loK]) ? j[loK] : dLo;
+          const hi = Number.isFinite(j[hiK]) ? j[hiK] : dHi;
+          const eps = isLenDof(j, d) ? 0.005 : 0.05;
+          if (st[d] < lo - eps || st[d] > hi + eps) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function solveLM(doc, core, initPoses, bodyIdx, driveMap, refStates = null) {
+    let poses = new Map();
+    for (const [id, ps] of initPoses) poses.set(id, { p: ps.p.clone(), q: ps.q.clone() });
+    const nFree = bodyIdx.size;
+    if (nFree === 0) return verifyCorePoses(doc, core, poses, driveMap, refStates) ? { ok: true, poses } : { ok: false };
+    const N = 6 * nFree;
+    let lambda = 1e-5;
+    let cur = buildResidualAndJacobian(core, poses, bodyIdx, driveMap);
+    let cost = 0;
+    let maxAbs = 0;
+    for (let i = 0; i < cur.m; i++) {
+      cost += cur.r[i] * cur.r[i];
+      maxAbs = Math.max(maxAbs, Math.abs(cur.r[i]));
+    }
+    const A = new Float64Array(N * N);
+    const g = new Float64Array(N);
+    for (let iter = 0; iter < 50; iter++) {
+      if (maxAbs < 1e-7) break;
+      A.fill(0);
+      g.fill(0);
+      const { m, J, r } = cur;
+      for (let row = 0; row < m; row++) {
+        const ro = row * N;
+        const rv = r[row];
+        for (let i = 0; i < N; i++) {
+          const jri = J[ro + i];
+          if (jri === 0) continue;
+          g[i] -= jri * rv;
+          for (let k = i; k < N; k++) A[i * N + k] += jri * J[ro + k];
+        }
+      }
+      for (let i = 0; i < N; i++) {
+        for (let k = 0; k < i; k++) A[i * N + k] = A[k * N + i];
+        A[i * N + i] += lambda * Math.max(1, A[i * N + i]);
+      }
+      const dx = solveSPD(A, g, N);
+      if (!dx) {
+        lambda *= 10;
+        if (lambda > 1e7) break;
+        continue;
+      }
+      let dxNorm = 0;
+      for (let i = 0; i < N; i++) dxNorm += dx[i] * dx[i];
+      if (dxNorm < 1e-20 && maxAbs < 1e-4) break;
+      const candPoses = applyStepToPoses(poses, bodyIdx, dx, 1);
+      const cand = buildResidualAndJacobian(core, candPoses, bodyIdx, driveMap);
+      let candCost = 0, candMax = 0;
+      for (let i = 0; i < cand.m; i++) {
+        candCost += cand.r[i] * cand.r[i];
+        candMax = Math.max(candMax, Math.abs(cand.r[i]));
+      }
+      if (candCost < cost) {
+        poses = candPoses;
+        cur = cand;
+        cost = candCost;
+        maxAbs = candMax;
+        lambda = Math.max(1e-10, lambda / 5);
+        if (maxAbs < 1e-7) break;
+      } else {
+        lambda *= 10;
+        if (lambda > 1e7) break;
+      }
+    }
+    if (!verifyCorePoses(doc, core, poses, driveMap, refStates)) return { ok: false };
+    return { ok: true, poses };
+  }
+
+  function makeDriveMapForT(driveJoint, driveDofs, fromSt, toSt, t, extraTargets = null) {
+    const dm = new Map();
+    if (driveJoint && driveDofs && driveDofs.length) {
+      const obj = {};
+      for (const d of driveDofs) {
+        const a = Number(fromSt[d]) || 0, b = Number(toSt[d]) || 0;
+        obj[d] = a + (b - a) * t;
+      }
+      dm.set(driveJoint.id, obj);
+    }
+    if (extraTargets && extraTargets.length) {
+      for (const et of extraTargets) {
+        const obj = dm.get(et.jid) || {};
+        for (const d of et.dofs) {
+          const a = Number(et.fromSt[d]) || 0, b = Number(et.toSt[d]) || 0;
+          obj[d] = a + (b - a) * t;
+        }
+        dm.set(et.jid, obj);
+      }
+    }
+    return dm;
+  }
+
+  function predictPoses(poses, prevPoses, ratio = 1) {
+    if (!prevPoses) return poses;
+    const out = new Map();
+    for (const [id, ps] of poses) {
+      const pp = prevPoses.get(id);
+      if (!pp) { out.set(id, { p: ps.p.clone(), q: ps.q.clone() }); continue; }
+      const dp = ps.p.clone().sub(pp.p).multiplyScalar(ratio);
+      const dq = ps.q.clone().multiply(pp.q.clone().invert()).normalize();
+      const axis = new THREE.Vector3(dq.x, dq.y, dq.z);
+      const len = axis.length();
+      let dqScaled = new THREE.Quaternion();
+      if (len > 1e-10) {
+        const halfAng = Math.atan2(len, dq.w);
+        const ang = 2 * halfAng * ratio;
+        if (Math.abs(ang) > 1e-10 && Math.abs(ang) < 0.7) {
+          dqScaled.setFromAxisAngle(axis.divideScalar(len), ang);
+        }
+      }
+      out.set(id, {
+        p: ps.p.clone().add(dp),
+        q: dqScaled.multiply(ps.q).normalize(),
+      });
+    }
+    return out;
+  }
+
+  function solveClosedPoses(doc, core, driveJoint, driveDofs, fromSt, toSt, opts = {}) {
+    ensureLocalFrames(doc, core.joints);
+    const fixedIds = new Set();
+    for (const id of core.partIds) {
+      const it = top(id, doc);
+      if (it && it.locked) fixedIds.add(id);
+    }
+    if (!fixedIds.size) {
+      const anchor = (driveJoint && core.partIds.has(driveJoint.a) && driveJoint.a) || [...core.partIds][0];
+      if (anchor) fixedIds.add(anchor);
+    }
+    const bodyIdx = new Map();
+    let idx = 0;
+    for (const id of core.partIds) {
+      if (!fixedIds.has(id)) bodyIdx.set(id, idx++);
+    }
+
+    const startPoses = new Map();
+    for (const id of core.partIds) {
+      if (opts.startPoses && opts.startPoses.has(id)) {
+        const sp = opts.startPoses.get(id);
+        startPoses.set(id, { p: sp.p.clone(), q: sp.q.clone() });
+      } else {
+        startPoses.set(id, mat4ToPose(Model.worldMatrix(doc, id)));
+      }
+    }
+
+    const extraTargets = opts.extraTargets || null;
+    let steps = 1;
+    if (driveJoint && driveDofs && driveDofs.length && fromSt && toSt) {
+      for (const d of driveDofs) {
+        const delta = Math.abs((Number(toSt[d]) || 0) - (Number(fromSt[d]) || 0));
+        const stepSize = isLenDof(driveJoint, d) ? 4 : 8;
+        steps = Math.max(steps, Math.ceil(delta / stepSize));
+      }
+    }
+    if (extraTargets) {
+      for (const et of extraTargets) {
+        const ej = core.joints.find((x) => x.id === et.jid);
+        if (!ej) continue;
+        for (const d of et.dofs) {
+          const delta = Math.abs((Number(et.toSt[d]) || 0) - (Number(et.fromSt[d]) || 0));
+          const stepSize = isLenDof(ej, d) ? 4 : 8;
+          steps = Math.max(steps, Math.ceil(delta / stepSize));
+        }
+      }
+    }
+    steps = clamp(steps, 1, 180);
+
+    let curPoses = startPoses;
+    let prevPoses = null;
+    let prevStepDt = 1 / steps;
+    let lastValidT = 0;
+    const refStates = new Map();
+    for (const j of core.joints) refStates.set(j.id, stateOf(j));
+
+    const updateRefs = (poses) => {
+      for (const j of core.joints) {
+        const pA = poses.get(j.a), pB = poses.get(j.b);
+        if (pA && pB) refStates.set(j.id, extractJointState(j, pA, pB, refStates.get(j.id)));
+      }
+    };
+
+    const seedMovedBody = (poses, t0, t1) => {
+      if (!driveJoint || !driveDofs || !driveDofs.length || !fromSt || !toSt) return poses;
+      const dPatch = {};
+      for (const d of driveDofs) {
+        const a = Number(fromSt[d]) || 0, b = Number(toSt[d]) || 0;
+        dPatch[d] = (b - a) * (t1 - t0);
+      }
+      const aFixed = fixedIds.has(driveJoint.a), bFree = bodyIdx.has(driveJoint.b);
+      if (aFixed && bFree) {
+        const fr = worldJointFrames(driveJoint, poses.get(driveJoint.a), poses.get(driveJoint.b));
+        const jTmp = {
+          kind: driveJoint.kind,
+          ao: fr.PA.toArray(),
+          ad: fr.DA.toArray(),
+          au: fr.UA.toArray(),
+        };
+        const dSt = { ang: 0, pos: 0, u: 0, v: 0, rx: 0, ry: 0, ...dPatch };
+        const D = stateMatrix(jTmp, dSt);
+        const out = new Map();
+        for (const [id, ps] of poses) {
+          if (id === driveJoint.b) out.set(id, mat4ToPose(D.clone().multiply(poseToMat4(ps))));
+          else out.set(id, { p: ps.p.clone(), q: ps.q.clone() });
+        }
+        return out;
+      }
+      return poses;
+    };
+
+    const solveInterval = (t0, t1, depth) => {
+      const dm = makeDriveMapForT(driveJoint, driveDofs, fromSt, toSt, t1, extraTargets);
+      const ratio = prevPoses ? (t1 - t0) / Math.max(1e-6, prevStepDt) : 1;
+      const guess = prevPoses ? predictPoses(curPoses, prevPoses, ratio) : seedMovedBody(curPoses, t0, t1);
+      let res = solveLM(doc, core, guess, bodyIdx, dm, refStates);
+      if (!res.ok && prevPoses) {
+        res = solveLM(doc, core, curPoses, bodyIdx, dm, refStates);
+      }
+      if (res.ok) {
+        prevPoses = curPoses;
+        prevStepDt = t1 - t0;
+        curPoses = res.poses;
+        lastValidT = t1;
+        updateRefs(curPoses);
+        return true;
+      }
+      if (depth >= 5) return false;
+      const tm = 0.5 * (t0 + t1);
+      if (!solveInterval(t0, tm, depth + 1)) return false;
+      return solveInterval(tm, t1, depth + 1);
+    };
+
+    for (let s = 1; s <= steps; s++) {
+      const t0 = (s - 1) / steps;
+      const t1 = s / steps;
+      if (!solveInterval(t0, t1, 0)) {
+        if (opts.clampToReachable && lastValidT > 0) {
+          return { ok: true, jammed: true, poses: curPoses, reachedT: lastValidT };
+        }
+        return { ok: false, jammed: true, poses: curPoses, reachedT: lastValidT };
+      }
+    }
+    return { ok: true, jammed: false, poses: curPoses, reachedT: 1 };
+  }
+
+  function applyClosedPoses(doc, core, poses, driveJoint = null, targetDriveSt = null, opts = {}) {
+    const oldWorld = new Map();
+    for (const id of core.partIds) oldWorld.set(id, Model.worldMatrix(doc, id).clone());
+    for (const id of core.partIds) {
+      const it = top(id, doc);
+      if (!it || it.locked) continue;
+      const ps = poses.get(id);
+      if (!ps) continue;
+      const Wnew = poseToMat4(ps);
+      const Lnew = Model.parentWorld(doc, id).invert().multiply(Wnew);
+      Model.setFromMatrix(it, Lnew);
+      if (opts.live && isTop(id, doc)) Viewer.updateNode(id, { matrix: Model.localMatrix(it) });
+    }
+    for (const j of core.joints) {
+      const pA = poses.get(j.a), pB = poses.get(j.b);
+      if (!pA || !pB) continue;
+      const fr = worldJointFrames(j, pA, pB);
+      j.ao = r6(fr.PA.toArray());
+      j.ad = r9(fr.DA.toArray());
+      if (isPlanar(j) || isBall(j) || isSlot(j) || Array.isArray(j.au)) j.au = r9(fr.UA.toArray());
+      const stNew = extractJointState(j, pA, pB, stateOf(j));
+      if (driveJoint && j.id === driveJoint.id && targetDriveSt) {
+        for (const d of Object.keys(targetDriveSt)) {
+          if (hasDof(j, d)) stNew[d] = round(targetDriveSt[d], 4);
+        }
+      }
+      writeState(j, stNew);
+      if (!j.stopsLocked) {
+        for (const d of ['ang', 'pos', 'u', 'v', 'rx', 'ry']) {
+          if (hasDof(j, d)) ensureRangeFor(j, d, stNew[d]);
+        }
+      }
+      const b = top(j.b, doc);
+      if (b) {
+        const inv = conj(doc, j.b, stateMatrix(j, stateOf(j))).invert();
+        j.home = r9(inv.multiply(Model.localMatrix(b)).toArray());
+      }
+    }
+    const coreJSet = new Set(core.joints.map((x) => x.id));
+    for (const id of core.partIds) {
+      const Wold = oldWorld.get(id);
+      const Wnew = Model.worldMatrix(doc, id);
+      if (!Wold || !Wnew || maxMatDiff(Wold, Wnew) <= 1e-6) continue;
+      if (list(doc).some((k) => k.a === id && !coreJSet.has(k.id))) {
+        moveChain(doc, id, Wnew.clone().multiply(Wold.clone().invert()), { ...opts, skipJointIds: coreJSet });
+      }
+    }
+  }
+
+  function widenClosedLoopDefaults(core) {
+    if (!core) return;
+    for (const j of core.joints) {
+      if (kindOf(j) === 'rot' && !j.stopsLocked && j.min === -90 && j.max === 90) {
+        j.min = -360;
+        j.max = 360;
+      }
+    }
+  }
+
+  function jointError(jid, doc = App.doc) {
+    const j = list(doc).find((x) => x.id === jid);
+    return j ? jointGapError(doc, j) : null;
+  }
+
+  function loopErrors(doc = App.doc) {
+    const out = [];
+    for (const j of list(doc)) {
+      if (isInClosedLoop(doc, j.id)) out.push({ id: j.id, ...jointGapError(doc, j) });
+    }
+    return out;
   }
 
   // ---------- Feste Verbindung (BG-05) ----------
@@ -35191,18 +36055,21 @@ const Joints = (() => {
     }
     const A = top(aId), B = top(bId);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Eine Verbindung braucht zwei verschiedene Teile.' };
-    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Verbindungen gekoppelt – eine weitere ergäbe einen Kreis.` };
-    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk oder einer Verbindung bewegt.` };
+    const k = opts.kind === 'slide' || opts.kind === 'cyl' || opts.kind === 'planar' ? opts.kind : 'rot';
+    const chk = canAddKinematicJoint(App.doc, A, B, k);
+    if (!chk.ok) return { ok: false, msg: chk.msg };
     const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Achse braucht eine Richtung.' };
     dv.normalize();
-    const k = opts.kind === 'slide' || opts.kind === 'cyl' || opts.kind === 'planar' ? opts.kind : 'rot';
-    const lo = Number.isFinite(+opts.min) ? +opts.min : k === 'slide' ? -20 : k === 'rot' ? -90 : -180;
-    const hi = Number.isFinite(+opts.max) ? +opts.max : k === 'slide' ? 20 : k === 'rot' ? 90 : 180;
-    let jid = null;
+    const lo = Number.isFinite(+opts.min) ? +opts.min : k === 'slide' ? -20 : k === 'rot' ? (chk.closing ? -360 : -90) : -180;
+    const hi = Number.isFinite(+opts.max) ? +opts.max : k === 'slide' ? 20 : k === 'rot' ? (chk.closing ? 360 : 90) : 180;
+    let jid = null, jamMsg = null;
     App.change('Gelenk angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b || b.locked) return false;
+      const a = top(A.id, doc), b = top(B.id, doc);
+      if (!a || !b) return false;
+      const chk2 = canAddKinematicJoint(doc, a, b, k);
+      if (!chk2.ok) return false;
+      const snapItems = chk2.closing ? deepClone(doc.items) : null;
+      const snapJoints = chk2.closing ? deepClone(doc.joints || []) : null;
       doc.joints = doc.joints || [];
       jid = uid('j');
       const entry = {
@@ -35228,8 +36095,29 @@ const Joints = (() => {
           flip: !!opts.flip,
         });
       }
+      captureLocalFrames(doc, entry);
       doc.joints.push(entry);
+      if (chk2.closing) {
+        const core = cyclicCore(doc, jid, true);
+        if (core) {
+          widenClosedLoopDefaults(core);
+          ensureLocalFrames(doc, core.joints);
+          const gap = jointGapError(doc, entry);
+          if (!gap.ok) {
+            const sol = solveClosedPoses(doc, core, null, null, null, null);
+            if (!sol.ok) {
+              doc.items = snapItems;
+              doc.joints = snapJoints;
+              jamMsg = JAM_MSG;
+              jid = null;
+              return false;
+            }
+            applyClosedPoses(doc, core, sol.poses);
+          }
+        }
+      }
     });
+    if (jamMsg) return { ok: false, msg: jamMsg };
     if (jid) {
       const patch = {};
       if (opts.ang != null && Number.isFinite(+opts.ang)) patch.ang = +opts.ang;
@@ -35246,10 +36134,8 @@ const Joints = (() => {
     if (!axA || !axB) return { ok: false, msg: 'Für „Zylindrisch“ werden zwei runde Flächen oder Kreiskanten benötigt.' };
     const A = top(axA.id), B = top(axB.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
-    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    const chk = canAddKinematicJoint(App.doc, A, B, 'cyl');
+    if (!chk.ok) return { ok: false, msg: chk.msg };
 
     const baseD = axA.d.dot(axB.d) >= 0 ? axA.d.clone() : axA.d.clone().negate();
     const dTarget = opts.flip ? baseD.clone().negate() : baseD;
@@ -35266,16 +36152,20 @@ const Joints = (() => {
     const phi = Number.isFinite(+opts.maxPos) ? +opts.maxPos : 20;
     let jid = null, conflictMsg = null;
     App.change('Zylindrische Verbindung angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b || b.locked) return false;
-      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
-      const snapItems = looseOf(B.id, doc).length ? deepClone(doc.items) : null;
-      const snapJoints = snapItems ? deepClone(doc.joints) : null;
-      const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
-      Model.setFromMatrix(b, newLocal);
-      moveChain(doc, B.id, M_align);
+      const a = top(A.id, doc), b = top(B.id, doc);
+      if (!a || !b) return false;
+      const chk2 = canAddKinematicJoint(doc, a, b, 'cyl');
+      if (!chk2.ok) return false;
+      const snapItems = (chk2.closing || looseOf(B.id, doc).length) ? deepClone(doc.items) : null;
+      const snapJoints = snapItems ? deepClone(doc.joints || []) : null;
+      if (!chk2.closing) {
+        const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
+        Model.setFromMatrix(b, newLocal);
+        moveChain(doc, B.id, M_align);
+      }
       doc.joints = doc.joints || [];
       jid = uid('j');
-      doc.joints.push({
+      const entry = {
         id: jid, a: A.id, b: B.id, kind: 'cyl',
         ao: r6(axA.o.toArray()),
         ad: r9(axA.d.toArray()),
@@ -35283,7 +36173,33 @@ const Joints = (() => {
         ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
         pos: 0, minPos: round(Math.min(plo, phi), 2), maxPos: round(Math.max(plo, phi), 2),
         flip: !!opts.flip,
-      });
+      };
+      if (chk2.closing) {
+        const dB = axB.d.dot(axA.d) >= 0 ? axB.d.clone() : axB.d.clone().negate();
+        const dBUse = opts.flip ? dB.clone().negate() : dB;
+        const uA = planeBasis(axA.d).u;
+        const uB = uA.clone().applyQuaternion(rotBetween(axA.d, dBUse));
+        captureLocalFrames(doc, entry, { oA: axA.o, dA: axA.d, uA, oB: axB.o, dB: dBUse, uB });
+      } else {
+        captureLocalFrames(doc, entry);
+      }
+      doc.joints.push(entry);
+      if (chk2.closing) {
+        const core = cyclicCore(doc, jid, true);
+        if (core) {
+          widenClosedLoopDefaults(core);
+          ensureLocalFrames(doc, core.joints);
+          const sol = solveClosedPoses(doc, core, null, null, null, null);
+          if (!sol.ok) {
+            doc.items = snapItems;
+            doc.joints = snapJoints;
+            conflictMsg = JAM_MSG;
+            jid = null;
+            return false;
+          }
+          applyClosedPoses(doc, core, sol.poses);
+        }
+      }
       if (looseOf(B.id, doc).length) {
         const sol = solvePartConstraints(doc, B.id, Model.vars(doc).v);
         if (sol.err > 0.05) {
@@ -35310,10 +36226,8 @@ const Joints = (() => {
     if (!plA || !plB) return { ok: false, msg: 'Für „Eben“ werden zwei ebene Flächen benötigt.' };
     const A = top(plA.id), B = top(plB.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
-    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    const chk = canAddKinematicJoint(App.doc, A, B, 'planar');
+    if (!chk.ok) return { ok: false, msg: chk.msg };
 
     // Standard: Flächen zeigen aufeinander zu (Normalen entgegengesetzt), damit die Teile bündig aufeinander liegen
     const nTarget = opts.flip ? plA.n.clone() : plA.n.clone().negate();
@@ -35334,16 +36248,20 @@ const Joints = (() => {
     const vhi = Number.isFinite(+opts.maxV) ? +opts.maxV : 20;
     let jid = null, conflictMsg = null;
     App.change('Ebene Verbindung angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b || b.locked) return false;
-      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
-      const snapItems = looseOf(B.id, doc).length ? deepClone(doc.items) : null;
-      const snapJoints = snapItems ? deepClone(doc.joints) : null;
-      const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
-      Model.setFromMatrix(b, newLocal);
-      moveChain(doc, B.id, M_align);
+      const a = top(A.id, doc), b = top(B.id, doc);
+      if (!a || !b) return false;
+      const chk2 = canAddKinematicJoint(doc, a, b, 'planar');
+      if (!chk2.ok) return false;
+      const snapItems = (chk2.closing || looseOf(B.id, doc).length) ? deepClone(doc.items) : null;
+      const snapJoints = snapItems ? deepClone(doc.joints || []) : null;
+      if (!chk2.closing) {
+        const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
+        Model.setFromMatrix(b, newLocal);
+        moveChain(doc, B.id, M_align);
+      }
       doc.joints = doc.joints || [];
       jid = uid('j');
-      doc.joints.push({
+      const entry = {
         id: jid, a: A.id, b: B.id, kind: 'planar',
         ao: r6(pBOnA.toArray()),
         ad: r9(plA.n.toArray()),
@@ -35353,7 +36271,31 @@ const Joints = (() => {
         v: 0, minV: round(Math.min(vlo, vhi), 2), maxV: round(Math.max(vlo, vhi), 2),
         ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
         flip: !!opts.flip,
-      });
+      };
+      if (chk2.closing) {
+        const nBAlign = opts.flip ? plB.n.clone() : plB.n.clone().negate();
+        const uB = basis.u.clone().applyQuaternion(rotBetween(plA.n, nBAlign));
+        captureLocalFrames(doc, entry, { oA: pBOnA, dA: plA.n, uA: basis.u, oB: plB.p, dB: nBAlign, uB });
+      } else {
+        captureLocalFrames(doc, entry);
+      }
+      doc.joints.push(entry);
+      if (chk2.closing) {
+        const core = cyclicCore(doc, jid, true);
+        if (core) {
+          widenClosedLoopDefaults(core);
+          ensureLocalFrames(doc, core.joints);
+          const sol = solveClosedPoses(doc, core, null, null, null, null);
+          if (!sol.ok) {
+            doc.items = snapItems;
+            doc.joints = snapJoints;
+            conflictMsg = JAM_MSG;
+            jid = null;
+            return false;
+          }
+          applyClosedPoses(doc, core, sol.poses);
+        }
+      }
       if (looseOf(B.id, doc).length) {
         const sol = solvePartConstraints(doc, B.id, Model.vars(doc).v);
         if (sol.err > 0.05) {
@@ -35533,10 +36475,8 @@ const Joints = (() => {
     if (!ptA || !ptB) return { ok: false, msg: 'Für „Kugel“ werden zwei Punkte oder Kugel-/Zylinderflächen an verschiedenen Teilen benötigt.' };
     const A = top(ptA.id), B = top(ptB.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
-    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    const chk = canAddKinematicJoint(App.doc, A, B, 'ball');
+    if (!chk.ok) return { ok: false, msg: chk.msg };
 
     const dp = ptA.p.clone().sub(ptB.p);
     const M_align = new THREE.Matrix4().makeTranslation(dp.x, dp.y, dp.z);
@@ -35546,16 +36486,22 @@ const Joints = (() => {
     const ryHi = Number.isFinite(+opts.maxRy) ? +opts.maxRy : 180;
     const lo = Number.isFinite(+opts.min) ? +opts.min : -180;
     const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
-    let jid = null;
+    let jid = null, jamMsg = null;
     App.change('Kugel-Verbindung angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b || b.locked) return false;
-      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
-      const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
-      Model.setFromMatrix(b, newLocal);
-      moveChain(doc, B.id, M_align);
+      const a = top(A.id, doc), b = top(B.id, doc);
+      if (!a || !b) return false;
+      const chk2 = canAddKinematicJoint(doc, a, b, 'ball');
+      if (!chk2.ok) return false;
+      const snapItems = chk2.closing ? deepClone(doc.items) : null;
+      const snapJoints = chk2.closing ? deepClone(doc.joints || []) : null;
+      if (!chk2.closing) {
+        const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
+        Model.setFromMatrix(b, newLocal);
+        moveChain(doc, B.id, M_align);
+      }
       doc.joints = doc.joints || [];
       jid = uid('j');
-      doc.joints.push({
+      const entry = {
         id: jid, a: A.id, b: B.id, kind: 'ball',
         ao: r6(ptA.p.toArray()),
         ad: [0, 0, 1],
@@ -35565,8 +36511,34 @@ const Joints = (() => {
         ry: 0, minRy: round(Math.min(ryLo, ryHi), 2), maxRy: round(Math.max(ryLo, ryHi), 2),
         ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
         ...(opts.stopsLocked ? { stopsLocked: true } : {}),
-      });
+      };
+      if (chk2.closing) {
+        captureLocalFrames(doc, entry, {
+          oA: ptA.p, dA: new THREE.Vector3(0, 0, 1), uA: new THREE.Vector3(1, 0, 0),
+          oB: ptB.p, dB: new THREE.Vector3(0, 0, 1), uB: new THREE.Vector3(1, 0, 0),
+        });
+      } else {
+        captureLocalFrames(doc, entry);
+      }
+      doc.joints.push(entry);
+      if (chk2.closing) {
+        const core = cyclicCore(doc, jid, true);
+        if (core) {
+          widenClosedLoopDefaults(core);
+          ensureLocalFrames(doc, core.joints);
+          const sol = solveClosedPoses(doc, core, null, null, null, null);
+          if (!sol.ok) {
+            doc.items = snapItems;
+            doc.joints = snapJoints;
+            jamMsg = JAM_MSG;
+            jid = null;
+            return false;
+          }
+          applyClosedPoses(doc, core, sol.poses);
+        }
+      }
     });
+    if (jamMsg) return { ok: false, msg: jamMsg };
     if (jid) {
       const patch = {};
       if (opts.rx != null && Number.isFinite(+opts.rx)) patch.rx = +opts.rx;
@@ -35584,10 +36556,8 @@ const Joints = (() => {
     if (!pin) return { ok: false, msg: 'Für „Stift im Langloch“ wird am zweiten Teil ein Stift (Zylinder, Kreisrand oder Punkt) benötigt.' };
     const A = top(sl.id), B = top(pin.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
-    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    const chk = canAddKinematicJoint(App.doc, A, B, 'slot');
+    if (!chk.ok) return { ok: false, msg: chk.msg };
 
     let M_align;
     if (pin.axis && opts.alignAxis !== false) {
@@ -35609,16 +36579,22 @@ const Joints = (() => {
     const maxPos = Number.isFinite(+opts.maxPos) ? +opts.maxPos : round(half, 4);
     const lo = Number.isFinite(+opts.min) ? +opts.min : -180;
     const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
-    let jid = null;
+    let jid = null, jamMsg = null;
     App.change('Stift-im-Langloch-Verbindung angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b || b.locked) return false;
-      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
-      const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
-      Model.setFromMatrix(b, newLocal);
-      moveChain(doc, B.id, M_align);
+      const a = top(A.id, doc), b = top(B.id, doc);
+      if (!a || !b) return false;
+      const chk2 = canAddKinematicJoint(doc, a, b, 'slot');
+      if (!chk2.ok) return false;
+      const snapItems = chk2.closing ? deepClone(doc.items) : null;
+      const snapJoints = chk2.closing ? deepClone(doc.joints || []) : null;
+      if (!chk2.closing) {
+        const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
+        Model.setFromMatrix(b, newLocal);
+        moveChain(doc, B.id, M_align);
+      }
       doc.joints = doc.joints || [];
       jid = uid('j');
-      doc.joints.push({
+      const entry = {
         id: jid, a: A.id, b: B.id, kind: 'slot',
         ao: r6(sl.o.toArray()),
         ad: r9(sl.d.toArray()),
@@ -35628,8 +36604,37 @@ const Joints = (() => {
         ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
         flip: !!opts.flip,
         stopsLocked: true,
-      });
+      };
+      if (chk2.closing) {
+        let uB = sl.n.clone();
+        if (pin.axis && opts.alignAxis !== false) {
+          const baseN = sl.n.dot(pin.axis) >= 0 ? pin.axis.clone() : pin.axis.clone().negate();
+          uB = opts.flip ? baseN.clone().negate() : baseN;
+        }
+        const dB = sl.d.clone().applyQuaternion(rotBetween(sl.n, uB));
+        captureLocalFrames(doc, entry, { oA: sl.o, dA: sl.d, uA: sl.n, oB: pin.p, dB, uB });
+      } else {
+        captureLocalFrames(doc, entry);
+      }
+      doc.joints.push(entry);
+      if (chk2.closing) {
+        const core = cyclicCore(doc, jid, true);
+        if (core) {
+          widenClosedLoopDefaults(core);
+          ensureLocalFrames(doc, core.joints);
+          const sol = solveClosedPoses(doc, core, null, null, null, null);
+          if (!sol.ok) {
+            doc.items = snapItems;
+            doc.joints = snapJoints;
+            jamMsg = JAM_MSG;
+            jid = null;
+            return false;
+          }
+          applyClosedPoses(doc, core, sol.poses);
+        }
+      }
     });
+    if (jamMsg) return { ok: false, msg: jamMsg };
     if (jid) {
       const patch = {};
       if (opts.pos != null && Number.isFinite(+opts.pos)) patch.pos = +opts.pos;
@@ -35639,10 +36644,11 @@ const Joints = (() => {
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Stift-im-Langloch-Verbindung ließ sich nicht anlegen.' };
   }
 
-  function canConnect(aId, bId, doc = App.doc) {
+  function canConnect(aId, bId, doc = App.doc, kind = null) {
     const A = top(aId, doc), B = top(bId, doc);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Bitte zwei verschiedene Teile wählen.' };
     const why = refuse(doc, A, B); if (why) return { ok: false, msg: why };
+    if (kind && kind !== 'fixed') return canAddKinematicJoint(doc, A, B, kind);
     if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
     if (connected(doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
     if (list(doc).some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt.` };
@@ -35673,7 +36679,7 @@ const Joints = (() => {
     if (!dock || !dock.target || !dock.source) return { ok: false, msg: 'Kein Andock-Punkt gewählt.' };
     if (kind === 'none') return { ok: true, id: null, kind: 'none' };
     const { target, source } = dock;
-    const chk = canConnect(target.id, source.id);
+    const chk = canConnect(target.id, source.id, App.doc, kind);
     if (!chk.ok) return { ok: false, msg: chk.msg };
     const Wb = Model.worldMatrix(App.doc, source.id);
     const sP = new THREE.Vector3(...source.localP).applyMatrix4(Wb);
@@ -36038,29 +37044,59 @@ const Joints = (() => {
     const sel = App.sel.map((id) => top(id)).filter(Boolean);
     if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken – Teile in einer Gruppe links im Verlauf).', { icon: 'info' }); return false; }
     const [A, B] = sel;
-    const why = refuse(App.doc, A, B); if (why) { UI.toast(why, { icon: 'info' }); return false; }
-    if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return false; }
-    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) { UI.toast('Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.', { icon: 'info' }); return false; }
-    if (list().some((j) => j.b === B.id && !isLoose(j))) { UI.toast(`„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur von einem Gelenk bewegt werden.`, { icon: 'info' }); return false; }
     const isSlide = kind === 'slide';
+    const k = isSlide ? 'slide' : 'rot';
+    const chk = canAddKinematicJoint(App.doc, A, B, k);
+    if (!chk.ok) { UI.toast(chk.msg, { icon: chk.locked ? 'lock' : 'info' }); return false; }
     Features.pickAxisThen((ax) => {
-      let jid = null;
+      let jid = null, jamMsg = null, wasClosing = false;
       App.change('Gelenk angelegt', (doc) => {
-        const b = top(B.id, doc); if (!b || b.locked) return false;
-        if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
+        const a = top(A.id, doc), b = top(B.id, doc);
+        if (!a || !b) return false;
+        const chk2 = canAddKinematicJoint(doc, a, b, k);
+        if (!chk2.ok) return false;
+        wasClosing = !!chk2.closing;
+        const snapItems = chk2.closing ? deepClone(doc.items) : null;
+        const snapJoints = chk2.closing ? deepClone(doc.joints || []) : null;
         doc.joints = doc.joints || [];
         jid = uid('j');
         const entry = {
           id: jid, a: A.id, b: B.id,
           ao: r6(ax.o.toArray()), ad: r9(ax.d.toArray()),
           home: r9(Model.localMatrix(b).toArray()),
-          ang: 0, min: isSlide ? -20 : -90, max: isSlide ? 20 : 90,
+          ang: 0, min: isSlide ? -20 : (chk2.closing ? -360 : -90), max: isSlide ? 20 : (chk2.closing ? 360 : 90),
         };
         if (isSlide) entry.kind = 'slide';
+        captureLocalFrames(doc, entry);
         doc.joints.push(entry);
+        if (chk2.closing) {
+          const core = cyclicCore(doc, jid, true);
+          if (core) {
+            widenClosedLoopDefaults(core);
+            ensureLocalFrames(doc, core.joints);
+            const gap = jointGapError(doc, entry);
+            if (!gap.ok) {
+              const sol = solveClosedPoses(doc, core, null, null, null, null);
+              if (!sol.ok) {
+                doc.items = snapItems;
+                doc.joints = snapJoints;
+                jamMsg = JAM_MSG;
+                jid = null;
+                return false;
+              }
+              applyClosedPoses(doc, core, sol.poses);
+            }
+          }
+        }
       });
-      App.select([B.id]);
-      UI.toast(`${isSlide ? 'Schiebegelenk' : 'Gelenk'} angelegt: „${Model.label(B)}“ ${isSlide ? 'gleitet entlang' : 'dreht sich um'} ${ax.what}, „${Model.label(A)}“ bleibt stehen.`, { icon: 'check', ms: 3600 });
+      if (jamMsg) { UI.toast(jamMsg, { kind: 'bad' }); return; }
+      if (!jid) return;
+      App.select([B.locked ? A.id : B.id]);
+      if (wasClosing) {
+        UI.toast(`Geschlossener Mechanismus verbunden: „${Model.label(B)}“ ↔ „${Model.label(A)}“ an ${ax.what}.`, { icon: 'check', ms: 3600 });
+      } else {
+        UI.toast(`${isSlide ? 'Schiebegelenk' : 'Gelenk'} angelegt: „${Model.label(B)}“ ${isSlide ? 'gleitet entlang' : 'dreht sich um'} ${ax.what}, „${Model.label(A)}“ bleibt stehen.`, { icon: 'check', ms: 3600 });
+      }
     }, '<b>Gelenkachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Stift, Loch). <b>Esc</b> bricht ab.');
     return true;
   }
@@ -37554,19 +38590,82 @@ const Joints = (() => {
 
   function setState(jid, patch) {
     const curJ = list().find((x) => x.id === jid);
+    const curA = curJ && top(curJ.a);
     const curB = curJ && top(curJ.b);
-    if (curB && curB.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(curB) }), { icon: 'lock' }); return false; }
+    const inLoop = curJ && isInClosedLoop(App.doc, curJ.id);
+    if (!inLoop && curB && curB.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(curB) }), { icon: 'lock' }); return false; }
+    if (inLoop && curA && curA.locked && curB && curB.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(curB) }), { icon: 'lock' }); return false; }
     const normPatch = patch && 'rz' in patch && !('ang' in patch) ? { ...patch, ang: patch.rz } : patch;
     const label = normPatch && Object.keys(normPatch).length === 1 && 'ang' in normPatch ? 'Gelenk bewegt' : 'Verbindung bewegt';
-    App.change(label, (doc) => {
+    let jammed = false;
+    const ok = App.change(label, (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return false;
-      const b = top(j.b, doc); if (!b || b.locked) return false;
-      syncHome(b, j, doc);
+      const a = top(j.a, doc), b = top(j.b, doc);
+      const core = cyclicCore(doc, j.id, true);
+      if (!core) {
+        if (!b || b.locked) return false;
+        syncHome(b, j, doc);
+      } else {
+        if (!a || !b || (a.locked && b.locked)) return false;
+      }
       const prev = stateOf(j);
       const seedDofs = pickPrimaryDofs(doc, j, normPatch, prev);
       const effPatch = {};
       for (const d of (seedDofs.length ? seedDofs : Object.keys(normPatch || {}))) {
         if (d in (normPatch || {})) effPatch[d] = normPatch[d];
+      }
+      if (core) {
+        const snapItems = deepClone(doc.items);
+        const snapJoints = deepClone(doc.joints || []);
+        const tmpJ = { ...j };
+        if (couplingsOf(j.id, doc).length && !tmpJ.stopsLocked) {
+          for (const d of seedDofs) {
+            const val = Number(effPatch[d]);
+            if (Number.isFinite(val)) ensureRangeFor(tmpJ, d, val);
+          }
+        }
+        const next = clampState(tmpJ, effPatch);
+        const driveDofs = seedDofs.length ? seedDofs : Object.keys(effPatch).filter((d) => hasDof(j, d));
+        const targets = seedDofs.length ? computeCoupledTargets(doc, seedDofs.map((d) => ({ jid: j.id, dof: d, val: next[d] }))) : null;
+        const extraTargets = [];
+        const coreJSet = new Set(core.joints.map((x) => x.id));
+        if (targets && targets.has(j.id)) {
+          for (const [d, rawVal] of targets.get(j.id)) {
+            if (!hasDof(j, d)) continue;
+            next[d] = j.stopsLocked ? round(clampDofVal(j, d, rawVal), 4) : round(rawVal, 4);
+            if (!driveDofs.includes(d)) driveDofs.push(d);
+          }
+        }
+        if (targets) {
+          for (const [kjId, dofMap] of targets) {
+            if (kjId === j.id || !coreJSet.has(kjId)) continue;
+            const kj = list(doc).find((x) => x.id === kjId);
+            if (!kj) continue;
+            const kjFrom = stateOf(kj), kjTo = { ...kjFrom }, kjDofs = [];
+            for (const [d, rawVal] of dofMap) {
+              if (!hasDof(kj, d)) continue;
+              kjTo[d] = kj.stopsLocked ? round(clampDofVal(kj, d, rawVal), 4) : round(rawVal, 4);
+              kjDofs.push(d);
+            }
+            if (kjDofs.length) extraTargets.push({ jid: kjId, dofs: kjDofs, fromSt: kjFrom, toSt: kjTo });
+          }
+        }
+        const sol = solveClosedPoses(doc, core, j, driveDofs, prev, next, { clampToReachable: false, extraTargets });
+        if (!sol.ok) {
+          doc.items = snapItems;
+          doc.joints = snapJoints;
+          jammed = true;
+          return false;
+        }
+        applyClosedPoses(doc, core, sol.poses, j, next);
+        if (targets && targets.size) {
+          for (const [kjId, dofMap] of targets) {
+            if (kjId === j.id || coreJSet.has(kjId)) continue;
+            const sub = new Map([[kjId, dofMap]]);
+            applyTargetsMap(doc, sub, j.id);
+          }
+        }
+        return true;
       }
       if (couplingsOf(j.id, doc).length && !j.stopsLocked) {
         for (const d of seedDofs) {
@@ -37592,7 +38691,24 @@ const Joints = (() => {
       if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
       if (targets && targets.size) applyTargetsMap(doc, targets, j.id);
     }, { merge: 'joint:' + jid });
+    if (jammed) {
+      notifyJam({ jid, target: normPatch }, false);
+      const ae = document.activeElement;
+      if (ae && ae.tagName === 'INPUT' && ae.type === 'range') {
+        const curNow = list().find((x) => x.id === jid);
+        if (curNow) {
+          const stNow = stateOf(curNow);
+          const dk = Object.keys(normPatch || {})[0] || 'ang';
+          if (dk in stNow) ae.value = stNow[dk];
+        }
+      } else {
+        Panels.renderRight();
+      }
+      return false;
+    }
+    if (ok) lastJam = null;
     drawSelectedJoint();
+    return !!ok;
   }
   // Winkel/Weg setzen (Abwärtskompatibilität)
   function setAngle(jid, ang) { return setState(jid, { ang }); }
@@ -37647,6 +38763,8 @@ const Joints = (() => {
         j.min = -90; j.max = 90;
       }
       Model.setFromMatrix(b, pose(j, zero, null, doc));
+      delete j.locA; delete j.locB;
+      captureLocalFrames(doc, j);
       pruneInvalidCouplings(doc);
     });
     drawSelectedJoint();
@@ -37716,6 +38834,8 @@ const Joints = (() => {
       j.home = r9(conj(doc, j.b, F).multiply(new THREE.Matrix4().fromArray(j.home)).toArray());
       Model.setFromMatrix(b, pose(j, st, null, doc));
       moveChain(doc, j.b, F);
+      delete j.locA; delete j.locB;
+      captureLocalFrames(doc, j);
     });
   }
 
@@ -37734,6 +38854,51 @@ const Joints = (() => {
 
   // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'rot'/'slide'/'cyl'/'planar'/'ball'/'slot'/'angle'/'center' sowie lockere Verbindungen projizieren
   function constrain(doc, itemId) {
+    const core = cyclicCore(doc, itemId, false);
+    if (core && core.partIds.has(itemId)) {
+      const it = top(itemId, doc);
+      if (!it || it.locked) return false;
+      const inc = core.joints.filter((k) => (k.a === itemId || k.b === itemId) && !isConstraint(k) && !isLoose(k));
+      if (!inc.length) return false;
+      const mj0 = drivingOf(itemId, doc);
+      const j = inc.find((k) => { const o = top(k.a === itemId ? k.b : k.a, doc); return !!(o && o.locked); }) || (mj0 && inc.includes(mj0) ? mj0 : inc[0]);
+      ensureLocalFrames(doc, core.joints);
+      const prev = stateOf(j);
+      const W_cur = Model.worldMatrix(doc, itemId);
+      const poseCur = mat4ToPose(W_cur);
+      const pA = j.a === itemId ? poseCur : mat4ToPose(Model.worldMatrix(doc, j.a));
+      const pB = j.b === itemId ? poseCur : mat4ToPose(Model.worldMatrix(doc, j.b));
+      const rawSt = extractJointState(j, pA, pB, prev);
+      const targetSt = clampState({ ...j }, rawSt);
+      const startPoses = new Map();
+      for (const id of core.partIds) startPoses.set(id, mat4ToPose(Model.worldMatrix(doc, id)));
+      if (j.b === itemId && Array.isArray(j.home)) {
+        startPoses.set(itemId, mat4ToPose(Model.parentWorld(doc, itemId).multiply(pose(j, prev, null, doc))));
+      } else if (j.a === itemId && Array.isArray(j.ao) && Array.isArray(j.ad)) {
+        const DAw = new THREE.Vector3(...j.ad).normalize();
+        const UAw = planeBasis(DAw, Array.isArray(j.au) ? new THREE.Vector3(...j.au) : null).u;
+        const VAw = new THREE.Vector3().crossVectors(DAw, UAw).normalize();
+        const Fw = new THREE.Matrix4().makeBasis(UAw, VAw, DAw);
+        const DAl = new THREE.Vector3(...j.locA.d).normalize();
+        const UAl = planeBasis(DAl, new THREE.Vector3(...j.locA.u)).u;
+        const VAl = new THREE.Vector3().crossVectors(DAl, UAl).normalize();
+        const Fl = new THREE.Matrix4().makeBasis(UAl, VAl, DAl);
+        const q = new THREE.Quaternion().setFromRotationMatrix(Fw.multiply(Fl.transpose()));
+        const p = new THREE.Vector3(...j.ao).sub(new THREE.Vector3(...j.locA.o).applyQuaternion(q));
+        startPoses.set(itemId, { p, q: q.normalize() });
+      }
+      const k = kindOf(j);
+      const driveDofs = k === 'cyl' ? ['ang', 'pos'] : k === 'slot' ? ['pos', 'ang'] : k === 'planar' ? ['u', 'v', 'ang'] : k === 'ball' ? ['rx', 'ry', 'ang'] : ['ang'];
+      const sol = solveClosedPoses(doc, core, j, driveDofs, prev, targetSt, { clampToReachable: true, startPoses });
+      if (sol.ok && sol.poses) {
+        applyClosedPoses(doc, core, sol.poses, j, sol.jammed ? null : targetSt);
+        if (sol.jammed) notifyJam({ jid: j.id }, true);
+      } else {
+        applyClosedPoses(doc, core, startPoses);
+        notifyJam({ jid: j.id }, true);
+      }
+      return true;
+    }
     const j = drivingOf(itemId, doc);
     const hasLoose = looseOf(itemId, doc).length > 0;
     if (!j || fixed(j)) {
@@ -37954,6 +39119,59 @@ const Joints = (() => {
   // Live-Ziehen in der 3D-Ansicht (ohne eigenes App.change – Interact.onUp speichert den Rückgängig-Schritt)
   function applyDrag(jid, patch, opts = {}) {
     const j = list(App.doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return null;
+    const core = cyclicCore(App.doc, j.id, true);
+    if (core) {
+      const a = top(j.a, App.doc), b = top(j.b, App.doc);
+      if (!a || !b || (a.locked && b.locked)) return null;
+      const prev = stateOf(j);
+      const seedDofs = pickPrimaryDofs(App.doc, j, patch || {}, prev);
+      const effPatch = {};
+      for (const d of (seedDofs.length ? seedDofs : Object.keys(patch || {}))) {
+        if (d in (patch || {})) effPatch[d] = patch[d];
+      }
+      const tmpJ = { ...j };
+      const next = computeDragState(tmpJ, effPatch);
+      const driveDofs = seedDofs.length ? seedDofs : Object.keys(effPatch).filter((d) => hasDof(j, d));
+      const targets = seedDofs.length ? computeCoupledTargets(App.doc, seedDofs.map((d) => ({ jid: j.id, dof: d, val: next[d] }))) : null;
+      const extraTargets = [];
+      const coreJSet = new Set(core.joints.map((x) => x.id));
+      if (targets && targets.has(j.id)) {
+        for (const [d, rawVal] of targets.get(j.id)) {
+          if (!hasDof(j, d)) continue;
+          next[d] = j.stopsLocked ? round(clampDofVal(j, d, rawVal), 4) : round(rawVal, 4);
+          if (!driveDofs.includes(d)) driveDofs.push(d);
+        }
+      }
+      if (targets) {
+        for (const [kjId, dofMap] of targets) {
+          if (kjId === j.id || !coreJSet.has(kjId)) continue;
+          const kj = list(App.doc).find((x) => x.id === kjId);
+          if (!kj) continue;
+          const kjFrom = stateOf(kj), kjTo = { ...kjFrom }, kjDofs = [];
+          for (const [d, rawVal] of dofMap) {
+            if (!hasDof(kj, d)) continue;
+            kjTo[d] = kj.stopsLocked ? round(clampDofVal(kj, d, rawVal), 4) : round(rawVal, 4);
+            kjDofs.push(d);
+          }
+          if (kjDofs.length) extraTargets.push({ jid: kjId, dofs: kjDofs, fromSt: kjFrom, toSt: kjTo });
+        }
+      }
+      const sol = solveClosedPoses(App.doc, core, j, driveDofs, prev, next, { clampToReachable: true, extraTargets });
+      if (sol.ok && sol.poses) {
+        applyClosedPoses(App.doc, core, sol.poses, j, sol.jammed ? null : next, { live: true });
+        if (targets && targets.size) {
+          for (const [kjId, dofMap] of targets) {
+            if (kjId === j.id || coreJSet.has(kjId)) continue;
+            applyTargetsMap(App.doc, new Map([[kjId, dofMap]]), j.id, { live: true });
+          }
+        }
+      }
+      if (!sol.ok || sol.jammed) notifyJam({ jid, target: patch }, true);
+      else lastJam = null;
+      drawSelectedJoint();
+      if (dragVisJid === j.id) showDragVis(j.id);
+      return stateOf(j);
+    }
     if (opts && opts.reverse && opts.snap) return applyReverseDrag(j, patch, opts.snap);
     const b = top(j.b, App.doc); if (!b || b.locked) return null;
     const prev = stateOf(j);
@@ -38044,6 +39262,28 @@ const Joints = (() => {
     // alles in Weltlage rechnen – so geht es auch mit Teilen in Gruppen
     const W = (it) => Model.worldMatrix(App.doc, it.id);
     const kw = (it, M) => { const c = deepClone(it); Model.setFromMatrix(c, M); return Model.kernelItem(c, V); };
+    const core = cyclicCore(App.doc, j.id, true);
+    if (core) {
+      const fixedIds = new Set([...core.partIds].filter((id) => { const it = top(id); return it && it.locked; }));
+      if (!fixedIds.size) fixedIds.add(j.a);
+      const movSet = new Set([...core.partIds].filter((id) => !fixedIds.has(id)));
+      const statK = [...fixedIds].map((id) => top(id)).filter((x) => x && x.role !== 'hole').map((it) => kw(it, W(it)));
+      const curSt = stateOf(j);
+      let rollPoses = new Map([...core.partIds].map((id) => [id, mat4ToPose(W(top(id)))]));
+      let rollSt = { ...curSt };
+      for (let a = sw.lo; a <= sw.hi + 1e-9; a += step) {
+        const tgtSt = { ...rollSt, [sw.key]: a };
+        const sol = solveClosedPoses(App.doc, core, j, [sw.key], rollSt, tgtSt, { clampToReachable: false, startPoses: rollPoses });
+        if (!sol.ok) continue;
+        rollPoses = sol.poses;
+        rollSt = tgtSt;
+        const movK = [...movSet].map((id) => top(id)).filter((x) => x && x.role !== 'hole').map((it) => kw(it, poseToMat4(rollPoses.get(it.id))));
+        let cl = null; try { cl = await Kernel.call('clashes', { scene: { items: [...statK, ...movK] } }); } catch (_) {}
+        const v = cl ? cl.pairs.filter((p) => movSet.has(p.a) !== movSet.has(p.b)).reduce((s, p) => s + p.v, 0) : 0;
+        out.push({ a: round(a, 4), v });
+      }
+      return out;
+    }
     const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter((x) => x && !Model.parentsOf(App.doc, x.id).some((p) => p.id === j.b));
     const movSet = new Set([B.id, ...down.map((x) => x.id)]);
     const compIds = new Set([j.a, j.b]);
@@ -38218,7 +39458,71 @@ const Joints = (() => {
       }
     }
     if (!j || isConstraint(j) || isLoose(j)) return;
-    const B = top(j.b); if (!B) return;
+    const A = top(j.a), B = top(j.b); if (!A || !B) return;
+    const core = cyclicCore(App.doc, j.id, true);
+    if (core) {
+      if (A.locked && B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return; }
+      const coreJSet = new Set(core.joints.map((x) => x.id));
+      const freeCoreIds = [...core.partIds].filter((id) => { const it = top(id); return it && !it.locked; });
+      const peeledMap = new Map();
+      const peeledIds = [];
+      for (const cid of freeCoreIds) {
+        const ds = downstream(App.doc, cid, { stopAtLocked: true, skipJointIds: coreJSet }).map((k) => top(k.b)).filter(Boolean);
+        peeledMap.set(cid, ds.map((it) => ({ it, m: Model.localMatrix(it) })));
+        for (const it of ds) peeledIds.push(it.id);
+      }
+      if ([...freeCoreIds, ...peeledIds].some((id) => !isTop(id))) {
+        UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 });
+        return;
+      }
+      const st0 = stateOf(j);
+      const { legs, T: dur } = buildPlayLegs(j);
+      if (dur < 1 || !legs.length) return;
+      const animDofs = Object.keys(legs[0].s0);
+      const allIds = new Set([...freeCoreIds, ...peeledIds]);
+      const baseW = new Map([...core.partIds].map((id) => [id, Model.worldMatrix(App.doc, id).clone()]));
+      let animPoses = new Map([...core.partIds].map((id) => [id, mat4ToPose(baseW.get(id))]));
+      let animSt = { ...st0 };
+      const t0 = performance.now();
+      const applyPose = (st) => {
+        const sol = solveClosedPoses(App.doc, core, j, animDofs, animSt, st, { clampToReachable: false, startPoses: animPoses });
+        if (!sol.ok || !sol.poses) return;
+        animPoses = sol.poses;
+        animSt = { ...st };
+        for (const cid of freeCoreIds) {
+          const ps = sol.poses.get(cid);
+          if (!ps) continue;
+          const Wnew = poseToMat4(ps);
+          const Lnew = Model.parentWorld(App.doc, cid).invert().multiply(Wnew);
+          Viewer.updateNode(cid, { matrix: Lnew });
+          const ds = peeledMap.get(cid) || [];
+          if (ds.length) {
+            const D = Wnew.clone().multiply(baseW.get(cid).clone().invert());
+            for (const d of ds) Viewer.updateNode(d.it.id, { matrix: D.clone().multiply(d.m) });
+          }
+        }
+      };
+      anim = { jid, ids: [...allIds], btn, raf: 0, timer: 0, st: st0, get a() { return this.st.ang; }, applyPose };
+      if (btn) btn.innerHTML = icon('close') + 'Stopp';
+      const step = () => {
+        if (!anim) return;
+        cancelAnimationFrame(anim.raf);
+        clearTimeout(anim.timer);
+        const t = performance.now() - t0;
+        if (t >= dur) { stopPlay(); return; }
+        const L = legs.find((l) => t < l.t1) || legs[legs.length - 1];
+        const u = (t - L.t0) / Math.max(1, L.t1 - L.t0);
+        const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+        const st = { ...st0 };
+        for (const key of Object.keys(L.s0)) st[key] = L.s0[key] + (L.s1[key] - L.s0[key]) * e;
+        anim.st = st;
+        applyPose(st);
+        anim.raf = requestAnimationFrame(step);
+        anim.timer = setTimeout(step, 50);
+      };
+      step();
+      return;
+    }
     if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return; }
     if (!isTop(B.id) || downstream(App.doc, j.b, { stopAtLocked: true }).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
     const cur = Model.localMatrix(B), st0 = stateOf(j), exp = pose(j, st0);
@@ -38467,10 +39771,14 @@ const Joints = (() => {
       return box;
     }
     const k = kindOf(j);
-    const down = downstream(App.doc, j.b).map((d) => top(d.b)).filter(Boolean);
+    const loopCore = cyclicCore(App.doc, j.id, true);
+    const down = loopCore ? [] : downstream(App.doc, j.b).map((d) => top(d.b)).filter(Boolean);
       const moveTxt = down.length ? ` (${down.map((x) => '„' + esc(Model.label(x)) + '“').join(', ')} ${down.length === 1 ? 'bewegt sich' : 'bewegen sich'} mit)` : '';
       const verb = k === 'slide' ? 'gleitet entlang' : k === 'cyl' ? 'dreht und gleitet in' : k === 'planar' ? 'gleitet und dreht auf' : k === 'ball' ? 'dreht sich frei um den Punkt an' : k === 'slot' ? 'gleitet im Langloch von' : 'dreht sich gegenüber';
       box.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> ${verb} <b>${esc(Model.label(A))}</b>${moveTxt}.` }));
+      if (loopCore) {
+        box.append(h('div', { class: 'hint-box loop-hint', text: `Geschlossener Mechanismus (${loopCore.partIds.size} Teile) – alle Gelenke werden gemeinsam gelöst.` }));
+      }
       box.append(UI.selectField({
         id: 'jt-kind' + sfx,
         label: 'Art',
@@ -38924,6 +40232,10 @@ const Joints = (() => {
     pose,
     isFixedPart,
     fixedJointOf,
+    isClosedLoop: (jid, doc = App.doc) => isInClosedLoop(doc, jid),
+    jointError,
+    loopErrors,
+    get lastJam() { return lastJam; },
     get picking() { return !!pickState; },
     get dockPromptOpen() { return !!dockPop; },
     get selected() { return selJoint; },
