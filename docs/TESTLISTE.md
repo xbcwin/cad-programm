@@ -2467,6 +2467,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Keilwellen-Profil DIN ISO 14 (Normteil & Formschritt)**: Normteil `splineShaft` (`6x16x20`, Länge `40 mm`) und Formschritt `splineProfile` auf Welle `d=20` erzeugen 6 Außenbögen (`r=10`), 6 Fußbögen (`r=8`) und 12 Flankenflächen ohne Geometriefehler; Hilfetexte (`werkzeug-hilfen.json`/`HELP`), `Explain.local` und DE/EN-Schlüsselgleichheit geprüft (`t_a130_wellen_features`).
 - [ ] **Von Hand**: Im Browser auf einer abgesetzten Welle (z. B. `d=20` mit Absatz `d=25`) nacheinander Gewinde-Freistich, Sicherungsring-Einstich und Passfeder-Nut über Kontextleiste/Rechtsklick anlegen und prüfen, ob alle Nuten optisch sauber auf den Zylinderflächen sitzen.
 
+## Muster mit wachsender Größe & Teilen mit Fläche oder Skizze (Auto [A-129], KP-46, KP-47)
+
+- [x] **5 Zylinder mit +10 % je Kopie**: Rechteckmuster (`nx = 5, dx = 25`) auf Zylinder (`Ø10 × 10`) mit `#op-scaleStep = 10` (`%`) → 5 Körper ohne Fehler (`GeomCheck` 0 Funde), letzter Zylinder ist `1,464`-mal so groß (`Ø ≈ 14,64 mm`, `h ≈ 14,64 mm`).
+- [x] **Wachsender Abstand & mm-Schritte (Profi)**: `#op-distStep = 5` (`mm`) vergrößert die Abstände zwischen aufeinanderfolgenden Kopien um +5 mm (`25, 30, 35, 40 mm`); `#op-scaleUnit = 'mm'`, `#op-scaleStep = 2` lässt den letzten Zylinder auf `18 mm` (1,8×) wachsen; Kreismuster mit wachsender Größe sowie Ausblenden von `#op-grow-wrap` im Einfach-Modus geprüft.
+- [x] **Quader mit gebogener Skizze teilen**: Quader `20×20×20` mit einem Skizzen-Bogen (`plane: 'SKETCH'`) geteilt → 2 gültige Körper ohne Fehler (`GeomCheck` 0 Funde), Gesamtvolumen bleibt `8 000 mm³`, gekrümmte Trennfläche vorhanden; „Behalten“ und „Spalt“ (`4 mm`) funktionieren.
+- [x] **Quader an Fläche & Bezugsebene teilen + Hilfen**: Teilen an schräger Bezugsebene sowie an gekrümmter Zylindermantelfläche (`plane: 'FACE'`) erzeugt jeweils 2 gültige Körper mit erhaltenem Gesamtvolumen; Profi-Schaltflächen im Einfach-Modus verborgen; `HELP.patternGrowth`, `HELP.splitAdvanced` und Rückgängig geprüft.
+- [ ] **Von Hand**: Im Browser beim Teilen „Mit Skizze teilen“ anklicken, einen freien S-Spline quer durch einen Quader zeichnen, „Fertig“ klicken und beide Hälften mit „Spalt“ auseinanderrücken.
+
 ## Füllmuster auf Fläche, Muster an Skizzenpunkten und aus Tabelle (Auto [A-128], KP-44, KP-45)
 
 - [x] **Waben-Füllmuster in Platte 60×40×5 (`fillPattern`)**: Im Profi-Modus über `#ctx-fill-pattern` (in „Einfach“ ausgeblendet) angelegt → Waben (`SW 6`, Abstand `8`, Randabstand `4`) erzeugen gültige Durchbrüche ohne Rand-Schnitt (`outerSides == 4`, alle Lochwände strikt innerhalb des Randabstands, `GeomCheck` 0 Funde); Umschalten auf Raster/Versetzt, Randabstand `8`, Sackloch-Tiefe `2 mm` und Unterdrücken funktionieren fehlerfrei.

@@ -240,6 +240,8 @@ const Commands = (() => {
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
     add('mirror-step', 'Schritt spiegeln (Formschritt im selben Körper)', 'mirror', 'spiegeln schritt formschritt tasche loch rippe symmetrisch ebene fläche körper', () => Features.mirrorStep(), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
+    add('split-face-tool', 'Körper an Fläche teilen (Profi)', 'split', 'teilen schneiden flaeche fläche bezugsebene gebogen kp-47', () => Features.splitWithFace(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('split-sketch', 'Körper mit Skizze teilen (Profi)', 'split', 'teilen schneiden skizze kurve bogen spline kp-47', () => Features.startSplitSketch(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('move-step', 'Verschieben/Drehen als Schritt', 'moveStep', 'verschieben drehen kopieren schritt transform versetzen bewegen lage verlauf', () => Features.transform(), { group: 'Bearbeiten' });
     add('scale-body', 'Körper skalieren (als Schritt)', 'scaleBody', 'skalieren groesser kleiner faktor achse strecken stauchen verlauf', () => Features.scale(), { group: 'Bearbeiten' });
     add('deform-body', 'Körper verformen (Biegen, Verdrehen, Verjüngen)', 'deform', 'verformen biegen verdrehen verjuengen verjüngen bogen torsion konisch schritt profi', () => Features.deform(), { group: 'Bearbeiten' });

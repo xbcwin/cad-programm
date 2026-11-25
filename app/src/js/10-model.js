@@ -156,12 +156,42 @@ const Model = (() => {
       return m;
     } finally { curV = prev; }
   }
+  // Wachsender Abstand/Winkel je Kopie (KP-46): distUnit 'pct' (%) oder 'mm' (mm bzw. °)
+  function progressiveOffset(step0, k, distStep = 0, distUnit = 'pct') {
+    if (k <= 0) return 0;
+    const ds = Number(distStep) || 0;
+    if (Math.abs(ds) < 1e-9) return k * step0;
+    let sum = 0;
+    if (distUnit === 'mm') {
+      if (Math.abs(step0) < 1e-9) {
+        for (let m = 0; m < k; m++) sum += m * ds;
+      } else {
+        const sgn = step0 < 0 ? -1 : 1, base = Math.abs(step0);
+        for (let m = 0; m < k; m++) sum += sgn * Math.max(0.01, base + m * ds);
+      }
+    } else {
+      const r = Math.max(0.05, 1 + ds / 100);
+      for (let m = 0; m < k; m++) sum += step0 * Math.pow(r, m);
+    }
+    return sum;
+  }
+  function patternScaleFactor(stepIdx, scaleStep = 0, scaleUnit = 'pct', baseRef = 10) {
+    const ss = Number(scaleStep) || 0;
+    if (!stepIdx || Math.abs(ss) < 1e-9) return 1;
+    if (scaleUnit === 'mm') {
+      const ref = Math.max(1e-3, Number(baseRef) || 10);
+      return Math.max(0.05, (ref + stepIdx * ss) / ref);
+    }
+    const r = Math.max(0.05, 1 + ss / 100);
+    return Math.max(0.05, Math.pow(r, stepIdx));
+  }
   // Alle Kopie-Instanzen einer Muster-Gruppe (inkl. skipped-Flag) – genau wie der Kern sie baut
   function patternInstances(g, V) {
     const I = new THREE.Matrix4();
-    if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, matrix: I, skipped: false, label: '1' }];
+    if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }];
     const p = g.p.pt === 'path' ? pathPatternParams(g, V) : g.p.pt === 'points' ? pointsPatternParams(g, V) : g.p.pt === 'table' ? tablePatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
     const skipSet = new Set(Array.isArray(g.p.skip) ? g.p.skip.map((x) => Math.round(Number(x))) : []);
+    const distStep = N('distStep', 0), distUnit = p.distUnit === 'mm' ? 'mm' : 'pct';
     const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
     const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
     const out = [];
@@ -169,7 +199,8 @@ const Model = (() => {
       const nx = clamp(Math.round(N('nx', 1)), 1, 60), ny = clamp(Math.round(N('ny', 1)), 1, 60), dx = N('dx', 10), dy = N('dy', 10);
       let idx = 0;
       for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
-        out.push({ idx, matrix: idx === 0 ? I : new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0), skipped: skipSet.has(idx), label: nx > 1 && ny > 1 ? `${i + 1}·${j + 1}` : String(idx + 1) });
+        const ox = progressiveOffset(dx, i, distStep, distUnit), oy = progressiveOffset(dy, j, distStep, distUnit);
+        out.push({ idx, stepIdx: i + j, matrix: idx === 0 ? I : new THREE.Matrix4().makeTranslation(ox, oy, 0), skipped: skipSet.has(idx), label: nx > 1 && ny > 1 ? `${i + 1}·${j + 1}` : String(idx + 1) });
       }
     } else if (p.pt === 'circ') {
       const n = clamp(Math.round(N('n', 4)), 1, 120), ang = N('ang', 360);
@@ -178,32 +209,33 @@ const Model = (() => {
       const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
       const c = picked ? p.ao.map(Number) : [N('cx', 0), N('cy', 0), N('cz', 0)];
       for (let k = 0; k < n; k++) {
-        out.push({ idx: k, matrix: k === 0 ? I : rot(c, ax, k * step), skipped: skipSet.has(k), label: String(k + 1) });
+        const angK = progressiveOffset(step, k, distStep, distUnit);
+        out.push({ idx: k, stepIdx: k, matrix: k === 0 ? I : rot(c, ax, angK), skipped: skipSet.has(k), label: String(k + 1) });
       }
     } else if (p.pt === 'path') {
       const places = (p.places || []).slice(0, 200);
-      if (!places.length) out.push({ idx: 0, matrix: I, skipped: false, label: '1' });
+      if (!places.length) out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' });
       else places.forEach((q, k) => {
-        if (k === 0) { out.push({ idx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
+        if (k === 0) { out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
         const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
-        out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
+        out.push({ idx: k, stepIdx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
       });
     } else if (p.pt === 'points' || p.pt === 'table') {
       const places = (p.places || []).slice(0, 200);
-      if (!places.length) out.push({ idx: 0, matrix: I, skipped: false, label: '1' });
+      if (!places.length) out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' });
       else places.forEach((q, k) => {
         const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
         if (Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0 || [0, 0, 0], p.n || [0, 0, 1], Number(q.a)));
-        out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
+        out.push({ idx: k, stepIdx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
       });
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
-      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(p.mn.map(Number), p.mo.map(Number)), skipped: false, label: '2' });
+      out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, stepIdx: 1, matrix: refl(p.mn.map(Number), p.mo.map(Number)), skipped: false, label: '2' });
     } else if (p.pt === 'mirror') {
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ', n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = N('off', 0);
-      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(n, [n[0] * off, n[1] * off, n[2] * off]), skipped: false, label: '2' });
+      out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, stepIdx: 1, matrix: refl(n, [n[0] * off, n[1] * off, n[2] * off]), skipped: false, label: '2' });
     }
-    return out.length ? out : [{ idx: 0, matrix: I, skipped: false, label: '1' }];
+    return out.length ? out : [{ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }];
   }
   // Lage jeder aktiven Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
   function patternMatrices(g, V) {
@@ -458,6 +490,10 @@ const Model = (() => {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
       }
+      if (it.kind === 'group' && it.p && it.p.op === 'split' && it.p.plane === 'FACE' && it.p.faceRef) {
+        if (it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'teilt an Fläche von' });
+        if (it.p.faceRef.datumId) out.push({ from: me, to: it.p.faceRef.datumId, what: 'teilt an Bezugsebene', datum: true });
+      }
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) {
@@ -592,7 +628,7 @@ const Model = (() => {
         o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, ownV));
         if (it.p && it.p.op) o.p = it.p.op === 'pattern'
           ? (it.p.pt === 'path' ? pathPatternParams(it, ownV) : it.p.pt === 'points' ? pointsPatternParams(it, ownV) : it.p.pt === 'table' ? tablePatternParams(it, ownV) : resolveP(it.p, ownV))
-          : resolveP(it.p, ownV);
+          : it.p.op === 'split' ? splitParams(it, ownV) : resolveP(it.p, ownV);
         if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
       }
       else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, ownV);
@@ -1102,23 +1138,63 @@ const Model = (() => {
     return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
   }
   // Lage (2D in der Kurvenebene) und Richtung jeder Kopie; die erste ist das Original am Kurvenanfang
-  function pathPlaces(ents, n, d) {
+  function pathPlaces(ents, n, d, distStep = 0, distUnit = 'pct') {
     const C = pathCurve(ents); if (!C || C.len < 1e-6) return [];
     const N = clamp(Math.round(n), 1, 200);
-    const step = d > 0 ? d : C.closed ? C.len / N : N > 1 ? C.len / (N - 1) : 0;
+    const ds = Number(distStep) || 0;
     const out = [];
+    if (Math.abs(ds) < 1e-9) {
+      const step = d > 0 ? d : C.closed ? C.len / N : N > 1 ? C.len / (N - 1) : 0;
+      for (let k = 0; k < N; k++) {
+        const s = k * step;
+        if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+        out.push(pathAt(C, Math.min(s, C.len)));
+      }
+      return out;
+    }
+    if (d > 0) {
+      for (let k = 0; k < N; k++) {
+        const s = progressiveOffset(d, k, ds, distUnit);
+        if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+        out.push(pathAt(C, Math.min(s, C.len)));
+      }
+      return out;
+    }
+    const M = C.closed ? N : N - 1;
+    if (M <= 0) { out.push(pathAt(C, 0)); return out; }
+    let gaps;
+    if (distUnit === 'mm') {
+      const b0 = (C.len - (ds * M * (M - 1)) / 2) / M;
+      if (b0 >= 0.01) {
+        gaps = Array.from({ length: M }, (_, m) => b0 + m * ds);
+      } else {
+        const w = Array.from({ length: M }, (_, m) => Math.max(0.01, 1 + m * Math.max(0, ds)));
+        const sum = w.reduce((a, b) => a + b, 0) || 1;
+        gaps = w.map((v) => (v / sum) * C.len);
+      }
+    } else {
+      const r = Math.max(0.05, 1 + ds / 100);
+      const w = Array.from({ length: M }, (_, m) => Math.pow(r, m));
+      const sum = w.reduce((a, b) => a + b, 0) || 1;
+      gaps = w.map((v) => (v / sum) * C.len);
+    }
+    let s = 0;
     for (let k = 0; k < N; k++) {
-      const s = k * step;
-      if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+      if (k > 0 && C.closed && s > C.len - 1e-6) break;
       out.push(pathAt(C, Math.min(s, C.len)));
+      if (k < gaps.length) s += gaps[k];
     }
     return out;
   }
   function pathPatternParams(it, V) {
     const p = it.p || {}, out = { op: 'pattern', pt: 'path', places: [], n: [0, 0, 1], p0: [0, 0, 0], align: p.align !== false && p.align !== 'nein' };
     if (Array.isArray(p.skip) && p.skip.length) out.skip = p.skip.slice();
+    const scaleStep = num(p.scaleStep, V, 0), scaleUnit = p.scaleUnit === 'mm' ? 'mm' : 'pct';
+    const distStep = num(p.distStep, V, 0), distUnit = p.distUnit === 'mm' ? 'mm' : 'pct';
+    if (Math.abs(scaleStep) > 1e-9) { out.scaleStep = scaleStep; out.scaleUnit = scaleUnit; }
+    if (Math.abs(distStep) > 1e-9) { out.distStep = distStep; out.distUnit = distUnit; }
     if (!p.sketch) return out;
-    const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0)); if (!L.length) return out;
+    const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0), distStep, distUnit); if (!L.length) return out;
     const pl = p.sketch.plane, x = pl.x, n = pl.n, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
     const W = (u, v) => [x[0] * u + y[0] * v, x[1] * u + y[1] * v, x[2] * u + y[2] * v];
     const P0 = L[0];
@@ -1129,6 +1205,47 @@ const Model = (() => {
     const o = pl.o, w0 = W(P0.p[0], P0.p[1]);
     out.p0 = [o[0] + w0[0], o[1] + w0[1], o[2] + w0[2]]; out.n = n.slice();
     return out;
+  }
+  function splitParams(it, V) {
+    const p = it.p || {};
+    const keep = p.keep === 'positive' || p.keep === 'negative' ? p.keep : 'both';
+    const gap = Math.max(0, num(p.gap, V, 0));
+    if (p.plane === 'SKETCH') {
+      const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+      const sketchPlane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+      const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+      const regions = SK.regions(ents).map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) }));
+      return { op: 'split', plane: 'SKETCH', sketchPlane, chains, regions, keep, gap };
+    }
+    if (p.plane === 'FACE') {
+      const out = { op: 'split', plane: 'FACE', keep, gap };
+      const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+      const ref = p.faceRef;
+      const toLocalPlane = (oW, nW) => {
+        const inv = doc ? worldMatrix(doc, it.id).invert() : new THREE.Matrix4();
+        const oL = new THREE.Vector3(...oW).applyMatrix4(inv).toArray().map((v) => round(v, 6));
+        const nL = new THREE.Vector3(...nW).transformDirection(inv).normalize().toArray().map((v) => round(v, 9));
+        return { o: oL, n: nL };
+      };
+      if (ref && ref.datumId) {
+        const dm = typeof Datums !== 'undefined' && doc ? Datums.find(ref.datumId, doc) : null;
+        if (!dm || !dm.plane) {
+          out.missingFace = 'Die gewählte Bezugsebene fehlt.';
+        } else {
+          out.facePlane = toLocalPlane(dm.plane.o, dm.plane.n);
+          out.faceRef = { datumId: ref.datumId, label: dm.name || ref.label || 'Bezugsebene' };
+        }
+      } else if (ref && ref.id) {
+        out.faceRef = { ...ref };
+        if (ref.t === 'PLANE' && Array.isArray(ref.wc) && Array.isArray(ref.wn)) {
+          out.facePlane = toLocalPlane(ref.wc, ref.wn);
+        }
+      } else {
+        out.missingFace = 'Keine Schnittfläche gewählt.';
+      }
+      return out;
+    }
+    return resolveP(p, V);
   }
   function splitPatternCsvLine(line, sep) {
     if (sep === 'ws') return line.trim().split(/\s+/);
@@ -2474,6 +2591,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
