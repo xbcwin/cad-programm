@@ -35288,6 +35288,64 @@ def t_a174_zeichnung_form_lagetoleranzen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_f11251719(p):
+    # 1. Befehlssuche bevorzugt Treffer im Befehlsnamen auch bei Einzelwort-Suchen (A-152: 'schraube' -> couple-screw in Top 6)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('F-11251719 Körper', (d) => {
+        const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil A' });
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Teil B' });
+        b.t.x = 30;
+        d.items.push(a, b);
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("App.select(App.doc.items.map(x => x.id));")
+    p.wait(150)
+
+    cmds_ok = p.ev("""
+      const s = Commands.search('schraube').map(c => c.id);
+      const r = Commands.search('riemen').map(c => c.id);
+      const l = Commands.search('linear').map(c => c.id);
+      const d = Commands.search('abstand').map(c => c.id);
+      return {
+        screw: s.includes('couple-screw') && s.includes('auto-screws') && s.includes('lib-stdScrew'),
+        belt: r.includes('couple-belt'),
+        linear: l.includes('couple-linear'),
+        dist: d.includes('mate-distance'),
+        s,
+      };
+    """)
+    ok1 = bool(cmds_ok['screw'] and cmds_ok['belt'] and cmds_ok['linear'] and cmds_ok['dist'])
+
+    # 2. Tooltip-Timer bleibt erhalten, wenn #right-body vor einem verzögerten scroll-Event unter der ruhenden Maus neu gerendert wird
+    p.ev("App.clearSelection();")
+    p.pg.wait_for_selector('#proj-print-cost', timeout=10000)
+    p.pg.mouse.move(10, 10)
+    p.wait(120)
+    p.pg.locator('#proj-print-cost').hover()
+    p.wait(60)
+    p.ev("""
+      Panels.renderRight();
+      const rb = document.querySelector('#right-body');
+      if (rb) rb.dispatchEvent(new Event('scroll'));
+    """)
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=3000)
+        tip_txt = p.pg.locator('.tooltip').text_content() or ''
+    except Exception:
+        tip_txt = ''
+    tip_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        match: !!(d.printCost && d.printCost.tip && String(arg || '').includes(d.printCost.tip)),
+        errs: App.errors.length === 0,
+      }));
+    """, tip_txt)
+    ok2 = bool(tip_ok['match'] and tip_ok['errs'] and len(p.errs) == 0)
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -35575,6 +35633,7 @@ TESTS = [
     ('[A-173] Zeichnung: Maße aus dem Modell übernehmen und ordnen (ZE-23)', t_a173_zeichnung_modellmasse),
     ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
     ('[A-174] Zeichnung: Form- und Lagetoleranzen (ZE-24)', t_a174_zeichnung_form_lagetoleranzen),
+    ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

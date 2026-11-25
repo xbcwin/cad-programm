@@ -2848,6 +2848,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Undo/Redo, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind `#t-gdt` und `#dw-gdt-sec` verborgen/gesperrt, `addDatum`/`addGdtFrame` liefern `null` und die Befehle fehlen in der Suche; Löschen/Undo, `Store.validateProject`, Neuladen, `HELP.drawingGdt`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingDatum`, `drawingGdtFrame`) laufen fehlerfrei (`t_a174_zeichnung_form_lagetoleranzen`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ über die Werkzeugleiste „Form & Lage“ einen Bezug A und B an zwei Flächenkanten setzen, einen Positions-Toleranzrahmen an eine Bohrungsbemaßung hängen, den Rahmen per Ziehen verschieben und den exportierten PDF- sowie SVG-Plan in einem Betrachter öffnen.
 
+## Volltest-Reparatur (Auto [F-11251719])
+
+- [x] **Befehlssuche-Ranking bei Einzelwörtern (`58-commands.js`)**: `Commands.score()` (`matchBonus`) bevorzugt Treffer im Befehlsnamen, sodass bei der Suche nach „schraube“ auch mit gewählten Körpern `couple-screw` zusammen mit `auto-screws` und `lib-stdScrew` in den Top 6 erscheint (ebenso `couple-belt`, `couple-linear` und `mate-distance`, `t_f11251719`).
+- [x] **Tooltip-Scroll nach Panel-Neubau (`50-ui-core.js`)**: `UI.onScrollTip()` re-akquiriert ein unter der ruhenden Maus neu gerendertes Ziel (`#proj-print-cost`) vor einem verzögerten `scroll`-Event auf `#right-body` über `reacquireTipTarget()`, sodass der Tooltip planmäßig erscheint (`t_f11251719`).
+- [ ] **Von Hand**: Im Browser mit Strg/Cmd+K nach „schraube“ suchen und prüfen, ob „Kopplung: Schraube (Drehen → Vorschub)“ neben „Schrauben automatisch einsetzen“ unter den ersten Treffern steht, sowie im rechten Panel über mehrere Knöpfe ganz unten hovern.
+
 ## Fehler melden
 
 ```
