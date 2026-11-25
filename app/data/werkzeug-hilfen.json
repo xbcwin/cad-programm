@@ -2049,6 +2049,16 @@
     "hilfe": "Verbindet zwei Wellenenden koaxial miteinander – mit gleichen oder unterschiedlichen Bohrungsdurchmessern (d₁ × d₂) und wahlweise als starre Hülsenkupplung mit Gewindestiften, als geschlitzte Klemmkupplung oder als Flanschkupplung mit 4 Schraubenlöchern.",
     "tipp": "Wähle „Eigene Maße“, um unterschiedliche Wellendurchmesser wie Ø 8 mm auf Ø 10 mm direkt zu verbinden."
   },
+  "timingPulley": {
+    "tip": "Zahnriemenscheibe (GT2 und HTD) mit optionalen Bordscheiben und Nabe",
+    "hilfe": "Erzeugt eine Zahnriemenscheibe für GT2- (2 / 3 / 5 mm) oder HTD-Zahnriemen (3M / 5M / 8M) mit exaktem Teilkreis Ø = Zähne · Teilung / π, abgerundeten Zahnlücken, einstellbarer Riemenbreite, Bohrung, Bordscheiben und Nabe.",
+    "tipp": "Wähle „Zweite Riemenscheibe daneben“ im Eigenschaften-Panel und verbinde beide über eine Riemen-Kopplung."
+  },
+  "sprocket": {
+    "tip": "Rollenkettenrad nach Teilung (DIN 8187 / ISO 606, z. B. 1/2\", 3/8\" oder eigene Teilung)",
+    "hilfe": "Erzeugt ein Kettenrad für genormte Rollenketten (04B–16B inkl. 1/2\" Standard- und Fahrradkette) oder eine eigene Kettenteilung mit exaktem Teilkreis Ø = p / sin(π / Zähne), Zahnbreite, optionaler Nabe und Bohrung.",
+    "tipp": "Für eigene Teilungen oder Kettenräder mit Bund stellst du rechts einfach „Eigene Teilung“ bzw. eine Nabenhöhe größer 0 ein."
+  },
   "mountPattern": {
     "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23), Servos und Platinen (Raspberry Pi, Arduino, ESP32)",
     "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt optionalem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23), gängige Servos sowie Platinen-Lochbilder für Raspberry Pi (4/3/5, Zero, Pico), Arduino (Uno R3/R4, Nano) und ESP32 (DevKit V1, Feather). Alle Durchmesser, Lage (X/Y), Drehung, Tiefe und eine 3D-Druck-Passung lassen sich rechts anpassen.",

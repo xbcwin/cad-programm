@@ -2560,6 +2560,54 @@ const Panels = (() => {
             slotW: Units.fmtLenU(m.slotW, 2),
             outW: Units.fmtLenU(m.outerW, 2), outL: Units.fmtLenU(m.outerL, 2), outH: Units.fmtLenU(m.outerH, 2),
           }) }));
+        } else if (def.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = timingPulleyMetrics(rp);
+          sec.append(h('div', { id: 'p-timingpulley-hint', class: 'hint-box', html: T('panel.item.timingPulleyHint', {
+            prof: esc(m.profile), pitch: Units.fmtLenU(m.pitch, 2),
+            dp: Units.fmtLenU(m.dp, 2), da: Units.fmtLenU(m.da, 2),
+            df: Units.fmtLenU(m.df, 2), h: Units.fmtLenU(m.totalH, 1),
+          }) }));
+          const row = h('div', { class: 'btn-row' });
+          const mateBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-timing-pulley-mate' }, T('panel.item.addTimingPulleyMate'));
+          mateBtn.onclick = () => {
+            const mate = timingPulleyMateTransform(rp, it.t);
+            let added = null;
+            App.change('Zweite Zahnriemenscheibe hinzugefügt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              const col = it.color === '#8a99a8' ? '#4f6272' : '#8a99a8';
+              added = Model.newItem('part', { lib: 'timingPulley', ...mate.params }, { name: `Zahnriemenscheibe ${mate.metrics.profile} (${mate.metrics.z} Zähne)`, role: 'solid', color: col, mat: it.mat || 'Alu 6061' });
+              Object.assign(added.t, mate.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          row.append(mateBtn); sec.append(row);
+        } else if (def.lib === 'sprocket' && typeof sprocketMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = sprocketMetrics(rp);
+          sec.append(h('div', { id: 'p-sprocket-hint', class: 'hint-box', html: T('panel.item.sprocketHint', {
+            chain: esc(m.chainLabelShort), pitch: Units.fmtLenU(m.pitch, 3),
+            dp: Units.fmtLenU(m.dp, 2), da: Units.fmtLenU(m.da, 2),
+            df: Units.fmtLenU(m.df, 2), t: Units.fmtLenU(m.thickness, 1), h: Units.fmtLenU(m.totalH, 1),
+          }) }));
+          const row = h('div', { class: 'btn-row' });
+          const mateBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-sprocket-mate' }, T('panel.item.addSprocketMate'));
+          mateBtn.onclick = () => {
+            const mate = sprocketMateTransform(rp, it.t);
+            let added = null;
+            App.change('Zweites Kettenrad hinzugefügt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              const col = it.color === '#4f6272' ? '#6d7f8f' : '#4f6272';
+              added = Model.newItem('part', { lib: 'sprocket', ...mate.params }, { name: `Kettenrad ${mate.metrics.chainLabelShort} (${mate.metrics.z} Zähne)`, role: 'solid', color: col, mat: it.mat || 'Baustahl' });
+              Object.assign(added.t, mate.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          row.append(mateBtn); sec.append(row);
         }
         w.append(sec);
       }

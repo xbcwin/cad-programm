@@ -1085,6 +1085,10 @@ const Model = (() => {
             o.p.spec = shaftCouplingMetrics(o.p);
           } else if (o.p.lib === 'batteryHolder' && typeof batteryHolderMetrics === 'function') {
             o.p.spec = batteryHolderMetrics(o.p);
+          } else if (o.p.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
+            o.p.spec = timingPulleyMetrics(o.p);
+          } else if (o.p.lib === 'sprocket' && typeof sprocketMetrics === 'function') {
+            o.p.spec = sprocketMetrics(o.p);
           }
         }
       }
@@ -2601,6 +2605,8 @@ const Model = (() => {
         if (L === 'shaftCollar') { const m = typeof shaftCollarMetrics === 'function' ? shaftCollarMetrics(p) : { D: 20, b: 10 }; const r = m.D / 2; return [-r, -r, 0, r, r, m.b]; }
         if (L === 'shaftCoupling') { const m = typeof shaftCouplingMetrics === 'function' ? shaftCouplingMetrics(p) : { outerD: 30, L: 45 }; const r = m.outerD / 2; return [-r, -r, 0, r, r, m.L]; }
         if (L === 'batteryHolder') { const m = typeof batteryHolderMetrics === 'function' ? batteryHolderMetrics(p) : { outerW: 35.8, outerL: 57.5, outerH: 16.9 }; return [-m.outerW / 2, -m.outerL / 2, 0, m.outerW / 2, m.outerL / 2, m.outerH]; }
+        if (L === 'timingPulley') { const m = typeof timingPulleyMetrics === 'function' ? timingPulleyMetrics(p) : { outerD: 16, totalH: 14 }; const r = m.outerD / 2; return [-r, -r, 0, r, r, m.totalH]; }
+        if (L === 'sprocket') { const m = typeof sprocketMetrics === 'function' ? sprocketMetrics(p) : { da: 66, totalH: 7.2 }; const r = m.da / 2; return [-r, -r, 0, r, r, m.totalH]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -2896,6 +2902,8 @@ const Model = (() => {
         if (L === 'shaftCollar' && typeof shaftCollarMetrics === 'function') { const m = shaftCollarMetrics(p); return `Ø ${f(m.d)} × ${f(m.D)} × ${f(m.b)}${u}`; }
         if (L === 'shaftCoupling' && typeof shaftCouplingMetrics === 'function') { const m = shaftCouplingMetrics(p); return `Ø ${f(m.d1)}${Math.abs(m.d1 - m.d2) > 0.01 ? '/' + f(m.d2) : ''} × ${f(m.L)}${u}`; }
         if (L === 'batteryHolder' && typeof batteryHolderMetrics === 'function') { const m = batteryHolderMetrics(p); return `${m.count}×${m.id} · ${f(m.outerW)} × ${f(m.outerL)} × ${f(m.outerH)}${u}`; }
+        if (L === 'timingPulley' && typeof timingPulleyMetrics === 'function') { const m = timingPulleyMetrics(p); return `${m.profile} · ${m.z} Z · Ø ${f(m.dp)}${u}`; }
+        if (L === 'sprocket' && typeof sprocketMetrics === 'function') { const m = sprocketMetrics(p); return `${m.chainLabelShort} · ${m.z} Z · Ø ${f(m.dp)}${u}`; }
         return p.size || '';
       }
     }

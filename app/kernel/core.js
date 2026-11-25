@@ -4969,6 +4969,8 @@ export function createKernel(R, oc) {
     if (lib === 'bevelGear') {
       return buildBevelGear(p);
     }
+    if (lib === 'timingPulley') return buildTimingPulley(p);
+    if (lib === 'sprocket') return buildSprocket(p);
     if (lib === 'aeroBody') return buildAeroBody(p);
     if (lib === 'armFairing') return buildArmFairing(p);
     if (lib === 'motorFairing') return buildMotorFairing(p);
@@ -5799,6 +5801,223 @@ export function createKernel(R, oc) {
       g = cutRes;
     }
     return g;
+  }
+  function buildTimingPulley(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const z = Math.max(10, Math.min(120, Math.round(num(sp.z ?? p.teeth, 20))));
+    const pitch = pos(sp.pitch, 2.0);
+    const pld = Math.max(0.05, num(sp.pld, 0.254));
+    const ht = pos(sp.ht, 0.75);
+    const family = sp.family || (String(p.profile || '').toUpperCase().startsWith('HTD') ? 'HTD' : 'GT2');
+    const dp = pos(sp.dp, (z * pitch) / Math.PI);
+    const da = Math.max(2, pos(sp.da, dp - 2 * pld));
+    const df = Math.max(1.2, pos(sp.df, da - 2 * ht));
+    const ra = da / 2;
+    const rf = df / 2;
+    const htEff = Math.max(0.15, ra - rf);
+    const grooveFrac = Math.max(0.42, Math.min(0.66, num(sp.grooveFrac, family === 'HTD' ? 0.60 : 0.56)));
+    const flanges = sp.flanges || p.flanges || 'both';
+    const hasBot = flanges === 'both' || flanges === 'bottom';
+    const hasTop = flanges === 'both';
+    const flangeT = hasBot || hasTop ? pos(sp.flangeT, Math.max(1.0, 0.55 * pitch)) : 0;
+    const flangeR = hasBot || hasTop ? Math.max(ra + 0.8, pos(sp.flangeD, da + 3.2) / 2) : ra;
+    const trackW = pos(sp.trackW, pos(p.beltW, 6) + (hasBot || hasTop ? 0.8 : 0));
+    const hubH = Math.max(0, num(sp.hubH ?? p.hubH, 5));
+    const hubR = hubH > 0 ? Math.max(1.2, pos(sp.hubD, da * 0.85) / 2) : 0;
+    const bore = Math.max(0, num(sp.bore ?? p.bore, 5));
+
+    const zBotFlange0 = hubH;
+    const zTrack0 = hubH + (hasBot ? flangeT : 0);
+    const zTrack1 = zTrack0 + trackW;
+    const totalH = zTrack1 + (hasTop ? flangeT : 0);
+    const zExt0 = zTrack0 - (hasBot ? 0.05 : 0);
+    const zExt1 = zTrack1 + (hasTop ? 0.05 : 0);
+
+    const theta = (2 * Math.PI) / z;
+    const halfG = (grooveFrac * theta) / 2;
+    const exp = family === 'HTD' ? 0.5 : 0.65;
+    const U = [-1, -0.85, -0.65, -0.35, 0, 0.35, 0.65, 0.85, 1];
+    const P = (r, a) => [r * Math.cos(a), r * Math.sin(a), zExt0];
+
+    const edges = [];
+    let wire = null, face = null, toothed = null;
+    try {
+      for (let i = 0; i < z; i++) {
+        const c = i * theta;
+        const cNext = i === z - 1 ? 0 : (i + 1) * theta;
+        const gPts = U.map((u) => {
+          const r = ra - htEff * Math.pow(Math.max(0, 1 - u * u), exp);
+          return P(r, c + halfG * u);
+        });
+        edges.push(R.makeBSplineApproximation(gPts, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+        const a0 = c + halfG;
+        const a1 = cNext - halfG;
+        const aM = c + theta / 2;
+        edges.push(R.makeThreePointArc(P(ra, a0), P(ra, aM), P(ra, a1)));
+      }
+      wire = R.assembleWire(edges);
+      face = R.makeFace(wire);
+      toothed = R.basicFaceExtrusion(face, new R.Vector([0, 0, zExt1 - zExt0]));
+    } catch (_) {
+      safeDelete(toothed); toothed = null;
+      const pts = [];
+      for (let i = 0; i < z; i++) {
+        const c = i * theta;
+        for (const u of U) {
+          const r = ra - htEff * Math.pow(Math.max(0, 1 - u * u), exp);
+          pts.push(P(r, c + halfG * u));
+        }
+      }
+      let pFace = null;
+      try {
+        pFace = polygonFace(pts);
+        toothed = R.basicFaceExtrusion(pFace, new R.Vector([0, 0, zExt1 - zExt0]));
+      } finally {
+        safeDelete(pFace);
+      }
+    } finally {
+      for (const e of edges) safeDelete(e);
+      safeDelete(wire);
+      safeDelete(face);
+    }
+
+    const parts = [toothed];
+    let shape = null;
+    try {
+      if (hasBot) parts.push(R.makeCylinder(flangeR, flangeT, [0, 0, zBotFlange0], [0, 0, 1]));
+      if (hasTop) parts.push(R.makeCylinder(flangeR, flangeT, [0, 0, zTrack1], [0, 0, 1]));
+      const hubREff = hubH > 0.05 && hubR > 0.5 ? (hasBot ? Math.min(hubR, flangeR) : Math.min(hubR, rf - 0.1)) : 0;
+      if (hubREff > 0.5) parts.push(R.makeCylinder(hubREff, hubH + 0.05, [0, 0, 0], [0, 0, 1]));
+      shape = parts.length > 1 ? fuseAll(parts, true) : toothed;
+      parts.length = 0;
+      const minOuter = hubREff > 0.5 ? Math.min(df, 2 * hubREff) : df;
+      if (bore > 0.1 && bore < minOuter - 0.35) {
+        const cyl = R.makeCylinder(bore / 2, totalH + 2, [0, 0, -1], [0, 0, 1]);
+        try {
+          const cut = shape.cut(cyl);
+          safeDelete(shape);
+          shape = cut;
+        } finally {
+          safeDelete(cyl);
+        }
+      }
+      if (!isClosedValidSolid(shape)) throw new Error('Zahnriemenscheibe ergab keinen geschlossenen Körper.');
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      for (const s of parts) safeDelete(s);
+      safeDelete(shape);
+    }
+  }
+  function buildSprocket(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const z = Math.max(8, Math.min(120, Math.round(num(sp.z ?? p.teeth, 15))));
+    const pitch = pos(sp.pitch, 12.7);
+    const d1 = Math.min(pitch * 0.72, Math.max(pitch * 0.3, pos(sp.d1 ?? p.rollerD, 8.51)));
+    const ri = pos(sp.ri, 0.505 * d1);
+    const dp = pos(sp.dp, pitch / Math.sin(Math.PI / z));
+    const rp = dp / 2;
+    const rf = Math.max(1, rp - ri);
+    const df = 2 * rf;
+    const da = Math.max(dp + 0.25 * pitch, pos(sp.da, dp + pitch * (1.125 - 0.8 / z) - d1));
+    const ra = da / 2;
+    const thick = pos(sp.thickness ?? p.thickness, 7.2);
+    const bore = Math.max(0, num(sp.bore ?? p.bore, 10));
+    const hubH = Math.max(0, num(sp.hubH ?? p.hubH, 0));
+    const hubR = hubH > 0 ? Math.min(rf - 0.3, Math.max(1.5, pos(sp.hubD, df * 0.62) / 2)) : 0;
+    const totalH = thick + hubH;
+
+    const theta = (2 * Math.PI) / z;
+    const halfT = theta / 2;
+    let alphaS = ((70 - 45 / z) * Math.PI) / 180;
+    const seatAng = (a) => Math.atan2(ri * Math.sin(a), rp - ri * Math.cos(a));
+    while (alphaS > 0.15 && seatAng(alphaS) > halfT * 0.78) alphaS *= 0.9;
+    const A0 = [rp - ri * Math.cos(alphaS), ri * Math.sin(alphaS)];
+    const angA = Math.atan2(A0[1], A0[0]);
+    const deltaTip = Math.min(0.07 * theta, Math.max(0.015 * theta, (halfT - angA) * 0.22));
+    const betaTip = halfT - deltaTip;
+    const T0 = [ra * Math.cos(betaTip), ra * Math.sin(betaTip)];
+
+    const tA = [Math.sin(alphaS), Math.cos(alphaS)];
+    const nTip = [Math.cos(betaTip), Math.sin(betaTip)];
+    const tauTip = [-Math.sin(betaTip), Math.cos(betaTip)];
+    const tTRaw = [0.45 * nTip[0] + 0.89 * tauTip[0], 0.45 * nTip[1] + 0.89 * tauTip[1]];
+    const tTLen = Math.hypot(tTRaw[0], tTRaw[1]) || 1;
+    const tT = [tTRaw[0] / tTLen, tTRaw[1] / tTLen];
+
+    const dx = T0[0] - A0[0];
+    const dy = T0[1] - A0[1];
+    const L = Math.hypot(dx, dy) || 1;
+    const s1 = Math.max(0.1 * L, Math.min(0.38 * L, dx > 0 && tA[0] > 0.1 ? (0.46 * dx) / tA[0] : 0.35 * L, dy > 0 && tA[1] > 0.1 ? (0.44 * dy) / tA[1] : 0.35 * L));
+    const s2 = Math.max(0.1 * L, Math.min(0.38 * L, dx > 0 && tT[0] > 0.1 ? (0.46 * dx) / tT[0] : 0.35 * L, dy > 0 && tT[1] > 0.1 ? (0.44 * dy) / tT[1] : 0.35 * L));
+    const P1_0 = [A0[0] + s1 * tA[0], A0[1] + s1 * tA[1]];
+    const P2_0 = [T0[0] - s2 * tT[0], T0[1] - s2 * tT[1]];
+
+    const mir = (pt) => [pt[0], -pt[1]];
+    const rot2 = (pt, ang) => {
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      return [pt[0] * cs - pt[1] * sn, pt[0] * sn + pt[1] * cs, 0];
+    };
+
+    const edges = [];
+    let wire = null, face = null, plate = null;
+    try {
+      for (let i = 0; i < z; i++) {
+        const c = i * theta;
+        const cNext = i === z - 1 ? 0 : (i + 1) * theta;
+        edges.push(R.makeThreePointArc(rot2(mir(A0), c), rot2([rf, 0], c), rot2(A0, c)));
+        edges.push(R.makeBezierCurve([rot2(A0, c), rot2(P1_0, c), rot2(P2_0, c), rot2(T0, c)]));
+        edges.push(R.makeThreePointArc(rot2(T0, c), rot2([ra, 0], c + halfT), rot2(mir(T0), cNext)));
+        edges.push(R.makeBezierCurve([rot2(mir(T0), cNext), rot2(mir(P2_0), cNext), rot2(mir(P1_0), cNext), rot2(mir(A0), cNext)]));
+      }
+      wire = R.assembleWire(edges);
+      face = R.makeFace(wire);
+      plate = R.basicFaceExtrusion(face, new R.Vector([0, 0, thick]));
+    } catch (_) {
+      safeDelete(plate); plate = null;
+      const pts = [];
+      for (let i = 0; i < z; i++) {
+        const c = i * theta;
+        pts.push(rot2(mir(A0), c), rot2([rf, 0], c), rot2(A0, c), rot2(P1_0, c), rot2(T0, c), rot2([ra, 0], c + halfT));
+      }
+      let pFace = null;
+      try {
+        pFace = polygonFace(pts);
+        plate = R.basicFaceExtrusion(pFace, new R.Vector([0, 0, thick]));
+      } finally {
+        safeDelete(pFace);
+      }
+    } finally {
+      for (const e of edges) safeDelete(e);
+      safeDelete(wire);
+      safeDelete(face);
+    }
+
+    let shape = plate;
+    try {
+      if (hubH > 0.05 && hubR > 0.5) {
+        const hub = R.makeCylinder(hubR, hubH + 0.05, [0, 0, thick - 0.05], [0, 0, 1]);
+        shape = fuseAll([shape, hub], true);
+      }
+      const minOuter = hubH > 0.05 && hubR > 0.5 ? Math.min(df, 2 * hubR) : df;
+      if (bore > 0.1 && bore < minOuter - 0.5) {
+        const cyl = R.makeCylinder(bore / 2, totalH + 2, [0, 0, -1], [0, 0, 1]);
+        try {
+          const cut = shape.cut(cyl);
+          safeDelete(shape);
+          shape = cut;
+        } finally {
+          safeDelete(cyl);
+        }
+      }
+      if (!isClosedValidSolid(shape)) throw new Error('Kettenrad ergab keinen geschlossenen Körper.');
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      safeDelete(shape);
+    }
   }
   // ---------- Kanten-Veredelung ----------
   function edgeSig(e) {
