@@ -5479,7 +5479,7 @@ const Joints = (() => {
     const baseV = Model.vars(doc).v;
     const inspect = (it, V) => {
       if (!it) return null;
-      if (it.kind === 'part' && it.p && it.p.lib === 'gear') {
+      if (it.kind === 'part' && it.p && (it.p.lib === 'gear' || it.p.lib === 'internalGear' || it.p.lib === 'wormWheel')) {
         const teeth = Model.num(it.p.teeth, V, 0);
         const rawMod = Model.num(it.p.module, V, 1.5);
         const mod = rawMod > 0 ? rawMod : 1.5;

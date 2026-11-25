@@ -384,5 +384,25 @@
     "was": "Schneidet einen geschlossenen Skizzen-Umriss als Schritt der Baugruppe gleichzeitig durch mehrere Teile.",
     "wozu": "Ideal für gemeinsame Aussparungen, Kabeldurchführungen oder Fenster über mehrere gestapelte Baugruppen-Teile hinweg.",
     "achtung": "Wie bei der Stapelbohrung bleiben alle geschnittenen Teile eigene Körper, und die verknüpften Bauteil-Dokumente bleiben unverändert."
+  },
+  "internalGear": {
+    "was": "Erstellt ein Hohlrad mit innenliegenden Evolventen-Zähnen und einer geschlossenen Außenwand.",
+    "wozu": "Brauchst du für Planetengetriebe, kompakte Untersetzungen und innenverzahnte Antriebe.",
+    "achtung": "Stirnräder (Sonne und Planeten) müssen exakt denselben Modul besitzen wie das Innenzahnrad."
+  },
+  "gearRack": {
+    "was": "Erstellt eine gerade Zahnstange mit 20°-Normverzahnung der Länge π · Modul · Zähne.",
+    "wozu": "Wandelt mit einem passenden Stirnrad Drehbewegungen in genaue geradlinige Bewegungen um.",
+    "achtung": "Ritzel und Zahnstange brauchen denselben Modul; der Teilungsabstand von Zahn zu Zahn beträgt π · Modul."
+  },
+  "worm": {
+    "was": "Erzeugt eine 1- bis 4-gängige Zylinderschnecke mit schraubenförmigem Trapezprofil passend zum Modul.",
+    "wozu": "Für große Untersetzungen auf kleinem Raum im rechten Winkel zu einem Schneckenrad.",
+    "achtung": "Schnecke und Schneckenrad müssen in Modul, Schnecken-Durchmesser, Gangzahl und Steigungsrichtung übereinstimmen."
+  },
+  "wormWheel": {
+    "was": "Erstellt ein schrägverzahntes Schneckenrad, dessen Verzahnung genau dem Steigungswinkel der Schnecke folgt.",
+    "wozu": "Bildet zusammen mit einer passenden Schnecke ein rechtwinkliges Schneckengetriebe mit Übersetzung z₂ : z₁.",
+    "achtung": "Der richtige Achsabstand beträgt a = (d₁ + d₂) / 2 und wird dir direkt im Eigenschaften-Panel angezeigt."
   }
 }

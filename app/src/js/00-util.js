@@ -724,6 +724,10 @@ const IC = {
   surface: '<path d="M4 13l4.5 6.5L15.5 5H21M6.3 16.3h6.2"/>',
   weld: '<path d="M3 18l5-6h13M11 12v-5l5 5"/>',
   symbols: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.2"/><path d="M5.5 8l1.2-2.8L8 8M15.8 6.8h3M17.3 5.3v3"/>',
+  internalGear: '<circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5" stroke-dasharray="2.1 1.6"/><circle cx="12" cy="12" r="7.5" opacity=".3"/>',
+  gearRack: '<path d="M3 18h18v-5H3z" fill="currentColor" opacity=".2"/><path d="M3 18h18v-5h-2v-3h-2.5v3h-2.5v-3H11.5v3H9v-3H6.5v3H3z"/>',
+  worm: '<rect x="7" y="4" width="10" height="16" rx="2"/><path d="M7 8l10-2.2M7 12l10-2.2M7 16l10-2.2M12 2v2M12 20v2"/>',
+  wormWheel: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3"/><path d="M8.5 5.3l7 1.4M7.2 8.8l9.6 2M7.2 13.2l9.6 2M8.5 16.7l7 1.4" opacity=".6"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2730,6 +2734,26 @@ const HELP = {
   "tip": "Zeichnung auf Knopfdruck mit Ansichten, Maßstab, Maßen, Mittellinien und Schriftfeld fertig machen",
   "hilfe": "Schaltet Vorder-, Drauf-, Seiten- und isometrische Ansicht ein, wählt einen passenden Standard-Maßstab ohne Überlauf über den Blattrand, übernimmt die Maße aus dem Modell ohne Überlappen, blendet Mittellinien an allen Bohrungen und Zylindern ein und füllt leere Felder im Schriftfeld automatisch aus.",
   "tipp": "Du kannst jederzeit einzelne Maße, Ansichten oder Schriftfeld-Angaben nachträglich ändern – und mit Rückgängig stellst du den vorherigen Stand wieder her."
+ },
+ "internalGear": {
+  "tip": "Innenzahnrad (Hohlrad) mit innenliegenden Zähnen passend zum Modul (Profi)",
+  "hilfe": "Erzeugt ein geschlossenes Hohlrad mit Evolventen-Innenverzahnung (Eingriffswinkel 20°) für Planeten- oder Innengetriebe. Wähle Zähnezahl, Modul, Dicke und Außenwandstärke – außen bleibt ein sauberer Ring stehen.",
+  "tipp": "Für ein Planetengetriebe wählst du beim Sonnen- und Planetenrad exakt denselben Modul; es gilt z_Hohlrad = z_Sonne + 2 · z_Planet."
+ },
+ "gearRack": {
+  "tip": "Gerade Zahnstange passend zum Modul (Profi)",
+  "hilfe": "Erstellt eine gerade Zahnstange mit trapezförmigem Normprofil (20° Flankenwinkel). Jede Zahnteilung ist exakt π · Modul lang, die Gesamtlänge beträgt damit genau π · Modul · Zähne.",
+  "tipp": "Kombiniere die Zahnstange im selben Modul mit einem Stirnrad und einer Zahnstangen-Kopplung (BG-14) für lineare Antriebe."
+ },
+ "worm": {
+  "tip": "Zylinderschnecke (1- bis 4-gängig) passend zum Modul (Profi)",
+  "hilfe": "Erzeugt eine gewindeartige Schneckenwelle mit Norm-Trapezprofil (20°) und einstellbarer Gangzahl, Teilkreisdurchmesser, Länge, Bohrung und Steigungsrichtung. Über den Knopf rechts setzt du direkt ein passendes Schneckenrad im richtigen Achsabstand daneben.",
+  "tipp": "Eingängige Schnecken mit kleinem Steigungswinkel wirken meist selbsthemmend; für höhere Geschwindigkeiten erhöhst du die Gangzahl (z₁)."
+ },
+ "wormWheel": {
+  "tip": "Schrägverzahntes Schneckenrad passend zu Modul und Schnecke (Profi)",
+  "hilfe": "Erzeugt ein Zahnrad, dessen Zähne genau um den Steigungswinkel γ der zugehörigen Schnecke geneigt sind. Stelle denselben Modul, Schnecken-Durchmesser, Gangzahl und Steigungsrichtung ein – rechts siehst du sofort Übersetzung und Achsabstand a = (d₁ + d₂) / 2.",
+  "tipp": "Nutze den Knopf „Passende Schnecke hinzufügen“ im Panel rechts, um beide Teile sofort passend auszurichten."
  }
 };
 

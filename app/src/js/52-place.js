@@ -31,6 +31,9 @@ const Place = (() => {
     if (d.lib === 'snapHook') return [0, -4, 0, 2.8, 4, 12];
     if (d.lib === 'hinge') return [-20, -17.5, 0, 20, 17.5, 5.3];
     if (d.lib === 'gear') return [-16.5, -16.5, 0, 16.5, 16.5, 6];
+    if (d.lib === 'internalGear' || d.lib === 'gearRack' || d.lib === 'worm' || d.lib === 'wormWheel') {
+      return Model.primitiveBox('part', { lib: d.lib, ...p }) || [-15, -15, 0, 15, 15, 10];
+    }
     return [-10, -10, 0, 10, 10, 10];
   }
   function makePreview(spec) {

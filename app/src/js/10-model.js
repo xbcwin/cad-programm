@@ -2525,6 +2525,11 @@ const Model = (() => {
         if (L === 'splineShaft') { const se = typeof splineEntry === 'function' && p.profile !== 'custom' ? splineEntry(p.profile) : null; const r = n('D', se ? se.D : 20) / 2, len = n('length', 40); return [-r, -r, 0, r, r, len]; }
         if (L === 'stdBearing') { const be = typeof bearingEntry === 'function' ? bearingEntry(p.size) : null; const r = (be ? be.D_mm : 22) / 2, B = be ? be.B_mm : 7; return [-r, -r, 0, r, r, B]; }
         if (L === 'stdSleeve') { const se = typeof sleeveEntry === 'function' ? sleeveEntry(p.size) : null; const D = se ? (p.flange === 'flange' ? (se.flansch_d_mm || se.D_mm + 4 * se.wand_mm) : se.D_mm) : 10, r = D / 2, len = n('length', 10); return [-r, -r, 0, r, r, len]; }
+        if (L === 'gear') { const r = (n('teeth', 20) * n('module', 1.5)) / 2 + n('module', 1.5); return [-r, -r, 0, r, r, n('h', 6)]; }
+        if (L === 'internalGear' && typeof internalGearMetrics === 'function') { const gm = internalGearMetrics({ teeth: n('teeth', 40), module: n('module', 1.5), h: n('h', 6), wall: n('wall', 5) }); const r = gm.outerD / 2; return [-r, -r, 0, r, r, gm.h]; }
+        if (L === 'gearRack' && typeof gearRackMetrics === 'function') { const gm = gearRackMetrics({ teeth: n('teeth', 10), module: n('module', 1.5), h: n('h', 6), baseH: n('baseH', 6) }); return [-gm.length / 2, 0, 0, gm.length / 2, gm.totalH, gm.h]; }
+        if (L === 'worm' && typeof wormMetrics === 'function') { const gm = wormMetrics({ module: n('module', 1.5), starts: n('starts', 1), d: n('d', 16), length: n('length', 30) }); const r = gm.da1 / 2; return [-r, -r, 0, r, r, gm.length]; }
+        if (L === 'wormWheel' && typeof wormWheelMetrics === 'function') { const gm = wormWheelMetrics({ teeth: n('teeth', 24), module: n('module', 1.5), h: n('h', 10), wormD: n('wormD', 16), wormStarts: n('wormStarts', 1) }); const r = gm.da2 / 2; return [-r, -r, 0, r, r, gm.h]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }

@@ -4499,6 +4499,10 @@ export function createKernel(R, oc) {
     if (lib === 'gear') {
       return buildGear(p);
     }
+    if (lib === 'internalGear') return buildInternalGear(p);
+    if (lib === 'gearRack') return buildGearRack(p);
+    if (lib === 'worm') return buildWorm(p);
+    if (lib === 'wormWheel') return buildWormWheel(p);
     if (lib === 'aeroBody') return buildAeroBody(p);
     if (lib === 'armFairing') return buildArmFairing(p);
     if (lib === 'motorFairing') return buildMotorFairing(p);
@@ -4789,6 +4793,256 @@ export function createKernel(R, oc) {
       g = R.basicFaceExtrusion(polygonFace(pts), new R.Vector([0, 0, h]));
     }
     if (bore > 0.1 && bore < rf * 2 - 0.5) g = g.cut(R.makeCylinder(bore / 2, h + 2, [0, 0, -1]));
+    return g;
+  }
+  function involuteGearWire(z, m, zOff = 0, rotRad = 0, N = 6) {
+    const alpha = (20 * Math.PI) / 180;
+    const rp = (m * z) / 2, rb = rp * Math.cos(alpha), ra = rp + m, rf = Math.max(0.5, rp - 1.25 * m);
+    const inv = (a) => Math.tan(a) - a;
+    const tooth = (2 * Math.PI) / z;
+    const half = Math.PI / (2 * z) + inv(alpha);
+    const rStart = Math.max(rb, rf);
+    const P = (r, a) => [r * Math.cos(a + rotRad), r * Math.sin(a + rotRad), zOff];
+    const flankAng = (r) => half - inv(Math.acos(Math.min(1, rb / r)));
+    const edges = [];
+    for (let i = 0; i < z; i++) {
+      const c = i * tooth;
+      const right = [], left = [];
+      for (let k = 0; k <= N; k++) { const r = rStart + ((ra - rStart) * k) / N; right.push(P(r, c - flankAng(r))); }
+      for (let k = N; k >= 0; k--) { const r = rStart + ((ra - rStart) * k) / N; left.push(P(r, c + flankAng(r))); }
+      if (rf < rStart - 1e-6) edges.push(R.makeLine(P(rf, c - flankAng(rStart)), right[0]));
+      edges.push(R.makeBSplineApproximation(right, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const tipA = c - flankAng(ra), tipB = c + flankAng(ra);
+      if (tipB - tipA > 1e-4) edges.push(R.makeThreePointArc(right[N], P(ra, c), left[0]));
+      edges.push(R.makeBSplineApproximation(left, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const rootA = c + flankAng(rStart);
+      const endL = rf < rStart - 1e-6 ? P(rf, rootA) : left[N];
+      if (rf < rStart - 1e-6) edges.push(R.makeLine(left[N], endL));
+      const nextA = c + tooth - flankAng(rStart);
+      const nextStart = P(rf < rStart - 1e-6 ? rf : rStart, nextA);
+      if (nextA - rootA > 1e-4) edges.push(R.makeThreePointArc(endL, P(rf < rStart - 1e-6 ? rf : rStart, (rootA + nextA) / 2), nextStart));
+    }
+    try {
+      return R.assembleWire(edges);
+    } finally {
+      for (const e of edges) safeDelete(e);
+    }
+  }
+  function isClosedValidSolid(shape) {
+    if (!shape || shape.isNull) return false;
+    let chk = null;
+    try {
+      chk = new oc.BRepCheck_Analyzer(shape.wrapped, true);
+      if (!chk.IsValid()) return false;
+      return R.measureVolume(shape) > 1e-6;
+    } catch (_) {
+      return false;
+    } finally {
+      if (chk) chk.delete();
+    }
+  }
+  function buildInternalGear(p) {
+    const z = Math.max(12, Math.min(200, Math.round(num(p.teeth, 40))));
+    const m = pos(p.module, 1.5), h = pos(p.h, 6), wall = Math.max(0.5, pos(p.wall, 5));
+    const alpha = (20 * Math.PI) / 180;
+    const rp = (m * z) / 2, rb = rp * Math.cos(alpha), ra = Math.max(0.5, rp - m), rf = rp + 1.25 * m, rOut = rf + wall;
+    const inv = (a) => Math.tan(a) - a;
+    const tooth = (2 * Math.PI) / z;
+    const half = Math.PI / (2 * z) + inv(alpha);
+    const rStart = Math.max(rb, ra);
+    const flankAng = (r) => Math.max(1e-4, half - inv(Math.acos(Math.min(1, rb / r))));
+    const P = (r, a) => [r * Math.cos(a), r * Math.sin(a), 0];
+    const N = 6;
+    const edges = [];
+    for (let i = 0; i < z; i++) {
+      const c = i * tooth;
+      const right = [], left = [];
+      for (let k = 0; k <= N; k++) { const r = rStart + ((rf - rStart) * k) / N; right.push(P(r, c - flankAng(r))); }
+      for (let k = N; k >= 0; k--) { const r = rStart + ((rf - rStart) * k) / N; left.push(P(r, c + flankAng(r))); }
+      if (ra < rStart - 1e-6) edges.push(R.makeLine(P(ra, c - flankAng(rStart)), right[0]));
+      edges.push(R.makeBSplineApproximation(right, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const rA = c - flankAng(rf), rB = c + flankAng(rf);
+      if (rB - rA > 1e-4) edges.push(R.makeThreePointArc(right[N], P(rf, c), left[0]));
+      edges.push(R.makeBSplineApproximation(left, { tolerance: 1e-4, degMax: 3, degMin: 2 }));
+      const tipA = c + flankAng(rStart);
+      const endL = ra < rStart - 1e-6 ? P(ra, tipA) : left[N];
+      if (ra < rStart - 1e-6) edges.push(R.makeLine(left[N], endL));
+      const nextA = c + tooth - flankAng(rStart);
+      const rTip = ra < rStart - 1e-6 ? ra : rStart;
+      const nextStart = P(rTip, nextA);
+      if (nextA - tipA > 1e-4) edges.push(R.makeThreePointArc(endL, P(rTip, (tipA + nextA) / 2), nextStart));
+    }
+    let outerEdge = null, outerWire = null, innerWire = null, holeWire = null, face = null, g = null;
+    try {
+      outerEdge = R.makeCircle(rOut, [0, 0, 0], [0, 0, 1]);
+      outerWire = R.assembleWire([outerEdge]);
+      innerWire = R.assembleWire(edges);
+      holeWire = R.cast(innerWire.wrapped.Reversed());
+      face = R.makeFace(outerWire, [holeWire]);
+      g = R.basicFaceExtrusion(face, new R.Vector([0, 0, h]));
+      if (isClosedValidSolid(g)) {
+        const out = g;
+        g = null;
+        return out;
+      }
+      safeDelete(g); g = null;
+    } catch (_) {
+      safeDelete(g); g = null;
+    } finally {
+      for (const e of edges) safeDelete(e);
+      safeDelete(outerEdge); safeDelete(outerWire); safeDelete(holeWire); safeDelete(face);
+    }
+    let outerCyl = null, plugFace = null, plug = null, cutRes = null;
+    try {
+      outerCyl = R.makeCylinder(rOut, h, [0, 0, 0], [0, 0, 1]);
+      if (innerWire) {
+        plugFace = R.makeFace(innerWire).translate([0, 0, -1]);
+      } else {
+        const pts = [];
+        for (let i = 0; i < z; i++) {
+          const c = i * tooth;
+          for (let k = 0; k <= 5; k++) { const r = rStart + ((rf - rStart) * k) / 5; pts.push([r * Math.cos(c - flankAng(r)), r * Math.sin(c - flankAng(r)), -1]); }
+          for (let k = 5; k >= 0; k--) { const r = rStart + ((rf - rStart) * k) / 5; pts.push([r * Math.cos(c + flankAng(r)), r * Math.sin(c + flankAng(r)), -1]); }
+        }
+        plugFace = polygonFace(pts);
+      }
+      plug = R.basicFaceExtrusion(plugFace, new R.Vector([0, 0, h + 2]));
+      cutRes = outerCyl.cut(plug);
+      if (!isClosedValidSolid(cutRes)) throw new Error('Innenzahnrad konnte nicht als geschlossener Körper erzeugt werden.');
+      const out = cutRes;
+      cutRes = null;
+      return out;
+    } finally {
+      safeDelete(innerWire); safeDelete(outerCyl); safeDelete(plugFace); safeDelete(plug); safeDelete(cutRes);
+    }
+  }
+  function buildGearRack(p) {
+    const z = Math.max(2, Math.min(200, Math.round(num(p.teeth, 10))));
+    const m = pos(p.module, 1.5), h = pos(p.h, 6), baseH = Math.max(0.5, pos(p.baseH, 6));
+    const alpha = (20 * Math.PI) / 180, tanA = Math.tan(alpha);
+    const pitch = Math.PI * m, L = pitch * z;
+    const yRoot = baseH, yTip = baseH + 2.25 * m;
+    const wTip = pitch / 4 - m * tanA, wRoot = pitch / 4 + 1.25 * m * tanA;
+    const pts = [[-L / 2, 0, 0], [L / 2, 0, 0], [L / 2, yRoot, 0]];
+    for (let i = z - 1; i >= 0; i--) {
+      const xc = -L / 2 + (i + 0.5) * pitch;
+      pts.push([xc + wRoot, yRoot, 0], [xc + wTip, yTip, 0], [xc - wTip, yTip, 0], [xc - wRoot, yRoot, 0]);
+    }
+    pts.push([-L / 2, yRoot, 0]);
+    const face = polygonFace(pts);
+    try {
+      return R.basicFaceExtrusion(face, new R.Vector([0, 0, h]));
+    } finally {
+      safeDelete(face);
+    }
+  }
+  function buildWorm(p) {
+    const m = pos(p.module, 1.5);
+    const starts = Math.max(1, Math.min(4, Math.round(num(p.starts, 1))));
+    const L = pos(p.length, 30), bore = Math.max(0, num(p.bore, 6));
+    const left = p.dir === 'left';
+    const d1 = Math.max(pos(p.d, 16), 2.5 * m + 2.4);
+    const r1 = d1 / 2, ra1 = r1 + m, rf1 = Math.max(0.6, r1 - 1.25 * m);
+    const px = Math.PI * m, pz = starts * px;
+    const alpha = (20 * Math.PI) / 180, tanA = Math.tan(alpha);
+    const wTip = px / 4 - m * tanA, wRoot = px / 4 + 1.25 * m * tanA;
+    const overlap = Math.min(0.15 * m, rf1 * 0.25, ((px / 2 - wRoot) * 0.4) / tanA);
+    const x0 = rf1 - overlap, wIn = wRoot + overlap * tanA;
+    let lastErr = null;
+    for (const phase of [0, 0.17, 0.37]) {
+      let prof = null, helix = null, gang0 = null, core = null, full = null, box = null, out = null;
+      const rotGangs = [];
+      try {
+        const z0 = -(1 + phase) * pz;
+        const pts = [[x0, 0, z0 - wIn], [ra1, 0, z0 - wTip], [ra1, 0, z0 + wTip], [x0, 0, z0 + wIn]];
+        const lines = [R.makeLine(pts[0], pts[1]), R.makeLine(pts[1], pts[2]), R.makeLine(pts[2], pts[3]), R.makeLine(pts[3], pts[0])];
+        prof = R.assembleWire(lines);
+        for (const ln of lines) safeDelete(ln);
+        helix = R.makeHelix(pz, L + (2 + phase) * pz, x0, [0, 0, z0], [0, 0, 1], left);
+        gang0 = R.genericSweep(prof, helix, { frenet: true });
+        core = R.makeCylinder(rf1 + 0.02, L + 3 * pz, [0, 0, -1.5 * pz], [0, 0, 1]);
+        const parts = [core, gang0];
+        for (let k = 1; k < starts; k++) {
+          const gk = gang0.clone().rotate((360 / starts) * k, [0, 0, 0], [0, 0, 1]);
+          rotGangs.push(gk);
+          parts.push(gk);
+        }
+        full = fuseAll(parts, false);
+        box = R.makeCylinder(ra1 + 1, L, [0, 0, 0], [0, 0, 1]);
+        out = full.intersect(box);
+        safeDelete(full); full = null; safeDelete(box); box = null;
+        if (!isClosedValidSolid(out)) throw new Error('Schnecke ergab keinen geschlossenen Körper');
+        if (bore > 0.1 && bore < rf1 * 2 - 0.5) {
+          const cyl = R.makeCylinder(bore / 2, L + 2, [0, 0, -1], [0, 0, 1]);
+          try {
+            const cut = out.cut(cyl);
+            safeDelete(out);
+            out = cut;
+          } finally { safeDelete(cyl); }
+        }
+        if (!isClosedValidSolid(out)) throw new Error('Schnecke ergab nach Bohrung keinen geschlossenen Körper');
+        const res = out;
+        out = null;
+        return res;
+      } catch (err) {
+        lastErr = err;
+      } finally {
+        safeDelete(prof); safeDelete(helix); safeDelete(gang0); safeDelete(core);
+        for (const gk of rotGangs) safeDelete(gk);
+        safeDelete(full); safeDelete(box); safeDelete(out);
+      }
+    }
+    throw lastErr || new Error('Schnecke konnte nicht gebaut werden.');
+  }
+  function buildWormWheel(p) {
+    const z = Math.max(10, Math.min(120, Math.round(num(p.teeth, 24))));
+    const m = pos(p.module, 1.5), h = pos(p.h, 10);
+    const d1 = Math.max(pos(p.wormD, 16), 2.5 * m + 2.4);
+    const starts = Math.max(1, Math.min(4, Math.round(num(p.wormStarts, 1))));
+    const bore = Math.max(0, num(p.bore, 6));
+    const sign = p.dir === 'left' ? -1 : 1;
+    const rp = (m * z) / 2, rf = Math.max(0.5, rp - 1.25 * m);
+    const tanGamma = (m * starts) / d1;
+    const twistRad = sign * (h * tanGamma) / rp;
+    const twistDeg = (twistRad * 180) / Math.PI;
+    let g = null;
+    if (Math.abs(twistDeg) >= 0.05) {
+      const steps = Math.max(2, Math.min(8, Math.ceil(Math.abs(twistDeg) / 5)));
+      const wires = [];
+      try {
+        for (let k = 0; k <= steps; k++) {
+          const u = k / steps;
+          wires.push(involuteGearWire(z, m, u * h, (u - 0.5) * twistRad, 6));
+        }
+        for (const ruled of [false, true]) {
+          try {
+            const cand = R.loft(wires, { ruled });
+            if (isClosedValidSolid(cand)) { g = cand; break; }
+            safeDelete(cand);
+          } catch (_) {}
+        }
+      } finally {
+        for (const w of wires) safeDelete(w);
+      }
+    }
+    if (!g) {
+      let w0 = null, f0 = null;
+      try {
+        w0 = involuteGearWire(z, m, 0, 0, 6);
+        f0 = R.makeFace(w0);
+        g = R.basicFaceExtrusion(f0, new R.Vector([0, 0, h]));
+      } finally {
+        safeDelete(w0); safeDelete(f0);
+      }
+    }
+    if (bore > 0.1 && bore < rf * 2 - 0.5) {
+      const cyl = R.makeCylinder(bore / 2, h + 2, [0, 0, -1], [0, 0, 1]);
+      try {
+        const cut = g.cut(cyl);
+        safeDelete(g);
+        g = cut;
+      } finally { safeDelete(cyl); }
+    }
     return g;
   }
   // ---------- Kanten-Veredelung ----------
