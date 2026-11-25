@@ -2432,6 +2432,11 @@ const HELP = {
   "tip": "Hoher Kontrast: kräftige Rahmen, klare Farben und extra deutlicher Fokusrahmen",
   "hilfe": "Verstärkt alle Ränder, Schriften, Knöpfe und Fokus-Umrandungen im hellen und dunklen Design, damit die Oberfläche auch bei grellem Licht oder schwachem Sehvermögen leicht lesbar bleibt.",
   "tipp": "Alle Knöpfe lassen sich außerdem per Tab, Pfeiltasten, Enter und Esc komplett ohne Maus bedienen."
+ },
+ "filletG2": {
+  "tip": "Form der Rundung wählen: klassisch rund (Kreisbogen) oder krümmungsglatt (G2, weicher Einlauf, Profi)",
+  "hilfe": "Bei „Rund“ entsteht ein normaler Kreisbogen. Bei „Krümmungsglatt (G2)“ läuft die Rundung ohne Krümmungssprung sanft aus den Nachbarflächen heraus (Kegelschnitt-artiger Verlauf) – ideal für glatte Gehäuseteile und schöne Lichtreflexe.",
+  "tipp": "Die gewählte Größe steuert weiterhin denselben Einlauf-Abstand auf den Nachbarflächen."
  }
 };
 

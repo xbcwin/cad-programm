@@ -2589,6 +2589,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Befehlssuche „Fläche auf Fläche“ (`[A-086]`)**: `Commands.search('fläche auf fläche')` liefert `mate-planar` auf Platz 1 und `Commands.search('zylindrisch')` findet `mate-cyl` (bereits durch `[F-11250536]` repariert, im Volltest-Nachlauf bestätigt: `t_a086_verbindungen_zyl_eben`, `t_f11250803`).
 - [ ] **Von Hand**: Im Browser über „Leeres Projekt“ (ohne vorher geladenen Kern) ein Schraubenloch M3 anlegen, Passung von Mittel auf Eng und Kernloch umschalten und in der Eingabezeile „fläche auf fläche“ suchen.
 
+## Krümmungsglatte Rundung, Schritt 1 (Auto [A-145], KP-40)
+
+- [x] **Form-Wahl (Profi vs. Einfach) & Quader-Volumen**: Quader (`40 × 30 × 20`) an einer Kante mit `r = 5 mm` rundet normal (`V ≈ 23892,7 mm³`), bietet im Profi-Modus `#fin-shape-…` (`Rund` / `Krümmungsglatt (G2)`), rechnet nach Umschalten auf `g2` ohne Fehler mit Volumen sauber zwischen ungerundet und normal rund (`23892,7 < V_g2 ≈ 23931,8 < 24000`) und blendet die Wahl in „Einfach“ aus (`t_a145_rundung_g2`).
+- [x] **Speichern & Laden erhält Wahl**: Nach Projekt-Export und erneutem Laden über `Model.migrate` / `App.load` bleibt `fin.shape === 'g2'`, die Auswahl im Panel zeigt `Krümmungsglatt (G2)` und das Volumen bleibt identisch ohne Fehler (`t_a145_rundung_g2`).
+- [x] **Konkave Kante, Zylinder-Kreiskante, variabler Radius, Hilfen & DE/EN**: Innere Kante an L-Winkel (`r = 4`), Zylinder-Oberkante (`r = 3`) und veränderliche G2-Rundung rechnen fehlerfrei; zu großer Radius meldet `toobig`; `HELP.filletG2` und `werkzeug-hilfen.json` sind gleich, DE/EN-Schlüssel komplett gleich, Befehl `fillet-g2` und `Explain.local` geprüft (`t_a145_rundung_g2`).
+- [ ] **Von Hand**: Im Browser einen Quader mit „Studio-Look“ und einer krümmungsglatten Rundung (`G2`) neben einer normalen runden Kante vergleichen und die weicher einlaufenden Lichtreflexe auf der G2-Fläche prüfen.
+
 ## Fehler melden
 
 ```

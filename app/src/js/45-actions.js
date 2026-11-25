@@ -546,7 +546,7 @@ const Actions = (() => {
     const b = worldBox(id); if (!b) return [];
     return App.doc.items.filter((x) => x.role === 'hole' && !x.hidden && x.id !== id).filter((x) => { const hb = worldBox(x.id); return hb && hb.intersectsBox(b); });
   }
-  function addFinish(type, r = 1, edges) {
+  function addFinish(type, r = 1, edges, extra = null) {
     edges = edges || App.edges;
     if (!edges.length) { UI.toast('Klick zuerst eine Kante an.', { icon: 'info' }); return; }
     const byItem = new Map();
@@ -569,7 +569,7 @@ const Actions = (() => {
           it = G; grouped = true;
         }
         it.finishes = it.finishes || [];
-        it.finishes.push({ id: uid('f'), type, r, edges: sigs });
+        it.finishes.push({ id: uid('f'), type, r, edges: sigs, ...(extra || {}) });
         targetId = it.id;
       }
     });
@@ -577,8 +577,8 @@ const Actions = (() => {
     if (grouped) UI.toast('Körper und Loch wurden zu einer Gruppe verbunden, damit die Kante gerundet werden kann.', { icon: 'group', ms: 5000 });
     return targetId;
   }
-  function finishAll(id, type, sel, r = 1) {
-    App.change(type === 'chamfer' ? 'Kanten abgeschrägt' : 'Kanten abgerundet', (doc) => { const f = Model.find(doc, id); if (!f) return false; f.item.finishes = f.item.finishes || []; f.item.finishes.push({ id: uid('f'), type, r, edges: sel }); });
+  function finishAll(id, type, sel, r = 1, extra = null) {
+    App.change(type === 'chamfer' ? 'Kanten abgeschrägt' : 'Kanten abgerundet', (doc) => { const f = Model.find(doc, id); if (!f) return false; f.item.finishes = f.item.finishes || []; f.item.finishes.push({ id: uid('f'), type, r, edges: sel, ...(extra || {}) }); });
   }
   function setFinish(itemId, finId, patch) {
     App.change('Rundung geändert', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; const fin = f.item.finishes.find((x) => x.id === finId); if (!fin) return false; for (const k in patch) { if (patch[k] === null) delete fin[k]; else fin[k] = patch[k]; } }, { merge: 'fin:' + finId });

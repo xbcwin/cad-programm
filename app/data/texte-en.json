@@ -3681,5 +3681,9 @@
   "dlg.settings.highContrast": "High contrast (stronger borders and focus)",
   "dlg.settings.highContrastHint": "Draws borders, text and keyboard focus rings extra clearly in both light and dark themes.",
   "dlg.settings.tHighContrastOn": "High contrast on",
-  "dlg.settings.tHighContrastOff": "High contrast off"
+  "dlg.settings.tHighContrastOff": "High contrast off",
+  "panel.edges.filletShape": "Profile",
+  "panel.edges.shapeRound": "Circular",
+  "panel.edges.shapeG2": "Curvature continuous (G2)",
+  "panel.edges.shapeG2Short": "G2"
 }
