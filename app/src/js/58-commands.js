@@ -327,6 +327,8 @@ const Commands = (() => {
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    add('explode-steps', 'Explosion in Schritten', 'explode', 'explosion schritte stufenweise baugruppe wegen linien anleitung', () => Views.openExplodeSteps(), { group: 'Ansicht' });
+    add('explode-video', 'Explosions-Video speichern', 'play', 'explosion video film webm baugruppe animation', () => Views.explodeVideoDialog(), { group: 'Ansicht' });
     add('verbund-alle', 'Alles zu einem Körper verbinden (Verbund)', 'group', 'verbund verbinden alles zusammen zusammenfügen ein körper vereinigen gruppieren alle', () => Actions.groupAll(), { group: 'Bearbeiten' });
     add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze schritte unterdrücken', () => Variants.compareDialog(), { group: 'Projekt' });
     add('variants-table', 'Varianten-Tabelle öffnen (CSV)', 'grid', 'variante varianten tabelle kalkulation excel csv import export werkstoff maße', () => Variants.tableDialog(), { group: 'Projekt' });

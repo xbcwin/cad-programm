@@ -472,6 +472,29 @@ body.sketching .timeline{display:none}
 .cut-cap-lbl{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;flex:none;color:var(--ink-2)}
 .cut-foot{justify-content:space-between;gap:6px}
 .cut-foot #cut-info{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.viewbar .seg.ex-mode-seg{grid-template-columns:repeat(2,1fr)}
+.ex-actions{flex-wrap:wrap;gap:6px}
+.ex-actions .btn{flex:1 1 auto;justify-content:center}
+.ex-steps-panel{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:8px}
+.ex-steps-panel[hidden]{display:none}
+.ex-steps-list{display:grid;gap:4px;max-height:150px;overflow-y:auto}
+.ex-step-row{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);cursor:pointer}
+.ex-step-row:hover{border-color:var(--accent)}
+.ex-step-row.is-active{border-color:var(--accent);background:var(--accent-soft)}
+.ex-step-row.is-done .ex-step-badge{background:var(--accent);color:#fff}
+.ex-step-row.is-editing{outline:2px solid var(--accent);outline-offset:-1px}
+.ex-step-badge{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:600 11px/1 var(--font-mono);background:var(--line);color:var(--ink);flex:none}
+.ex-step-info{min-width:0;flex:1}
+.ex-step-title{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-step-sub{font-size:11.5px;color:var(--muted);font-family:var(--font-mono)}
+.ex-step-btns{display:flex;align-items:center;gap:2px;flex:none}
+.ex-step-btns .vb-x{width:22px;height:22px;font-size:12px}
+.ex-step-btns .vb-x:disabled{opacity:.3;pointer-events:none}
+.ex-step-form{display:grid;gap:6px;padding-top:4px;border-top:1px dashed var(--line)}
+.ex-step-form .vb-l{min-width:48px}
+.ex-step-form .vb-sel{flex:1;min-width:0}
+.ex-custom-dir .vb-l{min-width:12px}
+.ex-custom-dir .vb-num{width:52px;flex:1;min-width:0}
 .focusview{border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);overflow:hidden;display:grid;grid-template-rows:auto 200px}
 .focusview .fv-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 4px 4px 10px;background:var(--surface);border-bottom:1px solid var(--line);min-width:0}
 .focusview .fv-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

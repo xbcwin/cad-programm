@@ -2,7 +2,12 @@
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, exTimer: null, exWaitOff: null, focus: null, ov: null, exGroups: false, quad: null };
+  const st = {
+    cut: null, xray: false,
+    ex: 0, exGoal: 0, exAnim: null, exTimer: null, exWaitOff: null,
+    exMode: 'auto', exTrails: true, exTrailsGroup: null, exPlay: null, exEditId: null, exDocId: null, lastExplodeVideo: null,
+    focus: null, ov: null, exGroups: false, quad: null,
+  };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -649,24 +654,160 @@ const Views = (() => {
     if (st.exAnim) { cancelAnimationFrame(st.exAnim); st.exAnim = null; }
     if (st.exTimer) { clearTimeout(st.exTimer); st.exTimer = null; }
   }
+  function stopExplode() {
+    if (!st.exPlay) return;
+    const p = st.exPlay;
+    st.exPlay = null;
+    if (p.raf) cancelAnimationFrame(p.raf);
+    if (p.timer) clearTimeout(p.timer);
+    if (p.resolve) p.resolve(false);
+    refreshExPlayBtn();
+  }
+  function disposeExTrails() {
+    if (!st.exTrailsGroup) return;
+    disposeOverlayGroup(st.exTrailsGroup);
+    st.exTrailsGroup = null;
+  }
+  function resolveNodeIdsForPart(pid) {
+    if (!pid) return [];
+    if (Viewer.nodes.has(pid)) return [pid];
+    if (Viewer.nodes.has('__ex:' + pid)) return ['__ex:' + pid];
+    const g = App.doc && Array.isArray(App.doc.items) ? App.doc.items.find((x) => x && x.id === pid && x.kind === 'group') : null;
+    if (g && Array.isArray(g.children)) {
+      const out = [];
+      for (const c of g.children) {
+        if (c && Viewer.nodes.has('__ex:' + c.id)) out.push('__ex:' + c.id);
+      }
+      if (out.length) return out;
+    }
+    return [];
+  }
+  function drawExTrails(f, evalRes, autoMap) {
+    disposeExTrails();
+    if (!st.exTrails || f <= 1e-4) { Viewer.requestRender(); return; }
+    const box = modelBox();
+    const scale = clamp(box.getSize(new THREE.Vector3()).length() * 0.03, 1.5, 12);
+    const dashSize = scale * 0.6;
+    const gapSize = scale * 0.4;
+    const col = new THREE.Color((Viewer.theme && Viewer.theme.accent) || '#2f80ed');
+    const grp = new THREE.Group();
+    grp.name = 'explode-trails';
+    grp.userData = { explodeTrails: true, count: 0 };
+    let lineCount = 0;
+
+    const addTrail = (partId, worldPts) => {
+      if (!worldPts || worldPts.length < 2) return;
+      let total = 0;
+      for (let i = 1; i < worldPts.length; i++) total += worldPts[i].distanceTo(worldPts[i - 1]);
+      if (total < 0.1) return;
+      const geo = new THREE.BufferGeometry().setFromPoints(worldPts);
+      const mat = new THREE.LineDashedMaterial({ color: col, dashSize, gapSize, transparent: true, opacity: 0.92, depthTest: true });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      line.renderOrder = 19;
+      line.userData = { explodeTrail: true, partId, dashed: true, points: worldPts.length, length: total };
+      grp.add(line);
+      const dotGeo = new THREE.BufferGeometry().setFromPoints([worldPts[0]]);
+      const dotMat = new THREE.PointsMaterial({ color: col, size: 5, sizeAttenuation: false, transparent: true, opacity: 0.9 });
+      const dot = new THREE.Points(dotGeo, dotMat);
+      dot.renderOrder = 19;
+      dot.userData = { explodeTrailDot: true, partId };
+      grp.add(dot);
+      lineCount++;
+    };
+
+    if (st.exMode === 'steps' && evalRes && evalRes.paths) {
+      for (const [partId, pts] of evalRes.paths.entries()) {
+        const nids = resolveNodeIdsForPart(partId);
+        if (!nids.length) continue;
+        for (const nid of nids) {
+          const bb = Viewer.baseBox(nid);
+          if (!bb) continue;
+          const c0 = bb.getCenter(new THREE.Vector3());
+          const worldPts = pts.map(([dx, dy, dz]) => new THREE.Vector3(c0.x + dx, c0.y + dy, c0.z + dz));
+          addTrail(partId, worldPts);
+        }
+      }
+    } else if (autoMap) {
+      for (const [id, vec] of autoMap.entries()) {
+        if (!shown(id) || !vec || vec.length() < 0.1) continue;
+        const bb = Viewer.baseBox(id);
+        if (!bb) continue;
+        const c0 = bb.getCenter(new THREE.Vector3());
+        addTrail(id, [c0, c0.clone().add(vec)]);
+      }
+    }
+
+    if (lineCount > 0) {
+      grp.userData.count = lineCount;
+      Viewer.groups.overlay.add(grp);
+      st.exTrailsGroup = grp;
+    }
+    Viewer.requestRender();
+  }
+  function syncStepRows(evalRes) {
+    if (!st.exBar) return;
+    const rows = st.exBar.querySelectorAll('.ex-step-row');
+    if (!rows.length) return;
+    const sp = evalRes && evalRes.stepProgress ? evalRes.stepProgress : [];
+    const active = evalRes ? evalRes.activeStep : -1;
+    rows.forEach((row, idx) => {
+      const u = sp[idx] || 0;
+      row.classList.toggle('is-active', idx === active && st.ex > 1e-4 && st.ex < 1 - 1e-4);
+      row.classList.toggle('is-done', u >= 1 - 1e-4 && st.ex > 1e-4);
+    });
+  }
   function explodeCount() { return [...Viewer.nodes.keys()].filter(shown).length; }
-  function explode(on = st.exGoal === 0, amount = 0.6) {
+  function explode(on = st.exGoal === 0, amountOrOpts = null) {
     if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; }
-    if (on && explodeCount() < 2) {
+    if (!on) {
+      stopExplode();
+      animateTo(0, 450, true);
+      return;
+    }
+    const opts = (amountOrOpts && typeof amountOrOpts === 'object') ? amountOrOpts : { amount: typeof amountOrOpts === 'number' ? amountOrOpts : undefined };
+    const hasSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps().length > 0;
+    const mode = opts.mode || (hasSteps ? 'steps' : 'auto');
+    const amount = opts.amount != null ? clamp(opts.amount, 0, 1) : (mode === 'steps' ? 1 : 0.6);
+    if (opts.trails !== undefined) st.exTrails = !!opts.trails;
+    if (mode === 'auto' && explodeCount() < 2) {
       // Nur ein Teil ganz oben, aber eine Gruppe mit mehreren Teilen: dann die Gruppen gleich mit zerlegen
       if (!groupsSplittable()) { UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile.', { icon: 'info', ms: 4200 }); return; }
+      st.exMode = 'auto';
+      st.exDocId = App.doc && App.doc.id;
       st.exGoal = amount;
       setGroups(true);
-      const off = App.on('results', () => { off(); if (st.exWaitOff === off) st.exWaitOff = null; if (st.exGoal > 0) animateTo(amount); });
+      const off = App.on('results', () => { off(); if (st.exWaitOff === off) st.exWaitOff = null; if (st.exGoal > 0) animateTo(amount, 450, false); });
       st.exWaitOff = off;
-      exBar(); App.select(App.sel); return;
+      exBar(); refreshExBar(); App.select(App.sel); return;
     }
-    animateTo(on ? amount : 0);
-    if (on) { exBar(); App.select(App.sel); }   // Griffe ausblenden
+    st.exMode = mode;
+    st.exDocId = App.doc && App.doc.id;
+    exBar(); refreshExBar();
+    animateTo(amount, 450, false);
+    App.select(App.sel);   // Griffe ausblenden
   }
-  function animateTo(goal, ms = 450) {
+  function openExplodeSteps() {
+    if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; }
+    stopExAnim();
+    stopExplode();
+    st.exMode = 'steps';
+    st.exDocId = App.doc && App.doc.id;
+    const hasSteps = typeof Assembly !== 'undefined' && Assembly.explodeSteps().length > 0;
+    exBar(); refreshExBar();
+    if (hasSteps) {
+      animateTo(1, 450, false);
+    } else {
+      st.exGoal = 0;
+      setEx(0);
+    }
+    App.select(App.sel);
+    sync();
+  }
+  function animateTo(goal, ms = 450, closeBar = goal === 0) {
     st.exGoal = goal; const from = st.ex, t0 = performance.now();
     stopExAnim();
+    stopExplode();
     const step = () => {
       stopExAnim();
       const elapsed = performance.now() - t0;
@@ -677,7 +818,15 @@ const Views = (() => {
         st.exAnim = requestAnimationFrame(step);
         st.exTimer = setTimeout(step, Math.max(16, Math.min(50, ms - elapsed + 16)));
       } else {
-        if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); }
+        if (goal === 0 && closeBar) {
+          Viewer.setOffsets(null);
+          disposeExTrails();
+          if (st.exBar) { st.exBar.remove(); st.exBar = null; }
+          st.exEditId = null;
+          if (st.exGroups) setGroups(false);
+          Handles.rebuild();
+          Panels.renderCtx();
+        }
         if (st.cut) drawCutCaps();
         sync();
       }
@@ -685,29 +834,549 @@ const Views = (() => {
     step();
   }
   function setEx(f, animating = false) {
-    st.ex = f; Viewer.setOffsets(f > 1e-4 ? offsets(f) : null);
-    if (st.cut && !animating && !st.exAnim && !st.exTimer) drawCutCaps();
-    if (st.exBar) { const r = st.exBar.querySelector('#ex-range'); if (r && document.activeElement !== r) r.value = Math.round(f * 100); }
+    f = clamp(Number(f) || 0, 0, 1);
+    st.ex = f;
+    const steps = typeof Assembly !== 'undefined' ? Assembly.explodeSteps() : [];
+    if (st.exMode === 'steps' && steps.length > 0) {
+      const evalRes = Assembly.evalExplodeSteps(f);
+      const vecMap = new Map();
+      for (const [pid, arr] of evalRes.offsets.entries()) {
+        const v = new THREE.Vector3(arr[0], arr[1], arr[2]);
+        for (const nid of resolveNodeIdsForPart(pid)) vecMap.set(nid, v.clone());
+      }
+      if (vecMap.size > 0) {
+        const solidBoxes = [];
+        for (const nid of vecMap.keys()) {
+          const sb = Viewer.baseBox(nid);
+          if (sb) solidBoxes.push([nid, sb]);
+        }
+        for (const nid of Viewer.nodes.keys()) {
+          if (vecMap.has(nid)) continue;
+          const it = sceneItem(nid);
+          if (!it || it.role !== 'hole') continue;
+          const hb = Viewer.baseBox(nid);
+          if (!hb) continue;
+          const host = solidBoxes.find(([, b]) => b.intersectsBox(hb));
+          if (host) vecMap.set(nid, vecMap.get(host[0]).clone());
+        }
+      }
+      Viewer.setOffsets(f > 1e-4 && vecMap.size ? vecMap : null);
+      drawExTrails(f, evalRes, null);
+      syncStepRows(evalRes);
+    } else if (st.exMode === 'steps') {
+      Viewer.setOffsets(null);
+      disposeExTrails();
+      syncStepRows(null);
+    } else {
+      const offMap = f > 1e-4 ? offsets(f) : null;
+      Viewer.setOffsets(offMap);
+      drawExTrails(f, null, offMap);
+    }
+    if (st.cut && !animating && !st.exAnim && !st.exTimer && !st.exPlay) drawCutCaps();
+    if (st.exBar) {
+      const r = st.exBar.querySelector('#ex-range');
+      if (r && document.activeElement !== r) r.value = Math.round(f * 100);
+      const pct = st.exBar.querySelector('#ex-pct');
+      if (pct) pct.textContent = Math.round(f * 100) + ' %';
+    }
+  }
+  function setExplodeProgress(f) {
+    stopExAnim();
+    stopExplode();
+    const g = clamp(Number(f) || 0, 0, 1);
+    st.exGoal = g;
+    if (g > 0 && !st.exBar) { exBar(); refreshExBar(); }
+    setEx(g);
+    sync();
+    return st.ex;
+  }
+  function setExplodeMode(mode) {
+    const next = mode === 'steps' ? 'steps' : 'auto';
+    if (next === 'auto' && explodeCount() < 2 && groupsSplittable() && !st.exGroups) {
+      st.exMode = 'auto';
+      setGroups(true);
+      refreshExBar();
+      return;
+    }
+    st.exMode = next;
+    setEx(st.ex);
+    refreshExBar();
+    sync();
+  }
+  function setExplodeTrails(on) {
+    st.exTrails = !!on;
+    const cb = st.exBar && st.exBar.querySelector('#ex-trails');
+    if (cb) cb.checked = st.exTrails;
+    setEx(st.ex);
+  }
+  function refreshExPlayBtn() {
+    if (!st.exBar) return;
+    const btn = st.exBar.querySelector('#ex-play');
+    if (!btn) return;
+    const playing = !!st.exPlay;
+    btn.innerHTML = icon(playing ? 'stop' : 'play') + esc(playing ? T('ex.stop') : T('ex.play'));
+    btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+  }
+  function playExplode(opts = {}) {
+    stopExAnim();
+    stopExplode();
+    const steps = typeof Assembly !== 'undefined' ? Assembly.explodeSteps() : [];
+    if (steps.length > 0 && st.exMode !== 'steps') st.exMode = 'steps';
+    if (st.exMode === 'steps' && !steps.length) {
+      UI.toast(T('ex.noSteps'), { icon: 'info', ms: 2600 });
+      return Promise.resolve(false);
+    }
+    if (st.exMode === 'auto' && explodeCount() < 2) {
+      if (groupsSplittable() && !st.exGroups) setGroups(true);
+      else { UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile.', { icon: 'info', ms: 3200 }); return Promise.resolve(false); }
+    }
+    st.exDocId = App.doc && App.doc.id;
+    exBar(); refreshExBar();
+    const reverse = !!opts.reverse;
+    const fromStart = opts.fromStart !== false;
+    let startF = fromStart ? (reverse ? 1 : 0) : st.ex;
+    const endF = reverse ? 0 : 1;
+    if (Math.abs(endF - startF) < 1e-4) startF = reverse ? 1 : 0;
+    const defaultSec = Math.max(1.6, Math.max(1, steps.length) * 1.1);
+    const durSec = Math.max(0.2, opts.duration != null ? Number(opts.duration) : defaultSec);
+    let last = performance.now(), k = 0;
+    return new Promise((resolve) => {
+      const playObj = { raf: 0, timer: 0, resolve };
+      st.exPlay = playObj;
+      refreshExPlayBtn();
+      const tick = () => {
+        if (st.exPlay !== playObj) return;
+        if (playObj.raf) { cancelAnimationFrame(playObj.raf); playObj.raf = 0; }
+        if (playObj.timer) { clearTimeout(playObj.timer); playObj.timer = 0; }
+        const now = performance.now();
+        const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+        last = now;
+        k = clamp(k + dt / durSec, 0, 1);
+        const f = startF + (endF - startF) * k;
+        st.exGoal = f;
+        setEx(f, true);
+        if (k < 1) {
+          playObj.raf = requestAnimationFrame(tick);
+          playObj.timer = setTimeout(tick, 32);
+        } else {
+          st.exPlay = null;
+          refreshExPlayBtn();
+          if (st.cut) drawCutCaps();
+          sync();
+          resolve(true);
+        }
+      };
+      tick();
+    });
+  }
+  function videoType() {
+    for (const t of ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4']) {
+      try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {}
+    }
+    return null;
+  }
+  function explodeVideoDialog() {
+    const steps = typeof Assembly !== 'undefined' ? Assembly.explodeSteps() : [];
+    const defSec = steps.length >= 4 ? '8' : (steps.length >= 2 ? '5' : '5');
+    const cfg = { sec: +defSec, roundtrip: false, trails: st.exTrails };
+    const body = h('div', { style: { display: 'grid', gap: '12px', minWidth: 'min(380px, 80vw)' } });
+    body.append(UI.selectField({
+      id: 'ex-vid-sec',
+      label: T('dlg.tt.length'),
+      value: defSec,
+      options: [['3', T('dlg.tt.sec', { n: 3 })], ['5', T('dlg.tt.sec', { n: 5 })], ['8', T('dlg.tt.sec', { n: 8 })], ['12', T('dlg.tt.sec', { n: 12 })]],
+      onChange: (v) => { cfg.sec = +v; },
+    }));
+    body.append(UI.selectField({
+      id: 'ex-vid-mode',
+      label: T('ex.vidMode'),
+      value: 'forward',
+      options: [['forward', T('ex.vidForward')], ['roundtrip', T('ex.vidRoundtrip')]],
+      onChange: (v) => { cfg.roundtrip = (v === 'roundtrip'); },
+    }));
+    const cb = h('input', { type: 'checkbox', id: 'ex-vid-trails' });
+    cb.checked = cfg.trails;
+    cb.onchange = () => { cfg.trails = cb.checked; };
+    body.append(h('label', { class: 'check' }, cb, T('ex.vidTrails')));
+    body.append(h('div', { class: 'hint-box' }, T('ex.vidHint')));
+    if (!videoType()) body.append(h('div', { class: 'err-box' }, T('dlg.tt.unsupported')));
+    UI.modal({
+      title: T('ex.vidTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel') },
+        { label: T('dlg.tt.recordBtn'), id: 'ex-vid-record', primary: true, run: () => { explodeVideo({ seconds: cfg.sec, roundtrip: cfg.roundtrip, trails: cfg.trails }); } },
+      ],
+    });
+  }
+  async function explodeVideo({ seconds, fps = 30, roundtrip = false, trails = true, save: doSave = true } = {}) {
+    const type = videoType();
+    if (!type) { UI.toast(T('dlg.tt.unsupported'), { kind: 'bad' }); return null; }
+    const steps = typeof Assembly !== 'undefined' ? Assembly.explodeSteps() : [];
+    const sec = Math.max(0.5, Number(seconds) || (steps.length ? clamp(steps.length * 1.5, 3, 12) : 4));
+    const prev = { ex: st.ex, exGoal: st.exGoal, exMode: st.exMode, exTrails: st.exTrails, barOpen: !!st.exBar };
+    stopExAnim();
+    stopExplode();
+    st.exMode = steps.length > 0 ? 'steps' : 'auto';
+    st.exTrails = !!trails;
+    const src = Viewer.canvas, chunks = [];
+    const recCv = document.createElement('canvas');
+    recCv.width = Math.max(2, (src.width || 640) & ~1);
+    recCv.height = Math.max(2, (src.height || 480) & ~1);
+    recCv.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;pointer-events:none;opacity:0;';
+    document.body.append(recCv);
+    const recCtx = recCv.getContext('2d');
+    let bgGrad = null;
+    if (recCtx) {
+      const cs = getComputedStyle(document.documentElement);
+      const topCol = cs.getPropertyValue('--viewport-top').trim() || '#f3f5f7';
+      const botCol = cs.getPropertyValue('--viewport-bottom').trim() || '#dde3e9';
+      bgGrad = recCtx.createLinearGradient(0, 0, 0, recCv.height);
+      bgGrad.addColorStop(0, topCol);
+      bgGrad.addColorStop(1, botCol);
+    }
+    const stream = recCtx && typeof recCv.captureStream === 'function' ? recCv.captureStream(0) : src.captureStream(fps);
+    const track = stream.getVideoTracks()[0];
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    App.clearSelection(); Handles.clear();
+    const tst = UI.toast(T('ex.vidRecording'), { icon: 'play', ms: sec * 1000 + 3000 });
+    const done = new Promise((res) => { rec.onstop = res; rec.onerror = res; });
+    try {
+      rec.start(250);
+      const dur = Math.max(100, sec * 1000);
+      const stepMs = Math.max(16, Math.round(1000 / Math.max(1, fps)));
+      const minFrames = Math.max(8, Math.min(24, Math.round(sec * 6)));
+      const t0 = performance.now();
+      await new Promise((res) => {
+        let frames = 0, raf = 0, timer = 0;
+        const step = () => {
+          cancelAnimationFrame(raf);
+          clearTimeout(timer);
+          const k = frames === 0 ? 0 : Math.min(1, Math.max(0, (performance.now() - t0) / dur), frames / minFrames);
+          let f;
+          if (roundtrip) {
+            f = k < 0.45 ? k / 0.45 : (k <= 0.55 ? 1 : Math.max(0, 1 - (k - 0.55) / 0.45));
+          } else {
+            f = k <= 0.9 ? k / 0.9 : 1;
+          }
+          setEx(f, true);
+          Viewer.renderNow();
+          if (recCtx) {
+            recCtx.fillStyle = bgGrad;
+            recCtx.fillRect(0, 0, recCv.width, recCv.height);
+            recCtx.drawImage(src, 0, 0, recCv.width, recCv.height);
+          }
+          try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
+          frames++;
+          if (k < 1) { raf = requestAnimationFrame(step); timer = setTimeout(step, stepMs + 15); } else res();
+        };
+        step();
+      });
+      await new Promise((r) => setTimeout(r, 150));
+      if (chunks.length === 0) {
+        try { if (track && typeof track.requestFrame === 'function') track.requestFrame(); } catch (_) {}
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (rec.state !== 'inactive') rec.stop();
+      await done;
+    } finally {
+      stream.getTracks().forEach((x) => x.stop());
+      recCv.remove();
+      tst.remove();
+      st.exMode = prev.exMode;
+      st.exTrails = prev.exTrails;
+      st.exGoal = prev.exGoal;
+      if (prev.ex > 1e-4 || prev.barOpen) {
+        setEx(prev.ex, true);
+        refreshExBar();
+      } else {
+        st.ex = 0;
+        st.exGoal = 0;
+        Viewer.setOffsets(null);
+        disposeExTrails();
+      }
+      sync();
+      Viewer.requestRender();
+    }
+    const blob = new Blob(chunks, { type: type.split(';')[0] });
+    st.lastExplodeVideo = { size: blob.size, type: blob.type, seconds: sec, steps: steps.length, roundtrip: !!roundtrip };
+    if (doSave && typeof Print !== 'undefined' && Print.save) {
+      await Print.save(Print.safeName(App.doc.name) + '-explosion' + (blob.type.includes('mp4') ? '.mp4' : '.webm'), blob);
+    }
+    return blob;
+  }
+  function refreshExBar() {
+    const bar = st.exBar;
+    if (!bar) return;
+    const steps = typeof Assembly !== 'undefined' ? Assembly.explodeSteps() : [];
+    const parts = typeof Assembly !== 'undefined' ? Assembly.explodeParts() : [];
+    const partNames = new Map(parts.map((p) => [p.id, p.name]));
+
+    const autoBtn = bar.querySelector('#ex-mode-auto');
+    const stepsBtn = bar.querySelector('#ex-mode-steps');
+    if (autoBtn) autoBtn.setAttribute('aria-pressed', st.exMode === 'auto' ? 'true' : 'false');
+    if (stepsBtn) {
+      stepsBtn.setAttribute('aria-pressed', st.exMode === 'steps' ? 'true' : 'false');
+      stepsBtn.textContent = steps.length ? `${T('ex.modeSteps')} (${steps.length})` : T('ex.modeSteps');
+    }
+
+    const r = bar.querySelector('#ex-range');
+    if (r && document.activeElement !== r) r.value = Math.round(st.ex * 100);
+    const pct = bar.querySelector('#ex-pct');
+    if (pct) pct.textContent = Math.round(st.ex * 100) + ' %';
+
+    const tcb = bar.querySelector('#ex-trails');
+    if (tcb) tcb.checked = st.exTrails;
+
+    const gcb = bar.querySelector('#ex-groups');
+    if (gcb) {
+      gcb.checked = st.exGroups;
+      const grow = gcb.closest('.vb-row');
+      if (grow) grow.hidden = !st.exGroups && !groupsSplittable();
+    }
+
+    refreshExPlayBtn();
+
+    const panel = bar.querySelector('#ex-steps-panel');
+    if (!panel) return;
+    panel.hidden = (st.exMode !== 'steps');
+
+    const listEl = panel.querySelector('#ex-steps-list');
+    if (listEl) {
+      listEl.innerHTML = '';
+      if (!steps.length) {
+        listEl.append(h('div', { class: 'vb-hint' }, T('ex.noSteps')));
+      } else {
+        const evalRes = st.exMode === 'steps' ? Assembly.evalExplodeSteps(st.ex) : null;
+        steps.forEach((step, idx) => {
+          const pLbl = (step.partIds || []).map((id) => partNames.get(id) || id).join(', ') || '–';
+          const dLbl = Assembly.dirLabelOf(step.dir);
+          const distLbl = Units.fmtLenU(step.dist, 1);
+          const isEditing = st.exEditId === step.id;
+          const u = evalRes && evalRes.stepProgress ? evalRes.stepProgress[idx] : 0;
+          const row = h('div', {
+            class: 'ex-step-row'
+              + (isEditing ? ' is-editing' : '')
+              + (evalRes && idx === evalRes.activeStep && st.ex > 1e-4 && st.ex < 1 - 1e-4 ? ' is-active' : '')
+              + (u >= 1 - 1e-4 && st.ex > 1e-4 ? ' is-done' : ''),
+            'data-step-id': step.id,
+          });
+          const badge = h('span', { class: 'ex-step-badge' }, String(idx + 1));
+          const info = h('div', { class: 'ex-step-info' },
+            h('div', { class: 'ex-step-title' }, pLbl),
+            h('div', { class: 'ex-step-sub' }, `${dLbl} · ${distLbl}`));
+          const upBtn = h('button', { type: 'button', class: 'vb-x ex-step-up', 'aria-label': 'Nach oben', 'data-tip': 'Früher ausführen', disabled: idx === 0 }, '↑');
+          const dnBtn = h('button', { type: 'button', class: 'vb-x ex-step-down', 'aria-label': 'Nach unten', 'data-tip': 'Später ausführen', disabled: idx === steps.length - 1 }, '↓');
+          const delBtn = h('button', { type: 'button', class: 'vb-x ex-step-del', 'aria-label': 'Schritt löschen', 'data-tip': 'Schritt löschen' });
+          delBtn.innerHTML = icon('close');
+
+          upBtn.onclick = (e) => { e.stopPropagation(); Assembly.moveExplodeStep(step.id, -1); if (st.exMode === 'steps') setEx(st.ex); refreshExBar(); };
+          dnBtn.onclick = (e) => { e.stopPropagation(); Assembly.moveExplodeStep(step.id, 1); if (st.exMode === 'steps') setEx(st.ex); refreshExBar(); };
+          delBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (st.exEditId === step.id) st.exEditId = null;
+            Assembly.removeExplodeStep(step.id);
+            if (st.exMode === 'steps') setEx(st.ex);
+            refreshExBar();
+          };
+          row.onclick = () => {
+            st.exEditId = step.id;
+            fillStepForm(step);
+            refreshExBar();
+          };
+          const btns = h('div', { class: 'ex-step-btns' }, upBtn, dnBtn, delBtn);
+          row.append(badge, info, btns);
+          listEl.append(row);
+        });
+      }
+    }
+
+    const partSel = panel.querySelector('#ex-step-part');
+    if (partSel) {
+      const prevVal = partSel.value;
+      partSel.innerHTML = '';
+      const selTops = [];
+      for (const sid of (App.sel || [])) {
+        const top = Model.topOf(App.doc, sid);
+        if (top && partNames.has(top.id) && !selTops.includes(top.id)) selTops.push(top.id);
+      }
+      if (!st.exEditId && selTops.length > 1) {
+        partSel.append(h('option', { value: '__SEL__' }, `Gewählte Teile (${selTops.length})`));
+      }
+      for (const p of parts) {
+        partSel.append(h('option', { value: p.id }, p.name));
+      }
+      if (st.exEditId) {
+        const editStep = steps.find((s) => s.id === st.exEditId);
+        if (editStep && editStep.partIds && editStep.partIds[0] && partNames.has(editStep.partIds[0])) {
+          partSel.value = editStep.partIds[0];
+        }
+      } else if (selTops.length > 1) {
+        partSel.value = '__SEL__';
+      } else if (selTops.length === 1) {
+        partSel.value = selTops[0];
+      } else if (prevVal && [...partSel.options].some((o) => o.value === prevVal)) {
+        partSel.value = prevVal;
+      } else if (parts.length) {
+        const used = new Set();
+        for (const s of steps) for (const id of (s.partIds || [])) used.add(id);
+        const unused = parts.find((p) => !used.has(p.id)) || parts[0];
+        if (unused) partSel.value = unused.id;
+      }
+    }
+
+    const addBtn = panel.querySelector('#ex-step-add');
+    const cancelBtn = panel.querySelector('#ex-step-cancel');
+    if (addBtn) addBtn.textContent = st.exEditId ? T('ex.saveStep') : T('ex.addStep');
+    if (cancelBtn) cancelBtn.hidden = !st.exEditId;
+  }
+  function fillStepForm(step) {
+    if (!st.exBar || !step) return;
+    const partSel = st.exBar.querySelector('#ex-step-part');
+    const dirSel = st.exBar.querySelector('#ex-step-dir');
+    const customBox = st.exBar.querySelector('#ex-custom-dir');
+    const dxIn = st.exBar.querySelector('#ex-dir-x');
+    const dyIn = st.exBar.querySelector('#ex-dir-y');
+    const dzIn = st.exBar.querySelector('#ex-dir-z');
+    const distIn = st.exBar.querySelector('#ex-step-dist');
+    if (partSel && step.partIds && step.partIds[0]) partSel.value = step.partIds[0];
+    const key = Assembly.dirKeyOf(step.dir);
+    if (dirSel) dirSel.value = key;
+    if (customBox) customBox.hidden = (key !== 'custom');
+    const v = Assembly.normalizeExplodeDir(step.dir);
+    if (dxIn) dxIn.value = round(v[0], 3);
+    if (dyIn) dyIn.value = round(v[1], 3);
+    if (dzIn) dzIn.value = round(v[2], 3);
+    if (distIn) distIn.value = Units.fmtInput(step.dist);
   }
   function exBar() {
-    if (st.exBar) return;
+    if (st.exBar) { refreshExBar(); return; }
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Explosion' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Explosion'));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wieder zusammensetzen', 'data-tip': 'Wieder zusammensetzen' }); close.innerHTML = icon('close'); close.onclick = () => explode(false);
     head.append(close);
+
+    const modeSeg = h('div', { class: 'seg ex-mode-seg', role: 'group', 'aria-label': 'Explosions-Art' });
+    const mAuto = h('button', { type: 'button', id: 'ex-mode-auto', 'aria-pressed': st.exMode === 'auto' ? 'true' : 'false' }, T('ex.modeAuto'));
+    const mSteps = h('button', { type: 'button', id: 'ex-mode-steps', 'aria-pressed': st.exMode === 'steps' ? 'true' : 'false', 'data-help': 'explodeSteps' }, T('ex.modeSteps'));
+    mAuto.onclick = () => setExplodeMode('auto');
+    mSteps.onclick = () => setExplodeMode('steps');
+    modeSeg.append(mAuto, mSteps);
+
     const range = h('input', { type: 'range', id: 'ex-range', min: 0, max: 100, step: 1, value: Math.round(st.exGoal * 100), 'aria-label': 'Wie weit auseinander' });
-    range.oninput = () => { stopExAnim(); st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
+    const pct = h('span', { class: 'vb-u mono', id: 'ex-pct' }, Math.round(st.exGoal * 100) + ' %');
+    range.oninput = () => { stopExAnim(); stopExplode(); st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
+
+    const playBtn = h('button', { type: 'button', class: 'btn small', id: 'ex-play', 'data-help': 'explodeSteps' });
+    playBtn.innerHTML = icon('play') + esc(T('ex.play'));
+    playBtn.onclick = () => { if (st.exPlay) stopExplode(); else playExplode(); };
+
+    const vidBtn = h('button', { type: 'button', class: 'btn small', id: 'ex-video', 'data-help': 'explodeVideo' });
+    vidBtn.innerHTML = icon('image') + esc(T('ex.video'));
+    vidBtn.onclick = () => explodeVideoDialog();
+
     const back = h('button', { type: 'button', class: 'btn small', id: 'ex-back' }); back.innerHTML = icon('group') + 'Zusammensetzen';
     back.onclick = () => explode(false);
+
+    const tcb = h('input', { type: 'checkbox', id: 'ex-trails' }); tcb.checked = st.exTrails;
+    tcb.onchange = () => setExplodeTrails(tcb.checked);
+    const trow = h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, tcb, ' ' + T('ex.trails')));
+
     const gcb = h('input', { type: 'checkbox', id: 'ex-groups' }); gcb.checked = st.exGroups;
     gcb.onchange = () => setGroups(gcb.checked);
     const grow = h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, gcb, ' Gruppen auch zerlegen'));
     if (!st.exGroups && !groupsSplittable()) grow.hidden = true;
-    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range), grow, h('div', { class: 'vb-row' }, back, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter')));
+
+    // Schritt-Panel (für Einfach und Profi)
+    const stepsPanel = h('div', { id: 'ex-steps-panel', class: 'ex-steps-panel' });
+    const stepsList = h('div', { id: 'ex-steps-list', class: 'ex-steps-list' });
+
+    const partSel = h('select', { id: 'ex-step-part', class: 'vb-sel', 'aria-label': T('ex.part') });
+    const dirSel = h('select', { id: 'ex-step-dir', class: 'vb-sel', 'aria-label': T('ex.dir') },
+      h('option', { value: '+Z' }, '+Z (Oben)'),
+      h('option', { value: '-Z' }, '-Z (Unten)'),
+      h('option', { value: '+X' }, '+X (Rechts)'),
+      h('option', { value: '-X' }, '-X (Links)'),
+      h('option', { value: '+Y' }, '+Y (Hinten)'),
+      h('option', { value: '-Y' }, '-Y (Vorne)'),
+      h('option', { value: 'custom' }, T('ex.customDir')));
+    const dxIn = h('input', { type: 'number', id: 'ex-dir-x', class: 'vb-num', step: '0.1', value: '0', 'aria-label': 'X' });
+    const dyIn = h('input', { type: 'number', id: 'ex-dir-y', class: 'vb-num', step: '0.1', value: '0', 'aria-label': 'Y' });
+    const dzIn = h('input', { type: 'number', id: 'ex-dir-z', class: 'vb-num', step: '0.1', value: '1', 'aria-label': 'Z' });
+    const customDir = h('div', { id: 'ex-custom-dir', class: 'vb-row ex-custom-dir' },
+      h('span', { class: 'vb-l' }, 'X'), dxIn,
+      h('span', { class: 'vb-l' }, 'Y'), dyIn,
+      h('span', { class: 'vb-l' }, 'Z'), dzIn);
+    customDir.hidden = true;
+    dirSel.onchange = () => { customDir.hidden = (dirSel.value !== 'custom'); };
+
+    const distIn = h('input', { type: 'text', id: 'ex-step-dist', class: 'vb-num', inputmode: 'decimal', value: Units.fmtInput(30), 'aria-label': T('ex.dist') });
+    distIn.onkeydown = (e) => { if (e.key === 'Enter') { addBtn.click(); } e.stopPropagation(); };
+    const addBtn = h('button', { type: 'button', class: 'btn small primary', id: 'ex-step-add', 'data-help': 'explodeSteps' }, T('ex.addStep'));
+    const cancelBtn = h('button', { type: 'button', class: 'btn small', id: 'ex-step-cancel' }, T('common.cancel'));
+    cancelBtn.hidden = true;
+    cancelBtn.onclick = () => { st.exEditId = null; refreshExBar(); };
+
+    addBtn.onclick = () => {
+      if (typeof Assembly === 'undefined') return;
+      const pv = partSel.value;
+      let partIds = [];
+      if (pv === '__SEL__') {
+        const valid = new Set(Assembly.explodeParts().map((p) => p.id));
+        for (const sid of (App.sel || [])) {
+          const top = Model.topOf(App.doc, sid);
+          if (top && valid.has(top.id) && !partIds.includes(top.id)) partIds.push(top.id);
+        }
+      } else if (pv) {
+        partIds = [pv];
+      }
+      if (!partIds.length) {
+        UI.toast('Bitte zuerst ein Teil wählen.', { icon: 'info' });
+        return;
+      }
+      const dir = dirSel.value === 'custom'
+        ? [parseFloat(dxIn.value) || 0, parseFloat(dyIn.value) || 0, parseFloat(dzIn.value) || 0]
+        : dirSel.value;
+      const parsed = Units.parseLen(distIn.value, Model.vars(App.doc).v, { expr: false });
+      const dist = parsed.ok ? Math.max(0, parsed.num) : Math.max(0, parseFloat(String(distIn.value).replace(',', '.')) || 30);
+      if (st.exEditId) {
+        Assembly.updateExplodeStep(st.exEditId, { partIds, dir, dist });
+        st.exEditId = null;
+      } else {
+        Assembly.addExplodeStep({ partIds, dir, dist });
+      }
+      st.exMode = 'steps';
+      const nextF = st.ex > 1e-4 ? st.ex : 1;
+      st.exGoal = nextF;
+      setEx(nextF);
+      refreshExBar();
+      sync();
+    };
+
+    const form = h('div', { id: 'ex-step-form', class: 'ex-step-form' },
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('ex.part')), partSel),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('ex.dir')), dirSel),
+      customDir,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('ex.dist')), distIn, h('span', { class: 'vb-u' }, Units.label()), addBtn, cancelBtn));
+
+    stepsPanel.append(stepsList, form);
+
+    bar.append(
+      head,
+      modeSeg,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range, pct),
+      h('div', { class: 'vb-row ex-actions' }, playBtn, vidBtn, back),
+      trow,
+      grow,
+      stepsPanel,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter'))
+    );
     const fv = bars().querySelector('.focusview'); fv ? bars().insertBefore(bar, fv) : bars().append(bar); st.exBar = bar;
+    refreshExBar();
   }
   // Zum Zeichnen, Bohren, Messen oder Ziehen muss alles wieder an seinem Platz sein
-  function collapse() { if (st.exGoal > 0 || st.ex > 0) animateTo(0, 250); }
+  function collapse() { if (st.exGoal > 0 || st.ex > 0) animateTo(0, 250, true); }
 
   // ---------- Fokus-Vorschau ----------
   function stopFocusTimer(f) {
@@ -1160,6 +1829,7 @@ const Views = (() => {
       { label: T('menu.view.present'), icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
       { label: T('menu.view.turntable'), icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       { label: (typeof Motion !== 'undefined' && Motion.active ? '✓ ' : '') + T('motion.menuLabel'), icon: 'play', help: 'motionStudy', id: 'view-motion', hidden: ViewPrefs.simple, run: () => Motion.toggle() },
+      { label: T('menu.view.explodeVideo'), icon: 'play', help: 'explodeVideo', id: 'view-explode-video', run: () => explodeVideoDialog() },
       '-', ...lookItems(),
     ]);
   }
@@ -1224,9 +1894,30 @@ const Views = (() => {
       else if (typeof Sketch !== 'undefined' && Sketch.active && st.quad) quad(false);
     });
     // Während die Gruppen zerlegt gezeigt werden: nach jeder Änderung die Einzelteile neu aufbauen
-    App.on('doc', () => { if (!st.exGroups) return; const { extra, hide } = splitGroups(); App.extra = extra; App.hideIds = hide; });
+    App.on('doc', () => {
+      if (st.exGroups) { const { extra, hide } = splitGroups(); App.extra = extra; App.hideIds = hide; }
+      if (st.exBar) {
+        refreshExBar();
+        if (st.exMode === 'steps' && st.ex > 1e-4) setEx(st.ex);
+      }
+    });
+    App.on('docLoaded', () => {
+      if (st.exBar && App.doc && App.doc.id !== st.exDocId) {
+        stopExplode();
+        stopExAnim();
+        st.ex = st.exGoal = 0;
+        st.exEditId = null;
+        Viewer.setOffsets(null);
+        disposeExTrails();
+        st.exBar.remove();
+        st.exBar = null;
+        sync();
+      }
+    });
+    App.on('selection', () => {
+      if (st.exBar && !st.exEditId) refreshExBar();
+    });
     App.on('results', () => {
-      if (st.ex > 1e-4) setEx(st.ex);
       if (st.ov) drawOverhang();
       if (st.thin) drawThin();
       if (st.wind) drawWind(false);
@@ -1245,8 +1936,28 @@ const Views = (() => {
       }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); quad(false); overhang(false); thin(false); wind(false); present(false); if (typeof Measure !== 'undefined' && Measure.draftActive) Measure.draft(false); if (typeof Measure !== 'undefined' && Measure.silhouetteActive) Measure.silhouette(false); if (typeof InnerRadius !== 'undefined' && InnerRadius.active) InnerRadius.close(); if (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) SymmetryCheck.close(); if (typeof Versions !== 'undefined' && Versions.comparing) Versions.compareOff(); if (st.exGroups) setGroups(false); }
-  return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, quad, overhang, menu, onKey, reset, sync, bars,
+  function reset() {
+    section(false);
+    if (st.xray) xray(false);
+    if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; }
+    stopExAnim();
+    stopExplode();
+    disposeExTrails();
+    if (st.exGoal > 0 || st.ex > 0 || st.exBar) {
+      st.ex = st.exGoal = 0;
+      st.exEditId = null;
+      Viewer.setOffsets(null);
+      if (st.exBar) { st.exBar.remove(); st.exBar = null; }
+    }
+    focus(false); quad(false); overhang(false); thin(false); wind(false); present(false);
+    if (typeof Measure !== 'undefined' && Measure.draftActive) Measure.draft(false);
+    if (typeof Measure !== 'undefined' && Measure.silhouetteActive) Measure.silhouette(false);
+    if (typeof InnerRadius !== 'undefined' && InnerRadius.active) InnerRadius.close();
+    if (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) SymmetryCheck.close();
+    if (typeof Versions !== 'undefined' && Versions.comparing) Versions.compareOff();
+    if (st.exGroups) setGroups(false);
+  }
+  return { saveView, goView, removeView,     init, section, xray, explode, openExplodeSteps, setExplodeProgress, setExplodeMode, setExplodeTrails, playExplode, stopExplode, explodeVideo, explodeVideoDialog, collapse, focus, quad, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get quadActive() { return !!st.quad; }, get quadPanes() { return Viewer.quadPanes; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
@@ -1265,6 +1976,7 @@ const Views = (() => {
       };
     },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; }, get explodeGroups() { return st.exGroups; }, setGroups,
+    get explodeMode() { return st.exMode; }, get explodeTrails() { return st.exTrails; }, get explodeTrailCount() { return st.exTrailsGroup ? (st.exTrailsGroup.userData.count || 0) : 0; }, get explodePlaying() { return !!st.exPlay; }, get lastExplodeVideo() { return st.lastExplodeVideo; },
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
   };
 })();
