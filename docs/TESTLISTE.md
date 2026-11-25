@@ -2520,6 +2520,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Speichern, Laden, Hilfe & Übersetzung**: Nach Speichern über `Start.projectPayload()` und Laden über `Start.openBlob()` bleiben Aufkleber samt Lage/Drehung/Skalierung sowie Holz-Textur samt geladener `THREE.Texture` vollständig erhalten; `HELP.decal`, `HELP.bodyTexture`, Befehle und DE/EN-Texte sind vorhanden (`t_a136_aufkleber_texturen`).
 - [ ] **Von Hand**: Im Browser ein eigenes PNG-Logo mit durchsichtigem Hintergrund auf eine Quader-Fläche legen, verschieben/drehen, anschließend auf Karbon-Textur umschalten und per Auge die Nahtlosigkeit an den Kanten prüfen.
 
+## Rändel und Griffmuster (Auto [A-131], KP-50)
+
+- [x] **Gekreuztes Rändel auf Zylinder `d=20` mit Teilung `1`**: Über Kontextleiste `#ctx-knurl` (im Einfach-Modus verborgen) angelegt → Oberfläche steigt deutlich (`> 1,05×`), maximaler Durchmesser bleibt `≤ 20,0 mm`, `GeomCheck` 0 Funde, `Model.dependencies`, Unterdrücken und Rückgängig geprüft (`t_a131_raendel_griffmuster`).
+- [x] **Gerades, schräges & Teil-Rändel**: Umschalten auf `straight` und `angled` sowie Teil-Rändel (`length: 12`, `margin: 2`) auf abgesetzter Welle erzeugen gültige Geometrie mit größerer Oberfläche ohne Überschreitung des Außendurchmessers (`t_a131_raendel_griffmuster`).
+- [x] **Griffmuster Rillen & Noppen (Fläche & Zylinder)**: Rillen (`v`/`round`, vertieft & erhaben auf Quader und Ringrillen auf Zylinder) sowie versetzte Halbkugel-Noppen (`bumps` auf Quader-Oberseite und Zylindermantel) verändern Volumen und Oberfläche erwartungsgemäß ohne Geometriefehler; Erklärungen (`Explain.local`), Befehle (`Commands.search`), Hilfetexte (`werkzeug-hilfen.json`) und DE/EN-Schlüsselgleichheit geprüft (`t_a131_raendel_griffmuster`).
+- [ ] **Von Hand**: Im Browser ein schräges Rändel auf einem abgestuften Drehknopf und ein Noppen-Griffmuster auf einer gekrümmten Griffhülse im 3D-Bild optisch prüfen.
+
 ## Boden mit Spiegelung und Licht von Hand (Auto [A-135], AN-11, AN-12)
 
 - [x] **Einfach & Profi Zugang**: `#look-panel` öffnet in „Einfach“ über `#proj-look-open` und `#t-more` (`#more-look-panel`) sowie in „Profi“ über `#t-views` (`#look-studio-panel`) und Befehlssuche (`t_a135_boden_licht`).
