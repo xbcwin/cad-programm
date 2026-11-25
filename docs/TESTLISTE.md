@@ -3009,6 +3009,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Suche, Undo/Redo, Validierung & Hilfen**: Unverändert 5 Kacheln im Einfach-Flyout, 3 neue Kacheln im Profi-Modus, Befehlssuche, `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüsselgleichheit ohne JS-Fehler (`t_a193_typenschild_qr_barcode`).
 - [ ] **Von Hand**: Im Browser ein Typenschild, einen QR-Code und einen EAN-13-/Code-128-Barcode in „Einfach“ und „Profi“ anlegen, den QR-Code mit dem Handy scannen und erhabene sowie vertiefte Ausführung visuell prüfen.
 
+## Bibliothek: Toleranz-Tabellen ISO 286 (Auto [A-195], BI-26)
+
+- [x] **Profi-Sichtbarkeit & Nachschlagen Ø20 H7 / g6 / IT7 / H7-g6**: Im Einfach-Modus bleibt `#open-iso286-table` ausgeblendet und die Kachelzahl unverändert (`5`); im Profi-Modus öffnet `#open-iso286-table` den Dialog `#iso286-dlg`, schlägt Ø20 H7 (`+0,021 / 0`, `20,000 – 20,021 mm`), Ø20 g6 (`−0,007 / −0,020`, `19,980 – 19,993 mm`), Grundtoleranz IT7 (`21 µm` / `0,021 mm`) und das Passungspaar `H7/g6` (`Spielpassung`, `+0,007 / +0,041 mm`) aus `app/data/iso286.json` nach (`t_a195_toleranz_tabellen_iso286`).
+- [x] **Übernehmen an Skizzen-Maß & Übernahme in die Zeichnung**: Klick auf `#dim-iso286` in der Maß-Eingabe `askDim` bei Ø20 übernimmt `H7` ans Skizzenmaß (`.skdim` zeigt `H7 (+0,021/0)`) und `Drawing.importModelDims()` überträgt `H7` direkt auf das Zeichnungsmaß (`t_a195_toleranz_tabellen_iso286`).
+- [x] **Übernehmen an Zeichnungs-Maß & Projekt-Maß, Suche, Validierung & Hilfen**: `#dw-tol-table-btn` setzt am gewählten Zeichnungsmaß `g6` (`App.undo()` geht zurück auf `H7`); unter „Maße“ setzt `#ptol-*` eine Toleranz am Projekt-Parameter; Befehlssuche (`iso286-table`), `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` (`iso286Table`) und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a195_toleranz_tabellen_iso286`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus über „Bauteile → Toleranz-Tabelle (ISO 286)“ sowie über das `±`-Symbol an einem Skizzen-Maß verschiedene Passungspaare (z. B. `H7/k6`, `H7/p6`) prüfen und in eine Zeichnung übernehmen.
+
 ## Fehler melden
 
 ```

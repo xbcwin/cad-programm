@@ -1426,6 +1426,24 @@ const Sketch = (() => {
     }
     App.emit('sketch');
   }
+  function getDimTol(spOrId) {
+    if (!S) return null;
+    const dm = typeof spOrId === 'string' ? S.dims.find((d) => d && d.id === spOrId) : dimFind(spOrId);
+    return dm && dm.tol ? { ...dm.tol } : null;
+  }
+  function setDimTol(spOrId, tol) {
+    if (!S || guardLocked()) return false;
+    const dm = typeof spOrId === 'string' ? S.dims.find((d) => d && d.id === spOrId) : dimFind(spOrId);
+    if (!dm) return false;
+    const clean = typeof Iso286 !== 'undefined' && Iso286.sanitizeTol ? Iso286.sanitizeTol(tol) : (tol || null);
+    pushUndo();
+    if (clean) dm.tol = clean;
+    else delete dm.tol;
+    App.emit('sketch');
+    render();
+    Panels.renderRight();
+    return true;
+  }
   function setDimName(spOrId, newName) {
     if (!S || guardLocked()) return false;
     const dm = typeof spOrId === 'string' ? S.dims.find((d) => d && d.id === spOrId) : dimFind(spOrId);
@@ -2066,6 +2084,37 @@ const Sketch = (() => {
       }
     }
     if (sp.k !== 'n' && !(cur && cur.ref)) {
+      if (isLen && typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+        const tb = h('button', {
+          type: 'button',
+          class: 'dimlock pro' + (cur && cur.tol ? ' active' : ''),
+          id: 'dim-iso286',
+          'data-help': 'iso286Table',
+          'data-tip': T('iso286.dimBtnTip'),
+          'aria-label': T('iso286.dimBtnAria'),
+        }, '±');
+        tb.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); });
+        tb.onclick = () => {
+          const raw = inp.value.trim();
+          const parsed = Units.parseLen(raw, vars(), { expr: true });
+          const meas = round(measureSpec(sp), 6);
+          const nomMm = parsed.ok && isFinite(parsed.num) && parsed.num > 0 ? parsed.num : (isFinite(meas) && meas > 0 ? meas : 20);
+          hideDimBox();
+          Iso286.openDialog({
+            nominalMm: nomMm,
+            code: (cur && cur.tol && cur.tol.fit) || (sp.k === 'd' ? 'H7' : 'h6'),
+            fitShow: (cur && cur.tol && cur.tol.fitShow) || 'both',
+            targetLabel: T('iso286.targetSketchDim', { label: dimLabelOf(sp) }),
+            onApply: (tol) => {
+              if (!cur || (parsed.ok && String(parsed.value) !== String(cur.v))) {
+                setDimSpec(sp, parsed.ok ? parsed.value : meas);
+              }
+              setDimTol(sp, tol);
+            },
+          });
+        };
+        dimBox.append(tb);
+      }
       // Knopf „( )“: nur ablesen statt festlegen
       const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': T('sk.dimBox.refTip'), 'aria-label': T('sk.dimBox.refAria') }, '( )');
       rb.onclick = () => { hideDimBox(); if (cur) { pushUndo(); cur.ref = true; cur.v = round(measureSpec(sp), 6); if (sp.k === 'distCC') cur.cm = sp.cm || 'center'; reapply(); render(); Panels.renderRight(); } else setRefDim(sp); };
@@ -5817,10 +5866,15 @@ const Sketch = (() => {
         const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
         const valTxt = isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val));
         const dLbl = dimLabelOf(dm);
-        const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? dLbl + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : dLbl + ' – klicken zum Ändern', dataset: { dim: dm.id } });
+        const tf = !dm.ref && isLen && dm.tol && typeof Iso286 !== 'undefined' && Iso286.formatTolShort
+          ? Iso286.formatTolShort(dm.tol, val)
+          : null;
+        const tolHtml = tf ? `<span class="skdim-tol"> ${esc(tf.badge)}</span>` : '';
+        const tolTip = tf && (tf.dev || tf.range) ? ` · ${tf.dev}${tf.range ? ` (${tf.range})` : ''}` : '';
+        const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? dLbl + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : dLbl + tolTip + ' – klicken zum Ändern', dataset: { dim: dm.id } });
         el.innerHTML = dm.ref
           ? (isSkeletonMode() && dm.name ? `<span class="fx">${esc(dm.name)}&nbsp;=</span>` : '') + esc('(' + pre + valTxt + unit + ')')
-          : (isSkeletonMode() && dm.name ? `<span class="fx">${esc(dm.name)}&nbsp;=</span>` : isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
+          : (isSkeletonMode() && dm.name ? `<span class="fx">${esc(dm.name)}&nbsp;=</span>` : isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit) + tolHtml;
         placeBadge(el, pos.p);
         el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
         el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
@@ -8061,6 +8115,26 @@ const Sketch = (() => {
             const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 6) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
             f.addEventListener('mouseenter', () => { if (e && S.hoverDim !== e.id) { S.hoverDim = e.id; S.hoverEnt = e.id; render(); } });
             tbl.append(f);
+            if (unitOf(d.k) === 'mm' && !d.ref && typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+              const nom = round(measureSpec(sp), 6);
+              const tf = d.tol ? Iso286.formatTolShort(d.tol, nom) : null;
+              const tRow = h('div', { class: 'param-tol-row pro' });
+              const tb = h('button', { type: 'button', class: 'btn ghost small', id: 'dt-tol-' + i, 'data-help': 'iso286Table' }, tf ? tf.badge : '± ISO 286');
+              tb.onclick = () => Iso286.openDialog({
+                nominalMm: isFinite(nom) && nom > 0 ? nom : 20,
+                code: (d.tol && d.tol.fit) || (d.k === 'd' ? 'H7' : 'h6'),
+                fitShow: (d.tol && d.tol.fitShow) || 'both',
+                targetLabel: T('iso286.targetSketchDim', { label: what }),
+                onApply: (tol) => setDimTol(d.id, tol),
+              });
+              tRow.append(tb);
+              if (d.tol) {
+                const td = h('button', { type: 'button', class: 'ptbl-rdel', id: 'dt-tol-del-' + i, 'data-tip': T('iso286.clearTol'), 'aria-label': T('iso286.clearTol') }, '×');
+                td.onclick = () => setDimTol(d.id, null);
+                tRow.append(td);
+              }
+              tbl.append(tRow);
+            }
           });
           if (S.dimTableOpen || (isSkeletonMode() && S.dimTableOpen !== false)) tbl.open = true;
           tbl.addEventListener('toggle', () => { S.dimTableOpen = tbl.open; });
@@ -9962,6 +10036,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimName, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startSplitCurve, startPoints, startAsmCut, startSkeleton, editSkeleton, chooseAndStartSkeleton, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimName, getDimTol, setDimTol, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startSplitCurve, startPoints, startAsmCut, startSkeleton, editSkeleton, chooseAndStartSkeleton, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

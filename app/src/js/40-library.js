@@ -3269,3 +3269,962 @@ const Enclosure = (() => {
   return { metrics: enclosureMetrics, create, openDialog };
 })();
 
+// ================= Toleranz-Tabellen ISO 286 (BI-26) =================
+const Iso286 = (() => {
+  const DATA = /*JSON:iso286.json*/null;
+  const STEPS = (DATA && Array.isArray(DATA.stufen_mm)) ? DATA.stufen_mm : [];
+  const IT_MAP = (DATA && DATA.it_um) || {};
+  const IT_GRADES = Object.keys(IT_MAP).sort((a, b) => Number(a) - Number(b));
+  const CLASSES = (DATA && DATA.klassen) || {};
+  const HOLE_CODES = Object.keys(CLASSES).filter((k) => CLASSES[k] && CLASSES[k].art === 'bohrung');
+  const SHAFT_CODES = Object.keys(CLASSES).filter((k) => CLASSES[k] && CLASSES[k].art === 'welle');
+  const COMMON_CODES = ['H7', 'H8', 'g6', 'h6', 'js6', 'k6', 'm6', 'p6'].filter((c) => !!CLASSES[c]);
+  const COMMON_PAIRS = [
+    ['H7', 'f7'], ['H7', 'g6'], ['H7', 'h6'], ['H7', 'js6'],
+    ['H7', 'k6'], ['H7', 'm6'], ['H7', 'n6'], ['H7', 'p6'],
+    ['H8', 'f7'], ['H8', 'e8'], ['H11', 'd9'],
+  ].filter(([a, b]) => !!CLASSES[a] && !!CLASSES[b]);
+
+  function stepIndex(nominalMm) {
+    const nom = Number(nominalMm);
+    if (!(nom > 0) || !STEPS.length || nom > STEPS[STEPS.length - 1]) return -1;
+    return STEPS.findIndex((hi) => nom <= hi);
+  }
+
+  function stepRange(idx) {
+    if (idx < 0 || idx >= STEPS.length) return null;
+    return { idx, min: idx === 0 ? 0 : STEPS[idx - 1], max: STEPS[idx] };
+  }
+
+  function fmtUm(um) {
+    const n = Number(um) || 0;
+    if (Math.abs(n) < 1e-9) return '0';
+    return (n > 0 ? '+' : '\u2212') + String(Math.abs(n)).replace('.', ',');
+  }
+
+  function fmtTolFixed(val, dec) {
+    const r = round(Number(val) || 0, dec);
+    const clean = Object.is(r, -0) ? 0 : r;
+    return clean.toFixed(dec).replace('.', ',');
+  }
+
+  function fmtDevMm(mm, minDec = 3) {
+    const n = Number(mm) || 0;
+    if (Math.abs(n) < 1e-9) return '0';
+    return (n > 0 ? '+' : '\u2212') + fmtTolFixed(Math.abs(n), minDec);
+  }
+
+  function resolveCode(code) {
+    const raw = String(code || '').trim();
+    if (!raw) return null;
+    if (CLASSES[raw]) return raw;
+    return Object.keys(CLASSES).find((k) => k.toLowerCase() === raw.toLowerCase()) || null;
+  }
+
+  function lookup(code, nominalMm) {
+    const key = resolveCode(code);
+    const entry = key ? CLASSES[key] : null;
+    if (!entry) return null;
+    const nom = Number(nominalMm);
+    const norm = (DATA && DATA.norm) || 'DIN EN ISO 286-2:2010';
+    const sources = (DATA && DATA._quellen) || [];
+    const idx = stepIndex(nom);
+    if (idx < 0) {
+      return {
+        code: key,
+        kind: entry.art,
+        hint: entry.hinweis || '',
+        norm,
+        sources,
+        nominalMm: nom,
+        outOfRange: true,
+      };
+    }
+    const pair = entry.abmasse_um[idx];
+    const upperUm = pair[0];
+    const lowerUm = pair[1];
+    const upperMm = upperUm / 1000;
+    const lowerMm = lowerUm / 1000;
+    const tolUm = round(upperUm - lowerUm, 4);
+    const tolMm = round(tolUm / 1000, 6);
+    const minMm = nom + lowerMm;
+    const maxMm = nom + upperMm;
+    const midMm = (minMm + maxMm) / 2;
+    const minDec = (!Number.isInteger(upperUm) || !Number.isInteger(lowerUm)) ? 4 : 3;
+    const upStr = fmtDevMm(upperMm, minDec);
+    const loStr = fmtDevMm(lowerMm, minDec);
+    const minStr = fmtTolFixed(minMm, minDec);
+    const maxStr = fmtTolFixed(maxMm, minDec);
+    const range = stepRange(idx);
+    return {
+      code: key,
+      kind: entry.art,
+      hint: entry.hinweis || '',
+      norm,
+      sources,
+      nominalMm: nom,
+      stepIdx: idx,
+      rangeMin: range.min,
+      rangeMax: range.max,
+      upperUm,
+      lowerUm,
+      tolUm,
+      upperMm,
+      lowerMm,
+      tolMm,
+      minMm,
+      maxMm,
+      midMm,
+      upUmStr: fmtUm(upperUm),
+      loUmStr: fmtUm(lowerUm),
+      upStr,
+      loStr,
+      devText: `${upStr} / ${loStr}`,
+      minStr,
+      maxStr,
+      outOfRange: false,
+    };
+  }
+
+  function lookupIT(grade, nominalMm) {
+    const g = String(grade || '7').replace(/^IT/i, '').trim();
+    const arr = IT_MAP[g];
+    if (!arr) return null;
+    const nom = Number(nominalMm);
+    const norm = (DATA && DATA.norm) || 'DIN EN ISO 286-2:2010';
+    const sources = (DATA && DATA._quellen) || [];
+    const idx = stepIndex(nom);
+    if (idx < 0) {
+      return {
+        grade: 'IT' + g,
+        num: Number(g),
+        nominalMm: nom,
+        norm,
+        sources,
+        outOfRange: true,
+      };
+    }
+    const itUm = arr[idx];
+    const itMm = itUm / 1000;
+    const symMm = round(itMm / 2, 6);
+    const symDec = (itUm % 2 === 1) ? 4 : 3;
+    const range = stepRange(idx);
+    return {
+      grade: 'IT' + g,
+      num: Number(g),
+      nominalMm: nom,
+      stepIdx: idx,
+      rangeMin: range.min,
+      rangeMax: range.max,
+      itUm,
+      itMm,
+      symMm,
+      itStr: fmtTolFixed(itMm, 3),
+      symStr: '±' + fmtTolFixed(symMm, symDec),
+      norm,
+      sources,
+      outOfRange: false,
+    };
+  }
+
+  function pairInfo(holeCode, shaftCode, nominalMm) {
+    const hole = lookup(holeCode, nominalMm);
+    const shaft = lookup(shaftCode, nominalMm);
+    if (!hole || !shaft || hole.outOfRange || shaft.outOfRange) {
+      return { hole, shaft, outOfRange: true };
+    }
+    const minClearUm = round(hole.lowerUm - shaft.upperUm, 4);
+    const maxClearUm = round(hole.upperUm - shaft.lowerUm, 4);
+    const fitKind = minClearUm >= 0 ? 'clearance' : maxClearUm <= 0 ? 'interference' : 'transition';
+    return {
+      hole,
+      shaft,
+      minClearUm,
+      maxClearUm,
+      minClearMm: minClearUm / 1000,
+      maxClearMm: maxClearUm / 1000,
+      fitKind,
+      outOfRange: false,
+    };
+  }
+
+  function parseSpec(raw) {
+    const s = String(raw || '').replace(/[Øø]/g, ' ').replace(/\bmm\b/gi, ' ').trim();
+    if (!s) return { nominalMm: NaN, code: null, itGrade: null };
+    let nominalMm = NaN;
+    let code = null;
+    let itGrade = null;
+    const numMatch = /(?:^|\s)(\d+(?:[.,]\d+)?)/.exec(s);
+    if (numMatch) {
+      const n = Number(numMatch[1].replace(',', '.'));
+      if (isFinite(n) && n > 0) nominalMm = n;
+    }
+    const itMatch = /\bIT\s*(\d{1,2})\b/i.exec(s);
+    if (itMatch && IT_MAP[itMatch[1]]) itGrade = itMatch[1];
+    const tokens = s.split(/\s+/);
+    for (const tk of tokens) {
+      if (/^IT\d+$/i.test(tk)) continue;
+      const rc = resolveCode(tk);
+      if (rc) { code = rc; break; }
+    }
+    return { nominalMm, code, itGrade };
+  }
+
+  function sanitizeTol(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.mode || raw.mode === 'none') return null;
+    if (raw.mode === 'sym') {
+      const sym = Math.abs(Number(raw.sym) || 0);
+      return { mode: 'sym', sym: round(sym, 6) };
+    }
+    if (raw.mode === 'dev' || raw.mode === 'limits') {
+      let upper = Number(raw.upper) || 0;
+      let lower = Number(raw.lower) || 0;
+      if (lower > upper) [upper, lower] = [lower, upper];
+      return { mode: raw.mode, upper: round(upper, 6), lower: round(lower, 6) };
+    }
+    if (raw.mode === 'fit') {
+      const code = resolveCode(raw.fit) || 'H7';
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(raw.fitShow) ? raw.fitShow : 'both';
+      return { mode: 'fit', fit: code, fitShow };
+    }
+    return null;
+  }
+
+  function decForTol(val) {
+    const a = Math.abs(Number(val) || 0);
+    if (a < 1e-9) return 1;
+    const s = a.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    const i = s.indexOf('.');
+    return i < 0 ? 1 : Math.max(1, s.length - i - 1);
+  }
+
+  function formatTolShort(tol, nominalMm) {
+    const t = sanitizeTol(tol);
+    if (!t) return null;
+    const nom = Number(nominalMm);
+    if (t.mode === 'fit') {
+      const info = lookup(t.fit, nom);
+      if (!info) return null;
+      if (info.outOfRange) {
+        return { mode: 'fit', code: info.code, badge: info.code, dev: '', range: '', info };
+      }
+      const badge = t.fitShow === 'code'
+        ? info.code
+        : t.fitShow === 'limits'
+          ? `${info.minStr}–${info.maxStr}`
+          : t.fitShow === 'dev'
+            ? `${info.upStr}/${info.loStr}`
+            : `${info.code} (${info.upStr}/${info.loStr})`;
+      return {
+        mode: 'fit',
+        code: info.code,
+        badge,
+        dev: info.devText,
+        range: `${info.minStr} – ${info.maxStr} mm`,
+        info,
+      };
+    }
+    if (t.mode === 'sym') {
+      const dec = decForTol(t.sym);
+      const s = '±' + fmtFixed(t.sym, dec);
+      const rTxt = isFinite(nom) && nom > 0 ? `${fmtFixed(nom - t.sym, dec)} – ${fmtFixed(nom + t.sym, dec)} mm` : '';
+      return { mode: 'sym', badge: s, dev: s, range: rTxt };
+    }
+    const minDec = Math.max(decForTol(t.upper), decForTol(t.lower));
+    const upStr = fmtDevMm(t.upper, minDec);
+    const loStr = fmtDevMm(t.lower, minDec);
+    const rTxt = isFinite(nom) && nom > 0 ? `${fmtFixed(nom + t.lower, minDec)} – ${fmtFixed(nom + t.upper, minDec)} mm` : '';
+    return {
+      mode: t.mode,
+      badge: t.mode === 'limits' && rTxt ? `${fmtFixed(nom + t.lower, minDec)}–${fmtFixed(nom + t.upper, minDec)}` : `${upStr}/${loStr}`,
+      dev: `${upStr} / ${loStr}`,
+      range: rTxt,
+    };
+  }
+
+  function collectTargets() {
+    const out = [];
+    if (typeof App === 'undefined' || !App.doc) return out;
+    if (App.mode === 'drawing' && typeof Drawing !== 'undefined' && typeof Drawing.tolTargets === 'function') {
+      const dList = Drawing.tolTargets();
+      dList.sort((a, b) => (b.selected ? 1 : 0) - (a.selected ? 1 : 0));
+      for (const dt of dList) {
+        out.push({
+          key: 'drawing:' + dt.dimId,
+          type: 'drawing',
+          dimId: dt.dimId,
+          nominalMm: dt.nominalMm,
+          curTol: dt.curTol || null,
+          label: T('iso286.targetDrawingDim', { label: dt.label }),
+        });
+      }
+    }
+    if (typeof Sketch !== 'undefined' && Sketch.active && !Sketch.active3d && Sketch.state) {
+      const st = Sketch.state;
+      const V = Model.vars(App.doc).v;
+      for (const dm of st.dims || []) {
+        if (!dm || dm.ref || dm.k === 'n' || dm.k === 'ang' || dm.k === 'angLL' || dm.k === 'ang3' || /^hAng\d+$/.test(dm.k)) continue;
+        const nom = typeof dm.v === 'number' ? dm.v : Model.num(dm.v, V, NaN);
+        const pre = dm.k === 'd' ? 'Ø ' : dm.k === 'r' ? 'R ' : '';
+        const lbl = isFinite(nom) ? `${pre}${fmtFixed(nom, 2)} mm` : String(dm.v || dm.k);
+        out.push({
+          key: 'sketch:' + dm.id,
+          type: 'sketch',
+          dimId: dm.id,
+          nominalMm: isFinite(nom) && nom > 0 ? nom : 20,
+          curTol: dm.tol || null,
+          label: T('iso286.targetSketchDim', { label: lbl }),
+        });
+      }
+    }
+    if (typeof Measure !== 'undefined' && typeof Measure.pmiList === 'function') {
+      const pmis = Measure.pmiList(App.doc).filter((x) => x && x.kind === 'dim');
+      const selId = Measure.selectedPmi;
+      pmis.sort((a, b) => ((b.id === selId ? 1 : 0) - (a.id === selId ? 1 : 0)));
+      for (const pm of pmis) {
+        const ev = typeof Measure.pmiEvalOf === 'function' ? Measure.pmiEvalOf(pm.id) : null;
+        if (ev && ev.unit === '°') continue;
+        const nom = ev && isFinite(Number(ev.value)) ? Number(ev.value) : 20;
+        const pre = pm.dimType === 'dia' ? 'Ø' : pm.dimType === 'rad' ? 'R' : '';
+        const lbl = `${pre}${fmtFixed(nom, 2)} mm`;
+        out.push({
+          key: 'pmi:' + pm.id,
+          type: 'pmi',
+          pmiId: pm.id,
+          nominalMm: nom,
+          curTol: pm.tol || null,
+          label: T('iso286.targetPmiDim', { label: lbl }),
+        });
+      }
+    }
+    const V = Model.vars(App.doc).v;
+    for (const p of App.doc.params || []) {
+      const nom = Number(V[p.name]);
+      out.push({
+        key: 'param:' + p.id,
+        type: 'param',
+        paramId: p.id,
+        name: p.name,
+        nominalMm: isFinite(nom) && nom > 0 ? nom : 20,
+        curTol: p.tol || null,
+        label: T('iso286.targetParam', { name: p.name }) + (isFinite(nom) ? ` (${fmtFixed(nom, 2)} mm)` : ''),
+      });
+    }
+    out.push({
+      key: 'newParam',
+      type: 'newParam',
+      nominalMm: null,
+      curTol: null,
+      label: T('iso286.targetNewParam'),
+    });
+    return out;
+  }
+
+  function applyToTarget(target, tol, nominalMm) {
+    if (!target) return false;
+    const clean = sanitizeTol(tol);
+    if (target.type === 'drawing' && typeof Drawing !== 'undefined' && Drawing.setDimTol) {
+      return Drawing.setDimTol(target.dimId, clean);
+    }
+    if (target.type === 'pmi' && typeof Measure !== 'undefined' && Measure.setPmiTol) {
+      return Measure.setPmiTol(target.pmiId, clean);
+    }
+    if (target.type === 'sketch' && typeof Sketch !== 'undefined' && Sketch.setDimTol) {
+      return Sketch.setDimTol(target.dimId, clean);
+    }
+    if (target.type === 'param') {
+      App.change('Toleranz geändert', (doc) => {
+        const p = (doc.params || []).find((x) => x.id === target.paramId);
+        if (!p) return false;
+        if (clean) p.tol = clean;
+        else delete p.tol;
+      });
+      return true;
+    }
+    if (target.type === 'newParam') {
+      const nom = isFinite(Number(nominalMm)) && Number(nominalMm) > 0 ? round(Number(nominalMm), 4) : 20;
+      App.change('Maß mit Toleranz angelegt', (doc) => {
+        doc.params = doc.params || [];
+        const base = clean && clean.mode === 'fit' ? 'Passung_' + clean.fit : 'Maß';
+        let nm = base;
+        let n = 1;
+        while (doc.params.some((x) => x.name.toLowerCase() === nm.toLowerCase())) {
+          n++;
+          nm = base + '_' + n;
+        }
+        doc.params.push({ id: uid('m'), name: nm, expr: nom, ...(clean ? { tol: clean } : {}) });
+      });
+      return true;
+    }
+    return false;
+  }
+
+  function openDialog(opts = {}) {
+    const targets = opts.onApply ? [] : collectTargets();
+    const firstTarget = targets[0] || null;
+    const initNom = Number(opts.nominalMm) > 0
+      ? Number(opts.nominalMm)
+      : (firstTarget && Number(firstTarget.nominalMm) > 0 ? Number(firstTarget.nominalMm) : 20);
+    const initCode = resolveCode(opts.code) || (firstTarget && firstTarget.curTol && resolveCode(firstTarget.curTol.fit)) || 'H7';
+    const initIT = opts.itGrade && IT_MAP[String(opts.itGrade).replace(/^IT/i, '')]
+      ? String(opts.itGrade).replace(/^IT/i, '')
+      : '7';
+
+    const st = {
+      tab: opts.tab === 'it' || opts.tab === 'pairs' ? opts.tab : 'fits',
+      nom: initNom,
+      code: initCode,
+      itGrade: initIT,
+      pairHole: resolveCode(opts.pairHole) || 'H7',
+      pairShaft: resolveCode(opts.pairShaft) || 'g6',
+      pairSide: opts.pairSide === 'shaft' ? 'shaft' : 'hole',
+      kindFilter: 'all',
+      tableView: 'step',
+      fitShow: ['both', 'code', 'dev', 'limits'].includes(opts.fitShow) ? opts.fitShow : 'both',
+      targetKey: firstTarget ? firstTarget.key : 'newParam',
+    };
+
+    const body = h('div', { id: 'iso286-dlg', class: 'iso-dlg' });
+
+    // Top row: Nennmaß + Tabs
+    const top = h('div', { class: 'iso-top' });
+    const nomFld = h('div', { class: 'field iso-nom-fld' },
+      h('label', { for: 'iso286-nom' }, T('iso286.nominalLabel')));
+    const nomInp = h('input', {
+      id: 'iso286-nom',
+      type: 'text',
+      inputmode: 'decimal',
+      value: fmt(st.nom, 3),
+      placeholder: '20 oder Ø20 H7',
+      autocomplete: 'off',
+      spellcheck: 'false',
+    });
+    nomFld.append(h('div', { class: 'inp' }, nomInp, h('span', { class: 'unit' }, 'mm')));
+
+    const tabs = h('div', { class: 'seg iso-tabs', role: 'tablist', 'aria-label': T('iso286.tabsAria') });
+    const tabBtns = {};
+    for (const [k, label] of [
+      ['fits', T('iso286.tabFits')],
+      ['it', T('iso286.tabIT')],
+      ['pairs', T('iso286.tabPairs')],
+    ]) {
+      const b = h('button', {
+        type: 'button',
+        id: 'iso286-tab-' + k,
+        role: 'tab',
+        'aria-selected': st.tab === k ? 'true' : 'false',
+        'aria-pressed': st.tab === k ? 'true' : 'false',
+      }, label);
+      b.onclick = () => { st.tab = k; syncAll(); };
+      tabs.append(b);
+      tabBtns[k] = b;
+    }
+    top.append(nomFld, tabs);
+
+    const ctrlWrap = h('div', { id: 'iso286-controls', class: 'iso-ctrls' });
+    const resWrap = h('div', { id: 'iso286-result', class: 'iso-res' });
+    const tblWrap = h('div', { id: 'iso286-table-wrap', class: 'iso-tbl-wrap' });
+    const applyWrap = h('div', { id: 'iso286-apply-bar', class: 'iso-apply-bar' });
+
+    body.append(top, ctrlWrap, resWrap, tblWrap, applyWrap);
+
+    const buildFitSelect = (id, label, value, filterKind, onChange) => {
+      const holeOpts = HOLE_CODES.map((k) => [k, k]);
+      const shaftOpts = SHAFT_CODES.map((k) => [k, k]);
+      const optsList = filterKind === 'bohrung'
+        ? holeOpts
+        : filterKind === 'welle'
+          ? shaftOpts
+          : [
+            { group: T('draw.panel.fitHoleGroup'), options: holeOpts },
+            { group: T('draw.panel.fitShaftGroup'), options: shaftOpts },
+          ];
+      return UI.selectField({ id, label, value, options: optsList, onChange });
+    };
+
+    const currentTolSpec = () => {
+      if (st.tab === 'it') {
+        const itInfo = lookupIT(st.itGrade, st.nom);
+        if (!itInfo || itInfo.outOfRange) return { tol: null, info: itInfo };
+        return { tol: { mode: 'sym', sym: itInfo.symMm }, info: itInfo };
+      }
+      const code = st.tab === 'pairs' ? (st.pairSide === 'shaft' ? st.pairShaft : st.pairHole) : st.code;
+      const info = lookup(code, st.nom);
+      if (!info || info.outOfRange) return { tol: null, info };
+      return { tol: { mode: 'fit', fit: info.code, fitShow: st.fitShow }, info };
+    };
+
+    const renderControls = () => {
+      ctrlWrap.innerHTML = '';
+      if (st.tab === 'fits') {
+        const row = h('div', { class: 'iso-ctrl-row' });
+        row.append(buildFitSelect('iso286-code', T('iso286.codeLabel'), st.code, 'all', (v) => {
+          st.code = v;
+          syncOutputs();
+        }));
+        const kf = UI.selectField({
+          id: 'iso286-kind-filter',
+          label: T('iso286.filterLabel'),
+          value: st.kindFilter,
+          options: [
+            ['all', T('iso286.filterAll')],
+            ['bohrung', T('iso286.filterHoles')],
+            ['welle', T('iso286.filterShafts')],
+          ],
+          onChange: (v) => { st.kindFilter = v; renderTable(); },
+        });
+        const vm = UI.selectField({
+          id: 'iso286-view-mode',
+          label: T('iso286.viewLabel'),
+          value: st.tableView,
+          options: [
+            ['step', T('iso286.viewStep')],
+            ['matrix', T('iso286.viewMatrix')],
+          ],
+          onChange: (v) => { st.tableView = v; renderTable(); },
+        });
+        row.append(kf, vm);
+        ctrlWrap.append(row);
+
+        const chips = h('div', { class: 'iso-chips' }, h('span', { class: 'iso-chips-lbl' }, T('iso286.commonLabel')));
+        for (const c of COMMON_CODES) {
+          const b = h('button', {
+            type: 'button',
+            class: 'btn small iso-chip' + (st.code === c ? ' active' : ''),
+            dataset: { isoCode: c },
+          }, c);
+          b.onclick = () => { st.code = c; syncControlsSelection(); syncOutputs(); };
+          chips.append(b);
+        }
+        ctrlWrap.append(chips);
+      } else if (st.tab === 'it') {
+        const row = h('div', { class: 'iso-ctrl-row' });
+        row.append(UI.selectField({
+          id: 'iso286-it-grade',
+          label: T('iso286.itLabel'),
+          value: st.itGrade,
+          options: IT_GRADES.map((g) => [g, 'IT' + g]),
+          onChange: (v) => { st.itGrade = v; syncOutputs(); },
+        }));
+        ctrlWrap.append(row);
+      } else {
+        const row = h('div', { class: 'iso-ctrl-row' });
+        row.append(
+          buildFitSelect('iso286-pair-hole', T('iso286.pairHoleLabel'), st.pairHole, 'bohrung', (v) => {
+            st.pairHole = v;
+            syncOutputs();
+          }),
+          buildFitSelect('iso286-pair-shaft', T('iso286.pairShaftLabel'), st.pairShaft, 'welle', (v) => {
+            st.pairShaft = v;
+            syncOutputs();
+          }),
+          UI.selectField({
+            id: 'iso286-pair-side',
+            label: T('iso286.pairApplySide'),
+            value: st.pairSide,
+            options: [
+              ['hole', T('iso286.sideHole')],
+              ['shaft', T('iso286.sideShaft')],
+            ],
+            onChange: (v) => { st.pairSide = v; renderApplyBar(); },
+          })
+        );
+        ctrlWrap.append(row);
+
+        const chips = h('div', { class: 'iso-chips' }, h('span', { class: 'iso-chips-lbl' }, T('iso286.commonPairsLabel')));
+        for (const [hc, sc] of [['H7', 'g6'], ['H7', 'h6'], ['H7', 'k6'], ['H7', 'm6'], ['H7', 'p6'], ['H7', 'f7']]) {
+          if (!CLASSES[hc] || !CLASSES[sc]) continue;
+          const active = st.pairHole === hc && st.pairShaft === sc;
+          const b = h('button', {
+            type: 'button',
+            class: 'btn small iso-chip' + (active ? ' active' : ''),
+            dataset: { isoPair: `${hc}/${sc}` },
+          }, `${hc}/${sc}`);
+          b.onclick = () => { st.pairHole = hc; st.pairShaft = sc; syncControlsSelection(); syncOutputs(); };
+          chips.append(b);
+        }
+        ctrlWrap.append(chips);
+      }
+    };
+
+    const syncControlsSelection = () => {
+      const codeSel = ctrlWrap.querySelector('#iso286-code');
+      if (codeSel && codeSel.value !== st.code) codeSel.value = st.code;
+      const itSel = ctrlWrap.querySelector('#iso286-it-grade');
+      if (itSel && itSel.value !== st.itGrade) itSel.value = st.itGrade;
+      const phSel = ctrlWrap.querySelector('#iso286-pair-hole');
+      if (phSel && phSel.value !== st.pairHole) phSel.value = st.pairHole;
+      const psSel = ctrlWrap.querySelector('#iso286-pair-shaft');
+      if (psSel && psSel.value !== st.pairShaft) psSel.value = st.pairShaft;
+      for (const b of ctrlWrap.querySelectorAll('.iso-chip[data-iso-code]')) {
+        b.classList.toggle('active', b.dataset.isoCode === st.code);
+      }
+      for (const b of ctrlWrap.querySelectorAll('.iso-chip[data-iso-pair]')) {
+        b.classList.toggle('active', b.dataset.isoPair === `${st.pairHole}/${st.pairShaft}`);
+      }
+    };
+
+    const renderResult = () => {
+      resWrap.innerHTML = '';
+      if (st.tab === 'fits') {
+        const info = lookup(st.code, st.nom);
+        if (!info || info.outOfRange) {
+          resWrap.append(h('div', { class: 'hint-box' }, T('iso286.outOfRange', { code: st.code })));
+          return;
+        }
+        const kindTxt = T(info.kind === 'bohrung' ? 'draw.panel.fitKindHole' : 'draw.panel.fitKindShaft');
+        resWrap.append(
+          h('div', { class: 'iso-res-head' },
+            h('b', null, `Ø ${fmt(info.nominalMm, 3)} ${info.code}`),
+            h('span', { class: 'sub' }, `${kindTxt} · ${T('iso286.stepRange', { min: info.rangeMin, max: info.rangeMax })}`)),
+          h('div', { class: 'iso-res-grid' },
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.resDevMm')),
+              h('b', { class: 'mono iso-res-val' }, info.devText + ' mm')),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.resDevUm')),
+              h('b', { class: 'mono iso-res-val' }, `${info.upUmStr} / ${info.loUmStr} µm`)),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.resLimits')),
+              h('b', { class: 'mono iso-res-val' }, `${info.minStr} – ${info.maxStr} mm`)),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.resTolWidth')),
+              h('b', { class: 'mono iso-res-val' }, `${fmtFixed(info.tolMm, 3)} mm (${String(info.tolUm).replace('.', ',')} µm)`))),
+          h('div', { class: 'iso-res-foot' },
+            h('span', null, info.hint || ''),
+            h('span', { class: 'sub' }, info.norm))
+        );
+      } else if (st.tab === 'it') {
+        const itInfo = lookupIT(st.itGrade, st.nom);
+        if (!itInfo || itInfo.outOfRange) {
+          resWrap.append(h('div', { class: 'hint-box' }, T('iso286.outOfRange', { code: 'IT' + st.itGrade })));
+          return;
+        }
+        resWrap.append(
+          h('div', { class: 'iso-res-head' },
+            h('b', null, `${itInfo.grade} ${T('iso286.atNominal')} ${fmt(itInfo.nominalMm, 3)} mm`),
+            h('span', { class: 'sub' }, T('iso286.stepRange', { min: itInfo.rangeMin, max: itInfo.rangeMax }))),
+          h('div', { class: 'iso-res-grid' },
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.resItVal')),
+              h('b', { class: 'mono iso-res-val' }, `${itInfo.itStr} mm (${itInfo.itUm} µm)`)),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.resItSym')),
+              h('b', { class: 'mono iso-res-val' }, `${itInfo.symStr} mm`))),
+          h('div', { class: 'iso-res-foot' },
+            h('span', null, T('iso286.itHint')),
+            h('span', { class: 'sub' }, itInfo.norm))
+        );
+      } else {
+        const pInfo = pairInfo(st.pairHole, st.pairShaft, st.nom);
+        if (!pInfo || pInfo.outOfRange) {
+          resWrap.append(h('div', { class: 'hint-box' }, T('iso286.outOfRange', { code: `${st.pairHole}/${st.pairShaft}` })));
+          return;
+        }
+        const kindKey = pInfo.fitKind === 'clearance' ? 'iso286.fitClearance' : pInfo.fitKind === 'interference' ? 'iso286.fitInterference' : 'iso286.fitTransition';
+        const minC = fmtDevMm(pInfo.minClearMm, 3);
+        const maxC = fmtDevMm(pInfo.maxClearMm, 3);
+        resWrap.append(
+          h('div', { class: 'iso-res-head' },
+            h('b', null, `Ø ${fmt(st.nom, 3)} ${pInfo.hole.code}/${pInfo.shaft.code}`),
+            h('span', { class: 'iso-fit-badge ' + pInfo.fitKind }, T(kindKey))),
+          h('div', { class: 'iso-res-grid' },
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, `${T('iso286.sideHole')} (${pInfo.hole.code})`),
+              h('b', { class: 'mono iso-res-val' }, `${pInfo.hole.devText} mm`)),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, `${T('iso286.sideShaft')} (${pInfo.shaft.code})`),
+              h('b', { class: 'mono iso-res-val' }, `${pInfo.shaft.devText} mm`)),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.pairMin')),
+              h('b', { class: 'mono iso-res-val' }, `${minC} mm (${fmtUm(pInfo.minClearUm)} µm)`)),
+            h('div', { class: 'iso-res-card' },
+              h('span', { class: 'iso-res-lbl' }, T('iso286.pairMax')),
+              h('b', { class: 'mono iso-res-val' }, `${maxC} mm (${fmtUm(pInfo.maxClearUm)} µm)`))),
+          h('div', { class: 'iso-res-foot' },
+            h('span', null, `${pInfo.hole.minStr}–${pInfo.hole.maxStr} / ${pInfo.shaft.minStr}–${pInfo.shaft.maxStr} mm`),
+            h('span', { class: 'sub' }, pInfo.hole.norm))
+        );
+      }
+    };
+
+    const renderTable = () => {
+      tblWrap.innerHTML = '';
+      const tbl = h('table', { class: 'vtable iso-table' });
+      const activeIdx = stepIndex(st.nom);
+
+      if (st.tab === 'fits' && st.tableView === 'step') {
+        tbl.append(h('thead', null, h('tr', null,
+          h('th', null, T('iso286.colClass')),
+          h('th', null, T('iso286.colKind')),
+          h('th', null, T('iso286.colUpper')),
+          h('th', null, T('iso286.colLower')),
+          h('th', null, T('iso286.colLimits')),
+          h('th', null, T('iso286.colHint')))));
+        const tb = h('tbody');
+        const list = Object.keys(CLASSES).filter((k) => st.kindFilter === 'all' || CLASSES[k].art === st.kindFilter);
+        for (const k of list) {
+          const info = lookup(k, st.nom);
+          const tr = h('tr', {
+            class: 'iso-row' + (k === st.code ? ' active' : ''),
+            dataset: { code: k },
+          });
+          const kindLbl = T(CLASSES[k].art === 'bohrung' ? 'draw.panel.fitKindHole' : 'draw.panel.fitKindShaft');
+          tr.append(
+            h('td', { class: 'mono' }, h('b', null, k)),
+            h('td', null, kindLbl),
+            h('td', { class: 'mono' }, info && !info.outOfRange ? `${info.upStr} (${info.upUmStr} µm)` : '–'),
+            h('td', { class: 'mono' }, info && !info.outOfRange ? `${info.loStr} (${info.loUmStr} µm)` : '–'),
+            h('td', { class: 'mono' }, info && !info.outOfRange ? `${info.minStr} – ${info.maxStr}` : '–'),
+            h('td', { class: 'iso-hint-cell' }, CLASSES[k].hinweis || '')
+          );
+          tr.onclick = () => { st.code = k; syncControlsSelection(); syncOutputs(); };
+          tb.append(tr);
+        }
+        tbl.append(tb);
+      } else if (st.tab === 'fits') {
+        const entry = CLASSES[st.code];
+        tbl.append(h('thead', null, h('tr', null,
+          h('th', null, T('iso286.colStep')),
+          h('th', null, `${st.code} ${T('iso286.colUpper')}`),
+          h('th', null, `${st.code} ${T('iso286.colLower')}`),
+          h('th', null, T('iso286.colTolSpan')))));
+        const tb = h('tbody');
+        STEPS.forEach((hi, idx) => {
+          const lo = idx === 0 ? 0 : STEPS[idx - 1];
+          const pair = entry ? entry.abmasse_um[idx] : [0, 0];
+          const minDec = (!Number.isInteger(pair[0]) || !Number.isInteger(pair[1])) ? 4 : 3;
+          const tr = h('tr', {
+            class: 'iso-row' + (idx === activeIdx ? ' active' : ''),
+            dataset: { stepIdx: String(idx) },
+          });
+          tr.append(
+            h('td', { class: 'mono' }, `>${lo} … ${hi} mm`),
+            h('td', { class: 'mono' }, `${fmtDevMm(pair[0] / 1000, minDec)} (${fmtUm(pair[0])} µm)`),
+            h('td', { class: 'mono' }, `${fmtDevMm(pair[1] / 1000, minDec)} (${fmtUm(pair[1])} µm)`),
+            h('td', { class: 'mono' }, `${String(round(pair[0] - pair[1], 4)).replace('.', ',')} µm`)
+          );
+          tr.onclick = () => {
+            if (activeIdx !== idx) {
+              st.nom = idx === 0 ? 3 : Math.min(hi, Math.round((lo + hi) / 2));
+              nomInp.value = fmt(st.nom, 3);
+            }
+            syncOutputs();
+          };
+          tb.append(tr);
+        });
+        tbl.append(tb);
+      } else if (st.tab === 'it') {
+        tbl.append(h('thead', null, h('tr', null,
+          h('th', null, T('iso286.colStep')),
+          ...IT_GRADES.map((g) => h('th', { class: g === st.itGrade ? 'iso-cell-hi' : '' }, 'IT' + g)))));
+        const tb = h('tbody');
+        STEPS.forEach((hi, idx) => {
+          const lo = idx === 0 ? 0 : STEPS[idx - 1];
+          const tr = h('tr', { class: 'iso-row' + (idx === activeIdx ? ' active' : '') });
+          tr.append(h('td', { class: 'mono' }, `>${lo} … ${hi}`));
+          for (const g of IT_GRADES) {
+            const um = IT_MAP[g][idx];
+            const td = h('td', {
+              class: 'mono iso-it-cell' + (g === st.itGrade && idx === activeIdx ? ' iso-cell-hi' : g === st.itGrade ? ' iso-col-hi' : ''),
+              dataset: { it: g, stepIdx: String(idx) },
+            }, `${um} µm`);
+            td.onclick = () => {
+              st.itGrade = g;
+              if (activeIdx !== idx) {
+                st.nom = idx === 0 ? 3 : Math.min(hi, Math.round((lo + hi) / 2));
+                nomInp.value = fmt(st.nom, 3);
+              }
+              syncControlsSelection();
+              syncOutputs();
+            };
+            tr.append(td);
+          }
+          tb.append(tr);
+        });
+        tbl.append(tb);
+      } else {
+        tbl.append(h('thead', null, h('tr', null,
+          h('th', null, T('iso286.colPair')),
+          h('th', null, T('iso286.colFitKind')),
+          h('th', null, T('iso286.colHoleDev')),
+          h('th', null, T('iso286.colShaftDev')),
+          h('th', null, T('iso286.colClearance')))));
+        const tb = h('tbody');
+        for (const [hc, sc] of COMMON_PAIRS) {
+          const pInfo = pairInfo(hc, sc, st.nom);
+          const isAct = hc === st.pairHole && sc === st.pairShaft;
+          const tr = h('tr', {
+            class: 'iso-row' + (isAct ? ' active' : ''),
+            dataset: { pair: `${hc}/${sc}` },
+          });
+          const kindKey = !pInfo.outOfRange
+            ? (pInfo.fitKind === 'clearance' ? 'iso286.fitClearance' : pInfo.fitKind === 'interference' ? 'iso286.fitInterference' : 'iso286.fitTransition')
+            : null;
+          tr.append(
+            h('td', { class: 'mono' }, h('b', null, `${hc}/${sc}`)),
+            h('td', null, kindKey ? T(kindKey) : '–'),
+            h('td', { class: 'mono' }, !pInfo.outOfRange ? pInfo.hole.devText : '–'),
+            h('td', { class: 'mono' }, !pInfo.outOfRange ? pInfo.shaft.devText : '–'),
+            h('td', { class: 'mono' }, !pInfo.outOfRange ? `${fmtDevMm(pInfo.minClearMm, 3)} / ${fmtDevMm(pInfo.maxClearMm, 3)}` : '–')
+          );
+          tr.onclick = () => {
+            st.pairHole = hc;
+            st.pairShaft = sc;
+            syncControlsSelection();
+            syncOutputs();
+          };
+          tb.append(tr);
+        }
+        tbl.append(tb);
+      }
+      tblWrap.append(tbl);
+    };
+
+    const renderApplyBar = () => {
+      applyWrap.innerHTML = '';
+      if (opts.onApply) {
+        applyWrap.append(h('div', { id: 'iso286-target-label', class: 'iso-target-badge' }, opts.targetLabel || T('iso286.targetDirect')));
+      } else {
+        const tgtSel = UI.selectField({
+          id: 'iso286-target',
+          label: T('iso286.targetLabel'),
+          value: st.targetKey,
+          options: targets.map((t) => [t.key, t.label]),
+          onChange: (v) => {
+            st.targetKey = v;
+            const t = targets.find((x) => x.key === v);
+            if (t && Number(t.nominalMm) > 0) {
+              st.nom = Number(t.nominalMm);
+              nomInp.value = fmt(st.nom, 3);
+              syncOutputs();
+            }
+          },
+        });
+        applyWrap.append(tgtSel);
+      }
+      if (st.tab !== 'it') {
+        applyWrap.append(UI.selectField({
+          id: 'iso286-fit-show',
+          label: T('draw.panel.fitShowLabel'),
+          value: st.fitShow,
+          options: [
+            ['both', T('draw.panel.fitShowBoth')],
+            ['code', T('draw.panel.fitShowCode')],
+            ['dev', T('draw.panel.fitShowDev')],
+            ['limits', T('draw.panel.fitShowLimits')],
+          ],
+          onChange: (v) => { st.fitShow = v; },
+        }));
+      }
+    };
+
+    const syncOutputs = () => {
+      renderResult();
+      renderTable();
+    };
+
+    const syncAll = () => {
+      for (const k of Object.keys(tabBtns)) {
+        tabBtns[k].setAttribute('aria-selected', st.tab === k ? 'true' : 'false');
+        tabBtns[k].setAttribute('aria-pressed', st.tab === k ? 'true' : 'false');
+      }
+      renderControls();
+      renderResult();
+      renderTable();
+      renderApplyBar();
+    };
+
+    nomInp.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); nomInp.blur(); }
+    });
+    nomInp.addEventListener('input', () => {
+      const parsed = parseSpec(nomInp.value);
+      let changedTab = false;
+      if (isFinite(parsed.nominalMm) && parsed.nominalMm > 0) st.nom = parsed.nominalMm;
+      if (parsed.code) {
+        st.code = parsed.code;
+        if (st.tab === 'it') { st.tab = 'fits'; changedTab = true; }
+      } else if (parsed.itGrade) {
+        st.itGrade = parsed.itGrade;
+        if (st.tab !== 'it') { st.tab = 'it'; changedTab = true; }
+      }
+      if (changedTab) syncAll();
+      else {
+        syncControlsSelection();
+        syncOutputs();
+      }
+    });
+
+    syncAll();
+
+    return UI.modal({
+      title: T('iso286.title'),
+      body,
+      wide: true,
+      actions: [
+        { id: 'iso286-close', label: T('common.close'), value: null },
+        {
+          id: 'iso286-copy',
+          label: T('iso286.copyBtn'),
+          run: async () => {
+            const { info } = currentTolSpec();
+            if (!info || info.outOfRange) {
+              UI.toast(T('iso286.outOfRangeShort'), { icon: 'warn', kind: 'bad' });
+              return false;
+            }
+            const txt = st.tab === 'it'
+              ? `${info.grade} (Ø ${fmt(info.nominalMm, 3)} mm): ${info.itStr} mm (${info.symStr} mm)`
+              : `Ø ${fmt(info.nominalMm, 3)} ${info.code}: ${info.devText} mm (${info.minStr}–${info.maxStr} mm)`;
+            try { await navigator.clipboard.writeText(txt); } catch (_) {}
+            UI.toast(T('iso286.copiedToast', { txt }), { icon: 'check', ms: 2400 });
+            return false;
+          },
+        },
+        {
+          id: 'iso286-apply',
+          label: T('iso286.applyBtn'),
+          primary: true,
+          help: 'iso286Table',
+          run: () => {
+            const { tol, info } = currentTolSpec();
+            if (!tol || !info || info.outOfRange) {
+              UI.toast(T('iso286.outOfRangeShort'), { icon: 'warn', kind: 'bad' });
+              return false;
+            }
+            if (opts.onApply) {
+              opts.onApply(tol, { nominalMm: st.nom, info });
+            } else {
+              const t = targets.find((x) => x.key === st.targetKey) || targets[targets.length - 1];
+              applyToTarget(t, tol, st.nom);
+            }
+            const badge = tol.mode === 'fit' ? `${info.code} (${info.devText})` : info.symStr;
+            UI.toast(T('iso286.appliedToast', { badge }), { icon: 'check' });
+            return true;
+          },
+        },
+      ],
+    });
+  }
+
+  return {
+    DATA,
+    STEPS,
+    IT_GRADES,
+    CLASSES,
+    HOLE_CODES,
+    SHAFT_CODES,
+    COMMON_PAIRS,
+    lookup,
+    lookupIT,
+    pairInfo,
+    parseSpec,
+    sanitizeTol,
+    formatTolShort,
+    collectTargets,
+    applyToTarget,
+    openDialog,
+  };
+})();
+

@@ -2118,5 +2118,10 @@
     "tip": "Lokal erzeugter Strichcode (Code 128, EAN-13, EAN-8) als Platte oder Präge-Balken",
     "hilfe": "Erzeugt ohne Internetverbindung einen lesbaren Strichcode: Code 128 für beliebige Texte, Seriennummern und Ziffern oder EAN-13 bzw. EAN-8 mit automatischer Prüfziffer. Wie beim QR-Code kannst du eine Platte mit erhabenen oder vertieften Balken erzeugen oder „Nur Balken“ zum Einprägen in andere Körper wählen.",
     "tipp": "Bei EAN-13 und EAN-8 berechnet Tracery die letzte Prüfziffer automatisch nach Norm, wenn du 12 bzw. 7 Ziffern eintippst."
+  },
+  "iso286Table": {
+    "tip": "Toleranz-Tabelle nach DIN EN ISO 286-2: Grundtoleranzen (IT5–IT11) & Passungen (H7, g6 …)",
+    "hilfe": "Schlägt im Profi-Modus zu jedem Nennmaß (bis 500 mm) die Grundtoleranzen (IT5 bis IT11), genormte Bohrungs- und Wellenpassungen (z. B. H7, g6, h6, k6, m6, p6) sowie komplette Passungspaare (z. B. H7/g6) direkt aus der lokalen Normtabelle nach. Mit „Übernehmen“ setzt du die gewählte Toleranz oder Passung direkt am aktuellen Skizzen-, Zeichnungs-, 3D- oder Projektmaß.",
+    "tipp": "Du kannst im Feld „Nennmaß“ auch direkt Kurzformen wie „Ø20 H7“ oder „20 g6“ eintippen – beide Werte werden sofort nachgeschlagen."
   }
 }

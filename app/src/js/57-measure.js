@@ -4238,6 +4238,18 @@ const Measure = (() => {
           }));
         }
       }
+      if (ev.unit !== '°' && typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+        const tblBtn = h('button', { type: 'button', class: 'btn small pro', id: 'pmi-tol-table-btn', 'data-help': 'iso286Table' });
+        tblBtn.innerHTML = icon('ruler') + esc(T('iso286.openTableBtn'));
+        tblBtn.onclick = () => Iso286.openDialog({
+          nominalMm: Number(ev.value) > 0 ? Number(ev.value) : 20,
+          code: (curTol && curTol.fit) || (item.dimType === 'dia' ? 'H7' : 'h6'),
+          fitShow: (curTol && curTol.fitShow) || 'both',
+          targetLabel: T('iso286.targetPmiDim', { label: (item.dimType === 'dia' ? 'Ø' : item.dimType === 'rad' ? 'R' : '') + fmtFixed(Number(ev.value) || 0, 2) + ' mm' }),
+          onApply: (tol) => setPmiTol(item.id, tol),
+        });
+        tolBox.append(tblBtn);
+      }
       w.append(tolBox);
 
       const noteInp = h('input', { id: 'pmi-note', type: 'text', value: item.note || '', placeholder: T('pmi.extraNotePh') });

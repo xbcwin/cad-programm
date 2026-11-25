@@ -607,6 +607,12 @@ const Panels = (() => {
         for (const d of stds) stdTiles.append(makeTile(d));
         el.append(stdTiles);
       }
+      if (typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+        const isoBtn = h('button', { type: 'button', class: 'btn small pro', id: 'open-iso286-table', 'data-help': 'iso286Table', 'data-tip': T('tool.fly.iso286TableTip') });
+        isoBtn.innerHTML = icon('ruler') + esc(T('tool.fly.iso286Table'));
+        isoBtn.onclick = () => { closeFlyout(); Iso286.openDialog(); };
+        el.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, isoBtn));
+      }
       el.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, T('fly.myParts')));
       const myGrid = h('div', { class: 'tiles user-tiles', id: 'my-parts-grid' });
       const renderMyParts = () => {
@@ -1380,6 +1386,36 @@ const Panels = (() => {
       const del = h('button', { type: 'button', class: 'btn ghost small danger' }); del.innerHTML = icon('trash') + esc(T('common.remove'));
       del.onclick = () => removeParam(p.id);
       info.append(del); row.append(info);
+      if (typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+        const pNom = Number(v[p.name]);
+        const tf = p.tol ? Iso286.formatTolShort(p.tol, pNom) : null;
+        const tolRow = h('div', { class: 'param-tol-row pro' });
+        const tolBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'ptol-' + p.id, 'data-help': 'iso286Table' }, tf ? tf.badge : '± ISO 286');
+        tolBtn.onclick = () => Iso286.openDialog({
+          nominalMm: isFinite(pNom) && pNom > 0 ? pNom : 20,
+          code: (p.tol && p.tol.fit) || 'H7',
+          fitShow: (p.tol && p.tol.fitShow) || 'both',
+          targetLabel: T('iso286.targetParam', { name: p.name }),
+          onApply: (tol) => App.change('Toleranz geändert', (doc) => {
+            const tgt = (doc.params || []).find((x) => x.id === p.id);
+            if (!tgt) return false;
+            if (tol) tgt.tol = tol;
+            else delete tgt.tol;
+          }),
+        });
+        tolRow.append(tolBtn);
+        if (tf && tf.range) tolRow.append(h('span', { class: 'param-tol-sub mono' }, tf.range));
+        if (p.tol) {
+          const tolDel = h('button', { type: 'button', class: 'ptbl-rdel', id: 'ptol-del-' + p.id, 'data-tip': T('iso286.clearTol'), 'aria-label': T('iso286.clearTol') }, '×');
+          tolDel.onclick = () => App.change('Toleranz entfernt', (doc) => {
+            const tgt = (doc.params || []).find((x) => x.id === p.id);
+            if (!tgt || !tgt.tol) return false;
+            delete tgt.tol;
+          });
+          tolRow.append(tolDel);
+        }
+        row.append(tolRow);
+      }
       list.append(row);
       if (i < App.doc.params.length - 1) list.append(h('hr', { style: { border: 0, borderTop: '1px solid var(--line)', margin: '2px 0', width: '100%' } }));
     });
@@ -1389,6 +1425,12 @@ const Panels = (() => {
     const exb = h('button', { type: 'button', class: 'btn ghost' }); exb.innerHTML = icon('help') + esc(T('left.par.formulaExamples'));
     exb.onclick = () => formulaHelp();
     wrap.append(h('div', { class: 'btn-row' }, add, exb));
+    if (typeof Iso286 !== 'undefined' && Iso286.openDialog) {
+      const isoParBtn = h('button', { type: 'button', class: 'btn ghost pro', id: 'par-iso286', 'data-help': 'iso286Table' });
+      isoParBtn.innerHTML = icon('ruler') + esc(T('tool.fly.iso286Table'));
+      isoParBtn.onclick = () => Iso286.openDialog();
+      wrap.append(h('div', { class: 'btn-row pro' }, isoParBtn));
+    }
     // Maße als Tabelle tauschen (KP-23): CSV mit Name;Wert, lesbar in Excel und Numbers
     const csvOut = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-out', 'data-help': 'paramsCsv' }); csvOut.innerHTML = icon('export') + esc(T('left.par.csvSave'));
     csvOut.disabled = !(App.doc.params || []).length; csvOut.onclick = () => Print.save(Print.safeName(App.doc.name) + ' – Maße.csv', new Blob(['\ufeff' + paramsCSV()], { type: 'text/csv' }));
