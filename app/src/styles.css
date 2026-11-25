@@ -1460,4 +1460,15 @@ body.simple:not(.tablet) .panel-body{font-size:calc(14.5px * var(--ui-scale,1))}
 .sym-dot.orig{background:#e0483b}
 .sym-dot.mirr{background:#2b7de9}
 #sym-pick-face.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+/* Skizzen-Blöcke (SK-31) */
+.sk-blk-box,.sk-blk-list{display:grid;gap:6px}
+.sk-blk-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.sk-blk-row.active{border-color:var(--accent);background:var(--accent-soft)}
+.sk-blk-meta{display:grid;gap:1px;min-width:0;flex:1}
+.sk-blk-meta b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sk-blk-meta small{font-size:11.5px;color:var(--muted)}
+.sk-blk-acts{display:flex;gap:4px;flex:none}
+.sk-blk-edit-badge{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:17;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--surface);border:1.5px solid #6741d9;color:var(--ink);font:600 12.5px/1.2 var(--font-cond);box-shadow:var(--shadow-1);pointer-events:none}
+[data-theme="dark"] .sk-blk-edit-badge{border-color:#b197fc}
+
 

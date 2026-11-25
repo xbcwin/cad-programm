@@ -1211,6 +1211,7 @@ const SKO = (() => {
     // Phase 1a: Deckungsgleich für Punkte mit < gapTol (0,05 mm) Abstand
     const pts = [];
     for (const e of wEnts) {
+      if (e.blk) continue;
       const addP = (p, xy) => { if (xy) pts.push({ e: e.id, type: e.type, npts: e.pts ? e.pts.length : 0, p, ref: { e: e.id, p }, xy }); };
       if (e.type === 'line' || e.type === 'slot') { addP('a', e.a); addP('b', e.b); }
       else if (e.type === 'arc') { addP('a', e.a); addP('b', e.b); const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) addP('c', ai.c); }
@@ -1349,7 +1350,7 @@ const SKO = (() => {
     const items = [], pts = [];
     const addMove = (moves, k, axis, scale = 1) => moves.push({ k, axis, scale });
     for (const e of ents || []) {
-      if (!e || e.link) continue;
+      if (!e || e.link || e.blk) continue;
       const moves = [], ePts = [];
       if (e.type === 'line' || e.type === 'slot' || e.type === 'conic') {
         if (inBox(e.a)) { addMove(moves, 'a0', 0); addMove(moves, 'a1', 1); ePts.push(e.a.slice()); }
@@ -1713,5 +1714,5 @@ const SKO = (() => {
     return { ok: true, ents, count: ents.length, wall: round(pitch - size, 4), truncated, kind, size, pitch, margin };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, isMirrorSelf, moveEnt, rotateEnt, rotPt, isCurveEnt, curvePath, curvePatternJobs, transformEnt, fillPattern, stretchSelect, stretchPreview, pr, inspect, thinRegions, autoDefine };
+  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mapEnt, mirrorEnt, mirrorPoint, isMirrorSelf, moveEnt, rotateEnt, rotPt, isCurveEnt, curvePath, curvePatternJobs, transformEnt, fillPattern, stretchSelect, stretchPreview, pr, inspect, thinRegions, autoDefine };
 })();

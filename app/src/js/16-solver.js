@@ -23,6 +23,7 @@ const Solver = (() => {
   };
   // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y, aktive Griffe „h3_0“/„h3_1“
   const varsOf = (e) => {
+    if (!e || e.blk) return null;
     if (e.type !== 'spline') return VARS[e.type];
     const ks = (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']);
     if (e.mode !== 'cv' && Array.isArray(e.handles)) {
@@ -223,7 +224,7 @@ const Solver = (() => {
       if (!ref) return null;
       if (ref.at) { const p = ref.at.slice(); return { deps: [], get: () => p }; }
       if (ref.e === 'origin') return { deps: [], get: () => [0, 0] };
-      const e = byId.get(ref.e); if (!e) return null;
+      const e = byId.get(ref.e); if (!e || !idx.has(e.id)) return null;
       const p = ref.p || 'c';
       const two = (k) => { const i = I(e.id, k + '0'), j = I(e.id, k + '1'); return { deps: [i, j], get: (X) => [X[i], X[j]] }; };
       if (e.type === 'spline') {
@@ -280,7 +281,7 @@ const Solver = (() => {
     // Linien-Zugriff: Linie, Achse eines Langlochs, Kante eines Rechtecks, Spline-Griff
     function line(ref) {
       if (!ref) return null;
-      const e = byId.get(ref.e); if (!e) return null;
+      const e = byId.get(ref.e); if (!e || !idx.has(e.id)) return null;
       if (e.type === 'line' || e.type === 'slot') return [point({ e: e.id, p: 'a' }), point({ e: e.id, p: 'b' })];
       if (e.type === 'spline' && ref.handle != null) {
         const A = point({ e: e.id, p: 'p' + ref.handle }), B = point({ e: e.id, p: 'h' + ref.handle });
@@ -293,7 +294,7 @@ const Solver = (() => {
     // Kreis-Zugriff: Mittelpunkt + Radius
     function circle(ref) {
       if (!ref) return null;
-      const e = byId.get(ref.e); if (!e) return null;
+      const e = byId.get(ref.e); if (!e || !idx.has(e.id)) return null;
       if (e.type === 'circle') { const c = point({ e: e.id, p: 'c' }), r = I(e.id, 'r'); return { deps: [...c.deps, r], c: c.get, r: (X) => X[r] }; }
       if (e.type === 'arc') {
         const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
@@ -306,7 +307,7 @@ const Solver = (() => {
     // Kurven-Endzustand (Punkt, Tangente in die Kurve, Krümmungsvektor K) für G2-Regeln
     function curveEnd(ref) {
       if (!ref) return null;
-      const e = byId.get(ref.e); if (!e) return null;
+      const e = byId.get(ref.e); if (!e || !idx.has(e.id)) return null;
       const end = ref.p === 'b' ? 'b' : 'a';
       if (e.type === 'spline' && !e.closed) {
         const n = (e.pts || []).length;
@@ -355,7 +356,7 @@ const Solver = (() => {
     const L = (X, P) => { const a = P[0].get(X), b = P[1].get(X); return [b[0] - a[0], b[1] - a[1], a, b]; };
 
     // Bögen: Hilfspunkt m liegt immer in der Bogenmitte (sonst wäre er eine Schein-Freiheit)
-    for (const e of ents) if (e.type === 'arc') {
+    for (const e of ents) if (e.type === 'arc' && idx.has(e.id)) {
       const [a0, a1, b0, b1, m0, m1] = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
       add([a0, a1, b0, b1, m0, m1], (X) => hyp(X[m0] - X[a0], X[m1] - X[a1]) - hyp(X[m0] - X[b0], X[m1] - X[b1]), { internal: true });
     }
@@ -365,6 +366,7 @@ const Solver = (() => {
       const put = (ref, e) => { const P = point(ref); if (!P) return; const k = qk(P.get(x)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(P); };
       groups.set(qk([0, 0]), [point({ e: 'origin' })]);
       for (const e of ents) {
+        if (!idx.has(e.id)) continue;
         if (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'conic' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });

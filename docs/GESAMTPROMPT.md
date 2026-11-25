@@ -139,7 +139,7 @@ Leitlinien:
 
 ## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
 
-- **`doc`:** `{ id, docType: 'part'|'assembly', name, params: [{id, name, expr}], tables: [{id, name, rows: [{id, key, val}]}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
+- **`doc`:** `{ id, docType: 'part'|'assembly', name, params: [{id, name, expr}], tables: [{id, name, rows: [{id, key, val}]}], items: [...], blocks: [{id, name, ents, dims, cons}], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
 - **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'fullFillet'|'cornerChamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase), v+d1+d2+d3 (Ecken-Fase)}], suppressed, hidden, mat, massG, props: {partNo, desc, supplier, price}, ai }`
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
@@ -155,7 +155,8 @@ Leitlinien:
   - `split` (plane, off, keep, gap)
   - `intersect`
   - Löcher in einer Gruppe werden aus den Körpern geschnitten.
-- **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, bg }`
+- **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, blockInsts, bg }`
+  - **Skizzen-Blöcke (SK-31):** `doc.blocks` speichert Block-Definitionen (`ents/dims/cons` um Einsetzpunkt `0|0`); `sketch.blockInsts` (`{id, blockId, x, y, rot}`) wird durch `Model.syncBlocks`/`Model.syncSketchBlocks` als `e.blk`-Elemente in `sketch.ents` synchronisiert (vom Solver übersprungen), samt `Sketch.createBlock`/`insertBlock`/`updateBlockInst`/`editBlock`/`finishBlockEdit`/`explodeBlockInst`
   - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), ellarc(c,rx,ry,rot,a0,a1,ccw), conic(a,m,b,rho), bridge(a,b,mode,s1,s2,refA,refB,pts), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed, mode:'cv', handles), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
   - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
   - **Regeln:** horizontal, vertical, parallel, perpendicular, collinear (zwei Linien auf einer Geraden), tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)

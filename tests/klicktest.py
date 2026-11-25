@@ -23342,6 +23342,150 @@ def t_a113_kegelschnitt_bruecke(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a118_skizzen_bloecke(p):
+    # [A-118] Skizzen-Blöcke (SK-31): speichern, 3x einsetzen (verschieben/drehen), zentral ändern, auflösen & rückgängig
+    p.empty()
+    p.ev("Sketch.startOnPlane('XY');")
+    p.wait(250)
+    p.ev("""
+      const S = Sketch.state;
+      S.ents.push(
+        { id: 'c1', type: 'circle', c: [-10, 0], r: 4 },
+        { id: 'c2', type: 'circle', c: [10, 0], r: 4 }
+      );
+      S.sels = ['c1', 'c2'];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(150)
+
+    # Einfach vs Profi: Block-Werkzeug & Knopf nur im Profi-Modus sichtbar
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(150)
+    sim_tool_vis = p.pg.locator('.sketchbar .tool[data-tool="block"]').is_visible()
+    sim_make_vis = p.pg.locator('#sk-make-block').is_visible()
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    pro_tool_vis = p.pg.locator('.sketchbar .tool[data-tool="block"]').is_visible()
+    pro_make_vis = p.pg.locator('#sk-make-block').is_visible()
+
+    # 1) Auswahl als Block speichern -> Einsatz 1 entsteht automatisch
+    p.pg.click('#sk-make-block')
+    p.wait(200)
+    # 2) Zweiten Einsatz über Werkzeug + Klick bei (0, 30) absetzen
+    p.pg.click('.sketchbar .tool[data-tool="block"]')
+    p.wait(150)
+    p2 = to_screen(p, 0, 30)
+    p.pg.mouse.click(p2[0], p2[1])
+    p.wait(200)
+    # 3) Dritten Einsatz über Knopf einsetzen, dann verschieben (-30, -20) und drehen (90°)
+    p.pg.click('.sketchbar .tool[data-tool="block"]')
+    p.wait(150)
+    p.pg.click('#blk-insert-origin')
+    p.wait(200)
+    p.pg.fill('#bi-x', '-30'); p.pg.locator('#bi-x').press('Enter'); p.wait(120)
+    p.pg.fill('#bi-y', '-20'); p.pg.locator('#bi-y').press('Enter'); p.wait(120)
+    p.pg.fill('#bi-rot', '90'); p.pg.locator('#bi-rot').press('Enter'); p.wait(180)
+
+    snap1 = p.ev("""
+      const S = Sketch.state;
+      const insts = S.blockInsts || [];
+      const third = insts[2] ? S.ents.filter((e) => e.blk === insts[2].id) : [];
+      return {
+        blkCount: (App.doc.blocks || []).length,
+        instCount: insts.length,
+        entCount: S.ents.length,
+        allBlk: S.ents.every((e) => !!e.blk),
+        thirdCenters: third.map((e) => e.c),
+      };
+    """)
+    ok1 = bool(
+        (not sim_tool_vis) and (not sim_make_vis) and pro_tool_vis and pro_make_vis
+        and snap1 and snap1['blkCount'] == 1 and snap1['instCount'] == 3 and snap1['entCount'] == 6 and snap1['allBlk']
+        and len(snap1['thirdCenters']) == 2
+        and abs(snap1['thirdCenters'][0][0] - (-30)) < 1e-4 and abs(snap1['thirdCenters'][0][1] - (-30)) < 1e-4
+        and abs(snap1['thirdCenters'][1][0] - (-30)) < 1e-4 and abs(snap1['thirdCenters'][1][1] - (-10)) < 1e-4
+    )
+
+    # 4) Block zentral bearbeiten -> Radius des 1. Kreises von 4 auf 7 (Durchmesser 14) -> alle 3 Einsätze geändert
+    p.ev("Sketch.selectBlockInst(Sketch.state.blockInsts[0].id); Panels.renderRight();")
+    p.wait(150)
+    p.pg.click('#blk-inst-edit')
+    p.wait(200)
+    in_edit = p.ev("const S=Sketch.state; return !!(S.blockEdit && S.ents.length === 2);")
+    p.ev("Sketch.state.sels = [Sketch.state.ents[0].id]; Panels.renderRight();")
+    p.wait(120)
+    p.pg.fill('#se-d', '14'); p.pg.locator('#se-d').press('Enter'); p.wait(150)
+    p.pg.click('#blk-edit-done')
+    p.wait(250)
+
+    after_edit = p.ev("""
+      const S = Sketch.state;
+      return (S.blockInsts || []).map((inst) => S.ents.filter((e) => e.blk === inst.id).map((e) => e.r));
+    """)
+    # Rückgängig in der Skizze (Strg+Z) stellt den vorigen Radius (4) über alle 3 Einsätze wieder her
+    p.pg.keyboard.press('ControlOrMeta+z')
+    p.wait(250)
+    after_sk_undo = p.ev("""
+      const S = Sketch.state;
+      return (S.blockInsts || []).map((inst) => S.ents.filter((e) => e.blk === inst.id).map((e) => e.r));
+    """)
+    ok2 = bool(
+        in_edit
+        and after_edit == [[7, 4], [7, 4], [7, 4]]
+        and after_sk_undo == [[4, 4], [4, 4], [4, 4]]
+    )
+
+    # 5) Einen Einsatz auflösen -> Block auf R = 6 ändern -> nur verbleibende 2 Einsätze ändern sich mit,
+    #    aufgelöste Kreise bleiben unabhängig (R = 4)
+    p.ev("Sketch.selectBlockInst(Sketch.state.blockInsts[1].id); Panels.renderRight();")
+    p.wait(150)
+    p.pg.click('#blk-inst-explode')
+    p.wait(200)
+    p.ev("Sketch.selectBlockInst(Sketch.state.blockInsts[0].id); Panels.renderRight();")
+    p.wait(150)
+    p.pg.click('#blk-inst-edit')
+    p.wait(200)
+    p.ev("Sketch.state.sels = [Sketch.state.ents[0].id]; Panels.renderRight();")
+    p.wait(120)
+    p.pg.fill('#se-d', '12'); p.pg.locator('#se-d').press('Enter'); p.wait(150)
+    p.pg.click('#blk-edit-done')
+    p.wait(250)
+
+    after_exp = p.ev("""
+      const S = Sketch.state;
+      const looseR = S.ents.filter((e) => !e.blk).map((e) => e.r);
+      const instR = (S.blockInsts || []).map((inst) => S.ents.filter((e) => e.blk === inst.id).map((e) => e.r));
+      return { looseR, instR, regs: SK.regions(S.ents).length };
+    """)
+
+    # 6) Hochziehen & Dokument-Rückgängig (App.undo stellt Projekt inkl. doc.blocks wieder her)
+    fertig_hoch(p)
+    v_blk = volumen(p)
+    doc_after_ext = p.ev("const d=App.doc; return { items: d.items.length, blocks: (d.blocks||[]).length, insts: ((d.items[0]||{}).p&&d.items[0].p.sketch&&d.items[0].p.sketch.blockInsts||[]).length };")
+    p.ev("App.undo();")
+    warte_rechnen(p, 20)
+    doc_after_undo = p.ev("const d=App.doc; return { items: d.items.length, blocks: (d.blocks||[]).length };")
+
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("""
+      return Commands.search('block').some((c) => c.id === 'sketch-block')
+          && Commands.search('block').some((c) => c.id === 'sketch-make-block');
+    """)
+    help_ok = 'sketchBlocks' in hilfen and all(f in hilfen['sketchBlocks'] for f in ('tip', 'hilfe', 'tipp'))
+    ok3 = bool(
+        after_exp and after_exp['looseR'] == [4, 4]
+        and after_exp['instR'] == [[6, 4], [6, 4]]
+        and after_exp['regs'] == 6
+        and v_blk > 500
+        and doc_after_ext == {'items': 1, 'blocks': 1, 'insts': 2}
+        and doc_after_undo == {'items': 0, 'blocks': 0}
+        and de_keys == en_keys and cmd_ok and help_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -23565,6 +23709,7 @@ TESTS = [
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
     ('[A-115] Muster entlang Kurve und Füllmuster in der Skizze (SK-44, SK-45)', t_a115_kurvenmuster_fuellmuster),
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
+    ('[A-118] Skizzen-Blöcke (SK-31)', t_a118_skizzen_bloecke),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

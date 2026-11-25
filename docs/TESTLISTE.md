@@ -2369,6 +2369,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Brückenkurve krümmungsglatt (G2) & 3D-Hochziehen**: Verbindet Kreisbogen (`R = 20`) und Linie mit `pts.length === 6`, Winkelfehler `< 0,1°` sowie passender Krümmung (`1/20` bzw. `0`) an beiden Enden, schließt zum Profil und lässt sich ohne Fehler hochziehen; Hilfetexte `conic2d` / `bridge2d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kegelschnitt`, `brückenkurve`) vollständig.
 - [ ] **Von Hand**: In einer Skizze einen Kegelschnitt frei mit der Maus aufziehen (Ellipsenstück, Parabel und Hyperbel am Schulterpunkt beobachten) und zwei schräge Splines bzw. Bögen mit „Brücke“ (G1 und G2) sowie Stärke 1/2 verbinden.
 
+## Skizzen-Blöcke (Auto [A-118], SK-31)
+- [x] **Profi-Modus**: Block-Werkzeug (`[data-tool="block"]`) und „Als Block speichern“ (`#sk-make-block`) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Block speichern & mehrfach einsetzen**: Zwei Kreise in der Skizze als Block speichern, 3 Einsätze platzieren, verschieben (`#bi-x`/`#bi-y`) und drehen (`#bi-rot`) → alle 3 Einsätze liegen exakt am Zielort.
+- [x] **Zentrale Block-Änderung & Rückgängig**: Block im eigenen Koordinatensystem bearbeiten (`#blk-inst-edit`), Kreisradius von `4 mm` auf `7 mm` ändern und speichern → alle 3 Einsätze in `S.ents` wechseln geschlossen auf `R = 7`; `Strg+Z` stellt den alten Radius `4 mm` über alle 3 Einsätze exakt wieder her.
+- [x] **Auflösen, 3D-Hochziehen & Dokument-Rückgängig**: Aufgelöster Einsatz bleibt bei späteren Block-Änderungen eigenständig; Hochziehen über alle Block-Konturen und `App.undo()` stellen Ausgangszustand sauber wieder her; `sketchBlocks` in `werkzeug-hilfen.json`/`HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`block`) geprüft.
+- [ ] **Von Hand**: In einer komplexen Skizze einen Block aus Rechteck + Bohrungen mit internen Regeln speichern, mehrfach gedreht einsetzen, durch Ziehen an einer Kontur direkt verschieben und mit „Block auflösen“ einzeln nachbearbeiten.
+
 ## Fehler melden
 
 ```
