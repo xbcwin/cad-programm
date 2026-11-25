@@ -575,7 +575,22 @@ const Panels = (() => {
       const encBtn = h('button', { type: 'button', class: 'btn small', id: 'add-enclosure-gen', 'data-help': 'enclosureGen', 'data-tip': T('tool.fly.enclosureGenTip') });
       encBtn.innerHTML = icon('enclosure') + esc(T('tool.fly.enclosureGen'));
       encBtn.onclick = () => { closeFlyout(); Enclosure.openDialog(); };
-      stepRow.append(mpBtn, pcBtn, bhBtn, encBtn);
+      const mpkBtn = h('button', { type: 'button', class: 'btn small', id: 'add-magnet-pocket', 'data-help': 'magnetPocket', 'data-tip': T('tool.fly.magnetPocketTip') });
+      mpkBtn.innerHTML = icon('magnetPocket') + esc(T('tool.fly.magnetPocket'));
+      mpkBtn.onclick = () => { closeFlyout(); Features.startMagnetPocket(); };
+      const phBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-pull-handle', 'data-help': 'pullHandle', 'data-tip': T('tool.fly.pullHandleTip') });
+      phBtn.innerHTML = icon('pullHandle') + esc(T('tool.fly.pullHandle'));
+      phBtn.onclick = () => { Actions.addPart(LIBMAP.pullHandle, libDefaults(LIBMAP.pullHandle)); closeFlyout(); };
+      const rkBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-rotary-knob', 'data-help': 'rotaryKnob', 'data-tip': T('tool.fly.rotaryKnobTip') });
+      rkBtn.innerHTML = icon('rotaryKnob') + esc(T('tool.fly.rotaryKnob'));
+      rkBtn.onclick = () => { Actions.addPart(LIBMAP.rotaryKnob, libDefaults(LIBMAP.rotaryKnob)); closeFlyout(); };
+      const tsBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-thumb-screw', 'data-help': 'thumbScrew', 'data-tip': T('tool.fly.thumbScrewTip') });
+      tsBtn.innerHTML = icon('thumbScrew') + esc(T('tool.fly.thumbScrew'));
+      tsBtn.onclick = () => { Actions.addPart(LIBMAP.thumbScrew, libDefaults(LIBMAP.thumbScrew)); closeFlyout(); };
+      const dfBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-device-foot', 'data-help': 'deviceFoot', 'data-tip': T('tool.fly.deviceFootTip') });
+      dfBtn.innerHTML = icon('deviceFoot') + esc(T('tool.fly.deviceFoot'));
+      dfBtn.onclick = () => { Actions.addPart(LIBMAP.deviceFoot, libDefaults(LIBMAP.deviceFoot)); closeFlyout(); };
+      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
@@ -1530,7 +1545,7 @@ const Panels = (() => {
       if (av && av.values) for (const k of Object.keys(av.values)) av.values[k] = fix(av.values[k]);
       if (av && av.itemParams) for (const ip of Object.values(av.itemParams)) if (ip && typeof ip === 'object') for (const k of Object.keys(ip)) ip[k] = fix(ip[k]);
     }
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'mountPattern' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeCenter' || k === 'printFit')) || (it.kind === 'portCutout' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeHoles' || k === 'printFit')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'mountPattern' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeCenter' || k === 'printFit')) || (it.kind === 'portCutout' && (k === 'target' || k === 'face' || k === 'preset' || k === 'includeHoles' || k === 'printFit')) || (it.kind === 'magnetPocket' && (k === 'target' || k === 'face' || k === 'preset' || k === 'printFit')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     for (const sk of doc.skeletons || []) for (const d of sk.dims || []) if (d && typeof d.v === 'string') d.v = fix(d.v);
     return hit;
@@ -1966,8 +1981,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'fillPattern' && x.kind !== 'mountPattern' && x.kind !== 'portCutout' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'splitFace' && x.kind !== 'dome' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern' && x.kind !== 'stackHole' && x.kind !== 'asmCut' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'fillPattern' && x.kind !== 'mountPattern' && x.kind !== 'portCutout' && x.kind !== 'magnetPocket' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'splitFace' && x.kind !== 'dome' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern' && x.kind !== 'stackHole' && x.kind !== 'asmCut' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -2127,7 +2142,7 @@ const Panels = (() => {
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
     const isRef = it.kind === 'ref';
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
-    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut';
+    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut';
     if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
     // Maße aus „Meine Teile“ (lokale Parameter je eingesetztem Teil)
@@ -2566,6 +2581,35 @@ const Panels = (() => {
             slotW: Units.fmtLenU(m.slotW, 2),
             outW: Units.fmtLenU(m.outerW, 2), outL: Units.fmtLenU(m.outerL, 2), outH: Units.fmtLenU(m.outerH, 2),
           }) }));
+        } else if (def.lib === 'pullHandle' && typeof pullHandleMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = pullHandleMetrics(rp);
+          sec.append(h('div', { id: 'p-pullhandle-hint', class: 'hint-box', html: T('panel.item.pullHandleHint', {
+            dist: Units.fmtLenU(m.holeDist, 1), h: Units.fmtLenU(m.height, 1), d: Units.fmtLenU(m.gripD, 1),
+            hole: m.holeD > 0 ? `Ø ${Units.fmtLenU(m.holeD, 1)}` : 'ohne',
+          }) }));
+        } else if (def.lib === 'rotaryKnob' && typeof rotaryKnobMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = rotaryKnobMetrics(rp);
+          sec.append(h('div', { id: 'p-rotaryknob-hint', class: 'hint-box', html: T('panel.item.rotaryKnobHint', {
+            D: Units.fmtLenU(m.D, 1), h: Units.fmtLenU(m.h, 1),
+            shaft: m.shaftEff > 0 ? `Ø ${Units.fmtLenU(m.shaftEff, 2)}` : 'ohne',
+            dep: Units.fmtLenU(m.boreDepth, 1),
+          }) }));
+        } else if (def.lib === 'thumbScrew' && typeof thumbScrewMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = thumbScrewMetrics(rp);
+          sec.append(h('div', { id: 'p-thumbscrew-hint', class: 'hint-box', html: T('panel.item.thumbScrewHint', {
+            norm: esc(m.norm), size: esc(m.size), L: Units.fmtLenU(m.length, 1),
+            headD: Units.fmtLenU(m.headD, 1), headH: Units.fmtLenU(m.headH, 1),
+          }) }));
+        } else if (def.lib === 'deviceFoot' && typeof deviceFootMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = deviceFootMetrics(rp);
+          sec.append(h('div', { id: 'p-devicefoot-hint', class: 'hint-box', html: T('panel.item.deviceFootHint', {
+            D: Units.fmtLenU(m.D, 1), h: Units.fmtLenU(m.h, 1),
+            screw: m.screw !== 'none' ? `${esc(m.screw)} (Ø ${Units.fmtLenU(m.holeD, 2)})` : 'ohne Loch',
+          }) }));
         } else if (def.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
           const rp = Model.resolveP(it.p, V);
           const m = timingPulleyMetrics(rp);
@@ -2956,6 +3000,10 @@ const Panels = (() => {
       sec.firstChild.textContent = T('kind.portCutout');
       sec.setAttribute('data-help', 'portCutout');
       Features.renderPortCutout(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'magnetPocket') {
+      sec.firstChild.textContent = T('kind.magnetPocket');
+      sec.setAttribute('data-help', 'magnetPocket');
+      Features.renderMagnetPocket(it, sec, setP); w.append(sec);
     } else if (it.kind === 'web') {
       sec.firstChild.textContent = T('kind.web');
       sec.setAttribute('data-help', 'web');
@@ -3622,11 +3670,11 @@ const Panels = (() => {
       Features.syncPatternMarkers();
       return;
     }
-    if (items.length === 1 && (items[0].item.kind === 'vent' || items[0].item.kind === 'fins' || items[0].item.kind === 'fillPattern' || items[0].item.kind === 'mountPattern' || items[0].item.kind === 'portCutout' || items[0].item.kind === 'web' || items[0].item.kind === 'dome')) {
+    if (items.length === 1 && (items[0].item.kind === 'vent' || items[0].item.kind === 'fins' || items[0].item.kind === 'fillPattern' || items[0].item.kind === 'mountPattern' || items[0].item.kind === 'portCutout' || items[0].item.kind === 'magnetPocket' || items[0].item.kind === 'web' || items[0].item.kind === 'dome')) {
       const it = items[0].item;
       bar.append(h('span', { class: 'lbl' }, T('kind.' + it.kind)));
       if (it.kind === 'web') b('edit', T('panel.item.editSketch'), () => Sketch.editItem(it.id), 'accent', T('ctx.webTip'));
-      else b('cursor', T('panel.ext.pickOtherFace'), () => (it.kind === 'vent' ? Features.pickVentFace(it.id) : it.kind === 'fins' ? Features.pickFinsFace(it.id) : it.kind === 'fillPattern' ? Features.pickFillPatternFace(it.id) : it.kind === 'mountPattern' ? Features.pickMountPatternFace(it.id) : it.kind === 'portCutout' ? Features.pickPortCutoutFace(it.id) : Features.pickDomeFace(it.id)), 'accent', T('ctx.' + it.kind + 'PickTip')).dataset.help = it.kind;
+      else b('cursor', T('panel.ext.pickOtherFace'), () => (it.kind === 'vent' ? Features.pickVentFace(it.id) : it.kind === 'fins' ? Features.pickFinsFace(it.id) : it.kind === 'fillPattern' ? Features.pickFillPatternFace(it.id) : it.kind === 'mountPattern' ? Features.pickMountPatternFace(it.id) : it.kind === 'portCutout' ? Features.pickPortCutoutFace(it.id) : it.kind === 'magnetPocket' ? Features.pickMagnetPocketFace(it.id) : Features.pickDomeFace(it.id)), 'accent', T('ctx.' + it.kind + 'PickTip')).dataset.help = it.kind;
       b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
@@ -3839,6 +3887,8 @@ const Panels = (() => {
         mp.id = 'ctx-mount-pattern'; mp.dataset.help = 'mountPattern';
         const pc = b('portCutout', T('kind.portCutout'), () => Features.portCutout(face), '', T('ctx.portCutoutFaceTip'), true);
         pc.id = 'ctx-port-cutout'; pc.dataset.help = 'portCutout';
+        const mpk = b('magnetPocket', T('kind.magnetPocket'), () => Features.magnetPocket(face), '', T('ctx.magnetPocketFaceTip'), true);
+        mpk.id = 'ctx-magnet-pocket'; mpk.dataset.help = 'magnetPocket';
         if (App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !x.op).length >= 2) {
           const lg = b('lipGroove', T('ctx.lipGroove'), () => Features.lipGroove({ face }), '', T('ctx.lipGrooveTip'));
           lg.id = 'ctx-lip-groove'; lg.dataset.help = 'lipGroove';

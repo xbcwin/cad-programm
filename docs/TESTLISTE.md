@@ -2984,6 +2984,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Modus, Befehlssuche, Validierung & Hilfen**: `#add-enclosure-gen` ist in Einfach (bei unveränderter Kachelzahl 5) und Profi sichtbar, Befehlssuche findet `enclosure-gen`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` (`enclosureGen`) und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a191_gehaeuse_generator`).
 - [ ] **Von Hand**: Im Browser über „Bauteile“ → „Gehäuse (Kasten + Deckel)“ ein Gehäuse erzeugen, Deckel ausblenden oder verschieben und Lippe, Nut und die vier Schraubdome von Hand ansehen.
 
+## Bibliothek: Griffe, Knöpfe, Füße, Magnet-Taschen (Auto [A-187], BI-14, BI-15)
+
+- [x] **Magnet-Tasche 10×3 mit 0,1 Spiel (Ø 10,2 × 3,1 mm)**: `Features.magnetPocket(topFace, { preset: 'd10x3', clear: 0.1 })` schneidet auf einem 40×40×10-mm-Quader eine zylindrische Tasche exakt mit **Ø 10,2 mm** und **3,1 mm Tiefe** (Boden bei `z = 6,9 mm`) ohne Geometrie-Fehler (`GeomCheck` 0 Fehler); Spiel-Änderung (`0,2` → `Ø 10,4 × 3,2 mm`), Einlauffase (`0,4 mm`), Rechteck-Magnet `20×10×3` (`20,2 × 10,2 × 3,1 mm`) sowie Einbetten (`0,8 mm`) mit Versatz (`u = 3, v = -2`) bestehen ohne Fehler (`t_a187_griffe_knoepfe_fuesse_magnettaschen`).
+- [x] **Drehknopf einfügen erzeugt Körper**: Einfügen von `rotaryKnob` erzeugt einen geschlossenen 3D-Körper (`24 × 24 × 16 mm`, Volumen > 1000 mm³, `GeomCheck` 0 Fehler); Umschalten auf Zeigerknopf (`pointer`, Madenschraube) und glatten Knopf (`smooth`, Rundbohrung) baut ebenfalls fehlerfrei (`t_a187_griffe_knoepfe_fuesse_magnettaschen`).
+- [x] **Griff, Rändelschraube & Gerätefuß**: Alle Bauformen von `pullHandle` (`bow` 108×12×35 mm, `bridge`, `tHandle`), `thumbScrew` (`M4` DIN 464 `straight`/`diamond` Rändel sowie DIN 653 `low`) und `deviceFoot` (`conical` Ø 20×10 mm mit M4-Senkung, `cylindrical`, `bumper` ohne Loch) bestehen `GeomCheck` ohne Befund (`t_a187_griffe_knoepfe_fuesse_magnettaschen`).
+- [x] **Einfach & Profi, Suche, Undo/Redo, Validierung & Hilfen**: Im Einfach-Modus bleiben genau 5 Kacheln sichtbar, `#add-magnet-pocket`, `#add-pull-handle`, `#add-rotary-knob`, `#add-thumb-screw`, `#add-device-foot` und `#ctx-magnet-pocket` sind sichtbar (Klick auf `#add-rotary-knob` erzeugt Körper); im Profi-Modus erscheinen die 4 Kacheln und `#add-magnet-pocket`; Befehlssuche (`drehknopf`, `magnet`, `rändelschraube`, `gerätefuß`, `bügelgriff`), `Explain.local()`, `App.undo()`/`redo()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a187_griffe_knoepfe_fuesse_magnettaschen`).
+- [ ] **Von Hand**: Im Browser im Bauteile-Menü einen Bügelgriff, Drehknopf, eine Rändelschraube mit Kreuzrändel sowie einen Gerätefuß einfügen und eine 10×3-mm-Magnet-Tasche auf eine Platte setzen und die Proportionen im 3D prüfen.
+
 ## Fehler melden
 
 ```

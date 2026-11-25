@@ -744,6 +744,11 @@ const IC = {
   portCutout: '<rect x="2.5" y="5" width="19" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5" width="19" height="14" rx="2"/><rect x="5.5" y="10" width="8" height="4" rx="2"/><circle cx="16.8" cy="12" r="1.6"/>',
   batteryHolder: '<rect x="3" y="5" width="18" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="5.5" y="7.5" width="5.2" height="9" rx="1"/><rect x="13.3" y="7.5" width="5.2" height="9" rx="1"/><path d="M7.2 7.5V6.3h1.8v1.2M15 7.5V6.3h1.8v1.2"/>',
   enclosure: '<path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z" fill="currentColor" opacity=".14"/><path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z"/><path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h14a1.5 1.5 0 0 1 1.5 1.5v2H3.5z"/><path d="M6.5 7.5v1.5h11V7.5"/><circle cx="7.5" cy="13" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="13" r=".9" fill="currentColor" stroke="none"/>',
+  pullHandle: '<path d="M5 18V9a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v9" stroke-width="2.4"/><path d="M3.5 18h3M17.5 18h3"/>',
+  rotaryKnob: '<circle cx="12" cy="12" r="8.5" fill="currentColor" opacity=".16"/><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5.2" opacity=".45"/><path d="M12 6.5V12" stroke-width="2.2"/>',
+  thumbScrew: '<rect x="5" y="4" width="14" height="5" rx="1" fill="currentColor" opacity=".18"/><rect x="5" y="4" width="14" height="5" rx="1"/><path d="M8 4v5M12 4v5M16 4v5M8 9h8v3H8zM10 12h4v8.5l-2 1-2-1z"/>',
+  deviceFoot: '<path d="M7 5h10l2.5 13.5H4.5z" fill="currentColor" opacity=".18"/><path d="M7 5h10l2.5 13.5H4.5z"/><path d="M10.5 5v5h3V5M12 10v8.5" stroke-dasharray="2 1.2"/>',
+  magnetPocket: '<rect x="3" y="10" width="18" height="10" rx="1.5" fill="currentColor" opacity=".14"/><path d="M3 10h4.5v5.5h9V10H21v10H3z"/><circle cx="12" cy="7.2" r="3.2" fill="currentColor" opacity=".25"/><circle cx="12" cy="7.2" r="3.2"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2850,6 +2855,31 @@ const HELP = {
   "tip": "Gehäuse-Generator: Kasten mit Deckel, umlaufender Lippe/Nut und 4 Schraubdomen",
   "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit echten, einzeln bearbeitbaren Schritten in der Zeitleiste: den ausgehöhlten Kasten, den passenden Deckel, eine umlaufende Stecklippe mit Nut und einstellbarem Spiel sowie vier Schraubdome in den Innenecken.",
   "tipp": "Alle erzeugten Schritte (Kasten, Deckel, Lippe & Nut und jeder einzelne Schraubdom) bleiben rechts und in der Zeitleiste jederzeit einzeln anpassbar."
+ },
+ "pullHandle": {
+  "tip": "Parametrischer Griff (Bügelgriff, Brückengriff mit Flansch oder T-Griff)",
+  "hilfe": "Erzeugt einen fertigen Griff mit einstellbarem Lochabstand, Höhe, Griffstärke sowie optionalen Befestigungslöchern von unten – wahlweise als runden Bügelgriff, stabilen Brückengriff mit Flanschen oder handlichen T-Griff.",
+  "tipp": "Setze den Lochdurchmesser auf 0, wenn du den Griff direkt mit dem Gehäuse verschmelzen oder ankleben möchtest."
+ },
+ "rotaryKnob": {
+  "tip": "Drehknopf für Potis und Drehgeber (geriffelt, glatt oder Zeigerknopf)",
+  "hilfe": "Erzeugt einen Drehknopf mit wählbarer Bauform (Griffmulden, glatt mit Zeigerrille oder Zeigerknopf mit Nase), Durchmesser, Höhe und passender Wellenbohrung von unten – für D-Welle, Rundwelle oder mit seitlicher Madenschraube samt 3D-Druck-Passung.",
+  "tipp": "Wähle unter Druck-Passung „saugend“ (+0,1 mm) oder „gleitend“ (+0,2 mm), damit der Knopf sauber auf eine 6-mm-Potiachse passt."
+ },
+ "thumbScrew": {
+  "tip": "Rändelschraube nach DIN 464 (hohe Form) oder DIN 653 (flache Form)",
+  "hilfe": "Erzeugt eine griffige Rändelschraube mit genormten Kopfmaßen für M3 bis M10, hoher Bauform mit Bund (DIN 464) oder flacher Bauform (DIN 653) sowie wählbarem Geraderändel, Kreuzrändel oder glattem Kopf.",
+  "tipp": "Für den 3D-Druck eignet sich besonders ein gerader oder gekreuzter Rändel bei großer M5- oder M6-Ausführung."
+ },
+ "deviceFoot": {
+  "tip": "Gerätefuß oder Gummipuffer (konisch, zylindrisch oder Halbkugel)",
+  "hilfe": "Erzeugt einen Standfuß oder Gerätepuffer als Kegelstumpf, Zylinder oder Halbkugel-Puffer – wahlweise mit versenktem Durchgangsloch für M3-, M4- oder M5-Schrauben oder geschlossen zum Aufkleben.",
+  "tipp": "Mit TPU als Material und „Ohne Loch“ entsteht direkt ein elastischer Klebepuffer mit passendem Gewicht."
+ },
+ "magnetPocket": {
+  "tip": "Magnet-Tasche mit Spiel in eine ebene Fläche schneiden (rund oder eckig)",
+  "hilfe": "Schneidet eine maßhaltige Tasche für Scheibenmagnete (z. B. Ø 10 × 3 mm) oder Quadermagnete als eigenen Formschritt in eine ebene Körperfläche. Das eingestellte Spiel wird beidseitig zum Durchmesser bzw. zur Breite/Länge addiert (2 × Spiel) sowie einfach zur Tiefe addiert – z. B. ergibt 10 × 3 mm mit 0,1 mm Spiel eine Tasche mit Ø 10,2 mm und 3,1 mm Tiefe.",
+  "tipp": "Gib bei „Abdeckung (Einbetten)“ z. B. 0,6 mm an, um den Magnet beim 3D-Druck unsichtbar im Bauteil einzuschließen."
  }
 };
 

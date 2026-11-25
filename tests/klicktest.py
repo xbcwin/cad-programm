@@ -39422,6 +39422,267 @@ def t_a191_gehaeuse_generator(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a187_griffe_knoepfe_fuesse_magnettaschen(p):
+    # [A-187] Bibliothek: Griffe, Knöpfe, Füße, Magnet-Taschen (BI-14, BI-15)
+    p.empty()
+
+    # 1. Magnet-Tasche 10×3 mit 0,1 Spiel → Loch Ø 10,2 mm, Tiefe 3,1 mm
+    p.ev("""
+      const b = Actions.addPrimitive('box', { p: { w: 40, d: 40, h: 10 } });
+      window.__a187BoxId = b.id;
+    """)
+    warte_rechnen(p, 30)
+    p.ev("""
+      const r = App.results.get(window.__a187BoxId);
+      const topIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Features.magnetPocket({ id: window.__a187BoxId, idx: topIdx, info: r.data.faces[topIdx] }, { preset: 'd10x3', clear: 0.1 });
+    """)
+    warte_rechnen(p, 40)
+
+    mpk1 = p.ev("""return (() => {
+      const r = App.results.get(window.__a187BoxId);
+      const faces = (r && r.data && r.data.faces) || [];
+      const cyls = faces.filter(f => f.t === 'CYLINDRE').map(f => Math.round(2 * f.r * 1000) / 1000);
+      const floorPlanes = faces.filter(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && f.c && Math.abs(f.c[2] - 6.9) < 0.05 && Math.hypot(f.c[0], f.c[1]) < 0.5);
+      const info = document.querySelector('#mpk-info')?.textContent || '';
+      return { errs: App.errors.length, cyls, floorZ: floorPlanes[0]?.c?.[2] ?? null, info };
+    })()""")
+    gc1 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    ok1 = bool(
+        mpk1['errs'] == 0
+        and any(abs(d - 10.2) < 0.02 for d in mpk1['cyls'])
+        and mpk1['floorZ'] is not None and abs((10.0 - mpk1['floorZ']) - 3.1) < 0.02
+        and gc1['issues'] == 0 and gc1['checked'] == 1
+        and '10,2' in mpk1['info'] and '3,1' in mpk1['info']
+    )
+
+    # 2. Magnet-Tasche Varianten: Spiel 0,2, Einlauffase, Rechteck 20×10×3, Einbetten + Versatz
+    p.pg.locator('#mpk-clear').fill('0.2'); p.pg.locator('#mpk-clear').press('Enter')
+    warte_rechnen(p, 30)
+    mpk2a = p.ev("""return (() => {
+      const faces = (App.results.get(window.__a187BoxId)?.data?.faces) || [];
+      const cyl = faces.find(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 10.4) < 0.03);
+      const fl = faces.find(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && f.c && Math.abs(f.c[2] - 6.8) < 0.05 && Math.hypot(f.c[0], f.c[1]) < 0.5);
+      return { errs: App.errors.length, hasD: !!cyl, hasZ: !!fl };
+    })()""")
+
+    p.pg.locator('#mpk-chamfer').fill('0.4'); p.pg.locator('#mpk-chamfer').press('Enter')
+    warte_rechnen(p, 30)
+    gc2_ch = p.ev("return GeomCheck.run({ silent: true }).then(g => g.issues.length)")
+
+    p.pg.locator('#mpk-clear').fill('0.1'); p.pg.locator('#mpk-clear').press('Enter')
+    warte_rechnen(p, 25)
+    p.pg.select_option('#mpk-preset', 'r20x10x3')
+    warte_rechnen(p, 35)
+    mpk2b = p.ev("""return (() => {
+      const faces = (App.results.get(window.__a187BoxId)?.data?.faces) || [];
+      const fl = faces.find(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && f.c && Math.abs(f.c[2] - 6.9) < 0.05 && Math.hypot(f.c[0], f.c[1]) < 0.5);
+      const wx = faces.filter(f => f.t === 'PLANE' && Math.abs(Math.abs(f.n[0]) - 1) < 0.01 && f.c && Math.abs(Math.abs(f.c[0]) - 10.1) < 0.03);
+      const wy = faces.filter(f => f.t === 'PLANE' && Math.abs(Math.abs(f.n[1]) - 1) < 0.01 && f.c && Math.abs(Math.abs(f.c[1]) - 5.1) < 0.03);
+      return { errs: App.errors.length, hasFloor: !!fl, wx: wx.length, wy: wy.length };
+    })()""")
+    gc2_rect = p.ev("return GeomCheck.run({ silent: true }).then(g => g.issues.length)")
+
+    p.pg.locator('#mpk-embed').fill('0.8'); p.pg.locator('#mpk-embed').press('Enter')
+    p.pg.locator('#mpk-u').fill('3'); p.pg.locator('#mpk-u').press('Enter')
+    p.pg.locator('#mpk-v').fill('-2'); p.pg.locator('#mpk-v').press('Enter')
+    warte_rechnen(p, 35)
+    gc2_emb = p.ev("return GeomCheck.run({ silent: true }).then(g => g.issues.length)")
+    emb_errs = p.ev("return App.errors.length")
+
+    ok2 = bool(
+        mpk2a['errs'] == 0 and mpk2a['hasD'] and mpk2a['hasZ']
+        and gc2_ch == 0
+        and mpk2b['errs'] == 0 and mpk2b['hasFloor'] and mpk2b['wx'] >= 2 and mpk2b['wy'] >= 2
+        and gc2_rect == 0
+        and emb_errs == 0 and gc2_emb == 0
+    )
+
+    # 3. Drehknopf einfügen erzeugt Körper (+ Bauformen pointer & smooth, Wellenarten)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Commands.search('drehknopf').find(c => c.id === 'lib-rotaryKnob').run(); window.__rk = App.doc.items[0];")
+    warte_rechnen(p, 40)
+    rk1 = p.ev("""return (async () => {
+      const it = App.doc.items.find(x => x.id === window.__rk.id);
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const m = await Mass.measure();
+      const vol = (m && m.parts && m.parts[0] && m.parts[0].volume) ? Math.round(m.parts[0].volume * 10) / 10 : 0;
+      return {
+        errs: App.errors.length,
+        hasBody: !!(r && r.data && r.data.bbox),
+        vol,
+        dx: bb ? Math.round((bb[3] - bb[0]) * 100) / 100 : 0,
+        dy: bb ? Math.round((bb[4] - bb[1]) * 100) / 100 : 0,
+        dz: bb ? Math.round((bb[5] - bb[2]) * 100) / 100 : 0,
+      };
+    })()""")
+    gc3_a = p.ev("return GeomCheck.run({ silent: true }).then(g => g.issues.length)")
+
+    p.ev("App.change('Zeigerknopf', d => { const it = Model.find(d, window.__rk.id).item; it.p.style = 'pointer'; it.p.shaftType = 'setscrew'; })")
+    warte_rechnen(p, 35)
+    rk_ptr = p.ev("const bb = App.results.get(window.__rk.id)?.data?.bbox; return { errs: App.errors.length, xMax: bb ? bb[3] : 0 }")
+    gc3_b = p.ev("return GeomCheck.run({ silent: true }).then(g => g.issues.length)")
+
+    p.ev("App.change('Glatter Knopf', d => { const it = Model.find(d, window.__rk.id).item; it.p.style = 'smooth'; it.p.shaftType = 'round'; })")
+    warte_rechnen(p, 35)
+    gc3_c = p.ev("return GeomCheck.run({ silent: true }).then(g => g.issues.length)")
+
+    ok3 = bool(
+        rk1['errs'] == 0 and rk1['hasBody'] and rk1['vol'] > 1000
+        and abs(rk1['dx'] - 24.0) < 0.2 and abs(rk1['dy'] - 24.0) < 0.2 and abs(rk1['dz'] - 16.0) < 0.2
+        and gc3_a == 0
+        and rk_ptr['errs'] == 0 and rk_ptr['xMax'] > 15.0 and gc3_b == 0
+        and gc3_c == 0
+    )
+
+    # 4. Griff (bow / bridge / tHandle), Rändelschraube (DIN 464 / DIN 653), Gerätefuß (conical / cylindrical / bumper)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("""
+      Commands.search('bügelgriff').find(c => c.id === 'lib-pullHandle').run();
+      Commands.search('rändelschraube').find(c => c.id === 'lib-thumbScrew').run();
+      Commands.search('gerätefuß').find(c => c.id === 'lib-deviceFoot').run();
+      window.__ph = App.doc.items.find(x => x.p && x.p.lib === 'pullHandle');
+      window.__ts = App.doc.items.find(x => x.p && x.p.lib === 'thumbScrew');
+      window.__df = App.doc.items.find(x => x.p && x.p.lib === 'deviceFoot');
+    """)
+    warte_rechnen(p, 60)
+    p4a = p.ev("""return (() => {
+      const ph = App.results.get(window.__ph.id)?.data?.bbox;
+      const ts = App.results.get(window.__ts.id)?.data?.bbox;
+      const df = App.results.get(window.__df.id)?.data?.bbox;
+      return {
+        errs: App.errors.length,
+        phDx: ph ? Math.round((ph[3] - ph[0]) * 10) / 10 : 0,
+        phDz: ph ? Math.round((ph[5] - ph[2]) * 10) / 10 : 0,
+        tsDx: ts ? Math.round((ts[3] - ts[0]) * 10) / 10 : 0,
+        tsZMin: ts ? Math.round(ts[2] * 10) / 10 : 0,
+        tsZMax: ts ? Math.round(ts[5] * 10) / 10 : 0,
+        dfDx: df ? Math.round((df[3] - df[0]) * 10) / 10 : 0,
+        dfDz: df ? Math.round((df[5] - df[2]) * 10) / 10 : 0,
+      };
+    })()""")
+    gc4_a = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    p.ev("""App.change('Varianten 1', d => {
+      const ph = Model.find(d, window.__ph.id).item; ph.p.style = 'bridge';
+      const ts = Model.find(d, window.__ts.id).item; ts.p.knurl = 'diamond';
+      const df = Model.find(d, window.__df.id).item; df.p.style = 'cylindrical';
+    })""")
+    warte_rechnen(p, 60)
+    gc4_b = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    p.ev("""App.change('Varianten 2', d => {
+      const ph = Model.find(d, window.__ph.id).item; ph.p.style = 'tHandle';
+      const ts = Model.find(d, window.__ts.id).item; ts.p.form = 'low'; ts.p.knurl = 'none';
+      const df = Model.find(d, window.__df.id).item; df.p.style = 'bumper'; df.p.screw = 'none';
+    })""")
+    warte_rechnen(p, 60)
+    gc4_c = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    ok4 = bool(
+        p4a['errs'] == 0
+        and abs(p4a['phDx'] - 108.0) < 0.3 and abs(p4a['phDz'] - 35.0) < 0.3
+        and abs(p4a['tsDx'] - 16.0) < 0.3 and abs(p4a['tsZMin'] + 12.0) < 0.2 and abs(p4a['tsZMax'] - 9.5) < 0.2
+        and abs(p4a['dfDx'] - 20.0) < 0.3 and abs(p4a['dfDz'] - 10.0) < 0.3
+        and gc4_a['issues'] == 0 and gc4_a['checked'] == 3
+        and gc4_b['issues'] == 0 and gc4_b['checked'] == 3
+        and gc4_c['issues'] == 0 and gc4_c['checked'] == 3
+    )
+
+    # 5. Einfach & Profi UI, Suche, Undo/Redo, Validierung, Hilfen & I18n
+    p.ev("App.setDoc(Model.newDoc()); ViewPrefs.setLevel('simple'); Commands.setMode('model');")
+    p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    simple_fly = p.ev("""return {
+      tileCount: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      mpkBtn: !!document.querySelector('#add-magnet-pocket') && !!document.querySelector('#add-magnet-pocket').offsetParent,
+      phBtn: !!document.querySelector('#add-pull-handle') && !!document.querySelector('#add-pull-handle').offsetParent,
+      rkBtn: !!document.querySelector('#add-rotary-knob') && !!document.querySelector('#add-rotary-knob').offsetParent,
+      tsBtn: !!document.querySelector('#add-thumb-screw') && !!document.querySelector('#add-thumb-screw').offsetParent,
+      dfBtn: !!document.querySelector('#add-device-foot') && !!document.querySelector('#add-device-foot').offsetParent,
+    }""")
+    p.pg.locator('#add-rotary-knob').click()
+    warte_rechnen(p, 35)
+    added_simple_rk = p.ev("return App.doc.items.length === 1 && App.doc.items[0].kind === 'part' && App.doc.items[0].p.lib === 'rotaryKnob' && !!(App.results.get(App.doc.items[0].id)?.data?.bbox)")
+
+    p.ev("const bx = Actions.addPrimitive('box', { p: { w: 30, d: 30, h: 10 } }); window.__ctxBx = bx.id;")
+    warte_rechnen(p, 25)
+    p.ev("""
+      const r = App.results.get(window.__ctxBx);
+      const topIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([window.__ctxBx], { face: { id: window.__ctxBx, faceIdx: topIdx, info: r.data.faces[topIdx] } });
+    """)
+    p.wait(200)
+    ctx_has_mpk = p.ev("return !!document.querySelector('#ctx-magnet-pocket') && !!document.querySelector('#ctx-magnet-pocket').offsetParent")
+
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(250)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    pro_fly = p.ev("""return {
+      mpkBtn: !!document.querySelector('#add-magnet-pocket') && !!document.querySelector('#add-magnet-pocket').offsetParent,
+      phTile: !!document.querySelector('.flyout .tile[data-lib="pullHandle"]') && !!document.querySelector('.flyout .tile[data-lib="pullHandle"]').offsetParent,
+      rkTile: !!document.querySelector('.flyout .tile[data-lib="rotaryKnob"]') && !!document.querySelector('.flyout .tile[data-lib="rotaryKnob"]').offsetParent,
+      tsTile: !!document.querySelector('.flyout .tile[data-lib="thumbScrew"]') && !!document.querySelector('.flyout .tile[data-lib="thumbScrew"]').offsetParent,
+      dfTile: !!document.querySelector('.flyout .tile[data-lib="deviceFoot"]') && !!document.querySelector('.flyout .tile[data-lib="deviceFoot"]').offsetParent,
+      cmdKnob: Commands.search('drehknopf').map(c => c.id),
+      cmdMag: Commands.search('magnet').map(c => c.id),
+      cmdThumb: Commands.search('rändelschraube').map(c => c.id),
+      cmdFoot: Commands.search('gerätefuß').map(c => c.id),
+      cmdPull: Commands.search('bügelgriff').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    p.ev("""
+      const r = App.results.get(window.__ctxBx);
+      const topIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      window.__mpkStep = Features.magnetPocket({ id: window.__ctxBx, idx: topIdx, info: r.data.faces[topIdx] }, { preset: 'd10x3', clear: 0.1 });
+    """)
+    warte_rechnen(p, 35)
+    explain_ok = p.ev("""return (() => {
+      const ex = Explain.local(window.__mpkStep.id);
+      const txt = (ex && ex.lines || []).map(l => l.t).join(' ');
+      return txt.includes('Magnet-Tasche') && txt.includes('3,1');
+    })()""")
+    p.ev("App.undo()"); warte_rechnen(p, 25)
+    undo_has = p.ev("return App.doc.items.some(x => x.id === window.__mpkStep.id)")
+    p.ev("App.redo()"); warte_rechnen(p, 30)
+    redo_has = p.ev("return App.doc.items.some(x => x.id === window.__mpkStep.id)")
+
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const keys = ['pullHandle', 'rotaryKnob', 'thumbScrew', 'deviceFoot', 'magnetPocket'];
+      const hOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, i18nOk };
+    })()""")
+
+    ok5 = bool(
+        simple_fly['tileCount'] == 5
+        and simple_fly['mpkBtn'] and simple_fly['phBtn'] and simple_fly['rkBtn'] and simple_fly['tsBtn'] and simple_fly['dfBtn']
+        and added_simple_rk
+        and ctx_has_mpk
+        and pro_fly['mpkBtn'] and pro_fly['phTile'] and pro_fly['rkTile'] and pro_fly['tsTile'] and pro_fly['dfTile']
+        and 'lib-rotaryKnob' in pro_fly['cmdKnob']
+        and 'magnet-pocket' in pro_fly['cmdMag']
+        and 'lib-thumbScrew' in pro_fly['cmdThumb']
+        and 'lib-deviceFoot' in pro_fly['cmdFoot']
+        and 'lib-pullHandle' in pro_fly['cmdPull']
+        and explain_ok and (not undo_has) and redo_has
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -39727,6 +39988,7 @@ TESTS = [
     ('[A-190] Bibliothek: Ausschnitte für Stecker und Schalter (BI-18)', t_a190_ausschnitte_stecker_schalter),
     ('[A-189] Bibliothek: Lochbilder Platinen & Batteriefächer (BI-17, BI-19)', t_a189_platinen_batteriefaecher),
     ('[A-191] Bibliothek: Gehäuse-Generator (Kasten mit Deckel, Lippe & 4 Schraubdome, BI-20)', t_a191_gehaeuse_generator),
+    ('[A-187] Bibliothek: Griffe, Knöpfe, Füße, Magnet-Taschen (BI-14, BI-15)', t_a187_griffe_knoepfe_fuesse_magnettaschen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -4575,6 +4575,340 @@ export function createKernel(R, oc) {
 
     return shape;
   }
+  function buildPullHandle(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const style = (sp.style || p.style) === 'bridge' || (sp.style || p.style) === 'tHandle' ? (sp.style || p.style) : 'bow';
+    const gripD = Math.max(4, Math.min(40, pos(sp.gripD, pos(p.gripD, 12))));
+    const L = Math.max(Math.max(20, gripD * 2.6), pos(sp.holeDist, pos(p.holeDist, 96)));
+    const H = Math.max(Math.max(16, gripD * 2.1), pos(sp.height, pos(p.height, 35)));
+    const rawHD = sp.holeD !== undefined ? sp.holeD : p.holeD;
+    const holeD = rawHD === 0 || rawHD === '0' ? 0 : Math.min(gripD - 1.2, Math.max(0, num(rawHD, 4.2)));
+    const rawHDep = sp.holeDepth !== undefined ? sp.holeDepth : p.holeDepth;
+    const holeDepth = rawHDep === 0 || rawHDep === '0' ? 0 : Math.min(H - 3, Math.max(0, num(rawHDep, 12)));
+    const r = gripD / 2;
+
+    const cutWith = (base, tool) => {
+      let next = null;
+      try {
+        next = base.cut(tool);
+        safeDelete(base);
+        return next;
+      } catch (err) {
+        safeDelete(next);
+        safeDelete(base);
+        throw err;
+      } finally { safeDelete(tool); }
+    };
+
+    let shape = null;
+    if (style === 'bridge') {
+      const flangeL = Math.max(gripD * 1.6, holeD + 6);
+      const flangeH = Math.max(3, Math.min(6, H * 0.2));
+      const xOut = L / 2 + flangeL / 2;
+      const xFlangeIn = L / 2 - flangeL / 2;
+      const xInnerBot = Math.max(4, xFlangeIn - gripD * 1.1);
+      const innerH = Math.max(flangeH + 4, H - gripD);
+      const slope = Math.min(gripD * 0.65, Math.max(2, (xInnerBot - 2) * 0.35));
+      const xInnerTop = Math.max(2, xInnerBot - slope);
+      const xOuterTop = Math.max(xInnerTop + gripD * 0.85, xFlangeIn - slope * 0.6);
+      const pts = [
+        [-xOut, -gripD / 2, 0],
+        [-xInnerBot, -gripD / 2, 0],
+        [-xInnerTop, -gripD / 2, innerH],
+        [xInnerTop, -gripD / 2, innerH],
+        [xInnerBot, -gripD / 2, 0],
+        [xOut, -gripD / 2, 0],
+        [xOut, -gripD / 2, flangeH],
+        [xFlangeIn, -gripD / 2, flangeH],
+        [xOuterTop, -gripD / 2, H],
+        [-xOuterTop, -gripD / 2, H],
+        [-xFlangeIn, -gripD / 2, flangeH],
+        [-xOut, -gripD / 2, flangeH],
+      ];
+      let fc = null;
+      try {
+        fc = polygonFace(pts);
+        shape = R.basicFaceExtrusion(fc, new R.Vector([0, gripD, 0]));
+      } finally { safeDelete(fc); }
+      if (holeD >= 0.4 && holeD <= flangeL - 1.5) {
+        const hr = holeD / 2;
+        for (const sx of [-1, 1]) {
+          shape = cutWith(shape, R.makeCylinder(hr, flangeH + 2, [(sx * L) / 2, 0, -1], [0, 0, 1]));
+        }
+      }
+      return shape;
+    }
+
+    if (style === 'tHandle') {
+      const rStem = Math.max(2, r * 0.85);
+      const zBar = Math.max(4, H - r);
+      const parts = [
+        R.makeCylinder(rStem, zBar, [0, 0, 0], [0, 0, 1]),
+        R.makeCylinder(r, L, [-L / 2, 0, zBar], [1, 0, 0]),
+        R.makeSphere(r).translate([-L / 2, 0, zBar]),
+        R.makeSphere(r).translate([L / 2, 0, zBar]),
+      ];
+      shape = fuseAll(parts, true);
+      if (holeD >= 0.4 && holeD <= rStem * 2 - 1.2 && holeDepth > 0.2) {
+        const hMax = Math.min(holeDepth, zBar - 1.5);
+        if (hMax > 0.2) {
+          shape = cutWith(shape, R.makeCylinder(holeD / 2, hMax + 0.5, [0, 0, -0.5], [0, 0, 1]));
+        }
+      }
+      return shape;
+    }
+
+    // Standard: Bügelgriff (bow) als runder Sweep entlang 5-teiliger Linie mit Viertelkreis-Bögen
+    const zTop = Math.max(r * 1.4 + 2, H - r);
+    const Rb = Math.max(r * 1.15, Math.min(r * 1.5, zTop - 1, L / 2 - 1));
+    const zBend = zTop - Rb;
+    const xL = -L / 2, xR = L / 2;
+    const kArc = Rb * (1 - Math.SQRT1_2);
+    const edges = [];
+    let spine = null, cEdge = null, prof = null;
+    try {
+      edges.push(R.makeLine([xL, 0, 0], [xL, 0, zBend]));
+      edges.push(R.makeThreePointArc([xL, 0, zBend], [xL + kArc, 0, zTop - kArc], [xL + Rb, 0, zTop]));
+      edges.push(R.makeLine([xL + Rb, 0, zTop], [xR - Rb, 0, zTop]));
+      edges.push(R.makeThreePointArc([xR - Rb, 0, zTop], [xR - kArc, 0, zTop - kArc], [xR, 0, zBend]));
+      edges.push(R.makeLine([xR, 0, zBend], [xR, 0, 0]));
+      spine = R.assembleWire(edges);
+      cEdge = R.makeCircle(r, [xL, 0, 0], [0, 0, 1]);
+      prof = R.assembleWire([cEdge]);
+      try {
+        shape = R.genericSweep(prof, spine, { frenet: false, transitionMode: 'round', forceProfileSpineOthogonality: true });
+      } catch (_) {
+        shape = R.genericSweep(prof, spine, { frenet: false, transitionMode: 'right', forceProfileSpineOthogonality: true });
+      }
+    } finally {
+      for (const e of edges) safeDelete(e);
+      safeDelete(spine); safeDelete(cEdge); safeDelete(prof);
+    }
+    if (holeD >= 0.4 && holeD <= gripD - 1.2 && holeDepth > 0.2) {
+      const hMax = Math.min(holeDepth, Math.max(1, zBend - 0.5));
+      for (const sx of [-1, 1]) {
+        shape = cutWith(shape, R.makeCylinder(holeD / 2, hMax + 0.5, [(sx * L) / 2, 0, -0.5], [0, 0, 1]));
+      }
+    }
+    return shape;
+  }
+  function buildRotaryKnob(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const style = (sp.style || p.style) === 'smooth' || (sp.style || p.style) === 'pointer' ? (sp.style || p.style) : 'fluted';
+    const D = Math.max(8, Math.min(120, pos(sp.D, pos(p.D, 24))));
+    const h = Math.max(6, Math.min(80, pos(sp.h, pos(p.h, 16))));
+    const shaftEff = Math.max(0, num(sp.shaftEff, num(sp.shaftD, num(p.shaftD, 6)) + printFitDelta(p.printFit)));
+    const shaftType = (sp.shaftType || p.shaftType) === 'round' || (sp.shaftType || p.shaftType) === 'setscrew' ? (sp.shaftType || p.shaftType) : 'dShaft';
+    const boreDepth = Math.min(h - 1.5, Math.max(2, pos(sp.boreDepth, h * 0.72)));
+    const flutes = Math.max(4, Math.min(24, Math.round(num(sp.flutes, num(p.flutes, 12)))));
+    const R0 = D / 2;
+    const c = Math.min(1.5, R0 * 0.12, h * 0.12);
+
+    const cutWith = (base, tool) => {
+      let next = null;
+      try {
+        next = base.cut(tool);
+        safeDelete(base);
+        return next;
+      } catch (err) {
+        safeDelete(next);
+        safeDelete(base);
+        throw err;
+      } finally { safeDelete(tool); }
+    };
+
+    let shape = revolveProfile([[0, 0], [R0, 0], [R0, h - c], [R0 - c, h], [0, h]]);
+    const noseLen = style === 'pointer' ? Math.max(2, D * 0.22) : 0;
+
+    if (style === 'pointer') {
+      const yBase = Math.min(R0 * 0.38, Math.max(2.5, R0 * 0.3));
+      const yTip = Math.max(1.2, yBase * 0.42);
+      const xTip = R0 + noseLen;
+      const xBase = R0 * 0.45;
+      let fc = null, nose = null, next = null;
+      try {
+        fc = polygonFace([[xBase, -yBase, 0], [xTip, -yTip, 0], [xTip, yTip, 0], [xBase, yBase, 0]]);
+        nose = R.basicFaceExtrusion(fc, new R.Vector([0, 0, h - c]));
+        next = shape.fuse(nose);
+        safeDelete(shape);
+        shape = next;
+        next = null;
+      } finally { safeDelete(fc); safeDelete(nose); safeDelete(next); }
+    }
+
+    if (style === 'fluted') {
+      const rBore = shaftEff > 0 ? shaftEff / 2 : 0;
+      const rFlute = Math.min(R0 * 0.16, (Math.PI * R0) / (flutes * 1.45));
+      const depthFlute = Math.min(rFlute * 0.55, Math.max(0.3, (R0 - rBore - 1.2) * 0.45));
+      if (rFlute > 0.3 && depthFlute > 0.15) {
+        const rCenter = R0 + rFlute - depthFlute;
+        const zStart = Math.min(1.2, h * 0.15);
+        const cyls = [];
+        let comp = null;
+        try {
+          for (let i = 0; i < flutes; i++) {
+            const a = (2 * Math.PI * i) / flutes;
+            cyls.push(R.makeCylinder(rFlute, h - zStart + 0.5, [rCenter * Math.cos(a), rCenter * Math.sin(a), zStart], [0, 0, 1]));
+          }
+          comp = R.makeCompound(cyls);
+          shape = cutWith(shape, comp);
+          comp = null;
+        } finally {
+          for (const cy of cyls) safeDelete(cy);
+          safeDelete(comp);
+        }
+      }
+    }
+
+    // Zeiger-Markierung oben (Rille entlang +X)
+    const notchDepth = Math.min(0.8, h * 0.12);
+    if (notchDepth > 0.15) {
+      shape = cutWith(shape, R.makeBox([R0 * 0.32, -0.55, h - notchDepth], [R0 + noseLen + 0.5, 0.55, h + 0.5]));
+    }
+
+    // Wellenbohrung von unten
+    if (shaftEff >= 0.8 && shaftEff < D - 2) {
+      const rBore = shaftEff / 2;
+      if (shaftType === 'dShaft') {
+        const xFlat = rBore * 0.5;
+        const yFlat = Math.sqrt(Math.max(0.01, rBore * rBore - xFlat * xFlat));
+        const Mxy = planeMap({ o: [0, 0, -0.5], x: [1, 0, 0], n: [0, 0, 1] });
+        const loop = {
+          segs: [
+            { t: 'line', a: [xFlat, -yFlat], b: [xFlat, yFlat] },
+            { t: 'arc', a: [xFlat, yFlat], m: [-rBore, 0], b: [xFlat, -yFlat] },
+          ],
+        };
+        let fc = null, boreSol = null;
+        try {
+          fc = regionFace({ outer: loop, holes: [] }, Mxy);
+          boreSol = R.basicFaceExtrusion(fc, new R.Vector([0, 0, boreDepth + 0.5]));
+          shape = cutWith(shape, boreSol);
+          boreSol = null;
+        } finally { safeDelete(fc); safeDelete(boreSol); }
+      } else {
+        shape = cutWith(shape, R.makeCylinder(rBore, boreDepth + 0.5, [0, 0, -0.5], [0, 0, 1]));
+        if (shaftType === 'setscrew' && boreDepth >= 3.5) {
+          const setAng = style === 'pointer' ? Math.PI / 2 : (Math.PI / flutes);
+          const dir = [Math.cos(setAng), Math.sin(setAng), 0];
+          const p0 = [(rBore - 0.5) * dir[0], (rBore - 0.5) * dir[1], boreDepth * 0.5];
+          const rSet = Math.min(1.25, boreDepth * 0.28);
+          shape = cutWith(shape, R.makeCylinder(rSet, R0 - rBore + 1.5, p0, dir));
+        }
+      }
+    }
+
+    return shape;
+  }
+  function buildThumbScrew(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = Math.max(2, pos(sp.d, 4));
+    const form = (sp.form || p.form) === 'low' ? 'low' : 'high';
+    const knurl = (sp.knurl || p.knurl) === 'diamond' || (sp.knurl || p.knurl) === 'none' ? (sp.knurl || p.knurl) : 'straight';
+    const L = Math.max(3, pos(sp.length, pos(p.length, 12)));
+    const headD = Math.max(d + 2, pos(sp.headD, pos(p.headD, 16)));
+    const headH = Math.max(1.5, pos(sp.headH, pos(p.headH, form === 'low' ? 3.5 : 9.5)));
+    const shoulderD = form === 'high' ? Math.min(headD - 2, pos(sp.shoulderD, 8)) : 0;
+    const shoulderH = form === 'high' ? Math.max(0, num(sp.shoulderH, 6)) : 0;
+    const rShaft = d / 2;
+    const rHead = headD / 2;
+    const ce = Math.min(0.6, rShaft * 0.3, L * 0.25);
+    const zH0 = form === 'high' && shoulderH > 0.2 ? shoulderH : 0;
+    const bandH = Math.max(1.0, headH - zH0);
+    const c = Math.min(0.45, bandH * 0.16, (rHead - rShaft) * 0.35);
+
+    const kDepth = knurl === 'none' ? 0 : Math.min(0.45, Math.max(0.2, headD * 0.025));
+    const hasKnurl = knurl !== 'none' && bandH > 2 * c + 0.6 && rHead - kDepth - 0.2 > Math.max(rShaft, shoulderD / 2);
+    const rBand = hasKnurl ? Math.max(rShaft + 0.1, rHead - kDepth - 0.15) : rHead;
+
+    const pts = [[0, -L]];
+    if (ce > 1e-4) pts.push([rShaft - ce, -L], [rShaft, -L + ce]);
+    else pts.push([rShaft, -L]);
+    if (zH0 > 0.2 && shoulderD > d + 0.2) {
+      const rSh = shoulderD / 2;
+      pts.push([rShaft, 0], [rSh, 0], [rSh, zH0]);
+    } else {
+      pts.push([rShaft, zH0]);
+    }
+    if (c > 1e-4) {
+      pts.push([rHead - c, zH0], [rBand, zH0 + c], [rBand, headH - c], [rHead - c, headH], [0, headH]);
+    } else {
+      pts.push([rBand, zH0], [rBand, headH], [0, headH]);
+    }
+    let shape = revolveProfile(pts);
+
+    if (hasKnurl) {
+      const N = Math.max(16, Math.min(36, Math.round((Math.PI * headD) / 2.2)));
+      const M = knurl === 'diamond' ? Math.max(2, Math.min(6, Math.round((bandH - 2 * c) / 2.2))) : 1;
+      let kn = null, next = null;
+      try {
+        kn = buildKnurlSolid(rHead, kDepth, zH0 + c + 0.01, headH - c - 0.01, N, M, knurl, 0, 0);
+        next = shape.fuse(kn);
+        safeDelete(shape);
+        shape = next;
+        next = null;
+      } finally { safeDelete(kn); safeDelete(next); }
+    }
+    return shape;
+  }
+  function buildDeviceFoot(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const style = (sp.style || p.style) === 'cylindrical' || (sp.style || p.style) === 'bumper' ? (sp.style || p.style) : 'conical';
+    const D = Math.max(6, Math.min(120, pos(sp.D, pos(p.D, 20))));
+    const h = Math.max(3, Math.min(80, pos(sp.h, pos(p.h, 10))));
+    const topD = style === 'conical' ? Math.max(4, pos(sp.topD, D * 0.8)) : D;
+    const screw = (sp.screw || p.screw) === 'none' ? 'none' : (sp.screw || p.screw || 'M4');
+    const holeD = screw === 'none' ? 0 : Math.max(0, num(sp.holeD, 4.5));
+    const cbD = screw === 'none' ? 0 : Math.max(0, num(sp.cbD, 7.8));
+    const cbH = screw === 'none' ? 0 : Math.max(0, num(sp.cbH, 4.8));
+    const rBase = D / 2, rTop = topD / 2;
+
+    if (style === 'bumper') {
+      const nArc = 24;
+      const pts = [[0, 0]];
+      for (let i = 0; i <= nArc; i++) {
+        const th = (Math.PI / 2) * (i / nArc);
+        pts.push([rBase * Math.cos(th), h * Math.sin(th)]);
+      }
+      let shape = revolveProfile(pts);
+      if (screw !== 'none' && holeD > 0.2) {
+        const rH = holeD / 2;
+        const borePts = [[0, -0.5], [rH, -0.5]];
+        if (cbD > holeD + 0.3 && cbH > 0.4) {
+          const zCb = Math.max(0.8, h - cbH);
+          borePts.push([rH, zCb], [cbD / 2, zCb], [cbD / 2, h + 1], [0, h + 1]);
+        } else {
+          borePts.push([rH, h + 1], [0, h + 1]);
+        }
+        let bore = null, next = null;
+        try {
+          bore = revolveProfile(borePts);
+          next = shape.cut(bore);
+          safeDelete(shape);
+          shape = next;
+          next = null;
+        } finally { safeDelete(bore); safeDelete(next); }
+      }
+      return shape;
+    }
+
+    const c = Math.min(0.6, h * 0.12, Math.max(0.1, (rTop - (cbD > 0 ? cbD / 2 : holeD / 2)) * 0.3));
+    const pts = [];
+    const hasHole = screw !== 'none' && holeD > 0.2 && rTop > holeD / 2 + 0.5;
+    if (hasHole) {
+      const rH = holeD / 2;
+      pts.push([rH, 0], [rBase - c, 0], [rBase, c], [rTop, h - c], [rTop - c, h]);
+      if (cbD > holeD + 0.3 && cbH > 0.4 && rTop - c > cbD / 2 + 0.2) {
+        const zCb = Math.max(0.8, h - cbH);
+        pts.push([cbD / 2, h], [cbD / 2, zCb], [rH, zCb]);
+      } else {
+        pts.push([rH, h]);
+      }
+    } else {
+      pts.push([0, 0], [rBase - c, 0], [rBase, c], [rTop, h - c], [rTop - c, h], [0, h]);
+    }
+    return revolveProfile(pts);
+  }
   function buildStdORing(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
     const d1 = pos(sp.d1, pos(p.d1, 20));
@@ -4804,6 +5138,10 @@ export function createKernel(R, oc) {
     if (lib === 'shaftCollar') return buildShaftCollar(p);
     if (lib === 'shaftCoupling') return buildShaftCoupling(p);
     if (lib === 'batteryHolder') return buildBatteryHolder(p);
+    if (lib === 'pullHandle') return buildPullHandle(p);
+    if (lib === 'rotaryKnob') return buildRotaryKnob(p);
+    if (lib === 'thumbScrew') return buildThumbScrew(p);
+    if (lib === 'deviceFoot') return buildDeviceFoot(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
@@ -8912,7 +9250,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'magnetPocket' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -10870,6 +11208,90 @@ export function createKernel(R, oc) {
         if (!overlaps) for (const s of solids) safeDelete(s);
         throw err;
       }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function buildMagnetPocketOn(baseShape, p, topo = null, tid = null) {
+    const shape = p.shape === 'rect' ? 'rect' : 'round';
+    const d = num(p.d, 10.2);
+    const w = num(p.w, 20.2);
+    const l = num(p.l, 10.2);
+    const depth = num(p.depth, 3.1);
+    const embed = Math.max(0, num(p.embed, 0));
+    const chamfer = embed > 1e-4 ? 0 : Math.max(0, num(p.chamfer, 0));
+    if (!(depth >= 0.2 && isFinite(depth))) throw new Error('Magnet-Tasche: Die Tiefe muss mindestens 0,2 mm sein.');
+    if (shape === 'round') {
+      if (!(d >= 0.5 && isFinite(d))) throw new Error('Magnet-Tasche: Der Durchmesser muss mindestens 0,5 mm sein.');
+    } else {
+      if (!(w >= 0.5 && l >= 0.5 && isFinite(w) && isFinite(l))) throw new Error('Magnet-Tasche: Breite und Länge müssen mindestens 0,5 mm sein.');
+    }
+    const u = num(p.u, 0);
+    const v = num(p.v, 0);
+    const angle = num(p.angle, 0);
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Magnet-Tasche: Wähle eine ebene Körperfläche.');
+      const F = planarFaceFrame(f);
+      const centerO = add(F.o, add(mul(F.x, u), mul(F.y, v)));
+      const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+      const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+      const Muv = {
+        o: centerO, x: U, y: V, n: F.n,
+        P: (uv) => [centerO[0] + U[0] * uv[0] + V[0] * uv[1], centerO[1] + U[1] * uv[0] + V[1] * uv[1], centerO[2] + U[2] * uv[0] + V[2] * uv[1]],
+      };
+
+      let tool = null;
+      if (shape === 'round') {
+        const r = d / 2;
+        if (embed > 1e-4) {
+          tool = R.makeCylinder(r, depth, add(centerO, mul(F.n, -embed)), mul(F.n, -1));
+        } else if (chamfer > 0.02) {
+          const ch = Math.min(chamfer, depth * 0.45, r * 0.45);
+          const topOff = 0.05;
+          let raw = null;
+          try {
+            raw = revolveProfile([[0, -depth], [r, -depth], [r, -ch], [r + ch + topOff, topOff], [0, topOff]]);
+            tool = applyMatrix(raw, rigidMat(centerO, U, V, F.n));
+          } finally { safeDelete(raw); }
+        } else {
+          tool = R.makeCylinder(r, depth + 0.05, add(centerO, mul(F.n, 0.05)), mul(F.n, -1));
+        }
+      } else {
+        const hw = w / 2, hh = l / 2;
+        const cr = Math.max(0, Math.min(num(p.r, 0), Math.min(w, l) / 2 - 0.02));
+        let segs;
+        if (cr <= 0.05) {
+          segs = [
+            { t: 'line', a: [-hw, -hh], b: [hw, -hh] },
+            { t: 'line', a: [hw, -hh], b: [hw, hh] },
+            { t: 'line', a: [hw, hh], b: [-hw, hh] },
+            { t: 'line', a: [-hw, hh], b: [-hw, -hh] },
+          ];
+        } else {
+          const cx = hw - cr, cy = hh - cr, S = Math.SQRT1_2;
+          segs = [
+            { t: 'line', a: [-cx, -hh], b: [cx, -hh] },
+            { t: 'arc', a: [cx, -hh], m: [cx + cr * S, -cy - cr * S], b: [hw, -cy] },
+            { t: 'line', a: [hw, -cy], b: [hw, cy] },
+            { t: 'arc', a: [hw, cy], m: [cx + cr * S, cy + cr * S], b: [cx, hh] },
+            { t: 'line', a: [cx, hh], b: [-cx, hh] },
+            { t: 'arc', a: [-cx, hh], m: [-cx - cr * S, cy + cr * S], b: [-hw, cy] },
+            { t: 'line', a: [-hw, cy], b: [-hw, -cy] },
+            { t: 'arc', a: [-hw, -cy], m: [-cx - cr * S, -cy - cr * S], b: [-cx, -hh] },
+          ];
+        }
+        let fc = null, fcStart = null;
+        try {
+          fc = regionFace({ outer: { segs }, holes: [] }, Muv);
+          const off = embed > 1e-4 ? -embed : 0.05;
+          const dist = embed > 1e-4 ? -depth : -(depth + 0.05);
+          fcStart = fc.translate(mul(F.n, off));
+          tool = R.basicFaceExtrusion(fcStart, new R.Vector(mul(F.n, dist)));
+        } finally { safeDelete(fc); safeDelete(fcStart); }
+      }
+      return { tool, shape, preset: p.preset || '', d, w, l, depth, embed };
     } finally {
       for (const fx of fArr) safeDelete(fx);
     }
@@ -13911,6 +14333,55 @@ export function createKernel(R, oc) {
             if (!next) {
               const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
               const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Pc:' + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(toolTopo);
+              cachePut(k, next, null, resMeta, null, nextTopo);
+            }
+            if (anyMirror) cachePut(kTool, tool);
+            else safeDelete(tool);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (resolved && resMeta) resolved[it.id] = resMeta;
+        if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType: 'cut', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'magnetPocket') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Magnet-Tasche: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Magnet-Tasche: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, 'magnetPocket', p]);
+        const kTool = keyOf([src.key, 'magnetPocketTool', p]);
+        const ce = cacheEntry(k);
+        let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+        let resMeta = ce ? ce.resolved : null;
+        let tool = anyMirror ? cacheGet(kTool) : null;
+        if (!next || (anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildMagnetPocketOn(src.shape, p, src.topo, src.it.id);
+            tool = built.tool;
+            resMeta = { shape: built.shape, preset: built.preset, d: built.d, w: built.w, l: built.l, depth: built.depth, embed: built.embed };
+            if (!next) {
+              const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
+              const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Mpk:' + it.id);
               next = br.shape; nextTopo = br.topo;
               freeTopoMap(toolTopo);
               cachePut(k, next, null, resMeta, null, nextTopo);

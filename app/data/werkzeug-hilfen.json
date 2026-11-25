@@ -2078,5 +2078,30 @@
     "tip": "Gehäuse-Generator: Kasten mit Deckel, umlaufender Lippe/Nut und 4 Schraubdomen",
     "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit echten, einzeln bearbeitbaren Schritten in der Zeitleiste: den ausgehöhlten Kasten, den passenden Deckel, eine umlaufende Stecklippe mit Nut und einstellbarem Spiel sowie vier Schraubdome in den Innenecken.",
     "tipp": "Alle erzeugten Schritte (Kasten, Deckel, Lippe & Nut und jeder einzelne Schraubdom) bleiben rechts und in der Zeitleiste jederzeit einzeln anpassbar."
+  },
+  "pullHandle": {
+    "tip": "Parametrischer Griff (Bügelgriff, Brückengriff mit Flansch oder T-Griff)",
+    "hilfe": "Erzeugt einen fertigen Griff mit einstellbarem Lochabstand, Höhe, Griffstärke sowie optionalen Befestigungslöchern von unten – wahlweise als runden Bügelgriff, stabilen Brückengriff mit Flanschen oder handlichen T-Griff.",
+    "tipp": "Setze den Lochdurchmesser auf 0, wenn du den Griff direkt mit dem Gehäuse verschmelzen oder ankleben möchtest."
+  },
+  "rotaryKnob": {
+    "tip": "Drehknopf für Potis und Drehgeber (geriffelt, glatt oder Zeigerknopf)",
+    "hilfe": "Erzeugt einen Drehknopf mit wählbarer Bauform (Griffmulden, glatt mit Zeigerrille oder Zeigerknopf mit Nase), Durchmesser, Höhe und passender Wellenbohrung von unten – für D-Welle, Rundwelle oder mit seitlicher Madenschraube samt 3D-Druck-Passung.",
+    "tipp": "Wähle unter Druck-Passung „saugend“ (+0,1 mm) oder „gleitend“ (+0,2 mm), damit der Knopf sauber auf eine 6-mm-Potiachse passt."
+  },
+  "thumbScrew": {
+    "tip": "Rändelschraube nach DIN 464 (hohe Form) oder DIN 653 (flache Form)",
+    "hilfe": "Erzeugt eine griffige Rändelschraube mit genormten Kopfmaßen für M3 bis M10, hoher Bauform mit Bund (DIN 464) oder flacher Bauform (DIN 653) sowie wählbarem Geraderändel, Kreuzrändel oder glattem Kopf.",
+    "tipp": "Für den 3D-Druck eignet sich besonders ein gerader oder gekreuzter Rändel bei großer M5- oder M6-Ausführung."
+  },
+  "deviceFoot": {
+    "tip": "Gerätefuß oder Gummipuffer (konisch, zylindrisch oder Halbkugel)",
+    "hilfe": "Erzeugt einen Standfuß oder Gerätepuffer als Kegelstumpf, Zylinder oder Halbkugel-Puffer – wahlweise mit versenktem Durchgangsloch für M3-, M4- oder M5-Schrauben oder geschlossen zum Aufkleben.",
+    "tipp": "Mit TPU als Material und „Ohne Loch“ entsteht direkt ein elastischer Klebepuffer mit passendem Gewicht."
+  },
+  "magnetPocket": {
+    "tip": "Magnet-Tasche mit Spiel in eine ebene Fläche schneiden (rund oder eckig)",
+    "hilfe": "Schneidet eine maßhaltige Tasche für Scheibenmagnete (z. B. Ø 10 × 3 mm) oder Quadermagnete als eigenen Formschritt in eine ebene Körperfläche. Das eingestellte Spiel wird beidseitig zum Durchmesser bzw. zur Breite/Länge addiert (2 × Spiel) sowie einfach zur Tiefe addiert – z. B. ergibt 10 × 3 mm mit 0,1 mm Spiel eine Tasche mit Ø 10,2 mm und 3,1 mm Tiefe.",
+    "tipp": "Gib bei „Abdeckung (Einbetten)“ z. B. 0,6 mm an, um den Magnet beim 3D-Druck unsichtbar im Bauteil einzuschließen."
   }
 }

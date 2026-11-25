@@ -454,5 +454,30 @@
     "was": "Erzeugt ein parametrisches Batteriefach für ein bis acht Rundzellen (AA, AAA, 18650) mit Innenfach, Trennwänden und Kontakt-/Kabellöchern.",
     "wozu": "Dient als fertiger Batteriehalter in Gehäusen, Robotik- und Elektronikprojekten – passend zu echten Zellenmaßen nach IEC samt Federkontakt-Zugabe.",
     "achtung": "Prüfe bei geschützten 18650-Zellen (mit Schutzschaltung), dass du „18650 geschützt“ auswählst, da sie etwa 4,5 mm länger sind als ungeschützte Zellen."
+  },
+  "pullHandle": {
+    "was": "Erzeugt einen parametrischen Griff (Bügelgriff, Brückengriff mit Flansch oder T-Griff) mit einstellbarem Lochabstand, Höhe und Griffstärke.",
+    "wozu": "Ermöglicht handliche Griffe an Gehäusen, Deckeln, Schubladen oder Prüfvorrichtungen mit passenden Befestigungslöchern.",
+    "achtung": "Stelle die Griffhöhe und den Lochabstand groß genug für die gewünschte Griffstärke ein, damit Finger bequem durchgreifen können."
+  },
+  "rotaryKnob": {
+    "was": "Erzeugt einen Drehknopf (mit Griffmulden, glatt oder als Zeigerknopf) samt passender Wellenbohrung (D-Welle, Rundbohrung oder Madenschraube).",
+    "wozu": "Passt auf Potentiometer, Drehgeber und Schalterwellen und zeigt mit der Markierung oder Zeigernase die aktuelle Stellung an.",
+    "achtung": "Prüfe bei gedruckten Knöpfen die 3D-Druck-Passung, damit die D-Welle ohne Gewalt auf die Achse gleitet."
+  },
+  "thumbScrew": {
+    "was": "Erzeugt eine Rändelschraube nach DIN 464 (hohe Form mit Bund) oder DIN 653 (flache Form) mit Geraderändel, Kreuzrändel oder glattem Kopf.",
+    "wozu": "Ermöglicht das Anziehen und Lösen von Abdeckungen, Klemmen oder Vorrichtungen von Hand ohne Werkzeug.",
+    "achtung": "Wähle für gedruckte Schrauben mindestens M5 oder M6 mit etwas gröberem Rändel oder nutze eine Metallschraube als Normteil."
+  },
+  "deviceFoot": {
+    "was": "Erzeugt einen Gerätefuß oder Gummipuffer (konisch, zylindrisch oder als Halbkugel) mit optionalem versenktem Schraubenloch.",
+    "wozu": "Sorgt für sicheren, rutschfesten Stand von Gehäusen und schützt Oberflächen vor Kratzern oder Vibrationen.",
+    "achtung": "Achte darauf, dass die gewählte Schraubengröße (M3–M5) genügend Randstärke im Fuß übrig lässt."
+  },
+  "magnetPocket": {
+    "was": "Schneidet eine runde oder rechteckige Tasche passend zu einem Magnetmaß samt eingestelltem Spiel (2× Spiel auf Maß, 1× Spiel auf Tiefe) in eine ebene Fläche.",
+    "wozu": "Erstellt saubere Sitze für Neodym-Scheiben- oder Quadermagnete an Deckeln, Verschlüssen und Halterungen – auch verdeckt zum Einlegen im 3D-Druck.",
+    "achtung": "Lass unter dem Magnetboden genug Wandstärke stehen; bei eingebetteten Taschen bestimmt „Abdeckung“ den Abstand zur Oberfläche."
   }
 }
