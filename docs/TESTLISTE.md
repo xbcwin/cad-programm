@@ -2497,6 +2497,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Varianten-Vergleich, Rückgängig, Migration & Hilfe**: `#vt-cmp` zeigt die Werkstoff-Spalte mit korrektem Gewichts-Unterschied (`Alu 6061` > `PLA`), `App.undo()` macht den Varianten-Wechsel rückgängig, `Model.migrate` erhält `v.material`, `HELP.variantTable` und Befehl `variants-table` sind vorhanden.
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Varianten-Tabelle mit 4 Zeilen und Formeln ausfüllen, über „CSV exportieren“ speichern, in Excel/Numbers bearbeiten, wieder über „CSV importieren“ laden und beim Umschalten prüfen, ob Werkstoff-Optik (z. B. Alu vs. PLA) und Maße im 3D-Bild sofort wechseln.
 
+## Druck-Kosten und Prüfbericht als PDF (Auto [A-134], PF-17, PF-18)
+
+- [x] **3D-Druck-Schätzung (Würfel 20 mm, 20 % Füllung, 25 €/kg)**: `#proj-print-cost` öffnet `#print-cost-dlg`, schätzt Filamentmenge (g & m), Materialkosten (`costEur > 0`, plausibel ca. 0,10 €) und Druckzeit aus Volumen, Oberfläche, Füllung und Drucker-Profil (`Print.estimatePrint`), reagiert live auf Füllung (100 % > 20 %), Kilopreis (50 €/kg = 2× Kosten) und Drucker-Profil (`ender-3` langsamer als `bambu-a1`) (`t_a134_druckkosten_pruefbericht`).
+- [x] **Prüfbericht als PDF (lokal erzeugt)**: `#proj-report-pdf` öffnet `#report-pdf-dlg` mit 3D-Vorschaubild, Maßen, Volumen, Masse und Wandstärke; `#rep-download` lädt eine gültige `%PDF-1.4`-Datei mit eingebettetem JPEG (`/Subtype /Image`, `/Filter /DCTDecode`) sowie `Volumen`, `Masse` und `Wandst` (`t_a134_druckkosten_pruefbericht`).
+- [x] **Einfach & Profi, Hilfen, Übersetzung & Befehlssuche**: Knöpfe im Projekt-Panel, im Mehr-Menü (`#t-more` in „Einfach“) und im Prüfen-Menü (`#t-check` in „Profi“), Hilfetexte (`printCost`, `reportPdf` in JSON/`HELP`), DE/EN-Schlüsselgleichheit und Befehle `print-cost` / `report-pdf` geprüft (`t_a134_druckkosten_pruefbericht`).
+- [ ] **Von Hand**: Im Browser bei einem komplexen Modell mit dünner Wand und mehreren Teilen den Dialog „Druckkosten & Zeit“ anpassen und den erzeugten PDF-Prüfbericht in einem PDF-Viewer öffnen, um Layout, Umlaute, €-Zeichen, Bildqualität und Teileliste visuell zu prüfen.
+
 ## Fehler melden
 
 ```

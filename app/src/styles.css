@@ -1543,4 +1543,22 @@ body.sketching:not(.simple) .sk-live-mir-badge{top:28px}
 .shell-fw-wrap{display:grid;gap:6px;margin-top:8px}
 .shell-fw-row{padding-left:6px;border-left:2px solid var(--line)}
 
+/* 3D-Druck-Schätzung & Prüfbericht als PDF (PF-17, PF-18) */
+.pc-dlg,.rep-dlg{display:grid;gap:12px}
+.pc-infill-row{display:flex;align-items:center;gap:8px}
+.pc-infill-row input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.pc-infill-num{width:88px;flex:none}
+.pc-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:600px){.pc-cards{grid-template-columns:1fr}}
+.pc-card{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.pc-card.accent{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 8%,var(--surface-2))}
+.pc-lbl{font-size:12px;color:var(--muted)}
+.pc-val{font-size:18px;font-weight:700;color:var(--ink)}
+.pc-sub{font-size:12px;color:var(--muted)}
+.rep-grid{display:grid;grid-template-columns:minmax(220px,1fr) 1.15fr;gap:12px;align-items:start}
+@media (max-width:680px){.rep-grid{grid-template-columns:1fr}}
+.rep-preview{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2);display:grid;place-items:center}
+.rep-preview img{display:block;width:100%;height:auto;max-height:220px;object-fit:contain}
+.rep-opts{display:flex;flex-wrap:wrap;gap:14px}
+
 

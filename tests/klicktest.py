@@ -26208,6 +26208,151 @@ def t_a132_varianten_tabelle(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a134_druckkosten_pruefbericht(p):
+    p.empty()
+    p.ev("""
+    ViewPrefs.setLevel('pro');
+    App.change('Würfel 20 mm PLA', d => {
+      d.settings.material = 'PLA';
+      d.items.push(Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Prüfwürfel' }));
+    });
+    App.clearSelection();
+    """)
+    warte_rechnen(p)
+
+    # 1. 3D-Druck-Kosten-Schätzung: Würfel 20 mm, 20 % Füllung, 25 €/kg
+    p.pg.locator('#proj-print-cost').click()
+    p.pg.wait_for_selector('#print-cost-dlg', timeout=10000)
+    p.pg.wait_for_function("() => { const el = document.querySelector('#pc-res-cost'); return el && el.textContent && el.textContent !== '…' && el.textContent !== '–'; }", timeout=15000)
+    p.wait(200)
+
+    est20 = p.ev("return Print.estimatePrint({ infill: 20, pricePerKg: 25, material: 'PLA', printer: 'bambu-a1' })")
+    ui_init = p.ev("""return {
+      infill: document.querySelector('#pc-infill').value,
+      price: document.querySelector('#pc-price').value,
+      costText: document.querySelector('#pc-res-cost').textContent,
+      filText: document.querySelector('#pc-res-filament').textContent,
+      timeText: document.querySelector('#pc-res-time').textContent,
+    }""")
+
+    # Füllung auf 100 %, Preis auf 50 €/kg, Drucker auf Ender 3 testen
+    p.pg.locator('#pc-infill').fill('100')
+    p.pg.locator('#pc-infill').dispatch_event('change')
+    p.wait(150)
+    est100 = p.ev("return Print.estimatePrint({ printer: 'bambu-a1' })")
+
+    p.pg.locator('#pc-price').fill('50')
+    p.pg.locator('#pc-price').dispatch_event('change')
+    p.wait(150)
+    est50 = p.ev("return Print.estimatePrint({ printer: 'bambu-a1' })")
+
+    p.pg.locator('#pc-printer').select_option('ender-3')
+    p.wait(150)
+    est_ender = p.ev("return Print.estimatePrint()")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # Zurück auf 20 % / 25 €/kg / Bambu A1 für den Prüfbericht
+    p.ev("Print.setPrintCostSettings({ infill: 20, pricePerKg: 25, printer: 'bambu-a1', material: 'PLA' })")
+
+    ok1 = (
+        est20 and est20.get('ok') is True
+        and abs(est20.get('volumeMm3', 0) - 8000) < 1
+        and 2.0 < est20.get('filamentG', 0) < 7.0
+        and est20.get('filamentM', 0) > 0.5
+        and 0.04 < est20.get('costEur', 0) < 0.25
+        and est20.get('timeMin', 0) > 3
+        and ui_init.get('infill') == '20'
+        and ui_init.get('price') == '25'
+        and '€' in ui_init.get('costText', '')
+        and 'g' in ui_init.get('filText', '')
+        and est100.get('filamentG', 0) > est20.get('filamentG', 0) * 1.8
+        and est100.get('costEur', 0) > est20.get('costEur', 0) * 1.8
+        and abs(est50.get('costEur', 0) - est100.get('costEur', 0) * 2) < 0.01
+        and est_ender.get('timeMin', 0) > est100.get('timeMin', 0) * 1.3
+    )
+
+    # 2. Prüfbericht als PDF: Dialog, Vorschau-Daten, 3D-Bild & PDF-Download
+    p.pg.locator('#proj-report-pdf').click()
+    p.pg.wait_for_selector('#report-pdf-dlg', timeout=10000)
+    p.pg.wait_for_selector('#rep-summary', timeout=15000)
+    p.wait(250)
+
+    rep_ui = p.ev("""return {
+      dims: document.querySelector('#rep-val-dims')?.textContent || '',
+      vol: document.querySelector('#rep-val-vol')?.textContent || '',
+      mass: document.querySelector('#rep-val-mass')?.textContent || '',
+      wall: document.querySelector('#rep-val-wall')?.textContent || '',
+      cost: document.querySelector('#rep-val-cost')?.textContent || '',
+      imgSrc: document.querySelector('#rep-preview-img')?.getAttribute('src') || '',
+    }""")
+
+    with p.pg.expect_download(timeout=30000) as dl_info:
+        p.pg.locator('#rep-download').click()
+    dl = dl_info.value
+    pdf_bytes = open(dl.path(), 'rb').read()
+
+    ok2 = (
+        '20' in rep_ui.get('dims', '')
+        and 'cm' in rep_ui.get('vol', '')
+        and 'g' in rep_ui.get('mass', '')
+        and '20' in rep_ui.get('wall', '')
+        and '€' in rep_ui.get('cost', '')
+        and rep_ui.get('imgSrc', '').startswith('data:image/jpeg')
+        and dl.suggested_filename.lower().endswith('.pdf')
+        and pdf_bytes.startswith(b'%PDF-1.4')
+        and b'xref' in pdf_bytes
+        and b'%%EOF' in pdf_bytes
+        and b'Volumen' in pdf_bytes
+        and b'Masse' in pdf_bytes
+        and b'Wandst' in pdf_bytes
+        and b'/Subtype /Image' in pdf_bytes
+        and b'/Filter /DCTDecode' in pdf_bytes
+    )
+
+    # 3. In Einfach und Profi über Panel und Menüs erreichbar
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_panel_ok = sichtbar(p, '#proj-print-cost') and sichtbar(p, '#proj-report-pdf')
+    p.pg.locator('#t-more').click(); p.wait(200)
+    simple_menu_ok = sichtbar(p, '#more-print-cost') and sichtbar(p, '#more-report-pdf')
+    p.ev("UI.closeMenu()"); p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.locator('#t-check').click(); p.wait(200)
+    pro_menu_ok = sichtbar(p, '#check-print-cost') and sichtbar(p, '#check-report-pdf')
+    p.ev("UI.closeMenu()"); p.wait(150)
+    ok3 = simple_panel_ok and simple_menu_ok and pro_menu_ok
+
+    # 4. Hilfetexte (JSON + eingebettetes HELP via Tooltip), DE/EN-Übersetzung & Befehlssuche
+    p.pg.mouse.move(10, 10)
+    p.pg.wait_for_selector('.tooltip', state='detached', timeout=3000)
+    p.pg.locator('#proj-print-cost').hover()
+    p.pg.wait_for_selector('.tooltip', timeout=5000)
+    tip_cost = p.pg.locator('.tooltip').text_content()
+    p.pg.mouse.move(10, 10)
+    p.pg.wait_for_selector('.tooltip', state='detached', timeout=3000)
+    p.pg.locator('#proj-report-pdf').hover()
+    p.pg.wait_for_selector('.tooltip', timeout=5000)
+    tip_rep = p.pg.locator('.tooltip').text_content()
+
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['printCost', 'reportPdf'].every(k => h[k] && h[k].tip && h[k].hilfe && h[k].tipp)
+        && String(arg[0] || '').includes(h.printCost.tip)
+        && String(arg[1] || '').includes(h.reportPdf.tip);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('druck kosten').some(c => c.id === 'print-cost')
+        && Commands.search('prüfbericht pdf').some(c => c.id === 'report-pdf');
+      return { helpOk, i18nEq, cmdOk };
+    })()""", [tip_cost, tip_rep])
+    ok4 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26449,6 +26594,7 @@ TESTS = [
     ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
+    ('[A-134] Druck-Kosten-Schätzung & Prüfbericht als PDF (PF-17, PF-18)', t_a134_druckkosten_pruefbericht),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

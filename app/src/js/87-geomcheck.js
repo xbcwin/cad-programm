@@ -18,6 +18,9 @@ const GeomCheck = (() => {
       { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.check.draft'), icon: 'chamfer', id: 'check-draft', help: 'draftAnalysis', run: () => Measure.draft() },
       { label: (typeof InnerRadius !== 'undefined' && InnerRadius.active ? '✓ ' : '') + T('menu.check.innerRadius'), icon: 'fillet', id: 'check-inner-radius', help: 'innerRadius', run: () => InnerRadius.toggle() },
       { label: (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active ? '✓ ' : '') + T('menu.check.symmetry'), icon: 'mirror', id: 'check-symmetry', help: 'symmetryCheck', run: () => SymmetryCheck.open() },
+      '-',
+      { label: T('menu.check.printCost'), icon: 'printer', id: 'check-print-cost', help: 'printCost', run: () => Print.costDialog() },
+      { label: T('menu.check.reportPdf'), icon: 'file', id: 'check-report-pdf', help: 'reportPdf', run: () => Measure.reportDialog() },
     ]);
   }
 

@@ -1593,5 +1593,15 @@
     "tip": "Varianten als Tabelle ausfüllen, umschalten und als CSV tauschen (Profi)",
     "hilfe": "Öffne im Profi-Modus unter „Maße“ → „Varianten“ auf „Tabelle“ (oder per Befehlssuche „Varianten-Tabelle“). Jede Zeile ist eine Variante, jede Spalte ein Maß sowie der Werkstoff. Du kannst Werte direkt eintippen, Zeilen hinzufügen oder duplizieren und die ganze Tabelle als CSV exportieren und wieder importieren.",
     "tipp": "Ein Klick auf eine Zeile schaltet das Modell sofort auf diese Variante um; mit Enter oder den Pfeiltasten springst du senkrecht von Zeile zu Zeile."
+  },
+  "printCost": {
+    "tip": "Filamentmenge, Materialkosten und Druckzeit für den 3D-Druck schätzen",
+    "hilfe": "Rechnet aus Volumen, Oberfläche, Füllung (Infill), Wandlinien, Schichthöhe, Filament-Material und Drucker-Profil eine Schätzung für Filamentgewicht (g), Drahtlänge (m bei 1,75 mm), Materialkosten (€) und Druckzeit.",
+    "tipp": "Passe den Filament-Preis je kg und die Füllung oben im Fenster an – du siehst sofort, wie sich Kosten und Druckzeit verändern."
+  },
+  "reportPdf": {
+    "tip": "Prüfbericht als PDF mit 3D-Bild, Maßen, Volumen, Masse und Wandstärke erstellen",
+    "hilfe": "Stellt alle wichtigen Modelldaten auf einer übersichtlichen A4-PDF-Seite zusammen: 3D-Ansicht, Hüllmaße, Volumen, Oberfläche, Masse, Schwerpunkt, kleinste Wandstärke, Düsen- und Bauraum-Prüfung, 3D-Druck-Schätzung und Teileübersicht – komplett lokal im Browser erzeugt.",
+    "tipp": "Wenn du vorher die 3D-Druck-Schätzung anpasst, übernimmt der PDF-Prüfbericht deine Werte automatisch."
   }
 }

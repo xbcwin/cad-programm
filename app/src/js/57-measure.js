@@ -1401,6 +1401,469 @@ const Measure = (() => {
     syncDraftButtons();
     return true;
   }
+  // ---------- PF-18: Prüfbericht als PDF (lokal erzeugt, mit Bild, Maßen, Volumen, Masse & Wandstärke) ----------
+  let lastReport = null;
+  function pdfWinAnsi(s) {
+    return String(s ?? '')
+      .replace(/[–—−]/g, '-')
+      .replace(/…/g, '...')
+      .replace(/[„“”]/g, '"')
+      .replace(/[‚‘’]/g, "'")
+      .replace(/≈/g, 'ca. ')
+      .replace(/≥/g, '>=')
+      .replace(/≤/g, '<=')
+      .replace(/€/g, '\x80')
+      .replace(/[^\x20-\x7e\x80\xa0-\xff]/g, '?');
+  }
+  function pdfEsc(s) {
+    return pdfWinAnsi(s).replace(/\r?\n/g, ' ').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+  function toPdfBytes(str) {
+    const out = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xff;
+    return out;
+  }
+  function dataUrlToBytes(url) {
+    if (!url || typeof url !== 'string') return null;
+    const idx = url.indexOf(';base64,');
+    if (idx < 0) return null;
+    const bin = atob(url.slice(idx + 8));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function pdfClip(s, maxChars) {
+    const t = String(s ?? '');
+    return t.length <= maxChars ? t : t.slice(0, Math.max(1, maxChars - 3)) + '...';
+  }
+  async function captureReportImage() {
+    const ids = [...Viewer.nodes.values()]
+      .filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev' && n.mesh)
+      .map((n) => n.id);
+    if (!ids.length) return null;
+    const w = 840, hgt = 500;
+    let pngUrl = null;
+    try {
+      if (Viewer.renderPartThumb) pngUrl = Viewer.renderPartThumb(ids, w, hgt);
+      if (!pngUrl && Viewer.renderImage) pngUrl = Viewer.renderImage(w, hgt, { bg: '#f8fafc', transparent: false });
+    } catch (_) {
+      pngUrl = null;
+    }
+    if (!pngUrl) return null;
+    try {
+      const jpg = await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const cv = document.createElement('canvas');
+            cv.width = w; cv.height = hgt;
+            const ctx = cv.getContext('2d');
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, w, hgt);
+            ctx.drawImage(img, 0, 0, w, hgt);
+            resolve(cv.toDataURL('image/jpeg', 0.9));
+          } catch (_) { resolve(null); }
+        };
+        img.onerror = () => resolve(null);
+        img.src = pngUrl;
+      });
+      return jpg ? { jpg, w, h: hgt } : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  async function reportData(opts = {}) {
+    const mRes = await Mass.measure();
+    const st = typeof Print !== 'undefined' && Print.stats ? Print.stats() : null;
+    const bbox = (mRes && mRes.bbox) || (st && st.box ? [st.box.min.x, st.box.min.y, st.box.min.z, st.box.max.x, st.box.max.y, st.box.max.z] : null);
+    const dimsMm = bbox ? [Math.abs(bbox[3] - bbox[0]), Math.abs(bbox[4] - bbox[1]), Math.abs(bbox[5] - bbox[2])] : null;
+    const mat = Mass.projectMaterial();
+    const stab = mRes && mRes.parts && mRes.parts.length === 1 && mRes.parts[0].com ? Mass.stability(mRes.parts[0].id, mRes.parts[0].com) : null;
+    const nozzleWall = typeof Print !== 'undefined' && Print.nozzleWallCheck ? Print.nozzleWallCheck() : null;
+    let minWallMm = nozzleWall && nozzleWall.minT != null ? nozzleWall.minT : null;
+    if (minWallMm == null && dimsMm) {
+      const nodes = [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev' && n.mesh && n.data && n.data.triangles);
+      const totalTris = nodes.reduce((s, n) => s + ((n.data.triangles.length || 0) / 3), 0);
+      if (nodes.length && totalTris <= 15000) {
+        const scanLimit = Math.min(200, Math.max(5, Math.max(...dimsMm) + 1));
+        const tw = Viewer.thinWalls(scanLimit, nodes.map((n) => n.id));
+        if (tw && tw.minT != null) minWallMm = round(tw.minT + 1e-4, 2);
+      }
+    }
+    const fit = typeof Print !== 'undefined' && Print.fitCheck ? Print.fitCheck() : null;
+    const orient = typeof Print !== 'undefined' && Print.bestPrintOrientation ? Print.bestPrintOrientation() : null;
+    const overhangArea = orient && orient.cur ? orient.cur.overhangArea : null;
+    const overhangAngle = orient ? orient.angle : 45;
+    const printEst = opts.includePrint === false
+      ? null
+      : (typeof Print !== 'undefined' && Print.computePrintEstimate ? Print.computePrintEstimate(mRes, opts.printOpts || {}) : null);
+    const errors = (App.errors || []).map((e) => e.message);
+    const geomIssues = (typeof GeomCheck !== 'undefined' && GeomCheck.last && GeomCheck.last.rev === App.revision) ? GeomCheck.last.issues.length : null;
+    const parts = ((mRes && mRes.parts) || []).map((p) => {
+      const f = Model.find(App.doc, p.id);
+      const pb = Array.isArray(p.bbox) && p.bbox.length >= 6 ? p.bbox : null;
+      return {
+        id: p.id,
+        name: f ? Model.label(f.item) : 'Körper',
+        material: p.fixed ? 'Kaufteil' : (p.mat || (mat && mat.k) || '–'),
+        dimsMm: pb ? [Math.abs(pb[3] - pb[0]), Math.abs(pb[4] - pb[1]), Math.abs(pb[5] - pb[2])] : null,
+        volumeMm3: p.fixed ? null : (p.volume || 0),
+        areaMm2: p.area || 0,
+        massG: p.mass || 0,
+        fixed: !!p.fixed,
+        missing: !!p.missing,
+      };
+    });
+    const image = opts.includeImage !== false ? await captureReportImage() : null;
+    const docName = (App.doc && App.doc.name) || 'Neues Projekt';
+    const isAsm = typeof Model !== 'undefined' && Model.isAssembly ? Model.isAssembly(App.doc) : false;
+    return {
+      name: docName,
+      docKind: isAsm ? 'Baugruppe' : 'Bauteil',
+      createdAt: new Date().toLocaleString('de-DE'),
+      unit: Units.label(),
+      dimsMm,
+      volumeMm3: mRes ? (mRes.volume || 0) : 0,
+      areaMm2: mRes ? (mRes.area || 0) : 0,
+      massG: mRes ? (mRes.mass || 0) : 0,
+      comMm: mRes && mRes.com ? mRes.com.slice(0, 3) : null,
+      materialName: mat ? (mat.name || mat.k) : '–',
+      materialKey: mat ? mat.k : '–',
+      stability: stab,
+      minWallMm,
+      nozzleWall,
+      fit,
+      overhangArea,
+      overhangAngle,
+      printEst,
+      errors,
+      geomIssues,
+      parts,
+      partCount: parts.length,
+      image,
+    };
+  }
+  function buildReportPDF(data) {
+    const W = 210, H = 297, PT = 72 / 25.4;
+    const M = 15, CW = W - 2 * M;
+    const pf = (n) => (Math.round(n * 1000) / 1000).toString();
+    const pf2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
+    const px = (x) => pf(x * PT);
+    const py = (y) => pf((H - y) * PT);
+
+    const fmtDims = (d) => d ? `${Units.fmtLen(d[0], 1)} x ${Units.fmtLen(d[1], 1)} x ${Units.fmtLen(d[2], 1)} ${Units.label()}` : '-';
+    const fmtCom = (c) => c ? `${c.map((v) => Units.fmtLen(v, 1)).join(' / ')} ${Units.label()}` : '-';
+    const fmtStab = (s) => !s ? 'nur bei Einzelteil' : (s.ok ? `Ja (kippt ab ${fmtAngleU(s.angle)})` : 'Nein (kippt um)');
+
+    const pages = [];
+    const newPage = () => { const pg = { cmds: [], hasImg: false }; pages.push(pg); return pg; };
+    const rect = (pg, x, y, w, hgt, fill, stroke, lw = 0.25) => {
+      if (fill) pg.cmds.push(`${fill} rg ${px(x)} ${py(y + hgt)} ${pf(w * PT)} ${pf(hgt * PT)} re f`);
+      if (stroke) pg.cmds.push(`${stroke} RG ${pf(lw * PT)} w ${px(x)} ${py(y + hgt)} ${pf(w * PT)} ${pf(hgt * PT)} re S`);
+    };
+    const line = (pg, x1, y1, x2, y2, stroke = '0.82 0.85 0.89', lw = 0.25) => {
+      pg.cmds.push(`${stroke} RG ${pf(lw * PT)} w ${px(x1)} ${py(y1)} m ${px(x2)} ${py(y2)} l S`);
+    };
+    const txt = (pg, x, y, textStr, sizePt = 9.5, bold = false, color = '0.09 0.11 0.14', align = 'left') => {
+      const s = pdfEsc(textStr);
+      const font = bold ? '/F2' : '/F1';
+      let dx = 0;
+      if (align !== 'left') {
+        const approxW = pdfWinAnsi(textStr).length * sizePt * 0.52;
+        dx = align === 'right' ? -approxW : -approxW / 2;
+      }
+      pg.cmds.push(`${color} rg BT ${font} ${pf(sizePt)} Tf ${px(x)} ${py(y)} Td ${pf(dx)} 0 Td (${s}) Tj ET`);
+    };
+    const kv = (pg, x, y, w, label, val, valBold = true) => {
+      txt(pg, x, y, label, 8.8, false, '0.35 0.40 0.47', 'left');
+      txt(pg, x + w, y, val, 8.8, valBold, '0.09 0.11 0.14', 'right');
+    };
+
+    const pg1 = newPage();
+    // Kopfzeile
+    rect(pg1, 0, 0, W, 24, '0.07 0.11 0.16', null);
+    txt(pg1, M, 10.5, 'Prüfbericht', 16, true, '1 1 1');
+    txt(pg1, M, 17.5, pdfClip(data.name, 56), 10.5, false, '0.82 0.89 0.95');
+    txt(pg1, W - M, 10.5, `Erstellt: ${data.createdAt}`, 8.5, false, '0.82 0.89 0.95', 'right');
+    txt(pg1, W - M, 17.5, `${data.docKind} | ${data.partCount} ${data.partCount === 1 ? 'Körper' : 'Körper'} | Einheit: ${data.unit}`, 8.5, false, '0.70 0.78 0.85', 'right');
+
+    let y = 30;
+    // 3D-Vorschaubild
+    if (data.image && data.image.jpg) {
+      const boxH = 68;
+      rect(pg1, M, y, CW, boxH, '0.97 0.98 0.99', '0.82 0.85 0.89', 0.3);
+      const pad = 2;
+      const maxW = CW - 2 * pad, maxH = boxH - 2 * pad;
+      const ratio = (data.image.w || 840) / (data.image.h || 500);
+      let iw = maxW, ih = iw / ratio;
+      if (ih > maxH) { ih = maxH; iw = ih * ratio; }
+      const ix = M + (CW - iw) / 2, iy = y + (boxH - ih) / 2;
+      pg1.cmds.push(`q ${pf(iw * PT)} 0 0 ${pf(ih * PT)} ${px(ix)} ${py(iy + ih)} cm /Im1 Do Q`);
+      pg1.hasImg = true;
+      y += boxH + 6;
+    }
+
+    // Zwei-Spalten-Kennzahlen: Maße & Geometrie | Masse & Werkstoff
+    const colW = (CW - 6) / 2;
+    const cardH = 34;
+    rect(pg1, M, y, colW, cardH, '0.98 0.985 0.99', '0.84 0.87 0.91', 0.25);
+    rect(pg1, M + colW + 6, y, colW, cardH, '0.98 0.985 0.99', '0.84 0.87 0.91', 0.25);
+    txt(pg1, M + 4, y + 6, 'Maße & Geometrie', 10, true, '0.07 0.42 0.39');
+    line(pg1, M + 4, y + 8.5, M + colW - 4, y + 8.5);
+    kv(pg1, M + 4, y + 13.5, colW - 8, 'Hüllmaße (B x T x H)', fmtDims(data.dimsMm));
+    kv(pg1, M + 4, y + 19.5, colW - 8, 'Volumen', data.volumeMm3 > 0 ? Units.fmtVolU(data.volumeMm3, 3) : '-');
+    kv(pg1, M + 4, y + 25.5, colW - 8, 'Oberfläche', data.areaMm2 > 0 ? Units.fmtAreaU(data.areaMm2, 2) : '-');
+    kv(pg1, M + 4, y + 31.2, colW - 8, 'Sichtbare Teile', String(data.partCount));
+
+    const rx = M + colW + 6;
+    txt(pg1, rx + 4, y + 6, 'Masse & Werkstoff', 10, true, '0.07 0.42 0.39');
+    line(pg1, rx + 4, y + 8.5, rx + colW - 4, y + 8.5);
+    kv(pg1, rx + 4, y + 13.5, colW - 8, 'Werkstoff', pdfClip(data.materialKey || '-', 28));
+    kv(pg1, rx + 4, y + 19.5, colW - 8, 'Masse (gesamt)', Mass.gText(data.massG || 0));
+    kv(pg1, rx + 4, y + 25.5, colW - 8, 'Schwerpunkt', fmtCom(data.comMm));
+    kv(pg1, rx + 4, y + 31.2, colW - 8, 'Standfestigkeit', fmtStab(data.stability));
+    y += cardH + 6;
+
+    // Wandstärke & Prüfungen
+    const chkH = 40;
+    rect(pg1, M, y, CW, chkH, '1 1 1', '0.84 0.87 0.91', 0.25);
+    txt(pg1, M + 4, y + 6, 'Wandstärke & Prüfungen', 10, true, '0.07 0.42 0.39');
+    line(pg1, M + 4, y + 8.5, M + CW - 4, y + 8.5);
+    const wallTxt = data.minWallMm != null ? Units.fmtLenU(data.minWallMm, 2) : 'nicht ermittelt';
+    const nwTxt = data.nozzleWall
+      ? (data.nozzleWall.warn
+        ? `Warnung: duennste Stelle ${Units.fmtLenU(data.nozzleWall.minT, 2)} (< ${Units.fmtLenU(data.nozzleWall.minWall, 2)})`
+        : `OK (Düse ${fmtFixed(data.nozzleWall.nozzle, 2)} mm, mind. ${Units.fmtLenU(data.nozzleWall.minWall, 2)})`)
+      : '-';
+    const fitTxt = !data.fit ? '-' : (!data.fit.active ? 'Druckbett aus' : (data.fit.fits ? `Passt in ${data.fit.printerName}` : `Zu groß für ${data.fit.printerName}`));
+    const ovTxt = data.overhangArea != null
+      ? (data.overhangArea < 0.5 ? `Keine nennenswerten Überhänge (${fmtAngleU(data.overhangAngle)})` : `${Units.fmtAreaU(data.overhangArea, 1)} (Grenzwinkel ${fmtAngleU(data.overhangAngle)})`)
+      : '-';
+    const stTxt = data.errors && data.errors.length
+      ? `${data.errors.length} Rechenfehler`
+      : (data.geomIssues != null ? (data.geomIssues === 0 ? 'Modell OK (Geometrie-Prüfung 0 Funde)' : `${data.geomIssues} Geometrie-Funde`) : 'Keine Rechenfehler');
+
+    kv(pg1, M + 4, y + 13.5, CW - 8, 'Kleinste Wandstärke (gemessen)', wallTxt);
+    kv(pg1, M + 4, y + 19.5, CW - 8, 'Düsen-Wandprüfung (2 x Düse)', nwTxt, false);
+    kv(pg1, M + 4, y + 25.5, CW - 8, 'Bauraum / Druckbett', fitTxt, false);
+    kv(pg1, M + 4, y + 31.5, CW - 8, 'Überhänge (Ist-Lage)', ovTxt, false);
+    kv(pg1, M + 4, y + 37.2, CW - 8, 'Modell-Status', stTxt, false);
+    y += chkH + 6;
+
+    // 3D-Druck (Schätzung)
+    if (data.printEst) {
+      const pe = data.printEst;
+      const prH = 38;
+      rect(pg1, M, y, CW, prH, '0.98 0.985 0.99', '0.84 0.87 0.91', 0.25);
+      txt(pg1, M + 4, y + 6, '3D-Druck (Schätzung)', 10, true, '0.07 0.42 0.39');
+      line(pg1, M + 4, y + 8.5, M + CW - 4, y + 8.5);
+      if (pe.ok) {
+        kv(pg1, M + 4, y + 13.5, CW - 8, 'Drucker & Material', `${pe.printerName} | ${pe.material} (Düse ${fmtFixed(pe.nozzle, 2)} mm)`, false);
+        kv(pg1, M + 4, y + 19.5, CW - 8, 'Einstellungen', `${pe.infill} % Füllung, ${fmtFixed(pe.layerHeight, 2)} mm Schicht, ${pe.walls} Wände, ${pe.layers} Schichten`, false);
+        kv(pg1, M + 4, y + 25.5, CW - 8, 'Filament & Druckzeit (Schätzung)', `${Mass.gText(pe.filamentG)} (${fmtFixed(pe.filamentM, 2)} m) | ca. ${pe.timeText}`);
+        kv(pg1, M + 4, y + 31.5, CW - 8, `Materialkosten (bei ${Mass.priceText(pe.pricePerKg)}/kg)`, `ca. ${Mass.priceText(pe.costEur)}`);
+        txt(pg1, M + 4, y + 36.2, 'Hinweis: Schätzung ohne Stützen - tatsächliche Werte hängen vom Slicer ab.', 7.5, false, '0.42 0.47 0.54');
+      } else {
+        txt(pg1, M + 4, y + 15, 'Keine druckbaren Teile mit Volumen vorhanden.', 8.8, false, '0.42 0.47 0.54');
+      }
+      y += prH + 6;
+    }
+
+    // Teileübersicht (ggf. mit automatischem Seitenumbruch auf Seite 2)
+    if (data.parts && data.parts.length) {
+      let curPg = pg1;
+      const drawTableHead = (pg, yy) => {
+        txt(pg, M, yy + 4.5, 'Teileübersicht', 10, true, '0.07 0.42 0.39');
+        const ty = yy + 7;
+        rect(pg, M, ty, CW, 6.5, '0.92 0.94 0.96', '0.82 0.85 0.89', 0.25);
+        txt(pg, M + 2.5, ty + 4.5, 'Teil', 8.2, true);
+        txt(pg, M + 52, ty + 4.5, 'Werkstoff', 8.2, true);
+        txt(pg, M + 82, ty + 4.5, `Maße (${data.unit})`, 8.2, true);
+        txt(pg, M + 150, ty + 4.5, 'Volumen', 8.2, true, '0.09 0.11 0.14', 'right');
+        txt(pg, M + CW - 2.5, ty + 4.5, 'Masse', 8.2, true, '0.09 0.11 0.14', 'right');
+        return ty + 6.5;
+      };
+      if (y > H - 36) { curPg = newPage(); y = 20; }
+      y = drawTableHead(curPg, y);
+      for (const p of data.parts) {
+        if (y + 6 > H - 18) {
+          curPg = newPage();
+          y = drawTableHead(curPg, 20);
+        }
+        rect(curPg, M, y, CW, 5.8, '1 1 1', '0.88 0.90 0.93', 0.2);
+        const dimStr = p.dimsMm ? `${Units.fmtLen(p.dimsMm[0], 1)} x ${Units.fmtLen(p.dimsMm[1], 1)} x ${Units.fmtLen(p.dimsMm[2], 1)}` : '-';
+        const volStr = p.volumeMm3 != null ? Units.fmtVolU(p.volumeMm3, 2) : '-';
+        const massStr = p.missing ? 'fehlt' : Mass.gText(p.massG);
+        txt(curPg, M + 2.5, y + 4.1, pdfClip(p.name, 26), 8.2, false);
+        txt(curPg, M + 52, y + 4.1, pdfClip(p.material, 16), 8.2, false);
+        txt(curPg, M + 82, y + 4.1, pdfClip(dimStr, 26), 8.2, false);
+        txt(curPg, M + 150, y + 4.1, volStr, 8.2, false, '0.09 0.11 0.14', 'right');
+        txt(curPg, M + CW - 2.5, y + 4.1, massStr, 8.2, false, '0.09 0.11 0.14', 'right');
+        y += 5.8;
+      }
+    }
+
+    // Fußzeile auf jeder Seite
+    pages.forEach((pg, idx) => {
+      line(pg, M, H - 13, W - M, H - 13, '0.84 0.87 0.91', 0.25);
+      txt(pg, M, H - 8.5, 'Tracery Prüfbericht - lokal im Browser erzeugt', 8, false, '0.45 0.50 0.57');
+      txt(pg, W - M, H - 8.5, `Seite ${idx + 1} / ${pages.length}`, 8, false, '0.45 0.50 0.57', 'right');
+    });
+
+    // PDF-1.4-Datei zusammensetzen
+    const objs = [];
+    const addObj = (bodyBytes) => { objs.push(bodyBytes); return objs.length; };
+    const addStr = (s) => addObj(toPdfBytes(s));
+    addStr(''); // 1: Catalog
+    addStr(''); // 2: Pages
+    const f1 = addStr('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    const f2 = addStr('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const infoId = addStr(`<< /Title (${pdfEsc('Prüfbericht - ' + data.name)}) /Creator (Tracery) >>`);
+
+    let imId = null;
+    if (data.image && data.image.jpg) {
+      const imgBytes = dataUrlToBytes(data.image.jpg);
+      if (imgBytes && imgBytes.length >= 4 && imgBytes[0] === 0xff && imgBytes[1] === 0xd8) {
+        const ih = toPdfBytes(`<< /Type /XObject /Subtype /Image /Width ${data.image.w || 840} /Height ${data.image.h || 500} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>\nstream\n`);
+        const it = toPdfBytes('\nendstream');
+        const imObj = new Uint8Array(ih.length + imgBytes.length + it.length);
+        imObj.set(ih, 0); imObj.set(imgBytes, ih.length); imObj.set(it, ih.length + imgBytes.length);
+        imId = addObj(imObj);
+      }
+    }
+
+    const kids = [];
+    for (const pg of pages) {
+      const sBytes = toPdfBytes(pg.cmds.join('\n') + '\n');
+      const head = toPdfBytes(`<< /Length ${sBytes.length} >>\nstream\n`);
+      const tail = toPdfBytes('\nendstream');
+      const cObj = new Uint8Array(head.length + sBytes.length + tail.length);
+      cObj.set(head, 0); cObj.set(sBytes, head.length); cObj.set(tail, head.length + sBytes.length);
+      const cId = addObj(cObj);
+      const xobj = pg.hasImg && imId ? ` /XObject << /Im1 ${imId} 0 R >>` : '';
+      const pId = addStr(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pf2(W * PT)} ${pf2(H * PT)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >>${xobj} >> /Contents ${cId} 0 R >>`);
+      kids.push(pId);
+    }
+    objs[0] = toPdfBytes('<< /Type /Catalog /Pages 2 0 R >>');
+    objs[1] = toPdfBytes(`<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`);
+
+    const chunks = [];
+    const hdr = toPdfBytes('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    chunks.push(hdr);
+    let pos = hdr.length;
+    const offsets = [0];
+    for (let i = 0; i < objs.length; i++) {
+      offsets.push(pos);
+      const pre = toPdfBytes(`${i + 1} 0 obj\n`);
+      const post = toPdfBytes('\nendobj\n');
+      chunks.push(pre, objs[i], post);
+      pos += pre.length + objs[i].length + post.length;
+    }
+    const xrefPos = pos;
+    const xrefLines = [`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`];
+    for (let i = 1; i <= objs.length; i++) {
+      xrefLines.push(String(offsets[i]).padStart(10, '0') + ' 00000 n \n');
+    }
+    xrefLines.push(`trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+    const tailBytes = toPdfBytes(xrefLines.join(''));
+    chunks.push(tailBytes);
+    pos += tailBytes.length;
+    const out = new Uint8Array(pos);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  }
+  async function exportReportPDF(opts = {}) {
+    if (!App.doc || !App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) {
+      UI.toast(T('report.empty'), { icon: 'info' });
+      return null;
+    }
+    const tst = UI.toast(T('report.building'), { icon: 'file', ms: 15000 });
+    try {
+      const data = opts.data || await reportData(opts);
+      const bytes = buildReportPDF(data);
+      const filename = `${Print.safeName(data.name)} Prüfbericht.pdf`;
+      lastReport = { filename, bytes: bytes.length, data, pdfBytes: bytes };
+      tst.remove();
+      await Print.save(filename, new Blob([bytes], { type: 'application/pdf' }));
+      return lastReport;
+    } catch (e) {
+      tst.remove();
+      UI.toast('Prüfbericht hat nicht geklappt: ' + e.message, { kind: 'bad' });
+      return null;
+    }
+  }
+  async function reportDialog() {
+    if (!App.doc || !App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) {
+      UI.toast(T('report.empty'), { icon: 'info' });
+      return null;
+    }
+    let incImg = true, incPrint = true, curData = null;
+    const body = h('div', { class: 'rep-dlg', id: 'report-pdf-dlg' },
+      h('div', { class: 'hint-box', id: 'rep-loading' }, T('report.loading')));
+    UI.modal({
+      title: T('report.title'),
+      body,
+      wide: true,
+      actions: [
+        { id: 'rep-open-cost', label: T('report.costBtn'), run: () => { setTimeout(() => Print.costDialog(), 0); } },
+        { label: T('common.cancel') },
+        {
+          id: 'rep-download', label: T('report.savePdf'), primary: true,
+          run: () => {
+            const d = curData ? { ...curData, image: incImg ? curData.image : null, printEst: incPrint ? curData.printEst : null } : null;
+            exportReportPDF({ includeImage: incImg, includePrint: incPrint, data: d });
+          },
+        },
+      ],
+    });
+
+    curData = await reportData({ includeImage: true, includePrint: true });
+    if (!body.isConnected) return null;
+    body.innerHTML = '';
+
+    const imgWrap = h('div', { class: 'rep-preview' });
+    if (curData.image && curData.image.jpg) {
+      imgWrap.append(h('img', { id: 'rep-preview-img', src: curData.image.jpg, alt: T('report.previewAlt') }));
+    }
+    const fmtDims = curData.dimsMm
+      ? `${Units.fmtLen(curData.dimsMm[0], 1)} × ${Units.fmtLen(curData.dimsMm[1], 1)} × ${Units.fmtLen(curData.dimsMm[2], 1)} ${Units.label()}`
+      : '–';
+    const wallTxt = curData.minWallMm != null
+      ? Units.fmtLenU(curData.minWallMm, 2) + (curData.nozzleWall ? (curData.nozzleWall.warn ? ` (${T('report.wallWarn')})` : ` (${T('report.wallOk')})`) : '')
+      : '–';
+    const pe = curData.printEst;
+    const printTxt = pe && pe.ok
+      ? `${Mass.gText(pe.filamentG)} · ca. ${pe.timeText} · ${Mass.priceText(pe.costEur)}`
+      : '–';
+
+    const sum = h('div', { class: 'mini-list rep-summary', id: 'rep-summary' },
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('report.dims')), h('b', { class: 'mono', id: 'rep-val-dims' }, fmtDims)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('report.volume')), h('b', { class: 'mono', id: 'rep-val-vol' }, curData.volumeMm3 > 0 ? Units.fmtVolU(curData.volumeMm3, 3) : '–')),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('report.area')), h('b', { class: 'mono', id: 'rep-val-area' }, curData.areaMm2 > 0 ? Units.fmtAreaU(curData.areaMm2, 2) : '–')),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('report.mass')), h('b', { class: 'mono', id: 'rep-val-mass' }, `${Mass.gText(curData.massG || 0)} (${curData.materialKey})`)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('report.wall')), h('b', { class: 'mono', id: 'rep-val-wall' }, wallTxt)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('report.printEst')), h('b', { class: 'mono', id: 'rep-val-cost' }, printTxt))
+    );
+
+    const cbImg = h('input', { type: 'checkbox', id: 'rep-inc-img', checked: true });
+    cbImg.onchange = () => { incImg = cbImg.checked; imgWrap.hidden = !incImg; };
+    const cbPrint = h('input', { type: 'checkbox', id: 'rep-inc-print', checked: true });
+    cbPrint.onchange = () => { incPrint = cbPrint.checked; };
+
+    const grid = h('div', { class: 'rep-grid' });
+    if (curData.image && curData.image.jpg) grid.append(imgWrap);
+    grid.append(sum);
+    body.append(
+      grid,
+      h('div', { class: 'rep-opts' },
+        h('label', { class: 'check' }, cbImg, T('report.incImg')),
+        h('label', { class: 'check' }, cbPrint, T('report.incPrint'))),
+      h('div', { class: 'hint-box' }, T('report.hint'))
+    );
+    return body;
+  }
+
   return {
     showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
@@ -1418,6 +1881,7 @@ const Measure = (() => {
         hasMesh: !!draftSt.mesh,
       };
     },
+    reportData, buildReportPDF, exportReportPDF, reportDialog, get lastReport() { return lastReport; },
   };
 })();
 
