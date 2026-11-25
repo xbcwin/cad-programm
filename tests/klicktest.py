@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -28599,6 +28599,288 @@ def t_a137_illustration_vierfach(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a148_gesten(p):
+    # 1. Einstellung in Profi und Einfach sichtbar, Standard aktiv, mit Hilfetext
+    p.empty()
+    st_pro = p.ev("""
+      ViewPrefs.dialog('general');
+      const cb = document.getElementById('set-gestures');
+      const row = cb && cb.closest('label');
+      const res = {
+        vis: !!(cb && row && row.offsetParent !== null),
+        checked: !!(cb && cb.checked),
+        help: row && row.dataset ? row.dataset.help : null,
+        vp: ViewPrefs.gestures,
+        vg: Viewer.gestures,
+      };
+      document.querySelector('.modal .actions button.primary')?.click();
+      return res;
+    """)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(250)
+    st_sim = p.ev("""
+      ViewPrefs.dialog('general');
+      const cb = document.getElementById('set-gestures');
+      const row = cb && cb.closest('label');
+      const res = {
+        vis: !!(cb && row && row.offsetParent !== null),
+        checked: !!(cb && cb.checked),
+      };
+      document.querySelector('.modal .actions button.primary')?.click();
+      return res;
+    """)
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(250)
+    ok1 = (
+        st_pro['vis'] is True and st_pro['checked'] is True
+        and st_pro['help'] == 'touchGestures'
+        and st_pro['vp'] is True and st_pro['vg'] is True
+        and st_sim['vis'] is True and st_sim['checked'] is True
+    )
+
+    # Touch-fähigen Kontext für CDP-Gesten, langes Drücken und Stift-Zeichnen öffnen
+    ctx = p.ctx.browser.new_context(
+        viewport={'width': 1280, 'height': 850},
+        has_touch=True,
+        accept_downloads=True,
+        locale='de-DE',
+    )
+    errs = []
+    try:
+        pg = ctx.new_page()
+        pg.on('pageerror', lambda e: errs.append(str(e)))
+        pg.add_init_script("try{if(!sessionStorage.getItem('kt')){localStorage.clear();sessionStorage.setItem('kt','1')}}catch(e){}")
+        pg.goto(URL)
+        pg.wait_for_timeout(2500)
+        pg.get_by_text('Leeres Projekt').first.tap()
+        pg.wait_for_timeout(3500)
+        try:
+            pg.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
+
+        ev = lambda js, arg=None: pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+
+        ev("Actions.addPrimitive('box')")
+        for _ in range(40):
+            if ev("return !App.busy && App.results.size >= 1"):
+                break
+            pg.wait_for_timeout(250)
+        pg.wait_for_timeout(300)
+        bid = ev("return App.doc.items[0].id")
+        ev("App.clearSelection(); Viewer.fit();")
+        pg.wait_for_timeout(600)
+
+        box_pt = ev("""const b=Actions.worldBox(arg); const c=b.getCenter(Viewer.camera.position.clone());
+          const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect();
+          return [s.x+r.left, s.y+r.top];""", bid)
+        cb = pg.locator('canvas').first.bounding_box()
+        cx, cy = cb['x'] + cb['width'] / 2, cb['y'] + cb['height'] / 2
+        cdp = ctx.new_cdp_session(pg)
+
+        def cam_state():
+            return ev("const c=Viewer.camera.position, t=Viewer.controls.target; const v=c.clone().sub(t); return { dir: v.clone().normalize().toArray(), dist: v.length(), target: [t.x, t.y, t.z] };")
+
+        def pinch_two(spread=False):
+            p1x, p1y = cx - (40 if spread else 120), cy
+            p2x, p2y = cx + (40 if spread else 120), cy
+            cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': p1x, 'y': p1y, 'id': 1}, {'x': p2x, 'y': p2y, 'id': 2}]})
+            steps = 8
+            for i in range(1, steps + 1):
+                f = i / steps
+                delta = 85 * f if spread else -80 * f
+                cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [
+                    {'x': p1x - delta, 'y': p1y, 'id': 1},
+                    {'x': p2x + delta, 'y': p2y, 'id': 2},
+                ]})
+                pg.wait_for_timeout(25)
+            cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+            pg.wait_for_timeout(450)
+
+        # 2. Simulierte Zwei-Finger-Geste ändert Zoom (Zusammenziehen zoomt heraus, Aufziehen zoomt hinein) + Trackpad
+        c0 = cam_state()
+        pinch_two(spread=False)
+        c1 = cam_state()
+        pinch_two(spread=True)
+        c2 = cam_state()
+
+        # Trackpad-Pinch (WheelEvent mit ctrlKey), Trackpad-Wischen (Drehen & Shift-Schieben)
+        ev("""
+          const cv = Viewer.canvas, r = cv.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaY: -40, ctrlKey: true, deltaMode: 0 }));
+        """)
+        pg.wait_for_timeout(200)
+        c_tp_zoom = cam_state()
+        ev("""
+          const cv = Viewer.canvas, r = cv.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaX: 80, deltaY: 30, deltaMode: 0 }));
+        """)
+        pg.wait_for_timeout(200)
+        c_tp_rot = cam_state()
+        ev("""
+          const cv = Viewer.canvas, r = cv.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaX: 60, deltaY: 30, shiftKey: true, deltaMode: 0 }));
+        """)
+        pg.wait_for_timeout(200)
+        c_tp_pan = cam_state()
+
+        rot_dot = max(-1.0, min(1.0, sum(a * b for a, b in zip(c_tp_zoom['dir'], c_tp_rot['dir']))))
+        tp_rot_deg = math.degrees(math.acos(rot_dot))
+        tp_pan_dist = math.dist(c_tp_rot['target'], c_tp_pan['target'])
+        ok2 = (
+            c1['dist'] > c0['dist'] * 1.08
+            and c2['dist'] < c1['dist'] * 0.92
+            and c_tp_zoom['dist'] < c2['dist'] * 0.97
+            and tp_rot_deg > 2.0
+            and tp_pan_dist > 0.5
+        )
+
+        # 3. Langes Drücken öffnet das Rechtsklick-Menü und bleibt nach Loslassen offen
+        ev("Viewer.fit();")
+        pg.wait_for_timeout(500)
+        box_pt = ev("""const b=Actions.worldBox(arg); const c=b.getCenter(Viewer.camera.position.clone());
+          const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect();
+          return [s.x+r.left, s.y+r.top];""", bid)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': box_pt[0], 'y': box_pt[1], 'id': 11}]})
+        pg.wait_for_timeout(650)
+        menu_open = pg.evaluate("() => ({ open: !!document.querySelector('.menu[role=\"menu\"]'), dup: !!document.querySelector('#cm-dup') })")
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        pg.wait_for_timeout(200)
+        menu_after_up = pg.evaluate("() => !!document.querySelector('.menu[role=\"menu\"]')")
+        pg.keyboard.press('Escape')
+        pg.wait_for_timeout(150)
+        ok3 = menu_open['open'] is True and menu_open['dup'] is True and menu_after_up is True
+
+        # 4. Stift zeichnet in der Skizze genau (Strichzeichnen + Handballen-Erkennung) + DragInput-Buttons
+        ev("App.clearSelection(); Sketch.startOnPlane('XY'); Sketch.setTool('line');")
+        pg.wait_for_timeout(650)
+        sk_pts = ev("""
+          const toScr = (u, v) => {
+            const S = Sketch.state;
+            const w = S.F.o.clone().addScaledVector(S.F.x, u).addScaledVector(S.F.y, v);
+            const s = Viewer.toScreen(w), r = Viewer.canvas.getBoundingClientRect();
+            return [s.x + r.left, s.y + r.top];
+          };
+          return { p0: toScr(0, 0), p1: toScr(30, 0), p2: toScr(10, -15) };
+        """)
+        ev("""
+          const [p0, p1, p2] = arg;
+          const cv = Viewer.canvas;
+          const fire = (type, pt, ptrType, id) => {
+            const evObj = new PointerEvent(type, {
+              bubbles: true, cancelable: true, clientX: pt[0], clientY: pt[1],
+              button: 0, buttons: type === 'pointerup' ? 0 : 1,
+              pointerId: id, pointerType: ptrType, pressure: type === 'pointerup' ? 0 : 0.6,
+            });
+            (type === 'pointerup' ? window : cv).dispatchEvent(evObj);
+          };
+          fire('pointerdown', p0, 'pen', 21);
+          fire('pointermove', [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2], 'pen', 21);
+          fire('pointerup', p1, 'pen', 21);
+          // Direkter einzelner Touch danach simuliert den Handballen und darf keine Linie anfangen
+          fire('pointerdown', p2, 'touch', 22);
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: p2[0], clientY: p2[1], button: 0, pointerId: 22, pointerType: 'touch' }));
+        """, [sk_pts['p0'], sk_pts['p1'], sk_pts['p2']])
+        pg.wait_for_timeout(200)
+        sk_res = ev("""
+          const ents = Sketch.state.ents.filter(e => e.type === 'line');
+          return {
+            n: ents.length,
+            draft: Sketch.state.draft,
+            a: ents[0] ? ents[0].a : null,
+            b: ents[0] ? ents[0].b : null,
+          };
+        """)
+        ev("Sketch.cancel(); Viewer.fit(null, false);")
+        pg.wait_for_timeout(400)
+        di_res = ev("""
+          let applied = null;
+          DragInput.open({ fields: [{ label: 'X', value: 10, unit: 'mm' }], apply: (vals) => { applied = vals[0]; } }, null, { x: 400, y: 300 });
+          const inp = document.querySelector('.drag-input input');
+          const okBtn = document.querySelector('#drag-input-ok');
+          if (inp && okBtn) { inp.value = '25'; okBtn.click(); }
+          return { applied, stillOpen: DragInput.open_ };
+        """)
+        ok4 = (
+            sk_res['n'] == 1
+            and sk_res['draft'] is None
+            and sk_res['a'] is not None and sk_res['b'] is not None
+            and math.hypot(sk_res['a'][0], sk_res['a'][1]) < 1.5
+            and math.hypot(sk_res['b'][0] - 30, sk_res['b'][1]) < 1.5
+            and di_res['applied'] == 25 and di_res['stillOpen'] is False
+        )
+
+        # 5. Einstellung aus -> Touch-Gesten, Trackpad-Gesten und langes Drücken ohne Wirkung (Mausrad zoomt weiter)
+        ev("ViewPrefs.dialog('general'); document.getElementById('set-gestures').click(); document.querySelector('.modal .actions button.primary')?.click(); Viewer.fit(null, false);")
+        pg.wait_for_timeout(300)
+        off_state = ev("return { vp: ViewPrefs.gestures, vg: Viewer.gestures, two: Viewer.controls.touches.TWO };")
+        c_off_0 = cam_state()
+        pinch_two(spread=False)
+        c_off_1 = cam_state()
+        ev("""
+          const cv = Viewer.canvas, r = cv.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaY: -40, ctrlKey: true, deltaMode: 0 }));
+          cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaX: 80, deltaY: 30, deltaMode: 0 }));
+        """)
+        pg.wait_for_timeout(200)
+        c_off_2 = cam_state()
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': box_pt[0], 'y': box_pt[1], 'id': 31}]})
+        pg.wait_for_timeout(650)
+        menu_off = pg.evaluate("() => !!document.querySelector('.menu[role=\"menu\"]')")
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        pg.wait_for_timeout(150)
+
+        # Klassisches Mausrad (deltaX: 0, ctrlKey: false) zoomt auch bei abgeschalteten Gesten weiter
+        ev("""
+          const cv = Viewer.canvas, r = cv.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          cv.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaY: -120, deltaMode: 0 }));
+        """)
+        pg.wait_for_timeout(200)
+        c_off_wheel = cam_state()
+
+        # Wieder einschalten & Metadaten prüfen
+        ev("ViewPrefs.set({ gestures: true });")
+        meta = ev("""return (async () => {
+          const [h, de, en] = await Promise.all([
+            fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+            fetch('data/texte-de.json').then(r => r.json()),
+            fetch('data/texte-en.json').then(r => r.json()),
+          ]);
+          const fake = document.createElement('div');
+          fake.dataset.help = 'touchGestures';
+          const desc = Explain.describeElement(fake);
+          const helpOk = !!(h.touchGestures && h.touchGestures.tip && h.touchGestures.hilfe && h.touchGestures.tipp && desc && desc.tip === h.touchGestures.tipp);
+          const cmdOk = Commands.search('gesten').some(c => c.id === 'toggle-gestures');
+          const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+          const i18nEq = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+          return { helpOk, cmdOk, i18nEq };
+        })();""")
+
+        ok5 = (
+            off_state['vp'] is False and off_state['vg'] is False and off_state['two'] is None
+            and abs(c_off_1['dist'] - c_off_0['dist']) < 1e-3
+            and abs(c_off_2['dist'] - c_off_0['dist']) < 1e-3
+            and math.dist(c_off_2['dir'], c_off_0['dir']) < 1e-4
+            and menu_off is False
+            and c_off_wheel['dist'] < c_off_0['dist'] * 0.97
+            and meta['helpOk'] is True and meta['cmdOk'] is True and meta['i18nEq'] is True
+            and len(errs) == 0
+        )
+
+        res = [ok1, ok2, ok3, ok4, ok5]
+        if all(res):
+            return res
+        diag = f"sk={sk_res} di={di_res} off={off_state} d0={round(c_off_0['dist'],3)} d1={round(c_off_1['dist'],3)} d2={round(c_off_2['dist'],3)} dw={round(c_off_wheel['dist'],3)} menu_off={menu_off} meta={meta} errs={errs}"
+        return False, ' '.join('✓' if x else '✗' for x in res) + ' | ' + diag
+    finally:
+        ctx.close()
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -28855,6 +29137,7 @@ TESTS = [
     ('[F-11250803] Volltest-Reparatur: Schraubenlöcher bei kaltem Kern / Befehlssuche „Fläche auf Fläche“', t_f11250803),
     ('[A-145] Krümmungsglatte Rundung (G2): Form-Wahl, Volumen, Profi & Speichern/Laden (KP-40)', t_a145_rundung_g2),
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
+    ('[A-148] Trackpad-, Touch- und Stift-Gesten: Zoom, langes Drücken, Stift in Skizze & Einstellung aus (BE-21)', t_a148_gesten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

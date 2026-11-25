@@ -1708,5 +1708,10 @@
     "tip": "Alles als Paket (ZIP): Projekt, Zeichnungen (PDF), STEP und STL je Körper zusammen speichern",
     "hilfe": "Packt dein gesamtes Projekt in eine einzige ZIP-Datei: die Tracery-Projektdatei zum Weiterbauen, alle technischen Zeichnungen als PDF, das komplette Modell als STEP sowie eine eigene STL-Datei für jeden sichtbaren Körper.",
     "tipp": "Ideal zum Weitergeben, Archivieren oder für den Fertiger – alle wichtigen Formate sind direkt dabei."
+  },
+  "touchGestures": {
+    "tip": "Trackpad-, Touch- und Stift-Gesten für 3D-Ansicht und Skizze ein- oder ausschalten",
+    "hilfe": "Mit zwei Fingern auf Trackpad oder Touchscreen drehst du das Modell (in der Skizze verschiebst du), Zusammenziehen und Aufziehen zoomt, langes Drücken am Touchscreen öffnet das Rechtsklick-Menü und ein Eingabestift zeichnet in der Skizze mit hoher Genauigkeit und Handballen-Schutz.",
+    "tipp": "Wenn du am Laptop lieber klassisch nur mit Mausrad-Zoom arbeiten möchtest, schaltest du die Gesten hier einfach ab."
   }
 }

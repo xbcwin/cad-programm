@@ -291,6 +291,7 @@ const Viewer = (() => {
     controls.minDistance = 0.2; controls.maxDistance = 12000;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.touches = touchesFor('model');
+    bindGestures(renderer.domElement, () => controls);
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
     controls.addEventListener('start', () => { orbitActive = true; pushCam(true); cancelCamAnim(); });
@@ -2713,9 +2714,15 @@ const Viewer = (() => {
     camBackBusy = true; moveCamera(s.p, s.t, s.up, animate); camBackBusy = false; camHistUser = false;
     return true;
   }
-  // ---------- Maus-Steuerung wie in anderen Programmen (BE-12) ----------
+  // ---------- Maus- und Gesten-Steuerung wie in anderen Programmen (BE-12, BE-21) ----------
   // ctx: 'model' (Modell), 'sketch' (Skizze: links zeichnet), 'place' (Setzen/Notizen: links setzt)
   let mouseStyle = 'tracery', mouseCtx = 'model';
+  let gesturesOn = true, ctrlKeyDown = false, lastTrackpadAt = 0;
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', (e) => { if (e.key === 'Control') ctrlKeyDown = true; }, { passive: true, capture: true });
+    window.addEventListener('keyup', (e) => { if (e.key === 'Control') ctrlKeyDown = false; }, { passive: true, capture: true });
+    window.addEventListener('blur', () => { ctrlKeyDown = false; });
+  }
   const M = () => THREE.MOUSE;
   function buttonsFor(style, ctx) {
     const R = M().ROTATE, P = M().PAN, D = M().DOLLY;
@@ -2728,6 +2735,7 @@ const Viewer = (() => {
     }
   }
   function touchesFor(ctx) {
+    if (!gesturesOn) return { ONE: null, TWO: null };
     if (ctx === 'sketch') return { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
     if (ctx === 'place') return { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE };
     return { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
@@ -2738,6 +2746,83 @@ const Viewer = (() => {
     if (quadState) for (const p of quadState.panes) { p.controls.mouseButtons = buttonsFor(mouseStyle, ctx); p.controls.touches = touchesFor(ctx); }
   }
   function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
+  function setGestures(on) {
+    gesturesOn = on !== false;
+    useButtons();
+    listeners.emit('viewmode');
+  }
+  function bindGestures(el, getCtrl) {
+    if (!el || !el.addEventListener) return () => {};
+    let gestureScale = 1;
+    const onWheel = (e) => {
+      const ctrl = getCtrl();
+      if (!ctrl || ctrl.enabled === false) return;
+      const isPinch = !!(e.ctrlKey && !ctrlKeyDown);
+      const hasHoriz = Math.abs(e.deltaX) >= 0.5;
+      const now = performance.now();
+      const isTrackpadSwipe = e.deltaMode === 0 && !isPinch && (hasHoriz || e.shiftKey || (now - lastTrackpadAt < 250 && Math.abs(e.deltaY) < 90));
+      if (!gesturesOn) {
+        if (isPinch || hasHoriz) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
+      if (isPinch) return; // OrbitControls _customWheelEvent zoomt bei ctrlKey (Trackpad-Pinch) auf den Mauszeiger
+      if (!isTrackpadSwipe) return;
+      lastTrackpadAt = now;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      pushCam(true);
+      cancelCamAnim();
+      const h = Math.max(1, el.clientHeight || (container && container.clientHeight) || 1);
+      if (mouseCtx === 'sketch' || e.shiftKey) {
+        ctrl._pan(-e.deltaX * ctrl.panSpeed, -e.deltaY * ctrl.panSpeed);
+      } else {
+        ctrl._rotateLeft((2 * Math.PI * (-e.deltaX) * ctrl.rotateSpeed) / h);
+        ctrl._rotateUp((2 * Math.PI * (-e.deltaY) * ctrl.rotateSpeed) / h);
+      }
+      ctrl.update();
+      needsRender = true;
+      listeners.emit('camera');
+    };
+    const onGestureStart = (e) => {
+      e.preventDefault();
+      gestureScale = e.scale || 1;
+    };
+    const onGestureChange = (e) => {
+      e.preventDefault();
+      if (!gesturesOn) return;
+      const ctrl = getCtrl();
+      if (!ctrl || ctrl.enabled === false) return;
+      const sc = e.scale || 1;
+      if (sc > 0 && gestureScale > 0) {
+        const ratio = sc / gestureScale;
+        gestureScale = sc;
+        pushCam(true);
+        cancelCamAnim();
+        ctrl._dollyOut(Math.pow(ratio, ctrl.zoomSpeed));
+        if (Number.isFinite(e.clientX) && Number.isFinite(e.clientY)) ctrl._updateZoomParameters(e.clientX, e.clientY);
+        ctrl.update();
+        needsRender = true;
+        listeners.emit('camera');
+      }
+    };
+    const onGestureEnd = (e) => {
+      e.preventDefault();
+      gestureScale = 1;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    el.addEventListener('gesturestart', onGestureStart, { passive: false });
+    el.addEventListener('gesturechange', onGestureChange, { passive: false });
+    el.addEventListener('gestureend', onGestureEnd, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel, true);
+      el.removeEventListener('gesturestart', onGestureStart);
+      el.removeEventListener('gesturechange', onGestureChange);
+      el.removeEventListener('gestureend', onGestureEnd);
+    };
+  }
   function stopDamping() {
     if (!controls) return;
     if (controls._sphericalDelta) controls._sphericalDelta.set(0, 0, 0);
@@ -2960,7 +3045,10 @@ const Viewer = (() => {
   function setQuad(on, hostMap = {}) {
     if (!on) {
       if (!quadState) return;
-      for (const p of quadState.panes) p.controls.dispose();
+      for (const p of quadState.panes) {
+        if (p.disposeGestures) p.disposeGestures();
+        p.controls.dispose();
+      }
       quadState = null;
       if (controls) controls.enabled = true;
       renderer.setScissorTest(false);
@@ -2988,7 +3076,8 @@ const Viewer = (() => {
       pCtrl.minDistance = 0.2; pCtrl.maxDistance = 12000;
       pCtrl.mouseButtons = buttonsFor(mouseStyle, 'model');
       pCtrl.touches = touchesFor('model');
-      const pane = { key: def.key, dir: def.dir.slice(), up: def.up.slice(), ortho: def.ortho, cam: pCam, orthoCam: pOrtho, controls: pCtrl, el: hitEl, rect: null, orbitActive: false };
+      const disposeGestures = hitEl !== renderer.domElement ? bindGestures(hitEl, () => pCtrl) : null;
+      const pane = { key: def.key, dir: def.dir.slice(), up: def.up.slice(), ortho: def.ortho, cam: pCam, orthoCam: pOrtho, controls: pCtrl, disposeGestures, el: hitEl, rect: null, orbitActive: false };
       placeQuadPane(pane, box, aspect);
       pCtrl.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
       pCtrl.addEventListener('start', () => { pane.orbitActive = true; setActiveQuadPane(def.key); });
@@ -3417,7 +3506,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, setGestures, get gestures() { return gesturesOn; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedFaces, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     setQuad, setActiveQuadPane, setQuadPaneOrtho, resetQuadPane, fitQuad, pickInPane,

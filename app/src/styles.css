@@ -416,6 +416,9 @@ body.sketching .timeline{display:none}
 .node.ctx-active{box-shadow:inset 3px 0 0 var(--accent)}
 .drag-input{position:absolute;z-index:30;display:flex;gap:6px;align-items:center;padding:5px 7px;border-radius:8px;background:var(--ink);color:var(--surface);box-shadow:var(--shadow-2);font:600 12px/1 var(--font-cond)}
 .drag-input input{width:64px;border:0;border-radius:5px;padding:4px 6px;font:500 13px var(--font-mono,monospace);background:var(--surface);color:var(--ink)}
+.drag-input .di-btn{border:0;border-radius:5px;min-width:26px;height:26px;padding:0 7px;display:inline-grid;place-items:center;font:700 14px/1 var(--font-sans,sans-serif);cursor:pointer;background:rgba(255,255,255,.16);color:inherit}
+.drag-input .di-btn.ok{background:var(--accent);color:#fff}
+.drag-input .di-btn:hover{filter:brightness(1.1)}
 .drag-input small{opacity:.6;font-weight:500}
 .center.has-tl .view-btns{bottom:66px}
 .center.has-tl .axis-gizmo{bottom:62px}
@@ -1242,6 +1245,7 @@ body.tablet .node{min-height:44px;padding:8px 10px;font-size:15px}
 body.tablet .node .acts button{width:36px;height:36px}
 body.tablet .menu button{min-height:44px;padding:10px 12px;font-size:15px}
 body.tablet .inp{height:44px}
+body.tablet .drag-input .di-btn{min-width:36px;height:36px;font-size:16px}
 body.tablet .timeline{height:54px;left:76px;right:68px}
 body.tablet .tl-chip,body.tablet .tl-btns button{width:40px;height:40px}
 body.tablet .tl-marker{width:22px;height:44px}

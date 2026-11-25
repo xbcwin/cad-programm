@@ -2612,6 +2612,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, DE/EN & Befehle**: `HELP.illustration`/`HELP.quadView`, DE/EN-Schlüsselgleichheit und Befehlssuche (`disp-illustration`, `quad-view`) geprüft (`t_a137_illustration_vierfach`).
 - [ ] **Von Hand**: Im Browser einen abgerundeten Körper mit Bohrungen in „Technische Illustration“ drehen, die Kanten- und Umrissqualität (auch per „Bild speichern“) prüfen und in der Vierfach-Ansicht gleichzeitig aus allen vier Blickrichtungen modellieren.
 
+## Trackpad-, Touch- und Stift-Gesten (Auto [A-148], BE-21)
+
+- [x] **Einstellung in Einfach & Profi**: `#set-gestures` ist in den Einstellungen in „Einfach“ und „Profi“ sichtbar, standardmäßig aktiv (`ViewPrefs.gestures === true`, `Viewer.gestures === true`) und trägt `data-help="touchGestures"`.
+- [x] **Zwei-Finger-Zoom & Trackpad-Gesten**: Simulierte Zwei-Finger-Touch-Geste (Zusammenziehen/Aufziehen via CDP `dispatchTouchEvent`) verändert den Kamera-Abstand deutlich; Trackpad-Pinch (`WheelEvent` mit `ctrlKey`), Zwei-Finger-Wischen (Drehen in 3D, mit `Shift` oder in der Skizze Verschieben) funktionieren erwartungsgemäß.
+- [x] **Langes Drücken öffnet Rechtsklick-Menü**: Langes Berühren (`500 ms`) auf einem Körper öffnet `.menu[role="menu"]` mit `#cm-dup` und bleibt nach `touchEnd` ohne Kamerasprung geöffnet.
+- [x] **Stift in der Skizze & Zahleneingabe**: Stift-Strich (`pointerType: 'pen'`) zeichnet in der Skizze exakt mit feinerer Toleranz und schließt beim Abheben ab; anschließender Einzel-Touch (Handballen) wird ignoriert; `DragInput` lässt sich per `#drag-input-ok` bestätigen.
+- [x] **Einstellung aus → Gesten ohne Wirkung**: Bei `#set-gestures` aus bleiben Zwei-Finger-Touch, Trackpad-Pinch/Wischen und langes Drücken ohne Wirkung, während das klassische Mausrad weiter zoomt; `HELP.touchGestures`, `toggle-gestures` und DE/EN-Schlüsselgleichheit geprüft (`t_a148_gesten`).
+- [ ] **Von Hand**: Auf einem Notebook-Trackpad (macOS/Windows) sowie am Tablet (iPad mit Finger & Apple Pencil) zwei Finger zum Drehen, Schieben und Zoomen, langes Drücken fürs Menü sowie das Zeichnen per Stift in der Skizze ausprobieren.
+
 ## Fehler melden
 
 ```

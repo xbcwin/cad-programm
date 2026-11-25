@@ -12,7 +12,7 @@ const ViewPrefs = (() => {
     grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal',
     adaptive: true, multiWorker: true, theme: 'system', highContrast: false, decimals: 2, angleDecimals: 1,
     notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true,
-    display: 'edges', lang: 'auto', mouse: 'tracery', uiScale: 100,
+    display: 'edges', lang: 'auto', mouse: 'tracery', gestures: true, uiScale: 100,
     floorReflect: false, floorReflectStrength: 45, envImageName: '', envImageData: '',
     manualLights: false, lights: [{ ...LIGHT_PRESETS[0] }],
   };
@@ -61,6 +61,7 @@ const ViewPrefs = (() => {
   v.lang = normLang(v.lang);
   v.uiScale = normUiScale(v.uiScale);
   v.mouse = normMouse(v.mouse);
+  v.gestures = v.gestures !== false;
   v.floorReflect = !!v.floorReflect;
   v.floorReflectStrength = normReflectStrength(v.floorReflectStrength);
   v.envImageName = typeof v.envImageName === 'string' ? v.envImageName : '';
@@ -132,6 +133,7 @@ const ViewPrefs = (() => {
     FMT.dec = normDec(v.decimals, DEF.decimals);
     FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
     Viewer.setMouseStyle(v.mouse || 'tracery');
+    if (typeof Viewer.setGestures === 'function') Viewer.setGestures(v.gestures !== false);
     const projFloorChk = document.getElementById('proj-floor-reflect');
     if (projFloorChk) projFloorChk.checked = !!v.floorReflect;
     if (lookPanel && lookPanel.isConnected) {
@@ -148,6 +150,7 @@ const ViewPrefs = (() => {
     if ('lang' in next) next.lang = normLang(next.lang);
     if ('uiScale' in next) next.uiScale = normUiScale(next.uiScale);
     if ('mouse' in next) next.mouse = normMouse(next.mouse);
+    if ('gestures' in next) next.gestures = !!next.gestures;
     if ('floorReflect' in next) next.floorReflect = !!next.floorReflect;
     if ('floorReflectStrength' in next) next.floorReflectStrength = normReflectStrength(next.floorReflectStrength);
     if ('manualLights' in next) next.manualLights = !!next.manualLights;
@@ -189,11 +192,15 @@ const ViewPrefs = (() => {
       axes: ['dlg.settings.tAxesOn', 'dlg.settings.tAxesOff'],
       notes: ['dlg.settings.tNotesOn', 'dlg.settings.tNotesOff'],
       highContrast: ['dlg.settings.tHighContrastOn', 'dlg.settings.tHighContrastOff'],
+      gestures: ['dlg.settings.tGesturesOn', 'dlg.settings.tGesturesOff'],
     }[k];
     set({ [k]: !v[k] }, labels ? T(labels[v[k] ? 1 : 0]) : null);
   }
   function setHighContrast(on) {
     set({ highContrast: !!on }, T(on ? 'dlg.settings.tHighContrastOn' : 'dlg.settings.tHighContrastOff'));
+  }
+  function setGestures(on) {
+    set({ gestures: !!on }, T(on ? 'dlg.settings.tGesturesOn' : 'dlg.settings.tGesturesOff'));
   }
   // Schild oben rechts: Einfach ↔ Profi
   function syncLevel() {
@@ -239,7 +246,7 @@ const ViewPrefs = (() => {
     const out = { ...DEF, lights: normLights(DEF.lights) };
     if (!src || typeof src !== 'object') return out;
     if (src.grid === 'auto' || (typeof src.grid === 'number' && isFinite(src.grid) && src.grid > 0)) out.grid = src.grid;
-    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows', 'floorReflect', 'manualLights', 'highContrast']) {
+    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows', 'floorReflect', 'manualLights', 'highContrast', 'gestures']) {
       if (typeof src[k] === 'boolean') out[k] = src[k];
     }
     if (VALID_QUALITY.has(src.quality)) out.quality = src.quality;
@@ -747,6 +754,8 @@ const ViewPrefs = (() => {
     );
     const hcChk = chk('highContrast', T('dlg.settings.highContrast'), T('dlg.settings.highContrastHint'));
     hcChk.dataset.help = 'highContrast';
+    const gestChk = chk('gestures', T('dlg.settings.gestures'), T('dlg.settings.gesturesHint'));
+    gestChk.dataset.help = 'touchGestures';
     paneGen.append(
       lvlField,
       langSel,
@@ -757,6 +766,7 @@ const ViewPrefs = (() => {
       decBlock,
       sel('set-quality', T('dlg.settings.qualityLabel'), v.quality, [['coarse', T('dlg.settings.qCoarse')], ['normal', T('dlg.settings.qNormal')], ['fine', T('dlg.settings.qFine')], ['ultra', T('dlg.settings.qUltra')]], (x) => set({ quality: x }), T('dlg.settings.qualityHint')),
       sel('set-mouse', T('dlg.settings.mouseLabel'), v.mouse || 'tracery', [['tracery', T('dlg.settings.mTracery')], ['onshape', T('dlg.settings.mOnshape')], ['solidworks', T('dlg.settings.mSolidworks')], ['fusion', T('dlg.settings.mFusion')], ['blender', T('dlg.settings.mBlender')]], (x) => set({ mouse: x }), T('dlg.settings.mouseHint')),
+      gestChk,
       chk('adaptive', T('dlg.settings.adaptive'), T('dlg.settings.adaptiveHint')),
     );
     const maxW = typeof Kernel !== 'undefined' && Kernel.maxWorkers ? Kernel.maxWorkers : 1;
@@ -873,6 +883,6 @@ const ViewPrefs = (() => {
     openDialogState = { handle: modalHandle, get tab() { return curTab; } };
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
-  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, get highContrast() { return !!v.highContrast; }, setHighContrast, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, get highContrast() { return !!v.highContrast; }, setHighContrast, get gestures() { return v.gestures !== false; }, setGestures, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 
