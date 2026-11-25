@@ -35,8 +35,20 @@ const Drawing = (() => {
     { key: 'stepped', pro: true, get label() { return T('draw.secMode.stepped'); }, get hint() { return T('draw.hint.sectionStepped'); } },
     { key: 'breakout', pro: true, get label() { return T('draw.secMode.breakout'); }, get hint() { return T('draw.hint.sectionBreakout'); } },
   ];
+  const THREAD_ARC_START = Math.PI / 12;
+  const THREAD_ARC_SPAN = Math.PI * 1.5;
+  const HATCH_PATTERNS = {
+    steel:     { key: 'steel',     get label() { return T('draw.hatch.steel'); },     angles: [45],       flipAngles: [135],      stepMul: 1.0,  pairOff: 0,    altDash: false },
+    alu:       { key: 'alu',       get label() { return T('draw.hatch.alu'); },       angles: [45],       flipAngles: [135],      stepMul: 1.45, pairOff: 0.28, altDash: false },
+    brass:     { key: 'brass',     get label() { return T('draw.hatch.brass'); },     angles: [45],       flipAngles: [135],      stepMul: 1.0,  pairOff: 0,    altDash: true  },
+    plastic:   { key: 'plastic',   get label() { return T('draw.hatch.plastic'); },   angles: [45, 135],  flipAngles: [45, 135],  stepMul: 1.25, pairOff: 0,    altDash: false, oddPhase: 0.5 },
+    composite: { key: 'composite', get label() { return T('draw.hatch.composite'); }, angles: [30, 150],  flipAngles: [30, 150],  stepMul: 1.2,  pairOff: 0,    altDash: false, oddPhase: 0.5 },
+    wood:      { key: 'wood',      get label() { return T('draw.hatch.wood'); },      angles: [30],       flipAngles: [150],      stepMul: 1.1,  pairOff: 0,    altDash: true  },
+  };
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   const isSimpleMode = () => typeof ViewPrefs !== 'undefined' && ViewPrefs.level === 'simple';
+  const normThreadsActive = (sh = dwg()) => !isSimpleMode() && (!sh || sh.normThreads !== false);
+  const materialHatchActive = (sh = dwg()) => !isSimpleMode() && (!sh || sh.materialHatch !== false);
   let proj = null, projRev = -1, projSceneKey = null, loadingProjPromise = null, projId = 0;
   const projSigs = new Map(), shadeCache = new Map();
   let bomData = null, bomMeasure = null, bomCacheKey = null;
@@ -160,6 +172,8 @@ const Drawing = (() => {
       extraViews: Array.isArray(opts.extraViews) ? opts.extraViews.map(normalizeExtraView).filter(Boolean) : [],
       hidden: opts.hidden != null ? !!opts.hidden : (tpl ? !!tpl.hidden : true),
       centers: opts.centers != null ? !!opts.centers : (tpl ? !!tpl.centers : true),
+      normThreads: opts.normThreads != null ? !!opts.normThreads : (tpl && tpl.normThreads != null ? !!tpl.normThreads : true),
+      materialHatch: opts.materialHatch != null ? !!opts.materialHatch : (tpl && tpl.materialHatch != null ? !!tpl.materialHatch : true),
       hiddenCenters: Array.isArray(opts.hiddenCenters) ? opts.hiddenCenters.slice() : [],
       dims: opts.dims || defaultAutoDims(),
       free: opts.free || [],
@@ -198,6 +212,8 @@ const Drawing = (() => {
       extraViews: raw && raw.extraViews,
       hidden: raw && raw.hidden,
       centers: raw && raw.centers,
+      normThreads: raw && raw.normThreads,
+      materialHatch: raw && raw.materialHatch,
       hiddenCenters: raw && Array.isArray(raw.hiddenCenters) ? raw.hiddenCenters : [],
       dims: raw && Array.isArray(raw.dims) ? raw.dims : undefined,
       free: raw && Array.isArray(raw.free) ? raw.free : undefined,
@@ -238,6 +254,8 @@ const Drawing = (() => {
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
       else if (cur) cur.sections = cur.sections.map(normalizeSection).filter(Boolean);
       if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
+      if (cur && typeof cur.normThreads !== 'boolean') cur.normThreads = cur.normThreads == null ? true : !!cur.normThreads;
+      if (cur && typeof cur.materialHatch !== 'boolean') cur.materialHatch = cur.materialHatch == null ? true : !!cur.materialHatch;
       if (cur && !Array.isArray(cur.notes)) cur.notes = [];
       if (cur && !Array.isArray(cur.balloons)) cur.balloons = [];
       if (cur && (!cur.bomTable || typeof cur.bomTable !== 'object')) cur.bomTable = { show: false, pos: null };
@@ -374,6 +392,8 @@ const Drawing = (() => {
       show: !!(src.bomTable && src.bomTable.show),
       pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
     };
+    clone.normThreads = src.normThreads !== false;
+    clone.materialHatch = src.materialHatch !== false;
     const nextVP = {};
     for (const [k, v] of Object.entries(clone.viewPos || {})) {
       if (Array.isArray(v) && v.length >= 2) nextVP[idMap.get(k) || k] = [Number(v[0]) || 0, Number(v[1]) || 0];
@@ -1181,7 +1201,8 @@ const Drawing = (() => {
       if (!g) return null;
       geoCache.set(ck, g);
     }
-    return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    const threads = is3d ? [] : projectThreadsForView(proj.views[name], sh);
+    return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
   }
   function viewGeom_(name, sh = dwg(), opts = viewOpts(sh, name), is3d = is3dView(sh, name)) {
     const v = proj.views[name];
@@ -1207,29 +1228,9 @@ const Drawing = (() => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const arr of [polys, tangents, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
-    // Mittellinien und kosmetische Gewinde (KP-20)
+    // Mittellinien (KP-20/ZE-06); Gewinde werden ungecached in viewGeom() projiziert
     const allCenters = is3d ? [] : computeViewCenters(name, v);
-    const threads = [];
-    if (!is3d) {
-      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
-      const seenT = new Set();
-      for (const th of docThreads()) {
-        const k = Math.abs(th.d.dot(dir));
-        if (k > 0.995) {
-          const c = [th.p0.dot(ex), th.p0.dot(ey)];
-          const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
-          if (seenT.has(key)) continue; seenT.add(key);
-          threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
-        } else if (k < 0.05) {
-          const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
-          const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20), sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
-          const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind;
-          if (seenT.has(key)) continue; seenT.add(key);
-          threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
-        }
-      }
-    }
-    return { polys, tangents, hidden, circles, points, allCenters, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    return { polys, tangents, hidden, circles, points, allCenters, threads: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
   function clipSegStrip(a, b, ax, ay, lo, hi) {
     const d0 = a[0] * ax + a[1] * ay;
@@ -1496,7 +1497,8 @@ const Drawing = (() => {
         if (!g) return null;
         geoCache.set(ck, g);
       }
-      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+      const threads = projectThreadsForView(proj.views[vk], sh, { isSection: true, sectionPlane: sp, halfClip: g.halfClip });
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
     }
     if (type === 'stepped') {
       const st = steppedSegments(sec);
@@ -1531,7 +1533,8 @@ const Drawing = (() => {
         if (!g) return null;
         geoCache.set(ck, g);
       }
-      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+      const threads = projectThreadsForView(st.sp, sh, { isSection: true, steppedSegments: st });
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
     }
     if (type === 'breakout') {
       if (!proj || !proj.sections || !proj.sections[key] || !proj.views || !proj.views[sec.parent]) return null;
@@ -1575,7 +1578,9 @@ const Drawing = (() => {
         g.h = y1 - y0;
         geoCache.set(ck, g);
       }
-      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+      const bp = breakoutPlaneSpec(sec);
+      const threads = projectThreadsForView(proj.views[sec.parent], sh, { isSection: true, sectionPlane: bp, breakPoly: g.breakPoly });
+      return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
     }
     if (!proj || !proj.sections || !proj.sections[key]) return null;
     const ck = 'sec|' + key + '|' + sec.id + '|' + projId + '|' + !!sh.hidden;
@@ -1595,35 +1600,347 @@ const Drawing = (() => {
       if (!g) return null;
       geoCache.set(ck, g);
     }
-    return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh) };
+    const secRaw = proj.sections[key];
+    const threads = projectThreadsForView(secRaw, sh, { isSection: true, sectionPlane: { o: secRaw.o || [0, 0, 0], dir: secRaw.dir } });
+    return { ...g, allCenters: g.allCenters, centers: filterVisibleCenters(g.allCenters, sh), threads };
   }
-  function docThreads() {
-    const out = [], V = Model.vars(App.doc).v;
-    Model.walk(App.doc.items, (it) => {
-      if (it.role === 'hole' || it.suppressed || !Model.isActive(App.doc, it.id) || !it.threads || !it.threads.length) return;
-      const mats = Model.instanceMatrices(App.doc, it.id, V);
-      for (const th of it.threads) {
-        const fi = Viewer.threadFaceIndex(it.id, th);
-        const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
-          o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
-        } : null);
-        if (!g) continue;
-        const kind = th.kind || g.kind || 'ext';
-        const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
-        const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
-        const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
-        const spec = THREAD_MAP[th.size];
-        const rThread = kind === 'int' ? (spec ? spec.d / 2 : g.r * 1.15) : (spec ? spec.core / 2 : g.r * 0.85);
-        const dL = new THREE.Vector3(...g.d).normalize();
-        const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
-        const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
-        for (const M of mats) {
-          const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
-          out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind });
+  function threadDims(size) {
+    const te = typeof threadEntry === 'function' ? threadEntry(size) : null;
+    if (te && te.nenn_d_mm > 0) {
+      return {
+        d: Number(te.nenn_d_mm),
+        core: Number(te.kernloch_mm) || Number(te.nenn_d_mm) * 0.82,
+        pitch: Number(te.steigung_mm) || 1,
+      };
+    }
+    const sp = THREAD_MAP[size];
+    if (sp) return { d: sp.d, core: sp.core, pitch: sp.pitch };
+    const d = parseFloat(String(size || '').replace(/[^\d.]/g, '')) || 6;
+    return { d, core: d * 0.83, pitch: 1 };
+  }
+  function isItemActiveVisible(doc, it) {
+    if (!it || it.suppressed || it.hidden || !Model.isActive(doc, it.id)) return false;
+    for (const p of Model.parentsOf(doc, it.id)) {
+      if (p && (p.suppressed || p.hidden)) return false;
+    }
+    return true;
+  }
+  function collectSolidBBoxes(doc = App.doc) {
+    const boxes = [];
+    if (typeof Actions !== 'undefined' && Actions.worldBox) {
+      for (const top of Model.activeItems(doc)) {
+        if (!top || top.role === 'hole' || top.suppressed || top.hidden) continue;
+        const wb = Actions.worldBox(top.id);
+        if (wb && !wb.isEmpty()) boxes.push([wb.min.x, wb.min.y, wb.min.z, wb.max.x, wb.max.y, wb.max.z]);
+      }
+    }
+    if (!boxes.length && proj && Array.isArray(proj.bbox) && proj.bbox.length >= 6) boxes.push(proj.bbox);
+    return boxes;
+  }
+  function ptInBox3(pt, b, eps = 0.05) {
+    return pt.x >= b[0] - eps && pt.x <= b[3] + eps
+      && pt.y >= b[1] - eps && pt.y <= b[4] + eps
+      && pt.z >= b[2] - eps && pt.z <= b[5] + eps;
+  }
+  function clampThreadSeg(p0, p1, solidBBoxes) {
+    const len = p0.distanceTo(p1);
+    if (len < 0.2) return [];
+    if (!solidBBoxes || !solidBBoxes.length) return [{ p0, p1, blind0: false, blind1: false }];
+    const u = p1.clone().sub(p0).divideScalar(len);
+    const dirArr = [u.x, u.y, u.z];
+    const pArr = [p0.x, p0.y, p0.z];
+    const ivs = [];
+    const hitBoxes = [];
+    for (const b of solidBBoxes) {
+      let t0 = 0, t1 = len, ok = true;
+      for (let k = 0; k < 3; k++) {
+        const d = dirArr[k], lo = b[k] - 0.02, hi = b[k + 3] + 0.02;
+        if (Math.abs(d) < 1e-8) {
+          if (pArr[k] < lo || pArr[k] > hi) { ok = false; break; }
+        } else {
+          let a = (lo - pArr[k]) / d, bb = (hi - pArr[k]) / d;
+          if (a > bb) [a, bb] = [bb, a];
+          t0 = Math.max(t0, a);
+          t1 = Math.min(t1, bb);
+          if (t0 >= t1 - 0.2) { ok = false; break; }
         }
       }
+      if (ok && t1 - t0 > 0.2) {
+        ivs.push([t0, t1]);
+        hitBoxes.push(b);
+      }
+    }
+    if (!ivs.length) return [];
+    ivs.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const [a, b] of ivs) {
+      const last = merged[merged.length - 1];
+      if (last && a <= last[1] + 0.05) last[1] = Math.max(last[1], b);
+      else merged.push([a, b]);
+    }
+    return merged.map(([tA, tB]) => {
+      const q0 = p0.clone().addScaledVector(u, tA);
+      const q1 = p0.clone().addScaledVector(u, tB);
+      const probe0 = q0.clone().addScaledVector(u, -0.15);
+      const probe1 = q1.clone().addScaledVector(u, 0.15);
+      const blind0 = hitBoxes.some((b) => ptInBox3(probe0, b, 0.04));
+      const blind1 = hitBoxes.some((b) => ptInBox3(probe1, b, 0.04));
+      return { p0: q0, p1: q1, blind0, blind1 };
     });
+  }
+  function docThreads(doc = App.doc, extraMat = null, visited = null, solidBBoxes = null) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    const vis = visited || new Set();
+    if (doc.id && vis.has(doc.id)) return [];
+    if (doc.id) vis.add(doc.id);
+    const out = [], V = Model.vars(doc).v;
+    const boxes = solidBBoxes || collectSolidBBoxes(doc);
+    try {
+      Model.walk(doc.items, (it) => {
+        if (!isItemActiveVisible(doc, it)) return;
+        const mats = Model.instanceMatrices(doc, it.id, V).map((m) => (extraMat ? extraMat.clone().multiply(m) : m));
+        if (!mats.length) return;
+        if (it.kind === 'ref' && it.p && it.p.docId && typeof Model.resolveDoc === 'function') {
+          const rd = Model.resolveDoc(it.p.docId);
+          if (rd) {
+            for (const M of mats) out.push(...docThreads(rd, M, vis, boxes));
+          }
+          return;
+        }
+        if (it.role !== 'hole' && it.threads && it.threads.length) {
+          for (const th of it.threads) {
+            const fi = !extraMat ? Viewer.threadFaceIndex(it.id, th) : -1;
+            const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+              o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+            } : null);
+            if (!g) continue;
+            const kind = th.kind || g.kind || 'ext';
+            const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+            const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+            const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+            const td = threadDims(th.size);
+            const rThread = kind === 'int' ? (td ? td.d / 2 : g.r * 1.15) : (td ? td.core / 2 : g.r * 0.85);
+            const dL = new THREE.Vector3(...g.d).normalize();
+            const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
+            const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
+            for (const M of mats) {
+              const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+              out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind, source: 'cosmetic', blind0: true, blind1: true });
+            }
+          }
+        }
+        if (it.kind === 'part' && it.p) {
+          const p = it.p;
+          if (p.lib === 'screwHole' && p.fit === 'tap') {
+            const size = p.size || 'M6';
+            const td = threadDims(size);
+            const L = Math.max(0.2, Model.num(p.length, V, 10));
+            const p0L = new THREE.Vector3(0, 0, -L), p1L = new THREE.Vector3(0, 0, 0);
+            for (const M of mats) {
+              const w0 = p0L.clone().applyMatrix4(M), w1 = p1L.clone().applyMatrix4(M);
+              for (const seg of clampThreadSeg(w0, w1, boxes)) {
+                out.push({ p0: seg.p0, p1: seg.p1, d: seg.p1.clone().sub(seg.p0).normalize(), r: td.core / 2, rThread: td.d / 2, size, length: round(seg.p0.distanceTo(seg.p1), 2), kind: 'int', source: 'tapHole', blind0: seg.blind0, blind1: seg.blind1 });
+              }
+            }
+          } else if (p.lib === 'threadHole') {
+            const size = p.size || 'M6';
+            const td = threadDims(size);
+            const L = Math.max(0.2, Model.num(p.length, V, 10));
+            const p0L = new THREE.Vector3(0, 0, -L), p1L = new THREE.Vector3(0, 0, 0);
+            for (const M of mats) {
+              const w0 = p0L.clone().applyMatrix4(M), w1 = p1L.clone().applyMatrix4(M);
+              const segs = (it.role === 'hole' || (it.op && it.op.type === 'cut')) ? clampThreadSeg(w0, w1, boxes) : [{ p0: w0, p1: w1, blind0: false, blind1: false }];
+              for (const seg of segs) {
+                out.push({ p0: seg.p0, p1: seg.p1, d: seg.p1.clone().sub(seg.p0).normalize(), r: td.core / 2, rThread: td.d / 2, size, length: round(seg.p0.distanceTo(seg.p1), 2), kind: 'int', source: 'threadHole', blind0: seg.blind0, blind1: seg.blind1 });
+              }
+            }
+          } else if (it.role !== 'hole' && p.lib === 'threadRod') {
+            const size = p.size || 'M6';
+            const td = threadDims(size);
+            const L = Math.max(0.2, Model.num(p.length, V, 12));
+            const p0L = new THREE.Vector3(0, 0, 0), p1L = new THREE.Vector3(0, 0, L);
+            for (const M of mats) {
+              const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+              out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: td.d / 2, rThread: td.core / 2, size, length: round(L, 2), kind: 'ext', source: 'threadRod', blind0: true, blind1: true });
+            }
+          } else if (it.role !== 'hole' && p.lib === 'stdScrew') {
+            const size = p.size || 'M3';
+            const td = threadDims(size);
+            const L = Math.max(0.5, Model.num(p.length, V, 10));
+            const se = typeof screwEntry === 'function' ? screwEntry(size) : null;
+            const ck = se && se.senkkopf && se.senkkopf.kopf_h_mm ? Number(se.senkkopf.kopf_h_mm) : 0;
+            const z0 = p.head === 'senk' && ck > 0 ? -Math.max(L, ck + 0.5) : -L;
+            const z1 = p.head === 'senk' && ck > 0 ? -ck : 0;
+            if (z1 - z0 >= 0.2) {
+              const p0L = new THREE.Vector3(0, 0, z0), p1L = new THREE.Vector3(0, 0, z1);
+              for (const M of mats) {
+                const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+                out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: td.d / 2, rThread: td.core / 2, size, length: round(z1 - z0, 2), kind: 'ext', source: 'stdScrew', blind0: true, blind1: true });
+              }
+            }
+          } else if (it.role !== 'hole' && p.lib === 'stdNut') {
+            const size = p.size || 'M3';
+            const td = threadDims(size);
+            const se = typeof screwEntry === 'function' ? screwEntry(size) : null;
+            const nutH = (se && se.mutter && Number(se.mutter.hoehe_mm)) || td.d * 0.8;
+            const p0L = new THREE.Vector3(0, 0, 0), p1L = new THREE.Vector3(0, 0, nutH);
+            for (const M of mats) {
+              const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+              out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: td.core / 2, rThread: td.d / 2, size, length: round(nutH, 2), kind: 'int', source: 'stdNut', blind0: false, blind1: false });
+            }
+          }
+        }
+      });
+    } finally {
+      if (doc.id) vis.delete(doc.id);
+    }
     return out;
+  }
+  function projectThreadsForView(v, sh = dwg(), opts = {}) {
+    if (!v || !v.dir || !v.x || !v.y) return [];
+    const normOn = normThreadsActive(sh);
+    const allowCosmetic = !sh || sh.normThreads !== false;
+    if (!normOn && !allowCosmetic) return [];
+    const rawList = docThreads().filter((th) => normOn || th.source === 'cosmetic');
+    if (!rawList.length) return [];
+    const dir = new THREE.Vector3(...v.dir).normalize();
+    const ex = new THREE.Vector3(...v.x).normalize();
+    const ey = new THREE.Vector3(...v.y).normalize();
+    const threads = [];
+    const seenT = new Set();
+    const sp = opts.sectionPlane || null;
+    const spO = sp && sp.o ? new THREE.Vector3(...sp.o) : null;
+    const spDir = sp && sp.dir ? new THREE.Vector3(...sp.dir).normalize() : null;
+    const cutStatus = (th, planeO, planeDir) => {
+      if (!planeO || !planeDir) return { keep: true, isCut: false };
+      const w0 = th.p0.clone().sub(planeO).dot(planeDir);
+      const w1 = th.p1.clone().sub(planeO).dot(planeDir);
+      if (Math.min(w0, w1) > th.rThread + 0.5) return { keep: false, isCut: false };
+      const isCut = Math.min(w0, w1) <= th.rThread + 0.25 && Math.max(w0, w1) >= -(th.rThread + 0.25);
+      return { keep: true, isCut };
+    };
+    const pushSide = (a, b, th, isCut, blind0 = th.blind0, blind1 = th.blind1) => {
+      if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) <= 0.2) return;
+      const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20);
+      const sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
+      const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind + '|' + (isCut ? 1 : 0);
+      if (seenT.has(key)) return;
+      seenT.add(key);
+      threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind, source: th.source, blind0, blind1, isCut: !!isCut });
+    };
+    const pushEnd = (c, th, isCut) => {
+      const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
+      if (seenT.has(key)) return;
+      seenT.add(key);
+      threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind, source: th.source, blind0: th.blind0, blind1: th.blind1, isCut: !!isCut });
+    };
+    for (const th of rawList) {
+      const k = Math.abs(th.d.dot(dir));
+      if (k > 0.995) {
+        const c = [th.p0.dot(ex), th.p0.dot(ey)];
+        if (opts.isSection && spO && spDir) {
+          const w0 = th.p0.clone().sub(spO).dot(spDir), w1 = th.p1.clone().sub(spO).dot(spDir);
+          if (Math.min(w0, w1) > 0.5) continue;
+        }
+        if (opts.halfClip) {
+          const d = c[0] * opts.halfClip.ax + c[1] * opts.halfClip.ay;
+          const inCut = d >= opts.halfClip.lo - 1e-4 && d <= opts.halfClip.hi + 1e-4;
+          pushEnd(c, th, inCut);
+        } else if (opts.breakPoly) {
+          pushEnd(c, th, pointInPoly2D(c, opts.breakPoly));
+        } else {
+          pushEnd(c, th, !!opts.isSection);
+        }
+      } else if (k < 0.05) {
+        const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
+        if (opts.steppedSegments && opts.steppedSegments.segments) {
+          const st = opts.steppedSegments;
+          for (const seg of st.segments) {
+            const clipped = clipSegStrip(a, b, st.ax2[0], st.ax2[1], seg.lo, seg.hi);
+            if (!clipped) continue;
+            const cs = cutStatus(th, new THREE.Vector3(...seg.o), new THREE.Vector3(...st.sp.dir).normalize());
+            if (!cs.keep) continue;
+            pushSide(clipped[0], clipped[1], th, cs.isCut, th.blind0 && Math.hypot(clipped[0][0] - a[0], clipped[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(clipped[1][0] - b[0], clipped[1][1] - b[1]) < 0.05);
+          }
+        } else if (opts.halfClip) {
+          const hc = opts.halfClip;
+          const cutSeg = clipSegStrip(a, b, hc.ax, hc.ay, hc.lo, hc.hi);
+          if (cutSeg) {
+            const cs = cutStatus(th, spO, spDir);
+            if (cs.keep) pushSide(cutSeg[0], cutSeg[1], th, cs.isCut, th.blind0 && Math.hypot(cutSeg[0][0] - a[0], cutSeg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(cutSeg[1][0] - b[0], cutSeg[1][1] - b[1]) < 0.05);
+          }
+          const uncutLo = isFinite(hc.lo) ? -Infinity : hc.hi;
+          const uncutHi = isFinite(hc.lo) ? hc.lo : Infinity;
+          const unSeg = clipSegStrip(a, b, hc.ax, hc.ay, uncutLo, uncutHi);
+          if (unSeg) {
+            pushSide(unSeg[0], unSeg[1], th, false, th.blind0 && Math.hypot(unSeg[0][0] - a[0], unSeg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(unSeg[1][0] - b[0], unSeg[1][1] - b[1]) < 0.05);
+          }
+        } else if (opts.breakPoly) {
+          for (const seg of clipSegPolygon(a, b, opts.breakPoly, true)) {
+            const cs = cutStatus(th, spO, spDir);
+            if (cs.keep) pushSide(seg[0], seg[1], th, cs.isCut, th.blind0 && Math.hypot(seg[0][0] - a[0], seg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(seg[1][0] - b[0], seg[1][1] - b[1]) < 0.05);
+          }
+          for (const seg of clipSegPolygon(a, b, opts.breakPoly, false)) {
+            pushSide(seg[0], seg[1], th, false, th.blind0 && Math.hypot(seg[0][0] - a[0], seg[0][1] - a[1]) < 0.05, th.blind1 && Math.hypot(seg[1][0] - b[0], seg[1][1] - b[1]) < 0.05);
+          }
+        } else if (opts.isSection && spO && spDir) {
+          const cs = cutStatus(th, spO, spDir);
+          if (!cs.keep) continue;
+          pushSide(a, b, th, cs.isCut);
+        } else {
+          pushSide(a, b, th, false);
+        }
+      }
+    }
+    return threads;
+  }
+  function hatchPatternForMaterial(matKey) {
+    const k = String(matKey || '').trim().toLowerCase();
+    if (!k) return 'steel';
+    if (k.includes('alu')) return 'alu';
+    if (k.includes('messing') || k.includes('kupfer') || k.includes('brass') || k.includes('copper') || k.includes('bronze')) return 'brass';
+    if (k.includes('cfk') || k.includes('gfk') || k.includes('faser') || k.includes('carbon')) return 'composite';
+    if (k.includes('holz') || k.includes('buche') || k.includes('birke') || k.includes('pappel') || k.includes('mdf') || k.includes('wood')) return 'wood';
+    if (k.includes('stahl') || k.includes('titan') || k.includes('eisen') || k.includes('steel')) return 'steel';
+    const m = typeof MATERIALS !== 'undefined' ? MATERIALS.find((x) => String(x.k || '').toLowerCase() === k || String(x.name || '').toLowerCase() === k) : null;
+    if (m) {
+      if (m.cat === 'Kunststoffe') return 'plastic';
+      if (m.cat === 'Holz & Platten') return 'wood';
+      if (m.cat === 'Faserverbund') return 'composite';
+      if (m.cat === 'Metalle') return 'steel';
+    }
+    if (/(pla|petg|abs|asa|tpu|pa6|pa12|nylon|pom|pc|kunststoff|plastic)/i.test(k)) return 'plastic';
+    return 'steel';
+  }
+  function resolveCapItem(cap, doc = App.doc) {
+    if (!doc || !Array.isArray(doc.items)) return null;
+    if (cap && cap.partId) {
+      const direct = doc.items.find((x) => x.id === cap.partId);
+      if (direct) return direct;
+      const found = Model.find(doc, cap.partId);
+      if (found && found.item) return found.item;
+    }
+    const solids = Model.activeItems(doc).filter((it) => it && it.role !== 'hole' && !(typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)));
+    return (cap && typeof cap.partIdx === 'number' && solids[cap.partIdx]) || null;
+  }
+  function itemExplicitMaterial(it, doc = App.doc) {
+    if (it && it.mat) return String(it.mat);
+    if (it && it.kind === 'ref' && it.p && it.p.docId && typeof Model.resolveDoc === 'function') {
+      const rd = Model.resolveDoc(it.p.docId);
+      if (rd) {
+        if (rd.settings && rd.settings.material) return String(rd.settings.material);
+        const solids = Model.activeItems(rd).filter((x) => x && x.role !== 'hole');
+        const mats = [...new Set(solids.map((x) => x.mat).filter(Boolean))];
+        if (mats.length === 1) return String(mats[0]);
+      }
+    }
+    if (doc && doc.settings && doc.settings.material) return String(doc.settings.material);
+    return null;
+  }
+  function capMaterialInfo(cap, doc = App.doc) {
+    const it = resolveCapItem(cap, doc);
+    const matKey = itemExplicitMaterial(it, doc);
+    return { item: it, matKey, pattern: hatchPatternForMaterial(matKey) };
   }
   function freeGeom(sh = dwg()) {
     if (!sh.free.length) return null;
@@ -2783,10 +3100,11 @@ const Drawing = (() => {
           const away = Math.hypot(best.c[0] - mx, best.c[1] - my) > 1e-6 ? (Math.atan2(best.c[1] - my, best.c[0] - mx) * 180) / Math.PI : 30;
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
-          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
+          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && (Math.abs(th.r - best.r) < 0.45 || Math.abs(th.rThread - best.r) < 0.45));
           const subId = dim.id + '_' + Math.round(best.r * 200);
           const subTol = dim.tols && dim.tols[subId] ? dim.tols[subId] : undefined;
-          const item = { ...dim, id: subId, type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length, st)}` } : {}) };
+          const thLbl = mt ? ((mt.source === 'cosmetic' || mt.blind0 || mt.blind1) ? `${mt.size} × ${fmtDim(mt.length, st)}` : `${mt.size}`) : null;
+          const item = { ...dim, id: subId, type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(thLbl ? { threadLabel: thLbl } : {}) };
           delete item.tols;
           if (subTol) item.tol = subTol;
           out.push(item);
@@ -3070,64 +3388,93 @@ const Drawing = (() => {
     const byScale = s >= 2 ? 3.2 : s >= 1 ? 2.5 : s >= 0.5 ? 2.0 : 1.6;
     return clamp(Math.min(byScale, Math.max(1.2, diagMm / 18)), 1.2, 4.5);
   }
-  function buildHatchLines(v, sec, lines) {
+  function buildHatchLines(v, sec, lines, sh = dwg()) {
     const caps = (v.geo && v.geo.caps) || [];
     if (!caps.length) return;
     const paperStep = hatchStepSheet(v.s, v.geo);
-    const modelStep = paperStep / (v.s || 1);
+    const useMat = materialHatchActive(sh);
     for (let capIdx = 0; capIdx < caps.length; capIdx++) {
       const cap = caps[capIdx];
       const loops = [cap.outer, ...(cap.holes || [])].filter((lp) => lp && lp.length >= 3);
       if (!loops.length) continue;
-      const deg = (cap.partIdx % 2 === 1) ? 135 : 45;
-      const rad = (deg * Math.PI) / 180;
-      const tx = Math.cos(rad), ty = Math.sin(rad), nx = -ty, ny = tx;
-      let bMin = Infinity, bMax = -Infinity;
-      const rotLoops = loops.map((lp) => lp.map((p) => {
-        const a = p[0] * tx + p[1] * ty;
-        const b = p[0] * nx + p[1] * ny;
-        if (b < bMin) bMin = b;
-        if (b > bMax) bMax = b;
-        return [a, b];
-      }));
-      if (!isFinite(bMin) || bMax - bMin < 1e-6) continue;
-      let k0 = Math.ceil((bMin + 1e-6) / modelStep);
-      let k1 = Math.floor((bMax - 1e-6) / modelStep);
-      const bs = [];
-      if (k0 <= k1) {
-        for (let k = k0; k <= k1; k++) bs.push(k * modelStep);
-      } else {
-        bs.push((bMin + bMax) * 0.5);
-      }
-      for (const b0 of bs) {
-        const hits = [];
-        for (const lp of rotLoops) {
-          for (let i = 0, n = lp.length; i < n; i++) {
-            const p0 = lp[i], p1 = lp[(i + 1) % n];
-            if ((p0[1] <= b0 && p1[1] > b0) || (p1[1] <= b0 && p0[1] > b0)) {
-              const t = (b0 - p0[1]) / (p1[1] - p0[1]);
-              hits.push(p0[0] + t * (p1[0] - p0[0]));
+      const mi = useMat ? capMaterialInfo(cap) : { item: null, matKey: null, pattern: 'steel' };
+      const pat = HATCH_PATTERNS[mi.pattern] || HATCH_PATTERNS.steel;
+      const odd = cap.partIdx % 2 === 1;
+      const angles = odd ? pat.flipAngles : pat.angles;
+      const effModelStep = (paperStep * pat.stepMul) / (v.s || 1);
+      const phase = (odd && pat.oddPhase) ? pat.oddPhase * effModelStep : 0;
+      const pairGap = pat.pairOff > 0 ? (paperStep * pat.pairOff) / (v.s || 1) : 0;
+      const partId = cap.partId || (mi.item ? mi.item.id : '');
+      for (const deg of angles) {
+        const rad = (deg * Math.PI) / 180;
+        const tx = Math.cos(rad), ty = Math.sin(rad), nx = -ty, ny = tx;
+        let bMin = Infinity, bMax = -Infinity;
+        const rotLoops = loops.map((lp) => lp.map((p) => {
+          const a = p[0] * tx + p[1] * ty;
+          const b = p[0] * nx + p[1] * ny;
+          if (b < bMin) bMin = b;
+          if (b > bMax) bMax = b;
+          return [a, b];
+        }));
+        if (!isFinite(bMin) || bMax - bMin < 1e-6) continue;
+        const k0 = Math.ceil((bMin + 1e-6 - phase) / effModelStep);
+        const k1 = Math.floor((bMax - 1e-6 - phase) / effModelStep);
+        const bs = [];
+        if (k0 <= k1) {
+          const kStart = pairGap > 0 ? k0 - 1 : k0;
+          for (let k = kStart; k <= k1; k++) {
+            const b0 = k * effModelStep + phase;
+            if (b0 >= bMin + 1e-6 && b0 <= bMax - 1e-6) bs.push({ b0, k });
+            if (pairGap > 0) {
+              const b2 = b0 + pairGap;
+              if (b2 >= bMin + 1e-6 && b2 <= bMax - 1e-6) bs.push({ b0: b2, k });
             }
           }
         }
-        hits.sort((x, y) => x - y);
-        for (let i = 0; i + 1 < hits.length; i += 2) {
-          const a0 = hits[i], a1 = hits[i + 1];
-          if (a1 - a0 < 1e-5) continue;
-          const P0 = [a0 * tx + b0 * nx, a0 * ty + b0 * ny];
-          const P1 = [a1 * tx + b0 * nx, a1 * ty + b0 * ny];
-          const emitSeg = (S0, S1) => {
-            if (Math.hypot(S1[0] - S0[0], S1[1] - S0[1]) > 1e-4) {
-              lines.push({ pts: [toSheet(v, S0), toSheet(v, S1)], cls: 'hatch', id: sec.id, secId: sec.id, capIdx, secType: sec.type || 'full' });
+        if (!bs.length) bs.push({ b0: (bMin + bMax) * 0.5, k: 0 });
+        for (const { b0, k } of bs) {
+          const isDashed = !!(pat.altDash && (Math.abs(k) % 2 === 1));
+          const hits = [];
+          for (const lp of rotLoops) {
+            for (let i = 0, n = lp.length; i < n; i++) {
+              const p0 = lp[i], p1 = lp[(i + 1) % n];
+              if ((p0[1] <= b0 && p1[1] > b0) || (p1[1] <= b0 && p0[1] > b0)) {
+                const t = (b0 - p0[1]) / (p1[1] - p0[1]);
+                hits.push(p0[0] + t * (p1[0] - p0[0]));
+              }
             }
-          };
-          if (cap.strip) {
-            const clipped = clipSegStrip(P0, P1, cap.strip.ax, cap.strip.ay, cap.strip.lo, cap.strip.hi);
-            if (clipped) emitSeg(clipped[0], clipped[1]);
-          } else if (cap.clipPoly) {
-            for (const sub of clipSegPolygon(P0, P1, cap.clipPoly, true)) emitSeg(sub[0], sub[1]);
-          } else {
-            emitSeg(P0, P1);
+          }
+          hits.sort((x, y) => x - y);
+          for (let i = 0; i + 1 < hits.length; i += 2) {
+            const a0 = hits[i], a1 = hits[i + 1];
+            if (a1 - a0 < 1e-5) continue;
+            const P0 = [a0 * tx + b0 * nx, a0 * ty + b0 * ny];
+            const P1 = [a1 * tx + b0 * nx, a1 * ty + b0 * ny];
+            const emitSeg = (S0, S1) => {
+              if (Math.hypot(S1[0] - S0[0], S1[1] - S0[1]) > 1e-4) {
+                lines.push({
+                  pts: [toSheet(v, S0), toSheet(v, S1)],
+                  cls: 'hatch',
+                  extraCls: isDashed ? 'hatch-dash' : '',
+                  dashed: isDashed,
+                  hatchPat: pat.key,
+                  matKey: mi.matKey || '',
+                  partId,
+                  id: sec.id,
+                  secId: sec.id,
+                  capIdx,
+                  secType: sec.type || 'full',
+                });
+              }
+            };
+            if (cap.strip) {
+              const clipped = clipSegStrip(P0, P1, cap.strip.ax, cap.strip.ay, cap.strip.lo, cap.strip.hi);
+              if (clipped) emitSeg(clipped[0], clipped[1]);
+            } else if (cap.clipPoly) {
+              for (const sub of clipSegPolygon(P0, P1, cap.clipPoly, true)) emitSeg(sub[0], sub[1]);
+            } else {
+              emitSeg(P0, P1);
+            }
           }
         }
       }
@@ -3390,7 +3737,7 @@ const Drawing = (() => {
         if (p.arc) l.arc = { c: toSheet(v, p.c), r: p.r * v.s, a: p.arc };
         return l;
       };
-      if (v.isSection) buildHatchLines(v, v.section, lines);
+      if (v.isSection) buildHatchLines(v, v.section, lines, sh);
       for (const p of v.geo.polys) lines.push(asLine(p, 'vis'));
       for (const p of v.geo.tangents || []) lines.push(asLine(p, 'tan'));
       for (const p of v.geo.hidden) lines.push(asLine(p, 'hid'));
@@ -3426,22 +3773,43 @@ const Drawing = (() => {
           lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name, id: c.id, ctrType: c.ctrGroup || 'line' });
         }
       }
-      // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
+      // Kosmetische & Norm-Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seiten-/Schnittansicht)
       const labelSide = !v.detail && (name === 'front' || (name === 'left' && !lay.views.front));
+      const showHid = v.opts ? !!v.opts.hidden : !!sh.hidden;
       for (const th of v.geo.threads || []) {
         if (th.type === 'end') {
           const C = toSheet(v, th.c), rr = th.rThread * v.s;
-          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin', view: name });
+          if (rr > 0.3) {
+            lines.push({
+              pts: arcPts(th.c, th.rThread, THREAD_ARC_START, THREAD_ARC_START + THREAD_ARC_SPAN).map((q) => toSheet(v, q)),
+              arc: { c: C, r: rr, a: [THREAD_ARC_START, THREAD_ARC_START + THREAD_ARC_SPAN] },
+              cls: 'thin',
+              extraCls: 'thread',
+              thread: 'end',
+              threadKind: th.kind,
+              threadSize: th.size,
+              view: name,
+            });
+          }
         } else if (th.type === 'side') {
           const A = toSheet(v, th.a), B = toSheet(v, th.b);
           const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
           if (L < 0.3) continue;
           const px = -dy / L, py = dx / L, rt = th.rThread * v.s, ro = th.r * v.s;
-          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin', view: name });
-          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin', view: name });
-          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis', view: name });
-          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis', view: name });
-          if (labelSide) {
+          const isHiddenInt = th.kind === 'int' && (!v.isSection || !th.isCut);
+          if (isHiddenInt && !showHid) continue;
+          const lineCls = isHiddenInt ? 'hid' : 'thin';
+          const endCls = isHiddenInt ? 'hid' : 'vis';
+          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: lineCls, extraCls: 'thread', thread: 'side', threadKind: th.kind, threadSize: th.size, view: name });
+          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: lineCls, extraCls: 'thread', thread: 'side', threadKind: th.kind, threadSize: th.size, view: name });
+          if (th.kind === 'ext') {
+            lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis', extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+            lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis', extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+          } else {
+            if (th.blind0) lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [A[0] + px * rt, A[1] + py * rt]], cls: endCls, extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+            if (th.blind1) lines.push({ pts: [[B[0] - px * rt, B[1] - py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: endCls, extraCls: 'thread-end', threadEnd: true, threadKind: th.kind, threadSize: th.size, view: name });
+          }
+          if (labelSide && th.source === 'cosmetic') {
             const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
             const P0 = [mx + px * ro, my + py * ro];
             const P1 = [P0[0] + px * 5 + 3, P0[1] + py * 5 - 4];
@@ -3570,7 +3938,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -3596,7 +3964,7 @@ const Drawing = (() => {
       else if (l.circle) { el = document.createElementNS(NS, 'circle'); el.setAttribute('cx', f(l.circle[0])); el.setAttribute('cy', f(l.circle[1])); el.setAttribute('r', f(l.circle[2])); }
       else if (l.poly) { el = document.createElementNS(NS, 'polygon'); el.setAttribute('points', l.poly.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       else { el = document.createElementNS(NS, 'polyline'); el.setAttribute('points', l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
-      el.setAttribute('class', l.cls + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
+      el.setAttribute('class', l.cls + (l.extraCls ? ' ' + l.extraCls : '') + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
       if (interactive) {
         if (l.id) el.dataset.id = l.id;
         if (l.lost) el.dataset.lost = '1';
@@ -3605,6 +3973,12 @@ const Drawing = (() => {
         if (l.secId) el.dataset.sec = l.secId;
         if (l.secType) el.dataset.secType = l.secType;
         if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
+        if (l.thread) el.dataset.thread = l.thread;
+        if (l.threadKind) el.dataset.threadKind = l.threadKind;
+        if (l.threadSize) el.dataset.threadSize = l.threadSize;
+        if (l.hatchPat) el.dataset.hatchPat = l.hatchPat;
+        if (l.matKey) el.dataset.mat = l.matKey;
+        if (l.partId) el.dataset.part = l.partId;
         if (l.noteTip) el.dataset.tipKind = l.noteTip;
         if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
         if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
@@ -5637,6 +6011,20 @@ const Drawing = (() => {
     if (!val && selDim && String(selDim).startsWith('ctr|')) selDim = null;
     render(); Panels.renderRight();
   }
+  function setNormThreads(on) {
+    const val = !!on;
+    const cur = dwg();
+    if ((cur.normThreads !== false) === val) return;
+    App.change(val ? 'Gewinde nach Norm eingeblendet' : 'Gewinde nach Norm ausgeblendet', () => { dwg().normThreads = val; });
+    render(); Panels.renderRight();
+  }
+  function setMaterialHatch(on) {
+    const val = !!on;
+    const cur = dwg();
+    if ((cur.materialHatch !== false) === val) return;
+    App.change(val ? 'Schraffur je Werkstoff aktiviert' : 'Schraffur je Werkstoff deaktiviert', () => { dwg().materialHatch = val; });
+    render(); Panels.renderRight();
+  }
   function hideCenter(id) {
     if (!id || !String(id).startsWith('ctr|')) return false;
     const d = dwg();
@@ -6025,6 +6413,7 @@ const Drawing = (() => {
       if (!st) continue;
       out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : '0.067')} G ${pf(st[0] * PT)} w`);
       if (l.lost && l.cls === 'dim') out.push(`[${pf(2 * PT)} ${pf(1 * PT)}] 0 d`);
+      else if (l.cls === 'hatch' && l.dashed) out.push(`[${pf(3 * PT)} ${pf(1.2 * PT)}] 0 d`);
       else if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
       else out.push('[] 0 d');
       if (l.rect) {
@@ -6150,6 +6539,7 @@ const Drawing = (() => {
     ['SCHRAFFUR', 'CONTINUOUS', 8],
     ['SCHNITTLINIE', 'CENTER', 1],
     ['BEMASSUNG', 'CONTINUOUS', 3],
+    ['GEWINDE', 'CONTINUOUS', 4],
     ['RAHMEN', 'CONTINUOUS', 7],
   ];
   function dxfEscText(s) {
@@ -6192,8 +6582,8 @@ const Drawing = (() => {
       stats.lines++; bumpLayer(ly);
     };
     for (const l of cur.lines || []) {
-      const ly = layer[l.cls]; if (!ly) continue;
-      const lt = l.cls === 'breakline' ? 'CONTINUOUS' : null;
+      const ly = (l.thread || l.threadEnd) ? 'GEWINDE' : layer[l.cls]; if (!ly) continue;
+      const lt = l.cls === 'breakline' ? 'CONTINUOUS' : ((l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
       if (l.rect) {
         const [x, y, w, hh] = l.rect;
         const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]];
@@ -6218,7 +6608,7 @@ const Drawing = (() => {
       } else if (l.arc) {
         // echter Bogen (gegen den Uhrzeigersinn); die Winkel der Ansicht gelten unverändert, weil DXF wie die Ansicht nach oben zählt
         const deg = (x) => ((((x * 180) / Math.PI) % 360) + 360) % 360;
-        P(0, 'ARC', 8, ly, 10, l.arc.c[0].toFixed(4), 20, Y(l.arc.c[1]).toFixed(4), 30, 0, 40, l.arc.r.toFixed(4), 50, deg(l.arc.a[0]).toFixed(4), 51, deg(l.arc.a[1]).toFixed(4));
+        P(0, 'ARC', 8, ly, ...(lt ? [6, lt] : []), 10, l.arc.c[0].toFixed(4), 20, Y(l.arc.c[1]).toFixed(4), 30, 0, 40, l.arc.r.toFixed(4), 50, deg(l.arc.a[0]).toFixed(4), 51, deg(l.arc.a[1]).toFixed(4));
         stats.arcs++; bumpLayer(ly);
       } else if (l.pts && l.pts.length === 2) {
         line(l.pts[0], l.pts[1], ly, lt);
@@ -6852,6 +7242,81 @@ const Drawing = (() => {
       secBox.append(lst);
     }
     w.append(secBox);
+    // Norm-Darstellung (Profi): Gewinde (ZE-20) & Werkstoff-Schraffur (ZE-28)
+    if (!isSimpleMode()) {
+      const normSec = h('div', { class: 'section pro', id: 'dw-norm-sec' }, h('div', { class: 'section-h' }, T('draw.panel.normSec')));
+      const thChk = h('label', { class: 'check', 'data-help': 'drawingNormThreads' },
+        h('input', { type: 'checkbox', id: 'dw-norm-threads', checked: d.normThreads !== false }),
+        T('draw.panel.normThreads'));
+      thChk.querySelector('input').onchange = (e) => setNormThreads(e.target.checked);
+      normSec.append(thChk);
+      const thList = docThreads();
+      if (thList.length) {
+        const sizes = [...new Set(thList.map((x) => x.size).filter(Boolean))].join(', ');
+        normSec.append(h('div', {
+          class: 'mini-row',
+          id: 'dw-threads-summary',
+          style: { fontSize: '11.5px', color: 'var(--muted)', paddingLeft: '22px' },
+        }, thList.length === 1 ? T('draw.panel.threadsFoundOne', { sizes }) : T('draw.panel.threadsFoundMany', { n: thList.length, sizes })));
+      }
+      const mhChk = h('label', { class: 'check', 'data-help': 'drawingMaterialHatch' },
+        h('input', { type: 'checkbox', id: 'dw-mat-hatch', checked: d.materialHatch !== false }),
+        T('draw.panel.matHatch'));
+      mhChk.querySelector('input').onchange = (e) => setMaterialHatch(e.target.checked);
+      normSec.append(mhChk);
+      if (d.materialHatch !== false) {
+        const usedMats = new Map();
+        for (const top of Model.activeItems(App.doc)) {
+          if (!top || top.role === 'hole' || (typeof App.mergedInto === 'function' && App.mergedInto(top.id))) continue;
+          const mk = itemExplicitMaterial(top, App.doc);
+          if (!mk) continue;
+          const pk = hatchPatternForMaterial(mk);
+          if (!usedMats.has(mk)) usedMats.set(mk, pk);
+        }
+        if (usedMats.size) {
+          const swatchSvg = (pk) => {
+            const segs = [];
+            if (pk === 'alu') {
+              for (const x of [-4, 6, 16]) {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"/>`);
+                segs.push(`<line x1="${x + 2.4}" y1="14" x2="${x + 16.4}" y2="0"/>`);
+              }
+            } else if (pk === 'brass') {
+              [-4, 2, 8, 14, 20].forEach((x, idx) => {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"${idx % 2 === 1 ? ' stroke-dasharray="3 1.4"' : ''}/>`);
+              });
+            } else if (pk === 'plastic') {
+              for (const x of [-4, 3, 10, 17]) {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"/>`);
+                segs.push(`<line x1="${x}" y1="0" x2="${x + 14}" y2="14"/>`);
+              }
+            } else if (pk === 'composite') {
+              for (const x of [-4, 4, 12, 20]) {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 20}" y2="0"/>`);
+                segs.push(`<line x1="${x}" y1="0" x2="${x + 20}" y2="14"/>`);
+              }
+            } else if (pk === 'wood') {
+              [-4, 3, 10, 17].forEach((x, idx) => {
+                segs.push(`<line x1="${x}" y1="14" x2="${x + 20}" y2="0"${idx % 2 === 1 ? ' stroke-dasharray="3 1.4"' : ''}/>`);
+              });
+            } else {
+              for (const x of [-4, 2, 8, 14, 20]) segs.push(`<line x1="${x}" y1="14" x2="${x + 14}" y2="0"/>`);
+            }
+            return `<svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true" style="border:1px solid var(--line-strong);border-radius:3px;background:#fff;flex-shrink:0"><g stroke="#111" stroke-width="0.9">${segs.join('')}</g></svg>`;
+          };
+          const leg = h('div', { class: 'mini-list', id: 'dw-hatch-legend', style: { marginTop: '4px' } });
+          for (const [mk, pk] of usedMats.entries()) {
+            const pat = HATCH_PATTERNS[pk] || HATCH_PATTERNS.steel;
+            const row = h('div', { class: 'mini-row', 'data-mat': mk, 'data-hatch-pat': pk, style: { gap: '8px', alignItems: 'center' } });
+            row.innerHTML = swatchSvg(pk);
+            row.append(h('b', { style: { fontSize: '12px' } }, mk), h('span', { class: 'grow', style: { fontSize: '11.5px', color: 'var(--muted)', textAlign: 'right' } }, pat.label));
+            leg.append(row);
+          }
+          normSec.append(leg);
+        }
+      }
+      w.append(normSec);
+    }
     // Detailansichten (ZE-03)
     const detSec = h('div', { class: 'section', 'data-help': 'drawingDetail' }, h('div', { class: 'section-h' }, T('draw.panel.detailsSec')));
     if (tool === 'detail') {
@@ -7219,6 +7684,7 @@ const Drawing = (() => {
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   App.on('docLoaded', () => { lastLostKey = ''; });
+  if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
     open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
@@ -7236,6 +7702,10 @@ const Drawing = (() => {
     get selectedId() { return selDim; },
     SECTION_MODES, setSectionMode, sectionMenu, finishSectionTool,
     addSection, updateSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
+    HATCH_PATTERNS, hatchPatternForMaterial, setNormThreads, setMaterialHatch,
+    normThreads: () => normThreadsActive(),
+    materialHatch: () => materialHatchActive(),
+    threads: () => docThreads(),
     get sectionMode() { return sectionMode; },
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
