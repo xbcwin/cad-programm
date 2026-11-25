@@ -2699,6 +2699,46 @@ const Model = (() => {
         delete doc.asmVariant;
       }
     }
+    if (doc.tolChains != null && !Array.isArray(doc.tolChains)) doc.tolChains = [];
+    if (Array.isArray(doc.tolChains)) {
+      const VALID_TC_KEYS = new Set(['X', 'Y', 'Z', 'face']);
+      doc.tolChains = doc.tolChains
+        .filter((tc) => tc && typeof tc === 'object' && Array.isArray(tc.items))
+        .map((tc) => {
+          const dirKey = VALID_TC_KEYS.has(tc.dirKey) ? tc.dirKey : 'X';
+          const rawDir = Array.isArray(tc.dir) && tc.dir.length >= 3 ? tc.dir.map((v) => Number(v) || 0) : [1, 0, 0];
+          const dl = Math.hypot(rawDir[0], rawDir[1], rawDir[2]);
+          const dir = dl > 1e-9 ? [rawDir[0] / dl, rawDir[1] / dl, rawDir[2] / dl] : [1, 0, 0];
+          const defTol = Number(tc.defaultTol);
+          const items = tc.items
+            .filter((it) => it && typeof it === 'object')
+            .map((it, idx) => {
+              const nom = Number(it.nominal);
+              const tpRaw = it.tolPlus != null ? Number(it.tolPlus) : Number(it.tol);
+              const tmRaw = it.tolMinus != null ? Number(it.tolMinus) : Number(it.tol);
+              const tolPlus = Number.isFinite(tpRaw) && tpRaw >= 0 ? tpRaw : 0.1;
+              const tolMinus = Number.isFinite(tmRaw) && tmRaw >= 0 ? tmRaw : 0.1;
+              return {
+                id: typeof it.id === 'string' && it.id ? it.id : uid('tc'),
+                label: typeof it.label === 'string' && it.label.trim() ? it.label.trim() : `Maß ${idx + 1}`,
+                sign: it.sign === -1 ? -1 : 1,
+                nominal: Number.isFinite(nom) ? nom : 0,
+                tolPlus,
+                tolMinus,
+                itemId: typeof it.itemId === 'string' && it.itemId ? it.itemId : null,
+                autoExtent: it.autoExtent !== false && typeof it.itemId === 'string' && !!it.itemId,
+              };
+            });
+          return {
+            id: typeof tc.id === 'string' && tc.id ? tc.id : uid('tch'),
+            name: typeof tc.name === 'string' && tc.name.trim() ? tc.name.trim() : 'Toleranzkette',
+            dirKey,
+            dir,
+            defaultTol: Number.isFinite(defTol) && defTol >= 0 ? defTol : 0.1,
+            items,
+          };
+        });
+    }
     if (doc.motion != null) {
       if (typeof doc.motion !== 'object' || Array.isArray(doc.motion)) {
         delete doc.motion;

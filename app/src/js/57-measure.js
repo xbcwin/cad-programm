@@ -1024,30 +1024,32 @@ const Measure = (() => {
       updateStatus();
       if (silSt && silSt.onlySel) drawSilhouette();
     });
-    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); if (silSt) drawSilhouette(); });
+    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); if (silSt) drawSilhouette(); if (tcSt) onTolChainResults(); });
     App.on('remeshed', relink);
     App.on('rebuilt', updateCalc);
-    App.on('docLoaded', stopFieldPick);
+    App.on('docLoaded', () => { stopFieldPick(); stopTolChainPick(); stopTolChainFacePick(); });
     let lastUnit = Units.key();
     let lastFmt = `${FMT.dec}:${FMT.angle}`;
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
       ViewPrefs.on('change', () => {
+        if (tcSt && ViewPrefs.simple) tolChain(false);
         const curFmt = `${FMT.dec}:${FMT.angle}`;
-        if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); if (silSt) updateSilUI(); }
+        if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); if (silSt) updateSilUI(); if (tcSt) updateTolChainUI(); }
       });
     }
     if (typeof I18n !== 'undefined' && I18n.on) {
-      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } if (silSt) { buildSilBar(); updateSilUI(); } });
+      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } if (silSt) { buildSilBar(); updateSilUI(); } if (tcSt) { buildTolChainBar(); updateTolChainUI(); } });
     }
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
-      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (draftSt) updateDraftUI(); if (silSt) updateSilUI(); }
+      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (draftSt) updateDraftUI(); if (silSt) updateSilUI(); if (tcSt) updateTolChainUI(); }
       drawSaved();
       updateStatus();
+      if (tcSt) { syncTolChainStateFromDoc(); updateTolChainUI(); drawTolChainOverlay(); }
     });
-    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (draftSt) draft(false); if (silSt) silhouette(false); stopFieldPick(); } drawSaved(); updateStatus(); });
+    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (draftSt) draft(false); if (silSt) silhouette(false); if (tcSt) tolChain(false); stopFieldPick(); } drawSaved(); updateStatus(); });
     App.on('sketch', updateStatus);
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
@@ -2165,6 +2167,882 @@ const Measure = (() => {
     syncDraftButtons();
     return true;
   }
+  // ---------- Toleranzkette in einer Richtung (BG-33) ----------
+  const TC_DIRS = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
+  let tcSt = null;
+
+  function normalizeTcDir(val) {
+    if (typeof val === 'string') {
+      const k = val.trim().toUpperCase();
+      if (TC_DIRS[k]) return { dirKey: k, dir: TC_DIRS[k].slice() };
+    }
+    if (Array.isArray(val) && val.length >= 3) {
+      const x = Number(val[0]) || 0, y = Number(val[1]) || 0, z = Number(val[2]) || 0;
+      const l = Math.hypot(x, y, z);
+      if (l > 1e-9) {
+        const u = [x / l, y / l, z / l];
+        for (const [k, d] of Object.entries(TC_DIRS)) {
+          if (Math.abs(u[0] * d[0] + u[1] * d[1] + u[2] * d[2]) > 0.9999) return { dirKey: k, dir: d.slice() };
+        }
+        return { dirKey: 'face', dir: u };
+      }
+    }
+    return { dirKey: 'X', dir: [1, 0, 0] };
+  }
+
+  function partExtentAlongDir(itemId, dirArg = [1, 0, 0]) {
+    if (!itemId || !App.doc) return null;
+    const { dir } = normalizeTcDir(dirArg);
+    let rid = itemId;
+    let guard = 0;
+    while (rid && App.mergedInto && App.mergedInto(rid) && guard++ < 12) rid = App.mergedInto(rid);
+    const node = Viewer.nodes.get(rid) || Viewer.nodes.get(itemId);
+    const dVec = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
+    let minP = Infinity, maxP = -Infinity;
+    const sum = new THREE.Vector3();
+    let count = 0;
+    const v = new THREE.Vector3();
+    if (node && node.mesh && node.mesh.geometry && node.mesh.geometry.attributes && node.mesh.geometry.attributes.position) {
+      node.obj.updateMatrixWorld(true);
+      const pos = node.mesh.geometry.attributes.position;
+      const M = node.mesh.matrixWorld;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(M);
+        const p = v.dot(dVec);
+        if (p < minP) minP = p;
+        if (p > maxP) maxP = p;
+        sum.add(v);
+        count++;
+      }
+    } else {
+      const r = App.results.get(rid) || App.results.get(itemId);
+      const b = (r && r.data && r.data.bbox) || (App.localBox ? App.localBox(rid) : null);
+      if (!b || b.length < 6) return null;
+      const M = Model.worldMatrix ? Model.worldMatrix(App.doc, rid) : new THREE.Matrix4();
+      for (const x of [b[0], b[3]]) {
+        for (const y of [b[1], b[4]]) {
+          for (const z of [b[2], b[5]]) {
+            v.set(x, y, z).applyMatrix4(M);
+            const p = v.dot(dVec);
+            if (p < minP) minP = p;
+            if (p > maxP) maxP = p;
+            sum.add(v);
+            count++;
+          }
+        }
+      }
+    }
+    if (!count || !Number.isFinite(minP) || !Number.isFinite(maxP)) return null;
+    const center = sum.divideScalar(count);
+    const cProj = center.dot(dVec);
+    const startPt = center.clone().addScaledVector(dVec, minP - cProj).toArray();
+    const endPt = center.clone().addScaledVector(dVec, maxP - cProj).toArray();
+    return {
+      extent: round(Math.max(0, maxP - minP), 4),
+      minP: round(minP, 4),
+      maxP: round(maxP, 4),
+      center: center.toArray(),
+      startPt,
+      endPt,
+    };
+  }
+
+  function evalTolChain(chainOrItems) {
+    const rawItems = Array.isArray(chainOrItems)
+      ? chainOrItems
+      : (chainOrItems && Array.isArray(chainOrItems.items) ? chainOrItems.items : []);
+    let nomSum = 0, meanSum = 0, wcTol = 0, rssSq = 0, hasNegSign = false;
+    const items = [];
+    for (let i = 0; i < rawItems.length; i++) {
+      const x = rawItems[i] || {};
+      const sign = x.sign === -1 ? -1 : 1;
+      if (sign === -1) hasNegSign = true;
+      const nom = Number(x.nominal);
+      const nominal = Number.isFinite(nom) ? nom : 0;
+      const tpRaw = x.tolPlus != null ? Number(x.tolPlus) : Math.abs(Number(x.tol) || 0);
+      const tmRaw = x.tolMinus != null ? Number(x.tolMinus) : Math.abs(Number(x.tol) || 0);
+      const tolPlus = Number.isFinite(tpRaw) && tpRaw >= 0 ? tpRaw : 0;
+      const tolMinus = Number.isFinite(tmRaw) && tmRaw >= 0 ? tmRaw : 0;
+      const mid = nominal + (tolPlus - tolMinus) / 2;
+      const half = (tolPlus + tolMinus) / 2;
+      nomSum += sign * nominal;
+      meanSum += sign * mid;
+      wcTol += half;
+      rssSq += half * half;
+      items.push({
+        id: x.id || `tc_${i}`,
+        label: x.label || `Maß ${i + 1}`,
+        sign,
+        nominal: round(nominal, 6),
+        tolPlus: round(tolPlus, 6),
+        tolMinus: round(tolMinus, 6),
+        itemId: x.itemId || null,
+        autoExtent: !!x.autoExtent,
+      });
+    }
+    const rssTol = Math.sqrt(rssSq);
+    const wcMin = meanSum - wcTol;
+    const wcMax = meanSum + wcTol;
+    const rssMin = meanSum - rssTol;
+    const rssMax = meanSum + rssTol;
+    return {
+      count: items.length,
+      nominal: round(nomSum, 6),
+      mean: round(meanSum, 6),
+      worstCaseTol: round(wcTol, 6),
+      worstCaseMin: round(wcMin, 6),
+      worstCaseMax: round(wcMax, 6),
+      rssTol: round(rssTol, 6),
+      rssMin: round(rssMin, 6),
+      rssMax: round(rssMax, 6),
+      hasNegSign,
+      interferes: hasNegSign && wcMin < -1e-6,
+      items,
+    };
+  }
+
+  function docTolChain(doc = App.doc) {
+    return (doc && Array.isArray(doc.tolChains) && doc.tolChains[0]) ? doc.tolChains[0] : null;
+  }
+
+  function ensureDocTolChain(doc) {
+    doc.tolChains = Array.isArray(doc.tolChains) ? doc.tolChains : [];
+    if (!doc.tolChains.length) {
+      const norm = tcSt ? normalizeTcDir(tcSt.dirKey === 'face' ? tcSt.dir : tcSt.dirKey) : { dirKey: 'X', dir: [1, 0, 0] };
+      const defTol = tcSt && Number.isFinite(tcSt.defaultTol) ? tcSt.defaultTol : 0.1;
+      doc.tolChains.push({
+        id: uid('tch'),
+        name: T('tc.defaultName'),
+        dirKey: norm.dirKey,
+        dir: norm.dir.slice(),
+        defaultTol: defTol,
+        items: [],
+      });
+    }
+    return doc.tolChains[0];
+  }
+
+  function activeTolChainSpec() {
+    const saved = docTolChain(App.doc);
+    if (saved) return saved;
+    const norm = tcSt ? normalizeTcDir(tcSt.dirKey === 'face' ? tcSt.dir : tcSt.dirKey) : { dirKey: 'X', dir: [1, 0, 0] };
+    return {
+      id: null,
+      name: T('tc.defaultName'),
+      dirKey: norm.dirKey,
+      dir: norm.dir,
+      defaultTol: tcSt ? tcSt.defaultTol : 0.1,
+      items: [],
+    };
+  }
+
+  function syncTolChainStateFromDoc() {
+    if (!tcSt) return;
+    const saved = docTolChain(App.doc);
+    if (saved) {
+      const norm = normalizeTcDir(saved.dirKey === 'face' ? saved.dir : saved.dirKey);
+      tcSt.dirKey = norm.dirKey;
+      tcSt.dir = norm.dir;
+      if (Number.isFinite(saved.defaultTol) && saved.defaultTol >= 0) tcSt.defaultTol = saved.defaultTol;
+    }
+  }
+
+  function clearTolChainOverlay() {
+    if (!tcSt) return;
+    const g = Viewer.groups.overlay;
+    if (g) {
+      for (const o of tcSt.overlayObjs || []) {
+        g.remove(o);
+        Viewer.disposeFat(o);
+      }
+    }
+    tcSt.overlayObjs = [];
+    Viewer.requestRender();
+  }
+
+  function drawTolChainOverlay() {
+    if (!tcSt) return;
+    clearTolChainOverlay();
+    const spec = activeTolChainSpec();
+    const g = Viewer.groups.overlay;
+    if (!g || !spec.items || !spec.items.length) return;
+    const dVec = new THREE.Vector3(...tcSt.dir).normalize();
+    const refUp = Math.abs(dVec.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+    const tickDir = new THREE.Vector3().crossVectors(dVec, refUp).normalize();
+    let idx = 0;
+    for (const it of spec.items) {
+      if (!it || !it.itemId) continue;
+      const ext = partExtentAlongDir(it.itemId, tcSt.dir);
+      if (!ext || !ext.startPt || !ext.endPt) continue;
+      const col = it.sign === -1 ? '#e8590c' : '#0ca678';
+      const offset = ((idx % 3) - 1) * 0.4;
+      const a = new THREE.Vector3(...ext.startPt).addScaledVector(tickDir, offset);
+      const b = new THREE.Vector3(...ext.endPt).addScaledVector(tickDir, offset);
+      const ln = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], col, 3.5, { depthTest: false, order: 37 });
+      g.add(ln); tcSt.overlayObjs.push(ln);
+      for (const endP of [a, b]) {
+        const t0 = endP.clone().addScaledVector(tickDir, -1.6);
+        const t1 = endP.clone().addScaledVector(tickDir, 1.6);
+        const tk = Viewer.makeFat([t0.x, t0.y, t0.z, t1.x, t1.y, t1.z], col, 2.5, { depthTest: false, order: 37 });
+        g.add(tk); tcSt.overlayObjs.push(tk);
+      }
+      idx++;
+    }
+    Viewer.requestRender();
+  }
+
+  function stopTolChainPick() {
+    if (!tcSt || !tcSt.picking) return;
+    const pk = tcSt.picking;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', pk.down, true);
+    window.removeEventListener('keydown', pk.key, true);
+    cv.style.cursor = '';
+    UI.hint(null);
+    tcSt.picking = null;
+    const btn = tcSt.bar && tcSt.bar.querySelector('#tc-pick');
+    if (btn) btn.classList.remove('active');
+  }
+
+  function startTolChainPick() {
+    if (!tcSt) return;
+    if (tcSt.picking) { stopTolChainPick(); return; }
+    stopTolChainFacePick();
+    if (on) stop();
+    stopFieldPick();
+    stopDraftFacePick();
+    stopSilFacePick();
+    const cv = Viewer.canvas;
+    const btn = tcSt.bar && tcSt.bar.querySelector('#tc-pick');
+    if (btn) btn.classList.add('active');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (!hit || !hit.id) {
+        UI.toast(T('tc.pickNeedPart'), { icon: 'info' });
+        return;
+      }
+      const top = Model.topOf(App.doc, hit.id);
+      const targetId = top ? top.id : hit.id;
+      const added = tolChainAddPart(targetId);
+      if (added) UI.toast(T('tc.addedToast', { name: added.label, val: Units.fmtLenU(added.nominal, 2) }), { icon: 'check', ms: 1800 });
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        stopTolChainPick();
+      }
+    };
+    tcSt.picking = { down, key };
+    cv.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(T('tc.pickHint'));
+  }
+
+  function stopTolChainFacePick() {
+    if (!tcSt || !tcSt.facePicking) return;
+    const pk = tcSt.facePicking;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', pk.down, true);
+    window.removeEventListener('keydown', pk.key, true);
+    cv.style.cursor = '';
+    UI.hint(null);
+    tcSt.facePicking = null;
+    const btn = tcSt.bar && tcSt.bar.querySelector('#tc-pick-face');
+    if (btn) btn.classList.remove('active');
+  }
+
+  function startTolChainFacePick() {
+    if (!tcSt) return;
+    if (tcSt.facePicking) { stopTolChainFacePick(); return; }
+    stopTolChainPick();
+    if (on) stop();
+    stopFieldPick();
+    stopDraftFacePick();
+    stopSilFacePick();
+    const cv = Viewer.canvas;
+    const btn = tcSt.bar && tcSt.bar.querySelector('#tc-pick-face');
+    if (btn) btn.classList.add('active');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      const f = hit && hit.faceIdx >= 0 && hit.node && hit.node.data && hit.node.data.faces ? hit.node.data.faces[hit.faceIdx] : null;
+      if (!f || f.t !== 'PLANE' || !f.n) {
+        UI.toast(T('tc.pickFaceNeedPlane'), { icon: 'info' });
+        return;
+      }
+      const wn = new THREE.Vector3(...f.n).transformDirection(hit.node.obj.matrixWorld).normalize().toArray();
+      stopTolChainFacePick();
+      tolChainSetDir(wn);
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        stopTolChainFacePick();
+      }
+    };
+    tcSt.facePicking = { down, key };
+    cv.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(T('tc.pickFaceHint'));
+  }
+
+  function tolChainSetDir(dirArg) {
+    const norm = normalizeTcDir(dirArg);
+    if (tcSt) {
+      tcSt.dirKey = norm.dirKey;
+      tcSt.dir = norm.dir.slice();
+    }
+    if (docTolChain(App.doc)) {
+      App.change(T('tc.undoDir'), (doc) => {
+        const ch = ensureDocTolChain(doc);
+        ch.dirKey = norm.dirKey;
+        ch.dir = norm.dir.slice();
+        for (const it of ch.items) {
+          if (it && it.itemId && it.autoExtent !== false) {
+            const ext = partExtentAlongDir(it.itemId, norm.dir);
+            if (ext) it.nominal = ext.extent;
+          }
+        }
+      });
+    }
+    if (tcSt) {
+      updateTolChainUI();
+      drawTolChainOverlay();
+    }
+    return norm;
+  }
+
+  function tolChainSetDefaultTol(val) {
+    const parsed = typeof val === 'number' ? val : parseNum(String(val));
+    const t = Number.isFinite(parsed) && parsed >= 0 ? round(parsed, 4) : 0.1;
+    if (tcSt) tcSt.defaultTol = t;
+    if (docTolChain(App.doc)) {
+      App.change(T('tc.undoEdit'), (doc) => {
+        const ch = ensureDocTolChain(doc);
+        ch.defaultTol = t;
+      }, { merge: 'tc:deftol' });
+    }
+    return t;
+  }
+
+  function tolChainAddPart(itemId, opts = {}) {
+    if (!itemId || !App.doc) return null;
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item || f.item.role === 'hole') return null;
+    const dir = opts.dir ? normalizeTcDir(opts.dir).dir : (tcSt ? tcSt.dir : [1, 0, 0]);
+    const ext = partExtentAlongDir(f.item.id, dir);
+    if (!ext) return null;
+    const defTol = tcSt && Number.isFinite(tcSt.defaultTol) ? tcSt.defaultTol : 0.1;
+    const tp = opts.tolPlus != null ? Math.max(0, Number(opts.tolPlus) || 0) : (opts.tol != null ? Math.abs(Number(opts.tol) || 0) : defTol);
+    const tm = opts.tolMinus != null ? Math.max(0, Number(opts.tolMinus) || 0) : (opts.tol != null ? Math.abs(Number(opts.tol) || 0) : defTol);
+    let added = null;
+    App.change(T('tc.undoAdd'), (doc) => {
+      const ch = ensureDocTolChain(doc);
+      added = {
+        id: uid('tc'),
+        label: String(opts.label || Model.label(f.item)),
+        sign: opts.sign === -1 ? -1 : 1,
+        nominal: ext.extent,
+        tolPlus: tp,
+        tolMinus: tm,
+        itemId: f.item.id,
+        autoExtent: true,
+      };
+      ch.items.push(added);
+    });
+    return added;
+  }
+
+  function tolChainAddAll(opts = {}) {
+    if (!App.doc) return 0;
+    const dir = opts.dir ? normalizeTcDir(opts.dir).dir : (tcSt ? tcSt.dir : [1, 0, 0]);
+    const defTol = tcSt && Number.isFinite(tcSt.defaultTol) ? tcSt.defaultTol : 0.1;
+    const tolVal = opts.tol != null ? Math.abs(Number(opts.tol) || 0) : defTol;
+    const cur = docTolChain(App.doc);
+    const existingIds = new Set(!opts.replace && cur ? cur.items.map((x) => x.itemId).filter(Boolean) : []);
+    const candidates = [];
+    for (const it of App.doc.items || []) {
+      if (!it || it.role === 'hole' || it.hidden || it.suppressed) continue;
+      if (!opts.replace && existingIds.has(it.id)) continue;
+      const ext = partExtentAlongDir(it.id, dir);
+      if (!ext || !(ext.extent > 0)) continue;
+      candidates.push({ item: it, ext });
+    }
+    if (!candidates.length) {
+      UI.toast(T('tc.addAllEmpty'), { icon: 'info' });
+      return 0;
+    }
+    candidates.sort((a, b) => (a.ext.minP - b.ext.minP) || (a.ext.maxP - b.ext.maxP));
+    App.change(T('tc.undoAddAll'), (doc) => {
+      const ch = ensureDocTolChain(doc);
+      if (opts.replace) ch.items = [];
+      for (const c of candidates) {
+        ch.items.push({
+          id: uid('tc'),
+          label: Model.label(c.item),
+          sign: 1,
+          nominal: c.ext.extent,
+          tolPlus: tolVal,
+          tolMinus: tolVal,
+          itemId: c.item.id,
+          autoExtent: true,
+        });
+      }
+    });
+    return candidates.length;
+  }
+
+  function tolChainAddSelected(opts = {}) {
+    if (!App.doc) return 0;
+    const dir = tcSt ? tcSt.dir : [1, 0, 0];
+    const defTol = tcSt && Number.isFinite(tcSt.defaultTol) ? tcSt.defaultTol : 0.1;
+    const tolVal = opts.tol != null ? Math.abs(Number(opts.tol) || 0) : defTol;
+    const seen = new Set();
+    const candidates = [];
+    for (const sid of App.sel || []) {
+      const top = Model.topOf(App.doc, sid);
+      if (!top || top.role === 'hole' || top.hidden || top.suppressed || seen.has(top.id)) continue;
+      seen.add(top.id);
+      const ext = partExtentAlongDir(top.id, dir);
+      if (ext && ext.extent > 0) candidates.push({ item: top, ext });
+    }
+    if (!candidates.length) {
+      UI.toast(T('tc.addSelEmpty'), { icon: 'info' });
+      return 0;
+    }
+    candidates.sort((a, b) => a.ext.minP - b.ext.minP);
+    App.change(T('tc.undoAdd'), (doc) => {
+      const ch = ensureDocTolChain(doc);
+      for (const c of candidates) {
+        ch.items.push({
+          id: uid('tc'),
+          label: Model.label(c.item),
+          sign: 1,
+          nominal: c.ext.extent,
+          tolPlus: tolVal,
+          tolMinus: tolVal,
+          itemId: c.item.id,
+          autoExtent: true,
+        });
+      }
+    });
+    return candidates.length;
+  }
+
+  function tolChainAddItem(entry = {}) {
+    const defTol = tcSt && Number.isFinite(tcSt.defaultTol) ? tcSt.defaultTol : 0.1;
+    const nom = Number(entry.nominal);
+    const tpRaw = entry.tolPlus != null ? Number(entry.tolPlus) : (entry.tol != null ? Math.abs(Number(entry.tol)) : defTol);
+    const tmRaw = entry.tolMinus != null ? Number(entry.tolMinus) : (entry.tol != null ? Math.abs(Number(entry.tol)) : defTol);
+    let added = null;
+    App.change(T('tc.undoAdd'), (doc) => {
+      const ch = ensureDocTolChain(doc);
+      added = {
+        id: uid('tc'),
+        label: String(entry.label || T('tc.manualLabel', { n: ch.items.length + 1 })).trim(),
+        sign: entry.sign === -1 ? -1 : 1,
+        nominal: Number.isFinite(nom) ? nom : 10,
+        tolPlus: Number.isFinite(tpRaw) && tpRaw >= 0 ? tpRaw : defTol,
+        tolMinus: Number.isFinite(tmRaw) && tmRaw >= 0 ? tmRaw : defTol,
+        itemId: typeof entry.itemId === 'string' && entry.itemId ? entry.itemId : null,
+        autoExtent: !!entry.autoExtent && !!entry.itemId,
+      };
+      ch.items.push(added);
+    });
+    return added;
+  }
+
+  function tolChainUpdateItem(id, patch = {}) {
+    if (!id || !App.doc) return false;
+    return App.change(T('tc.undoEdit'), (doc) => {
+      const ch = docTolChain(doc);
+      if (!ch) return false;
+      const it = ch.items.find((x) => x.id === id);
+      if (!it) return false;
+      if (patch.label != null) {
+        const clean = String(patch.label).trim();
+        if (clean) it.label = clean;
+      }
+      if (patch.sign === 1 || patch.sign === -1) it.sign = patch.sign;
+      if (patch.nominal != null) {
+        const v = typeof patch.nominal === 'number' ? patch.nominal : parseNum(String(patch.nominal));
+        if (Number.isFinite(v)) {
+          it.nominal = round(v, 4);
+          it.autoExtent = false;
+        }
+      }
+      if (patch.tol != null) {
+        const t = typeof patch.tol === 'number' ? patch.tol : parseNum(String(patch.tol));
+        if (Number.isFinite(t) && t >= 0) {
+          it.tolPlus = round(t, 4);
+          it.tolMinus = round(t, 4);
+        }
+      }
+      if (patch.tolPlus != null) {
+        const tp = typeof patch.tolPlus === 'number' ? patch.tolPlus : parseNum(String(patch.tolPlus));
+        if (Number.isFinite(tp) && tp >= 0) it.tolPlus = round(tp, 4);
+      }
+      if (patch.tolMinus != null) {
+        const tm = typeof patch.tolMinus === 'number' ? patch.tolMinus : parseNum(String(patch.tolMinus));
+        if (Number.isFinite(tm) && tm >= 0) it.tolMinus = round(tm, 4);
+      }
+      return true;
+    }, { merge: `tc:item:${id}` }) !== false;
+  }
+
+  function tolChainRemoveItem(id) {
+    if (!id || !App.doc) return false;
+    return App.change(T('tc.undoRemove'), (doc) => {
+      const ch = docTolChain(doc);
+      if (!ch) return false;
+      const before = ch.items.length;
+      ch.items = ch.items.filter((x) => x.id !== id);
+      return ch.items.length !== before;
+    }) !== false;
+  }
+
+  function tolChainClear() {
+    if (!App.doc) return false;
+    const ch = docTolChain(App.doc);
+    if (!ch || !ch.items.length) return false;
+    return App.change(T('tc.undoClear'), (doc) => {
+      const target = docTolChain(doc);
+      if (!target || !target.items.length) return false;
+      target.items = [];
+      return true;
+    }) !== false;
+  }
+
+  function onTolChainResults() {
+    if (!tcSt) return;
+    const ch = docTolChain(App.doc);
+    if (ch && ch.items.some((it) => it && it.itemId && it.autoExtent !== false)) {
+      let changed = false;
+      for (const it of ch.items) {
+        if (!it || !it.itemId || it.autoExtent === false) continue;
+        const ext = partExtentAlongDir(it.itemId, tcSt.dir);
+        if (ext && Math.abs(ext.extent - it.nominal) > 1e-4) {
+          it.nominal = ext.extent;
+          changed = true;
+        }
+      }
+      if (changed) updateTolChainUI();
+    }
+    drawTolChainOverlay();
+  }
+
+  function formatTolResultText(res) {
+    if (!res || !res.count) return '';
+    const u = Units.label();
+    return `${T('tc.wcShort')} ${Units.fmtLenFixed(res.mean, 3)} ± ${Units.fmtLenFixed(res.worstCaseTol, 3)} ${u} (${Units.fmtLenFixed(res.worstCaseMin, 3)}–${Units.fmtLenFixed(res.worstCaseMax, 3)} ${u}) | ${T('tc.statShort')} ${Units.fmtLenFixed(res.mean, 3)} ± ${Units.fmtLenFixed(res.rssTol, 3)} ${u}`;
+  }
+
+  function updateTolChainUI() {
+    if (!tcSt || !tcSt.bar) return;
+    const spec = activeTolChainSpec();
+    const res = evalTolChain(spec);
+    tcSt.result = res;
+
+    const dirSel = tcSt.bar.querySelector('#tc-dir');
+    if (dirSel) {
+      let faceOpt = dirSel.querySelector('option[value="face"]');
+      if (tcSt.dirKey === 'face') {
+        if (!faceOpt) { faceOpt = h('option', { value: 'face' }, T('tc.dirFace')); dirSel.append(faceOpt); }
+        dirSel.value = 'face';
+      } else {
+        if (faceOpt) faceOpt.remove();
+        dirSel.value = tcSt.dirKey;
+      }
+    }
+    const defInp = tcSt.bar.querySelector('#tc-def-tol');
+    if (defInp && document.activeElement !== defInp) {
+      defInp.value = fmtFixed(tcSt.defaultTol, 3);
+    }
+
+    const listEl = tcSt.bar.querySelector('#tc-list');
+    if (listEl) {
+      listEl.replaceChildren();
+      if (!res.items.length) {
+        listEl.append(h('div', { class: 'vb-hint tc-empty', id: 'tc-empty' }, T('tc.emptyHint')));
+      } else {
+        for (const it of res.items) {
+          const asym = Math.abs(it.tolPlus - it.tolMinus) > 1e-6 || tcSt.asymIds.has(it.id);
+          const signBtn = h('button', {
+            type: 'button',
+            class: 'btn small tc-sign' + (it.sign === -1 ? ' neg' : ''),
+            title: T('tc.signTip'),
+            'aria-label': T('tc.signTip'),
+          }, it.sign === -1 ? '−' : '+');
+          signBtn.onclick = () => tolChainUpdateItem(it.id, { sign: it.sign === -1 ? 1 : -1 });
+
+          const lblInp = h('input', {
+            type: 'text',
+            class: 'tc-lbl',
+            value: it.label,
+            'aria-label': T('common.name'),
+            spellcheck: 'false',
+          });
+          lblInp.onchange = () => tolChainUpdateItem(it.id, { label: lblInp.value });
+          lblInp.addEventListener('keydown', (e) => e.stopPropagation());
+
+          const nomInp = h('input', {
+            type: 'text',
+            class: 'tc-nom mono',
+            value: Units.fmtLenFixed(it.nominal, 3),
+            'aria-label': T('tc.nominalAria'),
+            spellcheck: 'false',
+          });
+          nomInp.onchange = () => {
+            const v = parseNum(nomInp.value);
+            if (!isNaN(v)) tolChainUpdateItem(it.id, { nominal: Units.toMM ? Units.toMM(v) : v });
+            else updateTolChainUI();
+          };
+          nomInp.addEventListener('keydown', (e) => e.stopPropagation());
+
+          const tolWrap = h('span', { class: 'tc-tol-wrap' });
+          if (asym) {
+            const tpInp = h('input', {
+              type: 'text',
+              class: 'tc-tol tc-tol-plus mono',
+              value: '+' + Units.fmtLenFixed(it.tolPlus, 3),
+              'aria-label': T('tc.tolPlusAria'),
+              spellcheck: 'false',
+            });
+            const tmInp = h('input', {
+              type: 'text',
+              class: 'tc-tol tc-tol-minus mono',
+              value: '−' + Units.fmtLenFixed(it.tolMinus, 3),
+              'aria-label': T('tc.tolMinusAria'),
+              spellcheck: 'false',
+            });
+            tpInp.onchange = () => {
+              const v = parseNum(tpInp.value.replace(/^\+/, ''));
+              if (!isNaN(v) && v >= 0) tolChainUpdateItem(it.id, { tolPlus: Units.toMM ? Units.toMM(v) : v });
+              else updateTolChainUI();
+            };
+            tmInp.onchange = () => {
+              const v = parseNum(tmInp.value.replace(/^[−-]/, ''));
+              if (!isNaN(v) && v >= 0) tolChainUpdateItem(it.id, { tolMinus: Units.toMM ? Units.toMM(v) : v });
+              else updateTolChainUI();
+            };
+            tpInp.addEventListener('keydown', (e) => e.stopPropagation());
+            tmInp.addEventListener('keydown', (e) => e.stopPropagation());
+            tolWrap.append(tpInp, tmInp);
+          } else {
+            const pmBtn = h('button', {
+              type: 'button',
+              class: 'tc-pm-btn',
+              title: T('tc.asymTip'),
+              'aria-label': T('tc.asymTip'),
+            }, '±');
+            pmBtn.onclick = () => {
+              tcSt.asymIds.add(it.id);
+              updateTolChainUI();
+            };
+            const tInp = h('input', {
+              type: 'text',
+              class: 'tc-tol mono',
+              value: Units.fmtLenFixed(it.tolPlus, 3),
+              'aria-label': T('tc.tolAria'),
+              spellcheck: 'false',
+            });
+            tInp.onchange = () => {
+              const v = parseNum(tInp.value);
+              if (!isNaN(v) && v >= 0) tolChainUpdateItem(it.id, { tol: Units.toMM ? Units.toMM(v) : v });
+              else updateTolChainUI();
+            };
+            tInp.addEventListener('keydown', (e) => e.stopPropagation());
+            tolWrap.append(pmBtn, tInp);
+          }
+
+          const delBtn = h('button', {
+            type: 'button',
+            class: 'tc-del',
+            'aria-label': T('common.delete'),
+            'data-tip': T('common.delete'),
+          });
+          delBtn.innerHTML = icon('trash');
+          delBtn.onclick = () => tolChainRemoveItem(it.id);
+
+          listEl.append(h('div', { class: 'tc-row', dataset: { tcId: it.id } }, signBtn, lblInp, nomInp, tolWrap, delBtn));
+        }
+      }
+    }
+
+    const resBox = tcSt.bar.querySelector('#tc-result');
+    const wcVal = tcSt.bar.querySelector('#tc-wc-val');
+    const wcRange = tcSt.bar.querySelector('#tc-wc-range');
+    const meanVal = tcSt.bar.querySelector('#tc-mean-val');
+    const meanRange = tcSt.bar.querySelector('#tc-mean-range');
+    const statBand = tcSt.bar.querySelector('#tc-bar-stat');
+    const warnEl = tcSt.bar.querySelector('#tc-warn');
+    const copyBtn = tcSt.bar.querySelector('#tc-copy');
+    const clearBtn = tcSt.bar.querySelector('#tc-clear');
+    if (clearBtn) clearBtn.disabled = !res.count;
+    if (copyBtn) copyBtn.disabled = !res.count;
+    if (!res.count) {
+      if (resBox) resBox.hidden = true;
+      return;
+    }
+    if (resBox) resBox.hidden = false;
+    const u = Units.label();
+    if (wcVal) wcVal.textContent = `${Units.fmtLenFixed(res.mean, 3)} ± ${Units.fmtLenFixed(res.worstCaseTol, 3)} ${u}`;
+    if (wcRange) {
+      const nomDiff = Math.abs(res.mean - res.nominal) > 1e-4 ? ` (${T('tc.nominalShort')} ${Units.fmtLenFixed(res.nominal, 3)} ${u})` : '';
+      wcRange.textContent = `${Units.fmtLenFixed(res.worstCaseMin, 3)} – ${Units.fmtLenFixed(res.worstCaseMax, 3)} ${u}${nomDiff}`;
+    }
+    if (meanVal) meanVal.textContent = `${Units.fmtLenFixed(res.mean, 3)} ± ${Units.fmtLenFixed(res.rssTol, 3)} ${u}`;
+    if (meanRange) meanRange.textContent = `${T('tc.meanLabel')} ${Units.fmtLenFixed(res.mean, 3)} ${u} · ${Units.fmtLenFixed(res.rssMin, 3)} – ${Units.fmtLenFixed(res.rssMax, 3)} ${u}`;
+    if (statBand) {
+      const ratio = res.worstCaseTol > 1e-9 ? clamp((res.rssTol / res.worstCaseTol) * 100, 4, 100) : 100;
+      statBand.style.width = `${round(ratio, 1)}%`;
+    }
+    if (warnEl) {
+      warnEl.hidden = !res.interferes;
+      if (res.interferes) warnEl.textContent = T('tc.interferenceWarn', { min: Units.fmtLenFixedU(res.worstCaseMin, 3) });
+    }
+  }
+
+  function buildTolChainBar() {
+    if (!tcSt) return;
+    if (tcSt.bar) tcSt.bar.remove();
+    const barEl = h('div', { class: 'viewbar tc-bar pro', id: 'tol-chain-bar', role: 'region', 'aria-label': T('tc.title'), 'data-help': 'tolChain' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, T('tc.title')));
+    const closeBtn = h('button', { type: 'button', class: 'vb-x', id: 'tc-close', 'aria-label': T('common.close'), 'data-tip': T('common.close') });
+    closeBtn.innerHTML = icon('close');
+    closeBtn.onclick = () => tolChain(false);
+    head.append(closeBtn);
+
+    const dirSel = h('select', { id: 'tc-dir', class: 'vb-sel', 'aria-label': T('tc.dirAria') },
+      h('option', { value: 'X' }, 'X'),
+      h('option', { value: 'Y' }, 'Y'),
+      h('option', { value: 'Z' }, 'Z'));
+    dirSel.onchange = () => {
+      if (dirSel.value !== 'face') tolChainSetDir(dirSel.value);
+    };
+    const faceBtn = h('button', { type: 'button', class: 'btn small', id: 'tc-pick-face', 'data-tip': T('tc.pickFaceTip') }, T('tc.pickFace'));
+    faceBtn.onclick = () => startTolChainFacePick();
+    const defTolInp = h('input', {
+      type: 'text',
+      id: 'tc-def-tol',
+      class: 'tc-def-inp mono',
+      value: fmtFixed(tcSt.defaultTol, 3),
+      'aria-label': T('tc.defaultTolAria'),
+      'data-tip': T('tc.defaultTolTip'),
+      spellcheck: 'false',
+    });
+    defTolInp.onchange = () => {
+      const v = tolChainSetDefaultTol(defTolInp.value);
+      defTolInp.value = fmtFixed(v, 3);
+    };
+    defTolInp.addEventListener('keydown', (e) => e.stopPropagation());
+
+    const addAllBtn = h('button', { type: 'button', class: 'btn small', id: 'tc-add-all' }, T('tc.addAll'));
+    addAllBtn.onclick = () => tolChainAddAll();
+    const addSelBtn = h('button', { type: 'button', class: 'btn small', id: 'tc-add-sel' }, T('tc.addSel'));
+    addSelBtn.onclick = () => tolChainAddSelected();
+    const pickBtn = h('button', { type: 'button', class: 'btn small', id: 'tc-pick' }, T('tc.pickPart'));
+    pickBtn.onclick = () => startTolChainPick();
+    const addManualBtn = h('button', { type: 'button', class: 'btn small', id: 'tc-add-manual' }, T('tc.addManual'));
+    addManualBtn.onclick = () => tolChainAddItem();
+    const clearBtn = h('button', { type: 'button', class: 'btn small ghost', id: 'tc-clear' }, T('tc.clear'));
+    clearBtn.onclick = () => tolChainClear();
+
+    const listEl = h('div', { class: 'tc-list', id: 'tc-list' });
+
+    const copyBtn = h('button', { type: 'button', class: 'btn small', id: 'tc-copy', 'aria-label': T('measure.copyBtn'), 'data-tip': T('measure.copyTip') });
+    copyBtn.innerHTML = icon('copy');
+    copyBtn.onclick = () => {
+      if (tcSt && tcSt.result && tcSt.result.count) copyText(formatTolResultText(tcSt.result), T('tc.title'));
+    };
+
+    const resBox = h('div', { class: 'tc-result', id: 'tc-result', hidden: true },
+      h('div', { class: 'tc-res-grid' },
+        h('div', { class: 'tc-res-card' },
+          h('span', { class: 'tc-res-lbl' }, T('tc.wcLabel')),
+          h('b', { class: 'mono tc-res-val', id: 'tc-wc-val' }, '–'),
+          h('span', { class: 'tc-res-sub mono', id: 'tc-wc-range' }, '')),
+        h('div', { class: 'tc-res-card' },
+          h('span', { class: 'tc-res-lbl' }, T('tc.statLabel')),
+          h('b', { class: 'mono tc-res-val', id: 'tc-mean-val' }, '–'),
+          h('span', { class: 'tc-res-sub mono', id: 'tc-mean-range' }, ''))),
+      h('div', { class: 'tc-bar-wrap', id: 'tc-bar-vis' },
+        h('div', { class: 'tc-bar-wc' },
+          h('div', { class: 'tc-bar-stat', id: 'tc-bar-stat' }),
+          h('div', { class: 'tc-bar-mid' })),
+        h('span', { class: 'tc-bar-legend' }, T('tc.barLegend'))),
+      h('div', { class: 'hint-box warn', id: 'tc-warn', hidden: true }),
+      h('div', { class: 'tc-res-foot' },
+        h('span', { class: 'vb-hint' }, T('tc.formulaHint')),
+        copyBtn));
+
+    barEl.append(
+      head,
+      h('div', { class: 'vb-row' },
+        h('span', { class: 'vb-l' }, T('tc.dirLabel')),
+        dirSel,
+        faceBtn,
+        h('span', { class: 'vb-l', style: { marginLeft: 'auto' } }, '±'),
+        defTolInp),
+      h('div', { class: 'tc-acts' }, addAllBtn, addSelBtn, pickBtn, addManualBtn, clearBtn),
+      listEl,
+      resBox,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, T('tc.hint'))));
+    Views.bars().append(barEl);
+    tcSt.bar = barEl;
+  }
+
+  function tolChain(onArg = !tcSt, opts = {}) {
+    if (!onArg) {
+      if (!tcSt) return false;
+      stopTolChainPick();
+      stopTolChainFacePick();
+      clearTolChainOverlay();
+      if (tcSt.bar) tcSt.bar.remove();
+      tcSt = null;
+      syncDraftButtons();
+      return false;
+    }
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) return false;
+    const saved = docTolChain(App.doc);
+    const norm = opts.dir !== undefined
+      ? normalizeTcDir(opts.dir)
+      : (tcSt ? normalizeTcDir(tcSt.dirKey === 'face' ? tcSt.dir : tcSt.dirKey) : (saved ? normalizeTcDir(saved.dirKey === 'face' ? saved.dir : saved.dirKey) : { dirKey: 'X', dir: [1, 0, 0] }));
+    const defTol = opts.defaultTol != null && Number.isFinite(Number(opts.defaultTol))
+      ? Math.max(0, Number(opts.defaultTol))
+      : (tcSt ? tcSt.defaultTol : (saved && Number.isFinite(saved.defaultTol) ? saved.defaultTol : 0.1));
+    if (tcSt) {
+      tcSt.dirKey = norm.dirKey;
+      tcSt.dir = norm.dir;
+      tcSt.defaultTol = defTol;
+      updateTolChainUI();
+      drawTolChainOverlay();
+      syncDraftButtons();
+      return true;
+    }
+    tcSt = {
+      dirKey: norm.dirKey,
+      dir: norm.dir,
+      defaultTol: defTol,
+      bar: null,
+      picking: null,
+      facePicking: null,
+      overlayObjs: [],
+      asymIds: new Set(),
+      result: null,
+    };
+    buildTolChainBar();
+    updateTolChainUI();
+    drawTolChainOverlay();
+    syncDraftButtons();
+    return true;
+  }
+
   return {
     showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
@@ -2198,6 +3076,30 @@ const Measure = (() => {
         height: r ? r.height : 0,
         px: r ? r.px : 0,
         count: r ? r.count : 0,
+      };
+    },
+    tolChain,
+    evalTolChain,
+    partExtentAlongDir,
+    tolChainSetDir,
+    tolChainSetDefaultTol,
+    tolChainAddPart,
+    tolChainAddAll,
+    tolChainAddSelected,
+    tolChainAddItem,
+    tolChainUpdateItem,
+    tolChainRemoveItem,
+    tolChainClear,
+    get tolChainActive() { return !!tcSt; },
+    get tolChainInfo() {
+      const spec = activeTolChainSpec();
+      const res = evalTolChain(spec);
+      return {
+        active: !!tcSt,
+        dirKey: tcSt ? tcSt.dirKey : spec.dirKey,
+        dir: (tcSt ? tcSt.dir : spec.dir).slice(),
+        defaultTol: tcSt ? tcSt.defaultTol : spec.defaultTol,
+        result: res,
       };
     },
   };

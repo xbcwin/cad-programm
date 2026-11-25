@@ -965,6 +965,15 @@ const Print = (() => {
       body.append(cf);
     }
     { const l = mk('each', T('dlg.export.each'), T('dlg.export.eachSub')); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
+    const solidCount = App.doc.items.filter((x) => x && x.role !== 'hole' && !x.hidden && !x.suppressed).length;
+    if ((typeof ViewPrefs === 'undefined' || !ViewPrefs.simple) && (Model.isAssembly(App.doc) || solidCount > 1)) {
+      opts.singleBody = false;
+      const sb = mk('singleBody', T('asm.singleBodyExportOpt'), T('asm.singleBodyExportOptSub'));
+      sb.classList.add('pro');
+      sb.querySelector('input').id = 'ex-single-body';
+      sb.setAttribute('data-help', 'asmSingleBody');
+      body.append(sb);
+    }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
       const d = mk('dxf', T('dlg.export.dxf'), T('dlg.export.dxfSub'));
@@ -1185,14 +1194,16 @@ const Print = (() => {
       const hc = opts.holeComp != null ? Math.max(0, Math.min(1, Number(opts.holeComp) || 0)) : holeComp();
       const name = safeName(App.doc.name);
       const files = [];
-      const mapObjs = (rawObjs) => (only ? rawObjs.filter((o) => only.includes(o.id)) : rawObjs).map((o) => {
+      const mapObjs = (rawObjs) => (only && !opts.singleBody ? rawObjs.filter((o) => only.includes(o.id)) : rawObjs).map((o) => {
         const f = Model.find(App.doc, o.id);
         return f ? { ...o, name: o.name || Model.label(f.item), color: o.bodyColor || o.color || f.item.color } : o;
       });
       let printObjs = null, visObjs = null;
       lastHoleComp = { mm: hc, holes: 0 };
       if (opts.stl || opts.mf || opts.amf) {
-        const resPrint = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: hc });
+        const resPrint = opts.singleBody
+          ? await Kernel.call('exportSingleBody', { scene, opts: { fmt: 'mesh', only, originMat, name: App.doc.name, fine: true, q: opts.q || 1, holeComp: hc } })
+          : await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: hc });
         lastTris = resPrint.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
         lastHoleComp = { mm: hc, holes: resPrint.compensatedHoles || 0 };
         printObjs = mapObjs(resPrint.objects);
@@ -1201,7 +1212,9 @@ const Print = (() => {
       }
       if (opts.obj || opts.glb || opts.ply) {
         if (!visObjs) {
-          const resVis = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: 0 });
+          const resVis = opts.singleBody
+            ? await Kernel.call('exportSingleBody', { scene, opts: { fmt: 'mesh', only, originMat, name: App.doc.name, fine: true, q: opts.q || 1, holeComp: 0 } })
+            : await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat, holeComp: 0 });
           if (!printObjs) lastTris = resVis.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
           visObjs = mapObjs(resVis.objects);
           if (!visObjs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
@@ -1233,9 +1246,19 @@ const Print = (() => {
           }
         }
       }
-      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only, originMat }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
+      if (opts.step) {
+        const r = opts.singleBody
+          ? await Kernel.call('exportSingleBody', { scene, opts: { fmt: 'step', only, originMat, name: App.doc.name } })
+          : await Kernel.call('exportSTEP', { scene, only, originMat });
+        files.push({ name: name + '.step', data: new Uint8Array(r.data) });
+      }
       if (opts.iges) { const r = await Kernel.call('exportIGES', { scene, only, originMat }); files.push({ name: name + '.igs', data: new Uint8Array(r.data) }); }
-      if (opts.brep) { const r = await Kernel.call('exportBREP', { scene, only, originMat }); files.push({ name: name + '.brep', data: new Uint8Array(r.data) }); }
+      if (opts.brep) {
+        const r = opts.singleBody
+          ? await Kernel.call('exportSingleBody', { scene, opts: { fmt: 'brep', only, originMat, name: App.doc.name } })
+          : await Kernel.call('exportBREP', { scene, only, originMat });
+        files.push({ name: name + '.brep', data: new Uint8Array(r.data) });
+      }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
       files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}${hc > 0 ? `Loch-Ausgleich (STL/3MF): +${fmt(hc, 2)} mm Durchmesser\n` : ''}\nSTEP: exakte Geometrie mit Teilenamen, Farben und Gruppen-Struktur (XCAF) für andere CAD-Programme\nIGES / BREP: exakte Geometrie für andere CAD-Programme (BREP = OpenCascade-Format)\nSTL / 3MF / AMF: Dreiecksnetz für 3D-Druck (Millimeter, 3MF/AMF mit Farben und Namen)\nOBJ / MTL / PLY: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);

@@ -2777,6 +2777,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig/Wiederholen, Speichern/Laden, i18n, Hilfen & Befehlssuche**: `App.undo()`/`App.redo()`, `Store.validateProject`, Speichern/Laden mit `doc.skeletons` samt anschließender Maßänderung auf `125 mm`, `HELP.skeletonSketch`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-skeleton`) arbeiten fehlerfrei (`t_a166_skelett_skizze`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine neue Baugruppe anlegen, über „Skelett-Skizze“ eine Hauptskizze auf XY zeichnen, zwei Maße mit Namen vergeben, über „Verknüpfen“ im Skelett-Panel zwei Teile daran hängen und die Maße sowohl im Skelett-Panel als auch im 2D-Skizzenmodus ändern.
 
+## Baugruppe als ein Körper und Toleranzkette (Auto [A-165], BG-31, BG-33)
+
+- [x] **Profi-Trennung**: Im Einfach-Modus sind `#proj-single-body`, `#proj-tol-chain` und `#t-check` ausgeblendet, `Assembly.singleBodyDialog()` liefert `null`, `Measure.tolChain(true)` liefert `false` und die Befehle `asm-single-body`/`tol-chain` sind verborgen (`t_a165_baugruppe_einkoerper_toleranzkette`).
+- [x] **Toleranzkette (BG-33)**: Drei Teile mit `10 ± 0,1 mm` in X-Richtung werden über `#proj-tol-chain` und `#tc-add-all` in die Kette übernommen; `#tc-wc-val` zeigt `30 ± 0,3 mm` (`29,7 – 30,3 mm`), `#tc-mean-val` zeigt `30 ± 0,173 mm` (Wurzelsumme `√(3·0,1²)`), Vorzeichenwechsel `+`/`−` und `Strg+Z` aktualisieren sauber (`t_a165_baugruppe_einkoerper_toleranzkette`).
+- [x] **Baugruppe als ein Körper speichern (BG-31)**: `#asm-single-body-dlg` öffnet per `#proj-single-body`; `Assembly.exportSingleBody` liefert für STEP (`ISO-10303-21`) und STL jeweils `objectCount === 1` und `solidCount === 1` bei `9 000 mm³`; `Assembly.saveAsSingleBodyPart` öffnet ein neues Bauteil-Tab mit genau 1 BREP-Körper (`30 × 20 × 15 mm`, `9 000 mm³`) (`t_a165_baugruppe_einkoerper_toleranzkette`).
+- [x] **Validierung, Hilfen, I18n & Befehlssuche**: `Store.validateProject` akzeptiert `doc.tolChains`, `HELP.asmSingleBody`/`HELP.tolChain`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-single-body`, `tol-chain`) laufen ohne JS-Fehler (`t_a165_baugruppe_einkoerper_toleranzkette`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe aus mehreren verschraubten oder gestapelten Teilen öffnen, über „Prüfen → Toleranzkette“ per „Fläche“ oder „Im Bild wählen“ eine gemischte `+`/`−`-Kette mit Spielprüfung rechnen und die Baugruppe über „Als 1 Körper“ als STEP sowie als STL in einen Slicer laden.
+
 ## Fehler melden
 
 ```

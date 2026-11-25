@@ -1843,5 +1843,15 @@
     "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
     "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
     "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
+  },
+  "asmSingleBody": {
+    "tip": "Baugruppe als einen Körper speichern: verschmilzt alle Teile zu einem einzigen Körper für Export, 3D-Druck oder Weiterarbeit (Profi)",
+    "hilfe": "Fasst alle sichtbaren Teile einer Baugruppe über den CAD-Kern zu einem einzigen Körper zusammen und speichert ihn als STEP, STL, 3MF, BREP oder als neues Bauteil im eigenen Tab. So kannst du eine fertige Baugruppe wie ein einzelnes Teil weitergeben oder drucken.",
+    "tipp": "Im Export-Fenster gibt es zusätzlich das Häkchen „Als einen Körper“, wenn du mehrere Formate auf einmal als Einzelkörper in eine ZIP-Datei packen willst."
+  },
+  "tolChain": {
+    "tip": "Toleranzkette in einer Richtung rechnen: Maße mit ± auswählen, schlimmster Fall und Mittelwert werden berechnet (Profi)",
+    "hilfe": "Misst gewählte Teile der Baugruppe entlang einer Achse (X, Y, Z oder senkrecht zu einer gewählten Fläche) und rechnet die Toleranzkette sofort aus: sowohl den schlimmsten Fall (Summe aller ± Toleranzen) als auch den wahrscheinlichen Bereich um den Mittelwert (Wurzelsumme der Quadrate).",
+    "tipp": "Mit dem Knopf „+“ vor einer Zeile wechselst du das Vorzeichen auf „−“, um ein Spiel oder einen Spalt (Schließmaß) gegen die übrigen Maße zu prüfen."
   }
 }

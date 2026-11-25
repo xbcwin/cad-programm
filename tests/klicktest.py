@@ -33313,6 +33313,172 @@ def t_a166_skelett_skizze(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a165_baugruppe_einkoerper_toleranzkette(p):
+    # [A-165] Baugruppe (Profi): Als-ein-Körper-Export (BG-31) und Toleranzkette (BG-33)
+    p.empty()
+    p.ev("""(() => {
+      const { App, Model, ViewPrefs } = window.__M;
+      ViewPrefs.setLevel('pro');
+      const d = Model.newAssemblyDoc('Toleranz-Stapel');
+      const b1 = Model.newItem('box', { w: 10, d: 20, h: 15 }, { name: 'Block A', color: '#2f9e91' });
+      b1.t.x = 0;
+      const b2 = Model.newItem('box', { w: 10, d: 20, h: 15 }, { name: 'Block B', color: '#3b82f6' });
+      b2.t.x = 10;
+      const b3 = Model.newItem('box', { w: 10, d: 20, h: 15 }, { name: 'Block C', color: '#f59e0b' });
+      b3.t.x = 20;
+      d.items = [b1, b2, b3];
+      App.setDoc(d, { fit: true });
+    })()""")
+    warte_rechnen(p)
+
+    # 1. Profi-Trennung: Im Einfach-Modus versteckt & blockiert
+    p.ev("window.__M.ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_chk = p.ev("""return (() => {
+      const hidden = ['#proj-single-body', '#proj-tol-chain', '#t-check'].every(sel => {
+        const el = document.querySelector(sel);
+        return !el || el.offsetParent === null;
+      });
+      const blocked = Assembly.singleBodyDialog() === null && Measure.tolChain(true) === false;
+      const cmdsBlocked = Commands.search('als einen koerper').length === 0 && Commands.search('toleranzkette').length === 0;
+      return { hidden, blocked, cmdsBlocked };
+    })()""")
+    ok1 = bool(simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdsBlocked'])
+
+    # Zurück in den Profi-Modus
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_vis = p.ev("""return ['#proj-single-body', '#proj-tol-chain', '#t-check'].every(sel => {
+      const el = document.querySelector(sel);
+      return !!(el && el.offsetParent !== null);
+    })""")
+    ok1 = ok1 and bool(pro_vis)
+
+    # 2. Toleranzkette (BG-33): drei Teile mit je 10 ± 0,1 mm -> 30 ± 0,3 mm (schlimmster Fall) & Mittelwert
+    p.pg.click('#proj-tol-chain')
+    p.wait(150)
+    p.pg.select_option('#tc-dir', 'X')
+    p.pg.fill('#tc-def-tol', '0,1')
+    p.pg.dispatch_event('#tc-def-tol', 'change')
+    p.wait(80)
+    p.pg.click('#tc-add-all')
+    p.wait(150)
+    tc_res = p.ev("""return (() => {
+      const bar = document.querySelector('#tol-chain-bar');
+      const rows = bar ? bar.querySelectorAll('.tc-row').length : 0;
+      const wcTxt = bar && bar.querySelector('#tc-wc-val') ? bar.querySelector('#tc-wc-val').textContent : '';
+      const meanTxt = bar && bar.querySelector('#tc-mean-val') ? bar.querySelector('#tc-mean-val').textContent : '';
+      const info = Measure.tolChainInfo;
+      const r = info && info.result ? info.result : null;
+      const valOk = Store.validateProject(App.doc).ok;
+      return { rows, wcTxt, meanTxt, r, valOk };
+    })()""")
+    r = tc_res['r'] or {}
+    rss_expected = 0.03 ** 0.5
+    ok2 = bool(
+        tc_res['rows'] == 3
+        and '30' in tc_res['wcTxt'] and '0,3' in tc_res['wcTxt']
+        and '30' in tc_res['meanTxt'] and '0,173' in tc_res['meanTxt']
+        and abs((r.get('nominal') or 0) - 30) < 1e-4
+        and abs((r.get('mean') or 0) - 30) < 1e-4
+        and abs((r.get('worstCaseTol') or 0) - 0.3) < 1e-4
+        and abs((r.get('worstCaseMin') or 0) - 29.7) < 1e-4
+        and abs((r.get('worstCaseMax') or 0) - 30.3) < 1e-4
+        and abs((r.get('rssTol') or 0) - rss_expected) < 1e-4
+        and tc_res['valOk']
+    )
+
+    # Vorzeichen-Wechsel (+) -> (-) und Rückgängig
+    p.pg.locator('#tol-chain-bar .tc-row .tc-sign').first.click()
+    p.wait(120)
+    sign_res = p.ev("return Measure.tolChainInfo.result")
+    p.ev("App.undo()")
+    p.wait(120)
+    undo_res = p.ev("return Measure.tolChainInfo.result")
+    p.pg.click('#tc-close')
+    p.wait(100)
+    ok3 = bool(
+        abs((sign_res.get('nominal') or 0) - 10) < 1e-4
+        and abs((sign_res.get('worstCaseTol') or 0) - 0.3) < 1e-4
+        and abs((undo_res.get('nominal') or 0) - 30) < 1e-4
+    )
+
+    # 3. Als ein Körper speichern / exportieren (BG-31)
+    p.pg.click('#proj-single-body')
+    p.wait(150)
+    dlg_chk = p.ev("""return (() => {
+      const dlg = document.querySelector('#asm-single-body-dlg');
+      const sum = dlg && dlg.querySelector('#sb-summary') ? dlg.querySelector('#sb-summary').textContent : '';
+      return { hasDlg: !!dlg, sum };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    exp_res = p.ev("""return (async () => {
+      const step = await Assembly.exportSingleBody({ fmt: 'step', save: false });
+      const stl = await Assembly.exportSingleBody({ fmt: 'stl', save: false });
+      const hdr = step && step.data ? new TextDecoder().decode(step.data.slice(0, 64)) : '';
+      return {
+        stepObj: step && step.objectCount,
+        stepSolids: step && step.solidCount,
+        stepSrc: step && step.sourceCount,
+        stepVol: step && step.volume,
+        stepHdr: hdr.includes('ISO-10303-21'),
+        stlObj: stl && stl.objectCount,
+        stlSolids: stl && stl.solidCount,
+        stlBytes: stl && stl.bytes,
+      };
+    })()""")
+
+    part_res = p.ev("""return (async () => {
+      const res = await Assembly.saveAsSingleBodyPart({ name: 'Stapel 1K' });
+      return res ? { itemCount: res.itemCount, docId: res.docId } : null;
+    })()""")
+    warte_rechnen(p)
+    part_meas = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      const it = App.doc && App.doc.items && App.doc.items[0];
+      return {
+        docType: Model.docType(App.doc),
+        itemCount: App.doc && App.doc.items ? App.doc.items.length : 0,
+        kind: it ? it.kind : null,
+        fmt: it && it.p ? it.p.fmt : null,
+        mCount: m ? m.count : 0,
+        mVol: m ? m.volume : 0,
+        bbox: m ? m.bbox : null,
+      };
+    })()""")
+    bb = part_meas.get('bbox') or [0, 0, 0, 0, 0, 0]
+    ok4 = bool(
+        dlg_chk['hasDlg'] and '3' in dlg_chk['sum']
+        and exp_res['stepObj'] == 1 and exp_res['stepSolids'] == 1 and exp_res['stepSrc'] == 3
+        and abs((exp_res['stepVol'] or 0) - 9000) < 2 and exp_res['stepHdr']
+        and exp_res['stlObj'] == 1 and exp_res['stlSolids'] == 1 and (exp_res['stlBytes'] or 0) > 84
+        and part_res and part_res.get('itemCount') == 1
+        and part_meas['docType'] == 'part' and part_meas['itemCount'] == 1
+        and part_meas['kind'] == 'import' and part_meas['fmt'] == 'brep'
+        and part_meas['mCount'] == 1 and abs((part_meas['mVol'] or 0) - 9000) < 2
+        and abs((bb[3] - bb[0]) - 30) < 0.05
+    )
+
+    # 4. Hilfen, I18n, Befehlssuche & keine Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = ['asmSingleBody', 'tolChain'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('als einen koerper').some(c => c.id === 'asm-single-body');
+      const c2 = Commands.search('toleranzkette').some(c => c.id === 'tol-chain');
+      return { hOk, i18nOk, cmds: c1 && c2 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -33591,6 +33757,7 @@ TESTS = [
     ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
+    ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
