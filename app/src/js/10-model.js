@@ -289,7 +289,7 @@ const Model = (() => {
     const tables = (doc && Array.isArray(doc.tables)) ? doc.tables : [];
     Object.defineProperty(v, '__tables', { value: tables, enumerable: false, configurable: true });
     for (const p of doc.params || []) {
-      if (p && p.measure && typeof p.expr === 'number' && isFinite(p.expr)) v[p.name] = p.expr;
+      if (p && (p.measure || p.skeleton) && typeof p.expr === 'number' && isFinite(p.expr)) v[p.name] = p.expr;
     }
     for (const p of doc.params || []) {
       try { v[p.name] = Expr.eval(String(p.expr), v, tables); }
@@ -314,8 +314,35 @@ const Model = (() => {
     return v;
   }
   function scopeItemVars(v, it) {
-    if (it && it.partRef) v = scopeVars(v, it.partRef);
-    if (it && it.userPart) v = scopeVars(v, it.userPart);
+    const ov = (it && it.p && it.p.skelOverrides && typeof it.p.skelOverrides === 'object') ? it.p.skelOverrides : null;
+    const base = v || {};
+    const baseTables = Array.isArray(base.__tables) ? base.__tables : [];
+    const ovVals = {};
+    if (ov) {
+      for (const [k, rawExpr] of Object.entries(ov)) {
+        if (!k) continue;
+        try { ovVals[k] = Expr.eval(String(rawExpr), base, baseTables); } catch (_) { ovVals[k] = 0; }
+      }
+    }
+    const applyOvToPart = (part) => {
+      if (!part || !ov) return part;
+      const ovMap = new Map(Object.entries(ovVals).map(([k, val]) => [k.toLowerCase(), val]));
+      const params = (part.params || []).map((p) => (p && p.name && ovMap.has(p.name.toLowerCase()) ? { ...p, expr: ovMap.get(p.name.toLowerCase()) } : p));
+      return { ...part, params };
+    };
+    if (it && it.partRef) v = scopeVars(v, applyOvToPart(it.partRef));
+    if (it && it.userPart) v = scopeVars(v, applyOvToPart(it.userPart));
+    if (ov) {
+      const next = { ...(v || {}) };
+      const tables = (v && Array.isArray(v.__tables)) ? v.__tables : baseTables;
+      Object.defineProperty(next, '__tables', { value: tables, enumerable: false, configurable: true });
+      for (const [k, val] of Object.entries(ovVals)) {
+        const low = String(k).toLowerCase();
+        for (const ek of Object.keys(next)) if (ek.toLowerCase() === low && ek !== k) delete next[ek];
+        next[k] = val;
+      }
+      v = next;
+    }
     return v;
   }
   function itemVars(doc, id) {
@@ -680,6 +707,45 @@ const Model = (() => {
     if (vr.material) nextDoc.settings = { ...(refDoc.settings || {}), material: vr.material };
     return nextDoc;
   }
+  function withSkeletonOverrides(refDoc, parentDoc, parentV, skelOverrides) {
+    if (!refDoc) return refDoc;
+    const skelParams = (parentDoc && Array.isArray(parentDoc.params))
+      ? parentDoc.params.filter((p) => p && p.skeleton && p.name)
+      : [];
+    const ovEntries = (skelOverrides && typeof skelOverrides === 'object') ? Object.entries(skelOverrides).filter(([k]) => !!k) : [];
+    if (!skelParams.length && !ovEntries.length) return refDoc;
+    const base = parentV || {};
+    const baseTables = Array.isArray(base.__tables) ? base.__tables : [];
+    const ovVals = new Map();
+    for (const [k, rawExpr] of ovEntries) {
+      let val = 0;
+      try { val = Expr.eval(String(rawExpr), base, baseTables); } catch (_) { val = 0; }
+      ovVals.set(k.toLowerCase(), { name: k, val });
+    }
+    const existingParams = Array.isArray(refDoc.params) ? refDoc.params : [];
+    const existingLower = new Set(existingParams.filter((p) => p && p.name).map((p) => p.name.toLowerCase()));
+    const params = existingParams.map((p) => {
+      if (!p || !p.name) return p;
+      const ov = ovVals.get(p.name.toLowerCase());
+      return ov ? { ...p, expr: ov.val } : p;
+    });
+    for (const [low, ov] of ovVals.entries()) {
+      if (!existingLower.has(low)) {
+        params.push({ id: uid('m'), name: ov.name, expr: ov.val });
+        existingLower.add(low);
+      }
+    }
+    const fallback = [];
+    for (const sp of skelParams) {
+      const low = sp.name.toLowerCase();
+      if (!existingLower.has(low)) {
+        const val = Object.prototype.hasOwnProperty.call(base, sp.name) ? base[sp.name] : sp.expr;
+        fallback.push({ id: sp.id || uid('m'), name: sp.name, expr: val });
+        existingLower.add(low);
+      }
+    }
+    return { ...refDoc, params: fallback.length ? [...fallback, ...params] : params };
+  }
   function kernelItem(it, V) {
     const prev = curV; curV = V;
     try {
@@ -692,7 +758,8 @@ const Model = (() => {
       if (it.kind === 'ref') {
         const refId = it.p && it.p.docId;
         const rawRefDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
-        const refDoc = withPartVariant(rawRefDoc, it.p && it.p.variantId);
+        const parentDoc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+        const refDoc = withSkeletonOverrides(withPartVariant(rawRefDoc, it.p && it.p.variantId), parentDoc, V, it.p && it.p.skelOverrides);
         if (!refDoc) {
           const outMissing = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: displayColor(it), m, comp: true, p: { assembly: true, subdoc: true, refMissing: true, refDocId: refId || null }, children: [] };
           if (it.opacity != null && it.opacity < 1) outMissing.opacity = Math.max(0.05, it.opacity);
@@ -2245,7 +2312,8 @@ const Model = (() => {
     if (it.kind === 'ref') {
       const refId = it.p && it.p.docId;
       const rawRefDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
-      const refDoc = withPartVariant(rawRefDoc, it.p && it.p.variantId);
+      const parentDoc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+      const refDoc = withSkeletonOverrides(withPartVariant(rawRefDoc, it.p && it.p.variantId), parentDoc, V, it.p && it.p.skelOverrides);
       if (!refDoc) return null;
       const refV = vars(refDoc).v;
       const prevVisited = visitedDocs;
@@ -3025,6 +3093,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, withPartVariant, withSkeletonOverrides, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -2762,6 +2762,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Validierung, Speichern/Laden, i18n, Hilfen & Befehlssuche**: Im Einfach-Modus sind die Bereiche ausgeblendet und Dialoge/Prompts geben `null` zurück; `Store.validateProject`, Speichern/Laden mit `displayStates` und `asmVariants`, `HELP.displayStates`/`HELP.asmVariants`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-display-state-save`, `asm-variant-save` …) laufen ohne JS-Fehler (`t_a163_anzeige_zustaende_varianten`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Teilen öffnen, einen Anzeige-Zustand mit ausgeblendetem Deckel und durchsichtigem Gehäuse anlegen, eine Baugruppen-Variante mit geändertem Maß oder Ersatzteil über „Verwalten“ einrichten und im Studio-Licht-Panel sowie Ansichtsmenü umschalten.
 
+## Skelett-Skizze (Auto [A-166], BG-32)
+
+- [x] **Profi-Schutz & Hauptskizze im 2D-Editor anlegen**: `#t-asm-skeleton` und `Comp.startSkeleton()` sind im Einfach-Modus gesperrt/verborgen und im Profi-Modus aktiv; im 2D-Editor (`Sketch.startSkeleton`) gezeichnete Linien mit benanntem Steuer-Maß (`Laenge = 100`) speichern nach `Sketch.done()` in `doc.skeletons`, synchronisieren `doc.params` (`p.skeleton`), zeichnen die 3D-Linien in `Viewer.groups.sketch3d` und erscheinen im Verlauf `#skel-tree` (`t_a166_skelett_skizze`).
+- [x] **Mehrere Teile steuern & bei `100 → 120` neu berechnen**: Ein Grundkörper (gebunden über `Comp.bindPartToSkeleton`), ein skizzenbasiertes Extrude-Teil (`w: 'Laenge'`) und ein eingesetztes externes `ref`-Bauteil (`skelOverrides`) haben bei `Laenge = 100` alle die exakte X-Länge `100 mm`; nach Ändern auf `120` (über `Sketch.editSkeleton` + `Sketch.done()` und über `#skel-dim-…` im Skelett-Panel rechts auf `140`) rechnen alle drei Teile sofort auf `120 mm` bzw. `140 mm` neu (`t_a166_skelett_skizze`).
+- [x] **Rückgängig/Wiederholen, Speichern/Laden, i18n, Hilfen & Befehlssuche**: `App.undo()`/`App.redo()`, `Store.validateProject`, Speichern/Laden mit `doc.skeletons` samt anschließender Maßänderung auf `125 mm`, `HELP.skeletonSketch`, DE/EN-Schlüsselgleichheit und Befehlssuche (`asm-skeleton`) arbeiten fehlerfrei (`t_a166_skelett_skizze`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine neue Baugruppe anlegen, über „Skelett-Skizze“ eine Hauptskizze auf XY zeichnen, zwei Maße mit Namen vergeben, über „Verknüpfen“ im Skelett-Panel zwei Teile daran hängen und die Maße sowohl im Skelett-Panel als auch im 2D-Skizzenmodus ändern.
+
 ## Fehler melden
 
 ```

@@ -782,6 +782,7 @@ const Panels = (() => {
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
       const dsTree = typeof Assembly !== 'undefined' && Assembly.displayStateTreeSection ? Assembly.displayStateTreeSection() : null; if (dsTree) body.append(dsTree);
       const avTree = typeof Assembly !== 'undefined' && Assembly.asmVariantTreeSection ? Assembly.asmVariantTreeSection() : null; if (avTree) body.append(avTree);
+      const skTree = typeof Comp !== 'undefined' && Comp.skeletonTreeSection ? Comp.skeletonTreeSection() : null; if (skTree) body.append(skTree);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
@@ -811,6 +812,7 @@ const Panels = (() => {
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
       const dsTree = typeof Assembly !== 'undefined' && Assembly.displayStateTreeSection ? Assembly.displayStateTreeSection() : null; if (dsTree) body.append(dsTree);
       const avTree = typeof Assembly !== 'undefined' && Assembly.asmVariantTreeSection ? Assembly.asmVariantTreeSection() : null; if (avTree) body.append(avTree);
+      const skTree = typeof Comp !== 'undefined' && Comp.skeletonTreeSection ? Comp.skeletonTreeSection() : null; if (skTree) body.append(skTree);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
@@ -1183,6 +1185,7 @@ const Panels = (() => {
     const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
     const dsTree = typeof Assembly !== 'undefined' && Assembly.displayStateTreeSection ? Assembly.displayStateTreeSection() : null; if (dsTree) body.append(dsTree);
     const avTree = typeof Assembly !== 'undefined' && Assembly.asmVariantTreeSection ? Assembly.asmVariantTreeSection() : null; if (avTree) body.append(avTree);
+    const skTree = typeof Comp !== 'undefined' && Comp.skeletonTreeSection ? Comp.skeletonTreeSection() : null; if (skTree) body.append(skTree);
     const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
   }
   function moveInTree(srcId, dstId, mode) {
@@ -1264,9 +1267,23 @@ const Panels = (() => {
         if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nv)) { UI.toast(T('left.par.badName'), { kind: 'bad' }); e.target.value = p.name; return; }
         renameParam(p.id, nv);
       });
-      const valF = UI.numField({ id: 'pv-' + p.id, label: T('common.value'), value: p.expr, unit: '', measurePick: !p.measure, onCommit: (val) => App.change('Maß geändert', (doc) => { const tgt = doc.params.find((x) => x.id === p.id); if (!tgt) return false; tgt.expr = val; if (tgt.measure) delete tgt.measure; }, { merge: 'param:' + p.id }) });
+      const valF = UI.numField({ id: 'pv-' + p.id, label: T('common.value'), value: p.expr, unit: '', measurePick: !p.measure && !p.skeleton, onCommit: (val) => {
+        if (p.skeleton && typeof Comp !== 'undefined' && Comp.setSkeletonDim) {
+          Comp.setSkeletonDim(p.skeleton.id, p.skeleton.dimId, val, { merge: 'param:' + p.id });
+          return;
+        }
+        App.change('Maß geändert', (doc) => { const tgt = doc.params.find((x) => x.id === p.id); if (!tgt) return false; tgt.expr = val; if (tgt.measure) delete tgt.measure; }, { merge: 'param:' + p.id });
+      } });
       f.append(nameIn, valF);
       row.append(f);
+      if (p.skeleton) {
+        const sInfo = h('div', { class: 'meas-param-info' });
+        const sTxt = h('span', { class: 'grow' }, T('skel.paramFrom', { name: p.skeleton.skName || T('skel.defaultName') }));
+        const sOpen = h('button', { type: 'button', class: 'btn ghost small', id: 'ps-open-' + p.id }, T('skel.openBtn'));
+        sOpen.onclick = () => Comp.editSkeleton(p.skeleton.id);
+        sInfo.append(iconEl('sketch'), sTxt, sOpen);
+        row.append(sInfo);
+      }
       if (p.measure) {
         const mInfo = h('div', { class: 'meas-param-info' + (p.measure.frozen ? ' frozen' : p.measure.lost ? ' lost' : '') });
         const mTxt = h('span', { class: 'grow' }, p.measure.frozen ? T('partRefs.paramFrozen', { src: p.measure.label || 'Kante' }) : p.measure.lost ? T('measure.paramLost') : T('measure.paramFrom', { src: p.measure.label || 'Kante' }));
@@ -1468,6 +1485,7 @@ const Panels = (() => {
     }
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
+    for (const sk of doc.skeletons || []) for (const d of sk.dims || []) if (d && typeof d.v === 'string') d.v = fix(d.v);
     return hit;
   }
   function replaceTableName(doc, old, repl) {
@@ -1493,7 +1511,15 @@ const Panels = (() => {
     if (App.doc.params.some((x) => x.id !== id && x.name.toLowerCase() === nv.toLowerCase())) { UI.toast(T('left.par.paramExists'), { kind: 'bad' }); renderLeft(); return; }
     const old = p.name;
     App.change('Maß umbenannt', (doc) => {
-      doc.params.find((x) => x.id === id).name = nv;
+      const targetP = doc.params.find((x) => x.id === id);
+      if (targetP) {
+        targetP.name = nv;
+        if (targetP.skeleton && typeof Comp !== 'undefined' && Comp.findSkeleton) {
+          const sk = Comp.findSkeleton(targetP.skeleton.id, doc);
+          const dm = sk && (sk.dims || []).find((d) => d && d.id === targetP.skeleton.dimId);
+          if (dm) dm.name = nv;
+        }
+      }
       for (const v of doc.variants || []) {
         if (v && v.values && Object.prototype.hasOwnProperty.call(v.values, old)) {
           v.values[nv] = v.values[old];
@@ -1515,7 +1541,16 @@ const Panels = (() => {
     const val = Model.vars(App.doc).v[p.name];
     const num = Number.isFinite(val) ? String(round(val, 4)) : '0';
     let used = false;
-    App.change('Maß entfernt', (doc) => { doc.params = doc.params.filter((x) => x.id !== id); used = replaceName(doc, p.name, +num < 0 ? '(' + num + ')' : num); });
+    App.change('Maß entfernt', (doc) => {
+      const rm = doc.params.find((x) => x.id === id);
+      if (rm && rm.skeleton && typeof Comp !== 'undefined' && Comp.findSkeleton) {
+        const sk = Comp.findSkeleton(rm.skeleton.id, doc);
+        const dm = sk && (sk.dims || []).find((d) => d && d.id === rm.skeleton.dimId);
+        if (dm) delete dm.name;
+      }
+      doc.params = doc.params.filter((x) => x.id !== id);
+      used = replaceName(doc, p.name, +num < 0 ? '(' + num + ')' : num);
+    });
     if (used) UI.toast(T('left.par.paramReplaced', { name: p.name, val: fmt(+num, 3) }), { icon: 'info' });
   }
 
@@ -1560,6 +1595,7 @@ const Panels = (() => {
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = T('panel.title.measure'); Measure.renderPanel(body); return; }
     if (!items.length && typeof Joints !== 'undefined' && Joints.selected && (Joints.list.some((x) => x.id === Joints.selected) || (Joints.couplings && Joints.couplings.some((x) => x.id === Joints.selected)))) { $('#right-title').textContent = Joints.isCouplingSelected ? T('panel.title.coupling') : T('panel.title.joint'); Joints.renderPanel(body); return; }
     if (!items.length && typeof Notes !== 'undefined' && Notes.selectedPin && Notes.findPin(Notes.selectedPin)) { $('#right-title').textContent = T('panel.title.commentPin'); Notes.renderPanel(body); return; }
+    if (!items.length && typeof Comp !== 'undefined' && Comp.selectedSkeleton && Comp.findSkeleton(Comp.selectedSkeleton)) { $('#right-title').textContent = T('skel.panelTitle'); Comp.renderSkeletonPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = T('panel.title.project'); renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = T('panel.title.selection'); renderMulti(body, items); return; }
     $('#right-title').textContent = T('panel.title.props');
@@ -1597,6 +1633,8 @@ const Panels = (() => {
     if (dsSec) w.append(dsSec);
     const avSec = typeof Assembly !== 'undefined' && Assembly.asmVariantSection ? Assembly.asmVariantSection('proj') : null;
     if (avSec) w.append(avSec);
+    const skSec = typeof Comp !== 'undefined' && Comp.skeletonSection ? Comp.skeletonSection('proj') : null;
+    if (skSec) w.append(skSec);
     const motSec = typeof Assembly !== 'undefined' && Assembly.motionSection ? Assembly.motionSection('proj') : null;
     if (motSec) w.append(motSec);
     const asmStepsSec = typeof Assembly !== 'undefined' && Assembly.stepsSection ? Assembly.stepsSection('proj') : null;

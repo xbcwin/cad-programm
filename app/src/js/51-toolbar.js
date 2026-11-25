@@ -59,6 +59,7 @@ const Toolbar = (() => {
       { id: 'autoScrews', group: T('dlg.tb.grpConstruct'), domId: 't-auto-screws', icon: 'bolt', label: T('asm.autoScrewsBtn'), tip: T('asm.autoScrewsTip'), cls: 'minor', help: 'autoScrews', run: () => Assembly.autoScrewsDialog() },
       { id: 'asmLightweight', group: T('dlg.tb.grpConstruct'), domId: 't-asm-lightweight', icon: 'xray', label: T('asm.lwBtn'), tip: T('asm.lwTip'), cls: 'minor pro', help: 'lightweightMode', run: () => Assembly.toggleLightweight() },
       { id: 'asmEnvelope', group: T('dlg.tb.grpConstruct'), domId: 't-asm-envelope', icon: 'box', label: T('asm.envBtn'), tip: T('asm.envTip'), cls: 'minor pro', help: 'simplifiedEnvelope', run: () => Assembly.envelopeDialog() },
+      { id: 'asmSkeleton', group: T('dlg.tb.grpConstruct'), domId: 't-asm-skeleton', icon: 'sketch', label: T('skel.toolBtn'), tip: T('skel.toolTip'), cls: 'minor pro', help: 'skeletonSketch', run: (e) => Comp.startSkeleton({ choose: true, anchor: e.currentTarget }) },
       { id: 'motion', group: T('dlg.tb.grpConstruct'), domId: 't-motion', icon: 'play', label: T('motion.title'), tip: T('motion.toolbarTip'), cls: 'minor pro', help: 'motionStudy', run: () => Motion.toggle() },
       { id: 'params', group: T('dlg.tb.grpConstruct'), domId: 't-params', icon: 'sliders', label: T('topbar.params'), tip: T('dlg.tb.paramsTip'), cls: 'minor', help: 'params', run: () => Panels.showParams() },
       // Ansicht & Prüfen
@@ -366,6 +367,7 @@ const Toolbar = (() => {
       asmCutBtn.addEventListener('click', () => Assembly.startAsmCut());
       el.append(asmCutBtn);
       const map = catalogMap();
+      if (map.asmSkeleton) el.append(buildToolButton(map.asmSkeleton, false));
       if (map.asmPattern) el.append(buildToolButton(map.asmPattern, false));
       if (map.autoScrews) el.append(buildToolButton(map.autoScrews, false));
       if (map.asmLightweight) {

@@ -1828,5 +1828,10 @@
     "tip": "Varianten für Baugruppen: verschiedene Längen, aktive Teile oder Ersatz-Bauteile umschalten (Profi)",
     "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
     "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
+  },
+  "skeletonSketch": {
+    "tip": "Skelett-Skizze (Profi): eine Hauptskizze steuert mehrere Teile der Baugruppe",
+    "hilfe": "In einer Skelett-Skizze zeichnest du die wichtigen Linien und Maße der gesamten Baugruppe an einer zentralen Stelle. Jedes benannte Maß wird automatisch als verknüpfter Parameter bereitgestellt – änderst du später ein Maß in der Hauptskizze, rechnen alle damit verbundenen Teile sofort neu.",
+    "tipp": "Auch eingesetzte Bauteile aus eigenen Dokumenten lassen sich im Skelett-Panel direkt über „Verknüpfen“ mit einem Steuer-Maß verbinden."
   }
 }
