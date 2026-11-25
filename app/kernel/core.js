@@ -1972,8 +1972,164 @@ export function createKernel(R, oc) {
     }
     return R.assembleWire(E);
   }
+  // Geschlossener Übergang (Ring): verbindet den letzten Umriss nahtlos zurück zum ersten
+  function buildClosedLoft(pr, ruled) {
+    if (!Array.isArray(pr) || pr.length < 3) {
+      throw new Error('Für einen geschlossenen Übergang (Ring) braucht es mindestens drei geschlossene Umrisse.');
+    }
+    const m = pr.length;
+    const maps = pr.map((q) => planeMap(q.plane));
+    const centers = pr.map((q, i) => maps[i].P(q.c || [0, 0]));
+    for (let i = 0; i < m; i++) {
+      if (len(sub(centers[(i + 1) % m], centers[i])) <= 1e-4) {
+        throw new Error('Für einen geschlossenen Übergang (Ring) müssen die Umrisse an verschiedenen Stellen liegen.');
+      }
+    }
+    const wires = [];
+    let prevStart = null;
+    for (let i = 0; i < m; i++) {
+      const vp = norm(sub(centers[i], centers[(i - 1 + m) % m]));
+      const vn = norm(sub(centers[(i + 1) % m], centers[i]));
+      const sum = add(vp, vn);
+      const tang = len(sum) > 1e-6 ? norm(sum) : vn;
+      const ccw = dot(maps[i].n, tang) >= 0;
+      const loop = pr[i].outer;
+      if (!loop.circle && !loop.ellipse && Array.isArray(loop.segs) && loop.segs.length > 1) {
+        let segs = loop.segs;
+        if ((loopArea(loop) > 0) !== ccw) {
+          segs = segs.slice().reverse().map((s) => (s.t === 'bez' ? { ...s, a: s.b, b: s.a, c1: s.c2, c2: s.c1 } : { ...s, a: s.b, b: s.a }));
+        }
+        if (prevStart) {
+          let bestI = 0, bestD = Infinity;
+          for (let k = 0; k < segs.length; k++) {
+            const d = len(sub(maps[i].P(segs[k].a), prevStart));
+            if (d < bestD) { bestD = d; bestI = k; }
+          }
+          if (bestI > 0) segs = segs.slice(bestI).concat(segs.slice(0, bestI));
+        }
+        prevStart = maps[i].P(segs[0].a);
+        wires.push(loopWire({ ...loop, segs }, maps[i], ccw));
+      } else {
+        wires.push(loopWire(loop, maps[i], ccw));
+      }
+    }
+
+    const sewClosedShellToSolid = (sh) => {
+      const sew = new oc.BRepBuilderAPI_Sewing(1e-4, true, true, true, false);
+      let sw = null, ms = null, sfs = null, sol = null;
+      try {
+        for (const f of sh.faces) sew.Add(f.wrapped);
+        sew.Perform();
+        sw = sew.SewedShape();
+        let shell = null;
+        if (sw.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_SHELL) shell = oc.TopoDS.Shell(sw);
+        else {
+          const exp = new oc.TopExp_Explorer(sw, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+          if (exp.More()) shell = oc.TopoDS.Shell(exp.Current());
+          exp.delete();
+        }
+        if (!shell) return null;
+        ms = new oc.BRepBuilderAPI_MakeSolid(shell);
+        sol = ms.Solid();
+        sfs = new oc.ShapeFix_Solid(sol);
+        sfs.Perform();
+        const fixed = oc.TopoDS.Solid(sfs.Solid());
+        let res = R.cast(fixed);
+        if (R.measureVolume(res) < 0) {
+          const rev = R.cast(res.wrapped.Reversed());
+          safeDelete(res);
+          res = rev;
+        }
+        return res;
+      } finally {
+        sew.delete();
+        if (ms) ms.delete();
+        if (sfs) sfs.delete();
+        safeDelete(sol);
+        safeDelete(sw);
+      }
+    };
+
+    const isValidClosedSolid = (res) => {
+      if (!res || !R.isShape3D(res) || !(R.measureVolume(res) > 1e-3)) return false;
+      let ana = null, exp = null;
+      try {
+        ana = new oc.BRepCheck_Analyzer(res.wrapped, true);
+        if (!ana.IsValid()) return false;
+        exp = new oc.TopExp_Explorer(res.wrapped, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+        let nShells = 0;
+        while (exp.More()) {
+          nShells++;
+          if (!oc.BRep_Tool.IsClosed(exp.Current())) return false;
+          exp.Next();
+        }
+        return nShells > 0;
+      } finally {
+        if (ana) ana.delete();
+        if (exp) exp.delete();
+      }
+    };
+
+    const tryPipe = () => {
+      const spine = bezLoopWire(centers);
+      const b = new oc.BRepOffsetAPI_MakePipeShell(spine.wrapped);
+      try {
+        b.SetTransitionMode(oc.BRepBuilderAPI_TransitionMode.BRepBuilderAPI_RoundCorner);
+        b.SetMode(false);
+        for (const w of wires) b.Add(w.wrapped, false, false);
+        b.Build();
+        if (!b.IsDone()) return null;
+        b.MakeSolid();
+        let res = R.cast(b.Shape());
+        if (!res || !R.isShape3D(res)) { safeDelete(res); return null; }
+        if (R.measureVolume(res) < 0) {
+          const rev = R.cast(res.wrapped.Reversed());
+          safeDelete(res);
+          res = rev;
+        }
+        if (!isValidClosedSolid(res)) { safeDelete(res); return null; }
+        return res;
+      } catch (_) {
+        return null;
+      } finally {
+        b.delete();
+        safeDelete(spine);
+      }
+    };
+
+    const tryThru = (isRuled) => {
+      const b = new oc.BRepOffsetAPI_ThruSections(false, isRuled, 1e-6);
+      let sh = null;
+      try {
+        for (const w of wires) b.AddWire(w.wrapped);
+        b.AddWire(wires[0].wrapped);
+        b.Build();
+        if (!b.IsDone()) return null;
+        sh = R.cast(b.Shape());
+        const res = sewClosedShellToSolid(sh);
+        if (!isValidClosedSolid(res)) { safeDelete(res); return null; }
+        return res;
+      } catch (_) {
+        return null;
+      } finally {
+        safeDelete(sh);
+        b.delete();
+      }
+    };
+
+    try {
+      const shape = ruled ? (tryThru(true) || tryPipe()) : (tryPipe() || tryThru(false));
+      if (!shape) {
+        throw new Error('Der geschlossene Übergang (Ring) klappt mit diesen Umrissen nicht. Ordne mindestens drei Umrisse reihum im Kreis an, ohne dass sie sich überschneiden.');
+      }
+      return shape;
+    } finally {
+      for (const w of wires) safeDelete(w);
+    }
+  }
   // Übergang zwischen mehreren Umrissen (Loft), auf Wunsch mit Spitze – oder entlang einer Mittellinie
   function buildLoft(p) {
+    if (p.closed) return buildClosedLoft(p.profiles || [], !!p.ruled);
     if (Array.isArray(p.sections3) && p.sections3.length >= 2) {
       // mit Führungskurve: Zwischenschnitte kommen fertig aus dem Modell
       try { return R.loft(p.sections3.map(bezLoopWire), { ruled: false }); }

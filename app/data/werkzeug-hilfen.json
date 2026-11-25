@@ -1468,5 +1468,15 @@
     "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
     "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
     "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
+  },
+  "loftClosed": {
+    "tip": "Geschlossener Übergang (Ring): verbindet den letzten Umriss zurück zum ersten (Profi)",
+    "hilfe": "Wähle mindestens drei Skizzenkörper im Kreis oder schalte rechts beim Übergang „Geschlossen (Ring)“ ein. Tracery schließt die Form nahtlos vom letzten Querschnitt wieder an den ersten an – wahlweise weich oder mit geraden Flächen.",
+    "tipp": "Ideal für nahtlose Ringe, Rahmen, Griffe oder geschlossene Kanäle – mit „Körper → Abziehen von“ lässt sich der Ring direkt als Nut oder Kanal aus einem Körper schneiden."
+  },
+  "loftCut": {
+    "tip": "Übergang direkt als Schnitt von einem Körper abziehen (Profi)",
+    "hilfe": "Wähle zwei oder mehr Skizzenkörper (und bei Bedarf gleich den Zielkörper mit) und klicke auf „Übergang abziehen“. Der Übergang wird direkt vom Zielkörper abgezogen, um verjüngte Kanäle, Aussparungen oder konische Taschen zu schneiden.",
+    "tipp": "Auch einen bestehenden Übergang kannst du jederzeit rechts unter „Körper“ auf „Abziehen von …“, „Vereinigen mit …“ oder „Schnittmenge mit …“ umstellen."
   }
 }

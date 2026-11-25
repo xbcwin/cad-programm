@@ -23955,6 +23955,189 @@ def t_f11250121(p):
     return [ok1, ok2]
 
 
+# ---------- [A-122] Übergang als Schnitt und als Ring (KP-30) ----------
+def t_a122_uebergang_schnitt_ring(p):
+    warte_idle = lambda: warte_rechnen(p, 35)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+
+    # 1. Geschlossener Ring durch 4 Kreise im Quadrat → Ring ohne Lücke
+    p.ev("""App.change('4 Kreise im Quadrat', d => {
+      const specs = [
+        { o: [20, 0, 0],  x: [1, 0, 0],  n: [0, 1, 0],  name: 'Kreis_1' },
+        { o: [0, 20, 0],  x: [0, 1, 0],  n: [-1, 0, 0], name: 'Kreis_2' },
+        { o: [-20, 0, 0], x: [-1, 0, 0], n: [0, -1, 0], name: 'Kreis_3' },
+        { o: [0, -20, 0], x: [0, -1, 0], n: [1, 0, 0],  name: 'Kreis_4' },
+      ];
+      for (let i = 0; i < specs.length; i++) {
+        const s = specs[i];
+        const sk = { plane: { o: s.o, x: s.x, n: s.n }, ents: [{ id: 'c_' + i, type: 'circle', c: [0, 0], r: 5 }], dims: [], cons: [] };
+        d.items.push(Model.newItem('extrude', { sketch: sk, dist: 2, dir: 'normal' }, { name: s.name }));
+      }
+    })""")
+    warte_idle()
+    p.ev("App.select(App.doc.items.map(x => x.id))"); p.wait(400)
+    p.pg.locator('#ctx-loft-closed').click(); warte_idle()
+
+    ring_info = p.ev("""const it = App.doc.items[0];
+      const r = it ? App.results.get(it.id) : null;
+      const n = it ? Viewer.nodes.get(it.id) : null;
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let minR = Infinity, maxR = 0;
+      const quads = [false, false, false, false];
+      const axes = [false, false, false, false];
+      if (pos) {
+        for (let i = 0; i < pos.length; i += 3) {
+          const x = pos[i], y = pos[i + 1], rad = Math.hypot(x, y);
+          if (rad < minR) minR = rad;
+          if (rad > maxR) maxR = rad;
+          if (x > 5 && y > 5) quads[0] = true;
+          if (x < -5 && y > 5) quads[1] = true;
+          if (x < -5 && y < -5) quads[2] = true;
+          if (x > 5 && y < -5) quads[3] = true;
+          if (x > 12 && Math.abs(y) < 3) axes[0] = true;
+          if (y > 12 && Math.abs(x) < 3) axes[1] = true;
+          if (x < -12 && Math.abs(y) < 3) axes[2] = true;
+          if (y < -12 && Math.abs(x) < 3) axes[3] = true;
+        }
+      }
+      return {
+        len: App.doc.items.length,
+        kind: it && it.kind,
+        closed: !!(it && it.p && it.p.closed),
+        errs: App.errors.length,
+        bbox: r && r.data ? r.data.bbox : null,
+        minR, maxR, quads, axes
+      };""")
+    v_ring = volumen(p)
+    gc_ring = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    bb_r = ring_info['bbox']
+    ok1 = (
+        ring_info['len'] == 1
+        and ring_info['kind'] == 'loft'
+        and ring_info['closed']
+        and ring_info['errs'] == 0
+        and v_ring is not None and 8000 < v_ring < 11000
+        and bool(bb_r) and abs(bb_r[0] + 25) < 0.8 and abs(bb_r[3] - 25) < 0.8
+        and abs(bb_r[1] + 25) < 0.8 and abs(bb_r[4] - 25) < 0.8
+        and abs(bb_r[2] + 5) < 0.5 and abs(bb_r[5] - 5) < 0.5
+        and ring_info['minR'] > 10.0 and ring_info['maxR'] < 27.0
+        and all(ring_info['quads']) and all(ring_info['axes'])
+        and gc_ring['n'] == 1 and gc_ring['iss'] == 0
+    )
+
+    # 2. Gerade Flächen (ruled), Öffnen/Schließen (#p-closed), Rückgängig & Einfach/Profi-Sichtbarkeit
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    p.pg.locator('#p-ruled').select_option('ruled'); warte_idle()
+    v_ruled = volumen(p)
+    gc_ruled = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    err_ruled = p.ev("return App.errors.length")
+
+    p.pg.locator('#p-closed').uncheck(); warte_idle()
+    v_open = volumen(p)
+    open_ui = p.ev("return { closed: !!App.doc.items[0].p.closed, tip: !!document.querySelector('#p-tip'), pathBtn: !!document.querySelector('#loft-path-edit'), errs: App.errors.length }")
+    p.pg.locator('#p-closed').check(); warte_idle()
+    v_reclosed = volumen(p)
+    p.ev("App.undo()"); warte_idle()
+    undone_closed = p.ev("return !!App.doc.items[0].p.closed")
+    p.ev("App.redo()"); warte_idle()
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_hidden = p.ev("const el = document.querySelector('#p-closed'); return !el || getComputedStyle(el.closest('.check')).display === 'none'")
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    pro_vis = p.ev("const el = document.querySelector('#p-closed'); return !!el && getComputedStyle(el.closest('.check')).display !== 'none'")
+    ok2 = (
+        err_ruled == 0 and gc_ruled['iss'] == 0
+        and v_ruled is not None and 5500 < v_ruled < 7000
+        and not open_ui['closed'] and open_ui['tip'] and open_ui['pathBtn'] and open_ui['errs'] == 0
+        and v_open is not None and v_open < v_ruled * 0.85
+        and v_reclosed is not None and abs(v_reclosed - v_ruled) < 10.0
+        and not undone_closed
+        and simple_hidden and pro_vis
+    )
+
+    # 3. Übergang als Schnitt in Quader -> Volumen kleiner
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    box_id = p.ev("""let id; App.change('Quader', d => {
+      const b = Model.newItem('box', { w: 60, d: 40, h: 30 }, { name: 'Quader' });
+      d.items.push(b); id = b.id;
+      const sk1 = { plane: { o: [0, 0, -1], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'r1', type: 'rect', a: [-12, -8], b: [12, 8] }], dims: [], cons: [] };
+      const sk2 = { plane: { o: [0, 0, 31], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c2', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] };
+      d.items.push(Model.newItem('extrude', { sketch: sk1, dist: 2, dir: 'normal' }, { name: 'Unten' }));
+      d.items.push(Model.newItem('extrude', { sketch: sk2, dist: 2, dir: 'normal' }, { name: 'Oben' }));
+    }); return id;""")
+    warte_idle()
+    v_box = p.ev("return Mass.measureDoc(App.doc).then(r => r && r.parts.find(x => x.id === arg)?.volume)", box_id)
+    p.ev("App.select(App.doc.items.slice(1).map(x => x.id))"); p.wait(400)
+    p.pg.locator('#ctx-loft-cut').click(); warte_idle()
+
+    cut_info = p.ev("""const lf = App.doc.items.find(x => x.kind === 'loft');
+      return lf ? { id: lf.id, op: lf.op, merged: App.mergedInto(lf.id), errs: App.errors.length } : null;""")
+    v_cut = volumen(p)
+    gc_cut = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    ok3 = (
+        v_box is not None and abs(v_box - 72000.0) < 20.0
+        and bool(cut_info) and cut_info['errs'] == 0
+        and cut_info['op'] and cut_info['op']['type'] == 'cut' and cut_info['op']['target'] == box_id
+        and cut_info['merged'] == box_id
+        and v_cut is not None and 58000.0 < v_cut < v_box - 5000.0
+        and gc_cut['n'] == 1 and gc_cut['iss'] == 0
+    )
+
+    # 4. Modus rechts (#op-type) umschalten, Rückgängig/Wiederholen & Ring als Schnitt in Platte
+    p.ev("App.select([arg])", cut_info['id']); p.wait(300)
+    p.pg.locator('#op-type').select_option('new'); warte_idle()
+    v_box_restored = p.ev("return Mass.measureDoc(App.doc).then(r => r && r.parts.find(x => x.id === arg)?.volume)", box_id)
+    p.pg.locator('#op-type').select_option('cut'); warte_idle()
+    v_cut_again = volumen(p)
+    p.ev("App.undo()"); warte_idle()
+    op_undone = p.ev("return !!App.doc.items.find(x => x.id === arg).op", cut_info['id'])
+
+    # Ring als Schnitt in Platte 80 × 80 × 20
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    plate_id = p.ev("""let id; App.change('Platte mit Ring-Nut', d => {
+      const b = Model.newItem('box', { w: 80, d: 80, h: 20 }, { name: 'Platte' });
+      d.items.push(b); id = b.id;
+      const specs = [
+        { o: [20, 0, 20],  x: [1, 0, 0],  n: [0, 1, 0] },
+        { o: [0, 20, 20],  x: [0, 1, 0],  n: [-1, 0, 0] },
+        { o: [-20, 0, 20], x: [-1, 0, 0], n: [0, -1, 0] },
+        { o: [0, -20, 20], x: [0, -1, 0], n: [1, 0, 0] },
+      ];
+      for (let i = 0; i < specs.length; i++) {
+        const s = specs[i];
+        const sk = { plane: { o: s.o, x: s.x, n: s.n }, ents: [{ id: 'rc_' + i, type: 'circle', c: [0, 0], r: 5 }], dims: [], cons: [] };
+        d.items.push(Model.newItem('extrude', { sketch: sk, dist: 2, dir: 'normal' }, { name: 'K_' + i }));
+      }
+    }); return id;""")
+    warte_idle()
+    v_plate = p.ev("return Mass.measureDoc(App.doc).then(r => r && r.parts.find(x => x.id === arg)?.volume)", plate_id)
+    ring_cut_id = p.ev("return Features.loftClosed(App.doc.items.slice(1).map(x => x.id))")
+    warte_idle()
+    p.ev("App.select([arg])", ring_cut_id); p.wait(300)
+    p.pg.locator('#op-type').select_option('cut'); warte_idle()
+    v_plate_cut = volumen(p)
+    err_ring_cut = p.ev("return App.errors.length")
+    ok4 = (
+        v_box_restored is not None and abs(v_box_restored - 72000.0) < 20.0
+        and v_cut_again is not None and abs(v_cut_again - v_cut) < 20.0
+        and not op_undone
+        and v_plate is not None and abs(v_plate - 128000.0) < 20.0
+        and err_ring_cut == 0
+        and v_plate_cut is not None and v_plate_cut < v_plate - 3000.0
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("App.select(App.doc.items.map(x=>x.id)); return Commands.search('übergang ring').some(c => c.id === 'loft-closed') && Commands.search('übergang schnitt').some(c => c.id === 'loft-cut')")
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'op' && /Ring/.test(l.t) && /Schnitt/.test(l.t)) && ex.lines.some(l => l.k === 'was' && /Ring/.test(l.t))", ring_cut_id)
+    ok5 = (
+        all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('loft', 'loftClosed', 'loftCut'))
+        and i18n_ok and cmds_ok and explain_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -24183,6 +24366,7 @@ TESTS = [
     ('[A-118] Skizzen-Blöcke (SK-31)', t_a118_skizzen_bloecke),
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
     ('[F-11250121] Volltest-Reparatur: Fokus-Vorschau zeichnet bei rAF-Stau / Meldung überlebt Hauptthread-Hänger', t_f11250121),
+    ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

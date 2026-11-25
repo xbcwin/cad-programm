@@ -2699,6 +2699,116 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: T('helix.hint') }));
   }
 
+  // ---------- Übergang (Loft): geschlossen (Ring) & als Schnitt (KP-30) ----------
+  function loftTargets(doc = App.doc, excludeIds = []) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    const ex = new Set(excludeIds || []);
+    return doc.items.filter((x) => (
+      x && !ex.has(x.id) && x.role !== 'hole' && !x.suppressed
+      && !(x.kind === 'group' && x.p && x.p.assembly)
+      && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss'
+      && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d'
+      && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale'
+      && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))
+    ));
+  }
+  function loftClosed(ids, opts = {}) {
+    return Actions.loft(ids, { ...opts, closed: true });
+  }
+  function loftCut(ids, targetId = null, opts = {}) {
+    return Actions.loft(ids, { ...opts, op: 'cut', target: targetId || undefined });
+  }
+  function setLoftClosed(itemId, closed) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'loft') return false;
+    const n = (f.item.p && Array.isArray(f.item.p.sketches)) ? f.item.p.sketches.length : 0;
+    if (closed && n < 3) {
+      UI.toast(T('panel.loft.needThreeClosed'), { icon: 'info' });
+      return false;
+    }
+    App.change(closed ? 'Übergang geschlossen (Ring)' : 'Übergang geöffnet', (doc) => {
+      const fn = Model.find(doc, itemId);
+      if (!fn || fn.item.kind !== 'loft') return false;
+      const p = fn.item.p || (fn.item.p = {});
+      if (closed) {
+        p.closed = true;
+        p.tip = 0;
+        delete p.path;
+        delete p.rail;
+        delete p.rail2;
+      } else {
+        delete p.closed;
+      }
+    });
+    return true;
+  }
+  function renderLoft(it, sec, setP, w) {
+    const n = (it.p.sketches || []).length;
+    const hasPath = !!it.p.path, hasRail1 = !!it.p.rail, hasRail2 = !!it.p.rail2, hasRail = hasRail1 || hasRail2;
+    const isClosed = !!it.p.closed && !hasPath && !hasRail;
+    sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.loft.profiles')), h('b', { class: 'mono' }, String(n))));
+    if (!hasPath && !hasRail) {
+      const fl = h('div', { class: 'fields' });
+      if (!isClosed) fl.append(UI.numField({ id: 'p-tip', label: T('panel.loft.extendTip'), value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
+      fl.append(UI.selectField({ id: 'p-ruled', label: T('kind.loft'), value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', T('panel.loft.smooth')], ['ruled', T('panel.loft.ruled')]], onChange: (v) => setP('ruled', v === 'ruled') }));
+      sec.append(fl);
+      const chk = h('input', { type: 'checkbox', id: 'p-closed', checked: isClosed });
+      if (n < 3 && !isClosed) chk.disabled = true;
+      chk.onchange = () => { if (!setLoftClosed(it.id, chk.checked)) chk.checked = !!it.p.closed; };
+      const cl = h('label', { class: 'check pro', 'data-help': 'loftClosed', title: n < 3 && !isClosed ? T('panel.loft.needThreeClosed') : '', style: { marginTop: '6px' } }, chk, T('panel.loft.closed'));
+      sec.append(cl);
+      sec.append(h('div', { class: 'hint-box', html: isClosed ? T('panel.loft.closedHint') : T('panel.loft.tipHint') }));
+    }
+    // Mittellinie: der Übergang folgt einer gebogenen Linie statt dem kürzesten Weg
+    const ml = h('div', { class: 'section', id: 'loft-path' }, h('div', { class: 'section-h' }, T('panel.loft.centerline')));
+    if (isClosed) {
+      ml.append(h('div', { class: 'hint-box', html: T('panel.loft.pathBlockedClosed') }));
+    } else if (n >= 2) {
+      const eb = h('button', { type: 'button', class: 'btn', id: 'loft-path-edit' }); eb.innerHTML = icon(hasPath ? 'edit' : 'spline') + esc(hasPath ? T('panel.loft.editPath') : T('panel.loft.drawPath'));
+      eb.onclick = () => Sketch.startLoftPath(it.id);
+      const row = h('div', { class: 'btn-row' }, eb);
+      if (hasPath) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'loft-path-off' }); rb.innerHTML = icon('close') + esc(T('panel.loft.noPath'));
+        rb.onclick = () => App.change('Mittellinie entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.path; });
+        row.append(rb);
+      }
+      const ang = hasPath ? Model.loftPathAngles(it, Model.vars(App.doc).v) : [];
+      const bad = ang.map((a, i) => [a, i]).filter(([a]) => a > 30);
+      if (bad.length) ml.append(h('div', { class: 'hint-box warn', id: 'loft-path-warn', html: T('panel.loft.pathAngleWarn', { which: bad.length === ang.length ? T('panel.loft.allProfiles') : bad.map(([, i]) => T('panel.loft.profileWord', { which: i === 0 ? T('panel.loft.firstProfile') : i === ang.length - 1 ? T('panel.loft.lastProfile') : T('panel.loft.nthProfile', { n: i + 1 }) })).join(T('panel.loft.andJoin')), angs: bad.map(([a]) => a + '°').join(', ') }) }));
+      ml.append(row, h('div', { class: 'hint-box', html: hasPath ? T('panel.loft.pathActiveHint') : T('panel.loft.pathIdleHint') }));
+    } else ml.append(h('div', { class: 'hint-box', html: T('panel.loft.needTwoPath') }));
+    // Führungskurve: gibt die Seitenlinie vor – der Übergang wird zwischen den Umrissen so weit, dass er sie berührt
+    const fk = h('div', { class: 'section', id: 'loft-rail' }, h('div', { class: 'section-h' }, T('panel.loft.rail')));
+    if (isClosed) {
+      fk.append(h('div', { class: 'hint-box', html: T('panel.loft.railBlockedClosed') }));
+    } else if (n >= 2 && !hasPath) {
+      const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail1 ? 'edit' : 'spline') + esc(hasRail1 ? T('panel.loft.editRail') : T('panel.loft.drawRail'));
+      eb.onclick = () => Sketch.startLoftPath(it.id, 'rail');
+      const row = h('div', { class: 'btn-row' }, eb);
+      if (hasRail1) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-off' }); rb.innerHTML = icon('close') + esc(T('panel.loft.noRail'));
+        rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; delete f.item.p.rail2; });
+        row.append(rb);
+      }
+      fk.append(row, h('div', { class: 'hint-box', html: hasRail ? T('panel.loft.railActiveHint') : T('panel.loft.railIdleHint') }));
+    } else fk.append(h('div', { class: 'hint-box', html: hasPath ? T('panel.loft.railBlockedPath') : T('panel.loft.needTwoRail') }));
+    // zweite Führungskurve quer zur ersten (z. B. Gehäuse: erste von der Seite für die Höhe, zweite von oben für die Breite)
+    const fk2 = !isClosed && hasRail1 && n >= 2 && !hasPath ? h('div', { class: 'section', id: 'loft-rail2' }, h('div', { class: 'section-h' }, T('panel.loft.rail2'))) : null;
+    if (fk2) {
+      const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-edit' }); eb.innerHTML = icon(hasRail2 ? 'edit' : 'spline') + esc(hasRail2 ? T('panel.loft.editRail2') : T('panel.loft.drawRail2'));
+      eb.onclick = () => Sketch.startLoftPath(it.id, 'rail2');
+      const row = h('div', { class: 'btn-row' }, eb);
+      if (hasRail2) {
+        const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-off' }); rb.innerHTML = icon('close') + esc(T('panel.loft.noRail2'));
+        rb.onclick = () => App.change('Zweite Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail2; });
+        row.append(rb);
+      }
+      fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? T('panel.loft.rail2ActiveHint') : T('panel.loft.rail2IdleHint') }));
+    }
+    if (!isClosed && hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, T('panel.loft.centerline')), h('div', { class: 'hint-box', html: T('panel.loft.pathBlockedRail') })); }
+    w.append(sec, ml, fk); if (fk2) w.append(fk2);
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, loftTargets, loftClosed, loftCut, setLoftClosed, renderLoft };
 })();

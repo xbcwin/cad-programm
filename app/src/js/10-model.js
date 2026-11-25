@@ -898,6 +898,10 @@ const Model = (() => {
       profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly });
     }
     const out = { profiles, ruled: !!p.ruled };
+    if (p.closed) {
+      out.closed = true;
+      return out;
+    }
     // Führungskurve: Zwischenschnitte, die in Richtung der Kurve so gestreckt werden, dass sie die Kurve berühren
     const rails = p.path ? [] : [p.rail, p.rail2].filter(Boolean).map((r) => ({ plane: r.plane, ch: SK.chains(Solver.cached(r, V).ents)[0] })).filter((r) => r.ch);
     if (rails.length && profiles.length >= 2) { const sec = railSections(profiles, rails); if (sec) { out.sections3 = sec; return out; } }
@@ -1531,6 +1535,12 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
+      case 'loft': {
+        const n = (it.p && Array.isArray(it.p.sketches)) ? it.p.sketches.length : 0;
+        const base = it.p && it.p.closed ? `Ring (${n} Umrisse)` : `${n} Umrisse`;
+        const opTxt = it.op && it.op.type === 'cut' ? ' · Schnitt' : it.op && it.op.type === 'join' ? ' · Vereinigen' : it.op && it.op.type === 'common' ? ' · Schnittmenge' : '';
+        return base + opTxt;
+      }
       case 'sweep': {
         const shp = p.shape === 'rect' ? `${f(p.w ?? 6)} × ${f(p.h ?? 4)}${u}` : p.shape === 'sketch' ? 'eigene Form' : `Ø ${f(p.d ?? 6)}${u}`;
         const tw = Math.abs(p.twist || 0) > 1e-6 ? ` · ↻ ${fmtAngleU(p.twist)}` : '';

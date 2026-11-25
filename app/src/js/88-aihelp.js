@@ -87,6 +87,13 @@ const Explain = (() => {
       const ents = (res.ents || []).filter((e) => !e.con);
       lines.push({ k: 'op', t: `3D-Skizze im Raum mit ${ents.length} Elementen (Gesamtlänge ${Units.fmtLenU(res.totalLength, 2, doc)}), nutzbar als Pfad für „Entlang Pfad“.` });
     }
+    if (it.kind === 'loft') {
+      const p = it.p || {}, n = (p.sketches || []).length;
+      const style = p.closed ? 'geschlossen als Ring' : p.path ? 'entlang einer Mittellinie' : (p.rail || p.rail2) ? 'mit Führungskurve' : Model.num(p.tip, V, 0) > 0 ? `zur Spitze (${Units.fmtLenU(Model.num(p.tip, V, 0), 2, doc)})` : (p.ruled ? 'mit geraden Flächen' : 'weich');
+      const tf = it.op && it.op.target ? Model.find(doc, it.op.target) : null;
+      const opTxt = it.op && it.op.type === 'cut' ? ` – wird von „${tf ? Model.label(tf.item) : 'Zielkörper'}“ als Schnitt abgezogen` : it.op && it.op.type === 'join' ? ` – wird mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ vereinigt` : it.op && it.op.type === 'common' ? ` – bildet mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ die Schnittmenge` : '';
+      lines.push({ k: 'op', t: `Verbindet ${n} Umrisse ${style}${opTxt}.` });
+    }
     if (it.kind === 'sweep') {
       const p = it.p || {};
       const shpTxt = p.shape === 'rect' ? `Rechteck ${Units.fmtLenU(Model.num(p.w, V, 6), 2, doc)} × ${Units.fmtLenU(Model.num(p.h, V, 4), 2, doc)}` : p.shape === 'sketch' ? `eigener Umriss${p.profName ? ` („${p.profName}“)` : ''}` : `Kreis Ø ${Units.fmtLenU(Model.num(p.d, V, 6), 2, doc)}`;
