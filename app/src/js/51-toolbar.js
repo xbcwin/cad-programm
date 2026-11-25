@@ -291,6 +291,7 @@ const Toolbar = (() => {
       { label: T('menu.more.measure'), icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
       { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
       { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
+      { label: T('menu.view.floorLights'), icon: 'sun', id: 'more-look-panel', help: 'studioFloorLight', run: () => ViewPrefs.openLookPanel() },
       { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
       { label: T('menu.check.geom'), icon: 'target', id: 'more-geom-check', help: 'geomCheck', run: () => GeomCheck.open() },
       { label: T('menu.check.clashes'), icon: 'boolIntersect', id: 'more-clash-check', help: 'clashCheck', run: () => ClashCheck.open() },

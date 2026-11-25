@@ -2,21 +2,52 @@
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges', lang: 'auto', mouse: 'tracery', uiScale: 100 };
+  const MAX_LIGHTS = 3;
+  const LIGHT_PRESETS = [
+    { azimuth: 35, elevation: 52, color: '#ffffff', intensity: 2.1 },
+    { azimuth: -55, elevation: 25, color: '#dfe8ff', intensity: 1.0 },
+    { azimuth: 165, elevation: 30, color: '#fff3e0', intensity: 0.8 },
+  ];
+  const DEF = {
+    grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal',
+    adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1,
+    notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true,
+    display: 'edges', lang: 'auto', mouse: 'tracery', uiScale: 100,
+    floorReflect: false, floorReflectStrength: 45, envImageName: '', envImageData: '',
+    manualLights: false, lights: [{ ...LIGHT_PRESETS[0] }],
+  };
   const VALID_MOUSE = new Set(['tracery', 'onshape', 'solidworks', 'fusion', 'blender']);
   const VALID_THEME = new Set(['system', 'light', 'dark']);
   const VALID_QUALITY = new Set(['coarse', 'normal', 'fine', 'ultra']);
   const VALID_LEVEL = new Set(['simple', 'pro']);
-  const VALID_LOOK = new Set(['studio', 'clay', 'chrome', 'simple']);
-  const VALID_MOOD = new Set(['studio', 'bright', 'workshop']);
+  const VALID_LOOK = new Set(['studio', 'plain', 'clay', 'chrome', 'simple']);
+  const VALID_MOOD = new Set(['studio', 'hell', 'werkstatt', 'bright', 'workshop']);
   const VALID_DISPLAY = new Set(['edges', 'shaded', 'wire', 'hidden']);
   const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
   const normLang = (x) => (x === 'de' || x === 'en' ? x : 'auto');
   const normUiScale = (x) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 80, 150) : 100; };
   const normMouse = (x) => (VALID_MOUSE.has(x) ? x : 'tracery');
-  let v = { ...DEF };
+  const normReflectStrength = (x) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 100) : DEF.floorReflectStrength; };
+  const normLight = (l, idx = 0) => {
+    const fb = LIGHT_PRESETS[idx % LIGHT_PRESETS.length] || LIGHT_PRESETS[0];
+    const src = l && typeof l === 'object' ? l : {};
+    const az = Number(src.azimuth), el = Number(src.elevation), inten = Number(src.intensity);
+    const col = typeof src.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(src.color) ? src.color.toLowerCase() : fb.color;
+    return {
+      azimuth: Number.isFinite(az) ? clamp(Math.round(az), -180, 180) : fb.azimuth,
+      elevation: Number.isFinite(el) ? clamp(Math.round(el), -60, 90) : fb.elevation,
+      color: col,
+      intensity: Number.isFinite(inten) ? clamp(Math.round(inten * 100) / 100, 0, 5) : fb.intensity,
+    };
+  };
+  const normLights = (list) => {
+    if (!Array.isArray(list) || !list.length) return [{ ...LIGHT_PRESETS[0] }];
+    return list.slice(0, MAX_LIGHTS).map((l, i) => normLight(l, i));
+  };
+  let v = { ...DEF, lights: normLights(DEF.lights) };
   let firstStart = !storageGet(KEY) && !storageGet('masswerk.last') && !storageGet('masswerk.index');
   let openDialogState = null;
+  let lookPanel = null, lookPanelHooksBound = false, envRestored = false, skipPanelRebuild = false;
   try {
     const raw = storageGet(KEY);
     if (raw) {
@@ -30,7 +61,18 @@ const ViewPrefs = (() => {
   v.lang = normLang(v.lang);
   v.uiScale = normUiScale(v.uiScale);
   v.mouse = normMouse(v.mouse);
+  v.floorReflect = !!v.floorReflect;
+  v.floorReflectStrength = normReflectStrength(v.floorReflectStrength);
+  v.envImageName = typeof v.envImageName === 'string' ? v.envImageName : '';
+  v.envImageData = typeof v.envImageData === 'string' && v.envImageData.length <= 400000 ? v.envImageData : '';
+  v.manualLights = !!v.manualLights;
+  v.lights = normLights(v.lights);
   const ev = makeEmitter();
+  function persist() {
+    const copy = { ...v, lights: normLights(v.lights) };
+    if (typeof copy.envImageData === 'string' && copy.envImageData.length > 400000) copy.envImageData = '';
+    storageSet(KEY, JSON.stringify(copy));
+  }
   function applyTheme() {
     const r = document.documentElement;
     if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
@@ -54,16 +96,41 @@ const ViewPrefs = (() => {
     Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes });
     Viewer.setOrtho(v.ortho);
     Viewer.setAdaptive(v.adaptive !== false);
-    Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' });
+    Viewer.setLook({
+      look: v.look,
+      mood: v.mood,
+      shadows: v.shadows !== false,
+      display: v.display || 'edges',
+      floorReflect: !!v.floorReflect,
+      floorReflectStrength: normReflectStrength(v.floorReflectStrength) / 100,
+      manualLights: !!v.manualLights,
+      lights: normLights(v.lights),
+    });
+    if (!envRestored) {
+      envRestored = true;
+      if (v.envImageData && typeof Viewer.setEnvImage === 'function' && !Viewer.hasCustomEnv) {
+        Viewer.setEnvImage(v.envImageData, v.envImageName || 'Umgebungsbild').then(() => {
+          if (lookPanel && lookPanel.isConnected) renderLookPanel();
+        });
+      }
+    } else if (!v.envImageName && !v.envImageData && typeof Viewer.hasCustomEnv !== 'undefined' && Viewer.hasCustomEnv && typeof Viewer.setEnvImage === 'function') {
+      Viewer.setEnvImage(null);
+    }
     if (typeof Kernel !== 'undefined' && Kernel.setMultiWorker) Kernel.setMultiWorker(v.multiWorker !== false);
     applyTheme();
     applyUiScale();
     FMT.dec = normDec(v.decimals, DEF.decimals);
     FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
     Viewer.setMouseStyle(v.mouse || 'tracery');
+    const projFloorChk = document.getElementById('proj-floor-reflect');
+    if (projFloorChk) projFloorChk.checked = !!v.floorReflect;
+    if (lookPanel && lookPanel.isConnected) {
+      if (skipPanelRebuild) syncLookPanelInputs();
+      else renderLookPanel();
+    }
     ev.emit('change', v);
   }
-  function set(patch, msg) {
+  function set(patch, msg, opts = {}) {
     const oldQ = v.quality, oldDec = v.decimals, oldAng = v.angleDecimals, oldL = v.level, oldMW = v.multiWorker;
     const next = { ...patch };
     if ('decimals' in next) next.decimals = normDec(next.decimals, DEF.decimals);
@@ -71,8 +138,17 @@ const ViewPrefs = (() => {
     if ('lang' in next) next.lang = normLang(next.lang);
     if ('uiScale' in next) next.uiScale = normUiScale(next.uiScale);
     if ('mouse' in next) next.mouse = normMouse(next.mouse);
+    if ('floorReflect' in next) next.floorReflect = !!next.floorReflect;
+    if ('floorReflectStrength' in next) next.floorReflectStrength = normReflectStrength(next.floorReflectStrength);
+    if ('manualLights' in next) next.manualLights = !!next.manualLights;
+    if ('lights' in next) next.lights = normLights(next.lights);
+    if ('envImageName' in next) next.envImageName = typeof next.envImageName === 'string' ? next.envImageName : '';
+    if ('envImageData' in next) next.envImageData = typeof next.envImageData === 'string' && next.envImageData.length <= 400000 ? next.envImageData : '';
     if ('level' in next) firstStart = false;
-    Object.assign(v, next); storageSet(KEY, JSON.stringify(v)); apply();
+    Object.assign(v, next);
+    persist();
+    skipPanelRebuild = !!opts.skipPanelRebuild;
+    try { apply(); } finally { skipPanelRebuild = false; }
     syncLevel();
     if (v.level !== oldL) {
       // Oberfläche gewechselt: Werkzeuge, Leisten und Kontextleiste neu aufbauen
@@ -137,17 +213,17 @@ const ViewPrefs = (() => {
       format: 'tracery-settings',
       version: 1,
       exportedAt: new Date().toISOString(),
-      view: { ...v },
+      view: { ...v, lights: normLights(v.lights) },
       shortcuts: typeof Commands !== 'undefined' && Commands.exportShortcuts ? Commands.exportShortcuts() : {},
       toolbar: tb ? { items: tb.items, favs: tb.favs } : { items: [], favs: [] },
       sketch: { angleSnap: typeof Sketch !== 'undefined' ? !!Sketch.angleSnap : true },
     };
   }
   function sanitizeView(src) {
-    const out = { ...DEF };
+    const out = { ...DEF, lights: normLights(DEF.lights) };
     if (!src || typeof src !== 'object') return out;
     if (src.grid === 'auto' || (typeof src.grid === 'number' && isFinite(src.grid) && src.grid > 0)) out.grid = src.grid;
-    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows']) {
+    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows', 'floorReflect', 'manualLights']) {
       if (typeof src[k] === 'boolean') out[k] = src[k];
     }
     if (VALID_QUALITY.has(src.quality)) out.quality = src.quality;
@@ -161,6 +237,10 @@ const ViewPrefs = (() => {
     out.lang = normLang(src.lang);
     out.mouse = normMouse(src.mouse);
     out.uiScale = normUiScale(src.uiScale);
+    out.floorReflectStrength = normReflectStrength(src.floorReflectStrength);
+    if (typeof src.envImageName === 'string') out.envImageName = src.envImageName;
+    if (typeof src.envImageData === 'string' && src.envImageData.length <= 400000) out.envImageData = src.envImageData;
+    if (Array.isArray(src.lights)) out.lights = normLights(src.lights);
     return out;
   }
   function importData(raw, opts = {}) {
@@ -226,7 +306,8 @@ const ViewPrefs = (() => {
   function resetAll(opts = {}) {
     const backup = exportData();
     firstStart = false;
-    set({ ...DEF });
+    if (typeof Viewer !== 'undefined' && Viewer.setEnvImage) Viewer.setEnvImage(null);
+    set({ ...DEF, lights: normLights(DEF.lights) });
     if (typeof Commands !== 'undefined' && Commands.resetShortcuts) Commands.resetShortcuts();
     if (typeof Toolbar !== 'undefined' && Toolbar.reset) Toolbar.reset(true);
     if (typeof Sketch !== 'undefined' && Sketch.setAngleSnap) Sketch.setAngleSnap(true);
@@ -237,6 +318,254 @@ const ViewPrefs = (() => {
       });
     }
     refreshOpenDialog();
+  }
+  function addLight(cfg) {
+    const cur = normLights(v.lights);
+    if (cur.length >= MAX_LIGHTS) return false;
+    const preset = LIGHT_PRESETS[cur.length] || LIGHT_PRESETS[0];
+    cur.push(normLight(cfg || preset, cur.length));
+    set({ manualLights: true, lights: cur });
+    return true;
+  }
+  function removeLight(idx) {
+    const cur = normLights(v.lights);
+    if (cur.length <= 1 || idx < 0 || idx >= cur.length) return false;
+    cur.splice(idx, 1);
+    set({ lights: cur });
+    return true;
+  }
+  function updateLight(idx, patch) {
+    const cur = normLights(v.lights);
+    if (idx < 0 || idx >= cur.length) return false;
+    cur[idx] = normLight({ ...cur[idx], ...(patch || {}) }, idx);
+    set({ manualLights: true, lights: cur }, null, { skipPanelRebuild: true });
+    return true;
+  }
+  function resetLights() {
+    set({ manualLights: false, lights: [{ ...LIGHT_PRESETS[0] }] });
+  }
+  async function loadEnvImage(file) {
+    if (!file || typeof Viewer === 'undefined' || !Viewer.setEnvImage) return { ok: false, error: 'no_file' };
+    const res = await Viewer.setEnvImage(file, file.name || '');
+    if (!res || !res.ok) {
+      UI.toast(T('look.envLoadErr'), { kind: 'bad', icon: 'warn' });
+      return res || { ok: false };
+    }
+    set({
+      look: 'studio',
+      envImageName: res.name || file.name || '',
+      envImageData: typeof res.dataUrl === 'string' ? res.dataUrl : '',
+    });
+    UI.toast(T('look.envLoaded', { name: res.name || file.name || '' }), { icon: 'check', ms: 1800 });
+    return res;
+  }
+  async function clearEnvImage() {
+    if (typeof Viewer !== 'undefined' && Viewer.setEnvImage) await Viewer.setEnvImage(null);
+    set({ envImageName: '', envImageData: '' });
+  }
+  function syncLookPanelInputs() {
+    if (!lookPanel || !lookPanel.isConnected) return;
+    const chkFloor = lookPanel.querySelector('#look-floor-reflect');
+    if (chkFloor) chkFloor.checked = !!v.floorReflect;
+    const rngFloor = lookPanel.querySelector('#look-floor-strength');
+    if (rngFloor) rngFloor.value = String(normReflectStrength(v.floorReflectStrength));
+    const valFloor = lookPanel.querySelector('#look-floor-strength-val');
+    if (valFloor) valFloor.textContent = `${normReflectStrength(v.floorReflectStrength)} %`;
+    const chkShad = lookPanel.querySelector('#look-shadows');
+    if (chkShad) chkShad.checked = v.shadows !== false;
+    const chkMan = lookPanel.querySelector('#look-manual-lights');
+    if (chkMan) chkMan.checked = !!v.manualLights;
+    const list = normLights(v.lights);
+    list.forEach((l, i) => {
+      const col = lookPanel.querySelector(`#look-light-color-${i}`);
+      if (col && col.value !== l.color) col.value = l.color;
+      const az = lookPanel.querySelector(`#look-light-az-${i}`);
+      if (az) az.value = String(l.azimuth);
+      const azVal = lookPanel.querySelector(`#look-light-az-val-${i}`);
+      if (azVal) azVal.textContent = `${l.azimuth}°`;
+      const el = lookPanel.querySelector(`#look-light-el-${i}`);
+      if (el) el.value = String(l.elevation);
+      const elVal = lookPanel.querySelector(`#look-light-el-val-${i}`);
+      if (elVal) elVal.textContent = `${l.elevation}°`;
+      const it = lookPanel.querySelector(`#look-light-int-${i}`);
+      if (it) it.value = String(l.intensity);
+      const itVal = lookPanel.querySelector(`#look-light-int-val-${i}`);
+      if (itVal) itVal.textContent = l.intensity.toFixed(1).replace('.', ',');
+    });
+  }
+  function renderLookPanel() {
+    if (!lookPanel || !lookPanel.isConnected) return;
+    lookPanel.innerHTML = '';
+    const head = h('div', { class: 'vb-head' },
+      h('span', { class: 'title' }, T('look.panelTitle')),
+      h('button', { type: 'button', class: 'vb-x', id: 'look-panel-close', 'aria-label': T('look.closeAria') }),
+    );
+    head.querySelector('#look-panel-close').innerHTML = icon('close');
+    head.querySelector('#look-panel-close').onclick = () => closeLookPanel();
+
+    // 1. Studio-Boden mit Spiegelung
+    const strengthPct = normReflectStrength(v.floorReflectStrength);
+    const floorSec = h('div', { class: 'look-sec', 'data-help': 'studioFloor' },
+      h('div', { class: 'look-sec-h' }, T('look.floorTitle')),
+    );
+    const floorChk = h('label', { class: 'check' },
+      h('input', { type: 'checkbox', id: 'look-floor-reflect', checked: !!v.floorReflect }),
+      T('look.floorReflect'),
+    );
+    floorChk.querySelector('input').onchange = (e) => set({ floorReflect: e.target.checked, ...(e.target.checked ? { look: 'studio' } : {}) });
+    const floorStrength = h('input', { type: 'range', id: 'look-floor-strength', min: '0', max: '100', step: '1', value: String(strengthPct), 'aria-label': T('look.floorStrength') });
+    const floorStrengthVal = h('span', { class: 'look-val mono', id: 'look-floor-strength-val' }, `${strengthPct} %`);
+    floorStrength.oninput = (e) => {
+      const pct = normReflectStrength(e.target.value);
+      floorStrengthVal.textContent = `${pct} %`;
+      set({ floorReflectStrength: pct, floorReflect: pct > 0, look: 'studio' }, null, { skipPanelRebuild: true });
+    };
+    const shadChk = h('label', { class: 'check' },
+      h('input', { type: 'checkbox', id: 'look-shadows', checked: v.shadows !== false }),
+      T('look.shadows'),
+    );
+    shadChk.querySelector('input').onchange = (e) => set({ shadows: e.target.checked });
+    floorSec.append(
+      floorChk,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('look.floorStrength')), floorStrength, floorStrengthVal),
+      shadChk,
+    );
+
+    // 2. Umgebung (Stimmung + eigenes Umgebungsbild aus Datei)
+    const hasCustom = !!(v.envImageName || (typeof Viewer !== 'undefined' && Viewer.hasCustomEnv));
+    const envName = v.envImageName || (typeof Viewer !== 'undefined' && Viewer.envImageName) || '';
+    const envSec = h('div', { class: 'look-sec', 'data-help': 'customEnv' },
+      h('div', { class: 'look-sec-h' }, T('look.envTitle')),
+    );
+    const moodSeg = h('div', { class: 'seg', role: 'group', 'aria-label': T('look.envTitle') });
+    for (const k of ['studio', 'hell', 'werkstatt']) {
+      const on = !hasCustom && v.mood === k;
+      const mb = h('button', { type: 'button', id: `look-mood-${k}`, 'aria-pressed': on ? 'true' : 'false' }, T(`menu.view.mood.${k}`));
+      mb.onclick = async () => {
+        if (typeof Viewer !== 'undefined' && Viewer.hasCustomEnv) await Viewer.setEnvImage(null);
+        set({ look: 'studio', mood: k, envImageName: '', envImageData: '' });
+      };
+      moodSeg.append(mb);
+    }
+    const envInp = h('input', { type: 'file', id: 'look-env-input', accept: '.hdr,.pic,.png,.jpg,.jpeg,.webp,.avif,.bmp,image/*', hidden: true });
+    envInp.onchange = () => {
+      const f = envInp.files && envInp.files[0];
+      envInp.value = '';
+      if (f) loadEnvImage(f);
+    };
+    const loadBtn = h('button', { type: 'button', class: 'btn small', id: 'look-env-load' }, T('look.envLoad'));
+    loadBtn.onclick = () => envInp.click();
+    const envRow = h('div', { class: 'btn-row' }, loadBtn);
+    if (hasCustom) {
+      const clearBtn = h('button', { type: 'button', class: 'btn small', id: 'look-env-clear' }, T('look.envClear'));
+      clearBtn.onclick = () => clearEnvImage();
+      envRow.append(clearBtn);
+    }
+    const envStatus = h('div', { class: 'look-status vb-hint', id: 'look-env-status' },
+      hasCustom ? T('look.envCustomActive', { name: envName || 'HDR' }) : T('look.envMoodActive', { name: T(`menu.view.mood.${v.mood || 'studio'}`) }),
+    );
+    envSec.append(moodSeg, envRow, envInp, envStatus, h('div', { class: 'vb-hint' }, T('look.envHint')));
+
+    // 3. Lichter von Hand (1–3 Lichter)
+    const lightsList = normLights(v.lights);
+    const lightsSec = h('div', { class: 'look-sec', 'data-help': 'manualLights' },
+      h('div', { class: 'look-sec-h' }, T('look.lightsTitle')),
+    );
+    const manChk = h('label', { class: 'check' },
+      h('input', { type: 'checkbox', id: 'look-manual-lights', checked: !!v.manualLights }),
+      T('look.manualLights'),
+    );
+    manChk.querySelector('input').onchange = (e) => set({ manualLights: e.target.checked });
+    const listWrap = h('div', { class: 'look-lights-list', id: 'look-lights-list' });
+    lightsList.forEach((l, i) => {
+      const card = h('div', { class: 'look-light-card', dataset: { lightIdx: String(i) } });
+      const titleRow = h('div', { class: 'look-light-head' },
+        h('b', null, T('look.lightName', { n: i + 1 })),
+        i === 0 ? h('span', { class: 'look-shadow-tag' }, T('look.lightShadowBadge')) : null,
+        h('span', { class: 'grow' }),
+      );
+      const colInp = h('input', {
+        type: 'color',
+        class: 'look-color-inp',
+        id: `look-light-color-${i}`,
+        value: l.color,
+        'aria-label': T('look.lightColorAria', { n: i + 1 }),
+      });
+      colInp.oninput = (e) => updateLight(i, { color: e.target.value });
+      titleRow.append(colInp);
+      if (lightsList.length > 1) {
+        const delBtn = h('button', { type: 'button', class: 'vb-x', id: `look-light-del-${i}`, 'aria-label': T('look.lightRemoveAria', { n: i + 1 }) });
+        delBtn.innerHTML = icon('close');
+        delBtn.onclick = () => removeLight(i);
+        titleRow.append(delBtn);
+      }
+
+      const azVal = h('span', { class: 'look-val mono', id: `look-light-az-val-${i}` }, `${l.azimuth}°`);
+      const azInp = h('input', { type: 'range', id: `look-light-az-${i}`, min: '-180', max: '180', step: '1', value: String(l.azimuth), 'aria-label': T('look.lightDir') });
+      azInp.oninput = (e) => {
+        const val = Math.round(Number(e.target.value));
+        azVal.textContent = `${val}°`;
+        updateLight(i, { azimuth: val });
+      };
+
+      const elVal = h('span', { class: 'look-val mono', id: `look-light-el-val-${i}` }, `${l.elevation}°`);
+      const elInp = h('input', { type: 'range', id: `look-light-el-${i}`, min: '-60', max: '90', step: '1', value: String(l.elevation), 'aria-label': T('look.lightElev') });
+      elInp.oninput = (e) => {
+        const val = Math.round(Number(e.target.value));
+        elVal.textContent = `${val}°`;
+        updateLight(i, { elevation: val });
+      };
+
+      const intVal = h('span', { class: 'look-val mono', id: `look-light-int-val-${i}` }, l.intensity.toFixed(1).replace('.', ','));
+      const intInp = h('input', { type: 'range', id: `look-light-int-${i}`, min: '0', max: '5', step: '0.1', value: String(l.intensity), 'aria-label': T('look.lightStrength') });
+      intInp.oninput = (e) => {
+        const val = Math.round(Number(e.target.value) * 10) / 10;
+        intVal.textContent = val.toFixed(1).replace('.', ',');
+        updateLight(i, { intensity: val });
+      };
+
+      card.append(
+        titleRow,
+        h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('look.lightDir')), azInp, azVal),
+        h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('look.lightElev')), elInp, elVal),
+        h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('look.lightStrength')), intInp, intVal),
+      );
+      listWrap.append(card);
+    });
+    const addBtn = h('button', { type: 'button', class: 'btn small', id: 'look-light-add', disabled: lightsList.length >= MAX_LIGHTS }, T('look.lightAdd'));
+    addBtn.onclick = () => addLight();
+    const lightActs = h('div', { class: 'btn-row' }, addBtn);
+    if (v.manualLights) {
+      const resetBtn = h('button', { type: 'button', class: 'btn small', id: 'look-light-reset' }, T('look.lightReset'));
+      resetBtn.onclick = () => resetLights();
+      lightActs.append(resetBtn);
+    }
+    lightsSec.append(manChk, listWrap, lightActs, h('div', { class: 'vb-hint' }, T('look.lightMaxHint')));
+
+    lookPanel.append(head, floorSec, envSec, lightsSec);
+  }
+  function openLookPanel() {
+    if (!lookPanelHooksBound) {
+      lookPanelHooksBound = true;
+      if (typeof I18n !== 'undefined' && I18n.on) I18n.on('change', () => { if (lookPanel && lookPanel.isConnected) renderLookPanel(); });
+      if (typeof App !== 'undefined' && App.on) App.on('mode', () => { if (App.mode !== 'model') closeLookPanel(); });
+    }
+    if (lookPanel && lookPanel.isConnected) {
+      renderLookPanel();
+      return lookPanel;
+    }
+    const host = (typeof Views !== 'undefined' && Views.bars) ? Views.bars() : (document.getElementById('overlay') || document.body);
+    lookPanel = h('div', { class: 'viewbar look-bar', id: 'look-panel', role: 'region', 'aria-label': T('look.panelTitle') });
+    host.append(lookPanel);
+    renderLookPanel();
+    return lookPanel;
+  }
+  function closeLookPanel() {
+    if (lookPanel) { lookPanel.remove(); lookPanel = null; }
+  }
+  function toggleLookPanel() {
+    if (lookPanel && lookPanel.isConnected) closeLookPanel();
+    else openLookPanel();
   }
   // Zwei Stufen-Karten („Einfach“ / „Profi“) für ersten Start und Einstellungen
   function levelCards({ idPrefix, active = v.level, onPick } = {}) {
@@ -426,7 +755,17 @@ const ViewPrefs = (() => {
       h('div', { class: 'btn-row' }, saveBtn, loadBtn, resetBtn),
       importInp,
     );
-    paneGen.append(ioBox);
+    const lookBtn = h('button', { type: 'button', class: 'btn small', id: 'set-open-look' }, T('dlg.settings.lookBtn'));
+    lookBtn.onclick = () => {
+      if (modalHandle) modalHandle.close();
+      openLookPanel();
+    };
+    const lookBox = h('div', { class: 'set-io-box', 'data-help': 'studioFloorLight' },
+      h('div', { class: 'section-h' }, T('look.panelTitle')),
+      h('small', { style: { color: 'var(--muted)' } }, T('dlg.settings.lookHint')),
+      h('div', { class: 'btn-row' }, lookBtn),
+    );
+    paneGen.append(lookBox, ioBox);
 
     const syncTabs = (tab) => {
       tabs.hidden = simple();
@@ -457,6 +796,6 @@ const ViewPrefs = (() => {
     openDialogState = { handle: modalHandle, get tab() { return curTab; } };
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
-  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 

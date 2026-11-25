@@ -2343,6 +2343,26 @@ const HELP = {
   "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
   "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
   "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
+ },
+ "studioFloorLight": {
+  "tip": "Studio-Boden mit Spiegelung, eigenes Umgebungsbild und bis zu 3 Lichter von Hand einstellen",
+  "hilfe": "Öffnet die Live-Steuerung für das Studio-Aussehen (in Einfach und Profi): Schalte den spiegelnden Studio-Boden mit einstellbarer Stärke ein, lade ein eigenes Umgebungsbild (PNG, JPG oder HDR) und stelle bis zu 3 eigene Lichter nach Richtung, Höhe, Farbe und Stärke ein.",
+  "tipp": "Alle Einstellungen wirken sofort im 3D-Bild und bleiben in diesem Browser gespeichert."
+ },
+ "studioFloor": {
+  "tip": "Studio-Boden unter dem Modell mit einstellbarer Spiegelung und weichen Schatten",
+  "hilfe": "Legt im Studio-Look einen sanft auslaufenden Boden unter das Modell, der Umgebungslicht spiegelt und Schatten auffängt. Über den Regler stellst du die Spiegelungs-Stärke von matt bis hochglänzend ein.",
+  "tipp": "Für echte Lichtreflexe am Boden schalte den Modus oben unter „Ansicht“ auf „Studio-Look“."
+ },
+ "customEnv": {
+  "tip": "Eigenes 360°-Umgebungsbild (PNG, JPG, WebP oder HDR) als Spiegel-Umgebung laden",
+  "hilfe": "Ersetzt die eingebaute Studio-Umgebung durch ein eigenes Bild vom Rechner. Glänzende Metalle, klare Lacke und der Studio-Boden spiegeln dieses Bild sofort wieder.",
+  "tipp": "Mit einem Klick auf „Studio“, „Hell“, „Werkstatt“ oder „Entfernen“ kehrst du jederzeit zur eingebauten Umgebung zurück."
+ },
+ "manualLights": {
+  "tip": "Bis zu 3 eigene Lichter mit Richtung, Höhe, Farbe und Stärke von Hand einstellen",
+  "hilfe": "Schaltet von der automatischen 3-Punkt-Beleuchtung auf bis zu 3 frei einstellbare Richtungslichter um. Für jedes Licht wählst du Richtung (Azimut), Höhe, Lichtfarbe und Stärke – Licht 1 wirft dabei die Schatten.",
+  "tipp": "Nutze z. B. ein warmes Hauptlicht von vorne-rechts und ein kühles Gegenlicht von hinten-links für mehr Tiefe."
  }
 };
 

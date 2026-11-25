@@ -26436,6 +26436,168 @@ def t_a133_vergleich_schattenriss(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a135_boden_licht(p):
+    import struct, zlib
+    p.empty()
+    p.ev("""
+      App.change('a135-box', d => {
+        const b = Model.newItem('box', { w: 30, d: 20, h: 15 }, { name: 'StudioBlock' });
+        b.mat = 'Alu 6061';
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("ViewPrefs.set({ level: 'simple', look: 'studio', mood: 'studio', shadows: true, floorReflect: false, floorReflectStrength: 45, manualLights: false, envImageName: '', envImageData: '' }); ViewPrefs.closeLookPanel()")
+    p.wait(250)
+
+    # 1. Einfach & Profi Zugang: in Einfach über #t-more & #proj-look-open, in Profi über #t-views
+    p.pg.click('#t-more')
+    p.wait(200)
+    has_more_entry = p.pg.locator('#more-look-panel').count() == 1
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    p.ev("App.select([])")
+    p.wait(200)
+    proj_btn_vis = sichtbar(p, '#proj-look-open')
+    p.pg.click('#proj-look-open')
+    p.pg.locator('#look-panel').wait_for(state='visible', timeout=5000)
+    p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(250)
+    p.pg.click('#t-views')
+    p.wait(200)
+    has_views_entry = p.pg.locator('#look-studio-panel').count() == 1
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    ok1 = bool(has_more_entry and proj_btn_vis and sichtbar(p, '#look-panel') and has_views_entry)
+
+    # 2. Studio-Boden mit Spiegelung: Anfangs aus (reflectivity == 0), einschalten -> > 0, Stärke auf 85 -> > 0.8
+    floor_off = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity, cc:f.material.clearcoat} : null")
+    p.pg.click('#look-floor-reflect')
+    p.wait(250)
+    floor_on = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity, cc:f.material.clearcoat} : null")
+    p.pg.locator('#look-floor-strength').fill('85')
+    p.wait(250)
+    floor_hi = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity, cc:f.material.clearcoat} : null")
+    p.pg.click('#look-floor-reflect')
+    p.wait(250)
+    floor_off2 = p.ev("const f=Viewer.floor; return f ? {vis:f.visible, ref:f.material.reflectivity} : null")
+    p.pg.click('#look-floor-reflect')
+    p.wait(200)
+    ok2 = (
+        floor_off is not None and floor_off['vis'] is False and floor_off['ref'] == 0
+        and floor_on is not None and floor_on['vis'] is True and floor_on['ref'] > 0 and floor_on['cc'] > 0
+        and floor_hi is not None and floor_hi['vis'] is True and floor_hi['ref'] > 0.8 and floor_hi['ref'] > floor_on['ref']
+        and floor_off2 is not None and floor_off2['vis'] is False and floor_off2['ref'] == 0
+    )
+
+    # 3. Eigenes Umgebungsbild aus Datei laden (PNG & Radiance HDR) und wieder entfernen
+    def make_png(w, h):
+        raw = b''.join(b'\x00' + bytes([255, 180, 90, 255] * w) for _ in range(h))
+        def chunk(tag, data):
+            c = tag + data
+            return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+        ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
+        return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+    png_bytes = make_png(8, 4)
+    p.pg.locator('#look-env-input').set_input_files([{'name': 'studio-test.png', 'mimeType': 'image/png', 'buffer': png_bytes}])
+    p.wait(500)
+    env_png = p.ev("return {has:Viewer.hasCustomEnv, name:Viewer.envImageName, env:!!Viewer.scene.environment}")
+    env_png_txt = (p.pg.locator('#look-env-status').text_content() or '')
+
+    hdr_bytes = b'#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 4\n' + bytes([132, 110, 90, 128] * 8)
+    p.pg.locator('#look-env-input').set_input_files([{'name': 'studio-test.hdr', 'mimeType': 'application/octet-stream', 'buffer': hdr_bytes}])
+    p.wait(500)
+    env_hdr = p.ev("return {has:Viewer.hasCustomEnv, name:Viewer.envImageName, env:!!Viewer.scene.environment}")
+
+    p.pg.click('#look-env-clear')
+    p.wait(350)
+    env_clr = p.ev("return {has:Viewer.hasCustomEnv, name:Viewer.envImageName, env:!!Viewer.scene.environment}")
+    ok3 = (
+        env_png['has'] is True and env_png['name'] == 'studio-test.png' and env_png['env'] is True and 'studio-test.png' in env_png_txt
+        and env_hdr['has'] is True and env_hdr['name'] == 'studio-test.hdr' and env_hdr['env'] is True
+        and env_clr['has'] is False and env_clr['name'] == '' and env_clr['env'] is True
+    )
+
+    # 4. Lichter von Hand: 1 -> 2 -> 3 Lichter, Richtung/Farbe/Stärke, Löschen & Reset
+    p.pg.click('#look-manual-lights')
+    p.wait(250)
+    cnt1 = p.ev("return Viewer.scene.children.filter(o=>o.isDirectionalLight).length")
+    p.pg.click('#look-light-add')
+    p.wait(250)
+    p.pg.locator('#look-light-color-1').fill('#ff6600')
+    p.pg.locator('#look-light-az-1').fill('-90')
+    p.pg.locator('#look-light-el-1').fill('40')
+    p.pg.locator('#look-light-int-1').fill('3.2')
+    p.wait(250)
+    st2 = p.ev("""
+      const ls = Viewer.scene.children.filter(o => o.isDirectionalLight);
+      const l2 = ls[1];
+      const dir = l2 ? l2.position.clone().sub(l2.target.position).normalize() : null;
+      return {
+        count: ls.length,
+        color: l2 ? ('#' + l2.color.getHexString()) : null,
+        intensity: l2 ? l2.intensity : null,
+        dir: dir ? [dir.x, dir.y, dir.z] : null
+      };
+    """)
+    p.pg.click('#look-light-add')
+    p.wait(250)
+    st3 = p.ev("return {count: Viewer.scene.children.filter(o=>o.isDirectionalLight).length, addDis: document.querySelector('#look-light-add').disabled}")
+    p.pg.click('#look-light-del-2')
+    p.wait(250)
+    cnt_after_del = p.ev("return Viewer.scene.children.filter(o=>o.isDirectionalLight).length")
+    p.pg.click('#look-light-reset')
+    p.wait(250)
+    after_reset = p.ev("return {man: ViewPrefs.get().manualLights, count: Viewer.scene.children.filter(o=>o.isDirectionalLight).length}")
+    ok4 = (
+        cnt1 == 1
+        and st2['count'] == 2 and st2['color'] == '#ff6600' and abs(st2['intensity'] - 3.2) < 0.05
+        and st2['dir'] is not None and st2['dir'][0] < -0.5 and st2['dir'][2] > 0.5
+        and st3['count'] == 3 and st3['addDis'] is True
+        and cnt_after_del == 2
+        and after_reset['man'] is False and after_reset['count'] == 3
+    )
+
+    # 5. Persistenz/Export, Hilfetexte, DE/EN-Schlüsselgleichheit & Befehle
+    p.pg.click('#look-light-add')
+    p.wait(200)
+    p.pg.hover('#proj-look-open')
+    p.wait(1700)
+    tip_look = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    meta = p.pg.evaluate("""async () => {
+      const { ViewPrefs, Commands } = window.__M;
+      const exp = ViewPrefs.exportData();
+      ViewPrefs.set({ floorReflect: false, manualLights: false });
+      const imp = ViewPrefs.importData(exp, { silent: true });
+      const cur = ViewPrefs.get();
+      const [hilfen, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hKeys = ['studioFloorLight', 'studioFloor', 'customEnv', 'manualLights'];
+      const helpOk = hKeys.every(k => hilfen[k] && hilfen[k].tip && hilfen[k].hilfe && hilfen[k].tipp && document.querySelectorAll(`[data-help="${k}"]`).length >= 1);
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nEq = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      const cmdOk = Commands.search('spiegelung').some(c => c.id === 'floor-reflect')
+        && Commands.search('licht').some(c => c.id === 'look-panel')
+        && Commands.search('lichter').some(c => c.id === 'manual-lights');
+      return { impOk: !!imp.ok, floorOn: !!cur.floorReflect, strength: cur.floorReflectStrength, man: !!cur.manualLights, lLen: cur.lights.length, helpOk, i18nEq, cmdOk };
+    }""")
+    p.pg.click('#look-panel-close')
+    p.wait(150)
+    p.ev("ViewPrefs.set({ floorReflect: false, floorReflectStrength: 45, manualLights: false, lights: [{ azimuth: 35, elevation: 52, color: '#ffffff', intensity: 2.1 }], envImageName: '', envImageData: '' })")
+    ok5 = (
+        meta['impOk'] and meta['floorOn'] and meta['strength'] == 85 and meta['man'] and meta['lLen'] == 2
+        and meta['helpOk'] and 'Studio-Boden' in tip_look and meta['i18nEq'] and meta['cmdOk']
+        and p.pg.locator('#look-panel').count() == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26678,6 +26840,7 @@ TESTS = [
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
     ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
+    ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
