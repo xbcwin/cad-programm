@@ -2264,6 +2264,16 @@ const HELP = {
   "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
   "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
   "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
+ },
+ "faceFillet": {
+  "tip": "Rundung mit Radius zwischen zwei gewählten Flächen anlegen (Profi)",
+  "hilfe": "Klick nach diesem Knopf zwei Flächen deines Körpers an. Tracery rundet den Übergang dazwischen mit dem gewählten Radius – auch wenn beide Flächen sich nicht berühren und eine Fase oder Stufe dazwischen liegt.",
+  "tipp": "Den Radius kannst du anschließend rechts im Kanten-Panel anpassen (auch mit Formeln) oder über „Flächen neu wählen“ andere Flächen festlegen."
+ },
+ "partingDraft": {
+  "tip": "Entformungsschräge ab einer Trennlinie nach oben und unten anlegen (Profi)",
+  "hilfe": "Wähle einen Körper (oder direkt eine Kante auf halber Höhe) und klicke auf „Schräge an Trennlinie“. Seitenflächen werden ab der Trennebene geteilt und beide Hälften in Gegenrichtung geneigt, damit das Teil aus einer zweiteiligen Form entformt werden kann.",
+  "tipp": "Rechts wählst du zwischen Mitte, fester Lage, gewählter Kante oder Bezugsebene – und auf Wunsch getrennte Winkel für oben und unten."
  }
 };
 

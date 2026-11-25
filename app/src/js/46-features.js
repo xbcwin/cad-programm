@@ -1034,6 +1034,144 @@ const Features = (() => {
     window.addEventListener('keydown', key, true);
     UI.hint(T('cornerChamfer.hint'));
   }
+  // ---------- Flächen-Rundung (KP-39) und Schräge an Trennlinie (KP-42) ----------
+  function addFaceFillet(itemId, faces, r = 5, opts = {}) {
+    const it = itemId && Model.find(App.doc, itemId)?.item;
+    if (!it || it.role === 'hole') { UI.toast(T('faceFillet.needFace'), { icon: 'info' }); return null; }
+    if (!Array.isArray(faces) || faces.length !== 2) return null;
+    const sigs = faces.map((f) => (typeof f === 'number' ? finishFaceSigOf(itemId, f) : (f && f.idx != null ? finishFaceSigOf(f.id || itemId, f.idx) : f))).filter(Boolean);
+    if (sigs.length !== 2) return null;
+    const rad = r != null ? r : 5;
+    const finId = opts.replaceFinId || uid('f');
+    App.change(opts.replaceFinId ? 'Flächen-Rundung geändert' : 'Flächen-Rundung', (doc) => {
+      const fn = Model.find(doc, itemId);
+      if (!fn) return false;
+      fn.item.finishes = fn.item.finishes || [];
+      if (opts.replaceFinId) {
+        const ex = fn.item.finishes.find((x) => x.id === opts.replaceFinId);
+        if (!ex) return false;
+        ex.faces = sigs;
+        if (opts.r != null) ex.r = rad;
+      } else {
+        fn.item.finishes.push({ id: finId, type: 'faceFillet', r: rad, faces: sigs });
+      }
+    });
+    App.select([itemId]);
+    UI.toast(T('faceFillet.added'), { icon: 'check' });
+    return finId;
+  }
+  function startFaceFillet(firstFace = null, opts = {}) {
+    stopPick();
+    let targetId = (firstFace && firstFace.id) || opts.itemId || null;
+    const picked = [];
+    if (firstFace && firstFace.id && firstFace.idx != null) picked.push({ id: firstFace.id, idx: firstFace.idx, info: firstFace.info || App.results.get(firstFace.id)?.data?.faces?.[firstFace.idx] });
+    const updateOverlay = () => {
+      const specs = [];
+      for (const pf of picked) {
+        if (!pf.info || !pf.info.c) continue;
+        const W = Model.worldMatrix(App.doc, pf.id);
+        const o = new THREE.Vector3(...pf.info.c).applyMatrix4(W).toArray();
+        const n = new THREE.Vector3(...(pf.info.n || [0, 0, 1])).transformDirection(W).normalize().toArray();
+        const bb = App.results.get(pf.id)?.data?.bbox;
+        const size = bb ? clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.45, 6, 36) : 16;
+        specs.push({ kind: 'plane', o, n, size });
+      }
+      Viewer.setRefGhost(specs);
+      UI.hint(picked.length === 0 ? T('faceFillet.hint1') : T('faceFillet.hint2'));
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (!hit || hit.faceIdx == null || hit.faceIdx < 0) { UI.toast(T('faceFillet.needFace'), { icon: 'info' }); return; }
+      if (targetId && hit.id !== targetId) { UI.toast(T('faceFillet.needSameBody'), { icon: 'info' }); return; }
+      if (picked.some((x) => x.idx === hit.faceIdx)) { UI.toast(T('faceFillet.alreadyPicked'), { icon: 'info' }); return; }
+      if (!targetId) targetId = hit.id;
+      const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+      picked.push({ id: hit.id, idx: hit.faceIdx, info: fi });
+      if (picked.length >= 2) {
+        stopPick();
+        addFaceFillet(targetId, picked, opts.r != null ? opts.r : 5, opts);
+      } else {
+        updateOverlay();
+      }
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const ok = hit && hit.faceIdx >= 0 && (!targetId || hit.id === targetId) && !picked.some((x) => x.idx === hit.faceIdx);
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key, ghost: true };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    updateOverlay();
+  }
+  function addPartingDraft(itemId, opts = {}) {
+    const it = itemId && Model.find(App.doc, itemId)?.item;
+    if (!it || it.role === 'hole') return null;
+    const axis = opts.axis === 'x' || opts.axis === 'y' ? opts.axis : 'z';
+    const axIdx = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+    const bb = App.results.get(itemId)?.data?.bbox;
+    const midPos = bb ? round((bb[axIdx] + bb[axIdx + 3]) / 2, 2) : 0;
+    let mode = opts.mode || 'mid';
+    let edges = opts.edges || null;
+    if (opts.edge && opts.edge.edgeIdx != null) {
+      const sig = Actions.edgeSigOf(opts.edge.id || itemId, opts.edge.edgeIdx);
+      if (sig) { mode = 'edge'; edges = [sig]; }
+    }
+    const r = opts.r != null ? opts.r : 3;
+    const sym = opts.sym !== false;
+    const r2 = sym ? r : (opts.r2 != null ? opts.r2 : r);
+    const finId = uid('f');
+    const fin = { id: finId, type: 'partingDraft', r, sym, r2, mode, axis };
+    if (opts.pos != null) fin.pos = opts.pos;
+    else if (mode === 'offset') fin.pos = midPos;
+    if (edges) fin.edges = edges;
+    if (opts.datumId) fin.datumId = opts.datumId;
+    if (opts.flip) fin.flip = true;
+    App.change('Schräge an Trennlinie', (doc) => {
+      const fn = Model.find(doc, itemId);
+      if (!fn) return false;
+      fn.item.finishes = fn.item.finishes || [];
+      fn.item.finishes.push(fin);
+    });
+    App.select([itemId]);
+    UI.toast(T('partingDraft.added'), { icon: 'check' });
+    return finId;
+  }
+  function pickPartingDraftEdge(itemId, finId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      if (!hit || hit.id !== itemId || hit.edgeIdx == null || hit.edgeIdx < 0) {
+        UI.toast(T('partingDraft.needEdge'), { icon: 'info' });
+        return;
+      }
+      const sig = Actions.edgeSigOf(itemId, hit.edgeIdx);
+      if (!sig) return;
+      stopPick();
+      App.change('Trennlinien-Kante gewählt', (doc) => {
+        const fn = Model.find(doc, itemId);
+        if (!fn) return false;
+        const fin = (fn.item.finishes || []).find((x) => x.id === finId);
+        if (!fin) return false;
+        fin.mode = 'edge';
+        fin.edges = [sig];
+      });
+      UI.toast(T('partingDraft.edgePicked'), { icon: 'check' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    UI.hint(T('partingDraft.pickEdgeHint'));
+  }
   // ---------- Einzelne Kopien im Muster auslassen (KP-13) ----------
   let patDots = [];
   function togglePatternSkip(id, idx) {
@@ -4179,5 +4317,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
 })();

@@ -25278,6 +25278,216 @@ def t_a124_flaeche_teilen_kuppel(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-126] Flächen-Rundung und Schräge an Trennlinie (KP-39, KP-42) ----------
+def t_a126_flaechenrundung_trennlinie(p):
+    import math
+    warte_idle = lambda: warte_rechnen(p, 30)
+    def set_num(sel, val):
+        p.pg.locator(sel).fill(str(val))
+        p.pg.locator(sel).press('Enter')
+        warte_idle()
+
+    p.empty()
+
+    # 1. Flächen-Rundung 90° (benachbart) über 3D-Klicks, r=5, Formel R=6 und Undo
+    box_id = p.ev("""let id; App.change('Quader', d => {
+      const b = Model.newItem('box', { w: 40, d: 40, h: 20 }, { name: 'Block' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("App.select([arg])", box_id); p.wait(250)
+    p.pg.locator('#btn-face-fillet').click(); p.wait(200)
+    picking_on = p.ev("return Features.picking")
+
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(45, -45, 50), c.clone().set(0, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    s_top = world_screen(p, 0, 0, 20)
+    p.pg.mouse.click(s_top[0], s_top[1]); p.wait(150)
+    s_front = world_screen(p, 0, -20, 10)
+    p.pg.mouse.click(s_front[0], s_front[1]); warte_idle()
+
+    ff_id = p.ev("return App.doc.items[0].finishes[0]?.id")
+    ff_r5 = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, cyls, gc: gc.issues.length }));""", box_id)
+    v_ff5 = volumen(p)
+    exp_v5 = 32000.0 - (25.0 - math.pi * 25.0 / 4.0) * 40.0
+
+    p.ev("App.change('Mass', d => { d.params.push({ id: 'pm_r', name: 'R', expr: 6 }); })"); warte_idle()
+    set_num(f'#fin-{ff_id}', 'R')
+    ff_r6 = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      return { errs: App.errors.length, cyls };""", box_id)
+    p.ev("App.undo()"); warte_idle()
+    ff_undo = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      return { errs: App.errors.length, cyls };""", box_id)
+
+    ok1 = (
+        picking_on
+        and bool(ff_id)
+        and ff_r5['errs'] == 0 and ff_r5['gc'] == 0
+        and len(ff_r5['cyls']) == 1
+        and abs(ff_r5['cyls'][0]['r'] - 5.0) < 0.01
+        and v_ff5 is not None and abs(v_ff5 - exp_v5) < 0.5
+        and ff_r6['errs'] == 0 and len(ff_r6['cyls']) == 1 and abs(ff_r6['cyls'][0]['r'] - 6.0) < 0.01
+        and ff_undo['errs'] == 0 and len(ff_undo['cyls']) == 1 and abs(ff_undo['cyls'][0]['r'] - 5.0) < 0.01
+    )
+
+    # 2. Nicht benachbarte Flächen: konvex (über Fase hinweg) & konkav (L-Winkel mit Innenstufe)
+    p.ev("App.change('x', d => { d.items = []; d.params = []; })"); warte_idle()
+    ch_id = p.ev("""let id; App.change('Gefast', d => {
+      const b = Model.newItem('box', { w: 40, d: 40, h: 20 }, { name: 'Gefast' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("""const eds = App.results.get(arg).data.edges;
+      const ei = eds.findIndex(e => e.m && Math.abs(e.m[1] + 20) < 0.1 && Math.abs(e.m[2] - 20) < 0.1);
+      Actions.addFinish('chamfer', 2, [{ id: arg, edgeIdx: ei }]);""", ch_id); warte_idle()
+    non_adj_conv = p.ev("""const r = App.results.get(arg);
+      const fs = r.data.faces;
+      const fTop = fs.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      const fFront = fs.findIndex(f => f.t === 'PLANE' && f.n && f.n[1] < -0.99);
+      Features.addFaceFillet(arg, [fTop, fFront], 5);
+      return { fTop, fFront, faceCountBefore: fs.length };""", ch_id)
+    warte_idle()
+    conv_res = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, cyls, gc: gc.issues.length }));""", ch_id)
+    v_conv = volumen(p)
+
+    # Konkave nicht benachbarte Flächen (L-Winkel mit 1 mm Innenstufe)
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    l_id = p.ev("""let id; App.change('LWinkel', d => {
+      const g = Model.newItem('group', {}, { name: 'LWinkel' });
+      const b1 = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Boden' });
+      const b2 = Model.newItem('box', { w: 40, d: 20, h: 20 }, { name: 'Wand' }); b2.t.y = 10;
+      const b3 = Model.newItem('box', { w: 40, d: 1, h: 1 }, { name: 'Stufe' }); b3.t.y = -0.5; b3.t.z = 10;
+      g.children.push(b1, b2, b3);
+      d.items.push(g); id = g.id;
+    }); return id;""")
+    warte_idle()
+    v_l_before = volumen(p)
+    p.ev("""const fs = App.results.get(arg).data.faces;
+      const fH = fs.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && Math.abs(f.c[2] - 10) < 0.2);
+      const fV = fs.findIndex(f => f.t === 'PLANE' && f.n && f.n[1] < -0.99 && Math.abs(f.c[1]) < 0.2);
+      Features.addFaceFillet(arg, [fH, fV], 5);""", l_id); warte_idle()
+    conc_res = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, cyls, gc: gc.issues.length }));""", l_id)
+    v_l_after = volumen(p)
+
+    ok2 = (
+        non_adj_conv['faceCountBefore'] == 7
+        and conv_res['errs'] == 0 and conv_res['gc'] == 0
+        and len(conv_res['cyls']) == 1 and abs(conv_res['cyls'][0]['r'] - 5.0) < 0.01
+        and v_conv is not None and abs(v_conv - exp_v5) < 0.5
+        and conc_res['errs'] == 0 and conc_res['gc'] == 0
+        and len(conc_res['cyls']) == 1 and abs(conc_res['cyls'][0]['r'] - 5.0) < 0.01
+        and v_l_after is not None and v_l_before is not None and v_l_after > v_l_before + 100
+    )
+
+    # 3. Entformungsschräge 3° ab Trennlinie in der Mitte (Z)
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    pd_box = p.ev("""let id; App.change('Quader', d => {
+      const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Formteil' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("App.select([arg])", pd_box); p.wait(250)
+    p.pg.locator('#btn-parting-draft').click(); warte_idle()
+
+    pd_id = p.ev("return App.doc.items[0].finishes[0]?.id")
+    pd_info = p.ev("""const r = App.results.get(arg);
+      const fs = r.data.faces;
+      const topSides = fs.filter(f => f.c && f.c[2] > 10.1 && Math.abs(f.n[2]) < 0.9);
+      const botSides = fs.filter(f => f.c && f.c[2] < 9.9 && Math.abs(f.n[2]) < 0.9);
+      return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, faceCount: fs.length, bb: r.data.bbox, topSides, botSides, gc: gc.issues.length }));""", pd_box)
+    v_pd = volumen(p)
+    sin3 = math.sin(math.radians(3.0))
+
+    ok3 = (
+        bool(pd_id)
+        and pd_info['errs'] == 0 and pd_info['gc'] == 0
+        and pd_info['faceCount'] == 10
+        and len(pd_info['topSides']) == 4
+        and len(pd_info['botSides']) == 4
+        and all(abs(f['n'][2] - sin3) < 0.002 for f in pd_info['topSides'])
+        and all(abs(f['n'][2] + sin3) < 0.002 for f in pd_info['botSides'])
+        and all(abs(pd_info['bb'][i] - [-10, -10, 0, 10, 10, 20][i]) < 0.05 for i in range(6))
+        and v_pd is not None and abs(v_pd - 7588.06) < 0.5
+    )
+
+    # 4. Unsymmetrisch (3°/5°), nach außen neigen, Offset-Lage, X-Achse, Zylinder & Undo
+    p.pg.locator(f'#fin-psym-{pd_id}').uncheck(); warte_idle()
+    set_num(f'#fin-r2-{pd_id}', '5')
+    pd_asym = p.ev("""const r = App.results.get(arg);
+      const fs = r.data.faces;
+      const topS = fs.filter(f => f.c && f.c[2] > 10.1 && Math.abs(f.n[2]) < 0.9);
+      const botS = fs.filter(f => f.c && f.c[2] < 9.9 && Math.abs(f.n[2]) < 0.9);
+      return { errs: App.errors.length, topNz: topS.map(f => f.n[2]), botNz: botS.map(f => f.n[2]) };""", pd_box)
+    sin5 = math.sin(math.radians(5.0))
+
+    p.pg.locator(f'#fin-pflip-{pd_id}').check(); warte_idle()
+    v_flip = volumen(p)
+    p.pg.locator(f'#fin-pflip-{pd_id}').uncheck(); warte_idle()
+
+    p.pg.locator(f'#fin-pmode-{pd_id}').select_option('offset'); warte_idle()
+    set_num(f'#fin-ppos-{pd_id}', '14')
+    pd_off = p.ev("""const r = App.results.get(arg);
+      const topS = r.data.faces.filter(f => f.c && f.c[2] > 14.1 && Math.abs(f.n[2]) < 0.9);
+      return { errs: App.errors.length, topCount: topS.length };""", pd_box)
+
+    p.pg.locator(f'#fin-paxis-{pd_id}').select_option('x'); warte_idle()
+    pd_x = p.ev("""const r = App.results.get(arg);
+      const posX = r.data.faces.filter(f => f.c && f.c[0] > 0.1 && Math.abs(f.n[0]) < 0.9);
+      return { errs: App.errors.length, posXCount: posX.length };""", pd_box)
+
+    p.ev("App.undo()"); warte_idle()
+    undo_axis = p.ev("return App.doc.items[0].finishes[0]?.axis || 'z'")
+
+    # Zylinder Ø20×20 mit Schräge an Trennlinie in der Mitte
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    cyl_id = p.ev("""let id; App.change('Zyl', d => {
+      const c = Model.newItem('cylinder', { d: 20, h: 20 }, { name: 'Bolzen' });
+      d.items.push(c); id = c.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("Features.addPartingDraft(arg, { r: 3 });", cyl_id); warte_idle()
+    cyl_res = p.ev("""const r = App.results.get(arg);
+      const cones = r.data.faces.filter(f => f.t === 'CONE');
+      return GeomCheck.run({ silent: true }).then(gc => ({ errs: App.errors.length, cones: cones.length, faces: r.data.faces.length, gc: gc.issues.length }));""", cyl_id)
+
+    ok4 = (
+        pd_asym['errs'] == 0
+        and len(pd_asym['topNz']) == 4 and all(abs(nz - sin3) < 0.002 for nz in pd_asym['topNz'])
+        and len(pd_asym['botNz']) == 4 and all(abs(nz + sin5) < 0.002 for nz in pd_asym['botNz'])
+        and v_flip is not None and v_flip > 8100
+        and pd_off['errs'] == 0 and pd_off['topCount'] == 4
+        and pd_x['errs'] == 0 and pd_x['posXCount'] == 4
+        and undo_axis == 'z'
+        and cyl_res['errs'] == 0 and cyl_res['gc'] == 0 and cyl_res['cones'] == 2 and cyl_res['faces'] == 4
+    )
+
+    # 5. Profi-Sichtbarkeit, Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    p.ev("ViewPrefs.set({ level: 'simple' }); App.select([arg]);", cyl_id); p.wait(200)
+    simple_hidden = p.ev("""const b1 = document.querySelector('#btn-face-fillet'), b2 = document.querySelector('#btn-parting-draft');
+      return (!b1 || getComputedStyle(b1).display === 'none') && (!b2 || getComputedStyle(b2).display === 'none');""")
+    p.ev("ViewPrefs.set({ level: 'pro' }); App.select([arg]);", cyl_id); p.wait(200)
+    pro_vis = p.ev("""const b1 = document.querySelector('#btn-face-fillet'), b2 = document.querySelector('#btn-parting-draft');
+      return !!b1 && getComputedStyle(b1).display !== 'none' && !!b2 && getComputedStyle(b2).display !== 'none';""")
+
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('flächen-rundung').some(c => c.id === 'faceFillet') && Commands.search('trennlinie').some(c => c.id === 'partingDraft')")
+    explain_ok = p.ev("""Features.addFaceFillet(arg, [0, 1], 2);
+      const ex = Explain.local(arg);
+      return !!ex && ex.lines.some(l => l.k === 'fin' && /Trennlinie/.test(l.t)) && ex.lines.some(l => l.k === 'fin' && /Flächen-Rundung/.test(l.t));""", cyl_id)
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('faceFillet', 'partingDraft'))
+    ok5 = simple_hidden and pro_vis and help_ok and i18n_ok and cmds_ok and explain_ok and not p.errs
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25514,6 +25724,7 @@ TESTS = [
     ('[A-127] Wandstärke je Fläche & Richtung innen/außen/mittig (KP-43)', t_a127_wandstaerke_flaechen),
     ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
+    ('[A-126] Flächen-Rundung und Schräge an Trennlinie (KP-39, KP-42)', t_a126_flaechenrundung_trennlinie),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

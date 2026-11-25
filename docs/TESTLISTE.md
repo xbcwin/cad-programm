@@ -2459,6 +2459,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kuppel auf ebener Fläche (`dome`)**: 5 mm Kuppel auf Quader-Oberseite (20×20×20) erhöht die Gesamthöhe exakt auf 25 mm (`+5 mm`) als gültiger Einzelkörper (`GeomCheck` 0 Funde); Ändern der Höhe (8 mm), Umschalten auf Kugelkappe (`spherical`) und „Nach innen“ (`flip`), Unterdrücken sowie 5 mm Kuppel auf Zylinder-Oberseite (Ø20 × 20 → Höhe 25 mm) funktionieren; Hilfetexte (`werkzeug-hilfen.json`) und Schritt-Erklärungen (`Explain.local`) sind vollständig.
 - [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel eine geschwungene Kurve mit „Fläche teilen“ projizieren, die abgetrennte Teilfläche farbig markieren und eine nach außen sowie eine nach innen gewölbte Kuppel im 3D-Bild optisch prüfen.
 
+## Flächen-Rundung und Schräge an Trennlinie (Auto [A-126], KP-39, KP-42)
+
+- [x] **Flächen-Rundung 90° (benachbart & nicht benachbart)**: Zwei Flächen am Quader `40×40×20` (benachbart per 3D-Klick sowie nicht benachbart über 2-mm-Fase hinweg) mit `r = 5` abrunden → neue `CYLINDRE`-Fläche mit `r = 5,0 mm`, exaktes Volumen, `GeomCheck` 0 Funde, Formel & Rückgängig funktionieren; konkave Innenrundung am L-Winkel mit Innenstufe rundet mit `r = 5,0 mm` ohne Geometriefehler.
+- [x] **Schräge an Trennlinie (3° nach oben & unten)**: Quader `20×20×20` über `#btn-parting-draft` ab der Mitte neigen → 10 Flächen, alle vier oberen Seitenflächen geneigt mit `nz ≈ +sin(3°)` und alle vier unteren mit `nz ≈ -sin(3°)` bei unveränderten Hüllmaßen, `GeomCheck` 0 Funde; getrennte Winkel (3°/5°), „Nach außen neigen“, feste Lage, X-Richtung sowie Zylinder Ø20×20 geprüft.
+- [x] **Profi-Modus, Hilfetexte, DE/EN & Befehle**: `#btn-face-fillet` und `#btn-parting-draft` nur im Profi-Modus sichtbar; `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit, `Commands.search` und `Explain.local` geprüft.
+- [ ] **Von Hand**: Im Browser zwei nicht benachbarte Flächen über eine größere Fase und an einem geschwungenen Formteil eine Trennlinien-Schräge mit Bezugsebene optisch auf glatte Übergänge prüfen.
+
 ## Fehler melden
 
 ```

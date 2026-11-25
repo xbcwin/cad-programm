@@ -572,14 +572,16 @@ const Panels = (() => {
           const ferr = errs.find((x) => x.finishId === fin.id);
           const isRef = !!(ferr && RefFix.isRefError(ferr));
           const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
-          fr.innerHTML = icon(fin.type === 'chamfer' || fin.type === 'cornerChamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
+          fr.innerHTML = icon(fin.type === 'chamfer' || fin.type === 'cornerChamfer' || fin.type === 'draft' || fin.type === 'partingDraft' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') {
             const dirTag = fin.dir === 'out' ? ' · ' + T('panel.edges.shellDirShortOut') : fin.dir === 'mid' ? ' · ' + T('panel.edges.shellDirShortMid') : '';
             const fwCnt = Array.isArray(fin.faceWalls) ? fin.faceWalls.length : 0;
             fr.append(h('span', null, T('panel.edges.shellTitle') + ' ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2) + dirTag + (fwCnt ? ` · +${fwCnt}` : '')));
           }
           else if (fin.type === 'draft') fr.append(h('span', null, T('panel.edges.draft') + ' ' + fmtAngleU(Model.num(fin.r, V, 3))));
+          else if (fin.type === 'partingDraft') fr.append(h('span', null, T('panel.edges.partingDraft') + ' ' + (fin.sym === false ? fmtAngleU(Model.num(fin.r, V, 3)) + ' / ' + fmtAngleU(Model.num(fin.r2, V, 3)) : fmtAngleU(Model.num(fin.r, V, 3)))));
           else if (fin.type === 'fullFillet') fr.append(h('span', null, T('panel.edges.fullFillet') + ' · ' + T('panel.edges.threeFaces')));
+          else if (fin.type === 'faceFillet') fr.append(h('span', null, T('panel.edges.faceFillet') + ' ' + Units.fmtLenU(Model.num(fin.r, V, 5), 2)));
           else if (fin.type === 'cornerChamfer') fr.append(h('span', null, T('panel.edges.cornerChamfer') + ' ' + [fin.d1, fin.d2, fin.d3].map((x) => Units.fmtLen(Model.num(x, V, 2), 2)).join(' / ') + ' ' + Units.label()));
           else {
             const eMap = { all: T('left.tree.finAllEdges'), top: T('left.tree.finTop'), bottom: T('left.tree.finBottom'), vertical: T('left.tree.finVert'), horizontal: T('left.tree.finHoriz') };
@@ -1397,7 +1399,7 @@ const Panels = (() => {
         }
         if (e.finishId) {
           const fin = (it.finishes || []).find((x) => x.id === e.finishId);
-          const rmLabel = fin && fin.type === 'chamfer' ? T('panel.item.removeChamfer') : fin && fin.type === 'cornerChamfer' ? T('panel.item.removeCornerChamfer') : fin && fin.type === 'fullFillet' ? T('panel.item.removeFullFillet') : fin && fin.type === 'shell' ? T('panel.item.removeShell') : T('panel.item.removeFillet');
+          const rmLabel = fin && fin.type === 'chamfer' ? T('panel.item.removeChamfer') : fin && fin.type === 'cornerChamfer' ? T('panel.item.removeCornerChamfer') : fin && fin.type === 'fullFillet' ? T('panel.item.removeFullFillet') : fin && fin.type === 'faceFillet' ? T('panel.item.removeFaceFillet') : fin && fin.type === 'partingDraft' ? T('panel.item.removePartingDraft') : fin && fin.type === 'shell' ? T('panel.item.removeShell') : T('panel.item.removeFillet');
           const b = h('button', { type: 'button', class: 'btn small' }, rmLabel);
           b.onclick = () => Actions.removeFinish(it.id, e.finishId);
           brow.append(b);
@@ -2137,6 +2139,115 @@ const Panels = (() => {
           }
           ks.append(ccFields); continue;
         }
+        if (fin.type === 'faceFillet') {
+          const nf = UI.numField({ id: 'fin-' + fin.id, label: T('panel.edges.faceFillet') + ' · ' + T('panel.edges.twoFaces'), value: fin.r, min: 0.01, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+          if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+          const rp = h('button', { type: 'button', class: 'btn ghost small', id: 'fin-repick-' + fin.id, 'data-help': 'faceFillet' }, T('panel.edges.repickFaces'));
+          rp.onclick = () => Features.startFaceFillet(null, { itemId: it.id, replaceFinId: fin.id, r: fin.r });
+          row.style.gridTemplateColumns = isRef ? '1fr auto auto auto' : '1fr auto auto';
+          row.append(nf, rp);
+          if (isRef) {
+            const iss = rightIssues.find((x) => x.finishId === fin.id);
+            if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, T('panel.item.pickAgain')); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+          }
+          const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': T('common.remove'), 'data-tip': T('common.remove') }); del.innerHTML = icon('trash');
+          del.onclick = () => Actions.removeFinish(it.id, fin.id);
+          row.append(del); ks.append(row); continue;
+        }
+        if (fin.type === 'partingDraft') {
+          const ttl = h('div', { class: 'mini-row' + (isRef ? ' warn' : err ? ' invalid' : '') }, h('span', { class: 'grow' }, T('panel.edges.partingDraft')));
+          row.style.gridTemplateColumns = isRef ? '1fr auto auto' : '1fr auto';
+          row.append(ttl);
+          if (isRef) {
+            const iss = rightIssues.find((x) => x.finishId === fin.id);
+            if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, T('panel.item.pickAgain')); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+          }
+          const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': T('common.remove'), 'data-tip': T('common.remove') }); del.innerHTML = icon('trash');
+          del.onclick = () => Actions.removeFinish(it.id, fin.id);
+          row.append(del); ks.append(row);
+
+          const sym = fin.sym !== false;
+          const angRow = h('div', { class: 'fields', style: { gridTemplateColumns: sym ? '1fr' : '1fr 1fr' } });
+          const nf1 = UI.numField({ id: 'fin-' + fin.id, label: sym ? T('common.angle') : T('panel.edges.pdAngleUp'), value: fin.r != null ? fin.r : 3, unit: '°', vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+          if (err) nf1.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+          angRow.append(nf1);
+          if (!sym) {
+            const nf2 = UI.numField({ id: 'fin-r2-' + fin.id, label: T('panel.edges.pdAngleDown'), value: fin.r2 != null ? fin.r2 : (fin.r != null ? fin.r : 3), unit: '°', vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) });
+            if (err) nf2.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+            angRow.append(nf2);
+          }
+          ks.append(angRow);
+
+          const pMode = fin.mode || 'mid';
+          const pAxis = fin.axis === 'x' || fin.axis === 'y' ? fin.axis : 'z';
+          const datums = (App.doc && Array.isArray(App.doc.datums)) ? App.doc.datums : [];
+          const modeOpts = [['mid', T('panel.edges.pdMid')], ['offset', T('panel.edges.pdOffset')], ['edge', T('panel.edges.pdEdge')]];
+          if (datums.length || pMode === 'datum') modeOpts.push(['datum', T('panel.edges.pdDatum')]);
+          const modeRow = h('div', { class: 'fields', style: { gridTemplateColumns: pMode === 'datum' ? '1fr' : '1fr auto', marginTop: '6px' } });
+          modeRow.append(UI.selectField({
+            id: 'fin-pmode-' + fin.id,
+            label: T('panel.edges.pdLine'),
+            value: pMode,
+            options: modeOpts,
+            onChange: (v) => {
+              const patch = { mode: v };
+              if (v === 'offset' && fin.pos == null) {
+                const axIdx = pAxis === 'x' ? 0 : pAxis === 'y' ? 1 : 2;
+                const bb = App.results.get(it.id)?.data?.bbox;
+                patch.pos = bb ? round((bb[axIdx] + bb[axIdx + 3]) / 2, 2) : 0;
+              } else if (v === 'datum' && !fin.datumId && datums.length) {
+                patch.datumId = datums[0].id;
+              }
+              Actions.setFinish(it.id, fin.id, patch);
+            },
+          }));
+          if (pMode !== 'datum') {
+            modeRow.append(UI.selectField({
+              id: 'fin-paxis-' + fin.id,
+              label: T('panel.edges.pdAxis'),
+              value: pAxis,
+              options: [['z', 'Z'], ['x', 'X'], ['y', 'Y']],
+              onChange: (v) => {
+                const patch = { axis: v };
+                if (pMode === 'offset') {
+                  const axIdx = v === 'x' ? 0 : v === 'y' ? 1 : 2;
+                  const bb = App.results.get(it.id)?.data?.bbox;
+                  if (bb) patch.pos = round((bb[axIdx] + bb[axIdx + 3]) / 2, 2);
+                }
+                Actions.setFinish(it.id, fin.id, patch);
+              },
+            }));
+          }
+          ks.append(modeRow);
+
+          if (pMode === 'offset') {
+            const axIdx = pAxis === 'x' ? 0 : pAxis === 'y' ? 1 : 2;
+            const bb = App.results.get(it.id)?.data?.bbox;
+            const defPos = bb ? round((bb[axIdx] + bb[axIdx + 3]) / 2, 2) : 0;
+            ks.append(h('div', { class: 'fields one', style: { marginTop: '6px' } }, UI.numField({ id: 'fin-ppos-' + fin.id, label: T('panel.edges.pdPos'), value: fin.pos != null ? fin.pos : defPos, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { pos: v }) })));
+          } else if (pMode === 'edge') {
+            const peBtn = h('button', { type: 'button', class: 'btn small', id: 'fin-pedge-' + fin.id, 'data-help': 'partingDraft' }, T('panel.edges.pdPickEdge'));
+            peBtn.onclick = () => Features.pickPartingDraftEdge(it.id, fin.id);
+            ks.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, peBtn));
+          } else if (pMode === 'datum' && datums.length) {
+            ks.append(h('div', { class: 'fields one', style: { marginTop: '6px' } }, UI.selectField({
+              id: 'fin-pdatum-' + fin.id,
+              label: T('panel.edges.pdDatum'),
+              value: fin.datumId || datums[0].id,
+              options: datums.map((d) => [d.id, d.name || d.id]),
+              onChange: (v) => Actions.setFinish(it.id, fin.id, { datumId: v }),
+            })));
+          }
+
+          const optRow = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr 1fr', marginTop: '6px' } });
+          const symLbl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'fin-psym-' + fin.id, checked: sym }), T('panel.edges.pdSym'));
+          symLbl.querySelector('input').onchange = (e) => Actions.setFinish(it.id, fin.id, { sym: e.target.checked, r2: e.target.checked ? fin.r : (fin.r2 != null ? fin.r2 : fin.r) });
+          const flipLbl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'fin-pflip-' + fin.id, checked: !!fin.flip }), T('panel.edges.pdFlip'));
+          flipLbl.querySelector('input').onchange = (e) => Actions.setFinish(it.id, fin.id, { flip: e.target.checked });
+          optRow.append(symLbl, flipLbl);
+          ks.append(optRow);
+          continue;
+        }
         const edgeSelMap = { all: T('panel.edges.selAll'), top: T('panel.edges.selTop'), bottom: T('panel.edges.selBottom'), vertical: T('panel.edges.selVertical'), horizontal: T('panel.edges.selHorizontal') };
         const eCnt = (fin.edges || []).length;
         const lbl = (fin.type === 'chamfer' ? T('panel.edges.chamfer') : T('panel.edges.fillet')) + (typeof fin.edges === 'string' ? ' · ' + (edgeSelMap[fin.edges] || '') : ' · ' + (eCnt === 1 ? T('panel.edges.oneEdge') : T('panel.edges.manyEdges', { n: eCnt })));
@@ -2173,8 +2284,10 @@ const Panels = (() => {
       const mk = (label, sel) => { const b = h('button', { type: 'button', class: 'btn small', 'data-help': 'fillet' }); b.innerHTML = icon('fillet') + esc(label); b.onclick = () => { Actions.finishAll(it.id, 'fillet', sel, 1); }; return b; };
       kr.append(mk(T('panel.edges.roundAll'), 'all'), mk(T('panel.edges.roundVert'), 'vertical'), mk(T('panel.edges.roundTop'), 'top'));
       const ffBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-full-fillet', 'data-help': 'fullFillet' }); ffBtn.innerHTML = icon('fillet') + esc(T('panel.edges.fullFilletBtn')); ffBtn.onclick = () => Features.startFullFillet(null, { itemId: it.id }); kr.append(ffBtn);
+      const flfBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-face-fillet', 'data-help': 'faceFillet' }); flfBtn.innerHTML = icon('fillet') + esc(T('panel.edges.faceFilletBtn')); flfBtn.onclick = () => Features.startFaceFillet(null, { itemId: it.id }); kr.append(flfBtn);
       const ccBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-corner-chamfer', 'data-help': 'cornerChamfer' }); ccBtn.innerHTML = icon('chamfer') + esc(T('panel.edges.cornerChamferBtn')); ccBtn.onclick = () => Features.startCornerChamfer(it.id); kr.append(ccBtn);
       if (!(it.finishes || []).some((x) => x.type === 'draft')) { const db = h('button', { type: 'button', class: 'btn small pro', id: 'btn-draft', 'data-help': 'draft' }); db.innerHTML = icon('chamfer') + esc(T('panel.edges.draftBtn')); db.onclick = () => Actions.finishAll(it.id, 'draft', 'all', 3); kr.append(db); }
+      const pdBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-parting-draft', 'data-help': 'partingDraft' }); pdBtn.innerHTML = icon('chamfer') + esc(T('panel.edges.partingDraftBtn')); pdBtn.onclick = () => Features.addPartingDraft(it.id); kr.append(pdBtn);
       ks.append(kr);
       ks.append(h('div', { class: 'hint-box', html: T('panel.edges.hint') }));
       w.append(ks);
@@ -2539,6 +2652,10 @@ const Panels = (() => {
       b('chainEdges', T('ctx.chain'), () => Select.chain(), '', T('ctx.chainTip'), true);
       b('similar', T('ctx.byKind'), (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', T('ctx.byKindTip'), true);
       if (App.edges.length === 1 && one) {
+        if (items[0] && items[0].item.role !== 'hole') {
+          const pd = b('chamfer', T('ctx.partingDraft'), () => Features.addPartingDraft(App.edges[0].id, { edge: App.edges[0] }), 'pro', T('ctx.partingDraftTip'));
+          pd.id = 'ctx-edge-parting-draft'; pd.dataset.help = 'partingDraft';
+        }
         if (App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !x.op).length >= 2) {
           const lg = b('lipGroove', T('ctx.lipGroove'), () => Features.lipGroove({ edge: App.edges[0] }), '', T('ctx.lipGrooveTip'));
           lg.id = 'ctx-edge-lip-groove'; lg.dataset.help = 'lipGroove';
@@ -2565,6 +2682,8 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole') {
         const ffb = b('fillet', T('ctx.fullFillet'), () => Features.startFullFillet(face), 'pro', T('ctx.fullFilletTip'));
         ffb.id = 'ctx-full-fillet'; ffb.dataset.help = 'fullFillet';
+        const flfb = b('fillet', T('ctx.faceFillet'), () => Features.startFaceFillet(face), 'pro', T('ctx.faceFilletTip'));
+        flfb.id = 'ctx-face-fillet'; flfb.dataset.help = 'faceFillet';
       }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
@@ -2621,6 +2740,8 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole') {
         const ffb = b('fillet', T('ctx.fullFillet'), () => Features.startFullFillet(face), 'pro', T('ctx.fullFilletTip'));
         ffb.id = 'ctx-full-fillet'; ffb.dataset.help = 'fullFillet';
+        const flfb = b('fillet', T('ctx.faceFillet'), () => Features.startFaceFillet(face), 'pro', T('ctx.faceFilletTip'));
+        flfb.id = 'ctx-face-fillet'; flfb.dataset.help = 'faceFillet';
       }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';

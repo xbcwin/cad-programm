@@ -61,7 +61,7 @@ const RefFix = (() => {
       if (e.code !== 'edges') continue;
       const fin = (it.finishes || []).find((x) => x.id === e.finishId);
       if (!fin) continue;
-      if (fin.type === 'shell' || fin.type === 'fullFillet') {
+      if (fin.type === 'shell' || fin.type === 'fullFillet' || fin.type === 'faceFillet') {
         out.push({
           key: `${it.id}:fin:${fin.id}`,
           kind: 'finish-face',
@@ -69,7 +69,7 @@ const RefFix = (() => {
           finishId: fin.id,
           finishType: fin.type,
           missing: Array.isArray(e.missing) ? e.missing.slice() : null,
-          title: fin.type === 'fullFillet' ? 'Vollrundung' : 'Wandstärke',
+          title: fin.type === 'fullFillet' ? 'Vollrundung' : fin.type === 'faceFillet' ? 'Flächen-Rundung' : 'Wandstärke',
           message: e.message,
           needCount: Math.max(1, (e.missing || fin.faces || [0]).length),
         });
@@ -81,7 +81,7 @@ const RefFix = (() => {
           finishId: fin.id,
           finishType: fin.type,
           missing: Array.isArray(e.missing) ? e.missing.slice() : null,
-          title: fin.type === 'cornerChamfer' ? 'Ecken-Fase' : fin.type === 'chamfer' ? 'Fase' : 'Rundung',
+          title: fin.type === 'cornerChamfer' ? 'Ecken-Fase' : fin.type === 'partingDraft' ? 'Schräge an Trennlinie' : fin.type === 'chamfer' ? 'Fase' : 'Rundung',
           message: e.message,
           needCount: Array.isArray(fin.edges) ? Math.max(1, (e.missing || fin.edges).length) : 1,
         });
@@ -391,7 +391,7 @@ const RefFix = (() => {
       const fin = (f.item.finishes || []).find((x) => x.id === issue.finishId);
       if (!fin) return false;
       const miss = Array.isArray(issue.missing) ? new Set(issue.missing) : null;
-      if (fin.type === 'fullFillet' && Array.isArray(fin.faces) && fin.faces.length === 3 && miss && miss.size === 1) {
+      if ((fin.type === 'fullFillet' && Array.isArray(fin.faces) && fin.faces.length === 3 && miss && miss.size === 1) || (fin.type === 'faceFillet' && Array.isArray(fin.faces) && fin.faces.length === 2 && miss && miss.size === 1)) {
         const missIdx = [...miss][0];
         fin.faces[missIdx] = sig;
         return;

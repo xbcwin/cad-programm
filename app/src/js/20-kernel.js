@@ -456,7 +456,7 @@ const Kernel = (() => {
 
   function approxLocalBox(it, depth = 0) {
     if (!it || depth > 16) return null;
-    if (Array.isArray(it.finishes) && it.finishes.some((f) => f && (f.type === 'draft' || f.type === 'shell'))) return null;
+    if (Array.isArray(it.finishes) && it.finishes.some((f) => f && (f.type === 'draft' || f.type === 'partingDraft' || f.type === 'faceFillet' || f.type === 'shell'))) return null;
     const p = it.p || {};
     let box = null;
     switch (it.kind) {

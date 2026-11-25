@@ -5416,6 +5416,354 @@ export function createKernel(R, oc) {
     return { shape, topo };
   }
 
+  function applyFaceFillet(shape, fin, errors, itemId, topo = null, isLeaf = false) {
+    const r = num(fin.r, 5);
+    if (!(r > 0)) {
+      errors.push({ itemId, finishId: fin.id, code: 'fillet', message: 'Der Radius der Flächen-Rundung muss größer als 0 sein.' });
+      return { shape, topo };
+    }
+    const sigs = (fin.faces || []).filter((f) => f && (f.c || f.tid));
+    if (sigs.length < 2) {
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: [0, 1], message: 'Für die Flächen-Rundung werden zwei Flächen gebraucht.' });
+      return { shape, topo };
+    }
+    const b = bboxOf(shape);
+    const maxDim = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const tol = 0.05 + 1e-3 * maxDim;
+    const faceArr = [];
+    try { for (const f of shape.faces) faceArr.push(f); } catch (_) {}
+    const resolved = [];
+    const missing = [];
+    for (let i = 0; i < 2; i++) {
+      const hits = resolveFaceRef({ ...sigs[i], tol }, faceArr, topo, itemId, isLeaf);
+      if (!hits.length) missing.push(i);
+      resolved.push(hits[0] || null);
+    }
+    if (missing.length) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing, message: 'Eine der beiden Flächen der Flächen-Rundung gibt es nicht mehr.' });
+      return { shape, topo };
+    }
+    const [f1, f2] = resolved;
+    if (f1.isSame(f2)) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'fillet', message: 'Bitte zwei verschiedene Flächen für die Flächen-Rundung wählen.' });
+      return { shape, topo };
+    }
+    const f1Edges = [], f2Edges = [];
+    try { for (const e of f1.edges) f1Edges.push(e); } catch (_) {}
+    try { for (const e of f2.edges) f2Edges.push(e); } catch (_) {}
+    const commonEdges = f1Edges.filter((e) => f2Edges.some((x) => x.isSame(e)));
+    const freeLists = () => {
+      for (const e of f1Edges) safeDelete(e);
+      for (const e of f2Edges) safeDelete(e);
+      for (const f of faceArr) safeDelete(f);
+    };
+
+    const tryAdjFillet = (rad, skipTopo) => {
+      if (!commonEdges.length) return null;
+      const bld = new oc.BRepFilletAPI_MakeFillet(shape.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);
+      let sh = null, chk = null;
+      try {
+        for (const e of commonEdges) bld.Add(rad, e.wrapped);
+        bld.Build();
+        sh = R.cast(bld.Shape());
+        if (!sh || !R.isShape3D(sh)) { safeDelete(sh); return null; }
+        chk = new oc.BRepCheck_Analyzer(sh.wrapped);
+        if (!chk.IsValid()) { safeDelete(sh); return null; }
+        const outTopo = skipTopo ? null : propagateHistory(bld, [{ topo, selfId: itemId }], sh, 'Ffl:' + (fin.id || 'f'));
+        return { shape: sh, topo: outTopo };
+      } catch (_) {
+        safeDelete(sh);
+        return null;
+      } finally {
+        safeDelete(chk);
+        bld.delete();
+      }
+    };
+
+    if (commonEdges.length) {
+      const adjRes = tryAdjFillet(r, false);
+      if (adjRes) {
+        freeLists();
+        return adjRes;
+      }
+    }
+
+    let parallelErr = false;
+    let planarReady = false;
+    let tryPlanar = null;
+
+    if (f1.geomType === 'PLANE' && f2.geomType === 'PLANE') {
+      try {
+        const n1 = norm(vec(f1.normalAt())), n2 = norm(vec(f2.normalAt()));
+        const c1 = vec(f1.center), c2 = vec(f2.center);
+        const dp = dot(n1, n2);
+        if (Math.abs(dp) >= 0.9999) {
+          parallelErr = true;
+        } else {
+          const u = norm(cross(n1, n2));
+          const ex = n1;
+          const ey = cross(u, ex);
+          const to2 = (p) => { const d = sub(p, c1); return [dot(d, ex), dot(d, ey)]; };
+          const N1 = [1, 0];
+          const N2 = [dot(n2, ex), dot(n2, ey)];
+          const Q2 = to2(c2);
+          const d2 = N2[0] * Q2[0] + N2[1] * Q2[1];
+          if (Math.abs(N2[1]) > 1e-6) {
+            const I = [0, d2 / N2[1]];
+            const uSpanOf = (edges) => {
+              let mn = Infinity, mx = -Infinity;
+              const pts2 = [];
+              for (const e of edges) {
+                for (const pt of [vec(e.startPoint), vec(e.endPoint), vec(e.pointAt(0.5))]) {
+                  const pr = dot(sub(pt, c1), u);
+                  if (pr < mn) mn = pr;
+                  if (pr > mx) mx = pr;
+                  pts2.push(to2(pt));
+                }
+              }
+              return { mn, mx, pts2 };
+            };
+            const s1 = uSpanOf(f1Edges), s2 = uSpanOf(f2Edges);
+            const uMin = Math.max(s1.mn, s2.mn), uMax = Math.min(s1.mx, s2.mx);
+            const s21 = dot(sub(c2, c1), n1), s12 = dot(sub(c1, c2), n2);
+            const isConvex = s21 < -1e-4 && s12 < -1e-4;
+            const isConcave = s21 > 1e-4 && s12 > 1e-4;
+            if (uMax - uMin > 1e-4 && (isConvex || isConcave)) {
+              const norm2 = (a) => { const l = Math.hypot(a[0], a[1]) || 1; return [a[0] / l, a[1] / l]; };
+              const dir1 = norm2([to2(c1)[0] - I[0], to2(c1)[1] - I[1]]);
+              const dir2 = norm2([Q2[0] - I[0], Q2[1] - I[1]]);
+              const reachMax1 = Math.max(...s1.pts2.map((q) => (q[0] - I[0]) * dir1[0] + (q[1] - I[1]) * dir1[1]));
+              const reachMax2 = Math.max(...s2.pts2.map((q) => (q[0] - I[0]) * dir2[0] + (q[1] - I[1]) * dir2[1]));
+              let shUMin = Infinity, shUMax = -Infinity;
+              for (const ix of [b[0], b[3]]) for (const iy of [b[1], b[4]]) for (const iz of [b[2], b[5]]) {
+                const pr = dot(sub([ix, iy, iz], c1), u);
+                if (pr < shUMin) shUMin = pr;
+                if (pr > shUMax) shUMax = pr;
+              }
+              const shapePts = [];
+              try {
+                for (const se of shape.edges) {
+                  shapePts.push(vec(se.startPoint), vec(se.endPoint));
+                  safeDelete(se);
+                }
+              } catch (_) {}
+              const volBefore = R.measureVolume(shape);
+              const bboxDiag = Math.max(1, Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]));
+              const to3 = (xy, zU) => add(add(c1, mul(u, zU)), add(mul(ex, xy[0]), mul(ey, xy[1])));
+              const finalizeBoolResult = (opRes, opBuilder, skipTopo) => {
+                let resRaw = R.cast(opRes), usd = null, res = null, chk = null, opTopo = null;
+                try {
+                  if (!resRaw || !R.isShape3D(resRaw)) return null;
+                  const volAfterRaw = R.measureVolume(resRaw);
+                  if (Math.abs(volBefore - volAfterRaw) <= 1e-4) return null;
+                  if (skipTopo) {
+                    chk = new oc.BRepCheck_Analyzer(resRaw.wrapped);
+                    if (!chk.IsValid()) return null;
+                    return { shape: resRaw, topo: null, ownsRaw: true };
+                  }
+                  opTopo = propagateHistory(opBuilder, [{ topo, selfId: itemId }], resRaw, 'Ffl:' + (fin.id || 'f'));
+                  usd = new oc.ShapeUpgrade_UnifySameDomain(resRaw.wrapped, true, true, false);
+                  usd.Build();
+                  res = R.cast(usd.Shape());
+                  chk = new oc.BRepCheck_Analyzer(res.wrapped);
+                  if (!res || !R.isShape3D(res) || !chk.IsValid() || Math.abs(R.measureVolume(res) - volAfterRaw) > 1e-2) {
+                    safeDelete(res); res = null;
+                    return null;
+                  }
+                  const outTopo = createTopoMap();
+                  const rawFaces = [];
+                  try { for (const f of resRaw.faces) rawFaces.push(f); } catch (_) {}
+                  const rawMeta = rawFaces.map((rf) => {
+                    let rn = null; try { rn = vec(rf.normalAt()); } catch (_) {}
+                    return { gt: rf.geomType, c: vec(rf.center), n: rn, tid: tmGet(opTopo.faces, rf.wrapped) };
+                  });
+                  const resFaces = exploreUnique(res, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+                  for (const rf of resFaces) {
+                    const rObj = new R.Face(oc.TopoDS.Face(rf.s));
+                    try {
+                      const rGt = rObj.geomType, rc = vec(rObj.center);
+                      let rn = null; try { rn = vec(rObj.normalAt()); } catch (_) {}
+                      const match = rawMeta.find((m) => m.tid && m.gt === rGt && len(sub(m.c, rc)) < 1e-3 && (!m.n || !rn || dot(m.n, rn) > 0.999));
+                      if (match) tmAdd(outTopo.faces, rf.s, match.tid);
+                      else rf.s.delete();
+                    } finally { rObj.delete(); }
+                  }
+                  for (const rf of rawFaces) safeDelete(rf);
+                  ensureTopoComplete(res, outTopo, 'Ffl:' + (fin.id || 'f'));
+                  return { shape: res, topo: outTopo };
+                } finally {
+                  if (opTopo) freeTopoMap(opTopo);
+                  safeDelete(chk); safeDelete(usd);
+                  if (resRaw && (!skipTopo || !res)) safeDelete(resRaw);
+                }
+              };
+
+              planarReady = true;
+              tryPlanar = (rad, skipTopo) => {
+                const padLo = uMin <= shUMin + 1e-3 ? Math.max(0.5, rad * 0.2) : 0;
+                const padHi = uMax >= shUMax - 1e-3 ? Math.max(0.5, rad * 0.2) : 0;
+                if (isConvex) {
+                  const Cx = -rad, Cy = (d2 - rad - N2[0] * Cx) / N2[1];
+                  const C = [Cx, Cy];
+                  const T1 = [C[0] + rad * N1[0], C[1] + rad * N1[1]];
+                  const T2 = [C[0] + rad * N2[0], C[1] + rad * N2[1]];
+                  const rT1 = (T1[0] - I[0]) * dir1[0] + (T1[1] - I[1]) * dir1[1];
+                  const rT2 = (T2[0] - I[0]) * dir2[0] + (T2[1] - I[1]) * dir2[1];
+                  if (rT1 <= 1e-4 || rT2 <= 1e-4 || rT1 > reachMax1 + 1e-3 || rT2 > reachMax2 + 1e-3) return null;
+                  const bis = norm2([N1[0] + N2[0], N1[1] + N2[1]]);
+                  const Tm = [C[0] + rad * bis[0], C[1] + rad * bis[1]];
+                  const pad = Math.max(2, rad * 0.5, bboxDiag * 0.1);
+                  const E1 = [T1[0] + pad * N1[0], T1[1] + pad * N1[1]];
+                  const E2 = [T2[0] + pad * N2[0], T2[1] + pad * N2[1]];
+                  const E0 = [pad, (d2 + pad - N2[0] * pad) / N2[1]];
+                  const z0 = uMin - padLo, hU = (uMax - uMin) + padLo + padHi;
+                  let wb = null, fb = null, pr = null, gv = null, cut = null;
+                  let l1 = null, l2 = null, l3 = null, l4 = null, a3 = null, faceW = null, prismSh = null;
+                  try {
+                    wb = new oc.BRepBuilderAPI_MakeWire();
+                    l1 = R.makeLine(to3(T1, z0), to3(E1, z0)); wb.Add(l1.wrapped);
+                    l2 = R.makeLine(to3(E1, z0), to3(E0, z0)); wb.Add(l2.wrapped);
+                    l3 = R.makeLine(to3(E0, z0), to3(E2, z0)); wb.Add(l3.wrapped);
+                    l4 = R.makeLine(to3(E2, z0), to3(T2, z0)); wb.Add(l4.wrapped);
+                    a3 = R.makeThreePointArc(to3(T2, z0), to3(Tm, z0), to3(T1, z0)); wb.Add(a3.wrapped);
+                    wb.Build();
+                    fb = new oc.BRepBuilderAPI_MakeFace(wb.Wire(), false);
+                    faceW = fb.Face();
+                    gv = new oc.gp_Vec(u[0] * hU, u[1] * hU, u[2] * hU);
+                    pr = new oc.BRepPrimAPI_MakePrism(faceW, gv, false, true);
+                    pr.Build();
+                    prismSh = pr.Shape();
+                    cut = new oc.BRepAlgoAPI_Cut(shape.wrapped, prismSh);
+                    cut.Build();
+                    const out = finalizeBoolResult(cut.Shape(), cut, skipTopo);
+                    if (out && skipTopo && out.ownsRaw) return { shape: out.shape, topo: null };
+                    return out;
+                  } catch (_) {
+                    return null;
+                  } finally {
+                    safeDelete(cut); safeDelete(prismSh); safeDelete(pr); safeDelete(gv);
+                    safeDelete(faceW); safeDelete(fb); safeDelete(wb);
+                    safeDelete(l1); safeDelete(l2); safeDelete(l3); safeDelete(l4); safeDelete(a3);
+                  }
+                } else {
+                  const Cx = rad, Cy = (d2 + rad - N2[0] * Cx) / N2[1];
+                  const C = [Cx, Cy];
+                  const T1 = [C[0] - rad * N1[0], C[1] - rad * N1[1]];
+                  const T2 = [C[0] - rad * N2[0], C[1] - rad * N2[1]];
+                  const rT1 = (T1[0] - I[0]) * dir1[0] + (T1[1] - I[1]) * dir1[1];
+                  const rT2 = (T2[0] - I[0]) * dir2[0] + (T2[1] - I[1]) * dir2[1];
+                  if (rT1 <= 1e-4 || rT2 <= 1e-4 || rT1 > reachMax1 + 1e-3 || rT2 > reachMax2 + 1e-3) return null;
+                  const bis = norm2([N1[0] + N2[0], N1[1] + N2[1]]);
+                  const Tm = [C[0] - rad * bis[0], C[1] - rad * bis[1]];
+                  let baseShape = shape, ownsBase = false;
+                  const needTrim = shapePts.some((pt) => {
+                    const pu = dot(sub(pt, c1), u);
+                    if (pu < uMin - 1e-3 || pu > uMax + 1e-3) return false;
+                    if (dot(sub(pt, c1), n1) <= 1e-4 || dot(sub(pt, c2), n2) <= 1e-4) return false;
+                    const q2 = to2(pt);
+                    return Math.hypot(q2[0] - C[0], q2[1] - C[1]) < rad - 1e-3;
+                  });
+                  if (needTrim) {
+                    const zC0 = uMin - padLo, hUC = (uMax - uMin) + padLo + padHi;
+                    let wbC = null, fbC = null, prC = null, gvC = null, cutC = null;
+                    let c1L = null, c2L = null, cArc = null, fwC = null, psC = null;
+                    try {
+                      wbC = new oc.BRepBuilderAPI_MakeWire();
+                      c1L = R.makeLine(to3(C, zC0), to3(T1, zC0)); wbC.Add(c1L.wrapped);
+                      cArc = R.makeThreePointArc(to3(T1, zC0), to3(Tm, zC0), to3(T2, zC0)); wbC.Add(cArc.wrapped);
+                      c2L = R.makeLine(to3(T2, zC0), to3(C, zC0)); wbC.Add(c2L.wrapped);
+                      wbC.Build();
+                      fbC = new oc.BRepBuilderAPI_MakeFace(wbC.Wire(), false);
+                      fwC = fbC.Face();
+                      gvC = new oc.gp_Vec(u[0] * hUC, u[1] * hUC, u[2] * hUC);
+                      prC = new oc.BRepPrimAPI_MakePrism(fwC, gvC, false, true);
+                      prC.Build();
+                      psC = prC.Shape();
+                      cutC = new oc.BRepAlgoAPI_Cut(shape.wrapped, psC);
+                      cutC.Build();
+                      const trimmed = R.cast(cutC.Shape());
+                      if (trimmed && R.isShape3D(trimmed)) { baseShape = trimmed; ownsBase = true; }
+                      else safeDelete(trimmed);
+                    } catch (_) {
+                    } finally {
+                      safeDelete(cutC); safeDelete(psC); safeDelete(prC); safeDelete(gvC);
+                      safeDelete(fwC); safeDelete(fbC); safeDelete(wbC);
+                      safeDelete(c1L); safeDelete(c2L); safeDelete(cArc);
+                    }
+                  }
+                  const hU = uMax - uMin;
+                  let wb = null, fb = null, pr = null, gv = null, fuse = null;
+                  let l1 = null, l2 = null, a3 = null, faceW = null, prismSh = null;
+                  try {
+                    wb = new oc.BRepBuilderAPI_MakeWire();
+                    l1 = R.makeLine(to3(I, uMin), to3(T1, uMin)); wb.Add(l1.wrapped);
+                    a3 = R.makeThreePointArc(to3(T1, uMin), to3(Tm, uMin), to3(T2, uMin)); wb.Add(a3.wrapped);
+                    l2 = R.makeLine(to3(T2, uMin), to3(I, uMin)); wb.Add(l2.wrapped);
+                    wb.Build();
+                    fb = new oc.BRepBuilderAPI_MakeFace(wb.Wire(), false);
+                    faceW = fb.Face();
+                    gv = new oc.gp_Vec(u[0] * hU, u[1] * hU, u[2] * hU);
+                    pr = new oc.BRepPrimAPI_MakePrism(faceW, gv, false, true);
+                    pr.Build();
+                    prismSh = pr.Shape();
+                    fuse = new oc.BRepAlgoAPI_Fuse(baseShape.wrapped, prismSh);
+                    fuse.Build();
+                    const out = finalizeBoolResult(fuse.Shape(), fuse, skipTopo);
+                    if (out && skipTopo && out.ownsRaw) return { shape: out.shape, topo: null };
+                    return out;
+                  } catch (_) {
+                    return null;
+                  } finally {
+                    if (ownsBase) safeDelete(baseShape);
+                    safeDelete(fuse); safeDelete(prismSh); safeDelete(pr); safeDelete(gv);
+                    safeDelete(faceW); safeDelete(fb); safeDelete(wb);
+                    safeDelete(l1); safeDelete(l2); safeDelete(a3);
+                  }
+                }
+              };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (parallelErr) {
+      freeLists();
+      errors.push({ itemId, finishId: fin.id, code: 'fillet', message: 'Die beiden gewählten Flächen sind parallel – wähle zwei Flächen im Winkel zueinander (oder nutze „Vollrundung“).' });
+      return { shape, topo };
+    }
+
+    if (planarReady && tryPlanar) {
+      const plRes = tryPlanar(r, false);
+      if (plRes) {
+        freeLists();
+        return plRes;
+      }
+    }
+
+    // Größten möglichen Radius per Bisektion suchen
+    const tester = commonEdges.length ? (rad) => tryAdjFillet(rad, true) : (planarReady && tryPlanar ? (rad) => tryPlanar(rad, true) : null);
+    let max = 0;
+    if (tester) {
+      let lo = 0, hi = r;
+      for (let i = 0; i < 6; i++) {
+        const mid = (lo + hi) / 2;
+        const t = tester(mid);
+        if (t && t.shape) { safeDelete(t.shape); lo = mid; }
+        else hi = mid;
+      }
+      max = Math.floor(lo * 10) / 10;
+    }
+
+    freeLists();
+    errors.push(max > 0
+      ? { itemId, finishId: fin.id, code: 'toobig', max, message: `Die Flächen-Rundung ist zu groß. Möglich sind höchstens ${String(max).replace('.', ',')} mm.` }
+      : { itemId, finishId: fin.id, code: 'fillet', message: commonEdges.length || planarReady ? 'Die Flächen-Rundung lässt sich zwischen diesen beiden Flächen nicht bauen.' : 'Für nicht benachbarte Flächen werden zwei ebene Flächen im Winkel zueinander gebraucht.' });
+    return { shape, topo };
+  }
+
   function applyCornerChamfer(shape, fin, errors, itemId, topo = null, isLeaf = false) {
     const d1 = num(fin.d1, 2), d2 = num(fin.d2, 2), d3 = num(fin.d3, 2);
     if (!(d1 > 0 && d2 > 0 && d3 > 0)) {
@@ -5657,6 +6005,24 @@ export function createKernel(R, oc) {
         }
         continue;
       }
+      if (fin.type === 'faceFillet') {
+        const res = applyFaceFillet(curShape, fin, errors, itemId, curTopo, isLeaf);
+        if (res.shape !== curShape) {
+          if (curShape !== shape) safeDelete(curShape);
+          if (ownsTopo) freeTopoMap(curTopo);
+          curShape = res.shape; curTopo = res.topo; ownsTopo = true;
+        }
+        continue;
+      }
+      if (fin.type === 'partingDraft') {
+        const res = applyPartingDraft(curShape, fin, errors, itemId, curTopo, isLeaf);
+        if (res.shape !== curShape) {
+          if (curShape !== shape) safeDelete(curShape);
+          if (ownsTopo) freeTopoMap(curTopo);
+          curShape = res.shape; curTopo = res.topo; ownsTopo = true;
+        }
+        continue;
+      }
       const r = num(fin.r, 1);
       if (!(r > 0)) continue;
       const shapeEdges = [];
@@ -5730,6 +6096,190 @@ export function createKernel(R, oc) {
       errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Schräge lässt sich an diesem Körper nicht bauen – versuch einen kleineren Winkel oder zuerst ohne Rundungen.' });
       return { shape, topo };
     } finally { try { builder.delete(); pln.delete(); dir.delete(); } catch (_) {} }
+  }
+
+  // Entformungsschräge ab einer Trennlinie nach oben und unten (KP-42)
+  function applyPartingDraft(shape, fin, errors, itemId, topo = null, isLeaf = false) {
+    const sign = fin.flip ? -1 : 1;
+    const angUp = num(fin.r, 3) * sign;
+    const angDown = (fin.sym === false ? num(fin.r2, num(fin.r, 3)) : num(fin.r, 3)) * sign;
+    if ((!(Math.abs(angUp) > 1e-6) && !(Math.abs(angDown) > 1e-6)) || Math.abs(angUp) >= 45 || Math.abs(angDown) >= 45) {
+      errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Schräge muss zwischen 0 und 45° liegen.' });
+      return { shape, topo };
+    }
+    const b = bboxOf(shape);
+    const axIdx = fin.axis === 'x' ? 0 : fin.axis === 'y' ? 1 : 2;
+    let D = axIdx === 0 ? [1, 0, 0] : axIdx === 1 ? [0, 1, 0] : [0, 0, 1];
+    let orig = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
+
+    if (fin.mode === 'datum') {
+      if (fin.missingDatum || !fin.plane || !Array.isArray(fin.plane.o) || !Array.isArray(fin.plane.n)) {
+        errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Bezugsebene für die Trennlinie gibt es nicht mehr.' });
+        return { shape, topo };
+      }
+      const nLen = len(fin.plane.n);
+      if (!(nLen > 1e-6)) {
+        errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Bezugsebene für die Trennlinie ist ungültig.' });
+        return { shape, topo };
+      }
+      orig = fin.plane.o.map(Number);
+      D = norm(fin.plane.n.map(Number));
+    } else if (fin.mode === 'edge') {
+      const sig = Array.isArray(fin.edges) ? fin.edges[0] : null;
+      const shapeEdges = [];
+      try { for (const e of shape.edges) shapeEdges.push(e); } catch (_) {}
+      const hits = sig ? resolveEdgeRef(sig, shapeEdges, topo, itemId, isLeaf) : [];
+      if (!hits.length) {
+        for (const e of shapeEdges) safeDelete(e);
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', missing: [0], message: 'Die gewählte Trennlinien-Kante gibt es nicht mehr.' });
+        return { shape, topo };
+      }
+      try { orig = vec(hits[0].pointAt(0.5)); } catch (_) {}
+      for (const e of shapeEdges) safeDelete(e);
+    } else if (fin.mode === 'offset') {
+      orig[axIdx] = num(fin.pos, orig[axIdx]);
+    }
+
+    let minP = Infinity, maxP = -Infinity;
+    for (const ix of [b[0], b[3]]) for (const iy of [b[1], b[4]]) for (const iz of [b[2], b[5]]) {
+      const pr = dot([ix, iy, iz], D);
+      if (pr < minP) minP = pr;
+      if (pr > maxP) maxP = pr;
+    }
+    const origP = dot(orig, D);
+    if (!(origP > minP + 1e-3 && origP < maxP - 1e-3)) {
+      errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Trennlinie schneidet den Körper nicht.' });
+      return { shape, topo };
+    }
+
+    const span = 20 + Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const draftSideFaces = (inShape, inTopo, signDir, angDeg, plnObj, dirObj, tag) => {
+      if (!(Math.abs(angDeg) > 1e-6)) return { shape: inShape, topo: inTopo, n: 0, own: false };
+      const bld = new oc.BRepOffsetAPI_DraftAngle(inShape.wrapped);
+      let n = 0;
+      const faces = [];
+      try {
+        for (const f of inShape.faces) faces.push(f);
+        for (const f of faces) {
+          let nv;
+          try { nv = vec(f.normalAt()); } catch (_) { continue; }
+          const nl = len(nv);
+          if (!(nl > 1e-9)) continue;
+          nv = mul(nv, 1 / nl);
+          if (Math.abs(dot(nv, D)) < 0.02) {
+            const s = dot(sub(vec(f.center), orig), D);
+            if (signDir > 0 ? s > 1e-4 : s < -1e-4) {
+              bld.Add(f.wrapped, dirObj, (angDeg * Math.PI) / 180, plnObj, true);
+              n++;
+            }
+          }
+        }
+        if (!n) return { shape: inShape, topo: inTopo, n: 0, own: false };
+        bld.Build();
+        if (!bld.IsDone || (typeof bld.IsDone === 'function' && !bld.IsDone())) throw new Error('draft');
+        const out = R.cast(bld.Shape());
+        if (!out || !R.isShape3D(out)) { safeDelete(out); throw new Error('draft'); }
+        const outTopo = propagateHistory(bld, [{ topo: inTopo, selfId: itemId }], out, tag);
+        return { shape: out, topo: outTopo, n, own: true };
+      } finally {
+        for (const f of faces) safeDelete(f);
+        safeDelete(bld);
+      }
+    };
+
+    // Primärweg: Seitenflächen an der Schnittkurve mit Splitter teilen, dann oben und unten separat neigen
+    const p0 = R.asPnt(orig), dUp = R.asDir(D), dDn = R.asDir(mul(D, -1));
+    const plnUp = new oc.gp_Pln(p0, dUp), plnDn = new oc.gp_Pln(p0, dDn);
+    const freePlns = () => { try { plnUp.delete(); plnDn.delete(); dUp.delete(); dDn.delete(); p0.delete(); } catch (_) {} };
+    let plnFace = null, sec = null, secSh = null, args = null, tools = null, spl = null;
+    let splitSh = null, splitTopo = null, curSh = null, curTopo = null, ownCur = false, chk = null;
+    try {
+      plnFace = new oc.BRepBuilderAPI_MakeFace(plnUp, -span, span, -span, span).Face();
+      sec = new oc.BRepAlgoAPI_Section(shape.wrapped, plnFace, false);
+      sec.Build();
+      secSh = sec.Shape();
+      args = new oc.NCollection_List_TopoDS_Shape(); args.Append(shape.wrapped);
+      tools = new oc.NCollection_List_TopoDS_Shape(); tools.Append(secSh);
+      spl = new oc.BRepAlgoAPI_Splitter();
+      spl.SetArguments(args); spl.SetTools(tools); spl.Build();
+      splitSh = R.cast(spl.Shape());
+      if (splitSh && R.isShape3D(splitSh)) {
+        splitTopo = propagateHistory(spl, [{ topo, selfId: itemId }], splitSh, 'Psp:' + (fin.id || 'd'));
+        let totalDrafted = 0;
+        const r1 = draftSideFaces(splitSh, splitTopo, 1, angUp, plnUp, dUp, 'Pdu:' + (fin.id || 'd'));
+        curSh = r1.shape; curTopo = r1.topo; ownCur = r1.own; totalDrafted += r1.n;
+        const r2 = draftSideFaces(curSh, curTopo, -1, angDown, plnDn, dDn, 'Pdd:' + (fin.id || 'd'));
+        if (r2.own) {
+          if (ownCur) { safeDelete(curSh); freeTopoMap(curTopo); }
+          curSh = r2.shape; curTopo = r2.topo; ownCur = true;
+        }
+        totalDrafted += r2.n;
+        if (totalDrafted > 0 && curSh && R.isShape3D(curSh)) {
+          chk = new oc.BRepCheck_Analyzer(curSh.wrapped);
+          if (chk.IsValid()) {
+            if (!ownCur) {
+              const resSh = curSh; curSh = null;
+              const resTopo = splitTopo; splitTopo = null;
+              splitSh = null;
+              freePlns();
+              return { shape: resSh, topo: resTopo };
+            }
+            const resSh = curSh; curSh = null;
+            const resTopo = curTopo; curTopo = null;
+            freePlns();
+            return { shape: resSh, topo: resTopo };
+          }
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (ownCur) { safeDelete(curSh); freeTopoMap(curTopo); }
+      safeDelete(splitSh);
+      if (splitTopo) freeTopoMap(splitTopo);
+      safeDelete(chk); safeDelete(spl); safeDelete(tools); safeDelete(args);
+      safeDelete(secSh); safeDelete(sec); safeDelete(plnFace);
+    }
+
+    // Fallback-Weg: Halbraum-Schnitt je Seite + DraftAngle + Fuse + UnifySameDomain
+    let topBox = null, botBox = null, topHalf = null, botHalf = null;
+    let topDraft = null, botDraft = null, fused = null, usd = null, res = null, chk2 = null;
+    try {
+      const ref = Math.abs(D[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      const ux = norm(cross(ref, D)), vy = norm(cross(D, ux));
+      const frameM = [ux[0], ux[1], ux[2], 0, vy[0], vy[1], vy[2], 0, D[0], D[1], D[2], 0, orig[0], orig[1], orig[2], 1];
+      const rawTop = R.makeBox([-span, -span, 0], [span, span, span]);
+      const rawBot = R.makeBox([-span, -span, -span], [span, span, 0]);
+      topBox = applyMatrix(rawTop, frameM); safeDelete(rawTop);
+      botBox = applyMatrix(rawBot, frameM); safeDelete(rawBot);
+      topHalf = shape.intersect(topBox);
+      botHalf = shape.intersect(botBox);
+      const rT = draftSideFaces(topHalf, null, 1, angUp, plnUp, dUp, 'Pft');
+      topDraft = rT.shape;
+      const rB = draftSideFaces(botHalf, null, -1, angDown, plnDn, dDn, 'Pfb');
+      botDraft = rB.shape;
+      if ((rT.n + rB.n) > 0) {
+        fused = topDraft.fuse(botDraft);
+        usd = new oc.ShapeUpgrade_UnifySameDomain(fused.wrapped, true, true, false);
+        usd.Build();
+        res = R.cast(usd.Shape());
+        chk2 = new oc.BRepCheck_Analyzer(res.wrapped);
+        if (res && R.isShape3D(res) && chk2.IsValid()) {
+          const outTopo = ensureTopoComplete(res, createTopoMap(), 'Pdr:' + (fin.id || 'd'));
+          const outRes = res; res = null;
+          return { shape: outRes, topo: outTopo };
+        }
+      }
+    } catch (_) {
+    } finally {
+      safeDelete(chk2); safeDelete(res); safeDelete(usd); safeDelete(fused);
+      if (topDraft && topDraft !== topHalf) safeDelete(topDraft);
+      if (botDraft && botDraft !== botHalf) safeDelete(botDraft);
+      safeDelete(topHalf); safeDelete(botHalf); safeDelete(topBox); safeDelete(botBox);
+      freePlns();
+    }
+
+    errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Schräge an der Trennlinie lässt sich an diesem Körper nicht bauen – versuch einen kleineren Winkel oder zuerst ohne Rundungen.' });
+    return { shape, topo };
   }
 
   // ---------- Muster, Spiegeln mit Kopie, Teilen ----------

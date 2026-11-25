@@ -181,6 +181,9 @@ const Explain = (() => {
         ft = `Ausgehöhlt${dirTxt} mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand${extraTxt}.`;
       }
       else if (fin.type === 'fullFillet') ft = 'Vollrundung über drei gewählte Flächen (mittlere Fläche ganz abgerundet).';
+      else if (fin.type === 'faceFillet') ft = `Flächen-Rundung mit Radius ${Units.fmtLenU(Model.num(fin.r, V, 5), 2, doc)} zwischen zwei gewählten Flächen.`;
+      else if (fin.type === 'partingDraft') ft = `Schräge an Trennlinie mit ${fin.sym === false ? `${fmtAngleU(Model.num(fin.r, V, 3))} / ${fmtAngleU(Model.num(fin.r2, V, 3))}` : fmtAngleU(Model.num(fin.r, V, 3))} nach oben und unten.`;
+      else if (fin.type === 'draft') ft = `Entformungsschräge mit ${fmtAngleU(Model.num(fin.r, V, 3))}.`;
       else if (fin.type === 'cornerChamfer') ft = `Ecken-Fase mit den drei Abständen ${[fin.d1, fin.d2, fin.d3].map((x) => Units.fmtLenU(Model.num(x, V, 2), 2, doc)).join(' / ')}.`;
       else ft = `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.`;
       lines.push({ k: 'fin', t: ft });
