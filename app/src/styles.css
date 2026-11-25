@@ -680,6 +680,15 @@ body.sketching .timeline{display:none}
 .dw-lost-acts{display:flex;gap:6px;margin-top:2px}
 .dw-lost-acts .btn{padding:3px 8px;font-size:11.5px;flex:1}
 .dw-lost-acts .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.dw-tbl-sub{display:grid;gap:6px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);margin-top:6px}
+.dw-tbl-sub-h{font:600 11.5px/1.2 var(--font);color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:6px}
+.dw-rev-item{display:grid;gap:4px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.dw-rev-top{display:flex;gap:4px;align-items:center}
+.dw-rev-top input,.dw-rev-meta input,.dw-ft-grid input{width:100%;min-width:0;box-sizing:border-box;padding:3px 5px;border:1px solid var(--line-strong);border-radius:5px;background:var(--surface);color:var(--ink);font:400 11.5px/1.2 var(--font)}
+.dw-rev-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.dw-ft-grid{display:grid;gap:4px;overflow-x:auto;padding-bottom:2px}
+.dw-ft-grid-row{display:grid;gap:4px}
+.dw-ft-grid-row.is-head input{font-weight:700;background:var(--surface-2)}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }

@@ -2854,6 +2854,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Tooltip-Scroll nach Panel-Neubau (`50-ui-core.js`)**: `UI.onScrollTip()` re-akquiriert ein unter der ruhenden Maus neu gerendertes Ziel (`#proj-print-cost`) vor einem verzögerten `scroll`-Event auf `#right-body` über `reacquireTipTarget()`, sodass der Tooltip planmäßig erscheint (`t_f11251719`).
 - [ ] **Von Hand**: Im Browser mit Strg/Cmd+K nach „schraube“ suchen und prüfen, ob „Kopplung: Schraube (Drehen → Vorschub)“ neben „Schrauben automatisch einsetzen“ unter den ersten Treffern steht, sowie im rechten Panel über mehrere Knöpfe ganz unten hovern.
 
+## Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (Auto [A-176], ZE-26)
+
+- [x] **Platte mit 3 Löchern & Bohrungstabelle**: Im Profi-Modus zeigt eine Platte (80×50×12 mm) mit Ø6-Durchgangsloch, Ø8-Sackloch (Tiefe 7 mm) und Ø10-Durchgangsloch beim Einschalten der Bohrungstabelle (`#dw-ht-show`) exakt 3 Zeilen in `Drawing.holeTableRows()` mit korrekten Durchmessern (`6`, `8`, `10`), relativen X/Y-Koordinaten ab Ecke links unten, Tiefenangabe (`Durchg.` bzw. `7`), 3 Nummern-Markern (`A1`, `B1`, `C1`) am Loch sowie den zugehörigen Tabellentexten im SVG (`t_a176_zeichnung_tabellen`).
+- [x] **Änderungstabelle & freie Tabelle**: `#dw-rt-show` blendet die Änderungstabelle mit Erstausgabe `A` ein; `#dw-rt-add` ergänzt Revision `B` („Bohrung ergänzt“). `#dw-ft-add` legt eine freie Tabelle an, deren Überschrift (`Prüfwerte`), Zellen (`Härte`, `HRC 58`) und Zeilenanzahl live auf dem Blatt erscheinen (`t_a176_zeichnung_tabellen`).
+- [x] **SVG-, PDF- und DXF-Export**: `Drawing.buildSVGString()` enthält alle Tabellenrahmen, Loch-Nummern (`A1`, `B1`, `C1`) und Zellen; `Drawing.buildPDFBytes()` beginnt mit `%PDF-1.4` und enthält `Bohrungstabelle`, `HRC 58` sowie `Ø6`/`Ø8`/`Ø10` ohne `?`-Ersatzzeichen; `Drawing.buildDXF()` exportiert `%%c6`, `%%c8`, `%%c10`, `HRC 58` auf Layer `RAHMEN` und `BEMASSUNG` (`t_a176_zeichnung_tabellen`).
+- [x] **Profi-Schutz, Undo/Redo, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind `#t-tables` und `#dw-tables-sec` verborgen/gesperrt, `setHoleTable`/`setRevTable`/`addFreeTable` blockiert und Befehle ausgeblendet; Löschen + `App.undo()`, `Store.validateProject`, Neuladen, alle 4 Hilfen in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingHoleTable`, `drawingRevTable`, `drawingFreeTable`) laufen fehlerfrei (`t_a176_zeichnung_tabellen`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ eine Platte mit mehreren Bohrungen öffnen, den Nullpunkt per „Nullpunkt klicken“ auf eine Bohrung setzen, Tabellen auf dem Blatt per Ziehen verschieben und die exportierte PDF- sowie DXF-Datei prüfen.
+
 ## Fehler melden
 
 ```

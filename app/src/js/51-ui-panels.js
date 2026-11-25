@@ -451,6 +451,9 @@ const Panels = (() => {
       const gdtBtn = btn('t-gdt', 'gdt', T('tool.gdt'), T('tool.gdtTip'), '', (e) => Drawing.gdtMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'datum' || Drawing.activeTool === 'gdt' ? ' active' : ''), T('tool.gdtShort'));
       gdtBtn.dataset.help = 'drawingGdt';
       gdtBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'datum' || Drawing.activeTool === 'gdt'));
+      const tblBtn = btn('t-tables', 'layout', T('tool.tables'), T('tool.tablesTip'), '', (e) => Drawing.tablesMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'hole-origin' ? ' active' : ''), T('tool.tablesShort'));
+      tblBtn.dataset.help = 'drawingTables';
+      tblBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'hole-origin'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
       const dexBtn = btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));

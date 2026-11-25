@@ -35346,6 +35346,201 @@ def t_f11251719(p):
     return [ok1, ok2]
 
 
+def t_a176_zeichnung_tabellen(p):
+    # [A-176] Zeichnung (Profi): Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit 3 Löchern', (d) => {
+        d.items.push(Model.newItem('box', { w: 80, d: 50, h: 12 }, { name: 'Platte' }));
+        d.items.push(Model.newItem('cylinder', { d: 6, h: 16 }, { name: 'Loch 6', role: 'hole', more: { t: { x: -20, y: -10, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+        d.items.push(Model.newItem('cylinder', { d: 8, h: 10 }, { name: 'Sackloch 8', role: 'hole', more: { t: { x: 0, y: 5, z: 5, rx: 0, ry: 0, rz: 0 } } }));
+        d.items.push(Model.newItem('cylinder', { d: 10, h: 16 }, { name: 'Loch 10', role: 'hole', more: { t: { x: 22, y: 10, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(150)
+
+    # 1. Bohrungstabelle einblenden → 3 Zeilen mit richtigen Durchmessern, X/Y, Tiefe & Nummern am Loch
+    p.pg.check('#dw-ht-show')
+    p.wait(200)
+    ht_chk = p.ev("""
+      const res = Drawing.holeTableRows();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tags = [...svg.querySelectorAll('text.ht-tag-text')].map(e => e.textContent);
+      const tdTexts = [...svg.querySelectorAll('text.tbl-td[data-id="__holetable__"]')].map(e => e.textContent);
+      const dias = res.rows.map(r => r.dia);
+      return {
+        view: res.view,
+        nRows: res.rows.length,
+        rows: res.rows,
+        dias,
+        tags,
+        tdTexts,
+        hasFrame: !!svg.querySelector('rect.tbl-frame[data-id="__holetable__"]'),
+      };
+    """)
+    ok1 = bool(
+        ht_chk['hasFrame']
+        and ht_chk['nRows'] == 3
+        and ht_chk['dias'] == [6, 8, 10]
+        and ht_chk['rows'][0]['tag'] == 'A1' and ht_chk['rows'][0]['thru'] is True
+        and abs(ht_chk['rows'][0]['x'] - 20) < 0.2 and abs(ht_chk['rows'][0]['y'] - 15) < 0.2
+        and ht_chk['rows'][1]['tag'] == 'B1' and ht_chk['rows'][1]['thru'] is False and abs(ht_chk['rows'][1]['depth'] - 7) < 0.2
+        and abs(ht_chk['rows'][1]['x'] - 40) < 0.2 and abs(ht_chk['rows'][1]['y'] - 30) < 0.2
+        and ht_chk['rows'][2]['tag'] == 'C1' and ht_chk['rows'][2]['thru'] is True
+        and abs(ht_chk['rows'][2]['x'] - 62) < 0.2 and abs(ht_chk['rows'][2]['y'] - 35) < 0.2
+        and set(ht_chk['tags']) == {'A1', 'B1', 'C1'}
+        and 'Ø6' in ht_chk['tdTexts'] and 'Ø8' in ht_chk['tdTexts'] and 'Ø10' in ht_chk['tdTexts']
+    )
+
+    # 2. Änderungstabelle & freie Tabelle
+    p.pg.check('#dw-rt-show')
+    p.wait(150)
+    p.pg.click('#dw-rt-add')
+    p.wait(150)
+    p.ev("""
+      const rows = Drawing.revTable().rows;
+      if (rows[1]) Drawing.updateRevRow(rows[1].id, { desc: 'Bohrung ergänzt', author: 'NK' });
+    """)
+    p.wait(150)
+    p.pg.click('#dw-ft-add')
+    p.wait(150)
+    p.ev("""
+      const ft = Drawing.freeTables()[0];
+      if (ft) {
+        Drawing.updateFreeTable(ft.id, { title: 'Prüfwerte', headers: ['Merkmal', 'Soll', 'Prüfmittel'] });
+        Drawing.setFreeTableCell(ft.id, 0, 0, 'Härte');
+        Drawing.setFreeTableCell(ft.id, 0, 1, 'HRC 58');
+        Drawing.addFreeTableRow(ft.id);
+        Drawing.setFreeTableCell(ft.id, 1, 0, 'Ra');
+        Drawing.setFreeTableCell(ft.id, 1, 1, '1,6');
+      }
+    """)
+    p.wait(150)
+    tbl_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const revTexts = [...svg.querySelectorAll('text.tbl-td[data-id="__rev__"]')].map(e => e.textContent);
+      const ft = Drawing.freeTables()[0];
+      const ftTexts = ft ? [...svg.querySelectorAll(`text.tbl-td[data-id="${ft.id}"]`)].map(e => e.textContent) : [];
+      const ftTitle = ft ? svg.querySelector(`text.tbl-title[data-id="${ft.id}"]`)?.textContent : '';
+      return {
+        revCount: Drawing.revTable().rows.length,
+        revTexts,
+        ftTitle,
+        ftTexts,
+        ftRows: ft ? ft.rows.length : 0,
+      };
+    """)
+    ok2 = bool(
+        tbl_chk['revCount'] == 2
+        and 'A' in tbl_chk['revTexts'] and 'B' in tbl_chk['revTexts']
+        and 'Bohrung ergänzt' in tbl_chk['revTexts'] and 'NK' in tbl_chk['revTexts']
+        and tbl_chk['ftTitle'] == 'Prüfwerte' and tbl_chk['ftRows'] == 2
+        and 'Härte' in tbl_chk['ftTexts'] and 'HRC 58' in tbl_chk['ftTexts'] and '1,6' in tbl_chk['ftTexts']
+    )
+
+    # 3. SVG-, PDF- und DXF-Export
+    exp_chk = p.ev("""return (async () => {
+      const svgStr = await Drawing.buildSVGString();
+      const bytes = await Drawing.buildPDFBytes();
+      let pdfStr = '';
+      for (let i = 0; i < bytes.length; i++) pdfStr += String.fromCharCode(bytes[i]);
+      const dxf = await Drawing.buildDXF();
+      return {
+        svgOk: svgStr.includes('Bohrungstabelle') && svgStr.includes('Ø6') && svgStr.includes('Ø8') && svgStr.includes('Ø10')
+          && svgStr.includes('A1') && svgStr.includes('B1') && svgStr.includes('C1')
+          && svgStr.includes('Bohrung ergänzt') && svgStr.includes('Prüfwerte') && svgStr.includes('HRC 58'),
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('Bohrungstabelle')
+          && pdfStr.includes('(HRC 58)') && pdfStr.includes('(\\xD86)') && pdfStr.includes('(\\xD88)') && pdfStr.includes('(\\xD810)')
+          && !pdfStr.includes('(?)'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('%%c6') && dxf.text.includes('%%c8') && dxf.text.includes('%%c10')
+          && dxf.text.includes('HRC 58') && dxf.text.includes('RAHMEN') && dxf.text.includes('BEMASSUNG')),
+      };
+    })()""")
+    ok3 = bool(exp_chk['svgOk'] and exp_chk['pdfOk'] and exp_chk['dxfOk'])
+
+    # 4. Profi-Schutz, Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(150)
+    simple_chk = p.ev("""
+      const btn = document.querySelector('#t-tables');
+      const sec = document.querySelector('#dw-tables-sec');
+      return {
+        btnHidden: !btn || !btn.offsetParent,
+        secAbsent: !sec,
+        htBlocked: Drawing.setHoleTable(true) === false,
+        rtBlocked: Drawing.setRevTable(true) === false,
+        ftBlocked: Drawing.addFreeTable() === null,
+        cmdsBlocked: Commands.search('bohrungstabelle').length === 0
+          && Commands.search('änderungstabelle').length === 0
+          && Commands.search('freie tabelle').length === 0,
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    ft_id = p.ev("const f = Drawing.freeTables()[0]; Drawing.select(f.id); return f.id;")
+    p.wait(120)
+    p.pg.click('#dw-del-sel')
+    p.wait(150)
+    after_del = p.ev("return Drawing.freeTables().length")
+    p.ev("App.undo()"); p.wait(150)
+    after_undo = p.ev("return Drawing.freeTables().some(x => x.id === arg)", ft_id)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      return {
+        htShow: Drawing.holeTable().show,
+        htRows: Drawing.holeTableRows().rows.length,
+        rtShow: Drawing.revTable().show,
+        rtRows: Drawing.revTable().rows.length,
+        ftCnt: Drawing.freeTables().length,
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helps = ['drawingTables', 'drawingHoleTable', 'drawingRevTable', 'drawingFreeTable']
+        .every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('bohrungstabelle').some(c => c.id === 'drawingHoleTable')
+        && Commands.search('änderungstabelle').some(c => c.id === 'drawingRevTable')
+        && Commands.search('freie tabelle').some(c => c.id === 'drawingFreeTable');
+      return !!(helps && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        simple_chk['btnHidden'] and simple_chk['secAbsent']
+        and simple_chk['htBlocked'] and simple_chk['rtBlocked'] and simple_chk['ftBlocked']
+        and simple_chk['cmdsBlocked']
+        and after_del == 0 and after_undo
+        and val_ok and reload_chk['htShow'] and reload_chk['htRows'] == 3
+        and reload_chk['rtShow'] and reload_chk['rtRows'] == 2 and reload_chk['ftCnt'] == 1
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -35634,6 +35829,7 @@ TESTS = [
     ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
     ('[A-174] Zeichnung: Form- und Lagetoleranzen (ZE-24)', t_a174_zeichnung_form_lagetoleranzen),
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
+    ('[A-176] Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)', t_a176_zeichnung_tabellen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

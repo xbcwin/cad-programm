@@ -82,7 +82,7 @@ const Drawing = (() => {
   let dimMode = 'lin';
   let sectionMode = 'full';
   let sectionDraft = { halfAxis: 'v', halfSide: 'right', depth: null };
-  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null, dragTable = null;
   let lastDimAnchors = new Map();
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
@@ -156,6 +156,71 @@ const Drawing = (() => {
       dimId: attachType === 'dim' && raw.dimId ? String(raw.dimId) : null,
       anchor: a,
       elbow: elb,
+    };
+  }
+  function normalizeHoleTable(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {};
+    return {
+      show: !!o.show,
+      view: typeof o.view === 'string' && o.view ? o.view : 'auto',
+      origin: ['bl', 'tl', 'center', 'model', 'custom'].includes(o.origin) ? o.origin : 'bl',
+      originPt: Array.isArray(o.originPt) && o.originPt.length >= 2
+        ? [Number(o.originPt[0]) || 0, Number(o.originPt[1]) || 0]
+        : null,
+      showTags: o.showTags !== false,
+      numbering: o.numbering === 'seq' ? 'seq' : 'group',
+      pos: Array.isArray(o.pos) && o.pos.length >= 2
+        ? [Number(o.pos[0]) || 0, Number(o.pos[1]) || 0]
+        : null,
+    };
+  }
+  function normalizeRevRow(raw) {
+    const r = raw && typeof raw === 'object' ? raw : {};
+    return {
+      id: r.id || uid('rev'),
+      rev: String(r.rev ?? 'A').slice(0, 8),
+      desc: String(r.desc ?? ''),
+      date: String(r.date ?? ''),
+      author: String(r.author ?? ''),
+    };
+  }
+  function normalizeRevTable(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {};
+    return {
+      show: !!o.show,
+      pos: Array.isArray(o.pos) && o.pos.length >= 2
+        ? [Number(o.pos[0]) || 0, Number(o.pos[1]) || 0]
+        : null,
+      rows: Array.isArray(o.rows) ? o.rows.map(normalizeRevRow) : [],
+    };
+  }
+  function normalizeFreeTable(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const rawH = Array.isArray(raw.headers) && raw.headers.length
+      ? raw.headers.slice(0, 12).map((x) => String(x ?? ''))
+      : ['Spalte 1', 'Spalte 2', 'Spalte 3'];
+    const ncols = rawH.length;
+    const rawR = Array.isArray(raw.rows) ? raw.rows.slice(0, 40) : [['', '', '']];
+    const rows = rawR.map((r) => {
+      const arr = Array.isArray(r) ? r : [];
+      const out = [];
+      for (let c = 0; c < ncols; c++) out.push(String(arr[c] ?? ''));
+      return out;
+    });
+    let colWidths = null;
+    if (Array.isArray(raw.colWidths) && raw.colWidths.length === ncols) {
+      const cw = raw.colWidths.map((n) => Number(n));
+      if (cw.every((n) => Number.isFinite(n) && n > 0)) colWidths = cw;
+    }
+    return {
+      id: raw.id || uid('tbl'),
+      title: String(raw.title ?? ''),
+      headers: rawH,
+      rows,
+      colWidths,
+      pos: Array.isArray(raw.pos) && raw.pos.length >= 2
+        ? [Number(raw.pos[0]) || 0, Number(raw.pos[1]) || 0]
+        : null,
     };
   }
   function normalizeSection(raw) {
@@ -296,6 +361,9 @@ const Drawing = (() => {
           ? [Number(opts.bomTable.pos[0]) || 0, Number(opts.bomTable.pos[1]) || 0]
           : null,
       },
+      holeTable: normalizeHoleTable(opts.holeTable),
+      revTable: normalizeRevTable(opts.revTable),
+      freeTables: Array.isArray(opts.freeTables) ? opts.freeTables.map(normalizeFreeTable).filter(Boolean) : [],
       viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
       title: {
         titel: t0.titel || '',
@@ -334,6 +402,9 @@ const Drawing = (() => {
       datums: raw && Array.isArray(raw.datums) ? raw.datums : undefined,
       gdtFrames: raw && Array.isArray(raw.gdtFrames) ? raw.gdtFrames : undefined,
       bomTable: raw && raw.bomTable && typeof raw.bomTable === 'object' ? raw.bomTable : undefined,
+      holeTable: raw && raw.holeTable && typeof raw.holeTable === 'object' ? raw.holeTable : undefined,
+      revTable: raw && raw.revTable && typeof raw.revTable === 'object' ? raw.revTable : undefined,
+      freeTables: raw && Array.isArray(raw.freeTables) ? raw.freeTables : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
@@ -380,6 +451,11 @@ const Drawing = (() => {
           ? [Number(cur.bomTable.pos[0]) || 0, Number(cur.bomTable.pos[1]) || 0]
           : null,
       };
+      if (cur) {
+        cur.holeTable = normalizeHoleTable(cur.holeTable);
+        cur.revTable = normalizeRevTable(cur.revTable);
+        cur.freeTables = Array.isArray(cur.freeTables) ? cur.freeTables.map(normalizeFreeTable).filter(Boolean) : [];
+      }
       if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
       if (cur) {
         cur.dimStyle = normDimStyle(cur.dimStyle);
@@ -418,8 +494,8 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'datum' || tool === 'gdt') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -434,8 +510,8 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'datum' || tool === 'gdt') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -538,6 +614,10 @@ const Drawing = (() => {
       show: !!(src.bomTable && src.bomTable.show),
       pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
     };
+    clone.holeTable = normalizeHoleTable(src.holeTable);
+    clone.revTable = normalizeRevTable(src.revTable);
+    clone.revTable.rows = clone.revTable.rows.map((r) => ({ ...r, id: uid('rev') }));
+    clone.freeTables = (src.freeTables || []).map((f) => normalizeFreeTable({ ...JSON.parse(JSON.stringify(f)), id: uid('tbl') })).filter(Boolean);
     clone.normThreads = src.normThreads !== false;
     clone.materialHatch = src.materialHatch !== false;
     const nextVP = {};
@@ -615,7 +695,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -2655,6 +2735,448 @@ const Drawing = (() => {
     }
     return best;
   }
+  function htCanonicalDir(v) {
+    const d = v.clone();
+    if (d.lengthSq() < 1e-12) return new THREE.Vector3(0, 0, 1);
+    d.normalize();
+    const ax = Math.abs(d.z) >= Math.abs(d.x) && Math.abs(d.z) >= Math.abs(d.y) ? 2 : Math.abs(d.y) >= Math.abs(d.x) ? 1 : 0;
+    if (d.getComponent(ax) < 0) d.negate();
+    return d;
+  }
+  function htAxisPerpDist(p1, p2, d) {
+    const v = p1.clone().sub(p2);
+    return v.addScaledVector(d, -v.dot(d)).length();
+  }
+  function extractSolidHoles(data, W) {
+    const faces = (data && data.faces) || [];
+    const groups = (data && data.faceGroups) || [];
+    const P = data && data.vertices;
+    const N = data && data.normals;
+    const T = data && data.triangles;
+    if (!faces.length || !groups.length || !P || !N || !T) return [];
+    const byFace = new Map();
+    for (const g of groups) {
+      let arr = byFace.get(g[2]);
+      if (!arr) { arr = []; byFace.set(g[2], arr); }
+      arr.push(g);
+    }
+    const raw = [];
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi];
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6 || !(f.r > 0.25)) continue;
+      const fGroups = byFace.get(fi);
+      if (!fGroups || !fGroups.length) continue;
+      const oLoc = new THREE.Vector3(f.axis[0], f.axis[1], f.axis[2]);
+      const dLoc = new THREE.Vector3(f.axis[3], f.axis[4], f.axis[5]);
+      if (dLoc.lengthSq() < 1e-12) continue;
+      dLoc.normalize();
+      let dotSum = 0;
+      const ptsW = [];
+      for (const g of fGroups) {
+        for (let i = g[0]; i < g[0] + g[1]; i++) {
+          const vi = T[i] * 3;
+          const vx = P[vi] - oLoc.x, vy = P[vi + 1] - oLoc.y, vz = P[vi + 2] - oLoc.z;
+          const t = vx * dLoc.x + vy * dLoc.y + vz * dLoc.z;
+          const rx = vx - dLoc.x * t, ry = vy - dLoc.y * t, rz = vz - dLoc.z * t;
+          dotSum += N[vi] * rx + N[vi + 1] * ry + N[vi + 2] * rz;
+          ptsW.push(new THREE.Vector3(P[vi], P[vi + 1], P[vi + 2]).applyMatrix4(W));
+        }
+      }
+      if (dotSum >= 0 || !ptsW.length) continue;
+      const oW = oLoc.clone().applyMatrix4(W);
+      const dW = htCanonicalDir(dLoc.clone().transformDirection(W));
+      const u = Math.abs(dW.z) < 0.9
+        ? new THREE.Vector3(0, 0, 1).cross(dW).normalize()
+        : new THREE.Vector3(1, 0, 0).cross(dW).normalize();
+      const v = new THREE.Vector3().crossVectors(dW, u).normalize();
+      let t0 = Infinity, t1 = -Infinity, sectorMask = 0;
+      for (const p of ptsW) {
+        const rel = p.clone().sub(oW);
+        const t = rel.dot(dW);
+        if (t < t0) t0 = t;
+        if (t > t1) t1 = t;
+        const px = rel.dot(u), py = rel.dot(v);
+        if (px * px + py * py > 1e-6) {
+          let ang = Math.atan2(py, px);
+          if (ang < 0) ang += TWO_PI;
+          const sec = Math.min(11, Math.floor((ang / TWO_PI) * 12));
+          sectorMask |= (1 << sec);
+        }
+      }
+      if (!isFinite(t0) || !isFinite(t1) || t1 - t0 < 0.15) continue;
+      raw.push({ o: oW, d: dW, r: f.r, t0, t1, sectorMask });
+    }
+    const merged = [];
+    for (const c of raw) {
+      let hit = null;
+      for (const m of merged) {
+        if (Math.abs(m.r - c.r) > 0.05) continue;
+        if (Math.abs(m.d.dot(c.d)) < 0.995) continue;
+        if (htAxisPerpDist(m.o, c.o, m.d) > 0.15) continue;
+        const cT0 = c.t0 + c.o.clone().sub(m.o).dot(m.d);
+        const cT1 = c.t1 + c.o.clone().sub(m.o).dot(m.d);
+        if (cT1 < m.t0 - 0.2 || cT0 > m.t1 + 0.2) continue;
+        hit = m;
+        m.t0 = Math.min(m.t0, cT0);
+        m.t1 = Math.max(m.t1, cT1);
+        m.sectorMask |= c.sectorMask;
+        break;
+      }
+      if (!hit) merged.push({ o: c.o.clone(), d: c.d.clone(), r: c.r, t0: c.t0, t1: c.t1, sectorMask: c.sectorMask });
+    }
+    const countBits = (mask) => {
+      let k = 0;
+      for (let b = 0; b < 12; b++) if (mask & (1 << b)) k++;
+      return k;
+    };
+    const cyls = merged
+      .filter((m) => countBits(m.sectorMask) >= 10 && m.t1 - m.t0 >= 0.2)
+      .map((m) => ({
+        o: m.o, d: m.d, r: m.r, t0: m.t0, t1: m.t1, len: m.t1 - m.t0,
+        cbDia: 0, cbDepth: 0, csDia: 0, absorbed: false,
+      }));
+    cyls.sort((a, b) => a.r - b.r);
+    for (let i = 0; i < cyls.length; i++) {
+      const small = cyls[i];
+      if (small.absorbed) continue;
+      for (let j = i + 1; j < cyls.length; j++) {
+        const big = cyls[j];
+        if (big.absorbed) continue;
+        if (big.r <= small.r * 1.08 || big.r > small.r * 2.6) continue;
+        if (Math.abs(small.d.dot(big.d)) < 0.995) continue;
+        if (htAxisPerpDist(small.o, big.o, small.d) > 0.2) continue;
+        const bShift = big.o.clone().sub(small.o).dot(small.d);
+        const bt0 = big.t0 + bShift, bt1 = big.t1 + bShift;
+        const atTop = Math.abs(bt0 - small.t1) < 0.25 && bt1 > small.t1 + 0.2;
+        const atBot = Math.abs(bt1 - small.t0) < 0.25 && bt0 < small.t0 - 0.2;
+        if (!atTop && !atBot) continue;
+        const totT0 = Math.min(small.t0, bt0), totT1 = Math.max(small.t1, bt1);
+        if (big.len > (totT1 - totT0) * 0.78) continue;
+        big.absorbed = true;
+        small.cbDia = round(big.r * 2, 2);
+        small.cbDepth = round(bt1 - bt0, 2);
+        small.t0 = totT0;
+        small.t1 = totT1;
+        small.len = totT1 - totT0;
+        break;
+      }
+    }
+    const holes = cyls.filter((c) => !c.absorbed);
+    const facePts = (fi) => {
+      const fGroups = byFace.get(fi);
+      if (!fGroups || !fGroups.length) return null;
+      const pts = [];
+      for (const g of fGroups) {
+        for (let i = g[0]; i < g[0] + g[1]; i++) {
+          const vi = T[i] * 3;
+          pts.push(new THREE.Vector3(P[vi], P[vi + 1], P[vi + 2]).applyMatrix4(W));
+        }
+      }
+      return pts;
+    };
+    const cones = [], planes = [];
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi];
+      if (!f) continue;
+      if (f.t === 'CONE' && Array.isArray(f.axis) && f.axis.length >= 6) {
+        const pts = facePts(fi);
+        if (!pts || !pts.length) continue;
+        const co = new THREE.Vector3(f.axis[0], f.axis[1], f.axis[2]).applyMatrix4(W);
+        const cd = htCanonicalDir(new THREE.Vector3(f.axis[3], f.axis[4], f.axis[5]).transformDirection(W));
+        cones.push({ o: co, d: cd, pts });
+      } else if (f.t === 'PLANE' && Array.isArray(f.c) && Array.isArray(f.n)) {
+        const pts = facePts(fi);
+        if (!pts || !pts.length) continue;
+        const pc = new THREE.Vector3(...f.c).applyMatrix4(W);
+        const pn = new THREE.Vector3(...f.n).transformDirection(W).normalize();
+        planes.push({ c: pc, n: pn, pts });
+      }
+    }
+    return holes.map((h0) => {
+      let minClose = false, maxClose = false;
+      for (const cn of cones) {
+        if (Math.abs(cn.d.dot(h0.d)) < 0.99 || htAxisPerpDist(cn.o, h0.o, h0.d) > 0.25) continue;
+        let ct0 = Infinity, ct1 = -Infinity, maxR = 0;
+        for (const p of cn.pts) {
+          const rel = p.clone().sub(h0.o);
+          const t = rel.dot(h0.d);
+          const rr = rel.addScaledVector(h0.d, -t).length();
+          if (t < ct0) ct0 = t;
+          if (t > ct1) ct1 = t;
+          if (rr > maxR) maxR = rr;
+        }
+        const nearTop = Math.abs(ct0 - h0.t1) < 0.35 || (ct0 <= h0.t1 + 0.25 && ct1 >= h0.t1 - 0.25);
+        const nearBot = Math.abs(ct1 - h0.t0) < 0.35 || (ct0 <= h0.t0 + 0.25 && ct1 >= h0.t0 - 0.25);
+        if (maxR > h0.r * 1.08) {
+          if (nearTop || nearBot) {
+            h0.csDia = round(maxR * 2, 2);
+            if (nearTop) h0.t1 = Math.max(h0.t1, ct1);
+            if (nearBot) h0.t0 = Math.min(h0.t0, ct0);
+            h0.len = h0.t1 - h0.t0;
+          }
+        } else if (maxR <= h0.r + 0.25) {
+          if (Math.abs(ct1 - h0.t0) < Math.max(0.3, h0.r * 1.2) || Math.abs(ct0 - h0.t0) < 0.3) minClose = true;
+          if (Math.abs(ct0 - h0.t1) < Math.max(0.3, h0.r * 1.2) || Math.abs(ct1 - h0.t1) < 0.3) maxClose = true;
+        }
+      }
+      for (const pl of planes) {
+        if (Math.abs(pl.n.dot(h0.d)) < 0.99) continue;
+        let maxR = 0, ptMin = Infinity, ptMax = -Infinity;
+        for (const p of pl.pts) {
+          const rel = p.clone().sub(h0.o);
+          const t = rel.dot(h0.d);
+          const rr = rel.addScaledVector(h0.d, -t).length();
+          if (rr > maxR) maxR = rr;
+          if (t < ptMin) ptMin = t;
+          if (t > ptMax) ptMax = t;
+        }
+        if (maxR <= h0.r + 0.25) {
+          const tMid = (ptMin + ptMax) * 0.5;
+          if (Math.abs(tMid - h0.t0) < 0.2) minClose = true;
+          if (Math.abs(tMid - h0.t1) < 0.2) maxClose = true;
+        }
+      }
+      const thru = !(minClose !== maxClose);
+      return {
+        o: h0.o,
+        d: h0.d,
+        r: h0.r,
+        dia: round(h0.r * 2, 2),
+        depth: round(h0.t1 - h0.t0, 2),
+        thru,
+        cbDia: h0.cbDia,
+        cbDepth: h0.cbDepth,
+        csDia: h0.csDia,
+        thread: '',
+      };
+    });
+  }
+  function collectDrawingHoles(doc = App.doc) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    const holes = [];
+    for (const it of Model.activeItems(doc)) {
+      if (!it || it.hidden || it.suppressed || it.role === 'hole') continue;
+      if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)) continue;
+      const res = typeof App !== 'undefined' && App.results ? App.results.get(it.id) : null;
+      if (!res || !res.data) continue;
+      const W = Model.worldMatrix(doc, it.id);
+      holes.push(...extractSolidHoles(res.data, W));
+    }
+    if (proj && Array.isArray(proj.axes)) {
+      for (const a of proj.axes) {
+        if (!a || a.kind !== 'hole' || !(a.r > 0.25) || !Array.isArray(a.o) || !Array.isArray(a.d)) continue;
+        const ao = new THREE.Vector3(...a.o);
+        const ad = htCanonicalDir(new THREE.Vector3(...a.d));
+        const dup = holes.some((h0) => Math.abs(h0.d.dot(ad)) > 0.995 && htAxisPerpDist(h0.o, ao, ad) < 0.25 && Math.abs(h0.r - a.r) < 0.08);
+        if (!dup) {
+          holes.push({
+            o: ao,
+            d: ad,
+            r: a.r,
+            dia: round(a.r * 2, 2),
+            depth: round(Math.max(0.2, (a.t1 ?? 0) - (a.t0 ?? 0)), 2),
+            thru: true,
+            cbDia: 0,
+            cbDepth: 0,
+            csDia: 0,
+            thread: '',
+          });
+        }
+      }
+    }
+    const threads = docThreads(doc).filter((th) => th.kind === 'int');
+    for (const th of threads) {
+      for (const h0 of holes) {
+        if (Math.abs(h0.d.dot(th.d)) < 0.995) continue;
+        if (htAxisPerpDist(h0.o, th.p0, h0.d) > 0.25) continue;
+        h0.thread = th.size;
+      }
+    }
+    return holes;
+  }
+  function resolveHoleTableView(sh, lay, holes) {
+    const ortho = ['top', 'front', 'left'].filter((k) => lay && lay.views && lay.views[k] && proj && proj.views && proj.views[k]);
+    if (!ortho.length) return null;
+    const req = sh && sh.holeTable && sh.holeTable.view;
+    if (req && req !== 'auto' && ortho.includes(req)) return req;
+    let best = ortho[0], bestCount = -1;
+    for (const k of ortho) {
+      const pv = proj.views[k];
+      const vd = new THREE.Vector3(...pv.dir).normalize();
+      let cnt = 0;
+      for (const h0 of holes) if (Math.abs(h0.d.dot(vd)) > 0.995) cnt++;
+      if (cnt > bestCount) { bestCount = cnt; best = k; }
+    }
+    return best;
+  }
+  function holeTableOrigin2D(sh, v) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const org = (sh && sh.holeTable && sh.holeTable.origin) || 'bl';
+    if (org === 'tl') return [b[0], b[3]];
+    if (org === 'center') return [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5];
+    if (org === 'model') return [0, 0];
+    if (org === 'custom' && sh.holeTable && Array.isArray(sh.holeTable.originPt) && sh.holeTable.originPt.length >= 2) {
+      return [Number(sh.holeTable.originPt[0]) || 0, Number(sh.holeTable.originPt[1]) || 0];
+    }
+    return [b[0], b[1]];
+  }
+  function holeTagLetters(idx) {
+    let n = idx + 1, s = '';
+    while (n > 0) {
+      n--;
+      s = String.fromCharCode(65 + (n % 26)) + s;
+      n = Math.floor(n / 26);
+    }
+    return s;
+  }
+  function holeTableRows(sh = dwg(), lay = layout) {
+    const useLay = lay || layout || computeLayout(sh);
+    const holes = collectDrawingHoles(App.doc);
+    const viewName = resolveHoleTableView(sh, useLay, holes);
+    if (!viewName || !useLay || !useLay.views[viewName] || !proj || !proj.views[viewName]) {
+      return { view: null, origin2D: [0, 0], rows: [] };
+    }
+    const v = useLay.views[viewName];
+    const pv = proj.views[viewName];
+    const vd = new THREE.Vector3(...pv.dir).normalize();
+    const ex = new THREE.Vector3(...pv.x).normalize();
+    const ey = new THREE.Vector3(...pv.y).normalize();
+    const origin2D = holeTableOrigin2D(sh, v);
+    const raw = [];
+    for (const h0 of holes) {
+      if (Math.abs(h0.d.dot(vd)) <= 0.995) continue;
+      const c2 = [h0.o.dot(ex), h0.o.dot(ey)];
+      const dup = raw.some((x) => Math.hypot(x.c[0] - c2[0], x.c[1] - c2[1]) < 0.15 && Math.abs(x.r - h0.r) < 0.05);
+      if (dup) continue;
+      raw.push({
+        c: c2,
+        r: h0.r,
+        x: round(c2[0] - origin2D[0], 2),
+        y: round(c2[1] - origin2D[1], 2),
+        dia: h0.dia,
+        depth: h0.depth,
+        thru: h0.thru,
+        cbDia: h0.cbDia,
+        cbDepth: h0.cbDepth,
+        csDia: h0.csDia,
+        thread: h0.thread || '',
+      });
+    }
+    const numbering = (sh && sh.holeTable && sh.holeTable.numbering) === 'seq' ? 'seq' : 'group';
+    if (numbering === 'seq') {
+      raw.sort((a, b) => (a.x - b.x) || (a.y - b.y) || (a.dia - b.dia));
+      return {
+        view: viewName,
+        origin2D,
+        rows: raw.map((r, i) => ({ ...r, tag: String(i + 1) })),
+      };
+    }
+    const groups = new Map();
+    for (const r of raw) {
+      const sig = `${r.dia}|${r.thru ? 1 : 0}|${r.thru ? 0 : r.depth}|${r.thread}|${r.cbDia}|${r.cbDepth}|${r.csDia}`;
+      if (!groups.has(sig)) groups.set(sig, { dia: r.dia, depth: r.thru ? 1e9 : r.depth, items: [] });
+      groups.get(sig).items.push(r);
+    }
+    const sortedGroups = [...groups.values()].sort((a, b) => (a.dia - b.dia) || (a.depth - b.depth));
+    const rows = [];
+    sortedGroups.forEach((grp, gi) => {
+      const prefix = holeTagLetters(gi);
+      grp.items.sort((a, b) => (a.x - b.x) || (a.y - b.y));
+      grp.items.forEach((item, ii) => {
+        rows.push({ ...item, tag: prefix + (ii + 1) });
+      });
+    });
+    return { view: viewName, origin2D, rows };
+  }
+  function revTableRect(sh = dwg(), frame) {
+    const rt = sh && sh.revTable;
+    if (!(rt && rt.show)) return null;
+    const rows = Array.isArray(rt.rows) ? rt.rows : [];
+    const baseW = 128;
+    const w = Math.min(baseW, frame.w);
+    const sc = w / baseW;
+    const cRev = round(14 * sc, 2);
+    const cDate = round(25 * sc, 2);
+    const cAuth = round(25 * sc, 2);
+    const cDesc = round(w - cRev - cDate - cAuth, 2);
+    const th = 6.2, hh = 6.0, rh = 5.8;
+    const h = th + hh + Math.max(1, rows.length) * rh;
+    let x = frame.x + frame.w - w;
+    let y = frame.y;
+    if (dragTable && dragTable.kind === 'rev' && dragTable.curPos) {
+      x = clamp(dragTable.curPos[0], frame.x, frame.x + frame.w - w);
+      y = clamp(dragTable.curPos[1], frame.y, frame.y + frame.h - h);
+    } else if (Array.isArray(rt.pos) && rt.pos.length >= 2) {
+      x = clamp(Number(rt.pos[0]) || 0, frame.x, frame.x + frame.w - w);
+      y = clamp(Number(rt.pos[1]) || 0, frame.y, frame.y + frame.h - h);
+    }
+    return { x, y, w, h, th, hh, rh, cols: [cRev, cDesc, cDate, cAuth], rows };
+  }
+  function freeTableRects(sh = dwg(), frame) {
+    const map = new Map();
+    const list = (sh && Array.isArray(sh.freeTables)) ? sh.freeTables : [];
+    if (!list.length) return map;
+    let curBottom = frame.y + frame.h - 4;
+    for (const ft of list) {
+      const ncols = ft.headers.length;
+      let cols = ft.colWidths ? ft.colWidths.slice() : ft.headers.map((hd, ci) => {
+        let maxLen = textW(hd, 2.8);
+        for (const r of ft.rows) maxLen = Math.max(maxLen, textW(r[ci] || '', 2.7));
+        return clamp(maxLen + 4.5, 16, 65);
+      });
+      let w = cols.reduce((a, b) => a + b, 0);
+      if (ft.title) w = Math.max(w, clamp(textW(ft.title, 3.0) + 6, w, frame.w));
+      const curSum = cols.reduce((a, b) => a + b, 0);
+      if (w > frame.w) {
+        const sc = frame.w / Math.max(1, curSum);
+        cols = cols.map((c) => round(c * sc, 2));
+        w = frame.w;
+      } else if (w > curSum) {
+        cols[ncols - 1] += w - curSum;
+      }
+      const th = ft.title ? 6.2 : 0;
+      const hh = 6.0, rh = 5.8;
+      const h = th + hh + Math.max(1, ft.rows.length) * rh;
+      let x = frame.x;
+      let y = Math.max(frame.y, curBottom - h);
+      if (dragTable && dragTable.kind === 'free' && dragTable.id === ft.id && dragTable.curPos) {
+        x = clamp(dragTable.curPos[0], frame.x, frame.x + frame.w - w);
+        y = clamp(dragTable.curPos[1], frame.y, frame.y + frame.h - h);
+      } else if (Array.isArray(ft.pos) && ft.pos.length >= 2) {
+        x = clamp(Number(ft.pos[0]) || 0, frame.x, frame.x + frame.w - w);
+        y = clamp(Number(ft.pos[1]) || 0, frame.y, frame.y + frame.h - h);
+      } else {
+        curBottom = y - 4;
+      }
+      map.set(ft.id, { id: ft.id, x, y, w, h, th, hh, rh, cols, ft });
+    }
+    return map;
+  }
+  function holeTableRect(sh = dwg(), frame, lay = null) {
+    const ht = sh && sh.holeTable;
+    if (!(ht && ht.show)) return null;
+    const res = holeTableRows(sh, lay);
+    const baseW = 118;
+    const w = Math.min(baseW, frame.w);
+    const sc = w / baseW;
+    const cTag = round(14 * sc, 2);
+    const cX = round(20 * sc, 2);
+    const cY = round(20 * sc, 2);
+    const cDia = round(26 * sc, 2);
+    const cDepth = round(w - cTag - cX - cY - cDia, 2);
+    const th = 6.2, hh = 6.0, rh = 5.8;
+    const h = th + hh + Math.max(1, res.rows.length) * rh;
+    let x = frame.x;
+    let y = frame.y;
+    if (dragTable && dragTable.kind === 'hole' && dragTable.curPos) {
+      x = clamp(dragTable.curPos[0], frame.x, frame.x + frame.w - w);
+      y = clamp(dragTable.curPos[1], frame.y, frame.y + frame.h - h);
+    } else if (Array.isArray(ht.pos) && ht.pos.length >= 2) {
+      x = clamp(Number(ht.pos[0]) || 0, frame.x, frame.x + frame.w - w);
+      y = clamp(Number(ht.pos[1]) || 0, frame.y, frame.y + frame.h - h);
+    }
+    return { x, y, w, h, th, hh, rh, cols: [cTag, cX, cY, cDia, cDepth], view: res.view, origin2D: res.origin2D, rows: res.rows };
+  }
   function bomTableRect(sh = dwg(), frame, tb, bom = bomData) {
     if (!(sh && sh.bomTable && sh.bomTable.show)) return null;
     const rows = bomItems(bom);
@@ -2676,12 +3198,13 @@ const Drawing = (() => {
     }
     return { x, y, w, h, hh, rh, cols: [cPos, cQty, cName, cMat], rows };
   }
-  function layoutSheet(sh, s, G, extras, secGeos, area, bomRect = null) {
+  function layoutSheet(sh, s, G, extras, secGeos, area, bomRect = null, extraObs = []) {
     const gap = 22;
     const views = {};
     const occ = [];
     const addOcc = (px, py, vw, vh, pad = 8, padBot = 10) => occ.push([px - pad, py - pad, px + vw + pad, py + vh + padBot]);
     if (bomRect) occ.push([bomRect.x - 4, bomRect.y - 4, bomRect.x + bomRect.w + 4, bomRect.y + bomRect.h + 4]);
+    for (const r of extraObs || []) if (r) occ.push([r.x - 4, r.y - 4, r.x + r.w + 4, r.y + r.h + 4]);
     const hits = (r) => {
       if (r[0] < area.x + 2 || r[1] < area.y + 2 || r[2] > area.x + area.w - 2 || r[3] > area.y + area.h - 2) return true;
       for (const o of occ) if (r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]) return true;
@@ -2821,6 +3344,9 @@ const Drawing = (() => {
     const tb = { w: Math.min(180, frame.w), h: 32 };
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
     const bomRect = bomTableRect(sh, frame, tb, bomData);
+    const revRect = revTableRect(sh, frame);
+    const freeRects = freeTableRects(sh, frame);
+    const preTableObs = [revRect, ...freeRects.values()].filter(Boolean);
     const G = {
       front: sh.views.front ? viewGeom('front', sh) : null,
       top: sh.views.top ? viewGeom('top', sh) : null,
@@ -2853,20 +3379,20 @@ const Drawing = (() => {
           if (needW(sc) + 24 <= area.w * (1 - extraRoom) && needH(sc) + 24 <= area.h) { s = sc; break; }
         }
       } else s = +sh.scale || 1;
-      views = layoutSheet(sh, s, G, extras, [], area, bomRect).views;
+      views = layoutSheet(sh, s, G, extras, [], area, bomRect, preTableObs).views;
     } else {
       if (sh.scale === 'auto') {
         s = SCALES[SCALES.length - 1];
         for (const sc of SCALES) {
           if (!main && !secGeos.length) { s = 1; break; }
           if (main && (needW(sc) + 24 > area.w * 0.78 || needH(sc) + 24 > area.h)) continue;
-          const tryLay = layoutSheet(sh, sc, G, extras, secGeos, area, bomRect);
+          const tryLay = layoutSheet(sh, sc, G, extras, secGeos, area, bomRect, preTableObs);
           if (tryLay.fits) { s = sc; views = tryLay.views; break; }
         }
-        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect).views;
+        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect, preTableObs).views;
       } else {
         s = +sh.scale || 1;
-        views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect).views;
+        views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect, preTableObs).views;
       }
     }
     const vp = sh.viewPos || {};
@@ -2881,10 +3407,14 @@ const Drawing = (() => {
         if (Array.isArray(v.rect)) v.rect = [v.rect[0] + dx, v.rect[1] + dy, v.rect[2] + dx, v.rect[3] + dy];
       }
     }
+    const holeRect = holeTableRect(sh, frame, { views });
     // Detailansichten platzieren
     if (Array.isArray(sh.details) && sh.details.length) {
       const occupied = [[frame.x + frame.w - tb.w - 4, frame.y + frame.h - tb.h - 4, tb.w + 4, tb.h + 4]];
       if (bomRect) occupied.push([bomRect.x - 4, bomRect.y - 4, bomRect.w + 8, bomRect.h + 8]);
+      for (const r of [holeRect, revRect, ...freeRects.values()]) {
+        if (r) occupied.push([r.x - 4, r.y - 4, r.w + 8, r.h + 8]);
+      }
       for (const [k, v] of Object.entries(views)) {
         const b = v.geo.box;
         occupied.push([v.ox + b[0] * v.s - 8, v.oy - b[3] * v.s - 8, (b[2] - b[0]) * v.s + 16, (b[3] - b[1]) * v.s + 16]);
@@ -2905,7 +3435,7 @@ const Drawing = (() => {
     }
     // frei Gezeichnetes liegt fest auf dem Papier: Millimeter ab der linken unteren Blattecke, 1:1
     if (G.free) views.free = { geo: G.free, s: 1, ox: 0, oy: H };
-    return { W, H, frame, tb, area, s, views, bomRect };
+    return { W, H, frame, tb, area, s, views, bomRect, holeRect, revRect, freeRects };
   }
   const toSheet = (v, p) => [v.ox + p[0] * v.s, v.oy - p[1] * v.s];
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
@@ -4531,6 +5061,180 @@ const Drawing = (() => {
       );
     }
   }
+  function drawTableShell(x0, y0, w, h, th, hh, rh, cols, rowCount, id, tableKind, lines) {
+    const x1 = x0 + w, y1 = y0 + h;
+    lines.push({ rect: [x0, y0, w, h], cls: 'tbl-bg', id, tableKind });
+    lines.push({ rect: [x0, y0, w, h], cls: 'tbl-frame', id, tableKind });
+    if (th > 0) lines.push({ pts: [[x0, y0 + th], [x1, y0 + th]], cls: 'tbl-head-line', id, tableKind });
+    lines.push({ pts: [[x0, y0 + th + hh], [x1, y0 + th + hh]], cls: 'tbl-head-line', id, tableKind });
+    let cx = x0;
+    for (let i = 0; i < cols.length - 1; i++) {
+      cx += cols[i];
+      lines.push({ pts: [[cx, y0 + th], [cx, y1]], cls: 'tbl-grid', id, tableKind });
+    }
+    for (let i = 1; i < Math.max(1, rowCount); i++) {
+      const ry = y0 + th + hh + i * rh;
+      lines.push({ pts: [[x0, ry], [x1, ry]], cls: 'tbl-grid', id, tableKind });
+    }
+  }
+  function drawHoleTags(sh, lay, lines, texts) {
+    if (!(sh && sh.holeTable && sh.holeTable.show)) return;
+    const hr = lay && lay.holeRect;
+    if (!hr || !hr.view || !lay.views[hr.view]) return;
+    const v = lay.views[hr.view];
+    const O = toSheet(v, hr.origin2D);
+    lines.push({ circle: [O[0], O[1], 1.1], cls: 'ht-origin', id: '__holetable__', tableKind: 'hole', view: hr.view });
+    lines.push(
+      { pts: [[O[0], O[1]], [O[0] + 4.5, O[1]]], cls: 'ht-origin', id: '__holetable__', tableKind: 'hole', view: hr.view },
+      { pts: [[O[0], O[1]], [O[0], O[1] - 4.5]], cls: 'ht-origin', id: '__holetable__', tableKind: 'hole', view: hr.view }
+    );
+    if (sh.holeTable.showTags === false || !hr.rows.length) return;
+    const b = v.geo.box;
+    const VC = toSheet(v, [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5]);
+    const placed = [];
+    const angTry = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, Math.PI];
+    for (const row of hr.rows) {
+      const C = toSheet(v, row.c);
+      const R = Math.max(0.4, row.r * v.s);
+      const baseAng = Math.hypot(C[0] - VC[0], C[1] - VC[1]) > 1e-3
+        ? Math.atan2(C[1] - VC[1], C[0] - VC[0])
+        : -Math.PI / 4;
+      let bestAng = baseAng, bestScore = -1;
+      for (const da of angTry) {
+        const a = baseAng + da;
+        const ex = C[0] + Math.cos(a) * (R + 5.2), ey = C[1] + Math.sin(a) * (R + 5.2);
+        let minD = Infinity;
+        for (const p of placed) minD = Math.min(minD, Math.hypot(ex - p[0], ey - p[1]));
+        if (minD >= 6.0) { bestAng = a; break; }
+        if (minD > bestScore) { bestScore = minD; bestAng = a; }
+      }
+      const ux = Math.cos(bestAng), uy = Math.sin(bestAng);
+      const A = [C[0] + ux * R, C[1] + uy * R];
+      const E = [C[0] + ux * (R + 5.2), C[1] + uy * (R + 5.2)];
+      const dir = ux >= -0.1 ? 1 : -1;
+      const tw = Math.max(4.5, textW(row.tag, 2.8) + 1.6);
+      const F = [E[0] + dir * tw, E[1]];
+      lines.push({ pts: [A, E, F], cls: 'ht-tag-line', id: '__holetable__', tableKind: 'hole', view: hr.view, htTag: row.tag });
+      arrowHead(lines, A, E, 1.9, true, '__holetable__', null, 'filled', 'ht-tag-arrow', hr.view);
+      const tx = (E[0] + F[0]) * 0.5;
+      texts.push({ x: tx, y: E[1] - 0.8, t: row.tag, size: 2.8, rot: 0, anchor: 'middle', cls: 'ht-tag-text', id: '__holetable__', tableKind: 'hole', view: hr.view, htTag: row.tag });
+      placed.push([tx, E[1]]);
+    }
+  }
+  function drawHoleTable(sh, lay, lines, texts) {
+    const hr = lay && lay.holeRect;
+    if (!hr) return;
+    const st = sheetDimStyle(sh);
+    const id = '__holetable__', tableKind = 'hole';
+    drawTableShell(hr.x, hr.y, hr.w, hr.h, hr.th, hr.hh, hr.rh, hr.cols, hr.rows.length, id, tableKind, lines);
+    const vLbl = hr.view ? viewLabel(hr.view, sh) : '';
+    const title = vLbl ? `${T('draw.ht.title')} (${vLbl})` : T('draw.ht.title');
+    const fsT = fitSize(title, hr.w - 3.6, 2.9, 1.8);
+    texts.push({ x: hr.x + 1.8, y: hr.y + hr.th * 0.68, t: clipText(title, hr.w - 3.6, fsT), size: fsT, anchor: 'start', cls: 'tbl-title', id, tableKind });
+    const headers = [T('draw.ht.colTag'), T('draw.ht.colX'), T('draw.ht.colY'), T('draw.ht.colDia'), T('draw.ht.colDepth')];
+    const aligns = ['middle', 'end', 'end', 'start', 'start'];
+    const hy = hr.y + hr.th + hr.hh * 0.67;
+    let cx = hr.x;
+    for (let c = 0; c < hr.cols.length; c++) {
+      const cw = hr.cols[c], al = aligns[c];
+      const tx = al === 'middle' ? cx + cw * 0.5 : al === 'end' ? cx + cw - 1.6 : cx + 1.6;
+      const fsH = fitSize(headers[c], cw - 2.4, 2.7, 1.7);
+      texts.push({ x: tx, y: hy, t: clipText(headers[c], cw - 2.4, fsH), size: fsH, anchor: al, cls: 'tbl-th', id, tableKind });
+      cx += cw;
+    }
+    if (!hr.rows.length) {
+      texts.push({ x: hr.x + hr.w * 0.5, y: hr.y + hr.th + hr.hh + hr.rh * 0.67, t: T('draw.ht.empty'), size: 2.5, anchor: 'middle', cls: 'tbl-td', id, tableKind });
+      return;
+    }
+    const colKeys = ['tag', 'x', 'y', 'dia', 'depth'];
+    for (let i = 0; i < hr.rows.length; i++) {
+      const r = hr.rows[i];
+      const ry = hr.y + hr.th + hr.hh + i * hr.rh;
+      const ty = ry + hr.rh * 0.68;
+      const diaStr = r.thread ? `${r.thread} (Ø${fmtDim(r.dia, st)})` : `Ø${fmtDim(r.dia, st)}`;
+      let depthStr = r.thru ? T('draw.ht.thru') : fmtDim(r.depth, st);
+      if (r.cbDia > 0) depthStr += ` / ${T('draw.ht.cbPrefix')} Ø${fmtDim(r.cbDia, st)}×${fmtDim(r.cbDepth, st)}`;
+      if (r.csDia > 0) depthStr += ` / 90°×Ø${fmtDim(r.csDia, st)}`;
+      const vals = [r.tag, fmtDim(r.x, st), fmtDim(r.y, st), diaStr, depthStr];
+      let xC = hr.x;
+      for (let c = 0; c < hr.cols.length; c++) {
+        const cw = hr.cols[c], al = aligns[c];
+        const tx = al === 'middle' ? xC + cw * 0.5 : al === 'end' ? xC + cw - 1.6 : xC + 1.6;
+        const fsC = fitSize(vals[c], cw - 2.4, 2.65, 1.65);
+        texts.push({ x: tx, y: ty, t: clipText(vals[c], cw - 2.4, fsC), size: fsC, anchor: al, cls: 'tbl-td', id, tableKind, htRow: r.tag, htCol: colKeys[c] });
+        xC += cw;
+      }
+    }
+  }
+  function drawRevTable(sh, lay, lines, texts) {
+    const rr = lay && lay.revRect;
+    if (!rr) return;
+    const id = '__rev__', tableKind = 'rev';
+    drawTableShell(rr.x, rr.y, rr.w, rr.h, rr.th, rr.hh, rr.rh, rr.cols, rr.rows.length, id, tableKind, lines);
+    const title = T('draw.rt.title');
+    texts.push({ x: rr.x + 1.8, y: rr.y + rr.th * 0.68, t: title, size: 2.9, anchor: 'start', cls: 'tbl-title', id, tableKind });
+    const headers = [T('draw.rt.colRev'), T('draw.rt.colDesc'), T('draw.rt.colDate'), T('draw.rt.colAuthor')];
+    const aligns = ['middle', 'start', 'middle', 'start'];
+    const hy = rr.y + rr.th + rr.hh * 0.67;
+    let cx = rr.x;
+    for (let c = 0; c < rr.cols.length; c++) {
+      const cw = rr.cols[c], al = aligns[c];
+      const tx = al === 'middle' ? cx + cw * 0.5 : cx + 1.6;
+      const fsH = fitSize(headers[c], cw - 2.4, 2.7, 1.7);
+      texts.push({ x: tx, y: hy, t: clipText(headers[c], cw - 2.4, fsH), size: fsH, anchor: al, cls: 'tbl-th', id, tableKind });
+      cx += cw;
+    }
+    if (!rr.rows.length) {
+      texts.push({ x: rr.x + rr.w * 0.5, y: rr.y + rr.th + rr.hh + rr.rh * 0.67, t: T('draw.rt.empty'), size: 2.5, anchor: 'middle', cls: 'tbl-td', id, tableKind });
+      return;
+    }
+    const colKeys = ['rev', 'desc', 'date', 'author'];
+    for (let i = 0; i < rr.rows.length; i++) {
+      const r = rr.rows[i];
+      const ry = rr.y + rr.th + rr.hh + i * rr.rh;
+      const ty = ry + rr.rh * 0.68;
+      const vals = [r.rev || '', r.desc || '', r.date || '', r.author || ''];
+      let xC = rr.x;
+      for (let c = 0; c < rr.cols.length; c++) {
+        const cw = rr.cols[c], al = aligns[c];
+        const tx = al === 'middle' ? xC + cw * 0.5 : xC + 1.6;
+        const fsC = fitSize(vals[c], cw - 2.4, 2.65, 1.65);
+        texts.push({ x: tx, y: ty, t: clipText(vals[c], cw - 2.4, fsC), size: fsC, anchor: al, cls: 'tbl-td', id, tableKind, revRow: r.rev, revCol: colKeys[c] });
+        xC += cw;
+      }
+    }
+  }
+  function drawFreeTables(sh, lay, lines, texts) {
+    const rects = lay && lay.freeRects;
+    if (!rects || !rects.size) return;
+    for (const fr of rects.values()) {
+      const ft = fr.ft, id = ft.id, tableKind = 'free';
+      drawTableShell(fr.x, fr.y, fr.w, fr.h, fr.th, fr.hh, fr.rh, fr.cols, ft.rows.length, id, tableKind, lines);
+      if (fr.th > 0) {
+        const fsT = fitSize(ft.title, fr.w - 3.6, 2.9, 1.8);
+        texts.push({ x: fr.x + 1.8, y: fr.y + fr.th * 0.68, t: clipText(ft.title, fr.w - 3.6, fsT), size: fsT, anchor: 'start', cls: 'tbl-title', id, tableKind });
+      }
+      const hy = fr.y + fr.th + fr.hh * 0.67;
+      let cx = fr.x;
+      for (let c = 0; c < fr.cols.length; c++) {
+        const cw = fr.cols[c], hd = ft.headers[c] || '';
+        const fsH = fitSize(hd, cw - 2.4, 2.7, 1.7);
+        texts.push({ x: cx + 1.6, y: hy, t: clipText(hd, cw - 2.4, fsH), size: fsH, anchor: 'start', cls: 'tbl-th', id, tableKind, ftCol: c });
+        cx += cw;
+      }
+      for (let r = 0; r < ft.rows.length; r++) {
+        const ry = fr.y + fr.th + fr.hh + r * fr.rh;
+        const ty = ry + fr.rh * 0.68;
+        let xC = fr.x;
+        for (let c = 0; c < fr.cols.length; c++) {
+          const cw = fr.cols[c], val = (ft.rows[r] && ft.rows[r][c]) || '';
+          const fsC = fitSize(val, cw - 2.4, 2.65, 1.65);
+          texts.push({ x: xC + 1.6, y: ty, t: clipText(val, cw - 2.4, fsC), size: fsC, anchor: 'start', cls: 'tbl-td', id, tableKind, ftRow: r, ftCol: c });
+          xC += cw;
+        }
+      }
+    }
+  }
   function getShadedImage(name, v) {
     if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
     const pv = proj.views[name];
@@ -4736,9 +5440,13 @@ const Drawing = (() => {
     // Form- und Lagetoleranzen & Bezüge (ZE-24)
     for (const dat of sh.datums || []) drawDatum(dat, lines, texts, lay, sh, dimAnchors);
     for (const fr of sh.gdtFrames || []) drawGdtFrame(fr, lines, texts, lay, sh, dimAnchors);
-    // Schriftfeld & Stückliste
+    // Schriftfeld, Stückliste & Tabellen
     titleBlock(sh, lay, idx, total, lines, texts);
     drawBomTable(sh, lay, lines, texts);
+    drawHoleTags(sh, lay, lines, texts);
+    drawHoleTable(sh, lay, lines, texts);
+    drawRevTable(sh, lay, lines, texts);
+    drawFreeTables(sh, lay, lines, texts);
     return { layout: lay, lines, texts, images, dimAnchors };
   }
   function render() {
@@ -4761,6 +5469,7 @@ const Drawing = (() => {
     if (tool === 'balloon' && toolState) previewBalloon(cur.lines, cur.texts);
     if (tool === 'datum' && toolState) previewDatum(cur.lines, cur.texts);
     if (tool === 'gdt' && toolState) previewGdt(cur.lines, cur.texts);
+    if (tool === 'hole-origin' && toolState) previewHoleOrigin(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts, cur.images);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
@@ -4836,7 +5545,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text,text.gdt-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round}.breakline.sel{stroke:#0c7a70;stroke-width:.4}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.balloon-text,text.gdt-text,text.ht-tag-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -4885,6 +5594,8 @@ const Drawing = (() => {
         if (l.gdtSym) el.dataset.gdtSym = l.gdtSym;
         if (l.gdtLabel) el.dataset.gdtLabel = l.gdtLabel;
         if (l.dimId) el.dataset.dimId = l.dimId;
+        if (l.tableKind) el.dataset.tableKind = l.tableKind;
+        if (l.htTag) el.dataset.htTag = l.htTag;
       }
       g.append(el);
     };
@@ -4923,6 +5634,14 @@ const Drawing = (() => {
         if (t.gdtSym) el.dataset.gdtSym = t.gdtSym;
         if (t.gdtLabel) el.dataset.gdtLabel = t.gdtLabel;
         if (t.dimId) el.dataset.dimId = t.dimId;
+        if (t.tableKind) el.dataset.tableKind = t.tableKind;
+        if (t.htRow != null) el.dataset.htRow = String(t.htRow);
+        if (t.htCol) el.dataset.htCol = t.htCol;
+        if (t.htTag) el.dataset.htTag = t.htTag;
+        if (t.revRow != null) el.dataset.revRow = String(t.revRow);
+        if (t.revCol) el.dataset.revCol = t.revCol;
+        if (t.ftRow != null) el.dataset.ftRow = String(t.ftRow);
+        if (t.ftCol != null) el.dataset.ftCol = String(t.ftCol);
       }
       el.textContent = t.t;
       g.append(el);
@@ -5310,7 +6029,12 @@ const Drawing = (() => {
     const hasMain = d.viewPos && Object.keys(d.viewPos).length > 0;
     const hasSec = (d.sections || []).some((s) => Array.isArray(s.pos));
     const hasBomPos = !viewName && d.bomTable && Array.isArray(d.bomTable.pos);
-    if (!hasMain && !hasSec && !hasBomPos && !viewName) return false;
+    const hasTblPos = !viewName && (
+      (d.holeTable && Array.isArray(d.holeTable.pos))
+      || (d.revTable && Array.isArray(d.revTable.pos))
+      || (d.freeTables || []).some((f) => Array.isArray(f.pos))
+    );
+    if (!hasMain && !hasSec && !hasBomPos && !hasTblPos && !viewName) return false;
     App.change('Ansichten zurückgesetzt', () => {
       const sh = dwg();
       if (viewName) {
@@ -5323,6 +6047,9 @@ const Drawing = (() => {
         sh.viewPos = {};
         for (const s of sh.sections || []) s.pos = null;
         if (sh.bomTable) sh.bomTable.pos = null;
+        if (sh.holeTable) sh.holeTable.pos = null;
+        if (sh.revTable) sh.revTable.pos = null;
+        for (const f of sh.freeTables || []) f.pos = null;
       }
     });
     render(); Panels.renderRight();
@@ -6212,6 +6939,325 @@ const Drawing = (() => {
     render(); Panels.renderRight();
     return true;
   }
+  // ---------- Bohrungstabelle, Änderungstabelle & freie Tabellen (ZE-26, Profi) ----------
+  function setHoleTable(show) {
+    const val = !!show;
+    if (val && isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return false; }
+    const cur = dwg();
+    if ((cur.holeTable && !!cur.holeTable.show) === val) return false;
+    App.change(val ? 'Bohrungstabelle eingeblendet' : 'Bohrungstabelle ausgeblendet', () => {
+      const d = dwg();
+      d.holeTable = normalizeHoleTable({ ...(d.holeTable || {}), show: val });
+    });
+    if (!val && selDim === '__holetable__') selDim = null;
+    else if (val) selDim = '__holetable__';
+    render(); Panels.renderRight();
+    if (val && !proj && Model.activeItems(App.doc).length) {
+      ensureProjections().then(() => { if (App.mode === 'drawing') { render(); Panels.renderRight({ preserveFocus: true }); } });
+    }
+    return true;
+  }
+  function updateHoleTable(patch = {}) {
+    if (patch.show && isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return false; }
+    let changed = false;
+    App.change('Bohrungstabelle geändert', () => {
+      const d = dwg();
+      const prev = normalizeHoleTable(d.holeTable);
+      const next = normalizeHoleTable({ ...prev, ...patch });
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        d.holeTable = next;
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function resetHoleTablePos() {
+    const d = dwg();
+    if (!d.holeTable || !Array.isArray(d.holeTable.pos)) return false;
+    App.change('Bohrungstabellen-Lage zurückgesetzt', () => {
+      const sh = dwg();
+      if (sh.holeTable) sh.holeTable.pos = null;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function nextRevCode(rows = []) {
+    if (!rows.length) return 'A';
+    const last = String(rows[rows.length - 1].rev || '').trim().toUpperCase();
+    if (/^[A-Z]+$/.test(last)) {
+      const arr = last.split('');
+      let i = arr.length - 1;
+      while (i >= 0) {
+        if (arr[i] !== 'Z') { arr[i] = String.fromCharCode(arr[i].charCodeAt(0) + 1); return arr.join(''); }
+        arr[i] = 'A';
+        i--;
+      }
+      return 'A' + arr.join('');
+    }
+    if (/^\d+$/.test(last)) return String(Number(last) + 1);
+    return holeTagLetters(rows.length);
+  }
+  function setRevTable(show) {
+    const val = !!show;
+    if (val && isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return false; }
+    const cur = dwg();
+    if ((cur.revTable && !!cur.revTable.show) === val) return false;
+    App.change(val ? 'Änderungstabelle eingeblendet' : 'Änderungstabelle ausgeblendet', () => {
+      const d = dwg();
+      const rt = normalizeRevTable(d.revTable);
+      rt.show = val;
+      if (val && !rt.rows.length) {
+        rt.rows.push(normalizeRevRow({
+          rev: 'A',
+          desc: T('draw.rt.initialDesc'),
+          date: new Date().toLocaleDateString('de-DE'),
+          author: (d.title && d.title.name) || '',
+        }));
+      }
+      d.revTable = rt;
+    });
+    if (!val && selDim === '__rev__') selDim = null;
+    else if (val) selDim = '__rev__';
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addRevRow(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return null; }
+    let created = null;
+    App.change('Änderung hinzugefügt', () => {
+      const d = dwg();
+      const rt = normalizeRevTable(d.revTable);
+      const row = normalizeRevRow({
+        rev: opts.rev != null ? opts.rev : nextRevCode(rt.rows),
+        desc: opts.desc != null ? opts.desc : '',
+        date: opts.date != null ? opts.date : new Date().toLocaleDateString('de-DE'),
+        author: opts.author != null ? opts.author : ((d.title && d.title.name) || ''),
+      });
+      rt.rows.push(row);
+      rt.show = true;
+      d.revTable = rt;
+      created = row;
+    });
+    selDim = '__rev__';
+    render(); Panels.renderRight();
+    return created;
+  }
+  function updateRevRow(id, patch = {}) {
+    let changed = false;
+    App.change('Änderung bearbeitet', () => {
+      const d = dwg();
+      const rt = normalizeRevTable(d.revTable);
+      const row = rt.rows.find((r) => r.id === id);
+      if (!row) return;
+      for (const k of ['rev', 'desc', 'date', 'author']) {
+        if (k in patch) {
+          const val = k === 'rev' ? String(patch[k] ?? '').slice(0, 8) : String(patch[k] ?? '');
+          if (row[k] !== val) { row[k] = val; changed = true; }
+        }
+      }
+      d.revTable = rt;
+    });
+    if (changed) { render(); Panels.renderRight({ preserveFocus: true }); }
+    return changed;
+  }
+  function removeRevRow(id) {
+    const cur = dwg().revTable && dwg().revTable.rows;
+    if (!cur || !cur.some((r) => r.id === id)) return false;
+    App.change('Änderung gelöscht', () => {
+      const d = dwg();
+      const rt = normalizeRevTable(d.revTable);
+      rt.rows = rt.rows.filter((r) => r.id !== id);
+      d.revTable = rt;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetRevTablePos() {
+    const d = dwg();
+    if (!d.revTable || !Array.isArray(d.revTable.pos)) return false;
+    App.change('Änderungstabellen-Lage zurückgesetzt', () => {
+      const sh = dwg();
+      if (sh.revTable) sh.revTable.pos = null;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addFreeTable(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return null; }
+    const curList = dwg().freeTables || [];
+    const n = curList.length + 1;
+    const ft = normalizeFreeTable({
+      id: uid('tbl'),
+      title: opts.title != null ? opts.title : T('draw.ft.defaultTitle', { n }),
+      headers: opts.headers || [1, 2, 3].map((k) => T('draw.ft.colDef', { n: k })),
+      rows: opts.rows || [['', '', '']],
+      colWidths: opts.colWidths || null,
+      pos: opts.pos || null,
+    });
+    if (!ft) return null;
+    App.change('Freie Tabelle hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.freeTables)) d.freeTables = [];
+      d.freeTables.push(ft);
+    });
+    selDim = ft.id;
+    render(); Panels.renderRight();
+    return ft;
+  }
+  function updateFreeTable(id, patch = {}) {
+    let changed = false;
+    App.change('Freie Tabelle geändert', () => {
+      const d = dwg();
+      const list = d.freeTables || [];
+      const idx = list.findIndex((x) => x.id === id);
+      if (idx < 0) return;
+      const prev = list[idx];
+      const next = normalizeFreeTable({ ...prev, ...patch, id: prev.id });
+      if (!next) return;
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        list[idx] = next;
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight({ preserveFocus: true }); }
+    return changed;
+  }
+  function setFreeTableCell(id, rowIdx, colIdx, val) {
+    let changed = false;
+    App.change('Tabellenzelle bearbeitet', () => {
+      const ft = (dwg().freeTables || []).find((x) => x.id === id);
+      if (!ft || colIdx < 0 || colIdx >= ft.headers.length) return;
+      const s = String(val ?? '');
+      if (rowIdx === -1) {
+        if (ft.headers[colIdx] !== s) { ft.headers[colIdx] = s; changed = true; }
+      } else if (rowIdx >= 0 && rowIdx < ft.rows.length) {
+        if (ft.rows[rowIdx][colIdx] !== s) { ft.rows[rowIdx][colIdx] = s; changed = true; }
+      }
+    });
+    if (changed) { render(); Panels.renderRight({ preserveFocus: true }); }
+    return changed;
+  }
+  function addFreeTableRow(id) {
+    const cur = (dwg().freeTables || []).find((x) => x.id === id);
+    if (!cur || cur.rows.length >= 40) return false;
+    App.change('Tabellenzeile hinzugefügt', () => {
+      const ft = (dwg().freeTables || []).find((x) => x.id === id);
+      if (ft && ft.rows.length < 40) ft.rows.push(new Array(ft.headers.length).fill(''));
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function removeFreeTableRow(id, rowIdx = -1) {
+    const cur = (dwg().freeTables || []).find((x) => x.id === id);
+    if (!cur || !cur.rows.length) return false;
+    App.change('Tabellenzeile gelöscht', () => {
+      const ft = (dwg().freeTables || []).find((x) => x.id === id);
+      if (!ft || !ft.rows.length) return;
+      const idx = rowIdx >= 0 && rowIdx < ft.rows.length ? rowIdx : ft.rows.length - 1;
+      ft.rows.splice(idx, 1);
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function addFreeTableCol(id) {
+    const cur = (dwg().freeTables || []).find((x) => x.id === id);
+    if (!cur || cur.headers.length >= 12) return false;
+    App.change('Tabellenspalte hinzugefügt', () => {
+      const ft = (dwg().freeTables || []).find((x) => x.id === id);
+      if (!ft || ft.headers.length >= 12) return;
+      ft.headers.push(T('draw.ft.colDef', { n: ft.headers.length + 1 }));
+      for (const r of ft.rows) r.push('');
+      if (Array.isArray(ft.colWidths)) ft.colWidths.push(24);
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function removeFreeTableCol(id, colIdx = -1) {
+    const cur = (dwg().freeTables || []).find((x) => x.id === id);
+    if (!cur || cur.headers.length <= 1) return false;
+    App.change('Tabellenspalte gelöscht', () => {
+      const ft = (dwg().freeTables || []).find((x) => x.id === id);
+      if (!ft || ft.headers.length <= 1) return;
+      const idx = colIdx >= 0 && colIdx < ft.headers.length ? colIdx : ft.headers.length - 1;
+      ft.headers.splice(idx, 1);
+      for (const r of ft.rows) r.splice(idx, 1);
+      if (Array.isArray(ft.colWidths)) ft.colWidths.splice(idx, 1);
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function removeFreeTable(id) {
+    const cur = (dwg().freeTables || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Freie Tabelle gelöscht', () => {
+      const d = dwg();
+      d.freeTables = (d.freeTables || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetFreeTablePos(id) {
+    const cur = (dwg().freeTables || []).find((x) => x.id === id);
+    if (!cur || !Array.isArray(cur.pos)) return false;
+    App.change('Tabellenlage zurückgesetzt', () => {
+      const ft = (dwg().freeTables || []).find((x) => x.id === id);
+      if (ft) ft.pos = null;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function tablesMenu(anchor) {
+    if (isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return; }
+    const sh = dwg();
+    const hasHt = !!(sh.holeTable && sh.holeTable.show);
+    const hasRt = !!(sh.revTable && sh.revTable.show);
+    UI.menu(anchor, [
+      { id: 'dw-menu-hole-table', label: T('menu.draw.holeTable'), icon: 'layout', help: 'drawingHoleTable', checked: hasHt, run: () => setHoleTable(!hasHt) },
+      { id: 'dw-menu-hole-origin', label: T('menu.draw.holeOrigin'), icon: 'target', help: 'drawingHoleTable', checked: tool === 'hole-origin', run: () => tool_('hole-origin') },
+      '-',
+      { id: 'dw-menu-rev-table', label: T('menu.draw.revTable'), icon: 'layout', help: 'drawingRevTable', checked: hasRt, run: () => setRevTable(!hasRt) },
+      { id: 'dw-menu-rev-add', label: T('draw.panel.revAdd'), icon: 'plus', help: 'drawingRevTable', run: () => addRevRow() },
+      '-',
+      { id: 'dw-menu-free-table', label: T('menu.draw.freeTable'), icon: 'plus', help: 'drawingFreeTable', run: () => addFreeTable() },
+    ]);
+  }
+  function pickHoleOriginSnap(P) {
+    const name = ['top', 'front', 'left'].find((k) => {
+      const v = layout && layout.views && layout.views[k];
+      if (!v || !v.geo || !v.geo.box) return false;
+      const b = v.geo.box;
+      const A = toSheet(v, [b[0], b[3]]), B = toSheet(v, [b[2], b[1]]);
+      return P[0] >= A[0] - 8 && P[0] <= B[0] + 8 && P[1] >= A[1] - 8 && P[1] <= B[1] + 8;
+    });
+    if (!name) return null;
+    const v = layout.views[name];
+    const sn = snapIn(name, P);
+    if (sn) return { view: name, p: sn.p, S: sn.S };
+    const c = circleAt(name, P, true);
+    if (c) return { view: name, p: c.c, S: toSheet(v, c.c) };
+    const q = toView(v, P);
+    return { view: name, p: q, S: toSheet(v, q) };
+  }
+  function holeOriginClick(P) {
+    const snap = pickHoleOriginSnap(P);
+    if (!snap) { UI.toast(T('draw.toast.pickOrigin'), { icon: 'info', ms: 2400 }); return; }
+    const sh = dwg();
+    const curView = sh.holeTable && sh.holeTable.view;
+    updateHoleTable({
+      show: true,
+      view: (!curView || curView === 'auto') ? snap.view : curView,
+      origin: 'custom',
+      originPt: [round(snap.p[0], 3), round(snap.p[1], 3)],
+    });
+    setTool(null);
+  }
+  function previewHoleOrigin(lines) {
+    const st = toolState;
+    if (!st || !st.snap || !st.snap.S) return;
+    lines.push({ circle: [st.snap.S[0], st.snap.S[1], Math.max(1.2, 2.2 / zoom)], cls: 'snap' });
+  }
   function balloonClick(P) {
     const st = toolState || { stage: 0 };
     if (st.stage === 0) {
@@ -6305,6 +7351,13 @@ const Drawing = (() => {
       render();
       return;
     }
+    if (dragTable) {
+      const P = sheetPt(e);
+      dragTable.curPos = [dragTable.origPos[0] + (P[0] - dragTable.startP[0]), dragTable.origPos[1] + (P[1] - dragTable.startP[1])];
+      if (Math.hypot(P[0] - dragTable.startP[0], P[1] - dragTable.startP[1]) > 0.5) dragTable.moved = true;
+      render();
+      return;
+    }
     if (dragView) {
       const P = sheetPt(e);
       const dx = P[0] - dragView.startP[0], dy = P[1] - dragView.startP[1];
@@ -6312,6 +7365,12 @@ const Drawing = (() => {
       if (dragView.kind === 'main') dragView.curOff = [dragView.origOff[0] + dx, dragView.origOff[1] + dy];
       else if (dragView.kind === 'section') dragView.curPos = [dragView.origPos[0] + dx, dragView.origPos[1] + dy];
       if (dragView.moved) render();
+      return;
+    }
+    if (tool === 'hole-origin') {
+      const P = sheetPt(e);
+      toolState = { P, snap: pickHoleOriginSnap(P) };
+      render();
       return;
     }
     if (tool === 'note') {
@@ -6447,6 +7506,7 @@ const Drawing = (() => {
     if (tool === 'balloon') { balloonClick(P); return; }
     if (tool === 'datum') { datumClick(P, e); return; }
     if (tool === 'gdt') { gdtClick(P, e); return; }
+    if (tool === 'hole-origin') { holeOriginClick(P); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : centerAt(P);
@@ -6467,6 +7527,14 @@ const Drawing = (() => {
       dragGdt = { id: selDim, startP: P, origElbow: [...(frObj.elbow || [14, -10])], curElbow: null, moved: false };
     } else if (selDim === '__bom__' && layout && layout.bomRect) {
       dragBom = { startP: P, origPos: [layout.bomRect.x, layout.bomRect.y], curPos: null, moved: false };
+    } else if (selDim === '__holetable__' && layout && layout.holeRect) {
+      const isTblCell = t && (t.classList.contains('tbl-bg') || t.classList.contains('tbl-frame') || t.classList.contains('tbl-th') || t.classList.contains('tbl-td') || t.classList.contains('tbl-title'));
+      if (isTblCell) dragTable = { kind: 'hole', id: '__holetable__', startP: P, origPos: [layout.holeRect.x, layout.holeRect.y], curPos: null, moved: false };
+    } else if (selDim === '__rev__' && layout && layout.revRect) {
+      dragTable = { kind: 'rev', id: '__rev__', startP: P, origPos: [layout.revRect.x, layout.revRect.y], curPos: null, moved: false };
+    } else if (selDim && layout && layout.freeRects && layout.freeRects.has(selDim)) {
+      const fr = layout.freeRects.get(selDim);
+      dragTable = { kind: 'free', id: selDim, startP: P, origPos: [fr.x, fr.y], curPos: null, moved: false };
     } else if (!selDim) {
       const hitV = viewAtAll(P);
       if (hitV) selView = hitV;
@@ -6525,6 +7593,28 @@ const Drawing = (() => {
         App.change('Stückliste verschoben', () => {
           const sh = dwg();
           sh.bomTable = { ...(sh.bomTable || { show: true }), show: true, pos: [round(nx, 2), round(ny, 2)] };
+        });
+        render(); Panels.renderRight();
+      }
+      return;
+    }
+    if (dragTable) {
+      const d = dragTable;
+      dragTable = null;
+      if (d.moved && d.curPos) {
+        const lay = layout || computeLayout(dwg());
+        const rect = d.kind === 'hole' ? lay.holeRect : d.kind === 'rev' ? lay.revRect : (lay.freeRects && lay.freeRects.get(d.id));
+        const w = rect ? rect.w : 80, h = rect ? rect.h : 20;
+        const nx = round(clamp(d.curPos[0], lay.frame.x, lay.frame.x + lay.frame.w - w), 2);
+        const ny = round(clamp(d.curPos[1], lay.frame.y, lay.frame.y + lay.frame.h - h), 2);
+        App.change('Tabelle verschoben', () => {
+          const sh = dwg();
+          if (d.kind === 'hole') sh.holeTable = normalizeHoleTable({ ...(sh.holeTable || {}), show: true, pos: [nx, ny] });
+          else if (d.kind === 'rev') sh.revTable = normalizeRevTable({ ...(sh.revTable || {}), show: true, pos: [nx, ny] });
+          else if (d.kind === 'free') {
+            const ft = (sh.freeTables || []).find((x) => x.id === d.id);
+            if (ft) ft.pos = [nx, ny];
+          }
         });
         render(); Panels.renderRight();
       }
@@ -7506,6 +8596,9 @@ const Drawing = (() => {
   function removeSel() {
     const id = selDim; if (!id) return;
     if (id === '__bom__') { setBomTable(false); return; }
+    if (id === '__holetable__') { setHoleTable(false); return; }
+    if (id === '__rev__') { setRevTable(false); return; }
+    if ((dwg().freeTables || []).some((x) => x.id === id)) { removeFreeTable(id); return; }
     if (String(id).startsWith('ctr|')) { hideCenter(id); return; }
     if ((dwg().sections || []).some((x) => x.id === id)) { removeSection(id); return; }
     if ((dwg().notes || []).some((x) => x.id === id)) { removeNote(id); return; }
@@ -7576,7 +8669,7 @@ const Drawing = (() => {
     const m = SECTION_MODES.find((x) => x.key === mode) || SECTION_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.secProOnly'), { icon: 'info' }); return false; }
     sectionMode = m.key;
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
     tool = 'section';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -7596,7 +8689,8 @@ const Drawing = (() => {
   }
   function setTool(t) {
     if ((t === 'datum' || t === 'gdt') && isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return false; }
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null;
+    if (t === 'hole-origin' && isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return false; }
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'section' && (!SECTION_MODES.some((x) => x.key === sectionMode) || (sectionMode !== 'full' && isSimpleMode()))) sectionMode = 'full';
@@ -7612,7 +8706,7 @@ const Drawing = (() => {
       }
       toolState = { stage: 0 };
     } else {
-      toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon') ? { stage: 0 } : t ? {} : null;
+      toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon' || t === 'hole-origin') ? { stage: 0 } : t ? {} : null;
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
@@ -7623,7 +8717,8 @@ const Drawing = (() => {
               : t === 'balloon' ? T('draw.hint.balloon')
                 : t === 'datum' ? T('draw.hint.datum')
                   : t === 'gdt' ? T('draw.hint.gdt')
-                    : t && t.startsWith('free-') ? freeHint(t) : null
+                    : t === 'hole-origin' ? T('draw.hint.holeOrigin')
+                      : t && t.startsWith('free-') ? freeHint(t) : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
     return true;
@@ -8289,6 +9384,9 @@ const Drawing = (() => {
     if (lay.bomRect) {
       staticObs.push([lay.bomRect.x - 2, lay.bomRect.y - 2, lay.bomRect.x + lay.bomRect.w + 2, lay.bomRect.y + lay.bomRect.h + 2]);
     }
+    for (const r of [lay.holeRect, lay.revRect, ...(lay.freeRects ? lay.freeRects.values() : [])]) {
+      if (r) staticObs.push([r.x - 2, r.y - 2, r.x + r.w + 2, r.y + r.h + 2]);
+    }
     for (const [k, v] of Object.entries(lay.views)) {
       const r = viewRects.get(k);
       if (!r) continue;
@@ -8798,6 +9896,11 @@ const Drawing = (() => {
       'bom-frame': [0.5, null],
       'bom-head-line': [0.35, null],
       'bom-grid': [0.22, null],
+      'tbl-frame': [0.5, null],
+      'tbl-head-line': [0.35, null],
+      'tbl-grid': [0.22, null],
+      'ht-origin': [0.35, null],
+      'ht-tag-line': [0.25, null],
       detail: [0.25, null],
       'detail-border': [0.25, [3, 1.5]],
     };
@@ -8808,12 +9911,12 @@ const Drawing = (() => {
     }
     for (const l of lines) {
       if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap' || l.cls === 'view-sel') continue;
-      if ((l.cls === 'bom-bg' || l.cls === 'gdt-bg') && l.rect) {
+      if ((l.cls === 'bom-bg' || l.cls === 'gdt-bg' || l.cls === 'tbl-bg') && l.rect) {
         const [rx, ry, rw, rh] = l.rect;
         out.push(`1 g ${px(rx)} ${py(ry + rh)} ${pf(rw * PT)} ${pf(rh * PT)} re f`);
         continue;
       }
-      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri') {
+      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri' || l.cls === 'ht-tag-arrow') {
         const [a, b, c] = l.poly;
         out.push(`${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
         continue;
@@ -8865,7 +9968,7 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'balloon-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
+      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'tbl-title' || t.cls === 'tbl-th' || t.cls === 'ht-tag-text' || t.cls === 'balloon-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
       const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' ? '0.333' : '0.067');
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
@@ -8994,8 +10097,10 @@ const Drawing = (() => {
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
       'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
       'gdt-frame': 'BEMASSUNG', 'gdt-line': 'BEMASSUNG', 'gdt-sym': 'BEMASSUNG', 'gdt-arrow': 'BEMASSUNG', 'gdt-datum-tri': 'BEMASSUNG',
+      'ht-origin': 'BEMASSUNG', 'ht-tag-line': 'BEMASSUNG', 'ht-tag-arrow': 'BEMASSUNG',
       'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN',
       'bom-frame': 'RAHMEN', 'bom-head-line': 'RAHMEN', 'bom-grid': 'RAHMEN',
+      'tbl-frame': 'RAHMEN', 'tbl-head-line': 'RAHMEN', 'tbl-grid': 'RAHMEN',
     };
     const stats = { lines: 0, circles: 0, arcs: 0, polylines: 0, solids: 0, texts: 0, byLayer: {} };
     const bumpLayer = (ly) => { stats.byLayer[ly] = (stats.byLayer[ly] || 0) + 1; };
@@ -9018,7 +10123,7 @@ const Drawing = (() => {
         stats.circles++; bumpLayer(ly);
       } else if (l.poly) {
         const q = l.poly;
-        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri')) {
+        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow' || l.cls === 'gdt-arrow' || l.cls === 'gdt-datum-tri' || l.cls === 'ht-tag-arrow')) {
           P(0, 'SOLID', 8, ly,
             10, q[0][0].toFixed(4), 20, Y(q[0][1]).toFixed(4), 30, 0,
             11, q[1][0].toFixed(4), 21, Y(q[1][1]).toFixed(4), 31, 0,
@@ -9045,7 +10150,7 @@ const Drawing = (() => {
     for (const t of cur.texts || []) {
       if (t.cls === 'note') continue;
       const cls = String(t.cls || '');
-      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'gdt-text') ? 'BEMASSUNG'
+      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'gdt-text' || cls === 'ht-tag-text') ? 'BEMASSUNG'
         : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
@@ -9783,6 +10888,145 @@ const Drawing = (() => {
       bomSec.append(bItems);
     }
     w.append(bomSec);
+    // Bohrungstabelle, Änderungstabelle & freie Tabellen (ZE-26, Profi)
+    if (!simpleMode) {
+      const tblSec = h('div', { class: 'section pro', id: 'dw-tables-sec', 'data-help': 'drawingTables' }, h('div', { class: 'section-h' }, T('draw.panel.tablesSec')));
+      const htCfg = normalizeHoleTable(d.holeTable);
+      const htBox = h('div', { class: 'dw-tbl-sub', id: 'dw-holetable-box', 'data-help': 'drawingHoleTable' });
+      htBox.append(h('div', { class: 'dw-tbl-sub-h' }, h('span', null, T('draw.panel.holeTableSec'))));
+      const htChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-ht-show', checked: !!htCfg.show }), T('draw.panel.holeTableShow'));
+      htChk.querySelector('input').onchange = (e) => setHoleTable(e.target.checked);
+      htBox.append(htChk);
+      if (htCfg.show) {
+        const orthoOpts = [['auto', T('draw.panel.holeViewAuto')]];
+        for (const vk of ['top', 'front', 'left']) {
+          if (d.views && d.views[vk]) orthoOpts.push([vk, viewLabel(vk, d)]);
+        }
+        htBox.append(UI.selectField({
+          id: 'dw-ht-view',
+          label: T('draw.panel.holeView'),
+          value: orthoOpts.some(([k]) => k === htCfg.view) ? htCfg.view : 'auto',
+          options: orthoOpts,
+          onChange: (v) => updateHoleTable({ view: v }),
+        }));
+        htBox.append(UI.selectField({
+          id: 'dw-ht-origin',
+          label: T('draw.panel.holeOrigin'),
+          value: htCfg.origin,
+          options: [
+            ['bl', T('draw.panel.holeOriginBL')],
+            ['tl', T('draw.panel.holeOriginTL')],
+            ['center', T('draw.panel.holeOriginCenter')],
+            ['model', T('draw.panel.holeOriginModel')],
+            ['custom', T('draw.panel.holeOriginCustom')],
+          ],
+          onChange: (v) => updateHoleTable({ origin: v }),
+        }));
+        const bPickOrg = h('button', { type: 'button', class: 'btn' + (tool === 'hole-origin' ? ' active' : ''), id: 'dw-ht-pick-origin', 'data-help': 'drawingHoleTable' });
+        bPickOrg.innerHTML = icon('target') + esc(T(tool === 'hole-origin' ? 'draw.panel.holePickOriginActive' : 'draw.panel.holePickOrigin'));
+        bPickOrg.onclick = () => tool_('hole-origin');
+        htBox.append(h('div', { class: 'btn-row' }, bPickOrg));
+        const htTagsChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-ht-tags', checked: htCfg.showTags !== false }), T('draw.panel.holeTags'));
+        htTagsChk.querySelector('input').onchange = (e) => updateHoleTable({ showTags: e.target.checked });
+        htBox.append(htTagsChk);
+        htBox.append(UI.selectField({
+          id: 'dw-ht-numbering',
+          label: T('draw.panel.holeNumbering'),
+          value: htCfg.numbering,
+          options: [
+            ['group', T('draw.panel.holeNumGroup')],
+            ['seq', T('draw.panel.holeNumSeq')],
+          ],
+          onChange: (v) => updateHoleTable({ numbering: v }),
+        }));
+        if (Array.isArray(htCfg.pos)) {
+          const bResetHt = h('button', { type: 'button', class: 'btn', id: 'dw-ht-reset-pos' }, T('draw.panel.holeResetPos'));
+          bResetHt.onclick = () => resetHoleTablePos();
+          htBox.append(bResetHt);
+        }
+        const htRes = holeTableRows(d, layout);
+        if (htRes.rows.length) {
+          const hl = h('div', { class: 'mini-list', id: 'dw-ht-list' });
+          for (const hr of htRes.rows) {
+            hl.append(h('div', { class: 'mini-row', 'data-ht-tag': hr.tag },
+              h('b', { class: 'mono' }, hr.tag),
+              h('span', { class: 'mono' }, `Ø${fmtDim(hr.dia, ds)}`),
+              h('span', { class: 'grow mono', style: { fontSize: '11px', color: 'var(--muted)', textAlign: 'right' } }, `${fmtDim(hr.x, ds)}, ${fmtDim(hr.y, ds)}`),
+              h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, hr.thru ? T('draw.ht.thru') : fmtDim(hr.depth, ds))));
+          }
+          htBox.append(hl);
+        }
+      }
+      tblSec.append(htBox);
+
+      const rtCfg = normalizeRevTable(d.revTable);
+      const rtBox = h('div', { class: 'dw-tbl-sub', id: 'dw-revtable-box', 'data-help': 'drawingRevTable' });
+      rtBox.append(h('div', { class: 'dw-tbl-sub-h' }, h('span', null, T('draw.panel.revTableSec'))));
+      const rtChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-rt-show', checked: !!rtCfg.show }), T('draw.panel.revTableShow'));
+      rtChk.querySelector('input').onchange = (e) => setRevTable(e.target.checked);
+      rtBox.append(rtChk);
+      const bAddRev = h('button', { type: 'button', class: 'btn', id: 'dw-rt-add' }, T('draw.panel.revAdd'));
+      bAddRev.onclick = () => addRevRow();
+      const rtBtns = [bAddRev];
+      if (Array.isArray(rtCfg.pos)) {
+        const bResetRt = h('button', { type: 'button', class: 'btn', id: 'dw-rt-reset-pos' }, T('draw.panel.revResetPos'));
+        bResetRt.onclick = () => resetRevTablePos();
+        rtBtns.push(bResetRt);
+      }
+      rtBox.append(h('div', { class: 'btn-row' }, ...rtBtns));
+      if (rtCfg.rows.length) {
+        const rl = h('div', { class: 'mini-list', id: 'dw-rt-list' });
+        for (const r of rtCfg.rows) {
+          const item = h('div', { class: 'dw-rev-item', 'data-rev-id': r.id });
+          const iRev = h('input', { type: 'text', class: 'dw-rt-rev mono', value: r.rev, placeholder: T('draw.panel.revRevPh'), style: { width: '44px', flex: 'none' } });
+          const iDesc = h('input', { type: 'text', class: 'dw-rt-desc', value: r.desc, placeholder: T('draw.panel.revDescPh') });
+          const iDate = h('input', { type: 'text', class: 'dw-rt-date', value: r.date, placeholder: T('draw.panel.revDatePh') });
+          const iAuth = h('input', { type: 'text', class: 'dw-rt-author', value: r.author, placeholder: T('draw.panel.revAuthorPh') });
+          for (const [inp, key] of [[iRev, 'rev'], [iDesc, 'desc'], [iDate, 'date'], [iAuth, 'author']]) {
+            inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); });
+            inp.addEventListener('change', () => updateRevRow(r.id, { [key]: inp.value }));
+          }
+          const db = h('button', { type: 'button', class: 'btn danger dw-rt-del', style: { padding: '2px 6px', fontSize: '11px', flex: 'none' }, 'data-tip': T('draw.panel.revDelTip'), 'aria-label': T('draw.panel.revDelTip') });
+          db.innerHTML = icon('trash');
+          db.onclick = () => removeRevRow(r.id);
+          item.append(h('div', { class: 'dw-rev-top' }, iRev, iDesc, db), h('div', { class: 'dw-rev-meta' }, iDate, iAuth));
+          rl.append(item);
+        }
+        rtBox.append(rl);
+      }
+      tblSec.append(rtBox);
+
+      const ftList = d.freeTables || [];
+      const ftBox = h('div', { class: 'dw-tbl-sub', id: 'dw-freetables-box', 'data-help': 'drawingFreeTable' });
+      ftBox.append(h('div', { class: 'dw-tbl-sub-h' }, h('span', null, T('draw.panel.freeTableSec'))));
+      const bAddFt = h('button', { type: 'button', class: 'btn', id: 'dw-ft-add' }, T('draw.panel.freeTableAdd'));
+      bAddFt.onclick = () => addFreeTable();
+      ftBox.append(h('div', { class: 'btn-row' }, bAddFt));
+      if (ftList.length) {
+        const fl = h('div', { class: 'mini-list', id: 'dw-ft-list' });
+        for (const ft of ftList) {
+          const row = h('div', {
+            class: 'mini-row ft-row',
+            'data-ft-id': ft.id,
+            style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === ft.id ? 'var(--accent-soft)' : '' },
+          });
+          const titleTxt = ft.title || T('draw.panel.selFreeTable');
+          const db = h('button', { type: 'button', class: 'btn danger ft-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.freeTableDelTip'), 'aria-label': T('draw.panel.freeTableDelTip') });
+          db.innerHTML = icon('trash');
+          db.onclick = (e) => { e.stopPropagation(); removeFreeTable(ft.id); };
+          row.append(
+            h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, titleTxt),
+            h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, `${ft.rows.length}×${ft.headers.length}`),
+            db
+          );
+          row.onclick = () => { selDim = ft.id; render(); Panels.renderRight(); };
+          fl.append(row);
+        }
+        ftBox.append(fl);
+      }
+      tblSec.append(ftBox);
+      w.append(tblSec);
+    }
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, T('draw.panel.sectionsSec')));
     if (!isSimpleMode()) {
@@ -10045,10 +11289,63 @@ const Drawing = (() => {
       const selDatum = (d.datums || []).find((x) => x.id === selDim);
       const selGdt = (d.gdtFrames || []).find((x) => x.id === selDim);
       const isBomSel = selDim === '__bom__';
+      const isHoleTblSel = selDim === '__holetable__';
+      const isRevTblSel = selDim === '__rev__';
+      const selFreeTbl = (d.freeTables || []).find((x) => x.id === selDim) || null;
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !selDatum && !selGdt && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !selDatum && !selGdt && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !selDatum && !selGdt && !isBomSel && !isHoleTblSel && !isRevTblSel && !selFreeTbl && !selCtr ? findDimById(selDim, d, layout) : null;
+      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !selDatum && !selGdt && !isHoleTblSel && !isRevTblSel && !selFreeTbl && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      if (isHoleTblSel) {
+        const htCnt = holeTableRows(d, layout).rows.length;
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.panel.holeCount')), h('b', { class: 'mono' }, String(htCnt)))));
+      }
+      if (isRevTblSel) {
+        const rtCnt = (d.revTable && Array.isArray(d.revTable.rows)) ? d.revTable.rows.length : 0;
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.panel.revCount')), h('b', { class: 'mono' }, String(rtCnt)))));
+      }
+      if (selFreeTbl) {
+        const ftTitleFld = UI.textField({
+          id: 'dw-ft-title',
+          label: T('draw.panel.freeTableTitle'),
+          value: selFreeTbl.title || '',
+          placeholder: T('draw.panel.freeTableTitlePh'),
+          onCommit: (v) => updateFreeTable(selFreeTbl.id, { title: v }),
+        });
+        const ftTitleInp = ftTitleFld.querySelector('input');
+        if (ftTitleInp) ftTitleInp.addEventListener('keydown', (e) => e.stopPropagation());
+        selSec.append(ftTitleFld);
+        const bAR = h('button', { type: 'button', class: 'btn', id: 'dw-ft-add-row' }, T('draw.panel.freeTableAddRow'));
+        bAR.onclick = () => addFreeTableRow(selFreeTbl.id);
+        const bDR = h('button', { type: 'button', class: 'btn', id: 'dw-ft-del-row', disabled: !selFreeTbl.rows.length }, T('draw.panel.freeTableDelRow'));
+        bDR.onclick = () => removeFreeTableRow(selFreeTbl.id);
+        const bAC = h('button', { type: 'button', class: 'btn', id: 'dw-ft-add-col' }, T('draw.panel.freeTableAddCol'));
+        bAC.onclick = () => addFreeTableCol(selFreeTbl.id);
+        const bDC = h('button', { type: 'button', class: 'btn', id: 'dw-ft-del-col', disabled: selFreeTbl.headers.length <= 1 }, T('draw.panel.freeTableDelCol'));
+        bDC.onclick = () => removeFreeTableCol(selFreeTbl.id);
+        selSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bAR, bDR), h('div', { class: 'btn-row', style: { marginTop: '4px' } }, bAC, bDC));
+        const grid = h('div', { class: 'dw-ft-grid', id: 'dw-ft-grid', style: { marginTop: '6px' } });
+        const colsTpl = `repeat(${selFreeTbl.headers.length}, minmax(56px, 1fr))`;
+        const hRow = h('div', { class: 'dw-ft-grid-row is-head', style: { gridTemplateColumns: colsTpl } });
+        selFreeTbl.headers.forEach((hd, ci) => {
+          const inp = h('input', { type: 'text', class: 'dw-ft-head-inp', 'data-col': String(ci), value: hd });
+          inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); });
+          inp.addEventListener('change', () => setFreeTableCell(selFreeTbl.id, -1, ci, inp.value));
+          hRow.append(inp);
+        });
+        grid.append(hRow);
+        selFreeTbl.rows.forEach((rArr, ri) => {
+          const rEl = h('div', { class: 'dw-ft-grid-row', style: { gridTemplateColumns: colsTpl } });
+          selFreeTbl.headers.forEach((_, ci) => {
+            const inp = h('input', { type: 'text', class: 'dw-ft-cell-inp', 'data-row': String(ri), 'data-col': String(ci), value: rArr[ci] || '' });
+            inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); });
+            inp.addEventListener('change', () => setFreeTableCell(selFreeTbl.id, ri, ci, inp.value));
+            rEl.append(inp);
+          });
+          grid.append(rEl);
+        });
+        selSec.append(grid);
+      }
       if (selDatum) {
         const aTxt = T(selDatum.attachType === 'dim' ? 'draw.panel.gdtAttachDim' : selDatum.attachType === 'edge' ? 'draw.panel.gdtAttachEdge' : 'draw.panel.gdtAttachFree');
         selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, selDatum.view ? viewLabel(selDatum.view, d) : T('draw.panel.freeOnSheet')), h('b', null, aTxt))));
@@ -10355,7 +11652,35 @@ const Drawing = (() => {
         hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
         hb.onclick = () => setBomTable(false);
         row.append(hb);
+      } else if (isHoleTblSel) {
+        if (d.holeTable && Array.isArray(d.holeTable.pos)) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-ht-sel-reset' }, T('draw.panel.holeResetPos'));
+          rb.onclick = () => resetHoleTablePos();
+          row.append(rb);
+        }
+        const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ht-hide' });
+        hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
+        hb.onclick = () => setHoleTable(false);
+        row.append(hb);
+      } else if (isRevTblSel) {
+        const ab = h('button', { type: 'button', class: 'btn', id: 'dw-rt-sel-add' }, T('draw.panel.revAdd'));
+        ab.onclick = () => addRevRow();
+        row.append(ab);
+        if (d.revTable && Array.isArray(d.revTable.pos)) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-rt-sel-reset' }, T('draw.panel.revResetPos'));
+          rb.onclick = () => resetRevTablePos();
+          row.append(rb);
+        }
+        const hb = h('button', { type: 'button', class: 'btn', id: 'dw-rt-hide' });
+        hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
+        hb.onclick = () => setRevTable(false);
+        row.append(hb);
       } else {
+        if (selFreeTbl && Array.isArray(selFreeTbl.pos)) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-ft-reset-pos' }, T('draw.panel.holeResetPos'));
+          rb.onclick = () => resetFreeTablePos(selFreeTbl.id);
+          row.append(rb);
+        }
         const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + esc(T('draw.panel.delSelBtn')); del.onclick = () => removeSel();
         row.append(del);
       }
@@ -10378,7 +11703,7 @@ const Drawing = (() => {
   if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
-    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, tablesMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera, updateExplodeView, explodeViewInfo,
@@ -10388,6 +11713,10 @@ const Drawing = (() => {
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
     GDT_SYMBOLS, gdtMenu, datums, gdtFrames, addDatum, updateDatum, removeDatum, nextDatumLabel, addGdtFrame, updateGdtFrame, removeGdtFrame,
     bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
+    holeTable: () => normalizeHoleTable(dwg().holeTable), setHoleTable, updateHoleTable, resetHoleTablePos, holeTableRows,
+    revTable: () => normalizeRevTable(dwg().revTable), setRevTable, addRevRow, updateRevRow, removeRevRow, resetRevTablePos,
+    freeTables: () => (dwg().freeTables || []).map((f) => JSON.parse(JSON.stringify(f))),
+    addFreeTable, updateFreeTable, setFreeTableCell, addFreeTableRow, removeFreeTableRow, addFreeTableCol, removeFreeTableCol, removeFreeTable, resetFreeTablePos,
     bomRows: () => bomItems(),
     balloons: () => (dwg().balloons || []).map((b) => ({ ...b, pos: resolveBalloonPos(b, bomData) })),
     autoBalloons, addBalloon, updateBalloon, removeBalloon, clearBalloons,

@@ -1903,5 +1903,25 @@
     "tip": "Form- und Lagetoleranzen: Toleranzrahmen und Bezugsbuchstaben (A, B, C …) an Kanten oder Maßen (Profi)",
     "hilfe": "Legt normgerechte Toleranzrahmen nach ISO 1101 für Geradheit, Ebenheit, Rundheit, Zylindrizität, Parallelität, Rechtwinkligkeit, Neigung, Position, Konzentrizität, Symmetrie sowie Rund- und Gesamtlauf auf das Blatt. Zuerst kannst du mit „Bezug setzen“ eine Kante oder ein Maß als Bezug A (B, C …) festlegen und danach den passenden Toleranzrahmen anhängen.",
     "tipp": "Wählst du ein bestehendes Maß an, kannst du rechts direkt mit „+ Bezug“ oder „+ Rahmen“ einen Bezugsbuchstaben oder Toleranzrahmen genau unter das Maß hängen."
+  },
+  "drawingTables": {
+    "tip": "Bohrungstabelle, Änderungstabelle und freie Tabellen auf das Blatt legen (Profi)",
+    "hilfe": "Über dieses Menü blendest du automatisch berechnete Bohrungstabellen, eine Änderungsliste mit Revisionsständen sowie frei bearbeitbare Tabellen auf dem Zeichnungsblatt ein. Alle Tabellen lassen sich frei auf dem Blatt verschieben und kommen mit in PDF, SVG und DXF.",
+    "tipp": "Klicke eine Tabelle auf dem Blatt direkt an, um sie zu verschieben oder ihre Spalten und Zeilen rechts zu bearbeiten."
+  },
+  "drawingHoleTable": {
+    "tip": "Bohrungstabelle mit X/Y-Lage, Durchmesser, Tiefe und Nummern am Loch (Profi)",
+    "hilfe": "Erkennt alle zylindrischen Bohrungen der gewählten Ansicht automatisch, vergibt Nummern wie A1, B1, C1 direkt an den Löchern und listet X- und Y-Abstand ab dem gewählten Nullpunkt sowie Durchmesser, Gewinde, Senkungen und Tiefe (Durchgang oder Sackloch) übersichtlich auf.",
+    "tipp": "Mit „Nullpunkt klicken“ kannst du jede beliebige Ecke oder Lochmitte als (0, 0)-Bezugspunkt für die X/Y-Koordinaten festlegen."
+  },
+  "drawingRevTable": {
+    "tip": "Änderungstabelle (Revisionen) oben auf dem Blatt (Profi)",
+    "hilfe": "Hält Konstruktionsstände mit Revisionsbuchstabe (A, B, C …), Beschreibung, Datum und Name direkt auf dem Zeichnungsblatt fest. Neue Revisionen zählen automatisch weiter und füllen das heutige Datum vor.",
+    "tipp": "Mit „+ Änderung“ legst du eine neue Zeile an und kannst alle vier Spalten sofort rechts im Panel ausfüllen."
+  },
+  "drawingFreeTable": {
+    "tip": "Frei bearbeitbare Tabelle mit eigenen Überschriften, Spalten und Zeilen (Profi)",
+    "hilfe": "Erstellt eine beliebige Tabelle auf dem Zeichnungsblatt – zum Beispiel für Prüfwerte, Anzugsmomente, Werkstoffhinweise oder Pinbelegungen. Anzahl der Spalten und Zeilen sowie alle Zelleninhalte lassen sich rechts frei bearbeiten.",
+    "tipp": "Lass die Überschrift leer, wenn nur Spaltenköpfe und Werte ohne Titelzeile erscheinen sollen."
   }
 }
