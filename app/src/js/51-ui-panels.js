@@ -5,6 +5,405 @@ const Panels = (() => {
   let leftTab = 'tree';
   let flyout = null;
 
+  // ---------- Arbeitsflächen-Anordnung (BE-29) ----------
+  const WS_KEY = 'tracery-arbeitsflaechen';
+  const DEF_LAYOUT = {
+    left: { open: true, width: 252, side: 'left' },
+    right: { open: true, width: 292, side: 'right' },
+    leftTab: 'tree',
+  };
+  let wsState = {
+    active: 'Standard',
+    current: {
+      left: { ...DEF_LAYOUT.left },
+      right: { ...DEF_LAYOUT.right },
+      leftTab: DEF_LAYOUT.leftTab,
+    },
+    presets: [],
+  };
+  let wsDialogRefresh = null;
+
+  const isValidSide = (s) => s === 'left' || s === 'right';
+  const isValidLeftTab = (t) => t === 'tree' || t === 'params' || t === 'log';
+  function normalizeLayout(src) {
+    const s = src && typeof src === 'object' ? src : {};
+    const sl = s.left && typeof s.left === 'object' ? s.left : {};
+    const sr = s.right && typeof s.right === 'object' ? s.right : {};
+    let lSide = isValidSide(sl.side) ? sl.side : (isValidSide(sr.side) ? (sr.side === 'left' ? 'right' : 'left') : 'left');
+    let rSide = lSide === 'left' ? 'right' : 'left';
+    if (isValidSide(sr.side) && !isValidSide(sl.side)) {
+      rSide = sr.side;
+      lSide = rSide === 'left' ? 'right' : 'left';
+    }
+    const lW = Number(sl.width), rW = Number(sr.width);
+    return {
+      left: {
+        open: typeof sl.open === 'boolean' ? sl.open : true,
+        width: Number.isFinite(lW) ? clamp(Math.round(lW), 180, 520) : DEF_LAYOUT.left.width,
+        side: lSide,
+      },
+      right: {
+        open: typeof sr.open === 'boolean' ? sr.open : true,
+        width: Number.isFinite(rW) ? clamp(Math.round(rW), 200, 560) : DEF_LAYOUT.right.width,
+        side: rSide,
+      },
+      leftTab: isValidLeftTab(s.leftTab) ? s.leftTab : 'tree',
+    };
+  }
+  function getBuiltinWorkspaces() {
+    return [
+      { id: 'builtin-standard', name: T('ws.stdName'), builtin: true, layout: { left: { open: true, width: 252, side: 'left' }, right: { open: true, width: 292, side: 'right' }, leftTab: 'tree' } },
+      { id: 'builtin-focus', name: T('ws.focusName'), builtin: true, layout: { left: { open: false, width: 252, side: 'left' }, right: { open: false, width: 292, side: 'right' }, leftTab: 'tree' } },
+      { id: 'builtin-params', name: T('ws.paramsName'), builtin: true, layout: { left: { open: true, width: 300, side: 'left' }, right: { open: true, width: 320, side: 'right' }, leftTab: 'params' } },
+    ];
+  }
+  function saveWorkspaces() {
+    try {
+      storageSet(WS_KEY, JSON.stringify({
+        active: wsState.active,
+        current: wsState.current,
+        presets: wsState.presets,
+      }));
+    } catch (_) {}
+  }
+  function loadWorkspaces() {
+    wsState.current = normalizeLayout(DEF_LAYOUT);
+    wsState.active = T('ws.stdName');
+    wsState.presets = [];
+    try {
+      const raw = storageGet(WS_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== 'object') return;
+      if (obj.current) wsState.current = normalizeLayout(obj.current);
+      if (typeof obj.active === 'string' || obj.active === null) wsState.active = obj.active;
+      if (Array.isArray(obj.presets)) {
+        wsState.presets = obj.presets
+          .filter((p) => p && typeof p.name === 'string' && p.name.trim())
+          .map((p) => ({ id: typeof p.id === 'string' ? p.id : uid('ws'), name: p.name.trim(), layout: normalizeLayout(p.layout) }));
+      }
+    } catch (_) {}
+    if (isValidLeftTab(wsState.current.leftTab)) leftTab = wsState.current.leftTab;
+  }
+  function getLayout() {
+    return normalizeLayout({ ...wsState.current, leftTab });
+  }
+  function applyLayout() {
+    const ws = $('#workspace');
+    if (!ws) return;
+    const cur = wsState.current;
+    const swapped = cur.left.side === 'right';
+    const drawing = typeof App !== 'undefined' && App.mode === 'drawing';
+    ws.classList.toggle('hide-left', !cur.left.open);
+    ws.classList.toggle('hide-right', !cur.right.open);
+    ws.classList.toggle('panels-swapped', swapped);
+    document.body.classList.toggle('panel-left-closed', !cur.left.open);
+    document.body.classList.toggle('panel-right-closed', !cur.right.open);
+    const effL = cur.left.open && !drawing;
+    const effR = cur.right.open;
+    const colL = swapped ? (effR ? cur.right.width + 'px' : '0px') : (effL ? cur.left.width + 'px' : '0px');
+    const colR = swapped ? (effL ? cur.left.width + 'px' : '0px') : (effR ? cur.right.width + 'px' : '0px');
+    ws.style.setProperty('--col-l', colL);
+    ws.style.setProperty('--col-r', colR);
+    const vw = (document.documentElement && document.documentElement.clientWidth) || innerWidth;
+    const narrow = vw <= 900 || (typeof UI !== 'undefined' && UI.isTablet && UI.isTablet());
+    const bl = $('#btn-left'), br = $('#btn-right');
+    if (!narrow) {
+      if (bl) bl.setAttribute('aria-expanded', String(cur.left.open));
+      if (br) br.setAttribute('aria-expanded', String(cur.right.open));
+    }
+    const bw = $('#btn-workspace');
+    if (bw) bw.dataset.tip = wsState.active ? `${T('ws.btnTip')} (${wsState.active})` : T('ws.btnTip');
+    if (cur.leftTab && cur.leftTab !== leftTab) {
+      leftTab = cur.leftTab;
+      renderLeft();
+    }
+    if (wsDialogRefresh) wsDialogRefresh();
+    setTimeout(() => {
+      if (typeof Notes !== 'undefined' && Notes.place) Notes.place();
+      placeCtx();
+      if (typeof Viewer !== 'undefined' && Viewer.requestRender) Viewer.requestRender();
+    }, 0);
+  }
+  function setPanel(which, patch) {
+    if (which !== 'left' && which !== 'right') return false;
+    const cur = getLayout();
+    const p = patch && typeof patch === 'object' ? patch : {};
+    if ('open' in p) cur[which].open = !!p.open;
+    if ('width' in p && Number.isFinite(Number(p.width))) {
+      cur[which].width = clamp(Math.round(Number(p.width)), which === 'left' ? 180 : 200, which === 'left' ? 520 : 560);
+    }
+    if ('side' in p && isValidSide(p.side)) {
+      cur[which].side = p.side;
+      cur[which === 'left' ? 'right' : 'left'].side = p.side === 'left' ? 'right' : 'left';
+    }
+    wsState.current = normalizeLayout(cur);
+    wsState.active = null;
+    saveWorkspaces();
+    applyLayout();
+    return true;
+  }
+  function swapSides() {
+    const cur = getLayout();
+    const nextSide = cur.left.side === 'right' ? 'left' : 'right';
+    setPanel('left', { side: nextSide });
+    UI.toast(T('ws.swappedToast'), { icon: 'info', ms: 1600 });
+  }
+  function saveWorkspace(name, opts = {}) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const layout = getLayout();
+    const idx = wsState.presets.findIndex((p) => p.name.toLowerCase() === clean.toLowerCase());
+    let entry;
+    if (idx >= 0) {
+      wsState.presets[idx] = { ...wsState.presets[idx], name: clean, layout };
+      entry = wsState.presets[idx];
+    } else {
+      entry = { id: uid('ws'), name: clean, layout };
+      wsState.presets.push(entry);
+    }
+    wsState.current = normalizeLayout(layout);
+    wsState.active = entry.name;
+    saveWorkspaces();
+    applyLayout();
+    if (!opts.silent) UI.toast(T('ws.savedToast', { name: entry.name }), { icon: 'check', ms: 1800 });
+    return entry;
+  }
+  function findWorkspace(nameOrId) {
+    const key = String(nameOrId || '').trim();
+    if (!key) return null;
+    const low = key.toLowerCase();
+    const custom = wsState.presets.find((p) => p.id === key || p.name.toLowerCase() === low);
+    if (custom) return { ...custom, builtin: false };
+    const builtins = getBuiltinWorkspaces();
+    const bi = builtins.find((b) => b.id === key || b.name.toLowerCase() === low);
+    if (bi) return bi;
+    if (low === 'standard') return builtins[0];
+    if (low === 'fokus' || low === 'focus') return builtins[1];
+    return null;
+  }
+  function loadWorkspace(nameOrId, opts = {}) {
+    const found = findWorkspace(nameOrId);
+    if (!found) return false;
+    wsState.current = normalizeLayout(found.layout);
+    wsState.active = found.name;
+    if (isValidLeftTab(wsState.current.leftTab)) leftTab = wsState.current.leftTab;
+    saveWorkspaces();
+    renderLeft();
+    applyLayout();
+    if (!opts.silent) UI.toast(T('ws.loadedToast', { name: found.name }), { icon: 'check', ms: 1800 });
+    return true;
+  }
+  function deleteWorkspace(nameOrId) {
+    const key = String(nameOrId || '').trim();
+    if (!key) return false;
+    const low = key.toLowerCase();
+    const idx = wsState.presets.findIndex((p) => p.id === key || p.name.toLowerCase() === low);
+    if (idx < 0) return false;
+    const removed = wsState.presets.splice(idx, 1)[0];
+    if (wsState.active && wsState.active.toLowerCase() === removed.name.toLowerCase()) wsState.active = null;
+    saveWorkspaces();
+    applyLayout();
+    UI.toast(T('ws.deletedToast', { name: removed.name }), { icon: 'info', ms: 1800 });
+    return true;
+  }
+  function listWorkspaces() {
+    return [
+      ...getBuiltinWorkspaces().map((b) => ({ ...b, layout: normalizeLayout(b.layout) })),
+      ...wsState.presets.map((p) => ({ ...p, builtin: false, layout: normalizeLayout(p.layout) })),
+    ];
+  }
+  function resetLayout() {
+    return loadWorkspace('builtin-standard', { silent: true });
+  }
+  async function promptSaveWorkspace() {
+    const curCustom = wsState.active && wsState.presets.some((p) => p.name === wsState.active) ? wsState.active : '';
+    const name = await UI.prompt(T('ws.promptTitle'), T('ws.promptLabel'), curCustom, T('common.save'));
+    if (!name || !name.trim()) return null;
+    return saveWorkspace(name);
+  }
+  function workspaceMenu(anchor) {
+    const cur = wsState.current;
+    const all = listWorkspaces();
+    const custom = all.filter((w) => !w.builtin);
+    const builtins = all.filter((w) => w.builtin);
+    const entries = [];
+    for (const p of custom) {
+      const act = wsState.active && wsState.active.toLowerCase() === p.name.toLowerCase();
+      entries.push({
+        id: 'ws-item-' + p.id,
+        label: (act ? '✓ ' : '') + p.name,
+        icon: 'layout',
+        help: 'workspaceLayout',
+        dataset: { wsName: p.name },
+        run: () => loadWorkspace(p.id),
+      });
+    }
+    if (custom.length) entries.push('-');
+    for (const b of builtins) {
+      const act = wsState.active && wsState.active.toLowerCase() === b.name.toLowerCase();
+      entries.push({
+        id: 'ws-item-' + b.id,
+        label: (act ? '✓ ' : '') + b.name,
+        icon: 'layout',
+        help: 'workspaceLayout',
+        run: () => loadWorkspace(b.id),
+      });
+    }
+    entries.push(
+      '-',
+      { id: 'ws-menu-save', label: T('ws.saveAs'), icon: 'save', help: 'workspaceLayout', run: () => promptSaveWorkspace() },
+      { id: 'ws-menu-manage', label: T('ws.manage'), icon: 'sliders', help: 'workspaceLayout', run: () => workspaceDialog() },
+      '-',
+      { id: 'ws-menu-left', label: (cur.left.open ? '✓ ' : '') + T('ws.toggleLeft'), icon: 'list', run: () => setPanel('left', { open: !cur.left.open }) },
+      { id: 'ws-menu-right', label: (cur.right.open ? '✓ ' : '') + T('ws.toggleRight'), icon: 'sliders', run: () => setPanel('right', { open: !cur.right.open }) },
+      { id: 'ws-menu-swap', label: T('ws.swapSides'), icon: 'replace', help: 'workspaceLayout', run: () => swapSides() }
+    );
+    return UI.menu(anchor, entries, { alignRight: true });
+  }
+  function workspaceDialog() {
+    const wrap = h('div', { class: 'ws-dlg', id: 'workspace-dlg' });
+    const renderDlg = () => {
+      wrap.innerHTML = '';
+      const cur = wsState.current;
+      const panelSec = h('div', { class: 'ws-sec' }, h('div', { class: 'section-h' }, T('ws.dlgPanels')));
+      const grid = h('div', { class: 'ws-panel-grid' });
+      const makeCard = (which, title, minW, maxW) => {
+        const st = cur[which];
+        const card = h('div', { class: 'ws-panel-card' });
+        const chk = h('input', { type: 'checkbox', id: `ws-${which}-open`, checked: !!st.open });
+        chk.onchange = () => setPanel(which, { open: chk.checked });
+        const head = h('label', { class: 'check ws-card-head' }, chk, h('b', null, title));
+        const wInp = h('input', { type: 'number', id: `ws-${which}-width`, min: minW, max: maxW, step: 10, value: st.width, class: 'ws-w-inp' });
+        wInp.onchange = () => { const v = parseFloat(wInp.value); if (Number.isFinite(v)) setPanel(which, { width: v }); };
+        const sSel = h('select', { id: `ws-${which}-side`, class: 'ws-s-sel' },
+          h('option', { value: 'left', ...(st.side === 'left' ? { selected: true } : {}) }, T('ws.sideLeft')),
+          h('option', { value: 'right', ...(st.side === 'right' ? { selected: true } : {}) }, T('ws.sideRight')));
+        sSel.onchange = () => setPanel(which, { side: sSel.value });
+        card.append(
+          head,
+          h('div', { class: 'ws-card-row' }, h('span', null, T('ws.dlgWidth')), wInp),
+          h('div', { class: 'ws-card-row' }, h('span', null, T('ws.dlgSide')), sSel)
+        );
+        return card;
+      };
+      grid.append(
+        makeCard('left', T('ws.dlgLeftPanel'), 180, 520),
+        makeCard('right', T('ws.dlgRightPanel'), 200, 560)
+      );
+      panelSec.append(grid);
+      wrap.append(panelSec);
+
+      const saveSec = h('div', { class: 'ws-sec' }, h('div', { class: 'section-h' }, T('ws.dlgSaveSec')));
+      const inp = h('input', { type: 'text', id: 'ws-save-name', placeholder: T('ws.dlgSavePh'), autocomplete: 'off', spellcheck: 'false' });
+      const saveBtn = h('button', { type: 'button', class: 'btn primary', id: 'ws-save-btn' }, T('common.save'));
+      const doSave = () => {
+        const nm = inp.value.trim();
+        if (!nm) { inp.focus(); return; }
+        saveWorkspace(nm);
+        inp.value = '';
+      };
+      saveBtn.onclick = doSave;
+      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
+      saveSec.append(h('div', { class: 'ws-save-row' }, inp, saveBtn));
+      wrap.append(saveSec);
+
+      const listSec = h('div', { class: 'ws-sec' }, h('div', { class: 'section-h' }, T('ws.dlgSavedSec')));
+      const listEl = h('div', { class: 'ws-list', id: 'ws-list' });
+      const all = listWorkspaces();
+      for (const item of all) {
+        const isActive = wsState.active && wsState.active.toLowerCase() === item.name.toLowerCase();
+        const L = item.layout;
+        const metaParts = [
+          `${T('ws.dlgLeftPanel')}: ${L.left.open ? L.left.width + 'px' : T('ws.panelClosed')}`,
+          `${T('ws.dlgRightPanel')}: ${L.right.open ? L.right.width + 'px' : T('ws.panelClosed')}`,
+        ];
+        if (L.left.side === 'right') metaParts.push(T('ws.swappedTag'));
+        const row = h('div', { class: 'ws-row' + (isActive ? ' active' : ''), dataset: { wsRow: item.name } });
+        const info = h('div', { class: 'ws-row-info' },
+          h('div', { class: 'ws-row-head' },
+            h('b', null, item.name),
+            item.builtin ? h('span', { class: 'ws-badge' }, T('ws.dlgBuiltin')) : null,
+            isActive ? h('span', { class: 'ws-badge active' }, T('ws.dlgActive')) : null),
+          h('div', { class: 'ws-row-meta mono' }, metaParts.join(' · ')));
+        const acts = h('div', { class: 'ws-row-acts' });
+        const bl = h('button', { type: 'button', class: 'btn small' + (isActive ? '' : ' primary'), dataset: { wsLoad: item.id } }, T('ws.dlgLoad'));
+        bl.onclick = () => loadWorkspace(item.id);
+        acts.append(bl);
+        if (!item.builtin) {
+          const bd = h('button', { type: 'button', class: 'btn small ghost', dataset: { wsDel: item.id }, 'aria-label': T('common.delete') });
+          bd.innerHTML = icon('trash');
+          bd.onclick = () => deleteWorkspace(item.id);
+          acts.append(bd);
+        }
+        row.append(info, acts);
+        listEl.append(row);
+      }
+      if (!wsState.presets.length) {
+        listEl.append(h('div', { class: 'hint-box' }, T('ws.dlgNoCustom')));
+      }
+      listSec.append(listEl);
+      wrap.append(listSec);
+    };
+    wsDialogRefresh = renderDlg;
+    renderDlg();
+    return UI.modal({
+      title: T('ws.dlgTitle'),
+      body: wrap,
+      wide: true,
+      actions: [
+        { label: T('ws.swapSides'), run: () => { swapSides(); return false; } },
+        { label: T('ws.resetBtn'), run: () => { resetLayout(); UI.toast(T('ws.loadedToast', { name: T('ws.stdName') }), { icon: 'check', ms: 1600 }); return false; } },
+        { label: T('common.close'), primary: true },
+      ],
+      onClose: () => { wsDialogRefresh = null; },
+    });
+  }
+  function initResizers() {
+    for (const [which, hostSel, rid] of [['left', '#left', 'resizer-left'], ['right', '#right', 'resizer-right']]) {
+      const host = $(hostSel);
+      if (!host || host.querySelector('#' + rid)) continue;
+      const bar = h('div', { class: 'panel-resizer', id: rid, role: 'separator', 'aria-orientation': 'vertical', 'data-help': 'workspaceLayout' });
+      bar.addEventListener('dblclick', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        setPanel(which, { width: DEF_LAYOUT[which].width });
+      });
+      bar.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const startX = e.clientX;
+        const startW = wsState.current[which].width;
+        const side = wsState.current[which].side;
+        const sign = side === 'left' ? 1 : -1;
+        const minW = which === 'left' ? 180 : 200;
+        const maxW = which === 'left' ? 520 : 560;
+        bar.classList.add('dragging');
+        document.body.classList.add('resizing-panel');
+        let lastW = startW;
+        const onMove = (ev) => {
+          lastW = clamp(Math.round(startW + (ev.clientX - startX) * sign), minW, maxW);
+          wsState.current[which].width = lastW;
+          applyLayout();
+        };
+        const onUp = () => {
+          bar.classList.remove('dragging');
+          document.body.classList.remove('resizing-panel');
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onUp);
+          if (lastW !== startW) {
+            wsState.active = null;
+            saveWorkspaces();
+          }
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
+      });
+      host.append(bar);
+    }
+  }
+
   // ---------- Werkzeugleiste ----------
   // einfache Oberfläche: diese Grundkörper und Bauteile bleiben sichtbar
   const SIMPLE_KINDS = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'hemisphere'];
@@ -361,6 +760,7 @@ const Panels = (() => {
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+      const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
     if (Model.isAssembly(App.doc)) {
@@ -712,6 +1112,7 @@ const Panels = (() => {
     const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
     const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+    const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
   }
   function moveInTree(srcId, dstId, mode) {
     return Actions.reorder(srcId, dstId, mode);
@@ -1067,6 +1468,7 @@ const Panels = (() => {
     if (!items.length && typeof PointClouds !== 'undefined' && PointClouds.selected && PointClouds.find(PointClouds.selected)) { $('#right-title').textContent = T('panel.title.pointCloud'); PointClouds.renderPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = T('panel.title.measure'); Measure.renderPanel(body); return; }
     if (!items.length && typeof Joints !== 'undefined' && Joints.selected && Joints.list.some((x) => x.id === Joints.selected)) { $('#right-title').textContent = T('panel.title.joint'); Joints.renderPanel(body); return; }
+    if (!items.length && typeof Notes !== 'undefined' && Notes.selectedPin && Notes.findPin(Notes.selectedPin)) { $('#right-title').textContent = T('panel.title.commentPin'); Notes.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = T('panel.title.project'); renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = T('panel.title.selection'); renderMulti(body, items); return; }
     $('#right-title').textContent = T('panel.title.props');
@@ -1276,6 +1678,22 @@ const Panels = (() => {
       if (nm) bits.push(nm === 1 ? T('panel.proj.missingOne') : T('panel.proj.missingMany', { n: nm }));
       if (bits.length) { own.hidden = false; own.innerHTML = T('panel.proj.matSummaryJoin', { bits: bits.join(', ') }); }
     });
+    if (typeof Notes !== 'undefined' && Notes.pins) {
+      const allPins = Notes.pins();
+      const openPins = allPins.filter((p) => !p.done).length;
+      const pinSec = h('div', { class: 'section', id: 'proj-pins-sec', 'data-help': 'commentPins' },
+        h('div', { class: 'section-h' }, T('notes.pinProjSec')),
+        h('div', { class: 'mini-list' },
+          h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('notes.pinProjSummary', { total: allPins.length, open: openPins })))));
+      const pinAdd = h('button', { type: 'button', class: 'btn small', id: 'proj-pin-add' });
+      pinAdd.innerHTML = icon('commentPin') + esc(T('notes.pinAddBtn'));
+      pinAdd.onclick = () => Notes.startPin();
+      const pinList = h('button', { type: 'button', class: 'btn small', id: 'proj-pin-list' });
+      pinList.innerHTML = icon('list') + esc(T('notes.pinListBtn'));
+      pinList.onclick = () => Notes.pinsDialog();
+      pinSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, pinAdd, pinList));
+      w.append(pinSec);
+    }
     w.append(h('div', { class: 'hint-box', html: T('panel.proj.tipHtml') }));
     body.append(w);
   }
@@ -3098,9 +3516,18 @@ const Panels = (() => {
   }
 
   function init() {
-    $('#lt-tree').onclick = () => { leftTab = 'tree'; renderLeft(); };
-    $('#lt-params').onclick = () => { leftTab = 'params'; renderLeft(); };
-    $('#lt-log').onclick = () => { leftTab = 'log'; renderLeft(); };
+    loadWorkspaces();
+    initResizers();
+    applyLayout();
+    const setTab = (tab) => {
+      leftTab = tab;
+      wsState.current.leftTab = tab;
+      saveWorkspaces();
+      renderLeft();
+    };
+    $('#lt-tree').onclick = () => setTab('tree');
+    $('#lt-params').onclick = () => setTab('params');
+    $('#lt-log').onclick = () => setTab('log');
     App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     if (typeof Kernel !== 'undefined' && Kernel.on) Kernel.on('state', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
@@ -3136,11 +3563,32 @@ const Panels = (() => {
     App.on('results', () => scheduleRerender(false));
     DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
     Weak.on('analyzed', () => { if (!App.sel.length) scheduleRerender(false); });
-    App.on('mode', () => { renderTools(); scheduleRerender(true); });
+    App.on('mode', () => { renderTools(); applyLayout(); scheduleRerender(true); });
+    window.addEventListener('resize', applyLayout);
     Viewer.on('camera', placeCtx);
     App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
-  return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, refreshViewCube, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); if (((document.documentElement && document.documentElement.clientWidth) || innerWidth) <= 900 || (UI.isTablet && UI.isTablet())) { const ws = $('#workspace'); if (ws) { ws.classList.add('show-left'); ws.classList.remove('show-right'); } const bl = $('#btn-left'), br = $('#btn-right'); if (bl) bl.setAttribute('aria-expanded', 'true'); if (br) br.setAttribute('aria-expanded', 'false'); } } };
+  return {
+    paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, refreshViewCube, closeFlyout, toggleFlyout, firstStepDone, firstStepsState,
+    expand: (id) => { expanded.add(id); renderLeft(); },
+    showParams: () => {
+      leftTab = 'params';
+      wsState.current.leftTab = 'params';
+      saveWorkspaces();
+      renderLeft();
+      if (((document.documentElement && document.documentElement.clientWidth) || innerWidth) <= 900 || (UI.isTablet && UI.isTablet())) {
+        const ws = $('#workspace');
+        if (ws) { ws.classList.add('show-left'); ws.classList.remove('show-right'); }
+        const bl = $('#btn-left'), br = $('#btn-right');
+        if (bl) bl.setAttribute('aria-expanded', 'true');
+        if (br) br.setAttribute('aria-expanded', 'false');
+      } else if (!wsState.current.left.open) {
+        setPanel('left', { open: true });
+      }
+    },
+    getLayout, setPanel, swapSides, saveWorkspace, loadWorkspace, deleteWorkspace, listWorkspaces, resetLayout, promptSaveWorkspace, workspaceMenu, workspaceDialog,
+    get activeWorkspace() { return wsState.active; },
+  };
 })();
 

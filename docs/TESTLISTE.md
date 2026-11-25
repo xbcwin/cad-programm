@@ -2536,6 +2536,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Hilfen, Übersetzung & Befehlssuche**: Knöpfe im Projekt-Panel, im Mehr-Menü (`#t-more` in „Einfach“) und im Prüfen-Menü (`#t-check` in „Profi“), Hilfetexte (`printCost`, `reportPdf` in JSON/`HELP`), DE/EN-Schlüsselgleichheit und Befehle `print-cost` / `report-pdf` geprüft (`t_a134_druckkosten_pruefbericht`).
 - [ ] **Von Hand**: Im Browser bei einem komplexen Modell mit dünner Wand und mehreren Teilen den Dialog „Druckkosten & Zeit“ anpassen und den erzeugten PDF-Prüfbericht in einem PDF-Viewer öffnen, um Layout, Umlaute, €-Zeichen, Bildqualität und Teileliste visuell zu prüfen.
 
+## Kommentar-Pins und Arbeitsflächen-Anordnung (Auto [A-139], BE-28, BE-29)
+
+- [x] **Kommentar-Pins am Modell setzen (`BE-28`)**: Über `#t-notes` → `[data-ntool="pin"]` direkt auf eine Modellfläche geklickt und Text `'Wand hier verstärken'` eingegeben → `.note-pin` erscheint an der 3D-Stelle, im Verlauf `#pin-tree`, ohne Eintrag im CAD-Kern oder der Zeitleiste (`t_a139_pins_arbeitsflaechen`).
+- [x] **Erledigt-Haken, Pin-Liste & Rückgängig**: Zweiten Pin gesetzt, Pin 1 über `[data-pin-done]` als erledigt abgehakt (`.note-pin.done`, `(1/2)` in `#pin-tree`), Filter in `#pins-dialog` (`Alle` / `Offen`) und `App.undo()`/`App.redo()` geprüft (`t_a139_pins_arbeitsflaechen`).
+- [x] **Speichern & Laden der Projektdatei**: Projekt über `Start.projectPayload()` gesichert, geleert und über `Start.openBlob()` wieder geladen → beide Pins mit Text und Erledigt-Status sind im Modell, im Bild und in `#pin-tree` wieder da (`t_a139_pins_arbeitsflaechen`).
+- [x] **Arbeitsflächen-Anordnung speichern & wechseln (`BE-29`)**: Breite des Verlaufs auf `310 px` gesetzt, als Arbeitsfläche `'Zeichnen'` über `#btn-workspace` → `#ws-menu-save` gespeichert, linkes Panel über `#btn-left-close` geschlossen und Seiten über `#ws-menu-swap` getauscht; beim Laden von `'Zeichnen'` öffnet das linke Panel wieder mit `310 px` Breite auf der linken Seite (`t_a139_pins_arbeitsflaechen`).
+- [x] **Hilfetexte, DE/EN & Befehle**: `commentPins` und `workspaceLayout` in `werkzeug-hilfen.json`/`HELP`, Tooltip auf `#btn-workspace`, DE/EN-Schlüsselgleichheit und Befehlssuche (`comment-pin`, `workspace-manage`) geprüft (`t_a139_pins_arbeitsflaechen`).
+- [ ] **Von Hand**: Im Browser mehrere Kommentar-Pins an verschiedenen Seiten eines komplexen Modells setzen, per Klick in der Pin-Liste anspringen, die Panel-Breiten per Ziehen an der Trennlinie anpassen und zwischen zwei eigenen Arbeitsflächen hin- und herschalten.
+
 ## Fehler melden
 
 ```

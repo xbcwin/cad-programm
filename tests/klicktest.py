@@ -27024,6 +27024,189 @@ def t_a134_druckkosten_pruefbericht(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a139_pins_arbeitsflaechen(p):
+    p.empty()
+    p.ev("""
+      Panels.resetLayout();
+      for (const w of Panels.listWorkspaces().filter(x => !x.builtin)) Panels.deleteWorkspace(w.id);
+      App.change('a139-box', d => {
+        d.items.push(Model.newItem('box', { w: 30, d: 20, h: 15 }, { name: 'PinBlock' }));
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("Viewer.fit()"); p.wait(400)
+
+    # 1. Kommentar-Pin über Notizstift-Leiste an Modellstelle setzen
+    p.pg.locator('#t-notes').click(); p.wait(250)
+    p.pg.locator('.notesbar [data-ntool="pin"]').click(); p.wait(200)
+    pt1 = world_screen(p, 4, 2, 7.5)
+    p.pg.mouse.click(pt1[0], pt1[1]); p.wait(300)
+    p.pg.keyboard.type('Wand hier verstärken')
+    p.pg.keyboard.press('Enter'); p.wait(400)
+    pin1_id = p.ev("const ps=Notes.pins(); return ps.length===1 ? ps[0].id : null")
+    ok1 = (
+        pin1_id is not None
+        and p.ev("const p=Notes.pins()[0]; return p.kind==='pin' && p.text==='Wand hier verstärken' && p.done===false")
+        and p.pg.locator('.note-pin').count() == 1
+        and 'Wand hier verstärken' in (p.pg.locator('#pin-tree').text_content() or '')
+        and 'verstärken' not in p.ev("return JSON.stringify(Model.kernelScene(App.doc))")
+        and p.pg.locator('.tl-chip').count() == 1
+    )
+    if not pin1_id:
+        return [False, False, False, False, False]
+
+    # 2. Zweiter Pin (links von Pin 1, nicht vom Schildchen verdeckt), Erledigt-Haken, Pin-Liste mit Filter & Rückgängig
+    pt2 = world_screen(p, -8, -4, 7.5)
+    p.pg.mouse.click(pt2[0], pt2[1]); p.wait(300)
+    p.pg.keyboard.type('Schraube M3 prüfen')
+    p.pg.keyboard.press('Enter'); p.wait(400)
+    p.pg.keyboard.press('Escape'); p.wait(250)  # Notizstift beenden
+
+    p.pg.locator(f'[data-pin-done="{pin1_id}"]').click(); p.wait(350)
+    done_state = p.ev("return Notes.findPin(arg).done", pin1_id)
+    done_cls = p.pg.locator(f'.note-pin[data-pin="{pin1_id}"]').evaluate("el => el.classList.contains('done')")
+    tree_txt = p.pg.locator('#pin-tree').text_content() or ''
+
+    # Pin-Inspektor ist offen (#pin-open-list); nach Abwahl zeigt Projekt-Panel #proj-pin-list
+    has_inspector = sichtbar(p, '#pin-inspector') and sichtbar(p, '#pin-open-list')
+    p.pg.locator('#pin-open-list').click(); p.wait(250)
+    dlg_all = p.pg.locator('#pins-dialog .pin-card').count()
+    p.pg.locator('#pins-dialog [data-pin-filter="open"]').click(); p.wait(150)
+    dlg_open = p.pg.locator('#pins-dialog .pin-card').count()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("Notes.selectPin(null)"); p.wait(200)
+    has_proj_pin_sec = sichtbar(p, '#proj-pins-sec') and sichtbar(p, '#proj-pin-list')
+
+    p.ev("App.undo()"); p.wait(250)
+    undone = p.ev("return Notes.findPin(arg).done", pin1_id)
+    p.ev("App.redo()"); p.wait(250)
+    redone = p.ev("return Notes.findPin(arg).done", pin1_id)
+    ok2 = (
+        p.ev("return Notes.pins().length") == 2
+        and done_state is True and done_cls is True
+        and '(1/2)' in tree_txt
+        and has_inspector and has_proj_pin_sec
+        and dlg_all == 2 and dlg_open == 1
+        and undone is False and redone is True
+    )
+
+    # 3. Speichern und Laden -> Pins samt Text und Erledigt-Status noch da
+    payload = p.ev("return (async () => await Start.projectPayload())()")
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(350)
+    cleared_cnt = p.ev("return Notes.pins().length")
+    p.ev("""return (async () => {
+      const f = new File([arg], 'pin-test.tracery.json', { type: 'application/json' });
+      await Start.openBlob(f);
+    })()""", payload)
+    warte_rechnen(p, 30)
+    p.wait(350)
+    loaded = p.ev("return Notes.pins().map(x => ({ text: x.text, done: !!x.done }))")
+    ok3 = (
+        cleared_cnt == 0
+        and len(loaded) == 2
+        and loaded[0]['text'] == 'Wand hier verstärken' and loaded[0]['done'] is True
+        and loaded[1]['text'] == 'Schraube M3 prüfen' and loaded[1]['done'] is False
+        and p.pg.locator('.note-pin').count() == 2
+        and 'Wand hier verstärken' in (p.pg.locator('#pin-tree').text_content() or '')
+    )
+
+    # 4. Arbeitsfläche „Zeichnen“ speichern, Panel schließen & Seiten tauschen, Arbeitsfläche laden
+    p.ev("Panels.setPanel('left', { open: true, width: 310 })"); p.wait(250)
+    p.pg.locator('#btn-workspace').click(); p.wait(200)
+    p.pg.locator('#ws-menu-save').click(); p.wait(200)
+    p.pg.keyboard.type('Zeichnen')
+    p.pg.keyboard.press('Enter'); p.wait(300)
+
+    # Panel schließen über #btn-left-close
+    p.pg.locator('#btn-left-close').click(); p.wait(250)
+    closed_state = p.ev("""
+      const l = document.querySelector('#left');
+      const bl = document.querySelector('#btn-left');
+      return {
+        leftHidden: !l.offsetParent && getComputedStyle(l).display === 'none',
+        btnLeftVis: bl.getBoundingClientRect().width > 0,
+        openFlag: Panels.getLayout().left.open
+      };
+    """)
+
+    # Seiten tauschen über Arbeitsflächen-Menü
+    p.pg.locator('#btn-workspace').click(); p.wait(200)
+    p.pg.locator('#ws-menu-swap').click(); p.wait(250)
+    swapped_state = p.ev("""
+      const ws = document.querySelector('#workspace');
+      const r = document.querySelector('#right').getBoundingClientRect();
+      const c = document.querySelector('#center').getBoundingClientRect();
+      return {
+        cls: ws.classList.contains('panels-swapped'),
+        rightOnLeft: r.width > 0 && r.left < c.left
+      };
+    """)
+
+    # Arbeitsfläche „Zeichnen“ wieder laden -> Panel wieder offen, Breite 310, normale Seite
+    p.pg.locator('#btn-workspace').click(); p.wait(200)
+    p.pg.locator('.menu button', has_text='Zeichnen').click(); p.wait(300)
+    restored = p.ev("""
+      const ws = document.querySelector('#workspace');
+      const l = document.querySelector('#left').getBoundingClientRect();
+      const c = document.querySelector('#center').getBoundingClientRect();
+      const r = document.querySelector('#right').getBoundingClientRect();
+      const lay = Panels.getLayout();
+      return {
+        leftOpen: lay.left.open,
+        leftW: l.width,
+        layLeftW: lay.left.width,
+        swapped: ws.classList.contains('panels-swapped'),
+        orderOk: l.width > 280 && l.left < c.left && c.right <= r.left + 1,
+        active: Panels.activeWorkspace
+      };
+    """)
+
+    # Dialog zeigt „Zeichnen“, danach aufräumen
+    p.pg.locator('#btn-workspace').click(); p.wait(200)
+    p.pg.locator('#ws-menu-manage').click(); p.wait(250)
+    has_row = p.pg.locator('#ws-list [data-ws-row="Zeichnen"]').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("Panels.resetLayout(); Panels.deleteWorkspace('Zeichnen');")
+    ok4 = (
+        closed_state['leftHidden'] is True
+        and closed_state['btnLeftVis'] is True
+        and closed_state['openFlag'] is False
+        and swapped_state['cls'] is True
+        and swapped_state['rightOnLeft'] is True
+        and restored['leftOpen'] is True
+        and abs(restored['leftW'] - 310) <= 2
+        and restored['layLeftW'] == 310
+        and restored['swapped'] is False
+        and restored['orderOk'] is True
+        and restored['active'] == 'Zeichnen'
+        and has_row
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit & Befehlssuche
+    p.pg.mouse.move(10, 10)
+    p.pg.wait_for_selector('.tooltip', state='detached', timeout=3000)
+    p.pg.locator('#btn-workspace').hover()
+    p.pg.wait_for_selector('.tooltip.big', timeout=5000)
+    tip_ws = p.pg.locator('.tooltip').text_content() or ''
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['commentPins', 'workspaceLayout'].every(k =>
+        h[k] && h[k].tip && h[k].hilfe && h[k].tipp && document.querySelectorAll(`[data-help="${k}"]`).length >= 1
+      ) && String(arg || '').includes(h.workspaceLayout.hilfe);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('kommentar pin').some(c => c.id === 'comment-pin')
+        && Commands.search('arbeitsfläche').some(c => c.id === 'workspace-manage');
+      return { helpOk, i18nEq, cmdOk };
+    })()""", tip_ws)
+    ok5 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -27270,6 +27453,7 @@ TESTS = [
     ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
     ('[A-136] Aufkleber, Logos und Texturen (AN-15, AN-16)', t_a136_aufkleber_texturen),
     ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
+    ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

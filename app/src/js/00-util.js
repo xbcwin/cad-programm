@@ -712,6 +712,8 @@ const IC = {
   undercut: '<path d="M4 6h7v4l3 2h6v6H4z" fill="currentColor" opacity=".2"/><path d="M4 6h7v4l3 2h6M4 18h16M11 6v4l3 2" />',
   circlipGroove: '<path d="M4 7h6v4h4V7h6v10H4z" fill="currentColor" opacity=".2"/><path d="M4 7h6v4h4V7h6M4 17h16" />',
   splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
+  commentPin: '<path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" fill="currentColor" opacity=".18"/><path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.2" />',
+  layout: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8.5 4v16 M15.5 4v16" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2383,6 +2385,16 @@ const HELP = {
   "tip": "Bis zu 3 eigene Lichter mit Richtung, Höhe, Farbe und Stärke von Hand einstellen",
   "hilfe": "Schaltet von der automatischen 3-Punkt-Beleuchtung auf bis zu 3 frei einstellbare Richtungslichter um. Für jedes Licht wählst du Richtung (Azimut), Höhe, Lichtfarbe und Stärke – Licht 1 wirft dabei die Schatten.",
   "tipp": "Nutze z. B. ein warmes Hauptlicht von vorne-rechts und ein kühles Gegenlicht von hinten-links für mehr Tiefe."
+ },
+ "commentPins": {
+  "tip": "Kommentar-Pin an eine Stelle des Modells setzen und als erledigt abhaken",
+  "hilfe": "Heftet eine nummerierte Kommentar-Stecknadel direkt an eine Stelle des 3D-Modells. Jeder Pin speichert seinen Text und einen Erledigt-Haken direkt in der Projektdatei. Alle Pins stehen übersichtlich in der Pin-Liste zum Anspringen und Abhaken.",
+  "tipp": "Klick auf einen Pin in der Liste, um die Kamera direkt auf diese Stelle zu richten."
+ },
+ "workspaceLayout": {
+  "tip": "Anordnung der Panels (offen, Breite, Seite) als Arbeitsfläche speichern und wechseln",
+  "hilfe": "Merkt sich, welche Seitenleisten offen sind, wie breit sie sind und auf welcher Seite Verlauf und Eigenschaften liegen. Du kannst eigene Arbeitsflächen wie „Zeichnen“ oder „Prüfen“ benennen und mit einem Klick wechseln.",
+  "tipp": "Zieh am inneren Rand eines Panels, um seine Breite anzupassen – ein Doppelklick setzt die Breite zurück."
  }
 };
 
