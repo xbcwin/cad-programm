@@ -274,7 +274,12 @@ const Commands = (() => {
     }, { group: 'Bearbeiten' });
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
+    add('comment-pin', 'Kommentar-Pin setzen', 'commentPin', 'kommentar pin stecknadel markierung erledigt notiz be-28', () => Notes.startPin(), { group: 'Werkzeuge' });
+    add('comment-pins-list', 'Kommentar-Pins anzeigen (Liste)', 'list', 'kommentar pin liste notizen aufgaben erledigt be-28', () => Notes.pinsDialog(), { group: 'Werkzeuge' });
     add('notes-show', 'Notizen ein- oder ausblenden', 'notesShow', 'notizen zeigen verstecken ausblenden', () => ViewPrefs.toggle('notes'), { group: 'Ansicht' });
+    add('workspace-save', 'Arbeitsfläche speichern', 'layout', 'arbeitsflaeche arbeitsfläche layout panels speichern ansicht be-29', () => Panels.promptSaveWorkspace(), { group: 'Ansicht' });
+    add('workspace-manage', 'Arbeitsflächen-Anordnung verwalten', 'layout', 'arbeitsflaeche arbeitsfläche layout panels breite seite wechseln be-29', () => Panels.workspaceDialog(), { group: 'Ansicht' });
+    add('workspace-swap', 'Panel-Seiten tauschen (Links ↔ Rechts)', 'layout', 'panels seite tauschen links rechts arbeitsflaeche be-29', () => Panels.swapSides(), { group: 'Ansicht' });
     add('bom', 'Stückliste (alle Teile mit Anzahl und Gewicht)', 'list', 'stückliste teileliste bom einkaufsliste gewicht tabelle csv', () => Mass.bomDialog(), { group: 'Werkzeuge' });
     add('dupLinked', 'Verknüpft duplizieren', 'copy', 'verknüpft kopie duplizieren instanz mehrfach gleich original folgt', () => Actions.duplicateLinked(), { group: 'Werkzeuge', kbd: 'Strg Umschalt D' });
     add('hideSel', 'Ausgewählte ausblenden', 'eyeOff', 'ausblenden verstecken unsichtbar', () => Actions.hideSelected(), { group: 'Ansicht', kbd: 'Umschalt H' });

@@ -2550,6 +2550,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Esc & Beenden, Schritte, DE/EN & Hilfen**: `Esc` beendet den Modus sauber, danach legt ein Klick auf „Quader“ den Körper normal an; Zeitleisten- und Verlaufs-Schritte werden über `Explain.describeElement` erklärt; DE/EN-Schlüsselgleichheit, `HELP.whatIsThis` und Befehlssuche (`what-is-this`) sind geprüft (`t_a140_was_ist_das`).
 - [ ] **Von Hand**: Im Browser den „Was ist das?“-Modus einschalten, den Mauszeiger über verschiedene Werkzeugleisten-Knöpfe, Skizzen-Werkzeuge und einen 3D-Körper fahren und optisch prüfen, dass Fragezeichen-Cursor, gestrichelte Vorschau-Markierung und die Position des Erklär-Popovers stimmen.
 
+## Kommentar-Pins und Arbeitsflächen-Anordnung (Auto [A-139], BE-28, BE-29)
+
+- [x] **Kommentar-Pins am Modell setzen (`BE-28`)**: Über `#t-notes` → `[data-ntool="pin"]` direkt auf eine Modellfläche geklickt und Text `'Wand hier verstärken'` eingegeben → `.note-pin` erscheint an der 3D-Stelle, im Verlauf `#pin-tree`, ohne Eintrag im CAD-Kern oder der Zeitleiste (`t_a139_pins_arbeitsflaechen`).
+- [x] **Erledigt-Haken, Pin-Liste & Rückgängig**: Zweiten Pin gesetzt, Pin 1 über `[data-pin-done]` als erledigt abgehakt (`.note-pin.done`, `(1/2)` in `#pin-tree`), Filter in `#pins-dialog` (`Alle` / `Offen`) und `App.undo()`/`App.redo()` geprüft (`t_a139_pins_arbeitsflaechen`).
+- [x] **Speichern & Laden der Projektdatei**: Projekt über `Start.projectPayload()` gesichert, geleert und über `Start.openBlob()` wieder geladen → beide Pins mit Text und Erledigt-Status sind im Modell, im Bild und in `#pin-tree` wieder da (`t_a139_pins_arbeitsflaechen`).
+- [x] **Arbeitsflächen-Anordnung speichern & wechseln (`BE-29`)**: Breite des Verlaufs auf `310 px` gesetzt, als Arbeitsfläche `'Zeichnen'` über `#btn-workspace` → `#ws-menu-save` gespeichert, linkes Panel über `#btn-left-close` geschlossen und Seiten über `#ws-menu-swap` getauscht; beim Laden von `'Zeichnen'` öffnet das linke Panel wieder mit `310 px` Breite auf der linken Seite (`t_a139_pins_arbeitsflaechen`).
+- [x] **Hilfetexte, DE/EN & Befehle**: `commentPins` und `workspaceLayout` in `werkzeug-hilfen.json`/`HELP`, Tooltip auf `#btn-workspace`, DE/EN-Schlüsselgleichheit und Befehlssuche (`comment-pin`, `workspace-manage`) geprüft (`t_a139_pins_arbeitsflaechen`).
+- [ ] **Von Hand**: Im Browser mehrere Kommentar-Pins an verschiedenen Seiten eines komplexen Modells setzen, per Klick in der Pin-Liste anspringen, die Panel-Breiten per Ziehen an der Trennlinie anpassen und zwischen zwei eigenen Arbeitsflächen hin- und herschalten.
+
 ## Kreis-Menü und Malen-Auswahl (Auto [A-138], BE-19, BE-20)
 
 - [x] **Kreis-Menü per Taste `Q` & Befehl ausführen (`BE-19`)**: `Q` öffnet `#radial-menu` mit 8 Einträgen am Mauszeiger; Klick auf „Quader“ schließt das Menü und legt einen Quader an (`t_kreis_malen`).

@@ -714,6 +714,8 @@ const IC = {
   knurl: '<rect x="5" y="4" width="14" height="16" rx="1.5" fill="currentColor" opacity=".15"/><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M5 9l5-5M5 15l10-10M8 20L19 9M14 20l5-5M19 9l-5-5M19 15L9 5M16 20L5 9M10 20l-5-5" opacity=".75"/>',
   gripPattern: '<rect x="3" y="4" width="18" height="16" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="7.5" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.5" cy="9" r="1.2" fill="currentColor" stroke="none"/><path d="M6 13.5h12M6 16.5h12" stroke-width="1.8"/>',
   splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
+  commentPin: '<path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" fill="currentColor" opacity=".18"/><path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.2" />',
+  layout: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8.5 4v16 M15.5 4v16" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2385,6 +2387,16 @@ const HELP = {
   "tip": "Bis zu 3 eigene Lichter mit Richtung, Höhe, Farbe und Stärke von Hand einstellen",
   "hilfe": "Schaltet von der automatischen 3-Punkt-Beleuchtung auf bis zu 3 frei einstellbare Richtungslichter um. Für jedes Licht wählst du Richtung (Azimut), Höhe, Lichtfarbe und Stärke – Licht 1 wirft dabei die Schatten.",
   "tipp": "Nutze z. B. ein warmes Hauptlicht von vorne-rechts und ein kühles Gegenlicht von hinten-links für mehr Tiefe."
+ },
+ "commentPins": {
+  "tip": "Kommentar-Pin an eine Stelle des Modells setzen und als erledigt abhaken",
+  "hilfe": "Heftet eine nummerierte Kommentar-Stecknadel direkt an eine Stelle des 3D-Modells. Jeder Pin speichert seinen Text und einen Erledigt-Haken direkt in der Projektdatei. Alle Pins stehen übersichtlich in der Pin-Liste zum Anspringen und Abhaken.",
+  "tipp": "Klick auf einen Pin in der Liste, um die Kamera direkt auf diese Stelle zu richten."
+ },
+ "workspaceLayout": {
+  "tip": "Anordnung der Panels (offen, Breite, Seite) als Arbeitsfläche speichern und wechseln",
+  "hilfe": "Merkt sich, welche Seitenleisten offen sind, wie breit sie sind und auf welcher Seite Verlauf und Eigenschaften liegen. Du kannst eigene Arbeitsflächen wie „Zeichnen“ oder „Prüfen“ benennen und mit einem Klick wechseln.",
+  "tipp": "Zieh am inneren Rand eines Panels, um seine Breite anzupassen – ein Doppelklick setzt die Breite zurück."
  },
  "knurl": {
   "tip": "Gerades, gekreuztes oder schräges Rändel auf einen Zylindermantel schneiden (Profi)",

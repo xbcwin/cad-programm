@@ -1644,6 +1644,16 @@
     "hilfe": "Schaltet von der automatischen 3-Punkt-Beleuchtung auf bis zu 3 frei einstellbare Richtungslichter um. Für jedes Licht wählst du Richtung (Azimut), Höhe, Lichtfarbe und Stärke – Licht 1 wirft dabei die Schatten.",
     "tipp": "Nutze z. B. ein warmes Hauptlicht von vorne-rechts und ein kühles Gegenlicht von hinten-links für mehr Tiefe."
   },
+  "commentPins": {
+    "tip": "Kommentar-Pin an eine Stelle des Modells setzen und als erledigt abhaken",
+    "hilfe": "Heftet eine nummerierte Kommentar-Stecknadel direkt an eine Stelle des 3D-Modells. Jeder Pin speichert seinen Text und einen Erledigt-Haken direkt in der Projektdatei. Alle Pins stehen übersichtlich in der Pin-Liste zum Anspringen und Abhaken.",
+    "tipp": "Klick auf einen Pin in der Liste, um die Kamera direkt auf diese Stelle zu richten."
+  },
+  "workspaceLayout": {
+    "tip": "Anordnung der Panels (offen, Breite, Seite) als Arbeitsfläche speichern und wechseln",
+    "hilfe": "Merkt sich, welche Seitenleisten offen sind, wie breit sie sind und auf welcher Seite Verlauf und Eigenschaften liegen. Du kannst eigene Arbeitsflächen wie „Zeichnen“ oder „Prüfen“ benennen und mit einem Klick wechseln.",
+    "tipp": "Zieh am inneren Rand eines Panels, um seine Breite anzupassen – ein Doppelklick setzt die Breite zurück."
+  },
   "knurl": {
     "tip": "Gerades, gekreuztes oder schräges Rändel auf einen Zylindermantel schneiden (Profi)",
     "hilfe": "Wähle den Außenmantel eines Zylinders oder einer Welle und klicke auf „Rändel“. Du kannst zwischen gekreuztem Rändel (Diamantmuster), geraden Rillen und schrägen Rillen wählen sowie Teilung, Tiefe, Winkel und Länge exakt festlegen.",

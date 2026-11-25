@@ -7,6 +7,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
 
   // Symbole in die festen Knöpfe setzen
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-whatis').innerHTML = icon('help'); $('#btn-menu').innerHTML = icon('menu');
+  $('#btn-workspace').innerHTML = icon('layout');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
   $('#btn-left-close').innerHTML = icon('close'); $('#btn-right-close').innerHTML = icon('close');
 
@@ -111,6 +112,7 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
     '-',
     { label: T('menu.main.about'), icon: 'info', run: () => openAboutDialog() },
   ], { alignRight: true });
+  $('#btn-workspace').onclick = (e) => Panels.workspaceMenu(e.currentTarget);
   const ws = $('#workspace');
   const setPanels = (side) => {
     const showL = side === 'left', showR = side === 'right';
@@ -119,11 +121,24 @@ const THIRD_PARTY_LIBS = /*JSON:fremde-bausteine.json*/null;
     $('#btn-left').setAttribute('aria-expanded', String(showL));
     $('#btn-right').setAttribute('aria-expanded', String(showR));
   };
-  $('#btn-left').onclick = () => setPanels(ws.classList.contains('show-left') ? null : 'left');
-  $('#btn-right').onclick = () => setPanels(ws.classList.contains('show-right') ? null : 'right');
-  $('#btn-left-close').onclick = () => setPanels(null);
-  $('#btn-right-close').onclick = () => setPanels(null);
-  $('#center').addEventListener('pointerdown', () => { if (vw() <= 900 || UI.isTablet()) setPanels(null); });
+  const isNarrow = () => vw() <= 900 || UI.isTablet();
+  $('#btn-left').onclick = () => {
+    if (isNarrow()) setPanels(ws.classList.contains('show-left') ? null : 'left');
+    else Panels.setPanel('left', { open: !Panels.getLayout().left.open });
+  };
+  $('#btn-right').onclick = () => {
+    if (isNarrow()) setPanels(ws.classList.contains('show-right') ? null : 'right');
+    else Panels.setPanel('right', { open: !Panels.getLayout().right.open });
+  };
+  $('#btn-left-close').onclick = () => {
+    if (isNarrow()) setPanels(null);
+    else Panels.setPanel('left', { open: false });
+  };
+  $('#btn-right-close').onclick = () => {
+    if (isNarrow()) setPanels(null);
+    else Panels.setPanel('right', { open: false });
+  };
+  $('#center').addEventListener('pointerdown', () => { if (isNarrow()) setPanels(null); });
   App.on('busy', (on) => UI.busy(on));
   App.on('selection', () => { if (innerWidth <= 900 && App.sel.length) { /* rechte Leiste nicht aufzwingen */ } });
   window.addEventListener('beforeunload', () => {
