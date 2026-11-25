@@ -4495,6 +4495,86 @@ export function createKernel(R, oc) {
     }
     return shape;
   }
+  function buildBatteryHolder(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const count = Math.max(1, Math.min(8, Math.round(num(sp.count, num(p.count, 2)))));
+    const wall = Math.max(0.8, pos(sp.wall, pos(p.wall, 2)));
+    const floor = Math.max(0.8, pos(sp.floor, pos(p.floor, 2)));
+    const divider = Math.max(0, num(sp.divider, num(p.divider, 1.2)));
+    const slotW = Math.max(4, pos(sp.slotW, 15.3));
+    const innerW = Math.max(slotW, pos(sp.innerW, count * slotW + Math.max(0, count - 1) * divider));
+    const innerL = Math.max(15, pos(sp.innerL, 53.5));
+    const innerH = Math.max(4, pos(sp.innerH, 14.9));
+    const divH = num(sp.divH, count > 1 && divider >= 0.4 ? Math.min(innerH - 1.0, slotW * 0.6) : 0);
+    const outerW = Math.max(innerW + 2 * wall, pos(sp.outerW, innerW + 2 * wall));
+    const outerL = Math.max(innerL + 2 * wall, pos(sp.outerL, innerL + 2 * wall));
+    const outerH = Math.max(floor + innerH, pos(sp.outerH, floor + innerH));
+    const wireHoles = sp.wireHoles !== undefined ? !!sp.wireHoles : (p.wireHoles !== 'nein' && p.wireHoles !== false);
+    const wireHoleD = Math.max(0.8, num(sp.wireHoleD, 2.5));
+    const mountHoles = sp.mountHoles !== undefined ? !!sp.mountHoles : (p.mountHoles === 'ja' || p.mountHoles === true);
+
+    const outer = R.makeBox([-outerW / 2, -outerL / 2, 0], [outerW / 2, outerL / 2, outerH]);
+    const cavity = R.makeBox([-innerW / 2, -innerL / 2, floor], [innerW / 2, innerL / 2, outerH + 1]);
+    let shape = null;
+    try {
+      shape = outer.cut(cavity);
+    } finally {
+      safeDelete(outer);
+      safeDelete(cavity);
+    }
+
+    const cutWith = (tool) => {
+      let next = null;
+      try {
+        next = shape.cut(tool);
+        safeDelete(shape);
+        shape = next;
+        next = null;
+      } finally { safeDelete(tool); safeDelete(next); }
+    };
+    const fuseWith = (part) => {
+      let next = null;
+      try {
+        next = shape.fuse(part);
+        safeDelete(shape);
+        shape = next;
+        next = null;
+      } finally { safeDelete(part); safeDelete(next); }
+    };
+
+    if (count > 1 && divider >= 0.4 && divH >= 1) {
+      const eps = Math.min(0.25, wall * 0.4, floor * 0.4);
+      for (let i = 1; i < count; i++) {
+        const xDiv = -innerW / 2 + i * slotW + (i - 0.5) * divider;
+        fuseWith(R.makeBox([xDiv - divider / 2, -innerL / 2 - eps, floor - eps], [xDiv + divider / 2, innerL / 2 + eps, floor + divH]));
+      }
+    }
+
+    if (wireHoles && wireHoleD >= 0.5) {
+      const rWire = Math.min(wireHoleD / 2, Math.max(0.5, innerH * 0.35));
+      const zWire = floor + innerH * 0.5;
+      for (let i = 0; i < count; i++) {
+        const cx = -innerW / 2 + i * (slotW + divider) + slotW / 2;
+        cutWith(R.makeCylinder(rWire, outerL + 1, [cx, -outerL / 2 - 0.5, zWire], [0, 1, 0]));
+      }
+    }
+
+    if (mountHoles) {
+      const rMnt = 1.7;
+      if (count === 1) {
+        const yOff = Math.min(innerL * 0.28, Math.max(4, innerL / 2 - 6));
+        cutWith(R.makeCylinder(rMnt, floor + 1, [0, -yOff, -0.5], [0, 0, 1]));
+        cutWith(R.makeCylinder(rMnt, floor + 1, [0, yOff, -0.5], [0, 0, 1]));
+      } else {
+        const x1 = -innerW / 2 + slotW / 2;
+        const x2 = innerW / 2 - slotW / 2;
+        cutWith(R.makeCylinder(rMnt, floor + 1, [x1, 0, -0.5], [0, 0, 1]));
+        cutWith(R.makeCylinder(rMnt, floor + 1, [x2, 0, -0.5], [0, 0, 1]));
+      }
+    }
+
+    return shape;
+  }
   function buildStdORing(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
     const d1 = pos(sp.d1, pos(p.d1, 20));
@@ -4723,6 +4803,7 @@ export function createKernel(R, oc) {
     if (lib === 'steppedShaft') return buildSteppedShaft(p);
     if (lib === 'shaftCollar') return buildShaftCollar(p);
     if (lib === 'shaftCoupling') return buildShaftCoupling(p);
+    if (lib === 'batteryHolder') return buildBatteryHolder(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
@@ -10353,7 +10434,7 @@ export function createKernel(R, oc) {
     if (!holes.length) throw new Error('Lochbild: Mindestens ein Befestigungsloch erforderlich.');
     if (!(holeD >= 0.2 && isFinite(holeD))) throw new Error('Lochbild: Der Lochdurchmesser muss mindestens 0,2 mm sein.');
     const includeCenter = p.includeCenter !== false;
-    const centerKind = p.centerKind === 'rect' ? 'rect' : 'circle';
+    const centerKind = p.centerKind === 'rect' ? 'rect' : p.centerKind === 'none' ? 'none' : 'circle';
     const centerD = num(p.centerD, 0);
     const cutW = num(p.cutW, 0);
     const cutH = num(p.cutH, 0);

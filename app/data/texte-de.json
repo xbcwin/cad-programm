@@ -5039,11 +5039,11 @@
   "panel.item.shaftCouplingStyleClamp": "Klemmkupplung (geschlitzt)",
   "panel.item.shaftCouplingStyleFlange": "Flanschkupplung",
   "kind.mountPattern": "Lochbild",
-  "tool.fly.mountPattern": "Lochbild (Lüfter, Motor, Servo)",
-  "tool.fly.mountPatternTip": "Norm-Lochbilder für Lüfter (25–140 mm), NEMA-Motoren und Servos auf eine Fläche setzen",
-  "ctx.mountPatternFaceTip": "Norm-Lochbild (Lüfter, NEMA, Servo) in diese Fläche schneiden",
+  "tool.fly.mountPattern": "Lochbild (Lüfter, Motor, Servo, Platine)",
+  "tool.fly.mountPatternTip": "Norm-Lochbilder für Lüfter (25–140 mm), NEMA-Motoren, Servos und Platinen (Raspberry Pi, Arduino, ESP32) auf eine Fläche setzen",
+  "ctx.mountPatternFaceTip": "Norm-Lochbild (Lüfter, NEMA, Servo, Platine) in diese Fläche schneiden",
   "ctx.mountPatternPickTip": "Andere ebene Fläche für das Lochbild wählen",
-  "dlg.tb.mountPatternTip": "Lochbilder für Lüfter, Schrittmotoren und Servos schneiden",
+  "dlg.tb.mountPatternTip": "Lochbilder für Lüfter, Schrittmotoren, Servos und Platinen schneiden",
   "toast.mountPatternAdded": "Lochbild „{name}“ angelegt. Rechts wechselst du die Vorlage oder passt Maße an.",
   "panel.mountPattern.preset": "Vorlage",
   "panel.mountPattern.includeCircle": "Mittelloch schneiden",
@@ -5056,5 +5056,8 @@
   "panel.mountPattern.offsetY": "Versatz Y",
   "panel.mountPattern.angle": "Drehwinkel",
   "panel.mountPattern.depth": "Tiefe (0 = durch)",
-  "panel.mountPattern.hint": "Schneidet das gewählte Lochbild samt Mittel- oder Gehäuseausschnitt senkrecht in die ebene Fläche. Durchmesser, Lage und 3D-Druck-Passung bleiben jederzeit änderbar."
+  "panel.mountPattern.hint": "Schneidet das gewählte Lochbild samt optionalem Mittel- oder Gehäuseausschnitt senkrecht in die ebene Fläche. Durchmesser, Lage und 3D-Druck-Passung bleiben jederzeit änderbar.",
+  "tool.fly.batteryHolder": "Batteriefach (AA, AAA, 18650)",
+  "tool.fly.batteryHolderTip": "Parametrisches Batteriefach für AA-, AAA- oder 18650-Zellen hinzufügen",
+  "panel.item.batteryHolderHint": "<b>{count}× {id}</b> ({source}) · Innenmaß <b>{inW} × {inL} × {inH}</b> (je Zelle {slotW} breit) · Außenmaß {outW} × {outL} × {outH}."
 }

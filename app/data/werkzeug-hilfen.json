@@ -2050,8 +2050,13 @@
     "tipp": "Wähle „Eigene Maße“, um unterschiedliche Wellendurchmesser wie Ø 8 mm auf Ø 10 mm direkt zu verbinden."
   },
   "mountPattern": {
-    "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) und Servos",
-    "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt passendem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23) sowie gängige Servos (Standard, Mini, Micro 9g, Groß-Servo). Alle Durchmesser, der Ausschnitt, die Lage (X/Y), Drehung, Tiefe und eine optionale 3D-Druck-Passung lassen sich rechts anpassen.",
-    "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben und Zentrierbund nach dem 3D-Druck sauber passen."
+    "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23), Servos und Platinen (Raspberry Pi, Arduino, ESP32)",
+    "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt optionalem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23), gängige Servos sowie Platinen-Lochbilder für Raspberry Pi (4/3/5, Zero, Pico), Arduino (Uno R3/R4, Nano) und ESP32 (DevKit V1, Feather). Alle Durchmesser, Lage (X/Y), Drehung, Tiefe und eine 3D-Druck-Passung lassen sich rechts anpassen.",
+    "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du bei Lüftern oder Motoren nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben nach dem 3D-Druck sauber passen."
+  },
+  "batteryHolder": {
+    "tip": "Parametrisches Batteriefach für AA-, AAA- und 18650-Zellen (1–8 Zellen)",
+    "hilfe": "Erzeugt ein fertiges Batterie- oder Akkufach mit exakt abgestimmtem Innenmaß nach IEC-Zellmaß plus Spiel und Kontakt-Zugabe für Federkontakte. Du wählst Zellentyp (AA, AAA, 18650 ungeschützt oder geschützt), Zellenanzahl, Wand- und Bodendicke, optionale Trennwände, Kontakt-/Kabellöcher an den Stirnseiten, M3-Befestigungslöcher im Boden sowie eine 3D-Druck-Passung.",
+    "tipp": "Lass „Spiel Ø“ und „Kontakt-Zugabe“ leer für geprüfte Standardwerte mit Metall-Blattfedern, oder wähle unter Druck-Passung „gleitend“, falls die Zellen enger oder lockerer sitzen sollen."
   }
 }

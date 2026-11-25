@@ -739,6 +739,7 @@ const IC = {
   worm: '<rect x="7" y="4" width="10" height="16" rx="2"/><path d="M7 8l10-2.2M7 12l10-2.2M7 16l10-2.2M12 2v2M12 20v2"/>',
   wormWheel: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3"/><path d="M8.5 5.3l7 1.4M7.2 8.8l9.6 2M7.2 13.2l9.6 2M8.5 16.7l7 1.4" opacity=".6"/>',
   mountPattern: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="currentColor" opacity=".14"/><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="17" r="1.2" fill="currentColor" stroke="none"/>',
+  batteryHolder: '<rect x="3" y="5" width="18" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="5.5" y="7.5" width="5.2" height="9" rx="1"/><rect x="13.3" y="7.5" width="5.2" height="9" rx="1"/><path d="M7.2 7.5V6.3h1.8v1.2M15 7.5V6.3h1.8v1.2"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2817,9 +2818,14 @@ const HELP = {
   "tipp": "Wähle „Eigene Maße“, um unterschiedliche Wellendurchmesser wie Ø 8 mm auf Ø 10 mm direkt zu verbinden."
  },
  "mountPattern": {
-  "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) und Servos",
-  "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt passendem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23) sowie gängige Servos (Standard, Mini, Micro 9g, Groß-Servo). Alle Durchmesser, der Ausschnitt, die Lage (X/Y), Drehung, Tiefe und eine optionale 3D-Druck-Passung lassen sich rechts anpassen.",
-  "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben und Zentrierbund nach dem 3D-Druck sauber passen."
+  "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23), Servos und Platinen (Raspberry Pi, Arduino, ESP32)",
+  "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt optionalem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23), gängige Servos sowie Platinen-Lochbilder für Raspberry Pi (4/3/5, Zero, Pico), Arduino (Uno R3/R4, Nano) und ESP32 (DevKit V1, Feather). Alle Durchmesser, Lage (X/Y), Drehung, Tiefe und eine 3D-Druck-Passung lassen sich rechts anpassen.",
+  "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du bei Lüftern oder Motoren nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben nach dem 3D-Druck sauber passen."
+ },
+ "batteryHolder": {
+  "tip": "Parametrisches Batteriefach für AA-, AAA- und 18650-Zellen (1–8 Zellen)",
+  "hilfe": "Erzeugt ein fertiges Batterie- oder Akkufach mit exakt abgestimmtem Innenmaß nach IEC-Zellmaß plus Spiel und Kontakt-Zugabe für Federkontakte. Du wählst Zellentyp (AA, AAA, 18650 ungeschützt oder geschützt), Zellenanzahl, Wand- und Bodendicke, optionale Trennwände, Kontakt-/Kabellöcher an den Stirnseiten, M3-Befestigungslöcher im Boden sowie eine 3D-Druck-Passung.",
+  "tipp": "Lass „Spiel Ø“ und „Kontakt-Zugabe“ leer für geprüfte Standardwerte mit Metall-Blattfedern, oder wähle unter Druck-Passung „gleitend“, falls die Zellen enger oder lockerer sitzen sollen."
  }
 };
 

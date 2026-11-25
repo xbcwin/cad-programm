@@ -99,7 +99,7 @@ const Explain = (() => {
       const mp = Model.mountPatternParams(it, V);
       const e = typeof mountPatternEntry === 'function' ? mountPatternEntry(mp.preset) : null;
       const dep = mp.depth > 1e-4 ? Units.fmtLenU(mp.depth, 2, doc) + ' tief' : 'durch die Wand';
-      const ctr = mp.includeCenter ? (mp.centerKind === 'circle' ? `, Mittelloch ${Units.fmtLenU(mp.centerD, 2, doc)}` : `, Ausschnitt ${Units.fmtLenU(mp.cutW, 2, doc)} × ${Units.fmtLenU(mp.cutH, 2, doc)}`) : '';
+      const ctr = mp.includeCenter && mp.centerKind !== 'none' ? (mp.centerKind === 'circle' ? `, Mittelloch ${Units.fmtLenU(mp.centerD, 2, doc)}` : `, Ausschnitt ${Units.fmtLenU(mp.cutW, 2, doc)} × ${Units.fmtLenU(mp.cutH, 2, doc)}`) : '';
       lines.push({ k: 'op', t: `Schneidet das Lochbild „${e ? e.label : mp.preset}“ (${mp.holes.length}× Ø ${Units.fmtLenU(mp.holeD, 2, doc)}${ctr}, ${dep}) in eine ebene Fläche von „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
     }
     if (it.kind === 'web') {

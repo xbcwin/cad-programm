@@ -2875,7 +2875,7 @@ const Features = (() => {
     if (!ribTargets().length) { UI.toast('Für ein Lochbild braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
     const f = Actions.selectedFace();
     if (f && f.info && f.info.t === 'PLANE') { mountPattern(f, opts); return true; }
-    pickPlanarBodyFace('<b>Lochbild setzen:</b> Klick auf eine ebene Fläche für Lüfter-, Motor- oder Servo-Löcher. <b>Esc</b> bricht ab.', (picked) => { mountPattern(picked, opts); });
+    pickPlanarBodyFace('<b>Lochbild setzen:</b> Klick auf eine ebene Fläche für Lüfter-, Motor-, Servo- oder Platinen-Löcher. <b>Esc</b> bricht ab.', (picked) => { mountPattern(picked, opts); });
     return true;
   }
   function pickMountPatternFace(stepId) {
@@ -2917,10 +2917,12 @@ const Features = (() => {
       }),
     }));
     sec.append(fl);
-    const ctrLabel = m.centerKind === 'circle' ? T('panel.mountPattern.includeCircle') : T('panel.mountPattern.includeRect');
-    const ctrCb = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'mp-center', checked: m.includeCenter }), ctrLabel);
-    ctrCb.querySelector('input').onchange = (e) => setP('includeCenter', e.target.checked);
-    sec.append(ctrCb);
+    if (m.centerKind !== 'none') {
+      const ctrLabel = m.centerKind === 'circle' ? T('panel.mountPattern.includeCircle') : T('panel.mountPattern.includeRect');
+      const ctrCb = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'mp-center', checked: m.includeCenter }), ctrLabel);
+      ctrCb.querySelector('input').onchange = (e) => setP('includeCenter', e.target.checked);
+      sec.append(ctrCb);
+    }
     const fl2 = h('div', { class: 'fields', style: { marginTop: '6px' } });
     fl2.append(UI.numField({
       id: 'mp-holeD', label: T('panel.mountPattern.holeD'),
@@ -2947,12 +2949,14 @@ const Features = (() => {
       UI.selectField({ id: 'mp-printFit', label: T('printFit.label'), value: p.printFit || '', options: printFitHoleOptions, onChange: (v) => setP('printFit', v) }),
     );
     sec.append(fl2);
-    const pitchTxt = m.layout === 'square'
-      ? `${Units.fmtLenU(m.pitch, 2)} × ${Units.fmtLenU(m.pitch, 2)}`
-      : m.layout === 'rect4'
-        ? `${Units.fmtLenU(m.pitchX, 2)} × ${Units.fmtLenU(m.pitchY, 2)}`
-        : `${Units.fmtLenU(m.pitchX, 2)}`;
-    const ctrTxt = m.includeCenter
+    const pitchTxt = m.layout === 'points'
+      ? `${Units.fmtLenU(m.spanX, 2)} × ${Units.fmtLenU(m.spanY, 2)} (asym.)`
+      : m.layout === 'square'
+        ? `${Units.fmtLenU(m.pitch, 2)} × ${Units.fmtLenU(m.pitch, 2)}`
+        : m.layout === 'rect4'
+          ? `${Units.fmtLenU(m.pitchX, 2)} × ${Units.fmtLenU(m.pitchY, 2)}`
+          : `${Units.fmtLenU(m.pitchX, 2)}`;
+    const ctrTxt = m.includeCenter && m.centerKind !== 'none'
       ? (m.centerKind === 'circle' ? ` · Mitte Ø ${Units.fmtLenU(m.centerDEff, 2)}` : ` · Ausschnitt ${Units.fmtLenU(m.cutWEff, 2)} × ${Units.fmtLenU(m.cutHEff, 2)}`)
       : '';
     sec.append(h('div', { class: 'mini-row', id: 'mp-info' },
