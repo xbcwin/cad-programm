@@ -16799,5 +16799,574 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
+  // ---------- Vereinfachte Hülle einer Baugruppe (BG-30) ----------
+  function countFacesOf(shape) {
+    if (!shape || !shape.wrapped) return 0;
+    const TA = oc.TopAbs_ShapeEnum;
+    const faces = uniqueShapes(shape.wrapped, TA.TopAbs_FACE);
+    const n = faces.length;
+    for (const f of faces) safeDelete(f);
+    return n;
+  }
+
+  function bboxVolumeOf(bb) {
+    if (!bb || bb.length < 6) return 0;
+    return Math.max(0, bb[3] - bb[0]) * Math.max(0, bb[4] - bb[1]) * Math.max(0, bb[5] - bb[2]);
+  }
+
+  function bboxesClose(a, b, tol = 0.05) {
+    if (!a || !b || a.length < 6 || b.length < 6) return false;
+    for (let i = 0; i < 6; i++) {
+      if (Math.abs(a[i] - b[i]) > tol) return false;
+    }
+    return true;
+  }
+
+  function keepOuterShellOnly(shape) {
+    if (!shape || !shape.wrapped) return shape;
+    const TA = oc.TopAbs_ShapeEnum;
+    const solids = extractSolids(shape);
+    if (!solids.length) return shape.clone();
+    const outSolids = [];
+    for (const sol of solids) {
+      const shells = uniqueShapes(sol.wrapped, TA.TopAbs_SHELL);
+      if (shells.length <= 1) {
+        for (const sh of shells) safeDelete(sh);
+        outSolids.push(sol);
+        continue;
+      }
+      let bestShell = null;
+      let bestVol = -1;
+      for (const sh of shells) {
+        let wrap = null;
+        try {
+          wrap = R.cast(sh);
+          const v = bboxVolumeOf(bboxOf(wrap));
+          if (v > bestVol) { bestVol = v; bestShell = sh; }
+        } catch (_) {}
+      }
+      let built = null;
+      if (bestShell) {
+        let ms = null;
+        try {
+          ms = new oc.BRepBuilderAPI_MakeSolid(oc.TopoDS.Shell(bestShell));
+          let cand = R.cast(ms.Solid());
+          if (cand && R.isShape3D(cand)) {
+            if (R.measureVolume(cand) < 0) {
+              const rev = R.cast(cand.wrapped.Reversed());
+              safeDelete(cand);
+              cand = rev;
+            }
+            built = cand;
+          } else {
+            safeDelete(cand);
+          }
+        } catch (_) {
+          safeDelete(built);
+          built = null;
+        } finally {
+          if (ms && ms.delete) try { ms.delete(); } catch (_) {}
+        }
+      }
+      for (const sh of shells) safeDelete(sh);
+      if (built) {
+        safeDelete(sol);
+        outSolids.push(built);
+      } else {
+        outSolids.push(sol);
+      }
+    }
+    if (outSolids.length === 1) return outSolids[0];
+    const comp = R.makeCompound(outSolids);
+    for (const s of outSolids) safeDelete(s);
+    return comp;
+  }
+
+  function fillSolidHoles(solid) {
+    if (!solid || !solid.wrapped) return null;
+    const TA = oc.TopAbs_ShapeEnum;
+    const ORI = oc.TopAbs_Orientation;
+    const origCount = countFacesOf(solid);
+    const origBb = bboxOf(solid);
+    const fl = topoList(solid, 'face');
+    if (fl.length <= 6) {
+      for (const f of fl) f.shape.delete();
+      return null;
+    }
+
+    const hostMap = new Map(); // fi -> { outerWire, reversed }
+    const outerEdges = new Set(); // edge hash strings (bucketed by IsSame below)
+    const innerEdgeEntries = []; // { hc, edge, hostFi }
+    const edgeAdj = new Map(); // hc -> [{ edge, faces: Set<fi> }]
+
+    const addEdgeAdj = (hc, ed, fi) => {
+      let arr = edgeAdj.get(hc);
+      if (!arr) { arr = []; edgeAdj.set(hc, arr); }
+      let entry = arr.find((x) => x.edge.IsSame(ed));
+      if (!entry) { entry = { edge: ed, faces: new Set() }; arr.push(entry); }
+      else safeDelete(ed);
+      entry.faces.add(fi);
+    };
+
+    const collectWireEdgeHashes = (wireRaw) => {
+      const list = [];
+      const ex = new oc.TopExp_Explorer(wireRaw, TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+      try {
+        while (ex.More()) {
+          const ed = oc.TopoDS.Edge(ex.Current());
+          const hc = oc.ReplicadShapeHasher.HashCode(ed, HMAX);
+          list.push({ hc, ed });
+          ex.Next();
+        }
+      } finally { ex.delete(); }
+      return list;
+    };
+
+    const outerEdgeEntries = [];
+    try {
+      for (let fi = 0; fi < fl.length; fi++) {
+        const fw = fl[fi].shape.wrapped;
+        const exAll = new oc.TopExp_Explorer(fw, TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+        try {
+          while (exAll.More()) {
+            const ed = oc.TopoDS.Edge(exAll.Current());
+            const hc = oc.ReplicadShapeHasher.HashCode(ed, HMAX);
+            addEdgeAdj(hc, ed, fi);
+            exAll.Next();
+          }
+        } finally { exAll.delete(); }
+
+        if (fl[fi].shape.geomType !== 'PLANE') continue;
+        const wires = uniqueShapes(fw, TA.TopAbs_WIRE);
+        if (wires.length <= 1) {
+          for (const w of wires) safeDelete(w);
+          continue;
+        }
+        let ow = null;
+        try { ow = oc.BRepTools.OuterWire(fw); } catch (_) { ow = null; }
+        if (!ow || ow.IsNull()) {
+          safeDelete(ow);
+          for (const w of wires) safeDelete(w);
+          continue;
+        }
+        hostMap.set(fi, { outerWire: ow, reversed: fw.Orientation() === ORI.TopAbs_REVERSED });
+        for (const x of collectWireEdgeHashes(ow)) {
+          outerEdges.add(x.hc);
+          outerEdgeEntries.push(x);
+        }
+        for (const w of wires) {
+          if (!w.IsSame(ow)) {
+            for (const x of collectWireEdgeHashes(w)) {
+              innerEdgeEntries.push({ ...x, hostFi: fi });
+            }
+          }
+          safeDelete(w);
+        }
+      }
+
+      if (!hostMap.size || !innerEdgeEntries.length) return null;
+
+      const isOuterEdge = (hc, ed) => {
+        if (!outerEdges.has(hc)) return false;
+        return outerEdgeEntries.some((x) => x.hc === hc && x.ed.IsSame(ed));
+      };
+
+      const dropFaces = new Set();
+      const queue = [];
+      for (const ie of innerEdgeEntries) {
+        const arr = edgeAdj.get(ie.hc);
+        if (!arr) continue;
+        const entry = arr.find((x) => x.edge.IsSame(ie.ed));
+        if (!entry) continue;
+        for (const nfi of entry.faces) {
+          if (nfi === ie.hostFi || hostMap.has(nfi) || dropFaces.has(nfi)) continue;
+          dropFaces.add(nfi);
+          queue.push(nfi);
+        }
+      }
+
+      const faceEdges = new Map();
+      for (const arr of edgeAdj.values()) {
+        for (const entry of arr) {
+          for (const fi of entry.faces) {
+            let list = faceEdges.get(fi);
+            if (!list) { list = []; faceEdges.set(fi, list); }
+            list.push(entry);
+          }
+        }
+      }
+
+      while (queue.length) {
+        const curFi = queue.shift();
+        for (const entry of (faceEdges.get(curFi) || [])) {
+          const hc = oc.ReplicadShapeHasher.HashCode(entry.edge, HMAX);
+          if (isOuterEdge(hc, entry.edge)) continue;
+          for (const nfi of entry.faces) {
+            if (nfi === curFi || hostMap.has(nfi) || dropFaces.has(nfi)) continue;
+            dropFaces.add(nfi);
+            queue.push(nfi);
+          }
+        }
+      }
+
+      if (!dropFaces.size) return null;
+
+      let sew = null, sewed = null, ms = null, rawSolid = null, unified = null, usd = null;
+      const tempFaces = [];
+      try {
+        sew = new oc.BRepBuilderAPI_Sewing(1e-3, true, true, true, false);
+        for (let fi = 0; fi < fl.length; fi++) {
+          if (dropFaces.has(fi)) continue;
+          const hm = hostMap.get(fi);
+          if (hm) {
+            const mf = new oc.BRepBuilderAPI_MakeFace(oc.TopoDS.Wire(hm.outerWire), true);
+            try {
+              if (!mf.IsDone()) return null;
+              let nf = mf.Face();
+              if (hm.reversed) {
+                const rf = oc.TopoDS.Face(nf.Reversed());
+                safeDelete(nf);
+                nf = rf;
+              }
+              tempFaces.push(nf);
+              sew.Add(nf);
+            } finally { mf.delete(); }
+          } else {
+            sew.Add(fl[fi].shape.wrapped);
+          }
+        }
+        sew.Perform();
+        sewed = sew.SewedShape();
+        const shells = uniqueShapes(sewed, TA.TopAbs_SHELL);
+        if (!shells.length) return null;
+        let bestShell = shells[0];
+        let bestVol = -1;
+        for (const sh of shells) {
+          try {
+            const v = bboxVolumeOf(bboxOf(R.cast(sh)));
+            if (v > bestVol) { bestVol = v; bestShell = sh; }
+          } catch (_) {}
+        }
+        ms = new oc.BRepBuilderAPI_MakeSolid(oc.TopoDS.Shell(bestShell));
+        for (const sh of shells) safeDelete(sh);
+        rawSolid = R.cast(ms.Solid());
+        if (!rawSolid || !R.isShape3D(rawSolid)) { safeDelete(rawSolid); return null; }
+        if (R.measureVolume(rawSolid) < 0) {
+          const rev = R.cast(rawSolid.wrapped.Reversed());
+          safeDelete(rawSolid);
+          rawSolid = rev;
+        }
+        usd = new oc.ShapeUpgrade_UnifySameDomain(rawSolid.wrapped, true, true, false);
+        usd.Build();
+        unified = R.cast(usd.Shape());
+        if (!unified || !R.isShape3D(unified)) {
+          safeDelete(unified);
+          unified = rawSolid;
+          rawSolid = null;
+        }
+        const candVol = Math.abs(R.measureVolume(unified));
+        const candBb = bboxOf(unified);
+        const candFaces = countFacesOf(unified);
+        if (!(candVol > 1e-6) || !bboxesClose(origBb, candBb, 0.05) || candFaces >= origCount) {
+          safeDelete(unified);
+          return null;
+        }
+        return unified;
+      } catch (_) {
+        safeDelete(unified);
+        return null;
+      } finally {
+        for (const tf of tempFaces) safeDelete(tf);
+        if (usd && usd.delete) try { usd.delete(); } catch (_) {}
+        if (ms && ms.delete) try { ms.delete(); } catch (_) {}
+        safeDelete(rawSolid);
+        safeDelete(sewed);
+        if (sew && sew.delete) try { sew.delete(); } catch (_) {}
+      }
+    } finally {
+      for (const hm of hostMap.values()) safeDelete(hm.outerWire);
+      for (const x of outerEdgeEntries) safeDelete(x.ed);
+      for (const x of innerEdgeEntries) safeDelete(x.ed);
+      for (const arr of edgeAdj.values()) for (const e of arr) safeDelete(e.edge);
+      for (const f of fl) f.shape.delete();
+    }
+  }
+
+  function simplifyOuterSolid(shape, opts = {}) {
+    let cur = keepOuterShellOnly(shape);
+    let filledHoles = 0;
+    const solids = extractSolids(cur);
+    if (solids.length) {
+      const nextSolids = [];
+      for (const sol of solids) {
+        let work = sol;
+        if (opts.fillHoles !== false) {
+          const filled = fillSolidHoles(work);
+          if (filled) {
+            filledHoles++;
+            safeDelete(work);
+            work = filled;
+          }
+        }
+        if (opts.simplifyDetails !== false) {
+          try {
+            const fc = countFacesOf(work);
+            const bb = bboxOf(work);
+            const dx = Math.max(0, bb[3] - bb[0]);
+            const dy = Math.max(0, bb[4] - bb[1]);
+            const dz = Math.max(0, bb[5] - bb[2]);
+            const bVol = dx * dy * dz;
+            const vol = Math.abs(R.measureVolume(work));
+            if (fc > 6 && bVol > 1e-6 && vol / bVol > 0.85) {
+              const bx = R.makeBox([bb[0], bb[1], bb[2]], [bb[3], bb[4], bb[5]]);
+              safeDelete(work);
+              work = bx;
+            } else if (fc > 12 && bVol > 1e-6 && dx > 1e-3 && Math.abs(dx - dy) <= 0.03 * Math.max(dx, dy) && vol / bVol >= 0.45 && vol / bVol <= 0.83) {
+              const cyl = R.makeCylinder(dx / 2, dz, [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, bb[2]], [0, 0, 1]);
+              if (bboxesClose(bb, bboxOf(cyl), 0.05)) {
+                safeDelete(work);
+                work = cyl;
+              } else {
+                safeDelete(cyl);
+              }
+            }
+          } catch (_) {}
+        }
+        nextSolids.push(work);
+      }
+      safeDelete(cur);
+      if (nextSolids.length === 1) cur = nextSolids[0];
+      else {
+        cur = R.makeCompound(nextSolids);
+        for (const s of nextSolids) safeDelete(s);
+      }
+    }
+    return { shape: cur, filledHoles };
+  }
+
+  function buildEnvelope(scene, opts = {}) {
+    ingestBlobs(scene);
+    const errors = [];
+    const only = Array.isArray(opts.only) && opts.only.length ? new Set(opts.only) : null;
+    let solids = evaluateShapes(scene, errors);
+    if (only) {
+      const kept = [];
+      for (const s of solids) {
+        if (only.has(s.id)) kept.push(s);
+        else safeDelete(s.shape);
+      }
+      solids = kept;
+    }
+    const filtered = [];
+    for (const s of solids) {
+      if (s.bodies && s.bodies.some((b) => b && b.hidden)) {
+        const parts = sortedSolids(s.shape, matInvRigid(s.m));
+        if (parts.length > 1) {
+          const meta = matchBodiesLocal(s.bodies, parts);
+          const kept = [];
+          for (let bi = 0; bi < parts.length; bi++) {
+            if (meta[bi] && meta[bi].hidden) safeDelete(parts[bi].shape);
+            else kept.push(parts[bi].shape);
+          }
+          safeDelete(s.shape);
+          if (!kept.length) continue;
+          s.shape = kept.length === 1 ? kept[0] : R.makeCompound(kept);
+          if (kept.length > 1) for (const k of kept) safeDelete(k);
+        } else {
+          for (const p of parts) safeDelete(p.shape);
+        }
+      }
+      filtered.push(s);
+    }
+    solids = filtered;
+    if (!solids.length) throw new Error('Keine Körper für die vereinfachte Hülle gefunden.');
+
+    const mode = opts.mode === 'box' || opts.mode === 'boxes' ? opts.mode : 'outer';
+    const fillHoles = opts.fillHoles !== false;
+    const removeInternal = opts.removeInternal !== false;
+    const simplifyDetails = opts.simplifyDetails !== false;
+    const minPartSize = Math.max(0, Number(opts.minPartSize) || 0);
+
+    let origFaces = 0;
+    let origBbox = null;
+    const allSubs = [];
+    const tempShapes = [];
+    let finalShape = null;
+
+    try {
+      const origParts = solids.length;
+      for (const s of solids) {
+        origFaces += countFacesOf(s.shape);
+        const sb = bboxOf(s.shape);
+        origBbox = origBbox
+          ? [Math.min(origBbox[0], sb[0]), Math.min(origBbox[1], sb[1]), Math.min(origBbox[2], sb[2]), Math.max(origBbox[3], sb[3]), Math.max(origBbox[4], sb[4]), Math.max(origBbox[5], sb[5])]
+          : sb;
+        const subs = extractSolids(s.shape);
+        for (const sub of subs) {
+          tempShapes.push(sub);
+          allSubs.push({ shape: sub, bbox: bboxOf(sub) });
+        }
+      }
+
+      let removedInternal = 0;
+      let filledHoles = 0;
+
+      if (mode === 'box') {
+        finalShape = R.makeBox([origBbox[0], origBbox[1], origBbox[2]], [origBbox[3], origBbox[4], origBbox[5]]);
+      } else {
+        const isAnchor = (bb) => {
+          for (let i = 0; i < 6; i++) {
+            if (Math.abs(bb[i] - origBbox[i]) <= 1e-3) return true;
+          }
+          return false;
+        };
+        const strictInside = (inner, outer, margin = 0.02) => (
+          inner[0] >= outer[0] + margin && inner[3] <= outer[3] - margin
+          && inner[1] >= outer[1] + margin && inner[4] <= outer[4] - margin
+          && inner[2] >= outer[2] + margin && inner[5] <= outer[5] - margin
+        );
+
+        const keptSubs = [];
+        for (let i = 0; i < allSubs.length; i++) {
+          const cur = allSubs[i];
+          const anchor = isAnchor(cur.bbox);
+          const maxDim = Math.max(cur.bbox[3] - cur.bbox[0], cur.bbox[4] - cur.bbox[1], cur.bbox[5] - cur.bbox[2]);
+          if (!anchor && minPartSize > 0 && maxDim < minPartSize) {
+            removedInternal++;
+            continue;
+          }
+          let enclosed = false;
+          if (!anchor && removeInternal) {
+            for (let j = 0; j < allSubs.length; j++) {
+              if (i === j) continue;
+              const other = allSubs[j];
+              if (!strictInside(cur.bbox, other.bbox, 0.02)) continue;
+              let shellOther = null;
+              let rem = null;
+              try {
+                shellOther = keepOuterShellOnly(other.shape);
+                const vi = Math.abs(R.measureVolume(cur.shape));
+                rem = cur.shape.cut(shellOther);
+                const vr = Math.abs(R.measureVolume(rem));
+                if (vi > 1e-6 && vr < 0.01 * vi) enclosed = true;
+              } catch (_) {
+                enclosed = true;
+              } finally {
+                safeDelete(rem);
+                safeDelete(shellOther);
+              }
+              if (enclosed) break;
+            }
+          }
+          if (enclosed) {
+            removedInternal++;
+            continue;
+          }
+          keptSubs.push(cur);
+        }
+        if (!keptSubs.length && allSubs.length) keptSubs.push(...allSubs);
+
+        const workSolids = [];
+        for (const ks of keptSubs) {
+          if (mode === 'boxes') {
+            const b = ks.bbox;
+            const bx = R.makeBox([b[0], b[1], b[2]], [b[3], b[4], b[5]]);
+            tempShapes.push(bx);
+            workSolids.push({ shape: bx, bbox: b });
+          } else {
+            const simp = simplifyOuterSolid(ks.shape, { fillHoles, simplifyDetails });
+            filledHoles += simp.filledHoles;
+            tempShapes.push(simp.shape);
+            workSolids.push({ shape: simp.shape, bbox: bboxOf(simp.shape) });
+          }
+        }
+
+        // Berührende/überlappende Körper zu geschlossenen Außenhüllen verschmelzen
+        const n = workSolids.length;
+        const parent = Array.from({ length: n }, (_, k) => k);
+        const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+        const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+        for (let i = 0; i < n; i++) {
+          for (let j = i + 1; j < n; j++) {
+            if (bboxHit(workSolids[i].bbox, workSolids[j].bbox, 0.05)) union(i, j);
+          }
+        }
+        const groups = new Map();
+        for (let i = 0; i < n; i++) {
+          const r = find(i);
+          let arr = groups.get(r);
+          if (!arr) { arr = []; groups.set(r, arr); }
+          arr.push(workSolids[i].shape);
+        }
+
+        const mergedList = [];
+        for (const grp of groups.values()) {
+          if (grp.length === 1) {
+            const outer = keepOuterShellOnly(grp[0]);
+            mergedList.push(outer);
+          } else {
+            let fused = null;
+            let usd = null;
+            let unified = null;
+            try {
+              fused = fuseAll(grp, false);
+              usd = new oc.ShapeUpgrade_UnifySameDomain(fused.wrapped, true, true, false);
+              usd.Build();
+              unified = R.cast(usd.Shape());
+              const base = unified && R.isShape3D(unified) ? unified : fused;
+              mergedList.push(keepOuterShellOnly(base));
+            } catch (_) {
+              for (const g of grp) mergedList.push(keepOuterShellOnly(g));
+            } finally {
+              if (usd && usd.delete) try { usd.delete(); } catch (_) {}
+              if (unified && unified !== fused) safeDelete(unified);
+              if (fused && !grp.includes(fused)) safeDelete(fused);
+            }
+          }
+        }
+
+        if (mergedList.length === 1) {
+          finalShape = mergedList[0];
+        } else {
+          finalShape = R.makeCompound(mergedList);
+          for (const m of mergedList) safeDelete(m);
+        }
+
+        const curFaces = countFacesOf(finalShape);
+        if (curFaces >= origFaces && origParts > 1) {
+          safeDelete(finalShape);
+          finalShape = R.makeBox([origBbox[0], origBbox[1], origBbox[2]], [origBbox[3], origBbox[4], origBbox[5]]);
+        }
+      }
+
+      const envFaces = countFacesOf(finalShape);
+      const envBbox = bboxOf(finalShape);
+      const envSolids = extractSolids(finalShape);
+      const envSolidCount = envSolids.length || 1;
+      for (const s of envSolids) safeDelete(s);
+      const brepStr = oc.BRepToolsWrapper.Write(finalShape.wrapped);
+      if (!brepStr || !brepStr.length) throw new Error('Vereinfachte Hülle konnte nicht geschrieben werden.');
+      const brepBytes = new TextEncoder().encode(brepStr);
+
+      return {
+        brepBytes,
+        origFaces,
+        envFaces,
+        origParts,
+        envSolids: envSolidCount,
+        origBbox,
+        envBbox,
+        removedInternal,
+        filledHoles,
+        mode,
+        errors,
+      };
+    } finally {
+      safeDelete(finalShape);
+      for (const ts of tempShapes) safeDelete(ts);
+      for (const s of solids) safeDelete(s.shape);
+    }
+  }
+
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, compareSolids, checkImport, healImport, buildEnvelope, getStats, resetStats, clearCache, _cache: cache };
 }

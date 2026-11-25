@@ -57,6 +57,8 @@ const Toolbar = (() => {
       { id: 'fixedJoint', group: T('dlg.tb.grpConstruct'), domId: 't-fixedJoint', icon: 'lock', label: T('ctx.fixedJoint'), tip: T('ctx.fixedJointTip'), cls: 'minor', help: 'fixedJoint', run: () => Joints.startFixed() },
       { id: 'asmPattern', group: T('dlg.tb.grpConstruct'), domId: 't-asm-pattern', icon: 'patternRect', label: T('asm.patToolBtn'), tip: T('asm.patToolTip'), cls: 'minor', help: 'asmPattern', run: (e) => Assembly.patternMenu(e.currentTarget) },
       { id: 'autoScrews', group: T('dlg.tb.grpConstruct'), domId: 't-auto-screws', icon: 'bolt', label: T('asm.autoScrewsBtn'), tip: T('asm.autoScrewsTip'), cls: 'minor', help: 'autoScrews', run: () => Assembly.autoScrewsDialog() },
+      { id: 'asmLightweight', group: T('dlg.tb.grpConstruct'), domId: 't-asm-lightweight', icon: 'xray', label: T('asm.lwBtn'), tip: T('asm.lwTip'), cls: 'minor pro', help: 'lightweightMode', run: () => Assembly.toggleLightweight() },
+      { id: 'asmEnvelope', group: T('dlg.tb.grpConstruct'), domId: 't-asm-envelope', icon: 'box', label: T('asm.envBtn'), tip: T('asm.envTip'), cls: 'minor pro', help: 'simplifiedEnvelope', run: () => Assembly.envelopeDialog() },
       { id: 'motion', group: T('dlg.tb.grpConstruct'), domId: 't-motion', icon: 'play', label: T('motion.title'), tip: T('motion.toolbarTip'), cls: 'minor pro', help: 'motionStudy', run: () => Motion.toggle() },
       { id: 'params', group: T('dlg.tb.grpConstruct'), domId: 't-params', icon: 'sliders', label: T('topbar.params'), tip: T('dlg.tb.paramsTip'), cls: 'minor', help: 'params', run: () => Panels.showParams() },
       // Ansicht & Prüfen
@@ -366,6 +368,14 @@ const Toolbar = (() => {
       const map = catalogMap();
       if (map.asmPattern) el.append(buildToolButton(map.asmPattern, false));
       if (map.autoScrews) el.append(buildToolButton(map.autoScrews, false));
+      if (map.asmLightweight) {
+        const lwBtn = buildToolButton(map.asmLightweight, false);
+        const lwOn = typeof Assembly !== 'undefined' && Assembly.isLightweight && Assembly.isLightweight();
+        lwBtn.classList.toggle('active', !!lwOn);
+        lwBtn.setAttribute('aria-pressed', String(!!lwOn));
+        el.append(lwBtn);
+      }
+      if (map.asmEnvelope) el.append(buildToolButton(map.asmEnvelope, false));
       for (const id of ['clashes', 'measure', 'notes', 'views', 'check']) {
         if (map[id]) el.append(buildToolButton(map[id], false));
       }

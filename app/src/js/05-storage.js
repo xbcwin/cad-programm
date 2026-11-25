@@ -199,10 +199,17 @@ const Store = (() => {
     return doc;
   }
   function collectBlobIds(doc, set = new Set()) {
-    if (!doc || !Array.isArray(doc.items)) return set;
-    walkItems(doc.items, (it) => {
-      if (it && it.kind === 'import' && it.p && it.p.blobId) set.add(it.p.blobId);
-    });
+    if (!doc) return set;
+    if (Array.isArray(doc.items)) {
+      walkItems(doc.items, (it) => {
+        if (it && it.kind === 'import' && it.p && it.p.blobId) set.add(it.p.blobId);
+      });
+    }
+    if (doc.lightCache && typeof doc.lightCache === 'object') {
+      for (const bid of Object.values(doc.lightCache)) {
+        if (typeof bid === 'string' && bid) set.add(bid);
+      }
+    }
     return set;
   }
   async function hydrateDoc(doc, seen = new Set()) {
@@ -229,6 +236,7 @@ const Store = (() => {
     if (!doc) return doc;
     extractBlobs(doc);
     const out = deepClone(doc);
+    delete out.lightCache;
     const items = [];
     walkItems(out.items, (it) => {
       if (it && it.kind === 'import' && it.p && it.p.blobId) items.push(it);
@@ -954,6 +962,12 @@ const Store = (() => {
     }
     if (doc.noHistory !== undefined && doc.noHistory !== null && typeof doc.noHistory !== 'boolean') {
       errors.push('Feld „noHistory“ muss ein Wahrheitswert (true/false) sein.');
+    }
+    if (doc.lightweight !== undefined && doc.lightweight !== null && typeof doc.lightweight !== 'boolean') {
+      errors.push('Feld „lightweight“ muss ein Wahrheitswert (true/false) sein.');
+    }
+    if (doc.lightCache !== undefined && doc.lightCache !== null && !isPlainObj(doc.lightCache)) {
+      errors.push('Feld „lightCache“ muss ein Objekt sein.');
     }
     if (doc.rollback !== undefined && doc.rollback !== null) {
       if (typeof doc.rollback !== 'number' || !Number.isInteger(doc.rollback) || doc.rollback < 0) {

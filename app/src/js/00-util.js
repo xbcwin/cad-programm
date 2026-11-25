@@ -2556,6 +2556,16 @@ const HELP = {
   "tip": "Teil in der Baugruppe spiegeln (verknüpfte Kopie)",
   "hilfe": "Erzeugt eine gespiegelte, verknüpfte Kopie des gewählten Teils an einer Grund- oder Bezugsebene. Änderungen an der Vorlage übernehmen sich automatisch auf das Spiegelbild.",
   "tipp": "Verschiebst du die Spiegelebene über den Abstand, wandert die gespiegelte Kopie direkt mit."
+ },
+ "lightweightMode": {
+  "tip": "Leichtmodus für große Baugruppen (Profi): zeigt Teile zuerst nur als schnelles Netz",
+  "hilfe": "Im Leichtmodus speichert Tracery die fertigen Dreiecks-Netze aller Teile. Beim nächsten Öffnen werden unveränderte Teile sofort aus diesem Netz-Speicher angezeigt, ohne den CAD-Kern jedes Mal neu zu rechnen. Sobald du ein Teil bearbeitest, ein Maß änderst oder auf „Voll laden“ klickst, rechnet der Kern dieses einzelne Teil exakt nach.",
+  "tipp": "Verschieben und Drehen ganzer Teile klappt auch im Leichtmodus sofort ohne Neuberechnung."
+ },
+ "simplifiedEnvelope": {
+  "tip": "Vereinfachte Hülle (Profi): fasst eine ganze Baugruppe zu einem einfachen Teil zusammen",
+  "hilfe": "Erzeugt aus vielen Einzelteilen einen einzigen einfachen Körper, der nur die Außenhaut mit gleichen Außenmaßen behält. Verdeckte Innenteile, innere Hohlräume und wahlweise Bohrungen oder kleine Rundungen fallen weg – ideal, um eine große Unterbaugruppe leicht und schnell weiterzuverwenden.",
+  "tipp": "Als „Außenhaut“ bleiben abgestufte Formen erhalten; „Einzel-Kästchen“ oder „Hüllquader“ machen die Hülle noch kleiner."
  }
 };
 
