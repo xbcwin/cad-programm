@@ -55,6 +55,7 @@ const Toolbar = (() => {
       { id: 'datumAxis', group: T('dlg.tb.grpConstruct'), domId: 't-datumAxis', icon: 'axes', label: T('dlg.tb.datumAxis'), tip: T('dlg.tb.datumAxisTip'), cls: 'minor', help: 'datumAxis', run: (e) => Datums.axisDialog(e.currentTarget) },
       { id: 'datumPoint', group: T('dlg.tb.grpConstruct'), domId: 't-datumPoint', icon: 'point', label: T('dlg.tb.datumPoint'), tip: T('dlg.tb.datumPointTip'), cls: 'minor', help: 'datumPoint', run: (e) => Datums.pointDialog(e.currentTarget) },
       { id: 'fixedJoint', group: T('dlg.tb.grpConstruct'), domId: 't-fixedJoint', icon: 'lock', label: T('ctx.fixedJoint'), tip: T('ctx.fixedJointTip'), cls: 'minor', help: 'fixedJoint', run: () => Joints.startFixed() },
+      { id: 'autoScrews', group: T('dlg.tb.grpConstruct'), domId: 't-auto-screws', icon: 'bolt', label: T('asm.autoScrewsBtn'), tip: T('asm.autoScrewsTip'), cls: 'minor', help: 'autoScrews', run: () => Assembly.autoScrewsDialog() },
       { id: 'motion', group: T('dlg.tb.grpConstruct'), domId: 't-motion', icon: 'play', label: T('motion.title'), tip: T('motion.toolbarTip'), cls: 'minor pro', help: 'motionStudy', run: () => Motion.toggle() },
       { id: 'params', group: T('dlg.tb.grpConstruct'), domId: 't-params', icon: 'sliders', label: T('topbar.params'), tip: T('dlg.tb.paramsTip'), cls: 'minor', help: 'params', run: () => Panels.showParams() },
       // Ansicht & Prüfen
@@ -308,6 +309,7 @@ const Toolbar = (() => {
       { label: T('menu.check.clashes'), icon: 'boolIntersect', id: 'more-clash-check', help: 'clashCheck', run: () => ClashCheck.open() },
       { label: T('menu.check.printCost'), icon: 'printer', id: 'more-print-cost', help: 'printCost', run: () => Print.costDialog() },
       { label: T('menu.check.reportPdf'), icon: 'file', id: 'more-report-pdf', help: 'reportPdf', run: () => Measure.reportDialog() },
+      { label: T('asm.autoScrewsBtn'), icon: 'bolt', id: 'more-auto-screws', help: 'autoScrews', run: () => Assembly.autoScrewsDialog() },
       '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
     ]));
     return b;
@@ -361,6 +363,7 @@ const Toolbar = (() => {
       asmCutBtn.addEventListener('click', () => Assembly.startAsmCut());
       el.append(asmCutBtn);
       const map = catalogMap();
+      if (map.autoScrews) el.append(buildToolButton(map.autoScrews, false));
       for (const id of ['clashes', 'measure', 'notes', 'views', 'check']) {
         if (map[id]) el.append(buildToolButton(map[id], false));
       }

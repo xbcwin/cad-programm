@@ -1556,6 +1556,10 @@ const Panels = (() => {
       fb.innerHTML = icon('folder') + esc(T('asm.insertFromFileShort'));
       fb.onclick = () => Comp.insertFromFile();
       w.append(h('div', { class: 'btn-row' }, ib, fb));
+      const sb = h('button', { type: 'button', class: 'btn', id: 'proj-auto-screws', 'data-help': 'autoScrews' });
+      sb.innerHTML = icon('bolt') + esc(T('asm.autoScrewsBtn'));
+      sb.onclick = () => Assembly.autoScrewsDialog();
+      w.append(h('div', { class: 'btn-row' }, sb));
     }
     const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
     if (poseSec) w.append(poseSec);

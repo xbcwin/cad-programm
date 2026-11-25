@@ -31811,6 +31811,209 @@ def t_a161_bohrung_stapel_baugruppe(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- [A-160] Schrauben automatisch einsetzen (BG-23) ----------
+def t_a160_schrauben_einsetzen(p):
+    # 1. Einfach-Modus: Platte 80×60×10 mm mit 4 Durchgangslöchern Ø 5,5 mm → 4× M5 einsetzen
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('simple');
+      App.setDoc(Assembly.newAssembly('Schrauben-Test'));
+      App.change('Platte mit 4 Löchern', (d) => {
+        const plate = Model.newItem('box', { w: 80, d: 60, h: 10 }, { name: 'Grundplatte' });
+        const grp = Model.newItem('group', {}, { name: 'Grundplatte' });
+        grp.children = [plate];
+        const coords = [[-25, -18], [25, -18], [-25, 18], [25, 18]];
+        for (let i = 0; i < coords.length; i++) {
+          const [cx, cy] = coords[i];
+          const hole = Model.newItem('cylinder', { d: 5.5, h: 14 }, { name: 'Loch ' + (i + 1), role: 'hole' });
+          hole.t.x = cx; hole.t.y = cy; hole.t.z = -2;
+          grp.children.push(hole);
+        }
+        d.items.push(grp);
+      });
+    """)
+    warte_rechnen(p, 60)
+
+    btn_vis = p.ev("""return {
+      simple: ViewPrefs.simple,
+      tbVis: !!(document.querySelector('#t-auto-screws') && document.querySelector('#t-auto-screws').offsetParent !== null),
+      projVis: !!(document.querySelector('#proj-auto-screws') && document.querySelector('#proj-auto-screws').offsetParent !== null),
+    }""")
+
+    p.pg.locator('#t-auto-screws').click()
+    p.wait(300)
+    dlg_info = p.ev("""
+      const rows = [...document.querySelectorAll('#auto-screws-table tr.as-row')];
+      return {
+        open: !!document.querySelector('#auto-screws-dialog'),
+        count: rows.length,
+        sizes: rows.map(r => r.querySelector('.as-size').value),
+        heads: rows.map(r => r.querySelector('.as-head').value),
+        lens: rows.map(r => Number(r.querySelector('.as-len').value)),
+      };
+    """)
+    p.pg.locator('#as-apply').click()
+    p.wait(300)
+    warte_rechnen(p, 60)
+
+    inserted = p.ev("""
+      const screws = App.doc.items.filter(x => x.kind === 'part' && x.p && x.p.lib === 'stdScrew');
+      return {
+        errCount: App.errors.length,
+        count: screws.length,
+        sizes: screws.map(s => s.p.size),
+        zs: screws.map(s => Math.round(s.t.z * 100) / 100),
+        pos: screws.map(s => [Math.round(s.t.x * 10) / 10, Math.round(s.t.y * 10) / 10]),
+        bboxes: screws.map(s => {
+          const r = App.results.get(s.id);
+          return r && r.data ? r.data.bbox.map(v => Math.round(v * 10) / 10) : null;
+        }),
+      };
+    """)
+    expected_pos = sorted([[-25.0, -18.0], [25.0, -18.0], [-25.0, 18.0], [25.0, 18.0]])
+    ok1 = (
+        btn_vis == {'simple': True, 'tbVis': True, 'projVis': True}
+        and dlg_info['open'] is True
+        and dlg_info['count'] == 4
+        and dlg_info['sizes'] == ['M5', 'M5', 'M5', 'M5']
+        and all(L >= 12 for L in dlg_info['lens'])
+        and inserted['errCount'] == 0
+        and inserted['count'] == 4
+        and inserted['sizes'] == ['M5', 'M5', 'M5', 'M5']
+        and all(abs(z - 10.0) < 0.05 for z in inserted['zs'])
+        and sorted(inserted['pos']) == expected_pos
+    )
+
+    # 2. Stückliste: 4 Schrauben M5 erscheinen zusammengefasst in der Stückliste (BOM + Dialog)
+    bom_info = p.ev("""return (async () => {
+      const b = await Mass.bom();
+      const row = b && b.rows ? b.rows.find(r => r.name.includes('M5') && r.partNo.includes('ISO 4762')) : null;
+      return { row };
+    })()""")
+    p.ev("Mass.bomDialog()")
+    p.wait(500)
+    bom_txt = p.pg.locator('#bom').inner_text() if p.pg.locator('#bom').count() else ''
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    ok2 = bool(
+        bom_info['row']
+        and bom_info['row']['n'] == 4
+        and bom_info['row']['kind'] == 'V2A Edelstahl'
+        and 'M5' in bom_txt
+        and '4' in bom_txt
+    )
+
+    # 3. Doppel-Schutz & Rückgängig in einem Schritt
+    after_check = p.ev("""
+      const h2 = Assembly.findHoles(App.doc);
+      const beforeUndo = App.doc.items.length;
+      App.undo();
+      return {
+        allUsed: h2.length === 4 && h2.every(x => x.hasScrew && !x.selected),
+        beforeUndo,
+        afterUndo: App.doc.items.length,
+      };
+    """)
+    warte_rechnen(p, 60)
+    ok3 = (
+        after_check['allUsed'] is True
+        and after_check['beforeUndo'] == 5
+        and after_check['afterUndo'] == 1
+    )
+
+    # 4. Profi-Modus: 2 gestapelte Platten (6 + 6 = 12 mm) + Senkloch M4 + Mutter & Scheibe
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.setDoc(Assembly.newAssembly('Stapel-Test'));
+      App.change('Zwei Platten und Senkloch', (d) => {
+        const mkPlate = (name, z0, h) => {
+          const g = Model.newItem('group', {}, { name });
+          g.t.z = z0;
+          const b = Model.newItem('box', { w: 70, d: 40, h }, { name: 'Platte' });
+          const h1 = Model.newItem('cylinder', { d: 5.5, h: h + 4 }, { name: 'L1', role: 'hole' });
+          h1.t.x = -20; h1.t.z = -2;
+          const h2 = Model.newItem('cylinder', { d: 5.5, h: h + 4 }, { name: 'L2', role: 'hole' });
+          h2.t.x = 20; h2.t.z = -2;
+          g.children = [b, h1, h2];
+          return g;
+        };
+        const p1 = mkPlate('Unterplatte', 0, 6);
+        const p2 = mkPlate('Oberplatte', 6, 6);
+        const sh = Model.newItem('part', { lib: 'screwHole', size: 'M4', head: 'countersunk', fit: 'medium', length: 12 }, { name: 'Senkloch', role: 'hole' });
+        sh.t.z = 6.2;
+        p2.children.push(sh);
+        d.items.push(p1, p2);
+      });
+    """)
+    warte_rechnen(p, 60)
+
+    stack_holes = p.ev("""
+      const holes = Assembly.findHoles(App.doc);
+      const m5Holes = holes.filter(h => h.size === 'M5');
+      const m4Hole = holes.find(h => h.size === 'M4');
+      return {
+        totalHoles: holes.length,
+        m5Count: m5Holes.length,
+        m5Thick: m5Holes.map(h => Math.round(h.thickness * 10) / 10),
+        m4Head: m4Hole ? m4Hole.head : null,
+        m4Csk: m4Hole ? m4Hole.hasCountersink : false,
+      };
+    """)
+    p.ev("Assembly.autoScrewsDialog()")
+    p.wait(250)
+    p.pg.check('#as-all-washer')
+    p.pg.check('#as-all-nut')
+    p.wait(150)
+    p.pg.locator('#as-apply').click()
+    p.wait(300)
+    warte_rechnen(p, 60)
+    stack_res = p.ev("""
+      const items = App.doc.items;
+      const screws = items.filter(x => x.kind === 'part' && x.p && x.p.lib === 'stdScrew');
+      const washers = items.filter(x => x.kind === 'part' && x.p && x.p.lib === 'stdWasher');
+      const nuts = items.filter(x => x.kind === 'part' && x.p && x.p.lib === 'stdNut');
+      return {
+        errCount: App.errors.length,
+        insScrews: screws.length,
+        insWashers: washers.length,
+        insNuts: nuts.length,
+        m5Len: screws.filter(s => s.p.size === 'M5').map(s => s.p.length),
+      };
+    """)
+    ok4 = (
+        stack_res['errCount'] == 0
+        and stack_holes['totalHoles'] == 3
+        and stack_holes['m5Count'] == 2
+        and stack_holes['m5Thick'] == [12.0, 12.0]
+        and stack_holes['m4Head'] == 'senk'
+        and stack_holes['m4Csk'] is True
+        and stack_res['insScrews'] == 3
+        and stack_res['insWashers'] == 5
+        and stack_res['insNuts'] == 3
+        and all(L >= 18 for L in stack_res['m5Len'])
+    )
+
+    # 5. Validierung, DE/EN-Texte, Hilfetext, Befehlssuche & keine JS-Fehler
+    meta = p.ev("""return (async () => {
+      const val = Store.validateProject(App.doc);
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'autoScrews';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.autoScrews && wh.autoScrews.tip && wh.autoScrews.hilfe && wh.autoScrews.tipp && desc && desc.text === wh.autoScrews.hilfe && desc.tip === wh.autoScrews.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('schrauben einsetzen').some(c => c.id === 'auto-screws');
+      return { valOk: val.ok, hOk, i18nOk, cmdOk };
+    })()""")
+    ok5 = bool(meta['valOk'] and meta['hOk'] and meta['i18nOk'] and meta['cmdOk'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -32083,6 +32286,7 @@ TESTS = [
     ('[A-159] Bezüge zwischen Teilen verwalten: Liste, Einfrieren, Auftauen & Lösen (BG-22)', t_a159_bezuege_verwalten),
     ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
     ('[A-161] Bohrung durch Stapel und Baugruppen-Schnitt (BG-24, BG-25)', t_a161_bohrung_stapel_baugruppe),
+    ('[A-160] Schrauben automatisch einsetzen: Bohrungen erkennen, M5-Schrauben & Stückliste (BG-23)', t_a160_schrauben_einsetzen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

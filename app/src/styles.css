@@ -1919,6 +1919,23 @@ body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
 .mot-cursor{stroke:#e03131;stroke-width:1.25;stroke-dasharray:3 2}
 .mot-dot{stroke:var(--surface);stroke-width:1.5}
 
+/* Schrauben automatisch einsetzen (BG-23) */
+.as-dlg{display:grid;gap:10px}
+.as-summary{font-size:13px;font-weight:600;color:var(--ink)}
+.as-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.as-bar-lbl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
+.as-bar select,.as-table select{height:26px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px}
+.as-table-wrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.as-table{margin:0;width:100%}
+.as-table th{position:sticky;top:0;background:var(--surface-2);z-index:1}
+.as-part{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.as-hole-cell{display:grid;gap:2px}
+.as-badges{display:flex;gap:4px;flex-wrap:wrap}
+.as-badge{display:inline-block;padding:1px 5px;border-radius:4px;font-size:10.5px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+.as-badge.warn{color:var(--warn);border-color:var(--warn)}
+.as-row-used{opacity:.72}
+.as-flip{min-width:28px;padding:0 6px}
+
 
 
 

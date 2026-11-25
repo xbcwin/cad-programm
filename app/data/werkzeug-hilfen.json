@@ -1793,5 +1793,10 @@
     "tip": "Baugruppen-Schnitt: schneidet eine Skizze gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
     "hilfe": "Erzeugt auf einer gewählten Fläche oder Ebene einen geschlossenen Schnitt-Umriss und zieht ihn gleichzeitig von allen getroffenen oder ausgewählten Teilen der Baugruppe ab. Die Teile bleiben einzelne Baugruppen-Komponenten.",
     "tipp": "Mit „Skizze bearbeiten“ passt du den Ausschnitt später an – alle betroffenen Teile werden sofort mitgeändert."
+  },
+  "autoScrews": {
+    "tip": "Schrauben automatisch einsetzen: erkennt Bohrungen in Bauteilen und setzt passende Normschrauben ein",
+    "hilfe": "Sucht alle runden Durchgangs-, Kern- und Sacklöcher in deinen Bauteilen, ordnet ihnen die passende metrische Normschraube (M1.6–M24 nach ISO 273 / DIN 336) zu und schlägt anhand der Materialstärke – auch über mehrere gestapelte Platten hinweg – eine Normlänge vor. Du kannst Größe, Kopfform, Länge sowie Scheiben und Muttern vor dem Einsetzen noch anpassen.",
+    "tipp": "Fahre mit der Maus über eine Zeile in der Tabelle, um die zugehörige Bohrung sofort im 3D-Bild markiert zu sehen."
   }
 }
