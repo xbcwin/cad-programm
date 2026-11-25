@@ -2358,6 +2358,7 @@ const Model = (() => {
       printFit: ['loose', 'slide', 'snug', 'press'].includes(rawBed.printFit) ? rawBed.printFit : '',
     };
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
+    if (doc.noHistory) { doc.noHistory = true; doc.rollback = null; } else delete doc.noHistory;
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];

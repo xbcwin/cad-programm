@@ -2070,6 +2070,22 @@ const Features = (() => {
     if (App.ctx) { UI.toast('Schritte zum Verschieben/Drehen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
     const tgt = resolveTopTarget(targetOrIds);
     if (!tgt) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
+    if (App.doc.noHistory && !opts.copy) {
+      const dx = Number(opts.dx) || 0, dy = Number(opts.dy) || 0, dz = Number(opts.dz) || 0;
+      const rx = Number(opts.rx) || 0, ry = Number(opts.ry) || 0, rz = Number(opts.rz) || 0;
+      if (dx || dy || dz || rx || ry || rz) {
+        App.change('Verschoben', (doc) => {
+          const f = Model.find(doc, tgt.id); if (!f) return false;
+          const tn = Model.tNumeric(f.item);
+          f.item.t.x = round(tn.x + dx, 4); f.item.t.y = round(tn.y + dy, 4); f.item.t.z = round(tn.z + dz, 4);
+          f.item.t.rx = round(tn.rx + rx, 4); f.item.t.ry = round(tn.ry + ry, 4); f.item.t.rz = round(tn.rz + rz, 4);
+        });
+      } else {
+        App.select([tgt.id]);
+        UI.toast(T('tl.noHistoryMoveHint'), { icon: 'info', ms: 3600 });
+      }
+      return tgt;
+    }
     const p = {
       target: tgt.id,
       dx: opts.dx ?? 0, dy: opts.dy ?? 0, dz: opts.dz ?? 0,

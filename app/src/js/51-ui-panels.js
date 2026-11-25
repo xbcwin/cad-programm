@@ -754,8 +754,33 @@ const Panels = (() => {
   }
   function renderTree(body) {
     const items = App.doc.items;
+    const isAsm = Model.isAssembly(App.doc);
     const fs = items.length <= 8 ? firstSteps() : null;
     if (fs) body.append(fs);
+    if (!isAsm) {
+      const hm = h('div', { class: 'history-mode-bar pro', id: 'history-mode-bar', 'data-help': 'noHistory' });
+      const chk = h('input', { type: 'checkbox', id: 'chk-no-history', checked: !!App.doc.noHistory });
+      chk.onchange = () => { Timeline.setNoHistory(chk.checked); };
+      hm.append(h('label', { class: 'check' }, chk, h('span', null, T('left.tree.noHistoryLabel'))));
+      body.append(hm);
+    }
+    if (App.doc.noHistory && !isAsm) {
+      const box = h('div', { class: 'hint-box no-history-info', id: 'no-history-info' });
+      box.append(h('div', { html: T('left.tree.noHistoryInfoHtml') }));
+      const rb = h('button', { type: 'button', class: 'btn small pro', id: 'btn-resume-history', 'data-help': 'noHistory' }, T('tl.resumeBtn'));
+      rb.onclick = () => Timeline.setNoHistory(false);
+      box.append(rb);
+      body.append(box);
+      const ds = Datums.treeSection(); if (ds) body.append(ds);
+      const as = Datums.axisTreeSection(); if (as) body.append(as);
+      const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
+      const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
+      const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
+      const ms = Measure.treeSection(); if (ms) body.append(ms);
+      const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+      const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
+      return;
+    }
     if (!items.length) {
       if (Model.isAssembly(App.doc)) {
         const emptyAsm = h('div', { class: 'empty-tree empty-asm' });
@@ -1824,7 +1849,8 @@ const Panels = (() => {
     const nameInp = h('input', { id: 'item-name', value: Model.label(it), 'aria-label': T('common.name') });
     nameInp.addEventListener('change', () => { const v = nameInp.value.trim(); if (v) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = v; }); });
     nameInp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nameInp.blur(); });
-    const kindLabel = it.kind === 'part' ? (LIBMAP[it.p.lib] || {}).label || T('kind.part') : KINDS[it.kind].label;
+    const isFrozen = it.kind === 'import' && it.p && it.p.frozen;
+    const kindLabel = isFrozen ? T('kind.frozen') : it.kind === 'part' ? (LIBMAP[it.p.lib] || {}).label || T('kind.part') : KINDS[it.kind].label;
     title.append(nameInp);
     if (kindLabel && kindLabel !== Model.label(it)) title.append(h('span', { class: 'kind-badge' }, kindLabel));
     const exb = h('button', { type: 'button', class: 'icon-btn', id: 'item-explain', 'aria-label': T('common.explainStep'), 'data-tip': T('common.explainStep'), 'data-help': 'explainStep' }); exb.innerHTML = icon('help');
@@ -2269,6 +2295,10 @@ const Panels = (() => {
       }
       w.append(sec);
     } else if (it.kind === 'import') {
+      if (it.p && it.p.frozen) {
+        sec.append(h('div', { class: 'hint-box', id: 'frozen-body-info' }, T(App.doc.noHistory ? 'panel.imp.frozenDirectHint' : 'panel.imp.frozenStepHint')));
+        w.append(sec);
+      } else {
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.imp.file')), h('b', { class: 'mono' }, it.p.file || '–')));
       const fl = h('div', { class: 'fields' });
       fl.append(UI.selectField({ id: 'p-scale', label: T('panel.imp.unit'), value: String(it.p.scale || 1), options: [['1', T('unit.mmShort')], ['10', T('unit.cmShort')], ['25.4', T('unit.inShort')], ['1000', T('unit.mShort')]], onChange: (v) => setP('scale', parseFloat(v)) }));
@@ -2323,6 +2353,7 @@ const Panels = (() => {
       }
       sec.append(icPanel, h('div', { class: 'hint-box', html: T('panel.imp.fixedHint') }));
       w.append(sec);
+      }
     } else if (it.kind === 'sweep') {
       const fl = h('div', { class: 'fields' });
       const profs = App.doc.items.filter((x) => x.kind === 'extrude' && x.p && x.p.sketch && x.id !== it.id);

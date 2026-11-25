@@ -2,7 +2,45 @@
 // Jeder oberste Eintrag im Verlauf ist ein Schritt. Der Marker legt fest, bis wohin gerechnet wird;
 // neue Schritte landen am Marker. Unterdrückte Schritte bleiben erhalten, zählen aber nicht mit.
 const Timeline = (() => {
-  let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
+  let el, track, info, btnL, btnR, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null, switching = false;
+  const isNoHistory = () => !!(App.doc && App.doc.noHistory);
+  async function setNoHistory(on, opts = {}) {
+    const target = !!on;
+    if (switching || target === isNoHistory()) return false;
+    if (target && Model.isAssembly(App.doc)) {
+      UI.toast(T('tl.noHistoryNoAsm'), { icon: 'info' });
+      Panels.renderLeft(); render();
+      return false;
+    }
+    if (!target && !(opts && opts.skipConfirm)) {
+      const ok = await new Promise((res) => {
+        UI.modal({
+          title: T('tl.resumeTitle'),
+          body: h('p', { style: { margin: 0, lineHeight: 1.5 } }, T('tl.resumeBody')),
+          actions: [
+            { id: 'nh-resume-cancel', label: T('common.cancel'), value: false },
+            { id: 'nh-resume-ok', label: T('tl.resumeConfirm'), primary: true, value: true },
+          ],
+          onClose: (v) => res(!!v),
+        });
+      });
+      if (!ok) {
+        Panels.renderLeft(); render();
+        return false;
+      }
+    }
+    switching = true;
+    try {
+      const ok = await App.setNoHistory(target);
+      if (ok && !(opts && opts.silent)) {
+        UI.toast(T(target ? 'tl.noHistoryOnToast' : 'tl.noHistoryOffToast'), { icon: target ? 'info' : 'check', ms: 4000 });
+      }
+      return ok;
+    } finally {
+      switching = false;
+      render();
+    }
+  }
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
     return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', deform: 'deform', thicken: 'thicken', rib: 'rib', vent: 'vent', fins: 'fins', fillPattern: 'patternFill', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', undercut: 'undercut', circlipGroove: 'circlipGroove', keyway: 'keyway', splineProfile: 'splineShaft', knurl: 'knurl', gripPattern: 'gripPattern', sketch3d: 'sketch3d' })[it.kind] || 'cube';
@@ -34,6 +72,24 @@ const Timeline = (() => {
   function render() {
     if (!el) return;
     const own = owner(), items = listOf(own), n = items.length, mk = markerPos();
+    const noHist = isNoHistory() && own === App.doc;
+    el.classList.toggle('no-history', noHist);
+    if (noHist) {
+      el.classList.remove('ctx');
+      if (btnL) btnL.hidden = true;
+      if (btnR) btnR.hidden = true;
+      track.innerHTML = '';
+      const msg = h('span', { class: 'tl-nohist-msg' }, T('tl.noHistoryBar'));
+      const btn = h('button', { type: 'button', class: 'btn small pro', id: 'tl-resume-history', 'data-help': 'noHistory' }, T('tl.resumeBtn'));
+      btn.onclick = () => setNoHistory(false);
+      track.append(msg, btn);
+      info.classList.remove('peek');
+      info.textContent = '';
+      delete info.dataset.tip;
+      return;
+    }
+    if (btnL) btnL.hidden = false;
+    if (btnR) btnR.hidden = false;
     const V = Model.vars(App.doc).v;
     const selTop = own === App.doc ? new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id)) : new Set(App.sel);
     el.classList.toggle('ctx', own !== App.doc);
@@ -130,7 +186,9 @@ const Timeline = (() => {
     bNext = bt('arrowR', T('tl.stepForward'), () => setMarker(markerPos() + 1));
     bEnd = bt('chevR', T('tl.toEnd'), () => setMarker(listOf(owner()).length));
     track = h('div', { class: 'tl-track' }); info = h('div', { class: 'tl-info', 'data-help': 'timeline' });
-    el.append(h('div', { class: 'tl-btns' }, bStart, bPrev), track, h('div', { class: 'tl-btns' }, bNext, bEnd), info);
+    btnL = h('div', { class: 'tl-btns' }, bStart, bPrev);
+    btnR = h('div', { class: 'tl-btns' }, bNext, bEnd);
+    el.append(btnL, track, btnR, info);
     $('#center').append(el); $('#center').classList.add('has-tl');
     const r = debounce(render, 30);
     const now = () => { r.cancel(); render(); };
@@ -140,6 +198,6 @@ const Timeline = (() => {
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
     render();
   }
-  return { init, render, refreshLabels, setMarker, toggleSuppress, markerPos };
+  return { init, render, refreshLabels, setMarker, toggleSuppress, markerPos, isNoHistory, setNoHistory };
 })();
 

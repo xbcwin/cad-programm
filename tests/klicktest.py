@@ -28881,6 +28881,211 @@ def t_a148_gesten(p):
         ctx.close()
 
 
+def t_verlauf_abschalten(p):
+    p.empty()
+    # 1. Profi-Sichtbarkeit: in Einfach ausgeblendet, in Profi sichtbar
+    p.ev("ViewPrefs.setLevel('simple');"); p.wait(150)
+    vis_simple = p.ev("const el=document.getElementById('chk-no-history'); return !!(el && el.offsetParent);")
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(150)
+    vis_pro = p.ev("const el=document.getElementById('chk-no-history'); return !!(el && el.offsetParent);")
+    ok1 = (vis_simple is False) and (vis_pro is True)
+
+    # 2. Teil mit 3 Schritten anlegen (Quader + vereinigen Zylinder + abziehen Aussparung)
+    p.ev("""
+      const b = Actions.addPrimitive('box', { p: { w: 40, d: 30, h: 20 } });
+      const c = Actions.addPrimitive('cylinder', { p: { d: 14, h: 20 }, pos: [15, 0] });
+      Actions.setOp(c.id, 'join', b.id);
+      const cut = Actions.addPrimitive('box', { p: { w: 10, d: 10, h: 20 }, pos: [-10, 0] });
+      Actions.setOp(cut.id, 'cut', b.id);
+    """)
+    warte_rechnen(p)
+    st0 = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      const bb = m.bbox || [0,0,0,0,0,0];
+      return {
+        items: App.doc.items.length,
+        nodes: document.querySelectorAll('#left-body .node').length,
+        chips: document.querySelectorAll('#timeline .tl-chip').length,
+        vol: m.volume,
+        sz: [bb[3]-bb[0], bb[4]-bb[1], bb[5]-bb[2]],
+        errs: App.errors.length,
+      };
+    })()""")
+    ok2 = st0['items'] == 3 and st0['nodes'] == 3 and st0['chips'] == 3 and st0['errs'] == 0 and st0['vol'] > 20000
+
+    # 3. Verlauf abschalten -> Liste & Zeitleiste leer, Koerper gleich gross
+    p.pg.locator('#chk-no-history').click()
+    for _ in range(40):
+        p.wait(500)
+        if p.ev("return !!App.doc.noHistory && !App.busy && App.results.size >= 1"):
+            break
+    warte_rechnen(p)
+    st1 = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      const bb = m.bbox || [0,0,0,0,0,0];
+      const info = document.getElementById('no-history-info');
+      return {
+        noHist: !!App.doc.noHistory,
+        items: App.doc.items.length,
+        frozen: !!(App.doc.items[0] && App.doc.items[0].p && App.doc.items[0].p.frozen),
+        nodes: document.querySelectorAll('#left-body .node').length,
+        trees: document.querySelectorAll('#left-body .tree').length,
+        chips: document.querySelectorAll('#timeline .tl-chip').length,
+        infoVis: !!(info && info.offsetParent),
+        vol: m.volume,
+        sz: [bb[3]-bb[0], bb[4]-bb[1], bb[5]-bb[2]],
+        errs: App.errors.length,
+      };
+    })()""")
+    vol_diff = abs(st1['vol'] - st0['vol']) / max(1.0, st0['vol'])
+    sz_diff = max(abs(st1['sz'][i] - st0['sz'][i]) for i in range(3))
+    ok3 = (
+        st1['noHist'] is True and st1['items'] == 1 and st1['frozen'] is True
+        and st1['nodes'] == 0 and st1['trees'] == 0 and st1['chips'] == 0
+        and st1['infoVis'] is True and st1['errs'] == 0
+        and vol_diff < 0.005 and sz_diff < 0.1
+    )
+
+    # 4. Bohrung direkt am eingefrorenen Koerper setzen
+    p.ev("""
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n[2] > 0.9 && f.c[2] > 19.5);
+      const f = r.data.faces[fi];
+      App.select([id], { face: { id, faceIdx: fi, point: f.c, normal: f.n } });
+      Place.holeWizard(document.getElementById('t-parts'));
+    """)
+    p.wait(300)
+    p.pg.locator('#hw-go').click()
+    p.wait(200)
+    p.ev("Place.stopHoles();")
+    warte_rechnen(p)
+    st2 = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return {
+        items: App.doc.items.length,
+        frozen: !!(App.doc.items[0] && App.doc.items[0].p && App.doc.items[0].p.frozen),
+        nodes: document.querySelectorAll('#left-body .node').length,
+        chips: document.querySelectorAll('#timeline .tl-chip').length,
+        vol: m.volume,
+        errs: App.errors.length,
+      };
+    })()""")
+    ok4 = (
+        st2['items'] == 1 and st2['frozen'] is True
+        and st2['nodes'] == 0 and st2['chips'] == 0
+        and st2['errs'] == 0 and st2['vol'] < st1['vol'] - 50
+    )
+
+    # 5. Kanten abrunden und Koerper verschieben gelten direkt ohne Schritte
+    p.ev("""
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const ei = r.data.edges.findIndex(e => e.t === 'LINE' && e.l > 25);
+      Actions.addFinish('fillet', 1.5, [{ id, edgeIdx: ei }]);
+    """)
+    warte_rechnen(p)
+    st3 = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return {
+        items: App.doc.items.length,
+        finishes: (App.doc.items[0].finishes || []).length,
+        nodes: document.querySelectorAll('#left-body .node').length,
+        vol: m.volume,
+        errs: App.errors.length,
+      };
+    })()""")
+    p.ev("Features.transform(App.doc.items[0].id, { dx: 15 });")
+    warte_rechnen(p)
+    st4 = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return {
+        items: App.doc.items.length,
+        nodes: document.querySelectorAll('#left-body .node').length,
+        minX: m.bbox[0],
+        tx: App.doc.items[0].t.x,
+        errs: App.errors.length,
+      };
+    })()""")
+    ok5 = (
+        st3['items'] == 1 and st3['finishes'] == 0 and st3['nodes'] == 0
+        and st3['errs'] == 0 and st3['vol'] < st2['vol'] - 1
+        and st4['items'] == 1 and st4['nodes'] == 0 and st4['errs'] == 0
+        and abs(st4['tx'] - 15) < 0.01 and abs(st4['minX'] - (-5)) < 0.5
+    )
+
+    # 6. Rueckgaengig (Move -> Fillet -> Hole) und Wiederholen (Hole) funktionieren weiter
+    p.ev("App.undo();"); warte_rechnen(p)
+    p.ev("App.undo();"); warte_rechnen(p)
+    p.ev("App.undo();"); warte_rechnen(p)
+    vol_undo = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return { vol: m.volume, noHist: !!App.doc.noHistory };
+    })()""")
+    p.ev("App.redo();"); warte_rechnen(p)
+    vol_redo = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return { vol: m.volume, noHist: !!App.doc.noHistory };
+    })()""")
+    ok6 = (
+        vol_undo['noHist'] is True and abs(vol_undo['vol'] - st1['vol']) < 5
+        and vol_redo['noHist'] is True and abs(vol_redo['vol'] - st2['vol']) < 5
+    )
+
+    # 7. Zurueckschalten fragt nach: Abbrechen behaelt Zustand, Bestaetigen legt 1. Schritt an
+    p.pg.locator('#chk-no-history').click()
+    p.wait(300)
+    has_modal = p.pg.locator('#nh-resume-cancel').count() == 1 and p.pg.locator('#nh-resume-ok').count() == 1
+    p.pg.locator('#nh-resume-cancel').click()
+    p.wait(250)
+    still_off = p.ev("return !!App.doc.noHistory && !!document.getElementById('chk-no-history').checked")
+    p.pg.locator('#chk-no-history').click()
+    p.wait(300)
+    p.pg.locator('#nh-resume-ok').click()
+    for _ in range(40):
+        p.wait(500)
+        if p.ev("return !App.doc.noHistory && !App.busy && App.results.size >= 1"):
+            break
+    warte_rechnen(p)
+    st5 = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      return {
+        noHist: !!App.doc.noHistory,
+        items: App.doc.items.length,
+        kind: App.doc.items[0] && App.doc.items[0].kind,
+        frozen: !!(App.doc.items[0] && App.doc.items[0].p && App.doc.items[0].p.frozen),
+        nodes: document.querySelectorAll('#left-body .node').length,
+        chips: document.querySelectorAll('#timeline .tl-chip').length,
+        vol: m.volume,
+        errs: App.errors.length,
+      };
+    })()""")
+    ok7 = (
+        has_modal and still_off is True and st5['noHist'] is False
+        and st5['items'] == 1 and st5['kind'] == 'import' and st5['frozen'] is True
+        and st5['nodes'] == 1 and st5['chips'] == 1 and st5['errs'] == 0
+        and abs(st5['vol'] - st2['vol']) < 5
+    )
+
+    # 8. Hilfe, Befehlssuche und DE/EN-Schluessel
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button'); b.dataset.help = 'noHistory';
+      const ex = Explain.describeElement(b);
+      const helpOk = !!(h.noHistory && h.noHistory.tip && h.noHistory.hilfe && h.noHistory.tipp && ex && ex.text === h.noHistory.hilfe);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nEq = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('ohne verlauf').some(c => c.id === 'toggle-no-history');
+      return { helpOk, i18nEq, cmdOk };
+    })()""")
+    ok8 = bool(meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -29138,6 +29343,7 @@ TESTS = [
     ('[A-145] Krümmungsglatte Rundung (G2): Form-Wahl, Volumen, Profi & Speichern/Laden (KP-40)', t_a145_rundung_g2),
     ('[A-143] Alles als Paket (ZIP) und Sicherheit beim Einlesen', t_paket_und_sicherheit),
     ('[A-148] Trackpad-, Touch- und Stift-Gesten: Zoom, langes Drücken, Stift in Skizze & Einstellung aus (BE-21)', t_a148_gesten),
+    ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

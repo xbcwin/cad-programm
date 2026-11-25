@@ -1796,6 +1796,13 @@ body.quad-view-on .viewcube,body.quad-view-on .axis-gizmo{display:none}
 .quad-close-btn:hover{border-color:var(--accent);color:var(--accent)}
 .quad-close-btn svg{width:14px;height:14px}
 
+/* ---------- Ohne Verlauf arbeiten (KP-54) ---------- */
+.history-mode-bar{display:flex;align-items:center;gap:8px;padding:6px 4px 10px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.history-mode-bar .check{font-size:13px;font-weight:500}
+.no-history-info{display:grid;gap:8px;margin:8px 0}
+.timeline.no-history{border-color:var(--accent-line)}
+.tl-nohist-msg{color:var(--muted);font-size:12.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+
 
 
 

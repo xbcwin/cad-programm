@@ -2621,6 +2621,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstellung aus → Gesten ohne Wirkung**: Bei `#set-gestures` aus bleiben Zwei-Finger-Touch, Trackpad-Pinch/Wischen und langes Drücken ohne Wirkung, während das klassische Mausrad weiter zoomt; `HELP.touchGestures`, `toggle-gestures` und DE/EN-Schlüsselgleichheit geprüft (`t_a148_gesten`).
 - [ ] **Von Hand**: Auf einem Notebook-Trackpad (macOS/Windows) sowie am Tablet (iPad mit Finger & Apple Pencil) zwei Finger zum Drehen, Schieben und Zoomen, langes Drücken fürs Menü sowie das Zeichnen per Stift in der Skizze ausprobieren.
 
+## Verlauf abschalten: freies Bearbeiten, Schritt 1 (Auto [A-147], KP-54)
+
+- [x] **Profi-Schalter & Verlauf abschalten**: `#chk-no-history` ist in „Einfach“ ausgeblendet und in „Profi“ sichtbar; ein 3-Schritte-Teil (Quader vereinigt mit Zylinder minus Aussparung) wird beim Einschalten sauber als BREP eingefroren, Verlauf-Liste (`#left-body .node`, `.tree`) und Zeitleiste (`#timeline .tl-chip`) sind leer bei unverändertem Volumen und Hüllmaßen (`t_verlauf_abschalten`).
+- [x] **Direkte Bearbeitung & Rückgängig**: Bohrung setzen (`Place.holeWizard`), Kantenrundung (`Actions.addFinish`) und Verschieben wirken direkt am eingefrorenen Körper ohne neue Schritte; 3× `App.undo()` und `App.redo()` stellen jeden Zwischenstand exakt wieder her (`t_verlauf_abschalten`).
+- [x] **Zurückschalten & Metadaten**: Zurückschalten fragt per Bestätigungs-Dialog (`#nh-resume-cancel` / `#nh-resume-ok`) nach und legt den eingefrorenen Stand als ersten Schritt im neuen Verlauf an; `HELP.noHistory`, Befehl `toggle-no-history` und DE/EN-Schlüsselgleichheit geprüft (`t_verlauf_abschalten`).
+- [ ] **Von Hand**: Im Browser in „Profi“ ein Teil mit mehreren Schritten anlegen, „Ohne Verlauf arbeiten“ aktivieren, den Körper per Ziehgriff im Bild verschieben, per Rechtsklick-/Kontextleiste eine Bohrung setzen und abrunden, mit `Strg Z` zurückgehen und über „Verlauf einschalten“ wieder mit einzelnen Schritten weiterbauen.
+
 ## Fehler melden
 
 ```

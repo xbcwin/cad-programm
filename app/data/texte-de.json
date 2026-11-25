@@ -3716,5 +3716,20 @@
   "import.errUnsupported": "Das Dateiformat von „{name}“ wird nicht unterstützt. Erlaubt sind Projekt (.json), STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY, DXF, SVG sowie CSV/XYZ.",
   "import.errSvgBad": "Diese SVG kann ich nicht lesen – die Datei ist beschädigt oder kein gültiges SVG.",
   "import.svgSanitized": "Aus Sicherheitsgründen wurden Skripte oder externe Links aus der SVG entfernt.",
-  "import.errJsonBad": "Die JSON-Datei ist beschädigt oder nicht lesbar."
+  "import.errJsonBad": "Die JSON-Datei ist beschädigt oder nicht lesbar.",
+  "kind.frozen": "Eingefroren",
+  "left.tree.noHistoryLabel": "Ohne Verlauf arbeiten",
+  "left.tree.noHistoryInfoHtml": "<b>Ohne Verlauf aktiv:</b> Der Körper ist eingefroren. Verschieben, Bohren und Runden gelten direkt am Körper – ohne Schritte-Liste. Rückgängig (Strg Z) geht weiter wie gewohnt.",
+  "tl.noHistoryBar": "Ohne Verlauf aktiv · Änderungen gelten direkt am Körper",
+  "tl.resumeBtn": "Verlauf einschalten",
+  "tl.resumeTitle": "Verlauf wieder einschalten?",
+  "tl.resumeBody": "Der aktuelle, eingefrorene Stand wird als erster Schritt in den neuen Verlauf übernommen. Neue Änderungen erscheinen danach wieder als einzelne Schritte.",
+  "tl.resumeConfirm": "Verlauf einschalten",
+  "tl.noHistoryOnToast": "Verlauf abgeschaltet – der Körper ist eingefroren. Änderungen gelten direkt (Rückgängig bleibt aktiv).",
+  "tl.noHistoryOffToast": "Verlauf wieder eingeschaltet – der eingefrorene Stand ist jetzt der erste Schritt.",
+  "tl.noHistoryNoAsm": "„Ohne Verlauf arbeiten“ gibt es nur für Einzelteile (Körper), nicht für Baugruppen.",
+  "tl.noHistoryMoveHint": "Ohne Verlauf kannst du den Körper direkt im Bild ziehen oder rechts unter „Lage“ verschieben.",
+  "tl.frozenBodyName": "Eingefrorener Körper",
+  "panel.imp.frozenDirectHint": "Eingefrorener Körper (ohne Verlauf). Verschieben, Bohren und Runden gelten direkt an diesem Körper.",
+  "panel.imp.frozenStepHint": "Eingefrorener Stand als erster Schritt im Verlauf. Weitere Schritte bauen darauf auf."
 }

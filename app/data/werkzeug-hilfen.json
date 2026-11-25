@@ -1713,5 +1713,10 @@
     "tip": "Trackpad-, Touch- und Stift-Gesten für 3D-Ansicht und Skizze ein- oder ausschalten",
     "hilfe": "Mit zwei Fingern auf Trackpad oder Touchscreen drehst du das Modell (in der Skizze verschiebst du), Zusammenziehen und Aufziehen zoomt, langes Drücken am Touchscreen öffnet das Rechtsklick-Menü und ein Eingabestift zeichnet in der Skizze mit hoher Genauigkeit und Handballen-Schutz.",
     "tipp": "Wenn du am Laptop lieber klassisch nur mit Mausrad-Zoom arbeiten möchtest, schaltest du die Gesten hier einfach ab."
+  },
+  "noHistory": {
+    "tip": "Ohne Verlauf arbeiten: Körper einfrieren und direkt verschieben, bohren und runden (Profi)",
+    "hilfe": "Friert deinen aktuellen Körper als feste Form ein und blendet die Schritte-Liste aus. Neue Änderungen wie Verschieben, Bohren oder Abrunden wirken sofort direkt am Körper, ohne neue Schritte zu sammeln. Rückgängig (Strg Z) funktioniert weiter wie gewohnt.",
+    "tipp": "Wenn du wieder mit Schritten arbeiten willst, nimm das Häkchen einfach wieder heraus – nach einer kurzen Rückfrage startet der eingefrorene Stand als erster Schritt im Verlauf."
   }
 }
