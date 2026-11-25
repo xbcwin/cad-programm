@@ -1953,9 +1953,26 @@ const Viewer = (() => {
     return true;
   }
 
-  // ---------- Vergleich: älterer Stand als roter, gestrichelter Umriss ----------
+  // ---------- Vergleich: älterer Stand als roter, gestrichelter Umriss oder 3-Farben-Diff (neu/weg/gleich) ----------
+  let compareHidNodes = false;
+  function clearCompareGroup() {
+    for (const o of [...groups.compare.children]) {
+      groups.compare.remove(o);
+      o.traverse((x) => {
+        if (x.isLineSegments2 || (x.material && x.material.isLineMaterial)) disposeFat(x);
+        else {
+          x.geometry && x.geometry.dispose();
+          x.material && x.material.dispose();
+        }
+      });
+    }
+    if (compareHidNodes) {
+      groups.nodes.visible = true;
+      compareHidNodes = false;
+    }
+  }
   function setCompare(list) {
-    for (const o of [...groups.compare.children]) { groups.compare.remove(o); o.traverse((x) => { x.geometry && x.geometry.dispose(); x.material && x.material.dispose(); }); }
+    clearCompareGroup();
     for (const it of list || []) {
       const d = it.data;
       const geo = new THREE.BufferGeometry();
@@ -1970,32 +1987,153 @@ const Viewer = (() => {
     }
     needsRender = true;
   }
+  function setCompareDiff(diff) {
+    clearCompareGroup();
+    if (!diff) { needsRender = true; return false; }
+    const root = new THREE.Group();
+    root.userData = { compareDiff: true, noPick: true };
+    const addRoleMesh = (mesh, role, hexColor, edgeHex, opacity, xrayOpacity, orderBase) => {
+      if (!mesh || !mesh.vertices || mesh.vertices.length < 9 || !mesh.triangles || mesh.triangles.length < 3) return;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(mesh.vertices, 3));
+      if (mesh.normals && mesh.normals.length === mesh.vertices.length) {
+        geo.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
+      } else {
+        geo.computeVertexNormals();
+      }
+      geo.setIndex(new THREE.BufferAttribute(mesh.triangles, 1));
+      const surf = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(hexColor),
+          roughness: role === 'same' ? 0.68 : 0.45,
+          metalness: 0.04,
+          transparent: true,
+          opacity,
+          depthWrite: role === 'same',
+          polygonOffset: role !== 'same',
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+          side: THREE.DoubleSide,
+        })
+      );
+      surf.renderOrder = orderBase;
+      surf.userData = { compareRole: role, noPick: true };
+      root.add(surf);
+
+      if (xrayOpacity > 0) {
+        const xray = new THREE.Mesh(
+          geo.clone(),
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color(hexColor),
+            transparent: true,
+            opacity: xrayOpacity,
+            depthTest: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          })
+        );
+        xray.renderOrder = orderBase + 1;
+        xray.userData = { compareRole: role, noPick: true };
+        root.add(xray);
+      }
+
+      if (mesh.lines && mesh.lines.length >= 6) {
+        if (role === 'same') {
+          const lg = new THREE.BufferGeometry();
+          lg.setAttribute('position', new THREE.BufferAttribute(mesh.lines, 3));
+          const ln = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: new THREE.Color(edgeHex), transparent: true, opacity: 0.48 }));
+          ln.renderOrder = orderBase + 1;
+          ln.userData = { compareRole: role, noPick: true };
+          root.add(ln);
+        } else {
+          const ln = makeFat(mesh.lines, edgeHex, 2.6, { depthTest: false, opacity: 0.9, order: orderBase + 2 });
+          ln.userData = { compareRole: role, noPick: true };
+          root.add(ln);
+        }
+      }
+    };
+    if (diff.showSame !== false) addRoleMesh(diff.sameMesh, 'same', '#8d96a5', '#5c6675', 0.48, 0, 10);
+    if (diff.showRemoved !== false) addRoleMesh(diff.removedMesh, 'removed', '#e0483b', '#c92a2a', 0.84, 0.26, 14);
+    if (diff.showAdded !== false) addRoleMesh(diff.addedMesh, 'added', '#2fb36d', '#1c8a52', 0.84, 0.26, 18);
+
+    const hasMesh = root.children.length > 0;
+    if (hasMesh) {
+      groups.compare.add(root);
+      groups.nodes.visible = false;
+      compareHidNodes = true;
+    }
+    needsRender = true;
+    return hasMesh;
+  }
 
   // Bild der Szene für Vorschaubilder
   // Schattenriss: Fläche (mm²), die die Teile aus Blickrichtung dir verdecken – z. B. die Stirnfläche im Fahrtwind.
   // Gerechnet durch Pixelzählen in einem eigenen Bild (orthografisch), unabhängig von der Kamera.
   function silhouette(ids, dir, res = 1024) {
     const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh && !n.allBodiesHidden);
-    if (!show.length) return { area: 0, px: 0 };
+    if (!show.length) return { area: 0, px: 0, width: 0, height: 0, dir: dir ? [...dir] : [0, 1, 0] };
     const d = new THREE.Vector3(...dir).normalize();
+    if (d.lengthSq() < 1e-8) d.set(0, 1, 0);
     groups.nodes.updateMatrixWorld(true);
-    const box = new THREE.Box3(); for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.mesh.matrixWorld));
-    const c = box.getCenter(new THREE.Vector3()), R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2) * 1.02;
-    const oc = new THREE.OrthographicCamera(-R, R, R, -R, 0.1, 4 * R + 20);
-    oc.up.copy(Math.abs(d.z) > 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1));
-    oc.position.copy(c).addScaledVector(d, -(2 * R + 10)); oc.lookAt(c); oc.updateProjectionMatrix(); oc.updateMatrixWorld();
+    const box = new THREE.Box3();
+    for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.mesh.matrixWorld));
+    const c = box.getCenter(new THREE.Vector3());
+    const sz = box.getSize(new THREE.Vector3());
+    const R = Math.max(1, sz.length() / 2) * 1.02;
+    const refUp = Math.abs(d.z) > 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+    const u = new THREE.Vector3().crossVectors(d, refUp).normalize();
+    const v = new THREE.Vector3().crossVectors(u, d).normalize();
+    const hw = (Math.abs(u.x) * sz.x + Math.abs(u.y) * sz.y + Math.abs(u.z) * sz.z) / 2;
+    const hh = (Math.abs(v.x) * sz.x + Math.abs(v.y) * sz.y + Math.abs(v.z) * sz.z) / 2;
+    const half = Math.max(0.5, hw, hh) * 1.04;
+
+    const oc = new THREE.OrthographicCamera(-half, half, half, -half, 0.1, 4 * R + 20);
+    oc.up.copy(v);
+    oc.position.copy(c).addScaledVector(d, -(2 * R + 10));
+    oc.lookAt(c);
+    oc.updateProjectionMatrix();
+    oc.updateMatrixWorld();
+
     const sc = new THREE.Scene(), mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-    for (const n of show) { const m = new THREE.Mesh(n.mesh.geometry, mat); m.matrixAutoUpdate = false; m.matrix.copy(n.mesh.matrixWorld); m.matrixWorld.copy(n.mesh.matrixWorld); sc.add(m); }
+    for (const n of show) {
+      const m = new THREE.Mesh(n.mesh.geometry, mat);
+      m.matrixAutoUpdate = false;
+      m.matrix.copy(n.mesh.matrixWorld);
+      m.matrixWorld.copy(n.mesh.matrixWorld);
+      sc.add(m);
+    }
     const rt = new THREE.WebGLRenderTarget(res, res);
     const oldRT = renderer.getRenderTarget(), oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.localClippingEnabled = false; renderer.clear(); renderer.render(sc, oc);
     const buf = new Uint8Array(res * res * 4); renderer.readRenderTargetPixels(rt, 0, 0, res, res, buf);
     renderer.setRenderTarget(oldRT); renderer.setClearColor(oldCol, oldA); renderer.localClippingEnabled = oldClip;
     rt.dispose(); mat.dispose();
-    let px = 0; for (let i = 0; i < buf.length; i += 4) if (buf[i] > 127) px++;
-    const s = (2 * R) / res;
+
+    let px = 0, minX = res, maxX = -1, minY = res, maxY = -1;
+    for (let y = 0; y < res; y++) {
+      const row = y * res;
+      for (let x = 0; x < res; x++) {
+        if (buf[(row + x) * 4] > 127) {
+          px++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    const s = (2 * half) / res;
     needsRender = true;
-    return { area: px * s * s, px, c: c.toArray(), R };
+    return {
+      area: px * s * s,
+      px,
+      c: c.toArray(),
+      R,
+      width: px ? (maxX - minX + 1) * s : 0,
+      height: px ? (maxY - minY + 1) * s : 0,
+      dir: d.toArray(),
+    };
   }
   // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
   function renderImage(w, hgt, opts = {}) {
@@ -2180,7 +2318,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
+    init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },

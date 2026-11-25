@@ -2282,6 +2282,7 @@ const Model = (() => {
     if (Array.isArray(doc.variants)) for (const v of doc.variants) {
       if (!v.values || typeof v.values !== 'object') v.values = {};
       if (v.suppressed != null && !Array.isArray(v.suppressed)) v.suppressed = [];
+      if (v.material != null && (typeof v.material !== 'string' || !v.material.trim())) delete v.material;
     }
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
     if (doc.pointClouds != null && !Array.isArray(doc.pointClouds)) doc.pointClouds = [];

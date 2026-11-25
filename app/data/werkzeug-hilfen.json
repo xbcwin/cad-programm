@@ -1588,5 +1588,20 @@
     "tip": "Normteil: fertige Keilwelle nach DIN ISO 14 einfügen",
     "hilfe": "Erzeugt eine eigenständige Keilwelle nach DIN ISO 14 (6 oder 8 Keile, parallele Flanken, Innenzentrierung) mit wählbarem Profil, Länge und optionaler Mittenbohrung.",
     "tipp": "Wähle bei „Profil“ „Eigene Maße“, wenn du Zähnezahl, Innendurchmesser, Außendurchmesser und Keilbreite frei festlegen möchtest."
+  },
+  "variantTable": {
+    "tip": "Varianten als Tabelle ausfüllen, umschalten und als CSV tauschen (Profi)",
+    "hilfe": "Öffne im Profi-Modus unter „Maße“ → „Varianten“ auf „Tabelle“ (oder per Befehlssuche „Varianten-Tabelle“). Jede Zeile ist eine Variante, jede Spalte ein Maß sowie der Werkstoff. Du kannst Werte direkt eintippen, Zeilen hinzufügen oder duplizieren und die ganze Tabelle als CSV exportieren und wieder importieren.",
+    "tipp": "Ein Klick auf eine Zeile schaltet das Modell sofort auf diese Variante um; mit Enter oder den Pfeiltasten springst du senkrecht von Zeile zu Zeile."
+  },
+  "compareBodies": {
+    "tip": "Zwei Körper oder Versionen farbig vergleichen: neu (grün), weg (rot), gleich (grau) (Profi)",
+    "hilfe": "Vergleicht zwei Körper im Projekt oder zwei gespeicherte Versionen mit dem exakten CAD-Kern. Hinzugekommene Bereiche leuchten grün, entfernte Bereiche (z. B. Bohrungen) rot und unveränderte Teile bleiben grau.",
+    "tipp": "Klicke auf die Farbfelder (Neu / Weg / Gleich), um einzelne Gruppen auszublenden, oder aktiviere „Aufeinander legen“, wenn zwei Vergleichskörper nebeneinander stehen."
+  },
+  "silhouetteArea": {
+    "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
+    "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
+    "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
   }
 }

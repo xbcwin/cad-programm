@@ -1010,8 +1010,9 @@ const Measure = (() => {
       if (App.sel.length !== 2) clearDist();
       if (sel && App.sel.length) { sel = null; drawSaved(); }
       updateStatus();
+      if (silSt && silSt.onlySel) drawSilhouette();
     });
-    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); });
+    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); if (silSt) drawSilhouette(); });
     App.on('remeshed', relink);
     App.on('rebuilt', updateCalc);
     App.on('docLoaded', stopFieldPick);
@@ -1020,21 +1021,21 @@ const Measure = (() => {
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
       ViewPrefs.on('change', () => {
         const curFmt = `${FMT.dec}:${FMT.angle}`;
-        if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); }
+        if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); if (silSt) updateSilUI(); }
       });
     }
     if (typeof I18n !== 'undefined' && I18n.on) {
-      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } });
+      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } if (silSt) { buildSilBar(); updateSilUI(); } });
     }
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
-      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (draftSt) updateDraftUI(); }
+      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (draftSt) updateDraftUI(); if (silSt) updateSilUI(); }
       drawSaved();
       updateStatus();
     });
-    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (draftSt) draft(false); stopFieldPick(); } drawSaved(); updateStatus(); });
+    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (draftSt) draft(false); if (silSt) silhouette(false); stopFieldPick(); } drawSaved(); updateStatus(); });
     App.on('sketch', updateStatus);
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
@@ -1055,6 +1056,7 @@ const Measure = (() => {
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
     Viewer.on('camera', place);
+    Viewer.on('camera', onSilCamera);
     // Lage unter der Maus in der Statusleiste (BE-17): im Modell X/Y/Z auf dem Körper oder dem Boden, in der Skizze X/Y der Skizze
     let timer = null, lastT = 0, lastPos = null;
     const flushCoords = () => {
@@ -1410,6 +1412,284 @@ const Measure = (() => {
     syncDraftButtons();
     return true;
   }
+  // ---------- Schattenriss-Fläche in Blickrichtung (PF-15) ----------
+  const SIL_DIRS = { front: [0, 1, 0], back: [0, -1, 0], right: [-1, 0, 0], left: [1, 0, 0], top: [0, 0, -1], bottom: [0, 0, 1] };
+  let silSt = null, silCamTimer = null, silLastCamT = 0;
+
+  function cameraViewDir() {
+    if (!Viewer.activeCamera || !Viewer.controls) return [0, 1, 0];
+    const d = Viewer.controls.target.clone().sub(Viewer.activeCamera.position);
+    if (d.lengthSq() < 1e-9) return [0, 1, 0];
+    return d.normalize().toArray();
+  }
+  function normalizeSilDir(val) {
+    if (!val || val === 'camera') return { dirKey: 'camera', dir: cameraViewDir() };
+    if (typeof val === 'string' && SIL_DIRS[val]) return { dirKey: val, dir: SIL_DIRS[val].slice() };
+    if (Array.isArray(val) && val.length >= 3) {
+      const x = Number(val[0]) || 0, y = Number(val[1]) || 0, z = Number(val[2]) || 0;
+      const l = Math.hypot(x, y, z);
+      if (l > 1e-9) {
+        const u = [x / l, y / l, z / l];
+        for (const [k, d] of Object.entries(SIL_DIRS)) {
+          if (u[0] * d[0] + u[1] * d[1] + u[2] * d[2] > 0.9999) return { dirKey: k, dir: d.slice() };
+        }
+        return { dirKey: 'face', dir: u };
+      }
+    }
+    return { dirKey: 'camera', dir: cameraViewDir() };
+  }
+  function silTargetIds(onlySel) {
+    const visibleSolids = [...Viewer.nodes.entries()].filter(([, n]) => n && n.obj.visible && n.role !== 'hole' && n.mesh && !n.allBodiesHidden);
+    if (onlySel && App.sel && App.sel.length) {
+      const wanted = new Set();
+      for (const sid of App.sel) {
+        let cur = sid, guard = 0;
+        while (cur && App.mergedInto && App.mergedInto(cur) && guard++ < 12) cur = App.mergedInto(cur);
+        const top = Model.topOf(App.doc, cur);
+        if (top) wanted.add(top.id);
+      }
+      const sub = visibleSolids.filter(([id]) => wanted.has(id)).map(([id]) => id);
+      if (sub.length) return sub;
+    }
+    return visibleSolids.map(([id]) => id);
+  }
+  function silhouetteArea(opts = {}) {
+    const dirArg = opts.dir !== undefined ? opts.dir : (silSt ? silSt.dirKey : 'camera');
+    const norm = normalizeSilDir(dirArg);
+    const onlySel = opts.onlySel !== undefined ? !!opts.onlySel : !!(silSt && silSt.onlySel);
+    const ids = Array.isArray(opts.ids) && opts.ids.length ? opts.ids : silTargetIds(onlySel);
+    if (!ids.length) {
+      return { area: 0, areaMm2: 0, width: 0, height: 0, px: 0, dirKey: norm.dirKey, dir: norm.dir, count: 0, onlySel };
+    }
+    const r = Viewer.silhouette(ids, norm.dir, opts.res || 1024);
+    const area = round(r.area || 0, 3);
+    return {
+      area,
+      areaMm2: area,
+      width: round(r.width || 0, 2),
+      height: round(r.height || 0, 2),
+      px: r.px || 0,
+      dirKey: norm.dirKey,
+      dir: norm.dir,
+      count: ids.length,
+      onlySel,
+      c: r.c || null,
+      R: r.R || 20,
+    };
+  }
+  function stopSilFacePick() {
+    if (!silSt || !silSt.picking) return;
+    const pk = silSt.picking;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', pk.down, true);
+    window.removeEventListener('keydown', pk.key, true);
+    cv.style.cursor = '';
+    UI.hint(null);
+    silSt.picking = null;
+    const btn = silSt.bar && silSt.bar.querySelector('#sil-pick-face');
+    if (btn) btn.classList.remove('active');
+  }
+  function startSilFacePick() {
+    if (!silSt) return;
+    if (silSt.picking) { stopSilFacePick(); return; }
+    if (on) stop();
+    stopFieldPick();
+    stopDraftFacePick();
+    const cv = Viewer.canvas;
+    const btn = silSt.bar && silSt.bar.querySelector('#sil-pick-face');
+    if (btn) btn.classList.add('active');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      const f = hit && hit.faceIdx >= 0 && hit.node && hit.node.data && hit.node.data.faces ? hit.node.data.faces[hit.faceIdx] : null;
+      if (!f || f.t !== 'PLANE' || !f.n) {
+        UI.toast(T('sil.pickFaceNeedPlane'), { icon: 'info' });
+        return;
+      }
+      const wn = new THREE.Vector3(...f.n).transformDirection(hit.node.obj.matrixWorld).normalize().negate().toArray();
+      const norm = normalizeSilDir(wn);
+      stopSilFacePick();
+      if (!silSt) return;
+      silSt.dirKey = norm.dirKey;
+      silSt.dir = norm.dir;
+      syncSilBarInputs();
+      drawSilhouette();
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        stopSilFacePick();
+      }
+    };
+    silSt.picking = { down, key };
+    cv.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(T('sil.pickFaceHint'));
+  }
+  function alignCamToSil() {
+    if (!silSt) return;
+    const k = silSt.dirKey;
+    if (SIL_DIRS[k]) {
+      Viewer.setView(k, false);
+      return;
+    }
+    const r = silSt.info;
+    const d = silSt.dir || [0, 1, 0];
+    const c = r && r.c ? r.c : [0, 0, 0];
+    const span = Math.max(20, (r && r.R ? r.R : 20) * 1.4);
+    const nVec = new THREE.Vector3(-d[0], -d[1], -d[2]).normalize();
+    const refUp = Math.abs(nVec.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+    const xVec = new THREE.Vector3().crossVectors(refUp, nVec).normalize();
+    Viewer.lookAtPlane(c, nVec.toArray(), xVec.toArray(), span, false);
+  }
+  function updateSilUI() {
+    if (!silSt || !silSt.bar) return;
+    const r = silSt.info;
+    const valEl = silSt.bar.querySelector('#sil-area-val');
+    const dimsEl = silSt.bar.querySelector('#sil-dims');
+    const copyBtn = silSt.bar.querySelector('#sil-copy');
+    const alignBtn = silSt.bar.querySelector('#sil-align-cam');
+    if (alignBtn) alignBtn.disabled = silSt.dirKey === 'camera';
+    if (!r || !r.count) {
+      if (valEl) valEl.textContent = '0 mm²';
+      if (dimsEl) dimsEl.textContent = T('sil.empty');
+      if (copyBtn) copyBtn.disabled = true;
+      return;
+    }
+    const dec = r.area < 100 ? 2 : 1;
+    const mm2Str = fmt(r.area, dec) + ' mm²';
+    const extraUnit = typeof Units !== 'undefined' && Units.key() !== 'mm' ? ` (${Units.fmtAreaU(r.area, 2)})` : '';
+    if (valEl) valEl.textContent = mm2Str + extraUnit;
+    if (copyBtn) copyBtn.disabled = !(r.area > 0);
+    if (dimsEl) {
+      const szStr = `${Units.fmtLen(r.width, 1)} × ${Units.fmtLen(r.height, 1)} ${Units.label()}`;
+      const scope = r.onlySel ? T('sil.scopeSel', { n: r.count }) : T('sil.scopeAll', { n: r.count });
+      dimsEl.textContent = T('sil.dimsInfo', { size: szStr, scope });
+    }
+  }
+  function syncSilBarInputs() {
+    if (!silSt || !silSt.bar) return;
+    const selEl = silSt.bar.querySelector('#sil-dir');
+    if (selEl) {
+      let faceOpt = selEl.querySelector('option[value="face"]');
+      if (silSt.dirKey === 'face') {
+        if (!faceOpt) { faceOpt = h('option', { value: 'face' }, T('sil.dirFace')); selEl.append(faceOpt); }
+        selEl.value = 'face';
+      } else {
+        if (faceOpt) faceOpt.remove();
+        selEl.value = silSt.dirKey;
+      }
+    }
+    const cb = silSt.bar.querySelector('#sil-only-sel');
+    if (cb) cb.checked = !!silSt.onlySel;
+  }
+  function drawSilhouette() {
+    if (!silSt) return;
+    silSt.info = silhouetteArea({ dir: silSt.dirKey === 'camera' ? 'camera' : silSt.dir, onlySel: silSt.onlySel });
+    silSt.dir = silSt.info.dir.slice();
+    updateSilUI();
+  }
+  function onSilCamera() {
+    if (!silSt || silSt.dirKey !== 'camera') return;
+    const now = performance.now();
+    if (now - silLastCamT >= 90) {
+      if (silCamTimer) { clearTimeout(silCamTimer); silCamTimer = null; }
+      silLastCamT = now;
+      drawSilhouette();
+    } else if (!silCamTimer) {
+      silCamTimer = setTimeout(() => {
+        silCamTimer = null;
+        silLastCamT = performance.now();
+        if (silSt && silSt.dirKey === 'camera') drawSilhouette();
+      }, 90);
+    }
+  }
+  function buildSilBar() {
+    if (!silSt) return;
+    if (silSt.bar) silSt.bar.remove();
+    const barEl = h('div', { class: 'viewbar sil-bar', id: 'silhouette-bar', role: 'toolbar', 'aria-label': T('sil.title'), 'data-help': 'silhouetteArea' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, T('sil.title')));
+    const closeBtn = h('button', { type: 'button', class: 'vb-x', id: 'sil-close', 'aria-label': T('sil.closeAria'), 'data-tip': T('common.close') });
+    closeBtn.innerHTML = icon('close');
+    closeBtn.onclick = () => silhouette(false);
+    head.append(closeBtn);
+
+    const dirSel = h('select', { id: 'sil-dir', class: 'vb-sel', style: { flex: '1', minWidth: '0' }, 'aria-label': T('sil.dirAria') },
+      h('option', { value: 'camera' }, T('sil.dirCamera')),
+      h('option', { value: 'front' }, T('sil.dirFront')),
+      h('option', { value: 'back' }, T('sil.dirBack')),
+      h('option', { value: 'right' }, T('sil.dirRight')),
+      h('option', { value: 'left' }, T('sil.dirLeft')),
+      h('option', { value: 'top' }, T('sil.dirTop')),
+      h('option', { value: 'bottom' }, T('sil.dirBottom')));
+    dirSel.onchange = () => {
+      if (dirSel.value === 'face') return;
+      const norm = normalizeSilDir(dirSel.value);
+      silSt.dirKey = norm.dirKey;
+      silSt.dir = norm.dir;
+      syncSilBarInputs();
+      drawSilhouette();
+    };
+    const pickBtn = h('button', { type: 'button', class: 'btn small', id: 'sil-pick-face', 'data-tip': T('sil.pickFaceTip') }, T('sil.pickFace'));
+    pickBtn.onclick = () => startSilFacePick();
+    const alignBtn = h('button', { type: 'button', class: 'btn small', id: 'sil-align-cam', 'data-tip': T('sil.alignCamTip') }, T('sil.alignCam'));
+    alignBtn.onclick = () => alignCamToSil();
+
+    const onlyCb = h('input', { type: 'checkbox', id: 'sil-only-sel' });
+    onlyCb.checked = !!silSt.onlySel;
+    onlyCb.onchange = () => { silSt.onlySel = onlyCb.checked; drawSilhouette(); };
+
+    const copyBtn = h('button', { type: 'button', class: 'btn small', id: 'sil-copy', 'aria-label': T('measure.copyBtn'), 'data-tip': T('measure.copyTip') });
+    copyBtn.innerHTML = icon('copy');
+    copyBtn.onclick = () => { if (silSt && silSt.info) copyText(fmt(silSt.info.area, silSt.info.area < 100 ? 2 : 1), T('sil.title')); };
+
+    const resBox = h('div', { class: 'sil-result' },
+      h('div', { class: 'sil-res-main' },
+        h('span', { class: 'sil-lbl' }, T('sil.areaLabel')),
+        h('b', { class: 'mono', id: 'sil-area-val' }, '–')),
+      copyBtn);
+
+    barEl.append(
+      head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('sil.dirLabel')), dirSel, pickBtn, alignBtn),
+      h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint', 'data-tip': T('sil.onlySelTip') }, onlyCb, ' ', T('sil.onlySel'))),
+      resBox,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'sil-dims' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, T('sil.hint'))));
+    Views.bars().append(barEl);
+    silSt.bar = barEl;
+    syncSilBarInputs();
+    updateSilUI();
+  }
+  function silhouette(onArg = !silSt, opts = {}) {
+    if (!onArg) {
+      if (!silSt) return false;
+      stopSilFacePick();
+      if (silCamTimer) { clearTimeout(silCamTimer); silCamTimer = null; }
+      if (silSt.bar) silSt.bar.remove();
+      silSt = null;
+      syncDraftButtons();
+      return false;
+    }
+    const norm = opts.dir !== undefined ? normalizeSilDir(opts.dir) : (silSt ? normalizeSilDir(silSt.dirKey === 'camera' ? 'camera' : silSt.dir) : normalizeSilDir('camera'));
+    const onlySel = opts.onlySel !== undefined ? !!opts.onlySel : (silSt ? silSt.onlySel : false);
+    if (silSt) {
+      silSt.dirKey = norm.dirKey;
+      silSt.dir = norm.dir;
+      silSt.onlySel = onlySel;
+      syncSilBarInputs();
+      drawSilhouette();
+      syncDraftButtons();
+      return true;
+    }
+    silSt = { dirKey: norm.dirKey, dir: norm.dir, onlySel, bar: null, info: null, picking: null };
+    buildSilBar();
+    drawSilhouette();
+    syncDraftButtons();
+    return true;
+  }
   return {
     showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
@@ -1425,6 +1705,23 @@ const Measure = (() => {
         counts: r ? { ...r.counts } : { ok: 0, warn: 0, undercut: 0 },
         faces: r ? r.faces.map((f) => ({ ...f })) : [],
         hasMesh: !!draftSt.mesh,
+      };
+    },
+    silhouette, silhouetteArea, get silhouetteActive() { return !!silSt; },
+    get silhouetteInfo() {
+      if (!silSt) return null;
+      const r = silSt.info;
+      return {
+        active: true,
+        dirKey: silSt.dirKey,
+        dir: silSt.dir.slice(),
+        onlySel: silSt.onlySel,
+        area: r ? r.area : 0,
+        areaMm2: r ? r.areaMm2 : 0,
+        width: r ? r.width : 0,
+        height: r ? r.height : 0,
+        px: r ? r.px : 0,
+        count: r ? r.count : 0,
       };
     },
   };

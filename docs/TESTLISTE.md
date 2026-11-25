@@ -2496,6 +2496,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Drehteller-Video über 2D-Puffer**: `Print.turntable()` bevorzugt `vp8` und kopiert jedes Einzelbild über einen 2D-Puffer-Canvas mit `captureStream(0)` + `requestFrame()`, sodass die Aufnahme auch bei hoher Systemlast oder blockiertem `requestAnimationFrame` stabil ein echtes Video liefert (`t_drehteller`, `t_f11240521`, `t_f11250536`).
 - [ ] **Von Hand**: Im Browser in der Skizze über die Zeichenfläche fahren, über die Eingabezeile „fläche auf fläche“ suchen und ein 6-Sekunden-Drehteller-Video herunterladen und abspielen.
 
+## Varianten-Tabelle zum Ausfüllen (Auto [A-132], KP-52)
+
+- [x] **Profi-Sichtbarkeit & 3-Zeilen-Tabelle**: `#var-table` ist im Einfach-Modus verborgen und öffnet im Profi-Modus den Dialog `#var-table-dlg`; über „Zeile hinzufügen“ angelegte 3 Zeilen („Klein“ 10/20/`PLA`, „Mittel“ 20/25/`Alu 6061`, „Groß“ 30/30/`CFK`) werden direkt in `App.doc.variants` gespeichert.
+- [x] **Zeilenklick schaltet Variante & Werkstoff**: Klick auf Zeile 3 und anschließend auf Zeile 2 schaltet Breite, Tiefe, 3D-Hüllmaße (`20×25×10`) sowie den Projekt-Werkstoff (`Alu 6061`) um und markiert die aktive Zeile (`.vt-row.on`).
+- [x] **CSV-Export & -Reimport**: `Variants.toCSV()` exportiert `Variante;Breite;Tiefe;Werkstoff`, nach Leeren stellt `Variants.importCSV()` alle 3 Zeilen mit gleichen Maßen und Werkstoffen wieder her (ohne Duplikate bei erneutem Import), und ein Klick auf Zeile 2 setzt wieder Breite `20` und `Alu 6061`.
+- [x] **Varianten-Vergleich, Rückgängig, Migration & Hilfe**: `#vt-cmp` zeigt die Werkstoff-Spalte mit korrektem Gewichts-Unterschied (`Alu 6061` > `PLA`), `App.undo()` macht den Varianten-Wechsel rückgängig, `Model.migrate` erhält `v.material`, `HELP.variantTable` und Befehl `variants-table` sind vorhanden.
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Varianten-Tabelle mit 4 Zeilen und Formeln ausfüllen, über „CSV exportieren“ speichern, in Excel/Numbers bearbeiten, wieder über „CSV importieren“ laden und beim Umschalten prüfen, ob Werkstoff-Optik (z. B. Alu vs. PLA) und Maße im 3D-Bild sofort wechseln.
+
+## Vergleich zweier Versionen/Körper & Schattenriss-Fläche (Auto [A-133], PF-12, PF-15)
+
+- [x] **Profi-Menü & Befehlssuche**: `#t-check` bleibt im Modus „Einfach“ ausgeblendet; im Profi-Modus öffnet das Prüfen-Menü `#check-compare` und `#check-silhouette` (`t_a133_vergleich_schattenriss`).
+- [x] **Versionen-Vergleich (Quader vs Quader mit Bohrung)**: Quader `20×20×20` als Version gespeichert, anschließend Bohrung `Ø6` (`V = π·9·20 ≈ 565,49 mm³`) ergänzt → `Versions.compare` zeigt entfernte Bohrung rot (`removedVolume ≈ 565,49 mm³`), unveränderten Rest grau (`sameVolume ≈ 7434,51 mm³`), `addedVolume < 0,1` sowie funktionierendes Ausblenden über `#cmp-show` (`t_a133_vergleich_schattenriss`).
+- [x] **Körper-Vergleich & Zwei gespeicherte Versionen**: Quader `20×20×20` und Quader `20×20×20` mit Bohrung `Ø8` (`V ≈ 1005,31 mm³`) im selben Projekt verglichen (automatische Mitten-Ausrichtung, Tauschen über `#cmp-swap` kehrt rot/grün sauber um) sowie zwei gespeicherte Versionen mit `Versions.compareVersions` verglichen (`t_a133_vergleich_schattenriss`).
+- [x] **Schattenriss-Fläche in Blickrichtung (`mm²`)**: Würfel `10×10×10` von vorn (`camera` / `front`) misst `≈ 100 mm²` (`99,88 mm²` bei `1024×1024`), schräge Ansicht (`iso`) steigt auf `> 130 mm²`, Würfel mit Durchgangsbohrung `Ø4` sinkt auf `≈ 100 − 4π mm²`; Hilfetexte (`werkzeug-hilfen.json`/`HELP`) und DE/EN-Schlüsselgleichheit geprüft (`t_a133_vergleich_schattenriss`).
+- [ ] **Von Hand**: Im Browser zwei leicht unterschiedliche Bauteile übereinanderlegen, einzelne Farb-Chips (`Neu` / `Weg` / `Gleich`) ein- und ausblenden sowie die Schattenriss-Fläche auf einer schräg angeklickten Fläche prüfen.
+
 ## Fehler melden
 
 ```

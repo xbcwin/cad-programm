@@ -26123,6 +26123,377 @@ def t_f11250536(p):
     return [ok1, ok2, ok3]
 
 
+def t_a132_varianten_tabelle(p):
+    p.empty()
+    p.ev("""
+    App.change('Quader mit Maßen', d => {
+      d.params.push({ id: 'm_b', name: 'Breite', expr: 10 }, { id: 'm_t', name: 'Tiefe', expr: 20 });
+      d.items.push(Model.newItem('box', { w: 'Breite', d: 'Tiefe', h: 10 }, { name: 'Quader' }));
+    });
+    """)
+    warte_rechnen(p)
+
+    # 1. Im Einfach-Modus verborgen, im Profi-Modus sichtbar -> Tabelle mit 3 Zeilen anlegen
+    p.ev("ViewPrefs.set({ level: 'simple' })")
+    p.pg.locator('#lt-params').click(); p.wait(250)
+    simple_hidden = p.pg.locator('#var-table').is_hidden()
+
+    p.ev("ViewPrefs.set({ level: 'pro' })"); p.wait(200)
+    pro_visible = p.pg.locator('#var-table').is_visible()
+    p.pg.locator('#var-table').click()
+    p.pg.wait_for_selector('#var-table-dlg', timeout=10000); p.wait(200)
+
+    for _ in range(3):
+        p.pg.locator('#vt-add-row').click(); p.wait(150)
+    row_count = p.pg.locator('#var-sheet tbody tr.vt-row').count()
+
+    rows_data = [
+        ('Klein', '10', '20', 'PLA'),
+        ('Mittel', '20', '25', 'Alu 6061'),
+        ('Groß', '30', '30', 'CFK'),
+    ]
+    for idx, (name, b_val, t_val, mat) in enumerate(rows_data):
+        tr = p.pg.locator('#var-sheet tbody tr.vt-row').nth(idx)
+        tr.locator('.vt-name').fill(name)
+        tr.locator('.vt-name').press('Tab')
+        tr.locator('[data-param="Breite"]').fill(b_val)
+        tr.locator('[data-param="Breite"]').press('Tab')
+        tr.locator('[data-param="Tiefe"]').fill(t_val)
+        tr.locator('[data-param="Tiefe"]').press('Tab')
+        tr.locator('.vt-sel').select_option(mat)
+        p.wait(150)
+    warte_rechnen(p)
+
+    saved = p.ev("return App.doc.variants.map(v => ({ name: v.name, b: v.values.Breite, t: v.values.Tiefe, mat: v.material || '' }))")
+    ok1 = (
+        simple_hidden and pro_visible and row_count == 3
+        and saved == [
+            {'name': 'Klein', 'b': 10, 't': 20, 'mat': 'PLA'},
+            {'name': 'Mittel', 'b': 20, 't': 25, 'mat': 'Alu 6061'},
+            {'name': 'Groß', 'b': 30, 't': 30, 'mat': 'CFK'},
+        ]
+    )
+
+    # 2. Klick auf Zeile 3 und dann Zeile 2 schaltet Breite, Tiefe, 3D-Geometrie und Werkstoff
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(2).click()
+    warte_rechnen(p)
+    b3 = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    bb3 = bbox(p, 0)
+    mat3 = p.ev("return App.doc.settings.material")
+
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(1).click()
+    warte_rechnen(p)
+    b2 = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    t2 = p.ev("return App.doc.params.find(x => x.name === 'Tiefe').expr")
+    bb2 = bbox(p, 0)
+    mat2 = p.ev("return App.doc.settings.material")
+    row2_on = p.pg.locator('#var-sheet tbody tr.vt-row').nth(1).evaluate("el => el.classList.contains('on')")
+    ok2 = (
+        b3 == 30 and abs((bb3[3] - bb3[0]) - 30) < 0.05 and mat3 == 'CFK'
+        and b2 == 20 and t2 == 25
+        and abs((bb2[3] - bb2[0]) - 20) < 0.05 and abs((bb2[4] - bb2[1]) - 25) < 0.05
+        and mat2 == 'Alu 6061' and row2_on
+    )
+
+    # 3. CSV exportieren, Tabelle leeren, CSV wieder importieren -> gleiche Tabelle
+    csv_txt = p.ev("return Variants.toCSV()")
+    p.ev("App.change('Leeren', d => { d.variants = []; d.variant = null; })")
+    p.wait(200)
+    empty_rows = p.pg.locator('#var-sheet tbody tr.vt-row').count()
+    imp_res = p.ev("return Variants.importCSV(arg)", csv_txt)
+    warte_rechnen(p)
+    reimp_res = p.ev("return Variants.importCSV(arg)", csv_txt)
+    p.wait(200)
+    after_rows = p.pg.evaluate("""[...document.querySelectorAll('#var-sheet tbody tr.vt-row')].map(tr => ({
+      name: tr.querySelector('.vt-name').value,
+      b: tr.querySelector('[data-param="Breite"]').value,
+      t: tr.querySelector('[data-param="Tiefe"]').value,
+      mat: tr.querySelector('.vt-sel').value,
+    }))""")
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(0).click(); warte_rechnen(p)
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(1).click(); warte_rechnen(p)
+    b2_re = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    bb2_re = bbox(p, 0)
+    mat2_re = p.ev("return App.doc.settings.material")
+    ok3 = (
+        'Variante;Breite;Tiefe;Werkstoff' in csv_txt
+        and empty_rows == 0
+        and imp_res.get('ok') and imp_res.get('count') == 3
+        and reimp_res.get('ok') and reimp_res.get('count') == 3
+        and after_rows == [
+            {'name': 'Klein', 'b': '10', 't': '20', 'mat': 'PLA'},
+            {'name': 'Mittel', 'b': '20', 't': '25', 'mat': 'Alu 6061'},
+            {'name': 'Groß', 'b': '30', 't': '30', 'mat': 'CFK'},
+        ]
+        and b2_re == 20 and abs((bb2_re[3] - bb2_re[0]) - 20) < 0.05 and mat2_re == 'Alu 6061'
+    )
+
+    # 4. Vergleich mit Werkstoff, Undo/Redo und Migration
+    p.pg.locator('#vt-cmp').click()
+    p.pg.wait_for_selector('#vtable', timeout=90000); p.wait(200)
+    cmp_rows = p.pg.evaluate("[...document.querySelectorAll('#vtable tr')].map(r => [...r.children].map(c => c.textContent))")
+    mat_col = cmp_rows[0].index('Werkstoff') if 'Werkstoff' in cmp_rows[0] else -1
+    gew_col = cmp_rows[0].index('Gewicht') if 'Gewicht' in cmp_rows[0] else -1
+    w1 = float(cmp_rows[1][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    w2 = float(cmp_rows[2][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(0).click(); warte_rechnen(p)
+    b_before_undo = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    p.ev("App.undo()"); warte_rechnen(p)
+    b_after_undo = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    mat_after_undo = p.ev("return App.doc.settings.material")
+    mig_mats = p.ev("return Model.migrate(JSON.parse(App.snapshot())).variants.map(v => v.material)")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    ok4 = (
+        mat_col >= 0 and gew_col >= 0
+        and cmp_rows[1][mat_col] == 'PLA' and cmp_rows[2][mat_col] == 'Alu 6061'
+        and w2 > w1
+        and b_before_undo == 10 and b_after_undo == 20 and mat_after_undo == 'Alu 6061'
+        and mig_mats == ['PLA', 'Alu 6061', 'CFK']
+    )
+
+    # 5. Hilfetexte und Befehlssuche
+    meta = p.ev("""return (async () => {
+      const h = await fetch('data/werkzeug-hilfen.json').then(r => r.json());
+      const vt = h.variantTable || {};
+      const btn = document.querySelector('#var-table');
+      const helpOk = !!(vt.tip && vt.hilfe && vt.tipp && btn && btn.dataset.help === 'variantTable');
+      const cmdOk = Commands.search('varianten-tabelle').some(c => c.id === 'variants-table');
+      return { helpOk, cmdOk };
+    })()""")
+    ok5 = bool(meta.get('helpOk') and meta.get('cmdOk'))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a133_vergleich_schattenriss(p):
+    import math
+    p.empty()
+
+    # 1. Profi-Modus: Prüfen-Menü zeigt Körper/Versionen vergleichen & Schattenriss-Fläche; in Einfach verborgen
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(150)
+    simple_hidden = not sichtbar(p, '#t-check')
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    p.pg.click('#t-check')
+    p.wait(250)
+    pro_menu_ok = (
+        sichtbar(p, '#t-check')
+        and p.pg.locator('#check-compare').count() == 1
+        and p.pg.locator('#check-silhouette').count() == 1
+    )
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    ok1 = simple_hidden and pro_menu_ok
+
+    # 2. PF-12a: Quader (20x20x20) vs Quader mit Bohrung (d=6 -> V_bohrung = pi * 9 * 20 ≈ 565.49 mm³) über Versionen
+    p.ev("""
+      App.change('a133-box', d => {
+        const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        d.items = [b];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("Versions.save('Ohne Bohrung')")
+    p.wait(300)
+
+    p.ev("""
+      App.change('a133-hole', d => {
+        const b = d.items[0];
+        const h = Model.newItem('cylinder', { d: 6, h: 24 }, { role: 'hole', name: 'Bohrung' });
+        h.t.x = 0; h.t.y = 0; h.t.z = -2;
+        const g = Model.newItem('group', {}, { name: 'QuaderMitBohrung' });
+        g.children = [b, h];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.locator('#btn-project').click()
+    p.wait(250)
+    p.pg.locator('.menu button').filter(has_text='Versionen').first.click()
+    p.wait(400)
+    p.pg.locator('.ver-cmp').first.click()
+    p.pg.wait_for_function("() => { const c = window.__M.Versions.comparing; return c && !c.busy && c.shown; }", timeout=15000)
+    p.wait(200)
+    cmp_ver = p.ev("return { c: Versions.comparing, ch: Viewer.groups.compare.children.length, nodesVis: Viewer.groups.nodes.visible }")
+    hole_vol1 = math.pi * 3 * 3 * 20
+    # Weg (rot) = entfernte Bohrung; Gleich (grau) = 8000 - Bohrung; Neu (grün) = 0
+    ok2 = (
+        cmp_ver is not None and cmp_ver['c'] is not None
+        and cmp_ver['c']['mode'] == 'versions'
+        and abs(cmp_ver['c']['removedVolume'] - hole_vol1) < 2.0
+        and cmp_ver['c']['addedVolume'] < 0.1
+        and abs(cmp_ver['c']['sameVolume'] - (8000 - hole_vol1)) < 2.0
+        and cmp_ver['c']['hasRemovedMesh'] is True
+        and cmp_ver['c']['hasSameMesh'] is True
+        and cmp_ver['c']['hasAddedMesh'] is False
+        and cmp_ver['ch'] == 1
+        and cmp_ver['nodesVis'] is False
+    )
+    # Farblayer umschalten & Anzeige komplett aus/an
+    p.pg.click('#cmp-chip-same')
+    p.wait(150)
+    p.pg.locator('#cmp-show').uncheck()
+    p.wait(150)
+    after_hide = p.ev("return { ch: Viewer.groups.compare.children.length, nodesVis: Viewer.groups.nodes.visible }")
+    p.ev("Versions.compareOff()")
+    p.wait(150)
+    ok2 = ok2 and after_hide['ch'] == 0 and after_hide['nodesVis'] is True and p.ev("return Versions.comparing") is None
+
+    # 3. PF-12b & PF-12c: Zwei Körper im Projekt vergleichen (Quader 20x20x20 & Quader 20x20x20 mit Bohrung d=8) + Zwei Versionen vergleichen
+    p.ev("""
+      App.change('a133-two-bodies', d => {
+        const a = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Rohling' });
+        a.t.x = 0; a.t.y = 0; a.t.z = 0;
+        const bBox = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Basis' });
+        bBox.t.x = 0; bBox.t.y = 0; bBox.t.z = 0;
+        const bHole = Model.newItem('cylinder', { d: 8, h: 24 }, { role: 'hole', name: 'Bohrung8' });
+        bHole.t.x = 0; bHole.t.y = 0; bHole.t.z = -2;
+        const b = Model.newItem('group', {}, { name: 'Gebohrt' });
+        b.t.x = 40; b.t.y = 0; b.t.z = 0;
+        b.children = [bBox, bHole];
+        d.items = [a, b];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check')
+    p.wait(250)
+    p.pg.click('#check-compare')
+    p.pg.wait_for_function("() => { const c = window.__M.Versions.comparing; return c && c.mode === 'bodies' && !c.busy && c.shown; }", timeout=15000)
+    p.wait(200)
+    cmp_b1 = p.ev("return Versions.comparing")
+    hole_vol2 = math.pi * 4 * 4 * 20
+    # Tauschen (#cmp-swap): dann wird die fehlende Bohrung zum hinzugekommenen grünen Volumen
+    p.pg.click('#cmp-swap')
+    p.pg.wait_for_function("() => { const c = window.__M.Versions.comparing; return c && !c.busy && c.addedVolume > 900; }", timeout=15000)
+    p.wait(200)
+    cmp_b2 = p.ev("return Versions.comparing")
+    p.pg.click('#cmp-close')
+    p.wait(150)
+
+    # Zweite Version speichern (mit Quader 6x10x5 = 300 mm³ oben drauf, abseits der Bohrung) und zwei gespeicherte Versionen vergleichen
+    p.ev("""
+      App.change('a133-ver2', d => {
+        const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+        const h = Model.newItem('cylinder', { d: 6, h: 24 }, { role: 'hole', name: 'Bohrung' });
+        h.t.z = -2;
+        const add = Model.newItem('box', { w: 6, d: 10, h: 5 }, { name: 'Aufsatz' });
+        add.t.x = 7; add.t.z = 20;
+        const g = Model.newItem('group', {}, { name: 'MitAufsatz' });
+        g.children = [b, h, add];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("Versions.save('Mit Bohrung und Aufsatz')")
+    p.wait(300)
+    p.ev("const vs = Versions.list(); return Versions.compareVersions(vs[0].id, vs[1].id);")
+    p.pg.wait_for_function("() => { const c = window.__M.Versions.comparing; return c && c.mode === 'versions' && !c.busy && c.shown; }", timeout=15000)
+    p.wait(200)
+    cmp_v2 = p.ev("return Versions.comparing")
+    p.ev("Versions.compareOff()")
+    p.wait(150)
+
+    ok3 = (
+        cmp_b1 is not None
+        and cmp_b1['aligned'] is True
+        and abs(cmp_b1['removedVolume'] - hole_vol2) < 3.0
+        and cmp_b1['addedVolume'] < 0.2
+        and abs(cmp_b1['sameVolume'] - (8000 - hole_vol2)) < 3.0
+        and cmp_b1['hasRemovedMesh'] is True
+        and cmp_b2 is not None
+        and abs(cmp_b2['addedVolume'] - hole_vol2) < 3.0
+        and cmp_b2['removedVolume'] < 0.2
+        and cmp_b2['hasAddedMesh'] is True
+        and cmp_v2 is not None
+        and abs(cmp_v2['removedVolume'] - hole_vol1) < 2.5
+        and abs(cmp_v2['addedVolume'] - 300.0) < 2.5
+    )
+
+    # 4. PF-15: Schattenriss-Fläche (Würfel 10 von vorn → 100 mm²; mit Bohrung Ø4 durch Y → 100 - 4π mm²)
+    p.ev("""
+      App.change('a133-cube10', d => {
+        const c = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Wuerfel10' });
+        c.t.x = 0; c.t.y = 0; c.t.z = 0;
+        d.items = [c];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("Viewer.setView('front', false)")
+    p.wait(200)
+    p.pg.click('#t-check')
+    p.wait(250)
+    p.pg.click('#check-silhouette')
+    p.pg.locator('#silhouette-bar').wait_for(state='visible', timeout=5000)
+    p.wait(250)
+
+    sil_front_cam = p.ev("return Measure.silhouetteInfo")
+    sil_txt = (p.pg.locator('#sil-area-val').text_content() or '').lower()
+
+    # Richtung fest auf 'front' stellen, danach zurück auf 'camera' + isometrische Ansicht (> 130 mm²)
+    p.pg.select_option('#sil-dir', 'front')
+    p.wait(200)
+    sil_front_fixed = p.ev("return Measure.silhouetteInfo")
+
+    p.pg.select_option('#sil-dir', 'camera')
+    p.wait(150)
+    p.ev("Viewer.setView('iso', false)")
+    p.wait(250)
+    sil_iso = p.ev("return Measure.silhouetteInfo")
+
+    # Durchgangsbohrung Ø4 entlang Y in Würfel 10 -> Stirnfläche von vorn sinkt auf 100 - pi * 4 ≈ 87.43 mm²
+    p.ev("""
+      App.change('a133-cube10-hole', d => {
+        const c = d.items[0];
+        const h = Model.newItem('cylinder', { d: 4, h: 14 }, { role: 'hole', name: 'LochY' });
+        h.t.x = 0; h.t.y = -7; h.t.z = 5; h.t.rx = -90;
+        const g = Model.newItem('group', {}, { name: 'WuerfelMitLoch' });
+        g.children = [c, h];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.select_option('#sil-dir', 'front')
+    p.wait(250)
+    sil_holed = p.ev("return Measure.silhouetteInfo")
+    p.pg.click('#sil-close')
+    p.wait(150)
+
+    # Hilfetexte, DE/EN-Schlüsselgleichheit & Befehlssuche
+    meta_res = p.pg.evaluate("""async () => {
+      const [hilfen, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['compareBodies', 'silhouetteArea'].every(k =>
+        hilfen[k] && hilfen[k].tip && hilfen[k].hilfe && hilfen[k].tipp && window.__M.T && true
+      );
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nEq = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      const { Commands } = window.__M;
+      const cmdOk = Commands.search('vergleich').some(c => c.id === 'compare-bodies')
+        && Commands.search('schattenriss').some(c => c.id === 'silhouette-area');
+      return { helpOk, i18nEq, cmdOk };
+    }""")
+
+    hole_front_expected = 100.0 - math.pi * 4.0
+    ok4 = (
+        sil_front_cam is not None and sil_front_cam['active'] is True
+        and abs(sil_front_cam['area'] - 100.0) < 0.5
+        and ('99,8' in sil_txt or '99,9' in sil_txt or '100' in sil_txt) and 'mm²' in sil_txt
+        and sil_front_fixed is not None and abs(sil_front_fixed['area'] - 100.0) < 0.5
+        and sil_iso is not None and sil_iso['area'] > 130.0
+        and sil_holed is not None and abs(sil_holed['area'] - hole_front_expected) < 1.5
+        and not p.ev("return Measure.silhouetteActive")
+        and meta_res['helpOk'] and meta_res['i18nEq'] and meta_res['cmdOk']
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26364,6 +26735,8 @@ TESTS = [
     ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('[F-11250536] Volltest-Reparatur: Skizzen-Koordinaten sofort / Befehlssuche „Fläche auf Fläche“ / Drehteller-Video über 2D-Puffer', t_f11250536),
+    ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
+    ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
