@@ -778,6 +778,7 @@ const Panels = (() => {
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+      const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
@@ -804,6 +805,7 @@ const Panels = (() => {
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+      const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
@@ -905,7 +907,7 @@ const Panels = (() => {
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
       const stepRes = (it.kind === 'stackHole' || it.kind === 'asmCut') && App.resolvedOf ? App.resolvedOf(it.id) : null;
       const stepCountTxt = stepRes && Array.isArray(stepRes.cutIds) ? ` · ${stepRes.cutIds.length} T.` : '';
-      const subText = intoF && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(intoF.item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V) + (stepRes && !(it.p && it.p.scope === 'selected') ? stepCountTxt : '');
+      const subText = intoF && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(intoF.item)}` : (it.link || it.asmPat ? '↔ ' : '') + Model.sizeText(it, V) + (stepRes && !(it.p && it.p.scope === 'selected') ? stepCountTxt : '');
       const sub = h('span', { class: 'sub mono' }, delBy ? `${subText ? subText + ' · ' : ''}gelöscht` : subText);
       const acts = h('span', { class: 'acts' });
       const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
@@ -960,7 +962,12 @@ const Panels = (() => {
           ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(it.kind === 'sketch3d' ? [{ icon: 'edit', label: T('sk3.editBtn'), id: 'tm-sk3-edit', run: () => Sketch.edit3d(it.id) }, { icon: 'sweep', label: T('ctx.alongPath'), id: 'tm-sk3-sweep', run: () => Features.sweepFromSketch3d(it.id) }] : []),
           ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && it.kind !== 'knurl' && it.kind !== 'gripPattern' && it.kind !== 'stackHole' && it.kind !== 'asmCut' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, ...(!ViewPrefs.simple ? [{ icon: 'deform', label: T('common.deformStep'), id: 'tm-deform', help: 'deform', run: () => Features.deform([it.id]) }] : []), { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
-          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }, { icon: 'point', label: T('ctx.patPoints'), id: 'tm-pat-points', help: 'patternPoints', run: () => Features.patternPoints([it.id]) }, { icon: 'list', label: T('ctx.patTable'), id: 'tm-pat-table', help: 'patternTable', run: () => Features.patternTable([it.id]) }] : []),
+          ...(Model.isAssembly(App.doc) && typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(it, App.doc) ? [
+            { icon: 'patternRect', label: T('asm.patMenuRect'), id: 'tm-asm-pat-rect', help: 'asmPattern', run: () => Assembly.patternDialog('rect', [it.id]) },
+            { icon: 'patternCirc', label: T('asm.patMenuCirc'), id: 'tm-asm-pat-circ', help: 'asmPattern', run: () => Assembly.patternDialog('circ', [it.id]) },
+            { icon: 'mirror', label: T('asm.patMenuMirror'), id: 'tm-asm-mirror', help: 'asmMirror', run: () => Assembly.patternDialog('mirror', [it.id]) },
+          ] : []),
+          ...(!Model.isAssembly(App.doc) && it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }, { icon: 'point', label: T('ctx.patPoints'), id: 'tm-pat-points', help: 'patternPoints', run: () => Features.patternPoints([it.id]) }, { icon: 'list', label: T('ctx.patTable'), id: 'tm-pat-table', help: 'patternTable', run: () => Features.patternTable([it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -1165,6 +1172,7 @@ const Panels = (() => {
     const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
     const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+    const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
     const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
     const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
   }
@@ -1559,7 +1567,10 @@ const Panels = (() => {
       const sb = h('button', { type: 'button', class: 'btn', id: 'proj-auto-screws', 'data-help': 'autoScrews' });
       sb.innerHTML = icon('bolt') + esc(T('asm.autoScrewsBtn'));
       sb.onclick = () => Assembly.autoScrewsDialog();
-      w.append(h('div', { class: 'btn-row' }, sb));
+      const pbBtn = h('button', { type: 'button', class: 'btn', id: 'proj-asm-pattern', 'data-help': 'asmPattern' });
+      pbBtn.innerHTML = icon('patternRect') + esc(T('asm.patToolBtn'));
+      pbBtn.onclick = (e) => Assembly.patternMenu(e.currentTarget);
+      w.append(h('div', { class: 'btn-row' }, pbBtn, sb));
     }
     const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
     if (poseSec) w.append(poseSec);
@@ -1968,7 +1979,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'Lüftungsgitter in': 'schneidet ein Lüftungsgitter in diesen Körper', 'Kühlrippen auf': 'setzt Kühlrippen auf diesen Körper', 'Steg-Netz an': 'verstärkt diesen Körper als Steg-Netz', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'folgt 3D-Skizze': 'läuft als Profil entlang dieser 3D-Skizze', '3D-Skizze fängt an': '3D-Skizze hängt an einer Ecke hiervon', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'Schraubdom auf': 'trägt einen Schraubdom auf', 'Lippe an': 'bekommt hiervon eine Stecklippe', 'Nut in': 'bekommt hiervon eine Nut', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'Lüftungsgitter in': 'schneidet ein Lüftungsgitter in diesen Körper', 'Kühlrippen auf': 'setzt Kühlrippen auf diesen Körper', 'Steg-Netz an': 'verstärkt diesen Körper als Steg-Netz', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'folgt 3D-Skizze': 'läuft als Profil entlang dieser 3D-Skizze', '3D-Skizze fängt an': '3D-Skizze hängt an einer Ecke hiervon', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'Schraubdom auf': 'trägt einen Schraubdom auf', 'Lippe an': 'bekommt hiervon eine Stecklippe', 'Nut in': 'bekommt hiervon eine Nut', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Baugruppen-Muster von': 'ist eine gemusterte Kopie hiervon', 'gespiegelt von': 'ist eine gespiegelte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? T('panel.item.depDatum', { name: x.datum }) : x.axis ? T('panel.item.depAxis', { name: x.axis }) : x.point ? T('panel.item.depPoint', { name: x.point }) : x.csys ? T('panel.item.depCsys', { name: x.csys }) : T('panel.item.depChild', { name: nm(x.from), what: back[x.what] || T('panel.item.depDefault') }), x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -2619,6 +2630,10 @@ const Panels = (() => {
       }
     }
     }
+    if (typeof Assembly !== 'undefined' && Assembly.patternSection) {
+      const apSec = Assembly.patternSection(it);
+      if (apSec) w.append(apSec);
+    }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     if (jsec && typeof Assembly !== 'undefined' && Assembly.poseSection) {
       const poseSec = Assembly.poseSection('item');
@@ -2628,11 +2643,12 @@ const Panels = (() => {
     if (!isMergedStep && it.kind !== 'transform') {
       const fixedJ = typeof Joints !== 'undefined' && Joints.fixedJointOf ? Joints.fixedJointOf(it.id) : null;
       const grounded = !!it.locked;
-      const posLocked = !!(fixedJ || grounded);
+      const patCopy = typeof Assembly !== 'undefined' && Assembly.isPatternCopy ? Assembly.isPatternCopy(it.id) : false;
+      const posLocked = !!(fixedJ || grounded || patCopy);
       const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.pos.title')));
       const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => {
         const tgt = Model.find(doc, it.id)?.item;
-        if (!tgt || tgt.locked || (typeof Joints !== 'undefined' && Joints.isFixedPart(it.id))) return false;
+        if (!tgt || tgt.locked || (typeof Joints !== 'undefined' && Joints.isFixedPart(it.id)) || (typeof Assembly !== 'undefined' && Assembly.isPatternCopy && Assembly.isPatternCopy(it.id))) return false;
         tgt.t[k] = val;
         if (typeof Joints !== 'undefined' && Joints.constrain) Joints.constrain(doc, it.id);
       }, { merge: 't:' + it.id + ':' + k });
@@ -2659,6 +2675,13 @@ const Panels = (() => {
       if (fixedJ) {
         const refA = Model.find(App.doc, fixedJ.a);
         pos.append(h('div', { class: 'hint-box' }, T('joint.fixedLockedHint', { name: refA ? Model.label(refA.item) : 'Teil' })));
+      }
+      if (patCopy) {
+        const ph = h('div', { class: 'hint-box', id: 'pat-copy-pos-hint', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } }, h('span', null, T('asm.patCopyLockedHint')));
+        const db = h('button', { type: 'button', class: 'btn small', id: 'btn-ap-dissolve-pos' }, T('asm.patDissolveBtn'));
+        db.onclick = () => { const pat = Assembly.patternOf(it.id); if (pat) Assembly.dissolvePattern(pat.id); };
+        ph.append(db);
+        pos.append(ph);
       }
       const qa = h('div', { class: 'btn-row' });
       const drop = h('button', { type: 'button', class: 'btn small', disabled: posLocked, 'data-tip': T('panel.pos.toXYTip') }); drop.innerHTML = icon('push') + esc(T('panel.pos.toXY'));
@@ -3483,6 +3506,10 @@ const Panels = (() => {
       b('edit', isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), () => Comp.openRef(it.id), 'accent', isSubAsm ? T('asm.openSubAsmTip') : T('asm.openPartTip')).dataset.help = isSubAsm ? 'subAssembly' : 'assemblyDoc';
       const rp = b('replace', T('asm.replacePartShort'), () => Comp.replacePartDialog(it.id), '', T('asm.replacePartTip'), true);
       rp.id = 'ctx-replace-part'; rp.dataset.help = 'replacePart';
+      const apb = b('patternRect', T('asm.patToolBtn'), (e) => Assembly.patternMenu(e.currentTarget, [it.id]), '', T('asm.patToolTip'), true);
+      apb.id = 'ctx-asm-pattern'; apb.dataset.help = 'asmPattern';
+      const amb = b('mirror', T('asm.patMenuMirror'), () => Assembly.patternDialog('mirror', [it.id]), '', T('asm.patMirrorTip'), true);
+      amb.id = 'ctx-asm-mirror'; amb.dataset.help = 'asmMirror';
       const gb = b(it.locked ? 'unlock' : 'lock', it.locked ? T('asm.unground') : T('asm.ground'), () => Actions.toggleGround([it.id]), it.locked ? 'accent' : '', it.locked ? T('asm.ungroundTip') : T('asm.groundTip'), true);
       gb.id = 'ctx-ground'; gb.dataset.help = 'groundPart';
       b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
@@ -3511,7 +3538,12 @@ const Panels = (() => {
       if (App.doc.items.includes(it)) { const dfb = b('deform', T('ctx.deform'), () => Features.deform(), '', T('ctx.deformTip'), true); dfb.id = 'ctx-deform'; dfb.dataset.help = 'deform'; }
       if (App.doc.items.includes(it)) b('deleteBody', T('ctx.deleteBody'), () => Features.deleteBody([it.id]), '', T('ctx.deleteBodyTip'), true).dataset.help = 'deleteBody';
       if (Features.canMirrorStep(it, items[0].parent)) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
-      b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }, { label: T('ctx.patPoints'), icon: 'point', help: 'patternPoints', run: () => Features.patternPoints() }, { label: T('ctx.patTable'), icon: 'list', help: 'patternTable', run: () => Features.patternTable() }, { label: T('ctx.patMirror'), icon: 'mirror', run: () => Features.pattern('mirror') }, ...(Features.canMirrorStep(it, items[0].parent) ? [{ label: T('ctx.mirrorStep'), icon: 'mirror', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : [])]), '', hole ? T('ctx.patternHoleTip') : T('ctx.patternTip'), true);
+      if (Model.isAssembly(App.doc) && typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(it, App.doc)) {
+        const apb = b('patternRect', T('asm.patToolBtn'), (e) => Assembly.patternMenu(e.currentTarget, [it.id]), '', T('asm.patToolTip'), true);
+        apb.id = 'ctx-asm-pattern'; apb.dataset.help = 'asmPattern';
+      } else {
+        b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }, { label: T('ctx.patPoints'), icon: 'point', help: 'patternPoints', run: () => Features.patternPoints() }, { label: T('ctx.patTable'), icon: 'list', help: 'patternTable', run: () => Features.patternTable() }, { label: T('ctx.patMirror'), icon: 'mirror', run: () => Features.pattern('mirror') }, ...(Features.canMirrorStep(it, items[0].parent) ? [{ label: T('ctx.mirrorStep'), icon: 'mirror', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : [])]), '', hole ? T('ctx.patternHoleTip') : T('ctx.patternTip'), true);
+      }
       if (!hole) b('split', T('ctx.split'), () => Features.split(), '', T('ctx.splitTip'), true);
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', T('ctx.toTip'), () => Actions.loft([it.id], { tip: 10 }), '', T('ctx.toTipTip'), true);
       if (!App.edges.length) b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarPartsTip'), true);

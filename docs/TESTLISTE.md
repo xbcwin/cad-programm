@@ -2740,6 +2740,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Validierung, i18n, Hilfe & Befehlssuche**: `Store.validateProject`, DE/EN-Schlüsselgleichheit, `HELP.autoScrews` und Befehlssuche (`auto-screws`) laufen ohne JS-Fehler (`t_a160_schrauben_einsetzen`).
 - [ ] **Von Hand**: Im Browser eine Baugruppe aus zwei verschraubten Platten im Einfach- und Profi-Modus öffnen, „Schrauben einsetzen“ klicken, über die Tabellenzeilen fahren (3D-Lochmarkierung prüfen) und wahlweise Senkkopf sowie Scheiben/Muttern testen.
 
+## Spiegeln und Muster von Teilen in der Baugruppe (Auto [A-162], BG-26)
+
+- [x] **Einfach-Modus & Rechteck-Muster (4× Fuß, Stückliste Menge 4)**: `#t-asm-pattern` und `#ctx-asm-pattern` sind im Einfach-Modus sichtbar; ein 2×2-Rechteck-Muster (`dx = 50`, `dy = 40`) eines eingesetzten Bauteils „Fuß“ erzeugt 4 verknüpfte `ref`-Teile an den exakten 3D-Lagen und `Mass.bom()` / `#bom` weisen Menge `4` aus (`t_a162_baugruppe_spiegeln_muster`).
+- [x] **Vorlage ändern → alle 4 folgen & Live-Anpassung**: Ändern des Bauteils „Fuß“ im Tab (`20 × 20 × 30` → `32 × 20 × 55 mm`) aktualisiert nach Rückkehr zur Baugruppe alle 4 Teile exakt; Änderung von `#ap-nx` (`2 → 3`) im rechten Panel `#asm-pat-sec` erzeugt 6 Teile (Menge 6) und `Strg+Z` macht es rückgängig (`t_a162_baugruppe_spiegeln_muster`).
+- [x] **Kreismuster & Spiegeln von Teilen**: 4× Kreismuster um Z legt 4 verknüpfte Teile auf dem Kreis mit Menge 4 in der Stückliste an; Spiegeln eines asymmetrischen Keils an YZ erzeugt eine gespiegelte verknüpfte Kopie (`mir: [-1, 1, 1]`, `linkMirror: true`), die bei Größenänderungen der Vorlage exakt gespiegelt mitwächst (`t_a162_baugruppe_spiegeln_muster`).
+- [x] **Auflösen, Entfernen, Validierung, i18n, Hilfen & Befehlssuche**: `dissolvePattern`, `removePattern`, `Store.validateProject`, Speichern/Laden mit `doc.asmPatterns`, DE/EN-Schlüsselgleichheit, `HELP.asmPattern`/`HELP.asmMirror` und Befehlssuche (`asm-pattern-rect`, `asm-pattern-circ`, `asm-mirror-part`) laufen ohne Fehler (`t_a162_baugruppe_spiegeln_muster`).
+- [ ] **Von Hand**: Im Browser im Einfach- und Profi-Modus in einer Baugruppe ein Bauteil einsetzen, über „Muster / Spiegeln“ ein Rechteck-, Kreis- und Spiegelmuster anlegen, Abstände rechts ändern und das Original im Bauteil-Tab umbauen.
+
 ## Fehler melden
 
 ```

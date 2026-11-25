@@ -361,6 +361,7 @@ const Assembly = (() => {
             if (applyPartDocToItem(it, partDoc, doc)) { ch = true; hit++; }
           }
         });
+        if (ch && typeof syncPatterns === 'function') syncPatterns(doc);
         return ch;
       });
       if (changed) { updatedTabs++; updatedItems += hit; }
@@ -392,6 +393,7 @@ const Assembly = (() => {
           if (pd && applyPartDocToItem(it, pd, doc)) { ch = true; updated++; }
         }
       });
+      if (ch && typeof syncPatterns === 'function') syncPatterns(doc);
       return ch;
     });
     if (opts.announce && updated > 0) {
@@ -784,6 +786,7 @@ const Assembly = (() => {
             if (applyPartDocToItem(it, fromDoc, doc)) ch = true;
           }
         });
+        if (ch && typeof syncPatterns === 'function') syncPatterns(doc);
         return ch;
       });
     });
@@ -2190,6 +2193,685 @@ const Assembly = (() => {
     return modalRef;
   }
 
+  // ================= Spiegeln und Muster von Teilen in der Baugruppe (BG-26) =================
+  function patterns(doc = App.doc) {
+    return (doc && Array.isArray(doc.asmPatterns)) ? doc.asmPatterns : [];
+  }
+  function patternsOf(itemId, doc = App.doc) {
+    if (!itemId) return [];
+    return patterns(doc).filter((pat) => pat && (pat.sourceId === itemId || (Array.isArray(pat.copyIds) && pat.copyIds.includes(itemId))));
+  }
+  function patternOf(itemId, doc = App.doc) {
+    if (!itemId) return null;
+    const list = patterns(doc);
+    return list.find((pat) => pat && Array.isArray(pat.copyIds) && pat.copyIds.includes(itemId))
+      || list.find((pat) => pat && pat.sourceId === itemId)
+      || null;
+  }
+  function isPatternCopy(itemId, doc = App.doc) {
+    if (!itemId) return false;
+    return patterns(doc).some((pat) => pat && Array.isArray(pat.copyIds) && pat.copyIds.includes(itemId));
+  }
+  function mirrorPlaneOf(doc, pat, V) {
+    if (pat && pat.plane === 'DATUM' && pat.datumId) {
+      const d = (doc && Array.isArray(doc.datums) ? doc.datums : []).find((x) => x && x.id === pat.datumId);
+      if (d && d.plane && Array.isArray(d.plane.o) && Array.isArray(d.plane.n)) {
+        return { o: d.plane.o.map(Number), n: d.plane.n.map(Number) };
+      }
+    }
+    const pl = ['XY', 'XZ', 'YZ'].includes(pat && pat.plane) ? pat.plane : 'YZ';
+    const off = Model.num(pat && pat.off, V, 0);
+    const n = pl === 'XY' ? [0, 0, 1] : pl === 'XZ' ? [0, 1, 0] : [1, 0, 0];
+    return { o: [n[0] * off, n[1] * off, n[2] * off], n };
+  }
+  function reflectionMatrix(o, n) {
+    const v = new THREE.Vector3(Number(n[0]) || 0, Number(n[1]) || 0, Number(n[2]) || 0);
+    if (v.lengthSq() < 1e-12) v.set(1, 0, 0);
+    else v.normalize();
+    const a = v.x, b = v.y, c = v.z;
+    const d = a * (Number(o[0]) || 0) + b * (Number(o[1]) || 0) + c * (Number(o[2]) || 0);
+    return new THREE.Matrix4().set(
+      1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a,
+      -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b,
+      -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c,
+      0, 0, 0, 1
+    );
+  }
+  function computePatternTargets(doc, pat, src) {
+    if (!doc || !pat || !src) return [];
+    const V = Model.vars(doc).v;
+    const Wsrc = Model.worldMatrix(doc, src.id);
+    const skipSet = new Set(Array.isArray(pat.skip) ? pat.skip.map((x) => Math.round(Number(x))) : []);
+    const targets = [];
+    if (pat.kind === 'rect') {
+      const nx = clamp(Math.round(Model.num(pat.nx, V, 2)), 1, 50);
+      const ny = clamp(Math.round(Model.num(pat.ny, V, 2)), 1, 50);
+      const dx = Model.num(pat.dx, V, 30);
+      const dy = Model.num(pat.dy, V, 30);
+      let slot = 0;
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < ny; j++, slot++) {
+          if (slot === 0 || skipSet.has(slot)) continue;
+          if (targets.length >= 100) break;
+          const W = new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0).multiply(Wsrc);
+          targets.push({ slot, copyNum: slot + 1, W, isMirror: false });
+        }
+        if (targets.length >= 100) break;
+      }
+    } else if (pat.kind === 'circ') {
+      const n = clamp(Math.round(Model.num(pat.n, V, 4)), 1, 60);
+      const ang = Model.num(pat.ang, V, 360);
+      const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : (n > 1 ? ang / (n - 1) : 0);
+      const axVec = pat.axis === 'x' ? new THREE.Vector3(1, 0, 0) : pat.axis === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+      const cx = Model.num(pat.cx, V, 0), cy = Model.num(pat.cy, V, 0), cz = Model.num(pat.cz, V, 0);
+      const srcPos = new THREE.Vector3(), srcQuat = new THREE.Quaternion(), srcScale = new THREE.Vector3();
+      Wsrc.decompose(srcPos, srcQuat, srcScale);
+      const align = pat.align !== false;
+      for (let k = 1; k < n; k++) {
+        if (skipSet.has(k)) continue;
+        if (targets.length >= 100) break;
+        const rad = (k * step * Math.PI) / 180;
+        const R = new THREE.Matrix4().makeTranslation(cx, cy, cz)
+          .multiply(new THREE.Matrix4().makeRotationAxis(axVec, rad))
+          .multiply(new THREE.Matrix4().makeTranslation(-cx, -cy, -cz));
+        const W = align
+          ? R.multiply(Wsrc)
+          : new THREE.Matrix4().compose(srcPos.clone().applyMatrix4(R), srcQuat, new THREE.Vector3(1, 1, 1));
+        targets.push({ slot: k, copyNum: k + 1, W, isMirror: false });
+      }
+    } else if (pat.kind === 'mirror') {
+      if (!skipSet.has(1)) {
+        const pl = mirrorPlaneOf(doc, pat, V);
+        const Mrefl = reflectionMatrix(pl.o, pl.n);
+        const D = new THREE.Matrix4().makeScale(-1, 1, 1);
+        const W = Mrefl.multiply(Wsrc).multiply(D);
+        targets.push({ slot: 1, copyNum: 2, W, isMirror: true });
+      }
+    }
+    return targets;
+  }
+  function syncPatterns(doc) {
+    if (!doc || !Array.isArray(doc.asmPatterns) || !doc.asmPatterns.length) return 0;
+    if (!Array.isArray(doc.items)) return 0;
+    let changed = 0;
+    let createdLinked = false;
+    const activePats = [];
+    for (const pat of doc.asmPatterns) {
+      if (!pat || typeof pat !== 'object' || !pat.sourceId) continue;
+      const src = doc.items.find((x) => x && x.id === pat.sourceId);
+      if (!src) {
+        for (const cid of pat.copyIds || []) {
+          const orphan = doc.items.find((x) => x && x.id === cid);
+          if (orphan) { delete orphan.asmPat; delete orphan.asmPatSlot; }
+        }
+        changed++;
+        continue;
+      }
+      activePats.push(pat);
+      const targets = computePatternTargets(doc, pat, src);
+      const existingBySlot = new Map();
+      const leftovers = [];
+      const seenExisting = new Set();
+      for (const cid of pat.copyIds || []) {
+        const c = doc.items.find((x) => x && x.id === cid);
+        if (!c || c === src || seenExisting.has(c.id)) continue;
+        seenExisting.add(c.id);
+        if (c.asmPatSlot != null && !existingBySlot.has(c.asmPatSlot)) existingBySlot.set(c.asmPatSlot, c);
+        else leftovers.push(c);
+      }
+      for (const c of doc.items) {
+        if (c && c !== src && c.asmPat === pat.id && !seenExisting.has(c.id)) {
+          seenExisting.add(c.id);
+          if (c.asmPatSlot != null && !existingBySlot.has(c.asmPatSlot)) existingBySlot.set(c.asmPatSlot, c);
+          else leftovers.push(c);
+        }
+      }
+
+      const assigned = [];
+      for (const tgt of targets) {
+        let copy = existingBySlot.get(tgt.slot);
+        if (copy) existingBySlot.delete(tgt.slot);
+        else copy = leftovers.shift() || null;
+        assigned.push({ tgt, copy });
+      }
+      const dropIds = new Set([...existingBySlot.values(), ...leftovers].map((c) => c.id));
+      if (dropIds.size) {
+        doc.items = doc.items.filter((x) => !x || !dropIds.has(x.id));
+        changed += dropIds.size;
+      }
+
+      const nextCopyIds = [];
+      let anchor = src;
+      for (const { tgt, copy: existing } of assigned) {
+        let copy = existing;
+        const desiredName = Comp.patternCopyName(src, tgt.copyNum, tgt.isMirror);
+        if (!copy) {
+          copy = Comp.cloneLinkedPart(doc, src, { mirror: tgt.isMirror, copyNum: tgt.copyNum, name: desiredName });
+          const idx = doc.items.indexOf(anchor);
+          if (idx >= 0) doc.items.splice(idx + 1, 0, copy);
+          else doc.items.push(copy);
+          if (copy.link) createdLinked = true;
+          changed++;
+        } else {
+          Comp.syncLinkedPart(doc, copy, src, tgt.isMirror);
+          copy.name = desiredName;
+        }
+        Model.setFromMatrix(copy, tgt.W);
+        copy.asmPat = pat.id;
+        copy.asmPatSlot = tgt.slot;
+        if (src.suppressed) copy.suppressed = true; else delete copy.suppressed;
+        nextCopyIds.push(copy.id);
+        anchor = copy;
+      }
+      pat.copyIds = nextCopyIds;
+    }
+    doc.asmPatterns = activePats;
+    if (createdLinked && typeof Model.syncLinks === 'function') Model.syncLinks(doc);
+    return changed;
+  }
+  function onItemRemoved(doc, item) {
+    if (!doc || !item || !Array.isArray(doc.asmPatterns) || !doc.asmPatterns.length) return;
+    const next = [];
+    for (const pat of doc.asmPatterns) {
+      if (!pat) continue;
+      if (pat.sourceId === item.id) {
+        for (const cid of pat.copyIds || []) {
+          const c = (doc.items || []).find((x) => x && x.id === cid);
+          if (c) { delete c.asmPat; delete c.asmPatSlot; }
+        }
+        continue;
+      }
+      if (Array.isArray(pat.copyIds) && pat.copyIds.includes(item.id)) {
+        pat.copyIds = pat.copyIds.filter((id) => id !== item.id);
+        if (item.asmPatSlot != null) {
+          pat.skip = Array.isArray(pat.skip) ? pat.skip : [];
+          if (!pat.skip.includes(item.asmPatSlot)) pat.skip.push(item.asmPatSlot);
+        }
+        if (!pat.copyIds.length) continue;
+      }
+      next.push(pat);
+    }
+    doc.asmPatterns = next;
+  }
+  function defaultStepFor(itemId) {
+    const box = typeof Actions !== 'undefined' && Actions.worldBox ? Actions.worldBox(itemId) : null;
+    if (!box || box.isEmpty()) return [30, 30];
+    const sz = box.getSize(new THREE.Vector3());
+    return [round(Math.max(10, sz.x + 10), 1), round(Math.max(10, sz.y + 10), 1)];
+  }
+  function patternKindLabel(kind) {
+    if (kind === 'circ') return T('asm.patKindCirc');
+    if (kind === 'mirror') return T('asm.patKindMirror');
+    return T('asm.patKindRect');
+  }
+  function createPattern(kind = 'rect', ids = null, opts = {}) {
+    if (!App.doc) return null;
+    const k = kind === 'circ' || kind === 'mirror' ? kind : 'rect';
+    const rawIds = Array.isArray(ids) ? ids : (ids ? [ids] : App.sel);
+    const tops = [];
+    const seen = new Set();
+    for (const id of rawIds) {
+      const t = Model.topOf(App.doc, id);
+      if (t && !seen.has(t.id) && typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(t, App.doc)) {
+        seen.add(t.id);
+        tops.push(t);
+      }
+    }
+    if (!tops.length) {
+      if (!opts.silent) UI.toast(T('asm.patSelectPart'), { icon: 'info' });
+      return null;
+    }
+    const created = [];
+    const undoKey = k === 'mirror' ? 'asm.patMirrorUndo' : (k === 'circ' ? 'asm.patCircUndo' : 'asm.patRectUndo');
+    App.change(T(undoKey), (doc) => {
+      doc.asmPatterns = Array.isArray(doc.asmPatterns) ? doc.asmPatterns : [];
+      for (const srcItem of tops) {
+        const src = doc.items.find((x) => x && x.id === srcItem.id);
+        if (!src) continue;
+        const [defDx, defDy] = defaultStepFor(src.id);
+        const entry = {
+          id: uid('ap'),
+          kind: k,
+          sourceId: src.id,
+          copyIds: [],
+        };
+        if (k === 'rect') {
+          entry.nx = opts.nx != null ? opts.nx : 2;
+          entry.ny = opts.ny != null ? opts.ny : 2;
+          entry.dx = opts.dx != null ? opts.dx : defDx;
+          entry.dy = opts.dy != null ? opts.dy : defDy;
+        } else if (k === 'circ') {
+          entry.n = opts.n != null ? opts.n : 4;
+          entry.ang = opts.ang != null ? opts.ang : 360;
+          entry.axis = opts.axis === 'x' || opts.axis === 'y' ? opts.axis : 'z';
+          entry.cx = opts.cx != null ? opts.cx : 0;
+          entry.cy = opts.cy != null ? opts.cy : 0;
+          entry.cz = opts.cz != null ? opts.cz : 0;
+          entry.align = opts.align !== false;
+        } else {
+          entry.plane = opts.plane === 'DATUM' || opts.plane === 'XY' || opts.plane === 'XZ' ? opts.plane : 'YZ';
+          entry.off = opts.off != null ? opts.off : 0;
+          if (entry.plane === 'DATUM' && opts.datumId) entry.datumId = opts.datumId;
+        }
+        doc.asmPatterns.push(entry);
+        created.push(entry);
+      }
+      if (!created.length) return false;
+      syncPatterns(doc);
+    });
+    if (!created.length) return null;
+    const liveList = created.map((c) => patterns(App.doc).find((x) => x.id === c.id)).filter(Boolean);
+    const first = liveList[0] || created[0];
+    if (!opts.keepSelection) App.select([first.sourceId]);
+    if (!opts.silent) {
+      const totalCopies = liveList.reduce((s, p) => s + (p.copyIds ? p.copyIds.length : 0), 0);
+      const totalParts = liveList.length + totalCopies;
+      UI.toast(
+        k === 'mirror'
+          ? T('asm.patMirrorToast', { n: totalCopies })
+          : T('asm.patCreatedToast', { kind: patternKindLabel(k), total: totalParts }),
+        { icon: 'check', ms: 3200 }
+      );
+    }
+    return opts.all ? liveList : first;
+  }
+  const patternRect = (ids, opts = {}) => createPattern('rect', ids, opts);
+  const patternCirc = (ids, opts = {}) => createPattern('circ', ids, opts);
+  const mirrorPart = (ids, opts = {}) => createPattern('mirror', ids, opts);
+
+  function updatePattern(patId, patch = {}, mergeKey = null) {
+    if (!patId || !patch || typeof patch !== 'object') return false;
+    const opts = mergeKey ? { merge: `ap:${patId}:${mergeKey}` } : {};
+    return App.change(T('asm.patUpdatedUndo'), (doc) => {
+      const pat = patterns(doc).find((p) => p && p.id === patId);
+      if (!pat) return false;
+      let changed = false;
+      for (const [k, v] of Object.entries(patch)) {
+        if (pat[k] !== v) { pat[k] = v; changed = true; }
+      }
+      if (!changed) return false;
+      if (Array.isArray(pat.skip) && pat.skip.length) {
+        const V = Model.vars(doc).v;
+        const maxSlot = pat.kind === 'rect'
+          ? clamp(Math.round(Model.num(pat.nx, V, 2)), 1, 50) * clamp(Math.round(Model.num(pat.ny, V, 2)), 1, 50)
+          : pat.kind === 'circ'
+            ? clamp(Math.round(Model.num(pat.n, V, 4)), 1, 60)
+            : 2;
+        pat.skip = pat.skip.filter((s) => s >= 1 && s < maxSlot);
+        if (!pat.skip.length) delete pat.skip;
+      }
+      syncPatterns(doc);
+      return true;
+    }, opts) !== false;
+  }
+  function restorePatternSkips(patId) {
+    return updatePattern(patId, { skip: [] });
+  }
+  function dissolvePattern(patId) {
+    if (!patId || !App.doc) return false;
+    let ok = false;
+    App.change(T('asm.patDissolveUndo'), (doc) => {
+      const list = patterns(doc);
+      const idx = list.findIndex((p) => p && p.id === patId);
+      if (idx < 0) return false;
+      const [pat] = list.splice(idx, 1);
+      for (const cid of pat.copyIds || []) {
+        const c = (doc.items || []).find((x) => x && x.id === cid);
+        if (c) { delete c.asmPat; delete c.asmPatSlot; }
+      }
+      ok = true;
+    });
+    if (ok) UI.toast(T('asm.patDissolveToast'), { icon: 'ungroup', ms: 2600 });
+    return ok;
+  }
+  function removePattern(patId) {
+    if (!patId || !App.doc) return false;
+    let srcId = null;
+    const ok = App.change(T('asm.patRemoveUndo'), (doc) => {
+      const list = patterns(doc);
+      const idx = list.findIndex((p) => p && p.id === patId);
+      if (idx < 0) return false;
+      const [pat] = list.splice(idx, 1);
+      srcId = pat.sourceId;
+      const drop = new Set(pat.copyIds || []);
+      if (drop.size) doc.items = (doc.items || []).filter((x) => !x || !drop.has(x.id));
+      return true;
+    }) !== false;
+    if (ok) {
+      if (srcId && Model.find(App.doc, srcId)) App.select([srcId]);
+      UI.toast(T('asm.patRemoveToast'), { icon: 'info', ms: 2400 });
+    }
+    return ok;
+  }
+
+  function patternMenu(anchor, ids = null) {
+    const sel = ids || (App.sel.length ? App.sel : null);
+    return UI.menu(anchor, [
+      { id: 'am-pat-rect', icon: 'patternRect', label: T('asm.patMenuRect'), help: 'asmPattern', run: () => patternDialog('rect', sel) },
+      { id: 'am-pat-circ', icon: 'patternCirc', label: T('asm.patMenuCirc'), help: 'asmPattern', run: () => patternDialog('circ', sel) },
+      { id: 'am-pat-mirror', icon: 'mirror', label: T('asm.patMenuMirror'), help: 'asmMirror', run: () => patternDialog('mirror', sel) },
+    ]);
+  }
+
+  function patternDialog(initialKind = 'rect', ids = null) {
+    if (!App.doc) return null;
+    const eligible = (App.doc.items || []).filter((it) => typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(it, App.doc));
+    if (!eligible.length) {
+      UI.toast(T('asm.patNoParts'), { icon: 'info' });
+      return null;
+    }
+    const rawIds = Array.isArray(ids) ? ids : (ids ? [ids] : App.sel);
+    let initialSrc = null;
+    for (const id of rawIds) {
+      const t = Model.topOf(App.doc, id);
+      if (t && eligible.includes(t)) { initialSrc = t; break; }
+    }
+    if (!initialSrc) initialSrc = eligible[0];
+
+    const [defDx, defDy] = defaultStepFor(initialSrc.id);
+    const st = {
+      kind: initialKind === 'circ' || initialKind === 'mirror' ? initialKind : 'rect',
+      sourceId: initialSrc.id,
+      nx: 2,
+      ny: 2,
+      dx: defDx,
+      dy: defDy,
+      dxTouched: false,
+      dyTouched: false,
+      n: 4,
+      ang: 360,
+      axis: 'z',
+      cx: 0,
+      cy: 0,
+      cz: 0,
+      align: true,
+      plane: 'YZ',
+      datumId: '',
+      off: 0,
+    };
+
+    const body = h('div', { id: 'asm-pattern-dialog', class: 'ap-dlg' });
+    const partSel = h('select', { id: 'ap-dlg-part' });
+    for (const it of eligible) {
+      partSel.append(h('option', { value: it.id, selected: it.id === st.sourceId }, Model.label(it)));
+    }
+    const partWrap = h('div', { class: 'field' }, h('label', { for: 'ap-dlg-part' }, T('asm.patDlgPart')), h('div', { class: 'inp' }, partSel));
+
+    const modes = h('div', { class: 'seg ap-modes', role: 'group', 'aria-label': T('asm.patDlgModeAria') });
+    const modeBtns = {};
+    for (const [k, ic, lbl] of [
+      ['rect', 'patternRect', T('asm.patKindRect')],
+      ['circ', 'patternCirc', T('asm.patKindCirc')],
+      ['mirror', 'mirror', T('asm.patKindMirror')],
+    ]) {
+      const mb = h('button', { type: 'button', id: 'ap-mode-' + k, 'aria-pressed': String(st.kind === k) });
+      mb.innerHTML = icon(ic) + esc(lbl);
+      mb.onclick = () => { st.kind = k; syncModeUI(); };
+      modeBtns[k] = mb;
+      modes.append(mb);
+    }
+
+    const fieldsWrap = h('div', { id: 'ap-dlg-fields', class: 'ap-fields' });
+    const summaryEl = h('div', { id: 'ap-dlg-summary', class: 'hint-box ap-summary' });
+
+    const updateSummary = () => {
+      const V = Model.vars(App.doc).v;
+      let total = 2;
+      if (st.kind === 'rect') {
+        const nx = clamp(Math.round(Model.num(st.nx, V, 2)), 1, 50);
+        const ny = clamp(Math.round(Model.num(st.ny, V, 2)), 1, 50);
+        total = Math.min(101, nx * ny);
+      } else if (st.kind === 'circ') {
+        total = clamp(Math.round(Model.num(st.n, V, 4)), 1, 60);
+      }
+      summaryEl.textContent = st.kind === 'mirror'
+        ? T('asm.patDlgSummaryMirror')
+        : T('asm.patDlgSummary', { total, copies: Math.max(0, total - 1) });
+    };
+
+    const renderFields = () => {
+      fieldsWrap.replaceChildren();
+      if (st.kind === 'rect') {
+        const row1 = h('div', { class: 'fields' },
+          UI.numField({ id: 'ap-dlg-nx', label: T('asm.patNx'), value: st.nx, unit: '', min: 1, int: true, onCommit: (v) => { st.nx = v; updateSummary(); } }),
+          UI.numField({ id: 'ap-dlg-ny', label: T('asm.patNy'), value: st.ny, unit: '', min: 1, int: true, onCommit: (v) => { st.ny = v; updateSummary(); } })
+        );
+        const row2 = h('div', { class: 'fields' },
+          UI.numField({ id: 'ap-dlg-dx', label: T('asm.patDx'), value: st.dx, unit: 'mm', axis: 'x', onCommit: (v) => { st.dx = v; st.dxTouched = true; } }),
+          UI.numField({ id: 'ap-dlg-dy', label: T('asm.patDy'), value: st.dy, unit: 'mm', axis: 'y', onCommit: (v) => { st.dy = v; st.dyTouched = true; } })
+        );
+        fieldsWrap.append(row1, row2);
+      } else if (st.kind === 'circ') {
+        const row1 = h('div', { class: 'fields' },
+          UI.numField({ id: 'ap-dlg-n', label: T('asm.patCount'), value: st.n, unit: '', min: 2, int: true, onCommit: (v) => { st.n = v; updateSummary(); } }),
+          UI.numField({ id: 'ap-dlg-ang', label: T('asm.patAngle'), value: st.ang, unit: '°', onCommit: (v) => { st.ang = v; } })
+        );
+        const axSel = UI.selectField({
+          id: 'ap-dlg-axis',
+          label: T('asm.patAxis'),
+          value: st.axis,
+          options: [['z', T('asm.patAxisZ')], ['x', T('asm.patAxisX')], ['y', T('asm.patAxisY')]],
+          onChange: (v) => { st.axis = v; },
+        });
+        const row2 = h('div', { class: 'fields three' },
+          UI.numField({ id: 'ap-dlg-cx', label: T('asm.patCenterX'), value: st.cx, unit: 'mm', axis: 'x', onCommit: (v) => { st.cx = v; } }),
+          UI.numField({ id: 'ap-dlg-cy', label: T('asm.patCenterY'), value: st.cy, unit: 'mm', axis: 'y', onCommit: (v) => { st.cy = v; } }),
+          UI.numField({ id: 'ap-dlg-cz', label: T('asm.patCenterZ'), value: st.cz, unit: 'mm', axis: 'z', onCommit: (v) => { st.cz = v; } })
+        );
+        const alChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'ap-dlg-align', checked: st.align }), T('asm.patAlign'));
+        alChk.querySelector('input').onchange = (e) => { st.align = e.target.checked; };
+        fieldsWrap.append(row1, axSel, row2, alChk);
+      } else {
+        const planeOpts = [
+          ['YZ', T('asm.patPlaneYZ')],
+          ['XZ', T('asm.patPlaneXZ')],
+          ['XY', T('asm.patPlaneXY')],
+        ];
+        for (const d of (App.doc.datums || [])) {
+          if (d && d.id && d.plane) planeOpts.push(['datum:' + d.id, `${T('asm.patPlaneDatum')}: ${d.name || d.id}`]);
+        }
+        const curPlaneVal = st.plane === 'DATUM' && st.datumId ? ('datum:' + st.datumId) : st.plane;
+        const plSel = UI.selectField({
+          id: 'ap-dlg-plane',
+          label: T('asm.patMirrorPlane'),
+          value: curPlaneVal,
+          options: planeOpts,
+          onChange: (v) => {
+            if (v.startsWith('datum:')) { st.plane = 'DATUM'; st.datumId = v.slice(6); }
+            else { st.plane = v; st.datumId = ''; }
+            syncOffVis();
+          },
+        });
+        const offFld = UI.numField({ id: 'ap-dlg-off', label: T('asm.patMirrorOff'), value: st.off, unit: 'mm', onCommit: (v) => { st.off = v; } });
+        const syncOffVis = () => { offFld.hidden = st.plane === 'DATUM'; };
+        syncOffVis();
+        fieldsWrap.append(plSel, offFld);
+      }
+      updateSummary();
+    };
+
+    const syncModeUI = () => {
+      for (const [k, btn] of Object.entries(modeBtns)) btn.setAttribute('aria-pressed', String(st.kind === k));
+      renderFields();
+    };
+
+    partSel.onchange = () => {
+      st.sourceId = partSel.value;
+      if (!st.dxTouched || !st.dyTouched) {
+        const [nxDx, nxDy] = defaultStepFor(st.sourceId);
+        if (!st.dxTouched) st.dx = nxDx;
+        if (!st.dyTouched) st.dy = nxDy;
+        if (st.kind === 'rect') renderFields();
+      }
+    };
+
+    body.append(partWrap, modes, fieldsWrap, summaryEl);
+    syncModeUI();
+
+    return UI.modal({
+      title: T('asm.patDlgTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel'), value: false },
+        {
+          id: 'ap-dlg-apply',
+          label: T('asm.patDlgApply'),
+          primary: true,
+          run: () => {
+            if (document.activeElement && body.contains(document.activeElement) && typeof document.activeElement.blur === 'function') {
+              document.activeElement.blur();
+            }
+            const opts = { ...st };
+            delete opts.dxTouched;
+            delete opts.dyTouched;
+            delete opts.sourceId;
+            delete opts.kind;
+            createPattern(st.kind, [st.sourceId], opts);
+          },
+        },
+      ],
+    });
+  }
+
+  function patternSection(item) {
+    if (!item || !item.id || !App.doc) return null;
+    const list = patternsOf(item.id, App.doc);
+    if (!list.length) return null;
+    const sec = h('div', { class: 'section asm-pat-sec', id: 'asm-pat-sec', 'data-help': 'asmPattern' },
+      h('div', { class: 'section-h' }, T('asm.patSecTitle'))
+    );
+    const single = list.length === 1;
+    list.forEach((pat) => {
+      const suf = single ? '' : ('-' + pat.id);
+      const src = Model.find(App.doc, pat.sourceId)?.item;
+      const total = 1 + (Array.isArray(pat.copyIds) ? pat.copyIds.length : 0);
+      const isCopy = pat.sourceId !== item.id;
+      const card = h('div', { class: 'ap-card', dataset: { patId: pat.id, patKind: pat.kind } });
+      card.append(h('div', { class: 'hint-box' },
+        isCopy
+          ? T('asm.patCopyHint', { kind: patternKindLabel(pat.kind), src: src ? Model.label(src) : '?', total })
+          : T('asm.patSrcHint', { kind: patternKindLabel(pat.kind), total })
+      ));
+
+      if (pat.kind === 'rect') {
+        card.append(
+          h('div', { class: 'fields' },
+            UI.numField({ id: 'ap-nx' + suf, label: T('asm.patNx'), value: pat.nx ?? 2, unit: '', min: 1, int: true, onCommit: (v) => updatePattern(pat.id, { nx: v }, 'nx') }),
+            UI.numField({ id: 'ap-ny' + suf, label: T('asm.patNy'), value: pat.ny ?? 2, unit: '', min: 1, int: true, onCommit: (v) => updatePattern(pat.id, { ny: v }, 'ny') })
+          ),
+          h('div', { class: 'fields' },
+            UI.numField({ id: 'ap-dx' + suf, label: T('asm.patDx'), value: pat.dx ?? 30, unit: 'mm', axis: 'x', onCommit: (v) => updatePattern(pat.id, { dx: v }, 'dx') }),
+            UI.numField({ id: 'ap-dy' + suf, label: T('asm.patDy'), value: pat.dy ?? 30, unit: 'mm', axis: 'y', onCommit: (v) => updatePattern(pat.id, { dy: v }, 'dy') })
+          )
+        );
+      } else if (pat.kind === 'circ') {
+        card.append(
+          h('div', { class: 'fields' },
+            UI.numField({ id: 'ap-n' + suf, label: T('asm.patCount'), value: pat.n ?? 4, unit: '', min: 2, int: true, onCommit: (v) => updatePattern(pat.id, { n: v }, 'n') }),
+            UI.numField({ id: 'ap-ang' + suf, label: T('asm.patAngle'), value: pat.ang ?? 360, unit: '°', onCommit: (v) => updatePattern(pat.id, { ang: v }, 'ang') })
+          ),
+          UI.selectField({
+            id: 'ap-axis' + suf,
+            label: T('asm.patAxis'),
+            value: pat.axis || 'z',
+            options: [['z', T('asm.patAxisZ')], ['x', T('asm.patAxisX')], ['y', T('asm.patAxisY')]],
+            onChange: (v) => updatePattern(pat.id, { axis: v }),
+          }),
+          h('div', { class: 'fields three' },
+            UI.numField({ id: 'ap-cx' + suf, label: T('asm.patCenterX'), value: pat.cx ?? 0, unit: 'mm', axis: 'x', onCommit: (v) => updatePattern(pat.id, { cx: v }, 'cx') }),
+            UI.numField({ id: 'ap-cy' + suf, label: T('asm.patCenterY'), value: pat.cy ?? 0, unit: 'mm', axis: 'y', onCommit: (v) => updatePattern(pat.id, { cy: v }, 'cy') }),
+            UI.numField({ id: 'ap-cz' + suf, label: T('asm.patCenterZ'), value: pat.cz ?? 0, unit: 'mm', axis: 'z', onCommit: (v) => updatePattern(pat.id, { cz: v }, 'cz') })
+          )
+        );
+        const alChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'ap-align' + suf, checked: pat.align !== false }), T('asm.patAlign'));
+        alChk.querySelector('input').onchange = (e) => updatePattern(pat.id, { align: e.target.checked });
+        card.append(alChk);
+      } else {
+        const planeOpts = [
+          ['YZ', T('asm.patPlaneYZ')],
+          ['XZ', T('asm.patPlaneXZ')],
+          ['XY', T('asm.patPlaneXY')],
+        ];
+        for (const d of (App.doc.datums || [])) {
+          if (d && d.id && d.plane) planeOpts.push(['datum:' + d.id, `${T('asm.patPlaneDatum')}: ${d.name || d.id}`]);
+        }
+        const curPl = pat.plane === 'DATUM' && pat.datumId ? ('datum:' + pat.datumId) : (pat.plane || 'YZ');
+        card.append(UI.selectField({
+          id: 'ap-plane' + suf,
+          label: T('asm.patMirrorPlane'),
+          value: curPl,
+          options: planeOpts,
+          onChange: (v) => v.startsWith('datum:')
+            ? updatePattern(pat.id, { plane: 'DATUM', datumId: v.slice(6) })
+            : updatePattern(pat.id, { plane: v, datumId: '' }),
+        }));
+        if (pat.plane !== 'DATUM') {
+          card.append(UI.numField({ id: 'ap-off' + suf, label: T('asm.patMirrorOff'), value: pat.off ?? 0, unit: 'mm', onCommit: (v) => updatePattern(pat.id, { off: v }, 'off') }));
+        }
+      }
+
+      const acts = h('div', { class: 'btn-row' });
+      if (isCopy && src) {
+        const sb = h('button', { type: 'button', class: 'btn small', id: 'ap-sel-src' + suf });
+        sb.innerHTML = icon('pointer') + esc(T('asm.patSelectSrc'));
+        sb.onclick = () => App.select([src.id]);
+        acts.append(sb);
+      }
+      const allBtn = h('button', { type: 'button', class: 'btn small', id: 'ap-sel-all' + suf });
+      allBtn.innerHTML = icon('patternRect') + esc(T('asm.patSelectAll'));
+      allBtn.onclick = () => App.select([pat.sourceId, ...(pat.copyIds || [])].filter((id) => Model.find(App.doc, id)));
+      acts.append(allBtn);
+      if (Array.isArray(pat.skip) && pat.skip.length) {
+        const rb = h('button', { type: 'button', class: 'btn small', id: 'ap-restore-skips' + suf }, T('asm.patRestoreSkips', { n: pat.skip.length }));
+        rb.onclick = () => restorePatternSkips(pat.id);
+        acts.append(rb);
+      }
+      const db = h('button', { type: 'button', class: 'btn small ghost', id: 'ap-dissolve' + suf });
+      db.innerHTML = icon('ungroup') + esc(T('asm.patDissolveBtn'));
+      db.onclick = () => dissolvePattern(pat.id);
+      const del = h('button', { type: 'button', class: 'btn small ghost', id: 'ap-remove' + suf });
+      del.innerHTML = icon('trash') + esc(T('asm.patRemoveBtn'));
+      del.onclick = () => removePattern(pat.id);
+      acts.append(db, del);
+      card.append(acts);
+      sec.append(card);
+    });
+    return sec;
+  }
+
+  function patternTreeSection() {
+    const list = patterns();
+    if (!list.length) return null;
+    const sec = h('div', { class: 'datum-tree asm-pat-tree', id: 'asm-pat-tree', 'data-help': 'asmPattern' },
+      h('div', { class: 'section-h' }, T('asm.patTreeTitle'))
+    );
+    for (const pat of list) {
+      const src = Model.find(App.doc, pat.sourceId)?.item;
+      const ids = [pat.sourceId, ...(pat.copyIds || [])].filter((id) => Model.find(App.doc, id));
+      const total = ids.length;
+      const sel = ids.some((id) => App.sel.includes(id));
+      const row = h('div', {
+        class: 'tree-row asm-pat-row' + (sel ? ' sel' : ''),
+        tabindex: '0',
+        role: 'button',
+        dataset: { asmPat: pat.id, patKind: pat.kind },
+      });
+      const ic = h('span', { class: 'swatch' });
+      ic.innerHTML = icon(pat.kind === 'mirror' ? 'mirror' : pat.kind === 'circ' ? 'patternCirc' : 'patternRect');
+      const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('asm.patRemoveBtn'), 'data-tip': T('asm.patRemoveBtn') });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); removePattern(pat.id); };
+      const title = `${patternKindLabel(pat.kind)} · ${src ? Model.label(src) : '?'}`;
+      row.append(ic, h('span', { class: 'nm', title }, title), h('span', { class: 'sub mono' }, `${total}×`), h('span', { class: 'm-acts' }, del));
+      row.onclick = () => App.select(ids);
+      row.addEventListener('keydown', (e) => {
+        if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); App.select(ids); }
+      });
+      sec.append(row);
+    }
+    return sec;
+  }
+
   return {
     init,
     isAssembly,
@@ -2206,6 +2888,25 @@ const Assembly = (() => {
     unlinkPart,
     assembliesReferencing,
     renderBanner,
+    patterns,
+    patternsOf,
+    patternOf,
+    isPatternCopy,
+    computePatternTargets,
+    syncPatterns,
+    onItemRemoved,
+    createPattern,
+    patternRect,
+    patternCirc,
+    mirrorPart,
+    updatePattern,
+    restorePatternSkips,
+    dissolvePattern,
+    removePattern,
+    patternMenu,
+    patternDialog,
+    patternSection,
+    patternTreeSection,
     EXPLODE_DIRS,
     normalizeExplodeDir,
     dirKeyOf,

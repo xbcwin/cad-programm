@@ -32014,6 +32014,272 @@ def t_a160_schrauben_einsetzen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a162_baugruppe_spiegeln_muster(p):
+    p.empty()
+
+    # 1. Einfach-Modus einschalten, Bauteil „Fuß“ anlegen und Baugruppe mit 2×2-Rechteck-Muster bauen
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(200)
+    part1_id = p.ev("""
+      App.change('Fuß anlegen', d => {
+        d.name = 'Fuß';
+        const b = Model.newItem('box', { w: 20, d: 20, h: 30 }, { name: 'Fuß' });
+        d.items.push(b);
+      });
+      return App.doc.id;
+    """)
+    warte_rechnen(p, 25)
+    p.ev("return App.saveNow().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-assembly'); p.wait(350)
+    asm_id = p.ev("App.change('Baugruppe benennen', d => { d.name = 'Gestell'; }); return App.doc.id;")
+
+    foot_id = p.ev("""return (async (pid) => {
+      const it = await Comp.insertPart(pid, { pos: [0, 0, 0] });
+      return it && it.id;
+    })(arg);""", part1_id)
+    warte_rechnen(p, 30)
+    p.ev("App.select([arg]);", foot_id); p.wait(250)
+
+    ui_vis = p.ev("""
+      const tb = document.querySelector('#t-asm-pattern');
+      const cb = document.querySelector('#ctx-asm-pattern');
+      return {
+        simple: document.body.classList.contains('simple'),
+        tbVis: !!(tb && tb.offsetParent !== null),
+        cbVis: !!(cb && cb.offsetParent !== null),
+      };
+    """)
+
+    p.pg.click('#t-asm-pattern'); p.wait(200)
+    p.pg.click('#am-pat-rect'); p.wait(250)
+    p.pg.locator('#ap-dlg-nx').fill('2')
+    p.pg.locator('#ap-dlg-ny').fill('2')
+    p.pg.locator('#ap-dlg-dx').fill('50')
+    p.pg.locator('#ap-dlg-dy').fill('40')
+    p.pg.click('#ap-dlg-apply')
+    p.wait(300); warte_rechnen(p, 40)
+
+    rect_state = p.ev("""return Mass.bom().then(B => {
+      const centers = App.doc.items.map(it => {
+        const wb = Actions.worldBox(it.id);
+        const c = wb ? wb.getCenter(Viewer.camera.position.clone()) : null;
+        return c ? [Math.round(c.x * 10) / 10, Math.round(c.y * 10) / 10] : null;
+      });
+      return {
+        count: App.doc.items.length,
+        allRef: App.doc.items.every(x => x.kind === 'ref'),
+        patCount: (App.doc.asmPatterns || []).length,
+        centers,
+        bomRows: B ? B.rows.map(r => ({ name: r.name, n: r.n })) : [],
+      };
+    });""")
+    p.ev("Mass.bomDialog();"); p.wait(400)
+    bom_txt = p.pg.locator('#bom').inner_text()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    want_centers = sorted([[0.0, 0.0], [0.0, 40.0], [50.0, 0.0], [50.0, 40.0]])
+    got_centers = sorted([c for c in rect_state['centers'] if c])
+    ok1 = (
+        ui_vis['simple'] is True
+        and ui_vis['tbVis'] is True
+        and ui_vis['cbVis'] is True
+        and rect_state['count'] == 4
+        and rect_state['allRef'] is True
+        and rect_state['patCount'] == 1
+        and got_centers == want_centers
+        and len(rect_state['bomRows']) == 1
+        and rect_state['bomRows'][0]['name'] == 'Fuß'
+        and rect_state['bomRows'][0]['n'] == 4
+        and 'Fuß' in bom_txt and '4' in bom_txt
+    )
+
+    # 2. Vorlage „Fuß“ ändern (20x20x30 -> 32x20x55) -> alle 4 Kopien in der Baugruppe ändern sich mit
+    p.ev("return Comp.openRef(arg);", foot_id)
+    p.wait(400); warte_rechnen(p, 25)
+    p.ev("""App.change('Fuß vergrößern', d => {
+      d.items[0].p.w = 32;
+      d.items[0].p.h = 55;
+    });""")
+    warte_rechnen(p, 25)
+    p.ev("return App.saveNow().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.locator(f'.proj-tab[data-doc-id="{asm_id}"]').click(); p.wait(400); warte_rechnen(p, 40)
+    dims_after = p.ev("""return App.doc.items.map(it => {
+      const wb = Actions.worldBox(it.id);
+      return wb ? [
+        Math.round((wb.max.x - wb.min.x) * 10) / 10,
+        Math.round((wb.max.y - wb.min.y) * 10) / 10,
+        Math.round((wb.max.z - wb.min.z) * 10) / 10,
+      ] : null;
+    });""")
+    ok2 = len(dims_after) == 4 and all(d == [32.0, 20.0, 55.0] for d in dims_after)
+
+    # 3. Rechte Panel-Steuerung an einer Kopie (3×2 -> 6 Teile) & Rückgängig
+    copy_id = p.ev("return App.doc.items[1].id")
+    p.ev("App.select([arg]);", copy_id); p.wait(300)
+    sec_ok = p.ev("""return {
+      hasSec: !!document.querySelector('#asm-pat-sec'),
+      posLocked: !!document.querySelector('#t-x')?.disabled,
+      hasHint: !!document.querySelector('#pat-copy-pos-hint'),
+    };""")
+    p.pg.locator('#ap-nx').fill('3')
+    p.pg.locator('#ap-nx').press('Enter')
+    p.wait(300); warte_rechnen(p, 40)
+    cnt_6 = p.ev("return Mass.bom().then(B => ({ n: App.doc.items.length, bom: B && B.rows[0] && B.rows[0].n }))")
+    p.pg.click('#btn-undo'); p.wait(350); warte_rechnen(p, 35)
+    cnt_back = p.ev("return App.doc.items.length")
+    ok3 = (
+        sec_ok['hasSec'] is True
+        and sec_ok['posLocked'] is True
+        and sec_ok['hasHint'] is True
+        and cnt_6 == {'n': 6, 'bom': 6}
+        and cnt_back == 4
+    )
+
+    # 4. Kreismuster um Z (4× „Säule“ auf Radius 30 mm) -> BOM Menge 4
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    part2_id = p.ev("""
+      App.change('Säule anlegen', d => {
+        d.name = 'Säule';
+        const c = Model.newItem('cylinder', { d: 12, h: 25 }, { name: 'Säule' });
+        d.items.push(c);
+      });
+      return App.doc.id;
+    """)
+    warte_rechnen(p, 20)
+    p.ev("return App.saveNow().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.locator(f'.proj-tab[data-doc-id="{asm_id}"]').click(); p.wait(400); warte_rechnen(p, 30)
+
+    col_id = p.ev("""return (async (pid) => {
+      const it = await Comp.insertPart(pid, { pos: [30, 0, 0] });
+      return it && it.id;
+    })(arg);""", part2_id)
+    warte_rechnen(p, 25)
+    p.ev("App.select([arg]);", col_id); p.wait(250)
+    p.pg.click('#t-asm-pattern'); p.wait(200)
+    p.pg.click('#am-pat-circ'); p.wait(250)
+    p.pg.click('#ap-dlg-apply')
+    p.wait(300); warte_rechnen(p, 40)
+
+    circ_state = p.ev("""return Mass.bom().then(B => {
+      const cols = App.doc.items.filter(x => (x.name || '').startsWith('Säule'));
+      const pts = cols.map(it => {
+        const wb = Actions.worldBox(it.id);
+        const c = wb ? wb.getCenter(Viewer.camera.position.clone()) : null;
+        return c ? [Math.round(c.x * 10) / 10, Math.round(c.y * 10) / 10] : null;
+      });
+      const row = B ? B.rows.find(r => r.name === 'Säule') : null;
+      return { count: cols.length, pts, bomN: row ? row.n : 0 };
+    });""")
+    want_circ = sorted([[30.0, 0.0], [0.0, 30.0], [-30.0, 0.0], [0.0, -30.0]])
+    ok4 = (
+        circ_state['count'] == 4
+        and sorted(circ_state['pts']) == want_circ
+        and circ_state['bomN'] == 4
+    )
+
+    # 5. Teil spiegeln (asymmetrischer Keil an YZ) & Vorlage ändern -> Spiegelbild bleibt gespiegelt und wächst mit
+    wedge_id = p.ev("""
+      let wid = null;
+      App.change('Keil anlegen', d => {
+        const w = Model.newItem('wedge', { w: 20, d: 10, h: 15 }, { name: 'Keil' });
+        w.t.x = 25;
+        d.items.push(w);
+        wid = w.id;
+      });
+      return wid;
+    """)
+    warte_rechnen(p, 25)
+    p.ev("App.select([arg]);", wedge_id); p.wait(250)
+    p.pg.click('#ctx-asm-pattern'); p.wait(200)
+    p.pg.click('#am-pat-mirror'); p.wait(250)
+    p.pg.click('#ap-dlg-apply'); p.wait(300); warte_rechnen(p, 35)
+
+    mir1 = p.ev("""
+      const pat = (App.doc.asmPatterns || []).find(p => p.sourceId === arg);
+      const mid = pat && pat.copyIds && pat.copyIds[0];
+      const mIt = mid ? App.doc.items.find(x => x.id === mid) : null;
+      const sb = Actions.worldBox(arg), mb = mid ? Actions.worldBox(mid) : null;
+      return {
+        mid,
+        link: mIt && mIt.link,
+        linkMirror: mIt && mIt.linkMirror,
+        mir: mIt && mIt.mir,
+        sb: sb ? [sb.min.x, sb.max.x] : null,
+        mb: mb ? [mb.min.x, mb.max.x] : null,
+      };
+    """, wedge_id)
+    p.ev("""App.change('Keil breiter', d => {
+      const w = d.items.find(x => x.id === arg);
+      if (w) w.p.w = 36;
+    });""", wedge_id)
+    warte_rechnen(p, 30)
+    mir2 = p.ev("""
+      const sb = Actions.worldBox(arg[0]), mb = Actions.worldBox(arg[1]);
+      const mIt = App.doc.items.find(x => x.id === arg[1]);
+      return {
+        mir: mIt && mIt.mir,
+        sw: sb ? sb.max.x - sb.min.x : 0,
+        mw: mb ? mb.max.x - mb.min.x : 0,
+        sb: sb ? [sb.min.x, sb.max.x] : null,
+        mb: mb ? [mb.min.x, mb.max.x] : null,
+      };
+    """, [wedge_id, mir1['mid']])
+    ok5 = (
+        mir1['link'] == wedge_id
+        and mir1['linkMirror'] is True
+        and mir1['mir'] == [-1, 1, 1]
+        and mir1['sb'] is not None and mir1['mb'] is not None
+        and abs(mir1['mb'][0] + mir1['sb'][1]) < 0.2
+        and abs(mir1['mb'][1] + mir1['sb'][0]) < 0.2
+        and mir2['mir'] == [-1, 1, 1]
+        and abs(mir2['sw'] - 36.0) < 0.2
+        and abs(mir2['mw'] - 36.0) < 0.2
+        and abs(mir2['mb'][0] + mir2['sb'][1]) < 0.2
+        and abs(mir2['mb'][1] + mir2['sb'][0]) < 0.2
+    )
+
+    # 6. Validierung, Speichern/Laden, Auflösen, Entfernen, i18n, Hilfen & Befehlssuche
+    meta = p.ev("""return (async () => {
+      const val = Store.validateProject(App.doc);
+      const saved = await Store.saveProject(App.doc, Model.countItems(App.doc));
+      const loaded = await Store.loadProject(App.doc.id);
+      const patLen = loaded && Array.isArray(loaded.asmPatterns) ? loaded.asmPatterns.length : 0;
+
+      const rectPat = App.doc.asmPatterns.find(x => x.kind === 'rect');
+      const circPat = App.doc.asmPatterns.find(x => x.kind === 'circ');
+      const disOk = rectPat ? Assembly.dissolvePattern(rectPat.id) : false;
+      const footAfter = App.doc.items.filter(x => (x.name || '').startsWith('Fuß')).length;
+      const remOk = circPat ? Assembly.removePattern(circPat.id) : false;
+      const colAfter = App.doc.items.filter(x => (x.name || '').startsWith('Säule')).length;
+
+      ViewPrefs.setLevel('pro');
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = ['asmPattern', 'asmMirror'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('rechteck muster baugruppe').some(c => c.id === 'asm-pattern-rect');
+      const c2 = Commands.search('kreis muster baugruppe').some(c => c.id === 'asm-pattern-circ');
+      const c3 = Commands.search('teil spiegeln baugruppe').some(c => c.id === 'asm-mirror-part');
+      return { valOk: val.ok, saved, patLen, disOk, footAfter, remOk, colAfter, hOk, i18nOk, cmds: c1 && c2 && c3 };
+    })();""")
+    ok6 = bool(
+        meta['valOk'] and meta['saved'] and meta['patLen'] == 3
+        and meta['disOk'] and meta['footAfter'] == 4
+        and meta['remOk'] and meta['colAfter'] == 1
+        and meta['hOk'] and meta['i18nOk'] and meta['cmds']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -32287,6 +32553,7 @@ TESTS = [
     ('[A-158] Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21)', t_a158_bewegungs_studie),
     ('[A-161] Bohrung durch Stapel und Baugruppen-Schnitt (BG-24, BG-25)', t_a161_bohrung_stapel_baugruppe),
     ('[A-160] Schrauben automatisch einsetzen: Bohrungen erkennen, M5-Schrauben & Stückliste (BG-23)', t_a160_schrauben_einsetzen),
+    ('[A-162] Baugruppe: Teile spiegeln, Rechteck- und Kreismuster als verknüpfte Kopien', t_a162_baugruppe_spiegeln_muster),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
