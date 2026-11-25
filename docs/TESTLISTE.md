@@ -2437,6 +2437,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zeichnung wartet auf Erstprojektion**: Während `ensureProjections()` erstmals für ein nicht-leeres Modell läuft (`loadingProjPromise && !proj`), unterdrückt `Drawing.render()` das Einhängen eines vorzeitigen leeren `<svg>`, und erst nach Projektionsabschluss erscheint das vollständige Blatt samt Ansichtsgeometrie (`t_a064_zeichnung_detailansicht`, `t_f11250227`).
 - [ ] **Von Hand**: Im Browser bei einem Drehgelenk zuerst den Winkel ändern, im Feld bleiben und direkt „Gelenk lösen“ klicken sowie bei einem größeren Modell beim Wechsel auf „Zeichnung“ ein Werkzeug wählen und prüfen, dass kein leeres Blatt aufblitzt.
 
+## Wandstärke je Fläche & nach außen/mittig (Auto [A-127], KP-43)
+
+- [x] **Eigene Wandstärke je Fläche (Quader innen)**: Quader 20×20×20 von oben mit Standard 1,5 mm schalen, über „Fläche mit eigener Stärke“ den Boden auf 3 mm setzen → `Viewer.wallAt` misst Boden 3,0 mm und alle 4 Seiten 1,5 mm bei unveränderten Hüllmaßen `[-10,-10,0,10,10,20]`, Volumen ≈ 3087 mm³, `GeomCheck` 0 Fehler.
+- [x] **Richtung nach außen & mittig**: Umschalten über `#fin-dir-...` auf „Nach außen“ (`out`) vergrößert Hüllmaße auf `[-11.5,-11.5,-3,11.5,11.5,20]` (Volumen ≈ 4167 mm³, Boden 3,0 mm, Seiten 1,5 mm); „Mittig“ (`mid`) ergibt `[-10.75,-10.75,-1.5,10.75,10.75,20]` (Volumen ≈ 3606,75 mm³), jeweils ohne Geometriefehler.
+- [x] **Mehrere abweichende Wände, Formeln, Löschen & Zylinder**: Zweite Seitenwand per Formel auf 4 mm setzen, über Löschknopf entfernen + Rückgängig, sowie Zylinder (Boden 3 mm, Mantel 1,5 mm) innen und außen mit `GeomCheck` 0 Fehlern geprüft.
+- [x] **Hilfetexte, Erklärung & DE/EN-Schlüssel**: `shell` und `shellFaceWall` in `werkzeug-hilfen.json` / `HELP`, Tooltip auf `#fin-addfw-...`, `Explain.local` und DE/EN-Schlüsselgleichheit geprüft.
+- [ ] **Von Hand**: Im Browser ein gerundetes Gehäuse mit Deckelöffnung schalen, zwischen „Nach innen“, „Nach außen“ und „Mittig“ umschalten und prüfen, ob mehrere Seitenwände mit verschiedenen Dicken im 3D-Schnitt sauber abschließen.
+
 ## Fehler melden
 
 ```

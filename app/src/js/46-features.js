@@ -617,23 +617,204 @@ const Features = (() => {
       UI.toast('Schnittmenge: Übrig bleibt nur, was in allen Körpern zugleich liegt.', { icon: 'check' });
     }
   }
-  // Wandstärke: Körper aushöhlen, die gewählte Fläche wird zur Öffnung
+  // Wandstärke: Körper aushöhlen, die gewählte Fläche wird zur Öffnung; optional Richtung (in/out/mid) und Stärke je Fläche
+  function shellFaceSig(itemId, fi) {
+    if (!fi || !Array.isArray(fi.c)) return null;
+    const bb = App.results.get(itemId)?.data?.bbox;
+    const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
+    return { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size, ...(fi.t ? { t: fi.t } : {}), ...(fi.tid ? { tid: fi.tid } : {}) };
+  }
+  function sameShellFace(a, b) {
+    if (!a || !b) return false;
+    if (a.tid && b.tid && a.tid === b.tid) return true;
+    if (!a.c || !b.c) return false;
+    const d = Math.hypot(a.c[0] - b.c[0], a.c[1] - b.c[1], a.c[2] - b.c[2]);
+    if (d < 1e-3) return true;
+    if (a.n && b.n) {
+      const dp = a.n[0] * b.n[0] + a.n[1] * b.n[1] + a.n[2] * b.n[2];
+      if (Math.abs(dp) > 0.995) {
+        const dx = b.c[0] - a.c[0], dy = b.c[1] - a.c[1], dz = b.c[2] - a.c[2];
+        const nd = dx * a.n[0] + dy * a.n[1] + dz * a.n[2];
+        const lat = Math.hypot(dx - nd * a.n[0], dy - nd * a.n[1], dz - nd * a.n[2]);
+        if (lat < 1e-2 && d < Math.max(a.size || 20, b.size || 20)) return true;
+      }
+    }
+    return false;
+  }
+  function shellFaceLabel(sig) {
+    if (!sig) return T('panel.edges.shellFaceOther');
+    if (sig.t === 'CYLINDRE' || sig.t === 'CONE') return T('panel.edges.shellFaceCyl');
+    if (Array.isArray(sig.n)) {
+      const [x, y, z] = sig.n;
+      const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+      if (az >= ax && az >= ay && az > 0.85) return T(z > 0 ? 'panel.edges.shellFaceTop' : 'panel.edges.shellFaceBottom');
+      if (ax >= ay && ax >= az && ax > 0.85) return T(x > 0 ? 'panel.edges.shellFaceRight' : 'panel.edges.shellFaceLeft');
+      if (ay >= ax && ay >= az && ay > 0.85) return T(y > 0 ? 'panel.edges.shellFaceBack' : 'panel.edges.shellFaceFront');
+    }
+    return T('panel.edges.shellFaceOther');
+  }
   function shell(face) {
     const it = face && App.doc.items.find((x) => x.id === face.id);
     if (!it || it.role === 'hole') { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' }); return; }
-    const bb = App.results.get(face.id)?.data?.bbox;
-    const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
-    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size, ...(face.info.tid ? { tid: face.info.tid } : {}) };
+    const sig = shellFaceSig(face.id, face.info);
+    if (!sig) return;
     const ex = (it.finishes || []).find((f) => f.type === 'shell');
     App.change(ex ? 'Öffnung geändert' : 'Ausgehöhlt', (doc) => {
       const T = Model.find(doc, it.id).item; T.finishes = T.finishes || [];
       const s = T.finishes.find((f) => f.type === 'shell');
-      if (!s) { T.finishes.push({ id: uid('f'), type: 'shell', r: 2, faces: [sig] }); return; }
-      const i = s.faces.findIndex((f) => (f.tid && sig.tid && f.tid === sig.tid) || (f.c && Math.hypot(f.c[0] - sig.c[0], f.c[1] - sig.c[1], f.c[2] - sig.c[2]) < 1e-3));
-      if (i >= 0) { if (s.faces.length > 1) s.faces.splice(i, 1); } else s.faces.push(sig);
+      if (!s) { T.finishes.push({ id: uid('f'), type: 'shell', r: 2, dir: 'in', faces: [sig] }); return; }
+      const i = s.faces.findIndex((f) => sameShellFace(f, sig));
+      if (i >= 0) { if (s.faces.length > 1) s.faces.splice(i, 1); }
+      else {
+        s.faces.push(sig);
+        if (Array.isArray(s.faceWalls)) {
+          s.faceWalls = s.faceWalls.filter((fw) => !sameShellFace(fw.face, sig));
+          if (!s.faceWalls.length) delete s.faceWalls;
+        }
+      }
     });
     App.select([it.id]);
-    UI.toast(ex ? 'Öffnung umgeschaltet. Jede Fläche, die du so anklickst, wird offen oder wieder zu.' : 'Ausgehöhlt mit 2 mm Wand. Rechts änderst du die Wandstärke.', { icon: 'check' });
+    UI.toast(ex ? 'Öffnung umgeschaltet. Jede Fläche, die du so anklickst, wird offen oder wieder zu.' : 'Ausgehöhlt mit 2 mm Wand. Rechts änderst du Wandstärke, Richtung und einzelne Flächen.', { icon: 'check' });
+  }
+  function setShellDir(itemId, finId, dir) {
+    const next = dir === 'out' || dir === 'mid' ? dir : 'in';
+    App.change('Wandrichtung geändert', (doc) => {
+      const f = Model.find(doc, itemId); if (!f) return false;
+      const fin = (f.item.finishes || []).find((x) => x.id === finId); if (!fin || fin.type !== 'shell') return false;
+      fin.dir = next;
+    });
+  }
+  function addShellFaceWall(itemId, finId, face, thickness) {
+    const f = Model.find(App.doc, itemId);
+    const fin = f && (f.item.finishes || []).find((x) => x.id === finId);
+    if (!fin || fin.type !== 'shell') return null;
+    const sig = face && face.info ? shellFaceSig(face.id || itemId, face.info) : (face && face.c ? face : null);
+    if (!sig) return null;
+    if ((fin.faces || []).some((x) => sameShellFace(x, sig))) {
+      UI.toast('Diese Fläche ist bereits als Öffnung gewählt.', { icon: 'info' });
+      return null;
+    }
+    let wallId = null;
+    App.change('Wandstärke je Fläche hinzugefügt', (doc) => {
+      const fn = Model.find(doc, itemId); if (!fn) return false;
+      const s = (fn.item.finishes || []).find((x) => x.id === finId); if (!s) return false;
+      s.faceWalls = s.faceWalls || [];
+      const ex = s.faceWalls.find((fw) => sameShellFace(fw.face, sig));
+      if (ex) {
+        wallId = ex.id;
+        if (thickness != null) ex.r = thickness;
+        return;
+      }
+      const baseLbl = shellFaceLabel(sig);
+      let lbl = baseLbl;
+      if (s.faceWalls.some((fw) => fw.label === lbl)) {
+        let k = 2;
+        while (s.faceWalls.some((fw) => fw.label === `${baseLbl} ${k}`)) k++;
+        lbl = `${baseLbl} ${k}`;
+      }
+      wallId = uid('fw');
+      s.faceWalls.push({ id: wallId, face: sig, r: thickness ?? s.r ?? 2, label: lbl });
+    });
+    if (typeof Panels !== 'undefined') Panels.renderRight();
+    return wallId;
+  }
+  function setShellFaceWall(itemId, finId, wallId, r) {
+    App.change('Wandstärke je Fläche geändert', (doc) => {
+      const f = Model.find(doc, itemId); if (!f) return false;
+      const fin = (f.item.finishes || []).find((x) => x.id === finId); if (!fin || !Array.isArray(fin.faceWalls)) return false;
+      const fw = fin.faceWalls.find((x) => x.id === wallId); if (!fw) return false;
+      fw.r = r;
+    }, { merge: 'fin:' + finId + ':' + wallId });
+  }
+  function removeShellFaceWall(itemId, finId, wallId) {
+    App.change('Flächen-Wandstärke entfernt', (doc) => {
+      const f = Model.find(doc, itemId); if (!f) return false;
+      const fin = (f.item.finishes || []).find((x) => x.id === finId); if (!fin || !Array.isArray(fin.faceWalls)) return false;
+      fin.faceWalls = fin.faceWalls.filter((x) => x.id !== wallId);
+      if (!fin.faceWalls.length) delete fin.faceWalls;
+    });
+    if (typeof Panels !== 'undefined') Panels.renderRight();
+  }
+  function pickShellFaceWall(itemId, finId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (hit && hit.id === itemId && hit.faceIdx >= 0) {
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (fi && Array.isArray(fi.c)) {
+          stopPick();
+          const wid = addShellFaceWall(itemId, finId, { id: hit.id, idx: hit.faceIdx, info: fi });
+          Panels.renderRight();
+          if (wid) {
+            const inp = document.getElementById('fin-fw-' + wid);
+            if (inp) { inp.focus(); inp.select && inp.select(); }
+          }
+          return;
+        }
+      }
+      UI.toast('Klick eine geschlossene Fläche dieses Körpers an.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      Viewer.highlightFace('hover', hit && hit.id === itemId && hit.faceIdx >= 0 ? hit.id : null, hit && hit.id === itemId && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche für eigene Wandstärke wählen:</b> Klick auf eine geschlossene Fläche dieses Körpers. <b>Esc</b> bricht ab.');
+  }
+  function renderShell(it, fin, w, V, rightIssues) {
+    const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
+    const isRef = !!(err && RefFix.isRefError(err));
+    const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.edges.shellTitle')));
+    const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
+    const fnCnt = (fin.faces || []).length;
+    const nf = UI.numField({ id: 'fin-' + fin.id, label: fnCnt === 1 ? T('panel.edges.shellOne') : T('panel.edges.shellMany', { n: fnCnt }), value: fin.r, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+    if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+    row.append(nf);
+    if (isRef) {
+      const iss = rightIssues.find((x) => x.finishId === fin.id);
+      if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, T('panel.item.pickAgain')); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+    }
+    const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': T('panel.item.removeShell'), 'data-tip': T('panel.item.removeShell') }); del.innerHTML = icon('trash');
+    del.onclick = () => Actions.removeFinish(it.id, fin.id);
+    row.append(del); sh.append(row);
+
+    const dirVal = fin.dir === 'out' || fin.dir === 'mid' ? fin.dir : 'in';
+    const dirRow = h('div', { class: 'fields one', style: { marginTop: '8px' } });
+    dirRow.append(UI.selectField({
+      id: 'fin-dir-' + fin.id,
+      label: T('panel.edges.shellDir'),
+      value: dirVal,
+      options: [['in', T('panel.edges.shellDirIn')], ['out', T('panel.edges.shellDirOut')], ['mid', T('panel.edges.shellDirMid')]],
+      onChange: (v) => setShellDir(it.id, fin.id, v),
+    }));
+    sh.append(dirRow);
+
+    const fwWrap = h('div', { class: 'shell-fw-wrap' });
+    const walls = Array.isArray(fin.faceWalls) ? fin.faceWalls : [];
+    for (const fw of walls) {
+      const fRow = h('div', { class: 'fields shell-fw-row', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+      const wf = UI.numField({ id: 'fin-fw-' + fw.id, label: fw.label || shellFaceLabel(fw.face), value: fw.r, vars: V, onCommit: (v) => setShellFaceWall(it.id, fin.id, fw.id, v) });
+      if (err && !isRef) wf.querySelector('.inp').classList.add('invalid');
+      const wDel = h('button', { type: 'button', class: 'btn ghost small', id: 'fin-fw-del-' + fw.id, 'aria-label': T('panel.edges.shellRemoveFace'), 'data-tip': T('panel.edges.shellRemoveFace') }); wDel.innerHTML = icon('trash');
+      wDel.onclick = () => removeShellFaceWall(it.id, fin.id, fw.id);
+      fRow.append(wf, wDel);
+      fwWrap.append(fRow);
+    }
+    const addBtn = h('button', { type: 'button', class: 'btn small', id: 'fin-addfw-' + fin.id, 'data-help': 'shellFaceWall' });
+    addBtn.innerHTML = icon('plus') + esc(T('panel.edges.shellAddFace'));
+    addBtn.onclick = () => pickShellFaceWall(it.id, fin.id);
+    fwWrap.append(h('div', { class: 'btn-row' }, addBtn));
+    sh.append(fwWrap);
+
+    sh.append(h('div', { class: 'hint-box', html: T('panel.edges.shellHint') }));
+    w.append(sh);
   }
   // ---------- Vollrundung (KP-38) und Ecken-Fase mit drei Abständen (KP-41) ----------
   function finishFaceSigOf(itemId, faceIdx) {
@@ -3711,5 +3892,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
 })();
