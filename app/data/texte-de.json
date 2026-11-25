@@ -3681,5 +3681,17 @@
   "dlg.settings.highContrast": "Hoher Kontrast (stärkere Rahmen und Fokus)",
   "dlg.settings.highContrastHint": "Zeichnet Ränder, Schriften und den Tastatur-Fokus extra deutlich – im hellen und dunklen Design.",
   "dlg.settings.tHighContrastOn": "Hoher Kontrast an",
-  "dlg.settings.tHighContrastOff": "Hoher Kontrast aus"
+  "dlg.settings.tHighContrastOff": "Hoher Kontrast aus",
+  "dlg.export.bundleTitle": "Alles als Paket (ZIP)",
+  "dlg.export.bundleDesc": "Speichert alles zusammen in einem ZIP: Tracery-Projekt, Zeichnungen (PDF), STEP und eine STL je Körper.",
+  "dlg.export.bundleBtn": "Alles als Paket speichern",
+  "dlg.export.bundleBuilding": "Paket (Projekt, PDF, STEP, STL) wird erstellt …",
+  "menu.proj.exportBundle": "Alles als Paket (ZIP) …",
+  "import.errNoFile": "Keine Datei zum Einlesen gewählt.",
+  "import.errEmpty": "Die Datei „{name}“ ist leer und kann nicht geöffnet werden.",
+  "import.errTooBig": "Die Datei „{name}“ ist zu groß ({size} – erlaubt sind höchstens {max}).",
+  "import.errUnsupported": "Das Dateiformat von „{name}“ wird nicht unterstützt. Erlaubt sind Projekt (.json), STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY, DXF, SVG sowie CSV/XYZ.",
+  "import.errSvgBad": "Diese SVG kann ich nicht lesen – die Datei ist beschädigt oder kein gültiges SVG.",
+  "import.svgSanitized": "Aus Sicherheitsgründen wurden Skripte oder externe Links aus der SVG entfernt.",
+  "import.errJsonBad": "Die JSON-Datei ist beschädigt oder nicht lesbar."
 }

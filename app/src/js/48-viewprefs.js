@@ -299,9 +299,19 @@ const ViewPrefs = (() => {
   }
   async function loadFromFile(file) {
     if (!file) return { ok: false, error: 'no_file' };
+    const sz = typeof Store !== 'undefined' && Store.checkFileSize ? Store.checkFileSize(file, 'settings') : { ok: true };
+    if (!sz.ok) {
+      UI.toast(sz.message, { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: 'too_large' };
+    }
     try {
       const txt = await file.text();
-      return importData(txt);
+      const parsed = typeof Store !== 'undefined' && Store.safeParseJSON ? Store.safeParseJSON(txt, { limit: Store.LIMITS.settings, name: file.name }) : { ok: true, data: JSON.parse(txt) };
+      if (!parsed.ok) {
+        UI.toast(T('dlg.settings.loadBadFile'), { kind: 'bad', icon: 'warn' });
+        return { ok: false, error: 'parse_error' };
+      }
+      return importData(parsed.data);
     } catch (_) {
       UI.toast(T('dlg.settings.loadBadFile'), { kind: 'bad', icon: 'warn' });
       return { ok: false, error: 'read_error' };
@@ -361,6 +371,15 @@ const ViewPrefs = (() => {
   }
   async function loadEnvImage(file) {
     if (!file || typeof Viewer === 'undefined' || !Viewer.setEnvImage) return { ok: false, error: 'no_file' };
+    const sz = typeof Store !== 'undefined' && Store.checkFileSize ? Store.checkFileSize(file, 'image') : { ok: true };
+    if (!sz.ok) {
+      UI.toast(sz.message, { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: sz.reason || 'too_large' };
+    }
+    if (/\.svg$/i.test(file.name || '') || (file.type || '').toLowerCase().includes('svg')) {
+      UI.toast(T('look.envLoadErr'), { kind: 'bad', icon: 'warn' });
+      return { ok: false, error: 'unsupported_svg' };
+    }
     const res = await Viewer.setEnvImage(file, file.name || '');
     if (!res || !res.ok) {
       UI.toast(T('look.envLoadErr'), { kind: 'bad', icon: 'warn' });

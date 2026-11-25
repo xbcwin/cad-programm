@@ -1398,8 +1398,9 @@ const Sketch = (() => {
   // Eigene TrueType-Schrift (.ttf) laden, im Projekt als Base64 speichern und in der Schriftliste anbieten
   async function loadFontFile(file, targetEntId = null) {
     if (!file) return null;
-    if (file.size > 15e6) {
-      UI.toast(T('sk.toast.fontTooBig'), { kind: 'bad' });
+    const sz = Store.checkFileSize(file, 'font');
+    if (!sz.ok) {
+      UI.toast(sz.message, { kind: 'bad', ms: 6000 });
       return null;
     }
     let bytes, parsed;
@@ -3531,25 +3532,45 @@ const Sketch = (() => {
   function pushUndoBg() { /* Bildlage gehört nicht zum Rückgängig der Geometrie */ }
   function bgLoad() {
     const inp = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
-    inp.onchange = () => {
+    inp.onchange = async () => {
       const file = inp.files && inp.files[0]; if (!file) return;
-      const rd = new FileReader();
-      rd.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          // verkleinern, damit das Projekt klein bleibt
-          const M = 1600, s = Math.min(1, M / Math.max(img.width, img.height));
-          const cv = document.createElement('canvas'); cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          const src = cv.toDataURL('image/jpeg', 0.85);
-          const w = 100, r = cv.height / cv.width;
-          S.bg = { src, a: [-w / 2, -(w * r) / 2], w, r, op: 0.5, name: file.name };
-          UI.toast('Bild geladen. Leg jetzt mit „Maßstab festlegen“ die echte Größe fest.', { icon: 'info', ms: 4000 });
-          render(); Panels.renderRight();
-        };
-        img.src = rd.result;
+      const sz = Store.checkFileSize(file, 'image');
+      if (!sz.ok) { UI.toast(sz.message, { kind: 'bad', ms: 6000 }); return; }
+      const isSvg = (file.type || '').toLowerCase().includes('svg') || /\.svg$/i.test(file.name || '');
+      let dataUrl = '';
+      if (isSvg) {
+        try {
+          const san = Store.sanitizeSVG(await file.text(), { name: file.name });
+          if (!san.ok) { UI.toast(san.error, { kind: 'bad', ms: 6000 }); return; }
+          if (san.stats && san.stats.stripped > 0) UI.toast(T('import.svgSanitized'), { icon: 'warn', ms: 6000 });
+          dataUrl = 'data:image/svg+xml;base64,' + Store.bytesToBase64(new TextEncoder().encode(san.svg));
+        } catch (_) {
+          UI.toast('Das Bild konnte nicht gelesen werden.', { kind: 'bad', ms: 6000 });
+          return;
+        }
+      } else {
+        dataUrl = await new Promise((resolve) => {
+          const rd = new FileReader();
+          rd.onload = () => resolve(String(rd.result || ''));
+          rd.onerror = () => resolve('');
+          rd.readAsDataURL(file);
+        });
+        if (!dataUrl) { UI.toast('Das Bild konnte nicht gelesen werden.', { kind: 'bad', ms: 6000 }); return; }
+      }
+      const img = new Image();
+      img.onload = () => {
+        // verkleinern, damit das Projekt klein bleibt
+        const M = 1600, s = Math.min(1, M / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas'); cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        const src = cv.toDataURL('image/jpeg', 0.85);
+        const w = 100, r = cv.height / cv.width;
+        S.bg = { src, a: [-w / 2, -(w * r) / 2], w, r, op: 0.5, name: file.name };
+        UI.toast('Bild geladen. Leg jetzt mit „Maßstab festlegen“ die echte Größe fest.', { icon: 'info', ms: 4000 });
+        render(); Panels.renderRight();
       };
-      rd.readAsDataURL(file);
+      img.onerror = () => UI.toast('Das Bild konnte nicht geladen werden – vielleicht ist die Datei beschädigt.', { kind: 'bad', ms: 6000 });
+      img.src = dataUrl;
     };
     document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
   }

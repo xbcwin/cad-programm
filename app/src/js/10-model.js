@@ -2309,12 +2309,14 @@ const Model = (() => {
     };
   }
   function normalizeDecal(raw) {
-    if (!raw || typeof raw !== 'object' || typeof raw.src !== 'string' || !raw.src.startsWith('data:image/') || !raw.face || typeof raw.face !== 'object') return null;
+    if (!raw || typeof raw !== 'object' || typeof raw.src !== 'string' || !raw.face || typeof raw.face !== 'object') return null;
+    const safeSrc = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl ? Store.sanitizeImageDataUrl(raw.src, { allowSvg: true }) : raw.src;
+    if (!safeSrc || !safeSrc.startsWith('data:image/')) return null;
     const asp = Number(raw.aspect), w = Number(raw.w), sc = Number(raw.scale), u = Number(raw.u), v = Number(raw.v), rot = Number(raw.rot), op = Number(raw.opacity);
     return {
       id: typeof raw.id === 'string' && raw.id ? raw.id : uid('dc'),
       name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Aufkleber',
-      src: raw.src,
+      src: safeSrc,
       aspect: Number.isFinite(asp) && asp > 0.05 && asp < 20 ? round(asp, 4) : 1,
       face: {
         n: Array.isArray(raw.face.n) && raw.face.n.length >= 3 ? raw.face.n.slice(0, 3).map((x) => round(Number(x) || 0, 6)) : null,
@@ -2381,6 +2383,11 @@ const Model = (() => {
       if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies;
       if ('texture' in it) { const nt = normalizeTexture(it.texture); if (nt) it.texture = nt; else delete it.texture; }
       if ('decals' in it) { const dl = Array.isArray(it.decals) ? it.decals.map(normalizeDecal).filter(Boolean) : []; if (dl.length) it.decals = dl; else delete it.decals; }
+      if (it.p && it.p.sketch && it.p.sketch.bg && typeof it.p.sketch.bg === 'object' && it.p.sketch.bg.src && typeof Store !== 'undefined' && Store.sanitizeImageDataUrl) {
+        const cleanBg = Store.sanitizeImageDataUrl(it.p.sketch.bg.src, { allowSvg: true });
+        if (cleanBg) it.p.sketch.bg.src = cleanBg;
+        else delete it.p.sketch.bg;
+      }
       if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor();
     });
     cleanFolders(doc);
