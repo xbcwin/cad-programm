@@ -36103,6 +36103,284 @@ def t_a178_zeichnung_schriftfeld(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a177_zeichnung_ebenen_bild(p):
+    # [A-177] Zeichnung (Profi): Linienarten & Strichstärken nach Norm, Ebenen (Layer) auch im DXF, Bild/Logo auf dem Blatt (ZE-29, ZE-31)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit Loch', d => {
+        const g = Model.newItem('group', { op: null }, { name: 'Platte' });
+        g.children = [
+          Model.newItem('box', { w: 80, d: 50, h: 16 }, { name: 'Körper' }),
+          Model.newItem('cylinder', { d: 12, h: 20 }, { role: 'hole', name: 'Bohrung' }),
+        ];
+        d.items.push(g);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    # 1. Ebene „Maße“ ausblenden -> keine Maße sichtbar; Liniengruppe & Linienart wechseln
+    before_dims = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        dimLines: svg ? svg.querySelectorAll('.dim').length : 0,
+        dimTexts: svg ? svg.querySelectorAll('text.dimtext').length : 0,
+        visWidth: Drawing.layers().vis.width,
+        lineGroup: Drawing.lineGroup(),
+      };
+    """)
+
+    p.pg.click('#dw-layer-vis-dim')
+    p.wait(200)
+    hidden_dims = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        dimLines: svg ? svg.querySelectorAll('.dim').length : 0,
+        dimTexts: svg ? svg.querySelectorAll('text.dimtext').length : 0,
+        dimVisible: Drawing.layers().dim.visible,
+        showAllDisabled: !!document.querySelector('#dw-layers-show-all')?.disabled,
+      };
+    """)
+
+    p.pg.select_option('#dw-line-group', '0.7')
+    p.wait(150)
+    p.pg.click('.dw-layer-row[data-layer-key="hid"]')
+    p.wait(150)
+    p.pg.select_option('#dw-layer-ltype', 'dotted')
+    p.wait(150)
+    style_chk = p.ev("""
+      const css = document.querySelector('#sheet .sheet-holder svg style')?.textContent || '';
+      const ly = Drawing.layers();
+      return {
+        grp: Drawing.lineGroup(),
+        visW: ly.vis.width,
+        hidType: ly.hid.lineType,
+        cssHasVisW: css.includes('.vis{stroke-width:0.7'),
+        cssHasDotted: css.includes('.hid{') && css.includes('0.6 1.2'),
+      };
+    """)
+
+    ok1 = bool(
+        before_dims['dimLines'] > 0 and before_dims['dimTexts'] > 0
+        and before_dims['lineGroup'] == '0.5' and before_dims['visWidth'] == 0.5
+        and hidden_dims['dimLines'] == 0 and hidden_dims['dimTexts'] == 0
+        and not hidden_dims['dimVisible'] and not hidden_dims['showAllDisabled']
+        and style_chk['grp'] == '0.7' and style_chk['visW'] == 0.7
+        and style_chk['hidType'] == 'dotted' and style_chk['cssHasVisW'] and style_chk['cssHasDotted']
+    )
+
+    # 2. DXF enthält Layer-Namen & Layer-Zustände (Maße ausgeblendet -> BEMASSUNG im Table mit -3 und 0 Entities; eingeblendet -> Entities auf BEMASSUNG)
+    dxf_hidden = p.ev("""return (async () => {
+      const r = await Drawing.buildDXF();
+      return {
+        layers: r.layers,
+        text: r.text,
+        bemCount: r.stats.byLayer.BEMASSUNG || 0,
+        bemOff: r.layerStates?.dim?.visible === false,
+      };
+    })()""")
+
+    p.pg.click('#dw-layers-show-all')
+    p.wait(200)
+    dxf_shown = p.ev("""return (async () => {
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const r = await Drawing.buildDXF();
+      return {
+        svgDimsBack: svg ? svg.querySelectorAll('.dim').length : 0,
+        layers: r.layers,
+        text: r.text,
+        bemCount: r.stats.byLayer.BEMASSUNG || 0,
+        visCount: r.stats.byLayer.SICHTBAR || 0,
+        hidCount: r.stats.byLayer.VERDECKT || 0,
+        ctrCount: r.stats.byLayer.MITTELLINIE || 0,
+      };
+    })()""")
+
+    expected_dxf_layers = ('SICHTBAR', 'VERDECKT', 'TANGENTIAL', 'MITTELLINIE', 'BEMASSUNG', 'SCHRAFFUR', 'SCHNITTLINIE', 'GEWINDE', 'RAHMEN', 'BILDER')
+    ok2 = bool(
+        all(ly in dxf_hidden['layers'] for ly in expected_dxf_layers)
+        and 'BEMASSUNG' in dxf_hidden['text'] and 'DOTTED' in dxf_hidden['text']
+        and '\r\n-3\r\n' in dxf_hidden['text']
+        and dxf_hidden['bemOff'] and dxf_hidden['bemCount'] == 0
+        and dxf_shown['svgDimsBack'] > 0 and dxf_shown['bemCount'] > 0
+        and dxf_shown['visCount'] > 0 and dxf_shown['ctrCount'] > 0
+    )
+
+    # 3. Bild/Logo aus lokaler Datei auf dem Blatt einfügen, Größe/Rahmen ändern, Layer aus/einblenden, SVG/PDF/PNG/DXF
+    p.ev("""return new Promise((resolve) => {
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 32;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#0c7a70'; ctx.fillRect(0, 0, 64, 32);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(10, 8, 44, 16);
+      c.toBlob((blob) => {
+        const file = new File([blob], 'firmenlogo.png', { type: 'image/png' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const inp = document.querySelector('#dw-img-file');
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+        resolve(true);
+      }, 'image/png');
+    })""")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg image.sheet-img', timeout=10000)
+    p.wait(180)
+
+    img_added = p.ev("""
+      const im = Drawing.sheetImages()[0];
+      return {
+        count: Drawing.sheetImages().length,
+        name: im ? im.name : '',
+        w: im ? im.w : 0,
+        h: im ? im.h : 0,
+        hasSvgEl: !!document.querySelector('#sheet .sheet-holder svg image.sheet-img'),
+        hasListRow: !!document.querySelector('#dw-images-list .dw-img-row'),
+      };
+    """)
+
+    p.pg.fill('#dw-img-w', '60')
+    p.pg.locator('#dw-img-w').press('Enter')
+    p.wait(150)
+    p.pg.check('#dw-img-border')
+    p.wait(150)
+
+    img_edited = p.ev("""
+      const im = Drawing.sheetImages()[0];
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        w: im ? im.w : 0,
+        h: im ? im.h : 0,
+        border: !!(im && im.border),
+        hasBorderRect: !!(svg && svg.querySelector('.sheet-img-border')),
+      };
+    """)
+
+    p.pg.click('#dw-layer-vis-image')
+    p.wait(150)
+    img_layer_off = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg image.sheet-img').length")
+    p.pg.click('#dw-layer-vis-image')
+    p.wait(150)
+    img_layer_on = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg image.sheet-img').length")
+
+    exp_chk = p.ev("""return (async () => {
+      const [svgStr, pdfBytes, dxf, png] = await Promise.all([
+        Drawing.buildSVGString(),
+        Drawing.buildPDFBytes(),
+        Drawing.buildDXF(),
+        Drawing.buildPNG({ width: 600 }),
+      ]);
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const pngMagic = png && png.bytes && png.bytes[0] === 0x89 && png.bytes[1] === 0x50 && png.bytes[2] === 0x4e && png.bytes[3] === 0x47;
+      return {
+        svgOk: svgStr.includes('sheet-img') && svgStr.includes('sheet-img-border'),
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('/XObject') && pdfStr.includes('/DCTDecode'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('BILDER') && (dxf.stats.byLayer.BILDER || 0) >= 4),
+        pngOk: !!pngMagic,
+      };
+    })()""")
+
+    ok3 = bool(
+        img_added['count'] == 1 and img_added['name'] == 'firmenlogo.png'
+        and img_added['hasSvgEl'] and img_added['hasListRow']
+        and abs(img_edited['w'] - 60) < 0.2 and abs(img_edited['h'] - 30) < 0.5
+        and img_edited['border'] and img_edited['hasBorderRect']
+        and img_layer_off == 0 and img_layer_on == 1
+        and exp_chk['svgOk'] and exp_chk['pdfOk'] and exp_chk['dxfOk'] and exp_chk['pngOk']
+    )
+
+    # 4. Profi-Schutz (Einfach-Modus), Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    saved_doc = p.ev("return JSON.stringify(App.doc)")
+
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(180)
+    simple_chk = p.ev("""
+      const laySec = document.querySelector('#dw-layers-sec');
+      const imgSec = document.querySelector('#dw-images-sec');
+      const tLay = document.querySelector('#t-layers');
+      const tImg = document.querySelector('#t-sheet-img');
+      const blockedGrp = Drawing.setLineGroup('0.35');
+      const blockedLayer = Drawing.setLayerVisible('dim', false);
+      const cmds = Commands.search('ebenen');
+      return {
+        laySecHidden: !laySec || laySec.offsetParent === null,
+        imgSecHidden: !imgSec || imgSec.offsetParent === null,
+        tLayHidden: !tLay || tLay.offsetParent === null,
+        tImgHidden: !tImg || tImg.offsetParent === null,
+        blocked: blockedGrp === false && blockedLayer === false,
+        cmdHidden: !cmds.some(c => c.id === 'drawingLayers'),
+      };
+    """)
+
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(150)
+    p.ev("Drawing.setLayerVisible('dim', false);")
+    p.wait(120)
+    after_hide = p.ev("return Drawing.layers().dim.visible")
+    p.ev("App.undo()")
+    p.wait(120)
+    after_undo = p.ev("return Drawing.layers().dim.visible")
+    p.ev("App.redo()")
+    p.wait(120)
+    after_redo = p.ev("return Drawing.layers().dim.visible")
+
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved_doc)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved_doc)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const ly = Drawing.layers();
+      const imgs = Drawing.sheetImages();
+      return {
+        grp: Drawing.lineGroup(),
+        hidType: ly.hid.lineType,
+        imgCount: imgs.length,
+        imgW: imgs[0] ? imgs[0].w : 0,
+        hasSvgImg: !!document.querySelector('#sheet .sheet-holder svg image.sheet-img'),
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h1 = wh.drawingLayers, h2 = wh.drawingSheetImage;
+      const helpOk = !!(h1 && h1.tip && h1.hilfe && h1.tipp
+        && h2 && h2.tip && h2.hilfe && h2.tipp
+        && document.querySelector('#dw-layers-sec')?.dataset.help === 'drawingLayers'
+        && document.querySelector('#dw-images-sec')?.dataset.help === 'drawingSheetImage');
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nOk = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      const cmdsL = Commands.search('ebenen'), cmdsI = Commands.search('bild');
+      const cmdOk = cmdsL.some(c => c.id === 'drawingLayers')
+        && cmdsL.some(c => c.id === 'drawingShowAllLayers')
+        && cmdsI.some(c => c.id === 'drawingSheetImage');
+      return helpOk && i18nOk && cmdOk;
+    })()""")
+
+    ok4 = bool(
+        simple_chk['laySecHidden'] and simple_chk['imgSecHidden']
+        and simple_chk['tLayHidden'] and simple_chk['tImgHidden']
+        and simple_chk['blocked'] and simple_chk['cmdHidden']
+        and after_hide is False and after_undo is True and after_redo is False
+        and val_ok and reload_chk['grp'] == '0.7' and reload_chk['hidType'] == 'dotted'
+        and reload_chk['imgCount'] == 1 and abs(reload_chk['imgW'] - 60) < 0.2 and reload_chk['hasSvgImg']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -36394,6 +36672,7 @@ TESTS = [
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('[A-176] Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)', t_a176_zeichnung_tabellen),
     ('[A-178] Zeichnung: Schriftfeld-Editor und Vorlagen (ISO, DIN, ANSI & eigene Vorlage)', t_a178_zeichnung_schriftfeld),
+    ('[A-177] Zeichnung: Linienarten, Ebenen (Layer) und Bild auf dem Blatt (ZE-29, ZE-31)', t_a177_zeichnung_ebenen_bild),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

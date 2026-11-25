@@ -708,6 +708,16 @@ body.sketching .timeline{display:none}
 .dw-tbe-row.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
 .dw-tbe-row .dw-tbe-badge{font:600 10.5px/1 var(--font-mono);color:var(--muted);padding:2px 5px;border-radius:4px;background:var(--surface)}
 .dw-tbe-props{display:grid;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
+.dw-layer-list{display:grid;gap:4px;margin-top:6px}
+.dw-layer-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);cursor:pointer;font-size:12px}
+.dw-layer-row:hover{border-color:var(--line-2)}
+.dw-layer-row.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.dw-layer-row.is-hidden{opacity:.55}
+.dw-layer-vis{display:inline-grid;place-items:center;width:24px;height:24px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer;flex:none}
+.dw-layer-vis svg{width:13px;height:13px}
+.dw-layer-swatch{flex:none;border-radius:3px;border:1px solid var(--line);background:#fff;padding:1px 3px;display:inline-flex;align-items:center}
+.dw-layer-props{display:grid;gap:7px;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.dw-layer-props-h{display:flex;align-items:center;justify-content:space-between;gap:6px;font:600 12px/1.2 var(--font)}
 @media (max-width:720px){.dw-tbe-split{grid-template-columns:1fr}}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */

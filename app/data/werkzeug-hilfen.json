@@ -1938,5 +1938,15 @@
     "tip": "Schriftfeld-Vorlage wählen (ISO, DIN, ANSI) oder eigene Felder, Logo und Linien gestalten",
     "hilfe": "Über die Vorlagen wechselst du mit einem Klick zwischen ISO 7200, DIN EN ISO 7200 und ANSI/ASME Y14.1. Mit „Schriftfeld gestalten …“ passt du Breite, Höhe, beliebige Text- und Automatik-Felder, Trennlinien sowie ein Firmenlogo an und speicherst deinen Entwurf als eigene Vorlage für alle künftigen Zeichnungen.",
     "tipp": "Klicke in der Live-Vorschau des Schriftfeld-Editors direkt auf ein Feld, um Beschriftung, Lage oder Größe sofort zu ändern."
+  },
+  "drawingLayers": {
+    "tip": "Linienarten und Strichstärken nach Norm einstellen sowie Ebenen (Layer) ein- und ausblenden (Profi)",
+    "hilfe": "Hier steuerst du die Liniengruppe nach ISO 128 (0,35 / 0,50 / 0,70 mm) sowie jede Zeichnungsebene einzeln: Sichtbare Kanten, Verdeckte Kanten, Mittellinien, Maße, Schraffur, Schnittlinien, Gewinde, Rahmen und Bilder lassen sich getrennt ein- und ausblenden und in Linienart sowie Strichstärke anpassen – alle Layer-Namen und Zustände landen auch im DXF-Export.",
+    "tipp": "Blende zum Prüfen der reinen Bauteilkontur kurz die Ebene „Maße & Hinweise“ über das Auge aus."
+  },
+  "drawingSheetImage": {
+    "tip": "Bild oder Firmenlogo aus einer lokalen Datei frei auf dem Zeichnungsblatt platzieren (Profi)",
+    "hilfe": "Lädt ein lokales Bild (PNG, JPG, WebP oder SVG) ohne Internetverbindung direkt auf das aktuelle Blatt. Du kannst das Bild frei über das Blatt ziehen, Breite und Höhe (wahlweise proportional), Deckkraft und einen Rahmen einstellen – und beim Export in SVG, PDF und PNG bleibt es gestochen scharf erhalten.",
+    "tipp": "Klicke das Bild auf dem Blatt an, um es mit der Maus zu verschieben oder rechts exakt auf den Millimeter auszurichten."
   }
 }
