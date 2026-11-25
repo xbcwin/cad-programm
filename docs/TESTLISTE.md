@@ -2649,6 +2649,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kaputte Dateien & Vorwärtskompatibilität**: Fehlendes oder falsches `format`, fehlendes `version`/`items`/`id`/`name`, fehlendes `kind`, doppelte Schritt-IDs und kaputtes JSON liefern klare deutsche Fehlermeldungen (`ok: false`), während eine neuere `version` oder unbekannte Schritt-Art nur Warnungen auslöst (`t_a150_dateiformat`).
 - [ ] **Von Hand**: `docs/DATEIFORMAT.md` einmal durchlesen, eines der Beispiele als `.tracery.json` speichern und per Drag-and-Drop in Tracery öffnen sowie in der Browser-Konsole `Store.validateProject(...)` mit einer eigenen leicht veränderten Datei ausprobieren.
 
+## Volltest-Reparatur (Auto [F-11251012])
+
+- [x] **Automatisches Raster bei `requestAnimationFrame`-Stau (`Raster automatisch`)**: `Viewer.moveCamera(..., false)`, `finishCamAnim()` und `get gridStep()` halten das automatische Raster (`autoStep()`/`buildGrid()`) auch ohne laufende Animations-Frames aktuell (`0,1 mm` nah / `10 mm` fern, `t_raster_auto`, `t_f11251012`).
+- [x] **Kamera-Schutz beim kalten Neubau**: Wird die Kamera während eines laufenden Neubaus (z. B. beim ersten Öffnen von „Schild mit Loch“ mit kaltem Kern) bewegt, überschreibt das abschließende `Viewer.fit(null, false)` in `activateTab()` den eingestellten Blick nicht (`t_f11251012`).
+- [x] **Automatisches Einpassen ohne Nutzer-Eingriff**: Lädt `App.setDoc()` ein Projekt ohne zwischenzeitliche Kamerabewegung (`Viewer.camMoveSeq` unverändert), passt `Viewer.fit()` die Ansicht nach dem Neubau weiter automatisch ein (`t_f11251012`).
+- [ ] **Von Hand**: Im Browser bei gedrosseltem Hauptthread direkt nach dem Öffnen von „Schild mit Loch“ mit dem Mausrad oder `Viewer.moveCamera` nah an eine Kante heranzoomen und prüfen, dass das Raster auf `0,1 mm` wechselt und nach Abschluss des Kern-Starts nicht zurückspringt.
+
 ## Kopplungen Schraube, Riemen, linear (Auto [A-152], BG-14)
 
 - [x] **Schraube (Steigung 2 mm → 2 mm/U)**: Zylindrische Schraube (`addScrew(cylId, { pitch: 2 })`) und Zwei-Gelenk-Spindel (`rot` + `slide`) verschieben nach `360°` Drehung exakt um `2,0 mm` (`720° → 4,0 mm`), unterstützen Linksgewinde (`reverse: true` → `-4,0 mm`) und wirken auch rückwärts vom Weg auf den Winkel (`t_a152_kopplungen_schraube_riemen_linear`).

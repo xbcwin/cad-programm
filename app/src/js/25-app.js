@@ -399,8 +399,11 @@ const App = (() => {
     }
     if (!(opts && opts.noAutosave) && !(opts && opts.isSwitch)) autosave();
     if (!(opts && opts.fromBoot)) syncOpenTabsToStore();
+    const startCamSeq = (typeof Viewer !== 'undefined' && Viewer.camMoveSeq != null) ? Viewer.camMoveSeq : null;
     rebuild().then(() => {
       if (activeTabId !== tab.tabId) return;
+      const camUntouched = startCamSeq == null || typeof Viewer === 'undefined' || Viewer.camMoveSeq === startCamSeq;
+      if (!camUntouched) return;
       if (opts && opts.isSwitch && tab.camera) Viewer.restoreCamera(tab.camera, false);
       else if (opts.fit !== false) Viewer.fit(null, false);
     });

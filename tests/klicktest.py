@@ -29502,6 +29502,88 @@ def t_a150_dateiformat(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11251012(p):
+    # 1. Kamera-Schutz bei kaltem Neubau: Zoom während Kernel-Start wird von anschließendem fit() nicht überschrieben
+    cold = p.ev("return !Kernel.ready && Kernel.state === 'idle'")
+    p.pg.get_by_text('Schild mit Loch').first.click()
+    imm = p.ev("""
+        const hasItems = App.doc.items.length > 0;
+        if (ViewPrefs.get().grid !== 'auto') ViewPrefs.set({ grid: 'auto' });
+        const t = Viewer.controls.target.clone().set(32, 0, 3);
+        Viewer.moveCamera(t.clone().set(32.5, -0.6, 3.6), t, null, false);
+        return {
+            hasItems,
+            distImmediate: Viewer.camera.position.distanceTo(Viewer.controls.target),
+            stepImmediate: Viewer.gridStep,
+        };
+    """)
+    warte_rechnen(p, 35)
+    p.wait(300)
+    after = p.ev("""return {
+        ready: Kernel.ready,
+        results: App.results.size,
+        dist: Viewer.camera.position.distanceTo(Viewer.controls.target),
+        step: Viewer.gridStep,
+    };""")
+    ok1 = (
+        bool(cold)
+        and imm['hasItems'] is True
+        and imm['distImmediate'] < 2.0
+        and imm['stepImmediate'] == 0.1
+        and after['ready'] is True
+        and after['results'] > 0
+        and after['dist'] < 2.0
+        and after['step'] < 1
+    )
+
+    # 2. Automatisches Raster aktualisiert auch bei blockiertem requestAnimationFrame (sofort & über finishCamAnim)
+    p.ev("if (ViewPrefs.get().grid !== 'auto') ViewPrefs.set({ grid: 'auto' }); Viewer.fit(null, false);")
+    s0 = p.ev("return Viewer.gridStep")
+    pause_raf = "window.__origRAF=window.requestAnimationFrame; window.__rafQueue=[]; window.requestAnimationFrame=(cb)=>{window.__rafQueue.push(cb); return window.__rafQueue.length;};"
+    resume_raf = "if(window.__origRAF){ window.requestAnimationFrame=window.__origRAF; const q=window.__rafQueue.splice(0); for(const cb of q) window.requestAnimationFrame(cb); }"
+    p.ev(pause_raf)
+    try:
+        s_close = p.ev("""
+            const t = Viewer.controls.target.clone().set(32, 0, 3);
+            Viewer.moveCamera(t.clone().set(32.5, -0.6, 3.6), t, null, false);
+            return Viewer.gridStep;
+        """)
+        p.ev("""
+            const t = Viewer.controls.target.clone().set(32, 0, 3);
+            Viewer.moveCamera(t.clone().set(170, -250, 190), t, null, true);
+        """)
+        p.wait(650)
+        s_far = p.ev("return Viewer.gridStep")
+    finally:
+        p.ev(resume_raf)
+    ok2 = s0 == 10 and s_close < s0 and s_close == 0.1 and s_far >= 10
+
+    # 3. Normales App.setDoc ohne Kamera-Eingriff passt die Ansicht weiterhin automatisch ein
+    zoom_state = p.ev("""
+        const t = Viewer.controls.target.clone().set(32, 0, 3);
+        Viewer.moveCamera(t.clone().set(32.5, -0.6, 3.6), t, null, false);
+        return { seq: Viewer.camMoveSeq, step: Viewer.gridStep };
+    """)
+    p.ev("App.setDoc(Templates.LIST[1].build())")
+    warte_rechnen(p, 25)
+    p.wait(300)
+    fit_state = p.ev("""return {
+        results: App.results.size,
+        seq: Viewer.camMoveSeq,
+        dist: Viewer.camera.position.distanceTo(Viewer.controls.target),
+        step: Viewer.gridStep,
+    };""")
+    ok3 = (
+        zoom_state['step'] == 0.1
+        and fit_state['results'] > 0
+        and fit_state['seq'] > zoom_state['seq']
+        and fit_state['dist'] > 50
+        and fit_state['step'] == 10
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3]
+
+
 # ---------- [A-152] Kopplungen: Schraube, Riemen, linear (BG-14) ----------
 def t_a152_kopplungen_schraube_riemen_linear(p):
     # 1. Schraube mit Steigung 2 mm: 1 Umdrehung (360°) -> 2 mm Vorschub (zylindrisch & Zwei-Gelenk-Spindel)
@@ -30260,6 +30342,7 @@ TESTS = [
     ('[A-147] Verlauf abschalten: freies Bearbeiten, Schritt 1', t_verlauf_abschalten),
     ('[A-149] Beispiel-Galerie: 8 lokale Beispiele mit Vorschaubild / Kopie öffnen / Original unverändert', t_a149_beispiel_galerie),
     ('[A-150] Dateiformat offen beschreiben: DATEIFORMAT.md, Beispiel-Projekt gültig & kaputte Datei deutsch gemeldet (PL-12)', t_a150_dateiformat),
+    ('[F-11251012] Volltest-Reparatur: Automatisches Raster bei rAF-Stau & Kamera-Schutz beim Neubau', t_f11251012),
     ('[A-152] Kopplungen: Schraube (2 mm/U), Riemen (20/40 Zähne) & linear (BG-14)', t_a152_kopplungen_schraube_riemen_linear),
     ('[A-153] Kurvenscheibe / Nocken: Exzentrische Scheibe (5 mm → 10 mm Hub) & Weg-Kurve-Diagramm (BG-15)', t_a153_kurvenscheibe_nocken),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

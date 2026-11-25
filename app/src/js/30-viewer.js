@@ -9,7 +9,7 @@ const Viewer = (() => {
   const raycaster = new THREE.Raycaster();
   const theme = {};
   let hoverFace = null, hoverEdge = null, hoverBody = null, selFaces = [], selEdges = [];
-  let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false;
+  let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false, camMoveSeq = 0;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
   const vis = { clip: null, clips: [], capEnabled: true, xray: false };
@@ -147,6 +147,7 @@ const Viewer = (() => {
     dot.userData.originDot = true; groups.origin.add(dot);
   }
   function updateViewAids() {
+    if (!camera || !controls) return;
     const ap = quadState ? (quadState.panes.find((p) => p.key === quadState.active) || quadState.panes[0]) : null;
     const refCam = ap ? ap.cam : camera;
     const refTarget = ap ? ap.controls.target : controls.target;
@@ -294,7 +295,7 @@ const Viewer = (() => {
     bindGestures(renderer.domElement, () => controls);
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
-    controls.addEventListener('start', () => { orbitActive = true; pushCam(true); cancelCamAnim(); });
+    controls.addEventListener('start', () => { camMoveSeq++; orbitActive = true; pushCam(true); cancelCamAnim(); });
     controls.addEventListener('end', () => { orbitActive = false; if (lowRes) scheduleAdaptRestore(); });
     buildGrid(autoStep()); buildOrigin();
     applyLook();
@@ -2773,6 +2774,7 @@ const Viewer = (() => {
       lastTrackpadAt = now;
       e.preventDefault();
       e.stopImmediatePropagation();
+      camMoveSeq++;
       pushCam(true);
       cancelCamAnim();
       const h = Math.max(1, el.clientHeight || (container && container.clientHeight) || 1);
@@ -2799,6 +2801,7 @@ const Viewer = (() => {
       if (sc > 0 && gestureScale > 0) {
         const ratio = sc / gestureScale;
         gestureScale = sc;
+        camMoveSeq++;
         pushCam(true);
         cancelCamAnim();
         ctrl._dollyOut(Math.pow(ratio, ctrl.zoomSpeed));
@@ -2849,6 +2852,7 @@ const Viewer = (() => {
     controls.update();
     inLoopCam = false;
     camera.updateMatrixWorld();
+    updateViewAids();
     needsRender = true;
     if (deferEmit) scheduleCamEmit();
     else {
@@ -2860,6 +2864,7 @@ const Viewer = (() => {
     if (camAnim && performance.now() - camAnim.t0 >= camAnim.dur) finishCamAnim(true);
   }
   function moveCamera(pos, target, up, animate = true) {
+    camMoveSeq++;
     pushCam(false);
     stopDamping();
     cancelCamAnim();
@@ -2867,6 +2872,7 @@ const Viewer = (() => {
       camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up);
       inLoopCam = true; controls.update(); inLoopCam = false;
       camera.updateMatrixWorld();
+      updateViewAids();
       needsRender = true; listeners.emit('camera'); return;
     }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
@@ -3512,7 +3518,7 @@ const Viewer = (() => {
     setQuad, setActiveQuadPane, setQuadPaneOrtho, resetQuadPane, fitQuad, pickInPane,
     get quad() { return !!quadState; }, get activeQuadPane() { return quadState ? quadState.active : null; },
     get quadPanes() { return quadState ? quadState.panes.map((p) => ({ key: p.key, ortho: p.ortho, active: quadState.active === p.key, rect: p.rect ? { ...p.rect } : null, camPos: p.cam.position.toArray(), target: p.controls.target.toArray() })) : []; },
-    get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
+    get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { syncCamAnim(); return gridStep; }, get camMoveSeq() { return camMoveSeq; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
   };
