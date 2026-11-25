@@ -3050,7 +3050,12 @@ const Assembly = (() => {
       sig.children = kids.filter((c) => c && !c.suppressed).map((c) => lightGeomSig(doc, c, ownV, true, seenDocs));
     } else if (it.kind === 'ref' && it.p && it.p.docId) {
       const seen = seenDocs || new Set(doc && doc.id ? [doc.id] : []);
-      const refDoc = !seen.has(it.p.docId) ? Model.resolveDoc(it.p.docId) : null;
+      const rawRefDoc = !seen.has(it.p.docId) ? Model.resolveDoc(it.p.docId) : null;
+      const refDoc = rawRefDoc
+        ? (Model.withSkeletonOverrides
+          ? Model.withSkeletonOverrides(Model.withPartVariant ? Model.withPartVariant(rawRefDoc, it.p && it.p.variantId) : rawRefDoc, doc, V, it.p && it.p.skelOverrides)
+          : rawRefDoc)
+        : null;
       if (refDoc) {
         const nextSeen = new Set(seen);
         nextSeen.add(refDoc.id);

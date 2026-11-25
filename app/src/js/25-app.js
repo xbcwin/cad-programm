@@ -606,6 +606,7 @@ const App = (() => {
     Model.syncLinks(S.doc);
     if (Model.syncBlocks) Model.syncBlocks(S.doc);
     if (typeof Assembly !== 'undefined' && Assembly.syncPatterns) Assembly.syncPatterns(S.doc);
+    if (typeof Comp !== 'undefined' && Comp.syncSkeletons) Comp.syncSkeletons(S.doc);
     if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(S.doc);
     Model.cleanFolders(S.doc);
     S.doc.modified = Date.now();
@@ -1423,6 +1424,9 @@ const App = (() => {
       for (const id of ids) { if (set.has(id)) set.delete(id); else set.add(id); }
       S.sel = [...set];
     } else S.sel = ids;
+    if (S.sel.length && typeof Comp !== 'undefined' && Comp.selectSkeleton) {
+      Comp.selectSkeleton(null, { silent: true });
+    }
     if (Array.isArray(opts.faces) && opts.faces.length) {
       S.faces = opts.faces.slice();
       S.face = S.faces[S.faces.length - 1];

@@ -33116,6 +33116,203 @@ def t_a163_anzeige_zustaende_varianten(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a166_skelett_skizze(p):
+    # [A-166] Baugruppe (Profi): Skelett-Skizze (BG-32)
+    p.ev("""
+      App.setDoc(Model.newAssemblyDoc('Skelett-Baugruppe'));
+      if (typeof Start !== 'undefined' && Start.hide) Start.hide();
+    """)
+    p.wait(400)
+
+    # 1. Profi-Schutz: im Einfach-Modus nicht verfügbar
+    p.ev("ViewPrefs.setLevel('simple');"); p.wait(200)
+    simple_state = p.ev("""
+      const btn = document.querySelector('#t-asm-skeleton');
+      const blocked = Comp.startSkeleton() === false;
+      const cmds = Commands.search('skelett skizze').length === 0;
+      return { btnVis: !!(btn && btn.offsetParent !== null), blocked, cmds };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(250)
+    pro_btn_vis = p.ev("const b = document.querySelector('#t-asm-skeleton'); return !!(b && b.offsetParent !== null);")
+    ok1 = (not simple_state['btnVis']) and simple_state['blocked'] and simple_state['cmds'] and bool(pro_btn_vis)
+
+    # 2. Hauptskizze im 2D-Editor mit benanntem Maß Laenge = 100 anlegen
+    p.ev("Sketch.startSkeleton({ planeName: 'XY', name: 'Hauptskizze' });")
+    p.wait(350)
+    cx, cy = p.canvas_center()
+    p.pg.keyboard.press('l')
+    p.pg.mouse.click(cx - 80, cy)
+    p.pg.mouse.click(cx + 80, cy)
+    p.pg.keyboard.press('Enter')
+    p.wait(250)
+    sk_res = p.ev("""
+      const ln = Sketch.state.ents.find(e => e && e.type === 'line');
+      if (!ln) return { ok: false };
+      const dimOk = Sketch.setDimSpec({ e: ln.id, k: 'len', name: 'Laenge' }, 100);
+      return { ok: dimOk, lnId: ln.id, dimNames: Sketch.state.dims.map(d => d.name) };
+    """)
+    p.pg.locator('.sketchbar .tool.primary').click()
+    p.wait(350)
+    after_done = p.ev("""
+      const sks = App.doc.skeletons || [];
+      const sk = sks[0] || null;
+      const v = Model.vars(App.doc).v;
+      const has3d = !!(Viewer.groups && Viewer.groups.sketch3d && Viewer.groups.sketch3d.children.length > 0);
+      const treeRow = document.querySelector('#skel-tree .skel-row[data-skeleton-name="Hauptskizze"]');
+      return {
+        skId: sk ? sk.id : null,
+        dimId: sk && sk.dims[0] ? sk.dims[0].id : null,
+        count: sks.length,
+        laenge: v.Laenge,
+        has3d,
+        inTree: !!treeRow,
+      };
+    """)
+    ok2 = (
+        bool(sk_res.get('ok')) and sk_res.get('dimNames') == ['Laenge']
+        and after_done['count'] == 1 and abs((after_done['laenge'] or 0) - 100.0) < 1e-4
+        and after_done['has3d'] and after_done['inTree']
+    )
+
+    # 3. Mehrere Teile steuern: Box (per bindPartToSkeleton), Extrude-Skizze & externes ref-Bauteil
+    ids = p.ev("""return (async () => {
+      const box = Model.newItem('box', { w: 50, d: 12, h: 10 }, { name: 'Traeger A' });
+      box.t.y = -25;
+      const extSk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [{ id: 'r1', type: 'rect', a: [-25, -6], b: [25, 6] }],
+        dims: [{ id: 'd_w', e: 'r1', k: 'w', v: 'Laenge' }, { id: 'd_h', e: 'r1', k: 'h', v: 12 }],
+        cons: [],
+      };
+      const ext = Model.newItem('extrude', { sketch: extSk, dist: 10, dir: 'normal' }, { name: 'Traeger B' });
+      ext.t.y = 25;
+      App.change('A-166 Teile anlegen', (d) => { d.items.push(box, ext); });
+      Comp.bindPartToSkeleton(box.id, 'w', 'Laenge');
+
+      const pRef = Model.newDoc('Schiene', { docType: 'part' });
+      pRef.params.push({ id: 'm_len', name: 'Laenge', expr: 40 });
+      pRef.items.push(Model.newItem('box', { w: 'Laenge', d: 10, h: 10 }, { name: 'Schiene' }));
+      await Store.saveProject(pRef, 1, { keepLast: true });
+      const refItem = await Comp.insertPart(pRef.id, { pos: [0, 55, 0] });
+      Comp.bindPartToSkeleton(refItem.id, 'refparam:Laenge', 'Laenge');
+      return { boxId: box.id, extId: ext.id, refId: refItem.id };
+    })();""")
+    p.wait(300)
+    p.ev("App.rebuild()"); p.wait(100)
+    # Sicherstellen, dass alle Berechnungen fertig sind
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+
+    def read_lengths():
+        return p.ev("""
+          const lenX = (id) => {
+            const b = Actions.worldBox(id);
+            return b ? (b.max.x - b.min.x) : 0;
+          };
+          const driven = Comp.skeletonDrivenParts(arg.skId);
+          return {
+            boxX: lenX(arg.boxId),
+            extX: lenX(arg.extId),
+            refX: lenX(arg.refId),
+            drivenCount: driven.length,
+          };
+        """, {**ids, 'skId': after_done['skId']})
+
+    l100 = read_lengths()
+    ok3 = (
+        abs(l100['boxX'] - 100.0) < 0.2
+        and abs(l100['extX'] - 100.0) < 0.2
+        and abs(l100['refX'] - 100.0) < 0.2
+        and l100['drivenCount'] == 3
+    )
+
+    # 4. Länge in der Hauptskizze auf 120 ändern (2D-Skizzenmodus) -> alle Teile werden 120 lang
+    p.ev("Sketch.editSkeleton(arg);", after_done['skId'])
+    p.wait(300)
+    p.ev("""
+      const dm = Sketch.state.dims[0];
+      Sketch.setDimSpec({ e: dm.e, k: dm.k, name: dm.name }, 120);
+    """)
+    p.pg.locator('.sketchbar .tool.primary').click()
+    p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l120 = read_lengths()
+
+    # Auch Änderung direkt über das rechte Skelett-Panel (120 -> 140) prüfen
+    p.ev("Comp.selectSkeleton(arg);", after_done['skId'])
+    p.wait(250)
+    dim_inp = f"#skel-dim-{after_done['dimId']}"
+    p.pg.fill(dim_inp, '140')
+    p.pg.press(dim_inp, 'Enter')
+    p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l140 = read_lengths()
+
+    ok4 = (
+        abs(l120['boxX'] - 120.0) < 0.2
+        and abs(l120['extX'] - 120.0) < 0.2
+        and abs(l120['refX'] - 120.0) < 0.2
+        and abs(l140['boxX'] - 140.0) < 0.2
+        and abs(l140['extX'] - 140.0) < 0.2
+        and abs(l140['refX'] - 140.0) < 0.2
+    )
+
+    # 5. Rückgängig / Wiederholen, Speichern/Laden, Hilfe, i18n & Befehlssuche
+    p.ev("App.undo();"); p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l_undo1 = read_lengths()
+    p.ev("App.undo();"); p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l_undo2 = read_lengths()
+    p.ev("App.redo();"); p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l_redo = read_lengths()
+
+    meta = p.ev("""return (async () => {
+      const val = Store.validateProject(App.doc);
+      const saved = await Store.saveProject(App.doc, Model.countItems(App.doc));
+      const loaded = await Store.loadProject(App.doc.id);
+      const skLoaded = loaded && Array.isArray(loaded.skeletons) ? loaded.skeletons.length : 0;
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = !!(wh.skeletonSketch && wh.skeletonSketch.tip && wh.skeletonSketch.hilfe && wh.skeletonSketch.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('skelett skizze').some(c => c.id === 'asm-skeleton');
+      return { valOk: val.ok, saved, skLoaded, hOk, i18nOk, cmdOk };
+    })();""")
+
+    ok5 = bool(
+        abs(l_undo1['boxX'] - 120.0) < 0.2 and abs(l_undo1['extX'] - 120.0) < 0.2
+        and abs(l_undo2['boxX'] - 100.0) < 0.2 and abs(l_undo2['extX'] - 100.0) < 0.2
+        and abs(l_redo['boxX'] - 120.0) < 0.2 and abs(l_redo['extX'] - 120.0) < 0.2
+        and meta['valOk'] and meta['saved'] and meta['skLoaded'] == 1
+        and meta['hOk'] and meta['i18nOk'] and meta['cmdOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a165_baugruppe_einkoerper_toleranzkette(p):
     # [A-165] Baugruppe (Profi): Als-ein-Körper-Export (BG-31) und Toleranzkette (BG-33)
     p.empty()
@@ -33765,6 +33962,7 @@ TESTS = [
     ('[A-155] Kollision beim Ziehen und Abstands-Prüfung (BG-17, BG-18)', t_a155_kollision_und_luft),
     ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
+    ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
