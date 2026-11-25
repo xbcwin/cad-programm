@@ -429,5 +429,10 @@
     "was": "Erzeugt eine Wellenkupplung als starre Hülse mit Gewindestiften, geschlitzte Klemmkupplung oder Flanschkupplung.",
     "wozu": "Verbindet zwei gleich oder unterschiedlich dicke Wellenenden fluchtend miteinander.",
     "achtung": "Für nicht genau fluchtende Wellen musst du später echte Ausgleichskupplungen vorsehen – starre Kupplungen verlangen koaxiale Wellen."
+  },
+  "mountPattern": {
+    "was": "Schneidet ein genormtes Befestigungs-Lochbild (Lüfter 25–140 mm, NEMA 14/17/23 oder Servo) samt optionalem Mittel- oder Gehäuseausschnitt in eine ebene Fläche.",
+    "wozu": "Spart das einzelne Zeichnen und Bemaßen aller Schraubenlöcher und Ausschnitte auf Montageplatten und Gehäusen.",
+    "achtung": "Prüfe, ob die Platte genug Rand um alle Löcher und den Ausschnitt herum bietet und stelle bei Bedarf eine 3D-Druck-Passung ein."
   }
 }

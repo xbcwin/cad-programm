@@ -39,6 +39,7 @@ const Toolbar = (() => {
       { id: 'vent', group: T('dlg.tb.grpEdit'), domId: 't-vent', icon: 'vent', label: T('kind.vent'), tip: T('dlg.tb.ventTip'), cls: 'minor', help: 'vent', run: () => Features.startVent() },
       { id: 'fins', group: T('dlg.tb.grpEdit'), domId: 't-fins', icon: 'fins', label: T('kind.fins'), tip: T('dlg.tb.finsTip'), cls: 'minor', help: 'fins', run: () => Features.startFins() },
       { id: 'fillPattern', group: T('dlg.tb.grpEdit'), domId: 't-fillPattern', icon: 'patternFill', label: T('kind.fillPattern'), tip: T('dlg.tb.fillPatternTip'), cls: 'minor pro', help: 'fillPattern', run: () => Features.startFillPattern() },
+      { id: 'mountPattern', group: T('dlg.tb.grpEdit'), domId: 't-mountPattern', icon: 'mountPattern', label: T('kind.mountPattern'), tip: T('dlg.tb.mountPatternTip'), cls: 'minor', help: 'mountPattern', run: () => Features.startMountPattern() },
       { id: 'web', group: T('dlg.tb.grpEdit'), domId: 't-web', icon: 'web', label: T('kind.web'), tip: T('dlg.tb.webTip'), cls: 'minor', help: 'web', run: () => Features.startWeb() },
       { id: 'splitFace', group: T('dlg.tb.grpEdit'), domId: 't-splitFace', icon: 'splitFace', label: T('kind.splitFace'), tip: T('dlg.tb.splitFaceTip'), cls: 'minor pro', help: 'splitFace', run: () => Features.startSplitFace() },
       { id: 'dome', group: T('dlg.tb.grpEdit'), domId: 't-dome', icon: 'dome', label: T('kind.dome'), tip: T('dlg.tb.domeTip'), cls: 'minor pro', help: 'dome', run: () => Features.startDome() },

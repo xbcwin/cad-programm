@@ -738,6 +738,7 @@ const IC = {
   gearRack: '<path d="M3 18h18v-5H3z" fill="currentColor" opacity=".2"/><path d="M3 18h18v-5h-2v-3h-2.5v3h-2.5v-3H11.5v3H9v-3H6.5v3H3z"/>',
   worm: '<rect x="7" y="4" width="10" height="16" rx="2"/><path d="M7 8l10-2.2M7 12l10-2.2M7 16l10-2.2M12 2v2M12 20v2"/>',
   wormWheel: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3"/><path d="M8.5 5.3l7 1.4M7.2 8.8l9.6 2M7.2 13.2l9.6 2M8.5 16.7l7 1.4" opacity=".6"/>',
+  mountPattern: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="currentColor" opacity=".14"/><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="17" r="1.2" fill="currentColor" stroke="none"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2814,6 +2815,11 @@ const HELP = {
   "tip": "Einfache Wellenkupplung (starr mit Gewindestiften, Klemm- oder Flanschkupplung)",
   "hilfe": "Verbindet zwei Wellenenden koaxial miteinander – mit gleichen oder unterschiedlichen Bohrungsdurchmessern (d₁ × d₂) und wahlweise als starre Hülsenkupplung mit Gewindestiften, als geschlitzte Klemmkupplung oder als Flanschkupplung mit 4 Schraubenlöchern.",
   "tipp": "Wähle „Eigene Maße“, um unterschiedliche Wellendurchmesser wie Ø 8 mm auf Ø 10 mm direkt zu verbinden."
+ },
+ "mountPattern": {
+  "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) und Servos",
+  "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt passendem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23) sowie gängige Servos (Standard, Mini, Micro 9g, Groß-Servo). Alle Durchmesser, der Ausschnitt, die Lage (X/Y), Drehung, Tiefe und eine optionale 3D-Druck-Passung lassen sich rechts anpassen.",
+  "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben und Zentrierbund nach dem 3D-Druck sauber passen."
  }
 };
 

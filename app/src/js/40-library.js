@@ -1195,6 +1195,93 @@ function shaftCouplingOnShaftTransform(shaftP = {}, shaftT = null) {
   };
 }
 
+// Genormte Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) & Servos (BI-16)
+const MOUNT_PATTERN_GROUPS = [
+  { id: 'fan', label: 'Lüfter (25–140 mm)' },
+  { id: 'nema', label: 'Schrittmotoren (NEMA)' },
+  { id: 'servo', label: 'Servos' },
+];
+const MOUNT_PATTERNS = [
+  // Axiallüfter (Quadrat-Lochbild + runder Luftausschnitt)
+  { id: 'fan25', group: 'fan', label: 'Lüfter 25 mm', layout: 'square', pitch: 20, holeD: 2.8, screw: 'M2.5', centerKind: 'circle', centerD: 23, source: 'Sunon MF2510 / ebm-papst 250' },
+  { id: 'fan30', group: 'fan', label: 'Lüfter 30 mm', layout: 'square', pitch: 24, holeD: 3.2, screw: 'M3', centerKind: 'circle', centerD: 28, source: 'Sunon MF3010 / ebm-papst 300' },
+  { id: 'fan40', group: 'fan', label: 'Lüfter 40 mm', layout: 'square', pitch: 32, holeD: 3.4, screw: 'M3', centerKind: 'circle', centerD: 38, source: 'ebm-papst 400 / Sunon MF4010' },
+  { id: 'fan50', group: 'fan', label: 'Lüfter 50 mm', layout: 'square', pitch: 40, holeD: 4.3, screw: 'M4', centerKind: 'circle', centerD: 47, source: 'Sunon MF5015 / ebm-papst 500' },
+  { id: 'fan60', group: 'fan', label: 'Lüfter 60 mm', layout: 'square', pitch: 50, holeD: 4.5, screw: 'M4', centerKind: 'circle', centerD: 57, source: 'Noctua NF-A6 / ebm-papst 600' },
+  { id: 'fan70', group: 'fan', label: 'Lüfter 70 mm', layout: 'square', pitch: 61.5, holeD: 4.5, screw: 'M4', centerKind: 'circle', centerD: 67, source: 'Sunon ME7015 / ebm-papst 700' },
+  { id: 'fan80', group: 'fan', label: 'Lüfter 80 mm', layout: 'square', pitch: 71.5, holeD: 4.5, screw: 'M4', centerKind: 'circle', centerD: 76, source: 'Noctua NF-A8 / ebm-papst 8400' },
+  { id: 'fan92', group: 'fan', label: 'Lüfter 92 mm', layout: 'square', pitch: 82.5, holeD: 4.5, screw: 'M4', centerKind: 'circle', centerD: 88, source: 'Noctua NF-A9 / ebm-papst 3400' },
+  { id: 'fan120', group: 'fan', label: 'Lüfter 120 mm', layout: 'square', pitch: 105, holeD: 4.5, screw: 'M4', centerKind: 'circle', centerD: 115, source: 'Noctua NF-A12 / ebm-papst 4400' },
+  { id: 'fan140', group: 'fan', label: 'Lüfter 140 mm', layout: 'square', pitch: 124.5, holeD: 4.5, screw: 'M4', centerKind: 'circle', centerD: 135, source: 'Noctua NF-A14 / ebm-papst 5200' },
+  // Schrittmotoren (NEMA ICS 16, Quadrat-Lochbild + runder Zentrierbund)
+  { id: 'nema14', group: 'nema', label: 'NEMA 14 (35 mm)', layout: 'square', pitch: 26, holeD: 3.4, screw: 'M3', centerKind: 'circle', centerD: 22, source: 'NEMA ICS 16' },
+  { id: 'nema17', group: 'nema', label: 'NEMA 17 (42 mm)', layout: 'square', pitch: 31, holeD: 3.4, screw: 'M3', centerKind: 'circle', centerD: 22, source: 'NEMA ICS 16' },
+  { id: 'nema23', group: 'nema', label: 'NEMA 23 (57 mm)', layout: 'square', pitch: 47.14, holeD: 5.5, screw: 'M5', centerKind: 'circle', centerD: 38.1, source: 'NEMA ICS 16' },
+  // Servos (2 oder 4 Befestigungslöcher + rechteckiger Gehäuse-Ausschnitt)
+  { id: 'servoStd', group: 'servo', label: 'Standard-Servo (S3003 / MG996R)', layout: 'rect4', pitchX: 48.5, pitchY: 10, holeD: 3.2, screw: 'M3', centerKind: 'rect', cutW: 40.5, cutH: 20.5, source: 'Futaba S3003 / Hitec HS-311' },
+  { id: 'servoMini', group: 'servo', label: 'Mini-Servo (HS-81 / MG92B)', layout: 'pair2', pitchX: 34.5, pitchY: 0, holeD: 2.5, screw: 'M2.5', centerKind: 'rect', cutW: 30.5, cutH: 12.5, source: 'Hitec HS-81' },
+  { id: 'servoMicro', group: 'servo', label: 'Micro-Servo 9g (SG90 / MG90S)', layout: 'pair2', pitchX: 27.5, pitchY: 0, holeD: 2.2, screw: 'M2', centerKind: 'rect', cutW: 23, cutH: 12.5, source: 'TowerPro SG90' },
+  { id: 'servoLarge', group: 'servo', label: 'Groß-Servo (HS-805BB)', layout: 'rect4', pitchX: 75.5, pitchY: 18, holeD: 4.2, screw: 'M4', centerKind: 'rect', cutW: 66.5, cutH: 30.5, source: 'Hitec HS-805BB' },
+];
+const MOUNT_PATTERN_BY_ID = new Map(MOUNT_PATTERNS.map((x) => [x.id, x]));
+function mountPatternDimSummary(e) {
+  const f = (v) => String(v).replace('.', ',');
+  if (e.layout === 'square') return `${f(e.pitch)} × ${f(e.pitch)} mm · Mitte Ø ${f(e.centerD)}`;
+  if (e.layout === 'rect4') return `${f(e.pitchX)} × ${f(e.pitchY)} mm · ${f(e.cutW)} × ${f(e.cutH)}`;
+  return `Abstand ${f(e.pitchX)} mm · ${f(e.cutW)} × ${f(e.cutH)}`;
+}
+const MOUNT_PATTERN_GROUPED_OPTIONS = MOUNT_PATTERN_GROUPS.map((g) => ({
+  group: g.label,
+  options: MOUNT_PATTERNS.filter((x) => x.group === g.id).map((x) => [x.id, `${x.label} (${mountPatternDimSummary(x)})`]),
+}));
+function mountPatternEntry(id) {
+  return MOUNT_PATTERN_BY_ID.get(String(id || 'nema17')) || MOUNT_PATTERN_BY_ID.get('nema17') || MOUNT_PATTERNS[0];
+}
+function mountPatternMetrics(p = {}) {
+  const e = mountPatternEntry(p.preset);
+  const pf = printFitMm(p.printFit);
+  const rawHoleD = Number(p.holeD);
+  const holeD = p.holeD != null && p.holeD !== '' && isFinite(rawHoleD) && rawHoleD > 0 ? rawHoleD : e.holeD;
+  const holeDEff = round(holeD + pf, 3);
+  const includeCenter = p.includeCenter !== false;
+  let centerD = 0, centerDEff = 0, cutW = 0, cutH = 0, cutWEff = 0, cutHEff = 0;
+  if (e.centerKind === 'circle') {
+    const rawCD = Number(p.centerD);
+    centerD = p.centerD != null && p.centerD !== '' && isFinite(rawCD) && rawCD >= 0 ? rawCD : e.centerD;
+    centerDEff = centerD > 0 ? round(centerD + pf, 3) : 0;
+  } else {
+    const rawW = Number(p.cutW), rawH = Number(p.cutH);
+    cutW = p.cutW != null && p.cutW !== '' && isFinite(rawW) && rawW > 0 ? rawW : e.cutW;
+    cutH = p.cutH != null && p.cutH !== '' && isFinite(rawH) && rawH > 0 ? rawH : e.cutH;
+    cutWEff = round(cutW + pf, 3);
+    cutHEff = round(cutH + pf, 3);
+  }
+  let holes;
+  if (e.layout === 'square') {
+    const h = e.pitch / 2;
+    holes = [[-h, -h], [h, -h], [h, h], [-h, h]];
+  } else if (e.layout === 'rect4') {
+    const hx = e.pitchX / 2, hy = e.pitchY / 2;
+    holes = [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
+  } else {
+    const hx = e.pitchX / 2;
+    holes = [[-hx, 0], [hx, 0]];
+  }
+  return {
+    ...e,
+    holeD, holeDEff,
+    includeCenter,
+    centerD, centerDEff,
+    cutW, cutH, cutWEff, cutHEff,
+    holes,
+    pf,
+    u: Number(p.u) || 0,
+    v: Number(p.v) || 0,
+    angle: Number(p.angle) || 0,
+    depth: Math.max(0, Number(p.depth) || 0),
+  };
+}
+
 // kleine Vorschaubilder der Grundkörper (isometrisch)
 function primitiveSVG(kind) {
   const A = 'var(--accent)', ink = 'var(--ink)';
