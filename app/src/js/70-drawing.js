@@ -19,7 +19,7 @@ const Drawing = (() => {
     { key: 'dot', get label() { return T('draw.arrow.dot'); } },
   ];
   const DIM_FONT_SIZES = [2.5, 3.5, 5, 7, 10];
-  const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null };
+  const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null, dual: false, dualDecimals: 3 };
   const NOTE_TIPS = [
     { key: 'auto', get label() { return T('draw.noteTip.auto'); } },
     { key: 'arrow', get label() { return T('draw.noteTip.arrow'); } },
@@ -30,9 +30,11 @@ const Drawing = (() => {
     { key: 'lin', get label() { return T('draw.dimMode.lin'); }, get short() { return T('draw.dimMode.lin'); }, get hint() { return T('draw.dimHint.lin'); } },
     { key: 'chain', get label() { return T('draw.dimMode.chain'); }, get short() { return T('draw.dimMode.chain'); }, get hint() { return T('draw.dimHint.chain'); } },
     { key: 'base', get label() { return T('draw.dimMode.base'); }, get short() { return T('draw.dimMode.base'); }, get hint() { return T('draw.dimHint.base'); } },
+    { key: 'ordinate', pro: true, get label() { return T('draw.dimMode.ordinate'); }, get short() { return T('draw.dimMode.ordinate'); }, get hint() { return T('draw.dimHint.ordinate'); } },
     { key: 'ang', get label() { return T('draw.dimMode.ang'); }, get short() { return T('draw.dimMode.ang'); }, get hint() { return T('draw.dimHint.ang'); } },
     { key: 'rad', get label() { return T('draw.dimMode.rad'); }, get short() { return T('draw.dimMode.rad'); }, get hint() { return T('draw.dimHint.rad'); } },
     { key: 'dia', get label() { return T('draw.dimMode.dia'); }, get short() { return T('draw.dimMode.dia'); }, get hint() { return T('draw.dimHint.dia'); } },
+    { key: 'arclen', pro: true, get label() { return T('draw.dimMode.arclen'); }, get short() { return T('draw.dimMode.arclen'); }, get hint() { return T('draw.dimHint.arclen'); } },
     { key: 'chamfer', get label() { return T('draw.dimMode.chamfer'); }, get short() { return T('draw.dimMode.chamfer'); }, get hint() { return T('draw.dimHint.chamfer'); } },
   ];
   const SECTION_MODES = [
@@ -114,7 +116,10 @@ const Drawing = (() => {
     const decimals = (rawDec === null || rawDec === undefined || rawDec === '' || rawDec === 'auto')
       ? null
       : (Number.isFinite(Number(rawDec)) ? clamp(Math.round(Number(rawDec)), 0, 4) : null);
-    return { arrow, fontSize, decimals };
+    const dual = (raw && 'dual' in raw) ? !!raw.dual : !!t.dual;
+    const rawDualDec = (raw && raw.dualDecimals != null) ? Number(raw.dualDecimals) : Number(t.dualDecimals);
+    const dualDecimals = Number.isFinite(rawDualDec) ? clamp(Math.round(rawDualDec), 1, 4) : DEFAULT_DIM_STYLE.dualDecimals;
+    return { arrow, fontSize, decimals, dual, dualDecimals };
   }
   function sheetDimStyle(sh = dwg()) {
     return normDimStyle(sh && sh.dimStyle);
@@ -2872,6 +2877,7 @@ const Drawing = (() => {
     if (!dim) return 0;
     if (dim.type === 'dia') return Number(dim.r || 0) * 2;
     if (dim.type === 'rad') return Number(dim.r || 0);
+    if (dim.type === 'arclen') return Math.abs(Number(dim.r || 0) * (Number(dim.a1 || 0) - Number(dim.a0 || 0)));
     if (dim.type === 'lin') {
       if (dim.dir === 'h') return Math.abs(dim.b[0] - dim.a[0]);
       if (dim.dir === 'v') return Math.abs(dim.b[1] - dim.a[1]);
@@ -2881,18 +2887,22 @@ const Drawing = (() => {
   }
   function dimLabelParts(dim, nominalMm, st = sheetDimStyle()) {
     const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
+    const dualLabel = (st && st.dual) ? fmtDualSecondary(nominalMm, st) : '';
     if (dim.type === 'dia' || dim.type === 'rad') {
-      if (dim.threadLabel) return { mainLabel: countPrefix + dim.threadLabel, prefix: '', isThread: true };
+      if (dim.threadLabel) return { mainLabel: countPrefix + dim.threadLabel, dualLabel: '', prefix: '', isThread: true };
       const prefix = dim.type === 'dia' ? 'Ø' : 'R';
-      return { mainLabel: countPrefix + prefix + fmtDim(nominalMm, st), prefix, isThread: false };
+      return { mainLabel: countPrefix + prefix + fmtDim(nominalMm, st), dualLabel, prefix, isThread: false };
     }
-    return { mainLabel: fmtDim(nominalMm, st), prefix: '', isThread: false };
+    if (dim.type === 'arclen') {
+      return { mainLabel: countPrefix + '⌒' + fmtDim(nominalMm, st), dualLabel, prefix: '⌒', isThread: false };
+    }
+    return { mainLabel: fmtDim(nominalMm, st), dualLabel, prefix: '', isThread: false };
   }
   function findDimById(id, sh = dwg(), lay = layout) {
     if (!id || !sh) return null;
     const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
     const dim = list.find((x) => x.id === id);
-    if (!dim || !['lin', 'dia', 'rad'].includes(dim.type)) return null;
+    if (!dim || !['lin', 'dia', 'rad', 'arclen'].includes(dim.type)) return null;
     const nominalMm = dimNominal(dim);
     const { mainLabel } = dimLabelParts(dim, nominalMm, sheetDimStyle(sh));
     return { dim, nominalMm, label: mainLabel };
@@ -2978,73 +2988,104 @@ const Drawing = (() => {
     }
     return null;
   }
-  function measureDimLabel(mainLabel, prefix, tolInfo, TXT, count = 1) {
-    if (!tolInfo) return { totalW: textW(mainLabel, TXT) * 0.92 };
-    if (tolInfo.mode === 'sym') return { totalW: textW(`${mainLabel} ±${tolInfo.symStr}`, TXT) * 0.92 };
+  function measureDimLabel(mainLabel, prefix, tolInfo, TXT, count = 1, dualLabel = '') {
+    const dualTxt = dualLabel ? ' ' + dualLabel : '';
+    if (!tolInfo) return { totalW: textW(mainLabel + dualTxt, TXT) * 0.92 };
+    if (tolInfo.mode === 'sym') return { totalW: textW(`${mainLabel} ±${tolInfo.symStr}${dualTxt}`, TXT) * 0.92 };
     if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
-      return { totalW: textW(`${mainLabel} ${tolInfo.code}`, TXT) * 0.92 };
+      return { totalW: textW(`${mainLabel} ${tolInfo.code}${dualTxt}`, TXT) * 0.92 };
     }
     const k = TXT / 3.5;
+    const wDual = dualLabel ? textW(dualLabel, TXT) * 0.92 : 0;
+    const gap = round(0.8 * k, 2);
     if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
       const LIM = round(2.8 * k, 2);
       const countPrefix = count > 1 ? count + '× ' : '';
-      return { totalW: Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95 };
+      const wLim = Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95;
+      return { totalW: wLim + (wDual ? gap + wDual : 0) };
     }
-    const SUB = round(2.3 * k, 2), gap = round(0.8 * k, 2);
+    const SUB = round(2.3 * k, 2);
     const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
     const wMain = textW(leftText, TXT) * 0.92;
     const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
-    return { totalW: wMain + gap + wStack };
+    return { totalW: wMain + gap + wStack + (wDual ? gap + wDual : 0) };
   }
-  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost = !!(dim && dim.lost)) {
+  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost = !!(dim && dim.lost), dualLabel = '') {
     const rad = (ang * Math.PI) / 180;
     const exX = Math.cos(rad), exY = Math.sin(rad);
     const euX = Math.sin(rad), euY = -Math.cos(rad);
     const pt = (lx, ly) => [cx + exX * lx + euX * ly, cy + exY * lx + euY * ly];
     const base = { rot: ang, id: dim.id, view: dim.view, ...(isLost ? { lost: true } : {}) };
+    const dualTxt = dualLabel ? ' ' + dualLabel : '';
     if (!tolInfo) {
-      texts.push({ ...base, x: cx, y: cy, t: mainLabel, size: TXT, anchor: 'middle', cls: 'dimtext' });
+      texts.push({ ...base, x: cx, y: cy, t: mainLabel + dualTxt, size: TXT, anchor: 'middle', cls: 'dimtext' });
       return;
     }
     if (tolInfo.mode === 'sym') {
-      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ±${tolInfo.symStr}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'sym' });
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ±${tolInfo.symStr}${dualTxt}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'sym' });
       return;
     }
     if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
-      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ${tolInfo.code}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'fit' });
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ${tolInfo.code}${dualTxt}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'fit' });
       return;
     }
     const k = TXT / 3.5;
+    const gap = round(0.8 * k, 2);
+    const wDual = dualLabel ? textW(dualLabel, TXT) * 0.92 : 0;
     if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
       const LIM = round(2.8 * k, 2);
       const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
-      const pTop = pt(0, 2.7 * k), pBot = pt(0, 0);
-      texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
-      texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+      if (dualLabel) {
+        const wLim = Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95;
+        const x0 = -(wLim + gap + wDual) / 2;
+        const pTop = pt(x0 + wLim * 0.5, 2.7 * k), pBot = pt(x0 + wLim * 0.5, 0), pDual = pt(x0 + wLim + gap, 0.1 * k);
+        texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
+        texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+        texts.push({ ...base, x: pDual[0], y: pDual[1], t: dualLabel, size: TXT, anchor: 'start', cls: 'dimtext dimdual' });
+      } else {
+        const pTop = pt(0, 2.7 * k), pBot = pt(0, 0);
+        texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
+        texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+      }
       return;
     }
-    const SUB = round(2.3 * k, 2), gap = round(0.8 * k, 2);
+    const SUB = round(2.3 * k, 2);
     const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
     const wMain = textW(leftText, TXT) * 0.92;
     const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
-    const x0 = -(wMain + gap + wStack) / 2;
+    const x0 = -(wMain + gap + wStack + (wDual ? gap + wDual : 0)) / 2;
     const pMain = pt(x0, 0.1 * k), pUp = pt(x0 + wMain + gap, 2.0 * k), pLo = pt(x0 + wMain + gap, -0.2 * k);
     texts.push({ ...base, x: pMain[0], y: pMain[1], t: leftText, size: TXT, anchor: 'start', cls: 'dimtext', tolPart: 'main' });
     texts.push({ ...base, x: pUp[0], y: pUp[1], t: tolInfo.upStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'upper' });
     texts.push({ ...base, x: pLo[0], y: pLo[1], t: tolInfo.loStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'lower' });
+    if (dualLabel) {
+      const pDual = pt(x0 + wMain + gap + wStack + gap, 0.1 * k);
+      texts.push({ ...base, x: pDual[0], y: pDual[1], t: dualLabel, size: TXT, anchor: 'start', cls: 'dimtext dimdual' });
+    }
   }
 
   // ---------- Bemaßung ----------
   function setDimStyle(patch = {}) {
+    const cleanPatch = { ...(patch || {}) };
+    if (cleanPatch.dual && isSimpleMode()) {
+      UI.toast(T('draw.dimProOnly'), { icon: 'info' });
+      delete cleanPatch.dual;
+      if (!Object.keys(cleanPatch).length) return null;
+    }
     let next = null;
     App.change('Maß-Stil geändert', () => {
       const s = dwg();
-      s.dimStyle = normDimStyle({ ...sheetDimStyle(s), ...patch });
+      s.dimStyle = normDimStyle({ ...sheetDimStyle(s), ...cleanPatch });
       next = s.dimStyle;
     });
     render();
     Panels.renderRight();
     return next;
+  }
+  function setDualDims(on) {
+    if (on && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
+    setDimStyle({ dual: !!on });
+    return true;
   }
   // ---------- Modelländerungen & verlorene Maße (ZE-14) ----------
   function viewCirclesPool(v) {
@@ -3172,6 +3213,11 @@ const Drawing = (() => {
         || { c: dim.c, r: dim.r, full: !dim.partial };
       return makeCircleRef(v, hit);
     }
+    if (dim.type === 'arclen') {
+      const hit = viewCirclesPool(v).find((c) => !c.full && c.arc && Math.hypot(c.c[0] - dim.c[0], c.c[1] - dim.c[1]) <= 0.2 && Math.abs(c.r - dim.r) <= 0.2)
+        || { c: dim.c, r: dim.r, full: false, arc: [dim.a0, dim.a1] };
+      return makeCircleRef(v, hit);
+    }
     if (dim.type === 'lin') {
       return { kind: 'lin', a: makePointRef(v, dim.a), b: makePointRef(v, dim.b) };
     }
@@ -3188,6 +3234,9 @@ const Drawing = (() => {
     }
     if (dim.type === 'base' && dim.base) {
       return { kind: 'base', base: makePointRef(v, dim.base), pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
+    }
+    if (dim.type === 'ordinate' && dim.origin) {
+      return { kind: 'ordinate', origin: makePointRef(v, dim.origin), pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
     }
     return null;
   }
@@ -3359,6 +3408,11 @@ const Drawing = (() => {
       if (!c) return { ...dim, lost: true, lostReason: dim.type === 'dia' ? 'Bohrung/Kreis fehlt' : 'Rundung/Bogen fehlt' };
       return { ...dim, c: c.c, r: c.r, partial: !c.full, lost: false };
     }
+    if (dim.type === 'arclen') {
+      const c = resolveCircleRef(v, dim.ref);
+      if (!c || c.full || !c.arc) return { ...dim, lost: true, lostReason: 'Kreisbogen fehlt' };
+      return { ...dim, c: c.c, r: c.r, a0: c.arc[0], a1: c.arc[1], lost: false };
+    }
     if (dim.type === 'lin') {
       const a = resolvePointRef(v, dim.ref.a), b = resolvePointRef(v, dim.ref.b);
       if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-4) return { ...dim, lost: true, lostReason: 'Kante oder Punkt fehlt' };
@@ -3390,11 +3444,17 @@ const Drawing = (() => {
       if (!base || !pts.length || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Bezugspunkt oder Kante fehlt' };
       return { ...dim, base, pts, lost: false };
     }
+    if (dim.type === 'ordinate') {
+      const origin = resolvePointRef(v, dim.ref.origin);
+      const pts = (dim.ref.pts || []).map((pr) => resolvePointRef(v, pr));
+      if (!origin || !pts.length || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Nullpunkt oder Zielpunkt fehlt' };
+      return { ...dim, origin, pts, lost: false };
+    }
     return { ...dim, lost: false };
   }
   function dimSummaryLabel(dim, st = sheetDimStyle()) {
     if (!dim) return 'Maß';
-    if (dim.type === 'dia' || dim.type === 'rad') return dimLabelParts(dim, dimNominal(dim), st).mainLabel;
+    if (dim.type === 'dia' || dim.type === 'rad' || dim.type === 'arclen') return dimLabelParts(dim, dimNominal(dim), st).mainLabel;
     if (dim.type === 'lin') return fmtDim(dimNominal(dim), st);
     if (dim.type === 'chamfer') {
       const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
@@ -3403,6 +3463,7 @@ const Drawing = (() => {
     if (dim.type === 'ang') return fmtDimAngle(((dim.a1 - dim.a0) * 180) / Math.PI, st);
     if (dim.type === 'chain') return 'Kettenmaß';
     if (dim.type === 'base') return 'Bezugsmaß';
+    if (dim.type === 'ordinate') return T('draw.dimMode.ordinate');
     return 'Maß';
   }
   function lostDims(sh = dwg()) {
@@ -3488,11 +3549,11 @@ const Drawing = (() => {
     const gap = Math.max(1.2, TXT * 0.34);
     const tx = mx + Math.sin(r) * gap, ty = my - Math.cos(r) * gap;
     if (dim) {
-      const { mainLabel, prefix } = dimLabelParts(dim, val, st);
+      const { mainLabel, dualLabel, prefix } = dimLabelParts(dim, val, st);
       const tolInfo = resolveDimTol(dim, val);
-      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost, dualLabel);
     } else {
-      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext', ...lostObj });
+      texts.push({ x: tx, y: ty, t: fmtDimWithDual(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext', ...lostObj });
     }
   }
   function dimSVG(dim, lines, texts, lay = layout, sh = dwg()) {
@@ -3534,9 +3595,9 @@ const Drawing = (() => {
       const lead = typeof dim.lead === 'number' && isFinite(dim.lead) && dim.lead > 0 ? dim.lead : autoLead;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
       const nomVal = dim.type === 'dia' ? dim.r * 2 : dim.r;
-      const { mainLabel, prefix } = dimLabelParts(dim, nomVal, st);
+      const { mainLabel, dualLabel, prefix } = dimLabelParts(dim, nomVal, st);
       const tolInfo = resolveDimTol(dim, nomVal);
-      const { totalW } = measureDimLabel(mainLabel, prefix, tolInfo, TXT, dim.count);
+      const { totalW } = measureDimLabel(mainLabel, prefix, tolInfo, TXT, dim.count, dualLabel);
       const tl = totalW + 2.5;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
@@ -3560,7 +3621,7 @@ const Drawing = (() => {
         arrowHead(lines, P, C, AR, true, dim.id, null, aStyle, null, null, isLost);
       } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id, ...lostObj });
-      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost);
+      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost, dualLabel);
     } else if (dim.type === 'chamfer') {
       const P = toSheet(v, dim.p);
       const ux = dim.dir[0], uy = -dim.dir[1];
@@ -3572,7 +3633,7 @@ const Drawing = (() => {
       const lead = typeof dim.lead === 'number' && isFinite(dim.lead) && dim.lead > 0 ? dim.lead : autoLead;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
       const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
-      const label = `${fmtDim(dim.dist, st)}×${angTxt}`;
+      const label = `${fmtDimWithDual(dim.dist, st)}×${angTxt}`;
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
@@ -3683,12 +3744,129 @@ const Drawing = (() => {
           drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st, isLost);
         }
       }
+    } else if (dim.type === 'arclen') {
+      const a0 = dim.a0, a1 = dim.a1, span = a1 - a0;
+      if (!(span > 1e-4) || !(dim.r > 1e-4)) return;
+      const off = Number.isFinite(Number(dim.off)) ? Number(dim.off) : (6 / v.s);
+      const rModel = Math.max(2 / v.s, dim.r + off);
+      const R = rModel * v.s;
+      const VC = toSheet(v, dim.c);
+      const sgn = rModel >= dim.r ? 1 : -1;
+      for (const ang of [a0, a1]) {
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const s0 = dim.r + sgn * (GAPX / v.s);
+        const s1 = rModel + sgn * (EXT / v.s);
+        lines.push({ pts: [toSheet(v, [dim.c[0] + ux * s0, dim.c[1] + uy * s0]), toSheet(v, [dim.c[0] + ux * s1, dim.c[1] + uy * s1])], cls: 'dim', id: dim.id, ...lostObj });
+      }
+      const nA0 = ((a0 % TWO_PI) + TWO_PI) % TWO_PI;
+      const nA1 = nA0 + span;
+      const aPts = arcPts(dim.c, rModel, a0, a1).map((q) => toSheet(v, q));
+      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id, ...lostObj });
+      const P0 = [VC[0] + R * Math.cos(a0), VC[1] - R * Math.sin(a0)];
+      const P1 = [VC[0] + R * Math.cos(a1), VC[1] - R * Math.sin(a1)];
+      const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : span * R > AR * 2.6;
+      const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
+      const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
+      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle, null, null, isLost);
+      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle, null, null, isLost);
+      if (!inside) {
+        const extA = (AR * 2.4) / R;
+        lines.push(
+          { pts: arcPts(dim.c, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj },
+          { pts: arcPts(dim.c, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj }
+        );
+      }
+      const val = dim.r * span;
+      const { mainLabel, dualLabel, prefix } = dimLabelParts(dim, val, st);
+      const tolInfo = resolveDimTol(dim, val);
+      const am = (a0 + a1) * 0.5;
+      const radOut = R + Math.max(3.2, TXT * 0.95);
+      const tx = VC[0] + Math.cos(am) * radOut;
+      const ty = VC[1] - Math.sin(am) * radOut + TXT * 0.34;
+      emitDimTexts(texts, tx, ty, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost, dualLabel);
+    } else if (dim.type === 'ordinate') {
+      const originPt = dim.origin;
+      const pts = [...(dim.pts || [])];
+      if (!originPt || !pts.length) return;
+      const O = toSheet(v, originPt);
+      const origR = clamp(TXT * 0.36, 0.9, 1.8);
+      const minGap = Math.max(TXT * 1.15, 3.8);
+      const axis = dim.dir === 'v' ? 1 : 0;
+      const deltas = pts.map((p) => p[axis] - originPt[axis]);
+      const useSigned = deltas.some((d) => d > 1e-4) && deltas.some((d) => d < -1e-4);
+      const fmtOrd = (delta) => {
+        const sVal = useSigned ? delta : Math.abs(delta);
+        if (Math.abs(sVal) < 1e-6) return '0';
+        return (sVal < 0 ? '\u2212' : '') + fmtDimWithDual(Math.abs(sVal), st);
+      };
+      const entries = [
+        { isOrigin: true, P: O, coord: dim.dir === 'v' ? O[1] : O[0], lCoord: 0, label: '0' },
+        ...pts.map((p, i) => {
+          const S = toSheet(v, p);
+          return { isOrigin: false, P: S, coord: dim.dir === 'v' ? S[1] : S[0], lCoord: 0, label: fmtOrd(deltas[i]) };
+        }),
+      ];
+      entries.sort((a, b) => a.coord - b.coord);
+      const oi = entries.findIndex((e) => e.isOrigin);
+      entries[oi].lCoord = entries[oi].coord;
+      for (let i = oi + 1; i < entries.length; i++) {
+        entries[i].lCoord = Math.max(entries[i].coord, entries[i - 1].lCoord + minGap);
+      }
+      for (let i = oi - 1; i >= 0; i--) {
+        entries[i].lCoord = Math.min(entries[i].coord, entries[i + 1].lCoord - minGap);
+      }
+      if (dim.dir === 'h') {
+        const yl = toSheet(v, [0, dim.linePos])[1];
+        const outSign = yl >= O[1] ? 1 : -1;
+        for (const e of entries) {
+          const sgn = Math.sign(yl - e.P[1]) || outSign;
+          const start = [e.P[0], e.P[1] + sgn * GAPX];
+          const lPts = (Math.abs(e.lCoord - e.P[0]) > 0.15 && Math.abs(yl - e.P[1]) > 5.5)
+            ? [start, [e.P[0], yl - sgn * 4.5], [e.lCoord, yl - sgn * 1.6], [e.lCoord, yl]]
+            : [start, [e.lCoord, yl]];
+          lines.push({ pts: lPts, cls: 'dim', id: dim.id, ...lostObj });
+          if (e.isOrigin) lines.push({ circle: [e.lCoord, yl, origR], cls: 'dim', id: dim.id, ...lostObj });
+          const tx = e.lCoord + TXT * 0.34;
+          const ty = yl + outSign * (e.isOrigin ? origR + 1.4 : 1.4);
+          texts.push({ x: tx, y: ty, t: e.label, size: TXT, rot: -90, anchor: outSign > 0 ? 'end' : 'start', id: dim.id, view: dim.view, cls: 'dimtext', ...lostObj });
+        }
+      } else {
+        const xl = toSheet(v, [dim.linePos, 0])[0];
+        const outSign = xl <= O[0] ? -1 : 1;
+        for (const e of entries) {
+          const sgn = Math.sign(xl - e.P[0]) || outSign;
+          const start = [e.P[0] + sgn * GAPX, e.P[1]];
+          const lPts = (Math.abs(e.lCoord - e.P[1]) > 0.15 && Math.abs(xl - e.P[0]) > 5.5)
+            ? [start, [xl - sgn * 4.5, e.P[1]], [xl - sgn * 1.6, e.lCoord], [xl, e.lCoord]]
+            : [start, [xl, e.lCoord]];
+          lines.push({ pts: lPts, cls: 'dim', id: dim.id, ...lostObj });
+          if (e.isOrigin) lines.push({ circle: [xl, e.lCoord, origR], cls: 'dim', id: dim.id, ...lostObj });
+          const tx = xl + outSign * (e.isOrigin ? origR + 1.4 : 1.4);
+          const ty = e.lCoord + TXT * 0.34;
+          texts.push({ x: tx, y: ty, t: e.label, size: TXT, rot: 0, anchor: outSign < 0 ? 'end' : 'start', id: dim.id, view: dim.view, cls: 'dimtext', ...lostObj });
+        }
+      }
     }
   }
   function fmtDim(v, st = sheetDimStyle()) {
     if (typeof v !== 'number' || !isFinite(v)) return '–';
     const dec = (st && st.decimals != null) ? st.decimals : FMT.dec;
     return fmtFixed(Units.fromMM(v), dec);
+  }
+  function fmtDualSecondary(mmVal, st = sheetDimStyle()) {
+    if (typeof mmVal !== 'number' || !isFinite(mmVal)) return '';
+    if (Units.key() === 'in') {
+      const dec = (st && st.decimals != null) ? st.decimals : FMT.dec;
+      return `[${fmtFixed(mmVal, dec)}]`;
+    }
+    const dec = clamp(Math.round(Number(st && st.dualDecimals != null ? st.dualDecimals : 3)), 1, 4);
+    let v = round(mmVal / 25.4, dec);
+    if (Object.is(v, -0)) v = 0;
+    return `[${v.toFixed(dec)}]`;
+  }
+  function fmtDimWithDual(mmVal, st = sheetDimStyle()) {
+    const pri = fmtDim(mmVal, st);
+    return (st && st.dual) ? `${pri} ${fmtDualSecondary(mmVal, st)}` : pri;
   }
   function fmtDimAngle(deg, st = sheetDimStyle()) {
     if (st && st.decimals != null) return fmtFixed(deg, st.decimals) + '°';
@@ -4286,7 +4464,8 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: Units.label() }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
+    const unitLabel = sheetDimStyle(sh).dual ? (Units.key() === 'in' ? 'in [mm]' : `${Units.label()} [in]`) : Units.label();
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: unitLabel }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
     // Projektionssymbol nach ISO 5456-2: Methode 1 (Europa / ISO E) oder Methode 3 (USA / ISO A)
     const projMode = normProjection(sh.projection);
     lab(cD, rows[0], T('draw.tb.projection'));
@@ -4318,7 +4497,7 @@ const Drawing = (() => {
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
   // Die Standardschrift im PDF kennt nur Latin-1: typografische Zeichen ersetzen
   function latin1(s) {
-    return String(s).replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
+    return String(s).replace(/⌒/g, 'Bogen ').replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
   }
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
@@ -4608,6 +4787,45 @@ const Drawing = (() => {
     const dx = Math.abs(ed.b[0] - ed.a[0]), dy = Math.abs(ed.b[1] - ed.a[1]);
     const preferDir = dy > dx * 4 ? 'h' : dx > dy * 4 ? 'v' : null;
     return { p: ed.hit, S: toSheet(v, ed.hit), edge: ed, preferDir };
+  }
+  function arcAt(name, P) {
+    const v = layout.views[name]; if (!v) return null;
+    const q = toView(v, P);
+    const tol = Math.max(2.5, 4 / zoom) / v.s;
+    const pool = [...v.geo.circles, ...v.geo.hidden.filter((p) => p.c).map((p) => ({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }))];
+    let best = null, bd = tol;
+    for (const c of pool) {
+      if (c.full || !c.arc || c.arc[1] - c.arc[0] <= 1e-4) continue;
+      const d = Math.abs(Math.hypot(q[0] - c.c[0], q[1] - c.c[1]) - c.r);
+      if (d >= bd) continue;
+      let a = angOf(c.c, q);
+      if (a < c.arc[0] - 0.12) a += TWO_PI;
+      if (a > c.arc[1] + 0.12) continue;
+      bd = d; best = c;
+    }
+    if (!best) return null;
+    return { ...best, a0: best.arc[0], a1: best.arc[1] };
+  }
+  function pickOrdinatePoint(name, P) {
+    const sn = snapIn(name, P);
+    if (sn) return sn;
+    const c = circleAt(name, P, true);
+    if (c) {
+      const v = layout.views[name];
+      return { p: [c.c[0], c.c[1]], S: toSheet(v, c.c), edge: null, preferDir: null };
+    }
+    return pickDimPoint(name, P);
+  }
+  function ordinateDir(v, origin, b, q, preferDir = null) {
+    const dx = Math.abs(b[0] - origin[0]), dy = Math.abs(b[1] - origin[1]);
+    if (dx > 1e-4 && dy <= 1e-4) return 'h';
+    if (dy > 1e-4 && dx <= 1e-4) return 'v';
+    const b0 = v && v.geo && v.geo.box;
+    if (b0) {
+      if ((q[1] < b0[1] - 0.5 || q[1] > b0[3] + 0.5) && q[0] >= b0[0] - 2 && q[0] <= b0[2] + 2) return 'h';
+      if ((q[0] < b0[0] - 0.5 || q[0] > b0[2] + 0.5) && q[1] >= b0[1] - 2 && q[1] <= b0[3] + 2) return 'v';
+    }
+    return chainDir(origin, b, q, preferDir);
   }
   function angularSector(V, e1, e2, q) {
     const rayAngles = (edge) => {
@@ -5449,12 +5667,17 @@ const Drawing = (() => {
       if (dimMode === 'dia' || dimMode === 'rad') {
         toolState.hoverCircle = name ? circleAt(name, P, true) : null;
         toolState.snap = null;
+      } else if (dimMode === 'arclen') {
+        toolState.hoverArc = (toolState.stage === 0 && name) ? arcAt(name, P) : null;
+        toolState.snap = null;
       } else if (dimMode === 'chamfer') {
         toolState.hoverChamfer = name ? chamferEdgeAt(name, P) : null;
         toolState.snap = null;
       } else if (dimMode === 'ang') {
         toolState.hoverEdge = (toolState.stage < 2 && name) ? edgeAt(name, P, true) : null;
         toolState.snap = null;
+      } else if (dimMode === 'ordinate') {
+        toolState.snap = name ? pickOrdinatePoint(name, P) : null;
       } else if (dimMode === 'chain' || dimMode === 'base') {
         toolState.snap = name ? pickDimPoint(name, P) : null;
       } else {
@@ -6044,6 +6267,89 @@ const Drawing = (() => {
       render();
       return;
     }
+    if (dimMode === 'arclen') {
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const arc = arcAt(name, P);
+        if (!arc) { UI.toast(T('draw.toast.pickArc'), { icon: 'info', ms: 2000 }); return; }
+        toolState = { ...st, stage: 1, view: name, arc, P };
+        render();
+        return;
+      }
+      if (st.stage === 1) {
+        const v = layout.views[st.view]; if (!v || !st.arc) return;
+        const q = toView(v, P);
+        const rawOff = Math.hypot(q[0] - st.arc.c[0], q[1] - st.arc.c[1]) - st.arc.r;
+        const minOff = 2 / v.s - st.arc.r;
+        const off = Math.max(minOff, Math.abs(rawOff) < 2 / v.s ? 6 / v.s : rawOff);
+        addDim({ view: st.view, type: 'arclen', c: st.arc.c, r: st.arc.r, a0: st.arc.a0, a1: st.arc.a1, off, ref: makeCircleRef(v, st.arc) });
+        return;
+      }
+    }
+    if (dimMode === 'ordinate') {
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const sn = pickOrdinatePoint(name, P);
+        if (!sn) { UI.toast(T('draw.toast.pickOrigin'), { icon: 'info', ms: 2000 }); return; }
+        toolState = { ...st, stage: 1, view: name, origin: sn.p, originEdge: sn.edge || null, preferDir: sn.preferDir || null, P };
+      } else if (st.stage === 1) {
+        const sn = pickOrdinatePoint(st.view, P); if (!sn) return;
+        if (Math.hypot(sn.p[0] - st.origin[0], sn.p[1] - st.origin[1]) < 1e-4) return;
+        toolState = { ...st, stage: 2, b: sn.p, bEdge: sn.edge || null, P };
+      } else if (st.stage === 2) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, P);
+        const dir = ordinateDir(v, st.origin, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        const oRef = makePointRef(v, st.origin, st.originEdge), bRef = makePointRef(v, st.b, st.bEdge);
+        const dimData = { view: st.view, type: 'ordinate', dir, linePos, origin: st.origin, pts: [st.b], ref: { kind: 'ordinate', origin: oRef, pts: [bRef] } };
+        if (st.rebindId) {
+          const targetId = st.rebindId;
+          App.change('Maß neu zugeordnet', () => {
+            const d = dwg();
+            const idx = (d.dims || []).findIndex((x) => x.id === targetId);
+            if (idx >= 0) {
+              const old = d.dims[idx];
+              d.dims[idx] = { ...dimData, id: old.id, ...(old.tol ? { tol: old.tol } : {}) };
+            }
+          });
+          selDim = targetId;
+          toolState = { stage: 3, view: st.view, dimId: targetId, dir, linePos, P };
+          lastLostKey = lostDims(dwg()).map((x) => x.id).sort().join(',');
+          Panels.renderRight();
+        } else {
+          const dim = { id: uid('d'), ...dimData };
+          App.change('Koordinatenmaß hinzugefügt', () => { dwg().dims.push(dim); });
+          selDim = dim.id;
+          toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
+          Panels.renderRight();
+        }
+      } else if (st.stage === 3) {
+        const hitView = viewAt(P);
+        if (hitView && hitView !== st.view) { toolState = { stage: 0 }; render(); Panels.renderRight(); return; }
+        const sn = pickOrdinatePoint(st.view, P);
+        if (!sn) {
+          if (!hitView) { toolState = { stage: 0 }; render(); Panels.renderRight(); }
+          return;
+        }
+        const cur = dwg().dims.find((x) => x.id === st.dimId);
+        if (!cur) { toolState = { stage: 0 }; render(); return; }
+        const coord = st.dir === 'h' ? sn.p[0] : sn.p[1];
+        const existing = [cur.origin, ...(cur.pts || [])].filter(Boolean);
+        if (existing.some((p) => Math.abs((st.dir === 'h' ? p[0] : p[1]) - coord) < 1e-4)) return;
+        const v = layout.views[st.view];
+        const ptRef = v ? makePointRef(v, sn.p, sn.edge || null) : null;
+        App.change('Koordinatenmaß erweitert', () => {
+          const d = dwg().dims.find((x) => x.id === st.dimId);
+          if (d) {
+            d.pts.push(sn.p);
+            if (ptRef && d.ref && Array.isArray(d.ref.pts)) d.ref.pts.push(ptRef);
+          }
+        });
+      }
+      render();
+      return;
+    }
     if (dimMode === 'chain' || dimMode === 'base') {
       const isBase = dimMode === 'base';
       if (st.stage === 0) {
@@ -6167,6 +6473,36 @@ const Drawing = (() => {
         const C = toSheet(v, st.hoverCircle.c);
         lines.push({ circle: [C[0], C[1], st.hoverCircle.r * v.s], cls: 'prev' });
         dimSVG({ id: '__prev', view: st.hoverView, type: dimMode, c: st.hoverCircle.c, r: st.hoverCircle.r, ang: Math.round(st.hoverCircle.ang), ...(st.hoverCircle.full ? {} : { partial: true }) }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'arclen') {
+      const v = layout.views[st.view || st.hoverView];
+      const arc = st.stage === 1 ? st.arc : st.hoverArc;
+      if (arc && v) {
+        lines.push({ pts: arcPts(arc.c, arc.r, arc.a0, arc.a1).map((q) => toSheet(v, q)), cls: 'prev' });
+        let off = 6 / v.s;
+        if (st.stage === 1 && st.P) {
+          const q = toView(v, st.P);
+          const rawOff = Math.hypot(q[0] - arc.c[0], q[1] - arc.c[1]) - arc.r;
+          off = Math.max(2 / v.s - arc.r, Math.abs(rawOff) < 2 / v.s ? 6 / v.s : rawOff);
+        }
+        dimSVG({ id: '__prev', view: st.view || st.hoverView, type: 'arclen', c: arc.c, r: arc.r, a0: arc.a0, a1: arc.a1, off }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'ordinate') {
+      if (st.stage === 1 && st.P) { const v = layout.views[st.view]; if (v) lines.push({ pts: [toSheet(v, st.origin), st.P], cls: 'prev' }); }
+      if (st.stage === 2 && st.P) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, st.P);
+        const dir = ordinateDir(v, st.origin, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        dimSVG({ id: '__prev', view: st.view, type: 'ordinate', dir, linePos, origin: st.origin, pts: [st.b] }, lines, texts);
+      }
+      if (st.stage === 3 && st.snap && st.snap.p) {
+        const v = layout.views[st.view];
+        if (v) lines.push({ circle: [st.snap.S[0], st.snap.S[1], (1.3 / zoom) * 1.6], cls: 'prev' });
       }
       return;
     }
@@ -6313,9 +6649,11 @@ const Drawing = (() => {
     if (svg) svg.style.cursor = 'crosshair';
     const what = dimMode === 'dia' ? 'die neue Bohrung oder den Kreis'
       : dimMode === 'rad' ? 'die neue Rundung oder den Bogen'
-        : dimMode === 'chamfer' ? 'die neue Fasen-Kante'
-          : dimMode === 'ang' ? 'zwei neue Kanten im Winkel'
-            : 'neue Punkte oder Kanten';
+        : dimMode === 'arclen' ? 'den neuen Kreisbogen'
+          : dimMode === 'chamfer' ? 'die neue Fasen-Kante'
+            : dimMode === 'ang' ? 'zwei neue Kanten im Winkel'
+              : dimMode === 'ordinate' ? 'Nullpunkt und Zielpunkte'
+                : 'neue Punkte oder Kanten';
     UI.hint(`<b>Maß neu zuordnen:</b> Klicke auf ${what} in einer Ansicht. <b>Esc</b> bricht ab.`);
     Panels.renderTools();
     Panels.renderRight();
@@ -6339,7 +6677,7 @@ const Drawing = (() => {
   }
   function onKey(e) {
     if (e.key === 'Escape') { if (tool) { setTool(null); return true; } if (selDim) { selDim = null; render(); Panels.renderRight(); return true; } return false; }
-    if (e.key === 'Enter' && tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+    if (e.key === 'Enter' && tool === 'dim' && (dimMode === 'chain' || dimMode === 'base' || dimMode === 'ordinate') && toolState && toolState.stage === 3) {
       toolState = { stage: 0 };
       render(); Panels.renderRight();
       return true;
@@ -6493,21 +6831,25 @@ const Drawing = (() => {
     return m ? m.hint : DIM_MODES[0].hint;
   }
   function setDimMode(mode) {
-    if (!mode) { setTool(null); return; }
-    dimMode = DIM_MODES.some((x) => x.key === mode) ? mode : 'lin';
+    if (!mode) { setTool(null); return false; }
+    const m = DIM_MODES.find((x) => x.key === mode) || DIM_MODES[0];
+    if (m.pro && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
+    dimMode = m.key;
     dragDetail = null;
     tool = 'dim';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
     UI.hint(dimHint(dimMode));
     Panels.renderTools(); Panels.renderRight(); render();
+    return true;
   }
   function dimMenu(anchor) {
-    const tMap = { lin: 'menu.draw.dimLin', chain: 'menu.draw.dimChain', base: 'menu.draw.dimBase', ang: 'menu.draw.dimAng', rad: 'menu.draw.dimRad', dia: 'menu.draw.dimDia', chamfer: 'menu.draw.dimChamfer' };
-    UI.menu(anchor, DIM_MODES.map((m) => ({
+    const simple = isSimpleMode();
+    const tMap = { lin: 'menu.draw.dimLin', chain: 'menu.draw.dimChain', base: 'menu.draw.dimBase', ordinate: 'menu.draw.dimOrdinate', ang: 'menu.draw.dimAng', rad: 'menu.draw.dimRad', dia: 'menu.draw.dimDia', arclen: 'menu.draw.dimArcLen', chamfer: 'menu.draw.dimChamfer' };
+    UI.menu(anchor, DIM_MODES.filter((m) => !simple || !m.pro).map((m) => ({
       label: T(tMap[m.key] || m.label),
       icon: 'dim',
-      help: 'drawingDimTypes',
+      help: m.pro ? 'drawingOrdArc' : 'drawingDimTypes',
       checked: tool === 'dim' && dimMode === m.key,
       run: () => setDimMode(m.key),
     })));
@@ -7890,6 +8232,7 @@ const Drawing = (() => {
   function dxfEscText(s) {
     return String(s ?? '')
       .replace(/\r?\n/g, ' ')
+      .replace(/⌒/g, 'Bogen ')
       .replace(/Ø/g, '%%c')
       .replace(/±/g, '%%p')
       .replace(/°/g, '%%d')
@@ -8380,14 +8723,16 @@ const Drawing = (() => {
     w.append(info);
     const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, T('draw.panel.dimSec')));
     const dimGrid = h('div', { class: 'dw-dim-grid' });
+    const simpleMode = isSimpleMode();
     for (const m of DIM_MODES) {
+      if (simpleMode && m.pro) continue;
       const act = tool === 'dim' && dimMode === m.key;
       const db = h('button', {
         type: 'button',
-        class: 'btn' + (act ? ' active' : ''),
+        class: 'btn' + (m.pro ? ' pro' : '') + (act ? ' active' : ''),
         id: 'dw-dm-' + m.key,
         'aria-pressed': String(act),
-        'data-help': 'drawingDimTypes',
+        'data-help': m.pro ? 'drawingOrdArc' : 'drawingDimTypes',
       }, m.short);
       db.onclick = () => { if (tool === 'dim' && dimMode === m.key) setTool(null); else setDimMode(m.key); };
       dimGrid.append(db);
@@ -8400,13 +8745,13 @@ const Drawing = (() => {
     bArrangeDims.innerHTML = icon('sliders') + esc(T('draw.panel.arrangeDimsBtn'));
     bArrangeDims.onclick = () => arrangeDims();
     dimSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bModelDims, bArrangeDims));
-    if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+    if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base' || dimMode === 'ordinate') && toolState && toolState.stage === 3) {
       const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, T('draw.panel.finishChain'));
       fin.onclick = () => { toolState = { stage: 0 }; render(); Panels.renderRight(); };
       dimSec.append(fin);
     }
     w.append(dimSec);
-    // Maß-Stil je Blatt (ZE-10)
+    // Maß-Stil je Blatt (ZE-10) & Doppelmaße (ZE-22)
     const ds = sheetDimStyle(d);
     const styleSec = h('div', { class: 'section', id: 'dw-dimstyle-sec', 'data-help': 'drawingDimStyle' }, h('div', { class: 'section-h' }, T('draw.panel.dimStyleSec')));
     const fsList = DIM_FONT_SIZES.includes(ds.fontSize) ? DIM_FONT_SIZES : [...DIM_FONT_SIZES, ds.fontSize].sort((a, b) => a - b);
@@ -8426,6 +8771,23 @@ const Drawing = (() => {
         UI.selectField({ id: 'dw-style-dec', label: T('draw.panel.decimals'), value: decVal, options: decOpts, onChange: (v) => setDimStyle({ decimals: v === 'auto' ? null : +v }) }),
       ),
     );
+    if (!simpleMode) {
+      const dualChk = h('label', { class: 'check pro', 'data-help': 'drawingDualDims' }, h('input', { type: 'checkbox', id: 'dw-style-dual', checked: !!ds.dual }), T('draw.panel.dualDims'));
+      dualChk.querySelector('input').onchange = (e) => setDualDims(e.target.checked);
+      styleSec.append(dualChk);
+      if (ds.dual && Units.key() !== 'in') {
+        const dualDecFld = UI.selectField({
+          id: 'dw-style-dual-dec',
+          label: T('draw.panel.dualDec'),
+          value: String(ds.dualDecimals),
+          options: [['2', T('draw.panel.dualDec2')], ['3', T('draw.panel.dualDec3')], ['4', T('draw.panel.dualDec4')]],
+          onChange: (v) => setDimStyle({ dualDecimals: +v || 3 }),
+        });
+        dualDecFld.classList.add('pro');
+        dualDecFld.dataset.help = 'drawingDualDims';
+        styleSec.append(dualDecFld);
+      }
+    }
     w.append(styleSec);
     // Hinweislinien / Notizen (ZE-11)
     const noteSec = h('div', { class: 'section', id: 'dw-notes-sec', 'data-help': 'drawingLeader' }, h('div', { class: 'section-h' }, T('draw.panel.leadersSec')));
@@ -9073,7 +9435,7 @@ const Drawing = (() => {
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera, updateExplodeView, explodeViewInfo,
     get selectedView() { return currentViewKey(); },
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
-    DIM_ARROWS, DIM_FONT_SIZES, dimStyle: () => sheetDimStyle(), setDimStyle,
+    DIM_ARROWS, DIM_FONT_SIZES, DIM_MODES, dimStyle: () => sheetDimStyle(), setDimStyle, setDualDims,
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
     bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
     bomRows: () => bomItems(),

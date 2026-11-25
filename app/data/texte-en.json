@@ -4491,5 +4491,19 @@
   "draw.modelDimsToast": "Imported and arranged {n} model dimensions.",
   "draw.modelDimsOneToast": "Imported and arranged 1 model dimension.",
   "draw.modelDimsEmptyToast": "No model available to import dimensions from.",
-  "draw.arrangeDimsToast": "Dimensions arranged without overlaps."
+  "draw.arrangeDimsToast": "Dimensions arranged without overlaps.",
+  "menu.draw.dimOrdinate": "Ordinate dimensions (from zero)",
+  "menu.draw.dimArcLen": "Arc length (⌒)",
+  "draw.dimMode.ordinate": "Ordinate",
+  "draw.dimMode.arclen": "Arc length",
+  "draw.dimHint.ordinate": "<b>Ordinate dimensions:</b> Click the zero origin (e.g. a corner), then click the first target and place the line outside, then click further points. <b>Enter</b> finishes, <b>Esc</b> exits.",
+  "draw.dimHint.arclen": "<b>Arc length:</b> Click a circular arc or fillet, then place the dimension arc outside or inside. <b>Esc</b> exits.",
+  "draw.dimProOnly": "This dimensioning feature is only available in Pro mode.",
+  "draw.panel.dualDims": "Dual units mm / inch […]",
+  "draw.panel.dualDec": "Inch decimals […]",
+  "draw.panel.dualDec2": "2 decimals [1.00]",
+  "draw.panel.dualDec3": "3 decimals [1.000]",
+  "draw.panel.dualDec4": "4 decimals [1.0000]",
+  "draw.toast.pickArc": "Click on a circular arc or fillet.",
+  "draw.toast.pickOrigin": "Click on a zero origin (e.g. a corner or hole center)."
 }
