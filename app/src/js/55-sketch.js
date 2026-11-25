@@ -260,6 +260,10 @@ const Sketch = (() => {
     const f = Model.find(App.doc, id);
     if (f && f.item.kind === 'sketch3d') { edit3d(id); return; }
     if (!f || !f.item.p.sketch) return;
+    if (typeof Assembly !== 'undefined' && Assembly.isLightweightItem) {
+      const top = Model.topOf(App.doc, id);
+      if (top && Assembly.isLightweightItem(top.id)) Assembly.resolveLightweight(top.id, { silent: true });
+    }
     const W = Model.worldMatrix(App.doc, id);
     const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
     begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), blockInsts: deepClone(f.item.p.sketch.blockInsts || []), guides: deepClone(f.item.p.sketch.guides || []), gridMode: f.item.p.sketch.gridMode || 'rect', polar: f.item.p.sketch.polar ? deepClone(f.item.p.sketch.polar) : null, bg: f.item.p.sketch.bg, locked: !!f.item.p.sketch.locked, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
@@ -9569,6 +9573,10 @@ const Sketch = (() => {
     return true;
   }
   function edit3d(id) {
+    if (typeof Assembly !== 'undefined' && Assembly.isLightweightItem) {
+      const top = Model.topOf(App.doc, id);
+      if (top && Assembly.isLightweightItem(top.id)) Assembly.resolveLightweight(top.id, { silent: true });
+    }
     return start3d({ editId: id });
   }
   // ---------- Beenden ----------

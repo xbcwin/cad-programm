@@ -797,7 +797,15 @@ const Comp = (() => {
     App.setCtx(it.id);
     UI.toast('Neues Bauteil angelegt. Alles, was du jetzt hinzufügst, landet darin.', { icon: 'parts', ms: 3200 });
   }
-  function edit(id) { const it = App.doc.items.find((x) => x.id === id); if (it && it.kind === 'group') { Views.collapse(); App.setIso(null); App.setCtx(id); App.select([]); } }
+  function edit(id) {
+    const it = App.doc.items.find((x) => x.id === id);
+    if (it && it.kind === 'group') {
+      if (typeof Assembly !== 'undefined' && Assembly.isLightweightItem && Assembly.isLightweightItem(id)) {
+        Assembly.resolveLightweight(id, { silent: true });
+      }
+      Views.collapse(); App.setIso(null); App.setCtx(id); App.select([]);
+    }
+  }
   function toggleIso(id) { App.setIso(App.iso === id ? null : id); if (App.iso) Viewer.fit([id]); }
   function init() {
     if (typeof Model !== 'undefined' && Model.setDocResolver) Model.setDocResolver(resolveDoc);
