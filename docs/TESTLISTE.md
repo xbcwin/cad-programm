@@ -2341,6 +2341,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `stretch2d` und `liveMirror` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`strecken`, `live-spiegeln`) ohne Fehler.
 - [ ] **Von Hand**: In einer Skizze mit gemischtem Profil einen Rahmen schräg mit Winkel/Weg strecken und Live-Spiegeln an einer schrägen Hilfslinie beim freien Zeichnen testen.
 
+## Silhouette und Schnittkurve in die Skizze (Auto [A-114], SK-42, SK-43)
+- [x] **Profi-Sichtbarkeit**: „Umriss holen“ (`#sk-silhouette`) und „Schnittkurve“ (`#sk-intersect`) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Umriss holen (SK-42)**: Liegender Zylinder (`d = 20`, `h = 40`) in der `XZ`-Skizze per Klick übernommen → exakt 4 Rechteck-Linien `40 × 20` (Fläche `800`), `Strg+Z` nimmt alles zurück; beim Ändern des Zylinders auf `60 × 30` wächst der Umriss automatisch mit.
+- [x] **Schnittkurve holen (SK-43)**: Zwei sich kreuzende Zylinder (`d = 20` und `d = 16`) per Flächenklick übernommen → Schnittkurve mit `link.kind === 'faceIntersect'` in der Skizze, `Strg+Z` nimmt sauber zurück; bei Verkleinern (`d = 16 → 10`) wandert die Kurve mit.
+- [x] **Kaputte Bezüge (`RefFix`)**: Unterdrücken des Zylinders bzw. Auseinanderschieben der Zylinder meldet `sketch-silhouette` / `sketch-intersect`, zeigt gestrichelte Alt-Lage und löst die Verbindung über `#reffix-unlink` sauber.
+- [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `silhouette2d` und `intersectCurve2d` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`umriss`, `schnittkurve`) ohne Fehler.
+- [ ] **Von Hand**: Im Browser die Silhouette eines gedrehten Körpers mit Bohrung sowie die Schnittkurve zweier schräger Freiform-/Zylinderflächen auf einer geneigten Skizzenebene prüfen und mit `RefFix` auf eine neue Fläche umhängen.
+
 ## Fehler melden
 
 ```

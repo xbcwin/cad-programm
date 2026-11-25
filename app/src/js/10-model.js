@@ -353,7 +353,18 @@ const Model = (() => {
       }
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
-      for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
+      for (const e of (sk && sk.ents) || []) {
+        if (!e.link || !e.link.id) continue;
+        if (e.link.kind === 'silhouette') {
+          out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Umriss von' });
+        } else if (e.link.kind === 'faceIntersect') {
+          const tA = top(e.link.id), tB = e.link.id2 ? top(e.link.id2) : null;
+          out.push({ from: me, to: tA, what: 'Skizze übernimmt Schnittkurve von' });
+          if (tB && tB !== tA) out.push({ from: me, to: tB, what: 'Skizze übernimmt Schnittkurve von' });
+        } else {
+          out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
+        }
+      }
       const b = it.p && it.p.path3d && it.p.path3d.bind;
       for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
       if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.targetId) {

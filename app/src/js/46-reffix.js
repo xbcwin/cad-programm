@@ -100,8 +100,39 @@ const RefFix = (() => {
     }
 
     if (it.p && it.p.sketch && typeof Sketch !== 'undefined' && Sketch.isLinkLost) {
+      const seenGrp = new Set();
       for (const e of it.p.sketch.ents || []) {
         if (e.link && Sketch.isLinkLost(it, e)) {
+          if (e.link.kind === 'silhouette' && e.link.grp) {
+            if (seenGrp.has('sil:' + e.link.grp)) continue;
+            seenGrp.add('sil:' + e.link.grp);
+            out.push({
+              key: `${it.id}:sksil:${e.link.grp}`,
+              kind: 'sketch-silhouette',
+              itemId: it.id,
+              entId: e.id,
+              grp: e.link.grp,
+              title: 'Übernommener Umriss',
+              message: 'Der Körper für diesen übernommenen Umriss (Silhouette) fehlt oder ist unterdrückt.',
+              needCount: 1,
+            });
+            continue;
+          }
+          if (e.link.kind === 'faceIntersect' && e.link.grp) {
+            if (seenGrp.has('ic:' + e.link.grp)) continue;
+            seenGrp.add('ic:' + e.link.grp);
+            out.push({
+              key: `${it.id}:skic:${e.link.grp}`,
+              kind: 'sketch-intersect',
+              itemId: it.id,
+              entId: e.id,
+              grp: e.link.grp,
+              title: 'Übernommene Schnittkurve',
+              message: 'Mindestens eine Fläche dieser Schnittkurve fehlt oder die Flächen schneiden sich nicht mehr.',
+              needCount: 2,
+            });
+            continue;
+          }
           out.push({
             key: `${it.id}:sklink:${e.id}`,
             kind: 'sketch-link',
@@ -279,6 +310,18 @@ const RefFix = (() => {
       return specs;
     }
 
+    if (issue.kind === 'sketch-silhouette' || issue.kind === 'sketch-intersect') {
+      const sk = it.p && it.p.sketch;
+      const ents = (sk && sk.ents || []).filter((x) => x.link && x.link.grp === issue.grp);
+      const pos = [];
+      for (const e of ents) {
+        const wp = typeof Sketch !== 'undefined' && Sketch.linkPointsWorld ? Sketch.linkPointsWorld(it, e) : [];
+        for (let i = 0; i + 1 < wp.length; i++) pos.push(...wp[i], ...wp[i + 1]);
+      }
+      if (pos.length >= 6) specs.push({ kind: 'segments', positions: pos });
+      return specs;
+    }
+
     if (issue.kind === 'sketch-link') {
       const sk = it.p && it.p.sketch;
       const e = sk && (sk.ents || []).find((x) => x.id === issue.entId);
@@ -389,6 +432,10 @@ const RefFix = (() => {
     if (!barEl || !state) return;
     const cnt = barEl.querySelector('#reffix-count');
     const applyBtn = barEl.querySelector('#reffix-apply');
+    if (state.issue.kind === 'sketch-intersect') {
+      if (cnt) cnt.textContent = `${state.pickedFaces.length}/2 Flächen gewählt`;
+      return;
+    }
     if (cnt) cnt.textContent = `${state.pickedEdges.length} gewählt`;
     if (applyBtn) applyBtn.disabled = state.pickedEdges.length === 0;
   }
@@ -404,6 +451,8 @@ const RefFix = (() => {
       'finish-face': 'Alte Lage ist gestrichelt. Klick eine neue Öffnungsfläche am Körper an.',
       'sketch-plane': 'Alte Lage ist gestrichelt. Klick eine ebene Körperfläche oder Bezugsebene an.',
       'sketch-link': 'Alte Lage ist gestrichelt. Klick eine neue Kante eines anderen Körpers an.',
+      'sketch-silhouette': 'Alte Lage ist gestrichelt. Klick einen neuen Körper an oder löse die Verbindung.',
+      'sketch-intersect': 'Alte Lage ist gestrichelt. Klick nacheinander zwei sich schneidende Flächen an oder löse die Verbindung.',
       'extrude-toFace': 'Alte Lage ist gestrichelt. Klick eine neue Zielfläche oder Bezugsebene an.',
       'revolve-toFace': 'Alte Lage ist gestrichelt. Klick eine neue Zielfläche oder Bezugsebene an.',
     }[issue.kind] || 'Alte Lage ist gestrichelt. Klick einen neuen Bezug an.';
@@ -438,18 +487,37 @@ const RefFix = (() => {
       }
     }
 
-    if (issue.kind === 'sketch-link') {
+    if (issue.kind === 'sketch-intersect') {
+      acts.append(h('span', { class: 'kbd', id: 'reffix-count' }, '0/2 Flächen gewählt'));
+    }
+
+    if (issue.kind === 'sketch-link' || issue.kind === 'sketch-silhouette' || issue.kind === 'sketch-intersect') {
       const ub = h('button', { type: 'button', class: 'btn small', id: 'reffix-unlink' });
       ub.innerHTML = icon('ungroup') + 'Verbindung lösen';
       ub.onclick = () => {
         App.change('Verbindung gelöst', (doc) => {
           const f = Model.find(doc, issue.itemId);
-          const e = f && f.item.p && f.item.p.sketch && (f.item.p.sketch.ents || []).find((x) => x.id === issue.entId);
-          if (!e) return false;
-          delete e.link;
+          const ents = f && f.item.p && f.item.p.sketch && (f.item.p.sketch.ents || []);
+          if (!ents) return false;
+          if (issue.grp) {
+            let hit = false;
+            for (const x of ents) if (x.link && x.link.grp === issue.grp) { delete x.link; hit = true; }
+            if (!hit) return false;
+          } else {
+            const e = ents.find((x) => x.id === issue.entId);
+            if (!e) return false;
+            delete e.link;
+          }
         });
         stop({ keepToast: true });
-        UI.toast('Verbindung zur Körperkante gelöst.', { icon: 'check' });
+        UI.toast(
+          issue.kind === 'sketch-silhouette'
+            ? 'Verbindung zum Umriss gelöst.'
+            : issue.kind === 'sketch-intersect'
+              ? 'Verbindung zur Schnittkurve gelöst.'
+              : 'Verbindung zur Körperkante gelöst.',
+          { icon: 'check' }
+        );
       };
       acts.append(ub);
     }
@@ -482,6 +550,7 @@ const RefFix = (() => {
     window.removeEventListener('keydown', st.key, true);
     Viewer.canvas.style.cursor = '';
     Viewer.clearHover();
+    Viewer.highlightFace('sel', null, null);
     Viewer.setSelectedEdges([]);
     Viewer.clearRefGhost();
     removeBar();
@@ -506,7 +575,7 @@ const RefFix = (() => {
     Viewer.setRefGhost(buildGhostSpecs(issue));
 
     const ownExclude = new Set(['__preview']);
-    if (issue.kind === 'sketch-plane' || issue.kind === 'extrude-toFace' || issue.kind === 'revolve-toFace') {
+    if (issue.kind === 'sketch-plane' || issue.kind === 'extrude-toFace' || issue.kind === 'revolve-toFace' || issue.kind === 'sketch-silhouette' || issue.kind === 'sketch-intersect') {
       if (top && top.id === issue.itemId) ownExclude.add(issue.itemId);
     }
 
@@ -530,11 +599,11 @@ const RefFix = (() => {
         else Viewer.highlightFace('hover', null, null);
       } else {
         const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: ownExclude });
-        if (hit && hit.faceIdx >= 0) Viewer.highlightFace('hover', hit.id, hit.faceIdx);
+        if (hit && hit.faceIdx >= 0 && (!hit.node || hit.node.role !== 'hole')) Viewer.highlightFace('hover', hit.id, hit.faceIdx);
         else Viewer.highlightFace('hover', null, null);
       }
     };
-    const up = (e) => {
+    const up = async (e) => {
       if (e.button !== 0 || !state || !downPos) return;
       const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
       downPos = null;
@@ -621,6 +690,51 @@ const RefFix = (() => {
         return;
       }
 
+      if (issue.kind === 'sketch-silhouette') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: ownExclude });
+        if (!hit || !hit.id || !hit.node || hit.node.role === 'hole') {
+          UI.toast('Klick einen anderen Körper an.', { icon: 'info' });
+          return;
+        }
+        const res = await Sketch.rebindSilhouette(issue.itemId, issue.grp, hit.id);
+        if (!state) return;
+        if (!res.ok) { UI.toast(res.why || 'Umriss konnte nicht übernommen werden.', { kind: 'bad' }); return; }
+        stop({ keepToast: true });
+        UI.toast('Verbundenen Umriss neu gewählt.', { icon: 'check' });
+        return;
+      }
+
+      if (issue.kind === 'sketch-intersect') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: ownExclude });
+        if (!hit || !hit.id || !(hit.faceIdx >= 0) || !hit.node || hit.node.role === 'hole') {
+          UI.toast('Klick eine Körperfläche an.', { icon: 'info' });
+          return;
+        }
+        if (!state.pickedFaces.length) {
+          state.pickedFaces.push({ id: hit.id, faceIdx: hit.faceIdx });
+          Viewer.highlightFace('sel', hit.id, hit.faceIdx);
+          updateBar();
+          return;
+        }
+        const first = state.pickedFaces[0];
+        if (first.id === hit.id && first.faceIdx === hit.faceIdx) {
+          UI.toast('Klick jetzt eine zweite, schneidende Fläche an.', { icon: 'info' });
+          return;
+        }
+        const res = await Sketch.rebindFaceIntersect(issue.itemId, issue.grp, first, { id: hit.id, faceIdx: hit.faceIdx });
+        if (!state) return;
+        if (!res.ok) {
+          state.pickedFaces = [];
+          Viewer.highlightFace('sel', null, null);
+          updateBar();
+          UI.toast(res.why || 'Schnittkurve konnte nicht übernommen werden.', { kind: 'bad' });
+          return;
+        }
+        stop({ keepToast: true });
+        UI.toast('Verbundene Schnittkurve neu gewählt.', { icon: 'check' });
+        return;
+      }
+
       if (issue.kind === 'extrude-toFace') {
         const ref = Features.pickTargetFaceAt(e.clientX, e.clientY, ownExclude);
         if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
@@ -656,7 +770,7 @@ const RefFix = (() => {
       else if (e.key === 'Enter' && state && state.issue.kind === 'finish-edge' && state.pickedEdges.length) { e.preventDefault(); e.stopPropagation(); applyMulti(); }
     };
 
-    state = { issue, pickedEdges: [], down, move, up, key };
+    state = { issue, pickedEdges: [], pickedFaces: [], down, move, up, key };
     Viewer.canvas.style.cursor = 'crosshair';
     Viewer.canvas.addEventListener('pointerdown', down);
     Viewer.canvas.addEventListener('pointermove', move);
