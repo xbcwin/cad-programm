@@ -24135,6 +24135,170 @@ def t_a120_schraubdom_lippe_nut(p):
     ]
 
 
+def t_a121_lueftung_kuehlrippen_stegnetz(p):
+    # 1. Lüftungsgitter (KP-26): 6 Schlitze (3 mm breit, 4 mm Rahmen, 0°) in 60×40×4-Platte → 6 Durchbrüche oben & unten
+    p.empty()
+    p.ev("App.change('Platte', d => { d.items.push(Model.newItem('box', { w: 60, d: 40, h: 4 }, { name: 'Platte' })); })")
+    warte_rechnen(p, 30); p.wait(300)
+    s_top = world_screen(p, 0, 0, 4)
+    p.pg.mouse.click(s_top[0], s_top[1]); p.wait(400)
+    p.pg.locator('#ctx-vent').click()
+    warte_rechnen(p, 30); p.wait(300)
+
+    def face_loop_counts(idx=0):
+        return p.ev("""return (async (idx) => {
+          const id = App.doc.items[idx].id;
+          const r = App.results.get(id);
+          if (!r || !r.data || !r.data.faces) return null;
+          const topIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+          const botIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] < -0.99);
+          if (topIdx < 0 || botIdx < 0) return null;
+          const [tl, bl] = await Promise.all([
+            Kernel.call('faceLoops', { key: r.key, faceIdx: topIdx }),
+            Kernel.call('faceLoops', { key: r.key, faceIdx: botIdx }),
+          ]);
+          return { top: tl.length, bot: bl.length };
+        })(arg)""", idx)
+
+    m_v1 = p.ev("return Mass.measureDoc(App.doc)")
+    lp1 = face_loop_counts(0)
+    st1 = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    exp_v1 = 9600 - 6 * (49 * 3 + math.pi * 1.5 * 1.5) * 4
+    ok1 = (
+        st1 == {'len': 2, 'kind': 'vent', 'merged': True, 'errs': 0}
+        and m_v1 and m_v1['count'] == 1
+        and abs(m_v1['volume'] - exp_v1) < 12
+        and lp1 == {'top': 7, 'bot': 7}
+        and near(bbox(p, 0), [-30, -20, 0, 30, 20, 4], 0.05)
+    )
+
+    # 2. Winkel 45°, 4 eckige Schlitze, Rahmen 5 mm + Unterdrücken/Reaktivieren
+    field(p, '#vent-count', 4); warte_rechnen(p, 30); p.wait(150)
+    field(p, '#vent-frame', 5); warte_rechnen(p, 30); p.wait(150)
+    field(p, '#vent-angle', 45); warte_rechnen(p, 30); p.wait(150)
+    p.pg.locator('#vent-round').uncheck(); warte_rechnen(p, 30); p.wait(300)
+    m_v2 = p.ev("return Mass.measureDoc(App.doc)")
+    lp2 = face_loop_counts(0)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(250)
+    p.pg.locator('.pop').get_by_role('button', name='Unterdrücken').click()
+    for _ in range(20):
+        p.wait(400)
+        if p.ev("return !App.busy && App.results.size >= 1"): break
+    p.wait(400)
+    v_sup = volumen(p)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(250)
+    p.pg.locator('.pop').get_by_role('button', name='Wieder aktivieren').click()
+    warte_rechnen(p, 30); p.wait(200)
+    v_unsup = volumen(p)
+    ok2 = (
+        p.ev("return App.errors.length") == 0
+        and m_v2 and m_v2['count'] == 1 and 4000 < m_v2['volume'] < 9500
+        and lp2 == {'top': 5, 'bot': 5}
+        and v_sup is not None and abs(v_sup - 9600) < 5
+        and v_unsup is not None and abs(v_unsup - m_v2['volume']) < 5
+    )
+
+    # 3. Kühlrippen (KP-26): 6 Rippen auf 50×30×4-Platte → 1 Körper, exaktes Volumen + Schräge
+    p.ev("App.clearSelection(); App.fitAfterBuild(); App.change('Platte', d => { d.marker = null; d.items = [Model.newItem('box', { w: 50, d: 30, h: 4 }, { name: 'Platte' })]; })")
+    warte_rechnen(p, 30); p.wait(300)
+    s_top2 = world_screen(p, 0, 0, 4)
+    p.pg.mouse.click(s_top2[0], s_top2[1]); p.wait(400)
+    p.pg.locator('#ctx-fins').click()
+    warte_rechnen(p, 30); p.wait(300)
+    m_f1 = p.ev("return Mass.measureDoc(App.doc)")
+    bb_f1 = bbox(p, 0)
+    st_f1 = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    field(p, '#fins-height', 12); warte_rechnen(p, 30); p.wait(150)
+    field(p, '#fins-draft', 2); warte_rechnen(p, 30); p.wait(300)
+    m_f2 = p.ev("return Mass.measureDoc(App.doc)")
+    ok3 = (
+        st_f1 == {'len': 2, 'kind': 'fins', 'merged': True, 'errs': 0}
+        and m_f1 and m_f1['count'] == 1 and abs(m_f1['volume'] - 10140) < 10
+        and near(bb_f1, [-25, -15, 0, 25, 15, 14], 0.05)
+        and m_f2 and m_f2['count'] == 1 and 9450 < m_f2['volume'] < 9700
+        and near(bbox(p, 0), [-25, -15, 0, 25, 15, 16], 0.05)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 4. Steg-Netz (KP-27): Kreuz-Skizze in Schale (40×40×20, Wand 2 mm) → Rippen verbinden alle 4 Wände
+    p.ev("""App.clearSelection(); App.fitAfterBuild(); App.change('Schale', d => {
+      d.marker = null;
+      const b = Model.newItem('box', { w: 40, d: 40, h: 20 }, { name: 'Schale' });
+      b.finishes = [{ id: 'f_sh', type: 'shell', r: 2, faces: [{ c: [0, 0, 20], n: [0, 0, 1] }] }];
+      d.items = [b];
+    })""")
+    warte_rechnen(p, 30); p.wait(300)
+    p.ev("Sketch.startOnPlane('XY', 20)"); p.wait(1000)
+    p.ev("Sketch.state.ents.push({id:'w1',type:'line',a:[-10,0],b:[10,0]},{id:'w2',type:'line',a:[0,-10],b:[0,10]})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.locator('#st-mode-web').click(); p.wait(250)
+    has_web_help = p.pg.locator('#st-mode-web').get_attribute('data-help') == 'web'
+    p.pg.fill('#st-web-t', '2'); p.pg.press('#st-web-t', 'Enter'); p.wait(150)
+    p.pg.fill('#st-web-depth', '10'); p.pg.press('#st-web-depth', 'Enter'); p.wait(250)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30); p.wait(300)
+
+    m_w1 = p.ev("return Mass.measureDoc(App.doc)")
+    st_w1 = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    field(p, '#web-depth', 0); warte_rechnen(p, 30); p.wait(300)
+    m_w2 = p.ev("return Mass.measureDoc(App.doc)")
+
+    # Verzweigte 4-Linien-Kreuzung (Grad-4-Knoten bei 0,0) → identisches Ergebnis
+    p.ev("""const bid = App.doc.items[0].id;
+    App.change('Reset', d => { d.items = [d.items[0]]; });
+    Features.web({ target: bid, thickness: 2, depth: 0, sketch: {
+      plane: { o: [0,0,20], x: [1,0,0], n: [0,0,1] },
+      ents: [
+        {id:'c1',type:'line',a:[-10,0],b:[0,0]},
+        {id:'c2',type:'line',a:[0,0],b:[10,0]},
+        {id:'c3',type:'line',a:[0,-10],b:[0,0]},
+        {id:'c4',type:'line',a:[0,0],b:[0,10]}
+      ], dims: [], cons: []
+    }});""")
+    warte_rechnen(p, 30); p.wait(300)
+    m_w3 = p.ev("return Mass.measureDoc(App.doc)")
+    ok4 = (
+        has_web_help
+        and st_w1 == {'len': 2, 'kind': 'web', 'merged': True, 'errs': 0}
+        and m_w1 and m_w1['count'] == 1 and abs(m_w1['volume'] - 10072) < 15
+        and near(bbox(p, 0), [-20, -20, 0, 20, 20, 20], 0.05)
+        and m_w2 and m_w2['count'] == 1 and abs(m_w2['volume'] - 11192) < 15
+        and m_w3 and m_w3['count'] == 1 and abs(m_w3['volume'] - 11192) < 15
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 5. Zeitleiste (Unterdrücken & Marker), Skizze bearbeiten, Bezüge, Erklärung, Befehle & Hilfetexte
+    p.ev("Timeline.setMarker(1)")
+    for _ in range(20):
+        p.wait(400)
+        if p.ev("return !App.busy && App.results.size >= 1"): break
+    p.wait(400)
+    v_mk1 = volumen(p)
+    p.ev("Timeline.setMarker(2)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk2 = volumen(p)
+    p.ev("Sketch.editItem(App.doc.items[1].id)"); p.wait(1000)
+    edit_ok = p.ev("return Sketch.active && Sketch.state.ents.length === 4")
+    p.pg.keyboard.press('Enter'); p.wait(1000); warte_rechnen(p, 30)
+    deps = p.ev("return Model.dependencies(App.doc)")
+    expl = p.ev("return Explain.local(App.doc.items[1].id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.ev("""return (async () => {
+      const [de, en] = await Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]);
+      const ks = ['vent', 'fins', 'web'];
+      return ks.every(k => de['kind.'+k] && en['kind.'+k]);
+    })()""")
+    cmds_ok = p.ev("return Commands.search('Lüftungsgitter').some(c=>c.id==='vent') && Commands.search('Kühlrippen').some(c=>c.id==='fins') && Commands.search('Steg-Netz').some(c=>c.id==='web')")
+    ok5 = (
+        v_mk1 is not None and abs(v_mk1 - 8672) < 5
+        and v_mk2 is not None and abs(v_mk2 - 11192) < 15
+        and edit_ok
+        and len(deps) >= 1 and deps[0]['what'] == 'Steg-Netz an'
+        and expl and any(l['k'] == 'op' for l in expl['lines'])
+        and all(k in hilfen and all(x in hilfen[k] for x in ('tip', 'hilfe', 'tipp')) for k in ('vent', 'fins', 'web'))
+        and i18n_ok and cmds_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- [A-122] Übergang als Schnitt und als Ring (KP-30) ----------
 def t_a122_uebergang_schnitt_ring(p):
     warte_idle = lambda: warte_rechnen(p, 35)
@@ -24547,6 +24711,7 @@ TESTS = [
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
     ('[F-11250121] Volltest-Reparatur: Fokus-Vorschau zeichnet bei rAF-Stau / Meldung überlebt Hauptthread-Hänger', t_f11250121),
     ('[A-120] Schraubdom, Lippe und Nut (KP-24, KP-25)', t_a120_schraubdom_lippe_nut),
+    ('[A-121] Lüftungsgitter, Kühlrippen und Steg-Netz (KP-26, KP-27)', t_a121_lueftung_kuehlrippen_stegnetz),
     ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

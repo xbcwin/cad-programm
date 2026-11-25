@@ -833,6 +833,78 @@ const SK = (() => {
     }
     return out.sort((a, b) => b.len - a.len);
   }
+  // Alle Pfade für ein Steg-Netz (KP-27): unterstützt Kreuzungen, T-Stöße, Verzweigungen, Zyklen und geschlossene Formen
+  function webPaths(ents) {
+    const segOf = (e, fwd) => {
+      if (e.type === 'spline') { const bz = splineBez(e.pts, false, e); return fwd ? bz : bz.slice().reverse().map(revSeg); }
+      if (e.type === 'ellarc') { const bz = ellArcBez(e.c, e.rx, e.ry, e.rot || 0, e.a0, e.a1, e.ccw !== false); return fwd ? bz : bz.slice().reverse().map(revSeg); }
+      if (e.type === 'conic') { const bz = conicBez(e.a, e.m, e.b, e.rho); return fwd ? bz : bz.slice().reverse().map(revSeg); }
+      if (e.type === 'bridge') { const bz = bridgeBez(e.pts); return fwd ? bz : bz.slice().reverse().map(revSeg); }
+      const s = e.type === 'arc' ? { t: 'arc', a: e.a, m: e.m, b: e.b } : { t: 'line', a: e.a, b: e.b };
+      return [fwd ? s : revSeg(s)];
+    };
+    const open = (ents || []).filter((e) => !e.con && !e.revAxis && (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'conic' || e.type === 'bridge' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2)) && endA(e) && endB(e) && d2(endA(e), endB(e)) > 1e-9);
+    const adj = new Map();
+    const addV = (p, e) => { const k = qkey(p); if (!adj.has(k)) adj.set(k, []); adj.get(k).push(e); };
+    for (const e of open) { addV(endA(e), e); addV(endB(e), e); }
+    const deg = (p) => (adj.get(qkey(p)) || []).length;
+    const used = new Set(), out = [];
+    // 1. Zweige ab jedem Knoten mit Grad != 2 (freie Enden, T-Stöße, Kreuzungen)
+    for (const e0 of open) {
+      for (const startAtA of [true, false]) {
+        if (used.has(e0.id)) break;
+        const pStart = startAtA ? endA(e0) : endB(e0);
+        const dStart = deg(pStart);
+        if (dStart === 2) continue;
+        let cur = e0, from = pStart;
+        const segs = [];
+        while (cur && !used.has(cur.id)) {
+          used.add(cur.id);
+          const fwd = qkey(endA(cur)) === qkey(from);
+          segs.push(...segOf(cur, fwd));
+          const to = fwd ? endB(cur) : endA(cur);
+          if (deg(to) !== 2) {
+            out.push({ segs, closed: false, extA: dStart === 1, extB: deg(to) === 1 });
+            cur = null;
+            break;
+          }
+          from = to;
+          cur = (adj.get(qkey(to)) || []).find((n) => !used.has(n.id)) || null;
+        }
+        if (cur === null && segs.length && (!out.length || out[out.length - 1].segs !== segs)) {
+          out.push({ segs, closed: false, extA: dStart === 1, extB: false });
+        }
+      }
+    }
+    // 2. Reine geschlossene Zyklen (überall Grad 2)
+    for (const e0 of open) {
+      if (used.has(e0.id)) continue;
+      let cur = e0, from = endA(e0);
+      const segs = [];
+      while (cur && !used.has(cur.id)) {
+        used.add(cur.id);
+        const fwd = qkey(endA(cur)) === qkey(from);
+        segs.push(...segOf(cur, fwd));
+        from = fwd ? endB(cur) : endA(cur);
+        cur = (adj.get(qkey(from)) || []).find((n) => !used.has(n.id)) || null;
+      }
+      if (segs.length) {
+        const isClosed = qkey(segs[0].a) === qkey(segs[segs.length - 1].b);
+        out.push({ segs, closed: isClosed, extA: false, extB: false });
+      }
+    }
+    // 3. Geschlossene Grundelemente (Kreis, Rechteck, Vieleck, Langloch, Ellipse, geschlossene Spline)
+    for (const e of ents || []) {
+      if (e.con || e.revAxis) continue;
+      if (e.type === 'circle' && e.r > 1e-4) {
+        out.push({ segs: [{ t: 'circle', c: e.c.slice(), r: e.r }], closed: true, extA: false, extB: false });
+      } else if (e.type === 'rect' || e.type === 'poly' || e.type === 'slot' || e.type === 'ellipse' || (e.type === 'spline' && e.closed && e.pts && e.pts.length >= 3)) {
+        const segs = segsOf(e);
+        if (segs.length) out.push({ segs, closed: true, extA: false, extB: false });
+      }
+    }
+    return out;
+  }
   function openEnds(ents) {
     // Endpunkte, die nur an einer Linie hängen (Hinweis „Umriss nicht geschlossen“)
     // Alleinstehende Drehachsen (revAxis) zählen nicht als offenes Ende.
@@ -1057,6 +1129,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { textPathPts, chains, ellipsePoints, ellArcSweep, ellArcPt, ellArcPoints, ellArcBez, conicPt, conicPoints, conicBez, bezEval, bezDerivInfo, curveEnd, bridgeControlPoints, bridgePoints, bridgeBez, syncBridges, splineBez, splineHandle, splineTangentAt, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, webPaths, ellipsePoints, ellArcSweep, ellArcPt, ellArcPoints, ellArcBez, conicPt, conicPoints, conicBez, bezEval, bezDerivInfo, curveEnd, bridgeControlPoints, bridgePoints, bridgeBez, syncBridges, splineBez, splineHandle, splineTangentAt, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

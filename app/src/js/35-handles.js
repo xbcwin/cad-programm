@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -751,7 +751,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove';
   function startMove(e) {
     if (typeof Joints !== 'undefined' && Joints.closeDockPrompt) Joints.closeDockPrompt();
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
@@ -1201,7 +1201,7 @@ const Interact = (() => {
     let items;
     if (top) {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
-      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib' || it.kind === 'emboss') && it.p && it.p.sketch;
+      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'emboss') && it.p && it.p.sketch;
       const isSubAsm = it.kind === 'ref' && typeof Model !== 'undefined' && Model.isSubAssemblyRef && Model.isSubAssemblyRef(it);
       items = [
         ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'cm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
@@ -1219,6 +1219,9 @@ const Interact = (() => {
         { icon: 'fillet', label: T('ctx.fullFillet'), id: 'cm-fullfillet', help: 'fullFillet', hidden: !hit || hit.faceIdx == null || top.role === 'hole', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startFullFillet({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'chamfer', label: T('ctx.cornerChamfer'), id: 'cm-cornerchamfer', help: 'cornerChamfer', hidden: !hit || top.role === 'hole', run: () => Features.startCornerChamfer(hit.id) },
         { icon: 'emboss', label: T('common.emboss'), id: 'cm-emboss', help: 'emboss', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startEmboss({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'vent', label: T('kind.vent'), id: 'cm-vent', help: 'vent', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.vent({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'fins', label: T('kind.fins'), id: 'cm-fins', help: 'fins', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.fins({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'web', label: T('kind.web'), id: 'cm-web', help: 'web', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startWeb({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'lock', label: T('ctx.fixedJoint'), id: 'cm-fixed-joint', help: 'fixedJoint', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || App.doc.items.filter((x) => !x.hidden && x.role !== 'hole').length < 2 || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Joints.startFixed({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx], point: hit.point.toArray() }); } },
         '-',
         { icon: 'copy', label: T('menu.ctx.copyBody'), kbd: Commands.keyLabel('copy'), id: 'cm-copy', help: 'copyBetweenTabs', run: () => Clipboard.copy() },

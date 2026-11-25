@@ -702,6 +702,9 @@ const IC = {
   bridge: '<path d="M3 16h3.5M17.5 8H21" opacity=".55"/><path d="M6.5 16C11 16 13 8 17.5 8" /><circle cx="6.5" cy="16" r="1.6" fill="currentColor"/><circle cx="17.5" cy="8" r="1.6" fill="currentColor"/>',
   boss: '<ellipse cx="12" cy="7" rx="5" ry="2.2"/><ellipse cx="12" cy="7" rx="2.2" ry="1"/><path d="M7 7v9c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2V7"/><path d="M3 18l4-3v3H3zM21 18l-4-3v3h4z" fill="currentColor" opacity=".25"/><path d="M3 18h4M17 18h4M3 18l4-3M21 18l-4-3" />',
   lipGroove: '<path d="M4 4h16v5h-6v3h-4V9H4z" fill="currentColor" opacity=".2"/><path d="M4 4h16v5h-6v3h-4V9H4zM4 20h16v-5h-5v-2.5h-6V15H4z" />',
+  vent: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6.5 8h11M6.5 12h11M6.5 16h11" stroke-width="2.1"/>',
+  fins: '<path d="M3 19h18"/><path d="M5 19V7M9.5 19V7M14.5 19V7M19 19V7" stroke-width="2"/><path d="M5 7v12M9.5 7v12M14.5 7v12M19 7v12" opacity=".3"/>',
+  web: '<rect x="3" y="3" width="18" height="18" rx="1.5" opacity=".45"/><path d="M3 12h18M12 3v18M6 6l12 12M18 6L6 18" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2129,16 +2132,6 @@ const HELP = {
   "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
   "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
  },
- "silhouette2d": {
-  "tip": "Umriss holen (Silhouette): Äußeren Schatten-Umriss eines Körpers auf die Skizzen-Ebene projizieren (Profi)",
-  "hilfe": "Klick im Profi-Modus einen Körper im Bild an – Tracery projiziert seinen äußeren Umriss (ohne innere Kanten) auf die Skizzen-Ebene. Ändert sich der Körper später, wandert der Umriss automatisch mit.",
-  "tipp": "Ideal für Schattenrisse von Rohren, Wellen oder liegenden Zylindern, um passende Ausschnitte oder Halter drum herum zu zeichnen."
- },
- "intersectCurve2d": {
-  "tip": "Schnittkurve zweier Flächen verbunden in die Skizze holen (Profi)",
-  "hilfe": "Klick im Profi-Modus nacheinander zwei sich schneidende Flächen an (vom selben oder von zwei verschiedenen Körpern). Die exakte 3D-Schnittlinie wird auf die Skizzen-Ebene projiziert und bleibt mit beiden Flächen verbunden.",
-  "tipp": "Damit übernimmst du z. B. die genaue Durchdringungskurve zweier Rohre oder gebogener Schalen direkt in deine Skizze."
- },
  "innerRadius": {
   "tip": "Innenrundungen prüfen: Sind alle Ecken groß genug für den Fräser?",
   "hilfe": "Misst alle nach innen gewölbten Rundungen und Bohrungen am Modell und vergleicht sie mit deinem eingestellten Fräser-Radius. Alles, was kleiner als der Fräser ist, leuchtet rot auf und erscheint in der Liste – so siehst du sofort, wo der Fräser nicht hineinkommt.",
@@ -2179,10 +2172,20 @@ const HELP = {
   "hilfe": "Wähle eine Durchgangs-Spline aus, um an jedem Punkt einen Griff für Richtung (Winkel) und Stärke (Länge) der Tangente zu sehen. Ziehe ein Griffende direkt im Bild oder gib Winkel und Stärke rechts bzw. mit dem Maß-Werkzeug (D) exakt ein.",
   "tipp": "Mit „Griff zurücksetzen“ übernimmt der Punkt wieder automatisch die weiche Standard-Tangente seiner Nachbarpunkte."
  },
- "sketch3d": {
-  "tip": "3D-Skizze mit Linien und Bögen frei im Raum zeichnen (Profi)",
-  "hilfe": "Im Profi-Modus startest du eine 3D-Skizze ohne feste Ebene (über „Skizze → 3D-Skizze“ oder die Befehlssuche). Setze Punkte per Klick im Raum, fange exakt an Körperecken und Kantenmitten oder gib X, Y und Z rechts ein. Jede Linie und jeder 3-Punkt-Bogen lässt sich über Längenmaße (auch Formeln) festlegen und anschließend mit „Entlang Pfad“ zu einem Körper ziehen.",
-  "tipp": "Wenn du an einer Körperecke fängst, merkt sich die 3D-Skizze diesen Körper und wandert mit, falls sich der Körper verschiebt."
+ "sketchBlocks": {
+  "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
+  "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
+  "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
+ },
+ "silhouette2d": {
+  "tip": "Umriss holen (Silhouette): Äußeren Schatten-Umriss eines Körpers auf die Skizzen-Ebene projizieren (Profi)",
+  "hilfe": "Klick im Profi-Modus einen Körper im Bild an – Tracery projiziert seinen äußeren Umriss (ohne innere Kanten) auf die Skizzen-Ebene. Ändert sich der Körper später, wandert der Umriss automatisch mit.",
+  "tipp": "Ideal für Schattenrisse von Rohren, Wellen oder liegenden Zylindern, um passende Ausschnitte oder Halter drum herum zu zeichnen."
+ },
+ "intersectCurve2d": {
+  "tip": "Schnittkurve zweier Flächen verbunden in die Skizze holen (Profi)",
+  "hilfe": "Klick im Profi-Modus nacheinander zwei sich schneidende Flächen an (vom selben oder von zwei verschiedenen Körpern). Die exakte 3D-Schnittlinie wird auf die Skizzen-Ebene projiziert und bleibt mit beiden Flächen verbunden.",
+  "tipp": "Damit übernimmst du z. B. die genaue Durchdringungskurve zweier Rohre oder gebogener Schalen direkt in deine Skizze."
  },
  "polarGrid": {
   "tip": "Zwischen rechteckigem und polarem Raster (Ringe und Strahlen) umschalten (Profi)",
@@ -2194,10 +2197,25 @@ const HELP = {
   "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
   "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
  },
- "sketchBlocks": {
-  "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
-  "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
-  "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
+ "vent": {
+  "tip": "Lüftungsgitter: Schlitze mit Rahmen und Winkel in eine Fläche schneiden",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Lüftungsgitter“. Tracery schneidet parallele Schlitze mit umlaufendem Rahmen in die Wand. Anzahl, Schlitzbreite, Rahmen, Winkel, Tiefe (0 = genau durch die Wand) und runde oder eckige Enden stellst du rechts jederzeit um.",
+  "tipp": "Bei einem Gehäuse mit Deckel und Boden durchstößt Tiefe 0 automatisch nur die angeklickte Wand und lässt die Rückwand heil."
+ },
+ "fins": {
+  "tip": "Kühlrippen: parallele Rippen auf eine ebene Fläche setzen",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kühlrippen“. Tracery setzt gleichmäßig verteilte Rippen innerhalb des Randabstands auf die Fläche und verschmilzt sie direkt mit dem Körper. Anzahl, Dicke, Höhe, Randabstand, Winkel und Schräge bleiben im Verlauf änderbar.",
+  "tipp": "Mit einer kleinen Schräge von 1° bis 3° lassen sich die Kühlrippen auch aus einer Gussform oder Spritzgussform sauber entformen."
+ },
+ "web": {
+  "tip": "Steg-Netz: viele Rippen aus einer offenen Skizze (auch Kreuzungen und Gitter)",
+  "hilfe": "Zeichne eine offene Skizze mit mehreren Linien, Bögen, Kreuzungen oder T-Stößen über einem ausgehöhlten Körper oder einer Schale. Das Steg-Netz extrudiert alle Pfade gemeinsam mit Dicke und Höhe und verlängert freie Enden automatisch bis an die Wände.",
+  "tipp": "Mit Tiefe 0 wachsen die Stege genau bis zum Schalenboden; eine feste Tiefe lässt das Netz frei auf gewünschter Höhe enden."
+ },
+ "sketch3d": {
+  "tip": "3D-Skizze mit Linien und Bögen frei im Raum zeichnen (Profi)",
+  "hilfe": "Im Profi-Modus startest du eine 3D-Skizze ohne feste Ebene (über „Skizze → 3D-Skizze“ oder die Befehlssuche). Setze Punkte per Klick im Raum, fange exakt an Körperecken und Kantenmitten oder gib X, Y und Z rechts ein. Jede Linie und jeder 3-Punkt-Bogen lässt sich über Längenmaße (auch Formeln) festlegen und anschließend mit „Entlang Pfad“ zu einem Körper ziehen.",
+  "tipp": "Wenn du an einer Körperecke fängst, merkt sich die 3D-Skizze diesen Körper und wandert mit, falls sich der Körper verschiebt."
  },
  "boss": {
   "tip": "Schraubdom mit 0–6 Stützrippen und Loch auf eine Fläche setzen",

@@ -31,6 +31,9 @@ const KINDS = {
   scale: { get label() { return T('kind.scale'); }, params: [] },
   thicken: { get label() { return T('kind.thicken'); }, params: [] },
   rib: { get label() { return T('kind.rib'); }, params: [] },
+  vent: { get label() { return T('kind.vent'); }, params: [] },
+  fins: { get label() { return T('kind.fins'); }, params: [] },
+  web: { get label() { return T('kind.web'); }, params: [] },
   wrap: { get label() { return T('kind.wrap'); }, params: [] },
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
@@ -407,6 +410,9 @@ const Model = (() => {
       }
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
+      if (it.kind === 'vent' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Lüftungsgitter in' });
+      if (it.kind === 'fins' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kühlrippen auf' });
+      if (it.kind === 'web' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Steg-Netz an' });
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
       if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
       if (it.kind === 'sweep' && it.p && it.p.sketch3dId) out.push({ from: me, to: top(it.p.sketch3dId), what: 'folgt 3D-Skizze' });
@@ -556,6 +562,9 @@ const Model = (() => {
       else if (it.kind === 'sweep') o.p = sweepParams(it, ownV);
       else if (it.kind === 'helix') o.p = helixParams(it, ownV);
       else if (it.kind === 'rib') o.p = ribParams(it, ownV);
+      else if (it.kind === 'vent') o.p = ventParams(it, ownV);
+      else if (it.kind === 'fins') o.p = finsParams(it, ownV);
+      else if (it.kind === 'web') o.p = webParams(it, ownV);
       else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
       else if (it.kind === 'sketch3d') o.p = { sketch3d: sketch3dResolve(it.p && it.p.sketch3d, ownV) };
@@ -744,6 +753,53 @@ const Model = (() => {
       flip: !!p.flip,
       depth: Math.max(0, num(p.depth, V, 0)),
       draft: num(p.draft, V, 0),
+    };
+  }
+  function ventParams(it, V) {
+    const p = it.p || {};
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      count: Math.max(1, Math.min(60, Math.round(num(p.count, V, 6)))),
+      slotW: Math.max(0.2, num(p.slotW, V, 3)),
+      frame: Math.max(0, num(p.frame, V, 4)),
+      angle: num(p.angle, V, 0),
+      depth: Math.max(0, num(p.depth, V, 0)),
+      roundEnds: p.roundEnds !== false,
+    };
+  }
+  function finsParams(it, V) {
+    const p = it.p || {};
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      count: Math.max(1, Math.min(80, Math.round(num(p.count, V, 6)))),
+      finW: Math.max(0.2, num(p.finW, V, 1.5)),
+      height: Math.max(0.1, num(p.height, V, 10)),
+      margin: Math.max(0, num(p.margin, V, 2)),
+      angle: num(p.angle, V, 0),
+      draft: Math.max(0, num(p.draft, V, 0)),
+    };
+  }
+  function webParams(it, V) {
+    const p = it.p || {};
+    let skForSolve = p.sketch;
+    if (skForSolve && Array.isArray(skForSolve.blockInsts) && skForSolve.blockInsts.length && curDoc && Array.isArray(curDoc.blocks)) {
+      skForSolve = { ...skForSolve, ents: (skForSolve.ents || []).slice() };
+      syncSketchBlocks(skForSolve, curDoc.blocks, V);
+    }
+    const ents = skForSolve ? Solver.cached(skForSolve, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const paths = SK.webPaths ? SK.webPaths(ents) : SK.chains(ents).map((ch) => ({ segs: ch.segs, closed: false, extA: true, extB: true }));
+    return {
+      target: p.target || null,
+      plane,
+      paths,
+      thickness: Math.max(0.05, num(p.thickness, V, 2)),
+      depth: Math.max(0, num(p.depth, V, 0)),
+      draft: num(p.draft, V, 0),
+      flip: !!p.flip,
+      extend: p.extend !== false,
     };
   }
   function wrapParams(it, V) {
@@ -1480,7 +1536,7 @@ const Model = (() => {
     V = scopeItemVars(V, it);
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
-    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
       const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
       const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
       if (b) {
@@ -1617,6 +1673,13 @@ const Model = (() => {
         const t = f(p.thickness ?? 2);
         const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmtAngleU(p.draft) : '';
         return `${t}${u} dick${dr}`;
+      }
+      case 'vent': return `${Math.max(1, Math.round(p.count ?? 6))}× · ${f(p.slotW ?? 3)}${u}`;
+      case 'fins': return `${Math.max(1, Math.round(p.count ?? 6))}× · ${f(p.height ?? 10)}${u} hoch`;
+      case 'web': {
+        const t = f(p.thickness ?? 2);
+        const dep = (p.depth || 0) > 1e-4 ? ` · ${f(p.depth)}${u}` : '';
+        return `${t}${u} dick${dep}`;
       }
       case 'wrap': {
         const info = wrapAngleInfo(it, V);
@@ -1835,7 +1898,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

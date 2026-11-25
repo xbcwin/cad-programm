@@ -2410,6 +2410,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte, DE/EN-Schlüssel & Befehlssuche**: `HELP.boss` und `HELP.lipGroove` samt `texte-de`/`texte-en`-Schlüsselgleichheit und Suche nach `schraubdom` / `lippe` grün.
 - [ ] **Von Hand**: Im Browser an einer runden und einer geschrägten Gehäuseschale eine Trennkante per Klick wählen und das Spiel der Lippe im Schnitt (Taste C) prüfen.
 
+## Lüftungsgitter, Kühlrippen und Steg-Netz (Auto [A-121], KP-26, KP-27)
+- [x] **Lüftungsgitter (`vent`)**: 6 Schlitze (3 mm breit, 4 mm Rahmen, 0°) in einer 60×40×4-Platte erzeugen exakt 6 Durchbrüche (7 Schleifen oben und unten) bei sauberem Restvolumen; Winkel 45° mit 4 eckigen Schlitzen sowie Unterdrücken/Reaktivieren über die Zeitleiste funktionieren fehlerfrei.
+- [x] **Kühlrippen (`fins`)**: 6 Rippen (1,5 mm dick, 10 mm hoch, 2 mm Randabstand) auf einer 50×30×4-Platte verschmelzen zu 1 Körper mit exaktem Volumen (10140 mm³) und lassen Höhe sowie Schräge (2°) sauber nachstellen.
+- [x] **Steg-Netz (`web`)**: Offenes Kreuz und verzweigte 4-Linien-Kreuzung auf einer 40×40×20-Schale (2 mm Wand) verbinden alle vier Wände als 1 Körper bei fester Tiefe (10 mm) und bis zum Schalenboden (Tiefe 0), inkl. Skizzen-Bearbeitung, Zeitleisten-Marker, Bezügen, Erklärungen, Befehlen und Hilfetexten.
+- [ ] **Von Hand**: Auf der Oberseite eines ausgehöhlten Gehäuses mit Deckel und Boden ein Lüftungsgitter (Tiefe 0) schneiden und prüfen, dass die Rückwand geschlossen bleibt, sowie ein gekreuztes Steg-Netz mit Schräge im 3D-Bild optisch kontrollieren.
+
 ## Übergang als Schnitt und als Ring (Auto [A-122], KP-30)
 
 - [x] **Geschlossener Ring durch 4 Kreise im Quadrat**: 4 runde Umrisse im Quadrat per `#ctx-loft-closed` im Profi-Modus verbunden → geschlossener Ring (`p.closed = true`) ohne Lücke und ohne Geometrie-Fehler (`GeomCheck` 0 Funde, offenes Zentrum, alle 4 Seiten und Quadranten voll geschlossen).
