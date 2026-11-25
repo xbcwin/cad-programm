@@ -273,7 +273,7 @@ const Toolbar = (() => {
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
-    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && Measure.draftActive) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active))) b.classList.add('active');
+    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
     if (def.id === 'clashes' && typeof ClashCheck !== 'undefined' && ClashCheck.active) b.classList.add('active');
     return b;
   }
