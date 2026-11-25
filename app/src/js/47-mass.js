@@ -188,6 +188,7 @@ const Mass = (() => {
   }
   // ---------- Stückliste: alle Teile ganz oben im Verlauf, gleiche zusammengefasst ----------
   const PRINTMATS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA6', 'PA12', 'PC'];
+  const isCable = (it) => !!(it && it.kind === 'sweep' && it.p && it.p.cable);
   async function bom(doc = App.doc) {
     const r = doc === App.doc ? await measure() : await measureDoc(doc); if (!r) return null;
     const map = new Map();
@@ -200,18 +201,46 @@ const Mass = (() => {
       const name = String(it.name || 'Teil').replace(/\s*\(\d+\s*[×x]\)\s*$/, '').replace(/\s*\(Kopie[^)]*\)\s*$/i, '').replace(/\s+\d+$/, '').trim() || 'Teil';
       const kind = p.fixed ? 'Kaufteil' : (p.mat || '–');
       const pr = partProps(it);
-      const key = [name, kind, round(p.mass / k, 2), pr.partNo, pr.desc, pr.supplier, pr.price != null ? pr.price : ''].join('|');
-      const row = map.get(key) || { name, kind, n: 0, g: p.mass / k, cm3: p.fixed ? null : p.volume / 1000 / k, dims: p.bbox ? [p.bbox[3] - p.bbox[0], p.bbox[4] - p.bbox[1], p.bbox[5] - p.bbox[2]] : null, missing: !!p.missing, buy: !!p.fixed, partNo: pr.partNo, desc: pr.desc, supplier: pr.supplier, price: pr.price, ids: [] };
+      const cm = isCable(it) ? Model.cableMetrics(it.p, Model.itemVars(doc, it.id)) : null;
+      const keyParts = [name, kind, round(p.mass / k, 2), pr.partNo, pr.desc, pr.supplier, pr.price != null ? pr.price : ''];
+      if (cm) keyParts.push('cable', cm.type, round(cm.length, 1), round(cm.d, 2), round(cm.wall, 2));
+      const key = keyParts.join('|');
+      const row = map.get(key) || {
+        name, kind, n: 0, g: p.mass / k,
+        cm3: p.fixed ? null : p.volume / 1000 / k,
+        dims: p.bbox ? [p.bbox[3] - p.bbox[0], p.bbox[4] - p.bbox[1], p.bbox[5] - p.bbox[2]] : null,
+        missing: !!p.missing, buy: !!p.fixed,
+        partNo: pr.partNo, desc: pr.desc, supplier: pr.supplier, price: pr.price,
+        isCable: !!cm,
+        cableLen: cm ? round(cm.length, 2) : null,
+        cableD: cm ? cm.d : null,
+        cableWall: cm ? cm.wall : 0,
+        cableBendR: cm ? cm.bendR : null,
+        cableType: cm ? cm.type : null,
+        ids: [],
+      };
       row.n += k; row.ids.push(it.id); map.set(key, row);
     }
     const rows = [...map.values()].sort((a, b) => (a.buy === b.buy ? b.g * b.n - a.g * a.n : a.buy ? 1 : -1));
+    const cables = rows.filter((x) => x.isCable).map((x) => ({
+      name: x.name,
+      type: x.cableType || 'cable',
+      d: x.cableD,
+      wall: x.cableWall || 0,
+      bendR: x.cableBendR,
+      length: x.cableLen,
+      totalLength: round(x.cableLen * x.n, 2),
+      n: x.n,
+      ids: x.ids.slice(),
+    }));
+    const totalCableLength = round(cables.reduce((s, x) => s + x.totalLength, 0), 2);
     // Filament für Druckteile: Gewicht je Druck-Material und Länge bei 1,75 mm Draht (massiv gerechnet)
     const fil = new Map();
     for (const x of rows) { const m = !x.buy && PRINTMATS.includes(x.kind) ? matOf(x.kind) : null; if (m) fil.set(m.k, (fil.get(m.k) || 0) + x.g * x.n); }
     const filament = [...fil.entries()].map(([k, g]) => ({ mat: k, g, m: g / matOf(k).rho / (Math.PI * 0.0875 * 0.0875) / 100 }));
     const hasPrice = rows.some((x) => x.price != null);
     const totalPrice = hasPrice ? round(rows.reduce((s, x) => s + (x.price != null ? x.price * x.n : 0), 0), 2) : null;
-    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), totalPrice, hasPrice, screws: screws(doc), threads: threads(doc), filament };
+    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), totalPrice, hasPrice, screws: screws(doc), threads: threads(doc), cables, totalCableLength, filament };
   }
   // Markierte kosmetische Gewinde (KP-20) je aktivem Körper mit Instanz-Anzahl
   function threads(doc = App.doc) {
@@ -265,7 +294,9 @@ const Mass = (() => {
     const q = (v) => '"' + String(v).replace(/"/g, '""') + '"', z = (v, d = 1) => String(round(v, d)).replace('.', ',');
     const L = [['Teil', 'Anzahl', 'Art', 'Gewicht je Stück (g)', 'Gewicht gesamt (g)', `Volumen je Stück (${Units.volLabel()})`, `Größe (${Units.label()})`, 'Teilenummer', 'Beschreibung', 'Lieferant', 'Preis je Stück (€)', 'Preis gesamt (€)'].map(q).join(';')];
     for (const x of B.rows) {
-      const sz = x.dims ? x.dims.map((v) => Units.fmtLen(v, 1)).join(' × ') : '';
+      const sz = x.isCable
+        ? `L ${Units.fmtLen(x.cableLen, 1)} · Ø ${Units.fmtLen(x.cableD, 1)}${x.cableType === 'hose' && x.cableWall > 0 ? ` (${Units.fmtLen(x.cableWall, 1)})` : ''}`
+        : (x.dims ? x.dims.map((v) => Units.fmtLen(v, 1)).join(' × ') : '');
       const vol = x.cm3 == null ? '' : z(Units.volFromMM3(x.cm3 * 1000), Units.key() === 'm' ? 5 : 2);
       const pe = x.price != null ? fmtPriceNum(x.price) : '';
       const pt = x.price != null ? fmtPriceNum(x.price * x.n) : '';
@@ -275,6 +306,7 @@ const Mass = (() => {
     L.push([q('Summe ' + name), B.count, '', '', z(B.mass), '', '', '', '', '', '', totalP].join(';'));
     for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', '', '', '', '', '', '', ''].join(';'));
     for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', '', '', '', '', '', '', ''].join(';'));
+    for (const x of B.cables || []) L.push([q(x.name), x.n, q(x.type === 'hose' ? 'Schlauch' : 'Kabel'), '', '', '', q(`L ${Units.fmtLenU(x.length, 1)} (Gesamt ${Units.fmtLenU(x.totalLength, 1)})`), '', '', '', '', ''].join(';'));
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
@@ -291,7 +323,9 @@ const Mass = (() => {
       T('dlg.bom.colEach'), T('dlg.bom.colTotal'), T('dlg.bom.colPriceEach'), T('dlg.bom.colPriceTotal'),
     ].map((t) => h('th', null, t))));
     for (const x of B.rows) {
-      const sz = x.dims ? `${Units.fmtLen(x.dims[0], 1)} × ${Units.fmtLen(x.dims[1], 1)} × ${Units.fmtLen(x.dims[2], 1)} ${Units.label()}` : '–';
+      const sz = x.isCable
+        ? `L ${Units.fmtLenU(x.cableLen, 1)} · Ø ${Units.fmtLenU(x.cableD, 1)}${x.cableType === 'hose' && x.cableWall > 0 ? ` (${Units.fmtLenU(x.cableWall, 1)})` : ''}`
+        : (x.dims ? `${Units.fmtLen(x.dims[0], 1)} × ${Units.fmtLen(x.dims[1], 1)} × ${Units.fmtLen(x.dims[2], 1)} ${Units.label()}` : '–');
       const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } },
         h('td', null, x.name),
         h('td', { class: 'mono' }, x.partNo || '–'),
@@ -334,6 +368,37 @@ const Mass = (() => {
         tt.append(tr);
       }
       body.append(tt);
+    }
+    if (B.cables && B.cables.length) {
+      const tc = h('table', { class: 'vtable', id: 'bom-cables', style: { marginTop: '14px' } }, h('tr', null,
+        h('th', null, T('dlg.bom.cablesCol')),
+        h('th', null, T('dlg.bom.cablesDia')),
+        h('th', null, T('dlg.bom.cablesBendR')),
+        h('th', null, T('dlg.bom.colCount')),
+        h('th', null, T('dlg.bom.cablesLenEach')),
+        h('th', null, T('dlg.bom.cablesLenTotal'))));
+      for (const x of B.cables) {
+        const diaTxt = x.type === 'hose' && x.wall > 0
+          ? `Ø ${Units.fmtLenU(x.d, 1)} × ${Units.fmtLenU(x.wall, 1)}`
+          : `Ø ${Units.fmtLenU(x.d, 1)}`;
+        const tr = h('tr', { class: 'bom-cable-row', style: { cursor: 'pointer' } },
+          h('td', null, x.name),
+          h('td', { class: 'mono' }, diaTxt),
+          h('td', { class: 'mono' }, `R ${Units.fmtLenU(x.bendR, 1)}`),
+          h('td', { class: 'mono' }, String(x.n)),
+          h('td', { class: 'mono' }, Units.fmtLenU(x.length, 1)),
+          h('td', { class: 'mono' }, Units.fmtLenU(x.totalLength, 1)));
+        tr.onclick = () => App.select(x.ids);
+        tc.append(tr);
+      }
+      tc.append(h('tr', { class: 'bom-sum', id: 'bom-cables-sum' },
+        h('td', null, h('b', null, T('dlg.bom.cablesTotalLabel'))),
+        h('td', null, ''),
+        h('td', null, ''),
+        h('td', { class: 'mono' }, h('b', null, String(B.cables.reduce((s, x) => s + x.n, 0)))),
+        h('td', null, ''),
+        h('td', { class: 'mono' }, h('b', { id: 'bom-cables-total-len' }, Units.fmtLenU(B.totalCableLength, 1)))));
+      body.append(tc);
     }
     const filLen = (m) => Units.key() === 'in' ? `${fmtFixed((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmtFixed(m * 100, 1)} cm` : `${fmtFixed(m, 1)} m`;
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: T('dlg.bom.filamentHtml', { list: B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') }) }));

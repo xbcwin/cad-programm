@@ -1997,6 +1997,48 @@ body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
 .av-ip-inp,.av-param-inp{width:76px;height:26px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px}
 .av-param-inp{width:100%}
 .av-ip-inp.invalid,.av-param-inp.invalid{border-color:var(--bad);color:var(--bad)}
+.skel-proj-card,.skel-dim-card{display:grid;gap:6px;padding:8px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface-2);margin-bottom:6px}
+.skel-proj-head,.skel-dim-head,.skel-bind-row,.skel-dt-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.skel-proj-head b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.skel-dim-name{flex:1;min-width:90px;height:26px;padding:0 7px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font:600 12.5px/1.2 var(--font)}
+.skel-driven-chips{display:flex;flex-wrap:wrap;gap:4px}
+.skel-bind-sel{flex:1;min-width:110px;height:26px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px}
+.dimask-namelbl{padding-right:4px}
+.dimask-name{width:92px !important;font-family:var(--font) !important}
+
+/* Baugruppe als 1 Körper & Toleranzkette (BG-31, BG-33) */
+.sb-dlg{display:grid;gap:10px}
+.sb-summary{font-size:12.5px;color:var(--muted)}
+.tc-bar{width:min(380px,92vw)}
+.tc-def-inp{width:62px;height:26px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;text-align:right}
+.tc-acts{display:flex;flex-wrap:wrap;gap:5px}
+.tc-list{display:grid;gap:5px;max-height:175px;overflow:auto;padding-right:2px}
+.tc-empty{padding:6px 4px}
+.tc-row{display:flex;align-items:center;gap:4px;padding:4px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2)}
+.tc-sign{min-width:26px;height:24px;padding:0;justify-content:center;font-weight:700}
+.tc-sign.neg{color:var(--warn);border-color:var(--warn)}
+.tc-lbl{flex:1;min-width:60px;height:24px;padding:0 5px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--ink);font-size:12px}
+.tc-lbl:focus{border-color:var(--line-strong);background:var(--surface);outline:none}
+.tc-nom{width:56px;height:24px;padding:0 5px;border:1px solid var(--line-strong);border-radius:5px;background:var(--surface);color:var(--ink);font-size:12px;text-align:right}
+.tc-tol-wrap{display:inline-flex;align-items:center;gap:2px}
+.tc-pm-btn{border:0;background:none;color:var(--muted);padding:0 2px;cursor:pointer;font-size:12px;line-height:1}
+.tc-pm-btn:hover{color:var(--accent)}
+.tc-tol{width:50px;height:24px;padding:0 4px;border:1px solid var(--line-strong);border-radius:5px;background:var(--surface);color:var(--ink);font-size:12px;text-align:right}
+.tc-del{border:0;background:none;color:var(--muted);padding:3px;border-radius:5px;cursor:pointer;display:inline-grid;place-items:center}
+.tc-del:hover{color:var(--bad)}
+.tc-del svg{width:13px;height:13px}
+.tc-result{display:grid;gap:7px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.tc-res-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tc-res-card{display:grid;gap:2px;padding:6px 7px;border:1px solid var(--line);border-radius:7px;background:var(--surface)}
+.tc-res-lbl{font-size:11px;color:var(--muted)}
+.tc-res-val{font-size:13px;color:var(--ink)}
+.tc-res-sub{font-size:11px;color:var(--muted)}
+.tc-bar-wrap{display:grid;gap:3px}
+.tc-bar-wc{position:relative;height:10px;border-radius:999px;background:color-mix(in srgb,var(--accent) 22%,var(--surface));overflow:hidden;border:1px solid var(--line)}
+.tc-bar-stat{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);background:var(--accent);border-radius:999px}
+.tc-bar-mid{position:absolute;top:0;bottom:0;left:50%;width:2px;transform:translateX(-50%);background:var(--ink)}
+.tc-bar-legend{font-size:10.5px;color:var(--muted)}
+.tc-res-foot{display:flex;align-items:center;justify-content:space-between;gap:6px}
 
 
 

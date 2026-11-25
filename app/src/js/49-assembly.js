@@ -56,6 +56,10 @@ const Assembly = (() => {
             if (b && b.id) b.id = mapId(b.id);
           }
         }
+        if (it.p.cable) {
+          if (it.p.cable.bindA && it.p.cable.bindA.id) it.p.cable.bindA.id = mapId(it.p.cable.bindA.id);
+          if (it.p.cable.bindB && it.p.cable.bindB.id) it.p.cable.bindB.id = mapId(it.p.cable.bindB.id);
+        }
       }
     });
     return cloned;
@@ -132,6 +136,10 @@ const Assembly = (() => {
           for (const b of it.p.path3d.bind) {
             if (b && b.id) b.id = strip(b.id);
           }
+        }
+        if (it.p.cable) {
+          if (it.p.cable.bindA && it.p.cable.bindA.id) it.p.cable.bindA.id = strip(it.p.cable.bindA.id);
+          if (it.p.cable.bindB && it.p.cable.bindB.id) it.p.cable.bindB.id = strip(it.p.cable.bindB.id);
         }
       }
     });
@@ -1414,7 +1422,8 @@ const Assembly = (() => {
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) return null;
     const parts = assemblyPartTargets(App.doc);
     const steps = assemblySteps(App.doc);
-    if (!isAssembly() && parts.length < 2 && !steps.length) return null;
+    const cableList = cables(App.doc);
+    if (!isAssembly() && parts.length < 2 && !steps.length && !cableList.length) return null;
     const sec = h('div', { class: 'section pro asm-steps-sec', id: ctx + '-asm-steps-sec' },
       h('div', { class: 'section-h' }, T('asm.stepsHeading'))
     );
@@ -1424,8 +1433,11 @@ const Assembly = (() => {
     const b2 = h('button', { type: 'button', class: 'btn small', id: 'btn-asm-cut', 'data-help': 'asmCut' });
     b2.innerHTML = icon('boolSubtract') + esc(T('asm.cutShort'));
     b2.onclick = () => startAsmCut();
-    sec.append(h('div', { class: 'btn-row' }, b1, b2));
-    if (steps.length) {
+    const b3 = h('button', { type: 'button', class: 'btn small', id: 'btn-asm-cable', 'data-help': 'asmCable' });
+    b3.innerHTML = icon('sweep') + esc(T('asm.cableShort'));
+    b3.onclick = () => cableDialog();
+    sec.append(h('div', { class: 'btn-row' }, b1, b2, b3));
+    if (steps.length || cableList.length) {
       const list = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
       for (const s of steps) {
         const res = typeof App.resolvedOf === 'function' ? App.resolvedOf(s.id) : null;
@@ -1434,6 +1446,14 @@ const Assembly = (() => {
           h('span', { class: 'grow' }, Model.label(s)),
           h('span', { class: 'mono muted' }, `${cnt} T.`));
         row.onclick = () => App.select([s.id]);
+        list.append(row);
+      }
+      for (const c of cableList) {
+        const lenTxt = Units.fmtLenU(cableLength(c, App.doc), 1);
+        const row = h('button', { type: 'button', class: 'mini-row', style: { width: '100%', textAlign: 'left', cursor: 'pointer' }, dataset: { asmCable: c.id } },
+          h('span', { class: 'grow' }, Model.label(c)),
+          h('span', { class: 'mono muted' }, lenTxt));
+        row.onclick = () => App.select([c.id]);
         list.append(row);
       }
       sec.append(list);
@@ -3030,7 +3050,12 @@ const Assembly = (() => {
       sig.children = kids.filter((c) => c && !c.suppressed).map((c) => lightGeomSig(doc, c, ownV, true, seenDocs));
     } else if (it.kind === 'ref' && it.p && it.p.docId) {
       const seen = seenDocs || new Set(doc && doc.id ? [doc.id] : []);
-      const refDoc = !seen.has(it.p.docId) ? Model.resolveDoc(it.p.docId) : null;
+      const rawRefDoc = !seen.has(it.p.docId) ? Model.resolveDoc(it.p.docId) : null;
+      const refDoc = rawRefDoc
+        ? (Model.withSkeletonOverrides
+          ? Model.withSkeletonOverrides(Model.withPartVariant ? Model.withPartVariant(rawRefDoc, it.p && it.p.variantId) : rawRefDoc, doc, V, it.p && it.p.skelOverrides)
+          : rawRefDoc)
+        : null;
       if (refDoc) {
         const nextSeen = new Set(seen);
         nextSeen.add(refDoc.id);
@@ -4928,6 +4953,425 @@ const Assembly = (() => {
     return sec;
   }
 
+  // ================= Baugruppe als ein Körper (BG-31) =================
+  let lastSingleBody = null;
+  function singleBodyTargets(onlySel = false) {
+    if (!App.doc || !Array.isArray(App.doc.items)) return [];
+    const visible = App.doc.items.filter((it) => it && it.role !== 'hole' && !it.hidden && !it.suppressed);
+    if (!onlySel || typeof Print === 'undefined' || !Print.exportSelection) return visible;
+    const selIds = new Set(Print.exportSelection());
+    if (!selIds.size) return visible;
+    return visible.filter((it) => selIds.has(it.id));
+  }
+  function firstSolidColor(items) {
+    for (const it of items || []) {
+      if (it && it.color) return it.color;
+      if (it && Array.isArray(it.children)) {
+        const c = it.children.find((x) => x && x.role !== 'hole' && x.color);
+        if (c && c.color) return c.color;
+      }
+    }
+    return '#2f9e91';
+  }
+  async function exportSingleBody(opts = {}) {
+    if (!isProMode() || !App.doc) return null;
+    const onlySel = !!opts.onlySel;
+    const targets = singleBodyTargets(onlySel);
+    if (!targets.length) {
+      UI.toast(T('asm.singleBodyEmpty'), { icon: 'info' });
+      return null;
+    }
+    const fmt = ['step', 'stl', '3mf', 'brep'].includes(String(opts.fmt || 'step').toLowerCase())
+      ? String(opts.fmt || 'step').toLowerCase()
+      : 'step';
+    const rawName = String(opts.name || `${App.doc.name || T('asm.defaultName')} – 1 Körper`).trim() || 'Baugruppe';
+    const only = Array.isArray(opts.only) ? opts.only : (onlySel ? targets.map((t) => t.id) : null);
+    const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+    const color = String(opts.color || firstSolidColor(targets));
+    const scene = Model.kernelScene(App.doc);
+    const tst = UI.toast(T('asm.singleBodyBuilding'), { icon: 'export', ms: 20000 });
+    try {
+      let bytes, filename, mime, r;
+      if (fmt === 'stl' || fmt === '3mf') {
+        const hc = opts.holeComp != null ? Math.max(0, Math.min(1, Number(opts.holeComp) || 0)) : (typeof Print !== 'undefined' && Print.holeComp ? Print.holeComp() : 0);
+        r = await Kernel.call('exportSingleBody', {
+          scene,
+          opts: { fmt: 'mesh', only, originMat, name: rawName, color, fine: true, q: opts.q || 1, holeComp: hc },
+        });
+        if (!r || !Array.isArray(r.objects) || !r.objects.length) throw new Error(T('asm.singleBodyEmpty'));
+        const safe = typeof Print !== 'undefined' && Print.safeName ? Print.safeName(rawName) : rawName.replace(/[^\w.-]+/g, '_');
+        if (fmt === '3mf') {
+          bytes = new Uint8Array(await Print.build3MF(r.objects, safe));
+          filename = safe + '.3mf';
+          mime = 'model/3mf';
+        } else {
+          const stlRes = opts.stlText ? Print.buildSTLText(r.objects, safe) : Print.buildSTL(r.objects, safe);
+          bytes = stlRes instanceof Uint8Array ? stlRes : new TextEncoder().encode(String(stlRes));
+          filename = safe + '.stl';
+          mime = 'model/stl';
+        }
+      } else {
+        r = await Kernel.call('exportSingleBody', {
+          scene,
+          opts: { fmt, only, originMat, name: rawName, color },
+        });
+        bytes = new Uint8Array(r.data);
+        const safe = typeof Print !== 'undefined' && Print.safeName ? Print.safeName(rawName) : rawName.replace(/[^\w.-]+/g, '_');
+        filename = safe + (fmt === 'brep' ? '.brep' : '.step');
+        mime = fmt === 'brep' ? 'text/plain' : 'application/STEP';
+      }
+      const out = {
+        fmt,
+        name: rawName,
+        filename,
+        bytes: bytes.byteLength,
+        data: bytes,
+        sourceCount: r.sourceCount || targets.length,
+        solidCount: r.solidCount || 1,
+        objectCount: r.objectCount || 1,
+        volume: r.volume || 0,
+        bbox: r.bbox || null,
+      };
+      lastSingleBody = out;
+      tst.remove();
+      if (opts.save !== false && typeof Print !== 'undefined' && Print.save) {
+        await Print.save(filename, new Blob([bytes], { type: mime }));
+      }
+      UI.toast(
+        out.solidCount > 1
+          ? T('asm.singleBodyDisjointToast', { n: out.solidCount })
+          : T('asm.singleBodyDoneToast', { n: out.sourceCount }),
+        { icon: out.solidCount > 1 ? 'info' : 'check', ms: 3200 }
+      );
+      return out;
+    } catch (e) {
+      tst.remove();
+      UI.toast(T('asm.singleBodyErr', { msg: e && e.message ? e.message : String(e) }), { kind: 'bad' });
+      return null;
+    }
+  }
+  async function saveAsSingleBodyPart(opts = {}) {
+    if (!isProMode() || !App.doc) return null;
+    const onlySel = !!opts.onlySel;
+    const targets = singleBodyTargets(onlySel);
+    if (!targets.length) {
+      UI.toast(T('asm.singleBodyEmpty'), { icon: 'info' });
+      return null;
+    }
+    const cleanName = String(opts.name || `${App.doc.name || T('asm.defaultName')} – 1 Körper`).trim() || 'Bauteil';
+    const only = Array.isArray(opts.only) ? opts.only : (onlySel ? targets.map((t) => t.id) : null);
+    const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+    const color = String(opts.color || firstSolidColor(targets));
+    const mat = (App.doc.settings && App.doc.settings.material) || undefined;
+    const scene = Model.kernelScene(App.doc);
+    const tst = UI.toast(T('asm.singleBodyBuilding'), { icon: 'parts', ms: 20000 });
+    try {
+      const r = await Kernel.call('exportSingleBody', {
+        scene,
+        opts: { fmt: 'brep', only, originMat, name: cleanName, color },
+      });
+      const bytes = new Uint8Array(r.data);
+      const blobId = typeof Store !== 'undefined' && Store.putBlob ? await Store.putBlob(bytes) : null;
+      const safe = typeof Print !== 'undefined' && Print.safeName ? Print.safeName(cleanName) : cleanName.replace(/[^\w.-]+/g, '_');
+      const partDoc = Model.newDoc(cleanName, { docType: 'part' });
+      if (App.doc.settings && App.doc.settings.material) partDoc.settings.material = App.doc.settings.material;
+      if (App.doc.settings && App.doc.settings.unit) partDoc.settings.unit = App.doc.settings.unit;
+      const imp = Model.newItem(
+        'import',
+        {
+          fmt: 'brep',
+          frozen: true,
+          file: safe + '.brep',
+          ...(blobId ? { blobId } : {}),
+          size: bytes.byteLength,
+          ...(!blobId && typeof Store !== 'undefined' && Store.bytesToBase64 ? { data: Store.bytesToBase64(bytes) } : {}),
+        },
+        { name: cleanName, color, mat }
+      );
+      imp.t = Model.T0();
+      partDoc.items = [imp];
+      if (typeof Store !== 'undefined' && Store.saveProject) {
+        await Store.saveProject(partDoc, 1, { keepLast: true });
+      }
+      if (opts.openTab !== false) {
+        App.openTab(partDoc, { saved: true });
+      }
+      lastSingleBody = {
+        fmt: 'part',
+        name: cleanName,
+        docId: partDoc.id,
+        itemCount: 1,
+        sourceCount: r.sourceCount || targets.length,
+        solidCount: r.solidCount || 1,
+        objectCount: 1,
+        volume: r.volume || 0,
+        bbox: r.bbox || null,
+        bytes: bytes.byteLength,
+      };
+      tst.remove();
+      UI.toast(T('asm.singleBodyPartToast', { name: cleanName }), { icon: 'check', ms: 3000 });
+      return { doc: partDoc, ...lastSingleBody };
+    } catch (e) {
+      tst.remove();
+      UI.toast(T('asm.singleBodyErr', { msg: e && e.message ? e.message : String(e) }), { kind: 'bad' });
+      return null;
+    }
+  }
+  function singleBodyDialog() {
+    if (!isProMode() || !App.doc) return null;
+    if (document.getElementById('asm-single-body-dlg')) return null;
+    const allTargets = singleBodyTargets(false);
+    if (!allTargets.length) {
+      UI.toast(T('asm.singleBodyEmpty'), { icon: 'info' });
+      return null;
+    }
+    const selTargets = typeof Print !== 'undefined' && Print.exportSelection ? Print.exportSelection() : [];
+    const st = {
+      name: `${App.doc.name || T('asm.defaultName')} – 1 Körper`,
+      fmt: 'step',
+      onlySel: false,
+    };
+    const body = h('div', { id: 'asm-single-body-dlg', class: 'sb-dlg' });
+    body.append(h('div', { class: 'hint-box' }, T('asm.singleBodyHint')));
+    const sumEl = h('div', { class: 'sb-summary mono', id: 'sb-summary' });
+    const updateSummary = () => {
+      const n = st.onlySel && selTargets.length ? selTargets.length : allTargets.length;
+      sumEl.textContent = T('asm.singleBodySummary', { n });
+    };
+    updateSummary();
+    const nameInp = h('input', { type: 'text', id: 'sb-name', value: st.name, 'aria-label': T('common.name') });
+    nameInp.oninput = () => { st.name = nameInp.value; };
+    nameInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const nameField = h('div', { class: 'field' }, h('label', { for: 'sb-name' }, T('common.name')), h('div', { class: 'inp' }, nameInp));
+    const fmtField = UI.selectField({
+      id: 'sb-fmt',
+      label: T('asm.singleBodyFmt'),
+      value: st.fmt,
+      options: [
+        ['step', T('asm.singleBodyFmtStep')],
+        ['stl', T('asm.singleBodyFmtStl')],
+        ['3mf', T('asm.singleBodyFmt3mf')],
+        ['brep', T('asm.singleBodyFmtBrep')],
+      ],
+      onChange: (v) => { st.fmt = v; },
+    });
+    body.append(sumEl, h('div', { class: 'fields' }, nameField, fmtField));
+    if (selTargets.length) {
+      const selCb = h('input', { type: 'checkbox', id: 'sb-only-sel' });
+      selCb.onchange = () => { st.onlySel = selCb.checked; updateSummary(); };
+      body.append(h('label', { class: 'check' }, selCb, T('asm.singleBodyOnlySel', { n: selTargets.length })));
+    }
+    return UI.modal({
+      title: T('asm.singleBodyTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel') },
+        {
+          id: 'sb-save-part',
+          label: T('asm.singleBodyPartBtn'),
+          run: () => { saveAsSingleBodyPart({ name: st.name, onlySel: st.onlySel }); },
+        },
+        {
+          id: 'sb-export',
+          label: T('asm.singleBodyExportBtn'),
+          primary: true,
+          run: () => { exportSingleBody({ name: st.name, fmt: st.fmt, onlySel: st.onlySel }); },
+        },
+      ],
+    });
+  }
+
+  // ================= Kabel und Schläuche (BG-34) =================
+  function isCableItem(it) {
+    return !!(it && it.kind === 'sweep' && it.p && it.p.cable);
+  }
+  function cables(doc = App.doc) {
+    if (!doc || !Array.isArray(doc.items)) return [];
+    return doc.items.filter((it) => isCableItem(it) && !it.suppressed && Model.isActive(doc, it.id));
+  }
+  function cableLength(it, doc = App.doc) {
+    if (!isCableItem(it)) return 0;
+    return Model.cableMetrics(it.p, Model.itemVars(doc, it.id)).length;
+  }
+  function createCable(opts = {}) {
+    if (!isProMode() || !App.doc) return null;
+    const type = opts.type === 'hose' ? 'hose' : 'cable';
+    const d = opts.d ?? (type === 'hose' ? 8 : 4);
+    const dNum = Model.num(d, Model.vars(App.doc).v, type === 'hose' ? 8 : 4);
+    const wall = type === 'hose'
+      ? (opts.wall ?? round(Math.min(1.5, Math.max(0.4, dNum * 0.2)), 2))
+      : 0;
+    const bendR = opts.bendR ?? Math.max(15, round(dNum * 3, 1));
+    const sag = opts.sag ?? 0;
+    const slack = opts.slack ?? 0;
+    const start = Array.isArray(opts.start) && opts.start.length >= 3 ? opts.start.slice(0, 3) : [0, 0, 0];
+    const end = Array.isArray(opts.end) && opts.end.length >= 3 ? opts.end.slice(0, 3) : [100, 0, 0];
+    const V = Model.vars(App.doc).v;
+    const pA = [0, 1, 2].map((k) => Model.num(start[k], V, 0));
+    const pB = [0, 1, 2].map((k) => Model.num(end[k], V, 0));
+    if (Math.hypot(pB[0] - pA[0], pB[1] - pA[1], pB[2] - pA[2]) < 0.5) {
+      if (!opts.silent) UI.toast(T('asm.cableTooCloseErr'), { icon: 'info' });
+      return null;
+    }
+    const cableObj = {
+      type,
+      start,
+      end,
+      dirA: opts.dirA ?? 'auto',
+      dirB: opts.dirB ?? 'auto',
+      bendR,
+      sag,
+      ...(slack ? { slack } : {}),
+      ...(opts.bindA ? { bindA: deepClone(opts.bindA) } : {}),
+      ...(opts.bindB ? { bindB: deepClone(opts.bindB) } : {}),
+      ...(Array.isArray(opts.via) && opts.via.length ? { via: opts.via.map((q) => q.slice(0, 3)) } : {}),
+    };
+    const cm = Model.cableMetrics({ d, wall, cable: cableObj }, V);
+    const name = String(opts.name || '').trim() || (type === 'hose' ? T('asm.hoseTitle') : T('asm.cableTitle'));
+    const color = String(opts.color || (type === 'hose' ? '#2e86ab' : '#262b33'));
+    let item = null;
+    App.change(T('asm.cableUndo'), (doc) => {
+      item = Model.newItem(
+        'sweep',
+        { shape: 'circle', d, w: d, h: d, wall: type === 'hose' ? wall : 0, twist: 0, cable: cableObj },
+        { name, color, role: 'solid', ...(opts.mat ? { mat: opts.mat } : {}) }
+      );
+      doc.items.push(item);
+    });
+    if (item) {
+      App.select([item.id]);
+      if (!opts.silent) {
+        UI.toast(T('asm.cableCreatedToast', { name: item.name, len: Units.fmtLenU(cm.length, 1) }), { icon: 'check', ms: 3200 });
+      }
+    }
+    return item;
+  }
+  function startCable(opts = {}) {
+    if (!isProMode() || !App.doc) return false;
+    return typeof Features !== 'undefined' && Features.startCablePick ? Features.startCablePick(opts) : false;
+  }
+  function cableDialog(opts = {}) {
+    if (!isProMode() || !App.doc) return null;
+    if (document.getElementById('asm-cable-dlg')) return null;
+    const st = {
+      type: opts.type === 'hose' ? 'hose' : 'cable',
+      name: opts.name || '',
+      d: opts.d ?? (opts.type === 'hose' ? 8 : 4),
+      wall: opts.wall ?? 1.5,
+      bendR: opts.bendR ?? 20,
+      sag: opts.sag ?? 0,
+      start: Array.isArray(opts.start) ? opts.start.slice(0, 3) : [0, 0, 20],
+      end: Array.isArray(opts.end) ? opts.end.slice(0, 3) : [100, 0, 20],
+      dirA: opts.dirA || '+Z',
+      dirB: opts.dirB || '+Z',
+    };
+    const V = Model.vars(App.doc).v;
+    const body = h('div', { id: 'asm-cable-dlg', class: 'sb-dlg' });
+    body.append(h('div', { class: 'hint-box' }, T('asm.cableDlgHint')));
+    const prevRow = h('div', { class: 'mini-row', id: 'cb-preview' },
+      h('span', { class: 'grow', id: 'cb-preview-len' }, ''),
+      h('b', { class: 'mono', id: 'cb-preview-r' }, ''));
+    const warnBox = h('div', { class: 'hint-box warn', id: 'cb-preview-warn', style: { display: 'none' } });
+    const updatePreview = () => {
+      const cm = Model.cableMetrics({
+        d: st.d,
+        wall: st.type === 'hose' ? st.wall : 0,
+        cable: { type: st.type, start: st.start, end: st.end, dirA: st.dirA, dirB: st.dirB, bendR: st.bendR, sag: st.sag },
+      }, V);
+      prevRow.querySelector('#cb-preview-len').textContent = `${T('asm.cableLengthLabel')}: ${Units.fmtLenU(cm.length, 1)}`;
+      prevRow.querySelector('#cb-preview-r').textContent = isFinite(cm.minBendR) ? `R ${Units.fmtLenU(cm.minBendR, 1)}` : T('asm.cableStraight');
+      if (!cm.bendOk) {
+        warnBox.textContent = T('asm.cableBendWarn', { minR: Units.fmtLenU(cm.minBendR, 1), req: Units.fmtLenU(cm.bendR, 1) });
+        warnBox.style.display = '';
+      } else {
+        warnBox.style.display = 'none';
+      }
+    };
+    const fl = h('div', { class: 'fields' });
+    const wallField = UI.numField({
+      id: 'cb-wall',
+      label: T('asm.cableWallLabel'),
+      value: st.wall,
+      min: 0.1,
+      unit: 'mm',
+      vars: V,
+      onCommit: (v) => { st.wall = v; updatePreview(); },
+    });
+    wallField.style.display = st.type === 'hose' ? '' : 'none';
+    const nameInp = h('input', { type: 'text', id: 'cb-name', value: st.name, placeholder: T('asm.cableTitle'), 'aria-label': T('common.name') });
+    nameInp.oninput = () => { st.name = nameInp.value; };
+    nameInp.addEventListener('keydown', (e) => e.stopPropagation());
+    const nameField = h('div', { class: 'field' }, h('label', { for: 'cb-name' }, T('common.name')), h('div', { class: 'inp' }, nameInp));
+    fl.append(
+      UI.selectField({
+        id: 'cb-type',
+        label: T('asm.cableTypeLabel'),
+        value: st.type,
+        options: [['cable', T('asm.cableKindCable')], ['hose', T('asm.cableKindHose')]],
+        onChange: (v) => {
+          st.type = v === 'hose' ? 'hose' : 'cable';
+          wallField.style.display = st.type === 'hose' ? '' : 'none';
+          updatePreview();
+        },
+      }),
+      nameField,
+      UI.numField({ id: 'cb-d', label: T('param.dia'), value: st.d, min: 0.4, unit: 'mm', vars: V, onCommit: (v) => { st.d = v; updatePreview(); } }),
+      wallField,
+      UI.numField({ id: 'cb-bendr', label: T('asm.cableBendRLabel'), value: st.bendR, min: 0.5, unit: 'mm', vars: V, onCommit: (v) => { st.bendR = v; updatePreview(); } }),
+      UI.numField({ id: 'cb-sag', label: T('asm.cableSagLabel'), value: st.sag, unit: 'mm', vars: V, onCommit: (v) => { st.sag = v; updatePreview(); } }),
+    );
+    const dirOpts = [['auto', T('asm.cableDirAuto')], ['+X', '+X'], ['-X', '−X'], ['+Y', '+Y'], ['-Y', '−Y'], ['+Z', '+Z'], ['-Z', '−Z']];
+    const portBlock = (title, ptArr, dirKey, pfx) => {
+      const wrap = h('div', { style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('b', null, title)));
+      const row3 = h('div', { class: 'fields three' });
+      ['x', 'y', 'z'].forEach((ax, k) => row3.append(UI.numField({
+        id: `cb-${pfx}${ax}`,
+        label: ax.toUpperCase(),
+        value: ptArr[k],
+        vars: V,
+        onCommit: (v) => { ptArr[k] = v; updatePreview(); },
+      })));
+      wrap.append(row3, h('div', { class: 'fields', style: { marginTop: '4px' } }, UI.selectField({
+        id: `cb-dir${pfx}`,
+        label: T('asm.cableDirLabel'),
+        value: st[dirKey],
+        options: dirOpts,
+        onChange: (v) => { st[dirKey] = v; updatePreview(); },
+      })));
+      return wrap;
+    };
+    body.append(prevRow, warnBox, fl, portBlock(T('asm.cablePortA'), st.start, 'dirA', 'a'), portBlock(T('asm.cablePortB'), st.end, 'dirB', 'b'));
+    updatePreview();
+    let dlgRef = null;
+    dlgRef = UI.modal({
+      title: T('asm.cableDlgTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel') },
+        {
+          id: 'cb-pick-3d',
+          label: T('asm.cablePick3dBtn'),
+          run: () => {
+            if (dlgRef) dlgRef.close();
+            startCable({ type: st.type, name: st.name, d: st.d, wall: st.wall, bendR: st.bendR, sag: st.sag });
+          },
+        },
+        {
+          id: 'cb-create',
+          label: T('asm.cableCreateBtn'),
+          primary: true,
+          run: () => {
+            const ae = document.activeElement;
+            if (ae && body.contains(ae) && ae.tagName === 'INPUT') ae.blur();
+            const created = createCable({ ...st, asAssembly: false });
+            if (!created) return false;
+          },
+        },
+      ],
+    });
+    return dlgRef;
+  }
+
   return {
     init,
     isAssembly,
@@ -5060,5 +5504,15 @@ const Assembly = (() => {
     asmVariantDialog,
     asmVariantTreeSection,
     asmVariantSection,
+    exportSingleBody,
+    saveAsSingleBodyPart,
+    singleBodyDialog,
+    get lastSingleBody() { return lastSingleBody; },
+    isCableItem,
+    cables,
+    cableLength,
+    createCable,
+    startCable,
+    cableDialog,
   };
 })();

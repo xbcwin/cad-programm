@@ -823,6 +823,14 @@ const Comp = (() => {
       Store.on('deleted', onExternalChange);
     }
     App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30));
+    App.on('doc', () => {
+      if (selectedSkeletonId && !findSkeleton(selectedSkeletonId, App.doc)) {
+        selectedSkeletonId = null;
+      }
+      if (App.doc && Array.isArray(App.doc.skeletons) && App.doc.skeletons.length) {
+        syncSkeletons(App.doc);
+      }
+    });
   }
   function canPatternPart(it, doc = App.doc) {
     if (!it || !doc || !Array.isArray(doc.items) || !doc.items.includes(it)) return false;
@@ -907,6 +915,1021 @@ const Comp = (() => {
     return true;
   }
 
+  // ================= Skelett-Skizze (BG-32) =================
+  let selectedSkeletonId = null;
+  const VALID_SKEL_PARAM_RE = /^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/;
+  const SKEL_NON_EXPR_P = new Set([
+    'op', 'pt', 'plane', 'keep', 'axis', 'scaleUnit', 'distUnit', 'mode', 'sourceId', 'csv', 'align',
+    'target', 'targets', 'pivot', 'uniform', 'bendAxis', 'anchor', 'flip', 'face', 'faceRef', 'toFace',
+    'dir', 'extent', 'wallSide', 'side', 'roundEnds', 'kind', 'extend', 'shape', 'form', 'norm', 'end',
+    'from', 'ends', 'size', 'profile', 'autoNorm', 'style', 'autoDepth', 'layout', 'sketch3dId', 'wrapId',
+    'prof', 'profName', 'by', 'lib', 'fmt', 'file', 'blobId', 'data', 'stepEntity', 'stepMat', 'sketch',
+    'sketches', 'path', 'rail', 'rail2', 'path3d', 'sketch3d', 'features', 'datumId', 'axisId', 'axisEnt',
+    'docId', 'docName', 'docType', 'variantId', 'skelOverrides', 'assembly', 'sel', 'printFit',
+  ]);
+  const SKEL_DIM_PREFIX = {
+    len: 'Laenge',
+    w: 'Breite',
+    h: 'Hoehe',
+    d: 'Durchmesser',
+    r: 'Radius',
+    dist: 'Abstand',
+    distPL: 'Abstand',
+    distCC: 'Abstand',
+    ord: 'Abstand',
+    ang: 'Winkel',
+    angLL: 'Winkel',
+    ang3: 'Winkel',
+    arcLen: 'Bogenlaenge',
+    x: 'PosX',
+    y: 'PosY',
+  };
+
+  function isProMode() {
+    return !(typeof ViewPrefs !== 'undefined' && ViewPrefs.simple);
+  }
+  function skeletons(doc = App.doc) {
+    return (doc && Array.isArray(doc.skeletons)) ? doc.skeletons : [];
+  }
+  function findSkeleton(idOrName, doc = App.doc) {
+    const key = String(idOrName || '').trim();
+    if (!key) return null;
+    const list = skeletons(doc);
+    return list.find((sk) => sk && sk.id === key)
+      || list.find((sk) => sk && sk.name && sk.name.toLowerCase() === key.toLowerCase())
+      || null;
+  }
+  function defaultSkeletonName(doc = App.doc) {
+    const list = skeletons(doc);
+    const base = T('skel.defaultName');
+    if (!list.some((s) => s && s.name && s.name.toLowerCase() === base.toLowerCase())) return base;
+    let n = 2;
+    while (list.some((s) => s && s.name && s.name.toLowerCase() === `${base} ${n}`.toLowerCase())) n++;
+    return `${base} ${n}`;
+  }
+  function isValidSkelParamName(name) {
+    return typeof name === 'string' && VALID_SKEL_PARAM_RE.test(name) && !/^pi$/i.test(name);
+  }
+  function nextSkeletonDimName(dimKind, currentDims = [], doc = App.doc, excludeSkId = null) {
+    const base = SKEL_DIM_PREFIX[dimKind] || 'Sk_Mass';
+    const used = new Set();
+    for (const p of (doc && Array.isArray(doc.params)) ? doc.params : []) {
+      if (!p || !p.name) continue;
+      if (excludeSkId && p.skeleton && p.skeleton.id === excludeSkId) continue;
+      used.add(p.name.toLowerCase());
+    }
+    for (const sk of skeletons(doc)) {
+      if (!sk || (excludeSkId && sk.id === excludeSkId)) continue;
+      for (const d of sk.dims || []) if (d && d.name) used.add(d.name.toLowerCase());
+    }
+    for (const d of currentDims || []) if (d && d.name) used.add(d.name.toLowerCase());
+    if (!used.has(base.toLowerCase())) return base;
+    let n = 2;
+    while (used.has(`${base}_${n}`.toLowerCase())) n++;
+    return `${base}_${n}`;
+  }
+  function baseVarsWithoutSkeletons(doc, excludeSkId = null) {
+    const v = {};
+    const tables = (doc && Array.isArray(doc.tables)) ? doc.tables : [];
+    Object.defineProperty(v, '__tables', { value: tables, enumerable: false, configurable: true });
+    for (const p of (doc && Array.isArray(doc.params)) ? doc.params : []) {
+      if (!p || !p.name || p.skeleton) continue;
+      if (p.measure && typeof p.expr === 'number' && isFinite(p.expr)) v[p.name] = p.expr;
+    }
+    for (const p of (doc && Array.isArray(doc.params)) ? doc.params : []) {
+      if (!p || !p.name) continue;
+      if (p.skeleton) {
+        if (!excludeSkId || p.skeleton.id !== excludeSkId) {
+          const val = typeof p.expr === 'number' ? p.expr : Model.num(p.expr, v, 0);
+          if (isFinite(val)) v[p.name] = val;
+        }
+        continue;
+      }
+      try { v[p.name] = Expr.eval(String(p.expr), v, tables); }
+      catch (_) { v[p.name] = 0; }
+    }
+    return v;
+  }
+  function skEntPoints(e) {
+    const out = [];
+    const P = (p, xy) => { if (xy) out.push([{ e: e.id, p }, xy]); };
+    if (!e) return out;
+    if (e.type === 'line' || e.type === 'slot') { P('a', e.a); P('b', e.b); if (e.a && e.b) P('mid', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
+    else if (e.type === 'arc') { P('a', e.a); P('b', e.b); P('m', e.m); const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) P('c', ai.c); }
+    else if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'ellarc') P('c', e.c);
+    else if (e.type === 'conic') { P('a', e.a); P('b', e.b); P('m', e.m); }
+    else if (e.type === 'bridge') { P('a', SK.endA(e)); P('b', SK.endB(e)); }
+    else if (e.type === 'text' || e.type === 'point') P('a', e.a);
+    else if (e.type === 'poly') { P('c', e.c); SK.polyCorners(e).forEach((q, i) => P('v' + i, q)); }
+    else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => P('k' + i, q)); if (e.a && e.b) P('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
+    return out;
+  }
+  function measureDimOnEnts(ents, dm) {
+    if (!dm || !Array.isArray(ents)) return NaN;
+    const findE = (id) => ents.find((x) => x && x.id === id) || null;
+    if (dm.e) {
+      const en = findE(dm.e);
+      return en ? SK.measure(en, dm.k) : NaN;
+    }
+    const refs = dm.refs || [];
+    const refXY = (ref) => {
+      if (!ref) return null;
+      if (ref.at) return ref.at;
+      if (ref.e === 'origin') return [0, 0];
+      const e = findE(ref.e); if (!e) return null;
+      if (ref.p === 'mid' && e.a && e.b) return [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
+      const m = skEntPoints(e).find(([r]) => r.p === ref.p);
+      return m ? m[1] : null;
+    };
+    const refLine = (ref) => {
+      const e = ref && findE(ref.e); if (!e) return null;
+      if (e.type === 'rect') { const c = SK.rectCorners(e); const i = ref.edge || 0; return [c[i], c[(i + 1) % 4]]; }
+      return e.a && e.b ? [e.a, e.b] : null;
+    };
+    const refCircle = (ref) => {
+      const e = ref && findE(ref.e); if (!e) return null;
+      if (e.type === 'circle') return { c: e.c, r: e.r };
+      if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); return ai ? { c: ai.c, r: ai.r } : null; }
+      return null;
+    };
+    const [r0, r1] = refs;
+    if (dm.k === 'dist') { const a = refXY(r0), b = refXY(r1); return a && b ? SK.d2(a, b) : NaN; }
+    if (dm.k === 'distCC') {
+      const A = refCircle(r0), B = refCircle(r1);
+      if (!A || !B) return NaN;
+      const d = SK.d2(A.c, B.c);
+      return dm.cm === 'min' ? d - A.r - B.r : dm.cm === 'max' ? d + A.r + B.r : d;
+    }
+    if (dm.k === 'distPL') {
+      const p = refXY(r0), L = refLine(r1);
+      if (!p || !L) return NaN;
+      const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1];
+      return Math.abs((p[0] - L[0][0]) * dy - (p[1] - L[0][1]) * dx) / (Math.hypot(dx, dy) || 1);
+    }
+    if (dm.k === 'angLL') {
+      const A = refLine(r0), B = refLine(r1);
+      if (!A || !B) return NaN;
+      const ux = A[1][0] - A[0][0], uy = A[1][1] - A[0][1], vx = B[1][0] - B[0][0], vy = B[1][1] - B[0][1];
+      return (Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy) * 180) / Math.PI;
+    }
+    if (dm.k === 'ang3') {
+      const a = refXY(refs[0]), v0 = refXY(refs[1]), b = refXY(refs[2]);
+      if (!a || !v0 || !b) return NaN;
+      const ux = a[0] - v0[0], uy = a[1] - v0[1], wx = b[0] - v0[0], wy = b[1] - v0[1];
+      if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(wx, wy) < 1e-12) return NaN;
+      return (Math.atan2(Math.abs(ux * wy - uy * wx), ux * wx + uy * wy) * 180) / Math.PI;
+    }
+    if (dm.k === 'ord') {
+      const p = refXY(r0); if (!p) return NaN;
+      const sg = dm.sg === -1 ? -1 : 1;
+      const Ln = refLine(r1);
+      if (Ln) {
+        const dx = Ln[1][0] - Ln[0][0], dy = Ln[1][1] - Ln[0][1];
+        return sg * (-(p[0] - Ln[0][0]) * dy + (p[1] - Ln[0][1]) * dx) / (Math.hypot(dx, dy) || 1);
+      }
+      const o = refXY(r1); if (!o) return NaN;
+      const ax = dm.axis === 'y' ? 1 : 0;
+      return sg * (p[ax] - o[ax]);
+    }
+    return NaN;
+  }
+  function replaceParamNameInDoc(doc, oldName, replName) {
+    if (!doc || !oldName || !replName || oldName === replName) return false;
+    const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß_0-9])' + oldName.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(?![A-Za-zÄÖÜäöüß_0-9])', 'gi');
+    let hit = false;
+    const fix = (s) => {
+      if (typeof s !== 'string') return s;
+      const r = s.replace(re, (_, pre) => { hit = true; return pre + replName; });
+      return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r;
+    };
+    for (const q of doc.params || []) if (q && !q.skeleton) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) if (r) r.val = fix(r.val);
+    for (const v of doc.variants || []) if (v && v.values) for (const k of Object.keys(v.values)) v.values[k] = fix(v.values[k]);
+    for (const av of doc.asmVariants || []) {
+      if (av && av.values) for (const k of Object.keys(av.values)) av.values[k] = fix(av.values[k]);
+      if (av && av.itemParams) for (const ip of Object.values(av.itemParams)) if (ip && typeof ip === 'object') for (const k of Object.keys(ip)) ip[k] = fix(ip[k]);
+    }
+    for (const sk of skeletons(doc)) {
+      for (const d of sk.dims || []) if (d && typeof d.v === 'string') d.v = fix(d.v);
+    }
+    Model.walk(doc.items || [], (it) => {
+      if (!it) return;
+      for (const k in it.p || {}) {
+        if (SKEL_NON_EXPR_P.has(k)) continue;
+        it.p[k] = fix(it.p[k]);
+      }
+      if (it.p && it.p.skelOverrides && typeof it.p.skelOverrides === 'object') {
+        for (const k of Object.keys(it.p.skelOverrides)) it.p.skelOverrides[k] = fix(it.p.skelOverrides[k]);
+      }
+      for (const k in it.t || {}) it.t[k] = fix(it.t[k]);
+      for (const f of it.finishes || []) {
+        f.r = fix(f.r);
+        if (f.r2 != null) f.r2 = fix(f.r2);
+        if (f.a != null) f.a = fix(f.a);
+        if (f.d1 != null) f.d1 = fix(f.d1);
+        if (f.d2 != null) f.d2 = fix(f.d2);
+        if (f.d3 != null) f.d3 = fix(f.d3);
+        for (const fw of f.faceWalls || []) fw.r = fix(fw.r);
+      }
+      if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v);
+      if (it.p && Array.isArray(it.p.sketches)) for (const sk of it.p.sketches) for (const d of (sk && sk.dims) || []) d.v = fix(d.v);
+      if (it.p && it.p.sketch3d) {
+        for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]);
+        for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v);
+      }
+      if (it.userPart && Array.isArray(it.userPart.params)) for (const qp of it.userPart.params) qp.expr = fix(qp.expr);
+      if (it.partRef && Array.isArray(it.partRef.params)) for (const qp of it.partRef.params) qp.expr = fix(qp.expr);
+    });
+    for (const j of doc.joints || []) if (j && j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
+    return hit;
+  }
+  function collectItemExprNames(it, doc, seenDocs = new Set()) {
+    const names = new Set();
+    const addExpr = (val) => {
+      if (typeof val !== 'string' || !val.trim()) return;
+      for (const nm of Expr.names(val)) names.add(nm.toLowerCase());
+    };
+    const scanItem = (node) => {
+      if (!node) return;
+      for (const k in node.t || {}) addExpr(node.t[k]);
+      for (const k in node.p || {}) {
+        if (SKEL_NON_EXPR_P.has(k)) continue;
+        addExpr(node.p[k]);
+      }
+      if (node.p && node.p.skelOverrides && typeof node.p.skelOverrides === 'object') {
+        for (const v of Object.values(node.p.skelOverrides)) addExpr(v);
+      }
+      for (const f of node.finishes || []) {
+        addExpr(f.r); addExpr(f.r2); addExpr(f.a); addExpr(f.d1); addExpr(f.d2); addExpr(f.d3);
+        for (const fw of f.faceWalls || []) addExpr(fw.r);
+      }
+      if (node.p && node.p.sketch) for (const d of node.p.sketch.dims || []) addExpr(d.v);
+      if (node.p && Array.isArray(node.p.sketches)) for (const sk of node.p.sketches) for (const d of (sk && sk.dims) || []) addExpr(d.v);
+      if (node.p && node.p.sketch3d) {
+        for (const e of node.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) addExpr(e[pk][j]);
+        for (const d of node.p.sketch3d.dims || []) addExpr(d.v);
+      }
+      if (node.userPart && Array.isArray(node.userPart.params)) for (const qp of node.userPart.params) addExpr(qp.expr);
+      if (node.partRef && Array.isArray(node.partRef.params)) for (const qp of node.partRef.params) addExpr(qp.expr);
+      if (node.kind === 'ref' && node.p && node.p.docId && !seenDocs.has(node.p.docId)) {
+        const rd = resolveDoc(node.p.docId);
+        if (rd) {
+          seenDocs.add(rd.id);
+          const ownParamLower = new Set((rd.params || []).filter((q) => q && q.name).map((q) => q.name.toLowerCase()));
+          const ovKeys = new Set(Object.keys((node.p && node.p.skelOverrides) || {}).map((k) => k.toLowerCase()));
+          for (const qp of rd.params || []) {
+            if (!qp || !qp.name) continue;
+            if (!ovKeys.has(qp.name.toLowerCase())) addExpr(qp.expr);
+          }
+          const subNames = new Set();
+          for (const c of rd.items || []) {
+            for (const sn of collectItemExprNames(c, rd, seenDocs)) subNames.add(sn);
+          }
+          for (const sn of subNames) {
+            if (!ownParamLower.has(sn) || ovKeys.has(sn)) names.add(sn);
+          }
+        }
+      }
+      if (Array.isArray(node.children)) for (const c of node.children) scanItem(c);
+    };
+    scanItem(it);
+    return names;
+  }
+  function skeletonDrivenParts(skId = null, paramName = null, doc = App.doc) {
+    if (!doc) return [];
+    const directMap = new Map();
+    if (paramName) {
+      directMap.set(String(paramName).toLowerCase(), paramName);
+    } else {
+      for (const sk of skeletons(doc)) {
+        if (skId && sk.id !== skId) continue;
+        for (const d of sk.dims || []) {
+          if (d && isValidSkelParamName(d.name)) directMap.set(d.name.toLowerCase(), d.name);
+        }
+      }
+      for (const p of doc.params || []) {
+        if (!p || !p.skeleton || !p.name) continue;
+        if (skId && p.skeleton.id !== skId) continue;
+        directMap.set(p.name.toLowerCase(), p.name);
+      }
+    }
+    if (!directMap.size) return [];
+    const expanded = new Set(directMap.keys());
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const p of doc.params || []) {
+        if (!p || !p.name || p.skeleton) continue;
+        const low = p.name.toLowerCase();
+        if (expanded.has(low)) continue;
+        if (typeof p.expr === 'string' && Expr.names(p.expr).some((nm) => expanded.has(nm.toLowerCase()))) {
+          expanded.add(low);
+          changed = true;
+        }
+      }
+    }
+    const out = [];
+    for (const it of doc.items || []) {
+      if (!it || it.suppressed) continue;
+      const used = collectItemExprNames(it, doc);
+      const hits = [];
+      for (const u of used) {
+        if (expanded.has(u)) hits.push(directMap.get(u) || u);
+      }
+      if (hits.length) {
+        out.push({ itemId: it.id, name: Model.label(it), params: [...new Set(hits)] });
+      }
+    }
+    return out;
+  }
+  function syncSkeletons(doc = App.doc) {
+    if (!doc) return { synced: 0, changed: false };
+    doc.params = Array.isArray(doc.params) ? doc.params : [];
+    const list = skeletons(doc);
+    if (!list.length) {
+      let changed = false;
+      for (const p of doc.params) {
+        if (p && p.skeleton) { delete p.skeleton; changed = true; }
+      }
+      return { synced: 0, changed };
+    }
+    const baseV = {};
+    const tables = Array.isArray(doc.tables) ? doc.tables : [];
+    Object.defineProperty(baseV, '__tables', { value: tables, enumerable: false, configurable: true });
+    for (const p of doc.params) {
+      if (!p || !p.name || p.skeleton) continue;
+      if (p.measure && typeof p.expr === 'number' && isFinite(p.expr)) baseV[p.name] = p.expr;
+    }
+    for (const p of doc.params) {
+      if (!p || !p.name || p.skeleton) continue;
+      try { baseV[p.name] = Expr.eval(String(p.expr), baseV, tables); }
+      catch (_) { baseV[p.name] = 0; }
+    }
+    const desired = [];
+    const suppressedIds = new Set();
+    for (const sk of list) {
+      if (!sk || !sk.id) continue;
+      if (sk.suppressed) {
+        suppressedIds.add(sk.id);
+        for (const p of doc.params) {
+          if (p && p.skeleton && p.skeleton.id === sk.id && p.name) {
+            const val = typeof p.expr === 'number' ? p.expr : Model.num(p.expr, baseV, 0);
+            if (isFinite(val)) baseV[p.name] = val;
+          }
+        }
+        continue;
+      }
+      let solvedEnts = Array.isArray(sk.ents) ? sk.ents : [];
+      if (typeof Solver !== 'undefined' && Solver.cached) {
+        const res = Solver.cached({ ents: sk.ents || [], dims: sk.dims || [], cons: sk.cons || [] }, baseV);
+        if (res && Array.isArray(res.ents)) solvedEnts = res.ents;
+      }
+      for (const d of sk.dims || []) {
+        if (!d) continue;
+        if (!d.id) d.id = uid('m');
+        if (!isValidSkelParamName(d.name)) continue;
+        let val = d.ref ? measureDimOnEnts(solvedEnts, d) : Model.num(d.v, baseV, NaN);
+        if (!isFinite(val)) val = measureDimOnEnts(solvedEnts, d);
+        if (!isFinite(val)) continue;
+        val = round(val, 6);
+        desired.push({
+          skId: sk.id,
+          skName: sk.name || T('skel.defaultName'),
+          dimId: d.id,
+          name: d.name,
+          k: d.k,
+          ref: !!d.ref,
+          val,
+        });
+        baseV[d.name] = val;
+      }
+    }
+    let changed = false;
+    const matchedParamIds = new Set();
+    for (const ds of desired) {
+      let existing = doc.params.find((p) => p && p.skeleton && p.skeleton.id === ds.skId && p.skeleton.dimId === ds.dimId);
+      if (!existing) {
+        const sameName = doc.params.find((p) => p && p.name && p.name.toLowerCase() === ds.name.toLowerCase());
+        if (sameName && !sameName.skeleton) continue;
+        if (sameName && sameName.skeleton) existing = sameName;
+      }
+      const nextMeta = { id: ds.skId, dimId: ds.dimId, skName: ds.skName, k: ds.k, ref: ds.ref };
+      if (existing) {
+        if (existing.name !== ds.name) {
+          const clash = doc.params.some((p) => p && p !== existing && p.name && p.name.toLowerCase() === ds.name.toLowerCase());
+          if (!clash) {
+            const oldName = existing.name;
+            existing.name = ds.name;
+            replaceParamNameInDoc(doc, oldName, ds.name);
+            changed = true;
+          }
+        }
+        if (existing.expr !== ds.val) { existing.expr = ds.val; changed = true; }
+        if (JSON.stringify(existing.skeleton) !== JSON.stringify(nextMeta)) { existing.skeleton = nextMeta; changed = true; }
+        matchedParamIds.add(existing.id);
+      } else {
+        const np = { id: uid('m'), name: ds.name, expr: ds.val, skeleton: nextMeta };
+        doc.params.push(np);
+        matchedParamIds.add(np.id);
+        changed = true;
+      }
+    }
+    const usedNames = new Set();
+    Model.walk(doc.items || [], (it) => {
+      for (const nm of collectItemExprNames(it, doc)) usedNames.add(nm);
+    });
+    for (const p of doc.params) {
+      if (!p || p.skeleton) continue;
+      if (typeof p.expr === 'string') for (const nm of Expr.names(p.expr)) usedNames.add(nm.toLowerCase());
+    }
+    const nextParams = [];
+    for (const p of doc.params) {
+      if (!p || !p.skeleton || matchedParamIds.has(p.id) || suppressedIds.has(p.skeleton.id)) {
+        nextParams.push(p);
+        continue;
+      }
+      changed = true;
+      if (p.name && usedNames.has(p.name.toLowerCase())) {
+        delete p.skeleton;
+        nextParams.push(p);
+      }
+    }
+    if (nextParams.length !== doc.params.length) doc.params = nextParams;
+    return { synced: desired.length, changed };
+  }
+  function startSkeleton(opts = {}) {
+    if (!isProMode()) {
+      UI.toast(T('skel.proOnly'), { icon: 'info' });
+      return false;
+    }
+    if (opts.choose && typeof Sketch !== 'undefined' && Sketch.chooseAndStartSkeleton) {
+      return Sketch.chooseAndStartSkeleton(opts.anchor || $('#t-asm-skeleton'));
+    }
+    if (typeof Sketch === 'undefined' || !Sketch.startSkeleton) return false;
+    return Sketch.startSkeleton(opts);
+  }
+  function editSkeleton(id) {
+    if (!isProMode()) {
+      UI.toast(T('skel.proOnly'), { icon: 'info' });
+      return false;
+    }
+    if (typeof Sketch === 'undefined' || !Sketch.editSkeleton) return false;
+    return Sketch.editSkeleton(id);
+  }
+  function createSkeleton(opts = {}) {
+    if (!App.doc) return null;
+    if (!isProMode() && !opts.force) {
+      UI.toast(T('skel.proOnly'), { icon: 'info' });
+      return null;
+    }
+    const name = String(opts.name || defaultSkeletonName(App.doc)).trim() || defaultSkeletonName(App.doc);
+    const plane = opts.plane ? deepClone(opts.plane) : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const ents = deepClone(opts.ents || []);
+    const dims = deepClone(opts.dims || []);
+    const cons = deepClone(opts.cons || []);
+    for (const d of dims) {
+      if (!d) continue;
+      if (!d.id) d.id = uid('m');
+      if (!d.ref && !d.name) d.name = nextSkeletonDimName(d.k, dims, App.doc);
+    }
+    if (typeof Solver !== 'undefined' && Solver.solve && ents.length) {
+      Solver.solve({ ents, dims, cons }, baseVarsWithoutSkeletons(App.doc), { inPlace: true, analyze: false });
+    }
+    const sk = {
+      id: opts.id || uid('sk'),
+      name,
+      plane,
+      ents,
+      dims,
+      cons,
+      ...(opts.hidden ? { hidden: true } : {}),
+    };
+    App.change(T('skel.createUndo', { name }), (doc) => {
+      doc.skeletons = Array.isArray(doc.skeletons) ? doc.skeletons : [];
+      doc.skeletons.push(sk);
+    });
+    if (opts.select !== false) selectSkeleton(sk.id);
+    else if (typeof Sketch !== 'undefined' && Sketch.render3dScene) Sketch.render3dScene();
+    return findSkeleton(sk.id);
+  }
+  function saveSkeletonSketch(editId, skData, opts = {}) {
+    if (!App.doc || !skData) return null;
+    let savedId = editId || null;
+    const label = editId ? T('skel.editUndo') : T('skel.createUndo', { name: opts.name || defaultSkeletonName(App.doc) });
+    const ok = App.change(label, (doc) => {
+      if (Array.isArray(opts.blocks)) doc.blocks = deepClone(opts.blocks);
+      doc.skeletons = Array.isArray(doc.skeletons) ? doc.skeletons : [];
+      const curDims = deepClone(skData.dims || []);
+      for (const d of curDims) {
+        if (!d) continue;
+        if (!d.id) d.id = uid('m');
+      }
+      if (editId) {
+        const sk = doc.skeletons.find((x) => x && x.id === editId);
+        if (!sk) return false;
+        sk.plane = deepClone(skData.plane);
+        sk.ents = deepClone(skData.ents || []);
+        sk.dims = curDims;
+        sk.cons = deepClone(skData.cons || []);
+        if (skData.blockInsts && skData.blockInsts.length) sk.blockInsts = deepClone(skData.blockInsts); else delete sk.blockInsts;
+        if (skData.locked) sk.locked = true; else delete sk.locked;
+        if (skData.bg) sk.bg = deepClone(skData.bg); else delete sk.bg;
+        if (skData.guides && skData.guides.length) sk.guides = deepClone(skData.guides); else delete sk.guides;
+        if (skData.gridMode === 'polar') { sk.gridMode = 'polar'; sk.polar = deepClone(skData.polar); } else { delete sk.gridMode; delete sk.polar; }
+        savedId = sk.id;
+      } else {
+        const sk = {
+          id: uid('sk'),
+          name: String(opts.name || defaultSkeletonName(doc)).trim() || defaultSkeletonName(doc),
+          plane: deepClone(skData.plane),
+          ents: deepClone(skData.ents || []),
+          dims: curDims,
+          cons: deepClone(skData.cons || []),
+          ...(skData.blockInsts && skData.blockInsts.length ? { blockInsts: deepClone(skData.blockInsts) } : {}),
+          ...(skData.locked ? { locked: true } : {}),
+          ...(skData.bg ? { bg: deepClone(skData.bg) } : {}),
+          ...(skData.guides && skData.guides.length ? { guides: deepClone(skData.guides) } : {}),
+          ...(skData.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(skData.polar) } : {}),
+        };
+        doc.skeletons.push(sk);
+        savedId = sk.id;
+      }
+    });
+    if (ok === false) return null;
+    const saved = findSkeleton(savedId);
+    const driven = saved ? skeletonDrivenParts(saved.id) : [];
+    if (driven.length) {
+      UI.toast(T(driven.length === 1 ? 'skel.savedDrivenOneToast' : 'skel.savedDrivenManyToast', { name: saved.name, n: driven.length }), { icon: 'check', ms: 3400 });
+    } else if (saved) {
+      UI.toast(T('skel.savedToast', { name: saved.name }), { icon: 'check', ms: 2600 });
+    }
+    return saved;
+  }
+  function setSkeletonDim(skId, dimIdOrName, val, opts = {}) {
+    if (!App.doc) return false;
+    const skNow = findSkeleton(skId);
+    if (!skNow) return false;
+    const key = String(dimIdOrName || '').trim();
+    const dimNow = (skNow.dims || []).find((d) => d && (d.id === key || (d.name && d.name.toLowerCase() === key.toLowerCase())));
+    if (!dimNow) return false;
+    const baseV = baseVarsWithoutSkeletons(App.doc, skNow.id);
+    const n = Model.num(val, baseV, NaN);
+    const signed = dimNow.k === 'ang' || dimNow.k === 'x' || dimNow.k === 'y' || dimNow.k === 'ord' || /^hAng\d+$/.test(dimNow.k || '');
+    const zeroOk = dimNow.k === 'dist' || dimNow.k === 'distPL' || dimNow.k === 'distCC' || dimNow.k === 'angLL' || dimNow.k === 'ang3';
+    if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || ((dimNow.k === 'angLL' || dimNow.k === 'ang3') && n > 180)) {
+      UI.toast(T('sk.toast.badVal', { v: val }), { kind: 'bad' });
+      return false;
+    }
+    const cleanVal = (typeof val === 'string' && !Expr.names(val).length) ? round(n, 4) : val;
+    let conflict = false;
+    const ok = App.change(T('skel.dimChangeUndo', { name: dimNow.name || skNow.name }), (doc) => {
+      const sk = findSkeleton(skNow.id, doc);
+      const dm = sk && (sk.dims || []).find((d) => d && d.id === dimNow.id);
+      if (!sk || !dm) return false;
+      dm.v = cleanVal;
+      delete dm.ref;
+      if (opts.name != null && isValidSkelParamName(opts.name)) dm.name = opts.name;
+      if (typeof Solver !== 'undefined' && Solver.solve) {
+        const res = Solver.solve({ ents: sk.ents || [], dims: sk.dims || [], cons: sk.cons || [] }, baseVarsWithoutSkeletons(doc, sk.id), { inPlace: true, analyze: false });
+        if (res && !res.ok) { conflict = true; return false; }
+      }
+    }, opts.merge ? { merge: opts.merge } : {});
+    if (conflict || ok === false) {
+      if (conflict) UI.toast(T('skel.dimConflictToast'), { kind: 'bad' });
+      return false;
+    }
+    if (typeof Sketch !== 'undefined' && Sketch.render3dScene) Sketch.render3dScene();
+    const driven = skeletonDrivenParts(skNow.id, dimNow.name);
+    if (!opts.silent && driven.length) {
+      UI.toast(T(driven.length === 1 ? 'skel.recalcOneToast' : 'skel.recalcManyToast', { n: driven.length }), { icon: 'check', ms: 2400 });
+    }
+    return true;
+  }
+  function renameSkeletonDim(skId, dimIdOrName, newName) {
+    const clean = String(newName || '').trim().replace(/\s+/g, '_');
+    if (!isValidSkelParamName(clean)) {
+      UI.toast(T('left.par.badName'), { kind: 'bad' });
+      return false;
+    }
+    const skNow = findSkeleton(skId);
+    if (!skNow) return false;
+    const key = String(dimIdOrName || '').trim();
+    const dmNow = (skNow.dims || []).find((d) => d && (d.id === key || (d.name && d.name.toLowerCase() === key.toLowerCase())));
+    if (!dmNow) return false;
+    if (dmNow.name === clean) return true;
+    const clash = (App.doc.params || []).some((p) => p && p.name && p.name.toLowerCase() === clean.toLowerCase() && !(p.skeleton && p.skeleton.id === skNow.id && p.skeleton.dimId === dmNow.id))
+      || skeletons(App.doc).some((s) => (s.dims || []).some((d) => d && d !== dmNow && d.name && d.name.toLowerCase() === clean.toLowerCase()));
+    if (clash) {
+      UI.toast(T('left.par.paramExists'), { kind: 'bad' });
+      return false;
+    }
+    App.change(T('skel.dimRenameUndo'), (doc) => {
+      const sk = findSkeleton(skNow.id, doc);
+      const dm = sk && (sk.dims || []).find((d) => d && d.id === dmNow.id);
+      if (!dm) return false;
+      dm.name = clean;
+    });
+    return true;
+  }
+  function renameSkeleton(skId, newName) {
+    const clean = String(newName || '').trim();
+    const skNow = findSkeleton(skId);
+    if (!skNow || !clean || clean === skNow.name) return false;
+    App.change(T('skel.renameUndo'), (doc) => {
+      const sk = findSkeleton(skNow.id, doc);
+      if (!sk) return false;
+      sk.name = clean;
+    });
+    return true;
+  }
+  function toggleSkeletonHidden(skId) {
+    const skNow = findSkeleton(skId);
+    if (!skNow) return false;
+    App.change(skNow.hidden ? T('skel.showUndo') : T('skel.hideUndo'), (doc) => {
+      const sk = findSkeleton(skNow.id, doc);
+      if (!sk) return false;
+      sk.hidden = !sk.hidden;
+    });
+    if (typeof Sketch !== 'undefined' && Sketch.render3dScene) Sketch.render3dScene();
+    return true;
+  }
+  function removeSkeleton(skId) {
+    const skNow = findSkeleton(skId);
+    if (!skNow) return false;
+    if (selectedSkeletonId === skNow.id) selectedSkeletonId = null;
+    App.change(T('skel.deleteUndo', { name: skNow.name }), (doc) => {
+      doc.skeletons = skeletons(doc).filter((s) => s && s.id !== skNow.id);
+    });
+    if (typeof Sketch !== 'undefined' && Sketch.render3dScene) Sketch.render3dScene();
+    return true;
+  }
+  function editableBindTargets(doc = App.doc) {
+    if (!doc) return [];
+    const targets = [];
+    const addTargetsFor = (it, prefix = '', labelPrefix = '') => {
+      if (!it || it.suppressed) return;
+      const nm = labelPrefix ? `${labelPrefix} · ${Model.label(it)}` : Model.label(it);
+      if (it.kind === 'ref') {
+        const rd = it.p && it.p.docId ? resolveDoc(it.p.docId) : null;
+        for (const qp of (rd && Array.isArray(rd.params)) ? rd.params : []) {
+          if (!qp || !qp.name) continue;
+          targets.push({ propKey: `${prefix}refparam:${qp.name}`, label: `${nm} → ${qp.name}` });
+        }
+        targets.push({ propKey: `${prefix}t.x`, label: `${nm} → X` });
+        targets.push({ propKey: `${prefix}t.y`, label: `${nm} → Y` });
+        targets.push({ propKey: `${prefix}t.z`, label: `${nm} → Z` });
+        return;
+      }
+      if (it.kind === 'group') {
+        if (it.partRef && Array.isArray(it.partRef.params)) {
+          for (const qp of it.partRef.params) {
+            if (!qp || !qp.name) continue;
+            targets.push({ propKey: `${prefix}refparam:${qp.name}`, label: `${nm} → ${qp.name}` });
+          }
+        }
+        for (const c of it.children || []) {
+          addTargetsFor(c, `${prefix}child:${c.id}:`, nm);
+        }
+        targets.push({ propKey: `${prefix}t.x`, label: `${nm} → X` });
+        targets.push({ propKey: `${prefix}t.y`, label: `${nm} → Y` });
+        targets.push({ propKey: `${prefix}t.z`, label: `${nm} → Z` });
+        return;
+      }
+      const def = typeof KINDS !== 'undefined' ? KINDS[it.kind] : null;
+      if (def && Array.isArray(def.params) && def.params.length) {
+        for (const q of def.params) {
+          targets.push({ propKey: `${prefix}p.${q.k}`, label: `${nm} → ${q.label}` });
+        }
+      }
+      if (it.kind === 'extrude') {
+        targets.push({ propKey: `${prefix}p.dist`, label: `${nm} → ${T('panel.ext.depth')}` });
+      } else if (it.kind === 'revolve') {
+        targets.push({ propKey: `${prefix}p.angle`, label: `${nm} → ${T('common.angle')}` });
+      }
+      if (it.p && it.p.sketch && Array.isArray(it.p.sketch.dims)) {
+        for (const d of it.p.sketch.dims) {
+          if (!d || d.ref) continue;
+          const dk = (typeof SK !== 'undefined' && SK.DIMNAME && SK.DIMNAME[d.k]) || d.k;
+          targets.push({ propKey: `${prefix}skdim:${d.id}`, label: `${nm} → ${dk}` });
+        }
+      }
+      targets.push({ propKey: `${prefix}t.x`, label: `${nm} → X` });
+      targets.push({ propKey: `${prefix}t.y`, label: `${nm} → Y` });
+      targets.push({ propKey: `${prefix}t.z`, label: `${nm} → Z` });
+    };
+    for (const it of doc.items || []) {
+      const list = [];
+      const prevLen = targets.length;
+      addTargetsFor(it);
+      for (let i = prevLen; i < targets.length; i++) list.push({ itemId: it.id, itemName: Model.label(it), ...targets[i] });
+      targets.splice(prevLen, targets.length - prevLen, ...list);
+    }
+    return targets;
+  }
+  function applyPropBinding(it, propKey, paramName) {
+    if (!it || !propKey) return false;
+    if (propKey.startsWith('child:')) {
+      const rest = propKey.slice(6);
+      const sep = rest.indexOf(':');
+      if (sep < 0) return false;
+      const cid = rest.slice(0, sep);
+      const subKey = rest.slice(sep + 1);
+      const child = (it.children || []).find((c) => c && c.id === cid);
+      return child ? applyPropBinding(child, subKey, paramName) : false;
+    }
+    if (propKey.startsWith('refparam:')) {
+      const pName = propKey.slice(9);
+      if (!pName) return false;
+      it.p = it.p || {};
+      it.p.skelOverrides = { ...(it.p.skelOverrides || {}), [pName]: paramName };
+      return true;
+    }
+    if (propKey.startsWith('skdim:')) {
+      const did = propKey.slice(6);
+      const dm = it.p && it.p.sketch && Array.isArray(it.p.sketch.dims)
+        ? it.p.sketch.dims.find((d) => d && d.id === did)
+        : null;
+      if (!dm) return false;
+      dm.v = paramName;
+      delete dm.ref;
+      return true;
+    }
+    if (propKey.startsWith('t.')) {
+      const k = propKey.slice(2);
+      if (!k) return false;
+      it.t = it.t || Model.T0();
+      it.t[k] = paramName;
+      return true;
+    }
+    const pk = propKey.startsWith('p.') ? propKey.slice(2) : propKey;
+    if (!pk) return false;
+    it.p = it.p || {};
+    it.p[pk] = paramName;
+    return true;
+  }
+  function bindPartToSkeleton(itemId, propKey, paramName, opts = {}) {
+    if (!App.doc || !itemId || !propKey || !paramName) return false;
+    const fNow = Model.find(App.doc, itemId);
+    if (!fNow) return false;
+    const ok = App.change(T('skel.bindUndo', { part: Model.label(fNow.item), param: paramName }), (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f) return false;
+      return applyPropBinding(f.item, propKey, paramName);
+    });
+    if (ok === false) return false;
+    if (!opts.silent) {
+      UI.toast(T('skel.bindToast', { part: Model.label(fNow.item), param: paramName }), { icon: 'check', ms: 2600 });
+    }
+    return true;
+  }
+  function selectSkeleton(id, opts = {}) {
+    const next = id ? (findSkeleton(id) ? id : null) : null;
+    if (selectedSkeletonId === next && opts.silent) return;
+    selectedSkeletonId = next;
+    if (opts.silent) return;
+    if (next) {
+      if (typeof App !== 'undefined' && App.sel && App.sel.length) App.select([]);
+      if (typeof Datums !== 'undefined') {
+        if (Datums.select) Datums.select(null);
+        if (Datums.selectAxis) Datums.selectAxis(null);
+        if (Datums.selectPoint) Datums.selectPoint(null);
+        if (Datums.selectCsys) Datums.selectCsys(null);
+      }
+      if (typeof PointClouds !== 'undefined' && PointClouds.select) PointClouds.select(null);
+      if (typeof Measure !== 'undefined' && Measure.select) Measure.select(null);
+      if (typeof Joints !== 'undefined' && Joints.select) Joints.select(null);
+    }
+    if (typeof Sketch !== 'undefined' && Sketch.render3dScene) Sketch.render3dScene();
+    if (typeof Panels !== 'undefined') {
+      if (Panels.renderLeft) Panels.renderLeft();
+      if (Panels.renderRight) Panels.renderRight();
+    }
+  }
+  function skeletonTreeSection() {
+    if (!isProMode() || !App.doc) return null;
+    const list = skeletons();
+    if (!Model.isAssembly(App.doc) && !list.length) return null;
+    const head = h('div', { class: 'section-h', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, h('span', null, T('skel.treeTitle')));
+    const addBtn = h('button', { type: 'button', class: 'btn small', id: 'skel-tree-add', 'data-help': 'skeletonSketch' });
+    addBtn.innerHTML = icon('plus') + esc(T('skel.addShort'));
+    addBtn.onclick = (e) => { e.stopPropagation(); startSkeleton({ choose: true, anchor: e.currentTarget }); };
+    head.append(addBtn);
+    const sec = h('div', { class: 'datum-tree skel-tree pro', id: 'skel-tree', 'data-help': 'skeletonSketch' }, head);
+    if (!list.length) {
+      sec.append(h('div', { class: 'hint-box' }, T('skel.emptyHint')));
+      return sec;
+    }
+    for (const sk of list) {
+      const isSel = selectedSkeletonId === sk.id;
+      const namedDims = (sk.dims || []).filter((d) => d && isValidSkelParamName(d.name));
+      const driven = skeletonDrivenParts(sk.id);
+      const row = h('div', {
+        class: 'tree-row skel-row' + (isSel ? ' sel' : '') + (sk.hidden ? ' muted' : ''),
+        tabindex: '0',
+        role: 'button',
+        'aria-pressed': isSel ? 'true' : 'false',
+        dataset: { skeletonId: sk.id, skeletonName: sk.name },
+      });
+      const ic = h('span', { class: 'swatch skel' }); ic.innerHTML = icon('sketch');
+      const eye = h('button', { type: 'button', class: 'skel-eye', 'aria-label': T(sk.hidden ? 'common.show' : 'common.hide'), 'data-tip': T(sk.hidden ? 'common.show' : 'common.hide') });
+      eye.innerHTML = icon(sk.hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); toggleSkeletonHidden(sk.id); };
+      const ed = h('button', { type: 'button', class: 'skel-edit', 'aria-label': T('skel.editBtn'), 'data-tip': T('skel.editBtn') });
+      ed.innerHTML = icon('edit');
+      ed.onclick = (e) => { e.stopPropagation(); editSkeleton(sk.id); };
+      row.append(
+        ic,
+        h('span', { class: 'nm', title: sk.name }, sk.name),
+        h('span', { class: 'sub mono' }, `${namedDims.length} · ${driven.length}`),
+        h('span', { class: 'm-acts' }, eye, ed)
+      );
+      row.onclick = () => selectSkeleton(sk.id);
+      row.ondblclick = (e) => { e.stopPropagation(); editSkeleton(sk.id); };
+      row.addEventListener('keydown', (e) => {
+        if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectSkeleton(sk.id); }
+      });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'edit', label: T('skel.editBtn'), run: () => editSkeleton(sk.id) },
+          { icon: sk.hidden ? 'eye' : 'eyeOff', label: T(sk.hidden ? 'common.show' : 'common.hide'), run: () => toggleSkeletonHidden(sk.id) },
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('skel.renameTitle'), T('common.name'), sk.name, T('common.rename')); if (n && n.trim()) renameSkeleton(sk.id, n); } },
+          '-',
+          { icon: 'trash', label: T('common.delete'), run: () => removeSkeleton(sk.id) },
+        ]);
+      });
+      sec.append(row);
+    }
+    return sec;
+  }
+  function skeletonSection(ctx = 'proj') {
+    if (!isProMode() || !App.doc) return null;
+    const list = skeletons();
+    if (!Model.isAssembly(App.doc) && !list.length) return null;
+    const sec = h('div', { class: 'section pro skel-sec', id: ctx + '-skel-sec', 'data-help': 'skeletonSketch' },
+      h('div', { class: 'section-h' }, T('skel.treeTitle'))
+    );
+    if (!list.length) {
+      sec.append(h('div', { class: 'hint-box' }, T('skel.emptyHint')));
+    } else {
+      const baseV = baseVarsWithoutSkeletons(App.doc);
+      for (const sk of list) {
+        const card = h('div', { class: 'skel-proj-card', dataset: { skeletonId: sk.id } });
+        const openBtn = h('button', { type: 'button', class: 'btn small ghost' }, T('skel.openBtn'));
+        openBtn.onclick = () => selectSkeleton(sk.id);
+        const editBtn = h('button', { type: 'button', class: 'btn small' }, T('skel.editShort'));
+        editBtn.onclick = () => editSkeleton(sk.id);
+        const driven = skeletonDrivenParts(sk.id);
+        card.append(h('div', { class: 'skel-proj-head' },
+          h('b', null, sk.name),
+          h('span', { class: 'sub mono' }, T('skel.drivenShort', { n: driven.length })),
+          openBtn,
+          editBtn
+        ));
+        const namedDims = (sk.dims || []).filter((d) => d && isValidSkelParamName(d.name) && !d.ref);
+        if (namedDims.length) {
+          const flds = h('div', { class: 'fields' });
+          for (const d of namedDims) {
+            const val = Model.num(d.v, baseV, 0);
+            flds.append(UI.numField({
+              id: `skel-proj-dim-${d.id}`,
+              label: d.name,
+              value: d.v != null ? d.v : val,
+              unit: d.k === 'ang' || d.k === 'angLL' || d.k === 'ang3' ? '°' : 'mm',
+              onCommit: (v) => setSkeletonDim(sk.id, d.id, v, { merge: `skel:${sk.id}:${d.id}` }),
+            }));
+          }
+          card.append(flds);
+        }
+        sec.append(card);
+      }
+    }
+    const addBtn = h('button', { type: 'button', class: 'btn small', id: ctx + '-add-skeleton' });
+    addBtn.innerHTML = icon('sketch') + esc(T('skel.addBtn'));
+    addBtn.onclick = (e) => startSkeleton({ choose: true, anchor: e.currentTarget });
+    sec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, addBtn));
+    return sec;
+  }
+  function renderSkeletonPanel(body) {
+    const sk = findSkeleton(selectedSkeletonId);
+    if (!sk) return;
+    const w = h('div', { class: 'props' });
+    const nameF = h('div', { class: 'field' },
+      h('label', { for: 'skel-name' }, T('common.name')),
+      h('div', { class: 'inp' }, h('input', { id: 'skel-name', value: sk.name, style: { fontFamily: 'var(--font)' } }))
+    );
+    nameF.querySelector('input').addEventListener('change', (e) => {
+      const nv = e.target.value.trim();
+      if (!nv) { e.target.value = sk.name; return; }
+      renameSkeleton(sk.id, nv);
+    });
+    w.append(nameF);
+
+    const edBtn = h('button', { type: 'button', class: 'btn primary', id: 'skel-edit-btn' });
+    edBtn.innerHTML = icon('edit') + esc(T('skel.editBtn'));
+    edBtn.onclick = () => editSkeleton(sk.id);
+    const hdBtn = h('button', { type: 'button', class: 'btn', id: 'skel-hide-btn' });
+    hdBtn.innerHTML = icon(sk.hidden ? 'eye' : 'eyeOff') + esc(T(sk.hidden ? 'common.show' : 'common.hide'));
+    hdBtn.onclick = () => toggleSkeletonHidden(sk.id);
+    const dlBtn = h('button', { type: 'button', class: 'btn danger', id: 'skel-del-btn' });
+    dlBtn.innerHTML = icon('trash') + esc(T('common.delete'));
+    dlBtn.onclick = () => removeSkeleton(sk.id);
+    w.append(h('div', { class: 'btn-row' }, edBtn, hdBtn, dlBtn));
+
+    const namedDims = (sk.dims || []).filter((d) => d && isValidSkelParamName(d.name));
+    const dimSec = h('div', { class: 'section', id: 'skel-dims-list' },
+      h('div', { class: 'section-h' }, T('skel.dimsTitle', { n: namedDims.length }))
+    );
+    if (!namedDims.length) {
+      dimSec.append(h('div', { class: 'hint-box' }, T('skel.noDimsHint')));
+    } else {
+      const baseV = baseVarsWithoutSkeletons(App.doc, sk.id);
+      const bindTargets = editableBindTargets(App.doc);
+      let solvedEnts = sk.ents || [];
+      if (typeof Solver !== 'undefined' && Solver.cached) {
+        const res = Solver.cached({ ents: sk.ents || [], dims: sk.dims || [], cons: sk.cons || [] }, baseV);
+        if (res && Array.isArray(res.ents)) solvedEnts = res.ents;
+      }
+      for (const d of namedDims) {
+        const card = h('div', { class: 'skel-dim-card', dataset: { skelDimId: d.id, skelParamName: d.name } });
+        const nmIn = h('input', {
+          type: 'text',
+          class: 'skel-dim-name',
+          value: d.name,
+          'aria-label': T('skel.dimNameLabel'),
+          dataset: { skelParamName: d.name },
+          spellcheck: 'false',
+        });
+        nmIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nmIn.blur(); if (e.key === 'Escape') { nmIn.value = d.name; nmIn.blur(); } });
+        nmIn.addEventListener('change', () => {
+          if (!renameSkeletonDim(sk.id, d.id, nmIn.value)) nmIn.value = d.name;
+        });
+        const unit = (d.k === 'ang' || d.k === 'angLL' || d.k === 'ang3') ? '°' : 'mm';
+        const val = d.ref ? round(measureDimOnEnts(solvedEnts, d), 4) : (d.v != null ? d.v : round(measureDimOnEnts(solvedEnts, d), 4));
+        const head = h('div', { class: 'skel-dim-head' },
+          nmIn,
+          d.ref ? h('span', { class: 'part-ref-badge frozen' }, T('skel.refTag')) : null
+        );
+        card.append(head);
+        if (!d.ref) {
+          card.append(UI.numField({
+            id: `skel-dim-${d.id}`,
+            label: T('common.value'),
+            value: val,
+            unit,
+            onCommit: (v) => setSkeletonDim(sk.id, d.id, v, { merge: `skel:${sk.id}:${d.id}` }),
+          }));
+        } else {
+          card.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('common.value')), h('b', { class: 'mono' }, `${fmt(val, 2)} ${unit}`)));
+        }
+        const drivenByDim = skeletonDrivenParts(sk.id, d.name);
+        if (drivenByDim.length) {
+          const chips = h('div', { class: 'skel-driven-chips' });
+          for (const dp of drivenByDim) {
+            const b = h('button', { type: 'button', class: 'btn small ghost', dataset: { skelDrivenItem: dp.itemId } }, dp.name);
+            b.onclick = () => App.select([dp.itemId]);
+            chips.append(b);
+          }
+          card.append(chips);
+        }
+        if (bindTargets.length) {
+          const sel = h('select', { class: 'skel-bind-sel', 'aria-label': T('skel.bindTargetAria') });
+          for (const bt of bindTargets) {
+            sel.append(h('option', { value: `${bt.itemId}::${bt.propKey}` }, bt.label));
+          }
+          const bindBtn = h('button', { type: 'button', class: 'btn small', dataset: { skelBindDim: d.name } }, T('skel.bindBtn'));
+          bindBtn.onclick = () => {
+            const v = sel.value || '';
+            const idx = v.indexOf('::');
+            if (idx < 0) return;
+            bindPartToSkeleton(v.slice(0, idx), v.slice(idx + 2), d.name);
+          };
+          card.append(h('div', { class: 'skel-bind-row' }, sel, bindBtn));
+        }
+        dimSec.append(card);
+      }
+    }
+    w.append(dimSec);
+
+    const allDriven = skeletonDrivenParts(sk.id);
+    const drvSec = h('div', { class: 'section', id: 'skel-driven-list' },
+      h('div', { class: 'section-h' }, T('skel.drivenTitle', { n: allDriven.length }))
+    );
+    if (!allDriven.length) {
+      drvSec.append(h('div', { class: 'hint-box' }, T('skel.noDrivenHint')));
+    } else {
+      for (const dp of allDriven) {
+        const row = h('div', { class: 'mini-row', dataset: { skelDrivenRow: dp.itemId } });
+        const linkBtn = h('button', { type: 'button', class: 'part-ref-target lk' }, dp.name);
+        linkBtn.onclick = () => App.select([dp.itemId]);
+        row.append(linkBtn, h('span', { class: 'sub mono' }, dp.params.join(', ')));
+        drvSec.append(row);
+      }
+    }
+    w.append(drvSec);
+    body.append(w);
+  }
+
   return {
     init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts,
     insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef,
@@ -917,6 +1940,12 @@ const Comp = (() => {
     patternDialog: (kind, ids) => typeof Assembly !== 'undefined' && Assembly.patternDialog ? Assembly.patternDialog(kind, ids) : null,
     partRefs, allPartRefs, freezeRef, unfreezeRef, toggleFreezeRef, breakRef, freezeAllRefs, unfreezeAllRefs, breakAllRefs,
     refsSection, refsDialog,
+    get selectedSkeleton() { return selectedSkeletonId; },
+    skeletons, findSkeleton, defaultSkeletonName, nextSkeletonDimName, isValidSkelParamName,
+    syncSkeletons, startSkeleton, editSkeleton, createSkeleton, saveSkeletonSketch,
+    setSkeletonDim, renameSkeletonDim, renameSkeleton, toggleSkeletonHidden, removeSkeleton,
+    editableBindTargets, bindPartToSkeleton, skeletonDrivenParts, selectSkeleton,
+    skeletonTreeSection, skeletonSection, renderSkeletonPanel,
   };
 })();
 

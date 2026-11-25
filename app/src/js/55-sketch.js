@@ -291,6 +291,85 @@ const Sketch = (() => {
     begin({ plane: o.plane, W: o.W || new THREE.Matrix4(), ents: o.ents || [], dims: [], cons: [], refs: [], viewSize: o.viewSize, ctx: { mode: 'asmcut', targets: o.targets || null, scope: o.scope || 'auto', dir: o.dir || 'reverse', thru: o.thru !== false, dist: o.dist ?? 20 } });
     UI.toast(T('asm.cutSketchHint'), { icon: 'info', ms: 4200 });
   }
+  const isSkeletonMode = () => !!(S && S.ctx && S.ctx.mode === 'skeleton');
+  function startSkeleton(opts = {}) {
+    if (isSimpleMode()) {
+      UI.toast(T('skel.proOnly'), { icon: 'info' });
+      return false;
+    }
+    stopPlanePick();
+    if (S3) cancel3d(true);
+    if (opts.id && typeof Comp !== 'undefined' && Comp.findSkeleton) {
+      const sk = Comp.findSkeleton(opts.id);
+      if (!sk) return false;
+      begin({
+        plane: deepClone(sk.plane || PLANES.XY),
+        W: new THREE.Matrix4(),
+        ents: deepClone(sk.ents || []),
+        dims: deepClone(sk.dims || []),
+        cons: deepClone(sk.cons || []),
+        blockInsts: deepClone(sk.blockInsts || []),
+        guides: deepClone(sk.guides || []),
+        gridMode: sk.gridMode || 'rect',
+        polar: sk.polar ? deepClone(sk.polar) : null,
+        bg: sk.bg ? deepClone(sk.bg) : null,
+        locked: !!sk.locked,
+        refs: [],
+        ctx: { mode: 'skeleton', skeletonId: sk.id, skeletonName: sk.name || Comp.defaultSkeletonName() },
+      });
+    } else {
+      const pk = PLANES[opts.planeName] ? opts.planeName : 'XY';
+      const plane = opts.plane ? deepClone(opts.plane) : deepClone(PLANES[pk]);
+      const skName = opts.name || (typeof Comp !== 'undefined' && Comp.defaultSkeletonName ? Comp.defaultSkeletonName() : T('skel.defaultName'));
+      begin({
+        plane,
+        W: new THREE.Matrix4(),
+        ents: deepClone(opts.ents || []),
+        dims: deepClone(opts.dims || []),
+        cons: deepClone(opts.cons || []),
+        refs: [],
+        pOff: opts.off || 0,
+        ctx: { mode: 'skeleton', skeletonId: null, skeletonName: skName },
+      });
+    }
+    render3dScene();
+    UI.toast(T('skel.editHintToast'), { icon: 'info', ms: 4200 });
+    return true;
+  }
+  function editSkeleton(id) {
+    return startSkeleton({ id });
+  }
+  function chooseAndStartSkeleton(anchor) {
+    if (isSimpleMode()) {
+      UI.toast(T('skel.proOnly'), { icon: 'info' });
+      return false;
+    }
+    const btn = anchor || $('#t-asm-skeleton') || $('#t-sketch');
+    const box = h('div', { style: { display: 'grid', gap: '10px' } });
+    box.append(h('b', null, T('skel.startTitle')));
+    box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, T('skel.startTip')));
+    let off = 0;
+    box.append(UI.numField({ id: 'skel-off', label: T('sk.start.offset'), value: 0, unit: 'mm', expr: false, onCommit: (v) => { off = v; } }));
+    const row = h('div', { class: 'btn-row' });
+    for (const [label, pl] of [[T('sk.start.xy'), 'XY'], [T('sk.start.xz'), 'XZ'], [T('sk.start.yz'), 'YZ']]) {
+      const b = h('button', { type: 'button', class: 'btn', dataset: { skelPlane: pl } }, label);
+      b.onclick = () => { UI.closePop(); startSkeleton({ planeName: pl, off }); };
+      row.append(b);
+    }
+    box.append(row);
+    const ds = typeof Datums !== 'undefined' && Datums.list ? Datums.list().filter((d) => !d.hidden) : [];
+    if (ds.length) {
+      const row2 = h('div', { class: 'btn-row' });
+      for (const d of ds) {
+        const b = h('button', { type: 'button', class: 'btn small' }, d.name);
+        b.onclick = () => { UI.closePop(); startSkeleton({ plane: d.plane }); };
+        row2.append(b);
+      }
+      box.append(row2);
+    }
+    UI.pop(btn, box);
+    return true;
+  }
   // Mittellinie für einen Übergang: Ebene durch den ersten Umriss, in der auch der letzte liegt; vorgezeichnet als Spline durch die Mitten
   let lpKey = '', lpPending = '';
   // kind 'path' = Mittellinie, 'rail' = Führungskurve (Seitenlinie, der der Übergang zwischen den Umrissen folgt)
@@ -451,7 +530,7 @@ const Sketch = (() => {
   function showBar() {
     hideBar();
     bar = h('div', { class: 'sketchbar', role: 'toolbar', 'aria-label': T('sk.bar.aria') });
-    bar.append(h('span', { class: 'title' }, S.blockEdit ? T('sk.bar.blockEditTitle', { name: S.blockEdit.name }) : T('sk.bar.title')));
+    bar.append(h('span', { class: 'title' }, S.blockEdit ? T('sk.bar.blockEditTitle', { name: S.blockEdit.name }) : isSkeletonMode() ? T('skel.barTitle', { name: S.ctx.skeletonName || T('skel.defaultName') }) : T('sk.bar.title')));
     const vsep = () => h('span', { class: 'vsep', style: { width: '1px', alignSelf: 'stretch', background: 'var(--line)', margin: '4px 4px' } });
     for (const t of TOOLS) {
       if (t.id === 'block' && S.blockEdit) continue;
@@ -1322,16 +1401,58 @@ const Sketch = (() => {
   function dimOf(eid, k) { return dimFind({ e: eid, k }); }
   function putDimSpec(sp, v, ref = false) {
     const old = dimFind(sp);
+    let targetDim;
     if (old) {
       old.v = v; if (ref) old.ref = true; else delete old.ref;
       if (sp.k === 'distCC') old.cm = sp.cm || 'center';
       if (sp.k === 'ord') { if (sp.sg != null) old.sg = sp.sg; if (sp.axis) old.axis = sp.axis; }
+      targetDim = old;
     } else {
       const dm = sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v, ...(sp.k === 'distCC' ? { cm: sp.cm || 'center' } : {}), ...(sp.k === 'ord' ? { ...(sp.sg != null ? { sg: sp.sg } : {}), ...(sp.axis ? { axis: sp.axis } : {}) } : {}) };
       if (ref) dm.ref = true;
       S.dims.push(dm);
+      targetDim = dm;
+    }
+    if (sp.name !== undefined) {
+      const cleanName = String(sp.name || '').trim();
+      if (cleanName) targetDim.name = cleanName;
+      else delete targetDim.name;
+    } else if (isSkeletonMode() && !targetDim.name && typeof Comp !== 'undefined' && Comp.nextSkeletonDimName) {
+      const rawStr = typeof v === 'string' ? v.trim() : '';
+      const isNonSkelParam = !!rawStr && (App.doc.params || []).some((p) => p && !p.skeleton && p.name && p.name.toLowerCase() === rawStr.toLowerCase());
+      if (!isNonSkelParam) {
+        targetDim.name = Comp.nextSkeletonDimName(targetDim.k, S.dims, App.doc, S.ctx.skeletonId);
+      }
     }
     App.emit('sketch');
+  }
+  function setDimName(spOrId, newName) {
+    if (!S || guardLocked()) return false;
+    const dm = typeof spOrId === 'string' ? S.dims.find((d) => d && d.id === spOrId) : dimFind(spOrId);
+    if (!dm) return false;
+    const clean = String(newName || '').trim().replace(/\s+/g, '_');
+    if (!clean) {
+      if (!dm.name) return true;
+      pushUndo();
+      delete dm.name;
+      render(); Panels.renderRight();
+      return true;
+    }
+    if (typeof Comp !== 'undefined' && Comp.isValidSkelParamName && !Comp.isValidSkelParamName(clean)) {
+      UI.toast(T('left.par.badName'), { kind: 'bad' });
+      return false;
+    }
+    const clash = S.dims.some((d) => d && d !== dm && d.name && d.name.toLowerCase() === clean.toLowerCase())
+      || (App.doc && (App.doc.params || []).some((p) => p && p.name && p.name.toLowerCase() === clean.toLowerCase() && !(p.skeleton && p.skeleton.id === (S.ctx && S.ctx.skeletonId) && p.skeleton.dimId === dm.id)));
+    if (clash) {
+      UI.toast(T('left.par.paramExists'), { kind: 'bad' });
+      return false;
+    }
+    if (dm.name === clean) return true;
+    pushUndo();
+    dm.name = clean;
+    render(); Panels.renderRight();
+    return true;
   }
   // Maß nur zum Ablesen (Referenzmaß): steht in Klammern, zeigt den Wert, legt aber nichts fest
   function setRefDim(sp, quiet = false) {
@@ -1903,6 +2024,12 @@ const Sketch = (() => {
     dimBox = h('div', { class: 'numentry dimask' });
     const inp = h('input', { type: 'text', value: val, 'aria-label': dimLabelOf(sp), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
     const lbl = dimLabelOf(sp) + (isLen && Units.key() !== 'mm' ? ' (' + Units.label() + ')' : '');
+    let nameInp = null;
+    if (isSkeletonMode() && sp.k !== 'n') {
+      const defName = (cur && cur.name) || (typeof Comp !== 'undefined' && Comp.nextSkeletonDimName ? Comp.nextSkeletonDimName(sp.k, S.dims, App.doc, S.ctx.skeletonId) : '');
+      nameInp = h('input', { type: 'text', id: 'sk-dim-name', class: 'dimask-name', value: defName, placeholder: T('skel.dimNamePh'), 'aria-label': T('skel.dimNameLabel'), spellcheck: 'false', autocomplete: 'off' });
+      dimBox.append(h('label', { class: 'dimask-namelbl' }, T('skel.dimNameLabel'), nameInp));
+    }
     dimBox.append(h('label', null, lbl, inp));
     if (sp.k === 'distCC') {
       const curCm = sp.cm || 'center';
@@ -1953,8 +2080,22 @@ const Sketch = (() => {
     dimBox.style.left = clientX - r.left + 'px'; dimBox.style.top = clientY - r.top + 'px';
     $('#overlay').append(dimBox);
     const commit = () => {
-      const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
-      if (raw === orig && cur && !cur.ref && sameMode) { hideDimBox(); S.dimFirst = null; Viewer.canvas.focus(); return; }
+      let raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
+      let skNameOverride = nameInp ? nameInp.value.trim().replace(/\s+/g, '_') : undefined;
+      if (isSkeletonMode()) {
+        const eqM = /^([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*)\s*=\s*(.+)$/.exec(raw);
+        if (eqM) {
+          skNameOverride = eqM[1];
+          raw = eqM[2].trim();
+        }
+        if (skNameOverride && typeof Comp !== 'undefined' && Comp.isValidSkelParamName && !Comp.isValidSkelParamName(skNameOverride)) {
+          UI.toast(T('left.par.badName'), { kind: 'bad' });
+          if (nameInp) nameInp.focus();
+          return;
+        }
+      }
+      const nameChanged = isSkeletonMode() && cur && (cur.name || '') !== (skNameOverride || '');
+      if (raw === orig && cur && !cur.ref && sameMode && !nameChanged) { hideDimBox(); S.dimFirst = null; Viewer.canvas.focus(); return; }
       // ein neuer Name wie „breite“ wird unter „Maße“ mit dem jetzigen Wert angelegt
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
         const now = round(measureSpec(sp), 6);
@@ -1971,10 +2112,17 @@ const Sketch = (() => {
         const res = typeof v === 'number' ? { ok: isFinite(v) } : Expr.tryEval(v, vars());
         if (!res.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast(T('sk.dimBox.calcErr', { err: res.error || `„${raw}“` }), { kind: 'bad' }); return; }
       }
-      hideDimBox(); S.dimFirst = null; if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
+      hideDimBox(); S.dimFirst = null; if (sp.e) setSel([sp.e]);
+      const nextSp = isSkeletonMode() && skNameOverride !== undefined ? { ...sp, name: skNameOverride } : sp;
+      if (raw === orig && cur && !cur.ref && sameMode && nameChanged) setDimName(cur.id, skNameOverride);
+      else setDimSpec(nextSp, v);
+      Viewer.canvas.focus();
     };
     dimBox._inp = inp; dimBox._commit = commit; dimBox._typed = false;
     inp.addEventListener('input', () => { if (dimBox) dimBox._typed = true; });
+    if (nameInp) {
+      nameInp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
+    }
     // nach dem Mausklick fokussieren, sonst holt sich das 3D-Bild den Fokus zurück
     const grab = () => {
       if (!dimBox || !dimBox.contains(inp)) return;
@@ -5670,7 +5818,9 @@ const Sketch = (() => {
         const valTxt = isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val));
         const dLbl = dimLabelOf(dm);
         const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? dLbl + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : dLbl + ' – klicken zum Ändern', dataset: { dim: dm.id } });
-        el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
+        el.innerHTML = dm.ref
+          ? (isSkeletonMode() && dm.name ? `<span class="fx">${esc(dm.name)}&nbsp;=</span>` : '') + esc('(' + pre + valTxt + unit + ')')
+          : (isSkeletonMode() && dm.name ? `<span class="fx">${esc(dm.name)}&nbsp;=</span>` : isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
         placeBadge(el, pos.p);
         el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
         el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
@@ -6820,6 +6970,7 @@ const Sketch = (() => {
     if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: T('sk.panel.loftRailHint') }));
     if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: T('sk.panel.loftRail2Hint') }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: T('sk.panel.loftPathHint') }));
+    if (isSkeletonMode() && !S.step) w.append(h('div', { class: 'ok-box', id: 'skel-edit-hint', html: T('skel.sketchPanelHint') }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: T(S.step.revolve ? 'sk.panel.stepRevHint' : 'sk.panel.stepExtHint') })); body.append(w); return; }
     const lockBtn = h('button', { type: 'button', class: 'btn sk-lock-btn' + (S.locked ? ' active' : ''), id: 'sk-lock', 'aria-pressed': S.locked ? 'true' : 'false', 'data-help': 'sketchLock' });
     lockBtn.innerHTML = icon(S.locked ? 'lock' : 'unlock') + `<span>${esc(T(S.locked ? 'sk.panel.lockedBtn' : 'sk.panel.lockBtn'))}</span>`;
@@ -7832,7 +7983,7 @@ const Sketch = (() => {
       else if (isLoftLine()) { if (!SK.chains(S.ents).length) w.append(h('div', { class: 'err-box' }, T('sk.panel.loftNoLine'))); }
       else {
         w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('sk.panel.closedRegions')), h('b', { class: 'mono' }, String(regs.length))));
-        if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, T('sk.panel.openEndsWarn')));
+        if (!isSkeletonMode() && SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, T('sk.panel.openEndsWarn')));
         // Skizzen-Prüfer (SK-09)
         const chkBtn = h('button', { type: 'button', class: 'btn', id: 'sk-check', 'data-help': 'sketchCheck' });
         chkBtn.innerHTML = icon('target') + esc(T('sk.panel.checkBtn'));
@@ -7892,11 +8043,26 @@ const Sketch = (() => {
             const e = d.e ? ent(d.e) : null;
             const nr = e ? S.ents.filter((x) => x.type === e.type).indexOf(e) + 1 : 0;
             const what = (dimLabelOf(d) + (e ? ` · ${TN[e.type] || e.type} ${nr}` : '')) + (d.ref ? T('sk.panel.dimReadSuffix') : '');
+            if (isSkeletonMode()) {
+              const nmIn = h('input', {
+                type: 'text',
+                id: 'dt-name-' + i,
+                class: 'skel-dim-name',
+                value: d.name || '',
+                placeholder: T('skel.dimNamePh'),
+                'aria-label': T('skel.dimNameLabel'),
+                dataset: { skelDimName: d.id },
+                spellcheck: 'false',
+              });
+              nmIn.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') nmIn.blur(); if (ev.key === 'Escape') { nmIn.value = d.name || ''; nmIn.blur(); } });
+              nmIn.addEventListener('change', () => { if (!setDimName(d.id, nmIn.value)) nmIn.value = d.name || ''; });
+              tbl.append(h('div', { class: 'skel-dt-name-row' }, h('span', { class: 'sub' }, T('skel.dimNameLabel')), nmIn));
+            }
             const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 6) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
             f.addEventListener('mouseenter', () => { if (e && S.hoverDim !== e.id) { S.hoverDim = e.id; S.hoverEnt = e.id; render(); } });
             tbl.append(f);
           });
-          if (S.dimTableOpen) tbl.open = true;
+          if (S.dimTableOpen || (isSkeletonMode() && S.dimTableOpen !== false)) tbl.open = true;
           tbl.addEventListener('toggle', () => { S.dimTableOpen = tbl.open; });
           w.append(tbl);
         }
@@ -8017,6 +8183,30 @@ const Sketch = (() => {
       const commitBlocks = docBlocksForCommit();
       if (App.doc) App.doc.blocks = commitBlocks;
       finishSession(); Assembly.asmCutFromSketch(sk, opts); return;
+    }
+    if (S.ctx.mode === 'skeleton') {
+      if (!S.ents.length) { UI.toast(T('skel.emptyNeedEnt'), { kind: 'bad', icon: 'info' }); return; }
+      const skData = {
+        plane: deepClone(S.plane),
+        ents: deepClone(S.ents),
+        dims: deepClone(S.dims),
+        cons: deepClone(S.cons),
+        ...(S.blockInsts && S.blockInsts.length ? { blockInsts: deepClone(S.blockInsts) } : {}),
+        ...(S.locked ? { locked: true } : {}),
+        ...(S.bg ? { bg: deepClone(S.bg) } : {}),
+        ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}),
+        ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}),
+      };
+      const editId = S.ctx.skeletonId || null;
+      const skName = S.ctx.skeletonName || (typeof Comp !== 'undefined' && Comp.defaultSkeletonName ? Comp.defaultSkeletonName() : T('skel.defaultName'));
+      const commitBlocks = docBlocksForCommit();
+      finishSession();
+      if (typeof Comp !== 'undefined' && Comp.saveSkeletonSketch) {
+        const saved = Comp.saveSkeletonSketch(editId, skData, { name: skName, blocks: commitBlocks });
+        if (saved && Comp.selectSkeleton) Comp.selectSkeleton(saved.id);
+      }
+      render3dScene();
+      return;
     }
     if (S.ctx.mode === 'edit') {
       const editIt = (Model.find(App.doc, S.ctx.editId) || {}).item;
@@ -8898,6 +9088,48 @@ const Sketch = (() => {
         addSk3Dot(g, pt, r, col, true, 19);
       }
     }
+    if (typeof Comp !== 'undefined' && Comp.skeletons) {
+      const skList = Comp.skeletons(App.doc);
+      const skColBase = th.dark ? '#22d3ee' : '#0b7285';
+      for (const sk of skList) {
+        if (!sk || sk.hidden || sk.suppressed) continue;
+        if (S && S.ctx && S.ctx.mode === 'skeleton' && S.ctx.skeletonId === sk.id) continue;
+        const isSel = Comp.selectedSkeleton === sk.id;
+        const col = isSel ? th.accent : skColBase;
+        const w = isSel ? 3.0 : 2.2;
+        const pl = sk.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+        const o = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+        const x = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize();
+        const n = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize();
+        const y = new THREE.Vector3().crossVectors(n, x);
+        const to3 = (uv) => [
+          o.x + x.x * uv[0] + y.x * uv[1],
+          o.y + x.y * uv[0] + y.y * uv[1],
+          o.z + x.z * uv[0] + y.z * uv[1],
+        ];
+        const solved = typeof Solver !== 'undefined' && Solver.cached
+          ? Solver.cached({ ents: sk.ents || [], dims: sk.dims || [], cons: sk.cons || [] }, V).ents
+          : (sk.ents || []);
+        for (const e of solved || []) {
+          if (!e) continue;
+          if (e.type === 'point' && e.a) {
+            const p3 = to3(e.a);
+            const r = Math.max(0.45, Math.min(1.6, Viewer.pixelSizeAt(new THREE.Vector3(...p3)) * 3.5));
+            addSk3Dot(g, p3, r, col, true, 19);
+            continue;
+          }
+          for (const pts of entPts(e)) {
+            if (!pts || pts.length < 2) continue;
+            const flat = [];
+            for (const q of pts) {
+              const p3 = to3(q);
+              flat.push(p3[0], p3[1], p3[2]);
+            }
+            g.add(Viewer.makeFat(flat, col, w, { depthTest: true, order: 18, dashed: !!e.con, dashSize: 2.5, gapSize: 1.8 }));
+          }
+        }
+      }
+    }
     Viewer.requestRender();
   }
   function push3dUndo() {
@@ -9730,6 +9962,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startSplitCurve, startPoints, startAsmCut, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimName, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startSplitCurve, startPoints, startAsmCut, startSkeleton, editSkeleton, chooseAndStartSkeleton, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

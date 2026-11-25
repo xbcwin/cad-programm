@@ -33241,6 +33241,816 @@ def t_f11251455(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a166_skelett_skizze(p):
+    # [A-166] Baugruppe (Profi): Skelett-Skizze (BG-32)
+    p.ev("""
+      App.setDoc(Model.newAssemblyDoc('Skelett-Baugruppe'));
+      if (typeof Start !== 'undefined' && Start.hide) Start.hide();
+    """)
+    p.wait(400)
+
+    # 1. Profi-Schutz: im Einfach-Modus nicht verfügbar
+    p.ev("ViewPrefs.setLevel('simple');"); p.wait(200)
+    simple_state = p.ev("""
+      const btn = document.querySelector('#t-asm-skeleton');
+      const blocked = Comp.startSkeleton() === false;
+      const cmds = Commands.search('skelett skizze').length === 0;
+      return { btnVis: !!(btn && btn.offsetParent !== null), blocked, cmds };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(250)
+    pro_btn_vis = p.ev("const b = document.querySelector('#t-asm-skeleton'); return !!(b && b.offsetParent !== null);")
+    ok1 = (not simple_state['btnVis']) and simple_state['blocked'] and simple_state['cmds'] and bool(pro_btn_vis)
+
+    # 2. Hauptskizze im 2D-Editor mit benanntem Maß Laenge = 100 anlegen
+    p.ev("Sketch.startSkeleton({ planeName: 'XY', name: 'Hauptskizze' });")
+    p.wait(350)
+    cx, cy = p.canvas_center()
+    p.pg.keyboard.press('l')
+    p.pg.mouse.click(cx - 80, cy)
+    p.pg.mouse.click(cx + 80, cy)
+    p.pg.keyboard.press('Enter')
+    p.wait(250)
+    sk_res = p.ev("""
+      const ln = Sketch.state.ents.find(e => e && e.type === 'line');
+      if (!ln) return { ok: false };
+      const dimOk = Sketch.setDimSpec({ e: ln.id, k: 'len', name: 'Laenge' }, 100);
+      return { ok: dimOk, lnId: ln.id, dimNames: Sketch.state.dims.map(d => d.name) };
+    """)
+    p.pg.locator('.sketchbar .tool.primary').click()
+    p.wait(350)
+    after_done = p.ev("""
+      const sks = App.doc.skeletons || [];
+      const sk = sks[0] || null;
+      const v = Model.vars(App.doc).v;
+      const has3d = !!(Viewer.groups && Viewer.groups.sketch3d && Viewer.groups.sketch3d.children.length > 0);
+      const treeRow = document.querySelector('#skel-tree .skel-row[data-skeleton-name="Hauptskizze"]');
+      return {
+        skId: sk ? sk.id : null,
+        dimId: sk && sk.dims[0] ? sk.dims[0].id : null,
+        count: sks.length,
+        laenge: v.Laenge,
+        has3d,
+        inTree: !!treeRow,
+      };
+    """)
+    ok2 = (
+        bool(sk_res.get('ok')) and sk_res.get('dimNames') == ['Laenge']
+        and after_done['count'] == 1 and abs((after_done['laenge'] or 0) - 100.0) < 1e-4
+        and after_done['has3d'] and after_done['inTree']
+    )
+
+    # 3. Mehrere Teile steuern: Box (per bindPartToSkeleton), Extrude-Skizze & externes ref-Bauteil
+    ids = p.ev("""return (async () => {
+      const box = Model.newItem('box', { w: 50, d: 12, h: 10 }, { name: 'Traeger A' });
+      box.t.y = -25;
+      const extSk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [{ id: 'r1', type: 'rect', a: [-25, -6], b: [25, 6] }],
+        dims: [{ id: 'd_w', e: 'r1', k: 'w', v: 'Laenge' }, { id: 'd_h', e: 'r1', k: 'h', v: 12 }],
+        cons: [],
+      };
+      const ext = Model.newItem('extrude', { sketch: extSk, dist: 10, dir: 'normal' }, { name: 'Traeger B' });
+      ext.t.y = 25;
+      App.change('A-166 Teile anlegen', (d) => { d.items.push(box, ext); });
+      Comp.bindPartToSkeleton(box.id, 'w', 'Laenge');
+
+      const pRef = Model.newDoc('Schiene', { docType: 'part' });
+      pRef.params.push({ id: 'm_len', name: 'Laenge', expr: 40 });
+      pRef.items.push(Model.newItem('box', { w: 'Laenge', d: 10, h: 10 }, { name: 'Schiene' }));
+      await Store.saveProject(pRef, 1, { keepLast: true });
+      const refItem = await Comp.insertPart(pRef.id, { pos: [0, 55, 0] });
+      Comp.bindPartToSkeleton(refItem.id, 'refparam:Laenge', 'Laenge');
+      return { boxId: box.id, extId: ext.id, refId: refItem.id };
+    })();""")
+    p.wait(300)
+    p.ev("App.rebuild()"); p.wait(100)
+    # Sicherstellen, dass alle Berechnungen fertig sind
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+
+    def read_lengths():
+        return p.ev("""
+          const lenX = (id) => {
+            const b = Actions.worldBox(id);
+            return b ? (b.max.x - b.min.x) : 0;
+          };
+          const driven = Comp.skeletonDrivenParts(arg.skId);
+          return {
+            boxX: lenX(arg.boxId),
+            extX: lenX(arg.extId),
+            refX: lenX(arg.refId),
+            drivenCount: driven.length,
+          };
+        """, {**ids, 'skId': after_done['skId']})
+
+    l100 = read_lengths()
+    ok3 = (
+        abs(l100['boxX'] - 100.0) < 0.2
+        and abs(l100['extX'] - 100.0) < 0.2
+        and abs(l100['refX'] - 100.0) < 0.2
+        and l100['drivenCount'] == 3
+    )
+
+    # 4. Länge in der Hauptskizze auf 120 ändern (2D-Skizzenmodus) -> alle Teile werden 120 lang
+    p.ev("Sketch.editSkeleton(arg);", after_done['skId'])
+    p.wait(300)
+    p.ev("""
+      const dm = Sketch.state.dims[0];
+      Sketch.setDimSpec({ e: dm.e, k: dm.k, name: dm.name }, 120);
+    """)
+    p.pg.locator('.sketchbar .tool.primary').click()
+    p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l120 = read_lengths()
+
+    # Auch Änderung direkt über das rechte Skelett-Panel (120 -> 140) prüfen
+    p.ev("Comp.selectSkeleton(arg);", after_done['skId'])
+    p.wait(250)
+    dim_inp = f"#skel-dim-{after_done['dimId']}"
+    p.pg.fill(dim_inp, '140')
+    p.pg.press(dim_inp, 'Enter')
+    p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l140 = read_lengths()
+
+    ok4 = (
+        abs(l120['boxX'] - 120.0) < 0.2
+        and abs(l120['extX'] - 120.0) < 0.2
+        and abs(l120['refX'] - 120.0) < 0.2
+        and abs(l140['boxX'] - 140.0) < 0.2
+        and abs(l140['extX'] - 140.0) < 0.2
+        and abs(l140['refX'] - 140.0) < 0.2
+    )
+
+    # 5. Rückgängig / Wiederholen, Speichern/Laden, Hilfe, i18n & Befehlssuche
+    p.ev("App.undo();"); p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l_undo1 = read_lengths()
+    p.ev("App.undo();"); p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l_undo2 = read_lengths()
+    p.ev("App.redo();"); p.wait(250)
+    for _ in range(60):
+        if not p.ev("return App.busy"):
+            break
+        p.wait(120)
+    l_redo = read_lengths()
+
+    meta = p.ev("""return (async () => {
+      const val = Store.validateProject(App.doc);
+      const saved = await Store.saveProject(App.doc, Model.countItems(App.doc));
+      const loaded = await Store.loadProject(App.doc.id);
+      const skLoaded = loaded && Array.isArray(loaded.skeletons) ? loaded.skeletons.length : 0;
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = !!(wh.skeletonSketch && wh.skeletonSketch.tip && wh.skeletonSketch.hilfe && wh.skeletonSketch.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('skelett skizze').some(c => c.id === 'asm-skeleton');
+      return { valOk: val.ok, saved, skLoaded, hOk, i18nOk, cmdOk };
+    })();""")
+
+    ok5 = bool(
+        abs(l_undo1['boxX'] - 120.0) < 0.2 and abs(l_undo1['extX'] - 120.0) < 0.2
+        and abs(l_undo2['boxX'] - 100.0) < 0.2 and abs(l_undo2['extX'] - 100.0) < 0.2
+        and abs(l_redo['boxX'] - 120.0) < 0.2 and abs(l_redo['extX'] - 120.0) < 0.2
+        and meta['valOk'] and meta['saved'] and meta['skLoaded'] == 1
+        and meta['hOk'] and meta['i18nOk'] and meta['cmdOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a165_baugruppe_einkoerper_toleranzkette(p):
+    # [A-165] Baugruppe (Profi): Als-ein-Körper-Export (BG-31) und Toleranzkette (BG-33)
+    p.empty()
+    p.ev("""(() => {
+      const { App, Model, ViewPrefs } = window.__M;
+      ViewPrefs.setLevel('pro');
+      const d = Model.newAssemblyDoc('Toleranz-Stapel');
+      const b1 = Model.newItem('box', { w: 10, d: 20, h: 15 }, { name: 'Block A', color: '#2f9e91' });
+      b1.t.x = 0;
+      const b2 = Model.newItem('box', { w: 10, d: 20, h: 15 }, { name: 'Block B', color: '#3b82f6' });
+      b2.t.x = 10;
+      const b3 = Model.newItem('box', { w: 10, d: 20, h: 15 }, { name: 'Block C', color: '#f59e0b' });
+      b3.t.x = 20;
+      d.items = [b1, b2, b3];
+      App.setDoc(d, { fit: true });
+    })()""")
+    warte_rechnen(p)
+
+    # 1. Profi-Trennung: Im Einfach-Modus versteckt & blockiert
+    p.ev("window.__M.ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_chk = p.ev("""return (() => {
+      const hidden = ['#proj-single-body', '#proj-tol-chain', '#t-check'].every(sel => {
+        const el = document.querySelector(sel);
+        return !el || el.offsetParent === null;
+      });
+      const blocked = Assembly.singleBodyDialog() === null && Measure.tolChain(true) === false;
+      const cmdsBlocked = Commands.search('als einen koerper').length === 0 && Commands.search('toleranzkette').length === 0;
+      return { hidden, blocked, cmdsBlocked };
+    })()""")
+    ok1 = bool(simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdsBlocked'])
+
+    # Zurück in den Profi-Modus
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_vis = p.ev("""return ['#proj-single-body', '#proj-tol-chain', '#t-check'].every(sel => {
+      const el = document.querySelector(sel);
+      return !!(el && el.offsetParent !== null);
+    })""")
+    ok1 = ok1 and bool(pro_vis)
+
+    # 2. Toleranzkette (BG-33): drei Teile mit je 10 ± 0,1 mm -> 30 ± 0,3 mm (schlimmster Fall) & Mittelwert
+    p.pg.click('#proj-tol-chain')
+    p.wait(150)
+    p.pg.select_option('#tc-dir', 'X')
+    p.pg.fill('#tc-def-tol', '0,1')
+    p.pg.dispatch_event('#tc-def-tol', 'change')
+    p.wait(80)
+    p.pg.click('#tc-add-all')
+    p.wait(150)
+    tc_res = p.ev("""return (() => {
+      const bar = document.querySelector('#tol-chain-bar');
+      const rows = bar ? bar.querySelectorAll('.tc-row').length : 0;
+      const wcTxt = bar && bar.querySelector('#tc-wc-val') ? bar.querySelector('#tc-wc-val').textContent : '';
+      const meanTxt = bar && bar.querySelector('#tc-mean-val') ? bar.querySelector('#tc-mean-val').textContent : '';
+      const info = Measure.tolChainInfo;
+      const r = info && info.result ? info.result : null;
+      const valOk = Store.validateProject(App.doc).ok;
+      return { rows, wcTxt, meanTxt, r, valOk };
+    })()""")
+    r = tc_res['r'] or {}
+    rss_expected = 0.03 ** 0.5
+    ok2 = bool(
+        tc_res['rows'] == 3
+        and '30' in tc_res['wcTxt'] and '0,3' in tc_res['wcTxt']
+        and '30' in tc_res['meanTxt'] and '0,173' in tc_res['meanTxt']
+        and abs((r.get('nominal') or 0) - 30) < 1e-4
+        and abs((r.get('mean') or 0) - 30) < 1e-4
+        and abs((r.get('worstCaseTol') or 0) - 0.3) < 1e-4
+        and abs((r.get('worstCaseMin') or 0) - 29.7) < 1e-4
+        and abs((r.get('worstCaseMax') or 0) - 30.3) < 1e-4
+        and abs((r.get('rssTol') or 0) - rss_expected) < 1e-4
+        and tc_res['valOk']
+    )
+
+    # Vorzeichen-Wechsel (+) -> (-) und Rückgängig
+    p.pg.locator('#tol-chain-bar .tc-row .tc-sign').first.click()
+    p.wait(120)
+    sign_res = p.ev("return Measure.tolChainInfo.result")
+    p.ev("App.undo()")
+    p.wait(120)
+    undo_res = p.ev("return Measure.tolChainInfo.result")
+    p.pg.click('#tc-close')
+    p.wait(100)
+    ok3 = bool(
+        abs((sign_res.get('nominal') or 0) - 10) < 1e-4
+        and abs((sign_res.get('worstCaseTol') or 0) - 0.3) < 1e-4
+        and abs((undo_res.get('nominal') or 0) - 30) < 1e-4
+    )
+
+    # 3. Als ein Körper speichern / exportieren (BG-31)
+    p.pg.click('#proj-single-body')
+    p.wait(150)
+    dlg_chk = p.ev("""return (() => {
+      const dlg = document.querySelector('#asm-single-body-dlg');
+      const sum = dlg && dlg.querySelector('#sb-summary') ? dlg.querySelector('#sb-summary').textContent : '';
+      return { hasDlg: !!dlg, sum };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    exp_res = p.ev("""return (async () => {
+      const step = await Assembly.exportSingleBody({ fmt: 'step', save: false });
+      const stl = await Assembly.exportSingleBody({ fmt: 'stl', save: false });
+      const hdr = step && step.data ? new TextDecoder().decode(step.data.slice(0, 64)) : '';
+      return {
+        stepObj: step && step.objectCount,
+        stepSolids: step && step.solidCount,
+        stepSrc: step && step.sourceCount,
+        stepVol: step && step.volume,
+        stepHdr: hdr.includes('ISO-10303-21'),
+        stlObj: stl && stl.objectCount,
+        stlSolids: stl && stl.solidCount,
+        stlBytes: stl && stl.bytes,
+      };
+    })()""")
+
+    part_res = p.ev("""return (async () => {
+      const res = await Assembly.saveAsSingleBodyPart({ name: 'Stapel 1K' });
+      return res ? { itemCount: res.itemCount, docId: res.docId } : null;
+    })()""")
+    warte_rechnen(p)
+    part_meas = p.ev("""return (async () => {
+      const m = await Kernel.call('measure', { scene: Model.kernelScene(App.doc) });
+      const it = App.doc && App.doc.items && App.doc.items[0];
+      return {
+        docType: Model.docType(App.doc),
+        itemCount: App.doc && App.doc.items ? App.doc.items.length : 0,
+        kind: it ? it.kind : null,
+        fmt: it && it.p ? it.p.fmt : null,
+        mCount: m ? m.count : 0,
+        mVol: m ? m.volume : 0,
+        bbox: m ? m.bbox : null,
+      };
+    })()""")
+    bb = part_meas.get('bbox') or [0, 0, 0, 0, 0, 0]
+    ok4 = bool(
+        dlg_chk['hasDlg'] and '3' in dlg_chk['sum']
+        and exp_res['stepObj'] == 1 and exp_res['stepSolids'] == 1 and exp_res['stepSrc'] == 3
+        and abs((exp_res['stepVol'] or 0) - 9000) < 2 and exp_res['stepHdr']
+        and exp_res['stlObj'] == 1 and exp_res['stlSolids'] == 1 and (exp_res['stlBytes'] or 0) > 84
+        and part_res and part_res.get('itemCount') == 1
+        and part_meas['docType'] == 'part' and part_meas['itemCount'] == 1
+        and part_meas['kind'] == 'import' and part_meas['fmt'] == 'brep'
+        and part_meas['mCount'] == 1 and abs((part_meas['mVol'] or 0) - 9000) < 2
+        and abs((bb[3] - bb[0]) - 30) < 0.05
+    )
+
+    # 4. Hilfen, I18n, Befehlssuche & keine Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = ['asmSingleBody', 'tolChain'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('als einen koerper').some(c => c.id === 'asm-single-body');
+      const c2 = Commands.search('toleranzkette').some(c => c.id === 'tol-chain');
+      return { hOk, i18nOk, cmds: c1 && c2 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a168_schnittarten(p):
+    # [A-168] Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit 3 versetzten Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' }));
+        const hA = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Loch A', role: 'hole' });
+        hA.t.x = -15; hA.t.y = 8; hA.t.z = -2;
+        const hB = Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Loch B', role: 'hole' });
+        hB.t.x = 15; hB.t.y = -8; hB.t.z = -2;
+        const hC = Model.newItem('cylinder', { d: 8, h: 24 }, { name: 'Loch C', role: 'hole' });
+        hC.t.z = -2;
+        d.items.push(hA, hB, hC);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    def view_pt(view_name, u, v):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const vw = Drawing.layout.views[arg.view];
+          const pt = svg.createSVGPoint();
+          pt.x = vw.ox + arg.u * vw.s;
+          pt.y = vw.oy - arg.v * vw.s;
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, {'view': view_name, 'u': u, 'v': v})
+
+    def read_hatch_uv(sec_idx):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[arg];
+          const v = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+          const hatches = sec && v ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)].map(el => {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const u0 = (pts[0][0] - v.ox) / v.s, v0 = (v.oy - pts[0][1]) / v.s;
+            const u1 = (pts[1][0] - v.ox) / v.s, v1 = (v.oy - pts[1][1]) / v.s;
+            return { u0, v0, u1, v1, uMin: Math.min(u0, u1), uMax: Math.max(u0, u1), vMin: Math.min(v0, v1), vMax: Math.max(v0, v1) };
+          }) : [];
+          return {
+            sec,
+            hasView: !!v,
+            hatches,
+            cutlines: sec ? svg.querySelectorAll(`polyline.cutline[data-sec="${sec.id}"]`).length : 0,
+            cutends: sec ? svg.querySelectorAll(`polyline.cutend[data-sec="${sec.id}"]`).length : 0,
+            breaklines: sec ? svg.querySelectorAll(`polyline.breakline[data-sec="${sec.id}"]`).length : 0,
+            ctrs: v ? svg.querySelectorAll(`polyline.ctr[data-sec="${sec.id}"]`).length : 0,
+            cutPts: sec ? [...svg.querySelectorAll(`polyline.cutline[data-sec="${sec.id}"]`)].map(el => el.getAttribute('points').trim().split(/\\s+/).length) : [],
+            txt: svg.textContent || '',
+          };
+        """, sec_idx)
+
+    # 1. Halbschnitt: Draufsicht bei y = 0 schneiden -> rechte Hälfte schraffiert, dann auf linke Hälfte umschalten
+    p.pg.select_option('#dw-sec-type', 'half'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    p0 = view_pt('top', -32, 0)
+    p1 = view_pt('top', 32, 0)
+    p.pg.mouse.move(p0[0], p0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(p1[0], p1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    h_right = read_hatch_uv(0)
+    right_ok = (
+        h_right['hasView'] and h_right['sec'] and h_right['sec']['type'] == 'half'
+        and 'Halbschnitt A–A' in h_right['txt']
+        and h_right['ctrs'] >= 1
+        and len(h_right['hatches']) >= 4
+        and all(h['uMin'] >= -0.05 for h in h_right['hatches'])
+        and not any(h['uMin'] < 0 and h['uMax'] > 0 for h in h_right['hatches'])
+        and not any(h['uMin'] < -3.5 and h['uMax'] > -3.5 for h in h_right['hatches'])
+    )
+
+    # Auf linke Hälfte umschalten
+    p.pg.select_option('#dw-sel-half-side', 'left'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    h_left = read_hatch_uv(0)
+    left_ok = (
+        len(h_left['hatches']) >= 4
+        and all(h['uMax'] <= 0.05 for h in h_left['hatches'])
+        and not any(h['uMin'] > 0.05 for h in h_left['hatches'])
+    )
+    ok1 = bool(right_ok and left_ok)
+
+    # 2. Abgesetzter Schnitt: 4-Punkt-Linie mit 90°-Knicken (-32,8) -> (0,8) -> (0,-8) -> (32,-8)
+    p.pg.select_option('#dw-sec-type', 'stepped'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    for (u, v) in [(-32, 8), (0, 8), (0, -8), (32, -8)]:
+        sp = view_pt('top', u, v)
+        p.pg.mouse.move(sp[0], sp[1])
+        p.pg.mouse.click(sp[0], sp[1])
+        p.wait(100)
+    p.pg.keyboard.press('Enter')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    st_res = read_hatch_uv(1)
+    st_hatches = st_res['hatches']
+    ok2 = bool(
+        st_res['hasView'] and st_res['sec'] and st_res['sec']['type'] == 'stepped'
+        and 'Schnitt B–B (abgesetzt)' in st_res['txt']
+        and st_res['cutlines'] == 1
+        and st_res['cutPts'] and st_res['cutPts'][0] >= 4
+        and st_res['cutends'] >= 6
+        and len(st_hatches) >= 8
+        and any(h['uMax'] < -20 for h in st_hatches)
+        and any(h['uMin'] > -10 and h['uMax'] < 10 for h in st_hatches)
+        and any(h['uMin'] > 20 for h in st_hatches)
+        and not any(h['uMin'] < -15 and h['uMax'] > -15 for h in st_hatches)
+        and not any(h['uMin'] < 15 and h['uMax'] > 15 for h in st_hatches)
+    )
+
+    # 3. Ausbruch: Bereich [-12, 3] .. [12, 17] in Vorderansicht aufziehen
+    p.pg.select_option('#dw-sec-type', 'breakout'); p.wait(150)
+    p.pg.click('#dw-add-section'); p.wait(150)
+    b0 = view_pt('front', -12, 3)
+    b1 = view_pt('front', 12, 17)
+    p.pg.mouse.move(b0[0], b0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(b1[0], b1[1], steps=8)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    br1 = read_hatch_uv(2)
+    br1_h = br1['hatches']
+    br_mid_ok = (
+        br1['hasView'] and br1['sec'] and br1['sec']['type'] == 'breakout'
+        and 'Ausbruch C–C' in br1['txt']
+        and br1['breaklines'] >= 2
+        and len(br1_h) >= 4
+        and all(h['uMin'] >= -12.05 and h['uMax'] <= 12.05 and h['vMin'] >= 2.95 and h['vMax'] <= 17.05 for h in br1_h)
+        and not any(h['uMin'] < 0 and h['uMax'] > 0 for h in br1_h)
+    )
+
+    # Schnitttiefe auf 12 mm setzen (schneidet bei y = -8 vor Loch C -> durchgehende Schraffur über u = 0)
+    p.pg.fill('#dw-sel-sec-depth', '12')
+    p.pg.locator('#dw-sel-sec-depth').dispatch_event('change')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    br2 = read_hatch_uv(2)
+    br2_h = br2['hatches']
+    br_depth_ok = (
+        len(br2_h) >= 4
+        and all(h['uMin'] >= -12.05 and h['uMax'] <= 12.05 and h['vMin'] >= 2.95 and h['vMax'] <= 17.05 for h in br2_h)
+        and any(h['uMin'] < 0 and h['uMax'] > 0 for h in br2_h)
+    )
+    ok3 = bool(br_mid_ok and br_depth_ok)
+
+    # 4. Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & I18n
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(150)
+    simple_chk = p.ev("""return (() => {
+      const tSel = document.querySelector('#dw-sec-type');
+      const tBtn = document.querySelector('#t-section-kind');
+      const hidden = (!tSel || tSel.offsetParent === null) && (!tBtn || tBtn.offsetParent === null);
+      const blocked = Drawing.setSectionMode('half') === false;
+      const cmdsBlocked = Commands.search('halbschnitt').length === 0 && Commands.search('abgesetzter schnitt').length === 0 && Commands.search('ausbruch').length === 0;
+      return { hidden, blocked, cmdsBlocked };
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    exp_chk = p.ev("""return (async () => {
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('Halbschnitt A-A') && pdfStr.includes('Schnitt B-B') && pdfStr.includes('Ausbruch C-C'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('SCHRAFFUR') && dxf.text.includes('SCHNITTLINIE') && dxf.stats.lines > 20),
+      };
+    })()""")
+
+    p.pg.locator('#right-body .sec-del').nth(2).click(); p.wait(200)
+    n_del = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    n_undo = p.ev("return Drawing.sections().length")
+    p.ev("App.redo()"); p.wait(250)
+    n_redo = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    re_chk = p.ev("""
+      const secs = Drawing.sections();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        n: secs.length,
+        types: secs.map(s => s.type),
+        hatches: svg.querySelectorAll('polyline.hatch').length,
+        txt: svg.textContent || '',
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h = wh['drawingSectionKinds'];
+      const tKind = document.querySelector('#t-section-kind');
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('halbschnitt').length >= 1 && Commands.search('abgesetzter schnitt').length >= 1 && Commands.search('ausbruch').length >= 1;
+      return !!(h && h.tip && h.hilfe && h.tipp && tKind && tKind.dataset.help === 'drawingSectionKinds' && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdsBlocked']
+        and exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and n_del == 2 and n_undo == 3 and n_redo == 2
+        and val_ok and re_chk['n'] == 3 and re_chk['types'] == ['half', 'stepped', 'breakout']
+        and re_chk['hatches'] >= 12
+        and 'Halbschnitt A–A' in re_chk['txt']
+        and 'Schnitt B–B (abgesetzt)' in re_chk['txt']
+        and 'Ausbruch C–C' in re_chk['txt']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a167_kabel_schlaeuche(p):
+    # [A-167] Baugruppe (Profi): Kabel und Schläuche zwischen zwei Anschlusspunkten (BG-34)
+    p.empty()
+    p.ev("""(() => {
+      const { App, Model, ViewPrefs } = window.__M;
+      ViewPrefs.setLevel('pro');
+      const d = Model.newAssemblyDoc('Kabel-Test');
+      const b1 = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Box A', color: '#2f9e91' });
+      b1.t.x = 0;
+      const b2 = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Box B', color: '#3b82f6' });
+      b2.t.x = 100;
+      d.items = [b1, b2];
+      App.setDoc(d, { fit: true });
+    })()""")
+    warte_rechnen(p)
+
+    # 1. Profi-Trennung: Im Einfach-Modus ausgeblendet & blockiert
+    p.ev("window.__M.ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_chk = p.ev("""return (() => {
+      const hidden = ['#proj-asm-cable', '#btn-asm-cable'].every(sel => {
+        const el = document.querySelector(sel);
+        return !el || el.offsetParent === null;
+      });
+      const blocked = Assembly.cableDialog() === null
+        && Assembly.createCable({ start: [0, 0, 20], end: [100, 0, 20] }) === null
+        && Assembly.startCable() === false;
+      const cmdBlocked = Commands.search('kabel').every(c => c.id !== 'asm-cable' && c.id !== 'asm-cable-pick');
+      return { hidden, blocked, cmdBlocked };
+    })()""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_vis = p.ev("""return ['#proj-asm-cable', '#btn-asm-cable'].every(sel => {
+      const el = document.querySelector(sel);
+      return !!(el && el.offsetParent !== null);
+    }) && Commands.search('kabel').some(c => c.id === 'asm-cable')""")
+    ok1 = bool(simple_chk['hidden'] and simple_chk['blocked'] and simple_chk['cmdBlocked'] and pro_vis)
+
+    # 2. Kabel zwischen zwei Punkten im Abstand 100 über Dialog, Körper & Biegeradius
+    p.pg.click('#proj-asm-cable')
+    p.wait(120)
+    p.pg.select_option('#cb-type', 'cable')
+    p.pg.fill('#cb-d', '5')
+    p.pg.press('#cb-d', 'Enter')
+    p.pg.fill('#cb-bendr', '20')
+    p.pg.press('#cb-bendr', 'Enter')
+    for sel, val in [('#cb-ax', '0'), ('#cb-ay', '0'), ('#cb-az', '20'), ('#cb-bx', '100'), ('#cb-by', '0'), ('#cb-bz', '20')]:
+        p.pg.fill(sel, val)
+        p.pg.press(sel, 'Enter')
+    p.pg.select_option('#cb-dira', '+Z')
+    p.pg.select_option('#cb-dirb', '+Z')
+    p.wait(80)
+    p.pg.click('#cb-create')
+    warte_rechnen(p)
+
+    c_res = p.ev("""return (async () => {
+      const c = App.doc.items.find(x => Assembly.isCableItem(x));
+      if (!c) return null;
+      const cm = Model.cableMetrics(c.p, Model.itemVars(App.doc, c.id));
+      const m = await Mass.measure();
+      const part = m ? Mass.partOf(m, c.id) : null;
+      const hasNode = Viewer.nodes.has(c.id);
+      return { id: c.id, cm, part, hasNode };
+    })()""")
+    ok2 = False
+    if c_res and c_res.get('part') and c_res.get('hasNode'):
+        cm = c_res['cm']
+        vol = c_res['part'].get('volume') or 0
+        expected_vol = 3.14159265 * 2.5 * 2.5 * cm['length']
+        ok2 = bool(
+            cm['length'] >= 100 and cm['length'] > 115
+            and cm['minBendR'] >= 19.5
+            and cm['bendOk']
+            and vol > 0 and abs(vol - expected_vol) < expected_vol * 0.08
+        )
+
+    # Biegeradius im Panel auf 40 mm erhöhen -> Kurve und Länge wachsen
+    p.pg.fill('#cable-bendr', '40')
+    p.pg.press('#cable-bendr', 'Enter')
+    warte_rechnen(p)
+    c_res2 = p.ev("""return (() => {
+      const c = App.doc.items.find(x => Assembly.isCableItem(x));
+      return c ? Model.cableMetrics(c.p, Model.itemVars(App.doc, c.id)) : null;
+    })()""")
+    ok2 = ok2 and bool(c_res2 and c_res2['minBendR'] >= 39.5 and c_res2['length'] > c_res['cm']['length'])
+
+    # 3. Stückliste zeigt Kabellänge
+    bom_data = p.ev("""return (async () => {
+      const b = await Mass.bom(App.doc);
+      const csv = b ? Mass.bomCSV(b, App.doc.name) : '';
+      return { b, csv };
+    })()""")
+    p.ev("Mass.bomDialog()")
+    p.wait(300)
+    bom_dlg = p.ev("""return (() => {
+      const dlg = document.querySelector('#bom');
+      const tbl = dlg ? dlg.querySelector('#bom-cables') : null;
+      const tot = dlg ? dlg.querySelector('#bom-cables-total-len') : null;
+      return {
+        hasDlg: !!dlg,
+        hasTbl: !!tbl,
+        tblTxt: tbl ? tbl.textContent : '',
+        totTxt: tot ? tot.textContent : '',
+        dlgTxt: dlg ? dlg.textContent : '',
+      };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(100)
+    b = bom_data.get('b') or {}
+    c_rows = [r for r in (b.get('rows') or []) if r.get('isCable')]
+    c_list = b.get('cables') or []
+    exp_len = c_res2['length'] if c_res2 else 0
+    len_prefix = str(round(exp_len, 1)).replace('.', ',')[:4]
+    ok3 = bool(
+        len(c_rows) == 1 and (c_rows[0].get('cableLen') or 0) >= 100
+        and len(c_list) == 1 and abs((c_list[0].get('length') or 0) - exp_len) < 0.2
+        and bom_dlg['hasDlg'] and bom_dlg['hasTbl']
+        and len_prefix in bom_dlg['tblTxt']
+        and len_prefix in bom_dlg['totTxt']
+        and len_prefix in bom_data.get('csv', '')
+    )
+
+    # 4. Hohler Schlauch, Nachführen bei Bauteil-Bewegung & Rückgängig
+    hose_res = p.ev("""return (async () => {
+      const b1 = App.doc.items.find(x => x.name === 'Box A');
+      const b2 = App.doc.items.find(x => x.name === 'Box B');
+      const h = Assembly.createCable({
+        type: 'hose',
+        name: 'Kühl-Schlauch',
+        d: 8,
+        wall: 1.5,
+        bendR: 25,
+        start: [0, 0, 20],
+        end: [100, 0, 20],
+        dirA: [0, 0, 1],
+        dirB: [0, 0, 1],
+        bindA: { id: b1.id, lp: [0, 0, 20], ln: [0, 0, 1] },
+        bindB: { id: b2.id, lp: [0, 0, 20], ln: [0, 0, 1] },
+      });
+      return h ? h.id : null;
+    })()""")
+    warte_rechnen(p)
+    hose_meas = p.ev("""return (async () => {
+      const h = App.doc.items.find(x => x.id === arg);
+      if (!h) return null;
+      const cm = Model.cableMetrics(h.p, Model.itemVars(App.doc, h.id));
+      const m = await Mass.measure();
+      const part = m ? Mass.partOf(m, h.id) : null;
+      return { cm, vol: part ? part.volume : 0 };
+    })()""", hose_res)
+    p.ev("""(() => {
+      App.change('Box B verschoben', (doc) => {
+        const b2 = doc.items.find(x => x.name === 'Box B');
+        if (b2) b2.t.x = 140;
+      });
+    })()""")
+    warte_rechnen(p)
+    p.wait(150)
+    warte_rechnen(p)
+    moved_hose = p.ev("""return (() => {
+      const h = App.doc.items.find(x => x.id === arg);
+      if (!h) return null;
+      const cm = Model.cableMetrics(h.p, Model.itemVars(App.doc, h.id));
+      return { end: h.p.cable.end, cm };
+    })()""", hose_res)
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    undo_move_end = p.ev("""return (() => {
+      const h = App.doc.items.find(x => x.id === arg);
+      return h ? h.p.cable.end[0] : null;
+    })()""", hose_res)
+    p.ev("App.undo()")
+    warte_rechnen(p)
+    undo_len = p.ev("return App.doc.items.filter(x => Assembly.isCableItem(x)).length")
+    solid_equiv = (3.14159265 * 4.0 * 4.0 * hose_meas['cm']['length']) if hose_meas else 0
+    hollow_equiv = (3.14159265 * (4.0 * 4.0 - 2.5 * 2.5) * hose_meas['cm']['length']) if hose_meas else 0
+    ok4 = bool(
+        hose_res and hose_meas and hose_meas['vol'] > 0
+        and hose_meas['vol'] < solid_equiv * 0.78
+        and abs(hose_meas['vol'] - hollow_equiv) < hollow_equiv * 0.1
+        and moved_hose and abs((moved_hose['end'][0] or 0) - 140) < 0.05
+        and moved_hose['cm']['bendOk']
+        and moved_hose['cm']['length'] > hose_meas['cm']['length'] + 20
+        and undo_move_end is not None and abs(undo_move_end - 100) < 0.05
+        and undo_len == 1
+    )
+
+    # 5. Validierung, Hilfen, I18n, Befehlssuche & keine Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = !!(wh.asmCable && wh.asmCable.tip && wh.asmCable.hilfe && wh.asmCable.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const valOk = Store.validateProject(App.doc).ok;
+      const c1 = Commands.search('kabel').some(c => c.id === 'asm-cable');
+      const c2 = Commands.search('schlauch anklicken').some(c => c.id === 'asm-cable-pick');
+      return { hOk, i18nOk, valOk, cmds: c1 && c2 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['valOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -33519,6 +34329,10 @@ TESTS = [
     ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
     ('[F-11251455] Volltest-Reparatur: Toast über Zeitleiste / Zeitleiste in-place / Festsetzen & doc-Tree-Sync / Mass.measure & Tooltip-Reacquire', t_f11251455),
+    ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
+    ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
+    ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
+    ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

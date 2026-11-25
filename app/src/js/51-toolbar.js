@@ -59,6 +59,8 @@ const Toolbar = (() => {
       { id: 'autoScrews', group: T('dlg.tb.grpConstruct'), domId: 't-auto-screws', icon: 'bolt', label: T('asm.autoScrewsBtn'), tip: T('asm.autoScrewsTip'), cls: 'minor', help: 'autoScrews', run: () => Assembly.autoScrewsDialog() },
       { id: 'asmLightweight', group: T('dlg.tb.grpConstruct'), domId: 't-asm-lightweight', icon: 'xray', label: T('asm.lwBtn'), tip: T('asm.lwTip'), cls: 'minor pro', help: 'lightweightMode', run: () => Assembly.toggleLightweight() },
       { id: 'asmEnvelope', group: T('dlg.tb.grpConstruct'), domId: 't-asm-envelope', icon: 'box', label: T('asm.envBtn'), tip: T('asm.envTip'), cls: 'minor pro', help: 'simplifiedEnvelope', run: () => Assembly.envelopeDialog() },
+      { id: 'asmCable', group: T('dlg.tb.grpConstruct'), domId: 't-asm-cable', icon: 'sweep', label: T('asm.cableBtn'), tip: T('asm.cableTip'), cls: 'minor pro', help: 'asmCable', run: () => Assembly.cableDialog() },
+      { id: 'asmSkeleton', group: T('dlg.tb.grpConstruct'), domId: 't-asm-skeleton', icon: 'sketch', label: T('skel.toolBtn'), tip: T('skel.toolTip'), cls: 'minor pro', help: 'skeletonSketch', run: (e) => Comp.startSkeleton({ choose: true, anchor: e.currentTarget }) },
       { id: 'motion', group: T('dlg.tb.grpConstruct'), domId: 't-motion', icon: 'play', label: T('motion.title'), tip: T('motion.toolbarTip'), cls: 'minor pro', help: 'motionStudy', run: () => Motion.toggle() },
       { id: 'params', group: T('dlg.tb.grpConstruct'), domId: 't-params', icon: 'sliders', label: T('topbar.params'), tip: T('dlg.tb.paramsTip'), cls: 'minor', help: 'params', run: () => Panels.showParams() },
       // Ansicht & Prüfen
@@ -73,10 +75,12 @@ const Toolbar = (() => {
       { id: 'bom', group: T('dlg.tb.grpViewCheck'), domId: 't-bom', icon: 'list', label: T('dlg.tb.bom'), tip: T('dlg.tb.bomTip'), cls: 'minor', help: 'bom', run: () => Mass.bomDialog() },
       { id: 'printCost', group: T('dlg.tb.grpViewCheck'), domId: 't-print-cost', icon: 'printer', label: T('menu.check.printCost'), tip: T('dlg.tb.printCostTip'), cls: 'minor', help: 'printCost', run: () => Print.costDialog() },
       { id: 'reportPdf', group: T('dlg.tb.grpViewCheck'), domId: 't-report-pdf', icon: 'file', label: T('menu.check.reportPdf'), tip: T('dlg.tb.reportPdfTip'), cls: 'minor', help: 'reportPdf', run: () => Measure.reportDialog() },
+      { id: 'tolChain', group: T('dlg.tb.grpViewCheck'), domId: 't-tol-chain', icon: 'ruler', label: T('tc.title'), tip: T('tc.toolbarTip'), cls: 'minor pro', help: 'tolChain', run: () => Measure.tolChain() },
       // Projekt & Datei
       { id: 'save', group: T('dlg.tb.grpProject'), domId: 't-save', icon: 'save', label: T('common.save'), tip: T('dlg.tb.saveTip'), kbd: 'Strg S', cls: 'minor', run: () => Start.saveFile() },
       { id: 'import', group: T('dlg.tb.grpProject'), domId: 't-import', icon: 'folder', label: T('dlg.tb.import'), tip: T('dlg.tb.importTip'), cls: 'minor', help: 'importCad', run: () => Start.openFile() },
       { id: 'insertFile', group: T('dlg.tb.grpProject'), domId: 't-insert-file-tool', icon: 'folder', label: T('asm.insertFromFileShort'), tip: T('asm.insertFromFileTip'), cls: 'minor', help: 'insertFromFile', run: () => Comp.insertFromFile() },
+      { id: 'asmSingleBody', group: T('dlg.tb.grpProject'), domId: 't-single-body', icon: 'cube', label: T('asm.singleBodyShort'), tip: T('asm.singleBodyTip'), cls: 'minor pro', help: 'asmSingleBody', run: () => Assembly.singleBodyDialog() },
       { id: 'image', group: T('dlg.tb.grpProject'), domId: 't-image', icon: 'image', label: T('dlg.tb.image'), tip: T('dlg.tb.imageTip'), cls: 'minor', run: () => Print.imageDialog() },
       { id: 'versions', group: T('dlg.tb.grpProject'), domId: 't-versions', icon: 'rollback', label: T('dlg.tb.versions'), tip: T('dlg.tb.versionsTip'), cls: 'minor', help: 'versions', run: () => Versions.dialog() },
     ];
@@ -288,7 +292,7 @@ const Toolbar = (() => {
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
-    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && (ClashCheck.active || ClashCheck.clearanceActive)) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
+    if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && (ClashCheck.active || ClashCheck.clearanceActive)) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive || Measure.tolChainActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
     if (def.id === 'clashes' && typeof ClashCheck !== 'undefined' && ClashCheck.active) b.classList.add('active');
     if (def.id === 'clearance' && typeof ClashCheck !== 'undefined' && ClashCheck.clearanceActive) b.classList.add('active');
     if (def.id === 'dragStop' && typeof ClashCheck !== 'undefined' && ClashCheck.stopOnContact && ClashCheck.stopOnContact()) b.classList.add('active');
@@ -370,6 +374,7 @@ const Toolbar = (() => {
       asmCutBtn.addEventListener('click', () => Assembly.startAsmCut());
       el.append(asmCutBtn);
       const map = catalogMap();
+      if (map.asmSkeleton) el.append(buildToolButton(map.asmSkeleton, false));
       if (map.asmPattern) el.append(buildToolButton(map.asmPattern, false));
       if (map.autoScrews) el.append(buildToolButton(map.autoScrews, false));
       if (map.asmLightweight) {

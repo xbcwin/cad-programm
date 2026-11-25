@@ -1784,6 +1784,16 @@
     "hilfe": "Treibt deine Baugruppe über eine echte Zeitachse an. Jeder Motor steuert ein Gelenk mit fester Drehzahl oder Geschwindigkeit (z. B. 60°/s) oder über eine Stützpunkt-Kurve (Weg über Zeit). Gleichzeitig verfolgt Tracery auf Wunsch den Weg einzelner Punkte am Bauteil als 3D-Bahnkurve im Bild und als Weg-Zeit-Diagramm.",
     "tipp": "Ziehe am Zeitschieber oder klicke direkt ins Weg-Zeit-Diagramm, um jede Zwischenstellung sofort im 3D-Modell zu prüfen."
   },
+  "stackHole": {
+    "tip": "Bohrung durch Stapel: bohrt ein Loch gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
+    "hilfe": "Setzt ein einfaches Loch, eine genormte Schrauben-Durchgangsbohrung (wahlweise mit Senk- oder Zylinderkopf), ein Sackloch oder eine Passbohrung H7 direkt als Schritt in der Baugruppe. Alle getroffenen oder gezielt ausgewählten Teile erhalten gleichzeitig dasselbe Loch, bleiben aber getrennte Körper und verändern keine verknüpften Bauteil-Dateien.",
+    "tipp": "Unter „Zielteile“ kannst du auf „Nur gewählte Teile“ umschalten, wenn das Loch z. B. nur durch zwei bestimmte Platten gehen soll."
+  },
+  "asmCut": {
+    "tip": "Baugruppen-Schnitt: schneidet eine Skizze gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
+    "hilfe": "Erzeugt auf einer gewählten Fläche oder Ebene einen geschlossenen Schnitt-Umriss und zieht ihn gleichzeitig von allen getroffenen oder ausgewählten Teilen der Baugruppe ab. Die Teile bleiben einzelne Baugruppen-Komponenten.",
+    "tipp": "Mit „Skizze bearbeiten“ passt du den Ausschnitt später an – alle betroffenen Teile werden sofort mitgeändert."
+  },
   "autoScrews": {
     "tip": "Schrauben automatisch einsetzen: erkennt Bohrungen in Bauteilen und setzt passende Normschrauben ein",
     "hilfe": "Sucht alle runden Durchgangs-, Kern- und Sacklöcher in deinen Bauteilen, ordnet ihnen die passende metrische Normschraube (M1.6–M24 nach ISO 273 / DIN 336) zu und schlägt anhand der Materialstärke – auch über mehrere gestapelte Platten hinweg – eine Normlänge vor. Du kannst Größe, Kopfform, Länge sowie Scheiben und Muttern vor dem Einsetzen noch anpassen.",
@@ -1799,25 +1809,15 @@
     "hilfe": "Erzeugt eine gespiegelte, verknüpfte Kopie des gewählten Teils an einer Grund- oder Bezugsebene. Änderungen an der Vorlage übernehmen sich automatisch auf das Spiegelbild.",
     "tipp": "Verschiebst du die Spiegelebene über den Abstand, wandert die gespiegelte Kopie direkt mit."
   },
-  "dragCollisionStop": {
-    "tip": "Beim Ziehen anhalten, wenn sich Teile berühren (Profi)",
-    "hilfe": "Prüft beim Verschieben, Anheben, Drehen oder Ziehen an Gelenken laufend, ob das bewegte Teil auf ein anderes Teil stößt. Sobald die Oberflächen sich berühren, hält das Teil genau dort an, statt hindurchzufahren.",
-    "tipp": "Ziehst du ein Teil schräg gegen eine Wand, gleitet es an der Fläche entlang weiter. Zum Durchziehen einfach kurz den Schalter wieder ausmachen."
+  "lightweightMode": {
+    "tip": "Leichtmodus für große Baugruppen (Profi): zeigt Teile zuerst nur als schnelles Netz",
+    "hilfe": "Im Leichtmodus speichert Tracery die fertigen Dreiecks-Netze aller Teile. Beim nächsten Öffnen werden unveränderte Teile sofort aus diesem Netz-Speicher angezeigt, ohne den CAD-Kern jedes Mal neu zu rechnen. Sobald du ein Teil bearbeitest, ein Maß änderst oder auf „Voll laden“ klickst, rechnet der Kern dieses einzelne Teil exakt nach.",
+    "tipp": "Verschieben und Drehen ganzer Teile klappt auch im Leichtmodus sofort ohne Neuberechnung."
   },
-  "clearanceCheck": {
-    "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
-    "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
-    "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
-  },
-  "stackHole": {
-    "tip": "Bohrung durch Stapel: bohrt ein Loch gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
-    "hilfe": "Setzt ein einfaches Loch, eine genormte Schrauben-Durchgangsbohrung (wahlweise mit Senk- oder Zylinderkopf), ein Sackloch oder eine Passbohrung H7 direkt als Schritt in der Baugruppe. Alle getroffenen oder gezielt ausgewählten Teile erhalten gleichzeitig dasselbe Loch, bleiben aber getrennte Körper und verändern keine verknüpften Bauteil-Dateien.",
-    "tipp": "Unter „Zielteile“ kannst du auf „Nur gewählte Teile“ umschalten, wenn das Loch z. B. nur durch zwei bestimmte Platten gehen soll."
-  },
-  "asmCut": {
-    "tip": "Baugruppen-Schnitt: schneidet eine Skizze gleichzeitig durch mehrere Teile der Baugruppe (Profi)",
-    "hilfe": "Erzeugt auf einer gewählten Fläche oder Ebene einen geschlossenen Schnitt-Umriss und zieht ihn gleichzeitig von allen getroffenen oder ausgewählten Teilen der Baugruppe ab. Die Teile bleiben einzelne Baugruppen-Komponenten.",
-    "tipp": "Mit „Skizze bearbeiten“ passt du den Ausschnitt später an – alle betroffenen Teile werden sofort mitgeändert."
+  "simplifiedEnvelope": {
+    "tip": "Vereinfachte Hülle (Profi): fasst eine ganze Baugruppe zu einem einfachen Teil zusammen",
+    "hilfe": "Erzeugt aus vielen Einzelteilen einen einzigen einfachen Körper, der nur die Außenhaut mit gleichen Außenmaßen behält. Verdeckte Innenteile, innere Hohlräume und wahlweise Bohrungen oder kleine Rundungen fallen weg – ideal, um eine große Unterbaugruppe leicht und schnell weiterzuverwenden.",
+    "tipp": "Als „Außenhaut“ bleiben abgestufte Formen erhalten; „Einzel-Kästchen“ oder „Hüllquader“ machen die Hülle noch kleiner."
   },
   "displayStates": {
     "tip": "Anzeige-Zustände: speichern, welche Teile sichtbar, durchsichtig oder farbig sind (Profi)",
@@ -1829,14 +1829,39 @@
     "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
     "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
   },
-  "lightweightMode": {
-    "tip": "Leichtmodus für große Baugruppen (Profi): zeigt Teile zuerst nur als schnelles Netz",
-    "hilfe": "Im Leichtmodus speichert Tracery die fertigen Dreiecks-Netze aller Teile. Beim nächsten Öffnen werden unveränderte Teile sofort aus diesem Netz-Speicher angezeigt, ohne den CAD-Kern jedes Mal neu zu rechnen. Sobald du ein Teil bearbeitest, ein Maß änderst oder auf „Voll laden“ klickst, rechnet der Kern dieses einzelne Teil exakt nach.",
-    "tipp": "Verschieben und Drehen ganzer Teile klappt auch im Leichtmodus sofort ohne Neuberechnung."
+  "skeletonSketch": {
+    "tip": "Skelett-Skizze (Profi): eine Hauptskizze steuert mehrere Teile der Baugruppe",
+    "hilfe": "In einer Skelett-Skizze zeichnest du die wichtigen Linien und Maße der gesamten Baugruppe an einer zentralen Stelle. Jedes benannte Maß wird automatisch als verknüpfter Parameter bereitgestellt – änderst du später ein Maß in der Hauptskizze, rechnen alle damit verbundenen Teile sofort neu.",
+    "tipp": "Auch eingesetzte Bauteile aus eigenen Dokumenten lassen sich im Skelett-Panel direkt über „Verknüpfen“ mit einem Steuer-Maß verbinden."
   },
-  "simplifiedEnvelope": {
-    "tip": "Vereinfachte Hülle (Profi): fasst eine ganze Baugruppe zu einem einfachen Teil zusammen",
-    "hilfe": "Erzeugt aus vielen Einzelteilen einen einzigen einfachen Körper, der nur die Außenhaut mit gleichen Außenmaßen behält. Verdeckte Innenteile, innere Hohlräume und wahlweise Bohrungen oder kleine Rundungen fallen weg – ideal, um eine große Unterbaugruppe leicht und schnell weiterzuverwenden.",
-    "tipp": "Als „Außenhaut“ bleiben abgestufte Formen erhalten; „Einzel-Kästchen“ oder „Hüllquader“ machen die Hülle noch kleiner."
+  "dragCollisionStop": {
+    "tip": "Beim Ziehen anhalten, wenn sich Teile berühren (Profi)",
+    "hilfe": "Prüft beim Verschieben, Anheben, Drehen oder Ziehen an Gelenken laufend, ob das bewegte Teil auf ein anderes Teil stößt. Sobald die Oberflächen sich berühren, hält das Teil genau dort an, statt hindurchzufahren.",
+    "tipp": "Ziehst du ein Teil schräg gegen eine Wand, gleitet es an der Fläche entlang weiter. Zum Durchziehen einfach kurz den Schalter wieder ausmachen."
+  },
+  "clearanceCheck": {
+    "tip": "Luft prüfen: listet alle Teilepaare mit weniger als X mm Abstand auf (Profi)",
+    "hilfe": "Misst im CAD-Kern den genauen kleinsten Abstand zwischen allen sichtbaren Körpern und Bauteilen. Jedes Paar unter deinem Grenzwert (z. B. 1 mm) erscheint in der Liste – Klick markiert die engste Stelle im Modell und fährt die Kamera direkt dorthin.",
+    "tipp": "Schalte „Berührende Paare (0 mm) mit listen“ nur ein, wenn du zusätzlich auch gewollte Anlageflächen prüfen willst."
+  },
+  "asmSingleBody": {
+    "tip": "Baugruppe als einen Körper speichern: verschmilzt alle Teile zu einem einzigen Körper für Export, 3D-Druck oder Weiterarbeit (Profi)",
+    "hilfe": "Fasst alle sichtbaren Teile einer Baugruppe über den CAD-Kern zu einem einzigen Körper zusammen und speichert ihn als STEP, STL, 3MF, BREP oder als neues Bauteil im eigenen Tab. So kannst du eine fertige Baugruppe wie ein einzelnes Teil weitergeben oder drucken.",
+    "tipp": "Im Export-Fenster gibt es zusätzlich das Häkchen „Als einen Körper“, wenn du mehrere Formate auf einmal als Einzelkörper in eine ZIP-Datei packen willst."
+  },
+  "tolChain": {
+    "tip": "Toleranzkette in einer Richtung rechnen: Maße mit ± auswählen, schlimmster Fall und Mittelwert werden berechnet (Profi)",
+    "hilfe": "Misst gewählte Teile der Baugruppe entlang einer Achse (X, Y, Z oder senkrecht zu einer gewählten Fläche) und rechnet die Toleranzkette sofort aus: sowohl den schlimmsten Fall (Summe aller ± Toleranzen) als auch den wahrscheinlichen Bereich um den Mittelwert (Wurzelsumme der Quadrate).",
+    "tipp": "Mit dem Knopf „+“ vor einer Zeile wechselst du das Vorzeichen auf „−“, um ein Spiel oder einen Spalt (Schließmaß) gegen die übrigen Maße zu prüfen."
+  },
+  "drawingSectionKinds": {
+    "tip": "Weitere Schnittarten in der Zeichnung (Profi): Halbschnitt, abgesetzter Schnitt und Ausbruch",
+    "hilfe": "Im Profi-Modus stehen dir neben dem normalen Vollschnitt drei weitere Schnittarten zur Wahl: Beim Halbschnitt siehst du die eine Hälfte als Außenansicht und die andere als Schnitt (ideal für runde oder symmetrische Teile). Beim abgesetzten Schnitt knickst du die Schnittlinie im rechten Winkel ab, um versetzte Bohrungen oder Taschen gemeinsam zu schneiden. Beim Ausbruch brichst du nur einen gezeichneten Bereich bis zur gewünschten Tiefe auf.",
+    "tipp": "Beim Halbschnitt kannst du die geschnittene Seite jederzeit rechts im Panel wechseln; beim Ausbruch lässt sich die Schnitttiefe dort genau eintippen."
+  },
+  "asmCable": {
+    "tip": "Kabel oder Schlauch zwischen zwei Anschlusspunkten mit Durchmesser und Biegeradius verlegen (Profi)",
+    "hilfe": "Erzeugt eine weiche 3D-Kurve zwischen zwei Punkten (direkt eingeben oder auf Bauteilflächen anklicken) mit frei wählbarem Durchmesser, Wandstärke (bei Schläuchen) und Biegeradius. Werden die Anschlusspunkte auf Bauteile geklickt, wandert das Kabel beim Verschieben mit, und die exakte Länge erscheint in der Stückliste.",
+    "tipp": "Wähle „Schlauch (hohl)“, um einen Innenhohlraum über die Wandstärke zu erhalten, oder füge rechts im Panel Zwischenpunkte hinzu."
   }
 }

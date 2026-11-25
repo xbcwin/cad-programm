@@ -1164,6 +1164,30 @@ const RefFix = (() => {
           });
         });
       }
+      if (it.kind === 'sweep' && it.p && it.p.cable) {
+        for (const [bindKey, ptLabel] of [['bindA', 'A'], ['bindB', 'B']]) {
+          const b = it.p.cable[bindKey];
+          if (!b || !b.id) continue;
+          const tgt = resolveTop(b.id);
+          if (!tgt || tgt.topId === sourceTopId) continue;
+          const frozen = !!b.frozen;
+          pushRef({
+            id: `cable:${it.id}:${bindKey}`,
+            kind: 'cable-bind',
+            sourceTopId,
+            sourceItemId: it.id,
+            sourceName: stepName,
+            targetTopId: tgt.topId,
+            targetItemId: b.id,
+            targetName: tgt.name || T('partRefs.deletedPart'),
+            what: T('partRefs.kind.cableBind'),
+            detail: ptLabel,
+            frozen,
+            lost: !frozen && !tgt.item,
+            bindKey,
+          });
+        }
+      }
 
       if (it.kind === 'sketch3d' && it.p && it.p.sketch3d && Array.isArray(it.p.sketch3d.ents)) {
         it.p.sketch3d.ents.forEach((e, ei) => {
@@ -1315,6 +1339,13 @@ const RefFix = (() => {
       else delete b.frozen;
       return true;
     }
+    if (ref.kind === 'cable-bind') {
+      const b = it.p && it.p.cable && it.p.cable[ref.bindKey];
+      if (!b || !!b.frozen === on) return false;
+      if (on) b.frozen = true;
+      else delete b.frozen;
+      return true;
+    }
     if (ref.kind === 'sketch3d-bind') {
       const e = it.p && it.p.sketch3d && it.p.sketch3d.ents && it.p.sketch3d.ents[ref.entIdx];
       const b = e && e[ref.bindKey];
@@ -1414,6 +1445,12 @@ const RefFix = (() => {
       if (!pp || !Array.isArray(pp.bind) || !pp.bind[ref.bindIdx]) return false;
       pp.bind[ref.bindIdx] = null;
       if (!pp.bind.some(Boolean)) delete pp.bind;
+      return true;
+    }
+    if (ref.kind === 'cable-bind') {
+      const cb = it.p && it.p.cable;
+      if (!cb || !cb[ref.bindKey]) return false;
+      delete cb[ref.bindKey];
       return true;
     }
     if (ref.kind === 'sketch3d-bind') {
