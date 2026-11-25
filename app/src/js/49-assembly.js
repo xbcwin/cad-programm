@@ -2371,7 +2371,23 @@ const Assembly = (() => {
     return changed;
   }
   function onItemRemoved(doc, item) {
-    if (!doc || !item || !Array.isArray(doc.asmPatterns) || !doc.asmPatterns.length) return;
+    if (!doc || !item) return;
+    if (Array.isArray(doc.displayStates)) {
+      for (const ds of doc.displayStates) {
+        if (ds && ds.items && Object.prototype.hasOwnProperty.call(ds.items, item.id)) {
+          delete ds.items[item.id];
+        }
+      }
+    }
+    if (Array.isArray(doc.asmVariants)) {
+      for (const av of doc.asmVariants) {
+        if (!av) continue;
+        if (Array.isArray(av.suppressed)) av.suppressed = av.suppressed.filter((id) => id !== item.id);
+        if (av.refs && Object.prototype.hasOwnProperty.call(av.refs, item.id)) delete av.refs[item.id];
+        if (av.itemParams && Object.prototype.hasOwnProperty.call(av.itemParams, item.id)) delete av.itemParams[item.id];
+      }
+    }
+    if (!Array.isArray(doc.asmPatterns) || !doc.asmPatterns.length) return;
     const next = [];
     for (const pat of doc.asmPatterns) {
       if (!pat) continue;
@@ -3572,6 +3588,1346 @@ const Assembly = (() => {
     });
   }
 
+  // ================= Anzeige-Zustände für Baugruppen (BG-27) =================
+  const VALID_DISPLAY_MODES = new Set(['edges', 'shaded', 'wire', 'hidden', 'illustration']);
+  function isProMode() {
+    return typeof ViewPrefs === 'undefined' || !ViewPrefs.simple;
+  }
+  function displayStates(doc = App.doc) {
+    return (doc && Array.isArray(doc.displayStates)) ? doc.displayStates : [];
+  }
+  function findDisplayState(idOrName, doc = App.doc) {
+    const key = String(idOrName || '').trim();
+    if (!key) return null;
+    const list = displayStates(doc);
+    return list.find((ds) => ds.id === key) || list.find((ds) => ds.name && ds.name.toLowerCase() === key.toLowerCase()) || null;
+  }
+  function captureDisplayState(doc = App.doc, opts = {}) {
+    const items = {};
+    Model.walk((doc && doc.items) || [], (it) => {
+      if (!it || !it.id) return;
+      items[it.id] = {
+        hidden: !!it.hidden,
+        opacity: (typeof it.opacity === 'number' && Number.isFinite(it.opacity) && it.opacity < 1)
+          ? round(clamp(it.opacity, 0.05, 1), 3)
+          : null,
+        color: (typeof it.color === 'string' && it.color) ? it.color : null,
+        colorSet: !!it.colorSet,
+      };
+    });
+    let display = null;
+    if (opts.includeDisplay !== false) {
+      if (opts.display !== undefined) {
+        display = typeof opts.display === 'string' && VALID_DISPLAY_MODES.has(opts.display) ? opts.display : null;
+      } else if (typeof ViewPrefs !== 'undefined' && ViewPrefs.get) {
+        const cur = ViewPrefs.get().display || 'edges';
+        display = VALID_DISPLAY_MODES.has(cur) ? cur : 'edges';
+      }
+    }
+    return { items, display };
+  }
+  function isDisplayStateActive(ds, doc = App.doc) {
+    if (!ds || !ds.items || typeof ds.items !== 'object') return false;
+    if (ds.display && typeof ViewPrefs !== 'undefined' && ViewPrefs.get) {
+      const curDisp = ViewPrefs.get().display || 'edges';
+      if (curDisp !== ds.display) return false;
+    }
+    let matched = 0;
+    let mismatch = false;
+    Model.walk((doc && doc.items) || [], (it) => {
+      if (!it || !it.id) return;
+      const saved = ds.items[it.id];
+      if (!saved || typeof saved !== 'object') return;
+      matched++;
+      if (!!it.hidden !== !!saved.hidden) { mismatch = true; return false; }
+      const curOp = (typeof it.opacity === 'number' && Number.isFinite(it.opacity) && it.opacity < 1) ? it.opacity : 1;
+      const savOp = (typeof saved.opacity === 'number' && Number.isFinite(saved.opacity) && saved.opacity < 1) ? saved.opacity : 1;
+      if (Math.abs(curOp - savOp) > 0.01) { mismatch = true; return false; }
+      if (!!it.colorSet !== !!saved.colorSet) { mismatch = true; return false; }
+      if (saved.colorSet && String(it.color || '').toLowerCase() !== String(saved.color || '').toLowerCase()) {
+        mismatch = true;
+        return false;
+      }
+    });
+    return matched > 0 && !mismatch;
+  }
+  function activeDisplayState(doc = App.doc) {
+    const list = displayStates(doc);
+    if (!list.length) return null;
+    if (doc && doc.displayState) {
+      const cur = list.find((d) => d.id === doc.displayState);
+      if (cur && isDisplayStateActive(cur, doc)) return cur;
+    }
+    return list.find((ds) => isDisplayStateActive(ds, doc)) || null;
+  }
+  function displayStateItemsList(doc = App.doc) {
+    return ((doc && doc.items) || []).filter((it) => it && it.role !== 'hole' && !isStepMod(it));
+  }
+  function displayStateSummary(ds, doc = App.doc) {
+    if (!ds || !ds.items || typeof ds.items !== 'object') return T('asm.dsAllVisible');
+    let hidden = 0, trans = 0, colored = 0;
+    for (const it of displayStateItemsList(doc)) {
+      const st = ds.items[it.id];
+      if (!st) continue;
+      if (st.hidden) hidden++;
+      if (typeof st.opacity === 'number' && st.opacity < 1) trans++;
+      if (st.colorSet) colored++;
+    }
+    const parts = [];
+    if (hidden) parts.push(T('asm.dsSumHidden', { n: hidden }));
+    if (trans) parts.push(T('asm.dsSumTrans', { n: trans }));
+    if (colored) parts.push(T('asm.dsSumColor', { n: colored }));
+    if (ds.display && ds.display !== 'edges') parts.push(T('menu.view.disp.' + ds.display));
+    return parts.length ? parts.join(' · ') : T('asm.dsAllVisible');
+  }
+  function applyDisplayStateToDoc(doc, ds) {
+    if (!doc || !ds) return false;
+    const map = ds.items && typeof ds.items === 'object' ? ds.items : {};
+    Model.walk(doc.items || [], (it) => {
+      if (!it || !it.id) return;
+      const st = map[it.id];
+      if (!st || typeof st !== 'object') return;
+      if (st.hidden) it.hidden = true;
+      else delete it.hidden;
+      if (typeof st.opacity === 'number' && Number.isFinite(st.opacity) && st.opacity < 1) {
+        it.opacity = round(clamp(st.opacity, 0.05, 1), 3);
+      } else {
+        delete it.opacity;
+      }
+      if (st.colorSet) {
+        it.colorSet = true;
+        if (st.color) it.color = st.color;
+      } else {
+        delete it.colorSet;
+        if (st.color) it.color = st.color;
+      }
+    });
+    doc.displayState = ds.id;
+    return true;
+  }
+  function syncViewerDisplayNow(doc = App.doc) {
+    if (!doc || typeof Viewer === 'undefined' || !Viewer.nodes) return;
+    for (const [id] of Viewer.nodes) {
+      const it = (doc.items || []).find((x) => x && x.id === id)
+        || (typeof App !== 'undefined' && Array.isArray(App.extra) ? App.extra.find((x) => x && x.id === id) : null);
+      if (!it) continue;
+      const mat = it.mat || (doc.settings && doc.settings.material) || null;
+      const L = Viewer.lookOf ? Viewer.lookOf(mat) : {};
+      const look = { ...L, mat, matCol: L.nat && !it.colorSet ? L.col : null, customColor: !!it.colorSet };
+      const hideSet = (typeof App !== 'undefined' && App.hideIds) ? App.hideIds : new Set();
+      const isoId = typeof App !== 'undefined' ? App.iso : null;
+      Viewer.updateNode(id, {
+        visible: !it.hidden && !hideSet.has(id) && (!isoId || isoId === id),
+        opacity: it.opacity ?? null,
+        color: it.color || '#2f9e91',
+        look,
+      });
+    }
+    if (typeof App !== 'undefined' && App.applyView) App.applyView();
+  }
+  function saveDisplayState(name, opts = {}) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    if (!App.doc || !Array.isArray(App.doc.items) || !App.doc.items.length) {
+      if (!opts.silent) UI.toast(T('asm.dsNoPartsSave'), { icon: 'info' });
+      return null;
+    }
+    const snap = captureDisplayState(App.doc, opts);
+    let saved = null;
+    App.change(T('asm.dsSavedUndo', { name: clean }), (doc) => {
+      doc.displayStates = Array.isArray(doc.displayStates) ? doc.displayStates : [];
+      const low = clean.toLowerCase();
+      let idx = opts.id ? doc.displayStates.findIndex((d) => d && d.id === opts.id) : -1;
+      if (idx < 0) idx = doc.displayStates.findIndex((d) => d && typeof d.name === 'string' && d.name.toLowerCase() === low);
+      if (idx >= 0) {
+        doc.displayStates[idx] = { ...doc.displayStates[idx], name: clean, items: snap.items, display: snap.display };
+        saved = doc.displayStates[idx];
+      } else {
+        saved = { id: uid('ds'), name: clean, items: snap.items, display: snap.display };
+        doc.displayStates.push(saved);
+      }
+      doc.displayState = saved.id;
+    });
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.refreshLookPanel) ViewPrefs.refreshLookPanel();
+    if (!opts.silent && saved) UI.toast(T('asm.dsSavedToast', { name: saved.name }), { icon: 'check', ms: 2200 });
+    return saved;
+  }
+  function updateDisplayState(id, opts = {}) {
+    const ds = findDisplayState(id);
+    if (!ds) return null;
+    return saveDisplayState(ds.name, { ...opts, id: ds.id });
+  }
+  function setDisplayStateItem(dsId, itemId, patch = {}) {
+    if (!dsId || !itemId || !App.doc) return false;
+    let ok = false;
+    let activeChanged = false;
+    App.change(T('asm.dsUpdatedUndo'), (doc) => {
+      const ds = findDisplayState(dsId, doc);
+      const f = Model.find(doc, itemId);
+      if (!ds || !f || !f.item) return false;
+      ds.items = ds.items && typeof ds.items === 'object' ? ds.items : {};
+      const cur = ds.items[itemId] || {
+        hidden: !!f.item.hidden,
+        opacity: (typeof f.item.opacity === 'number' && f.item.opacity < 1) ? f.item.opacity : null,
+        color: f.item.color || null,
+        colorSet: !!f.item.colorSet,
+      };
+      const next = { ...cur };
+      if ('hidden' in patch) next.hidden = !!patch.hidden;
+      if ('opacity' in patch) {
+        const op = Number(patch.opacity);
+        next.opacity = (patch.opacity != null && Number.isFinite(op) && op < 1) ? round(clamp(op, 0.05, 1), 3) : null;
+      }
+      if ('color' in patch) next.color = (typeof patch.color === 'string' && patch.color) ? patch.color : null;
+      if ('colorSet' in patch) next.colorSet = !!patch.colorSet;
+      ds.items[itemId] = next;
+      ok = true;
+      if (doc.displayState === ds.id) {
+        if (next.hidden) f.item.hidden = true;
+        else delete f.item.hidden;
+        if (next.opacity != null && next.opacity < 1) f.item.opacity = next.opacity;
+        else delete f.item.opacity;
+        if (next.colorSet) {
+          f.item.colorSet = true;
+          if (next.color) f.item.color = next.color;
+        } else {
+          delete f.item.colorSet;
+          if (next.color) f.item.color = next.color;
+        }
+        activeChanged = true;
+      }
+      return true;
+    });
+    if (activeChanged) syncViewerDisplayNow(App.doc);
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.refreshLookPanel) ViewPrefs.refreshLookPanel();
+    return ok;
+  }
+  function setDisplayStateMode(dsId, mode) {
+    if (!dsId || !App.doc) return false;
+    const nextMode = typeof mode === 'string' && VALID_DISPLAY_MODES.has(mode) ? mode : null;
+    let isAct = false;
+    const ok = App.change(T('asm.dsUpdatedUndo'), (doc) => {
+      const ds = findDisplayState(dsId, doc);
+      if (!ds) return false;
+      if ((ds.display || null) === nextMode) return false;
+      ds.display = nextMode;
+      isAct = doc.displayState === ds.id;
+      return true;
+    }) !== false;
+    if (ok && isAct && nextMode && typeof ViewPrefs !== 'undefined' && ViewPrefs.applyDisplayState) {
+      ViewPrefs.applyDisplayState({ display: nextMode });
+    }
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.refreshLookPanel) ViewPrefs.refreshLookPanel();
+    return ok;
+  }
+  function renameDisplayState(id, newName) {
+    const clean = String(newName || '').trim();
+    if (!clean) return false;
+    const low = clean.toLowerCase();
+    const ok = App.change(T('asm.dsRenamedUndo', { name: clean }), (doc) => {
+      const list = Array.isArray(doc.displayStates) ? doc.displayStates : [];
+      const ds = list.find((x) => x.id === id);
+      if (!ds) return false;
+      if (list.some((x) => x.id !== id && x.name && x.name.toLowerCase() === low)) return false;
+      ds.name = clean;
+      return true;
+    }) !== false;
+    if (ok && typeof ViewPrefs !== 'undefined' && ViewPrefs.refreshLookPanel) ViewPrefs.refreshLookPanel();
+    return ok;
+  }
+  function removeDisplayState(id) {
+    const ds = findDisplayState(id);
+    if (!ds) return false;
+    const ok = App.change(T('asm.dsRemovedUndo', { name: ds.name }), (doc) => {
+      doc.displayStates = (doc.displayStates || []).filter((x) => x.id !== ds.id);
+      if (doc.displayState === ds.id) delete doc.displayState;
+      return true;
+    }) !== false;
+    if (ok) {
+      if (typeof ViewPrefs !== 'undefined' && ViewPrefs.refreshLookPanel) ViewPrefs.refreshLookPanel();
+      UI.toast(T('asm.dsRemovedToast', { name: ds.name }), { icon: 'info', ms: 2000 });
+    }
+    return ok;
+  }
+  function applyDisplayState(idOrName, opts = {}) {
+    const ds = findDisplayState(idOrName);
+    if (!ds) return false;
+    const ok = App.change(T('asm.dsAppliedUndo', { name: ds.name }), (doc) => {
+      const target = findDisplayState(ds.id, doc);
+      if (!target) return false;
+      return applyDisplayStateToDoc(doc, target);
+    }) !== false;
+    if (!ok) return false;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.applyDisplayState) ViewPrefs.applyDisplayState(ds);
+    syncViewerDisplayNow(App.doc);
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.refreshLookPanel) ViewPrefs.refreshLookPanel();
+    if (!opts.silent) UI.toast(T('asm.dsAppliedToast', { name: ds.name }), { icon: 'check', ms: 2000 });
+    return true;
+  }
+  function defaultDisplayStateName(doc = App.doc) {
+    const existing = new Set(displayStates(doc).map((d) => (d.name || '').toLowerCase()));
+    const suggestions = String(T('asm.dsDefaults') || 'Standard,ohne Deckel,Innenleben,Durchsichtig').split(',').map((s) => s.trim()).filter(Boolean);
+    for (const s of suggestions) {
+      if (!existing.has(s.toLowerCase())) return s;
+    }
+    return T('asm.dsDefaultN', { n: displayStates(doc).length + 1 });
+  }
+  async function promptSaveDisplayState() {
+    if (!isProMode()) return null;
+    if (!App.doc || !Array.isArray(App.doc.items) || !App.doc.items.length) {
+      UI.toast(T('asm.dsNoPartsSave'), { icon: 'info' });
+      return null;
+    }
+    const n = await UI.prompt(T('asm.dsPromptTitle'), T('asm.dsPromptLabel'), defaultDisplayStateName(), T('common.save'));
+    if (!n || !n.trim()) return null;
+    return saveDisplayState(n.trim());
+  }
+  function displayStateDialog(initialId = null) {
+    if (!isProMode() || !App.doc) return null;
+    const existing = document.getElementById('ds-dialog');
+    if (existing) return null;
+
+    let selId = initialId ? (findDisplayState(initialId)?.id || null) : (activeDisplayState()?.id || (displayStates()[0]?.id || null));
+    const body = h('div', { id: 'ds-dialog', class: 'ds-dlg' });
+    const bar = h('div', { class: 'ds-bar' });
+    const content = h('div', { class: 'ds-content' });
+    body.append(h('div', { class: 'hint-box' }, T('asm.dsDlgHint')), bar, content);
+
+    let unsub = null;
+    const rebuild = () => {
+      const list = displayStates();
+      if (!selId || !list.some((x) => x.id === selId)) {
+        selId = activeDisplayState()?.id || (list[0]?.id || null);
+      }
+      const ds = selId ? list.find((x) => x.id === selId) : null;
+
+      bar.replaceChildren();
+      const sel = h('select', { id: 'ds-dlg-sel', 'aria-label': T('asm.dsHeading') });
+      if (!list.length) sel.append(h('option', { value: '' }, T('asm.dsNoneOption')));
+      for (const x of list) sel.append(h('option', { value: x.id, selected: x.id === selId }, x.name));
+      sel.onchange = () => {
+        selId = sel.value || null;
+        if (selId) applyDisplayState(selId, { silent: true });
+        rebuild();
+      };
+
+      const newBtn = h('button', { type: 'button', class: 'btn small', id: 'ds-dlg-new' });
+      newBtn.innerHTML = icon('plus') + esc(T('asm.dsNewBtn'));
+      newBtn.onclick = async () => {
+        const res = await promptSaveDisplayState();
+        if (res) { selId = res.id; rebuild(); }
+      };
+
+      const updBtn = h('button', { type: 'button', class: 'btn small', id: 'ds-dlg-upd', disabled: !ds });
+      updBtn.innerHTML = icon('save') + esc(T('asm.dsUpdateShort'));
+      updBtn.onclick = () => { if (ds) updateDisplayState(ds.id); };
+
+      const renBtn = h('button', { type: 'button', class: 'btn small', id: 'ds-dlg-ren', disabled: !ds });
+      renBtn.innerHTML = icon('edit') + esc(T('common.rename'));
+      renBtn.onclick = async () => {
+        if (!ds) return;
+        const n = await UI.prompt(T('asm.dsRenameTitle'), T('common.name'), ds.name, T('common.rename'));
+        if (n && n.trim()) renameDisplayState(ds.id, n);
+      };
+
+      const delBtn = h('button', { type: 'button', class: 'btn small ghost danger', id: 'ds-dlg-del', disabled: !ds });
+      delBtn.innerHTML = icon('trash');
+      delBtn.onclick = () => {
+        if (!ds) return;
+        removeDisplayState(ds.id);
+      };
+
+      bar.append(sel, newBtn, updBtn, renBtn, delBtn);
+      content.replaceChildren();
+      if (!ds) {
+        content.append(h('div', { class: 'hint-box', id: 'ds-empty-hint' }, T('asm.dsEmptyHint')));
+        return;
+      }
+
+      const modeSel = UI.selectField({
+        id: 'ds-dlg-mode',
+        label: T('asm.dsModeLabel'),
+        value: ds.display || '',
+        options: [
+          ['', T('asm.dsModeKeep')],
+          ['edges', T('menu.view.disp.edges')],
+          ['shaded', T('menu.view.disp.shaded')],
+          ['wire', T('menu.view.disp.wire')],
+          ['hidden', T('menu.view.disp.hidden')],
+          ['illustration', T('menu.view.disp.illustration')],
+        ],
+        onChange: (val) => setDisplayStateMode(ds.id, val),
+      });
+      content.append(modeSel);
+
+      const parts = displayStateItemsList(App.doc);
+      if (!parts.length) {
+        content.append(h('div', { class: 'hint-box' }, T('asm.dsNoPartsSave')));
+        return;
+      }
+
+      const tbl = h('table', { class: 'vtable ds-table', id: 'ds-items-table' },
+        h('tr', null,
+          h('th', null, T('asm.dsColPart')),
+          h('th', null, T('asm.dsColVisible')),
+          h('th', null, T('asm.dsColOpacity')),
+          h('th', null, T('asm.dsColColor'))
+        )
+      );
+      for (const it of parts) {
+        const st = (ds.items && ds.items[it.id]) || {
+          hidden: !!it.hidden,
+          opacity: (typeof it.opacity === 'number' && it.opacity < 1) ? it.opacity : null,
+          color: it.color || '#2f9e91',
+          colorSet: !!it.colorSet,
+        };
+        const visChk = h('input', { type: 'checkbox', class: 'ds-vis-chk', checked: !st.hidden, dataset: { itemId: it.id }, 'aria-label': `${Model.label(it)} ${T('asm.dsColVisible')}` });
+        visChk.onchange = () => setDisplayStateItem(ds.id, it.id, { hidden: !visChk.checked });
+
+        const opPct = Math.round(((typeof st.opacity === 'number' && st.opacity < 1) ? st.opacity : 1) * 100);
+        const opInp = h('input', { type: 'number', class: 'ds-opac-inp mono', min: '5', max: '100', step: '5', value: String(opPct), dataset: { itemId: it.id }, 'aria-label': `${Model.label(it)} ${T('asm.dsColOpacity')}` });
+        opInp.onchange = () => {
+          const pct = clamp(Number(opInp.value) || 100, 5, 100);
+          opInp.value = String(Math.round(pct));
+          setDisplayStateItem(ds.id, it.id, { opacity: pct >= 100 ? null : pct / 100 });
+        };
+
+        const colSetChk = h('input', { type: 'checkbox', class: 'ds-colset-chk', checked: !!st.colorSet, dataset: { itemId: it.id }, title: T('asm.dsCustomColorTip') });
+        const colVal = (st.color && /^#[0-9a-fA-F]{6}$/.test(st.color)) ? st.color : '#2f9e91';
+        const colInp = h('input', { type: 'color', class: 'ds-col-inp', value: colVal, dataset: { itemId: it.id }, 'aria-label': `${Model.label(it)} ${T('asm.dsColColor')}` });
+        colSetChk.onchange = () => setDisplayStateItem(ds.id, it.id, { colorSet: colSetChk.checked, ...(colSetChk.checked ? { color: colInp.value } : {}) });
+        colInp.onchange = () => {
+          colSetChk.checked = true;
+          setDisplayStateItem(ds.id, it.id, { color: colInp.value, colorSet: true });
+        };
+
+        tbl.append(h('tr', { dataset: { itemId: it.id } },
+          h('td', null, Model.label(it)),
+          h('td', null, visChk),
+          h('td', null, h('div', { class: 'ds-opac-cell' }, opInp, h('span', { class: 'muted' }, '%'))),
+          h('td', null, h('div', { class: 'ds-color-cell' }, colSetChk, colInp))
+        ));
+      }
+      content.append(h('div', { class: 'ds-table-wrap' }, tbl));
+    };
+
+    unsub = App.on('doc', rebuild);
+    rebuild();
+    return UI.modal({
+      title: T('asm.dsDlgTitle'),
+      body,
+      wide: true,
+      actions: [{ label: T('common.close'), primary: true }],
+      onClose: () => { if (unsub) { unsub(); unsub = null; } },
+    });
+  }
+  function displayStateTreeSection() {
+    const list = displayStates();
+    if (!isAssembly() && !list.length) return null;
+    const head = h('div', { class: 'section-h', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, h('span', null, T('asm.dsHeading')));
+    const addBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-ds-save', 'data-help': 'displayStates' });
+    addBtn.innerHTML = icon('plus') + esc(T('asm.dsSaveShort'));
+    addBtn.onclick = (e) => { e.stopPropagation(); promptSaveDisplayState(); };
+    const editBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-ds-edit', 'data-help': 'displayStates' }, T('asm.dsManageBtn'));
+    editBtn.onclick = (e) => { e.stopPropagation(); displayStateDialog(); };
+    head.append(h('span', { style: { display: 'inline-flex', gap: '4px', alignItems: 'center' } }, addBtn, editBtn));
+
+    const sec = h('div', { class: 'datum-tree ds-tree pro', id: 'ds-tree', 'data-help': 'displayStates' }, head);
+    if (!list.length) {
+      sec.append(h('div', { class: 'hint-box' }, T('asm.dsEmptyHint')));
+      return sec;
+    }
+    const act = activeDisplayState();
+    for (const ds of list) {
+      const on = !!(act && act.id === ds.id);
+      const row = h('div', {
+        class: 'tree-row ds-row' + (on ? ' sel' : ''),
+        tabindex: '0',
+        role: 'button',
+        'aria-pressed': on ? 'true' : 'false',
+        dataset: { ds: ds.id, dsName: ds.name },
+      });
+      const ic = h('span', { class: 'swatch ds' }); ic.innerHTML = icon(on ? 'check' : 'eye');
+      const upd = h('button', { type: 'button', class: 'ds-upd', 'aria-label': T('asm.dsUpdateTip'), 'data-tip': T('asm.dsUpdateTip') });
+      upd.innerHTML = icon('save');
+      upd.onclick = (e) => { e.stopPropagation(); updateDisplayState(ds.id); };
+      const del = h('button', { type: 'button', class: 'j-del ds-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); removeDisplayState(ds.id); };
+      row.append(
+        ic,
+        h('span', { class: 'nm', title: ds.name }, ds.name),
+        h('span', { class: 'sub mono' }, displayStateSummary(ds)),
+        h('span', { class: 'm-acts' }, upd, del)
+      );
+      row.onclick = () => applyDisplayState(ds.id);
+      row.addEventListener('keydown', (e) => {
+        if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); applyDisplayState(ds.id); }
+      });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'eye', label: T('asm.dsApplyMenu'), run: () => applyDisplayState(ds.id) },
+          { icon: 'save', label: T('asm.dsUpdateMenu'), run: () => updateDisplayState(ds.id) },
+          { icon: 'sliders', label: T('asm.dsEditMenu'), run: () => displayStateDialog(ds.id) },
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('asm.dsRenameTitle'), T('common.name'), ds.name, T('common.rename')); if (n && n.trim()) renameDisplayState(ds.id, n); } },
+          '-',
+          { icon: 'trash', label: T('common.delete'), run: () => removeDisplayState(ds.id) },
+        ]);
+      });
+      sec.append(row);
+    }
+    return sec;
+  }
+  function displayStateSection(ctx = 'proj') {
+    const list = displayStates();
+    if (!isAssembly() && !list.length) return null;
+    const sec = h('div', { class: 'section pro ds-sec', id: ctx + '-ds-sec', 'data-help': 'displayStates' },
+      h('div', { class: 'section-h' }, T('asm.dsHeading'))
+    );
+    const act = activeDisplayState();
+    if (list.length) {
+      const chips = h('div', { class: 'ds-chips' });
+      for (const ds of list) {
+        const on = !!(act && act.id === ds.id);
+        const btn = h('button', {
+          type: 'button',
+          class: 'btn small ds-chip' + (on ? ' primary' : ''),
+          'aria-pressed': on ? 'true' : 'false',
+          dataset: { dsApply: ds.id, dsName: ds.name },
+        }, h('span', { class: 'ds-chip-nm' }, ds.name), h('span', { class: 'sub mono' }, displayStateSummary(ds)));
+        btn.onclick = () => applyDisplayState(ds.id);
+        chips.append(btn);
+      }
+      sec.append(chips);
+    } else {
+      sec.append(h('div', { class: 'hint-box' }, T('asm.dsEmptyHint')));
+    }
+    const inp = h('input', {
+      type: 'text',
+      id: ctx + '-ds-name',
+      class: 'ds-name-inp',
+      placeholder: T('asm.dsNamePh'),
+      'aria-label': T('asm.dsPromptLabel'),
+      autocomplete: 'off',
+      spellcheck: 'false',
+    });
+    const saveBtn = h('button', { type: 'button', class: 'btn small', id: ctx + '-ds-save' });
+    saveBtn.innerHTML = icon('plus') + esc(T('asm.dsSaveShort'));
+    const doSave = () => {
+      const nm = inp.value.trim();
+      if (nm) { saveDisplayState(nm); inp.value = ''; }
+      else promptSaveDisplayState();
+    };
+    saveBtn.onclick = doSave;
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
+    const manBtn = h('button', { type: 'button', class: 'btn small ghost', id: ctx + '-ds-manage' }, T('asm.dsManageBtn'));
+    manBtn.onclick = () => displayStateDialog();
+    sec.append(h('div', { class: 'ds-save-row' }, inp, saveBtn, manBtn));
+    return sec;
+  }
+
+  // ================= Varianten für Baugruppen (BG-28) =================
+  const ASM_SKIP_P_KEYS = new Set([
+    'lib', 'fmt', 'file', 'blobId', 'data', 'stepEntity', 'stepMat', 'sketch', 'sketches',
+    'path', 'rail', 'rail2', 'path3d', 'sketch3d', 'target', 'targets', 'features', 'wrapId',
+    'sketch3dId', 'sourceId', 'face', 'faceRef', 'toFace', 'datumId', 'axisId', 'axisEnt',
+    'op', 'assembly', 'docId', 'docName', 'docType', 'variantId',
+  ]);
+  function asmVariants(doc = App.doc) {
+    return (doc && Array.isArray(doc.asmVariants)) ? doc.asmVariants : [];
+  }
+  function findAsmVariant(idOrName, doc = App.doc) {
+    const key = String(idOrName || '').trim();
+    if (!key) return null;
+    const list = asmVariants(doc);
+    return list.find((av) => av.id === key) || list.find((av) => av.name && av.name.toLowerCase() === key.toLowerCase()) || null;
+  }
+  function captureItemParams(it) {
+    if (!it || !it.p || typeof it.p !== 'object' || it.kind === 'ref' || it.kind === 'group') return null;
+    const out = {};
+    for (const [k, val] of Object.entries(it.p)) {
+      if (ASM_SKIP_P_KEYS.has(k)) continue;
+      if ((typeof val === 'number' && Number.isFinite(val)) || typeof val === 'string' || typeof val === 'boolean') {
+        out[k] = val;
+      }
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  function asmVariantPartsList(doc = App.doc) {
+    return ((doc && doc.items) || []).filter((it) => it && it.role !== 'hole' && !isStepMod(it) && !isPatternCopy(it.id, doc));
+  }
+  function captureAsmVariant(doc = App.doc) {
+    const values = {};
+    for (const p of (doc && doc.params) || []) {
+      if (p && p.name) values[p.name] = p.expr;
+    }
+    const suppressed = [];
+    const refs = {};
+    const itemParams = {};
+    for (const it of (doc && doc.items) || []) {
+      if (!it || !it.id) continue;
+      if (it.suppressed) suppressed.push(it.id);
+      if (it.kind === 'ref' && it.p && it.p.docId) {
+        refs[it.id] = {
+          docId: it.p.docId,
+          docName: it.p.docName || Model.label(it),
+          ...(it.p.docType === 'assembly' ? { docType: 'assembly' } : {}),
+          ...(it.p.variantId ? { variantId: it.p.variantId } : {}),
+        };
+      } else {
+        const ip = captureItemParams(it);
+        if (ip) itemParams[it.id] = ip;
+      }
+    }
+    return { values, suppressed, refs, itemParams, displayStateId: null };
+  }
+  function asmVariantChanged(av, doc = App.doc) {
+    if (!av || !doc) return { params: false, suppressed: false, refs: false, itemParams: false, any: false };
+    const cur = captureAsmVariant(doc);
+    const avVals = av.values || {};
+    const params = Object.keys({ ...avVals, ...cur.values }).some((k) => String(avVals[k]) !== String(cur.values[k]));
+    const existingIds = new Set((doc.items || []).map((x) => x && x.id).filter(Boolean));
+    const sa = new Set((av.suppressed || []).filter((id) => existingIds.has(id)));
+    const sb = new Set(cur.suppressed);
+    const suppressed = sa.size !== sb.size || [...sa].some((id) => !sb.has(id));
+    let refs = false;
+    for (const [id, r] of Object.entries(av.refs || {})) {
+      if (!existingIds.has(id) || !r) continue;
+      const cr = cur.refs[id];
+      if (!cr || cr.docId !== r.docId || (cr.variantId || '') !== (r.variantId || '')) { refs = true; break; }
+    }
+    let itemParams = false;
+    for (const [id, ip] of Object.entries(av.itemParams || {})) {
+      if (!existingIds.has(id) || !ip) continue;
+      const cip = cur.itemParams[id] || {};
+      if (Object.keys(ip).some((k) => String(ip[k]) !== String(cip[k]))) { itemParams = true; break; }
+    }
+    return { params, suppressed, refs, itemParams, any: params || suppressed || refs || itemParams };
+  }
+  function isAsmVariantActive(av, doc = App.doc) {
+    return !!(av && doc && doc.asmVariant === av.id);
+  }
+  function activeAsmVariant(doc = App.doc) {
+    const list = asmVariants(doc);
+    if (!list.length || !doc || !doc.asmVariant) return null;
+    return list.find((av) => av.id === doc.asmVariant) || null;
+  }
+  function asmVariantSummary(av, doc = App.doc) {
+    if (!av) return '—';
+    const parts = [];
+    const list = asmVariants(doc);
+    const base = list[0];
+    if (base && base.id !== av.id) {
+      for (const [k, val] of Object.entries(av.values || {})) {
+        if (String((base.values || {})[k]) !== String(val)) {
+          parts.push(`${k}=${String(val).replace('.', ',')}`);
+          if (parts.length >= 2) break;
+        }
+      }
+      let refDiff = 0;
+      for (const [id, r] of Object.entries(av.refs || {})) {
+        const br = (base.refs || {})[id];
+        if (r && (!br || br.docId !== r.docId || (br.variantId || '') !== (r.variantId || ''))) refDiff++;
+      }
+      if (refDiff) parts.push(T('asm.varRefDiff', { n: refDiff }));
+    } else {
+      for (const [k, val] of Object.entries(av.values || {})) {
+        parts.push(`${k}=${String(val).replace('.', ',')}`);
+        if (parts.length >= 2) break;
+      }
+    }
+    const supN = Array.isArray(av.suppressed) ? av.suppressed.filter((id) => (doc && doc.items || []).some((x) => x.id === id)).length : 0;
+    if (supN) parts.push(T('asm.varSupCount', { n: supN }));
+    return parts.length ? parts.join(' · ') : T('asm.varAllActive');
+  }
+  function applyAsmVariantToDoc(doc, av) {
+    if (!doc || !av) return false;
+    const vals = av.values || {};
+    for (const p of doc.params || []) {
+      if (p && Object.prototype.hasOwnProperty.call(vals, p.name)) p.expr = vals[p.name];
+    }
+    const supSet = new Set(Array.isArray(av.suppressed) ? av.suppressed : []);
+    for (const it of doc.items || []) {
+      if (!it) continue;
+      if (supSet.has(it.id)) it.suppressed = true;
+      else if (it.suppressed) delete it.suppressed;
+    }
+    const refs = av.refs || {};
+    for (const [itemId, spec] of Object.entries(refs)) {
+      if (!spec || !spec.docId) continue;
+      const it = (doc.items || []).find((x) => x && x.id === itemId);
+      if (!it || it.kind !== 'ref') continue;
+      it.p = it.p || {};
+      const prevDocName = it.p.docName || '';
+      it.p.docId = spec.docId;
+      it.p.docName = spec.docName || prevDocName;
+      if (spec.docType === 'assembly') it.p.docType = 'assembly';
+      else delete it.p.docType;
+      if (spec.variantId) it.p.variantId = spec.variantId;
+      else delete it.p.variantId;
+      if ((!it.name || it.name === prevDocName) && spec.docName) it.name = spec.docName;
+    }
+    const itemParams = av.itemParams || {};
+    for (const [itemId, ip] of Object.entries(itemParams)) {
+      if (!ip || typeof ip !== 'object') continue;
+      const it = (doc.items || []).find((x) => x && x.id === itemId);
+      if (!it || it.kind === 'ref' || it.kind === 'group') continue;
+      it.p = it.p || {};
+      for (const [k, val] of Object.entries(ip)) {
+        if (ASM_SKIP_P_KEYS.has(k)) continue;
+        if ((typeof val === 'number' && Number.isFinite(val)) || typeof val === 'string' || typeof val === 'boolean') {
+          it.p[k] = val;
+        }
+      }
+    }
+    if (typeof syncPatterns === 'function') syncPatterns(doc);
+    if (av.displayStateId) {
+      const ds = findDisplayState(av.displayStateId, doc);
+      if (ds) applyDisplayStateToDoc(doc, ds);
+    }
+    doc.asmVariant = av.id;
+    return true;
+  }
+  function saveAsmVariant(name, opts = {}) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const snap = captureAsmVariant(App.doc);
+    const values = opts.values && typeof opts.values === 'object' ? { ...snap.values, ...opts.values } : snap.values;
+    const suppressed = Array.isArray(opts.suppressed) ? [...new Set(opts.suppressed)] : snap.suppressed;
+    const refs = opts.refs && typeof opts.refs === 'object' ? { ...snap.refs, ...deepClone(opts.refs) } : snap.refs;
+    const itemParams = opts.itemParams && typeof opts.itemParams === 'object'
+      ? (() => {
+        const merged = { ...snap.itemParams };
+        for (const [id, ip] of Object.entries(opts.itemParams)) {
+          if (ip && typeof ip === 'object') merged[id] = { ...(merged[id] || {}), ...ip };
+        }
+        return merged;
+      })()
+      : snap.itemParams;
+    const displayStateId = opts.displayStateId !== undefined ? (opts.displayStateId || null) : snap.displayStateId;
+    const hasOverrides = !!(opts.values || opts.suppressed || opts.refs || opts.itemParams || opts.displayStateId);
+
+    let saved = null;
+    App.change(T('asm.varSavedUndo', { name: clean }), (doc) => {
+      doc.asmVariants = Array.isArray(doc.asmVariants) ? doc.asmVariants : [];
+      const low = clean.toLowerCase();
+      let idx = opts.id ? doc.asmVariants.findIndex((x) => x && x.id === opts.id) : -1;
+      if (idx < 0) idx = doc.asmVariants.findIndex((x) => x && typeof x.name === 'string' && x.name.toLowerCase() === low);
+      if (idx >= 0) {
+        doc.asmVariants[idx] = { ...doc.asmVariants[idx], name: clean, values, suppressed, refs, itemParams, displayStateId };
+        saved = doc.asmVariants[idx];
+      } else {
+        saved = { id: uid('av'), name: clean, values, suppressed, refs, itemParams, displayStateId };
+        doc.asmVariants.push(saved);
+      }
+      if (opts.activate !== false) {
+        doc.asmVariant = saved.id;
+        if (hasOverrides) applyAsmVariantToDoc(doc, saved);
+      }
+    });
+    if (opts.activate !== false && hasOverrides) {
+      if (saved && saved.displayStateId) {
+        const ds = findDisplayState(saved.displayStateId, App.doc);
+        if (ds && typeof ViewPrefs !== 'undefined' && ViewPrefs.applyDisplayState) ViewPrefs.applyDisplayState(ds);
+        syncViewerDisplayNow(App.doc);
+      }
+    }
+    if (!opts.silent && saved) UI.toast(T('asm.varSavedToast', { name: saved.name }), { icon: 'check', ms: 2200 });
+    return saved;
+  }
+  function updateAsmVariant(id, opts = {}) {
+    const av = findAsmVariant(id);
+    if (!av) return null;
+    return saveAsmVariant(av.name, { ...opts, id: av.id, displayStateId: opts.displayStateId !== undefined ? opts.displayStateId : av.displayStateId });
+  }
+  function duplicateAsmVariant(id) {
+    const src = findAsmVariant(id);
+    if (!src) return null;
+    const used = new Set(asmVariants().map((x) => (x.name || '').toLowerCase()));
+    const base = `${src.name} ${T('asm.varCopySuffix')}`;
+    let name = base;
+    let k = 2;
+    while (used.has(name.toLowerCase())) { name = `${base} ${k}`; k++; }
+    let copy = null;
+    App.change(T('asm.varDupUndo', { name }), (doc) => {
+      doc.asmVariants = Array.isArray(doc.asmVariants) ? doc.asmVariants : [];
+      copy = { ...deepClone(src), id: uid('av'), name };
+      const idx = doc.asmVariants.findIndex((x) => x.id === src.id);
+      doc.asmVariants.splice(idx >= 0 ? idx + 1 : doc.asmVariants.length, 0, copy);
+    });
+    return copy;
+  }
+  function renameAsmVariant(id, newName) {
+    const clean = String(newName || '').trim();
+    if (!clean) return false;
+    const low = clean.toLowerCase();
+    return App.change(T('asm.varRenamedUndo', { name: clean }), (doc) => {
+      const list = Array.isArray(doc.asmVariants) ? doc.asmVariants : [];
+      const av = list.find((x) => x.id === id);
+      if (!av) return false;
+      if (list.some((x) => x.id !== id && x.name && x.name.toLowerCase() === low)) return false;
+      av.name = clean;
+      return true;
+    }) !== false;
+  }
+  function removeAsmVariant(id) {
+    const av = findAsmVariant(id);
+    if (!av) return false;
+    const ok = App.change(T('asm.varRemovedUndo', { name: av.name }), (doc) => {
+      doc.asmVariants = (doc.asmVariants || []).filter((x) => x.id !== av.id);
+      if (doc.asmVariant === av.id) delete doc.asmVariant;
+      return true;
+    }) !== false;
+    if (ok) UI.toast(T('asm.varRemovedToast', { name: av.name }), { icon: 'info', ms: 2000 });
+    return ok;
+  }
+  function applyAsmVariant(idOrName, opts = {}) {
+    const av = findAsmVariant(idOrName);
+    if (!av) return false;
+    const ok = App.change(T('asm.varAppliedUndo', { name: av.name }), (doc) => {
+      const target = findAsmVariant(av.id, doc);
+      if (!target) return false;
+      return applyAsmVariantToDoc(doc, target);
+    }) !== false;
+    if (!ok) return false;
+    const liveAv = findAsmVariant(av.id, App.doc) || av;
+    const missingRef = Object.values(liveAv.refs || {}).some((r) => r && r.docId && !Model.resolveDoc(r.docId));
+    if (missingRef && typeof Comp !== 'undefined' && Comp.ensureRefs) {
+      Comp.ensureRefs(App.doc).then(() => { if (typeof App !== 'undefined' && App.rebuild) App.rebuild(); });
+    }
+    if (liveAv.displayStateId) {
+      const ds = findDisplayState(liveAv.displayStateId, App.doc);
+      if (ds) {
+        if (typeof ViewPrefs !== 'undefined' && ViewPrefs.applyDisplayState) ViewPrefs.applyDisplayState(ds);
+        syncViewerDisplayNow(App.doc);
+      }
+    }
+    if (!opts.silent) UI.toast(T('asm.varAppliedToast', { name: liveAv.name }), { icon: 'check', ms: 2000 });
+    return true;
+  }
+  function parseVarInputValue(rawVal, extraVars = {}) {
+    if (typeof rawVal === 'number' && Number.isFinite(rawVal)) return { ok: true, value: rawVal };
+    const raw = String(rawVal == null ? '' : rawVal).trim();
+    if (!raw) return { ok: false, error: T('asm.varEmptyValErr') };
+    const n = parseNum(raw);
+    if (!isNaN(n)) return { ok: true, value: n };
+    const baseVars = { ...Model.vars(App.doc).v, ...extraVars };
+    const res = Expr.tryEval(raw, baseVars, (App.doc && App.doc.tables) || []);
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, value: raw };
+  }
+  function setAsmVariantParam(varId, paramName, rawVal) {
+    const av = findAsmVariant(varId);
+    if (!av || !paramName) return { ok: false, error: T('asm.varNotFound') };
+    const vals = av.values || {};
+    const tmp = { ...App.doc, params: (App.doc.params || []).map((p) => ({ ...p })), tables: App.doc.tables || [] };
+    for (const p of tmp.params) if (Object.prototype.hasOwnProperty.call(vals, p.name)) p.expr = vals[p.name];
+    for (const [k, val] of Object.entries(vals)) {
+      if (!tmp.params.some((p) => p.name === k)) tmp.params.push({ id: uid('m'), name: k, expr: val });
+    }
+    const evalVars = Model.vars(tmp).v;
+    for (const k of Object.keys(evalVars)) if (k.toLowerCase() === paramName.toLowerCase()) delete evalVars[k];
+    const parsed = parseVarInputValue(rawVal, evalVars);
+    if (!parsed.ok) return parsed;
+    const nextVal = parsed.value;
+    App.change(T('asm.varUpdatedUndo'), (doc) => {
+      const target = findAsmVariant(varId, doc);
+      if (!target) return false;
+      target.values = target.values || {};
+      target.values[paramName] = nextVal;
+      if (doc.asmVariant === target.id) {
+        const p = (doc.params || []).find((x) => x && x.name === paramName);
+        if (p) {
+          p.expr = nextVal;
+          if (p.measure) delete p.measure;
+        } else {
+          doc.params = doc.params || [];
+          doc.params.push({ id: uid('m'), name: paramName, expr: nextVal });
+        }
+      }
+      return true;
+    }, { merge: `avp:${varId}:${paramName}` });
+    return { ok: true, value: nextVal };
+  }
+  function setAsmVariantSuppressed(varId, itemId, sup) {
+    const want = !!sup;
+    return App.change(T('asm.varUpdatedUndo'), (doc) => {
+      const target = findAsmVariant(varId, doc);
+      const f = Model.find(doc, itemId);
+      if (!target || !f || !f.item) return false;
+      const cur = new Set(Array.isArray(target.suppressed) ? target.suppressed : []);
+      if (want) cur.add(itemId);
+      else cur.delete(itemId);
+      target.suppressed = [...cur];
+      if (doc.asmVariant === target.id) {
+        if (want) f.item.suppressed = true;
+        else delete f.item.suppressed;
+        if (typeof syncPatterns === 'function') syncPatterns(doc);
+      }
+      return true;
+    }) !== false;
+  }
+  function setAsmVariantRef(varId, itemId, refPatch = {}) {
+    if (!varId || !itemId || !refPatch || !refPatch.docId) return false;
+    let needsLoad = false;
+    const ok = App.change(T('asm.varUpdatedUndo'), (doc) => {
+      const target = findAsmVariant(varId, doc);
+      const it = (doc.items || []).find((x) => x && x.id === itemId);
+      if (!target || !it || it.kind !== 'ref') return false;
+      target.refs = target.refs && typeof target.refs === 'object' ? target.refs : {};
+      const prev = target.refs[itemId] || {};
+      const next = {
+        docId: refPatch.docId,
+        docName: refPatch.docName != null ? String(refPatch.docName) : (prev.docName || ''),
+        ...(refPatch.docType === 'assembly' ? { docType: 'assembly' } : {}),
+        ...(refPatch.variantId ? { variantId: String(refPatch.variantId) } : {}),
+      };
+      target.refs[itemId] = next;
+      if (doc.asmVariant === target.id) {
+        it.p = it.p || {};
+        const prevDocName = it.p.docName || '';
+        it.p.docId = next.docId;
+        it.p.docName = next.docName || prevDocName;
+        if (next.docType === 'assembly') it.p.docType = 'assembly';
+        else delete it.p.docType;
+        if (next.variantId) it.p.variantId = next.variantId;
+        else delete it.p.variantId;
+        if ((!it.name || it.name === prevDocName) && next.docName) it.name = next.docName;
+        if (typeof syncPatterns === 'function') syncPatterns(doc);
+        if (!Model.resolveDoc(next.docId)) needsLoad = true;
+      }
+      return true;
+    }) !== false;
+    if (ok && needsLoad && typeof Comp !== 'undefined' && Comp.ensureRefs) {
+      Comp.ensureRefs(App.doc).then(() => { if (typeof App !== 'undefined' && App.rebuild) App.rebuild(); });
+    }
+    return ok;
+  }
+  function setAsmVariantItemParam(varId, itemId, key, rawVal) {
+    if (!varId || !itemId || !key || ASM_SKIP_P_KEYS.has(key)) return { ok: false, error: T('asm.varNotFound') };
+    const av = findAsmVariant(varId);
+    if (!av) return { ok: false, error: T('asm.varNotFound') };
+    const parsed = parseVarInputValue(rawVal, av.values || {});
+    if (!parsed.ok) return parsed;
+    const nextVal = parsed.value;
+    App.change(T('asm.varUpdatedUndo'), (doc) => {
+      const target = findAsmVariant(varId, doc);
+      const it = (doc.items || []).find((x) => x && x.id === itemId);
+      if (!target || !it || it.kind === 'ref' || it.kind === 'group') return false;
+      target.itemParams = target.itemParams && typeof target.itemParams === 'object' ? target.itemParams : {};
+      target.itemParams[itemId] = target.itemParams[itemId] || {};
+      target.itemParams[itemId][key] = nextVal;
+      if (doc.asmVariant === target.id) {
+        it.p = it.p || {};
+        it.p[key] = nextVal;
+      }
+      return true;
+    }, { merge: `avip:${varId}:${itemId}:${key}` });
+    return { ok: true, value: nextVal };
+  }
+  function setAsmVariantDisplayState(varId, dsId) {
+    const nextDs = dsId ? String(dsId) : null;
+    let applyLiveDs = null;
+    const ok = App.change(T('asm.varUpdatedUndo'), (doc) => {
+      const target = findAsmVariant(varId, doc);
+      if (!target) return false;
+      target.displayStateId = nextDs;
+      if (doc.asmVariant === target.id && nextDs) {
+        const ds = findDisplayState(nextDs, doc);
+        if (ds) { applyDisplayStateToDoc(doc, ds); applyLiveDs = ds; }
+      }
+      return true;
+    }) !== false;
+    if (ok && applyLiveDs) {
+      if (typeof ViewPrefs !== 'undefined' && ViewPrefs.applyDisplayState) ViewPrefs.applyDisplayState(applyLiveDs);
+      syncViewerDisplayNow(App.doc);
+    }
+    return ok;
+  }
+  function editableItemParamFields(it) {
+    if (!it || it.kind === 'ref' || it.kind === 'group') return [];
+    if (typeof KINDS !== 'undefined' && KINDS[it.kind] && Array.isArray(KINDS[it.kind].params) && KINDS[it.kind].params.length) {
+      return KINDS[it.kind].params.filter((q) => q && q.k && !ASM_SKIP_P_KEYS.has(q.k)).slice(0, 4);
+    }
+    if (it.kind === 'part' && it.p && it.p.lib && typeof LIBMAP !== 'undefined' && LIBMAP[it.p.lib] && Array.isArray(LIBMAP[it.p.lib].params)) {
+      return LIBMAP[it.p.lib].params.filter((q) => q && q.k && q.type !== 'select' && !ASM_SKIP_P_KEYS.has(q.k)).slice(0, 3);
+    }
+    if (it.kind === 'extrude' && it.p) return [{ k: 'dist', label: T('asm.varFieldLen'), unit: 'mm' }];
+    if (it.kind === 'revolve' && it.p) return [{ k: 'angle', label: T('asm.varFieldAngle'), unit: '°' }];
+    return [];
+  }
+  function defaultAsmVariantName(doc = App.doc) {
+    const existing = new Set(asmVariants(doc).map((x) => (x.name || '').toLowerCase()));
+    const suggestions = String(T('asm.varDefaults') || 'Standard,lang,kurz,kompakt').split(',').map((s) => s.trim()).filter(Boolean);
+    for (const s of suggestions) {
+      if (!existing.has(s.toLowerCase())) return s;
+    }
+    return T('asm.varDefaultN', { n: asmVariants(doc).length + 1 });
+  }
+  async function promptSaveAsmVariant() {
+    if (!isProMode()) return null;
+    const n = await UI.prompt(T('asm.varPromptTitle'), T('asm.varPromptLabel'), defaultAsmVariantName(), T('common.save'));
+    if (!n || !n.trim()) return null;
+    return saveAsmVariant(n.trim());
+  }
+  function asmVariantDialog(initialId = null) {
+    if (!isProMode() || !App.doc) return null;
+    const existing = document.getElementById('asm-var-dialog');
+    if (existing) return null;
+
+    let selId = initialId ? (findAsmVariant(initialId)?.id || null) : (activeAsmVariant()?.id || (asmVariants()[0]?.id || null));
+    const body = h('div', { id: 'asm-var-dialog', class: 'av-dlg' });
+    const bar = h('div', { class: 'av-bar' });
+    const content = h('div', { class: 'av-content' });
+    body.append(h('div', { class: 'hint-box' }, T('asm.varDlgHint')), bar, content);
+
+    let unsub = null;
+    const rebuild = () => {
+      const list = asmVariants();
+      if (!selId || !list.some((x) => x.id === selId)) {
+        selId = activeAsmVariant()?.id || (list[0]?.id || null);
+      }
+      const av = selId ? list.find((x) => x.id === selId) : null;
+
+      bar.replaceChildren();
+      const sel = h('select', { id: 'av-dlg-sel', 'aria-label': T('asm.varHeading') });
+      if (!list.length) sel.append(h('option', { value: '' }, T('asm.varNoneOption')));
+      for (const x of list) sel.append(h('option', { value: x.id, selected: x.id === selId }, x.name));
+      sel.onchange = () => {
+        selId = sel.value || null;
+        if (selId) applyAsmVariant(selId, { silent: true });
+        rebuild();
+      };
+
+      const newBtn = h('button', { type: 'button', class: 'btn small', id: 'av-dlg-new' });
+      newBtn.innerHTML = icon('plus') + esc(T('asm.varNewBtn'));
+      newBtn.onclick = async () => {
+        const res = await promptSaveAsmVariant();
+        if (res) { selId = res.id; rebuild(); }
+      };
+
+      const dupBtn = h('button', { type: 'button', class: 'btn small', id: 'av-dlg-dup', disabled: !av });
+      dupBtn.innerHTML = icon('copy') + esc(T('asm.varDupBtn'));
+      dupBtn.onclick = () => {
+        if (!av) return;
+        const c = duplicateAsmVariant(av.id);
+        if (c) { selId = c.id; applyAsmVariant(c.id, { silent: true }); rebuild(); }
+      };
+
+      const renBtn = h('button', { type: 'button', class: 'btn small', id: 'av-dlg-ren', disabled: !av });
+      renBtn.innerHTML = icon('edit') + esc(T('common.rename'));
+      renBtn.onclick = async () => {
+        if (!av) return;
+        const n = await UI.prompt(T('asm.varRenameTitle'), T('common.name'), av.name, T('common.rename'));
+        if (n && n.trim()) renameAsmVariant(av.id, n);
+      };
+
+      const delBtn = h('button', { type: 'button', class: 'btn small ghost danger', id: 'av-dlg-del', disabled: !av });
+      delBtn.innerHTML = icon('trash');
+      delBtn.onclick = () => { if (av) removeAsmVariant(av.id); };
+
+      bar.append(sel, newBtn, dupBtn, renBtn, delBtn);
+      content.replaceChildren();
+      if (!av) {
+        content.append(h('div', { class: 'hint-box', id: 'av-empty-hint' }, T('asm.varEmptyHint')));
+        return;
+      }
+
+      const dsList = displayStates();
+      const dsSel = UI.selectField({
+        id: 'av-dlg-ds',
+        label: T('asm.varLinkDsLabel'),
+        value: av.displayStateId || '',
+        options: [['', T('asm.varLinkDsNone')], ...dsList.map((d) => [d.id, d.name])],
+        onChange: (val) => setAsmVariantDisplayState(av.id, val || null),
+      });
+      content.append(dsSel);
+
+      const paramNames = [...new Set([
+        ...(App.doc.params || []).map((p) => p && p.name).filter(Boolean),
+        ...Object.keys(av.values || {}),
+      ])];
+      const parSec = h('div', { class: 'av-subsec', id: 'av-dlg-params' },
+        h('div', { class: 'av-subhead' },
+          h('b', null, T('asm.varParamsTitle')),
+          h('button', { type: 'button', class: 'btn small ghost', id: 'av-dlg-add-param' }, T('asm.varAddParamBtn'))
+        )
+      );
+      parSec.querySelector('#av-dlg-add-param').onclick = async () => {
+        let idx = 1;
+        while ((App.doc.params || []).some((p) => p.name === 'Maß' + idx)) idx++;
+        const nm = await UI.prompt(T('asm.varAddParamTitle'), T('common.name'), 'Maß' + idx, T('common.save'));
+        if (!nm || !nm.trim()) return;
+        const cleanName = nm.trim().replace(/\s+/g, '_');
+        if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(cleanName)) {
+          UI.toast(T('left.par.badName'), { kind: 'bad' });
+          return;
+        }
+        if (!(App.doc.params || []).some((p) => p.name.toLowerCase() === cleanName.toLowerCase())) {
+          App.change(T('asm.varAddParamTitle'), (doc) => {
+            doc.params = doc.params || [];
+            doc.params.push({ id: uid('m'), name: cleanName, expr: 50 });
+            for (const v of doc.asmVariants || []) {
+              v.values = v.values || {};
+              if (!Object.prototype.hasOwnProperty.call(v.values, cleanName)) v.values[cleanName] = 50;
+            }
+          });
+        }
+      };
+
+      if (paramNames.length) {
+        const pGrid = h('div', { class: 'fields' });
+        for (const pn of paramNames) {
+          const curVal = Object.prototype.hasOwnProperty.call(av.values || {}, pn) ? av.values[pn] : '';
+          const inp = h('input', {
+            type: 'text',
+            class: 'av-param-inp mono',
+            value: curVal == null ? '' : String(curVal),
+            dataset: { avParam: pn },
+            'aria-label': pn,
+            spellcheck: 'false',
+          });
+          inp.onchange = () => {
+            const res = setAsmVariantParam(av.id, pn, inp.value);
+            if (!res.ok) {
+              inp.classList.add('invalid');
+              UI.toast(res.error || T('asm.varEmptyValErr'), { kind: 'bad' });
+              return;
+            }
+            inp.classList.remove('invalid');
+            inp.value = String(res.value);
+          };
+          inp.addEventListener('keydown', (e) => e.stopPropagation());
+          pGrid.append(h('div', { class: 'field' }, h('label', null, pn), h('div', { class: 'inp' }, inp)));
+        }
+        parSec.append(pGrid);
+      } else {
+        parSec.append(h('div', { class: 'hint-box' }, T('asm.varNoParamsHint')));
+      }
+      content.append(parSec);
+
+      const parts = asmVariantPartsList(App.doc);
+      const partSec = h('div', { class: 'av-subsec', id: 'av-dlg-parts' },
+        h('div', { class: 'av-subhead' }, h('b', null, T('asm.varPartsTitle')))
+      );
+      if (!parts.length) {
+        partSec.append(h('div', { class: 'hint-box' }, T('asm.varNoPartsHint')));
+      } else {
+        const supSet = new Set(Array.isArray(av.suppressed) ? av.suppressed : []);
+        const avail = (typeof Comp !== 'undefined' && Comp.availableParts) ? Comp.availableParts() : [];
+        const tbl = h('table', { class: 'vtable av-table', id: 'av-parts-table' },
+          h('tr', null,
+            h('th', null, T('asm.varColActive')),
+            h('th', null, T('asm.varColPart')),
+            h('th', null, T('asm.varColConfig'))
+          )
+        );
+        for (const it of parts) {
+          const isAct = !supSet.has(it.id);
+          const actChk = h('input', { type: 'checkbox', class: 'av-act-chk', checked: isAct, dataset: { itemId: it.id }, 'aria-label': `${Model.label(it)} ${T('asm.varColActive')}` });
+          actChk.onchange = () => setAsmVariantSuppressed(av.id, it.id, !actChk.checked);
+
+          const cfgCell = h('div', { class: 'av-dims-cell' });
+          if (it.kind === 'ref') {
+            const spec = (av.refs && av.refs[it.id]) || { docId: it.p && it.p.docId, docName: (it.p && it.p.docName) || Model.label(it), docType: it.p && it.p.docType, variantId: it.p && it.p.variantId };
+            const optsMap = new Map();
+            if (spec.docId) optsMap.set(spec.docId, { id: spec.docId, name: spec.docName || spec.docId, docType: spec.docType || 'part' });
+            for (const p of avail) {
+              if (p && p.id && !optsMap.has(p.id)) optsMap.set(p.id, p);
+            }
+            const refSel = h('select', { class: 'av-ref-doc', dataset: { itemId: it.id }, 'aria-label': `${Model.label(it)} ${T('asm.varColConfig')}` });
+            for (const opt of optsMap.values()) {
+              refSel.append(h('option', { value: opt.id, selected: opt.id === spec.docId }, opt.name));
+            }
+            refSel.onchange = () => {
+              const picked = optsMap.get(refSel.value);
+              if (picked) setAsmVariantRef(av.id, it.id, { docId: picked.id, docName: picked.name, docType: picked.docType });
+            };
+            cfgCell.append(refSel);
+
+            const refDoc = spec.docId ? Model.resolveDoc(spec.docId) : null;
+            if (refDoc && Array.isArray(refDoc.variants) && refDoc.variants.length) {
+              const varSel = h('select', { class: 'av-ref-var', dataset: { itemId: it.id }, 'aria-label': `${Model.label(it)} ${T('asm.varRefVariant')}` });
+              varSel.append(h('option', { value: '' }, T('asm.varRefVarDefault')));
+              for (const rv of refDoc.variants) {
+                varSel.append(h('option', { value: rv.id, selected: rv.id === spec.variantId }, rv.name));
+              }
+              varSel.onchange = () => setAsmVariantRef(av.id, it.id, {
+                docId: spec.docId,
+                docName: spec.docName,
+                docType: spec.docType,
+                variantId: varSel.value || null,
+              });
+              cfgCell.append(varSel);
+            }
+          } else {
+            const fields = editableItemParamFields(it);
+            for (const f of fields) {
+              const savedIp = av.itemParams && av.itemParams[it.id];
+              const curV = (savedIp && Object.prototype.hasOwnProperty.call(savedIp, f.k)) ? savedIp[f.k] : (it.p ? it.p[f.k] : '');
+              const inp = h('input', {
+                type: 'text',
+                class: 'av-ip-inp mono',
+                value: curV == null ? '' : String(curV),
+                dataset: { itemId: it.id, pKey: f.k },
+                'aria-label': `${Model.label(it)} ${f.label}`,
+                spellcheck: 'false',
+              });
+              inp.onchange = () => {
+                const res = setAsmVariantItemParam(av.id, it.id, f.k, inp.value);
+                if (!res.ok) {
+                  inp.classList.add('invalid');
+                  UI.toast(res.error || T('asm.varEmptyValErr'), { kind: 'bad' });
+                  return;
+                }
+                inp.classList.remove('invalid');
+                inp.value = String(res.value);
+              };
+              inp.addEventListener('keydown', (e) => e.stopPropagation());
+              cfgCell.append(h('label', { class: 'av-ip-fld' }, h('span', null, f.label), inp));
+            }
+          }
+          tbl.append(h('tr', { dataset: { itemId: it.id } },
+            h('td', null, actChk),
+            h('td', null, Model.label(it)),
+            h('td', null, cfgCell)
+          ));
+        }
+        partSec.append(h('div', { class: 'av-table-wrap' }, tbl));
+      }
+      content.append(partSec);
+    };
+
+    unsub = App.on('doc', rebuild);
+    rebuild();
+    return UI.modal({
+      title: T('asm.varDlgTitle'),
+      body,
+      wide: true,
+      actions: [{ label: T('common.close'), primary: true }],
+      onClose: () => { if (unsub) { unsub(); unsub = null; } },
+    });
+  }
+  function asmVariantTreeSection() {
+    const list = asmVariants();
+    if (!isAssembly() && !list.length) return null;
+    const head = h('div', { class: 'section-h', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, h('span', null, T('asm.varHeading')));
+    const addBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-av-save', 'data-help': 'asmVariants' });
+    addBtn.innerHTML = icon('plus') + esc(T('asm.varSaveShort'));
+    addBtn.onclick = (e) => { e.stopPropagation(); promptSaveAsmVariant(); };
+    const editBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-av-edit', 'data-help': 'asmVariants' }, T('asm.varManageBtn'));
+    editBtn.onclick = (e) => { e.stopPropagation(); asmVariantDialog(); };
+    head.append(h('span', { style: { display: 'inline-flex', gap: '4px', alignItems: 'center' } }, addBtn, editBtn));
+
+    const sec = h('div', { class: 'datum-tree av-tree pro', id: 'asm-var-tree', 'data-help': 'asmVariants' }, head);
+    if (!list.length) {
+      sec.append(h('div', { class: 'hint-box' }, T('asm.varEmptyHint')));
+      return sec;
+    }
+    const act = activeAsmVariant();
+    for (const av of list) {
+      const on = !!(act && act.id === av.id);
+      const row = h('div', {
+        class: 'tree-row av-row' + (on ? ' sel' : ''),
+        tabindex: '0',
+        role: 'button',
+        'aria-pressed': on ? 'true' : 'false',
+        dataset: { av: av.id, avName: av.name },
+      });
+      const ic = h('span', { class: 'swatch av' }); ic.innerHTML = icon(on ? 'check' : 'sliders');
+      const upd = h('button', { type: 'button', class: 'av-upd', 'aria-label': T('asm.varUpdateTip'), 'data-tip': T('asm.varUpdateTip') });
+      upd.innerHTML = icon('save');
+      upd.onclick = (e) => { e.stopPropagation(); updateAsmVariant(av.id); };
+      const del = h('button', { type: 'button', class: 'j-del av-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); removeAsmVariant(av.id); };
+      row.append(
+        ic,
+        h('span', { class: 'nm', title: av.name }, av.name),
+        h('span', { class: 'sub mono' }, asmVariantSummary(av)),
+        h('span', { class: 'm-acts' }, upd, del)
+      );
+      row.onclick = () => applyAsmVariant(av.id);
+      row.addEventListener('keydown', (e) => {
+        if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); applyAsmVariant(av.id); }
+      });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'play', label: T('asm.varApplyMenu'), run: () => applyAsmVariant(av.id) },
+          { icon: 'save', label: T('asm.varUpdateMenu'), run: () => updateAsmVariant(av.id) },
+          { icon: 'sliders', label: T('asm.varEditMenu'), run: () => asmVariantDialog(av.id) },
+          { icon: 'copy', label: T('asm.varDupBtn'), run: () => duplicateAsmVariant(av.id) },
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('asm.varRenameTitle'), T('common.name'), av.name, T('common.rename')); if (n && n.trim()) renameAsmVariant(av.id, n); } },
+          '-',
+          { icon: 'trash', label: T('common.delete'), run: () => removeAsmVariant(av.id) },
+        ]);
+      });
+      sec.append(row);
+    }
+    return sec;
+  }
+  function asmVariantSection(ctx = 'proj') {
+    const list = asmVariants();
+    if (!isAssembly() && !list.length) return null;
+    const sec = h('div', { class: 'section pro av-sec', id: ctx + '-av-sec', 'data-help': 'asmVariants' },
+      h('div', { class: 'section-h' }, T('asm.varHeading'))
+    );
+    const act = activeAsmVariant();
+    if (list.length) {
+      const chips = h('div', { class: 'av-chips' });
+      for (const av of list) {
+        const on = !!(act && act.id === av.id);
+        const btn = h('button', {
+          type: 'button',
+          class: 'btn small av-chip' + (on ? ' primary' : ''),
+          'aria-pressed': on ? 'true' : 'false',
+          dataset: { avApply: av.id, avName: av.name },
+        }, h('span', { class: 'av-chip-nm' }, av.name), h('span', { class: 'sub mono' }, asmVariantSummary(av)));
+        btn.onclick = () => applyAsmVariant(av.id);
+        chips.append(btn);
+      }
+      sec.append(chips);
+    } else {
+      sec.append(h('div', { class: 'hint-box' }, T('asm.varEmptyHint')));
+    }
+    const diff = act ? asmVariantChanged(act) : null;
+    if (act && diff && diff.any) {
+      sec.append(h('div', { class: 'hint-box warn' }, T('asm.varChangedHint', { name: act.name })));
+    }
+    const inp = h('input', {
+      type: 'text',
+      id: ctx + '-av-name',
+      class: 'av-name-inp',
+      placeholder: T('asm.varNamePh'),
+      'aria-label': T('asm.varPromptLabel'),
+      autocomplete: 'off',
+      spellcheck: 'false',
+    });
+    const saveBtn = h('button', { type: 'button', class: 'btn small', id: ctx + '-av-save' });
+    saveBtn.innerHTML = icon('plus') + esc(T('asm.varSaveShort'));
+    const doSave = () => {
+      const nm = inp.value.trim();
+      if (nm) { saveAsmVariant(nm); inp.value = ''; }
+      else promptSaveAsmVariant();
+    };
+    saveBtn.onclick = doSave;
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
+    const row = h('div', { class: 'av-save-row' }, inp, saveBtn);
+    if (act && diff && diff.any) {
+      const updBtn = h('button', { type: 'button', class: 'btn small', id: ctx + '-av-update' });
+      updBtn.innerHTML = icon('save') + esc(T('asm.varUpdateShort'));
+      updBtn.onclick = () => updateAsmVariant(act.id);
+      row.append(updBtn);
+    }
+    const manBtn = h('button', { type: 'button', class: 'btn small ghost', id: ctx + '-av-manage' }, T('asm.varManageBtn'));
+    manBtn.onclick = () => asmVariantDialog();
+    row.append(manBtn);
+    sec.append(row);
+    return sec;
+  }
+
   return {
     init,
     isAssembly,
@@ -3665,5 +5021,44 @@ const Assembly = (() => {
     lightweightItemSection,
     createEnvelope,
     envelopeDialog,
+    displayStates,
+    findDisplayState,
+    captureDisplayState,
+    isDisplayStateActive,
+    activeDisplayState,
+    displayStateSummary,
+    saveDisplayState,
+    updateDisplayState,
+    setDisplayStateItem,
+    setDisplayStateMode,
+    renameDisplayState,
+    removeDisplayState,
+    applyDisplayState,
+    promptSaveDisplayState,
+    displayStateDialog,
+    displayStateTreeSection,
+    displayStateSection,
+    asmVariants,
+    findAsmVariant,
+    captureAsmVariant,
+    asmVariantChanged,
+    isAsmVariantActive,
+    activeAsmVariant,
+    asmVariantSummary,
+    saveAsmVariant,
+    updateAsmVariant,
+    duplicateAsmVariant,
+    renameAsmVariant,
+    removeAsmVariant,
+    applyAsmVariant,
+    setAsmVariantParam,
+    setAsmVariantSuppressed,
+    setAsmVariantRef,
+    setAsmVariantItemParam,
+    setAsmVariantDisplayState,
+    promptSaveAsmVariant,
+    asmVariantDialog,
+    asmVariantTreeSection,
+    asmVariantSection,
   };
 })();

@@ -780,6 +780,8 @@ const Panels = (() => {
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
       const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
+      const dsTree = typeof Assembly !== 'undefined' && Assembly.displayStateTreeSection ? Assembly.displayStateTreeSection() : null; if (dsTree) body.append(dsTree);
+      const avTree = typeof Assembly !== 'undefined' && Assembly.asmVariantTreeSection ? Assembly.asmVariantTreeSection() : null; if (avTree) body.append(avTree);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
@@ -807,6 +809,8 @@ const Panels = (() => {
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
       const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
+      const dsTree = typeof Assembly !== 'undefined' && Assembly.displayStateTreeSection ? Assembly.displayStateTreeSection() : null; if (dsTree) body.append(dsTree);
+      const avTree = typeof Assembly !== 'undefined' && Assembly.asmVariantTreeSection ? Assembly.asmVariantTreeSection() : null; if (avTree) body.append(avTree);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
@@ -1177,6 +1181,8 @@ const Panels = (() => {
     const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
     const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
     const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
+    const dsTree = typeof Assembly !== 'undefined' && Assembly.displayStateTreeSection ? Assembly.displayStateTreeSection() : null; if (dsTree) body.append(dsTree);
+    const avTree = typeof Assembly !== 'undefined' && Assembly.asmVariantTreeSection ? Assembly.asmVariantTreeSection() : null; if (avTree) body.append(avTree);
     const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
   }
   function moveInTree(srcId, dstId, mode) {
@@ -1456,6 +1462,10 @@ const Panels = (() => {
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     for (const v of doc.variants || []) if (v && v.values) for (const k of Object.keys(v.values)) v.values[k] = fix(v.values[k]);
+    for (const av of doc.asmVariants || []) {
+      if (av && av.values) for (const k of Object.keys(av.values)) av.values[k] = fix(av.values[k]);
+      if (av && av.itemParams) for (const ip of Object.values(av.itemParams)) if (ip && typeof ip === 'object') for (const k of Object.keys(ip)) ip[k] = fix(ip[k]);
+    }
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
@@ -1488,6 +1498,12 @@ const Panels = (() => {
         if (v && v.values && Object.prototype.hasOwnProperty.call(v.values, old)) {
           v.values[nv] = v.values[old];
           delete v.values[old];
+        }
+      }
+      for (const av of doc.asmVariants || []) {
+        if (av && av.values && Object.prototype.hasOwnProperty.call(av.values, old)) {
+          av.values[nv] = av.values[old];
+          delete av.values[old];
         }
       }
       replaceName(doc, old, nv);
@@ -1577,6 +1593,10 @@ const Panels = (() => {
     }
     const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
     if (poseSec) w.append(poseSec);
+    const dsSec = typeof Assembly !== 'undefined' && Assembly.displayStateSection ? Assembly.displayStateSection('proj') : null;
+    if (dsSec) w.append(dsSec);
+    const avSec = typeof Assembly !== 'undefined' && Assembly.asmVariantSection ? Assembly.asmVariantSection('proj') : null;
+    if (avSec) w.append(avSec);
     const motSec = typeof Assembly !== 'undefined' && Assembly.motionSection ? Assembly.motionSection('proj') : null;
     if (motSec) w.append(motSec);
     const asmStepsSec = typeof Assembly !== 'undefined' && Assembly.stepsSection ? Assembly.stepsSection('proj') : null;
@@ -2053,6 +2073,25 @@ const Panels = (() => {
         } else {
           const refCnt = Model.countItems(refDoc);
           refSec.append(h('div', { class: 'hint-box' }, T('asm.refActive', { name: refDoc.name || 'Bauteil', n: refCnt, unit: refCnt === 1 ? T('common.object') : T('common.objects') })));
+        }
+        if (Array.isArray(refDoc.variants) && refDoc.variants.length) {
+          const vrSel = UI.selectField({
+            id: 'ref-variant-sel',
+            label: T('asm.varRefVariant'),
+            value: (it.p && it.p.variantId) || '',
+            options: [['', T('asm.varRefVarDefault')], ...refDoc.variants.map((rv) => [rv.id, rv.name])],
+            onChange: (val) => App.change(T('asm.varRefVariantUndo'), (doc) => {
+              const f = Model.find(doc, it.id);
+              if (!f || !f.item) return false;
+              f.item.p = f.item.p || {};
+              if (val) f.item.p.variantId = val;
+              else delete f.item.p.variantId;
+            }),
+          });
+          vrSel.classList.add('pro');
+          vrSel.dataset.help = 'asmVariants';
+          vrSel.style.marginBottom = '8px';
+          refSec.append(vrSel);
         }
       } else {
         refSec.append(h('div', { class: 'err-box' }, T('asm.refMissingErr', { name: (it.p && it.p.docName) || Model.label(it) })));

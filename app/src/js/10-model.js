@@ -658,6 +658,28 @@ const Model = (() => {
     }
     return it.color || '#2f9e91';
   }
+  function withPartVariant(refDoc, variantId) {
+    if (!refDoc || !variantId || !Array.isArray(refDoc.variants)) return refDoc;
+    const vr = refDoc.variants.find((x) => x && (x.id === variantId || x.name === variantId));
+    if (!vr) return refDoc;
+    const vals = (vr.values && typeof vr.values === 'object') ? vr.values : {};
+    const params = (refDoc.params || []).map((p) => (p && Object.prototype.hasOwnProperty.call(vals, p.name) ? { ...p, expr: vals[p.name] } : p));
+    for (const [k, val] of Object.entries(vals)) {
+      if (!params.some((p) => p && p.name === k)) params.push({ id: uid('m'), name: k, expr: val });
+    }
+    const sup = new Set(Array.isArray(vr.suppressed) ? vr.suppressed : []);
+    const mapItems = (list) => (list || []).map((c) => {
+      if (!c) return c;
+      const next = { ...c };
+      if (sup.has(c.id)) next.suppressed = true;
+      else if (next.suppressed) delete next.suppressed;
+      if (Array.isArray(c.children)) next.children = mapItems(c.children);
+      return next;
+    });
+    const nextDoc = { ...refDoc, params, items: mapItems(refDoc.items) };
+    if (vr.material) nextDoc.settings = { ...(refDoc.settings || {}), material: vr.material };
+    return nextDoc;
+  }
   function kernelItem(it, V) {
     const prev = curV; curV = V;
     try {
@@ -669,7 +691,8 @@ const Model = (() => {
       if (it.comp) o.comp = true;
       if (it.kind === 'ref') {
         const refId = it.p && it.p.docId;
-        const refDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+        const rawRefDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+        const refDoc = withPartVariant(rawRefDoc, it.p && it.p.variantId);
         if (!refDoc) {
           const outMissing = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: displayColor(it), m, comp: true, p: { assembly: true, subdoc: true, refMissing: true, refDocId: refId || null }, children: [] };
           if (it.opacity != null && it.opacity < 1) outMissing.opacity = Math.max(0.05, it.opacity);
@@ -692,7 +715,7 @@ const Model = (() => {
           visitedDocs = prevVisited;
         }
         const refColor = it.colorSet && it.color ? it.color : (refAct.length === 1 ? displayColor(refAct[0]) : displayColor(it));
-        const outRef = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: refColor, m, comp: true, p: { assembly: true, subdoc: true, refDocId: refDoc.id }, children };
+        const outRef = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: refColor, m, comp: true, p: { assembly: true, subdoc: true, refDocId: refDoc.id, ...(it.p && it.p.variantId ? { refVariantId: it.p.variantId } : {}) }, children };
         if (it.opacity != null && it.opacity < 1) outRef.opacity = Math.max(0.05, it.opacity);
         if (it.mir) outRef.mir = it.mir;
         return outRef;
@@ -2221,7 +2244,8 @@ const Model = (() => {
     }
     if (it.kind === 'ref') {
       const refId = it.p && it.p.docId;
-      const refDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+      const rawRefDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+      const refDoc = withPartVariant(rawRefDoc, it.p && it.p.variantId);
       if (!refDoc) return null;
       const refV = vars(refDoc).v;
       const prevVisited = visitedDocs;
@@ -2528,6 +2552,84 @@ const Model = (() => {
           name: ps.name.trim(),
           states: ps.states && typeof ps.states === 'object' && !Array.isArray(ps.states) ? ps.states : {},
         }));
+    }
+    const VALID_DISPLAY_MODES = new Set(['edges', 'shaded', 'wire', 'hidden', 'illustration']);
+    if (doc.displayStates != null && !Array.isArray(doc.displayStates)) doc.displayStates = [];
+    if (Array.isArray(doc.displayStates)) {
+      doc.displayStates = doc.displayStates
+        .filter((ds) => ds && typeof ds === 'object' && typeof ds.name === 'string' && ds.name.trim())
+        .map((ds) => {
+          const items = {};
+          if (ds.items && typeof ds.items === 'object' && !Array.isArray(ds.items)) {
+            for (const [k, raw] of Object.entries(ds.items)) {
+              if (!k || !raw || typeof raw !== 'object') continue;
+              const op = Number(raw.opacity);
+              items[k] = {
+                hidden: !!raw.hidden,
+                opacity: raw.opacity != null && Number.isFinite(op) && op < 1 ? round(clamp(op, 0.05, 1), 3) : null,
+                color: typeof raw.color === 'string' && raw.color ? raw.color : null,
+                colorSet: !!raw.colorSet,
+              };
+            }
+          }
+          return {
+            id: typeof ds.id === 'string' && ds.id ? ds.id : uid('ds'),
+            name: ds.name.trim(),
+            items,
+            display: typeof ds.display === 'string' && VALID_DISPLAY_MODES.has(ds.display) ? ds.display : null,
+          };
+        });
+    }
+    if (doc.displayState != null) {
+      if (!(Array.isArray(doc.displayStates) && doc.displayStates.some((d) => d.id === doc.displayState))) {
+        delete doc.displayState;
+      }
+    }
+    if (doc.asmVariants != null && !Array.isArray(doc.asmVariants)) doc.asmVariants = [];
+    if (Array.isArray(doc.asmVariants)) {
+      doc.asmVariants = doc.asmVariants
+        .filter((av) => av && typeof av === 'object' && typeof av.name === 'string' && av.name.trim())
+        .map((av) => {
+          const values = av.values && typeof av.values === 'object' && !Array.isArray(av.values) ? { ...av.values } : {};
+          const suppressed = Array.isArray(av.suppressed) ? [...new Set(av.suppressed.filter((id) => typeof id === 'string' && id))] : [];
+          const refs = {};
+          if (av.refs && typeof av.refs === 'object' && !Array.isArray(av.refs)) {
+            for (const [k, r] of Object.entries(av.refs)) {
+              if (!k || !r || typeof r !== 'object' || typeof r.docId !== 'string' || !r.docId) continue;
+              refs[k] = {
+                docId: r.docId,
+                docName: typeof r.docName === 'string' ? r.docName : '',
+                ...(r.docType === 'assembly' ? { docType: 'assembly' } : {}),
+                ...(typeof r.variantId === 'string' && r.variantId ? { variantId: r.variantId } : {}),
+              };
+            }
+          }
+          const itemParams = {};
+          if (av.itemParams && typeof av.itemParams === 'object' && !Array.isArray(av.itemParams)) {
+            for (const [k, ip] of Object.entries(av.itemParams)) {
+              if (!k || !ip || typeof ip !== 'object' || Array.isArray(ip)) continue;
+              const cleanIp = {};
+              for (const [pk, pv] of Object.entries(ip)) {
+                if (typeof pv === 'number' || typeof pv === 'string' || typeof pv === 'boolean') cleanIp[pk] = pv;
+              }
+              if (Object.keys(cleanIp).length) itemParams[k] = cleanIp;
+            }
+          }
+          return {
+            id: typeof av.id === 'string' && av.id ? av.id : uid('av'),
+            name: av.name.trim(),
+            values,
+            suppressed,
+            refs,
+            itemParams,
+            displayStateId: typeof av.displayStateId === 'string' && av.displayStateId ? av.displayStateId : null,
+          };
+        });
+    }
+    if (doc.asmVariant != null) {
+      if (!(Array.isArray(doc.asmVariants) && doc.asmVariants.some((av) => av.id === doc.asmVariant))) {
+        delete doc.asmVariant;
+      }
     }
     if (doc.motion != null) {
       if (typeof doc.motion !== 'object' || Array.isArray(doc.motion)) {

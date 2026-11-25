@@ -1873,6 +1873,20 @@ const Views = (() => {
     out.push('-', { label: T('menu.view.viewBack'), icon: 'undo', kbd: 'Umschalt Z', help: 'viewBack', id: 'view-back', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() });
     out.push({ label: T('menu.view.saveView'), icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
     for (const v of App.doc.views || []) out.push({ label: T('menu.view.savedViewPrefix', { name: v.name }), icon: 'viewPersp', help: 'savedViews', id: 'view-go-' + v.id, run: () => goView(v.id) });
+    if (!ViewPrefs.simple && typeof Assembly !== 'undefined' && Assembly.displayStates && (Assembly.isAssembly() || Assembly.displayStates().length)) {
+      const dsList = Assembly.displayStates();
+      const dsAct = Assembly.activeDisplayState ? Assembly.activeDisplayState() : null;
+      out.push('-', { label: T('asm.dsSaveMenu'), icon: 'eye', help: 'displayStates', id: 'view-ds-save', run: () => Assembly.promptSaveDisplayState() });
+      for (const ds of dsList) {
+        out.push({
+          label: (dsAct && dsAct.id === ds.id ? '✓ ' : '') + T('asm.dsMenuPrefix', { name: ds.name }),
+          icon: 'eye',
+          help: 'displayStates',
+          id: 'view-ds-' + ds.id,
+          run: () => Assembly.applyDisplayState(ds.id),
+        });
+      }
+    }
     return out;
   }
   function sync() {
