@@ -39721,6 +39721,236 @@ def t_a191_gehaeuse_generator(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a192_gehaeuse_erweitert(p):
+    # [A-192] Bibliothek: Gehäuse-Generator, Schritt 2: Schnapphaken, Lüftung, Kabeldurchführung (BI-20, BI-21)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('model');")
+    p.wait(250)
+
+    # 1. Einfach-Modus: Schnapphaken statt Schrauben über Dialog
+    p.pg.locator('#t-parts').click()
+    p.wait(300)
+    p.pg.locator('#add-enclosure-gen').click()
+    p.pg.wait_for_selector('#enclosure-gen-dlg', timeout=5000)
+    p.pg.locator('#enc-fastening').select_option('snaps')
+    p.wait(150)
+    dlg_snaps = p.ev("""return {
+      bossHidden: document.querySelector('#enc-boss-od')?.offsetParent === null,
+      snapShown: !!document.querySelector('#enc-snap-len') && !!document.querySelector('#enc-snap-len').offsetParent,
+      summary: document.querySelector('#enc-preview-summary')?.textContent || '',
+    }""")
+    p.pg.locator('#enc-gen-create').click()
+    warte_rechnen(p, 60)
+
+    snaps_st = p.ev("""return (() => {
+      const boxIt = App.doc.items.find(x => x.name === 'Kasten');
+      const lidIt = App.doc.items.find(x => x.name === 'Deckel');
+      const bosses = App.doc.items.filter(x => x.kind === 'boss');
+      const snaps = App.doc.items.filter(x => x.kind === 'part' && x.p && x.p.lib === 'snapHook');
+      const wins = App.doc.items.filter(x => x.name && x.name.startsWith('Rastfenster '));
+      const lidWb = lidIt ? Actions.worldBox(lidIt.id) : null;
+      const boxWb = boxIt ? Actions.worldBox(boxIt.id) : null;
+      const activeBodies = App.doc.items.filter(x => {
+        const r = App.results.get(x.id);
+        return r && r.data && r.data.bbox;
+      }).map(x => x.name);
+      return {
+        errs: App.errors.length,
+        bossCount: bosses.length,
+        snapCount: snaps.length,
+        snapJoinOk: lidIt ? snaps.every(s => s.op && s.op.type === 'join' && s.op.target === lidIt.id) : false,
+        winCount: wins.length,
+        winCutOk: boxIt ? wins.every(w => w.op && w.op.type === 'cut' && w.op.target === boxIt.id) : false,
+        activeBodies,
+        lidZMin: lidWb ? Math.round(lidWb.min.z * 100) / 100 : 0,
+        boxDx: boxWb ? Math.round((boxWb.max.x - boxWb.min.x) * 100) / 100 : 0,
+        boxDy: boxWb ? Math.round((boxWb.max.y - boxWb.min.y) * 100) / 100 : 0,
+      };
+    })()""")
+    gc1 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    clash1 = p.ev("return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } })")
+
+    ok1 = bool(
+        dlg_snaps['bossHidden'] and dlg_snaps['snapShown'] and 'Schnapphaken' in dlg_snaps['summary']
+        and snaps_st['errs'] == 0
+        and snaps_st['bossCount'] == 0
+        and snaps_st['snapCount'] == 4 and snaps_st['snapJoinOk']
+        and snaps_st['winCount'] == 4 and snaps_st['winCutOk']
+        and sorted(snaps_st['activeBodies']) == ['Deckel', 'Kasten']
+        and abs(snaps_st['lidZMin'] - 22.0) < 0.08
+        and abs(snaps_st['boxDx'] - 84.0) < 0.05 and abs(snaps_st['boxDy'] - 54.0) < 0.05
+        and gc1['issues'] == 0 and gc1['checked'] == 2
+        and len(clash1.get('pairs', [])) == 0
+    )
+
+    # 2. Lüftung an -> Schlitze in den Seitenwänden + Deckel-Variante
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    p.pg.locator('#add-enclosure-gen').click()
+    p.pg.wait_for_selector('#enclosure-gen-dlg', timeout=5000)
+    p.pg.locator('#enc-with-vent').check()
+    p.wait(150)
+    dlg_vent = p.ev("""return {
+      sideShown: !!document.querySelector('#enc-vent-side') && !!document.querySelector('#enc-vent-side').offsetParent,
+      summary: document.querySelector('#enc-preview-summary')?.textContent || '',
+    }""")
+    p.pg.locator('#enc-gen-create').click()
+    warte_rechnen(p, 60)
+
+    vent_st = p.ev("""return (() => {
+      const boxIt = App.doc.items.find(x => x.name === 'Kasten');
+      const vents = App.doc.items.filter(x => x.kind === 'vent');
+      const faces = (boxIt && App.results.get(boxIt.id)?.data?.faces) || [];
+      const slotCyl = faces.filter(f => f.t === 'CYLINDRE' && Math.abs(f.r - 1.25) < 0.05);
+      const leftCyl = slotCyl.filter(f => f.c && f.c[0] < -39.5).length;
+      const rightCyl = slotCyl.filter(f => f.c && f.c[0] > 39.5).length;
+      return {
+        errs: App.errors.length,
+        ventCount: vents.length,
+        slotCylCount: slotCyl.length,
+        leftCyl,
+        rightCyl,
+      };
+    })()""")
+    gc2 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    clash2 = p.ev("return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } })")
+
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Enclosure.create({ innerW: 80, innerD: 50, innerH: 30, wall: 2, withBosses: false, withVent: true, ventSide: 'lid', ventCount: 4 })")
+    warte_rechnen(p, 60)
+    lid_vent_st = p.ev("""return (() => {
+      const lidIt = App.doc.items.find(x => x.name === 'Deckel');
+      const vents = App.doc.items.filter(x => x.kind === 'vent');
+      const faces = (lidIt && App.results.get(lidIt.id)?.data?.faces) || [];
+      const slotCyl = faces.filter(f => f.t === 'CYLINDRE' && Math.abs(f.r - 1.25) < 0.05).length;
+      return {
+        errs: App.errors.length,
+        ventCount: vents.length,
+        targetsLid: lidIt ? vents.every(v => v.p && v.p.target === lidIt.id) : false,
+        slotCyl,
+      };
+    })()""")
+    gc2b = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+
+    ok2 = bool(
+        dlg_vent['sideShown'] and 'Lüftung' in dlg_vent['summary']
+        and vent_st['errs'] == 0 and vent_st['ventCount'] == 2
+        and vent_st['slotCylCount'] >= 10 and vent_st['leftCyl'] >= 5 and vent_st['rightCyl'] >= 5
+        and gc2['issues'] == 0 and gc2['checked'] == 2
+        and len(clash2.get('pairs', [])) == 0
+        and lid_vent_st['errs'] == 0 and lid_vent_st['ventCount'] == 1
+        and lid_vent_st['targetsLid'] and lid_vent_st['slotCyl'] >= 4
+        and gc2b['issues'] == 0 and gc2b['checked'] == 2
+    )
+
+    # 3. Kabeldurchführung mit Zugentlastung + Kombi-Gehäuse (Schnapphaken + Lüftung + Kabel) + Rückgängig
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    p.pg.locator('#add-enclosure-gen').click()
+    p.pg.wait_for_selector('#enclosure-gen-dlg', timeout=5000)
+    p.pg.locator('#enc-fastening').select_option('snaps')
+    p.pg.locator('#enc-with-vent').check()
+    p.pg.locator('#enc-with-cable').check()
+    p.wait(150)
+    dlg_cable = p.ev("""return {
+      sideShown: !!document.querySelector('#enc-cable-side') && !!document.querySelector('#enc-cable-side').offsetParent,
+      summary: document.querySelector('#enc-preview-summary')?.textContent || '',
+    }""")
+    p.pg.locator('#enc-gen-create').click()
+    warte_rechnen(p, 75)
+
+    combo_st = p.ev("""return (() => {
+      const boxIt = App.doc.items.find(x => x.name === 'Kasten');
+      const lidIt = App.doc.items.find(x => x.name === 'Deckel');
+      const bosses = App.doc.items.filter(x => x.kind === 'boss');
+      const snaps = App.doc.items.filter(x => x.kind === 'part' && x.p && x.p.lib === 'snapHook');
+      const vents = App.doc.items.filter(x => x.kind === 'vent');
+      const tabIt = App.doc.items.find(x => x.name === 'Zugentlastungs-Lasche');
+      const holeIt = App.doc.items.find(x => x.name === 'Kabeldurchführung');
+      const slotIt = App.doc.items.find(x => x.name === 'Kabelbinder-Schlitz');
+      const boxWb = boxIt ? Actions.worldBox(boxIt.id) : null;
+      const faces = (boxIt && App.results.get(boxIt.id)?.data?.faces) || [];
+      const cableCyl = faces.filter(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 6.0) < 0.05 && f.c && Math.abs(f.c[0]) < 0.2 && f.c[1] < -24.5 && f.c[2] >= 5.0 && f.c[2] <= 11.0);
+      const activeBodies = App.doc.items.filter(x => {
+        const r = App.results.get(x.id);
+        return r && r.data && r.data.bbox;
+      }).map(x => x.name);
+      return {
+        errs: App.errors.length,
+        itemCount: App.doc.items.length,
+        bossCount: bosses.length,
+        snapCount: snaps.length,
+        ventCount: vents.length,
+        hasTab: !!tabIt, hasHole: !!holeIt, hasSlot: !!slotIt,
+        activeBodies,
+        boxMinY: boxWb ? Math.round(boxWb.min.y * 100) / 100 : 0,
+        boxMaxY: boxWb ? Math.round(boxWb.max.y * 100) / 100 : 0,
+        cableCylCount: cableCyl.length,
+      };
+    })()""")
+    gc3 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    clash3 = p.ev("return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } })")
+
+    p.ev("App.undo()"); warte_rechnen(p, 45)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo()"); warte_rechnen(p, 75)
+    redo_st = p.ev("return { len: App.doc.items.length, errs: App.errors.length }")
+
+    ok3 = bool(
+        dlg_cable['sideShown'] and 'Zugentlastung' in dlg_cable['summary']
+        and combo_st['errs'] == 0
+        and combo_st['bossCount'] == 0
+        and combo_st['snapCount'] == 4
+        and combo_st['ventCount'] == 2
+        and combo_st['hasTab'] and combo_st['hasHole'] and combo_st['hasSlot']
+        and sorted(combo_st['activeBodies']) == ['Deckel', 'Kasten']
+        and abs(combo_st['boxMinY'] - (-37.0)) < 0.08
+        and abs(combo_st['boxMaxY'] - 27.0) < 0.08
+        and combo_st['cableCylCount'] >= 1
+        and gc3['issues'] == 0 and gc3['checked'] == 2
+        and len(clash3.get('pairs', [])) == 0
+        and undo_len == 0
+        and redo_st['len'] == combo_st['itemCount'] and redo_st['errs'] == 0
+    )
+
+    # 4. Profi-Modus, Befehlssuche, Validierung, Hilfen & I18n
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    pro_st = p.ev("""return {
+      encBtn: !!document.querySelector('#add-enclosure-gen') && !!document.querySelector('#add-enclosure-gen').offsetParent,
+      cmdsSnap: Commands.search('schnapphaken').map(c => c.id),
+      cmdsVent: Commands.search('lüftung').map(c => c.id),
+      cmdsCable: Commands.search('kabeldurchführung').map(c => c.id),
+      cmdsZug: Commands.search('zugentlastung').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const eg = wh.enclosureGen;
+      const hOk = !!(eg && eg.tip && eg.hilfe && eg.tipp && /Schnapphaken/.test(eg.hilfe) && /Lüftung/.test(eg.hilfe) && /Kabel/.test(eg.hilfe));
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, i18nOk };
+    })()""")
+
+    ok4 = bool(
+        pro_st['encBtn']
+        and 'enclosure-gen' in pro_st['cmdsSnap']
+        and 'enclosure-gen' in pro_st['cmdsVent']
+        and 'enclosure-gen' in pro_st['cmdsCable']
+        and 'enclosure-gen' in pro_st['cmdsZug']
+        and meta['valOk'] and meta['hOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -40026,6 +40256,7 @@ TESTS = [
     ('[A-190] Bibliothek: Ausschnitte für Stecker und Schalter (BI-18)', t_a190_ausschnitte_stecker_schalter),
     ('[A-189] Bibliothek: Lochbilder Platinen & Batteriefächer (BI-17, BI-19)', t_a189_platinen_batteriefaecher),
     ('[A-191] Bibliothek: Gehäuse-Generator (Kasten mit Deckel, Lippe & 4 Schraubdome, BI-20)', t_a191_gehaeuse_generator),
+    ('[A-192] Bibliothek: Gehäuse-Generator Schritt 2 (Schnapphaken, Lüftung, Kabeldurchführung, BI-20, BI-21)', t_a192_gehaeuse_erweitert),
     ('[A-193] Bibliothek: Typenschild, QR-Code und Barcode (BI-22, BI-23)', t_a193_typenschild_qr_barcode),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

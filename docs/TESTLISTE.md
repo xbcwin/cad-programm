@@ -2984,6 +2984,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Modus, Befehlssuche, Validierung & Hilfen**: `#add-enclosure-gen` ist in Einfach (bei unveränderter Kachelzahl 5) und Profi sichtbar, Befehlssuche findet `enclosure-gen`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` (`enclosureGen`) und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a191_gehaeuse_generator`).
 - [ ] **Von Hand**: Im Browser über „Bauteile“ → „Gehäuse (Kasten + Deckel)“ ein Gehäuse erzeugen, Deckel ausblenden oder verschieben und Lippe, Nut und die vier Schraubdome von Hand ansehen.
 
+## Bibliothek: Gehäuse-Generator, Schritt 2: Schnapphaken, Lüftung, Kabeldurchführung (Auto [A-192], BI-20, BI-21)
+
+- [x] **Schnapphaken statt Schrauben**: Über `#enc-fastening = 'snaps'` im Dialog entstehen 0 Schraubdome (`boss`), 4 `snapHook`-Haken am Deckel und 4 `Rastfenster` im Kasten mit 0 `GeomCheck`-Fehlern und 0 Durchdringungen (`t_a192_gehaeuse_erweitert`).
+- [x] **Lüftungsschlitze**: `#enc-with-vent` schneidet auf Seitenwänden (`±X`) sowie in der Deckel-Variante echte `vent`-Schlitze mit abgerundeten Enden ohne `GeomCheck`- oder Kollisionsfehler (`t_a192_gehaeuse_erweitert`).
+- [x] **Kabeldurchführung mit Zugentlastung & Rückgängig**: `#enc-with-cable` erzeugt an der gewählten Wand ein Kabelloch (`Ø 6 mm`) samt vorstehender `Zugentlastungs-Lasche` (`+10 mm`) und `Kabelbinder-Schlitz` (`GeomCheck` 0 Fehler, 0 Durchdringungen) in einem einzigen `App.undo()`/`redo()`-Schritt (`t_a192_gehaeuse_erweitert`).
+- [x] **Profi-Modus, Befehlssuche, Validierung & Hilfen**: Befehlssuche (`schnapphaken`, `lüftung`, `kabeldurchführung`, `zugentlastung`), `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüsselgleichheit ohne JS-Fehler (`t_a192_gehaeuse_erweitert`).
+- [ ] **Von Hand**: Im Browser ein Gehäuse mit Schnapphaken, Lüftungsschlitzen und Kabeldurchführung mit Zugentlastung erzeugen und das Einrasten der Haken in die Rastfenster sowie den Kabelbinder-Schlitz von außen und innen prüfen.
+
 ## Bibliothek: Typenschild, QR-Code und Barcode (Auto [A-193], BI-22, BI-23)
 
 - [x] **QR-Code für „tracery“ & Speichern/Laden**: Im Einfach-Modus über `#add-qr-code` erzeugter QR-Code für `tracery` liefert lokal (ohne Netz) einen Version-1-Code (`21 × 21` Module mit allen 3 Finder-Mustern, `> 150` dunklen Quadraten, `> 100` Flächen, `36 × 36 × 2,8 mm`, `GeomCheck` 0 Fehler); nach Speichern (`Start.projectPayload()`) und Neu-Laden bleiben Geometrie, BBox, Volumen, Flächenzahl und Matrix exakt gleich (`t_a193_typenschild_qr_barcode`).
