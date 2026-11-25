@@ -2824,6 +2824,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export, Speichern/Laden, Hilfen & I18n**: PDF (`%PDF-1.4`), DXF (`ISO 5456-2 (A)`, `MITTELLINIE`), `Store.validateProject`, `HELP.drawingExplode`/`HELP.drawingProjection`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a170_zeichnung_explosion_projektion`).
 - [ ] **Von Hand**: Im Browser in „Zeichnung“ eine Explosionsansicht schattiert anlegen, den Blickwinkel aus dem 3D-Modell übernehmen, Positionsnummern automatisch setzen und ein Blatt im Format USA (ISO A) als PDF exportieren.
 
+## Zeichnung: Maße aus dem Modell übernehmen (Auto [A-173], ZE-23)
+
+- [x] **Quader 40×30×20 ohne Überlappen**: Klick auf `#dw-model-dims` legt genau die drei Maße `40`, `30`, `20` assoziativ (`lostCount == 0`) auf dem Blatt an; weder DOM-`getBoundingClientRect()` noch `Drawing.dimTextBoxes()` melden Überlappungen; erneuter Klick über `#t-model-dims` verdoppelt keine Maße; `App.undo()` / `App.redo()` arbeiten sauber (`t_a173_zeichnung_modellmasse`).
+- [x] **Skizzen- und Schritt-Maße zusammen**: Rechteck-Skizze (`80 × 50`, `Ø12`, `Ø8`, `36`) mit `extrude` (`15`) und Aufsatz-Quader (`30 × 20 × 10`) platziert alle Skizzen- und Schritt-Maße in passenden Ansichten ohne jede Überlappung (`t_a173_zeichnung_modellmasse`).
+- [x] **Einfach-Modus & „Maße ordnen“**: Im Einfach-Modus sind `#t-model-dims`, `#dw-model-dims` und `#dw-arrange-dims` sichtbar und funktionsfähig; zwei gezielt übereinander gelegte Maße werden durch `#dw-arrange-dims` überlappungsfrei getrennt (`t_a173_zeichnung_modellmasse`).
+- [x] **Export, Validierung, Hilfen, I18n & Befehlssuche**: `Drawing.buildPDFBytes()`, `Drawing.buildDXF()`, `Store.validateProject()`, `HELP.drawingModelDims`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingModelDims`, `drawingArrangeDims`) laufen fehlerfrei (`t_a173_zeichnung_modellmasse`).
+- [ ] **Von Hand**: Im Browser in „Zeichnung“ an einem eigenen Mehrstufen-Teil mit Rundungen, Fasen und Bohrungen „Maße aus dem Modell“ testen und prüfen, ob alle Maße sauber lesbar außen am Bauteil sitzen.
+
 ## Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (Auto [A-172], ZE-21, ZE-22)
 
 - [x] **Koordinatenmaße ab Ecke an 3 Löchern & Nachführung (ZE-21)**: Nullpunkt `(-40, -25)` und drei Bohrungen zeigen waagerecht `0`, `15`, `40`, `60` (mit Nullpunkt-Kreis) sowie senkrecht `0`, `20`, `30`, `35`; nach Ändern der Plattenbreite von `80` auf `90 mm` aktualisiert sich das Koordinatenmaß automatisch auf `0`, `20`, `45`, `65` (`t_a172_zeichnung_koord_bogen_doppel`).

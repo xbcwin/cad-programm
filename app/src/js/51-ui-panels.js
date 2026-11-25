@@ -440,6 +440,8 @@ const Panels = (() => {
       dimKindBtn.dataset.help = 'drawingDimTypes';
       dimKindBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode !== 'lin'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
+      const mDimBtn = btn('t-model-dims', 'dim', T('tool.modelDims'), T('tool.modelDimsTip'), '', () => Drawing.importModelDims(), '', T('tool.modelDimsShort'));
+      mDimBtn.dataset.help = 'drawingModelDims';
       const noteBtn = btn('t-note', 'noteText', T('tool.dnote'), T('tool.dnoteTip'), 'N', () => Drawing.tool('note'), Drawing.activeTool === 'note' ? 'active' : '');
       noteBtn.dataset.help = 'drawingLeader';
       noteBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'note'));

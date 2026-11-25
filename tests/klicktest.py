@@ -34601,6 +34601,218 @@ def t_a170_zeichnung_explosion_projektion(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a173_zeichnung_modellmasse(p):
+    # [A-173] Zeichnung: Maße aus dem Modell übernehmen und ordnen (ZE-23)
+    p.empty()
+    p.ev("""
+      const box = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Quader' });
+      App.change('Quader 40x30x20', d => { d.items.push(box); });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    def read_dim_state():
+        return p.ev("""return (() => {
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const els = [...svg.querySelectorAll('text.dimtext')];
+          const boxes = els.map(el => {
+            const r = el.getBoundingClientRect();
+            return {
+              id: el.dataset.id || '',
+              view: el.dataset.view || '',
+              text: (el.textContent || '').trim(),
+              left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+              w: r.width, h: r.height,
+            };
+          });
+          let domOverlaps = 0;
+          for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+              const a = boxes[i], b = boxes[j];
+              if (a.id && b.id && a.id === b.id) continue;
+              if (a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5) domOverlaps++;
+            }
+          }
+          const dims = Drawing.dims();
+          const tb = Drawing.dimTextBoxes();
+          return {
+            texts: boxes.map(b => b.text),
+            views: boxes.map(b => b.view),
+            fromModelCount: dims.filter(d => d.fromModel).length,
+            lostCount: Drawing.lostDims().length,
+            domOverlaps,
+            mathOverlaps: tb.overlaps,
+            dimsCount: dims.length,
+          };
+        })()""")
+
+    p.pg.click('#dw-model-dims')
+    p.wait(200)
+    st1 = read_dim_state()
+
+    # Zweiter Klick über Werkzeugleiste verdoppelt keine Maße
+    p.pg.click('#t-model-dims')
+    p.wait(150)
+    st1_again = read_dim_state()
+
+    p.ev("App.undo(); App.undo();"); p.wait(150)
+    st_undo = read_dim_state()
+    p.ev("App.redo(); App.redo();"); p.wait(150)
+    st_redo = read_dim_state()
+
+    def has_num(texts, val):
+        s = str(val)
+        return any(t == s or t.startswith(s + ',') or t.startswith(s + '.') for t in texts)
+
+    ok1 = bool(
+        st1['fromModelCount'] == 3
+        and st1['lostCount'] == 0
+        and has_num(st1['texts'], 40)
+        and has_num(st1['texts'], 30)
+        and has_num(st1['texts'], 20)
+        and st1['domOverlaps'] == 0
+        and st1['mathOverlaps'] == 0
+        and st1_again['fromModelCount'] == 3
+        and st1_again['domOverlaps'] == 0
+        and st_undo['fromModelCount'] == 0
+        and st_redo['fromModelCount'] == 3
+    )
+
+    # 2. Skizzen-Maße + Schritt-Maße (Extrude + Bohrungen + zweiter Quader) ohne Überlappen
+    p.ev("""
+      Commands.setMode('model');
+      App.setDoc(Model.newDoc('Skizzenmodell'));
+      const rId = 'e_rect1', c1Id = 'e_c1', c2Id = 'e_c2';
+      const sk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [
+          { id: rId, type: 'rect', a: [-40, -25], b: [40, 25] },
+          { id: c1Id, type: 'circle', c: [-18, 0], r: 6 },
+          { id: c2Id, type: 'circle', c: [18, 0], r: 4 },
+        ],
+        dims: [
+          { id: 'm_w', e: rId, k: 'w', v: 80 },
+          { id: 'm_h', e: rId, k: 'h', v: 50 },
+          { id: 'm_d1', e: c1Id, k: 'd', v: 12 },
+          { id: 'm_d2', e: c2Id, k: 'd', v: 8 },
+          { id: 'm_cc', k: 'distCC', refs: [{ e: c1Id }, { e: c2Id }], v: 36 },
+        ],
+        cons: [],
+      };
+      const base = Model.newItem('extrude', { sketch: sk, dist: 15, dir: 'normal' }, { name: 'Platte' });
+      const top = Model.newItem('box', { w: 30, d: 20, h: 10 }, { name: 'Aufsatz' });
+      top.t.z = 15;
+      App.change('Platte mit Skizze und Aufsatz', d => { d.items.push(base, top); });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    p.pg.click('#t-model-dims')
+    p.wait(250)
+    st2 = read_dim_state()
+
+    ok2 = bool(
+        st2['fromModelCount'] >= 7
+        and st2['lostCount'] == 0
+        and has_num(st2['texts'], 80)
+        and has_num(st2['texts'], 50)
+        and has_num(st2['texts'], 15)
+        and has_num(st2['texts'], 30)
+        and has_num(st2['texts'], 10)
+        and any('Ø12' in t for t in st2['texts'])
+        and any('Ø8' in t for t in st2['texts'])
+        and st2['domOverlaps'] == 0
+        and st2['mathOverlaps'] == 0
+    )
+
+    # 3. Einfach-Modus sichtbar + „Maße ordnen“ entzerrt überlappende Maße
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    simple_vis = p.ev("""return (() => {
+      const b1 = document.querySelector('#t-model-dims');
+      const b2 = document.querySelector('#dw-model-dims');
+      const b3 = document.querySelector('#dw-arrange-dims');
+      return !!(b1 && b1.offsetParent !== null && b2 && b2.offsetParent !== null && b3 && b3.offsetParent !== null);
+    })()""")
+    p.pg.click('#dw-model-dims')
+    p.wait(200)
+    st_simple = read_dim_state()
+
+    # Provozierte Überlappung zweier manueller Maße mit gleichem off in front
+    p.ev("""
+      App.change('Überlappende Maße', d => {
+        const s = Drawing.activeSheet();
+        s.dims.push(
+          { id: 'd_ov1', view: 'front', type: 'lin', dir: 'h', a: [-15, 15], b: [15, 15], off: -9 },
+          { id: 'd_ov2', view: 'front', type: 'lin', dir: 'h', a: [-15, 15], b: [15, 15], off: -9 }
+        );
+      });
+      Drawing.refresh();
+    """)
+    p.wait(150)
+    st_before_arr = read_dim_state()
+    p.pg.click('#dw-arrange-dims')
+    p.wait(200)
+    st_after_arr = read_dim_state()
+
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+
+    ok3 = bool(
+        simple_vis
+        and st_simple['fromModelCount'] >= 7
+        and st_simple['domOverlaps'] == 0
+        and st_before_arr['mathOverlaps'] >= 1
+        and st_after_arr['domOverlaps'] == 0
+        and st_after_arr['mathOverlaps'] == 0
+    )
+
+    # 4. PDF/DXF, Validierung, Hilfen, i18n, Befehlssuche & keine JS-Fehler
+    extra_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      const val = Store.validateProject(App.doc);
+      const h = wh && wh.drawingModelDims;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nSync = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('maße aus dem modell');
+      const cmdArr = Commands.search('maße ordnen');
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfBytes.length > 1000,
+        dxfOk: !!(dxf && dxf.text && (dxf.text.includes('BEMASSUNG') || dxf.text.includes('DIMENSION') || dxf.text.includes('80'))),
+        valOk: !!(val && val.ok),
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp),
+        cmdOk: cmds.some(c => c.id === 'drawingModelDims') && cmdArr.some(c => c.id === 'drawingArrangeDims'),
+        deEnOk: i18nSync && T('tool.modelDims') === 'Maße aus dem Modell' && T('draw.panel.arrangeDimsBtn') === 'Maße ordnen',
+      };
+    })()""")
+    ok4 = bool(
+        extra_chk['pdfOk'] and extra_chk['dxfOk']
+        and extra_chk['valOk'] and extra_chk['helpOk']
+        and extra_chk['cmdOk'] and extra_chk['deEnOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a172_zeichnung_koord_bogen_doppel(p):
     # [A-172] Zeichnung (Profi): Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)
     def sheet_screen(sx, sy):
@@ -35208,6 +35420,7 @@ TESTS = [
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
     ('[A-171] Zeichnung: Gewinde-Darstellung und Schraffur je Material', t_a171_gewinde_und_materialschraffur),
     ('[A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)', t_a170_zeichnung_explosion_projektion),
+    ('[A-173] Zeichnung: Maße aus dem Modell übernehmen und ordnen (ZE-23)', t_a173_zeichnung_modellmasse),
     ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
