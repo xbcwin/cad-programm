@@ -1603,6 +1603,33 @@ body.sketching:not(.simple) .sk-live-mir-badge{top:28px}
 .look-color-inp{width:30px;height:22px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer}
 .look-bar .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
 
+/* Kreis-Menü an der Maus & Malen-Auswahl (BE-19, BE-20) */
+.radial-menu{position:fixed;z-index:85;width:0;height:0;overflow:visible;user-select:none;animation:radialPop .12s ease-out}
+@keyframes radialPop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+.radial-ring{position:absolute;left:-114px;top:-114px;width:228px;height:228px;border-radius:50%;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line-strong);box-shadow:0 10px 30px rgba(0,0,0,.18);pointer-events:none}
+.radial-ring svg{width:100%;height:100%;display:block}
+.radial-ring line{stroke:var(--line);stroke-width:1.2}
+.radial-item{position:absolute;transform:translate(-50%,-50%);width:82px;min-height:54px;padding:6px 5px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);box-shadow:var(--shadow-1);display:grid;justify-items:center;align-content:center;gap:3px;cursor:pointer;font-size:11.5px;line-height:1.15;text-align:center;transition:background .1s,border-color .1s,color .1s,transform .1s}
+.radial-item svg{width:18px;height:18px;flex:none}
+.radial-item .radial-lbl{max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.radial-item:hover,.radial-item.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);transform:translate(-50%,-50%) scale(1.06);z-index:2}
+.radial-center{position:absolute;left:0;top:0;transform:translate(-50%,-50%);z-index:3}
+.radial-gear{width:42px;height:42px;border-radius:50%;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted);box-shadow:var(--shadow-1);display:grid;place-items:center;cursor:pointer;transition:background .1s,color .1s,border-color .1s}
+.radial-gear svg{width:18px;height:18px}
+.radial-gear:hover{background:var(--surface-2);color:var(--ink);border-color:var(--accent)}
+.radial-cfg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+.radial-cfg-row{display:grid;gap:4px}
+.radial-cfg-row label{font-size:12px;color:var(--muted);font-weight:600}
+.radial-cfg-row select{width:100%;padding:7px 9px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);font-size:13.5px}
+.paintbar{flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;width:auto;max-width:calc(100vw - 24px);padding:6px 10px}
+.paintbar .vb-t{font:700 12.5px/1.2 var(--font-cond);color:var(--ink);margin-right:2px}
+.paintbar .seg button.on,.paintbar .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.paint-count{font-size:12px;font-weight:600;color:var(--ink-2);padding:3px 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);white-space:nowrap}
+.paint-cursor{position:fixed;z-index:84;width:22px;height:22px;border-radius:50%;border:2px solid var(--accent);background:transparent;transform:translate(-50%,-50%);pointer-events:none;transition:transform .08s,background .08s,border-color .08s}
+.paint-cursor.down{background:color-mix(in srgb,var(--accent) 18%,transparent);transform:translate(-50%,-50%) scale(1.12)}
+.paint-cursor.erase{border-style:dashed;border-color:var(--danger,#d9483f)}
+.paint-cursor.erase.down{background:color-mix(in srgb,var(--danger,#d9483f) 18%,transparent)}
+
 
 
 

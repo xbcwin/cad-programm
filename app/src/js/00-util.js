@@ -2395,6 +2395,16 @@ const HELP = {
   "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
   "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",
   "tipp": "Mit „Randabstand“ und „Länge“ grenzt du den Griffbereich sauber gegen Kanten und Schultern ab."
+ },
+ "radialMenu": {
+  "tip": "Kreis-Menü an der Maus (Q oder rechte Maus gedrückt halten): 8 schnelle Befehle, frei einstellbar",
+  "hilfe": "Öffnet direkt am Mauszeiger ein rundes Schnellmenü mit deinen 8 wichtigsten Befehlen. Mit dem Zahnrad in der Mitte belegst du alle 8 Plätze nach Wunsch.",
+  "tipp": "Halte die rechte Maustaste kurz gedrückt, ziehe direkt auf das gewünschte Feld und lass los – so wählst du Befehle in einer flüssigen Bewegung."
+ },
+ "paintSelect": {
+  "tip": "Malen-Auswahl (V): Mit gedrückter Maus über mehrere Flächen oder Kanten streichen",
+  "hilfe": "Aktiviert die Malen-Auswahl: Fahre mit gedrückter linker Maustaste einfach über Flächen oder Kanten, um sie der Reihe nach auszuwählen – ideal zum gemeinsamen Abrunden, Abschrägen oder Einfärben.",
+  "tipp": "Umschalt hält die bestehende Auswahl zum Dazunehmen, Alt streicht ausgewählte Flächen oder Kanten wieder ab, und Esc beendet den Modus."
  }
 };
 

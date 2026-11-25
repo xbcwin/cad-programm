@@ -642,13 +642,43 @@ const Interact = (() => {
     cv.addEventListener('pointerleave', () => { if (!down) { Viewer.clearHover(); Handles.hover(null); } });
     cv.addEventListener('dblclick', onDbl);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
-    // Rechtsklick ohne Ziehen: Menü passend zu dem, was unter der Maus liegt (Ziehen mit rechts verschiebt weiter die Ansicht)
-    cv.addEventListener('pointerdown', (e) => { if (e.button === 2) rdown = { x: e.clientX, y: e.clientY }; }, true);
-    window.addEventListener('pointerup', (e) => { if (e.button !== 2 || !rdown) return; const r = rdown; rdown = null; if (Math.hypot(e.clientX - r.x, e.clientY - r.y) <= 4 && e.target === Viewer.canvas && modelActive()) contextMenu(e.clientX, e.clientY); });
+    // Rechtsklick ohne Ziehen: Kontextmenü · rechte Maus halten (>320 ms): Kreis-Menü (Ziehen mit rechts verschiebt weiter die Ansicht)
+    const RADIAL_HOLD_MS = 320;
+    cv.addEventListener('pointerdown', (e) => {
+      if (e.button !== 2) return;
+      if (rdown && rdown.timer) clearTimeout(rdown.timer);
+      if (!modelActive()) { rdown = null; return; }
+      const st = { x: e.clientX, y: e.clientY, radial: false, timer: 0 };
+      st.timer = setTimeout(() => {
+        if (rdown !== st || !modelActive()) return;
+        st.timer = 0;
+        st.radial = true;
+        Viewer.controls.enabled = false;
+        UI.openRadial(st.x, st.y, { holdMode: true });
+      }, RADIAL_HOLD_MS);
+      rdown = st;
+    }, true);
+    window.addEventListener('pointerup', (e) => {
+      if (e.button !== 2 || !rdown) return;
+      const r = rdown; rdown = null;
+      if (r.timer) clearTimeout(r.timer);
+      if (r.radial) {
+        Viewer.controls.enabled = true;
+        UI.finishRadialHold(e.clientX, e.clientY);
+        return;
+      }
+      if (Math.hypot(e.clientX - r.x, e.clientY - r.y) <= 4 && e.target === Viewer.canvas && modelActive()) contextMenu(e.clientX, e.clientY);
+    }, true);
     window.addEventListener('keydown', onKey, true);
-    window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
+    window.addEventListener('pointermove', (e) => {
+      lastPtr = { x: e.clientX, y: e.clientY };
+      if (rdown && !rdown.radial && rdown.timer && Math.hypot(e.clientX - rdown.x, e.clientY - rdown.y) > 5) {
+        clearTimeout(rdown.timer);
+        rdown.timer = 0;
+      }
+    }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Measure.pickingField && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking); }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Measure.pickingField && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking) && !(typeof Select !== 'undefined' && Select.paintActive); }
   function onDown(e) {
     if (e.pointerType === 'touch') {
       activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1122,6 +1152,7 @@ const Interact = (() => {
       if (activeTouches.size === 0) touchMulti = false;
     }
     clearLongPress();
+    if (rdown) { if (rdown.timer) clearTimeout(rdown.timer); rdown = null; }
     if (band) { band.el.remove(); band = null; }
     if (down && down.handle) Handles.end();
     if (moving) {
