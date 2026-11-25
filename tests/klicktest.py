@@ -38268,6 +38268,252 @@ def t_a186_wellen_stellringe_kupplungen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a185_zahnriemenscheiben_kettenraeder(p):
+    p.empty()
+
+    # 1. GT2-Scheibe 20 Zähne -> Teilkreis ≈ 12,73 mm, Kopfkreis ≈ 12,22 mm, ohne Bordscheiben, HTD 5M & Gegenpart
+    p.ev("""
+      App.change('GT2-Scheibe 20 Zähne', (doc) => {
+        const tp = Model.newItem('part', {
+          lib: 'timingPulley', profile: 'GT2', teeth: 20, beltW: null,
+          bore: 5, flanges: 'both', hubH: 5, hubD: null,
+        }, { name: 'GT2 20Z' });
+        doc.items.push(tp);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    gt2 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      const m = await Mass.measure();
+      const vol = (m.parts && m.parts[0] && m.parts[0].volume) || 0;
+      const hint = document.querySelector('#p-timingpulley-hint')?.textContent || '';
+      const met = Model.kernelItem(it, {}).p.spec;
+      return {
+        errs: App.errors.length,
+        ok: !!(r && r.data && bb && r.data.vertices && r.data.vertices.length > 0),
+        dp: met.dp, da: met.da,
+        vol, cylR, hint,
+      };
+    })()""")
+    p.ev("""
+      App.change('GT2 ohne Bordscheiben/Nabe', (doc) => {
+        doc.items[0].p.flanges = 'none';
+        doc.items[0].p.hubH = 0;
+      });
+    """)
+    warte_rechnen(p, 45)
+    gt2_bare = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))];
+      return {
+        errs: App.errors.length,
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        cylR,
+      };
+    })()""")
+    p.ev("""
+      App.change('HTD 5M 24 Zähne', (doc) => {
+        doc.items[0].p.profile = 'HTD5M';
+        doc.items[0].p.teeth = 24;
+        doc.items[0].p.flanges = 'both';
+        doc.items[0].p.hubH = 6;
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    htd = p.ev("""return (async () => {
+      const r = App.results.get(App.doc.items[0].id);
+      const m = await Mass.measure();
+      const vol = (m.parts && m.parts[0] && m.parts[0].volume) || 0;
+      const hint = document.querySelector('#p-timingpulley-hint')?.textContent || '';
+      return { errs: App.errors.length, ok: !!(r && r.data && r.data.vertices && r.data.vertices.length > 0), vol, hint };
+    })()""")
+    p.pg.click('#btn-add-timing-pulley-mate')
+    warte_rechnen(p, 45)
+    pulley_pair = p.ev("""return (async () => {
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return { count: App.doc.items.length, errs: App.errors.length, checked: res.checkedCount, clashes: (res.pairs || []).length, clashErrs: (res.errors || []).length };
+    })()""")
+    ok1 = bool(
+        gt2['errs'] == 0 and gt2['ok'] and gt2['vol'] > 400
+        and abs(gt2['dp'] - 12.7324) < 0.01 and '12,73' in gt2['hint']
+        and any(abs(r - 2.5) < 0.01 for r in gt2['cylR'])
+        and any(abs(r - gt2['da'] / 2) < 0.02 for r in gt2['cylR'])
+        and gt2_bare['errs'] == 0
+        and 0.96 * gt2['da'] <= gt2_bare['dx'] <= gt2['da'] + 0.05
+        and 0.96 * gt2['da'] <= gt2_bare['dy'] <= gt2['da'] + 0.05
+        and any(abs(r - gt2['da'] / 2) < 0.02 for r in gt2_bare['cylR'])
+        and abs(gt2_bare['dz'] - 6.0) < 0.05
+        and htd['errs'] == 0 and htd['ok'] and htd['vol'] > 2000 and '38,2' in htd['hint']
+        and pulley_pair['count'] == 2 and pulley_pair['errs'] == 0
+        and pulley_pair['checked'] == 2 and pulley_pair['clashes'] == 0 and pulley_pair['clashErrs'] == 0
+    )
+
+    # 2. Kettenrad 15 Zähne 1/2" (08B) -> Körper mit exaktem Teilkreis ≈ 61,08 mm, + Nabe, 3/8" (06B), eigene Teilung & Zweitrad
+    p.ev("""
+      App.setDoc(Model.newDoc('Kettenrad-Test'));
+      App.change('Kettenrad 15Z 1/2 Zoll', (doc) => {
+        const sp = Model.newItem('part', {
+          lib: 'sprocket', chain: '08B', teeth: 15,
+          pitch: null, rollerD: null, thickness: null,
+          bore: 10, hubH: 0, hubD: null,
+        }, { name: 'Kettenrad 15Z' });
+        doc.items.push(sp);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    spr1 = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      const m = await Mass.measure();
+      const vol = (m.parts && m.parts[0] && m.parts[0].volume) || 0;
+      const hint = document.querySelector('#p-sprocket-hint')?.textContent || '';
+      const met = Model.kernelItem(it, {}).p.spec;
+      return {
+        errs: App.errors.length,
+        ok: !!(r && r.data && bb && r.data.vertices && r.data.vertices.length > 0),
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        dp: met.dp, da: met.da, df: met.df,
+        vol, cylR, hint,
+      };
+    })()""")
+    p.ev("App.change('Kettenrad mit Nabe', (doc) => { doc.items[0].p.hubH = 10; });")
+    warte_rechnen(p, 45)
+    spr_hub = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[0].id);
+      const bb = r && r.data && r.data.bbox;
+      return { errs: App.errors.length, dz: bb ? bb[5] - bb[2] : 0 };
+    })()""")
+    p.ev("App.change('Kettenrad 06B 3/8 Zoll', (doc) => { doc.items[0].p.chain = '06B'; doc.items[0].p.teeth = 20; doc.items[0].p.hubH = 0; });")
+    warte_rechnen(p, 45)
+    spr_06b = p.ev("return Mass.measure().then(m => ({ errs: App.errors.length, vol: (m.parts && m.parts[0] && m.parts[0].volume) || 0 }))")
+    p.ev("App.change('Kettenrad eigene Teilung', (doc) => { doc.items[0].p.chain = 'custom'; doc.items[0].p.pitch = 10; doc.items[0].p.teeth = 12; });")
+    warte_rechnen(p, 45)
+    spr_cust = p.ev("return Mass.measure().then(m => ({ errs: App.errors.length, vol: (m.parts && m.parts[0] && m.parts[0].volume) || 0 }))")
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.wait(200)
+    p.pg.click('#btn-add-sprocket-mate')
+    warte_rechnen(p, 45)
+    spr_pair = p.ev("""return (async () => {
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return { count: App.doc.items.length, errs: App.errors.length, checked: res.checkedCount, clashes: (res.pairs || []).length, clashErrs: (res.errors || []).length };
+    })()""")
+    ok2 = bool(
+        spr1['errs'] == 0 and spr1['ok'] and spr1['vol'] > 5000
+        and abs(spr1['dp'] - 61.0836) < 0.02 and '61,08' in spr1['hint']
+        and 0.95 * spr1['da'] <= spr1['dx'] <= spr1['da'] + 0.05
+        and 0.95 * spr1['da'] <= spr1['dy'] <= spr1['da'] + 0.05
+        and any(abs(r - spr1['da'] / 2) < 0.02 for r in spr1['cylR'])
+        and abs(spr1['dz'] - 7.2) < 0.05
+        and any(abs(r - 5.0) < 0.01 for r in spr1['cylR'])
+        and spr_hub['errs'] == 0 and abs(spr_hub['dz'] - 17.2) < 0.05
+        and spr_06b['errs'] == 0 and spr_06b['vol'] > 3000
+        and spr_cust['errs'] == 0 and spr_cust['vol'] > 1000
+        and spr_pair['count'] == 2 and spr_pair['errs'] == 0
+        and spr_pair['checked'] == 2 and spr_pair['clashes'] == 0 and spr_pair['clashErrs'] == 0
+    )
+
+    # 3. Einfach & Profi, Flyout, Befehlssuche & Kopplungs-Erkennung
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts [data-lib="timingPulley"]', timeout=5000)
+    pro_fly = p.ev("""return ['timingPulley', 'sprocket'].every(k => {
+      const el = document.querySelector(`.flyout.parts [data-lib="${k}"]`);
+      return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === k);
+    })""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("App.change('Leeren', d => { d.items = []; }); ViewPrefs.setLevel('simple');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts', timeout=5000)
+    simple_fly_cnt = p.ev("return [...document.querySelectorAll('.flyout.parts .tile')].filter(t => t.offsetParent !== null).length")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+    simple_res = p.ev("""return (() => {
+      const h1 = Commands.search('zahnriemenscheibe').find(c => c.id === 'lib-timingPulley');
+      const h2 = Commands.search('kettenrad').find(c => c.id === 'lib-sprocket');
+      if (h1) h1.run();
+      if (h2) h2.run();
+      return {
+        has1: !!h1, has2: !!h2,
+        libs: App.doc.items.map(it => it.p && it.p.lib),
+      };
+    })()""")
+    warte_rechnen(p, 50)
+    simple_ui = p.ev("""return (() => {
+      App.select([App.doc.items[0].id]);
+      const h1 = !!document.querySelector('#p-timingpulley-hint') && !!document.querySelector('#btn-add-timing-pulley-mate');
+      App.select([App.doc.items[1].id]);
+      const h2 = !!document.querySelector('#p-sprocket-hint') && !!document.querySelector('#btn-add-sprocket-mate');
+      return { h1, h2 };
+    })()""")
+    ok3 = bool(
+        pro_fly and simple_fly_cnt == 5
+        and simple_res['has1'] and simple_res['has2']
+        and simple_res['libs'] == ['timingPulley', 'sprocket']
+        and simple_ui['h1'] and simple_ui['h2']
+    )
+
+    # 4. GeomCheck, Undo/Redo, Validierung, Hilfen, Erklärungen, I18n & 0 JS-Fehler
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Beide Teile nebeneinander', (doc) => {
+        const tp = Model.newItem('part', { lib: 'timingPulley', profile: 'GT2', teeth: 20, bore: 5, flanges: 'both', hubH: 5 }, { name: 'GT2 20Z' });
+        const sp = Model.newItem('part', { lib: 'sprocket', chain: '08B', teeth: 15, bore: 10, hubH: 0 }, { name: 'Kettenrad 15Z' });
+        sp.t.x = 70;
+        doc.items = [tp, sp];
+      });
+    """)
+    warte_rechnen(p, 60)
+    p.ev("App.undo();")
+    warte_rechnen(p, 35)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 35)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en, gc] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        GeomCheck.run({ silent: true }),
+      ]);
+      const keys = ['timingPulley', 'sprocket'];
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, i18nOk, gcIssues: gc.issues.length, gcChecked: gc.checkedCount };
+    })()""")
+    ok4 = bool(
+        undo_len == 2 and redo_len == 2
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and meta['gcIssues'] == 0 and meta['gcChecked'] == 2
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -38568,6 +38814,7 @@ TESTS = [
     ('[A-184] Bibliothek (Profi): Zahnstange (π·10 mm), Innenzahnrad (40 Zähne geschlossen), Schnecke & Schneckenrad (BI-11)', t_a184_bibliothek_schnecke_innenzahnrad_zahnstange),
     ('[A-183] Bibliothek: Schrägzahnrad & Kegelrad-Paar 90°', t_a183_zahnraeder_schraeg_kegel),
     ('[A-186] Bibliothek: Wellen, Stellringe & Kupplungen (BI-13)', t_a186_wellen_stellringe_kupplungen),
+    ('[A-185] Bibliothek: Zahnriemenscheiben (GT2, HTD) & Kettenräder nach Teilung (BI-12)', t_a185_zahnriemenscheiben_kettenraeder),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

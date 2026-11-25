@@ -732,6 +732,96 @@ function wormWheelMetrics(p) {
   const leadAngleDeg = (Math.atan((m * starts) / d1) * 180) / Math.PI;
   return { z2, m, h, d1, starts, bore, d2, da2, df2, centerDist, ratio, leadAngleDeg, dir: p && p.dir === 'left' ? 'left' : 'right' };
 }
+// Zahnriemenscheiben (GT2 & HTD) und Rollenkettenräder nach Teilung (DIN 8187 / ISO 606, BI-12)
+const TIMING_PULLEY_PROFILES = [
+  { id: 'GT2', label: 'GT2 (2 mm Teilung)', family: 'GT2', pitch: 2.0, pld: 0.254, grooveDepth: 0.75, grooveFrac: 0.56, defBeltW: 6, flangeAdd: 3.2, flangeT: 1.2 },
+  { id: 'GT2-3', label: 'GT2-3 (3 mm Teilung)', family: 'GT2', pitch: 3.0, pld: 0.381, grooveDepth: 1.14, grooveFrac: 0.56, defBeltW: 9, flangeAdd: 4.5, flangeT: 1.5 },
+  { id: 'GT2-5', label: 'GT2-5 (5 mm Teilung)', family: 'GT2', pitch: 5.0, pld: 0.5715, grooveDepth: 1.93, grooveFrac: 0.56, defBeltW: 15, flangeAdd: 7.0, flangeT: 2.0 },
+  { id: 'HTD3M', label: 'HTD 3M (3 mm Teilung)', family: 'HTD', pitch: 3.0, pld: 0.381, grooveDepth: 1.22, grooveFrac: 0.60, defBeltW: 9, flangeAdd: 4.5, flangeT: 1.5 },
+  { id: 'HTD5M', label: 'HTD 5M (5 mm Teilung)', family: 'HTD', pitch: 5.0, pld: 0.5715, grooveDepth: 2.06, grooveFrac: 0.60, defBeltW: 15, flangeAdd: 7.5, flangeT: 2.0 },
+  { id: 'HTD8M', label: 'HTD 8M (8 mm Teilung)', family: 'HTD', pitch: 8.0, pld: 0.686, grooveDepth: 3.48, grooveFrac: 0.60, defBeltW: 20, flangeAdd: 11.0, flangeT: 2.5 },
+];
+const TIMING_PULLEY_BY_ID = new Map(TIMING_PULLEY_PROFILES.map((x) => [x.id.toLowerCase(), x]));
+const TIMING_PULLEY_OPTIONS = TIMING_PULLEY_PROFILES.map((x) => [x.id, x.label]);
+function timingPulleyProfile(id) {
+  const s = String(id || 'GT2').trim().toLowerCase();
+  return TIMING_PULLEY_BY_ID.get(s) || TIMING_PULLEY_PROFILES[0];
+}
+function timingPulleyMetrics(p = {}) {
+  const prof = timingPulleyProfile(p.profile);
+  const z = Math.max(10, Math.min(120, Math.round(Number(p.teeth ?? 20) || 20)));
+  const pitch = prof.pitch;
+  const pld = prof.pld;
+  const ht = prof.grooveDepth;
+  const dp = (z * pitch) / Math.PI;
+  const da = Math.max(2, dp - 2 * pld);
+  const df = Math.max(1.2, da - 2 * ht);
+  const rawBeltW = Number(p.beltW);
+  const beltW = rawBeltW > 0 ? rawBeltW : prof.defBeltW;
+  const flanges = p.flanges === 'none' || p.flanges === 'bottom' ? p.flanges : 'both';
+  const trackW = flanges === 'none' ? round(beltW, 3) : round(beltW + Math.max(0.6, 0.2 * pitch), 3);
+  const flangeT = flanges === 'none' ? 0 : prof.flangeT;
+  const flangeD = flanges === 'none' ? da : round(da + prof.flangeAdd, 2);
+  const bore = Math.max(0, Number(p.bore ?? 5) || 0);
+  const rawHubH = p.hubH === null || p.hubH === undefined || p.hubH === '' ? 5 : Number(p.hubH);
+  const hubH = Math.max(0, isFinite(rawHubH) ? rawHubH : 5);
+  const rawHubD = Number(p.hubD);
+  const maxHubD = flanges === 'none' ? Math.max(bore + 2, df - 0.2) : flangeD;
+  const defHubD = round(Math.min(maxHubD, Math.max(bore + 4, da * 0.85)), 1);
+  const hubD = hubH > 0 ? Math.min(maxHubD, Math.max(bore + 1.5, rawHubD > 0 ? rawHubD : defHubD)) : 0;
+  const nFlanges = flanges === 'both' ? 2 : flanges === 'bottom' ? 1 : 0;
+  const totalH = round(hubH + nFlanges * flangeT + trackW, 3);
+  const outerD = Math.max(da, flangeD, hubD);
+  return {
+    profile: prof.id, family: prof.family, z, pitch, pld, ht, grooveFrac: prof.grooveFrac,
+    dp, da, df, beltW, trackW, flanges, flangeT, flangeD, bore, hubH, hubD, totalH, outerD,
+  };
+}
+const SPROCKET_CHAINS = [
+  { id: '04B', short: '04B (6 mm)', label: '04B · 6 mm (DIN 8187)', pitch: 6.0, rollerD: 4.0, bf1: 2.6 },
+  { id: '05B', short: '05B (8 mm)', label: '05B · 8 mm (DIN 8187)', pitch: 8.0, rollerD: 5.0, bf1: 2.8 },
+  { id: '06B', short: '06B (3/8")', label: '06B · 3/8" (9,525 mm)', pitch: 9.525, rollerD: 6.35, bf1: 5.3 },
+  { id: '08B', short: '08B (1/2")', label: '08B · 1/2" (12,7 mm · Standard)', pitch: 12.7, rollerD: 8.51, bf1: 7.2 },
+  { id: '08A', short: '08A (1/2")', label: '08A / ANSI 40 · 1/2" (12,7 mm)', pitch: 12.7, rollerD: 7.95, bf1: 7.2 },
+  { id: 'bike', short: 'Fahrrad 1/2"', label: 'Fahrradkette · 1/2" × 3/32"', pitch: 12.7, rollerD: 7.75, bf1: 2.1 },
+  { id: '10B', short: '10B (5/8")', label: '10B · 5/8" (15,875 mm)', pitch: 15.875, rollerD: 10.16, bf1: 9.1 },
+  { id: '12B', short: '12B (3/4")', label: '12B · 3/4" (19,05 mm)', pitch: 19.05, rollerD: 12.07, bf1: 11.1 },
+  { id: '16B', short: '16B (1")', label: '16B · 1" (25,4 mm)', pitch: 25.4, rollerD: 15.88, bf1: 16.2 },
+];
+const SPROCKET_CHAIN_BY_ID = new Map(SPROCKET_CHAINS.map((x) => [x.id.toLowerCase(), x]));
+const SPROCKET_CHAIN_OPTIONS = [...SPROCKET_CHAINS.map((x) => [x.id, x.label]), ['custom', 'Eigene Teilung']];
+function sprocketChainEntry(id) {
+  const s = String(id || '08B').trim().toLowerCase();
+  return SPROCKET_CHAIN_BY_ID.get(s) || SPROCKET_CHAIN_BY_ID.get('08b') || SPROCKET_CHAINS[3];
+}
+function sprocketMetrics(p = {}) {
+  const isCustom = p.chain === 'custom';
+  const e = isCustom ? null : sprocketChainEntry(p.chain);
+  const z = Math.max(8, Math.min(120, Math.round(Number(p.teeth ?? 15) || 15)));
+  const rawPitch = Number(p.pitch);
+  const pitch = rawPitch > 0 ? Math.max(2, rawPitch) : (e ? e.pitch : 12.7);
+  const rawRoller = Number(p.rollerD);
+  const d1 = Math.min(pitch * 0.72, Math.max(pitch * 0.3, rawRoller > 0 ? rawRoller : (e ? e.rollerD : round(pitch * 0.625, 2))));
+  const rawThick = Number(p.thickness);
+  const thickness = Math.max(0.8, rawThick > 0 ? rawThick : (e ? e.bf1 : round(pitch * 0.55, 1)));
+  const dp = pitch / Math.sin(Math.PI / z);
+  const ri = 0.505 * d1;
+  const df = Math.max(2, dp - 2 * ri);
+  const da = Math.max(dp + 0.25 * pitch, dp + pitch * (1.125 - 0.8 / z) - d1);
+  const bore = Math.max(0, Number(p.bore ?? 10) || 0);
+  const rawHubH = p.hubH === null || p.hubH === undefined || p.hubH === '' ? 0 : Number(p.hubH);
+  const hubH = Math.max(0, isFinite(rawHubH) ? rawHubH : 0);
+  const rawHubD = Number(p.hubD);
+  const maxHubD = Math.max(bore + 2, df - 0.6);
+  const defHubD = round(Math.min(maxHubD, Math.max(bore + 8, df * 0.62)), 1);
+  const hubD = hubH > 0 ? Math.min(maxHubD, Math.max(bore + 2, rawHubD > 0 ? rawHubD : defHubD)) : 0;
+  const totalH = round(thickness + hubH, 3);
+  const chainLabelShort = e && !(rawPitch > 0) ? e.short : (`p ${fmt(pitch, 2)} mm`);
+  return {
+    chain: isCustom ? 'custom' : (e ? e.id : '08B'), chainLabelShort,
+    z, pitch, d1, ri, dp, da, df, thickness, bore, hubH, hubD, totalH,
+  };
+}
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
@@ -991,6 +1081,29 @@ const LIB = [
     { k: 'hubH', label: 'Rückenhöhe', type: 'num', def: null, auto: true },
     { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
   ] },
+  { lib: 'timingPulley', label: 'Zahnriemenscheibe', role: 'solid', icon: 'timingPulley', mat: 'Alu 6061',
+    kw: 'zahnriemenscheibe riemenscheibe pulley gt2 htd 3m 5m 8m zahnriemen riemenantrieb bi-12',
+    desc: 'Zahnriemenscheibe für GT2- und HTD-Riemen mit optionalen Bordscheiben und Nabe', params: [
+      { k: 'profile', label: 'Profil', type: 'select', options: TIMING_PULLEY_OPTIONS, def: 'GT2' },
+      { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' },
+      { k: 'beltW', label: 'Riemenbreite', type: 'num', def: null, auto: true },
+      { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
+      { k: 'flanges', label: 'Bordscheiben', type: 'select', options: [['both', 'Beidseitig'], ['bottom', 'Nur unten'], ['none', 'Ohne']], def: 'both' },
+      { k: 'hubH', label: 'Nabenhöhe (0 = ohne)', type: 'num', def: 5 },
+      { k: 'hubD', label: 'Naben-Ø', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'sprocket', label: 'Kettenrad', role: 'solid', icon: 'sprocket', mat: 'Baustahl',
+    kw: 'kettenrad ritzel kettenblatt teilung kette rollenkette 1/2 3/8 5/8 08b 06b 10b din 8187 iso 606 fahrrad bi-12',
+    desc: 'Rollenkettenrad nach Teilung (DIN 8187 / ISO 606, z. B. 1/2", 3/8" oder eigene Teilung)', params: [
+      { k: 'chain', label: 'Kette / Teilung', type: 'select', options: SPROCKET_CHAIN_OPTIONS, def: '08B' },
+      { k: 'teeth', label: 'Zähne', type: 'num', def: 15, int: true, unit: '' },
+      { k: 'pitch', label: 'Teilung (p)', type: 'num', def: null, auto: true },
+      { k: 'rollerD', label: 'Rollen-Ø (d₁)', type: 'num', def: null, auto: true },
+      { k: 'thickness', label: 'Zahnbreite', type: 'num', def: null, auto: true },
+      { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 10 },
+      { k: 'hubH', label: 'Nabenhöhe (0 = flach)', type: 'num', def: 0 },
+      { k: 'hubD', label: 'Naben-Ø', type: 'num', def: null, auto: true },
+    ] },
 ];
 // Kaufteile mit ihrer echten Form (kommen über die Drohnen-Bibliothek, nicht ins Fenster „Bauteile“)
 const N = (k, label, def, unit) => ({ k, label, type: 'num', def, ...(unit ? { unit } : {}) });
@@ -1192,6 +1305,45 @@ function shaftCouplingOnShaftTransform(shaftP = {}, shaftT = null) {
     t: gearComposeWorldTransform(shaftT, { x: 0, y: 0, z: zPos, rx: 0, ry: 0, rz: 0 }),
     shaft: m,
     coupling: cm,
+  };
+}
+
+// Zweite Zahnriemenscheibe daneben platzieren
+function timingPulleyMateTransform(p1 = {}, t1 = null) {
+  const m = timingPulleyMetrics(p1);
+  const dx = Math.max(40, Math.ceil((m.outerD + 25) / 5) * 5);
+  return {
+    params: {
+      profile: m.profile,
+      teeth: m.z,
+      beltW: p1 && p1.beltW != null && p1.beltW !== '' ? p1.beltW : null,
+      bore: m.bore,
+      flanges: m.flanges,
+      hubH: m.hubH,
+      hubD: p1 && p1.hubD != null && p1.hubD !== '' ? p1.hubD : null,
+    },
+    t: gearComposeWorldTransform(t1, { x: dx, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }),
+    metrics: m,
+  };
+}
+
+// Zweites Kettenrad daneben platzieren
+function sprocketMateTransform(p1 = {}, t1 = null) {
+  const m = sprocketMetrics(p1);
+  const dx = Math.max(80, Math.ceil((m.da + 40) / 10) * 10);
+  return {
+    params: {
+      chain: m.chain,
+      teeth: m.z,
+      pitch: p1 && p1.pitch != null && p1.pitch !== '' ? p1.pitch : null,
+      rollerD: p1 && p1.rollerD != null && p1.rollerD !== '' ? p1.rollerD : null,
+      thickness: p1 && p1.thickness != null && p1.thickness !== '' ? p1.thickness : null,
+      bore: m.bore,
+      hubH: m.hubH,
+      hubD: p1 && p1.hubD != null && p1.hubD !== '' ? p1.hubD : null,
+    },
+    t: gearComposeWorldTransform(t1, { x: dx, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }),
+    metrics: m,
   };
 }
 

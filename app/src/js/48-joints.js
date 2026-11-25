@@ -5485,6 +5485,14 @@ const Joints = (() => {
         const mod = rawMod > 0 ? rawMod : 1.5;
         if (teeth > 0) return { mode: 'teeth', teeth, module: mod, d: round(teeth * mod, 6) };
       }
+      if (it.kind === 'part' && it.p && it.p.lib === 'timingPulley' && typeof timingPulleyMetrics === 'function') {
+        const m = timingPulleyMetrics(Model.resolveP(it.p, V));
+        if (m.z > 0) return { mode: 'teeth', teeth: m.z, d: round(m.dp, 6) };
+      }
+      if (it.kind === 'part' && it.p && it.p.lib === 'sprocket' && typeof sprocketMetrics === 'function') {
+        const m = sprocketMetrics(Model.resolveP(it.p, V));
+        if (m.z > 0) return { mode: 'teeth', teeth: m.z, d: round(m.dp, 6) };
+      }
       if ((it.kind === 'cylinder' || it.kind === 'tube') && it.p) {
         const d = Model.num(it.p.d, V, 0);
         if (d > 0) return { mode: 'diameter', d };

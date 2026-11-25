@@ -2947,6 +2947,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, GeomCheck, Undo/Redo, Validierung, Hilfen & I18n**: Alle 3 Teile erscheinen im Profi-Flyout, bleiben in „Einfach“ über Befehlssuche und rechtes Panel nutzbar (ohne `t_einfach`-Kachelzahl zu verändern), bestehen `GeomCheck` ohne Befund sowie `App.undo()`/`redo()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit (`t_a186_wellen_stellringe_kupplungen`).
 - [ ] **Von Hand**: Im Browser im Bauteil-Menü eine abgesetzte Welle einfügen, per Klick einen DIN-705-Stellring und eine Wellenkupplung aufsetzen, auf Klemm-/Flanschkupplung umschalten und den Sitz aus verschiedenen Winkeln prüfen.
 
+## Bibliothek: Zahnriemenscheiben und Kettenräder (Auto [A-185], BI-12)
+
+- [x] **Zahnriemenscheiben GT2 & HTD (`timingPulley`)**: GT2-Scheibe mit 20 Zähnen (`profile: 'GT2'`) berechnet den Teilkreis Ø exakt als `20 · 2 / π ≈ 12,73 mm` (`#p-timingpulley-hint`), baut mit messbarem Kopfkreis Ø ≈ `12,22 mm` und Bohrung Ø `5 mm` ohne Geometrie-Fehler, unterstützt Bordscheiben (`both`/`bottom`/`none`), Nabe (`hubH`), HTD 5M (`24` Zähne, Teilkreis ≈ `38,2 mm`) sowie den Knopf `#btn-add-timing-pulley-mate` ohne Durchdringung (`t_a185_zahnriemenscheiben_kettenraeder`).
+- [x] **Kettenräder nach Teilung (`sprocket`)**: Kettenrad mit 15 Zähnen für `1/2"`-Rollenkette (`chain: '08B'`) erzeugt einen geschlossenen Volumenkörper ohne Geometrie-Fehler mit Teilkreis Ø = `12,7 / sin(π/15) ≈ 61,08 mm`, Kopfkreis Ø ≈ `66,18 mm`, Zahnbreite `7,2 mm` und Bohrung Ø `10 mm`; unterstützt optionale Nabe (`hubH: 10`), `3/8"`-Kette (`06B`), eigene Teilung (`chain: 'custom'`) sowie `#btn-add-sprocket-mate` ohne Durchdringung (`t_a185_zahnriemenscheiben_kettenraeder`).
+- [x] **Einfach & Profi, Befehlssuche & Kopplungs-Erkennung**: Beide Teile erscheinen im Profi-Flyout, bleiben in „Einfach“ über die Befehlssuche (`zahnriemenscheibe`, `kettenrad`) einfügbar und im rechten Panel bearbeitbar (ohne `t_einfach`-Kachelzahl zu verändern) und werden von der Riemen-Kopplung mit Zähnezahl und Teilkreis erkannt (`t_a185_zahnriemenscheiben_kettenraeder`).
+- [x] **GeomCheck, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n**: Beide Körper bestehen `GeomCheck` ohne Befund, `App.undo()`/`redo()`, `Store.validateProject()`, Synchronität von `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json`, DE/EN-Schlüsselgleichheit und 0 JS-Konsolenfehler (`t_a185_zahnriemenscheiben_kettenraeder`).
+- [ ] **Von Hand**: Im Browser über „Bauteile“ eine GT2-Zahnriemenscheibe und ein 1/2"-Kettenrad einfügen, Profile, Zähnezahl, Bordscheiben und Nabe variieren und die Verzahnung aus mehreren Blickwinkeln prüfen.
+
 ## Fehler melden
 
 ```

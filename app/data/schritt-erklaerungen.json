@@ -429,5 +429,15 @@
     "was": "Erzeugt eine Wellenkupplung als starre Hülse mit Gewindestiften, geschlitzte Klemmkupplung oder Flanschkupplung.",
     "wozu": "Verbindet zwei gleich oder unterschiedlich dicke Wellenenden fluchtend miteinander.",
     "achtung": "Für nicht genau fluchtende Wellen musst du später echte Ausgleichskupplungen vorsehen – starre Kupplungen verlangen koaxiale Wellen."
+  },
+  "timingPulley": {
+    "was": "Erzeugt eine Zahnriemenscheibe für GT2- oder HTD-Zahnriemen mit optionalen Bordscheiben und Nabe.",
+    "wozu": "Überträgt Drehbewegungen spielfrei per Zahnriemen (z. B. bei 3D-Druckern, CNC-Achsen oder Antrieben).",
+    "achtung": "Beide Riemenscheiben und der Riemen müssen genau dasselbe Profil (z. B. GT2 2 mm oder HTD 5M) verwenden."
+  },
+  "sprocket": {
+    "was": "Erzeugt ein Kettenrad nach Kettenteilung (DIN 8187 / ISO 606) mit normgerechten Zahntaschen und optionaler Nabe.",
+    "wozu": "Überträgt hohe Kräfte formschlüssig per Rollenkette (z. B. 1/2\"- oder 3/8\"-Kette).",
+    "achtung": "Teilung, Rollendurchmesser und Zahnbreite müssen zur gewählten Rollenkette passen."
   }
 }

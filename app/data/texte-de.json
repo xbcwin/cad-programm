@@ -5037,5 +5037,9 @@
   "panel.item.shaftCouplingHint": "<b>{style}</b> · Bohrungen <b>Ø {d1} / Ø {d2}</b> (effektiv {d1Eff} / {d2Eff}) · Außen-Ø <b>{D}</b> · Länge <b>{L}</b> · Schraube {screw}.",
   "panel.item.shaftCouplingStyleRigid": "Starre Kupplung (Gewindestifte)",
   "panel.item.shaftCouplingStyleClamp": "Klemmkupplung (geschlitzt)",
-  "panel.item.shaftCouplingStyleFlange": "Flanschkupplung"
+  "panel.item.shaftCouplingStyleFlange": "Flanschkupplung",
+  "panel.item.timingPulleyHint": "<b>{prof}</b> (Teilung {pitch}) · Teilkreis Ø <b>{dp}</b> · Kopfkreis Ø {da} · Fußkreis Ø {df} · Höhe {h}.",
+  "panel.item.addTimingPulleyMate": "Zweite Riemenscheibe daneben",
+  "panel.item.sprocketHint": "<b>{chain}</b> (Teilung {pitch}) · Teilkreis Ø <b>{dp}</b> · Kopfkreis Ø {da} · Fußkreis Ø {df} · Breite {t} · Gesamthöhe {h}.",
+  "panel.item.addSprocketMate": "Zweites Kettenrad daneben"
 }
