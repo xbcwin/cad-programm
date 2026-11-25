@@ -19,6 +19,9 @@ const GeomCheck = (() => {
       { label: (typeof InnerRadius !== 'undefined' && InnerRadius.active ? '✓ ' : '') + T('menu.check.innerRadius'), icon: 'fillet', id: 'check-inner-radius', help: 'innerRadius', run: () => InnerRadius.toggle() },
       { label: (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active ? '✓ ' : '') + T('menu.check.symmetry'), icon: 'mirror', id: 'check-symmetry', help: 'symmetryCheck', run: () => SymmetryCheck.open() },
       '-',
+      { label: T('menu.check.printCost'), icon: 'printer', id: 'check-print-cost', help: 'printCost', run: () => Print.costDialog() },
+      { label: T('menu.check.reportPdf'), icon: 'file', id: 'check-report-pdf', help: 'reportPdf', run: () => Measure.reportDialog() },
+      '-',
       { label: (typeof Versions !== 'undefined' && Versions.comparing ? '✓ ' : '') + T('menu.check.compare'), icon: 'compare', id: 'check-compare', help: 'compareBodies', run: () => Versions.openCompare() },
       { label: (typeof Measure !== 'undefined' && Measure.silhouetteActive ? '✓ ' : '') + T('menu.check.silhouette'), icon: 'silhouette2d', id: 'check-silhouette', help: 'silhouetteArea', run: () => Measure.silhouette() },
     ]);

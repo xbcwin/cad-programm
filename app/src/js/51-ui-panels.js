@@ -1106,6 +1106,14 @@ const Panels = (() => {
       w.append(ps);
     }
     const pv = ViewPrefs.get();
+    const lookSec = h('div', { class: 'section', id: 'proj-look-sec', 'data-help': 'studioFloorLight' }, h('div', { class: 'section-h' }, T('panel.proj.lookTitle')));
+    const floorChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'proj-floor-reflect', checked: !!pv.floorReflect }), T('panel.proj.floorReflect'));
+    floorChk.querySelector('input').onchange = (e) => ViewPrefs.set({ floorReflect: e.target.checked, ...(e.target.checked ? { look: 'studio' } : {}) });
+    const lookOpenBtn = h('button', { type: 'button', class: 'btn small', id: 'proj-look-open' });
+    lookOpenBtn.innerHTML = icon('sun') + esc(T('panel.proj.lookOpenBtn'));
+    lookOpenBtn.onclick = () => ViewPrefs.openLookPanel();
+    lookSec.append(floorChk, h('div', { class: 'btn-row', style: { marginTop: '6px' } }, lookOpenBtn));
+    w.append(lookSec);
     const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, T('panel.proj.viewTitle')));
     va.append(UI.selectField({ id: 'view-grid', label: T('panel.proj.gridSize'), value: String(pv.grid), options: [['auto', T('panel.proj.gridAuto')], ['0.01', Units.fmtLenFixedU(0.01, 2)], ['0.1', Units.fmtLenFixedU(0.1, 2)], ['1', Units.fmtLenFixedU(1, 2)], ['10', Units.fmtLenFixedU(10, 2)], ['100', Units.fmtLenFixedU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
@@ -1214,7 +1222,10 @@ const Panels = (() => {
       const orientBtn = h('button', { type: 'button', class: 'btn', id: 'proj-orient-print', 'data-help': 'orientPrint' });
       orientBtn.innerHTML = icon('overhang') + esc(T('panel.proj.orientPrint'));
       orientBtn.onclick = () => Print.orientForPrint();
-      orientRow.append(orientBtn);
+      const costBtn = h('button', { type: 'button', class: 'btn', id: 'proj-print-cost', 'data-help': 'printCost' });
+      costBtn.innerHTML = icon('printer') + esc(T('panel.proj.printCost'));
+      costBtn.onclick = () => Print.costDialog();
+      orientRow.append(orientBtn, costBtn);
       bedSec.append(orientRow);
     }
     const hcVal = Print.holeComp();
@@ -1251,7 +1262,8 @@ const Panels = (() => {
     cog.querySelector('input').onchange = (e) => ViewPrefs.set({ cog: e.target.checked });
     ms.append(cog, own);
     const bomB = h('button', { type: 'button', class: 'btn', id: 'proj-bom', 'data-help': 'bom' }); bomB.innerHTML = icon('list') + esc(T('panel.proj.bom')); bomB.onclick = () => Mass.bomDialog();
-    ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB));
+    const repB = h('button', { type: 'button', class: 'btn', id: 'proj-report-pdf', 'data-help': 'reportPdf' }); repB.innerHTML = icon('file') + esc(T('panel.proj.reportPdf')); repB.onclick = () => Measure.reportDialog();
+    ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB, repB));
     Mass.measure().then((r) => {
       if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
       vRow.textContent = Units.fmtVolU(r.volume, 3); gRow.textContent = Mass.gText(r.mass);

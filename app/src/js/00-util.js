@@ -2355,6 +2355,36 @@ const HELP = {
   "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
   "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",
   "tipp": "Mit „Randabstand“ und „Länge“ grenzt du den Griffbereich sauber gegen Kanten und Schultern ab."
+ },
+ "printCost": {
+  "tip": "Filamentmenge, Materialkosten und Druckzeit für den 3D-Druck schätzen",
+  "hilfe": "Rechnet aus Volumen, Oberfläche, Füllung (Infill), Wandlinien, Schichthöhe, Filament-Material und Drucker-Profil eine Schätzung für Filamentgewicht (g), Drahtlänge (m bei 1,75 mm), Materialkosten (€) und Druckzeit.",
+  "tipp": "Passe den Filament-Preis je kg und die Füllung oben im Fenster an – du siehst sofort, wie sich Kosten und Druckzeit verändern."
+ },
+ "reportPdf": {
+  "tip": "Prüfbericht als PDF mit 3D-Bild, Maßen, Volumen, Masse und Wandstärke erstellen",
+  "hilfe": "Stellt alle wichtigen Modelldaten auf einer übersichtlichen A4-PDF-Seite zusammen: 3D-Ansicht, Hüllmaße, Volumen, Oberfläche, Masse, Schwerpunkt, kleinste Wandstärke, Düsen- und Bauraum-Prüfung, 3D-Druck-Schätzung und Teileübersicht – komplett lokal im Browser erzeugt.",
+  "tipp": "Wenn du vorher die 3D-Druck-Schätzung anpasst, übernimmt der PDF-Prüfbericht deine Werte automatisch."
+ },
+ "studioFloorLight": {
+  "tip": "Studio-Boden mit Spiegelung, eigenes Umgebungsbild und bis zu 3 Lichter von Hand einstellen",
+  "hilfe": "Öffnet die Live-Steuerung für das Studio-Aussehen (in Einfach und Profi): Schalte den spiegelnden Studio-Boden mit einstellbarer Stärke ein, lade ein eigenes Umgebungsbild (PNG, JPG oder HDR) und stelle bis zu 3 eigene Lichter nach Richtung, Höhe, Farbe und Stärke ein.",
+  "tipp": "Alle Einstellungen wirken sofort im 3D-Bild und bleiben in diesem Browser gespeichert."
+ },
+ "studioFloor": {
+  "tip": "Studio-Boden unter dem Modell mit einstellbarer Spiegelung und weichen Schatten",
+  "hilfe": "Legt im Studio-Look einen sanft auslaufenden Boden unter das Modell, der Umgebungslicht spiegelt und Schatten auffängt. Über den Regler stellst du die Spiegelungs-Stärke von matt bis hochglänzend ein.",
+  "tipp": "Für echte Lichtreflexe am Boden schalte den Modus oben unter „Ansicht“ auf „Studio-Look“."
+ },
+ "customEnv": {
+  "tip": "Eigenes 360°-Umgebungsbild (PNG, JPG, WebP oder HDR) als Spiegel-Umgebung laden",
+  "hilfe": "Ersetzt die eingebaute Studio-Umgebung durch ein eigenes Bild vom Rechner. Glänzende Metalle, klare Lacke und der Studio-Boden spiegeln dieses Bild sofort wieder.",
+  "tipp": "Mit einem Klick auf „Studio“, „Hell“, „Werkstatt“ oder „Entfernen“ kehrst du jederzeit zur eingebauten Umgebung zurück."
+ },
+ "manualLights": {
+  "tip": "Bis zu 3 eigene Lichter mit Richtung, Höhe, Farbe und Stärke von Hand einstellen",
+  "hilfe": "Schaltet von der automatischen 3-Punkt-Beleuchtung auf bis zu 3 frei einstellbare Richtungslichter um. Für jedes Licht wählst du Richtung (Azimut), Höhe, Lichtfarbe und Stärke – Licht 1 wirft dabei die Schatten.",
+  "tipp": "Nutze z. B. ein warmes Hauptlicht von vorne-rechts und ein kühles Gegenlicht von hinten-links für mehr Tiefe."
  }
 };
 
