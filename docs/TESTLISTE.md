@@ -2512,6 +2512,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Schattenriss-Fläche in Blickrichtung (`mm²`)**: Würfel `10×10×10` von vorn (`camera` / `front`) misst `≈ 100 mm²` (`99,88 mm²` bei `1024×1024`), schräge Ansicht (`iso`) steigt auf `> 130 mm²`, Würfel mit Durchgangsbohrung `Ø4` sinkt auf `≈ 100 − 4π mm²`; Hilfetexte (`werkzeug-hilfen.json`/`HELP`) und DE/EN-Schlüsselgleichheit geprüft (`t_a133_vergleich_schattenriss`).
 - [ ] **Von Hand**: Im Browser zwei leicht unterschiedliche Bauteile übereinanderlegen, einzelne Farb-Chips (`Neu` / `Weg` / `Gleich`) ein- und ausblenden sowie die Schattenriss-Fläche auf einer schräg angeklickten Fläche prüfen.
 
+## Boden mit Spiegelung und Licht von Hand (Auto [A-135], AN-11, AN-12)
+
+- [x] **Einfach & Profi Zugang**: `#look-panel` öffnet in „Einfach“ über `#proj-look-open` und `#t-more` (`#more-look-panel`) sowie in „Profi“ über `#t-views` (`#look-studio-panel`) und Befehlssuche (`t_a135_boden_licht`).
+- [x] **Studio-Boden mit Spiegelung (`AN-11`)**: `#look-floor-reflect` schaltet den Studio-Boden sichtbar (`reflectivity > 0`, `clearcoat > 0`), `#look-floor-strength` auf `85` steigert `reflectivity > 0,8`, Ausschalten setzt `visible = false` und `reflectivity = 0` (`t_a135_boden_licht`).
+- [x] **Eigenes Umgebungsbild (`AN-11`)**: Laden eines PNG- und eines Radiance-`.hdr`-Umgebungsbildes über `#look-env-input` aktiviert `Viewer.hasCustomEnv` samt Dateiname in `#look-env-status`; `#look-env-clear` kehrt sauber zur Standard-Umgebung zurück (`t_a135_boden_licht`).
+- [x] **Lichter von Hand (`AN-12`)**: `#look-manual-lights` wechselt auf 1 Richtungslicht, `#look-light-add` ergänzt ein 2. und 3. Licht (ab 3 deaktiviert); Farbe `#ff6600`, Azimut `-90°`, Höhe `40°` und Stärke `3,2` erscheinen exakt am 2. Licht in `Viewer.scene`; Entfernen und „Standard-Lichter“ funktionieren (`t_a135_boden_licht`).
+- [x] **Persistenz, Hilfen, DE/EN & Befehle**: `ViewPrefs.exportData()` / `importData()` sichert Boden und Lichter; `werkzeug-hilfen.json`/`HELP` und DE/EN-Schlüssel sind vollständig (`t_a135_boden_licht`).
+- [ ] **Von Hand**: Im Browser ein hochglänzendes Metallteil (z. B. Alu oder Chrom) auf den spiegelnden Studio-Boden stellen, ein echtes 360°-HDR-Panorama laden und die drei Lichter farbig um das Modell drehen.
+
 ## Fehler melden
 
 ```

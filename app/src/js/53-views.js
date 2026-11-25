@@ -1091,9 +1091,10 @@ const Views = (() => {
     out.push('-');
     for (const k of LOOKKEYS) out.push({ label: (pv.look === k ? '✓ ' : '') + T('menu.view.look.' + k), icon: k === 'studio' ? 'spark' : 'eye', help: 'look', id: 'look-' + k, run: () => setLook(k) });
     if (pv.look === 'studio') {
-      for (const k of MOODKEYS) out.push({ label: (pv.mood === k ? '✓ ' : '') + T('menu.view.lightPrefix', { name: T('menu.view.mood.' + k) }), icon: 'sun', help: 'look', id: 'mood-' + k, run: () => ViewPrefs.set({ mood: k }) });
+      for (const k of MOODKEYS) out.push({ label: (!pv.envImageName && pv.mood === k ? '✓ ' : '') + T('menu.view.lightPrefix', { name: T('menu.view.mood.' + k) }), icon: 'sun', help: 'look', id: 'mood-' + k, run: () => ViewPrefs.set({ mood: k, envImageName: '', envImageData: '' }) });
       out.push({ label: (pv.shadows !== false ? '✓ ' : '') + T('menu.view.shadows'), icon: 'shadow', help: 'look', id: 'look-shadows', run: () => ViewPrefs.set({ shadows: pv.shadows === false }) });
     }
+    out.push({ label: T('menu.view.floorLights'), icon: 'sun', help: 'studioFloorLight', id: 'look-studio-panel', run: () => ViewPrefs.openLookPanel() });
     out.push('-', { label: T('menu.view.viewBack'), icon: 'undo', kbd: 'Umschalt Z', help: 'viewBack', id: 'view-back', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() });
     out.push({ label: T('menu.view.saveView'), icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
     for (const v of App.doc.views || []) out.push({ label: T('menu.view.savedViewPrefix', { name: v.name }), icon: 'viewPersp', help: 'savedViews', id: 'view-go-' + v.id, run: () => goView(v.id) });
