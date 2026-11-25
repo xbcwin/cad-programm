@@ -346,20 +346,75 @@ const Model = (() => {
     return out;
   }
 
+  function remapChildIds(items, prefix) {
+    const cloned = deepClone(Array.isArray(items) ? items : []);
+    const idMap = new Map();
+    walk(cloned, (it) => { if (it && it.id) idMap.set(it.id, prefix + it.id); });
+    const mapId = (id) => (id && idMap.has(id) ? idMap.get(id) : id);
+    walk(cloned, (it) => {
+      if (!it) return;
+      if (it.id) it.id = mapId(it.id);
+      if (Array.isArray(it.finishes)) {
+        it.finishes = it.finishes.map((f) => (f && f.id ? { ...f, id: prefix + f.id } : f));
+      }
+      if (it.link) it.link = mapId(it.link);
+      if (it.op && it.op.target) it.op.target = mapId(it.op.target);
+      if (it.p) {
+        if (it.p.target) it.p.target = mapId(it.p.target);
+        if (it.p.wrapId) it.p.wrapId = mapId(it.p.wrapId);
+        if (Array.isArray(it.p.features)) it.p.features = it.p.features.map(mapId);
+        if (it.p.sketch && it.p.sketch.planeRef && it.p.sketch.planeRef.id) {
+          it.p.sketch.planeRef.id = mapId(it.p.sketch.planeRef.id);
+        }
+        if (it.p.toFace && it.p.toFace.id) it.p.toFace.id = mapId(it.p.toFace.id);
+        if (it.p.path3d && Array.isArray(it.p.path3d.bind)) {
+          for (const b of it.p.path3d.bind) {
+            if (b && b.id) b.id = mapId(b.id);
+          }
+        }
+      }
+    });
+    return cloned;
+  }
+
   // Verknüpfte Kopien: Teile mit link = Kennung des Originals übernehmen dessen Form (Art, Maße, Kanten, Rolle);
-  // Lage, Name, Farbe, Sichtbarkeit bleiben eigen. Nur für Teile ohne Unterteile.
+  // Lage, Name, Farbe, Sichtbarkeit bleiben eigen.
   function syncLinks(doc) {
     let n = 0;
     walk(doc.items, (it) => {
       if (!it.link || it.linkFrozen) return;
       const f = find(doc, it.link);
-      if (!f || f.item === it || f.item.link || f.item.kind === 'group') { it.linkLost = true; return; }
+      if (!f || f.item === it || f.item.link || f.item.kind === 'ref' || f.item.partRef) { it.linkLost = true; return; }
       delete it.linkLost;
       const s = f.item;
-      const want = JSON.stringify([s.kind, s.p, s.finishes || [], s.role, s.mir || null]);
-      if (JSON.stringify([it.kind, it.p, it.finishes || [], it.role, it.mir || null]) === want) return;
+      const sm = Array.isArray(s.mir) ? s.mir : [1, 1, 1];
+      const expMirArr = it.linkMirror ? [-sm[0], sm[1], sm[2]] : sm;
+      const expMir = expMirArr.every((v) => v === 1) ? null : expMirArr;
+      if (s.kind === 'group') {
+        const prefix = it.id + '__';
+        const wantChildren = remapChildIds(s.children || [], prefix);
+        const wantRb = s.rollback != null ? s.rollback : null;
+        const want = JSON.stringify([s.kind, s.p, s.finishes || [], s.role, expMir, wantChildren, wantRb, s.userPart || null]);
+        const curRb = it.rollback != null ? it.rollback : null;
+        if (JSON.stringify([it.kind, it.p, it.finishes || [], it.role, it.mir || null, it.children || [], curRb, it.userPart || null]) === want) return;
+        it.kind = 'group';
+        it.p = deepClone(s.p || {});
+        it.finishes = deepClone(s.finishes || []);
+        it.role = s.role;
+        it.children = wantChildren;
+        if (wantRb != null) it.rollback = wantRb; else delete it.rollback;
+        if (s.comp) it.comp = true; else delete it.comp;
+        if (s.userPart) it.userPart = deepClone(s.userPart); else delete it.userPart;
+        if (expMir) it.mir = expMir; else delete it.mir;
+        n++;
+        return;
+      }
+      const want = JSON.stringify([s.kind, s.p, s.finishes || [], s.role, expMir, s.userPart || null]);
+      if (JSON.stringify([it.kind, it.p, it.finishes || [], it.role, it.mir || null, it.userPart || null]) === want) return;
       it.kind = s.kind; it.p = deepClone(s.p); it.finishes = deepClone(s.finishes || []); it.role = s.role;
-      if (s.mir) it.mir = deepClone(s.mir); else delete it.mir;
+      delete it.children; delete it.rollback;
+      if (s.userPart) it.userPart = deepClone(s.userPart); else delete it.userPart;
+      if (expMir) it.mir = expMir; else delete it.mir;
       n++;
     });
     return n;
@@ -529,6 +584,16 @@ const Model = (() => {
         }
       }
     });
+    for (const pat of doc.asmPatterns || []) {
+      if (!pat || !pat.sourceId || !Array.isArray(pat.copyIds)) continue;
+      const what = pat.kind === 'mirror' ? 'gespiegelt von' : 'Baugruppen-Muster von';
+      for (const cid of pat.copyIds) {
+        if (!cid) continue;
+        const cf = find(doc, cid);
+        if (cf && cf.item && cf.item.link === pat.sourceId) continue;
+        out.push({ from: top(cid), to: top(pat.sourceId), what });
+      }
+    }
     for (const d of doc.datums || []) {
       const b = d.base || {};
       if ((b.type === 'face' || b.type === 'tangent') && b.id) out.push({ from: 'datum:' + d.id, to: top(b.id), what: 'Bezugsebene an', datum: d.name });
@@ -2439,6 +2504,24 @@ const Model = (() => {
         if (!Array.isArray(b.cons)) b.cons = [];
       }
     }
+    if (doc.asmPatterns != null && !Array.isArray(doc.asmPatterns)) doc.asmPatterns = [];
+    if (Array.isArray(doc.asmPatterns)) {
+      doc.asmPatterns = doc.asmPatterns
+        .filter((pat) => pat && typeof pat === 'object' && typeof pat.sourceId === 'string' && pat.sourceId)
+        .map((pat) => {
+          const kind = pat.kind === 'circ' || pat.kind === 'mirror' ? pat.kind : 'rect';
+          const out = {
+            ...pat,
+            id: typeof pat.id === 'string' && pat.id ? pat.id : uid('ap'),
+            kind,
+            sourceId: pat.sourceId,
+            copyIds: Array.isArray(pat.copyIds) ? pat.copyIds.filter((id) => typeof id === 'string' && id) : [],
+            skip: Array.isArray(pat.skip) ? [...new Set(pat.skip.map((x) => Math.round(Number(x))).filter((x) => Number.isFinite(x) && x >= 1))] : [],
+          };
+          if (!out.skip.length) delete out.skip;
+          return out;
+        });
+    }
     walk(doc.items, (it) => {
       it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || [];
       if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies;
@@ -2746,6 +2829,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { TEXTURE_KINDS, normalizeTexture, normalizeDecal, matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, remapChildIds, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, parsePatternCSV, pointsPatternParams, tablePatternParams, fillPatternParams, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

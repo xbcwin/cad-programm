@@ -816,10 +816,97 @@ const Comp = (() => {
     }
     App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30));
   }
+  function canPatternPart(it, doc = App.doc) {
+    if (!it || !doc || !Array.isArray(doc.items) || !doc.items.includes(it)) return false;
+    if (typeof App !== 'undefined' && App.ctx) return false;
+    if (it.role === 'hole') return false;
+    if (it.kind === 'transform' && !(it.p && it.p.copy)) return false;
+    if (it.kind === 'scale' || it.kind === 'deform' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'deleteBody' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'sketch3d') return false;
+    if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return false;
+    if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)) return false;
+    return true;
+  }
+  function patternCopyName(src, copyNum, isMirror = false) {
+    const base = Model.label(src);
+    if (isMirror) return `${base} (${T('asm.patMirroredSuffix')})`;
+    if (!/\s+\d+$/.test(base)) return `${base} ${copyNum}`;
+    return `${base} (Kopie ${copyNum})`;
+  }
+  function cloneLinkedPart(doc, src, opts = {}) {
+    if (!src) return null;
+    const copyNum = Math.max(2, Number(opts.copyNum) || 2);
+    const isMirror = !!opts.mirror;
+    const name = opts.name || patternCopyName(src, copyNum, isMirror);
+    let copy;
+    if (src.kind === 'ref') {
+      copy = Model.newItem('ref', deepClone(src.p || {}), { name, color: src.color });
+      copy.t = { ...Model.T0(), ...(src.t ? deepClone(src.t) : {}) };
+    } else if (src.partRef && src.partRef.docId) {
+      copy = deepClone(src);
+      copy.id = uid('i');
+      delete copy.ai; delete copy.op; delete copy.locked; delete copy.asmPat; delete copy.asmPatSlot;
+      copy.name = name;
+      copy.comp = true;
+      copy.children = Model.remapChildIds(src.children || [], copy.id + '__');
+    } else {
+      copy = Model.reId(deepClone(src));
+      delete copy.ai; delete copy.op; delete copy.locked; delete copy.asmPat; delete copy.asmPatSlot;
+      if (copy.kind === 'group') copy.children = Model.remapChildIds(src.children || [], copy.id + '__');
+      copy.name = name;
+      copy.link = src.id;
+      delete copy.linkLost; delete copy.linkFrozen;
+      if (isMirror) copy.linkMirror = true; else delete copy.linkMirror;
+    }
+    if (src.color) copy.color = src.color;
+    if (src.colorSet) copy.colorSet = true; else delete copy.colorSet;
+    if (src.mat != null) copy.mat = src.mat; else delete copy.mat;
+    if (src.massG != null) copy.massG = src.massG; else delete copy.massG;
+    if (src.props) copy.props = deepClone(src.props); else delete copy.props;
+    if (src.opacity != null) copy.opacity = src.opacity; else delete copy.opacity;
+    if (src.texture) copy.texture = deepClone(src.texture); else delete copy.texture;
+    const sm = Array.isArray(src.mir) ? src.mir : [1, 1, 1];
+    const cm = isMirror ? [-sm[0], sm[1], sm[2]] : sm.slice();
+    if (cm.every((v) => v === 1)) delete copy.mir; else copy.mir = cm;
+    return copy;
+  }
+  function syncLinkedPart(doc, copy, src, isMirror = false) {
+    if (!copy || !src) return false;
+    if (src.kind === 'ref') {
+      copy.kind = 'ref';
+      copy.p = deepClone(src.p || {});
+      delete copy.children; delete copy.partRef; delete copy.link; delete copy.linkMirror;
+    } else if (src.partRef && src.partRef.docId) {
+      copy.kind = 'group';
+      copy.comp = true;
+      copy.partRef = deepClone(src.partRef);
+      copy.children = Model.remapChildIds(src.children || [], copy.id + '__');
+      if (src.rollback != null) copy.rollback = src.rollback; else delete copy.rollback;
+      delete copy.link; delete copy.linkMirror;
+    } else {
+      copy.link = src.id;
+      if (isMirror) copy.linkMirror = true; else delete copy.linkMirror;
+    }
+    if (src.color) copy.color = src.color;
+    if (src.colorSet) copy.colorSet = true; else delete copy.colorSet;
+    if (src.mat != null) copy.mat = src.mat; else delete copy.mat;
+    if (src.massG != null) copy.massG = src.massG; else delete copy.massG;
+    if (src.props) copy.props = deepClone(src.props); else delete copy.props;
+    if (src.opacity != null) copy.opacity = src.opacity; else delete copy.opacity;
+    if (src.texture) copy.texture = deepClone(src.texture); else delete copy.texture;
+    const sm = Array.isArray(src.mir) ? src.mir : [1, 1, 1];
+    const cm = isMirror ? [-sm[0], sm[1], sm[2]] : sm.slice();
+    if (cm.every((v) => v === 1)) delete copy.mir; else copy.mir = cm;
+    return true;
+  }
+
   return {
     init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts,
     insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef,
     canReplace, insertFromBlob, insertFromFile, replacePart, replacePartWithFile, replacePartDialog,
+    canPatternPart, patternCopyName, cloneLinkedPart, syncLinkedPart,
+    patternPart: (kind, ids, opts) => typeof Assembly !== 'undefined' && Assembly.createPattern ? Assembly.createPattern(kind, ids, opts) : null,
+    mirrorPart: (ids, opts) => typeof Assembly !== 'undefined' && Assembly.mirrorPart ? Assembly.mirrorPart(ids, opts) : null,
+    patternDialog: (kind, ids) => typeof Assembly !== 'undefined' && Assembly.patternDialog ? Assembly.patternDialog(kind, ids) : null,
     partRefs, allPartRefs, freezeRef, unfreezeRef, toggleFreezeRef, breakRef, freezeAllRefs, unfreezeAllRefs, breakAllRefs,
     refsSection, refsDialog,
   };

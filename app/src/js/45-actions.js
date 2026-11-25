@@ -151,7 +151,13 @@ const Actions = (() => {
     const gone = new Set(ids.map((id) => (Model.topOf(App.doc, id) || {}).id));
     const hit = Model.dependencies(App.doc).filter((x) => gone.has(x.to) && !gone.has(x.from));
     App.change(n > 1 ? `${n} Objekte gelöscht` : 'Gelöscht', (doc) => {
-      for (const id of ids) { const f = Model.find(doc, id); if (f) f.list.splice(f.list.indexOf(f.item), 1); }
+      for (const id of ids) {
+        const f = Model.find(doc, id);
+        if (f) {
+          if (typeof Assembly !== 'undefined' && Assembly.onItemRemoved) Assembly.onItemRemoved(doc, f.item);
+          f.list.splice(f.list.indexOf(f.item), 1);
+        }
+      }
       // leere oder einzelne Gruppen aufräumen
       cleanupGroups(doc);
     });

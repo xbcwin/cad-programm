@@ -802,8 +802,12 @@ const Interact = (() => {
       UI.toast(T('joint.fixedCannotMove', { name: Model.label(top) }), { icon: 'info' });
       down = null; Viewer.controls.enabled = true; return;
     }
+    if (typeof Assembly !== 'undefined' && Assembly.isPatternCopy && Assembly.isPatternCopy(top.id)) {
+      UI.toast(T('asm.patCopyCannotMove', { name: Model.label(top) }), { icon: 'info' });
+      down = null; Viewer.controls.enabled = true; return;
+    }
     if (!App.sel.includes(top.id)) App.select([top.id]);
-    let ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && !isStepMod(x) && !(typeof Joints !== 'undefined' && (Joints.isFixedPart(x.id) || (Joints.dragContext && Joints.dragContext(App.doc, x.id).blocked))));
+    let ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && !isStepMod(x) && !(typeof Joints !== 'undefined' && (Joints.isFixedPart(x.id) || (Joints.dragContext && Joints.dragContext(App.doc, x.id).blocked))) && !(typeof Assembly !== 'undefined' && Assembly.isPatternCopy && Assembly.isPatternCopy(x.id)));
     if (ids.length > 1 && typeof Joints !== 'undefined') {
       const idSet = new Set(ids.map((x) => x.id));
       const skip = new Set();
@@ -1249,6 +1253,11 @@ const Interact = (() => {
         ...(typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc) ? [{ icon: 'replace', label: T('asm.replacePart'), id: 'cm-replace-part', help: 'replacePart', run: () => Comp.replacePartDialog(it.id) }] : []),
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: it.locked ? 'unlock' : 'lock', label: it.locked ? T('asm.unground') : T('asm.ground'), id: 'cm-ground', help: 'groundPart', run: () => Actions.toggleGround([it.id]) },
+        ...(Model.isAssembly(App.doc) && typeof Comp !== 'undefined' && Comp.canPatternPart && Comp.canPatternPart(it, App.doc) ? [
+          { icon: 'patternRect', label: T('asm.patMenuRect'), id: 'cm-asm-pat-rect', help: 'asmPattern', run: () => Assembly.patternDialog('rect', [it.id]) },
+          { icon: 'patternCirc', label: T('asm.patMenuCirc'), id: 'cm-asm-pat-circ', help: 'asmPattern', run: () => Assembly.patternDialog('circ', [it.id]) },
+          { icon: 'mirror', label: T('asm.patMenuMirror'), id: 'cm-asm-mirror', help: 'asmMirror', run: () => Assembly.patternDialog('mirror', [it.id]) },
+        ] : []),
         ...(typeof Comp !== 'undefined' && Comp.partRefs && !ViewPrefs.simple && Comp.partRefs(it.id).length ? [{ icon: 'link', label: T('partRefs.menuLabel', { n: Comp.partRefs(it.id).length }), id: 'cm-part-refs', help: 'partRefs', run: () => Comp.refsDialog(it.id) }] : []),
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
         { icon: 'viewOrtho', label: T('menu.ctx.lookAtFace'), id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },

@@ -2536,6 +2536,16 @@ const HELP = {
   "tip": "Schrauben automatisch einsetzen: erkennt Bohrungen in Bauteilen und setzt passende Normschrauben ein",
   "hilfe": "Sucht alle runden Durchgangs-, Kern- und Sacklöcher in deinen Bauteilen, ordnet ihnen die passende metrische Normschraube (M1.6–M24 nach ISO 273 / DIN 336) zu und schlägt anhand der Materialstärke – auch über mehrere gestapelte Platten hinweg – eine Normlänge vor. Du kannst Größe, Kopfform, Länge sowie Scheiben und Muttern vor dem Einsetzen noch anpassen.",
   "tipp": "Fahre mit der Maus über eine Zeile in der Tabelle, um die zugehörige Bohrung sofort im 3D-Bild markiert zu sehen."
+ },
+ "asmPattern": {
+  "tip": "Teile in der Baugruppe als verknüpfte Kopien vervielfältigen (Reihe, Rechteck oder Kreis)",
+  "hilfe": "Ordnet ein Bauteil in Reihe, im Rechteck oder im Kreis mehrfach an. Alle Kopien bleiben mit der Vorlage verknüpft und zählen in der Stückliste zusammen – änderst du die Vorlage, ändern sich sofort alle Kopien mit.",
+  "tipp": "Anzahl und Abstände kannst du später jederzeit rechts bei einem der Teile anpassen; mit „Muster auflösen“ bleiben die Kopien unabhängig stehen."
+ },
+ "asmMirror": {
+  "tip": "Teil in der Baugruppe spiegeln (verknüpfte Kopie)",
+  "hilfe": "Erzeugt eine gespiegelte, verknüpfte Kopie des gewählten Teils an einer Grund- oder Bezugsebene. Änderungen an der Vorlage übernehmen sich automatisch auf das Spiegelbild.",
+  "tipp": "Verschiebst du die Spiegelebene über den Abstand, wandert die gespiegelte Kopie direkt mit."
  }
 };
 

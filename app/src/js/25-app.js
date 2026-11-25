@@ -605,6 +605,7 @@ const App = (() => {
     placeNewAtMarker(S.doc, topBefore);
     Model.syncLinks(S.doc);
     if (Model.syncBlocks) Model.syncBlocks(S.doc);
+    if (typeof Assembly !== 'undefined' && Assembly.syncPatterns) Assembly.syncPatterns(S.doc);
     if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(S.doc);
     Model.cleanFolders(S.doc);
     S.doc.modified = Date.now();

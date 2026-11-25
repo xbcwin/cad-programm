@@ -1936,6 +1936,17 @@ body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
 .as-row-used{opacity:.72}
 .as-flip{min-width:28px;padding:0 6px}
 
+/* Baugruppen-Muster & Spiegeln (BG-26) */
+.ap-dlg{display:grid;gap:10px}
+.ap-modes{width:100%}
+.ap-modes button{flex:1;justify-content:center}
+.ap-fields{display:grid;gap:8px}
+.ap-summary{margin:0}
+.ap-card{display:grid;gap:8px}
+.asm-pat-row .swatch{display:grid;place-items:center;background:var(--surface-2);color:var(--accent);border:1px solid var(--line)}
+.asm-pat-row .swatch svg{width:12px;height:12px}
+
+
 
 
 
