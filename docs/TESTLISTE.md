@@ -2702,6 +2702,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Speichern & Laden, Validierung & Hilfen**: `doc.poses` besteht `Store.validateProject`, bleibt nach `Store.saveProject`/`loadProject` sowie `.tracery.json`-Export und erneutem Laden erhalten und fährt „auf“ wieder auf `90°`; `HELP.namedPoses`, DE/EN-Texte und Befehlssuche (`save-pose`) sind vollständig (`t_a157_benannte_stellungen`).
 - [ ] **Von Hand**: Im Browser das Beispiel „Baugruppe Scharnier“ im Modus „Einfach“ und „Profi“ öffnen, Stellungen wie „auf“ (90°) und „zu“ (0°) über den Verlauf „Stellungen“ und die Eigenschaften speichern, per Klick umschalten und nach „Projekt als Datei speichern“ und erneutem Öffnen prüfen.
 
+## Volltest-Reparatur (Auto [F-11251236])
+
+- [x] **Skizzen-Lineal frei von Verlaufs-Kopfzeile (`[A-117]`)**: `.panel-head`/`.tabs` in `#left` bleiben innerhalb `--col-l` (auch bei `180 px` schmaler Leiste) und verdecken `#sk-ruler-c` nicht mehr; der Klick auf `#sk-ruler-c` schaltet das polare Raster um (`t_a117_polares_raster_hilfslinien`, `t_f11251236`).
+- [x] **Beispiel-Galerie im I18n-Testmodus (`[A-074]`)**: Alle 8 Beispiel-Karten nutzen `start.ex.*`-Texte bzw. `I18n.mark()`, werden mit `I18n.setTestMode(true)` vollständig mit `⟦…⟧` markiert und halten DE/EN-Schlüsselgleichheit (`t_a074_uebersetzbare_oberflaeche_2`, `t_a149_beispiel_galerie`, `t_f11251236`).
+- [x] **Gelenk-Anschlag, Körper-Zeilen-Auswahl, Mittellinien-Vorschau & Tooltip-Timer**: `Joints.setStops()` aktualisiert das rechte Panel auch bei fokussiertem Eingabefeld sofort (`t_gelenk_anschlag`, `t_f11251236`); `Panels.syncLeftSelection()` erhält `.body-row`-Knoten bei Auswahlwechsel per Klick (`t_koerper_liste`, `t_f11251236`); `loftPreview()` im `select`-Werkzeug läuft auch über Fenster-`pointermove`/ohne `mouseUV` (`t_uebergang_mittellinie`); `UI.initTips()` bricht laufende Tooltip-Timer bei Kindelement-Wechseln innerhalb desselben `[data-help]`-Ziels nicht ab (`t_a081_englische_oberflaeche`, `t_f11251236`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Skizze öffnen, die linke Leiste schmal ziehen und das Lineal-Ecksymbol `#sk-ruler-c` anklicken; außerdem in den Einstellungen über den Sprache-Eintrag fahren und die schnelle Tooltip-Anzeige prüfen.
+
 ## Fehler melden
 
 ```

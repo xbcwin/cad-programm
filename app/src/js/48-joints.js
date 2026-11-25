@@ -7141,7 +7141,7 @@ const Joints = (() => {
     return [s[lo].a, s[hi].a];
   }
   function setStops(jid, lo, hi) {
-    App.change('Gelenk-Anschlag', (doc) => {
+    const ok = App.change('Gelenk-Anschlag', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return false;
       const a = round(Math.min(lo, hi), 2), b = round(Math.max(lo, hi), 2);
       const sw = sweepMeta(j);
@@ -7151,6 +7151,8 @@ const Joints = (() => {
       else if (sw.key === 'rx') { j.minRx = a; j.maxRx = b; j.stopsLocked = true; }
       else { j.min = a; j.max = b; }
     });
+    if (ok === false) return;
+    Panels.renderRight();
     UI.toast('Anschlag gesetzt – weiter lässt sich die Verbindung nicht bewegen.', { icon: 'check' });
   }
 

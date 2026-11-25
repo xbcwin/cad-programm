@@ -329,6 +329,12 @@ const Start = (() => {
       return null;
     }
   }
+  function exampleText(ex, field) {
+    const k = `start.ex.${ex.id}.${field}`;
+    if (I18n.packs && I18n.packs.de && Object.prototype.hasOwnProperty.call(I18n.packs.de, k)) return T(k);
+    const raw = I18n.lang === 'en' ? (ex[field + 'En'] || ex[field]) : ex[field];
+    return raw ? (I18n.mark ? I18n.mark(raw) : raw) : '';
+  }
   function renderExamplesGrid(grid, list) {
     if (!grid) return;
     grid.innerHTML = '';
@@ -336,11 +342,10 @@ const Start = (() => {
       grid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('start.examplesEmpty')));
       return;
     }
-    const isEn = I18n.lang === 'en';
     for (const ex of list) {
-      const title = isEn ? (ex.nameEn || ex.name) : ex.name;
-      const desc = isEn ? (ex.descEn || ex.desc) : ex.desc;
-      const tag = isEn ? (ex.tagEn || ex.tag) : ex.tag;
+      const title = exampleText(ex, 'name');
+      const desc = exampleText(ex, 'desc');
+      const tag = exampleText(ex, 'tag');
       const btn = h('button', { type: 'button', class: 'card example-card', dataset: { exampleId: ex.id } });
       const th = h('div', { class: 'thumb example-thumb' },
         h('img', { src: 'data/beispiele/' + ex.thumb, alt: title }),
