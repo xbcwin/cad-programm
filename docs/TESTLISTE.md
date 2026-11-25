@@ -2664,6 +2664,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert beide gekoppelten Teile live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-screw`, `couple-belt`, `couple-linear`) und Hilfetexte (`coupleScrew`, `coupleBelt`, `coupleLinear`) laufen fehlerfrei (`t_a152_kopplungen_schraube_riemen_linear`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus ein zylindrisches Bolzen-Gelenk mit Steigung `2 mm` sowie zwei Zahnräder (`20` und `40` Zähne) per Kontextleiste → „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild mit der Maus ziehen und das gleichzeitige Mitdrehen bzw. Verschieben optisch prüfen.
 
+## Geschlossene Mechanismen lösen (Auto [A-154], BG-16)
+
+- [x] **Viergelenk über volle 360°**: Ein Grashof-Viergelenk aus vier Stäben und vier Drehgelenken dreht bei `30°`, `90°`, `180°`, `270°` und `360°` geschlossen mit (`< 0,01 mm` Spalt an allen vier Gelenken und starren Stablängen, `t_a154_geschlossene_mechanismen`).
+- [x] **Kurbeltrieb (R-R-R-P)**: Bei `90°` und `180°` Kurbelwinkel landet der Kolben exakt auf `√2100 mm` bzw. `30,0 mm` ohne Versatz quer zur Führung (`< 0,01 mm`, `t_a154_geschlossene_mechanismen`).
+- [x] **Unmögliche Stellung & Meldung**: Sowohl an der Schwinge des Grashof-Viergelenks, am Nicht-Grashof-Viergelenk als auch hinter dem Totpunkt des Kurbeltriebs wird die unmögliche Stellung abgelehnt, `#toasts` zeigt „Dieser Mechanismus klemmt hier“, alle Gelenke bleiben `< 0,01 mm` geschlossen und `Strg+Z` geht sauber zurück (`t_a154_geschlossene_mechanismen`).
+- [x] **Profi-Schutz, Live-Ziehen & Abspielen**: Im Einfach-Modus werden geschlossene Gelenkketten abgelehnt; im Profi-Modus bewegen `applyDrag` und `play` alle Glieder gemeinsam (`t_a154_geschlossene_mechanismen`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus vier Stäbe als Viergelenk über „Gelenk“ im Kreis verbinden, die Kurbel mit der Maus im 3D-Bild ziehen und mit dem Schieberegler über einen Totpunkt fahren, bis die Meldung „Dieser Mechanismus klemmt hier“ erscheint.
+
 ## Kurvenscheibe / Nocken (Auto [A-153], BG-15)
 
 - [x] **Exzentrische Scheibe (5 mm Versatz → 10 mm Hub)**: Dreht eine um `5 mm` versetzte Scheibe über 0°–360°, folgt der Stößel der echten Außenkontur (Anlage über `#coupling-dialog` mit Vorschau-Kurve `#cp-cam-chart`), erreicht im Gelenk und real im 3D-Raum exakt `10,0 mm` Hub und kehrt bei `360°` an den Ausgangspunkt zurück (`t_a153_kurvenscheibe_nocken`).
