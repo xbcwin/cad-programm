@@ -1513,5 +1513,15 @@
     "tip": "Start und Ende des Übergangs tangential (G1) oder krümmungsglatt (G2) an Nachbarflächen anschließen (Profi)",
     "hilfe": "Im Profi-Modus legst du unter „Weicher Anschluss“ für Start und Ende einzeln fest, ob der Übergang frei, tangential (ohne Knick) oder krümmungsglatt (gleiche Wölbung) an den benachbarten Körper anschließt. Berührende Nachbarflächen erkennt Tracery automatisch oder du wählst sie über „Fläche wählen“ selbst aus.",
     "tipp": "Mit dem Regler „Stärke“ bestimmst du von 0,1 bis 3,0, wie weit der Übergang die Anschlussrichtung hält, bevor er zum nächsten Umriss einlenkt."
+  },
+  "splitFace": {
+    "tip": "Kurve auf eine Fläche projizieren und die Fläche daran teilen (Profi)",
+    "hilfe": "Wähle eine ebene oder gekrümmte Fläche (z. B. einen Zylindermantel oder eine Kugel) und klicke auf „Fläche teilen“. Zeichne eine geschlossene Form oder eine offene Kurve und bestätige mit „Fertig“. Tracery projiziert die Kurve auf die Fläche und teilt nur diese Oberfläche – der Körper bleibt ein einzelnes Stück.",
+    "tipp": "Jede entstandene Teilfläche kannst du anschließend einzeln anklicken, mit einer eigenen Farbe versehen oder gezielt weiterbearbeiten."
+  },
+  "dome": {
+    "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
+    "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
+    "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
   }
 }

@@ -36,6 +36,8 @@ const Toolbar = (() => {
       { id: 'vent', group: T('dlg.tb.grpEdit'), domId: 't-vent', icon: 'vent', label: T('kind.vent'), tip: T('dlg.tb.ventTip'), cls: 'minor', help: 'vent', run: () => Features.startVent() },
       { id: 'fins', group: T('dlg.tb.grpEdit'), domId: 't-fins', icon: 'fins', label: T('kind.fins'), tip: T('dlg.tb.finsTip'), cls: 'minor', help: 'fins', run: () => Features.startFins() },
       { id: 'web', group: T('dlg.tb.grpEdit'), domId: 't-web', icon: 'web', label: T('kind.web'), tip: T('dlg.tb.webTip'), cls: 'minor', help: 'web', run: () => Features.startWeb() },
+      { id: 'splitFace', group: T('dlg.tb.grpEdit'), domId: 't-splitFace', icon: 'splitFace', label: T('kind.splitFace'), tip: T('dlg.tb.splitFaceTip'), cls: 'minor pro', help: 'splitFace', run: () => Features.startSplitFace() },
+      { id: 'dome', group: T('dlg.tb.grpEdit'), domId: 't-dome', icon: 'dome', label: T('kind.dome'), tip: T('dlg.tb.domeTip'), cls: 'minor pro', help: 'dome', run: () => Features.startDome() },
       { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
       { id: 'helix', group: T('dlg.tb.grpEdit'), domId: 't-helix', icon: 'helix', label: T('kind.helix'), tip: T('dlg.tb.helixTip'), cls: 'minor', help: 'helix', run: () => Features.helix() },
       { id: 'deform', group: T('dlg.tb.grpEdit'), domId: 't-deform', icon: 'deform', label: T('kind.deform'), tip: T('dlg.tb.deformTip'), cls: 'minor pro', help: 'deform', run: () => Features.deform() },

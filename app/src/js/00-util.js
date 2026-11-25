@@ -706,6 +706,8 @@ const IC = {
   vent: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6.5 8h11M6.5 12h11M6.5 16h11" stroke-width="2.1"/>',
   fins: '<path d="M3 19h18"/><path d="M5 19V7M9.5 19V7M14.5 19V7M19 19V7" stroke-width="2"/><path d="M5 7v12M9.5 7v12M14.5 7v12M19 7v12" opacity=".3"/>',
   web: '<rect x="3" y="3" width="18" height="18" rx="1.5" opacity=".45"/><path d="M3 12h18M12 3v18M6 6l12 12M18 6L6 18" />',
+  splitFace: '<path d="M4 17c4-3 12-3 16 0V7c-4-3-12-3-16 0z" opacity=".35" fill="currentColor"/><path d="M4 17c4-3 12-3 16 0V7c-4-3-12-3-16 0z"/><circle cx="12" cy="11.5" r="3.4" stroke-dasharray="2 1.5"/>',
+  dome: '<path d="M3 16h18v4H3z" opacity=".35" fill="currentColor"/><path d="M3 16h18v4H3z"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10" fill="currentColor" opacity=".2"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2247,6 +2249,16 @@ const HELP = {
   "tip": "Start und Ende des Übergangs tangential (G1) oder krümmungsglatt (G2) an Nachbarflächen anschließen (Profi)",
   "hilfe": "Im Profi-Modus legst du unter „Weicher Anschluss“ für Start und Ende einzeln fest, ob der Übergang frei, tangential (ohne Knick) oder krümmungsglatt (gleiche Wölbung) an den benachbarten Körper anschließt. Berührende Nachbarflächen erkennt Tracery automatisch oder du wählst sie über „Fläche wählen“ selbst aus.",
   "tipp": "Mit dem Regler „Stärke“ bestimmst du von 0,1 bis 3,0, wie weit der Übergang die Anschlussrichtung hält, bevor er zum nächsten Umriss einlenkt."
+ },
+ "splitFace": {
+  "tip": "Kurve auf eine Fläche projizieren und die Fläche daran teilen (Profi)",
+  "hilfe": "Wähle eine ebene oder gekrümmte Fläche (z. B. einen Zylindermantel oder eine Kugel) und klicke auf „Fläche teilen“. Zeichne eine geschlossene Form oder eine offene Kurve und bestätige mit „Fertig“. Tracery projiziert die Kurve auf die Fläche und teilt nur diese Oberfläche – der Körper bleibt ein einzelnes Stück.",
+  "tipp": "Jede entstandene Teilfläche kannst du anschließend einzeln anklicken, mit einer eigenen Farbe versehen oder gezielt weiterbearbeiten."
+ },
+ "dome": {
+  "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
+  "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
  }
 };
 

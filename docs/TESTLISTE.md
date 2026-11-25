@@ -2445,6 +2445,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Modus, Zeitleiste, Formeln, Bezüge & Hilfe**: `#ctx-deform` und `#add-deform` nur im Profi-Modus sichtbar; Unterdrücken/Reaktivieren, Rückgängig/Wiederholen, Formel im Winkel, `Model.dependencies`, `Explain.local` und `HELP.deform` geprüft.
 - [ ] **Von Hand**: Einen Körper mit Durchgangsbohrung im 3D-Bild um 90° biegen und visuell prüfen, dass die Flächen und Bohrungskanten glatt ohne sichtbare Lücken dargestellt werden.
 
+## Kurve auf Fläche projizieren, Fläche teilen & Kuppel (Auto [A-124], KP-35, KP-36)
+
+- [x] **Kreis auf Zylindermantel projizieren & teilen (`splitFace`)**: Kreis (r = 5 mm) auf Zylindermantel (Ø30 × 40) projiziert → Flächenzahl steigt exakt von 3 auf 4 (1 Solid, Volumen unverändert, `GeomCheck` 0 Funde), beide Teilflächen sind über `faceColors`/`Viewer.faceIndexOf` getrennt färbbar; Umschalten auf „Beide Seiten“ teilt Vorder- und Rückseite (5 Flächen); im Modus „Einfach“ bleibt `#ctx-split-face` verborgen; Unterdrücken und Zeitleisten-Marker funktionieren sauber.
+- [x] **Kuppel auf ebener Fläche (`dome`)**: 5 mm Kuppel auf Quader-Oberseite (20×20×20) erhöht die Gesamthöhe exakt auf 25 mm (`+5 mm`) als gültiger Einzelkörper (`GeomCheck` 0 Funde); Ändern der Höhe (8 mm), Umschalten auf Kugelkappe (`spherical`) und „Nach innen“ (`flip`), Unterdrücken sowie 5 mm Kuppel auf Zylinder-Oberseite (Ø20 × 20 → Höhe 25 mm) funktionieren; Hilfetexte (`werkzeug-hilfen.json`) und Schritt-Erklärungen (`Explain.local`) sind vollständig.
+- [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel eine geschwungene Kurve mit „Fläche teilen“ projizieren, die abgetrennte Teilfläche farbig markieren und eine nach außen sowie eine nach innen gewölbte Kuppel im 3D-Bild optisch prüfen.
+
 ## Fehler melden
 
 ```

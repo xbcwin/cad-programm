@@ -24959,6 +24959,167 @@ def t_a125_verformen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a124_flaeche_teilen_kuppel(p):
+    # 1. KP-35: Kreis auf Zylindermantel (Ø 30 × 40) projizieren und Fläche teilen (nur Profi)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro'); Actions.addPrimitive('cylinder', { p: { d: 30, h: 40 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    st0 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([id], { face: { id, faceIdx: fi } });
+      return { faces0: r.data.faces.length, fi };""")
+    p.wait(300)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_simple_sf = not p.pg.locator('#ctx-split-face').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    btn_sf = p.pg.locator('#ctx-split-face')
+    has_sf_btn = btn_sf.count() == 1 and btn_sf.is_visible() and btn_sf.get_attribute('data-help') == 'splitFace'
+    btn_sf.click(); p.wait(1000)
+    sk_active = p.ev("return Sketch.active && Sketch.state.tool === 'circle'")
+    p.ev("Sketch.insertEnts([{ type: 'circle', c: [0, 0], r: 5 }]);")
+    p.wait(300)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(700)
+    has_side_sel = p.pg.locator('#st-sf-side').count() == 1
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 35); p.wait(400)
+    gc1 = p.ev("return GeomCheck.run({ silent: true })")
+    v1_sf = volumen(p)
+    st1 = p.ev("""const id = App.doc.items[0].id, sfid = App.doc.items[1].id, r = App.results.get(id);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE');
+      let colorOk = false;
+      if (cyls.length === 2) {
+        const fcA = { c: cyls[0].c, col: '#e8833a' };
+        const fcB = { c: cyls[1].c, col: '#3f7fd6' };
+        App.change('Flächen färben', (doc) => { Model.find(doc, id).item.faceColors = [fcA, fcB]; });
+        const iA = Viewer.faceIndexOf(id, fcA), iB = Viewer.faceIndexOf(id, fcB);
+        colorOk = iA >= 0 && iB >= 0 && iA !== iB;
+      }
+      return {
+        errs: App.errors.length,
+        items: App.doc.items.length,
+        kind: App.doc.items[1].kind,
+        merged: App.mergedInto(sfid) === id,
+        faces: r.data.faces.length,
+        cyls: cyls.length,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        colorOk,
+      };""")
+    v0 = 3.141592653589793 * 15 * 15 * 40
+    ok1 = (
+        hidden_simple_sf and has_sf_btn and sk_active is True and has_side_sel
+        and st0['faces0'] == 3 and st1['errs'] == 0 and st1['items'] == 2
+        and st1['kind'] == 'splitFace' and st1['merged'] is True
+        and st1['faces'] == st0['faces0'] + 1 and st1['cyls'] == 2
+        and st1['bodies'] == 1 and v1_sf is not None and abs(v1_sf - v0) < 2
+        and gc1 and len(gc1.get('issues', [])) == 0 and st1['colorOk'] is True
+    )
+
+    # 2. KP-35: „Beide Seiten“ teilt vorn & hinten (5 Flächen), Unterdrücken & Zeitleisten-Marker
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.select_option('#sf-side', 'both')
+    warte_rechnen(p, 35); p.wait(300)
+    f_both = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20); p.wait(250)
+    f_sup = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 30); p.wait(250)
+    p.ev("Timeline.setMarker(1)")
+    warte_rechnen(p, 20); p.wait(250)
+    f_mk1 = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    p.ev("Timeline.setMarker(2)")
+    warte_rechnen(p, 30); p.wait(250)
+    f_mk2 = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    info_sf = p.ev("return Explain.local(App.doc.items[1].id).lines.map(l => l.t).join(' ')")
+    ok2 = (
+        f_both == 5 and f_sup == 3 and f_mk1 == 3 and f_mk2 == 5
+        and 'teilt' in info_sf.lower()
+    )
+
+    # 3. KP-36: Kuppel 5 mm auf Quader-Oberseite (20×20×20) → Höhe +5 (zMax = 25)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    b0_vol = volumen(p)
+    b0 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });
+      return { zMax: r.data.bbox[5] };""")
+    p.wait(300)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_simple_dm = not p.pg.locator('#ctx-dome').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    btn_dm = p.pg.locator('#ctx-dome')
+    has_dm_btn = btn_dm.count() == 1 and btn_dm.is_visible() and btn_dm.get_attribute('data-help') == 'dome'
+    btn_dm.click()
+    warte_rechnen(p, 35); p.wait(400)
+    gc3 = p.ev("return GeomCheck.run({ silent: true })")
+    dm_vol = volumen(p)
+    st_dm = p.ev("""const id = App.doc.items[0].id, did = App.doc.items[1].id, r = App.results.get(id);
+      return {
+        errs: App.errors.length,
+        items: App.doc.items.length,
+        kind: App.doc.items[1].kind,
+        merged: App.mergedInto(did) === id,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        zMax: r.data.bbox[5],
+      };""")
+    ok3 = (
+        hidden_simple_dm and has_dm_btn
+        and st_dm['errs'] == 0 and st_dm['items'] == 2
+        and st_dm['kind'] == 'dome' and st_dm['merged'] is True
+        and st_dm['bodies'] == 1
+        and abs(b0['zMax'] - 20) < 0.05 and abs(st_dm['zMax'] - (b0['zMax'] + 5)) < 0.05
+        and b0_vol is not None and dm_vol is not None and dm_vol > b0_vol + 1000
+        and gc3 and len(gc3.get('issues', [])) == 0
+    )
+
+    # 4. KP-36: Höhe 8 mm, Kugelkappe, nach innen, Unterdrücken, Zylinder-Kuppel & Hilfetexte
+    p.pg.fill('#dome-h', '8'); p.pg.press('#dome-h', 'Enter')
+    warte_rechnen(p, 35); p.wait(300)
+    dm_h8_vol = volumen(p)
+    dm_h8 = p.ev("const r=App.results.get(App.doc.items[0].id); return { zMax: r.data.bbox[5], errs: App.errors.length };")
+    p.pg.select_option('#dome-shape', 'spherical')
+    warte_rechnen(p, 35); p.wait(300)
+    dm_sph_vol = volumen(p)
+    dm_sph = p.ev("const r=App.results.get(App.doc.items[0].id); return { zMax: r.data.bbox[5], errs: App.errors.length };")
+    p.pg.locator('#dome-flip').click()
+    warte_rechnen(p, 35); p.wait(300)
+    dm_in_vol = volumen(p)
+    dm_in = p.ev("const r=App.results.get(App.doc.items[0].id); return { zMax: r.data.bbox[5], errs: App.errors.length };")
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20); p.wait(250)
+    v_sup_dm = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 30); p.wait(250)
+    info_dm = p.ev("return Explain.local(App.doc.items[1].id).lines.map(l => l.t).join(' ')")
+
+    # Kuppel 5 mm auf Zylinder-Oberseite
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(250)
+    p.pg.locator('#ctx-dome').click()
+    warte_rechnen(p, 35); p.wait(300)
+    dm_cyl = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, zMax: r.data.bbox[5], bodies: r.data.bodies ? r.data.bodies.length : 1 };")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('splitFace', 'dome'))
+    ok4 = (
+        dm_h8['errs'] == 0 and abs(dm_h8['zMax'] - 28) < 0.05
+        and dm_sph['errs'] == 0 and abs(dm_sph['zMax'] - 28) < 0.05
+        and dm_sph_vol is not None and dm_h8_vol is not None and b0_vol < dm_sph_vol < dm_h8_vol
+        and dm_in['errs'] == 0 and abs(dm_in['zMax'] - 20) < 0.05 and dm_in_vol is not None and dm_in_vol < b0_vol - 100
+        and v_sup_dm is not None and abs(v_sup_dm - b0_vol) < 1
+        and ('kuppel' in info_dm.lower() or 'kugelkappe' in info_dm.lower())
+        and dm_cyl['errs'] == 0 and dm_cyl['bodies'] == 1 and abs(dm_cyl['zMax'] - 25) < 0.05
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25193,6 +25354,7 @@ TESTS = [
     ('[A-123] Übergang mit weichem Anschluss: tangential, krümmungsglatt & Stärke (KP-31)', t_a123_uebergang_anschluss),
     ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
     ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
+    ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
