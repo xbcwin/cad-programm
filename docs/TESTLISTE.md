@@ -2605,6 +2605,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, DE/EN & Befehle**: `HELP.illustration`/`HELP.quadView`, DE/EN-Schlüsselgleichheit und Befehlssuche (`disp-illustration`, `quad-view`) geprüft (`t_a137_illustration_vierfach`).
 - [ ] **Von Hand**: Im Browser einen abgerundeten Körper mit Bohrungen in „Technische Illustration“ drehen, die Kanten- und Umrissqualität (auch per „Bild speichern“) prüfen und in der Vierfach-Ansicht gleichzeitig aus allen vier Blickrichtungen modellieren.
 
+## Verlauf abschalten: freies Bearbeiten, Schritt 1 (Auto [A-147], KP-54)
+
+- [x] **Profi-Schalter & Verlauf abschalten**: `#chk-no-history` ist in „Einfach“ ausgeblendet und in „Profi“ sichtbar; ein 3-Schritte-Teil (Quader vereinigt mit Zylinder minus Aussparung) wird beim Einschalten sauber als BREP eingefroren, Verlauf-Liste (`#left-body .node`, `.tree`) und Zeitleiste (`#timeline .tl-chip`) sind leer bei unverändertem Volumen und Hüllmaßen (`t_verlauf_abschalten`).
+- [x] **Direkte Bearbeitung & Rückgängig**: Bohrung setzen (`Place.holeWizard`), Kantenrundung (`Actions.addFinish`) und Verschieben wirken direkt am eingefrorenen Körper ohne neue Schritte; 3× `App.undo()` und `App.redo()` stellen jeden Zwischenstand exakt wieder her (`t_verlauf_abschalten`).
+- [x] **Zurückschalten & Metadaten**: Zurückschalten fragt per Bestätigungs-Dialog (`#nh-resume-cancel` / `#nh-resume-ok`) nach und legt den eingefrorenen Stand als ersten Schritt im neuen Verlauf an; `HELP.noHistory`, Befehl `toggle-no-history` und DE/EN-Schlüsselgleichheit geprüft (`t_verlauf_abschalten`).
+- [ ] **Von Hand**: Im Browser in „Profi“ ein Teil mit mehreren Schritten anlegen, „Ohne Verlauf arbeiten“ aktivieren, den Körper per Ziehgriff im Bild verschieben, per Rechtsklick-/Kontextleiste eine Bohrung setzen und abrunden, mit `Strg Z` zurückgehen und über „Verlauf einschalten“ wieder mit einzelnen Schritten weiterbauen.
+
 ## Fehler melden
 
 ```

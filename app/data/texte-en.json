@@ -3708,5 +3708,20 @@
   "import.errUnsupported": "The file format of “{name}” is not supported. Supported are project (.json), STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY, DXF, SVG and CSV/XYZ.",
   "import.errSvgBad": "Could not read this SVG – the file is damaged or not a valid SVG.",
   "import.svgSanitized": "Scripts or external links were removed from the SVG for security.",
-  "import.errJsonBad": "The JSON file is damaged or unreadable."
+  "import.errJsonBad": "The JSON file is damaged or unreadable.",
+  "kind.frozen": "Frozen",
+  "left.tree.noHistoryLabel": "Work without history",
+  "left.tree.noHistoryInfoHtml": "<b>History off:</b> The body is frozen. Moving, drilling and filleting apply directly to the body without a step list. Undo (Ctrl+Z) still works as usual.",
+  "tl.noHistoryBar": "History off · Edits apply directly to the body",
+  "tl.resumeBtn": "Turn history on",
+  "tl.resumeTitle": "Turn history back on?",
+  "tl.resumeBody": "The current frozen state becomes the first step in the new history. New edits will appear as individual steps again.",
+  "tl.resumeConfirm": "Turn history on",
+  "tl.noHistoryOnToast": "History turned off – the body is frozen. Edits apply directly (Undo remains active).",
+  "tl.noHistoryOffToast": "History turned back on – the frozen state is now the first step.",
+  "tl.noHistoryNoAsm": "“Work without history” is only available for single parts (bodies), not assemblies.",
+  "tl.noHistoryMoveHint": "Without history, drag the body directly in the viewport or adjust its position under “Location” on the right.",
+  "tl.frozenBodyName": "Frozen body",
+  "panel.imp.frozenDirectHint": "Frozen body (no history). Moving, drilling and filleting apply directly to this body.",
+  "panel.imp.frozenStepHint": "Frozen state as the first step in history. Further steps build on top of it."
 }

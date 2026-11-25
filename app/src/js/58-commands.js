@@ -419,6 +419,7 @@ const Commands = (() => {
     add('paste', 'Kopierte Körper einfügen', 'copy', 'einfügen einfuegen zwischenablage tab projekt strg v', () => Clipboard.paste(), { group: 'Bearbeiten', kbd: 'Strg V' });
     add('dup', 'Duplizieren', 'copy', 'kopieren kopie', () => Actions.duplicate(), { group: 'Bearbeiten', kbd: 'Strg D', needSel: true });
     add('tree-folder', 'In Ordner legen', 'folder', 'ordner verlauf schritte zusammenfassen gruppieren', () => Actions.createFolder(), { group: 'Verlauf', needSel: true });
+    add('toggle-no-history', 'Ohne Verlauf arbeiten ein-/ausschalten', 'rollback', 'ohne verlauf abschalten einfrieren freies bearbeiten direkt schritte aus', () => Timeline.setNoHistory(!Timeline.isNoHistory()), { group: 'Verlauf', when: () => !ViewPrefs.simple && !Model.isAssembly(App.doc) });
     add('group', 'Gruppieren', 'group', 'verbinden vereinen zusammenfügen kombinieren', () => Actions.group(), { group: 'Bearbeiten', kbd: 'Strg G', needSel: true });
     add('ungroup', 'Gruppe lösen', 'ungroup', 'trennen auflösen', () => Actions.ungroup(), { group: 'Bearbeiten', needSel: true });
     add('hole', 'Zwischen Körper und Loch wechseln', 'hole', 'loch körper umschalten aussparung', () => Actions.toggleRole(), { group: 'Bearbeiten', kbd: 'H', needSel: true });

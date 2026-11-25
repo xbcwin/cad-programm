@@ -2449,6 +2449,11 @@ const HELP = {
   "tip": "Alles als Paket (ZIP): Projekt, Zeichnungen (PDF), STEP und STL je Körper zusammen speichern",
   "hilfe": "Packt dein gesamtes Projekt in eine einzige ZIP-Datei: die Tracery-Projektdatei zum Weiterbauen, alle technischen Zeichnungen als PDF, das komplette Modell als STEP sowie eine eigene STL-Datei für jeden sichtbaren Körper.",
   "tipp": "Ideal zum Weitergeben, Archivieren oder für den Fertiger – alle wichtigen Formate sind direkt dabei."
+ },
+ "noHistory": {
+  "tip": "Ohne Verlauf arbeiten: Körper einfrieren und direkt verschieben, bohren und runden (Profi)",
+  "hilfe": "Friert deinen aktuellen Körper als feste Form ein und blendet die Schritte-Liste aus. Neue Änderungen wie Verschieben, Bohren oder Abrunden wirken sofort direkt am Körper, ohne neue Schritte zu sammeln. Rückgängig (Strg Z) funktioniert weiter wie gewohnt.",
+  "tipp": "Wenn du wieder mit Schritten arbeiten willst, nimm das Häkchen einfach wieder heraus – nach einer kurzen Rückfrage startet der eingefrorene Stand als erster Schritt im Verlauf."
  }
 };
 

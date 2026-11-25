@@ -886,6 +886,212 @@ const App = (() => {
     autosave();
     return true;
   }
+  // ---------- Ohne Verlauf arbeiten: Körper einfrieren & direkt bearbeiten (KP-54) ----------
+  function transformSpatialMeta(list, m, isDecal = false) {
+    if (!Array.isArray(list) || !list.length || !m) return list;
+    const nMat = new THREE.Matrix3().getNormalMatrix(m);
+    const xf = (obj) => {
+      if (!obj || typeof obj !== 'object') return obj;
+      const out = { ...obj };
+      if (Array.isArray(obj.c) && obj.c.length >= 3) {
+        out.c = new THREE.Vector3(obj.c[0], obj.c[1], obj.c[2]).applyMatrix4(m).toArray().map((v) => round(v, 6));
+      }
+      if (Array.isArray(obj.n) && obj.n.length >= 3) {
+        out.n = new THREE.Vector3(obj.n[0], obj.n[1], obj.n[2]).applyMatrix3(nMat).normalize().toArray().map((v) => round(v, 6));
+      }
+      return out;
+    };
+    return list.map((entry) => {
+      if (!entry) return entry;
+      const out = Patch.jsonClone(entry);
+      if (isDecal) { if (out.face) out.face = xf(out.face); }
+      else Object.assign(out, xf(out));
+      return out;
+    });
+  }
+  function worldBoxOfTop(doc, it) {
+    if (!it) return null;
+    let b = S.ownBoxes && S.ownBoxes.get(it.id);
+    if (!b) {
+      const r = S.results && S.results.get(it.id);
+      if (r && r.data && r.data.bbox) b = r.data.bbox;
+    }
+    if (!b) b = Model.itemLocalBox(it, Model.itemVars(doc, it.id));
+    if (!b || b.length < 6) return null;
+    const box = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
+    box.applyMatrix4(Model.localMatrix(it));
+    return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+  }
+  function boxesHit(a, b, tol = 1e-3) {
+    if (!a || !b) return false;
+    return a[0] <= b[3] + tol && a[3] >= b[0] - tol && a[1] <= b[4] + tol && a[4] >= b[1] - tol && a[2] <= b[5] + tol && a[5] >= b[2] - tol;
+  }
+  function isCleanFrozenBody(it) {
+    return !!(it && it.kind === 'import' && it.role !== 'hole' && it.p && it.p.fmt === 'brep' && it.p.frozen === true && !(it.finishes && it.finishes.length) && !it.op && !it.mir);
+  }
+  function needsDirectBake(doc) {
+    if (!doc || !doc.noHistory || !Array.isArray(doc.items) || !doc.items.length) return false;
+    if (doc.rollback != null || (Array.isArray(doc.folders) && doc.folders.length)) return true;
+    const act = Model.activeItems(doc);
+    const solidBoxes = [];
+    const holeItems = [];
+    for (const it of act) {
+      if (it.hidden) continue;
+      if (it.role === 'hole') { holeItems.push(it); continue; }
+      if (!isCleanFrozenBody(it)) return true;
+      const wb = worldBoxOfTop(doc, it);
+      if (wb) solidBoxes.push(wb);
+    }
+    for (const h of holeItems) {
+      const hb = worldBoxOfTop(doc, h);
+      if (!hb || !solidBoxes.length || solidBoxes.some((sb) => boxesHit(hb, sb))) return true;
+    }
+    return false;
+  }
+  async function bakeItemsToFrozen(doc, opts = {}) {
+    await Kernel.ensure();
+    const act = Model.activeItems(doc);
+    const hasRes = S.results && S.results.size > 0;
+    const liveSolids = act.filter((it) => !it.hidden && it.role !== 'hole' && !S.merged.has(it.id) && !S.deletedBy.has(it.id) && (!hasRes || S.results.has(it.id)));
+    const solidBoxes = liveSolids.map((it) => worldBoxOfTop(doc, it));
+    const looseHoles = [];
+    const activeHoles = [];
+    for (const it of act) {
+      if (it.hidden || it.role !== 'hole') continue;
+      const hb = worldBoxOfTop(doc, it);
+      if (hb && solidBoxes.length && solidBoxes.every((sb) => sb && !boxesHit(hb, sb))) looseHoles.push(Patch.jsonClone(it));
+      else activeHoles.push({ item: it, wb: hb });
+    }
+    const scene = Model.kernelScene(doc);
+    const frozenSolids = [];
+    const idMap = new Map();
+    const usedIds = new Set(looseHoles.map((x) => x.id));
+    for (let idx = 0; idx < liveSolids.length; idx++) {
+      const root = liveSolids[idx];
+      const sb = solidBoxes[idx];
+      let metaSrc = root;
+      if (root.kind === 'group' && Array.isArray(root.children)) {
+        const firstSolid = root.children.find((c) => c && c.role !== 'hole' && !c.suppressed);
+        if (firstSolid) metaSrc = firstSolid;
+      }
+      const preferredId = metaSrc && metaSrc.p && metaSrc.p.frozen && !usedIds.has(metaSrc.id)
+        ? metaSrc.id
+        : (!usedIds.has(root.id) ? root.id : uid('i'));
+      usedIds.add(preferredId);
+      const holeHits = activeHoles.some((h) => !h.wb || !sb || boxesHit(h.wb, sb));
+      if (!opts.bakeTransforms && isCleanFrozenBody(root) && !holeHits) {
+        const kept = Patch.jsonClone(root);
+        frozenSolids.push(kept);
+        idMap.set(root.id, kept.id);
+        continue;
+      }
+      const res = await Kernel.call('exportBREP', { scene, only: [root.id] });
+      const bytes = new Uint8Array(res.data);
+      const blobId = typeof Store !== 'undefined' && Store.putBlob ? await Store.putBlob(bytes) : null;
+      const baseName = (root.name && root.name.trim()) ? root.name.trim() : ((metaSrc && metaSrc.name && metaSrc.name.trim()) ? metaSrc.name.trim() : Model.label(root));
+      const mat = root.mat || (metaSrc && metaSrc.mat) || undefined;
+      const colorSet = !!(root.colorSet || (metaSrc && metaSrc.colorSet));
+      const color = root.colorSet ? root.color : (metaSrc && metaSrc.colorSet ? metaSrc.color : (root.color || (metaSrc && metaSrc.color)));
+      const imp = Model.newItem(
+        'import',
+        { fmt: 'brep', frozen: true, file: baseName + '.brep', ...(blobId ? { blobId } : {}), size: bytes.byteLength, ...(!blobId && typeof Store !== 'undefined' && Store.bytesToBase64 ? { data: Store.bytesToBase64(bytes) } : {}) },
+        { name: baseName, color, mat }
+      );
+      imp.id = preferredId;
+      imp.t = Model.T0();
+      if (colorSet) imp.colorSet = true;
+      const op = root.opacity != null ? root.opacity : (metaSrc && metaSrc.opacity != null ? metaSrc.opacity : null);
+      if (op != null) imp.opacity = op;
+      const mg = root.massG != null ? root.massG : (metaSrc && metaSrc.massG != null ? metaSrc.massG : null);
+      if (mg != null) imp.massG = mg;
+      const tex = root.texture || (metaSrc && metaSrc.texture);
+      if (tex) imp.texture = Patch.jsonClone(tex);
+      const fcSrc = Array.isArray(root.faceColors) && root.faceColors.length ? root : (metaSrc && Array.isArray(metaSrc.faceColors) && metaSrc.faceColors.length ? metaSrc : null);
+      if (fcSrc) imp.faceColors = transformSpatialMeta(fcSrc.faceColors, Model.worldMatrix(doc, fcSrc.id), false);
+      const dcSrc = Array.isArray(root.decals) && root.decals.length ? root : (metaSrc && Array.isArray(metaSrc.decals) && metaSrc.decals.length ? metaSrc : null);
+      if (dcSrc) imp.decals = transformSpatialMeta(dcSrc.decals, Model.worldMatrix(doc, dcSrc.id), true);
+      Model.walk([root], (x) => idMap.set(x.id, imp.id));
+      for (const [srcId, tgtId] of S.merged) {
+        let cur = tgtId;
+        const seen = new Set([srcId]);
+        while (S.merged.has(cur) && !seen.has(cur)) { seen.add(cur); cur = S.merged.get(cur); }
+        if (cur === root.id) idMap.set(srcId, imp.id);
+      }
+      frozenSolids.push(imp);
+    }
+    return { items: [...frozenSolids, ...looseHoles], idMap };
+  }
+  function remapSelectionIds(sel, doc, idMap) {
+    const valid = new Set((doc.items || []).map((x) => x.id));
+    const out = [];
+    for (const id of sel || []) {
+      const mapped = (idMap && idMap.get(id)) || id;
+      if (valid.has(mapped) && !out.includes(mapped)) out.push(mapped);
+    }
+    return out;
+  }
+  function applyDirectBake(frozenItems, idMap) {
+    const beforeObj = cloneDoc(S.doc);
+    S.doc.items = frozenItems;
+    S.doc.rollback = null;
+    S.doc.folders = [];
+    S.doc.modified = Date.now();
+    const last = S.undo[S.undo.length - 1];
+    if (S.redo.length) {
+      const topRedo = S.redo[S.redo.length - 1];
+      const nextDoc = Patch.applyForward(cloneDoc(beforeObj), topRedo.ops);
+      S.redoBytes -= topRedo.bytes;
+      topRedo.ops = Patch.diff(S.doc, nextDoc);
+      topRedo.bytes = Patch.estimateBytes(topRedo.ops, topRedo.label);
+      S.redoBytes += topRedo.bytes;
+    }
+    if (last) {
+      const baseDoc = Patch.applyBackward(cloneDoc(beforeObj), last.ops);
+      S.undoBytes -= last.bytes;
+      last.ops = Patch.diff(baseDoc, S.doc);
+      last.bytes = Patch.estimateBytes(last.ops, last.label);
+      S.undoBytes += last.bytes;
+    }
+    trimHistory();
+    S.sel = remapSelectionIds(S.sel, S.doc, idMap);
+    S.face = null; S.faces = []; S.edges = [];
+    S.revision = nextRev();
+    pruneMerged();
+    syncCurrentMeta();
+    ev.emit('doc');
+    ev.emit('dirty', { doc: S.doc, revision: S.revision });
+    ev.emit('tabs');
+    ev.emit('selection');
+    autosave();
+  }
+  async function setNoHistory(on) {
+    const target = !!on;
+    if (target === !!(S.doc && S.doc.noHistory)) return true;
+    if (target && Model.isAssembly(S.doc)) return false;
+    if (S.ctx) setCtx(null);
+    if (S.peek != null) peek(null);
+    const hasActive = needsKernelFor(S.doc, [], null);
+    if (hasActive && (busy || dirty || S.doc.items.some((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !S.merged.has(x.id) && !S.deletedBy.has(x.id) && !S.results.has(x.id)))) {
+      await rebuild();
+    }
+    const baked = hasActive ? await bakeItemsToFrozen(S.doc, { bakeTransforms: true }) : { items: [], idMap: new Map() };
+    if (!target && baked.items.length === 1 && (!baked.items[0].name || !baked.items[0].name.trim())) {
+      baked.items[0].name = T('tl.frozenBodyName');
+    }
+    const prevSel = S.sel.slice();
+    change(target ? 'Verlauf abgeschaltet' : 'Verlauf wieder eingeschaltet', (doc) => {
+      if (target) doc.noHistory = true;
+      else delete doc.noHistory;
+      doc.rollback = null;
+      doc.folders = [];
+      doc.items = baked.items;
+    });
+    const nextSel = remapSelectionIds(prevSel, S.doc, baked.idMap);
+    select(nextSel);
+    await rebuild();
+    return true;
+  }
+
   function cancelRebuild() {
     if (!busy) return false;
     cancelRunId = curRunId;
@@ -906,6 +1112,7 @@ const App = (() => {
     curRunId = myRunId;
     let calcEmitted = false;
     let wasCancelled = false;
+    let lastBakedRev = -1;
     while (dirty) {
       dirty = false;
       const buildTabId = activeTabId;
@@ -973,6 +1180,22 @@ const App = (() => {
       if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
       if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       apply(res);
+      if (S.doc.noHistory && S.peek == null && !(S.extra && S.extra.length) && !(res && res.errors && res.errors.length) && S.revision !== lastBakedRev && needsDirectBake(S.doc)) {
+        const bakeRev = S.revision;
+        try {
+          const baked = await bakeItemsToFrozen(S.doc, { bakeTransforms: false });
+          if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
+          if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+          if (S.revision === bakeRev && S.doc.noHistory) {
+            applyDirectBake(baked.items, baked.idMap);
+            lastBakedRev = S.revision;
+            dirty = true;
+            continue;
+          }
+        } catch (e) {
+          console.error('Direkt-Einfrieren:', e);
+        }
+      }
       ev.emit('rebuilt');
     }
     busy = false; clearTimeout(busyTimer); clearTimeout(cancelTimer); cancelTimer = null; setCanCancel(false);
@@ -1243,6 +1466,7 @@ const App = (() => {
     get evalStats() { return S.evalStats; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
+    get noHistory() { return !!(S.doc && S.doc.noHistory); }, setNoHistory,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
     get dirty() { return S.revision !== S.cleanRev; },
