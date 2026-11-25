@@ -4,22 +4,44 @@ const UI = (() => {
   // stumm geschaltet (z. B. während der KI-Kollege arbeitet): Meldungen werden gesammelt statt gezeigt
   let muted = null;
   function mute(on) { if (on) { muted = []; return null; } const m = muted || []; muted = null; return m; }
+  const TOAST_SLICE = 500;
   function scheduleToast(el, ms) {
     clearTimeout(el._timer);
-    el._timer = setTimeout(() => {
+    el._rem = Math.max(0, ms);
+    const tick = () => {
       if (!el.isConnected) return;
       if (busyEl || (typeof App !== 'undefined' && App.busy)) {
         el._waitBusy = true;
-        scheduleToast(el, 500);
+        el._timer = setTimeout(tick, TOAST_SLICE);
         return;
       }
       if (el._waitBusy) {
         el._waitBusy = false;
-        scheduleToast(el, el._ttl || 3200);
-        return;
+        el._rem = el._ttl || 3200;
       }
-      el.remove();
-    }, ms);
+      const step = Math.min(el._rem, TOAST_SLICE);
+      const started = performance.now();
+      el._timer = setTimeout(() => {
+        if (!el.isConnected) return;
+        if (busyEl || (typeof App !== 'undefined' && App.busy)) {
+          el._waitBusy = true;
+          el._timer = setTimeout(tick, TOAST_SLICE);
+          return;
+        }
+        if (el._waitBusy) {
+          el._waitBusy = false;
+          el._rem = el._ttl || 3200;
+          tick();
+          return;
+        }
+        const dt = performance.now() - started;
+        // Ein Hauptthread-Hänger (> 250 ms über Zielzeit) darf höchstens 100 ms Restzeit abziehen
+        el._rem -= dt > step + 250 ? Math.min(step, 100) : step;
+        if (el._rem <= 0) el.remove();
+        else tick();
+      }, step);
+    };
+    tick();
   }
   function toast(text, opts = {}) {
     const plain = typeof text === 'string' ? text : (text && text.textContent) || '';

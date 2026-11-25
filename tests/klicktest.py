@@ -23760,6 +23760,60 @@ def t_a117_polares_raster_hilfslinien(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_f11250121(p):
+    # 1. Fokus-Vorschau zeichnet bei blockiertem requestAnimationFrame über Timer-Fallback
+    p.empty()
+    p.ev("Actions.addPrimitive('box')")
+    warte_rechnen(p)
+    box_id = p.ev("return App.doc.items[0].id")
+    p.ev("App.clearSelection(); Views.focus(true)")
+    p.wait(100)
+    ok_empty = p.ev("return !Views.focusDrawn && Array.isArray(Views.focusIds) && Views.focusIds.length === 0")
+    ok_raf = False
+    ok_clear = False
+    try:
+        p.ev("""
+          window.__origRAF1125 = window.requestAnimationFrame;
+          window.__rafQueue1125 = [];
+          window.requestAnimationFrame = (cb) => { window.__rafQueue1125.push(cb); return window.__rafQueue1125.length; };
+        """)
+        p.wait(50)
+        p.ev("App.select([arg])", box_id)
+        p.wait(250)
+        st = p.ev("return { drawn: Views.focusDrawn, ids: Views.focusIds }")
+        ok_raf = bool(st['drawn'] and st['ids'] == [box_id])
+        p.ev("App.clearSelection()")
+        p.wait(100)
+        st2 = p.ev("return { drawn: Views.focusDrawn, ids: Views.focusIds }")
+        ok_clear = bool((not st2['drawn']) and st2['ids'] == [])
+    finally:
+        p.ev("""
+          if (window.__origRAF1125) {
+            window.requestAnimationFrame = window.__origRAF1125;
+            const q = window.__rafQueue1125 || [];
+            window.__origRAF1125 = null;
+            window.__rafQueue1125 = [];
+            for (const cb of q) try { window.requestAnimationFrame(cb); } catch (_) {}
+          }
+          Views.focus(false);
+        """)
+    ok1 = ok_empty and ok_raf and ok_clear
+
+    # 2. Meldung (UI.toast) überlebt einzelnen Hauptthread-Hänger und verschwindet nach Restlaufzeit
+    p.ev("UI.busy(false)")
+    p.ev("""
+      UI.toast('Stall-Test-Meldung', { icon: 'info', ms: 600 });
+      const t0 = performance.now();
+      while (performance.now() - t0 < 900) {}
+    """)
+    p.wait(120)
+    alive_after_stall = p.pg.locator('.toast', has_text='Stall-Test-Meldung').count() == 1
+    p.wait(900)
+    gone_after_rest = p.pg.locator('.toast', has_text='Stall-Test-Meldung').count() == 0
+    ok2 = alive_after_stall and gone_after_rest
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -23986,6 +24040,7 @@ TESTS = [
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('[A-118] Skizzen-Blöcke (SK-31)', t_a118_skizzen_bloecke),
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
+    ('[F-11250121] Volltest-Reparatur: Fokus-Vorschau zeichnet bei rAF-Stau / Meldung überlebt Hauptthread-Hänger', t_f11250121),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
