@@ -695,6 +695,8 @@ const IC = {
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
+  conic: '<path d="M4 17l8-11 8 11" stroke-dasharray="2.2 2" opacity=".5"/><path d="M4 17Q12 6 20 17" /><circle cx="12" cy="11.5" r="1.7" fill="currentColor"/><circle cx="4" cy="17" r="1.4" fill="currentColor"/><circle cx="20" cy="17" r="1.4" fill="currentColor"/>',
+  bridge: '<path d="M3 16h3.5M17.5 8H21" opacity=".55"/><path d="M6.5 16C11 16 13 8 17.5 8" /><circle cx="6.5" cy="16" r="1.6" fill="currentColor"/><circle cx="17.5" cy="8" r="1.6" fill="currentColor"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2141,6 +2143,26 @@ const HELP = {
   "tip": "Eine geschlossene Fläche automatisch mit Löchern füllen (Raster, versetzt oder Waben)",
   "hilfe": "Klick eine geschlossene Fläche in der Skizze an (bei nur einer Fläche ist sie schon gewählt). Stelle Musterart (Raster, versetzte Kreise oder Sechseck-Waben), Lochgröße, Abstand von Mitte zu Mitte und Randabstand ein – kein Loch schneidet den Rand.",
   "tipp": "Der Steg zwischen den Löchern ist Abstand minus Lochgröße. Nach „Füllung anlegen“ lässt sich jedes Loch wie gewohnt einzeln bearbeiten oder löschen."
+ },
+ "conic2d": {
+  "tip": "Kegelschnitt aus Start, Ende, Schulterpunkt und Rho-Wert",
+  "hilfe": "Klicke im Profi-Modus Startpunkt, Endpunkt und den spitzen Schulterpunkt (Tangentenschnittpunkt) an und ziehe die Kurve über den Rho-Wert auf (oder tippe ihn ein). Unter 0,5 entsteht ein Ellipsenstück, bei genau 0,5 eine Parabel und darüber eine Hyperbel.",
+  "tipp": "Mit Rho = 0,5 bekommst du exakt eine Parabel; den Rho-Wert kannst du danach rechts jederzeit zwischen 0,05 und 0,95 nachstellen."
+ },
+ "bridge2d": {
+  "tip": "Brückenkurve: weicher Übergang zwischen zwei offenen Kurvenenden",
+  "hilfe": "Klicke im Profi-Modus nacheinander zwei offene Kurvenenden (Linie, Bogen, Teil-Ellipse, Spline, Kegelschnitt oder Brücke) an. Wähle rechts „Tangential (G1)“ für einen knickfreien Übergang oder „Krümmungsglatt (G2)“, wenn auch die Krümmung ohne Sprung anschließen soll.",
+  "tipp": "Mit „Stärke 1“ und „Stärke 2“ steuerst du, wie weit die Brückenkurve an jedem Ende in die bestehende Richtung weiterläuft. Änderst du später eine der beiden Kurven, wandert die Brücke automatisch mit."
+ },
+ "splineControl": {
+  "tip": "Weiche Formkurve über Kontrollpunkte (Profi)",
+  "hilfe": "Bei „Mit Kontrollpunkten“ beginnt die Kurve exakt im ersten Punkt und endet im letzten Punkt. Alle Punkte dazwischen ziehen die Kurve wie Magnete weich an, ohne dass sie durch jeden Punkt hindurch muss.",
+  "tipp": "Ideal für glatte Übergänge ohne Dellen – am rechten Rand oder vor dem Zeichnen kannst du jederzeit zwischen „Durch Punkte“ und „Mit Kontrollpunkten“ wechseln."
+ },
+ "splineHandles": {
+  "tip": "Tangenten-Griffe an jedem Punkt einer Durchgangs-Spline einstellen (Profi)",
+  "hilfe": "Wähle eine Durchgangs-Spline aus, um an jedem Punkt einen Griff für Richtung (Winkel) und Stärke (Länge) der Tangente zu sehen. Ziehe ein Griffende direkt im Bild oder gib Winkel und Stärke rechts bzw. mit dem Maß-Werkzeug (D) exakt ein.",
+  "tipp": "Mit „Griff zurücksetzen“ übernimmt der Punkt wieder automatisch die weiche Standard-Tangente seiner Nachbarpunkte."
  }
 };
 

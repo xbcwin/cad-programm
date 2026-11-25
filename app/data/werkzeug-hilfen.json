@@ -1418,5 +1418,25 @@
     "tip": "Eine geschlossene Fläche automatisch mit Löchern füllen (Raster, versetzt oder Waben)",
     "hilfe": "Klick eine geschlossene Fläche in der Skizze an (bei nur einer Fläche ist sie schon gewählt). Stelle Musterart (Raster, versetzte Kreise oder Sechseck-Waben), Lochgröße, Abstand von Mitte zu Mitte und Randabstand ein – kein Loch schneidet den Rand.",
     "tipp": "Der Steg zwischen den Löchern ist Abstand minus Lochgröße. Nach „Füllung anlegen“ lässt sich jedes Loch wie gewohnt einzeln bearbeiten oder löschen."
+  },
+  "conic2d": {
+    "tip": "Kegelschnitt aus Start, Ende, Schulterpunkt und Rho-Wert",
+    "hilfe": "Klicke im Profi-Modus Startpunkt, Endpunkt und den spitzen Schulterpunkt (Tangentenschnittpunkt) an und ziehe die Kurve über den Rho-Wert auf (oder tippe ihn ein). Unter 0,5 entsteht ein Ellipsenstück, bei genau 0,5 eine Parabel und darüber eine Hyperbel.",
+    "tipp": "Mit Rho = 0,5 bekommst du exakt eine Parabel; den Rho-Wert kannst du danach rechts jederzeit zwischen 0,05 und 0,95 nachstellen."
+  },
+  "bridge2d": {
+    "tip": "Brückenkurve: weicher Übergang zwischen zwei offenen Kurvenenden",
+    "hilfe": "Klicke im Profi-Modus nacheinander zwei offene Kurvenenden (Linie, Bogen, Teil-Ellipse, Spline, Kegelschnitt oder Brücke) an. Wähle rechts „Tangential (G1)“ für einen knickfreien Übergang oder „Krümmungsglatt (G2)“, wenn auch die Krümmung ohne Sprung anschließen soll.",
+    "tipp": "Mit „Stärke 1“ und „Stärke 2“ steuerst du, wie weit die Brückenkurve an jedem Ende in die bestehende Richtung weiterläuft. Änderst du später eine der beiden Kurven, wandert die Brücke automatisch mit."
+  },
+  "splineControl": {
+    "tip": "Weiche Formkurve über Kontrollpunkte (Profi)",
+    "hilfe": "Bei „Mit Kontrollpunkten“ beginnt die Kurve exakt im ersten Punkt und endet im letzten Punkt. Alle Punkte dazwischen ziehen die Kurve wie Magnete weich an, ohne dass sie durch jeden Punkt hindurch muss.",
+    "tipp": "Ideal für glatte Übergänge ohne Dellen – am rechten Rand oder vor dem Zeichnen kannst du jederzeit zwischen „Durch Punkte“ und „Mit Kontrollpunkten“ wechseln."
+  },
+  "splineHandles": {
+    "tip": "Tangenten-Griffe an jedem Punkt einer Durchgangs-Spline einstellen (Profi)",
+    "hilfe": "Wähle eine Durchgangs-Spline aus, um an jedem Punkt einen Griff für Richtung (Winkel) und Stärke (Länge) der Tangente zu sehen. Ziehe ein Griffende direkt im Bild oder gib Winkel und Stärke rechts bzw. mit dem Maß-Werkzeug (D) exakt ein.",
+    "tipp": "Mit „Griff zurücksetzen“ übernimmt der Punkt wieder automatisch die weiche Standard-Tangente seiner Nachbarpunkte."
   }
 }

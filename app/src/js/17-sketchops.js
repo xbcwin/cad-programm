@@ -40,15 +40,17 @@ const SKO = (() => {
         tOf: (p) => norm(Math.atan2(p[1] - seg.c[1], p[0] - seg.c[0])) / TAU,
       };
     }
-    // Spline, Ellipse und elliptischer Bogen: als Linienzug mit Bogenlängen-Parameter
+    // Spline, Ellipse, elliptischer Bogen, Kegelschnitt und Brücke: als Linienzug mit Bogenlängen-Parameter
     const poly = seg.t === 'ellipse' ? (() => { const q = SK.ellipsePoints(seg.c, seg.rx, seg.ry, seg.rot); q.push(q[0]); return q; })()
       : seg.t === 'ellarc' ? SK.ellArcPoints(seg.c, seg.rx, seg.ry, seg.rot, seg.a0, seg.a1, seg.ccw)
-      : seg.t === 'bez' ? SK.bezPoints(seg) : SK.splinePoints(seg.pts, seg.closed);
+      : seg.t === 'conic' ? SK.conicPoints(seg.a, seg.m, seg.b, seg.rho)
+      : seg.t === 'bridge' ? SK.bridgePoints(seg.pts)
+      : seg.t === 'bez' ? SK.bezPoints(seg) : SK.splinePoints(seg.pts, seg.closed, seg);
     const cum = [0];
     for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + d2(poly[i - 1], poly[i]));
     const total = cum[cum.length - 1] || 1;
     return {
-      type: 'spline', closed: seg.t === 'ellipse' || (seg.t !== 'ellarc' && !!seg.closed), poly, cum, total, pts: seg.pts || poly,
+      type: 'spline', closed: seg.t === 'ellipse' || (seg.t !== 'ellarc' && !!seg.closed), mode: seg.mode, handles: seg.handles, poly, cum, total, pts: seg.pts || poly,
       at: (t) => {
         const L = Math.max(0, Math.min(1, t)) * total;
         let i = 1; while (i < cum.length - 1 && cum[i] < L) i++;
@@ -249,7 +251,7 @@ const SKO = (() => {
   // Vorschau: der Teil, der wegfällt
   function trimRemoved(plan) {
     const { C, lo, hi } = plan;
-    if (plan.kind === 'delete' || plan.kind === 'single') return SK.segPoints(C.type === 'circle' ? { t: 'circle', c: C.c, r: C.r } : C.type === 'spline' ? { t: 'spline', pts: C.pts, closed: C.closed } : C.type === 'arc' ? { t: 'arc', a: C.at(0), m: C.at(0.5), b: C.at(1) } : { t: 'line', a: C.a, b: C.b });
+    if (plan.kind === 'delete' || plan.kind === 'single') return SK.segPoints(C.type === 'circle' ? { t: 'circle', c: C.c, r: C.r } : C.type === 'spline' ? { t: 'spline', pts: C.pts, closed: C.closed, mode: C.mode, handles: C.handles } : C.type === 'arc' ? { t: 'arc', a: C.at(0), m: C.at(0.5), b: C.at(1) } : { t: 'line', a: C.a, b: C.b });
     const e = pieceOf(C, lo.t, hi.t);
     return SK.segPoints(e.type === 'line' ? { t: 'line', a: e.a, b: e.b } : e.type === 'arc' ? { t: 'arc', a: e.a, m: e.m, b: e.b } : { t: 'spline', pts: e.pts, closed: false });
   }
@@ -709,7 +711,10 @@ const SKO = (() => {
       return { ok: true, ent: { type: 'spline', pts, closed: false } };
     }
     if (e.type === 'spline') {
-      const P = e.pts, m = P.length;
+      const P = e.mode === 'cv' || (Array.isArray(e.handles) && e.handles.some(Array.isArray))
+        ? (() => { const q = SK.splinePoints(e.pts, !!e.closed, e); return e.closed && q.length > 1 ? q.slice(0, -1) : q; })()
+        : e.pts;
+      const m = P.length;
       const pts = P.map((p, i) => {
         const p0 = e.closed ? P[(i - 1 + m) % m] : P[Math.max(0, i - 1)], p1 = e.closed ? P[(i + 1) % m] : P[Math.min(m - 1, i + 1)];
         const t = sub(p1, p0), L = Math.hypot(t[0], t[1]) || 1;
@@ -727,6 +732,7 @@ const SKO = (() => {
       case 'line': case 'slot': return ['a', 'b'];
       case 'point': return ['a'];
       case 'arc': return ['a', 'b', 'c'];
+      case 'conic': return ['a', 'b', 'm'];
       case 'circle': case 'poly': case 'ellipse': case 'ellarc': return ['c'];
       case 'text': return ['a'];
       case 'rect': return ['k0', 'k1', 'k2', 'k3'];
@@ -765,7 +771,26 @@ const SKO = (() => {
         ents.push({ id, type: 'ellarc', c: pr(p0), rx: e.rx, ry: e.ry, rot: flip ? Math.atan2(ux[1], ux[0]) : polyRot(e), a0: flip ? -e.a0 : e.a0, a1: flip ? -e.a1 : e.a1, ccw: flip ? !(e.ccw !== false) : e.ccw !== false, ...base });
         pairs.push([R(e.id, 'c'), R(id, 'c')]); break;
       }
-      case 'spline': ents.push({ id, type: 'spline', pts: e.pts.map((p) => pr(f(p))), closed: !!e.closed, ...base }); e.pts.forEach((_, i) => pairs.push([R(e.id, 'p' + i), R(id, 'p' + i)])); break;
+      case 'spline': {
+        const hs = Array.isArray(e.handles) ? e.handles.map((h, i) => {
+          if (!Array.isArray(h)) return null;
+          const p0 = f(e.pts[i]), p1 = f([e.pts[i][0] + h[0], e.pts[i][1] + h[1]]);
+          return pr([p1[0] - p0[0], p1[1] - p0[1]]);
+        }) : null;
+        ents.push({ id, type: 'spline', pts: e.pts.map((p) => pr(f(p))), closed: !!e.closed, ...(e.mode ? { mode: e.mode } : {}), ...(hs && hs.some(Array.isArray) ? { handles: hs } : {}), ...base });
+        e.pts.forEach((_, i) => pairs.push([R(e.id, 'p' + i), R(id, 'p' + i)]));
+        break;
+      }
+      case 'conic': {
+        ents.push({ id, type: 'conic', a: pr(f(e.a)), m: pr(f(e.m)), b: pr(f(e.b)), rho: e.rho, ...base });
+        pairs.push([R(e.id, 'a'), R(id, 'a')], [R(e.id, 'b'), R(id, 'b')], [R(e.id, 'm'), R(id, 'm')]);
+        break;
+      }
+      case 'bridge': {
+        const pts = (e.pts || []).map((p) => pr(f(p)));
+        ents.push({ id, type: 'bridge', a: pts[0] || pr(f(e.a)), b: pts[pts.length - 1] || pr(f(e.b)), mode: e.mode || 'g1', s1: e.s1 != null ? e.s1 : 1, s2: e.s2 != null ? e.s2 : 1, refA: null, refB: null, pts, ...base });
+        break;
+      }
       case 'rect': {
         if (!explodeRect) {
           ents.push({ id, type: 'rect', a: pr(f(e.a)), b: pr(f(e.b)), ...base });
@@ -919,7 +944,7 @@ const SKO = (() => {
     const putV = (xy, ep) => { const k = key(xy); if (!verts.has(k)) verts.set(k, []); verts.get(k).push(ep); };
     for (const e of list) {
       if (dropped.has(e.id)) continue;
-      if (!(e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2))) continue;
+      if (!(e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'conic' || e.type === 'bridge' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2))) continue;
       const a = SK.endA(e), b = SK.endB(e);
       if (d2(a, b) <= 1e-9) continue;
       putV(a, { e: e.id, p: 'a', xy: a, type: e.type, npts: e.pts ? e.pts.length : 0, revAxis: !!e.revAxis });
@@ -1176,6 +1201,8 @@ const SKO = (() => {
       }
       if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') return p === 'c' ? e.c : null;
       if (e.type === 'ellarc') return p === 'c' ? e.c : p === 'a' ? SK.endA(e) : p === 'b' ? SK.endB(e) : null;
+      if (e.type === 'conic') return p === 'a' || p === 'b' || p === 'm' ? e[p] : null;
+      if (e.type === 'bridge') return p === 'a' ? SK.endA(e) : p === 'b' ? SK.endB(e) : null;
       if (e.type === 'point' || e.type === 'text') return p === 'a' ? e.a : null;
       if (e.type === 'spline' && /^p\d+$/.test(p)) return e.pts[+p.slice(1)] || null;
       return null;
@@ -1190,6 +1217,8 @@ const SKO = (() => {
       else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => addP('k' + i, q)); addP('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
       else if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') addP('c', e.c);
       else if (e.type === 'ellarc') { addP('a', SK.endA(e)); addP('b', SK.endB(e)); addP('c', e.c); }
+      else if (e.type === 'conic') { addP('a', e.a); addP('b', e.b); addP('m', e.m); }
+      else if (e.type === 'bridge') { addP('a', SK.endA(e)); addP('b', SK.endB(e)); }
       else if (e.type === 'point' || e.type === 'text') addP('a', e.a);
       else if (e.type === 'spline') (e.pts || []).forEach((q, i) => addP('p' + i, q));
     }
@@ -1295,6 +1324,7 @@ const SKO = (() => {
       const e = byId(id); if (!e) continue;
       const fixP = (pName, xy) => { if (xy) tryAdd('con', { id: uid('k'), type: 'fix', refs: [{ e: id, p: pName }], at: xy.map(r4) }); };
       if (e.type === 'arc') { fixP('b', e.b); fixP('a', e.a); }
+      else if (e.type === 'conic') { fixP('b', e.b); fixP('a', e.a); fixP('m', e.m); }
       else if (e.type === 'spline') (e.pts || []).forEach((q, i) => { if (cur.dof > 0) fixP('p' + i, q); });
       else if (e.type === 'line' || e.type === 'slot') { fixP('b', e.b); fixP('a', e.a); }
       else if (e.type === 'rect') { const c = SK.rectCorners(e); fixP('k2', c[2]); fixP('k0', c[0]); }
@@ -1321,9 +1351,10 @@ const SKO = (() => {
     for (const e of ents || []) {
       if (!e || e.link) continue;
       const moves = [], ePts = [];
-      if (e.type === 'line' || e.type === 'slot') {
+      if (e.type === 'line' || e.type === 'slot' || e.type === 'conic') {
         if (inBox(e.a)) { addMove(moves, 'a0', 0); addMove(moves, 'a1', 1); ePts.push(e.a.slice()); }
         if (inBox(e.b)) { addMove(moves, 'b0', 0); addMove(moves, 'b1', 1); ePts.push(e.b.slice()); }
+        if (e.type === 'conic' && inBox(e.m)) { addMove(moves, 'm0', 0); addMove(moves, 'm1', 1); ePts.push(e.m.slice()); }
       } else if (e.type === 'point' || e.type === 'text') {
         if (inBox(e.a)) { addMove(moves, 'a0', 0); addMove(moves, 'a1', 1); ePts.push(e.a.slice()); }
       } else if (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' || e.type === 'ellarc') {

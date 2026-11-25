@@ -328,7 +328,7 @@ body.tablet .dock-opt{min-height:44px}
 .consbar .tool svg{width:18px;height:18px}
 /* beide Skizzenleisten untereinander; bei vielen Werkzeugen brechen sie um statt abgeschnitten zu werden */
 .skbars{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;flex-direction:column;align-items:center;gap:6px;width:max-content;max-width:calc(100% - 140px);pointer-events:none}
-.skbars>.sketchbar{position:static;transform:none;max-width:100%;flex-wrap:wrap;justify-content:center;overflow:visible;row-gap:3px;pointer-events:auto}
+.skbars>.sketchbar{position:static;transform:none;max-width:100%;flex-wrap:wrap;justify-content:center;overflow:visible;row-gap:2px;pointer-events:auto}
 /* Regeln senkrecht am linken Rand – so bleibt oben Platz zum Zeichnen */
 .consbar.vert{top:50%;left:12px;transform:translateY(-50%);flex-direction:column;max-width:none;max-height:calc(100% - 140px);overflow-x:hidden;overflow-y:auto;padding:5px 3px;gap:2px}
 .consbar.vert .title{writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 0 6px}
@@ -438,7 +438,7 @@ body.sketching .timeline{display:none}
 
 .view-btns svg{width:19px;height:19px}
 .axis-gizmo{position:absolute;left:12px;bottom:12px;width:64px;height:64px;pointer-events:none;z-index:11}
-.sketchbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
+.sketchbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:1px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:4px 5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
 .sketchbar::-webkit-scrollbar{display:none}
 .viewbars{position:absolute;top:12px;left:12px;z-index:16;display:grid;gap:8px;width:300px;max-width:calc(100% - 24px)}
 .viewbar{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:6px 8px 10px 10px;display:grid;gap:8px}
