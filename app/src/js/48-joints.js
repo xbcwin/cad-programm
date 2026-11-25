@@ -4151,8 +4151,11 @@ const Joints = (() => {
   function remove(jid) {
     const cur = list().find((x) => x.id === jid);
     const wasConn = isConstraint(cur) || isLoose(cur);
+    const wasSel = selJoint === jid;
     App.change(wasConn ? 'Verbindung gelöst' : 'Gelenk gelöst', (doc) => { doc.joints = list(doc).filter((x) => x.id !== jid); });
-    if (selJoint === jid) { selJoint = null; clearSelVis(); Panels.renderRight(); Panels.renderLeft(); }
+    if (wasSel) { selJoint = null; clearSelVis(); }
+    Panels.renderRight();
+    Panels.renderLeft();
     UI.toast(wasConn ? 'Verbindung gelöst – das Teil lässt sich wieder frei bewegen.' : 'Verbindung gelöst – das Teil bleibt, wo es gerade ist.', { icon: 'check' });
   }
 
