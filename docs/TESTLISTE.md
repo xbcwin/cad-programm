@@ -2451,6 +2451,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kuppel auf ebener Fläche (`dome`)**: 5 mm Kuppel auf Quader-Oberseite (20×20×20) erhöht die Gesamthöhe exakt auf 25 mm (`+5 mm`) als gültiger Einzelkörper (`GeomCheck` 0 Funde); Ändern der Höhe (8 mm), Umschalten auf Kugelkappe (`spherical`) und „Nach innen“ (`flip`), Unterdrücken sowie 5 mm Kuppel auf Zylinder-Oberseite (Ø20 × 20 → Höhe 25 mm) funktionieren; Hilfetexte (`werkzeug-hilfen.json`) und Schritt-Erklärungen (`Explain.local`) sind vollständig.
 - [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel eine geschwungene Kurve mit „Fläche teilen“ projizieren, die abgetrennte Teilfläche farbig markieren und eine nach außen sowie eine nach innen gewölbte Kuppel im 3D-Bild optisch prüfen.
 
+## Muster mit wachsender Größe & Teilen mit Fläche oder Skizze (Auto [A-129], KP-46, KP-47)
+
+- [x] **5 Zylinder mit +10 % je Kopie**: Rechteckmuster (`nx = 5, dx = 25`) auf Zylinder (`Ø10 × 10`) mit `#op-scaleStep = 10` (`%`) → 5 Körper ohne Fehler (`GeomCheck` 0 Funde), letzter Zylinder ist `1,464`-mal so groß (`Ø ≈ 14,64 mm`, `h ≈ 14,64 mm`).
+- [x] **Wachsender Abstand & mm-Schritte (Profi)**: `#op-distStep = 5` (`mm`) vergrößert die Abstände zwischen aufeinanderfolgenden Kopien um +5 mm (`25, 30, 35, 40 mm`); `#op-scaleUnit = 'mm'`, `#op-scaleStep = 2` lässt den letzten Zylinder auf `18 mm` (1,8×) wachsen; Kreismuster mit wachsender Größe sowie Ausblenden von `#op-grow-wrap` im Einfach-Modus geprüft.
+- [x] **Quader mit gebogener Skizze teilen**: Quader `20×20×20` mit einem Skizzen-Bogen (`plane: 'SKETCH'`) geteilt → 2 gültige Körper ohne Fehler (`GeomCheck` 0 Funde), Gesamtvolumen bleibt `8 000 mm³`, gekrümmte Trennfläche vorhanden; „Behalten“ und „Spalt“ (`4 mm`) funktionieren.
+- [x] **Quader an Fläche & Bezugsebene teilen + Hilfen**: Teilen an schräger Bezugsebene sowie an gekrümmter Zylindermantelfläche (`plane: 'FACE'`) erzeugt jeweils 2 gültige Körper mit erhaltenem Gesamtvolumen; Profi-Schaltflächen im Einfach-Modus verborgen; `HELP.patternGrowth`, `HELP.splitAdvanced` und Rückgängig geprüft.
+- [ ] **Von Hand**: Im Browser beim Teilen „Mit Skizze teilen“ anklicken, einen freien S-Spline quer durch einen Quader zeichnen, „Fertig“ klicken und beide Hälften mit „Spalt“ auseinanderrücken.
+
 ## Fehler melden
 
 ```

@@ -25120,6 +25120,161 @@ def t_a124_flaeche_teilen_kuppel(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze (KP-46, KP-47) ----------
+def t_a129_muster_wachstum_teilen(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+
+    # 1. KP-46: 5 Zylinder (Ø10 × 10), Rechteckmuster mit +10 % Größe je Kopie → letzter ~1,464-mal so groß
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 10, h: 10 }, pos: [0, 0] })")
+    warte_rechnen(p, 25); p.wait(300)
+    p.ev("Features.pattern('rect', [App.doc.items[0].id])")
+    warte_rechnen(p, 30); p.wait(300)
+    field(p, '#op-nx', 5)
+    field(p, '#op-dx', 25)
+    field(p, '#op-scaleStep', 10)
+    warte_rechnen(p, 35); p.wait(300)
+    gc1 = p.ev("return GeomCheck.run({ silent: true })")
+    st1 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const bs = (r && r.data && r.data.bodies || []).slice().sort((a, b) => a.c[0] - b.c[0]);
+      const sz = (b) => [b.bbox[3] - b.bbox[0], b.bbox[4] - b.bbox[1], b.bbox[5] - b.bbox[2]];
+      return {
+        errs: App.errors.length,
+        count: bs.length,
+        centers: bs.map(b => b.c[0]),
+        first: bs[0] ? sz(bs[0]) : null,
+        last: bs[4] ? sz(bs[4]) : null,
+        info: document.querySelector('#op-grow-info')?.textContent || '',
+      };""")
+    ok1 = (
+        st1['errs'] == 0 and st1['count'] == 5
+        and gc1 and len(gc1.get('issues', [1])) == 0
+        and abs(st1['first'][0] - 10) < 0.15 and abs(st1['first'][2] - 10) < 0.05
+        and 1.45 <= st1['last'][0] / st1['first'][0] <= 1.48
+        and 1.45 <= st1['last'][2] / st1['first'][2] <= 1.48
+        and '1,46' in st1['info']
+    )
+
+    # 2. KP-46: Wachsender Abstand (+5 mm je Schritt) & Größe in mm (+2 mm je Kopie → 18 mm) & Kreismuster & Einfach-Modus
+    p.pg.select_option('#op-distUnit', 'mm'); p.wait(200)
+    field(p, '#op-distStep', 5)
+    warte_rechnen(p, 35); p.wait(300)
+    cs = p.ev("const r=App.results.get(App.doc.items[0].id); return (r.data.bodies||[]).map(b=>b.c[0]).sort((a,b)=>a-b);")
+    gaps = [cs[i + 1] - cs[i] for i in range(len(cs) - 1)] if len(cs) == 5 else []
+
+    p.pg.select_option('#op-scaleUnit', 'mm'); p.wait(200)
+    field(p, '#op-scaleStep', 2)
+    warte_rechnen(p, 35); p.wait(300)
+    st_mm = p.ev("""const r=App.results.get(App.doc.items[0].id);
+      const bs=(r.data.bodies||[]).slice().sort((a,b)=>a.c[0]-b.c[0]);
+      const h0=bs[0].bbox[5]-bs[0].bbox[2], h4=bs[4].bbox[5]-bs[4].bbox[2];
+      return { errs: App.errors.length, h0, h4 };""")
+
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    hidden_grow_simple = not p.pg.locator('#op-grow-wrap').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    shown_grow_pro = p.pg.locator('#op-grow-wrap').is_visible()
+
+    # Kreismuster mit +15 % je Kopie
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 8, h: 8 }, pos: [20, 0] })")
+    warte_rechnen(p, 25); p.wait(250)
+    p.ev("Features.pattern('circ', [App.doc.items[0].id])")
+    warte_rechnen(p, 25); p.wait(250)
+    field(p, '#op-n', 4)
+    field(p, '#op-scaleStep', 15)
+    warte_rechnen(p, 35); p.wait(300)
+    st_circ = p.ev("""const r=App.results.get(App.doc.items[0].id);
+      const bs=(r.data.bodies||[]).slice().sort((a,b)=>(a.bbox[5]-a.bbox[2])-(b.bbox[5]-b.bbox[2]));
+      return { errs: App.errors.length, n: bs.length, h0: bs[0] ? bs[0].bbox[5]-bs[0].bbox[2] : 0, h3: bs[3] ? bs[3].bbox[5]-bs[3].bbox[2] : 0 };""")
+    ok2 = (
+        len(gaps) == 4 and all(abs(gaps[i] - (25 + 5 * i)) < 0.25 for i in range(4))
+        and st_mm['errs'] == 0 and abs(st_mm['h0'] - 10) < 0.05 and abs(st_mm['h4'] - 18) < 0.1
+        and hidden_grow_simple and shown_grow_pro
+        and st_circ['errs'] == 0 and st_circ['n'] == 4 and abs(st_circ['h3'] / st_circ['h0'] - 1.15 ** 3) < 0.03
+    )
+
+    # 3. KP-47: Quader (20×20×20) mit gebogener Skizze teilen → zwei Körper
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 25); p.wait(250)
+    v0_box = volumen(p)
+    p.ev("""Features.splitWithSketch([App.doc.items[0].id], {
+      plane: { o: [0, 0, 10], x: [1, 0, 0], n: [0, 0, 1] },
+      ents: [{ id: 'a1', type: 'arc', a: [-10, 0], m: [0, 4], b: [10, 0] }],
+      dims: [], cons: []
+    })""")
+    warte_rechnen(p, 35); p.wait(300)
+    gc_sk = p.ev("return GeomCheck.run({ silent: true })")
+    v1_sk = volumen(p)
+    st_sk = p.ev("""const r=App.results.get(App.doc.items[0].id);
+      return {
+        errs: App.errors.length,
+        bodies: r.data.bodies ? r.data.bodies.length : 1,
+        curved: r.data.faces.some(f => f.t !== 'PLANE'),
+        bbox: r.data.bbox,
+      };""")
+    field(p, '#op-gap', 4)
+    warte_rechnen(p, 35); p.wait(300)
+    st_gap = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1, dy: r.data.bbox[4]-r.data.bbox[1] };")
+    p.pg.select_option('#op-keep', 'positive')
+    warte_rechnen(p, 35); p.wait(300)
+    st_keep = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1 };")
+    v_keep = volumen(p)
+    ok3 = (
+        st_sk['errs'] == 0 and st_sk['bodies'] == 2 and st_sk['curved']
+        and gc_sk and len(gc_sk.get('issues', [1])) == 0
+        and v0_box is not None and v1_sk is not None and abs(v1_sk - v0_box) < 25
+        and st_gap['errs'] == 0 and st_gap['bodies'] == 2 and st_gap['dy'] > 23.5
+        and st_keep['errs'] == 0 and st_keep['bodies'] == 1 and v_keep is not None and 500 < v_keep < v0_box - 500
+    )
+
+    # 4. KP-47: Teilen an gekrümmter Körperfläche (Zylinder) & schräger Bezugsebene + Einfach-Modus + Undo + Hilfe
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("""Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] });
+      Actions.addPrimitive('cylinder', { p: { d: 12, h: 24 }, pos: [0, 0] });""")
+    warte_rechnen(p, 30); p.wait(300)
+    p.ev("""const boxId = App.doc.items[0].id, cylId = App.doc.items[1].id;
+      const r = App.results.get(cylId);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      const ref = Features.makeFaceRef({ id: cylId, faceIdx: fi, node: Viewer.nodes.get(cylId) });
+      Features.splitWithFace([boxId], ref);""")
+    warte_rechnen(p, 35); p.wait(300)
+    st_face = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1, curved: r.data.faces.some(f => f.t === 'CYLINDRE') };""")
+    v_face = volumen(p)
+
+    # Schräge Bezugsebene als Schnittfläche
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("Actions.addPrimitive('box', { p: { w: 20, d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 25); p.wait(250)
+    p.ev("""const n = [0, -Math.sin(Math.PI / 6), Math.cos(Math.PI / 6)];
+      const x = [1, 0, 0];
+      const dm = { id: 'dm_split', name: 'Schräg 30°', base: { type: 'fixed' }, plane: { o: [0, 0, 10], x, n }, size: 40 };
+      App.change('Bezugsebene', (doc) => { doc.datums = doc.datums || []; doc.datums.push(dm); });
+      Features.splitWithFace([App.doc.items[0].id], { datumId: 'dm_split', label: 'Bezugsebene „Schräg 30°“' });""")
+    warte_rechnen(p, 35); p.wait(300)
+    st_datum = p.ev("const r=App.results.get(App.doc.items[0].id); return { errs: App.errors.length, bodies: r.data.bodies ? r.data.bodies.length : 1 };")
+    v_datum = volumen(p)
+
+    # Einfach-Modus versteckt Profi-Schaltflächen
+    p.ev("Features.split([App.doc.items[0].id])")
+    warte_rechnen(p, 25); p.wait(250)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    simple_no_pro = not p.pg.locator('#op-split-pro-row').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    pro_has_row = p.pg.locator('#op-split-pro-row').is_visible()
+    p.ev("App.undo()"); warte_rechnen(p, 25); p.wait(200)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('patternGrowth', 'splitAdvanced'))
+    ok4 = (
+        st_face['errs'] == 0 and st_face['bodies'] == 2 and st_face['curved'] and v_face is not None and abs(v_face - (8000 + math.pi * 36 * 24)) < 40
+        and st_datum['errs'] == 0 and st_datum['bodies'] == 2 and v_datum is not None and abs(v_datum - 8000) < 25
+        and simple_no_pro and pro_has_row and help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25355,6 +25510,7 @@ TESTS = [
     ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
     ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
+    ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

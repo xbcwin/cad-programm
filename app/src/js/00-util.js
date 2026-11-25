@@ -2259,6 +2259,16 @@ const HELP = {
   "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
   "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
   "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
+ },
+ "patternGrowth": {
+  "tip": "Größe und Abstand je Muster-Kopie schrittweise wachsen oder schrumpfen lassen (Profi)",
+  "hilfe": "Im Profi-Modus legst du unter „Wachstum je Kopie“ fest, um wie viel Prozent (%) oder Millimeter (bzw. Grad beim Kreismuster) jede folgende Kopie größer/kleiner wird und wie stark sich der Abstand zwischen den Kopien ändert.",
+  "tipp": "Bei +10 % je Kopie wächst die Größe schrittweise im Verhältnis (z. B. 1,1×, 1,21×, 1,33×, 1,46×); negative Werte lassen die Kopien kleiner werden."
+ },
+ "splitAdvanced": {
+  "tip": "Körper an einer anderen Fläche, Bezugsebene oder gezeichneten Skizze teilen (Profi)",
+  "hilfe": "Statt nur waagerecht oder senkrecht zu schneiden, kannst du im Profi-Modus beim Teilen eine ebene oder gekrümmte Fläche eines anderen Körpers (oder eine Bezugsebene) wählen oder eine eigene Kurve (Linie, Bogen, Spline) durch den Körper zeichnen.",
+  "tipp": "Mit „Behalten“ und „Spalt“ entscheidest du auch bei gebogenen Schnitten, ob beide Teile bleiben oder eine Seite ausgeblendet wird."
  }
 };
 

@@ -1028,6 +1028,10 @@ body.presenting .pat-dot{display:none!important}
 .pat-chip{min-width:28px;height:26px;padding:0 7px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);font:600 12px/1 var(--font-mono);cursor:pointer;transition:border-color .12s,background .12s}
 .pat-chip:hover{border-color:var(--accent);color:var(--accent)}
 .pat-chip.skipped{border-style:dashed;border-color:var(--bad);background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+.pat-grow-box{display:grid;gap:6px;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.pat-grow-head{font-size:12px;font-weight:600;color:var(--muted)}
+.pat-grow-grid{display:grid;grid-template-columns:1fr 78px;gap:6px;align-items:end}
+.pat-grow-info{font-size:11.5px;color:var(--muted);font-family:var(--font-mono)}
 
 /* Nachschlagetabellen unter „Maße“ & Formel-Fehleranzeige (KP-22) */
 .inp .fx.bad{color:var(--bad);font-weight:600}
@@ -3851,6 +3855,16 @@ const HELP = {
   "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
   "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
   "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
+ },
+ "patternGrowth": {
+  "tip": "Größe und Abstand je Muster-Kopie schrittweise wachsen oder schrumpfen lassen (Profi)",
+  "hilfe": "Im Profi-Modus legst du unter „Wachstum je Kopie“ fest, um wie viel Prozent (%) oder Millimeter (bzw. Grad beim Kreismuster) jede folgende Kopie größer/kleiner wird und wie stark sich der Abstand zwischen den Kopien ändert.",
+  "tipp": "Bei +10 % je Kopie wächst die Größe schrittweise im Verhältnis (z. B. 1,1×, 1,21×, 1,33×, 1,46×); negative Werte lassen die Kopien kleiner werden."
+ },
+ "splitAdvanced": {
+  "tip": "Körper an einer anderen Fläche, Bezugsebene oder gezeichneten Skizze teilen (Profi)",
+  "hilfe": "Statt nur waagerecht oder senkrecht zu schneiden, kannst du im Profi-Modus beim Teilen eine ebene oder gekrümmte Fläche eines anderen Körpers (oder eine Bezugsebene) wählen oder eine eigene Kurve (Linie, Bogen, Spline) durch den Körper zeichnen.",
+  "tipp": "Mit „Behalten“ und „Spalt“ entscheidest du auch bei gebogenen Schnitten, ob beide Teile bleiben oder eine Seite ausgeblendet wird."
  }
 };
 
@@ -4802,12 +4816,42 @@ const Model = (() => {
       return m;
     } finally { curV = prev; }
   }
+  // Wachsender Abstand/Winkel je Kopie (KP-46): distUnit 'pct' (%) oder 'mm' (mm bzw. °)
+  function progressiveOffset(step0, k, distStep = 0, distUnit = 'pct') {
+    if (k <= 0) return 0;
+    const ds = Number(distStep) || 0;
+    if (Math.abs(ds) < 1e-9) return k * step0;
+    let sum = 0;
+    if (distUnit === 'mm') {
+      if (Math.abs(step0) < 1e-9) {
+        for (let m = 0; m < k; m++) sum += m * ds;
+      } else {
+        const sgn = step0 < 0 ? -1 : 1, base = Math.abs(step0);
+        for (let m = 0; m < k; m++) sum += sgn * Math.max(0.01, base + m * ds);
+      }
+    } else {
+      const r = Math.max(0.05, 1 + ds / 100);
+      for (let m = 0; m < k; m++) sum += step0 * Math.pow(r, m);
+    }
+    return sum;
+  }
+  function patternScaleFactor(stepIdx, scaleStep = 0, scaleUnit = 'pct', baseRef = 10) {
+    const ss = Number(scaleStep) || 0;
+    if (!stepIdx || Math.abs(ss) < 1e-9) return 1;
+    if (scaleUnit === 'mm') {
+      const ref = Math.max(1e-3, Number(baseRef) || 10);
+      return Math.max(0.05, (ref + stepIdx * ss) / ref);
+    }
+    const r = Math.max(0.05, 1 + ss / 100);
+    return Math.max(0.05, Math.pow(r, stepIdx));
+  }
   // Alle Kopie-Instanzen einer Muster-Gruppe (inkl. skipped-Flag) – genau wie der Kern sie baut
   function patternInstances(g, V) {
     const I = new THREE.Matrix4();
-    if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, matrix: I, skipped: false, label: '1' }];
+    if (!g || !g.p || g.p.op !== 'pattern') return [{ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }];
     const p = g.p.pt === 'path' ? pathPatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
     const skipSet = new Set(Array.isArray(g.p.skip) ? g.p.skip.map((x) => Math.round(Number(x))) : []);
+    const distStep = N('distStep', 0), distUnit = p.distUnit === 'mm' ? 'mm' : 'pct';
     const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
     const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
     const out = [];
@@ -4815,7 +4859,8 @@ const Model = (() => {
       const nx = clamp(Math.round(N('nx', 1)), 1, 60), ny = clamp(Math.round(N('ny', 1)), 1, 60), dx = N('dx', 10), dy = N('dy', 10);
       let idx = 0;
       for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++, idx++) {
-        out.push({ idx, matrix: idx === 0 ? I : new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0), skipped: skipSet.has(idx), label: nx > 1 && ny > 1 ? `${i + 1}·${j + 1}` : String(idx + 1) });
+        const ox = progressiveOffset(dx, i, distStep, distUnit), oy = progressiveOffset(dy, j, distStep, distUnit);
+        out.push({ idx, stepIdx: i + j, matrix: idx === 0 ? I : new THREE.Matrix4().makeTranslation(ox, oy, 0), skipped: skipSet.has(idx), label: nx > 1 && ny > 1 ? `${i + 1}·${j + 1}` : String(idx + 1) });
       }
     } else if (p.pt === 'circ') {
       const n = clamp(Math.round(N('n', 4)), 1, 120), ang = N('ang', 360);
@@ -4824,24 +4869,25 @@ const Model = (() => {
       const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
       const c = picked ? p.ao.map(Number) : [N('cx', 0), N('cy', 0), N('cz', 0)];
       for (let k = 0; k < n; k++) {
-        out.push({ idx: k, matrix: k === 0 ? I : rot(c, ax, k * step), skipped: skipSet.has(k), label: String(k + 1) });
+        const angK = progressiveOffset(step, k, distStep, distUnit);
+        out.push({ idx: k, stepIdx: k, matrix: k === 0 ? I : rot(c, ax, angK), skipped: skipSet.has(k), label: String(k + 1) });
       }
     } else if (p.pt === 'path') {
       const places = (p.places || []).slice(0, 200);
-      if (!places.length) out.push({ idx: 0, matrix: I, skipped: false, label: '1' });
+      if (!places.length) out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' });
       else places.forEach((q, k) => {
-        if (k === 0) { out.push({ idx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
+        if (k === 0) { out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: skipSet.has(0), label: '1' }); return; }
         const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
         if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
-        out.push({ idx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
+        out.push({ idx: k, stepIdx: k, matrix: m, skipped: skipSet.has(k), label: String(k + 1) });
       });
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
-      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(p.mn.map(Number), p.mo.map(Number)), skipped: false, label: '2' });
+      out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, stepIdx: 1, matrix: refl(p.mn.map(Number), p.mo.map(Number)), skipped: false, label: '2' });
     } else if (p.pt === 'mirror') {
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ', n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = N('off', 0);
-      out.push({ idx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, matrix: refl(n, [n[0] * off, n[1] * off, n[2] * off]), skipped: false, label: '2' });
+      out.push({ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }, { idx: 1, stepIdx: 1, matrix: refl(n, [n[0] * off, n[1] * off, n[2] * off]), skipped: false, label: '2' });
     }
-    return out.length ? out : [{ idx: 0, matrix: I, skipped: false, label: '1' }];
+    return out.length ? out : [{ idx: 0, stepIdx: 0, matrix: I, skipped: false, label: '1' }];
   }
   // Lage jeder aktiven Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
   function patternMatrices(g, V) {
@@ -5090,6 +5136,10 @@ const Model = (() => {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
       }
+      if (it.kind === 'group' && it.p && it.p.op === 'split' && it.p.plane === 'FACE' && it.p.faceRef) {
+        if (it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'teilt an Fläche von' });
+        if (it.p.faceRef.datumId) out.push({ from: me, to: it.p.faceRef.datumId, what: 'teilt an Bezugsebene', datum: true });
+      }
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) {
@@ -5222,7 +5272,7 @@ const Model = (() => {
         let kids = it.children || [];
         if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
         o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, ownV));
-        if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, ownV) : resolveP(it.p, ownV);
+        if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, ownV) : it.p.op === 'split' ? splitParams(it, ownV) : resolveP(it.p, ownV);
         if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
       }
       else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, ownV);
@@ -5663,23 +5713,63 @@ const Model = (() => {
     return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
   }
   // Lage (2D in der Kurvenebene) und Richtung jeder Kopie; die erste ist das Original am Kurvenanfang
-  function pathPlaces(ents, n, d) {
+  function pathPlaces(ents, n, d, distStep = 0, distUnit = 'pct') {
     const C = pathCurve(ents); if (!C || C.len < 1e-6) return [];
     const N = clamp(Math.round(n), 1, 200);
-    const step = d > 0 ? d : C.closed ? C.len / N : N > 1 ? C.len / (N - 1) : 0;
+    const ds = Number(distStep) || 0;
     const out = [];
+    if (Math.abs(ds) < 1e-9) {
+      const step = d > 0 ? d : C.closed ? C.len / N : N > 1 ? C.len / (N - 1) : 0;
+      for (let k = 0; k < N; k++) {
+        const s = k * step;
+        if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+        out.push(pathAt(C, Math.min(s, C.len)));
+      }
+      return out;
+    }
+    if (d > 0) {
+      for (let k = 0; k < N; k++) {
+        const s = progressiveOffset(d, k, ds, distUnit);
+        if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+        out.push(pathAt(C, Math.min(s, C.len)));
+      }
+      return out;
+    }
+    const M = C.closed ? N : N - 1;
+    if (M <= 0) { out.push(pathAt(C, 0)); return out; }
+    let gaps;
+    if (distUnit === 'mm') {
+      const b0 = (C.len - (ds * M * (M - 1)) / 2) / M;
+      if (b0 >= 0.01) {
+        gaps = Array.from({ length: M }, (_, m) => b0 + m * ds);
+      } else {
+        const w = Array.from({ length: M }, (_, m) => Math.max(0.01, 1 + m * Math.max(0, ds)));
+        const sum = w.reduce((a, b) => a + b, 0) || 1;
+        gaps = w.map((v) => (v / sum) * C.len);
+      }
+    } else {
+      const r = Math.max(0.05, 1 + ds / 100);
+      const w = Array.from({ length: M }, (_, m) => Math.pow(r, m));
+      const sum = w.reduce((a, b) => a + b, 0) || 1;
+      gaps = w.map((v) => (v / sum) * C.len);
+    }
+    let s = 0;
     for (let k = 0; k < N; k++) {
-      const s = k * step;
-      if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+      if (k > 0 && C.closed && s > C.len - 1e-6) break;
       out.push(pathAt(C, Math.min(s, C.len)));
+      if (k < gaps.length) s += gaps[k];
     }
     return out;
   }
   function pathPatternParams(it, V) {
     const p = it.p || {}, out = { op: 'pattern', pt: 'path', places: [], n: [0, 0, 1], p0: [0, 0, 0], align: p.align !== false && p.align !== 'nein' };
     if (Array.isArray(p.skip) && p.skip.length) out.skip = p.skip.slice();
+    const scaleStep = num(p.scaleStep, V, 0), scaleUnit = p.scaleUnit === 'mm' ? 'mm' : 'pct';
+    const distStep = num(p.distStep, V, 0), distUnit = p.distUnit === 'mm' ? 'mm' : 'pct';
+    if (Math.abs(scaleStep) > 1e-9) { out.scaleStep = scaleStep; out.scaleUnit = scaleUnit; }
+    if (Math.abs(distStep) > 1e-9) { out.distStep = distStep; out.distUnit = distUnit; }
     if (!p.sketch) return out;
-    const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0)); if (!L.length) return out;
+    const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0), distStep, distUnit); if (!L.length) return out;
     const pl = p.sketch.plane, x = pl.x, n = pl.n, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
     const W = (u, v) => [x[0] * u + y[0] * v, x[1] * u + y[1] * v, x[2] * u + y[2] * v];
     const P0 = L[0];
@@ -5690,6 +5780,47 @@ const Model = (() => {
     const o = pl.o, w0 = W(P0.p[0], P0.p[1]);
     out.p0 = [o[0] + w0[0], o[1] + w0[1], o[2] + w0[2]]; out.n = n.slice();
     return out;
+  }
+  function splitParams(it, V) {
+    const p = it.p || {};
+    const keep = p.keep === 'positive' || p.keep === 'negative' ? p.keep : 'both';
+    const gap = Math.max(0, num(p.gap, V, 0));
+    if (p.plane === 'SKETCH') {
+      const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+      const sketchPlane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+      const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+      const regions = SK.regions(ents).map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) }));
+      return { op: 'split', plane: 'SKETCH', sketchPlane, chains, regions, keep, gap };
+    }
+    if (p.plane === 'FACE') {
+      const out = { op: 'split', plane: 'FACE', keep, gap };
+      const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+      const ref = p.faceRef;
+      const toLocalPlane = (oW, nW) => {
+        const inv = doc ? worldMatrix(doc, it.id).invert() : new THREE.Matrix4();
+        const oL = new THREE.Vector3(...oW).applyMatrix4(inv).toArray().map((v) => round(v, 6));
+        const nL = new THREE.Vector3(...nW).transformDirection(inv).normalize().toArray().map((v) => round(v, 9));
+        return { o: oL, n: nL };
+      };
+      if (ref && ref.datumId) {
+        const dm = typeof Datums !== 'undefined' && doc ? Datums.find(ref.datumId, doc) : null;
+        if (!dm || !dm.plane) {
+          out.missingFace = 'Die gewählte Bezugsebene fehlt.';
+        } else {
+          out.facePlane = toLocalPlane(dm.plane.o, dm.plane.n);
+          out.faceRef = { datumId: ref.datumId, label: dm.name || ref.label || 'Bezugsebene' };
+        }
+      } else if (ref && ref.id) {
+        out.faceRef = { ...ref };
+        if (ref.t === 'PLANE' && Array.isArray(ref.wc) && Array.isArray(ref.wn)) {
+          out.facePlane = toLocalPlane(ref.wc, ref.wn);
+        }
+      } else {
+        out.missingFace = 'Keine Schnittfläche gewählt.';
+      }
+      return out;
+    }
+    return resolveP(p, V);
   }
   // Übergang (Loft): je Profil die größte geschlossene Fläche, dazu optional eine Spitze hinter dem letzten Profil
   function loftParams(it, V) {
@@ -6852,7 +6983,7 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, progressiveOffset, patternScaleFactor, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, splitParams, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 14-ttf.js ----
@@ -11788,8 +11919,14 @@ const Kernel = (() => {
         }
         if (!base) return null;
         if (!p.op) { box = base; break; }
-        if (p.op === 'split' || p.op === 'intersect') { box = base; break; }
+        if (p.op === 'intersect') { box = base; break; }
+        if (p.op === 'split') {
+          if (p.plane === 'FACE' || p.plane === 'SKETCH' || numOr(p.gap, 0) > 0) return null;
+          box = base;
+          break;
+        }
         if (p.op === 'pattern') {
+          if (Math.abs(numOr(p.scaleStep, 0)) > 1e-9 || Math.abs(numOr(p.distStep, 0)) > 1e-9) return null;
           if (p.pt === 'rect') {
             const nx = Math.max(1, Math.min(60, Math.round(numOr(p.nx, 1))));
             const ny = Math.max(1, Math.min(60, Math.round(numOr(p.ny, 1))));
@@ -11903,6 +12040,7 @@ const Kernel = (() => {
         if (Array.isArray(p.profiles)) for (const pr of p.profiles) if (pr && pr.planeRef && pr.planeRef.id) unionRef(topIdx, pr.planeRef.id);
       }
       if (p.planeRef && p.planeRef.kind === 'face' && p.planeRef.id) unionRef(topIdx, p.planeRef.id);
+      if (x.kind === 'group' && p.op === 'split' && p.plane === 'FACE' && p.faceRef && p.faceRef.id) unionRef(topIdx, p.faceRef.id);
       if (isTop && x.kind === 'mirrorStep') {
         if (p.faceRef && p.faceRef.id) unionRef(topIdx, p.faceRef.id);
         const fids = Array.isArray(p.features) ? p.features : [];
@@ -20408,6 +20546,114 @@ const Features = (() => {
     UI.toast('Geteilt. Rechts wählst du die Schnittebene, ihre Lage und welche Hälfte bleibt.', { icon: 'check' });
     return G;
   }
+  function defaultSplitSketchPlane(items, planeOpt = null) {
+    const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
+    const b = Actions.selBox(items.map((x) => x.id));
+    const bl = b.isEmpty() ? new THREE.Box3(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10)) : b.clone().applyMatrix4(inv);
+    const sz = bl.getSize(new THREE.Vector3());
+    const c = bl.getCenter(new THREE.Vector3());
+    const viewSize = Math.max(80, 3 * Math.max(sz.x, sz.y, sz.z, 10));
+    let plane;
+    if (planeOpt === 'XZ') plane = { o: [0, round(c.y, 4), 0], x: [1, 0, 0], n: [0, 1, 0] };
+    else if (planeOpt === 'YZ') plane = { o: [round(c.x, 4), 0, 0], x: [0, 1, 0], n: [1, 0, 0] };
+    else plane = { o: [0, 0, round(c.z, 4)], x: [1, 0, 0], n: [0, 0, 1] };
+    return { plane, W, viewSize };
+  }
+  function setSplitFace(gid, ref) {
+    const f = Model.find(App.doc, gid);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'split' || !ref) return false;
+    App.change('Schnittfläche gewählt', (doc) => {
+      const fn = Model.find(doc, gid); if (!fn) return false;
+      fn.item.p.plane = 'FACE';
+      fn.item.p.faceRef = deepClone(ref);
+    });
+    App.select([gid]);
+    return true;
+  }
+  function pickSplitToolFace(gid) {
+    const f = Model.find(App.doc, gid);
+    if (!f || !isOp(f.item) || f.item.p.op !== 'split') return false;
+    pickFaceThen((ref) => {
+      setSplitFace(gid, ref);
+      UI.toast('Schnittfläche gesetzt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, { exclude: new Set([gid, '__preview']), hint: '<b>Schnittfläche wählen:</b> Klick auf eine ebene oder gekrümmte Fläche eines anderen Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.' });
+    return true;
+  }
+  function splitWithFace(ids = null, faceRef = null) {
+    const list = ids || App.sel;
+    if (list.length === 1) {
+      const f = Model.find(App.doc, list[0]);
+      if (f && isOp(f.item) && f.item.p.op === 'split') {
+        if (faceRef) return setSplitFace(f.item.id, faceRef);
+        return pickSplitToolFace(f.item.id);
+      }
+    }
+    const items = need(list); if (!items.length) return null;
+    if (faceRef) {
+      const G = wrap(items, NAMES.split, { op: 'split', plane: 'FACE', faceRef: deepClone(faceRef), keep: 'both', gap: 0 });
+      UI.toast('Geteilt an der gewählten Fläche.', { icon: 'check' });
+      return G;
+    }
+    pickFaceThen((ref) => {
+      const still = siblings(items.map((x) => x.id));
+      if (!still.length) return;
+      wrap(still, NAMES.split, { op: 'split', plane: 'FACE', faceRef: deepClone(ref), keep: 'both', gap: 0 });
+      UI.toast('Geteilt an der gewählten Fläche.', { icon: 'check' });
+    }, { exclude: new Set([...items.map((x) => x.id), '__preview']), hint: '<b>Schnittfläche wählen:</b> Klick auf eine ebene oder gekrümmte Fläche eines anderen Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.' });
+    return true;
+  }
+  function startSplitSketch(gidOrIds = null, planeOpt = null) {
+    if (typeof gidOrIds === 'string') {
+      const f = Model.find(App.doc, gidOrIds);
+      if (!f || !isOp(f.item) || f.item.p.op !== 'split') return false;
+      if (f.item.p.sketch && !planeOpt) { Sketch.editItem(gidOrIds); return true; }
+      const kids = (f.item.children || []).filter((c) => !c.suppressed);
+      const { plane, W, viewSize } = defaultSplitSketchPlane(kids.length ? kids : [f.item], planeOpt);
+      Sketch.startSplitCurve({ plane, W, ents: [], gid: gidOrIds, viewSize });
+      return true;
+    }
+    const list = gidOrIds || App.sel;
+    if (list.length === 1) {
+      const f = Model.find(App.doc, list[0]);
+      if (f && isOp(f.item) && f.item.p.op === 'split') return startSplitSketch(f.item.id, planeOpt);
+    }
+    const items = need(list); if (!items.length) return false;
+    const { plane, W, viewSize } = defaultSplitSketchPlane(items, planeOpt);
+    Sketch.startSplitCurve({ plane, W, ents: [], ids: items.map((x) => x.id), viewSize });
+    return true;
+  }
+  function splitFromSketch(target, sketch) {
+    if (!sketch) return null;
+    if (target && target.gid) {
+      const gid = target.gid;
+      App.change('Schnitt-Skizze gesetzt', (doc) => {
+        const fn = Model.find(doc, gid); if (!fn || !fn.item.p) return false;
+        fn.item.p.plane = 'SKETCH';
+        fn.item.p.sketch = deepClone(sketch);
+      });
+      App.select([gid]);
+      UI.toast('Körper mit Skizze geteilt. Rechts kannst du die Kurve bearbeiten, eine Hälfte wählen oder einen Spalt setzen.', { icon: 'check' });
+      return Model.find(App.doc, gid)?.item || null;
+    }
+    const items = siblings(target && target.ids);
+    if (!items.length) { UI.toast('Die gewählten Objekte gibt es nicht mehr.', { kind: 'bad' }); return null; }
+    const G = wrap(items, NAMES.split, { op: 'split', plane: 'SKETCH', sketch: deepClone(sketch), keep: 'both', gap: 0 });
+    UI.toast('Körper mit Skizze geteilt. Rechts kannst du die Kurve bearbeiten, eine Hälfte wählen oder einen Spalt setzen.', { icon: 'check' });
+    return G;
+  }
+  function splitWithSketch(ids = null, sketch = null, opts = {}) {
+    if (!sketch) return startSplitSketch(ids, opts.plane || null);
+    const items = need(ids); if (!items.length) return null;
+    const G = splitFromSketch({ ids: items.map((x) => x.id) }, sketch);
+    if (G && (opts.keep || opts.gap != null)) {
+      App.change('Schnitt-Einstellungen', (doc) => {
+        const fn = Model.find(doc, G.id); if (!fn) return false;
+        if (opts.keep) fn.item.p.keep = opts.keep;
+        if (opts.gap != null) fn.item.p.gap = opts.gap;
+      }, { amend: true });
+    }
+    return G;
+  }
   // Boolesch: vereinigen, abziehen (der erste bleibt, die anderen schneiden), Schnittmenge
   function boolean(mode, ids) {
     ids = (ids || App.sel).slice();
@@ -20760,6 +21006,37 @@ const Features = (() => {
     box.append(head, chips);
     sec.append(box);
   }
+  function renderPatternGrowthUI(it, sec, setP) {
+    const p = it.p || {};
+    if (p.op !== 'pattern' || (p.pt !== 'rect' && p.pt !== 'circ' && p.pt !== 'path')) return;
+    const sUnit = p.scaleUnit === 'mm' ? 'mm' : 'pct';
+    const dUnit = p.distUnit === 'mm' ? 'mm' : 'pct';
+    const isCirc = p.pt === 'circ';
+    const box = h('div', { class: 'pat-grow-box pro', id: 'op-grow-wrap', 'data-help': 'patternGrowth' });
+    box.append(h('div', { class: 'pat-grow-head' }, 'Wachstum je Kopie'));
+    const g1 = h('div', { class: 'pat-grow-grid' });
+    g1.append(
+      UI.numField({ id: 'op-scaleStep', label: 'Größe je Kopie', value: p.scaleStep ?? 0, unit: sUnit === 'mm' ? 'mm' : '%', len: sUnit === 'mm', onCommit: (v) => setP('scaleStep', v) }),
+      UI.selectField({ id: 'op-scaleUnit', label: 'Einheit', value: sUnit, options: [['pct', '%'], ['mm', 'mm']], onChange: (v) => setP('scaleUnit', v) })
+    );
+    const g2 = h('div', { class: 'pat-grow-grid' });
+    g2.append(
+      UI.numField({ id: 'op-distStep', label: isCirc ? 'Winkel je Kopie' : 'Abstand je Kopie', value: p.distStep ?? 0, unit: dUnit === 'mm' ? (isCirc ? '°' : 'mm') : '%', len: dUnit === 'mm' && !isCirc, onCommit: (v) => setP('distStep', v) }),
+      UI.selectField({ id: 'op-distUnit', label: 'Einheit', value: dUnit, options: [['pct', '%'], ['mm', isCirc ? '°' : 'mm']], onChange: (v) => setP('distUnit', v) })
+    );
+    box.append(g1, g2);
+    const V = Model.vars(App.doc).v;
+    const scaleVal = Model.num(p.scaleStep, V, 0);
+    if (Math.abs(scaleVal) > 1e-9) {
+      const inst = Model.patternInstances(it, V);
+      const maxStep = Math.max(0, ...inst.filter((x) => !x.skipped).map((x) => x.stepIdx ?? x.idx ?? 0));
+      const bb = App.baseBox(it.id) || Model.itemLocalBox(it, V) || App.localBox(it.id);
+      const refSize = bb ? Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2], 1e-3) : 10;
+      const lastScale = Model.patternScaleFactor(maxStep, scaleVal, sUnit, refSize);
+      box.append(h('div', { class: 'pat-grow-info', id: 'op-grow-info' }, `Letzte Kopie: ${fmt(lastScale, 2)}× so groß`));
+    }
+    sec.append(box);
+  }
   // ---------- Rechte Leiste ----------
   function renderOp(it, sec, setP) {
     const p = it.p || {};
@@ -20797,6 +21074,7 @@ const Features = (() => {
       hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum. Klick im Bild oder rechts auf eine Kopie, um sie auszulassen (durchgestrichen).';
       sec.append(f); if (info) sec.append(info);
       sec.append(h('div', { class: 'btn-row' }, pb));
+      renderPatternGrowthUI(it, sec, setP);
       renderSkipUI(it, sec);
       sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
@@ -20811,6 +21089,7 @@ const Features = (() => {
       const eb = h('button', { type: 'button', class: 'btn', id: 'op-editpath' }); eb.innerHTML = icon('sketch') + 'Kurve bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
       sec.append(f, h('div', { class: 'btn-row' }, eb));
+      renderPatternGrowthUI(it, sec, setP);
       renderSkipUI(it, sec);
       sec.append(h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
@@ -20822,11 +21101,66 @@ const Features = (() => {
     else if (p.op === 'pattern' && p.pt === 'mirror') { f.append(sel('plane', 'Spiegeln', [['YZ', 'Links ↔ rechts'], ['XZ', 'Vorne ↔ hinten'], ['XY', 'Oben ↔ unten']]), num('off', 'Lage der Ebene')); hint = 'Original und Spiegelbild werden ein Körper. Die Ebene geht durch den Nullpunkt, „Lage“ verschiebt sie.'; }
     else if (p.op === 'split') {
       const pl = p.plane || 'XY';
-      const sides = { XY: ['Oben', 'Unten'], XZ: ['Hinten', 'Vorne'], YZ: ['Rechts', 'Links'] }[pl];
-      f.append(sel('plane', 'Schnitt', [['XY', 'Waagerecht (XY)'], ['XZ', 'Von vorne (XZ)'], ['YZ', 'Von der Seite (YZ)']]), num('off', 'Lage der Ebene'), sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', sides[0]], ['negative', sides[1]]]), num('gap', 'Spalt'));
+      const isSimple = typeof ViewPrefs !== 'undefined' && ViewPrefs.simple;
+      const planeOpts = [['XY', 'Waagerecht (XY)'], ['XZ', 'Von vorne (XZ)'], ['YZ', 'Von der Seite (YZ)']];
+      if (!isSimple || pl === 'FACE' || pl === 'SKETCH') {
+        planeOpts.push(['FACE', 'Fläche (Profi)'], ['SKETCH', 'Skizze / Kurve (Profi)']);
+      }
+      f.append(UI.selectField({
+        id: 'op-plane', label: 'Schnitt', value: pl, options: planeOpts,
+        onChange: (v) => {
+          if (v === 'FACE') { if (p.faceRef) setP('plane', 'FACE'); else pickSplitToolFace(it.id); }
+          else if (v === 'SKETCH') { if (p.sketch) setP('plane', 'SKETCH'); else startSplitSketch(it.id); }
+          else setP('plane', v);
+        },
+      }));
+      if (pl === 'FACE') {
+        const refLbl = p.faceRef && p.faceRef.label ? p.faceRef.label : 'Keine Fläche gewählt';
+        const faceInfo = h('div', { class: 'mini-row', id: 'op-split-faceinfo' }, h('span', { class: 'grow' }, 'Schnittfläche'), h('b', { class: 'mono' }, refLbl));
+        f.append(sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', 'Seite A'], ['negative', 'Seite B']]), num('gap', 'Spalt', 'mm', { min: 0 }));
+        sec.append(f, faceInfo);
+        const pb = h('button', { type: 'button', class: 'btn', id: 'op-split-face' });
+        pb.innerHTML = icon('cursor') + (p.faceRef ? 'Andere Fläche wählen' : 'Fläche wählen');
+        pb.onclick = () => pickSplitToolFace(it.id);
+        sec.append(h('div', { class: 'btn-row', 'data-help': 'splitAdvanced' }, pb));
+        hint = 'Teilt den Körper an einer ebenen oder gekrümmten Fläche eines anderen Körpers oder einer Bezugsebene.';
+        sec.append(h('div', { class: 'hint-box', html: hint }));
+        const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen';
+        ub.onclick = () => Actions.ungroup(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ub));
+        return;
+      }
+      if (pl === 'SKETCH') {
+        f.append(sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', 'Seite A'], ['negative', 'Seite B']]), num('gap', 'Spalt', 'mm', { min: 0 }));
+        sec.append(f);
+        const sb = h('button', { type: 'button', class: 'btn', id: 'op-split-sketch' });
+        sb.innerHTML = icon('sketch') + (p.sketch ? 'Schnitt-Skizze bearbeiten' : 'Schnitt-Skizze zeichnen');
+        sb.onclick = () => startSplitSketch(it.id);
+        sec.append(h('div', { class: 'btn-row', 'data-help': 'splitAdvanced' }, sb));
+        hint = 'Zieht die gezeichnete Kurve (Linie, Bogen, Spline oder Umriss) als Schnittfläche durch den Körper.';
+        sec.append(h('div', { class: 'hint-box', html: hint }));
+        const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen';
+        ub.onclick = () => Actions.ungroup(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ub));
+        return;
+      }
+      const sides = { XY: ['Oben', 'Unten'], XZ: ['Hinten', 'Vorne'], YZ: ['Rechts', 'Links'] }[pl] || ['Seite A', 'Seite B'];
+      f.append(num('off', 'Lage der Ebene'), sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', sides[0]], ['negative', sides[1]]]), num('gap', 'Spalt'));
       hint = 'Mit „Spalt“ rücken die Hälften auseinander – praktisch zum Drucken in zwei Teilen.';
+      sec.append(f);
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'op-split-face' }); fb.innerHTML = icon('cursor') + 'An Fläche teilen';
+      fb.onclick = () => pickSplitToolFace(it.id);
+      const sb = h('button', { type: 'button', class: 'btn small', id: 'op-split-sketch' }); sb.innerHTML = icon('sketch') + 'Mit Skizze teilen';
+      sb.onclick = () => startSplitSketch(it.id);
+      sec.append(h('div', { class: 'btn-row pro', id: 'op-split-pro-row', 'data-help': 'splitAdvanced' }, fb, sb));
+      sec.append(h('div', { class: 'hint-box', html: hint }));
+      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen';
+      ub.onclick = () => Actions.ungroup(it.id);
+      sec.append(h('div', { class: 'btn-row' }, ub));
+      return;
     } else if (p.op === 'intersect') hint = 'Übrig bleibt nur, was in allen Körpern dieser Gruppe zugleich liegt.';
     sec.append(f);
+    renderPatternGrowthUI(it, sec, setP);
     renderSkipUI(it, sec);
     if (hint) sec.append(h('div', { class: 'hint-box', html: hint }));
     const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + (p.op === 'pattern' ? 'Auflösen (nur Original behalten)' : 'Auflösen');
@@ -23802,7 +24136,7 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
@@ -37165,7 +37499,7 @@ const Panels = (() => {
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
   }
@@ -42050,6 +42384,11 @@ const Sketch = (() => {
     begin({ plane: o.plane, W: o.W, ents: o.ents || [], dims: [], cons: [], refs: [], viewSize: o.viewSize, ctx: { mode: 'patpath', ids: o.ids } });
     UI.toast('Zeichne die Kurve, an der die Kopien entlanglaufen – Linie, Bogen, Spline oder Kreis. Dann „Fertig“.', { icon: 'info', ms: 4200 });
   }
+  // Schnitt-Kurve für „Körper mit Skizze teilen“ zeichnen (o: { plane, W, ents, gid, ids })
+  function startSplitCurve(o) {
+    begin({ plane: o.plane, W: o.W, ents: o.ents || [], dims: [], cons: [], refs: [], viewSize: o.viewSize, ctx: { mode: 'splitcurve', gid: o.gid || null, ids: o.ids || null } });
+    UI.toast('Zeichne eine Linie, einen Bogen oder Spline durch den Körper – dann „Fertig“.', { icon: 'info', ms: 4200 });
+  }
   // Mittellinie für einen Übergang: Ebene durch den ersten Umriss, in der auch der letzte liegt; vorgezeichnet als Spline durch die Mitten
   let lpKey = '', lpPending = '';
   // kind 'path' = Mittellinie, 'rail' = Führungskurve (Seitenlinie, der der Übergang zwischen den Umrissen folgt)
@@ -42154,6 +42493,7 @@ const Sketch = (() => {
   }
   const pathGroup = () => { if (!S || S.ctx.mode !== 'edit') return null; const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.pt === 'path' ? f.item : null; };
   const isPathEdit = () => !!(S && S.ctx.mode === 'edit' && (() => { const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.pt === 'path'; })());
+  const isSplitSketchEdit = () => !!(S && S.ctx.mode === 'edit' && (() => { const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.op === 'split'; })());
   async function pushPullFace(face) {
     const loops = await loopsOf(face); if (loops == null) return;
     const fr = Actions.faceFrame(face.info);
@@ -42181,7 +42521,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : init.ctx.splitFaceMode ? 'circle' : (init.ctx.mode === 'patpath' || init.ctx.ribMode || init.ctx.webMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, icPick: null, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, blockInsts: Array.isArray(init.blockInsts) ? deepClone(init.blockInsts) : [], blocks0: App.doc && Array.isArray(App.doc.blocks) ? deepClone(App.doc.blocks) : [], selBlockInst: null, blockActive: (App.doc && Array.isArray(App.doc.blocks) && App.doc.blocks[0]) ? App.doc.blocks[0].id : null, blockEdit: null, blockRot: 0, blockLibOpen: false, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : init.ctx.splitFaceMode ? 'circle' : (init.ctx.mode === 'patpath' || init.ctx.mode === 'splitcurve' || init.ctx.ribMode || init.ctx.webMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, icPick: null, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, blockInsts: Array.isArray(init.blockInsts) ? deepClone(init.blockInsts) : [], blocks0: App.doc && Array.isArray(App.doc.blocks) ? deepClone(App.doc.blocks) : [], selBlockInst: null, blockActive: (App.doc && Array.isArray(App.doc.blocks) && App.doc.blocks[0]) ? App.doc.blocks[0].id : null, blockEdit: null, blockRot: 0, blockLibOpen: false, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -48521,6 +48861,7 @@ const Sketch = (() => {
     }
     const w = h('div', { class: 'props' });
     if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: T('sk.panel.patPathHint') }));
+    if (!S.step && (S.ctx.mode === 'splitcurve' || isSplitSketchEdit())) w.append(h('div', { class: 'ok-box', id: 'splitcurve-hint', html: 'Zeichne eine Linie, einen Bogen, Spline oder Umriss durch den Körper und klick <b>Fertig</b>.' }));
     if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: T('sk.panel.loftRailHint') }));
     if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: T('sk.panel.loftRail2Hint') }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: T('sk.panel.loftPathHint') }));
@@ -49680,6 +50021,7 @@ const Sketch = (() => {
     const regs = SK.regions(S.ents);
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
+    const splitMode = S.ctx.mode === 'splitcurve' || isSplitSketchEdit();
     if (isLoftLine()) {
       const rk = railKey(), nm = rk === 'rail2' ? 'zweiten Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie';
       if (!SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneNeedOpen', { what: rk === 'rail2' ? 'zweite Führungskurve' : nm }), { kind: 'bad', icon: 'info' }); return; }
@@ -49690,16 +50032,24 @@ const Sketch = (() => {
       App.select([id]); UI.toast(T('sk.toast.doneLoftFollow', { what: nm }), { icon: 'check' }); return;
     }
     if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast(T('sk.toast.donePathEmpty'), { kind: 'bad', icon: 'info' }); return; }
+    if (splitMode && !SK.chains(S.ents).length && !regs.length) { UI.toast('Zeichne mindestens eine Kurve oder einen Umriss zum Teilen.', { kind: 'bad', icon: 'info' }); return; }
     if (S.ctx.mode === 'patpath') {
       const sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons, ...(S.blockInsts && S.blockInsts.length ? { blockInsts: deepClone(S.blockInsts) } : {}), ...(S.locked ? { locked: true } : {}), ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}), ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}) }, ids = S.ctx.ids;
       const commitBlocks = docBlocksForCommit();
       if (App.doc) App.doc.blocks = commitBlocks;
       finishSession(); Features.pathFromSketch(ids, sk); return;
     }
+    if (S.ctx.mode === 'splitcurve') {
+      const sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons, ...(S.blockInsts && S.blockInsts.length ? { blockInsts: deepClone(S.blockInsts) } : {}), ...(S.locked ? { locked: true } : {}), ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}), ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}) };
+      const target = { gid: S.ctx.gid, ids: S.ctx.ids };
+      const commitBlocks = docBlocksForCommit();
+      if (App.doc) App.doc.blocks = commitBlocks;
+      finishSession(); Features.splitFromSketch(target, sk); return;
+    }
     if (S.ctx.mode === 'edit') {
       const editIt = (Model.find(App.doc, S.ctx.editId) || {}).item;
       const isThinEdit = editKind === 'extrude' && editIt && editIt.p && editIt.p.thin;
-      if (!pathMode) {
+      if (!pathMode && !splitMode) {
         if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneSweepNeed'), { kind: 'bad' }); return; }
         if (editKind === 'rib' && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneRibNeed'), { kind: 'bad' }); return; }
         if (editKind === 'web' && !(SK.webPaths && SK.webPaths(S.ents).length)) { UI.toast(T('sk.toast.doneWebNeed'), { kind: 'bad' }); return; }
@@ -51385,7 +51735,7 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startSplitFace, startPath, startSplitCurve, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
 // ---- 56-notes.js ----
@@ -53290,6 +53640,8 @@ const Commands = (() => {
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
     add('mirror-step', 'Schritt spiegeln (Formschritt im selben Körper)', 'mirror', 'spiegeln schritt formschritt tasche loch rippe symmetrisch ebene fläche körper', () => Features.mirrorStep(), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
+    add('split-face-tool', 'Körper an Fläche teilen (Profi)', 'split', 'teilen schneiden flaeche fläche bezugsebene gebogen kp-47', () => Features.splitWithFace(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('split-sketch', 'Körper mit Skizze teilen (Profi)', 'split', 'teilen schneiden skizze kurve bogen spline kp-47', () => Features.startSplitSketch(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('move-step', 'Verschieben/Drehen als Schritt', 'moveStep', 'verschieben drehen kopieren schritt transform versetzen bewegen lage verlauf', () => Features.transform(), { group: 'Bearbeiten' });
     add('scale-body', 'Körper skalieren (als Schritt)', 'scaleBody', 'skalieren groesser kleiner faktor achse strecken stauchen verlauf', () => Features.scale(), { group: 'Bearbeiten' });
     add('deform-body', 'Körper verformen (Biegen, Verdrehen, Verjüngen)', 'deform', 'verformen biegen verdrehen verjuengen verjüngen bogen torsion konisch schritt profi', () => Features.deform(), { group: 'Bearbeiten' });
