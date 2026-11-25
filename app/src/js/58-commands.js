@@ -321,6 +321,8 @@ const Commands = (() => {
     add('symmetry-check', 'Symmetrie prüfen', 'mirror', 'symmetrie symmetrisch spiegeln ebene abweichung prüfen farben pf-16', () => SymmetryCheck.open(), { group: 'Projekt' });
     add('print-cost', '3D-Druck: Kosten, Filament & Zeit schätzen', 'printer', 'druck kosten preis filament zeit dauer schaetzung schätzung fuellung füllung infill 3d-druck euro kg pf-17', () => Print.costDialog(), { group: 'Projekt' });
     add('report-pdf', 'Prüfbericht als PDF erstellen', 'file', 'pruefbericht prüfbericht bericht pdf report protokoll masse volumen wandstaerke wandstärke bild drucken export pf-18', () => Measure.reportDialog(), { group: 'Projekt' });
+    add('compare-bodies', 'Körper oder Versionen vergleichen (Farben)', 'compare', 'vergleich vergleichen körper versionen unterschied diff farben grün rot grau pf-12', () => Versions.openCompare(), { group: 'Projekt' });
+    add('silhouette-area', 'Schattenriss-Fläche in Blickrichtung (mm²)', 'silhouette2d', 'schattenriss silhouette fläche stirnfläche projektion blickrichtung querschnitt mm2 pf-15', () => Measure.silhouette(), { group: 'Projekt' });
     add('clash-check', 'Durchdringungen suchen (Baugruppe prüfen)', 'boolIntersect', 'durchdringung durchdringungen kollision kollisionen überlappung überschneidung schnitt baugruppe prüfen clash interference bg-10', () => ClashCheck.open(), { group: 'Baugruppe' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
@@ -448,8 +450,18 @@ const Commands = (() => {
   function score(c, q) {
     if (!q) return 0;
     const words = q.split(/\s+/).filter(Boolean); let s = 0;
-    for (const w of words) { const i = c.keys.indexOf(w); if (i < 0) return -1; s += i === 0 ? 3 : c.keys[i - 1] === ' ' ? 2 : 1; }
-    return s + (normTxt(c.label).startsWith(q) ? 5 : 0);
+    for (const w of words) {
+      const i = c.keys.indexOf(w);
+      if (i < 0) return -1;
+      s += i === 0 ? 3 : !/[a-z0-9]/.test(c.keys[i - 1]) ? 2 : 1;
+    }
+    const lbl = normTxt(c.label);
+    if (lbl.startsWith(q)) s += 5;
+    if (words.length > 1) {
+      if (lbl.includes(q)) s += 6;
+      else if (c.keys.includes(q)) s += 3;
+    }
+    return s;
   }
   function search(text) {
     const q = normTxt(text.trim()); if (!q) return [];

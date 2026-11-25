@@ -632,6 +632,7 @@ const IC = {
   plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
   projectEdge: '<path d="M7 3h10l4 4v6" opacity=".45"/><path d="M7 3v6M17 3v6" opacity=".45"/><path d="M12 11v6" stroke-dasharray="2 2"/><path d="M8 15l4 4 4-4"/><path d="M3 21h18" />',
+  compare: '<rect x="3.5" y="4.5" width="11" height="11" rx="1.5" opacity=".6"/><rect x="9.5" y="8.5" width="11" height="11" rx="1.5"/>',
   silhouette2d: '<ellipse cx="12" cy="7" rx="6.5" ry="3" opacity=".45"/><path d="M5.5 7v5c0 1.6 2.9 3 6.5 3s6.5-1.4 6.5-3V7" opacity=".45"/><path d="M12 15v3" stroke-dasharray="2 2"/><rect x="4" y="18" width="16" height="3.5" rx="1"/>',
   intersectCurve: '<path d="M3 9c4-3 14-3 18 0v8c-4-3-14-3-18 0z" opacity=".4"/><path d="M6 4l12 4v11L6 15z" opacity=".4"/><path d="M6 9.5c3.5-1.8 8.5-1.2 12 .8" stroke-width="2.4"/>',
   wall2d: '<path d="M4 18c3-8 9-12 16-12" stroke-dasharray="2.5 2" opacity=".5"/><path d="M3 15.5C6 8 12 4 19 3.5M5.5 20.5c3-7.5 9-11.5 16-12M3 15.5l2.5 5M19 3.5l2.5 5" />',
@@ -2342,6 +2343,16 @@ const HELP = {
   "tip": "Prüfbericht als PDF mit 3D-Bild, Maßen, Volumen, Masse und Wandstärke erstellen",
   "hilfe": "Stellt alle wichtigen Modelldaten auf einer übersichtlichen A4-PDF-Seite zusammen: 3D-Ansicht, Hüllmaße, Volumen, Oberfläche, Masse, Schwerpunkt, kleinste Wandstärke, Düsen- und Bauraum-Prüfung, 3D-Druck-Schätzung und Teileübersicht – komplett lokal im Browser erzeugt.",
   "tipp": "Wenn du vorher die 3D-Druck-Schätzung anpasst, übernimmt der PDF-Prüfbericht deine Werte automatisch."
+ },
+ "compareBodies": {
+  "tip": "Zwei Körper oder Versionen farbig vergleichen: neu (grün), weg (rot), gleich (grau) (Profi)",
+  "hilfe": "Vergleicht zwei Körper im Projekt oder zwei gespeicherte Versionen mit dem exakten CAD-Kern. Hinzugekommene Bereiche leuchten grün, entfernte Bereiche (z. B. Bohrungen) rot und unveränderte Teile bleiben grau.",
+  "tipp": "Klicke auf die Farbfelder (Neu / Weg / Gleich), um einzelne Gruppen auszublenden, oder aktiviere „Aufeinander legen“, wenn zwei Vergleichskörper nebeneinander stehen."
+ },
+ "silhouetteArea": {
+  "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
+  "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
+  "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
  }
 };
 

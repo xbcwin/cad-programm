@@ -1603,5 +1603,15 @@
     "tip": "Prüfbericht als PDF mit 3D-Bild, Maßen, Volumen, Masse und Wandstärke erstellen",
     "hilfe": "Stellt alle wichtigen Modelldaten auf einer übersichtlichen A4-PDF-Seite zusammen: 3D-Ansicht, Hüllmaße, Volumen, Oberfläche, Masse, Schwerpunkt, kleinste Wandstärke, Düsen- und Bauraum-Prüfung, 3D-Druck-Schätzung und Teileübersicht – komplett lokal im Browser erzeugt.",
     "tipp": "Wenn du vorher die 3D-Druck-Schätzung anpasst, übernimmt der PDF-Prüfbericht deine Werte automatisch."
+  },
+  "compareBodies": {
+    "tip": "Zwei Körper oder Versionen farbig vergleichen: neu (grün), weg (rot), gleich (grau) (Profi)",
+    "hilfe": "Vergleicht zwei Körper im Projekt oder zwei gespeicherte Versionen mit dem exakten CAD-Kern. Hinzugekommene Bereiche leuchten grün, entfernte Bereiche (z. B. Bohrungen) rot und unveränderte Teile bleiben grau.",
+    "tipp": "Klicke auf die Farbfelder (Neu / Weg / Gleich), um einzelne Gruppen auszublenden, oder aktiviere „Aufeinander legen“, wenn zwei Vergleichskörper nebeneinander stehen."
+  },
+  "silhouetteArea": {
+    "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
+    "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
+    "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
   }
 }

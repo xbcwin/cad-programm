@@ -4,7 +4,7 @@ const GeomCheck = (() => {
 
   function sync() {
     const b = $('#t-check');
-    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && Measure.draftActive) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active));
+    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing));
   }
 
   function menu(anchor) {
@@ -21,6 +21,9 @@ const GeomCheck = (() => {
       '-',
       { label: T('menu.check.printCost'), icon: 'printer', id: 'check-print-cost', help: 'printCost', run: () => Print.costDialog() },
       { label: T('menu.check.reportPdf'), icon: 'file', id: 'check-report-pdf', help: 'reportPdf', run: () => Measure.reportDialog() },
+      '-',
+      { label: (typeof Versions !== 'undefined' && Versions.comparing ? '✓ ' : '') + T('menu.check.compare'), icon: 'compare', id: 'check-compare', help: 'compareBodies', run: () => Versions.openCompare() },
+      { label: (typeof Measure !== 'undefined' && Measure.silhouetteActive ? '✓ ' : '') + T('menu.check.silhouette'), icon: 'silhouette2d', id: 'check-silhouette', help: 'silhouetteArea', run: () => Measure.silhouette() },
     ]);
   }
 
