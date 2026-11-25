@@ -569,7 +569,10 @@ const Panels = (() => {
       const bhBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-battery-holder', 'data-help': 'batteryHolder', 'data-tip': T('tool.fly.batteryHolderTip') });
       bhBtn.innerHTML = icon('batteryHolder') + esc(T('tool.fly.batteryHolder'));
       bhBtn.onclick = () => { Actions.addPart(LIBMAP.batteryHolder, libDefaults(LIBMAP.batteryHolder)); closeFlyout(); };
-      stepRow.append(mpBtn, bhBtn);
+      const encBtn = h('button', { type: 'button', class: 'btn small', id: 'add-enclosure-gen', 'data-help': 'enclosureGen', 'data-tip': T('tool.fly.enclosureGenTip') });
+      encBtn.innerHTML = icon('enclosure') + esc(T('tool.fly.enclosureGen'));
+      encBtn.onclick = () => { closeFlyout(); Enclosure.openDialog(); };
+      stepRow.append(mpBtn, bhBtn, encBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));

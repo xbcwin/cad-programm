@@ -2969,6 +2969,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Suche, Undo/Redo, Validierung & Hilfen**: Im Einfach-Modus bleiben genau 5 Kacheln sichtbar und `#add-battery-holder` sowie `#add-mount-pattern` sind direkt klickbar, im Profi-Modus erscheint die Kachel `[data-lib="batteryHolder"]`; Befehlssuche (`raspberry pi`, `arduino uno`, `esp32`, `batteriefach`, `18650`), `App.undo()`/`redo()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a189_platinen_batteriefaecher`).
 - [ ] **Von Hand**: Im Browser eine Platte mit Raspberry-Pi-4- und Arduino-Uno-Lochbild sowie ein 2×AA- und 1×18650-Batteriefach anlegen und Wandstärken, Trennwände und Kabel- bzw. Bodenlöcher aus verschiedenen Blickwinkeln prüfen.
 
+## Bibliothek: Gehäuse-Generator, Schritt 1: Kasten mit Deckel (Auto [A-191], BI-20)
+
+- [x] **Einfach-Modus, Dialog & Gehäuse 80×50×30 innen, Wand 2**: Über „Bauteile“ → `#add-enclosure-gen` (`#enclosure-gen-dlg`) entstehen fehlerfrei zwei Körper (`Kasten` und `Deckel`) mit Außenmaß **84 × 54 mm** (Kasten 32 mm, Deckel mit 2-mm-Stecklippe von `z = 30` bis `z = 34 mm`), Innenboden bei `z = 2 mm`, 4 symmetrischen Eck-Schraubdomen (`Ø 7,0 mm` / Loch `Ø 3,0 mm` bei `(±36, ±21) mm`), 0 `GeomCheck`-Befunden und 0 Durchdringungen (`t_a191_gehaeuse_generator`).
+- [x] **Rückgängig, eigene Maße & Optionen**: Einmal `App.undo()`/`redo()` entfernt bzw. stellt alle 7 Schritte sauber wieder her; eigene Maße (`100 × 60 × 25` innen, Wand `2,5`) und Gehäuse ohne Lippe/Schraubdome (`60 × 40 × 20`) bestehen ohne Fehler (`t_a191_gehaeuse_generator`).
+- [x] **Profi-Modus, Befehlssuche, Validierung & Hilfen**: `#add-enclosure-gen` ist in Einfach (bei unveränderter Kachelzahl 5) und Profi sichtbar, Befehlssuche findet `enclosure-gen`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP` (`enclosureGen`) und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a191_gehaeuse_generator`).
+- [ ] **Von Hand**: Im Browser über „Bauteile“ → „Gehäuse (Kasten + Deckel)“ ein Gehäuse erzeugen, Deckel ausblenden oder verschieben und Lippe, Nut und die vier Schraubdome von Hand ansehen.
+
 ## Fehler melden
 
 ```

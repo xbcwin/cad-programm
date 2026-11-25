@@ -1533,3 +1533,324 @@ function partSVG(def) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[def.icon] || IC.parts}</svg>`;
 }
 
+// Parametrischer Gehäuse-Generator (BI-20): Kasten mit Deckel, Lippe/Nut und 4 Schraubdomen
+function enclosureMetrics(opts = {}) {
+  const numOpt = (v, def) => {
+    if (v === null || v === undefined || v === '') return def;
+    const n = Number(v);
+    return isFinite(n) ? n : def;
+  };
+  const innerW = round(numOpt(opts.innerW, 80), 3);
+  const innerD = round(numOpt(opts.innerD, 50), 3);
+  const innerH = round(numOpt(opts.innerH, 30), 3);
+  const wall = round(numOpt(opts.wall, 2), 3);
+  const rawLidH = numOpt(opts.lidH, 0);
+  const lidH = rawLidH > 0 ? round(rawLidH, 3) : wall;
+  const withLip = opts.withLip !== false && opts.withLip !== 'nein';
+  const clearance = round(Math.max(0, numOpt(opts.clearance, 0.2)), 3);
+  const rawLipH = numOpt(opts.lipH, 2);
+  const lipH = round(Math.max(0.5, Math.min(Math.max(0.5, innerH - 1.5), rawLipH)), 3);
+  const rawLipW = numOpt(opts.lipW, 0);
+  const autoLipW = round(Math.max(0.4, Math.min(wall * 0.5, wall - clearance - 0.5)), 3);
+  const lipW = rawLipW > 0 ? round(rawLipW, 3) : autoLipW;
+  const withBosses = opts.withBosses !== false && opts.withBosses !== 'nein';
+  const bossOuterD = round(numOpt(opts.bossOuterD, 7), 3);
+  const bossHoleD = round(numOpt(opts.bossHoleD, 3), 3);
+  const rawBossH = numOpt(opts.bossH, 0);
+  const bossH = rawBossH > 0 ? round(Math.min(innerH, rawBossH), 3) : innerH;
+  const bossHoleDepth = round(Math.max(0, numOpt(opts.bossHoleDepth, 0)), 3);
+
+  const outerW = round(innerW + 2 * wall, 3);
+  const outerD = round(innerD + 2 * wall, 3);
+  const boxH = round(innerH + wall, 3);
+  const totalH = round(boxH + lidH, 3);
+  const bossInset = round(bossOuterD / 2 + 0.5, 3);
+  const bossX = round(innerW / 2 - bossInset, 3);
+  const bossY = round(innerD / 2 - bossInset, 3);
+
+  // basisFromNormal([0, 0, 1]) liefert bx = [0, -1, 0], by = [1, 0, 0] -> u = -y, v = x
+  const corners = [
+    { idx: 1, x: -bossX, y: -bossY, u: bossY, v: -bossX },
+    { idx: 2, x: bossX, y: -bossY, u: bossY, v: bossX },
+    { idx: 3, x: bossX, y: bossY, u: -bossY, v: bossX },
+    { idx: 4, x: -bossX, y: bossY, u: -bossY, v: -bossX },
+  ];
+
+  let error = '';
+  if (!(innerW >= 12 && innerD >= 12 && innerH >= 6)) {
+    error = 'Die Innenmaße müssen mindestens 12 × 12 × 6 mm betragen.';
+  } else if (!(wall >= 0.8)) {
+    error = 'Die Wandstärke muss mindestens 0,8 mm betragen.';
+  } else if (!(lidH >= 0.8)) {
+    error = 'Die Deckelstärke muss mindestens 0,8 mm betragen.';
+  } else if (withLip && !(lipW >= 0.3 && lipW + clearance <= wall - 0.2)) {
+    error = 'Die Wand ist zu dünn für diese Lippenbreite plus Spiel.';
+  } else if (withBosses && !(bossOuterD >= 2.5)) {
+    error = 'Der Schraubdom-Durchmesser muss mindestens 2,5 mm betragen.';
+  } else if (withBosses && !(bossHoleD >= 0 && bossHoleD <= bossOuterD - 0.6)) {
+    error = 'Das Domloch muss mindestens 0,6 mm kleiner als der Außendurchmesser sein.';
+  } else if (withBosses && !(bossX > bossOuterD / 2 + 0.5 && bossY > bossOuterD / 2 + 0.5)) {
+    error = 'Der Innenraum ist zu klein für vier Schraubdome in den Ecken.';
+  }
+
+  return {
+    ok: !error,
+    error,
+    innerW, innerD, innerH, wall, lidH,
+    outerW, outerD, boxH, totalH,
+    withLip, lipH, lipW, clearance,
+    withBosses, bossOuterD, bossHoleD, bossH, bossHoleDepth,
+    bossInset, bossX, bossY, corners,
+  };
+}
+
+const Enclosure = (() => {
+  function insertAtMarker(doc, step) {
+    const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
+    doc.items.splice(at, 0, step);
+    if (doc.rollback != null) doc.rollback = at + 1;
+  }
+
+  function create(opts = {}) {
+    if (typeof App !== 'undefined' && App.ctx) {
+      UI.toast(T('toast.enclosureMainOnly'), { icon: 'info' });
+      return null;
+    }
+    const m = enclosureMetrics(opts);
+    if (!m.ok) {
+      UI.toast(m.error, { icon: 'warn', kind: 'bad' });
+      return null;
+    }
+
+    let box = null, lid = null, lip = null;
+    const bosses = [];
+    const createdIds = [];
+    App.change(T('undo.enclosure'), (doc) => {
+      const mat = (doc.settings && doc.settings.material) || 'PLA';
+      box = Model.newItem('box', { w: m.outerW, d: m.outerD, h: m.boxH }, {
+        name: 'Kasten',
+        role: 'solid',
+        color: '#2f9e91',
+        mat,
+      });
+      box.finishes = [{
+        id: uid('f'),
+        type: 'shell',
+        r: m.wall,
+        dir: 'in',
+        faces: [{ c: [0, 0, m.boxH], n: [0, 0, 1], t: 'PLANE' }],
+      }];
+      lid = Model.newItem('box', { w: m.outerW, d: m.outerD, h: m.lidH }, {
+        name: 'Deckel',
+        role: 'solid',
+        color: '#e8833a',
+        mat,
+      });
+      lid.t.z = m.boxH;
+      insertAtMarker(doc, box);
+      insertAtMarker(doc, lid);
+      createdIds.push(box.id, lid.id);
+
+      if (m.withLip) {
+        lip = Model.newItem('lipGroove', {
+          lipTarget: lid.id,
+          grooveTarget: box.id,
+          face: { c: [0, 0, 0], n: [0, 0, -1], t: 'PLANE' },
+          edge: null,
+          side: 'inner',
+          height: m.lipH,
+          width: m.lipW,
+          clearance: m.clearance,
+        }, {
+          name: 'Deckel-Lippe & Nut',
+          color: lid.color,
+          role: 'solid',
+          mat,
+        });
+        insertAtMarker(doc, lip);
+        createdIds.push(lip.id);
+      }
+
+      if (m.withBosses) {
+        for (const c of m.corners) {
+          const b = Model.newItem('boss', {
+            target: box.id,
+            face: { c: [0, 0, m.wall], n: [0, 0, 1], t: 'PLANE' },
+            origin: [0, 0, m.wall],
+            outerD: m.bossOuterD,
+            holeD: m.bossHoleD,
+            height: m.bossH,
+            holeDepth: m.bossHoleDepth,
+            ribs: 0,
+            ribT: 1.5,
+            ribL: 4,
+            ribH: 0,
+            ribAngle: 0,
+            u: c.u,
+            v: c.v,
+          }, {
+            name: `Schraubdom ${c.idx}`,
+            color: box.color,
+            role: 'solid',
+            mat,
+          });
+          insertAtMarker(doc, b);
+          bosses.push(b);
+          createdIds.push(b.id);
+        }
+      }
+    });
+
+    if (box) {
+      App.select([box.id]);
+      UI.toast(T('toast.enclosureAdded', {
+        outW: fmt(m.outerW, 1),
+        outD: fmt(m.outerD, 1),
+        totalH: fmt(m.totalH, 1),
+      }), { icon: 'check' });
+    }
+    return { box, lid, lip, bosses, metrics: m, ids: createdIds };
+  }
+
+  function openDialog(initial = {}) {
+    if (typeof App !== 'undefined' && App.ctx) {
+      UI.toast(T('toast.enclosureMainOnly'), { icon: 'info' });
+      return null;
+    }
+    const def = enclosureMetrics(initial);
+    const body = h('div', { id: 'enclosure-gen-dlg', class: 'fields' });
+
+    const mkNum = (id, label, val, unit = 'mm') => {
+      const wrap = h('div', { class: 'field' });
+      wrap.append(h('label', { for: id }, label));
+      const box = h('div', { class: 'inp' });
+      const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: val, autocomplete: 'off', spellcheck: 'false' });
+      box.append(inp);
+      if (unit) box.append(h('span', { class: 'unit' }, unit));
+      wrap.append(box);
+      return { wrap, inp };
+    };
+    const mkChk = (id, label, checked) => {
+      const lbl = h('label', { class: 'chk', for: id, style: { gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '4px' } });
+      const inp = h('input', { id, type: 'checkbox' });
+      inp.checked = !!checked;
+      lbl.append(inp, h('span', null, label));
+      return { wrap: lbl, inp };
+    };
+
+    const fW = mkNum('enc-inner-w', T('dlg.enclosure.innerW'), fmt(def.innerW, 2));
+    const fD = mkNum('enc-inner-d', T('dlg.enclosure.innerD'), fmt(def.innerD, 2));
+    const fH = mkNum('enc-inner-h', T('dlg.enclosure.innerH'), fmt(def.innerH, 2));
+    const fWall = mkNum('enc-wall', T('dlg.enclosure.wall'), fmt(def.wall, 2));
+    const fLidH = mkNum('enc-lid-h', T('dlg.enclosure.lidH'), initial.lidH > 0 ? fmt(def.lidH, 2) : '0');
+
+    const cLip = mkChk('enc-with-lip', T('dlg.enclosure.withLip'), def.withLip);
+    const fLipH = mkNum('enc-lip-h', T('dlg.enclosure.lipH'), fmt(def.lipH, 2));
+    const fLipW = mkNum('enc-lip-w', T('dlg.enclosure.lipW'), initial.lipW > 0 ? fmt(def.lipW, 2) : '0');
+    const fClear = mkNum('enc-clear', T('dlg.enclosure.clearance'), fmt(def.clearance, 2));
+
+    const cBoss = mkChk('enc-with-bosses', T('dlg.enclosure.withBosses'), def.withBosses);
+    const fBossOD = mkNum('enc-boss-od', T('dlg.enclosure.bossOuterD'), fmt(def.bossOuterD, 2));
+    const fBossHD = mkNum('enc-boss-hd', T('dlg.enclosure.bossHoleD'), fmt(def.bossHoleD, 2));
+    const fBossH = mkNum('enc-boss-h', T('dlg.enclosure.bossH'), initial.bossH > 0 ? fmt(def.bossH, 2) : '0');
+
+    const summary = h('div', { id: 'enc-preview-summary', class: 'hint-box', style: { gridColumn: '1 / -1' } });
+    body.append(
+      fW.wrap, fD.wrap, fH.wrap, fWall.wrap, fLidH.wrap,
+      cLip.wrap, fLipH.wrap, fLipW.wrap, fClear.wrap,
+      cBoss.wrap, fBossOD.wrap, fBossHD.wrap, fBossH.wrap,
+      summary,
+    );
+
+    const parseRaw = (el, fallback) => {
+      const s = String(el.value || '').trim().replace(',', '.');
+      if (!s) return fallback;
+      const n = Number(s);
+      return isFinite(n) ? n : fallback;
+    };
+
+    const readValues = () => ({
+      innerW: parseRaw(fW.inp, 80),
+      innerD: parseRaw(fD.inp, 50),
+      innerH: parseRaw(fH.inp, 30),
+      wall: parseRaw(fWall.inp, 2),
+      lidH: parseRaw(fLidH.inp, 0),
+      withLip: !!cLip.inp.checked,
+      lipH: parseRaw(fLipH.inp, 2),
+      lipW: parseRaw(fLipW.inp, 0),
+      clearance: parseRaw(fClear.inp, 0.2),
+      withBosses: !!cBoss.inp.checked,
+      bossOuterD: parseRaw(fBossOD.inp, 7),
+      bossHoleD: parseRaw(fBossHD.inp, 3),
+      bossH: parseRaw(fBossH.inp, 0),
+    });
+
+    const syncUI = () => {
+      const lipOn = !!cLip.inp.checked;
+      const bossOn = !!cBoss.inp.checked;
+      for (const el of [fLipH, fLipW, fClear]) {
+        el.inp.disabled = !lipOn;
+        el.wrap.style.opacity = lipOn ? '' : '0.45';
+      }
+      for (const el of [fBossOD, fBossHD, fBossH]) {
+        el.inp.disabled = !bossOn;
+        el.wrap.style.opacity = bossOn ? '' : '0.45';
+      }
+      const m = enclosureMetrics(readValues());
+      if (!m.ok) {
+        summary.innerHTML = `<span style="color:var(--bad)">${esc(m.error)}</span>`;
+        return m;
+      }
+      const lipInfo = m.withLip ? ` · Lippe ${fmt(m.lipW, 2)}×${fmt(m.lipH, 2)} mm (Spiel ${fmt(m.clearance, 2)})` : '';
+      const bossInfo = m.withBosses ? ` · 4× Dom Ø ${fmt(m.bossOuterD, 1)} / Loch Ø ${fmt(m.bossHoleD, 1)} mm` : '';
+      summary.innerHTML = T('dlg.enclosure.summary', {
+        outW: fmt(m.outerW, 1),
+        outD: fmt(m.outerD, 1),
+        totalH: fmt(m.totalH, 1),
+        boxH: fmt(m.boxH, 1),
+        lidH: fmt(m.lidH, 1),
+        inW: fmt(m.innerW, 1),
+        inD: fmt(m.innerD, 1),
+        inH: fmt(m.innerH, 1),
+        lipInfo,
+        bossInfo,
+      });
+      return m;
+    };
+
+    for (const el of [fW.inp, fD.inp, fH.inp, fWall.inp, fLidH.inp, fLipH.inp, fLipW.inp, fClear.inp, fBossOD.inp, fBossHD.inp, fBossH.inp]) {
+      el.addEventListener('input', syncUI);
+      el.addEventListener('change', syncUI);
+    }
+    cLip.inp.addEventListener('change', syncUI);
+    cBoss.inp.addEventListener('change', syncUI);
+    syncUI();
+
+    return UI.modal({
+      title: T('dlg.enclosure.title'),
+      body,
+      actions: [
+        { label: T('common.cancel'), value: null },
+        {
+          id: 'enc-gen-create',
+          label: T('dlg.enclosure.create'),
+          primary: true,
+          help: 'enclosureGen',
+          run: () => {
+            const vals = readValues();
+            const m = enclosureMetrics(vals);
+            if (!m.ok) {
+              syncUI();
+              UI.toast(m.error, { icon: 'warn', kind: 'bad' });
+              return false;
+            }
+            return !!create(vals);
+          },
+        },
+      ],
+    });
+  }
+
+  return { metrics: enclosureMetrics, create, openDialog };
+})();
+

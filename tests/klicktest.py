@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI,Enclosure}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -38994,6 +38994,203 @@ def t_a189_platinen_batteriefaecher(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a191_gehaeuse_generator(p):
+    # [A-191] Bibliothek: Gehäuse-Generator, Schritt 1: Kasten mit Deckel (BI-20)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('model');")
+    p.wait(250)
+
+    # 1. Einfach-Modus: Bauteile-Flyout öffnet Gehäuse-Generator-Dialog und erzeugt 80×50×30 innen, Wand 2
+    p.pg.locator('#t-parts').click()
+    p.wait(300)
+    simple_fly = p.ev("""return {
+      tileCount: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      encBtn: !!document.querySelector('#add-enclosure-gen') && !!document.querySelector('#add-enclosure-gen').offsetParent,
+      encHelp: document.querySelector('#add-enclosure-gen')?.getAttribute('data-help') || '',
+      cmdsSimple: Commands.search('gehäuse').map(c => c.id),
+    }""")
+    p.pg.locator('#add-enclosure-gen').click()
+    p.pg.wait_for_selector('#enclosure-gen-dlg', timeout=5000)
+    p.pg.locator('#enc-inner-w').fill('80')
+    p.pg.locator('#enc-inner-d').fill('50')
+    p.pg.locator('#enc-inner-h').fill('30')
+    p.pg.locator('#enc-wall').fill('2')
+    p.wait(150)
+    preview_txt = p.pg.locator('#enc-preview-summary').text_content() or ''
+    p.pg.locator('#enc-gen-create').click()
+    warte_rechnen(p, 60)
+
+    ok1 = bool(
+        simple_fly['tileCount'] == 5
+        and simple_fly['encBtn']
+        and simple_fly['encHelp'] == 'enclosureGen'
+        and 'enclosure-gen' in simple_fly['cmdsSimple']
+        and '84' in preview_txt and '54' in preview_txt
+    )
+
+    # 2. Geometrie prüfen: zwei Körper (Kasten & Deckel), Außenmaß 84×54, Deckel mit Lippe, 4 Schraubdome in den Ecken
+    geo = p.ev("""return (() => {
+      const boxIt = App.doc.items.find(x => x.name === 'Kasten');
+      const lidIt = App.doc.items.find(x => x.name === 'Deckel');
+      const lipIt = App.doc.items.find(x => x.kind === 'lipGroove');
+      const bosses = App.doc.items.filter(x => x.kind === 'boss');
+      const boxWb = boxIt ? Actions.worldBox(boxIt.id) : null;
+      const lidWb = lidIt ? Actions.worldBox(lidIt.id) : null;
+      const boxRes = boxIt ? App.results.get(boxIt.id) : null;
+      const lidRes = lidIt ? App.results.get(lidIt.id) : null;
+      const faces = (boxRes && boxRes.data && boxRes.data.faces) || [];
+      const floorPlanes = faces.filter(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && f.c && Math.abs(f.c[2] - 2.0) < 0.05);
+      const uniqPts = (arr) => {
+        const out = [];
+        for (const f of arr) {
+          if (!f.c) continue;
+          const x = f.c[0], y = f.c[1];
+          if (!out.some(q => Math.hypot(q[0] - x, q[1] - y) < 0.1)) out.push([Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
+        }
+        return out;
+      };
+      const outerBossPts = uniqPts(faces.filter(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 7.0) < 0.05));
+      const holeBossPts = uniqPts(faces.filter(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 3.0) < 0.05));
+      const activeBodies = App.doc.items.filter(x => {
+        const r = App.results.get(x.id);
+        return r && r.data && r.data.bbox;
+      }).map(x => x.name);
+      return {
+        errs: App.errors.length,
+        itemCount: App.doc.items.length,
+        hasBox: !!boxIt, hasLid: !!lidIt, hasLip: !!lipIt, bossCount: bosses.length,
+        activeBodies,
+        boxDx: boxWb ? Math.round((boxWb.max.x - boxWb.min.x) * 100) / 100 : 0,
+        boxDy: boxWb ? Math.round((boxWb.max.y - boxWb.min.y) * 100) / 100 : 0,
+        boxZMin: boxWb ? Math.round(boxWb.min.z * 100) / 100 : 0,
+        boxZMax: boxWb ? Math.round(boxWb.max.z * 100) / 100 : 0,
+        lidDx: lidWb ? Math.round((lidWb.max.x - lidWb.min.x) * 100) / 100 : 0,
+        lidDy: lidWb ? Math.round((lidWb.max.y - lidWb.min.y) * 100) / 100 : 0,
+        lidZMin: lidWb ? Math.round(lidWb.min.z * 100) / 100 : 0,
+        lidZMax: lidWb ? Math.round(lidWb.max.z * 100) / 100 : 0,
+        hasFloor2: floorPlanes.length > 0,
+        outerBossPts,
+        holeBossPts,
+        lidReady: !!(lidRes && lidRes.data && lidRes.data.bbox),
+      };
+    })()""")
+    gc = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    clash = p.ev("return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } })")
+
+    expected_corners = [(-36.0, -21.0), (36.0, -21.0), (36.0, 21.0), (-36.0, 21.0)]
+    def corners_ok(pts):
+        return len(pts) == 4 and all(any(abs(px - ex) < 0.08 and abs(py - ey) < 0.08 for px, py in pts) for ex, ey in expected_corners)
+
+    ok2 = bool(
+        geo['errs'] == 0
+        and geo['itemCount'] == 7
+        and geo['hasBox'] and geo['hasLid'] and geo['hasLip'] and geo['bossCount'] == 4
+        and sorted(geo['activeBodies']) == ['Deckel', 'Kasten']
+        and abs(geo['boxDx'] - 84.0) < 0.05 and abs(geo['boxDy'] - 54.0) < 0.05
+        and abs(geo['boxZMin']) < 0.05 and abs(geo['boxZMax'] - 32.0) < 0.05
+        and abs(geo['lidDx'] - 84.0) < 0.05 and abs(geo['lidDy'] - 54.0) < 0.05
+        and abs(geo['lidZMin'] - 30.0) < 0.05 and abs(geo['lidZMax'] - 34.0) < 0.05
+        and geo['hasFloor2']
+        and corners_ok(geo['outerBossPts'])
+        and corners_ok(geo['holeBossPts'])
+        and gc['issues'] == 0 and gc['checked'] == 2
+        and len(clash.get('pairs', [])) == 0
+    )
+
+    # 3. Rückgängig / Wiederholen, eigene Maße & Variante ohne Lippe/Schraubdome
+    p.ev("App.undo()"); warte_rechnen(p, 45)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo()"); warte_rechnen(p, 60)
+    redo_st = p.ev("return { len: App.doc.items.length, errs: App.errors.length }")
+
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Enclosure.create({ innerW: 100, innerD: 60, innerH: 25, wall: 2.5, lidH: 3, bossOuterD: 8, bossHoleD: 3.2 })")
+    warte_rechnen(p, 60)
+    custom_st = p.ev("""return (() => {
+      const boxIt = App.doc.items.find(x => x.name === 'Kasten');
+      const lidIt = App.doc.items.find(x => x.name === 'Deckel');
+      const boxWb = boxIt ? Actions.worldBox(boxIt.id) : null;
+      const lidWb = lidIt ? Actions.worldBox(lidIt.id) : null;
+      const faces = (boxIt && App.results.get(boxIt.id)?.data?.faces) || [];
+      const outer8 = faces.filter(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 8.0) < 0.05).length;
+      const hole32 = faces.filter(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 3.2) < 0.05).length;
+      return {
+        errs: App.errors.length,
+        boxDx: boxWb ? Math.round((boxWb.max.x - boxWb.min.x) * 100) / 100 : 0,
+        boxDy: boxWb ? Math.round((boxWb.max.y - boxWb.min.y) * 100) / 100 : 0,
+        boxDz: boxWb ? Math.round((boxWb.max.z - boxWb.min.z) * 100) / 100 : 0,
+        lidZMin: lidWb ? Math.round(lidWb.min.z * 100) / 100 : 0,
+        lidZMax: lidWb ? Math.round(lidWb.max.z * 100) / 100 : 0,
+        outer8, hole32,
+      };
+    })()""")
+    gc_custom = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    clash_custom = p.ev("return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } })")
+
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Enclosure.create({ innerW: 60, innerD: 40, innerH: 20, wall: 2, withLip: false, withBosses: false })")
+    warte_rechnen(p, 45)
+    plain_st = p.ev("""return (() => {
+      const boxIt = App.doc.items.find(x => x.name === 'Kasten');
+      const lidIt = App.doc.items.find(x => x.name === 'Deckel');
+      const boxWb = boxIt ? Actions.worldBox(boxIt.id) : null;
+      return {
+        errs: App.errors.length,
+        len: App.doc.items.length,
+        lipCount: App.doc.items.filter(x => x.kind === 'lipGroove').length,
+        bossCount: App.doc.items.filter(x => x.kind === 'boss').length,
+        hasLid: !!lidIt,
+        boxDx: boxWb ? Math.round((boxWb.max.x - boxWb.min.x) * 100) / 100 : 0,
+        boxDy: boxWb ? Math.round((boxWb.max.y - boxWb.min.y) * 100) / 100 : 0,
+      };
+    })()""")
+
+    ok3 = bool(
+        undo_len == 0 and redo_st['len'] == 7 and redo_st['errs'] == 0
+        and custom_st['errs'] == 0
+        and abs(custom_st['boxDx'] - 105.0) < 0.05 and abs(custom_st['boxDy'] - 65.0) < 0.05 and abs(custom_st['boxDz'] - 27.5) < 0.05
+        and abs(custom_st['lidZMin'] - 25.5) < 0.05 and abs(custom_st['lidZMax'] - 30.5) < 0.05
+        and custom_st['outer8'] >= 4 and custom_st['hole32'] >= 4
+        and gc_custom['issues'] == 0 and gc_custom['checked'] == 2
+        and len(clash_custom.get('pairs', [])) == 0
+        and plain_st['errs'] == 0 and plain_st['len'] == 2 and plain_st['hasLid']
+        and plain_st['lipCount'] == 0 and plain_st['bossCount'] == 0
+        and abs(plain_st['boxDx'] - 64.0) < 0.05 and abs(plain_st['boxDy'] - 44.0) < 0.05
+    )
+
+    # 4. Profi-Modus, Befehlssuche, Validierung, Hilfen & I18n
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    pro_st = p.ev("""return {
+      encBtn: !!document.querySelector('#add-enclosure-gen') && !!document.querySelector('#add-enclosure-gen').offsetParent,
+      cmdsGeh: Commands.search('gehäuse').map(c => c.id),
+      cmdsKas: Commands.search('kasten').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = !!(wh.enclosureGen && wh.enclosureGen.tip && wh.enclosureGen.hilfe && wh.enclosureGen.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, i18nOk };
+    })()""")
+
+    ok4 = bool(
+        pro_st['encBtn']
+        and 'enclosure-gen' in pro_st['cmdsGeh']
+        and 'enclosure-gen' in pro_st['cmdsKas']
+        and meta['valOk'] and meta['hOk'] and meta['i18nOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -39297,6 +39494,7 @@ TESTS = [
     ('[A-185] Bibliothek: Zahnriemenscheiben (GT2, HTD) & Kettenräder nach Teilung (BI-12)', t_a185_zahnriemenscheiben_kettenraeder),
     ('[A-188] Bibliothek: Lochbilder für Lüfter, Motoren, Servos (BI-16)', t_a188_lochbilder_luefter_motoren_servos),
     ('[A-189] Bibliothek: Lochbilder Platinen & Batteriefächer (BI-17, BI-19)', t_a189_platinen_batteriefaecher),
+    ('[A-191] Bibliothek: Gehäuse-Generator (Kasten mit Deckel, Lippe & 4 Schraubdome, BI-20)', t_a191_gehaeuse_generator),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

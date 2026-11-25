@@ -892,6 +892,7 @@ const Model = (() => {
           ribAngle: num(p.ribAngle, ownV, 0),
           u: num(p.u, ownV, 0),
           v: num(p.v, ownV, 0),
+          ...(Array.isArray(p.origin) && p.origin.length >= 3 ? { origin: p.origin.slice(0, 3).map((x) => num(x, ownV, 0)) } : {}),
         };
       } else if (it.kind === 'lipGroove') {
         const p = it.p || {};

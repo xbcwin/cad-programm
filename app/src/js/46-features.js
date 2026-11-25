@@ -4332,6 +4332,7 @@ const Features = (() => {
             f.item.p.face = sig;
             f.item.p.u = uv.u;
             f.item.p.v = uv.v;
+            f.item.p.origin = null;
           });
           UI.toast('Fläche für Schraubdom aktualisiert.', { icon: 'check' });
           return;

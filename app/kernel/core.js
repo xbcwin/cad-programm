@@ -11721,7 +11721,13 @@ export function createKernel(R, oc) {
     }
 
     const { bx, by } = basisFromNormal(fn);
-    const baseO = add(fc, add(mul(bx, u), mul(by, v)));
+    let refO = fc;
+    if (Array.isArray(p.origin) && p.origin.length >= 3) {
+      const po = [num(p.origin[0], fc[0]), num(p.origin[1], fc[1]), num(p.origin[2], fc[2])];
+      const dPln = dot(sub(po, fc), fn);
+      refO = sub(po, mul(fn, dPln));
+    }
+    const baseO = add(refO, add(mul(bx, u), mul(by, v)));
     const emb = 0.05;
     const outerR = outerD / 2;
 

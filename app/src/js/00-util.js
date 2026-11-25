@@ -742,6 +742,7 @@ const IC = {
   sprocket: '<circle cx="12" cy="12" r="3.4"/><path d="M10.8 2.8h2.4l.7 2.7a6.6 6.6 0 0 1 2.2.9l2.1-1.8 1.7 1.7-1.8 2.1a6.6 6.6 0 0 1 .9 2.2l2.7.7v2.4l-2.7.7a6.6 6.6 0 0 1-.9 2.2l1.8 2.1-1.7 1.7-2.1-1.8a6.6 6.6 0 0 1-2.2.9l-.7 2.7h-2.4l-.7-2.7a6.6 6.6 0 0 1-2.2-.9l-2.1 1.8-1.7-1.7 1.8-2.1a6.6 6.6 0 0 1-.9-2.2l-2.7-.7v-2.4l2.7-.7a6.6 6.6 0 0 1 .9-2.2L4.2 6.3l1.7-1.7 2.1 1.8a6.6 6.6 0 0 1 2.2-.9z"/>',
   mountPattern: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="currentColor" opacity=".14"/><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="17" r="1.2" fill="currentColor" stroke="none"/>',
   batteryHolder: '<rect x="3" y="5" width="18" height="14" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="5.5" y="7.5" width="5.2" height="9" rx="1"/><rect x="13.3" y="7.5" width="5.2" height="9" rx="1"/><path d="M7.2 7.5V6.3h1.8v1.2M15 7.5V6.3h1.8v1.2"/>',
+  enclosure: '<path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z" fill="currentColor" opacity=".14"/><path d="M4 9.5h16v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z"/><path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h14a1.5 1.5 0 0 1 1.5 1.5v2H3.5z"/><path d="M6.5 7.5v1.5h11V7.5"/><circle cx="7.5" cy="13" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="13" r=".9" fill="currentColor" stroke="none"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2838,6 +2839,11 @@ const HELP = {
   "tip": "Parametrisches Batteriefach für AA-, AAA- und 18650-Zellen (1–8 Zellen)",
   "hilfe": "Erzeugt ein fertiges Batterie- oder Akkufach mit exakt abgestimmtem Innenmaß nach IEC-Zellmaß plus Spiel und Kontakt-Zugabe für Federkontakte. Du wählst Zellentyp (AA, AAA, 18650 ungeschützt oder geschützt), Zellenanzahl, Wand- und Bodendicke, optionale Trennwände, Kontakt-/Kabellöcher an den Stirnseiten, M3-Befestigungslöcher im Boden sowie eine 3D-Druck-Passung.",
   "tipp": "Lass „Spiel Ø“ und „Kontakt-Zugabe“ leer für geprüfte Standardwerte mit Metall-Blattfedern, oder wähle unter Druck-Passung „gleitend“, falls die Zellen enger oder lockerer sitzen sollen."
+ },
+ "enclosureGen": {
+  "tip": "Gehäuse-Generator: Kasten mit Deckel, umlaufender Lippe/Nut und 4 Schraubdomen",
+  "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit echten, einzeln bearbeitbaren Schritten in der Zeitleiste: den ausgehöhlten Kasten, den passenden Deckel, eine umlaufende Stecklippe mit Nut und einstellbarem Spiel sowie vier Schraubdome in den Innenecken.",
+  "tipp": "Alle erzeugten Schritte (Kasten, Deckel, Lippe & Nut und jeder einzelne Schraubdom) bleiben rechts und in der Zeitleiste jederzeit einzeln anpassbar."
  }
 };
 

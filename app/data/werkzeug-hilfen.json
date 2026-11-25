@@ -2068,5 +2068,10 @@
     "tip": "Parametrisches Batteriefach für AA-, AAA- und 18650-Zellen (1–8 Zellen)",
     "hilfe": "Erzeugt ein fertiges Batterie- oder Akkufach mit exakt abgestimmtem Innenmaß nach IEC-Zellmaß plus Spiel und Kontakt-Zugabe für Federkontakte. Du wählst Zellentyp (AA, AAA, 18650 ungeschützt oder geschützt), Zellenanzahl, Wand- und Bodendicke, optionale Trennwände, Kontakt-/Kabellöcher an den Stirnseiten, M3-Befestigungslöcher im Boden sowie eine 3D-Druck-Passung.",
     "tipp": "Lass „Spiel Ø“ und „Kontakt-Zugabe“ leer für geprüfte Standardwerte mit Metall-Blattfedern, oder wähle unter Druck-Passung „gleitend“, falls die Zellen enger oder lockerer sitzen sollen."
+  },
+  "enclosureGen": {
+    "tip": "Gehäuse-Generator: Kasten mit Deckel, umlaufender Lippe/Nut und 4 Schraubdomen",
+    "hilfe": "Erzeugt aus deinen Innenmaßen und der Wandstärke ein komplettes zweiteiliges Gehäuse (Kasten und Deckel) mit echten, einzeln bearbeitbaren Schritten in der Zeitleiste: den ausgehöhlten Kasten, den passenden Deckel, eine umlaufende Stecklippe mit Nut und einstellbarem Spiel sowie vier Schraubdome in den Innenecken.",
+    "tipp": "Alle erzeugten Schritte (Kasten, Deckel, Lippe & Nut und jeder einzelne Schraubdom) bleiben rechts und in der Zeitleiste jederzeit einzeln anpassbar."
   }
 }
