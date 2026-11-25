@@ -2351,15 +2351,21 @@ const Panels = (() => {
     }
     if (!isMoveOnly) {
       w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; }), it.color, !!it.colorSet, it));
-      // Farbe der gewählten Fläche
-      const sf = !isRef ? Actions.selectedFace() : null;
+      // Farbe der gewählten Fläche(n)
+      const sfs = !isRef ? (App.faces || []).filter((x) => x.id === it.id).map((x) => {
+        const r = App.results.get(x.id);
+        const info = r && r.data && r.data.faces ? r.data.faces[x.faceIdx] : null;
+        return info ? { id: x.id, idx: x.faceIdx, info } : null;
+      }).filter(Boolean) : [];
+      const sf = sfs.length ? sfs[sfs.length - 1] : (!isRef ? Actions.selectedFace() : null);
       if (sf && sf.id === it.id && it.role !== 'hole') {
+        const targetFaces = sfs.length ? sfs : [sf];
+        const targetIdxs = new Set(targetFaces.map((x) => x.idx));
         const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, T('panel.faceCol.title')));
-        const key = { n: sf.info.n || null, c: sf.info.c };
         const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
         const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
-          const tgt = Model.find(doc, it.id).item; const list = (tgt.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
-          if (col) list.push({ ...key, col });
+          const tgt = Model.find(doc, it.id).item; const list = (tgt.faceColors || []).filter((x) => !targetIdxs.has(Viewer.faceIndexOf(it.id, x)));
+          if (col) for (const f of targetFaces) list.push({ n: f.info.n || null, c: f.info.c, col });
           if (list.length) tgt.faceColors = list; else delete tgt.faceColors;
         });
         const row = h('div', { class: 'colors' });
@@ -2800,6 +2806,19 @@ const Panels = (() => {
         tb.dataset.help = 'datumTwoEdges';
       }
       sep();
+    } else if (App.faces && App.faces.length > 1) {
+      bar.append(h('span', { class: 'lbl', id: 'ctx-faces-lbl' }, T('ctx.facesCount', { n: App.faces.length })));
+      b('fillet', T('ctx.facesEdges'), () => {
+        const seen = new Set(), list = [], ids = new Set();
+        for (const f of App.faces) {
+          for (const ei of Viewer.faceEdges(f.id, f.faceIdx)) {
+            const k = f.id + ':' + ei;
+            if (!seen.has(k)) { seen.add(k); list.push({ id: f.id, edgeIdx: ei }); ids.add(f.id); }
+          }
+        }
+        if (list.length) App.select([...ids], { edges: list });
+      }, 'accent', T('ctx.facesEdgesTip'));
+      sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, T('ctx.face')));
       b('sketch', T('ctx.sketchHere'), () => Sketch.startOnFace(face), 'accent', T('ctx.sketchHereTip')).dataset.help = 'sketchFace';
@@ -3088,8 +3107,9 @@ const Panels = (() => {
     const bX = h('button', { type: 'button', 'aria-label': T('vc.xrayAria'), 'data-tip': T('vc.xrayTip'), 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray', 'data-vc-key': 'xrayTip', 'data-vc-aria': 'xrayAria' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': T('vc.sectionAria'), 'data-tip': T('vc.sectionTip'), 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section', 'data-vc-key': 'sectionTip', 'data-vc-aria': 'sectionAria' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
     const bF = h('button', { type: 'button', 'aria-label': T('vc.filterAria'), 'data-tip': T('vc.filterTip'), 'data-view': 'filter', 'data-help': 'selectFilter', 'data-vc-key': 'filterTip', 'data-vc-aria': 'filterAria' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
+    const bPaint = h('button', { type: 'button', 'aria-label': T('vc.paintAria'), 'data-tip': T('vc.paintTip'), 'data-kbd': 'V', 'data-view': 'paint', 'data-help': 'paintSelect', 'data-vc-key': 'paintTip', 'data-vc-aria': 'paintAria' }); bPaint.innerHTML = icon('noteDraw'); bPaint.onclick = () => Select.togglePaint();
     for (const x of [bX, bC, bF]) x.classList.add('pro');
-    vb.append(bO, bG, bP, bN, bX, bC, bF, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb); viewBtnsEl = vb;
+    vb.append(bO, bG, bP, bN, bX, bC, bF, bPaint, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb); viewBtnsEl = vb;
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();

@@ -902,6 +902,18 @@ const Measure = (() => {
       if (total > 0) return { text: T('status.edgeManyLen', { n: App.edges.length, v: Units.fmtLenU(total, 2) }), tip: T('status.edgesTotalTip'), copyVal: Units.fmtLen(total, 2), copyWhat: T('status.copyTotalLen') };
       return { text: T('status.edgeMany', { n: App.edges.length }), tip: T('status.edgeManyTip') };
     }
+    if (App.faces && App.faces.length > 1) {
+      let totalArea = 0;
+      for (const f of App.faces) {
+        const a = Viewer.faceArea(f.id, f.faceIdx);
+        if (a > 0) totalArea += a;
+      }
+      if (totalArea > 0) {
+        const dec = totalArea < 100 ? 2 : 1;
+        return { text: T('status.faceManyArea', { n: App.faces.length, area: Units.fmtAreaU(totalArea, dec) }), tip: T('status.faceManyTip'), copyVal: Units.fmtArea(totalArea, dec), copyWhat: T('status.copyArea') };
+      }
+      return { text: T('status.faceMany', { n: App.faces.length }), tip: T('status.faceManyTip') };
+    }
     if (App.face) {
       const face = typeof Actions !== 'undefined' && Actions.selectedFace ? Actions.selectedFace() : null;
       if (face) {

@@ -27375,6 +27375,192 @@ def t_a140_was_ist_das(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_kreis_malen(p):
+    # 1. Taste Q -> Kreis-Menü mit 8 Einträgen, Klick auf „Quader“ legt Quader an
+    p.empty()
+    cx, cy = p.canvas_center()
+    p.pg.mouse.move(cx, cy)
+    p.pg.keyboard.press('q')
+    p.wait(300)
+    ok1 = (
+        p.pg.locator('#radial-menu').count() == 1
+        and p.pg.locator('#radial-menu .radial-item').count() == 8
+        and any('Quader' in t for t in p.pg.locator('#radial-menu .radial-item').all_text_contents())
+    )
+    p.pg.locator('#radial-menu .radial-item[data-cmd="box"]').click()
+    warte_rechnen(p, 20)
+    ok1 = ok1 and p.pg.locator('#radial-menu').count() == 0 and kinds(p) == ['box']
+
+    # 2. Einstellbar (Speichern + Zurücksetzen) & rechte Maus halten öffnet Kreis-Menü
+    p.pg.mouse.move(cx + 180, cy)
+    p.pg.keyboard.press('q')
+    p.wait(250)
+    p.pg.locator('#radial-config-btn').click()
+    p.wait(250)
+    p.pg.select_option('#radial-slot-0', 'cylinder')
+    p.pg.locator('#radial-save').click()
+    p.wait(250)
+    saved_items = p.ev("return [UI.radialItems()[0], localStorage.getItem('tracery-kreismenue')]")
+    ok2 = saved_items[0] == 'cylinder' and bool(saved_items[1])
+
+    p.pg.mouse.move(cx + 220, cy + 40)
+    p.pg.mouse.down(button='right')
+    p.wait(450)
+    p.pg.mouse.up(button='right')
+    p.wait(250)
+    ok2 = (
+        ok2
+        and p.pg.locator('#radial-menu').count() == 1
+        and p.pg.locator('.menu').count() == 0
+        and p.pg.locator('#radial-menu .radial-item[data-slot="0"]').get_attribute('data-cmd') == 'cylinder'
+        and 'Zylinder' in p.pg.locator('#radial-menu .radial-item[data-slot="0"]').text_content()
+    )
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    ok2 = ok2 and p.pg.locator('#radial-menu').count() == 0 and p.ev("return UI.resetRadial()[0]") == 'box'
+    # Kurzer Rechtsklick im Leeren öffnet weiterhin das normale Kontextmenü
+    p.pg.mouse.click(cx - 200, cy, button='right')
+    p.wait(250)
+    ok2 = ok2 and p.pg.locator('.menu').count() == 1
+    p.pg.mouse.click(cx - 200, cy)
+    p.wait(150)
+    ok2 = ok2 and p.pg.locator('.menu').count() == 0
+
+    # 3. Malen-Auswahl: über 3 Flächen streichen -> 3 Flächen gewählt
+    p.ev("""
+      App.change('Quader', d => {
+        const b = d.items[0];
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        Object.assign(b.p, { w: 40, d: 30, h: 20 });
+      });
+      App.clearSelection();
+    """)
+    warte_rechnen(p, 20)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(400)
+
+    face_pts = p.ev("""
+      const THREE = window.__masswerk.THREE;
+      const it = App.doc.items[0];
+      const n = Viewer.nodes.get(it.id);
+      if (!n || !n.data || !n.data.faces) return [];
+      const r = Viewer.canvas.getBoundingClientRect();
+      const cam = Viewer.activeCamera;
+      const out = [];
+      n.data.faces.forEach((f, idx) => {
+        if (!f || !f.c || !f.n) return;
+        const wc = new THREE.Vector3(...f.c).applyMatrix4(n.obj.matrix);
+        const wn = new THREE.Vector3(...f.n).transformDirection(n.obj.matrix).normalize();
+        const toCam = cam.position.clone().sub(wc).normalize();
+        if (toCam.dot(wn) <= 0.15) return;
+        const s = Viewer.toScreen(wc);
+        const sx = r.left + s.x, sy = r.top + s.y;
+        const hit = Viewer.pick(sx, sy, { noEdges: true });
+        if (hit && hit.id === it.id && hit.faceIdx === idx) out.push({ idx, sx, sy });
+      });
+      return out;
+    """)
+    ok3 = len(face_pts) >= 3
+    if ok3:
+        p.pg.locator('.view-btns [data-view="paint"]').click()
+        p.wait(250)
+        ok3 = p.ev("return Select.paintActive") is True and p.pg.locator('#paint-select-bar').count() == 1
+        pts = face_pts[:3]
+        p.pg.mouse.move(pts[0]['sx'], pts[0]['sy'])
+        p.pg.mouse.down()
+        p.pg.mouse.move(pts[1]['sx'], pts[1]['sy'], steps=12)
+        p.pg.mouse.move(pts[2]['sx'], pts[2]['sy'], steps=12)
+        p.pg.mouse.up()
+        p.wait(300)
+        sel_faces = p.ev("return App.faces.map(f => f.faceIdx)")
+        ok3 = (
+            ok3
+            and len(sel_faces) == 3
+            and len(set(sel_faces)) == 3
+            and '3 Flächen' in p.pg.locator('#paint-count').text_content()
+            and '3 Flächen' in p.pg.locator('#status-sel').text_content()
+            and '3 Flächen' in p.pg.locator('#ctx-faces-lbl').text_content()
+        )
+        p.pg.keyboard.press('Escape')
+        p.wait(200)
+        ok3 = ok3 and p.ev("return !Select.paintActive && App.faces.length === 3") is True
+
+    # 4. Malen-Auswahl über Kanten + Alt zum Abwählen + Hilfen/i18n/Befehle
+    p.ev("Select.startPaint('edge')")
+    p.wait(250)
+    edge_pts = p.ev("""
+      const THREE = window.__masswerk.THREE;
+      const it = App.doc.items[0];
+      const n = Viewer.nodes.get(it.id);
+      if (!n || !n.data || !n.data.edges) return [];
+      const r = Viewer.canvas.getBoundingClientRect();
+      const out = [];
+      n.data.edges.forEach((e, idx) => {
+        if (!e || !e.m) return;
+        const wm = new THREE.Vector3(...e.m).applyMatrix4(n.obj.matrix);
+        const s = Viewer.toScreen(wm);
+        const sx = r.left + s.x, sy = r.top + s.y;
+        const hit = Viewer.pick(sx, sy, { edgePx: 9 });
+        if (hit && hit.id === it.id && hit.edgeIdx === idx) out.push({ idx, sx, sy });
+      });
+      return out;
+    """)
+    ok4 = len(edge_pts) >= 2
+    if ok4:
+        e1, e2 = edge_pts[0], edge_pts[1]
+        p.pg.mouse.move(e1['sx'], e1['sy'])
+        p.pg.mouse.down()
+        p.pg.mouse.move(e2['sx'], e2['sy'], steps=12)
+        p.pg.mouse.up()
+        p.wait(250)
+        cnt_after = p.ev("return App.edges.length")
+        ok4 = cnt_after >= 2 and 'Kanten' in p.pg.locator('#paint-count').text_content()
+
+        # Alt + über erste Kante streichen wählt sie ab
+        p.pg.keyboard.down('Alt')
+        p.pg.mouse.move(e1['sx'] - 2, e1['sy'] - 2)
+        p.pg.mouse.down()
+        p.pg.mouse.move(e1['sx'] + 2, e1['sy'] + 2, steps=4)
+        p.pg.mouse.up()
+        p.pg.keyboard.up('Alt')
+        p.wait(200)
+        cnt_less = p.ev("return App.edges.length")
+        ok4 = ok4 and cnt_less < cnt_after
+
+    p.pg.locator('#paint-done').click()
+    p.wait(200)
+    p.pg.locator('.view-btns [data-view="paint"]').hover()
+    p.pg.wait_for_selector('.tooltip.big', timeout=5000)
+    tip_paint = p.pg.locator('.tooltip.big').text_content()
+    p.pg.mouse.click(cx - 200, cy)
+    p.wait(100)
+    p.pg.mouse.move(cx, cy)
+    p.pg.keyboard.press('q')
+    p.wait(200)
+    p.pg.locator('#radial-config-btn').hover()
+    p.pg.wait_for_selector('.tooltip.big', timeout=5000)
+    tip_radial = p.pg.locator('.tooltip.big').text_content()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['radialMenu', 'paintSelect'].every(k => h[k] && h[k].tip && h[k].hilfe && h[k].tipp)
+        && String(arg[0] || '').includes(h.paintSelect.hilfe)
+        && String(arg[1] || '').includes(h.radialMenu.hilfe);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('kreismenü').some(c => c.id === 'radialMenu')
+        && Commands.search('malen-auswahl').some(c => c.id === 'paintSelect');
+      return { helpOk, i18nEq, cmdOk };
+    })()""", [tip_paint, tip_radial])
+    ok4 = bool(ok4 and not p.ev("return Select.paintActive") and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -27623,6 +27809,7 @@ TESTS = [
     ('[A-131] Rändel (gerade, gekreuzt, Teilung) und Griffmuster (Rillen, Noppen)', t_a131_raendel_griffmuster),
     ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
     ('[A-140] Was-ist-das-Modus: Klick erklärt Elemente statt auszuführen / Esc aus (BE-32)', t_a140_was_ist_das),
+    ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

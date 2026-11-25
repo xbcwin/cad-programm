@@ -8,7 +8,7 @@ const Viewer = (() => {
   const groups = {};
   const raycaster = new THREE.Raycaster();
   const theme = {};
-  let hoverFace = null, hoverEdge = null, hoverBody = null, selFace = null, selEdges = [];
+  let hoverFace = null, hoverEdge = null, hoverBody = null, selFaces = [], selEdges = [];
   let camAnim = null, camAnimTimer = null, camEmitTimer = null, inLoopCam = false;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
@@ -1146,7 +1146,17 @@ const Viewer = (() => {
     if (box.isEmpty()) n.mesh.geometry.boundingSphere.set(new THREE.Vector3(), 0);
     else box.getBoundingSphere(n.mesh.geometry.boundingSphere);
     n._filtered = true;
-    if (selFace && selFace.id === n.id && selFace.faceIdx >= 0 && n.data.faceBody && hiddenBodies.has(n.data.faceBody[selFace.faceIdx])) highlightFace('sel', null, null);
+    if (selFaces.length && n.data.faceBody) {
+      const keep = [];
+      let changed = false;
+      for (const sf of selFaces) {
+        if (sf.id === n.id && sf.faceIdx >= 0 && hiddenBodies.has(n.data.faceBody[sf.faceIdx])) {
+          groups.overlay.remove(sf.mesh); sf.mesh.geometry.dispose(); sf.mesh.material.dispose();
+          changed = true;
+        } else keep.push(sf);
+      }
+      if (changed) { selFaces = keep; needsRender = true; }
+    }
     if (hoverBody && hoverBody.id === n.id && hiddenBodies.has(hoverBody.bodyIdx)) highlightBody(null, null);
   }
   // Farbe je Fläche: Ecken der Fläche bekommen ihre Farbe, der Rest die Farbe des Teils (Vertex-Farben)
@@ -1443,7 +1453,8 @@ const Viewer = (() => {
     else n.obj.matrix.copy(n.base);
     n.obj.matrixWorldNeedsUpdate = true;
     // Hervorhebungen dieses Teils wandern mit
-    for (const f of [hoverFace, selFace]) if (f && f.id === n.id) f.mesh.matrix.copy(n.obj.matrix);
+    if (hoverFace && hoverFace.id === n.id) hoverFace.mesh.matrix.copy(n.obj.matrix);
+    for (const f of selFaces) if (f.id === n.id) f.mesh.matrix.copy(n.obj.matrix);
     if (hoverBody && hoverBody.id === n.id) hoverBody.mesh.matrix.copy(n.obj.matrix);
     if (hoverEdge && hoverEdge.id === n.id) hoverEdge.line.matrix.copy(n.obj.matrix);
     for (const e of selEdges) if (e.id === n.id) e.line.matrix.copy(n.obj.matrix);
@@ -2189,8 +2200,32 @@ const Viewer = (() => {
     return out;
   }
   function disposeFat(obj) { if (!obj) return; obj.geometry.dispose(); fatMaterials.delete(obj.material); obj.material.dispose(); }
+  function setSelectedFaces(list) { // [{id, faceIdx}]
+    for (const f of selFaces) { groups.overlay.remove(f.mesh); f.mesh.geometry.dispose(); f.mesh.material.dispose(); }
+    selFaces = [];
+    const seen = new Set();
+    for (const f of list || []) {
+      if (!f || f.faceIdx == null || f.faceIdx < 0) continue;
+      const key = f.id + ':' + f.faceIdx;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const n = nodes.get(f.id);
+      if (!n) continue;
+      if (n.hiddenBodies && n.data && n.data.faceBody && n.hiddenBodies.has(n.data.faceBody[f.faceIdx])) continue;
+      const geo = faceSubGeometry(n, f.faceIdx);
+      if (!geo) continue;
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.accent), transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(geo, mat); mesh.matrixAutoUpdate = false; mesh.matrix.copy(n.obj.matrix); mesh.renderOrder = 6;
+      groups.overlay.add(mesh); selFaces.push({ id: f.id, faceIdx: f.faceIdx, mesh });
+    }
+    needsRender = true;
+  }
   function highlightFace(which, id, faceIdx) {
-    const cur = which === 'hover' ? hoverFace : selFace;
+    if (which !== 'hover') {
+      setSelectedFaces(id != null && faceIdx != null && faceIdx >= 0 ? [{ id, faceIdx }] : []);
+      return;
+    }
+    const cur = hoverFace;
     if (cur && cur.id === id && cur.faceIdx === faceIdx) return;
     if (cur) { groups.overlay.remove(cur.mesh); cur.mesh.geometry.dispose(); cur.mesh.material.dispose(); }
     let next = null;
@@ -2198,12 +2233,12 @@ const Viewer = (() => {
     if (n && faceIdx != null && faceIdx >= 0) {
       const geo = faceSubGeometry(n, faceIdx);
       if (geo) {
-        const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.accent), transparent: true, opacity: which === 'hover' ? 0.18 : 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+        const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.accent), transparent: true, opacity: 0.18, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(geo, mat); mesh.matrixAutoUpdate = false; mesh.matrix.copy(n.obj.matrix); mesh.renderOrder = 6;
         groups.overlay.add(mesh); next = { id, faceIdx, mesh };
       }
     }
-    if (which === 'hover') hoverFace = next; else selFace = next;
+    hoverFace = next;
     needsRender = true;
   }
   function highlightBody(id, bodyIdx) {
@@ -2983,7 +3018,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
+    init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedFaces, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
