@@ -24751,6 +24751,164 @@ def t_f11250227(p):
     return [ok1, ok2]
 
 
+def t_a127_wandstaerke_flaechen(p):
+    import math
+    p.empty()
+    p.ev("Actions.addPrimitive('box');")
+    p.wait(1500)
+    p.ev("App.change('x', d=>{ d.items[0].t.x=0; d.items[0].t.y=0; });")
+    p.wait(1500)
+    p.ev("Viewer.setView('top', false);")
+    p.wait(1000)
+    s = world_screen(p, 3, 3, 20)
+    p.pg.mouse.click(s[0], s[1]); p.wait(600)
+    ctx(p, 'Aushöhlen')
+    fid = p.ev("return App.doc.items[0].finishes[0].id")
+    field(p, '#fin-' + fid, 1.5)
+    # Bodenfläche über „Fläche mit eigener Stärke“ anklicken und auf 3 mm setzen
+    p.pg.click('#fin-addfw-' + fid); p.wait(300)
+    p.ev("Viewer.setView('bottom', false);")
+    p.wait(1000)
+    sb = world_screen(p, 2, 2, 0)
+    p.pg.mouse.click(sb[0], sb[1]); p.wait(1500)
+    fw_id = p.ev("const fw=App.doc.items[0].finishes[0].faceWalls; return fw && fw[0] ? fw[0].id : null")
+    ok_pick = bool(fw_id) and p.pg.locator('#fin-fw-' + str(fw_id)).count() == 1
+    field(p, '#fin-fw-' + fw_id, 3)
+
+    def wall_at(pt, nrm):
+        return p.ev(f"""
+          const id = App.doc.items[0].id;
+          return Viewer.wallAt(id, {{x:{pt[0]},y:{pt[1]},z:{pt[2]}}}, {{x:{nrm[0]},y:{nrm[1]},z:{nrm[2]}}});
+        """)
+
+    def geom_ok():
+        return p.ev("return GeomCheck.run().then(r => r.issues.filter(x => x.s === 'bad').length === 0)")
+
+    def vol_of():
+        return p.ev("return Mass.measure().then(r => { const q = r && r.parts && r.parts.find(x => x.id === App.doc.items[0].id); return q ? q.volume : null; })")
+
+    # 1. Nach innen: Boden 3 mm, alle 4 Seiten 1,5 mm, Hüllmaße unverändert
+    w_bot_in = wall_at([2, 2, 0], [0, 0, -1])
+    w_sides_in = [
+        wall_at([10, 0, 10], [1, 0, 0]),
+        wall_at([-10, 0, 10], [-1, 0, 0]),
+        wall_at([0, 10, 10], [0, 1, 0]),
+        wall_at([0, -10, 10], [0, -1, 0]),
+    ]
+    ok_in = (
+        ok_pick
+        and p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-10, -10, 0, 10, 10, 20])
+        and w_bot_in is not None and abs(w_bot_in - 3.0) < 0.05
+        and all(w is not None and abs(w - 1.5) < 0.05 for w in w_sides_in)
+        and abs(vol_of() - 3087.0) < 1.0
+    )
+
+    # 2. Nach außen: Hüllmaße größer, Boden 3 mm, Seiten 1,5 mm
+    p.pg.select_option('#fin-dir-' + fid, 'out'); p.wait(2000)
+    w_bot_out = wall_at([2, 2, -3], [0, 0, -1])
+    w_sides_out = [
+        wall_at([11.5, 0, 10], [1, 0, 0]),
+        wall_at([-11.5, 0, 10], [-1, 0, 0]),
+        wall_at([0, 11.5, 10], [0, 1, 0]),
+        wall_at([0, -11.5, 10], [0, -1, 0]),
+    ]
+    exp_ok = p.ev("const ex=Explain.local(App.doc.items[0].id); return ex && ex.lines.some(l => l.k==='fin' && l.t.includes('nach außen') && l.t.includes('1 Fläche'));")
+    ok_out = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-11.5, -11.5, -3, 11.5, 11.5, 20])
+        and w_bot_out is not None and abs(w_bot_out - 3.0) < 0.05
+        and all(w is not None and abs(w - 1.5) < 0.05 for w in w_sides_out)
+        and abs(vol_of() - 4167.0) < 1.0
+        and exp_ok
+    )
+
+    # 3. Mittig: Hüllmaße halb nach außen, Boden 3 mm, Seiten 1,5 mm
+    p.pg.select_option('#fin-dir-' + fid, 'mid'); p.wait(2000)
+    w_bot_mid = wall_at([2, 2, -1.5], [0, 0, -1])
+    w_side_mid = wall_at([10.75, 0, 10], [1, 0, 0])
+    ok_mid = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-10.75, -10.75, -1.5, 10.75, 10.75, 20])
+        and w_bot_mid is not None and abs(w_bot_mid - 3.0) < 0.05
+        and w_side_mid is not None and abs(w_side_mid - 1.5) < 0.05
+        and abs(vol_of() - 3606.75) < 1.5
+    )
+
+    # 4. Zweite Seitenwand per Formel auf 4 mm im Modus „innen“, danach wieder löschen + Rückgängig
+    p.pg.select_option('#fin-dir-' + fid, 'in'); p.wait(2000)
+    p.ev("""
+      App.change('Maß anlegen', d=>{ d.params.push({id:'p_sw', name:'Seite', expr:4}); });
+      const it = App.doc.items[0];
+      Features.addShellFaceWall(it.id, it.finishes[0].id, { c: [-10, 0, 10], n: [-1, 0, 0], size: 20, t: 'PLANE' }, 'Seite');
+    """); p.wait(2000)
+    fw2_id = p.ev("return App.doc.items[0].finishes[0].faceWalls[1].id")
+    w_left_4 = wall_at([-10, 0, 10], [-1, 0, 0])
+    w_right_15 = wall_at([10, 0, 10], [1, 0, 0])
+    ok_two = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and w_left_4 is not None and abs(w_left_4 - 4.0) < 0.05
+        and w_right_15 is not None and abs(w_right_15 - 1.5) < 0.05
+        and abs(vol_of() - 3809.5) < 1.0
+    )
+    p.pg.click('#fin-fw-del-' + fw2_id); p.wait(1500)
+    ok_del_undo = (
+        p.ev("return App.doc.items[0].finishes[0].faceWalls.length === 1")
+        and abs(vol_of() - 3087.0) < 1.0
+    )
+    p.ev("App.undo()"); p.wait(1500)
+    ok_del_undo = ok_del_undo and p.ev("return App.doc.items[0].finishes[0].faceWalls.length === 2") and abs(vol_of() - 3809.5) < 1.0
+
+    # 5. Zylinder: Boden 3 mm, Mantel 1,5 mm – innen und außen
+    p.ev("""
+      let cid = null;
+      App.change('Zylinder', d=>{
+        d.items = [];
+        const c = Model.newItem('cylinder', { d: 20, h: 20 });
+        c.finishes = [{ id: 'f_cyl', type: 'shell', r: 1.5, dir: 'in', faces: [{ c: [0, 0, 20], n: [0, 0, 1], size: 20, t: 'PLANE' }], faceWalls: [{ id: 'fw_cbot', face: { c: [0, 0, 0], n: [0, 0, -1], size: 20, t: 'PLANE' }, r: 3, label: 'Unten' }] }];
+        d.items.push(c);
+        cid = c.id;
+      });
+      if (cid) App.select([cid]);
+    """); p.wait(2000)
+    exp_cyl_in = math.pi * (100 * 20 - 8.5 * 8.5 * 17)
+    ok_cyl_in = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-10, -10, 0, 10, 10, 20])
+        and abs(vol_of() - exp_cyl_in) < 2.0
+    )
+    p.ev("Features.setShellDir(App.doc.items[0].id, 'f_cyl', 'out');"); p.wait(2000)
+    exp_cyl_out = math.pi * (11.5 * 11.5 * 23 - 100 * 20)
+    ok_cyl_out = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-11.5, -11.5, -3, 11.5, 11.5, 20])
+        and abs(vol_of() - exp_cyl_out) < 2.0
+    )
+
+    # 6. Hilfen & DE/EN-Schlüssel
+    p.pg.hover('#fin-addfw-f_cyl'); p.wait(1700)
+    tip_fw = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    ok_meta = p.ev("""
+      const deKeys = Object.keys(I18n.packs.de).filter(k => k.startsWith('panel.edges.shell')).sort();
+      const enKeys = Object.keys(I18n.packs.en).filter(k => k.startsWith('panel.edges.shell')).sort();
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d =>
+        JSON.stringify(deKeys) === JSON.stringify(enKeys)
+        && deKeys.includes('panel.edges.shellDirOut')
+        && deKeys.includes('panel.edges.shellAddFace')
+        && !!(d.shell && d.shell.hilfe.includes('außen'))
+        && !!(d.shellFaceWall && d.shellFaceWall.tip && d.shellFaceWall.hilfe && d.shellFaceWall.tipp)
+      );
+    """) and ('eigene Wandstärke' in tip_fw)
+
+    return [ok_in, ok_out, ok_mid, ok_two, ok_del_undo, ok_cyl_in, ok_cyl_out, ok_meta]
+
+
 # ---------- [A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37) ----------
 def t_a125_verformen(p):
     warte_idle = lambda: warte_rechnen(p, 35)
@@ -25508,6 +25666,7 @@ TESTS = [
     ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
     ('[A-123] Übergang mit weichem Anschluss: tangential, krümmungsglatt & Stärke (KP-31)', t_a123_uebergang_anschluss),
     ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
+    ('[A-127] Wandstärke je Fläche & Richtung innen/außen/mittig (KP-43)', t_a127_wandstaerke_flaechen),
     ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
     ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),

@@ -4914,8 +4914,224 @@ export function createKernel(R, oc) {
       return { shape: res, topo: outTopo };
     } finally { builder.delete(); }
   }
+  function shellFaceNormal(f) {
+    try {
+      const nv = f.normalAt();
+      const nl = Math.hypot(nv.x, nv.y, nv.z);
+      return nl > 1e-12 ? [nv.x / nl, nv.y / nl, nv.z / nl] : null;
+    } catch (_) { return null; }
+  }
+  function shellFacePoint(f) {
+    try {
+      const p = f.geomType === 'PLANE' ? f.center : f.pointOnSurface(0.5, 0.5);
+      return [p.x, p.y, p.z];
+    } catch (_) {
+      try { const c = f.center; return [c.x, c.y, c.z]; } catch (__) { return null; }
+    }
+  }
+  function resolveShellWallFace(spec, nonOpen, tol, topo, itemId, isLeaf) {
+    if (!spec || (!spec.c && !spec.tid)) return null;
+    const direct = resolveFaceRef({ ...spec, tol }, nonOpen, topo, itemId, isLeaf);
+    if (direct.length === 1) return direct[0];
+    if (direct.length > 1 && Array.isArray(spec.c)) {
+      let best = direct[0], bd = Infinity;
+      for (const f of direct) {
+        try {
+          const c = vec(f.center);
+          const d = Math.hypot(c[0] - spec.c[0], c[1] - spec.c[1], c[2] - spec.c[2]);
+          if (d < bd) { bd = d; best = f; }
+        } catch (_) {}
+      }
+      return best;
+    }
+    if (!Array.isArray(spec.c)) return null;
+    const hasN = Array.isArray(spec.n) && spec.n.length >= 3;
+    const sn = hasN ? norm(spec.n) : null;
+    const pickBest = (signCheck) => {
+      let best = null, bestScore = Infinity;
+      for (const f of nonOpen) {
+        if (spec.t && f.geomType !== spec.t && f.geomType === 'PLANE') continue;
+        let fc;
+        try { fc = vec(f.center); } catch (_) { continue; }
+        const diff = sub(spec.c, fc);
+        if (sn && f.geomType === 'PLANE') {
+          const fn = shellFaceNormal(f);
+          if (!fn) continue;
+          const dp = dot(fn, sn);
+          if (signCheck > 0 ? dp < 0.95 : dp > -0.95) continue;
+          const nDir = signCheck > 0 ? fn : mul(fn, -1);
+          const nDist = dot(diff, nDir);
+          if (nDist < -tol) continue;
+          const lat = Math.hypot(...sub(diff, mul(nDir, nDist)));
+          const typePen = spec.t && f.geomType !== spec.t ? 100 : 0;
+          const score = typePen + lat * 4 + Math.abs(nDist);
+          if (score < bestScore) { bestScore = score; best = f; }
+        } else {
+          if (spec.t && f.geomType !== spec.t) continue;
+          const d = len(diff);
+          if (d < bestScore) { bestScore = d; best = f; }
+        }
+      }
+      return best;
+    };
+    return pickBest(1) || (sn ? pickBest(-1) : null);
+  }
+  function makeShellBase(baseShape, openFaces, signedOff, preferIntersect) {
+    const modes = preferIntersect
+      ? [oc.GeomAbs_JoinType.GeomAbs_Intersection, oc.GeomAbs_JoinType.GeomAbs_Arc]
+      : [oc.GeomAbs_JoinType.GeomAbs_Arc, oc.GeomAbs_JoinType.GeomAbs_Intersection];
+    let lastErr = null;
+    for (const jt of modes) {
+      const rem = new oc.NCollection_List_TopoDS_Shape();
+      for (const f of openFaces) rem.Append(f.wrapped);
+      const builder = new oc.BRepOffsetAPI_MakeThickSolid();
+      try {
+        builder.MakeThickSolidByJoin(baseShape.wrapped, rem, signedOff, 1e-3, oc.BRepOffset_Mode.BRepOffset_Skin, false, false, jt, false);
+        const res = R.cast(builder.Shape());
+        if (res && R.isShape3D(res)) {
+          rem.delete();
+          return { shape: res, builder };
+        }
+        safeDelete(res);
+      } catch (e) {
+        lastErr = e;
+      }
+      builder.delete();
+      rem.delete();
+    }
+    throw lastErr || new Error('shell');
+  }
+  function thickenShellFaceOut(face, delta, overlap = 1e-2) {
+    const fw = face.wrapped;
+    if (face.geomType === 'PLANE') {
+      const n = shellFaceNormal(face);
+      if (!n) throw new Error('shell normal');
+      const fStart = overlap > 0 ? face.clone().translate([-n[0] * overlap, -n[1] * overlap, -n[2] * overlap]) : face;
+      const vecArg = new oc.gp_Vec(n[0] * (delta + overlap), n[1] * (delta + overlap), n[2] * (delta + overlap));
+      const pr = new oc.BRepPrimAPI_MakePrism(fStart.wrapped, vecArg, false, true);
+      let res = R.cast(pr.Shape());
+      pr.delete(); vecArg.delete();
+      if (fStart !== face) safeDelete(fStart);
+      if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+      return res;
+    }
+    const pt = shellFacePoint(face);
+    const n = shellFaceNormal(face);
+    if (!pt || !n) throw new Error('shell curved normal');
+    const ob0 = new oc.BRepOffsetAPI_MakeOffsetShape();
+    ob0.PerformBySimple(fw, Math.min(delta, 0.5));
+    const offSh0 = R.cast(ob0.Shape()); ob0.delete();
+    const offFace0 = offSh0.faces && offSh0.faces[0] ? offSh0.faces[0] : offSh0;
+    const pOff = shellFacePoint(offFace0);
+    safeDelete(offSh0);
+    const moved = pOff ? dot(sub(pOff, pt), n) : 1;
+    const sgn = moved >= 0 ? 1 : -1;
+    let startSh = fw, ownStart = false;
+    if (overlap > 0) {
+      const ob1 = new oc.BRepOffsetAPI_MakeOffsetShape();
+      ob1.PerformBySimple(fw, -sgn * overlap);
+      startSh = ob1.Shape(); ob1.delete(); ownStart = true;
+    }
+    const ts = new oc.BRepOffsetAPI_MakeThickSolid();
+    let raw = null;
+    try {
+      ts.MakeThickSolidBySimple(startSh, sgn * (delta + overlap));
+      raw = ts.Shape();
+    } finally {
+      ts.delete();
+      if (ownStart) safeDelete(startSh);
+    }
+    const sfs = new oc.ShapeFix_Solid(oc.TopoDS.Solid(raw));
+    sfs.Perform();
+    const sol = oc.TopoDS.Solid(sfs.Solid());
+    sfs.delete();
+    let res = R.cast(sol);
+    if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+    return res;
+  }
+  function findShellTargetFace(curFaces, origInfo, tMin, side) {
+    const wantSign = side === 'in' ? -1 : 1;
+    const expPt = add(origInfo.pt, mul(origInfo.n, wantSign * tMin));
+    let best = null, bestScore = Infinity;
+    for (const f of curFaces) {
+      if (f.geomType !== origInfo.t) continue;
+      const fn = shellFaceNormal(f);
+      if (!fn) continue;
+      const dp = dot(fn, origInfo.n) * wantSign;
+      if (origInfo.t === 'PLANE') {
+        if (dp < 0.98) continue;
+        let fc;
+        try { fc = vec(f.center); } catch (_) { continue; }
+        const proj = dot(sub(fc, origInfo.pt), origInfo.n);
+        const errN = Math.abs(proj - wantSign * tMin);
+        if (errN > Math.max(0.2, tMin * 0.25)) continue;
+        const score = errN * 10 + len(sub(fc, expPt));
+        if (score < bestScore) { bestScore = score; best = f; }
+      } else {
+        if (dp < 0.85) continue;
+        const fp = shellFacePoint(f);
+        if (!fp) continue;
+        const d = len(sub(fp, expPt));
+        if (d < bestScore) { bestScore = d; best = f; }
+      }
+    }
+    return best;
+  }
+  function buildOneSideShell(baseShape, openFaces, defaultT, overrideMap, side, inTopo, itemId, finId) {
+    const baseFaces = [];
+    try { for (const f of baseShape.faces) baseFaces.push(f); } catch (_) {}
+    try {
+      const nonOpen = baseFaces.filter((f) => !openFaces.some((o) => o.isSame(f)));
+      const plan = [];
+      for (const f of nonOpen) {
+        let r = defaultT;
+        for (const [of, val] of overrideMap.entries()) {
+          if (of.isSame(f)) { r = val; break; }
+        }
+        const n = shellFaceNormal(f);
+        const pt = shellFacePoint(f);
+        if (!n || !pt) continue;
+        plan.push({ r, info: { t: f.geomType, n, pt } });
+      }
+      const tMin = plan.length ? Math.min(...plan.map((p) => p.r)) : defaultT;
+      const baseRes = makeShellBase(baseShape, openFaces, side === 'in' ? -tMin : tMin, side === 'out');
+      let cur = baseRes.shape;
+      let curTopo = null;
+      try {
+        curTopo = propagateHistory(baseRes.builder, [{ topo: inTopo, selfId: itemId }], cur, 'Sh:' + (finId || 's'));
+      } finally {
+        baseRes.builder.delete();
+      }
+      const extras = plan.filter((p) => p.r - tMin > 1e-4);
+      for (const ex of extras) {
+        const curFaces = [];
+        try { for (const f of cur.faces) curFaces.push(f); } catch (_) {}
+        let slab = null;
+        try {
+          const tf = findShellTargetFace(curFaces, ex.info, tMin, side);
+          if (!tf) throw new Error('shell target face');
+          slab = thickenShellFaceOut(tf, ex.r - tMin, Math.min(1e-2, tMin * 0.25));
+        } finally {
+          for (const f of curFaces) safeDelete(f);
+        }
+        try {
+          const fused = boolWithTopo('fuse', cur, curTopo, null, slab, null, null, 'ShW:' + (finId || 's'));
+          safeDelete(cur);
+          freeTopoMap(curTopo);
+          cur = fused.shape;
+          curTopo = fused.topo;
+        } finally {
+          safeDelete(slab);
+        }
+      }
+      return { shape: cur, topo: curTopo };
+    } finally {
+      for (const f of baseFaces) safeDelete(f);
+    }
+  }
   function applyShell(shape, fin, errors, itemId, topo = null, isLeaf = false) {
-    const t = num(fin.r, 2);
+    const t0 = num(fin.r, 2);
+    const dir = fin.dir === 'out' || fin.dir === 'mid' ? fin.dir : 'in';
     const b = bboxOf(shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     const sigs = (fin.faces || []).filter((f) => f && (f.c || f.tid));
     const faceArr = [];
@@ -4935,31 +5151,79 @@ export function createKernel(R, oc) {
     if (missing.length) {
       errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', partial: true, missing, message: `${missing.length} von ${sigs.length} offenen Flächen für die Wandstärke gibt es nicht mehr.` });
     }
+    const nonOpen = faceArr.filter((f) => !picked.some((o) => o.isSame(f)));
+    const overrideMap = new Map();
+    const wallSpecs = Array.isArray(fin.faceWalls) ? fin.faceWalls : [];
+    for (const fw of wallSpecs) {
+      if (!fw) continue;
+      const wr = num(fw.r, t0);
+      if (!(wr > 0)) {
+        for (const f of faceArr) safeDelete(f);
+        errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke muss größer als 0 mm sein.' });
+        return { shape, topo };
+      }
+      const target = resolveShellWallFace(fw.face, nonOpen, tol, topo, itemId, isLeaf);
+      if (target) overrideMap.set(target, wr);
+    }
+    const allT = [t0, ...overrideMap.values()];
+    const tMin = Math.min(...allT), tMax = Math.max(...allT);
     const minDim = Math.min(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-    if (!(t > 0) || 2 * t >= minDim - 1e-6) {
+    const maxDim = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    if (!(t0 > 0) || !(tMin > 0)) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke muss größer als 0 mm sein.' });
+      return { shape, topo };
+    }
+    if (dir === 'in' && (2 * tMin >= minDim - 1e-6 || tMax >= maxDim - 1e-6)) {
       for (const f of faceArr) safeDelete(f);
       errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` });
       return { shape, topo };
     }
+    if (dir === 'mid' && (tMin >= minDim - 1e-6 || tMax * 0.5 >= maxDim - 1e-6)) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 10) / 10).replace('.', ',')} mm.` });
+      return { shape, topo };
+    }
     try {
-      const facesToRemove = new oc.NCollection_List_TopoDS_Shape();
-      for (const f of picked) facesToRemove.Append(f.wrapped);
-      const builder = new oc.BRepOffsetAPI_MakeThickSolid();
-      let res = null;
-      try {
-        builder.MakeThickSolidByJoin(shape.wrapped, facesToRemove, -t, 1e-3, oc.BRepOffset_Mode.BRepOffset_Skin, false, false, oc.GeomAbs_JoinType.GeomAbs_Arc, false);
-        res = R.cast(builder.Shape());
-        if (!R.isShape3D(res)) { safeDelete(res); throw new Error('shell'); }
-        const rb = bboxOf(res);   // Unsinnige Ergebnisse (größer als vorher) als Fehler melden
-        if (rb[3] - rb[0] > b[3] - b[0] + 1e-3 || rb[4] - rb[1] > b[4] - b[1] + 1e-3 || rb[5] - rb[2] > b[5] - b[2] + 1e-3) { safeDelete(res); throw new Error('größer'); }
-        const outTopo = propagateHistory(builder, [{ topo, selfId: itemId }], res, 'Sh:' + (fin.id || 's'));
-        return { shape: res, topo: outTopo };
-      } finally {
-        builder.delete();
-        facesToRemove.delete();
+      let resObj = null;
+      if (dir === 'mid') {
+        const halfMap = new Map();
+        for (const [f, val] of overrideMap.entries()) halfMap.set(f, val * 0.5);
+        const hIn = buildOneSideShell(shape, picked, t0 * 0.5, halfMap, 'in', topo, itemId, fin.id);
+        let hOut = null;
+        try {
+          hOut = buildOneSideShell(shape, picked, t0 * 0.5, halfMap, 'out', topo, itemId, fin.id);
+          resObj = boolWithTopo('fuse', hIn.shape, hIn.topo, null, hOut.shape, hOut.topo, null, 'ShM:' + (fin.id || 's'));
+        } finally {
+          safeDelete(hIn.shape); freeTopoMap(hIn.topo);
+          if (hOut) { safeDelete(hOut.shape); freeTopoMap(hOut.topo); }
+        }
+      } else {
+        resObj = buildOneSideShell(shape, picked, t0, overrideMap, dir, topo, itemId, fin.id);
       }
+      const res = resObj && resObj.shape;
+      if (!res || !R.isShape3D(res)) {
+        safeDelete(res);
+        if (resObj) freeTopoMap(resObj.topo);
+        throw new Error('shell');
+      }
+      const rb = bboxOf(res);
+      if (dir === 'in') {
+        if (rb[3] - rb[0] > b[3] - b[0] + 1e-3 || rb[4] - rb[1] > b[4] - b[1] + 1e-3 || rb[5] - rb[2] > b[5] - b[2] + 1e-3 || R.measureVolume(res) >= R.measureVolume(shape) - 1e-3) {
+          safeDelete(res); freeTopoMap(resObj.topo); throw new Error('größer');
+        }
+      } else {
+        const maxExp = (dir === 'out' ? 2 * tMax : tMax) + 1;
+        const grew = (rb[3] - rb[0] > b[3] - b[0] + 1e-3) || (rb[4] - rb[1] > b[4] - b[1] + 1e-3) || (rb[5] - rb[2] > b[5] - b[2] + 1e-3);
+        const shrunk = (rb[3] - rb[0] < b[3] - b[0] - 1e-3) || (rb[4] - rb[1] < b[4] - b[1] - 1e-3) || (rb[5] - rb[2] < b[5] - b[2] - 1e-3);
+        const exploded = (rb[3] - rb[0] > b[3] - b[0] + maxExp) || (rb[4] - rb[1] > b[4] - b[1] + maxExp) || (rb[5] - rb[2] > b[5] - b[2] + maxExp);
+        if (!grew || shrunk || exploded) {
+          safeDelete(res); freeTopoMap(resObj.topo); throw new Error('shell bounds');
+        }
+      }
+      return resObj;
     } catch (_) {
-      errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke ist zu dick für dieses Teil – nimm einen kleineren Wert.' });
+      errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke ließ sich mit diesen Werten nicht bauen – prüfe Richtung und Wandstärken.' });
       return { shape, topo };
     } finally {
       for (const f of faceArr) safeDelete(f);

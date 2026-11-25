@@ -174,7 +174,12 @@ const Explain = (() => {
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
     for (const fin of it.finishes || []) {
       let ft;
-      if (fin.type === 'shell') ft = `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.`;
+      if (fin.type === 'shell') {
+        const dirTxt = fin.dir === 'out' ? ' nach außen' : fin.dir === 'mid' ? ' mittig' : ' nach innen';
+        const fwCnt = Array.isArray(fin.faceWalls) ? fin.faceWalls.length : 0;
+        const extraTxt = fwCnt ? ` (${fwCnt} ${fwCnt === 1 ? 'Fläche' : 'Flächen'} mit eigener Wandstärke)` : '';
+        ft = `Ausgehöhlt${dirTxt} mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand${extraTxt}.`;
+      }
       else if (fin.type === 'fullFillet') ft = 'Vollrundung über drei gewählte Flächen (mittlere Fläche ganz abgerundet).';
       else if (fin.type === 'cornerChamfer') ft = `Ecken-Fase mit den drei Abständen ${[fin.d1, fin.d2, fin.d3].map((x) => Units.fmtLenU(Model.num(x, V, 2), 2, doc)).join(' / ')}.`;
       else ft = `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.`;
@@ -356,7 +361,10 @@ const Weak = (() => {
       else if (x.kind === 'tube') { t = Math.min(p.wall, p.h); what = 'Wand'; }
       else if (x.kind === 'prism') { t = Math.min(p.d, p.h); what = 'Dicke'; }
       else if (x.kind === 'extrude') { t = Math.abs(p.dist); what = 'Dicke'; }
-      for (const f of x.finishes || []) if (f.type === 'shell') { const r = Model.num(f.r, V, 2); if (t == null || r < t) { t = r; what = 'Wand'; } }
+      for (const f of x.finishes || []) if (f.type === 'shell') {
+        const vals = [Model.num(f.r, V, 2), ...((f.faceWalls || []).map((fw) => Model.num(fw.r, V, 2)))];
+        for (const r of vals) if (typeof r === 'number' && isFinite(r) && r > 0 && (t == null || r < t)) { t = r; what = 'Wand'; }
+      }
       if (typeof t === 'number' && isFinite(t) && t > 0 && (!best || t < best.t)) best = { t, what, name: Model.label(x) };
     };
     rec(it);

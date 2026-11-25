@@ -921,9 +921,9 @@ const HELP = {
   "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an gefrästen Platten oder Gehäusen sind die Ränder dann angenehm glatt."
  },
  "shell": {
-  "tip": "Körper aushöhlen wie eine Schachtel",
-  "hilfe": "Klick die Fläche an, die offen sein soll, und wähle „Aushöhlen“. Rechts unter „Wandstärke“ tippst du ein, wie dick die Wände bleiben.",
-  "tipp": "Klickst du eine zweite Fläche an und wieder „Aushöhlen“, wird auch sie offen – oder wieder zu."
+  "tip": "Körper aushöhlen wie eine Schachtel (innen, außen oder mittig)",
+  "hilfe": "Klick die Fläche an, die offen sein soll, und wähle „Aushöhlen“. Rechts unter „Wandstärke“ stellst du die Standard-Wanddicke, die Richtung (nach innen, nach außen oder mittig) sowie über „Fläche mit eigener Stärke“ abweichende Wanddicken für einzelne Flächen wie z. B. den Boden ein.",
+  "tipp": "Klickst du eine zweite Fläche an und wieder „Aushöhlen“, wird auch sie offen – oder wieder zu. Nach außen bleibt der Innenraum genau so groß wie dein Ausgangskörper."
  },
  "patternRect": {
   "tip": "Körper in geraden Reihen kopieren",
@@ -2240,15 +2240,20 @@ const HELP = {
   "hilfe": "Wähle zwei oder mehr Skizzenkörper (und bei Bedarf gleich den Zielkörper mit) und klicke auf „Übergang abziehen“. Der Übergang wird direkt vom Zielkörper abgezogen, um verjüngte Kanäle, Aussparungen oder konische Taschen zu schneiden.",
   "tipp": "Auch einen bestehenden Übergang kannst du jederzeit rechts unter „Körper“ auf „Abziehen von …“, „Vereinigen mit …“ oder „Schnittmenge mit …“ umstellen."
  },
- "deform": {
-  "tip": "Körper biegen, verdrehen oder verjüngen (Profi)",
-  "hilfe": "Wähle einen Körper und klicke auf „Verformen“ (im Profi-Modus in der Kontextleiste, unter Körper oder per Rechtsklick im Verlauf). Rechts wählst du zwischen „Biegen“ (Winkel um eine Achse), „Verdrehen“ (Grad über die Länge) und „Verjüngen“ (Faktor am Ende, z. B. 0,5 für halb so breit).",
-  "tipp": "Alle Winkel und Faktoren akzeptieren Formeln. Beim Biegen wählst du die Längs- und die Biegeachse getrennt; mit „Richtung umkehren“ biegst oder verjüngst du zur anderen Seite."
- },
  "loftContinuity": {
   "tip": "Start und Ende des Übergangs tangential (G1) oder krümmungsglatt (G2) an Nachbarflächen anschließen (Profi)",
   "hilfe": "Im Profi-Modus legst du unter „Weicher Anschluss“ für Start und Ende einzeln fest, ob der Übergang frei, tangential (ohne Knick) oder krümmungsglatt (gleiche Wölbung) an den benachbarten Körper anschließt. Berührende Nachbarflächen erkennt Tracery automatisch oder du wählst sie über „Fläche wählen“ selbst aus.",
   "tipp": "Mit dem Regler „Stärke“ bestimmst du von 0,1 bis 3,0, wie weit der Übergang die Anschlussrichtung hält, bevor er zum nächsten Umriss einlenkt."
+ },
+ "shellFaceWall": {
+  "tip": "Einer einzelnen Fläche eine eigene Wandstärke geben",
+  "hilfe": "Klick nach diesem Knopf eine geschlossene Fläche deines ausgehöhlten Körpers an (z. B. den Boden oder eine Seitenwand). Sie bekommt rechts ein eigenes Eingabefeld für ihre Wandstärke – auch mit Formeln – während alle übrigen Wände bei der Standard-Wandstärke bleiben.",
+  "tipp": "So baust du zum Beispiel ein Gehäuse mit 1,5 mm dünnen Seitenwänden und einem 3 mm dicken, stabilen Boden."
+ },
+ "deform": {
+  "tip": "Körper biegen, verdrehen oder verjüngen (Profi)",
+  "hilfe": "Wähle einen Körper und klicke auf „Verformen“ (im Profi-Modus in der Kontextleiste, unter Körper oder per Rechtsklick im Verlauf). Rechts wählst du zwischen „Biegen“ (Winkel um eine Achse), „Verdrehen“ (Grad über die Länge) und „Verjüngen“ (Faktor am Ende, z. B. 0,5 für halb so breit).",
+  "tipp": "Alle Winkel und Faktoren akzeptieren Formeln. Beim Biegen wählst du die Längs- und die Biegeachse getrennt; mit „Richtung umkehren“ biegst oder verjüngst du zur anderen Seite."
  },
  "splitFace": {
   "tip": "Kurve auf eine Fläche projizieren und die Fläche daran teilen (Profi)",

@@ -734,7 +734,7 @@ const Model = (() => {
       }
       if (it.mir) o.mir = it.mir;
       if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
-      if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, ownV, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, ownV, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, ownV, x.r); else x.a = num(f.a, ownV, 45); } if (f.side) x.side = 1; if (f.type === 'cornerChamfer') { x.v = Array.isArray(f.v) ? f.v.map(Number) : null; x.d1 = num(f.d1, ownV, 2); x.d2 = num(f.d2, ownV, 2); x.d3 = num(f.d3, ownV, 2); } return x; });
+      if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, ownV, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, ownV, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, ownV, x.r); else x.a = num(f.a, ownV, 45); } if (f.side) x.side = 1; if (f.type === 'shell') { if (f.dir === 'out' || f.dir === 'mid') x.dir = f.dir; if (Array.isArray(f.faceWalls) && f.faceWalls.length) x.faceWalls = f.faceWalls.map((w) => ({ id: w.id, face: w.face, r: num(w.r, ownV, x.r) })); } if (f.type === 'cornerChamfer') { x.v = Array.isArray(f.v) ? f.v.map(Number) : null; x.d1 = num(f.d1, ownV, 2); x.d2 = num(f.d2, ownV, 2); x.d3 = num(f.d3, ownV, 2); } return x; });
       if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
       return o;
     } finally { curV = prev; }
