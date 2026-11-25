@@ -631,6 +631,8 @@ const IC = {
   plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
   projectEdge: '<path d="M7 3h10l4 4v6" opacity=".45"/><path d="M7 3v6M17 3v6" opacity=".45"/><path d="M12 11v6" stroke-dasharray="2 2"/><path d="M8 15l4 4 4-4"/><path d="M3 21h18" />',
+  silhouette2d: '<ellipse cx="12" cy="7" rx="6.5" ry="3" opacity=".45"/><path d="M5.5 7v5c0 1.6 2.9 3 6.5 3s6.5-1.4 6.5-3V7" opacity=".45"/><path d="M12 15v3" stroke-dasharray="2 2"/><rect x="4" y="18" width="16" height="3.5" rx="1"/>',
+  intersectCurve: '<path d="M3 9c4-3 14-3 18 0v8c-4-3-14-3-18 0z" opacity=".4"/><path d="M6 4l12 4v11L6 15z" opacity=".4"/><path d="M6 9.5c3.5-1.8 8.5-1.2 12 .8" stroke-width="2.4"/>',
   wall2d: '<path d="M4 18c3-8 9-12 16-12" stroke-dasharray="2.5 2" opacity=".5"/><path d="M3 15.5C6 8 12 4 19 3.5M5.5 20.5c3-7.5 9-11.5 16-12M3 15.5l2.5 5M19 3.5l2.5 5" />',
   offset2d: '<path d="M4 16h6M16 4v6" opacity=".4"/><path d="M4 20V11a7 7 0 0 1 7-7h9M10 20v-9a1 1 0 0 1 1-1h9" />',
   project: '<path d="M3 16l6-3 12 2-6 4z" opacity=".4"/><path d="M7 5v11M17 7v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M7 5l10 2M7 16l10 2"/><circle cx="7" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.6" fill="currentColor" stroke="none"/>',
@@ -2123,6 +2125,16 @@ const HELP = {
   "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
   "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
   "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
+ },
+ "silhouette2d": {
+  "tip": "Umriss holen (Silhouette): Äußeren Schatten-Umriss eines Körpers auf die Skizzen-Ebene projizieren (Profi)",
+  "hilfe": "Klick im Profi-Modus einen Körper im Bild an – Tracery projiziert seinen äußeren Umriss (ohne innere Kanten) auf die Skizzen-Ebene. Ändert sich der Körper später, wandert der Umriss automatisch mit.",
+  "tipp": "Ideal für Schattenrisse von Rohren, Wellen oder liegenden Zylindern, um passende Ausschnitte oder Halter drum herum zu zeichnen."
+ },
+ "intersectCurve2d": {
+  "tip": "Schnittkurve zweier Flächen verbunden in die Skizze holen (Profi)",
+  "hilfe": "Klick im Profi-Modus nacheinander zwei sich schneidende Flächen an (vom selben oder von zwei verschiedenen Körpern). Die exakte 3D-Schnittlinie wird auf die Skizzen-Ebene projiziert und bleibt mit beiden Flächen verbunden.",
+  "tipp": "Damit übernimmst du z. B. die genaue Durchdringungskurve zweier Rohre oder gebogener Schalen direkt in deine Skizze."
  },
  "innerRadius": {
   "tip": "Innenrundungen prüfen: Sind alle Ecken groß genug für den Fräser?",

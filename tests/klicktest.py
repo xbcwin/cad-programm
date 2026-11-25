@@ -22857,6 +22857,171 @@ def t_a110_strecken_live_spiegeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a114_silhouette_schnittkurve(p):
+    # 1. Profi-Sichtbarkeit prüfen
+    sketch_xy(p)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_hidden = (
+        not sichtbar(p, '#sk-silhouette')
+        and not sichtbar(p, '#sk-intersect')
+    )
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_shown = (
+        sichtbar(p, '#sk-silhouette')
+        and sichtbar(p, '#sk-intersect')
+    )
+    ok1 = simple_hidden and pro_shown
+
+    # 2. Silhouette (SK-42): liegender Zylinder d=20, h=40 auf XZ-Ebene -> Rechteck 40x20
+    p.ev("if (Sketch.active) Sketch.cancel(true); Start.newProject(true)"); p.wait(500)
+    p.ev("App.change('cyl', d=>{ const c=Model.newItem('cylinder',{d:20,h:40},{name:'Welle'}); c.t.x=-20; c.t.ry=90; d.items.push(c); })")
+    warte_rechnen(p, 30)
+    p.ev("Sketch.startOnPlane('XZ', 0)"); p.wait(1200)
+    p.pg.click('#sk-silhouette'); p.wait(150)
+    s_cyl = world_screen(p, 0, -10, 0)
+    p.pg.mouse.click(s_cyl[0], s_cyl[1]); p.wait(2000)
+    sil1 = SS(p, """
+      const lines = S.ents.filter(e => e.type === 'line');
+      const xs = lines.flatMap(e => [e.a[0], e.b[0]]);
+      const ys = lines.flatMap(e => [e.a[1], e.b[1]]);
+      const regs = SK.regions(S.ents);
+      const linked = S.ents.length > 0 && S.ents.every(e => e.link && e.link.kind === 'silhouette' && e.link.id === App.doc.items[0].id);
+      return {
+        n: S.ents.length,
+        nl: lines.length,
+        w: xs.length ? Math.max(...xs) - Math.min(...xs) : 0,
+        h: ys.length ? Math.max(...ys) - Math.min(...ys) : 0,
+        area: regs[0] ? regs[0].area : 0,
+        linked,
+      };
+    """)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    undone_sil = SS(p, "return S.ents.length === 0")
+    p.pg.mouse.click(s_cyl[0], s_cyl[1]); p.wait(2000)
+    fertig_hoch(p, '5')
+    ok2 = (
+        sil1['n'] == 4 and sil1['nl'] == 4
+        and abs(sil1['w'] - 40) < 0.2 and abs(sil1['h'] - 20) < 0.2
+        and abs(sil1['area'] - 800) < 5
+        and sil1['linked'] and undone_sil
+        and p.ev("return App.doc.items.length === 2 && App.errors.length === 0")
+    )
+
+    # 3. Assoziativität & RefFix bei Silhouette: Zylinder 60x30 -> Umriss wächst mit; Unterdrücken -> RefFix -> Lösen
+    p.ev("App.change('grow', d=>{ d.items[0].p.d=30; d.items[0].p.h=60; d.items[0].t.x=-30; })")
+    warte_rechnen(p, 30)
+    p.ev("return Sketch.whenRelinked()")
+    p.wait(250)
+    sil_grow = p.ev("""
+      const sk = App.doc.items[1] && App.doc.items[1].p && App.doc.items[1].p.sketch;
+      const lines = (sk ? sk.ents : []).filter(e => e.type === 'line');
+      const xs = lines.flatMap(e => [e.a[0], e.b[0]]);
+      const ys = lines.flatMap(e => [e.a[1], e.b[1]]);
+      return {
+        n: lines.length,
+        w: xs.length ? Math.max(...xs) - Math.min(...xs) : 0,
+        h: ys.length ? Math.max(...ys) - Math.min(...ys) : 0,
+      };
+    """)
+    p.ev("App.change('off', d=>{ d.items[0].suppressed = true; })")
+    for _ in range(20):
+        p.wait(300)
+        if not p.ev("return App.busy"):
+            break
+    p.wait(300)
+    rf_sil_warn = (
+        p.ev("const iss = RefFix.issuesOf(App.doc.items[1].id); return iss.length === 1 && iss[0].kind === 'sketch-silhouette'")
+        and p.pg.locator('.node .warn-ref').count() >= 1
+    )
+    p.pg.locator('.node .warn-ref').first.click(); p.wait(350)
+    rf_sil_bar = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return RefFix.active && Viewer.hasRefGhost()")
+    p.pg.click('#reffix-unlink'); p.wait(300)
+    rf_sil_cleared = p.ev("return RefFix.issuesOf(App.doc.items[1].id).length === 0 && !RefFix.active && App.errors.length === 0")
+    ok3 = (
+        sil_grow['n'] == 4 and abs(sil_grow['w'] - 60) < 0.3 and abs(sil_grow['h'] - 30) < 0.3
+        and rf_sil_warn and rf_sil_bar and rf_sil_cleared
+    )
+
+    # 4. Schnittkurve (SK-43): zwei sich kreuzende Zylinder -> Schnittkurve + Rückgängig + Nachführen + RefFix
+    p.ev("if (Sketch.active) Sketch.cancel(true); Start.newProject(true)"); p.wait(500)
+    p.ev("""App.change('cross', d=>{
+      const a = Model.newItem('cylinder', {d:20, h:40}, {name:'Senkrecht'}); a.t.z = -20;
+      const b = Model.newItem('cylinder', {d:16, h:40}, {name:'Quer'}); b.t.x = -20; b.t.ry = 90;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p, 30)
+    p.ev("Sketch.startOnPlane('XZ', 0)"); p.wait(1200)
+    p.pg.click('#sk-intersect'); p.wait(150)
+    s_a = world_screen(p, 0, -10, 14)
+    s_b = world_screen(p, 14, -8, 0)
+    p.pg.mouse.click(s_a[0], s_a[1]); p.wait(250)
+    picked_one = SS(p, "return !!S.icPick") and sichtbar(p, '#ic-picked')
+    p.pg.mouse.click(s_b[0], s_b[1]); p.wait(2200)
+    ic1 = SS(p, """
+      const ents = S.ents.filter(e => e.link && e.link.kind === 'faceIntersect');
+      const pts = ents.flatMap(e => SK.segsOf(e).flatMap(s => SK.segPoints(s)));
+      const maxX = pts.length ? Math.max(...pts.map(q => Math.abs(q[0]))) : 999;
+      const maxY = pts.length ? Math.max(...pts.map(q => Math.abs(q[1]))) : 999;
+      return { n: S.ents.length, linked: ents.length, maxX, maxY, id1: ents[0]?.link?.id, id2: ents[0]?.link?.id2 };
+    """)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    undone_ic = SS(p, "return S.ents.length === 0")
+    p.pg.mouse.click(s_a[0], s_a[1]); p.wait(200)
+    p.pg.mouse.click(s_b[0], s_b[1]); p.wait(2200)
+    ic2_n = SS(p, "return S.ents.filter(e => e.link && e.link.kind === 'faceIntersect').length")
+    SS(p, "S.ents.forEach(e=>{ if (e.link) e.con = true; }); S.ents.push({id:'r_ic',type:'rect',a:[-3,-3],b:[3,3]}); Sketch.render();")
+    fertig_hoch(p, '5')
+    ok4 = (
+        picked_one and undone_ic
+        and ic1['n'] >= 1 and ic1['linked'] == ic1['n']
+        and ic1['maxX'] <= 10.2 and ic1['maxY'] <= 8.2
+        and ic1['id1'] != ic1['id2'] and ic2_n >= 1
+        and p.ev("return App.doc.items.length === 3 && App.errors.length === 0")
+    )
+
+    # Schnittkurve wächst bei kleinerem 2. Zylinder mit, und meldet Verlust beim Auseinanderschieben
+    p.ev("App.change('shrink', d=>{ d.items[1].p.d = 10; })")
+    warte_rechnen(p, 30)
+    p.ev("return Sketch.whenRelinked()")
+    p.wait(250)
+    ic_shrink = p.ev("""
+      const sk = App.doc.items[2] && App.doc.items[2].p && App.doc.items[2].p.sketch;
+      const ents = (sk ? sk.ents : []).filter(e => e.link && e.link.kind === 'faceIntersect');
+      const pts = ents.flatMap(e => SK.segsOf(e).flatMap(s => SK.segPoints(s)));
+      return { n: ents.length, maxY: pts.length ? Math.max(...pts.map(q => Math.abs(q[1]))) : 999 };
+    """)
+    p.ev("App.change('apart', d=>{ d.items[1].t.x = 120; })")
+    warte_rechnen(p, 30)
+    p.ev("return Sketch.whenRelinked()")
+    p.wait(250)
+    rf_ic_warn = p.ev("const iss = RefFix.issuesOf(App.doc.items[2].id); return iss.length === 1 && iss[0].kind === 'sketch-intersect'")
+    p.ev("RefFix.start(App.doc.items[2].id)"); p.wait(300)
+    rf_ic_bar = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return RefFix.active && Viewer.hasRefGhost()")
+    p.pg.click('#reffix-unlink'); p.wait(300)
+    rf_ic_cleared = p.ev("return RefFix.issuesOf(App.doc.items[2].id).length === 0 && App.errors.length === 0")
+
+    # 5. Hilfetexte, Befehle & DE/EN-Schlüsselgleichheit
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("""
+      const a = Commands.search('umriss').some(c => c.id === 'sketch-silhouette');
+      const b = Commands.search('schnittkurve').some(c => c.id === 'sketch-intersect');
+      return a && b;
+    """)
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('silhouette2d', 'intersectCurve2d'))
+    ok5 = (
+        ic_shrink['n'] >= 1 and ic_shrink['maxY'] <= 5.2
+        and rf_ic_warn and rf_ic_bar and rf_ic_cleared
+        and de_keys == en_keys and cmd_ok and help_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a115_kurvenmuster_fuellmuster(p):
     # 1. Start in XY-Skizze: beide Werkzeuge sind in Einfach und Profi sichtbar
     sketch_xy(p)
@@ -23672,6 +23837,7 @@ TESTS = [
     ('[A-111] Spline mit Kontrollpunkten und Tangenten-Griffen (SK-32, SK-33)', t_spline_kontrollpunkte_griffe),
     ('[A-112] Krümmungskamm und Regel „krümmungsglatt“ (SK-34, SK-35)', t_a112_kruemmung_g2),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
+    ('[A-114] Silhouette und Schnittkurve in die Skizze (SK-42, SK-43)', t_a114_silhouette_schnittkurve),
     ('[A-115] Muster entlang Kurve und Füllmuster in der Skizze (SK-44, SK-45)', t_a115_kurvenmuster_fuellmuster),
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),

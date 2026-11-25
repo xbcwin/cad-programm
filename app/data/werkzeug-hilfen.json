@@ -1399,6 +1399,16 @@
     "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
     "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
   },
+  "silhouette2d": {
+    "tip": "Umriss holen (Silhouette): Äußeren Schatten-Umriss eines Körpers auf die Skizzen-Ebene projizieren (Profi)",
+    "hilfe": "Klick im Profi-Modus einen Körper im Bild an – Tracery projiziert seinen äußeren Umriss (ohne innere Kanten) auf die Skizzen-Ebene. Ändert sich der Körper später, wandert der Umriss automatisch mit.",
+    "tipp": "Ideal für Schattenrisse von Rohren, Wellen oder liegenden Zylindern, um passende Ausschnitte oder Halter drum herum zu zeichnen."
+  },
+  "intersectCurve2d": {
+    "tip": "Schnittkurve zweier Flächen verbunden in die Skizze holen (Profi)",
+    "hilfe": "Klick im Profi-Modus nacheinander zwei sich schneidende Flächen an (vom selben oder von zwei verschiedenen Körpern). Die exakte 3D-Schnittlinie wird auf die Skizzen-Ebene projiziert und bleibt mit beiden Flächen verbunden.",
+    "tipp": "Damit übernimmst du z. B. die genaue Durchdringungskurve zweier Rohre oder gebogener Schalen direkt in deine Skizze."
+  },
   "innerRadius": {
     "tip": "Innenrundungen prüfen: Sind alle Ecken groß genug für den Fräser?",
     "hilfe": "Misst alle nach innen gewölbten Rundungen und Bohrungen am Modell und vergleicht sie mit deinem eingestellten Fräser-Radius. Alles, was kleiner als der Fräser ist, leuchtet rot auf und erscheint in der Liste – so siehst du sofort, wo der Fräser nicht hineinkommt.",

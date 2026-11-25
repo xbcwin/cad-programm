@@ -955,7 +955,7 @@ const Kernel = (() => {
     return out;
   }
 
-  const KEY_ROUTED = new Set(['remesh', 'faceLoops', 'faceGrid', 'section']);
+  const KEY_ROUTED = new Set(['remesh', 'faceLoops', 'faceGrid', 'section', 'silhouette']);
   async function call(cmd, args = {}, transfer = []) {
     await ensurePrimary();
     if (cmd === 'evaluate') return evaluateParallel(args);
@@ -963,6 +963,10 @@ const Kernel = (() => {
     if (KEY_ROUTED.has(cmd) && args && args.key) {
       const idx = keyOwner.get(args.key);
       if (idx != null && pool[idx] && pool[idx].ready && !pool[idx].terminated) slot = pool[idx];
+    } else if (cmd === 'faceIntersect' && args && args.a && args.b && args.a.key && args.b.key) {
+      const iA = keyOwner.get(args.a.key);
+      const iB = keyOwner.get(args.b.key);
+      if (iA != null && iA === iB && pool[iA] && pool[iA].ready && !pool[iA].terminated) slot = pool[iA];
     }
     return postTo(slot, cmd, args, transfer);
   }
