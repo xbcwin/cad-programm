@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -642,13 +642,43 @@ const Interact = (() => {
     cv.addEventListener('pointerleave', () => { if (!down) { Viewer.clearHover(); Handles.hover(null); } });
     cv.addEventListener('dblclick', onDbl);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
-    // Rechtsklick ohne Ziehen: Menü passend zu dem, was unter der Maus liegt (Ziehen mit rechts verschiebt weiter die Ansicht)
-    cv.addEventListener('pointerdown', (e) => { if (e.button === 2) rdown = { x: e.clientX, y: e.clientY }; }, true);
-    window.addEventListener('pointerup', (e) => { if (e.button !== 2 || !rdown) return; const r = rdown; rdown = null; if (Math.hypot(e.clientX - r.x, e.clientY - r.y) <= 4 && e.target === Viewer.canvas && modelActive()) contextMenu(e.clientX, e.clientY); });
+    // Rechtsklick ohne Ziehen: Kontextmenü · rechte Maus halten (>320 ms): Kreis-Menü (Ziehen mit rechts verschiebt weiter die Ansicht)
+    const RADIAL_HOLD_MS = 320;
+    cv.addEventListener('pointerdown', (e) => {
+      if (e.button !== 2) return;
+      if (rdown && rdown.timer) clearTimeout(rdown.timer);
+      if (!modelActive()) { rdown = null; return; }
+      const st = { x: e.clientX, y: e.clientY, radial: false, timer: 0 };
+      st.timer = setTimeout(() => {
+        if (rdown !== st || !modelActive()) return;
+        st.timer = 0;
+        st.radial = true;
+        Viewer.controls.enabled = false;
+        UI.openRadial(st.x, st.y, { holdMode: true });
+      }, RADIAL_HOLD_MS);
+      rdown = st;
+    }, true);
+    window.addEventListener('pointerup', (e) => {
+      if (e.button !== 2 || !rdown) return;
+      const r = rdown; rdown = null;
+      if (r.timer) clearTimeout(r.timer);
+      if (r.radial) {
+        Viewer.controls.enabled = true;
+        UI.finishRadialHold(e.clientX, e.clientY);
+        return;
+      }
+      if (Math.hypot(e.clientX - r.x, e.clientY - r.y) <= 4 && e.target === Viewer.canvas && modelActive()) contextMenu(e.clientX, e.clientY);
+    }, true);
     window.addEventListener('keydown', onKey, true);
-    window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
+    window.addEventListener('pointermove', (e) => {
+      lastPtr = { x: e.clientX, y: e.clientY };
+      if (rdown && !rdown.radial && rdown.timer && Math.hypot(e.clientX - rdown.x, e.clientY - rdown.y) > 5) {
+        clearTimeout(rdown.timer);
+        rdown.timer = 0;
+      }
+    }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Measure.pickingField && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking); }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Measure.pickingField && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking) && !(typeof Select !== 'undefined' && Select.paintActive); }
   function onDown(e) {
     if (e.pointerType === 'touch') {
       activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -751,7 +781,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern';
   function startMove(e) {
     if (typeof Joints !== 'undefined' && Joints.closeDockPrompt) Joints.closeDockPrompt();
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
@@ -1122,6 +1152,7 @@ const Interact = (() => {
       if (activeTouches.size === 0) touchMulti = false;
     }
     clearLongPress();
+    if (rdown) { if (rdown.timer) clearTimeout(rdown.timer); rdown = null; }
     if (band) { band.el.remove(); band = null; }
     if (down && down.handle) Handles.end();
     if (moving) {
@@ -1220,6 +1251,8 @@ const Interact = (() => {
         { icon: 'circlipGroove', label: T('kind.circlipGroove'), id: 'cm-circlip', help: 'circlipGroove', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.circlipGroove({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'keyway', label: T('kind.keyway'), id: 'cm-keyway', help: 'keywayStep', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.keyway({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'splineShaft', label: T('kind.splineProfile'), id: 'cm-spline-profile', help: 'splineProfile', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.splineProfile({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'knurl', label: T('kind.knurl'), id: 'cm-knurl', help: 'knurl', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.knurl({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'gripPattern', label: T('kind.gripPattern'), id: 'cm-grip-pattern', help: 'gripPattern', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top) || !['PLANE', 'CYLINDRE'].includes(((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.gripPattern({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'thicken', label: T('common.thicken'), id: 'cm-thicken', help: 'thickenFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.thicken({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'fillet', label: T('ctx.fullFillet'), id: 'cm-fullfillet', help: 'fullFillet', hidden: !hit || hit.faceIdx == null || top.role === 'hole', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startFullFillet({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'fillet', label: T('ctx.faceFillet'), id: 'cm-facefillet', help: 'faceFillet', hidden: (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) || !hit || hit.faceIdx == null || top.role === 'hole', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startFaceFillet({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },

@@ -908,8 +908,8 @@ const Panels = (() => {
           ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(it.kind === 'sketch3d' ? [{ icon: 'edit', label: T('sk3.editBtn'), id: 'tm-sk3-edit', run: () => Sketch.edit3d(it.id) }, { icon: 'sweep', label: T('ctx.alongPath'), id: 'tm-sk3-sweep', run: () => Features.sweepFromSketch3d(it.id) }] : []),
-          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, ...(!ViewPrefs.simple ? [{ icon: 'deform', label: T('common.deformStep'), id: 'tm-deform', help: 'deform', run: () => Features.deform([it.id]) }] : []), { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
-          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }, { icon: 'point', label: T('ctx.patPoints'), id: 'tm-pat-points', help: 'patternPoints', run: () => Features.patternPoints([it.id]) }, { icon: 'list', label: T('ctx.patTable'), id: 'tm-pat-table', help: 'patternTable', run: () => Features.patternTable([it.id]) }] : []),
+          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && it.kind !== 'boss' && it.kind !== 'lipGroove' && it.kind !== 'undercut' && it.kind !== 'circlipGroove' && it.kind !== 'keyway' && it.kind !== 'splineProfile' && it.kind !== 'knurl' && it.kind !== 'gripPattern' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, ...(!ViewPrefs.simple ? [{ icon: 'deform', label: T('common.deformStep'), id: 'tm-deform', help: 'deform', run: () => Features.deform([it.id]) }] : []), { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
+          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }, { icon: 'point', label: T('ctx.patPoints'), id: 'tm-pat-points', help: 'patternPoints', run: () => Features.patternPoints([it.id]) }, { icon: 'list', label: T('ctx.patTable'), id: 'tm-pat-table', help: 'patternTable', run: () => Features.patternTable([it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -1381,7 +1381,7 @@ const Panels = (() => {
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     for (const v of doc.variants || []) if (v && v.values) for (const k of Object.keys(v.values)) v.values[k] = fix(v.values[k]);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || k === 'size' || k === 'profile' || k === 'autoNorm')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'group' && (k === 'op' || k === 'pt' || k === 'plane' || k === 'keep' || k === 'axis' || k === 'scaleUnit' || k === 'distUnit' || k === 'mode' || k === 'sourceId' || k === 'csv' || k === 'align')) || (it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deform' && (k === 'target' || k === 'mode' || k === 'axis' || k === 'bendAxis' || k === 'anchor' || k === 'flip')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'fillPattern' && (k === 'target' || k === 'face' || k === 'kind')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'splitFace' && (k === 'target' || k === 'face' || k === 'side')) || (it.kind === 'dome' && (k === 'target' || k === 'face' || k === 'shape' || k === 'flip')) || ((it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') && (k === 'target' || k === 'face' || k === 'form' || k === 'norm' || k === 'end' || k === 'from' || k === 'ends' || (it.kind === 'keyway' && k === 'size') || k === 'profile' || k === 'autoNorm' || k === 'style' || k === 'autoDepth' || k === 'kind' || k === 'mode' || k === 'dir' || k === 'layout' || k === 'shape')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); for (const fw of f.faceWalls || []) fw.r = fix(fw.r); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
   }
@@ -1736,8 +1736,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'fillPattern' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'splitFace' && x.kind !== 'dome' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'fillPattern' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'splitFace' && x.kind !== 'dome' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -1888,7 +1888,7 @@ const Panels = (() => {
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
     const isRef = it.kind === 'ref';
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
-    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile';
+    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern';
     if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
     // Maße aus „Meine Teile“ (lokale Parameter je eingesetztem Teil)
@@ -2468,6 +2468,14 @@ const Panels = (() => {
       sec.firstChild.textContent = T('kind.splineProfile');
       sec.setAttribute('data-help', 'splineProfile');
       Features.renderSplineProfile(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'knurl') {
+      sec.firstChild.textContent = T('kind.knurl');
+      sec.setAttribute('data-help', 'knurl');
+      Features.renderKnurl(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'gripPattern') {
+      sec.firstChild.textContent = T('kind.gripPattern');
+      sec.setAttribute('data-help', 'gripPattern');
+      Features.renderGripPattern(it, sec, setP); w.append(sec);
     } else if (it.kind === 'mirrorStep') {
       sec.firstChild.textContent = T('kind.mirrorStep');
       Features.renderMirrorStep(it, sec, setP); w.append(sec);
@@ -2761,15 +2769,21 @@ const Panels = (() => {
     }
     if (!isMoveOnly) {
       w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; }), it.color, !!it.colorSet, it));
-      // Farbe der gewählten Fläche
-      const sf = !isRef ? Actions.selectedFace() : null;
+      // Farbe der gewählten Fläche(n)
+      const sfs = !isRef ? (App.faces || []).filter((x) => x.id === it.id).map((x) => {
+        const r = App.results.get(x.id);
+        const info = r && r.data && r.data.faces ? r.data.faces[x.faceIdx] : null;
+        return info ? { id: x.id, idx: x.faceIdx, info } : null;
+      }).filter(Boolean) : [];
+      const sf = sfs.length ? sfs[sfs.length - 1] : (!isRef ? Actions.selectedFace() : null);
       if (sf && sf.id === it.id && it.role !== 'hole') {
+        const targetFaces = sfs.length ? sfs : [sf];
+        const targetIdxs = new Set(targetFaces.map((x) => x.idx));
         const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, T('panel.faceCol.title')));
-        const key = { n: sf.info.n || null, c: sf.info.c };
         const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
         const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
-          const tgt = Model.find(doc, it.id).item; const list = (tgt.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
-          if (col) list.push({ ...key, col });
+          const tgt = Model.find(doc, it.id).item; const list = (tgt.faceColors || []).filter((x) => !targetIdxs.has(Viewer.faceIndexOf(it.id, x)));
+          if (col) for (const f of targetFaces) list.push({ n: f.info.n || null, c: f.info.c, col });
           if (list.length) tgt.faceColors = list; else delete tgt.faceColors;
         });
         const row = h('div', { class: 'colors' });
@@ -3151,12 +3165,12 @@ const Panels = (() => {
       Features.syncPatternMarkers();
       return;
     }
-    if (items.length === 1 && (items[0].item.kind === 'undercut' || items[0].item.kind === 'circlipGroove' || items[0].item.kind === 'keyway' || items[0].item.kind === 'splineProfile')) {
+    if (items.length === 1 && (items[0].item.kind === 'undercut' || items[0].item.kind === 'circlipGroove' || items[0].item.kind === 'keyway' || items[0].item.kind === 'splineProfile' || items[0].item.kind === 'knurl' || items[0].item.kind === 'gripPattern')) {
       const it = items[0].item;
       const helpKey = it.kind === 'keyway' ? 'keywayStep' : it.kind;
-      const undoLbl = `Zylinderfläche für ${T('kind.' + it.kind)} gewählt`;
+      const undoLbl = `${it.kind === 'gripPattern' ? 'Fläche' : 'Zylinderfläche'} für ${T('kind.' + it.kind)} gewählt`;
       bar.append(h('span', { class: 'lbl' }, T('kind.' + it.kind)));
-      b('cursor', 'Andere Fläche wählen', () => Features.pickStepCylFace(it.id, undoLbl), 'accent').dataset.help = helpKey;
+      b('cursor', 'Andere Fläche wählen', () => (it.kind === 'gripPattern' ? Features.pickGripPatternFace(it.id) : Features.pickStepCylFace(it.id, undoLbl)), 'accent').dataset.help = helpKey;
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
@@ -3210,6 +3224,19 @@ const Panels = (() => {
         tb.dataset.help = 'datumTwoEdges';
       }
       sep();
+    } else if (App.faces && App.faces.length > 1) {
+      bar.append(h('span', { class: 'lbl', id: 'ctx-faces-lbl' }, T('ctx.facesCount', { n: App.faces.length })));
+      b('fillet', T('ctx.facesEdges'), () => {
+        const seen = new Set(), list = [], ids = new Set();
+        for (const f of App.faces) {
+          for (const ei of Viewer.faceEdges(f.id, f.faceIdx)) {
+            const k = f.id + ':' + ei;
+            if (!seen.has(k)) { seen.add(k); list.push({ id: f.id, edgeIdx: ei }); ids.add(f.id); }
+          }
+        }
+        if (list.length) App.select([...ids], { edges: list });
+      }, 'accent', T('ctx.facesEdgesTip'));
+      sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, T('ctx.face')));
       b('sketch', T('ctx.sketchHere'), () => Sketch.startOnFace(face), 'accent', T('ctx.sketchHereTip')).dataset.help = 'sketchFace';
@@ -3239,6 +3266,8 @@ const Panels = (() => {
         fb.id = 'ctx-fins'; fb.dataset.help = 'fins';
         const fpb = b('patternFill', T('kind.fillPattern'), () => Features.fillPattern(face), 'pro', T('ctx.fillPatternFaceTip'), true);
         fpb.id = 'ctx-fill-pattern'; fpb.dataset.help = 'fillPattern';
+        const gpb = b('gripPattern', T('ctx.gripPattern'), () => Features.gripPattern(face), 'pro', T('ctx.gripPatternTip'), true);
+        gpb.id = 'ctx-grip-pattern'; gpb.dataset.help = 'gripPattern';
         const wb = b('web', T('kind.web'), () => Features.startWeb(face), 'pro', T('ctx.webFaceTip'), true);
         wb.id = 'ctx-web'; wb.dataset.help = 'web';
         const sfb = b('splitFace', T('kind.splitFace'), () => Features.startSplitFace(face), 'pro', T('ctx.splitFaceTip'), true);
@@ -3281,6 +3310,10 @@ const Panels = (() => {
           kw.id = 'ctx-keyway'; kw.dataset.help = 'keywayStep';
           const sp = b('splineShaft', T('ctx.splineProfile'), () => Features.splineProfile(face), 'pro', T('ctx.splineProfileTip'));
           sp.id = 'ctx-spline-profile'; sp.dataset.help = 'splineProfile';
+          const kn = b('knurl', T('ctx.knurl'), () => Features.knurl(face), 'pro', T('ctx.knurlTip'));
+          kn.id = 'ctx-knurl'; kn.dataset.help = 'knurl';
+          const gp = b('gripPattern', T('ctx.gripPattern'), () => Features.gripPattern(face), 'pro', T('ctx.gripPatternTip'), true);
+          gp.id = 'ctx-grip-pattern'; gp.dataset.help = 'gripPattern';
         }
       }
       if (face.info.t === 'CYLINDRE' || face.info.t === 'CONE') {
@@ -3492,8 +3525,9 @@ const Panels = (() => {
     const bX = h('button', { type: 'button', 'aria-label': T('vc.xrayAria'), 'data-tip': T('vc.xrayTip'), 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray', 'data-vc-key': 'xrayTip', 'data-vc-aria': 'xrayAria' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': T('vc.sectionAria'), 'data-tip': T('vc.sectionTip'), 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section', 'data-vc-key': 'sectionTip', 'data-vc-aria': 'sectionAria' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
     const bF = h('button', { type: 'button', 'aria-label': T('vc.filterAria'), 'data-tip': T('vc.filterTip'), 'data-view': 'filter', 'data-help': 'selectFilter', 'data-vc-key': 'filterTip', 'data-vc-aria': 'filterAria' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
+    const bPaint = h('button', { type: 'button', 'aria-label': T('vc.paintAria'), 'data-tip': T('vc.paintTip'), 'data-kbd': 'V', 'data-view': 'paint', 'data-help': 'paintSelect', 'data-vc-key': 'paintTip', 'data-vc-aria': 'paintAria' }); bPaint.innerHTML = icon('noteDraw'); bPaint.onclick = () => Select.togglePaint();
     for (const x of [bX, bC, bF]) x.classList.add('pro');
-    vb.append(bO, bG, bP, bN, bX, bC, bF, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb); viewBtnsEl = vb;
+    vb.append(bO, bG, bP, bN, bX, bC, bF, bPaint, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb); viewBtnsEl = vb;
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();

@@ -364,5 +364,15 @@
     "was": "Erzeugt anhand einer CSV-Koordinatentabelle (X, Y, optional Z und Drehwinkel) für jede Zeile eine Kopie eines Körpers oder Lochs.",
     "wozu": "Nützlich für Bohrpläne, CNC-Koordinaten, Stücklisten-Positionen oder vermessene Punktlisten aus Messdaten oder Tabellenkalkulationen.",
     "achtung": "Prüfe rechts zwischen „Zielposition“ und „Versatz zum Original“, wie die eingetragenen Koordinaten gerechnet werden sollen."
+  },
+  "knurl": {
+    "was": "Schneidet ein gerades, gekreuztes (Diamant-) oder schräges Rändel mit einstellbarer Teilung und Tiefe auf den Außenmantel eines Zylinders.",
+    "wozu": "Macht Drehknöpfe, Rändelmuttern, Wellenenden, Griffe und Werkzeuge rutschfest und griffig, ohne den maximalen Außendurchmesser zu vergrößern.",
+    "achtung": "Eine sehr feine Teilung auf großen Zylindern erzeugt viele Einzelflächen – wähle für den schnellen Entwurf zuerst eine gröbere Teilung."
+  },
+  "gripPattern": {
+    "was": "Setzt gleichmäßige Rillen (V-Profil, rund oder rechteckig) oder Noppen (Halbkugel, Kegel oder Zylinder) vertieft oder erhaben auf eine ebene Fläche oder einen Zylindermantel.",
+    "wozu": "Ideal für griffige Gehäusekanten, Handgriffe, Tasten, Schiebeschalter und rutschsichere Auflagen.",
+    "achtung": "Achte darauf, dass die Teilung größer bleibt als die Rillenbreite bzw. der Noppen-Durchmesser, damit zwischen den Elementen Platz bleibt."
   }
 }

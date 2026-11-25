@@ -26717,6 +26717,242 @@ def t_a136_aufkleber_texturen(p):
     return [ok_ui, ok_place, ok_xform, ok_tex, ok_reload, bool(gone and restored), bool(meta_ok)]
 
 
+def t_a131_raendel_griffmuster(p):
+    # [A-131] Rändel (gerade, gekreuzt, Teilung) und Griffmuster (Rillen, Noppen) (KP-50)
+    p.empty()
+    p.ev("if (ViewPrefs.simple) ViewPrefs.setLevel('pro');")
+    p.pg.wait_for_timeout(120)
+
+    # 1. Zylinder d=20, h=20 mit gekreuztem Rändel Teilung 1 über Kontextleiste
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'GriffWelle', p: { d: 20, h: 20 } });
+    window.__knCyl = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    m0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__knCyl));")
+    p.ev("""
+    const fs = App.results.get(window.__knCyl).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    App.select([window.__knCyl], { face: { id: window.__knCyl, faceIdx: ci, info: fs[ci] } });
+    """)
+    p.pg.wait_for_timeout(120)
+
+    # Im Einfach-Modus verborgen, im Profi-Modus sichtbar
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.pg.wait_for_timeout(100)
+    simple_hidden = (not p.pg.locator('#ctx-knurl').is_visible()) and (not p.pg.locator('#ctx-grip-pattern').is_visible())
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.pg.wait_for_timeout(100)
+    pro_vis = p.pg.locator('#ctx-knurl').is_visible() and p.pg.locator('#ctx-grip-pattern').is_visible()
+
+    p.pg.locator('#ctx-knurl').click()
+    warte_rechnen(p, 40)
+    kn1 = p.ev("""return (async () => {
+      const st = App.doc.items.find(x => x.kind === 'knurl');
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__knCyl);
+      const gc = await GeomCheck.run();
+      const deps = st ? Model.dependencies(App.doc).filter(d => d.from === st.id && d.to === window.__knCyl) : [];
+      return {
+        id: st?.id, style: st?.p?.style, pitch: st?.p?.pitch,
+        area: part?.area || 0, vol: part?.volume || 0, bbox: part?.bbox || null,
+        errs: App.errors.length, geomErrs: gc.issues.length, depCount: deps.length
+      };
+    })();""")
+    dx1 = (kn1['bbox'][3] - kn1['bbox'][0]) if kn1['bbox'] else 0
+    dy1 = (kn1['bbox'][4] - kn1['bbox'][1]) if kn1['bbox'] else 0
+
+    # Unterdrücken & Rückgängig prüfen
+    p.ev("Timeline.toggleSuppress(App.doc.items.find(x=>x.kind==='knurl').id);")
+    warte_rechnen(p, 30)
+    m_supp = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__knCyl));")
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 30)
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    kn_after_undo = p.ev("return App.doc.items.filter(x=>x.kind==='knurl').length;")
+    ok1 = (
+        simple_hidden and pro_vis
+        and kn1['style'] == 'crossed' and abs(kn1['pitch'] - 1.0) < 0.01
+        and kn1['area'] > m0['area'] * 1.05
+        and 19.8 <= dx1 <= 20.001 and 19.8 <= dy1 <= 20.001
+        and kn1['errs'] == 0 and kn1['geomErrs'] == 0 and kn1['depCount'] >= 1
+        and abs(m_supp['area'] - m0['area']) < 0.2 and kn_after_undo == 0
+    )
+
+    # 2. Gerades & schräges Rändel + Teil-Rändel auf abgesetzter Welle
+    p.ev("""
+    const fs = App.results.get(window.__knCyl).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    Features.knurl({ id: window.__knCyl, idx: ci, info: fs[ci] });
+    """)
+    warte_rechnen(p, 40)
+    p.pg.select_option('#kn-style', 'straight')
+    warte_rechnen(p, 30)
+    kn_str = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__knCyl);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, bbox: part?.bbox || null, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.pg.select_option('#kn-style', 'angled')
+    warte_rechnen(p, 30)
+    field(p, '#kn-pitch', 1.2)
+    warte_rechnen(p, 30)
+    kn_ang = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__knCyl);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, bbox: part?.bbox || null, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+
+    # Abgesetzte Welle (d=30 Flansch unten + d=20 Schaft) mit Teil-Rändel (Länge 12, gerade)
+    p.ev("""
+    App.setDoc(Model.newDoc());
+    Actions.addPrimitive('cylinder', { name: 'Schaft', p: { d: 20, h: 20 } });
+    window.__sh = App.doc.items[App.doc.items.length - 1].id;
+    Actions.addPrimitive('cylinder', { name: 'Flansch', p: { d: 30, h: 4 }, pos: [0, 0, -4] });
+    const fl = App.doc.items[App.doc.items.length - 1];
+    Actions.setOp(fl.id, 'join', window.__sh);
+    """)
+    warte_rechnen(p, 25)
+    m_sh0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__sh));")
+    p.ev("""
+    const fs = App.results.get(window.__sh).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    Features.knurl({ id: window.__sh, idx: ci, info: fs[ci] }, { style: 'crossed', pitch: 1.5, length: 12, margin: 2 });
+    """)
+    warte_rechnen(p, 35)
+    kn_step = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__sh);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    dx_s = (kn_str['bbox'][3] - kn_str['bbox'][0]) if kn_str['bbox'] else 0
+    dx_a = (kn_ang['bbox'][3] - kn_ang['bbox'][0]) if kn_ang['bbox'] else 0
+    ok2 = (
+        kn_str['area'] > m0['area'] * 1.05 and 19.8 <= dx_s <= 20.001 and kn_str['errs'] == 0 and kn_str['geomErrs'] == 0
+        and kn_ang['area'] > m0['area'] * 1.05 and 19.8 <= dx_a <= 20.001 and kn_ang['errs'] == 0 and kn_ang['geomErrs'] == 0
+        and kn_step['area'] > m_sh0['area'] * 1.02 and kn_step['errs'] == 0 and kn_step['geomErrs'] == 0
+    )
+
+    # 3. Griffmuster: Rillen (eben + Ringrillen auf Zylinder)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("""
+    Actions.addPrimitive('box', { name: 'GriffPlatte', p: { w: 40, d: 30, h: 10 } });
+    window.__gpBox = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    mb0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__gpBox));")
+    p.ev("""
+    const fs = App.results.get(window.__gpBox).data.faces;
+    const fi = fs.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+    App.select([window.__gpBox], { face: { id: window.__gpBox, faceIdx: fi, info: fs[fi] } });
+    """)
+    p.pg.wait_for_timeout(120)
+    p.pg.locator('#ctx-grip-pattern').click()
+    warte_rechnen(p, 25)
+    gp_cut = p.ev("""return (async () => {
+      const st = App.doc.items.find(x => x.kind === 'gripPattern');
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__gpBox);
+      const gc = await GeomCheck.run();
+      return { kind: st?.p?.kind, mode: st?.p?.mode, area: part?.area || 0, vol: part?.volume || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.pg.select_option('#gp-profile', 'round')
+    warte_rechnen(p, 25)
+    p.pg.select_option('#gp-mode', 'join')
+    warte_rechnen(p, 25)
+    gp_join = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__gpBox);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, vol: part?.volume || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'GriffZyl', p: { d: 20, h: 25 }, pos: [50, 0, 0] });
+    window.__gpCyl = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    mc0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__gpCyl));")
+    p.ev("""
+    const fs = App.results.get(window.__gpCyl).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    Features.gripPattern({ id: window.__gpCyl, idx: ci, info: fs[ci] }, { kind: 'grooves', dir: 'ring', mode: 'cut', pitch: 2.5, width: 1.2, depth: 0.8, margin: 2 });
+    """)
+    warte_rechnen(p, 25)
+    gp_cyl_ring = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__gpCyl);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, vol: part?.volume || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    ok3 = (
+        gp_cut['kind'] == 'grooves' and gp_cut['mode'] == 'cut'
+        and gp_cut['area'] > mb0['area'] and gp_cut['vol'] < mb0['volume'] and gp_cut['errs'] == 0 and gp_cut['geomErrs'] == 0
+        and gp_join['area'] > mb0['area'] and gp_join['vol'] > mb0['volume'] and gp_join['errs'] == 0 and gp_join['geomErrs'] == 0
+        and gp_cyl_ring['area'] > mc0['area'] and gp_cyl_ring['vol'] < mc0['volume'] and gp_cyl_ring['errs'] == 0 and gp_cyl_ring['geomErrs'] == 0
+    )
+
+    # 4. Griffmuster: Noppen (eben + Zylindermantel)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("""
+    Actions.addPrimitive('box', { name: 'NoppenPlatte', p: { w: 30, d: 20, h: 8 } });
+    window.__nbBox = App.doc.items[App.doc.items.length - 1].id;
+    Actions.addPrimitive('cylinder', { name: 'NoppenZyl', p: { d: 20, h: 25 }, pos: [45, 0, 0] });
+    window.__nbCyl = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    mnb0 = p.ev("return Mass.measure().then(m => ({ b: Mass.partOf(m, window.__nbBox), c: Mass.partOf(m, window.__nbCyl) }));")
+    p.ev("""
+    const fsB = App.results.get(window.__nbBox).data.faces;
+    const fiB = fsB.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+    window.__stNbBox = Features.gripPattern({ id: window.__nbBox, idx: fiB, info: fsB[fiB] }, { kind: 'bumps', shape: 'dome', layout: 'staggered', mode: 'join', size: 2, pitch: 4, depth: 0.8, margin: 2 })?.id;
+    const fsC = App.results.get(window.__nbCyl).data.faces;
+    const ciC = fsC.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    window.__stNbCyl = Features.gripPattern({ id: window.__nbCyl, idx: ciC, info: fsC[ciC] }, { kind: 'bumps', shape: 'dome', layout: 'staggered', mode: 'join', size: 2, pitch: 5, depth: 0.8, margin: 3 })?.id;
+    """)
+    warte_rechnen(p, 35)
+    nb_res = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const b = Mass.partOf(ms, window.__nbBox);
+      const c = Mass.partOf(ms, window.__nbCyl);
+      const gc = await GeomCheck.run();
+      return {
+        bArea: b?.area || 0, bVol: b?.volume || 0,
+        cArea: c?.area || 0, cVol: c?.volume || 0,
+        errs: App.errors.length, geomErrs: gc.issues.length
+      };
+    })();""")
+    ok4 = (
+        nb_res['bArea'] > mnb0['b']['area'] and nb_res['bVol'] > mnb0['b']['volume']
+        and nb_res['cArea'] > mnb0['c']['area'] and nb_res['cVol'] > mnb0['c']['volume']
+        and nb_res['errs'] == 0 and nb_res['geomErrs'] == 0
+    )
+
+    # 5. Erklärungen, Befehle, Hilfetexte und i18n
+    meta = p.ev("""
+    const expKn = Explain.local((() => {
+      const it = Model.newItem('knurl', { target: window.__nbCyl, style: 'crossed', pitch: 1, depth: 0.38 });
+      App.doc.items.push(it); return it.id;
+    })());
+    const expGp = Explain.local(window.__stNbBox);
+    const cmdKn = Commands.search('rändel').some(c => c.id === 'knurl');
+    const cmdGp = Commands.search('griffmuster').some(c => c.id === 'grip-pattern');
+    return {
+      expKnOk: !!expKn && expKn.lines.some(l => l.k === 'op' && l.t.includes('Rändel')),
+      expGpOk: !!expGp && expGp.lines.some(l => l.k === 'op' && l.t.includes('Griffmuster')),
+      cmdKn, cmdGp
+    };
+    """)
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('knurl', 'gripPattern'))
+    ok5 = meta['expKnOk'] and meta['expGpOk'] and meta['cmdKn'] and meta['cmdGp'] and i18n_ok and help_ok
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a135_boden_licht(p):
     import struct, zlib
     p.empty()
@@ -27207,6 +27443,192 @@ def t_a139_pins_arbeitsflaechen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_kreis_malen(p):
+    # 1. Taste Q -> Kreis-Menü mit 8 Einträgen, Klick auf „Quader“ legt Quader an
+    p.empty()
+    cx, cy = p.canvas_center()
+    p.pg.mouse.move(cx, cy)
+    p.pg.keyboard.press('q')
+    p.wait(300)
+    ok1 = (
+        p.pg.locator('#radial-menu').count() == 1
+        and p.pg.locator('#radial-menu .radial-item').count() == 8
+        and any('Quader' in t for t in p.pg.locator('#radial-menu .radial-item').all_text_contents())
+    )
+    p.pg.locator('#radial-menu .radial-item[data-cmd="box"]').click()
+    warte_rechnen(p, 20)
+    ok1 = ok1 and p.pg.locator('#radial-menu').count() == 0 and kinds(p) == ['box']
+
+    # 2. Einstellbar (Speichern + Zurücksetzen) & rechte Maus halten öffnet Kreis-Menü
+    p.pg.mouse.move(cx + 180, cy)
+    p.pg.keyboard.press('q')
+    p.wait(250)
+    p.pg.locator('#radial-config-btn').click()
+    p.wait(250)
+    p.pg.select_option('#radial-slot-0', 'cylinder')
+    p.pg.locator('#radial-save').click()
+    p.wait(250)
+    saved_items = p.ev("return [UI.radialItems()[0], localStorage.getItem('tracery-kreismenue')]")
+    ok2 = saved_items[0] == 'cylinder' and bool(saved_items[1])
+
+    p.pg.mouse.move(cx + 220, cy + 40)
+    p.pg.mouse.down(button='right')
+    p.wait(450)
+    p.pg.mouse.up(button='right')
+    p.wait(250)
+    ok2 = (
+        ok2
+        and p.pg.locator('#radial-menu').count() == 1
+        and p.pg.locator('.menu').count() == 0
+        and p.pg.locator('#radial-menu .radial-item[data-slot="0"]').get_attribute('data-cmd') == 'cylinder'
+        and 'Zylinder' in p.pg.locator('#radial-menu .radial-item[data-slot="0"]').text_content()
+    )
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    ok2 = ok2 and p.pg.locator('#radial-menu').count() == 0 and p.ev("return UI.resetRadial()[0]") == 'box'
+    # Kurzer Rechtsklick im Leeren öffnet weiterhin das normale Kontextmenü
+    p.pg.mouse.click(cx - 200, cy, button='right')
+    p.wait(250)
+    ok2 = ok2 and p.pg.locator('.menu').count() == 1
+    p.pg.mouse.click(cx - 200, cy)
+    p.wait(150)
+    ok2 = ok2 and p.pg.locator('.menu').count() == 0
+
+    # 3. Malen-Auswahl: über 3 Flächen streichen -> 3 Flächen gewählt
+    p.ev("""
+      App.change('Quader', d => {
+        const b = d.items[0];
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        Object.assign(b.p, { w: 40, d: 30, h: 20 });
+      });
+      App.clearSelection();
+    """)
+    warte_rechnen(p, 20)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(400)
+
+    face_pts = p.ev("""
+      const THREE = window.__masswerk.THREE;
+      const it = App.doc.items[0];
+      const n = Viewer.nodes.get(it.id);
+      if (!n || !n.data || !n.data.faces) return [];
+      const r = Viewer.canvas.getBoundingClientRect();
+      const cam = Viewer.activeCamera;
+      const out = [];
+      n.data.faces.forEach((f, idx) => {
+        if (!f || !f.c || !f.n) return;
+        const wc = new THREE.Vector3(...f.c).applyMatrix4(n.obj.matrix);
+        const wn = new THREE.Vector3(...f.n).transformDirection(n.obj.matrix).normalize();
+        const toCam = cam.position.clone().sub(wc).normalize();
+        if (toCam.dot(wn) <= 0.15) return;
+        const s = Viewer.toScreen(wc);
+        const sx = r.left + s.x, sy = r.top + s.y;
+        const hit = Viewer.pick(sx, sy, { noEdges: true });
+        if (hit && hit.id === it.id && hit.faceIdx === idx) out.push({ idx, sx, sy });
+      });
+      return out;
+    """)
+    ok3 = len(face_pts) >= 3
+    if ok3:
+        p.pg.locator('.view-btns [data-view="paint"]').click()
+        p.wait(250)
+        ok3 = p.ev("return Select.paintActive") is True and p.pg.locator('#paint-select-bar').count() == 1
+        pts = face_pts[:3]
+        p.pg.mouse.move(pts[0]['sx'], pts[0]['sy'])
+        p.pg.mouse.down()
+        p.pg.mouse.move(pts[1]['sx'], pts[1]['sy'], steps=12)
+        p.pg.mouse.move(pts[2]['sx'], pts[2]['sy'], steps=12)
+        p.pg.mouse.up()
+        p.wait(300)
+        sel_faces = p.ev("return App.faces.map(f => f.faceIdx)")
+        ok3 = (
+            ok3
+            and len(sel_faces) == 3
+            and len(set(sel_faces)) == 3
+            and '3 Flächen' in p.pg.locator('#paint-count').text_content()
+            and '3 Flächen' in p.pg.locator('#status-sel').text_content()
+            and '3 Flächen' in p.pg.locator('#ctx-faces-lbl').text_content()
+        )
+        p.pg.keyboard.press('Escape')
+        p.wait(200)
+        ok3 = ok3 and p.ev("return !Select.paintActive && App.faces.length === 3") is True
+
+    # 4. Malen-Auswahl über Kanten + Alt zum Abwählen + Hilfen/i18n/Befehle
+    p.ev("Select.startPaint('edge')")
+    p.wait(250)
+    edge_pts = p.ev("""
+      const THREE = window.__masswerk.THREE;
+      const it = App.doc.items[0];
+      const n = Viewer.nodes.get(it.id);
+      if (!n || !n.data || !n.data.edges) return [];
+      const r = Viewer.canvas.getBoundingClientRect();
+      const out = [];
+      n.data.edges.forEach((e, idx) => {
+        if (!e || !e.m) return;
+        const wm = new THREE.Vector3(...e.m).applyMatrix4(n.obj.matrix);
+        const s = Viewer.toScreen(wm);
+        const sx = r.left + s.x, sy = r.top + s.y;
+        const hit = Viewer.pick(sx, sy, { edgePx: 9 });
+        if (hit && hit.id === it.id && hit.edgeIdx === idx) out.push({ idx, sx, sy });
+      });
+      return out;
+    """)
+    ok4 = len(edge_pts) >= 2
+    if ok4:
+        e1, e2 = edge_pts[0], edge_pts[1]
+        p.pg.mouse.move(e1['sx'], e1['sy'])
+        p.pg.mouse.down()
+        p.pg.mouse.move(e2['sx'], e2['sy'], steps=12)
+        p.pg.mouse.up()
+        p.wait(250)
+        cnt_after = p.ev("return App.edges.length")
+        ok4 = cnt_after >= 2 and 'Kanten' in p.pg.locator('#paint-count').text_content()
+
+        # Alt + über erste Kante streichen wählt sie ab
+        p.pg.keyboard.down('Alt')
+        p.pg.mouse.move(e1['sx'] - 2, e1['sy'] - 2)
+        p.pg.mouse.down()
+        p.pg.mouse.move(e1['sx'] + 2, e1['sy'] + 2, steps=4)
+        p.pg.mouse.up()
+        p.pg.keyboard.up('Alt')
+        p.wait(200)
+        cnt_less = p.ev("return App.edges.length")
+        ok4 = ok4 and cnt_less < cnt_after
+
+    p.pg.locator('#paint-done').click()
+    p.wait(200)
+    p.pg.locator('.view-btns [data-view="paint"]').hover()
+    p.pg.wait_for_selector('.tooltip.big', timeout=5000)
+    tip_paint = p.pg.locator('.tooltip.big').text_content()
+    p.pg.mouse.click(cx - 200, cy)
+    p.wait(100)
+    p.pg.mouse.move(cx, cy)
+    p.pg.keyboard.press('q')
+    p.wait(200)
+    p.pg.locator('#radial-config-btn').hover()
+    p.pg.wait_for_selector('.tooltip.big', timeout=5000)
+    tip_radial = p.pg.locator('.tooltip.big').text_content()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const helpOk = ['radialMenu', 'paintSelect'].every(k => h[k] && h[k].tip && h[k].hilfe && h[k].tipp)
+        && String(arg[0] || '').includes(h.paintSelect.hilfe)
+        && String(arg[1] || '').includes(h.radialMenu.hilfe);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('kreismenü').some(c => c.id === 'radialMenu')
+        && Commands.search('malen-auswahl').some(c => c.id === 'paintSelect');
+      return { helpOk, i18nEq, cmdOk };
+    })()""", [tip_paint, tip_radial])
+    ok4 = bool(ok4 and not p.ev("return Select.paintActive") and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -27452,8 +27874,10 @@ TESTS = [
     ('[A-134] Druck-Kosten-Schätzung & Prüfbericht als PDF (PF-17, PF-18)', t_a134_druckkosten_pruefbericht),
     ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
     ('[A-136] Aufkleber, Logos und Texturen (AN-15, AN-16)', t_a136_aufkleber_texturen),
+    ('[A-131] Rändel (gerade, gekreuzt, Teilung) und Griffmuster (Rillen, Noppen)', t_a131_raendel_griffmuster),
     ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
     ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
+    ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

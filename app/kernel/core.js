@@ -6943,7 +6943,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -10309,6 +10309,731 @@ export function createKernel(R, oc) {
     }
   }
 
+  // ---------- Rändel & Griffmuster (KP-50) ----------
+  function buildKnurlSolid(R0, depth, z0, z1, N, M, style, totalTwist = 0, rInner = 0) {
+    const rRoot = R0 - depth;
+    const builder = new oc.TopoDS_Builder();
+    const shell = new oc.TopoDS_Shell();
+    builder.MakeShell(shell);
+
+    const nI = 2 * N;
+    const nJ = style === 'straight' ? 2 : style === 'angled' ? Math.max(2, M + 1) : (2 * M + 1);
+    const verts = [];
+    for (let j = 0; j < nJ; j++) {
+      const tJ = j / (nJ - 1);
+      const z = z0 + (z1 - z0) * tJ;
+      const vRow = [];
+      for (let i = 0; i < nI; i++) {
+        let ang, isPeak;
+        if (style === 'straight') {
+          ang = (2 * Math.PI * i) / nI;
+          isPeak = (i % 2) === 1;
+        } else if (style === 'angled') {
+          ang = (2 * Math.PI * i) / nI + tJ * totalTwist;
+          isPeak = (i % 2) === 1;
+        } else {
+          ang = (2 * Math.PI * i) / nI;
+          isPeak = ((i + j) % 2) === 1;
+        }
+        const r = isPeak ? R0 : rRoot;
+        const gp = new oc.gp_Pnt(r * Math.cos(ang), r * Math.sin(ang), z);
+        const mv = new oc.BRepBuilderAPI_MakeVertex(gp);
+        vRow.push(mv.Vertex());
+        mv.delete(); gp.delete();
+      }
+      verts.push(vRow);
+    }
+
+    const edgeCache = new Map();
+    const getEdge = (prefix, j1, i1, j2, i2, arr, mod) => {
+      i1 = ((i1 % mod) + mod) % mod;
+      i2 = ((i2 % mod) + mod) % mod;
+      const k1 = prefix + j1 + ',' + i1, k2 = prefix + j2 + ',' + i2;
+      const fwd = k1 < k2;
+      const key = fwd ? k1 + '|' + k2 : k2 + '|' + k1;
+      let e = edgeCache.get(key);
+      if (!e) {
+        const me = new oc.BRepBuilderAPI_MakeEdge(fwd ? arr[j1][i1] : arr[j2][i2], fwd ? arr[j2][i2] : arr[j1][i1]);
+        e = me.Edge();
+        me.delete();
+        edgeCache.set(key, e);
+      }
+      return fwd ? e : oc.TopoDS.Edge(e.Reversed());
+    };
+    const ge = (j1, i1, j2, i2) => getEdge('o', j1, i1, j2, i2, verts, nI);
+
+    const addTri = (j1, i1, j2, i2, j3, i3) => {
+      const mw = new oc.BRepBuilderAPI_MakeWire();
+      mw.Add(ge(j1, i1, j2, i2));
+      mw.Add(ge(j2, i2, j3, i3));
+      mw.Add(ge(j3, i3, j1, i1));
+      const w = mw.Wire(); mw.delete();
+      const mf = new oc.BRepBuilderAPI_MakeFace(w, true);
+      const f = mf.Face(); mf.delete(); w.delete();
+      builder.Add(shell, f); f.delete();
+    };
+    const addQuad = (j1, i1, j2, i2, j3, i3, j4, i4) => {
+      const mw = new oc.BRepBuilderAPI_MakeWire();
+      mw.Add(ge(j1, i1, j2, i2));
+      mw.Add(ge(j2, i2, j3, i3));
+      mw.Add(ge(j3, i3, j4, i4));
+      mw.Add(ge(j4, i4, j1, i1));
+      const w = mw.Wire(); mw.delete();
+      const mf = new oc.BRepBuilderAPI_MakeFace(w, true);
+      const f = mf.Face(); mf.delete(); w.delete();
+      builder.Add(shell, f); f.delete();
+    };
+
+    for (let j = 0; j < nJ - 1; j++) {
+      for (let i = 0; i < nI; i++) {
+        const iN = (i + 1) % nI;
+        if (style === 'straight') {
+          addQuad(j, i, j, iN, j + 1, iN, j + 1, i);
+        } else if (style === 'crossed') {
+          if (((i + j) % 2) === 0) {
+            addTri(j, i, j, iN, j + 1, iN);
+            addTri(j, i, j + 1, iN, j + 1, i);
+          } else {
+            addTri(j, i, j, iN, j + 1, i);
+            addTri(j, iN, j + 1, iN, j + 1, i);
+          }
+        } else {
+          if ((i % 2) === 0) {
+            addTri(j, i, j, iN, j + 1, iN);
+            addTri(j, i, j + 1, iN, j + 1, i);
+          } else {
+            addTri(j, i, j, iN, j + 1, i);
+            addTri(j, iN, j + 1, iN, j + 1, i);
+          }
+        }
+      }
+    }
+
+    const inK = rInner > 0.1 ? 24 : 0;
+    const inV = [[], []];
+    if (inK) {
+      for (let j = 0; j < 2; j++) {
+        const z = j === 0 ? z0 : z1;
+        for (let k = 0; k < inK; k++) {
+          const a = (2 * Math.PI * k) / inK;
+          const gp = new oc.gp_Pnt(rInner * Math.cos(a), rInner * Math.sin(a), z);
+          const mv = new oc.BRepBuilderAPI_MakeVertex(gp);
+          inV[j].push(mv.Vertex());
+          mv.delete(); gp.delete();
+        }
+      }
+      const gi = (j1, i1, j2, i2) => getEdge('i', j1, i1, j2, i2, inV, inK);
+      for (let k = 0; k < inK; k++) {
+        const kN = (k + 1) % inK;
+        const mw = new oc.BRepBuilderAPI_MakeWire();
+        mw.Add(gi(0, k, 1, k));
+        mw.Add(gi(1, k, 1, kN));
+        mw.Add(gi(1, kN, 0, kN));
+        mw.Add(gi(0, kN, 0, k));
+        const w = mw.Wire(); mw.delete();
+        const mf = new oc.BRepBuilderAPI_MakeFace(w, true);
+        const f = mf.Face(); mf.delete(); w.delete();
+        builder.Add(shell, f); f.delete();
+      }
+      const mwO = new oc.BRepBuilderAPI_MakeWire();
+      for (let i = nI - 1; i >= 0; i--) mwO.Add(ge(0, (i + 1) % nI, 0, i));
+      const wO = mwO.Wire(); mwO.delete();
+      const mwI = new oc.BRepBuilderAPI_MakeWire();
+      for (let k = 0; k < inK; k++) mwI.Add(gi(0, k, 0, (k + 1) % inK));
+      const wI = mwI.Wire(); mwI.delete();
+      const p0 = new oc.gp_Pnt(0, 0, z0), d0 = new oc.gp_Dir(0, 0, -1), pln0 = new oc.gp_Pln(p0, d0);
+      const mf0 = new oc.BRepBuilderAPI_MakeFace(pln0, wO, true);
+      mf0.Add(wI);
+      const f0 = mf0.Face(); mf0.delete(); pln0.delete(); p0.delete(); d0.delete(); wO.delete(); wI.delete();
+      builder.Add(shell, f0); f0.delete();
+
+      const mwO2 = new oc.BRepBuilderAPI_MakeWire();
+      for (let i = 0; i < nI; i++) mwO2.Add(ge(nJ - 1, i, nJ - 1, (i + 1) % nI));
+      const wO2 = mwO2.Wire(); mwO2.delete();
+      const mwI2 = new oc.BRepBuilderAPI_MakeWire();
+      for (let k = inK - 1; k >= 0; k--) mwI2.Add(gi(1, (k + 1) % inK, 1, k));
+      const wI2 = mwI2.Wire(); mwI2.delete();
+      const p1 = new oc.gp_Pnt(0, 0, z1), d1 = new oc.gp_Dir(0, 0, 1), pln1 = new oc.gp_Pln(p1, d1);
+      const mf1 = new oc.BRepBuilderAPI_MakeFace(pln1, wO2, true);
+      mf1.Add(wI2);
+      const f1 = mf1.Face(); mf1.delete(); pln1.delete(); p1.delete(); d1.delete(); wO2.delete(); wI2.delete();
+      builder.Add(shell, f1); f1.delete();
+    } else {
+      const mw0 = new oc.BRepBuilderAPI_MakeWire();
+      for (let i = nI - 1; i >= 0; i--) mw0.Add(ge(0, (i + 1) % nI, 0, i));
+      const w0 = mw0.Wire(); mw0.delete();
+      const mf0 = new oc.BRepBuilderAPI_MakeFace(w0, true);
+      const f0 = mf0.Face(); mf0.delete(); w0.delete();
+      builder.Add(shell, f0); f0.delete();
+
+      const mw1 = new oc.BRepBuilderAPI_MakeWire();
+      for (let i = 0; i < nI; i++) mw1.Add(ge(nJ - 1, i, nJ - 1, (i + 1) % nI));
+      const w1 = mw1.Wire(); mw1.delete();
+      const mf1 = new oc.BRepBuilderAPI_MakeFace(w1, true);
+      const f1 = mf1.Face(); mf1.delete(); w1.delete();
+      builder.Add(shell, f1); f1.delete();
+    }
+
+    const ms = new oc.BRepBuilderAPI_MakeSolid(shell);
+    let sol = ms.Solid(); ms.delete();
+    let shape = R.cast(sol);
+    if (R.measureVolume(shape) < 0) shape = R.cast(sol.Reversed());
+
+    for (const e of edgeCache.values()) e.delete();
+    for (const row of verts) for (const v of row) v.delete();
+    for (const row of inV) for (const v of row) v.delete();
+    shell.delete(); builder.delete();
+    return shape;
+  }
+
+  function resolveCylAxialRange(F, p, errLabel) {
+    const margin = Math.max(0, num(p.margin, 0));
+    const length = Math.max(0, num(p.length, 0));
+    const from = p.from === 'top' || p.from === 'bottom' ? p.from : 'center';
+    const offset = num(p.offset, 0);
+    let z0, z1;
+    if (length <= 0) {
+      z0 = F.vMin + margin;
+      z1 = F.vMax - margin;
+    } else if (from === 'top') {
+      z1 = F.vMax - margin - offset;
+      z0 = z1 - length;
+    } else if (from === 'bottom') {
+      z0 = F.vMin + margin + offset;
+      z1 = z0 + length;
+    } else {
+      const zm = F.vMid + offset;
+      z0 = zm - length / 2;
+      z1 = zm + length / 2;
+    }
+    z0 = Math.max(F.vMin, z0);
+    z1 = Math.min(F.vMax, z1);
+    if (!(z1 - z0 >= 0.5)) throw new Error(`${errLabel}: Die verfügbare Länge auf dem Zylinder ist zu klein.`);
+    return [z0, z1];
+  }
+
+  function findCoaxialBoreRadius(shape, F) {
+    let rBore = 0;
+    const fArr = [];
+    try { for (const fx of shape.faces) fArr.push(fx); } catch (_) {}
+    try {
+      for (const f of fArr) {
+        if (f.geomType !== 'CYLINDRE') continue;
+        if (f.wrapped.Orientation() !== oc.TopAbs_Orientation.TopAbs_REVERSED) continue;
+        try {
+          const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+          const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), d = ax.Direction();
+          const o = [l.X(), l.Y(), l.Z()], dir = norm([d.X(), d.Y(), d.Z()]), r = cy.Radius();
+          ad.delete();
+          if (Math.abs(dot(dir, F.A)) > 0.999) {
+            const v = sub(o, F.O);
+            const perp = len(sub(v, mul(F.A, dot(v, F.A))));
+            if (perp < 0.05 && r < F.R) rBore = Math.max(rBore, r);
+          }
+        } catch (_) {}
+      }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+    return rBore;
+  }
+
+  function buildKnurlOn(baseShape, baseTopo, baseId, stepId, p) {
+    const F = resolveCylFaceForShaft(baseShape, baseTopo, baseId, p.face, 'Rändel');
+    if (F.isInner) throw new Error('Rändel: Wähle die Außenfläche (Mantel) eines Zylinders.');
+    const style = p.style === 'straight' || p.style === 'angled' ? p.style : 'crossed';
+    const pitch = num(p.pitch, 1.0);
+    if (!(pitch >= 0.3 && isFinite(pitch))) throw new Error('Rändel: Die Teilung muss mindestens 0,3 mm sein.');
+    const angle = Math.max(10, Math.min(60, num(p.angle, 30)));
+    const depth = num(p.depth, 0) > 0 ? num(p.depth, 0) : Math.round(pitch * 0.38 * 1000) / 1000;
+    if (!(depth >= 0.05 && isFinite(depth))) throw new Error('Rändel: Die Rändeltiefe muss mindestens 0,05 mm sein.');
+    if (depth >= F.R - 0.5) throw new Error('Rändel: Die Rändeltiefe ist zu groß für diesen Durchmesser.');
+
+    const [z0, z1] = resolveCylAxialRange(F, p, 'Rändel');
+    const H = z1 - z0;
+    const angRad = (angle * Math.PI) / 180;
+    let N, M, totalTwist = 0;
+    if (style === 'straight') {
+      N = Math.max(6, Math.min(120, 2 * Math.round((Math.PI * F.R) / pitch)));
+      M = 1;
+    } else if (style === 'crossed') {
+      const pc = pitch / Math.cos(angRad);
+      N = Math.max(6, Math.min(96, 2 * Math.round((Math.PI * F.R) / pc)));
+      const ds = (2 * Math.PI * F.R) / N;
+      const dz = ds / Math.tan(angRad);
+      M = Math.max(1, Math.round(H / dz));
+    } else {
+      const pc = pitch / Math.cos(angRad);
+      N = Math.max(6, Math.min(96, 2 * Math.round((Math.PI * F.R) / pc)));
+      totalTwist = (H * Math.tan(angRad)) / F.R;
+      M = Math.max(4, Math.min(24, Math.ceil(H / Math.max(1.0, pitch * 2))));
+    }
+    if (N * M > 1500) {
+      throw new Error('Rändel: Die Teilung ist für diese Fläche zu fein – wähle eine größere Teilung oder kürzere Rändellänge.');
+    }
+
+    const Mloc = rigidMat(F.O, F.R0, F.T0, F.A);
+    let isSimpleFullCyl = false;
+    try {
+      const sols = baseShape.solids, fcs = baseShape.faces;
+      isSimpleFullCyl = sols.length === 1 && fcs.length === 3
+        && Math.abs(z0 - F.vMin) < 1e-4 && Math.abs(z1 - F.vMax) < 1e-4;
+      for (const s of sols) safeDelete(s);
+      for (const f of fcs) safeDelete(f);
+    } catch (_) {}
+
+    if (isSimpleFullCyl) {
+      let raw = null, out = null;
+      try {
+        raw = buildKnurlSolid(F.R, depth, z0, z1, N, M, style, totalTwist, 0);
+        out = applyMatrix(raw, Mloc);
+        const topo = ensureTopoComplete(out, createTopoMap(), stepId);
+        return { shape: out, topo, meta: { style, teeth: N, rows: M, pitch, depth } };
+      } catch (err) {
+        safeDelete(out);
+        throw err;
+      } finally {
+        safeDelete(raw);
+      }
+    }
+
+    const rRoot = F.R - depth;
+    const rBore = findCoaxialBoreRadius(baseShape, F);
+    if (rBore >= rRoot - 0.08) {
+      throw new Error('Rändel: Die Wandstärke ist zu dünn für diese Rändeltiefe.');
+    }
+    const rStrip = rBore > 0 ? Math.max(rBore + 0.08, rRoot - 0.15) : Math.max(0.25, rRoot - 0.15);
+    const rInner = rBore > 0 ? Math.max(rBore + 0.04, rStrip - 0.08) : 0;
+
+    let ringOut = null, ringIn = null, ringLoc = null, ringWorld = null;
+    let stripped = null, strippedTopo = null, rawKn = null, knTool = null;
+    try {
+      ringOut = R.makeCylinder(F.R + 0.6, H, [0, 0, z0], [0, 0, 1]);
+      ringIn = R.makeCylinder(rStrip, H + 0.4, [0, 0, z0 - 0.2], [0, 0, 1]);
+      ringLoc = ringOut.cut(ringIn);
+      ringWorld = applyMatrix(ringLoc, Mloc);
+      const cutRes = boolWithTopo('cut', baseShape, baseTopo, baseId, ringWorld, null, stepId, 'KnCut:' + stepId);
+      stripped = cutRes.shape; strippedTopo = cutRes.topo;
+      rawKn = buildKnurlSolid(F.R, depth, z0, z1, N, M, style, totalTwist, rInner);
+      knTool = applyMatrix(rawKn, Mloc);
+      const fuseRes = boolWithTopo('fuse', stripped, strippedTopo, baseId, knTool, null, stepId, 'Kn:' + stepId);
+      return { shape: fuseRes.shape, topo: fuseRes.topo, meta: { style, teeth: N, rows: M, pitch, depth } };
+    } finally {
+      safeDelete(ringOut); safeDelete(ringIn); safeDelete(ringLoc); safeDelete(ringWorld);
+      safeDelete(stripped); freeTopoMap(strippedTopo);
+      safeDelete(rawKn); safeDelete(knTool);
+    }
+  }
+
+  function buildBumpMaster(shapeKind, r, depth, isCut, sag = 0) {
+    const d = Math.max(0.1, depth);
+    if (!isCut) {
+      const zBot = -sag - 0.25;
+      const zBase = sag > 1e-5 ? 0.05 : 0;
+      const zTop = Math.max(zBase + 0.08, d);
+      const hCap = zTop - zBase;
+      if (shapeKind === 'cyl') {
+        let sol = R.makeCylinder(r, zTop - zBot, [0, 0, zBot], [0, 0, 1]);
+        if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+        return sol;
+      }
+      if (shapeKind === 'cone') {
+        const pts2 = sag > 1e-5
+          ? [[0, zBot], [r, zBot], [r, zBase], [0, zTop]]
+          : [[0, zBot], [r, zBot], [0, zTop]];
+        let sol = revolveProfile(pts2);
+        if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+        return sol;
+      }
+      // 'dome'
+      const Rsp = (r * r + hCap * hCap) / (2 * hCap);
+      const zc = zBase + hCap - Rsp;
+      const midAng = Math.asin(Math.min(1, r / Rsp)) / 2;
+      const midPt = [Rsp * Math.sin(midAng), 0, zc + Rsp * Math.cos(midAng)];
+      const eds = [
+        R.makeLine([0, 0, zBot], [r, 0, zBot]),
+        R.makeLine([r, 0, zBot], [r, 0, zBase]),
+        R.makeThreePointArc([r, 0, zBase], midPt, [0, 0, zTop]),
+        R.makeLine([0, 0, zTop], [0, 0, zBot]),
+      ];
+      const w = R.assembleWire(eds); eds.forEach(safeDelete);
+      const f = R.makeFace(w); safeDelete(w);
+      let sol = R.revolution(f, [0, 0, 0], [0, 0, 1], 360);
+      safeDelete(f);
+      if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+      return sol;
+    }
+
+    // isCut: recessed dimple along -Z starting above surface (+0.25)
+    const zTop = 0.25;
+    if (shapeKind === 'cyl') {
+      let sol = R.makeCylinder(r, d + zTop, [0, 0, -d], [0, 0, 1]);
+      if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+      return sol;
+    }
+    if (shapeKind === 'cone') {
+      const rTop = r * ((d + zTop) / d);
+      let sol = revolveProfile([[0, -d], [rTop, zTop], [0, zTop]]);
+      if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+      return sol;
+    }
+    if (d <= r + 1e-4) {
+      const Rsp = (r * r + d * d) / (2 * d);
+      const sph = R.makeSphere(Rsp);
+      const out = sph.translate([0, 0, Rsp - d]);
+      safeDelete(sph);
+      return out;
+    }
+    const zShoulder = -(d - r);
+    const midAng = Math.PI / 4;
+    const midPt = [r * Math.sin(midAng), 0, zShoulder - r * Math.cos(midAng)];
+    const eds = [
+      R.makeLine([0, 0, zTop], [r, 0, zTop]),
+      R.makeLine([r, 0, zTop], [r, 0, zShoulder]),
+      R.makeThreePointArc([r, 0, zShoulder], midPt, [0, 0, -d]),
+      R.makeLine([0, 0, -d], [0, 0, zTop]),
+    ];
+    const w = R.assembleWire(eds); eds.forEach(safeDelete);
+    const f = R.makeFace(w); safeDelete(w);
+    let sol = R.revolution(f, [0, 0, 0], [0, 0, 1], 360);
+    safeDelete(f);
+    if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+    return sol;
+  }
+
+  function buildGripPatternOn(baseShape, baseTopo, baseId, stepId, p) {
+    const kind = p.kind === 'bumps' ? 'bumps' : 'grooves';
+    const mode = p.mode === 'join' || p.mode === 'cut' ? p.mode : (kind === 'bumps' ? 'join' : 'cut');
+    const isCut = mode === 'cut';
+    const margin = Math.max(0, num(p.margin, 2));
+    const effMargin = Math.max(margin, 0.05);
+    const depth = num(p.depth, 0.8);
+    if (!(depth >= 0.1 && isFinite(depth))) throw new Error('Griffmuster: Die Tiefe bzw. Höhe muss mindestens 0,1 mm sein.');
+    const isCyl = p.face && p.face.t === 'CYLINDRE';
+
+    if (!isCyl) {
+      const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, baseTopo, baseId);
+      try {
+        if (!f || f.geomType !== 'PLANE') throw new Error('Griffmuster: Wähle eine ebene oder zylindrische Körperfläche.');
+        const F = planarFaceFrame(f);
+        const { outer, holes } = sampleFaceLoops2D(f, F);
+        if (outer.length < 3) throw new Error('Griffmuster: Die gewählte Fläche hat keinen gültigen Umriss.');
+        const angle = num(p.angle, 0);
+        const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+        const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+        const Muv = {
+          o: F.o, x: U, y: V, n: F.n,
+          P: (uv) => [F.o[0] + U[0] * uv[0] + V[0] * uv[1], F.o[1] + U[1] * uv[0] + V[1] * uv[1], F.o[2] + U[2] * uv[0] + V[2] * uv[1]],
+        };
+        const outerRot = rotatePoly2D(outer, cosA, sinA);
+        const holesRot = holes.map((h) => rotatePoly2D(h, cosA, sinA));
+
+        if (kind === 'grooves') {
+          const profile = p.profile === 'round' || p.profile === 'rect' ? p.profile : 'v';
+          const width = num(p.width, 1.2);
+          const pitch = num(p.pitch, 2.5);
+          if (!(width >= 0.2 && isFinite(width))) throw new Error('Griffmuster: Die Rillenbreite muss mindestens 0,2 mm sein.');
+          if (!(pitch > width + 0.05)) throw new Error('Griffmuster: Die Teilung muss größer als die Rillenbreite sein.');
+          let vMin = Infinity, vMax = -Infinity;
+          for (const q of outerRot) { if (q[1] < vMin) vMin = q[1]; if (q[1] > vMax) vMax = q[1]; }
+          const availV = (vMax - vMin) - 2 * effMargin - width;
+          if (availV < -1e-4) throw new Error('Griffmuster: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Rillen.');
+          const nRows = Math.max(1, Math.min(80, Math.floor(availV / pitch + 1e-6) + 1));
+          const vMid = (vMin + vMax) / 2;
+          const segs = [];
+          for (let j = 0; j < nRows; j++) {
+            const v = vMid + (j - (nRows - 1) / 2) * pitch;
+            for (const [uA, uB] of bandIntervals2D(outerRot, holesRot, v, width / 2, effMargin, false)) {
+              if (uB - uA >= 0.3) segs.push({ uA, uB, v });
+            }
+          }
+          if (!segs.length) throw new Error('Griffmuster: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Rillen.');
+
+          const toolSolids = [];
+          const pt3 = (u, v, n) => add(Muv.P([u, v]), mul(F.n, n));
+          try {
+            const halfW = width / 2;
+            for (const r of segs) {
+              const pTL = pt3(r.uA, r.v - halfW, isCut ? 0.1 : 0);
+              const pTR = pt3(r.uA, r.v + halfW, isCut ? 0.1 : 0);
+              const pBL = pt3(r.uA, r.v - halfW, isCut ? 0 : -0.1);
+              const pBR = pt3(r.uA, r.v + halfW, isCut ? 0 : -0.1);
+              const eds = [];
+              if (isCut) {
+                eds.push(R.makeLine(pTL, pTR), R.makeLine(pTR, pBR));
+                if (profile === 'v') {
+                  const pTip = pt3(r.uA, r.v, -depth);
+                  eds.push(R.makeLine(pBR, pTip), R.makeLine(pTip, pBL));
+                } else if (profile === 'round') {
+                  const pBot = pt3(r.uA, r.v, -depth);
+                  eds.push(R.makeThreePointArc(pBR, pBot, pBL));
+                } else {
+                  const pL = pt3(r.uA, r.v - halfW, -depth), pR = pt3(r.uA, r.v + halfW, -depth);
+                  eds.push(R.makeLine(pBR, pR), R.makeLine(pR, pL), R.makeLine(pL, pBL));
+                }
+                eds.push(R.makeLine(pBL, pTL));
+              } else {
+                eds.push(R.makeLine(pBL, pBR), R.makeLine(pBR, pTR));
+                if (profile === 'v') {
+                  const pTip = pt3(r.uA, r.v, depth);
+                  eds.push(R.makeLine(pTR, pTip), R.makeLine(pTip, pTL));
+                } else if (profile === 'round') {
+                  const pTop = pt3(r.uA, r.v, depth);
+                  eds.push(R.makeThreePointArc(pTR, pTop, pTL));
+                } else {
+                  const pL = pt3(r.uA, r.v - halfW, depth), pR = pt3(r.uA, r.v + halfW, depth);
+                  eds.push(R.makeLine(pTR, pR), R.makeLine(pR, pL), R.makeLine(pL, pTL));
+                }
+                eds.push(R.makeLine(pTL, pBL));
+              }
+              const wr = R.assembleWire(eds); eds.forEach(safeDelete);
+              const fc = R.makeFace(wr); safeDelete(wr);
+              let sol = R.basicFaceExtrusion(fc, new R.Vector(mul(U, r.uB - r.uA)));
+              safeDelete(fc);
+              if (R.measureVolume(sol) < 0) sol = R.cast(sol.wrapped.Reversed());
+              toolSolids.push(sol);
+            }
+            const comp = toolSolids.length === 1 ? toolSolids[0] : R.makeCompound(toolSolids);
+            const res = boolWithTopo(isCut ? 'cut' : 'fuse', baseShape, baseTopo, baseId, comp, null, stepId, 'Gp:' + stepId);
+            if (comp !== toolSolids[0]) safeDelete(comp);
+            return { shape: res.shape, topo: res.topo, meta: { kind, count: segs.length, surface: 'plane' } };
+          } finally {
+            for (const s of toolSolids) safeDelete(s);
+          }
+        }
+
+        // Planar bumps
+        const layout = p.layout === 'grid' ? 'grid' : 'staggered';
+        const shapeKind = p.shape === 'cone' || p.shape === 'cyl' ? p.shape : 'dome';
+        const size = num(p.size, 2.0);
+        const pitch = num(p.pitch, 3.5);
+        if (!(size >= 0.4 && isFinite(size))) throw new Error('Griffmuster: Der Noppen-Durchmesser muss mindestens 0,4 mm sein.');
+        if (!(pitch > size + 0.05)) throw new Error('Griffmuster: Der Abstand muss größer als der Noppen-Durchmesser sein.');
+        const r = size / 2;
+        const pointInPoly2D = (pt, poly) => {
+          let inside = false;
+          for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+            if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi)) inside = !inside;
+          }
+          return inside;
+        };
+        const distPtSeg2D = (pt, a, b) => {
+          const vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy;
+          if (l2 <= 1e-12) return Math.hypot(pt[0] - a[0], pt[1] - a[1]);
+          const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * vx + (pt[1] - a[1]) * vy) / l2));
+          return Math.hypot(pt[0] - (a[0] + t * vx), pt[1] - (a[1] + t * vy));
+        };
+        const rings = [outerRot, ...holesRot];
+        const fits = (pt) => {
+          if (!pointInPoly2D(pt, outerRot) || holesRot.some((h) => pointInPoly2D(pt, h))) return false;
+          let dm = Infinity;
+          for (const ring of rings) for (let i = 0; i < ring.length; i++) dm = Math.min(dm, distPtSeg2D(pt, ring[i], ring[(i + 1) % ring.length]));
+          return dm >= r + effMargin - 1e-6;
+        };
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const q of outerRot) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+        const availW = (x1 - x0) - 2 * effMargin - size, availH = (y1 - y0) - 2 * effMargin - size;
+        if (availW < -1e-4 || availH < -1e-4) throw new Error('Griffmuster: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Noppen.');
+        const dx = pitch, dy = layout === 'staggered' ? (pitch * Math.sqrt(3)) / 2 : pitch;
+        const ny = Math.floor(availH / dy + 1e-6) + 1, nxMax = Math.floor(availW / dx + 1e-6) + 1;
+        const midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
+        const centers = [];
+        for (let j = 0; j < ny && centers.length < 140; j++) {
+          const y = midY + (j - (ny - 1) / 2) * dy;
+          const xShift = layout === 'staggered' && (j % 2 === 1) ? dx / 2 : 0;
+          for (let i = -1; i <= nxMax && centers.length < 140; i++) {
+            const x = midX + (i - (nxMax - 1) / 2) * dx + xShift;
+            if (fits([x, y])) centers.push([x, y]);
+          }
+        }
+        if (!centers.length) throw new Error('Griffmuster: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Noppen.');
+
+        let masterRaw = null, masterOriented = null;
+        const bumps = [];
+        try {
+          masterRaw = buildBumpMaster(shapeKind, r, depth, isCut, 0);
+          masterOriented = applyMatrix(masterRaw, rigidMat([0, 0, 0], U, V, F.n));
+          for (const c of centers) {
+            const wp = Muv.P(c);
+            bumps.push(masterOriented.clone().translate(wp));
+          }
+          const comp = bumps.length === 1 ? bumps[0] : R.makeCompound(bumps);
+          const res = boolWithTopo(isCut ? 'cut' : 'fuse', baseShape, baseTopo, baseId, comp, null, stepId, 'Gp:' + stepId);
+          if (comp !== bumps[0]) safeDelete(comp);
+          return { shape: res.shape, topo: res.topo, meta: { kind, count: centers.length, surface: 'plane' } };
+        } finally {
+          safeDelete(masterRaw); safeDelete(masterOriented);
+          for (const b of bumps) safeDelete(b);
+        }
+      } finally {
+        for (const fx of fArr) safeDelete(fx);
+      }
+    }
+
+    // Cylindrical face
+    const F = resolveCylFaceForShaft(baseShape, baseTopo, baseId, p.face, 'Griffmuster');
+    if (F.isInner) throw new Error('Griffmuster: Wähle die Außenfläche (Mantel) eines Zylinders.');
+    const [z0, z1] = resolveCylAxialRange(F, p, 'Griffmuster');
+    const Mloc = rigidMat(F.O, F.R0, F.T0, F.A);
+
+    if (kind === 'grooves') {
+      const dir = p.dir === 'axial' ? 'axial' : 'ring';
+      const profile = p.profile === 'round' || p.profile === 'rect' ? p.profile : 'v';
+      const width = num(p.width, 1.2);
+      const pitch = num(p.pitch, 2.5);
+      if (!(width >= 0.2 && isFinite(width))) throw new Error('Griffmuster: Die Rillenbreite muss mindestens 0,2 mm sein.');
+      if (!(pitch > width + 0.05)) throw new Error('Griffmuster: Die Teilung muss größer als die Rillenbreite sein.');
+      if (isCut && depth >= F.R - 0.4) throw new Error('Griffmuster: Die Rillentiefe ist zu groß für diesen Zylinderdurchmesser.');
+
+      if (dir === 'ring') {
+        const avail = (z1 - z0) - width;
+        if (avail < -1e-4) throw new Error('Griffmuster: Die Länge reicht nicht für eine Ringrille.');
+        const count = Math.max(1, Math.min(80, Math.floor(avail / pitch + 1e-6) + 1));
+        const zMid = (z0 + z1) / 2;
+        const solids = [];
+        try {
+          const halfW = width / 2;
+          for (let j = 0; j < count; j++) {
+            const zc = zMid + (j - (count - 1) / 2) * pitch;
+            const rOut = isCut ? F.R + 0.5 : F.R + depth;
+            const rIn = isCut ? F.R - depth : F.R - 0.15;
+            const eds = [];
+            if (isCut) {
+              eds.push(R.makeLine([rOut, 0, zc - halfW], [rOut, 0, zc + halfW]));
+              eds.push(R.makeLine([rOut, 0, zc + halfW], [F.R, 0, zc + halfW]));
+              if (profile === 'v') {
+                eds.push(R.makeLine([F.R, 0, zc + halfW], [rIn, 0, zc]), R.makeLine([rIn, 0, zc], [F.R, 0, zc - halfW]));
+              } else if (profile === 'round') {
+                eds.push(R.makeThreePointArc([F.R, 0, zc + halfW], [rIn, 0, zc], [F.R, 0, zc - halfW]));
+              } else {
+                eds.push(R.makeLine([F.R, 0, zc + halfW], [rIn, 0, zc + halfW]), R.makeLine([rIn, 0, zc + halfW], [rIn, 0, zc - halfW]), R.makeLine([rIn, 0, zc - halfW], [F.R, 0, zc - halfW]));
+              }
+              eds.push(R.makeLine([F.R, 0, zc - halfW], [rOut, 0, zc - halfW]));
+            } else {
+              eds.push(R.makeLine([rIn, 0, zc - halfW], [rIn, 0, zc + halfW]));
+              eds.push(R.makeLine([rIn, 0, zc + halfW], [F.R, 0, zc + halfW]));
+              if (profile === 'v') {
+                eds.push(R.makeLine([F.R, 0, zc + halfW], [rOut, 0, zc]), R.makeLine([rOut, 0, zc], [F.R, 0, zc - halfW]));
+              } else if (profile === 'round') {
+                eds.push(R.makeThreePointArc([F.R, 0, zc + halfW], [rOut, 0, zc], [F.R, 0, zc - halfW]));
+              } else {
+                eds.push(R.makeLine([F.R, 0, zc + halfW], [rOut, 0, zc + halfW]), R.makeLine([rOut, 0, zc + halfW], [rOut, 0, zc - halfW]), R.makeLine([rOut, 0, zc - halfW], [F.R, 0, zc - halfW]));
+              }
+              eds.push(R.makeLine([F.R, 0, zc - halfW], [rIn, 0, zc - halfW]));
+            }
+            const wr = R.assembleWire(eds); eds.forEach(safeDelete);
+            const fc = R.makeFace(wr); safeDelete(wr);
+            let sr = R.revolution(fc, [0, 0, 0], [0, 0, 1], 360);
+            safeDelete(fc);
+            if (R.measureVolume(sr) < 0) sr = R.cast(sr.wrapped.Reversed());
+            solids.push(sr);
+          }
+          const comp = solids.length === 1 ? solids[0] : R.makeCompound(solids);
+          const tool = applyMatrix(comp, Mloc);
+          if (comp !== solids[0]) safeDelete(comp);
+          try {
+            const res = boolWithTopo(isCut ? 'cut' : 'fuse', baseShape, baseTopo, baseId, tool, null, stepId, 'Gp:' + stepId);
+            return { shape: res.shape, topo: res.topo, meta: { kind, count, surface: 'cyl' } };
+          } finally { safeDelete(tool); }
+        } finally {
+          for (const s of solids) safeDelete(s);
+        }
+      }
+
+      // Axial grooves on cylinder
+      const nCols = Math.max(4, Math.min(72, Math.round((2 * Math.PI * F.R) / pitch)));
+      const halfW = width / 2;
+      if (halfW >= F.R * 0.6) throw new Error('Griffmuster: Die Rillenbreite ist zu groß für diesen Zylinderdurchmesser.');
+      const sag = F.R - Math.sqrt(Math.max(0.01, F.R * F.R - halfW * halfW));
+      const xRef = isCut ? F.R + 0.5 : F.R - sag - 0.15;
+      const xApex = isCut ? F.R - depth : F.R + depth;
+      const xBase = isCut ? F.R : F.R - sag;
+      const eds = [
+        R.makeLine([xRef, -halfW, z0], [xRef, halfW, z0]),
+        R.makeLine([xRef, halfW, z0], [xBase, halfW, z0]),
+      ];
+      if (profile === 'v') {
+        eds.push(R.makeLine([xBase, halfW, z0], [xApex, 0, z0]), R.makeLine([xApex, 0, z0], [xBase, -halfW, z0]));
+      } else if (profile === 'round') {
+        eds.push(R.makeThreePointArc([xBase, halfW, z0], [xApex, 0, z0], [xBase, -halfW, z0]));
+      } else {
+        eds.push(R.makeLine([xBase, halfW, z0], [xApex, halfW, z0]), R.makeLine([xApex, halfW, z0], [xApex, -halfW, z0]), R.makeLine([xApex, -halfW, z0], [xBase, -halfW, z0]));
+      }
+      eds.push(R.makeLine([xBase, -halfW, z0], [xRef, -halfW, z0]));
+      let master = null, tool = null;
+      const solids = [];
+      try {
+        const wr = R.assembleWire(eds); eds.forEach(safeDelete);
+        const fc = R.makeFace(wr); safeDelete(wr);
+        master = R.basicFaceExtrusion(fc, new R.Vector([0, 0, z1 - z0]));
+        safeDelete(fc);
+        if (R.measureVolume(master) < 0) master = R.cast(master.wrapped.Reversed());
+        for (let k = 0; k < nCols; k++) {
+          const ang = (360 * k) / nCols;
+          solids.push(ang === 0 ? master.clone() : master.clone().rotate(ang, [0, 0, 0], [0, 0, 1]));
+        }
+        const comp = R.makeCompound(solids);
+        tool = applyMatrix(comp, Mloc);
+        safeDelete(comp);
+        const res = boolWithTopo(isCut ? 'cut' : 'fuse', baseShape, baseTopo, baseId, tool, null, stepId, 'Gp:' + stepId);
+        return { shape: res.shape, topo: res.topo, meta: { kind, count: nCols, surface: 'cyl' } };
+      } finally {
+        eds.forEach(safeDelete);
+        safeDelete(master); safeDelete(tool);
+        for (const s of solids) safeDelete(s);
+      }
+    }
+
+    // Cylindrical bumps
+    const layout = p.layout === 'grid' ? 'grid' : 'staggered';
+    const shapeKind = p.shape === 'cone' || p.shape === 'cyl' ? p.shape : 'dome';
+    const size = num(p.size, 2.0);
+    const pitch = num(p.pitch, 4.0);
+    if (!(size >= 0.4 && isFinite(size))) throw new Error('Griffmuster: Der Noppen-Durchmesser muss mindestens 0,4 mm sein.');
+    if (!(pitch > size + 0.05)) throw new Error('Griffmuster: Der Abstand muss größer als der Noppen-Durchmesser sein.');
+    const r = size / 2;
+    if (r >= F.R * 0.45) throw new Error('Griffmuster: Der Noppen-Durchmesser ist zu groß für diesen Zylinder.');
+
+    const nCols = Math.max(4, Math.min(36, Math.round((2 * Math.PI * F.R) / pitch)));
+    const dy = layout === 'staggered' ? (pitch * Math.sqrt(3)) / 2 : pitch;
+    const availZ = (z1 - z0) - size;
+    if (availZ < -1e-4) throw new Error('Griffmuster: Die Länge reicht nicht für Noppen auf diesem Zylinder.');
+    const nRows = Math.max(1, Math.floor(availZ / dy + 1e-6) + 1);
+    if (nCols * nRows > 120) {
+      throw new Error('Griffmuster: Zu viele Noppen für diese Fläche – vergrößere den Mittenabstand oder verkürze die Länge.');
+    }
+
+    const sag = F.R - Math.sqrt(Math.max(0.01, F.R * F.R - r * r));
+    let master = null, tool = null;
+    const bumps = [];
+    try {
+      master = buildBumpMaster(shapeKind, r, depth, isCut, sag);
+      const zMid = (z0 + z1) / 2;
+      for (let row = 0; row < nRows; row++) {
+        const zR = zMid + (row - (nRows - 1) / 2) * dy;
+        const off = layout === 'staggered' && (row & 1) ? (Math.PI / nCols) : 0;
+        for (let col = 0; col < nCols; col++) {
+          const ang = (2 * Math.PI * col) / nCols + off;
+          const ca = Math.cos(ang), sa = Math.sin(ang);
+          const trsf = new oc.gp_Trsf();
+          trsf.SetValues(-sa, 0, ca, F.R * ca, ca, 0, sa, F.R * sa, 0, 1, 0, zR);
+          const tr = new oc.BRepBuilderAPI_Transform(master.wrapped, trsf, true, false);
+          bumps.push(R.cast(tr.ModifiedShape(master.wrapped)));
+          tr.delete(); trsf.delete();
+        }
+      }
+      const comp = bumps.length === 1 ? bumps[0] : R.makeCompound(bumps);
+      tool = applyMatrix(comp, Mloc);
+      if (comp !== bumps[0]) safeDelete(comp);
+      const res = boolWithTopo(isCut ? 'cut' : 'fuse', baseShape, baseTopo, baseId, tool, null, stepId, 'Gp:' + stepId);
+      return { shape: res.shape, topo: res.topo, meta: { kind, count: bumps.length, surface: 'cyl' } };
+    } finally {
+      safeDelete(master); safeDelete(tool);
+      for (const b of bumps) safeDelete(b);
+    }
+  }
+
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
   // known = { id: resultKey } (was die Anzeige schon hat)
@@ -11037,14 +11762,14 @@ export function createKernel(R, oc) {
         if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf(['lipGroove', kA, kB]));
         continue;
       }
-      if (it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile') {
+      if (it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern') {
         const p = it.p || {};
         let tid = p.target;
         while (tid && consumed.has(tid)) tid = consumed.get(tid);
         const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
         if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
           if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
-          const nm = it.kind === 'undercut' ? 'Freistich' : it.kind === 'circlipGroove' ? 'Einstich' : it.kind === 'keyway' ? 'Passfeder-Nut' : 'Keilwellen-Profil';
+          const nm = it.kind === 'undercut' ? 'Freistich' : it.kind === 'circlipGroove' ? 'Einstich' : it.kind === 'keyway' ? 'Passfeder-Nut' : it.kind === 'splineProfile' ? 'Keilwellen-Profil' : it.kind === 'knurl' ? 'Rändel' : 'Griffmuster';
           errors.push({ itemId: it.id, code: 'op', message: `${nm}: Der Zielkörper fehlt oder kommt erst später im Verlauf.` });
           continue;
         }
@@ -11052,6 +11777,7 @@ export function createKernel(R, oc) {
         const k = keyOf([src.key, it.kind, p]);
         const ceS = cacheEntry(k);
         let next = ceS ? ceS.shape : null, nextTopo = ceS ? ceS.topo : null;
+        let resMeta = ceS ? ceS.resolved : null;
         if (!next) {
           if (track) track.rebuilt.add(it.id);
           try {
@@ -11061,14 +11787,20 @@ export function createKernel(R, oc) {
                 ? buildCirclipGrooveOn(src.shape, src.topo, src.it.id, it.id, p)
                 : it.kind === 'keyway'
                   ? buildKeywayOn(src.shape, src.topo, src.it.id, it.id, p)
-                  : buildSplineProfileOn(src.shape, src.topo, src.it.id, it.id, p);
+                  : it.kind === 'splineProfile'
+                    ? buildSplineProfileOn(src.shape, src.topo, src.it.id, it.id, p)
+                    : it.kind === 'knurl'
+                      ? buildKnurlOn(src.shape, src.topo, src.it.id, it.id, p)
+                      : buildGripPatternOn(src.shape, src.topo, src.it.id, it.id, p);
             next = built.shape; nextTopo = built.topo;
-            cachePut(k, next, null, null, null, nextTopo);
+            resMeta = built.meta || null;
+            cachePut(k, next, null, resMeta, null, nextTopo);
           } catch (err) {
             errors.push({ itemId: it.id, code: err && err.code === 'edges' ? 'edges' : 'build', message: friendlyError(err) });
             continue;
           }
         }
+        if (resolved && resMeta) resolved[it.id] = resMeta;
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         if (track && track.stepKeys) track.stepKeys.set(it.id, k);

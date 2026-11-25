@@ -221,7 +221,7 @@ const App = (() => {
   })();
 
   const S = {
-    doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
+    doc: Model.newDoc(), sel: [], face: null, faces: [], edges: [], mode: 'model', tool: null,
     results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), deletedBy: new Map(), stepStats: new Map(), evalStats: null, errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
@@ -243,6 +243,7 @@ const App = (() => {
       doc: d,
       sel: [],
       face: null,
+      faces: [],
       edges: [],
       undo: [],
       redo: [],
@@ -312,6 +313,7 @@ const App = (() => {
     cur.doc = S.doc;
     cur.sel = S.sel.slice();
     cur.face = S.face;
+    cur.faces = S.faces.slice();
     cur.edges = S.edges.slice();
     cur.undo = S.undo;
     cur.redo = S.redo;
@@ -335,9 +337,10 @@ const App = (() => {
     if (typeof Sketch !== 'undefined' && Sketch.active) Sketch.cancel(true);
     if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
     if (typeof Notes !== 'undefined' && Notes.active) Notes.stop();
+    if (typeof Select !== 'undefined' && Select.paintActive) Select.stopPaint();
     if (typeof RefFix !== 'undefined' && RefFix.active) RefFix.stop({ keepToast: true });
     if (typeof Panels !== 'undefined' && Panels.closeFlyout) Panels.closeFlyout();
-    if (typeof UI !== 'undefined') { UI.closeMenu(); UI.closePop(); }
+    if (typeof UI !== 'undefined') { UI.closeMenu(); UI.closePop(); if (UI.closeRadial) UI.closeRadial(); }
   }
   function syncOpenTabsToStore() {
     if (typeof Store === 'undefined' || !Store.ready || !Store.setOpenTabs) return;
@@ -354,6 +357,7 @@ const App = (() => {
     tab.doc = S.doc;
     S.sel = (tab.sel || []).slice();
     S.face = tab.face || null;
+    S.faces = (tab.faces || []).slice();
     S.edges = (tab.edges || []).slice();
     S.undo = tab.undo || [];
     S.redo = tab.redo || [];
@@ -1144,12 +1148,21 @@ const App = (() => {
       for (const id of ids) { if (set.has(id)) set.delete(id); else set.add(id); }
       S.sel = [...set];
     } else S.sel = ids;
-    S.face = opts.face || null;
+    if (Array.isArray(opts.faces) && opts.faces.length) {
+      S.faces = opts.faces.slice();
+      S.face = S.faces[S.faces.length - 1];
+    } else if (opts.face) {
+      S.face = opts.face;
+      S.faces = [opts.face];
+    } else {
+      S.face = null;
+      S.faces = [];
+    }
     S.edges = opts.edges || [];
     refreshSelectionVisuals();
     ev.emit('selection');
   }
-  function clearSelection() { if (!S.sel.length && !S.face && !S.edges.length) return; select([]); }
+  function clearSelection() { if (!S.sel.length && !S.face && !S.faces.length && !S.edges.length) return; select([]); }
   const ghostReq = { n: 0 };
   async function refreshSelectionVisuals() {
     const selTop = new Set();
@@ -1157,7 +1170,7 @@ const App = (() => {
       const top = Model.topOf(S.doc, id);
       if (top) {
         selTop.add(top.id);
-        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'deform' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'vent' || top.kind === 'fins' || top.kind === 'fillPattern' || top.kind === 'web' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'splitFace' || top.kind === 'dome' || top.kind === 'mirrorStep' || top.kind === 'boss' || top.kind === 'undercut' || top.kind === 'circlipGroove' || top.kind === 'keyway' || top.kind === 'splineProfile') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'deform' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'vent' || top.kind === 'fins' || top.kind === 'fillPattern' || top.kind === 'web' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'splitFace' || top.kind === 'dome' || top.kind === 'mirrorStep' || top.kind === 'boss' || top.kind === 'undercut' || top.kind === 'circlipGroove' || top.kind === 'keyway' || top.kind === 'splineProfile' || top.kind === 'knurl' || top.kind === 'gripPattern') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
         if (top.kind === 'lipGroove' && top.p) {
           for (const tid of [top.p.lipTarget, top.p.grooveTarget]) {
             if (!tid) continue;
@@ -1168,7 +1181,8 @@ const App = (() => {
       selTop.add('__ex:' + id);
     }
     for (const [id] of Viewer.nodes) Viewer.updateNode(id, { selected: selTop.has(id) });
-    Viewer.highlightFace('sel', S.face ? S.face.id : null, S.face ? S.face.faceIdx : null);
+    if (Viewer.setSelectedFaces) Viewer.setSelectedFaces(S.faces);
+    else Viewer.highlightFace('sel', S.face ? S.face.id : null, S.face ? S.face.faceIdx : null);
     Viewer.setSelectedEdges(S.edges);
     // Unterobjekte in Gruppen als Umriss zeigen
     const childIds = S.sel.filter((id) => !S.doc.items.find((x) => x.id === id));
@@ -1204,7 +1218,7 @@ const App = (() => {
   }
 
   return {
-    get doc() { return S.doc; }, get sel() { return S.sel; }, get face() { return S.face; }, get edges() { return S.edges; }, get results() { return S.results; }, get errors() { return S.errors; },
+    get doc() { return S.doc; }, get sel() { return S.sel; }, get face() { return S.face; }, get faces() { return S.faces; }, get edges() { return S.edges; }, get results() { return S.results; }, get errors() { return S.errors; },
     get undoStack() { return S.undo; }, get redoStack() { return S.redo; }, get revision() { return S.revision; }, get busy() { return busy; },
     get canCancel() { return canCancel; }, get lastCancelledAt() { return lastCancelledAt; }, cancelRebuild,
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },

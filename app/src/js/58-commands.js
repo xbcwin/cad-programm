@@ -37,7 +37,9 @@ const Commands = (() => {
     { id: 'group', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.group'); }, def: 'ctrl+g', run: () => Actions.group() },
     { id: 'ungroup', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.ungroup'); }, def: 'ctrl+shift+g', run: () => Actions.ungroup() },
     { id: 'selectAll', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.selectAll'); }, def: 'ctrl+a', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
+    { id: 'paintSelect', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.paintSelect'); }, def: 'v', run: () => Select.togglePaint() },
     // Werkzeuge
+    { id: 'radialMenu', get group() { return T('dlg.keys.groupTools'); }, get label() { return T('kbd.radialMenu'); }, def: 'q', run: () => UI.toggleRadial() },
     { id: 'sketch', get group() { return T('dlg.keys.groupTools'); }, get label() { return T('kbd.sketch'); }, def: 's', run: () => Sketch.chooseAndStart() },
     { id: 'measure', get group() { return T('dlg.keys.groupTools'); }, get label() { return T('kbd.measure'); }, def: 'm', run: () => Measure.toggle() },
     { id: 'notes', get group() { return T('dlg.keys.groupTools'); }, get label() { return T('kbd.notes'); }, def: 'n', run: () => Notes.toggle() },
@@ -59,6 +61,7 @@ const Commands = (() => {
     isolate: 'isolate', undo: 'undo', redo: 'redo', delete: 'delete', dup: 'dup',
     copy: 'copy', paste: 'paste',
     group: 'group', ungroup: 'ungroup', hole: 'hole', rot: 'rot', fit: 'fit', save: 'save',
+    radialMenu: 'radialMenu', paintSelect: 'paintSelect',
   };
 
   function loadShortcuts() {
@@ -127,6 +130,7 @@ const Commands = (() => {
       '#btn-undo': 'undo', '#btn-redo': 'redo', '#t-body': 'bodies', '#t-sketch': 'sketch',
       '#t-parts': 'parts', '#t-measure': 'measure', '#t-notes': 'notes', '#t-export': 'export',
       '.view-btns [data-view="xray"]': 'xray', '.view-btns [data-view="cut"]': 'section',
+      '.view-btns [data-view="paint"]': 'paintSelect',
     };
     for (const [sel, sid] of Object.entries(domMap)) {
       const el = document.querySelector(sel);
@@ -230,6 +234,8 @@ const Commands = (() => {
     add('circlip-groove', 'Einstich für Sicherungsring (DIN 471 / 472)', 'circlipGroove', 'einstich sicherungsring seegerring din 471 din 472 nut welle bohrung kp-48', () => Features.startCirclipGroove(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('keyway-step', 'Passfeder-Nut auf Welle / Nabe (DIN 6885)', 'keyway', 'passfeder nut passfedernut din 6885 welle nabe rundstirnig kp-49', () => Features.startKeyway(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('spline-profile', 'Keilwellen-Profil auf Welle / Bohrung (DIN ISO 14)', 'splineShaft', 'keilwelle keilwellen profil din iso 14 welle bohrung verzahnung kp-49', () => Features.startSplineProfile(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('knurl', 'Rändel auf Zylindermantel (gerade, gekreuzt, schräg)', 'knurl', 'raendel rändel kreuzraendel kreuzrändel knurl griff zylinder teilung din 82 kp-50', () => Features.startKnurl(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('grip-pattern', 'Griffmuster auf Fläche oder Zylinder (Rillen, Noppen)', 'gripPattern', 'griffmuster grip rillen noppen profil rutschfest griffig flaeche fläche zylinder kp-50', () => Features.startGripPattern(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('spline-shaft', 'Normteil: Keilwelle (DIN ISO 14) einfügen', 'splineShaft', 'keilwelle normteil din iso 14 profil welle bauteil kp-49', () => { if (LIBMAP.splineShaft) Actions.addPart(LIBMAP.splineShaft, libDefaults(LIBMAP.splineShaft)); }, { group: 'Hinzufügen', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
@@ -340,6 +346,11 @@ const Commands = (() => {
     add('filter-face', 'Auswahlfilter: nur Flächen', 'planeXY', 'filter auswahl flächen', () => Select.setFilter('face'), { group: 'Ansicht' });
     add('filter-edge', 'Auswahlfilter: nur Kanten', 'line', 'filter auswahl kanten', () => Select.setFilter('edge'), { group: 'Ansicht' });
     add('filter-all', 'Auswahlfilter aus (alles wählen)', 'pointer', 'filter auswahl alles', () => Select.setFilter('all'), { group: 'Ansicht' });
+    add('paintSelect', 'Malen-Auswahl (Flächen / Kanten überstreichen)', 'noteDraw', 'malen auswahl streichen pinsel flächen kanten mehrfach', () => Select.togglePaint(), { group: 'Bearbeiten', kbd: 'V' });
+    add('paintSelect-face', 'Malen-Auswahl: Flächen', 'planeXY', 'malen auswahl flächen streichen pinsel', () => Select.startPaint('face'), { group: 'Bearbeiten' });
+    add('paintSelect-edge', 'Malen-Auswahl: Kanten', 'line', 'malen auswahl kanten streichen pinsel', () => Select.startPaint('edge'), { group: 'Bearbeiten' });
+    add('radialMenu', 'Kreis-Menü öffnen', 'menu', 'kreis menü kreismenü schnellmenü radial pie q', () => UI.toggleRadial(), { group: 'Werkzeuge', kbd: 'Q' });
+    add('radial-config', 'Kreis-Menü anpassen (8 Befehle)', 'gear', 'kreis menü kreismenü anpassen einstellen 8 befehle', () => UI.radialDialog(), { group: 'Werkzeuge' });
     add('focus', 'Fokus-Vorschau ein/aus', 'focusView', 'fokus vorschau zweites fenster lupe groß', () => Views.focus(), { group: 'Ansicht' });
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
@@ -558,7 +569,7 @@ const Commands = (() => {
     if ((e.key === '?' || e.key === 'F1') && !mod && !e.altKey) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape' && Views.presenting) { Views.present(false); return; }
-    if (e.key === 'Escape') { if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
+    if (e.key === 'Escape') { if (UI.radialOpen) UI.closeRadial(); else if (Select.paintActive) Select.stopPaint(); else if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
     const mHit = combo && SHORTCUTS.find((s) => !s.global && getCombo(s.id) === combo);
     if (mHit) {
       if (mHit.id === 'delete' && !App.sel.length && typeof Joints !== 'undefined' && Joints.selected) { e.preventDefault(); Joints.remove(Joints.selected); return; }
@@ -614,8 +625,8 @@ const Commands = (() => {
     const K = (id) => keyLabel(id, true);
     const groups = [
       [T('dlg.keys.groupView'), [[T('keys.view.dragLeftKey'), T('keys.view.dragLeftVal')], [T('keys.view.dragRightKey'), T('keys.view.dragRightVal')], [T('keys.view.wheelKey'), T('keys.view.wheelVal')], [K('fit'), T('kbd.fit')], [K('viewBack'), T('kbd.viewBack')], [K('present'), T('keys.view.presentVal')], [`${K('view-front')} · ${K('view-right')} · ${K('view-top')} · ${K('view-iso')}`, T('keys.view.viewsVal')], [K('ortho'), T('kbd.ortho')], [K('gridtoggle'), T('kbd.gridtoggle')], [K('section'), T('kbd.section')], [K('xray'), T('kbd.xray')], [K('explode'), T('kbd.explode')], [K('isolate'), T('kbd.isolate')]]],
-      [T('dlg.keys.groupModel'), [[T('keys.model.clickKey'), T('keys.model.clickVal')], [T('keys.model.shiftClickKey'), T('keys.model.shiftClickVal')], [T('keys.model.altClickKey'), T('keys.model.altClickVal')], [T('keys.model.boxKey'), T('keys.model.boxVal')], [T('keys.model.rclickKey'), T('keys.model.rclickVal')], [K('repeat'), T('kbd.repeat')], [K('hideSel'), T('keys.model.hideSelVal')], [K('invertSel'), T('kbd.invertSel')], [K('dupLinked'), T('kbd.dupLinked')], [T('keys.model.dragKey'), T('keys.model.dragVal')], [T('keys.model.dblClickKey'), T('keys.model.dblClickVal')], [K('editItem'), T('kbd.editItem')], ['Esc', T('keys.model.escVal')], [K('delete'), T('common.delete')], [K('hole'), T('keys.model.holeVal')], [K('similar'), T('keys.model.similarVal')], [K('rot'), T('kbd.rot')], [T('keys.model.arrowsKey'), T('keys.model.arrowsVal')], [T('keys.model.pageKey'), T('keys.model.pageVal')], [`${K('copy')} · ${K('paste')}`, T('keys.model.copyPasteVal')], [K('dup'), T('kbd.dup')], [`${K('group')} · ${K('ungroup')}`, T('keys.model.groupVal')], [K('selectAll'), T('keys.model.selectAllVal')]]],
-      [T('dlg.keys.groupTools'), [[K('sketch'), T('keys.tools.sketchVal')], [K('measure'), T('kbd.measure')], [K('notes'), T('keys.tools.notesVal')], [K('bodies'), T('keys.tools.bodiesVal')], [K('parts'), T('keys.tools.partsVal')], [T('keys.tools.cmdKey', { key: K('cmdFocus') }), T('keys.tools.cmdVal')]]],
+      [T('dlg.keys.groupModel'), [[T('keys.model.clickKey'), T('keys.model.clickVal')], [T('keys.model.shiftClickKey'), T('keys.model.shiftClickVal')], [T('keys.model.altClickKey'), T('keys.model.altClickVal')], [T('keys.model.boxKey'), T('keys.model.boxVal')], [T('keys.model.rclickKey'), T('keys.model.rclickVal')], [K('paintSelect'), T('kbd.paintSelect')], [K('repeat'), T('kbd.repeat')], [K('hideSel'), T('keys.model.hideSelVal')], [K('invertSel'), T('kbd.invertSel')], [K('dupLinked'), T('kbd.dupLinked')], [T('keys.model.dragKey'), T('keys.model.dragVal')], [T('keys.model.dblClickKey'), T('keys.model.dblClickVal')], [K('editItem'), T('kbd.editItem')], ['Esc', T('keys.model.escVal')], [K('delete'), T('common.delete')], [K('hole'), T('keys.model.holeVal')], [K('similar'), T('keys.model.similarVal')], [K('rot'), T('kbd.rot')], [T('keys.model.arrowsKey'), T('keys.model.arrowsVal')], [T('keys.model.pageKey'), T('keys.model.pageVal')], [`${K('copy')} · ${K('paste')}`, T('keys.model.copyPasteVal')], [K('dup'), T('kbd.dup')], [`${K('group')} · ${K('ungroup')}`, T('keys.model.groupVal')], [K('selectAll'), T('keys.model.selectAllVal')]]],
+      [T('dlg.keys.groupTools'), [[K('radialMenu'), T('kbd.radialMenu')], [K('sketch'), T('keys.tools.sketchVal')], [K('measure'), T('kbd.measure')], [K('notes'), T('keys.tools.notesVal')], [K('bodies'), T('keys.tools.bodiesVal')], [K('parts'), T('keys.tools.partsVal')], [T('keys.tools.cmdKey', { key: K('cmdFocus') }), T('keys.tools.cmdVal')]]],
       [T('dlg.keys.groupSketch'), [['V', T('keys.sk.selVal')], ['L · R · C · A', T('keys.sk.drawVal')], [T('keys.sk.arcKey'), T('keys.sk.arcVal')], ['G · P · S', T('keys.sk.shapesVal')], ['T · F', T('keys.sk.editVal')], ['M · Q · W', T('keys.sk.patVal')], ['H', T('keys.sk.moveVal')], [T('keys.sk.freeKey'), T('keys.sk.freeVal')], [M + ' C · V', T('keys.sk.clipVal')], ['X', T('keys.sk.constrVal')], [T('keys.sk.altKey'), T('keys.sk.altVal')], ['D', T('keys.sk.dimVal')], [T('keys.sk.numKey'), T('keys.sk.numVal')], ['Tab', T('keys.sk.tabVal')], [T('keys.sk.shiftKey'), T('keys.sk.shiftVal')], ['Enter', T('keys.sk.enterVal')], ['Esc', T('keys.sk.escVal')]]],
       [T('dlg.keys.groupFiles'), [[K('undo'), T('kbd.undo')], [K('redo'), T('kbd.redo')], [K('save'), T('kbd.save')], [K('export'), T('kbd.export')], ['?', T('keys.files.helpVal')]]],
     ];
@@ -741,6 +752,8 @@ const Commands = (() => {
     if (Sketch.active) Sketch.cancel(true);
     if (Measure.active) Measure.stop();
     if (Notes.active) Notes.stop();
+    if (Select.paintActive) Select.stopPaint();
+    if (UI.radialOpen) UI.closeRadial();
     App.mode = m;
     $('#tab-model').setAttribute('aria-pressed', m === 'model'); $('#tab-drawing').setAttribute('aria-pressed', m === 'drawing');
     $('#workspace').classList.toggle('drawing-mode', m === 'drawing');

@@ -101,6 +101,7 @@ const UI = (() => {
   function closeMenu() { if (openMenu) { openMenu.remove(); openMenu = null; document.removeEventListener('pointerdown', outside, true); } }
   function outside(e) { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }
   function menu(anchor, entries, opts = {}) {
+    closeRadial();
     closeMenu();
     const m = h('div', { class: 'menu', role: 'menu' });
     for (const en of entries) {
@@ -123,6 +124,7 @@ const UI = (() => {
   let openPop = null;
   function closePop() { if (openPop) { openPop.el.remove(); document.removeEventListener('pointerdown', openPop.outside, true); const cb = openPop.onClose; openPop = null; cb && cb(); } }
   function pop(anchor, content, opts = {}) {
+    closeRadial();
     closePop();
     const el = h('div', { class: 'pop' }); el.append(content);
     document.body.append(el);
@@ -135,6 +137,270 @@ const UI = (() => {
     setTimeout(() => document.addEventListener('pointerdown', outside2, true), 0);
     if (typeof App !== 'undefined' && App.emit) App.emit('pop');
     return el;
+  }
+  // ---------- Kreis-Menü an der Maus (BE-19) ----------
+  const RADIAL_KEY = 'tracery-kreismenue';
+  const RADIAL_DEFAULTS = ['box', 'cylinder', 'sketch', 'fillet', 'chamfer', 'hole', 'measure', 'paintSelect'];
+  let lastPtr = { x: null, y: null };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
+  }
+  function radialCatalog() {
+    return [
+      { id: 'box', label: T('kind.box'), icon: 'cube', run: () => Actions.addPrimitive('box') },
+      { id: 'cylinder', label: T('kind.cylinder'), icon: 'circle', run: () => Actions.addPrimitive('cylinder') },
+      { id: 'sphere', label: T('kind.sphere'), icon: 'circle', run: () => Actions.addPrimitive('sphere') },
+      { id: 'cone', label: T('kind.cone'), icon: 'cube', run: () => Actions.addPrimitive('cone') },
+      { id: 'tube', label: T('kind.tube'), icon: 'circle', run: () => Actions.addPrimitive('tube') },
+      { id: 'sketch', label: T('tool.sketch'), icon: 'sketch', help: 'sketchFace', run: () => Sketch.chooseAndStart() },
+      { id: 'fillet', label: T('ctx.fillet'), icon: 'fillet', help: 'fillet', run: () => { if (App.edges.length) Actions.addFinish('fillet', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'fillet', 'all', 1); else toast(T('dlg.tb.needBodyOrEdge'), { icon: 'info' }); } },
+      { id: 'chamfer', label: T('ctx.chamfer'), icon: 'chamfer', help: 'chamfer', run: () => { if (App.edges.length) Actions.addFinish('chamfer', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'chamfer', 'all', 1); else toast(T('dlg.tb.needBodyOrEdge'), { icon: 'info' }); } },
+      { id: 'hole', label: T('dlg.tb.hole'), icon: 'holeWizard', help: 'holeWizard', run: () => Place.holeWizard($('#t-parts') || $('#center')) },
+      { id: 'shell', label: T('ctx.shell'), icon: 'shell', help: 'shell', run: () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else toast(T('dlg.tb.needOpenFace'), { icon: 'info' }); } },
+      { id: 'mirror', label: T('ctx.mirror'), icon: 'mirror', help: 'mirror', run: () => Features.pattern('mirror') },
+      { id: 'split', label: T('ctx.split'), icon: 'split', help: 'split', run: () => Features.split() },
+      { id: 'patternRect', label: T('ctx.patRect'), icon: 'patternRect', help: 'patternRect', run: () => Features.pattern('rect') },
+      { id: 'patternCirc', label: T('ctx.patCirc'), icon: 'patternCirc', help: 'patternCirc', run: () => Features.pattern('circ') },
+      { id: 'duplicate', label: T('common.duplicate'), icon: 'copy', run: () => Actions.duplicate() },
+      { id: 'measure', label: T('tool.measure'), icon: 'measure', help: 'measure', run: () => Measure.toggle() },
+      { id: 'paintSelect', label: T('paint.title'), icon: 'noteDraw', help: 'paintSelect', run: () => Select.togglePaint() },
+      { id: 'notes', label: T('tool.notes'), icon: 'noteDraw', help: 'notes', run: () => Notes.toggle() },
+      { id: 'section', label: T('menu.view.section'), icon: 'section', help: 'section', run: () => Views.section() },
+      { id: 'xray', label: T('menu.view.xray'), icon: 'xray', help: 'xray', run: () => Views.xray() },
+      { id: 'explode', label: T('menu.view.explode'), icon: 'explode', help: 'explode', run: () => Views.explode() },
+      { id: 'fit', label: T('menu.ctx.fitAll'), icon: 'fit', run: () => Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null) },
+      { id: 'export', label: T('tool.export'), icon: 'export', run: () => Print.exportDialog() },
+      { id: 'undo', label: T('topbar.undo'), icon: 'undo', run: () => App.undo() },
+    ];
+  }
+  function normalizeRadialIds(ids) {
+    const map = new Map(radialCatalog().map((c) => [c.id, c]));
+    const out = [];
+    for (let i = 0; i < 8; i++) {
+      const id = Array.isArray(ids) ? ids[i] : null;
+      out.push(typeof id === 'string' && map.has(id) ? id : RADIAL_DEFAULTS[i]);
+    }
+    return out;
+  }
+  function radialItems() {
+    try {
+      const raw = storageGet(RADIAL_KEY);
+      if (!raw) return [...RADIAL_DEFAULTS];
+      return normalizeRadialIds(JSON.parse(raw));
+    } catch (_) {
+      return [...RADIAL_DEFAULTS];
+    }
+  }
+  function setRadialItems(ids) {
+    const next = normalizeRadialIds(ids);
+    const isDef = next.every((id, i) => id === RADIAL_DEFAULTS[i]);
+    if (isDef) storageDel(RADIAL_KEY);
+    else storageSet(RADIAL_KEY, JSON.stringify(next));
+    return next;
+  }
+  function resetRadial() {
+    storageDel(RADIAL_KEY);
+    return [...RADIAL_DEFAULTS];
+  }
+  let radialEl = null, radialState = null;
+  function slotForPoint(cx, cy, px, py) {
+    if (Math.hypot(px - cx, py - cy) < 26) return -1;
+    const raw = Math.atan2(py - cy, px - cx) + Math.PI / 2 + Math.PI / 8;
+    const norm = ((raw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    return Math.floor(norm / (Math.PI / 4)) % 8;
+  }
+  function setRadialActive(slot) {
+    if (!radialEl || !radialState) return;
+    radialState.activeSlot = slot;
+    for (const el of radialEl.querySelectorAll('.radial-item')) {
+      el.classList.toggle('active', Number(el.dataset.slot) === slot);
+    }
+  }
+  function closeRadial() {
+    if (!radialEl) return;
+    radialEl.remove();
+    radialEl = null;
+    if (radialState) {
+      document.removeEventListener('pointerdown', radialState.onOut, true);
+      window.removeEventListener('pointermove', radialState.onMove);
+      window.removeEventListener('keydown', radialState.onKey, true);
+      window.removeEventListener('resize', closeRadial);
+      radialState = null;
+    }
+  }
+  function openRadial(cx, cy, opts = {}) {
+    closeMenu();
+    closePop();
+    closeRadial();
+    let x = cx, y = cy;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      if (Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y) && lastPtr.x >= 0 && lastPtr.y >= 0 && lastPtr.x <= innerWidth && lastPtr.y <= innerHeight) {
+        x = lastPtr.x; y = lastPtr.y;
+      } else {
+        const vp = $('#viewport');
+        if (vp) {
+          const r = vp.getBoundingClientRect();
+          x = r.left + r.width / 2; y = r.top + r.height / 2;
+        } else {
+          x = innerWidth / 2; y = innerHeight / 2;
+        }
+      }
+    }
+    const margin = Math.min(156, Math.max(40, Math.floor(Math.min(innerWidth, innerHeight) / 2) - 8));
+    x = clamp(x, margin, Math.max(margin, innerWidth - margin));
+    y = clamp(y, margin, Math.max(margin, innerHeight - margin));
+
+    const map = new Map(radialCatalog().map((c) => [c.id, c]));
+    const ids = radialItems();
+    const cmds = ids.map((id) => map.get(id) || map.get('box'));
+    const root = h('div', { id: 'radial-menu', class: 'radial-menu', role: 'menu', 'aria-label': T('radial.aria') });
+    root.style.left = Math.round(x) + 'px';
+    root.style.top = Math.round(y) + 'px';
+
+    const ring = h('div', { class: 'radial-ring', 'aria-hidden': 'true' });
+    let lines = '';
+    for (let i = 0; i < 8; i++) {
+      const a = -Math.PI / 2 + (i - 0.5) * (Math.PI / 4);
+      const x1 = 114 + Math.cos(a) * 32, y1 = 114 + Math.sin(a) * 32;
+      const x2 = 114 + Math.cos(a) * 112, y2 = 114 + Math.sin(a) * 112;
+      lines += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+    }
+    ring.innerHTML = `<svg viewBox="0 0 228 228">${lines}</svg>`;
+    root.append(ring);
+
+    const R = 102;
+    cmds.forEach((cmd, i) => {
+      const a = -Math.PI / 2 + i * (Math.PI / 4);
+      const btn = h('button', {
+        type: 'button',
+        class: 'radial-item',
+        role: 'menuitem',
+        dataset: { slot: String(i), cmd: cmd.id },
+        'data-help': cmd.help || 'radialMenu',
+      });
+      btn.style.left = Math.round(Math.cos(a) * R) + 'px';
+      btn.style.top = Math.round(Math.sin(a) * R) + 'px';
+      btn.innerHTML = icon(cmd.icon);
+      btn.append(h('span', { class: 'radial-lbl' }, cmd.label));
+      btn.onclick = () => { closeRadial(); cmd.run(); };
+      root.append(btn);
+    });
+
+    const gearBtn = h('button', {
+      type: 'button',
+      id: 'radial-config-btn',
+      class: 'radial-gear',
+      'data-help': 'radialMenu',
+      'data-tip': T('radial.configTip'),
+      'aria-label': T('radial.configTip'),
+    });
+    gearBtn.innerHTML = icon('gear');
+    gearBtn.onclick = () => { closeRadial(); radialDialog(); };
+    root.append(h('div', { class: 'radial-center' }, gearBtn));
+
+    const st = {
+      x, y,
+      holdMode: !!opts.holdMode,
+      activeSlot: -1,
+      cmds,
+      onOut: (e) => {
+        if (st.holdMode) return;
+        if (radialEl && !radialEl.contains(e.target)) closeRadial();
+      },
+      onMove: (e) => {
+        if (!st.holdMode) return;
+        setRadialActive(slotForPoint(st.x, st.y, e.clientX, e.clientY));
+      },
+      onKey: (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          closeRadial();
+        }
+      },
+    };
+    radialEl = root;
+    radialState = st;
+    document.body.append(root);
+    setTimeout(() => {
+      if (radialState !== st) return;
+      document.addEventListener('pointerdown', st.onOut, true);
+      window.addEventListener('pointermove', st.onMove);
+      window.addEventListener('keydown', st.onKey, true);
+      window.addEventListener('resize', closeRadial);
+    }, 0);
+    return root;
+  }
+  function finishRadialHold(px, py) {
+    if (!radialState || !radialState.holdMode) return false;
+    const st = radialState;
+    let slot = -1;
+    const hitEl = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(px, py) : null;
+    const itemBtn = hitEl && hitEl.closest ? hitEl.closest('#radial-menu .radial-item') : null;
+    if (itemBtn && itemBtn.dataset.slot != null) slot = Number(itemBtn.dataset.slot);
+    else slot = slotForPoint(st.x, st.y, px, py);
+    if (slot >= 0 && slot < st.cmds.length) {
+      const cmd = st.cmds[slot];
+      closeRadial();
+      cmd && cmd.run && cmd.run();
+      return true;
+    }
+    st.holdMode = false;
+    setRadialActive(-1);
+    return false;
+  }
+  function toggleRadial(cx, cy) {
+    if (radialEl) { closeRadial(); return false; }
+    openRadial(cx, cy);
+    return true;
+  }
+  function radialDialog() {
+    const cat = radialCatalog();
+    const cur = radialItems();
+    const selects = [];
+    const grid = h('div', { class: 'radial-cfg-grid' });
+    for (let i = 0; i < 8; i++) {
+      const sel = h('select', { id: 'radial-slot-' + i });
+      for (const c of cat) {
+        const opt = h('option', { value: c.id }, c.label);
+        if (c.id === cur[i]) opt.selected = true;
+        sel.append(opt);
+      }
+      selects.push(sel);
+      grid.append(h('div', { class: 'radial-cfg-row' },
+        h('label', { for: 'radial-slot-' + i }, T('radial.pos' + i)),
+        sel));
+    }
+    const body = h('div', { style: { display: 'grid', gap: '10px' } },
+      h('p', { style: { color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, T('radial.configIntro')),
+      grid);
+    return modal({
+      title: T('radial.configTitle'),
+      body,
+      actions: [
+        {
+          id: 'radial-reset',
+          label: T('common.reset'),
+          run: () => {
+            const def = resetRadial();
+            selects.forEach((s, i) => { s.value = def[i]; });
+            toast(T('radial.resetToast'), { icon: 'check', ms: 1800 });
+            return false;
+          },
+        },
+        { label: T('common.cancel'), value: false },
+        {
+          id: 'radial-save',
+          label: T('common.save'),
+          primary: true,
+          value: true,
+          run: () => {
+            setRadialItems(selects.map((s) => s.value));
+            toast(T('radial.saved'), { icon: 'check', ms: 2000 });
+          },
+        },
+      ],
+    });
   }
   // ---------- Tooltips ----------
   let tipEl = null, tipTimer = 0, helpTimer = 0;
@@ -225,9 +491,11 @@ const UI = (() => {
   }
   function defaultHint() {
     if (App.mode === 'drawing') return T('hint.defaultDrawing');
+    if (typeof Select !== 'undefined' && Select.paintActive) return T('hint.paintActive');
     const n = App.doc.items.length;
     if (!n) return T('hint.defaultEmpty');
     if (App.edges.length) return T('hint.defaultEdges');
+    if (App.faces && App.faces.length > 1) return T('hint.defaultFaces', { n: App.faces.length });
     if (App.face && App.sel.length === 1) return T('hint.defaultFace');
     if (App.sel.length > 1) return T('hint.defaultMulti', { n: App.sel.length });
     if (App.sel.length === 1) return T('hint.defaultOne');
@@ -400,6 +668,6 @@ const UI = (() => {
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
   }
-  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
+  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, openRadial, closeRadial, toggleRadial, finishRadialHold, radialItems, setRadialItems, resetRadial, radialCatalog, radialDialog, get radialOpen() { return !!radialEl; }, lastPointer: () => ({ ...lastPtr }), initTips, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
 })();
 
