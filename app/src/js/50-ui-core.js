@@ -174,7 +174,7 @@ const UI = (() => {
       const body = h('div', { style: { display: 'grid', gap: '6px' } }, h('label', { for: 'prompt-inp', style: { color: 'var(--muted)', fontSize: '13.5px' } }, label), inp);
       let result = null;
       const m = modal({ title, body, actions: [{ label: T('common.cancel') }, { label: okLabel, primary: true, run: () => { result = inp.value; } }], onClose: () => res(result) });
-      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { result = inp.value; m.close(); } });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); result = inp.value; m.close(); } });
       setTimeout(() => { inp.focus(); inp.select(); }, 40);
     });
   }

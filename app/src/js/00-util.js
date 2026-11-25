@@ -2515,6 +2515,11 @@ const HELP = {
   "tip": "Explosions-Video speichern: nimmt die schrittweise Explosion lokal als WebM- oder MP4-Video auf",
   "hilfe": "Spielt deine Explosion einmal vor der Kamera ab und speichert sie direkt im Browser als Video-Datei – wahlweise nur auseinander oder hin und zurück, mit oder ohne gestrichelte Wegen-Linien.",
   "tipp": "Drehe dir die Baugruppe vorher in eine schöne Schrägansicht – das Video filmt genau aus diesem Blickwinkel."
+ },
+ "namedPoses": {
+  "tip": "Benannte Stellungen: Gelenk-Positionen wie „auf“, „zu“ oder „halb“ speichern und per Klick einnehmen",
+  "hilfe": "Merkt sich die aktuellen Winkel und Wege aller beweglichen Gelenke unter einem Namen wie „auf“, „zu“ oder „halb“. Ein Klick auf eine gespeicherte Stellung fährt alle zugehörigen Teile sofort wieder genau dorthin – auch über ganze Gelenk-Ketten hinweg und dauerhaft mit dem Projekt gespeichert.",
+  "tipp": "Über das Speichern-Symbol an einer vorhandenen Stellung überschreibst du sie mit der aktuellen Lage; per Rechtsklick kannst du sie umbenennen."
  }
 };
 

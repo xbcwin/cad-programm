@@ -2695,6 +2695,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Video-Export, Zusammensetzen, i18n & Hilfen**: `Views.explodeVideo` liefert lokal eine abspielbare Video-Datei (`video/*`, > 1 KB), `#ex-video` öffnet den Video-Dialog, `#ex-back` setzt alles zusammen, und alle DE/EN-Texte, Befehlssuche-Einträge (`explode-steps`, `explode-video`) und Hilfetexte (`explodeSteps`, `explodeVideo`) sind vollständig (`t_a156_explosion_schritte_video`).
 - [ ] **Von Hand**: Im Browser eine mehrteilige Baugruppe (z. B. das Beispiel „Baugruppe Scharnier“) öffnen, 3 Explosions-Schritte in verschiedenen Richtungen anlegen, auf „Abspielen“ und „Video“ klicken und die gespeicherte `.webm`-Datei lokal im Browser oder VLC abspielen.
 
+## Benannte Stellungen (Auto [A-157], BG-20)
+
+- [x] **Einfach-Modus: Speichern, Einnehmen & Rückgängig**: Scharnier auf `90°` über `#proj-pose-name` / `#proj-pose-save` als „auf“ und bei `0°` über `#btn-pose-save` als „zu“ gespeichert; Klick auf `.pose-row[data-pose-name="auf"]` fährt Gelenk und 3D-Bauteil exakt zurück auf `90°`, `.pose-chip[data-pose-name="zu"]` auf `0°` und `Strg+Z` macht den Wechsel in einem Schritt rückgängig (`t_a157_benannte_stellungen`).
+- [x] **Profi-Modus: Gelenk-Kette, Überschreiben, Umbenennen & Löschen**: Eine Kette aus zwei Drehgelenken (`60°` / `30°` als „halb“) stellt beim Klick auf die gespeicherte Stellung beide Gelenke sowie die 3D-Lage des Endglieds auf `< 0,01 mm` exakt wieder her; `updatePose`, `renamePose` und `removePose` funktionieren fehlerfrei (`t_a157_benannte_stellungen`).
+- [x] **Speichern & Laden, Validierung & Hilfen**: `doc.poses` besteht `Store.validateProject`, bleibt nach `Store.saveProject`/`loadProject` sowie `.tracery.json`-Export und erneutem Laden erhalten und fährt „auf“ wieder auf `90°`; `HELP.namedPoses`, DE/EN-Texte und Befehlssuche (`save-pose`) sind vollständig (`t_a157_benannte_stellungen`).
+- [ ] **Von Hand**: Im Browser das Beispiel „Baugruppe Scharnier“ im Modus „Einfach“ und „Profi“ öffnen, Stellungen wie „auf“ (90°) und „zu“ (0°) über den Verlauf „Stellungen“ und die Eigenschaften speichern, per Klick umschalten und nach „Projekt als Datei speichern“ und erneutem Öffnen prüfen.
+
 ## Fehler melden
 
 ```

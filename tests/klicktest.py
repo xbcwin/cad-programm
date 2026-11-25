@@ -30769,6 +30769,214 @@ def t_a156_explosion_schritte_video(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
 
 
+# ---------- [A-157] Benannte Stellungen (BG-20) ----------
+def t_a157_benannte_stellungen(p):
+    # 1. Einfach-Modus: Scharnier auf 90° -> Stellung „auf“ speichern -> auf 0° drehen -> „auf“ wählen -> wieder 90° + Rückgängig
+    p.empty()
+    info = p.ev("""
+      App.setDoc(Assembly.newAssembly('Scharnier-Test'));
+      App.change('Scharnier anlegen', (d) => {
+        const base = Model.newItem('box', { w: 20, d: 30, h: 10 }, { name: 'Basis' });
+        base.locked = true;
+        const wing = Model.newItem('box', { w: 20, d: 30, h: 10 }, { name: 'Fluegel' });
+        wing.t.x = 20;
+        d.items.push(base, wing);
+      });
+      const [bId, wId] = App.doc.items.map(x => x.id);
+      const j = Joints.add(bId, wId, [10, 0, 5], [0, 0, 1], { kind: 'rot' });
+      return { bId, wId, jid: j.id, ok: !!j.ok };
+    """)
+    warte_rechnen(p, 30)
+
+    p.ev("ViewPrefs.setLevel('simple'); Panels.renderLeft(); Panels.renderRight();")
+    p.wait(200)
+    vis_simple = p.ev("""
+      const pt = document.querySelector('#pose-tree');
+      const ps = document.querySelector('#proj-poses-sec');
+      return !!(pt && pt.offsetParent !== null && ps && ps.offsetParent !== null);
+    """)
+
+    # Scharnier auf 90° drehen & Lage merken
+    p.ev("Joints.setAngle(arg, 90)", info['jid'])
+    p.wait(200)
+    pose90_t = p.ev("""
+      const w = Model.find(App.doc, arg).item;
+      return { x: w.t.x, y: w.t.y, rz: w.t.rz, ang: (App.doc.joints || [])[0]?.ang };
+    """, info['wId'])
+
+    # Stellung „auf“ über das Projekt-Panel speichern
+    p.pg.fill('#proj-pose-name', 'auf')
+    p.pg.click('#proj-pose-save')
+    p.wait(250)
+    after_save_auf = p.ev("""
+      const ps = (App.doc.poses || []).find(x => x.name === 'auf');
+      const row = document.querySelector('#pose-tree .pose-row[data-pose-name="auf"]');
+      const chip = document.querySelector('#proj-poses-sec .pose-chip[data-pose-name="auf"]');
+      return {
+        savedAng: ps && ps.states && ps.states[arg] ? ps.states[arg].ang : null,
+        rowActive: !!(row && row.classList.contains('sel')),
+        chipActive: !!(chip && chip.classList.contains('primary')),
+      };
+    """, info['jid'])
+
+    # Scharnier auf 0° drehen und Stellung „zu“ über Verlauf-Knopf speichern
+    p.ev("Joints.setAngle(arg, 0)", info['jid'])
+    p.wait(200)
+    at0 = p.ev("""
+      const j = (App.doc.joints || [])[0];
+      const row = document.querySelector('#pose-tree .pose-row[data-pose-name="auf"]');
+      return { ang: j && j.ang, aufActive: !!(row && row.classList.contains('sel')) };
+    """)
+    p.pg.click('#btn-pose-save')
+    p.wait(200)
+    p.pg.fill('#prompt-inp', 'zu')
+    p.pg.press('#prompt-inp', 'Enter')
+    p.wait(250)
+
+    # Mit einem Klick „auf“ wieder einnehmen -> wieder 90° (Gelenk + 3D-Bauteil)
+    p.pg.click('#pose-tree .pose-row[data-pose-name="auf"]')
+    p.wait(250)
+    restored90 = p.ev("""
+      const j = (App.doc.joints || [])[0];
+      const w = Model.find(App.doc, arg).item;
+      const row = document.querySelector('#pose-tree .pose-row[data-pose-name="auf"]');
+      return { ang: j && j.ang, x: w.t.x, y: w.t.y, rz: w.t.rz, active: !!(row && row.classList.contains('sel')) };
+    """, info['wId'])
+
+    # Klick auf Chip „zu“ -> wieder 0°, dann Strg+Z -> wieder 90°
+    p.pg.click('#proj-poses-sec .pose-chip[data-pose-name="zu"]')
+    p.wait(250)
+    ang_zu = p.ev("return (App.doc.joints || [])[0]?.ang")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    ang_undo = p.ev("return (App.doc.joints || [])[0]?.ang")
+
+    ok1 = (
+        info['ok'] is True
+        and vis_simple is True
+        and abs(pose90_t['ang'] - 90) < 1e-3
+        and after_save_auf == {'savedAng': 90, 'rowActive': True, 'chipActive': True}
+        and abs(at0['ang']) < 1e-3 and at0['aufActive'] is False
+        and abs(restored90['ang'] - 90) < 1e-3
+        and abs(restored90['x'] - pose90_t['x']) < 0.01
+        and abs(restored90['y'] - pose90_t['y']) < 0.01
+        and abs(restored90['rz'] - pose90_t['rz']) < 0.01
+        and restored90['active'] is True
+        and abs(ang_zu) < 1e-3
+        and abs(ang_undo - 90) < 1e-3
+    )
+
+    # 2. Profi-Modus: Gelenk-Kette (2 Gelenke) -> „halb“ speichern -> 0° -> Klick -> exakte 3D-Lage + Update/Rename/Delete
+    p.ev("ViewPrefs.setLevel('pro'); Panels.renderLeft(); Panels.renderRight();")
+    p.wait(200)
+    chain = p.ev("""
+      Joints.setAngle(arg.jid, 0);
+      App.change('Drittes Glied', (d) => {
+        const tip = Model.newItem('box', { w: 16, d: 10, h: 8 }, { name: 'Spitze' });
+        tip.t.x = 38;
+        d.items.push(tip);
+      });
+      const tipId = App.doc.items[2].id;
+      const j2 = Joints.add(arg.wId, tipId, [30, 0, 5], [0, 0, 1], { kind: 'rot' });
+      Joints.setAngle(arg.jid, 60);
+      Joints.setAngle(j2.id, 30);
+      const tipItem = Model.find(App.doc, tipId).item;
+      const want = { x: tipItem.t.x, y: tipItem.t.y, rz: tipItem.t.rz };
+      Assembly.savePose('halb');
+      Joints.setAngle(j2.id, 0);
+      Joints.setAngle(arg.jid, 0);
+      return { tipId, jid2: j2.id, ok: !!j2.ok, want };
+    """, info)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#pose-tree .pose-row[data-pose-name="halb"]')
+    p.wait(250)
+    chain_restored = p.ev("""
+      const j1 = App.doc.joints.find(x => x.id === arg.jid1);
+      const j2 = App.doc.joints.find(x => x.id === arg.jid2);
+      const tip = Model.find(App.doc, arg.tipId).item;
+      return { a1: j1 && j1.ang, a2: j2 && j2.ang, x: tip.t.x, y: tip.t.y, rz: tip.t.rz };
+    """, {'jid1': info['jid'], 'jid2': chain['jid2'], 'tipId': chain['tipId']})
+
+    crud = p.ev("""
+      const halb = App.doc.poses.find(x => x.name === 'halb');
+      Joints.setAngle(arg.jid2, 45);
+      Assembly.updatePose(halb.id);
+      const updatedAng = App.doc.poses.find(x => x.id === halb.id)?.states[arg.jid2]?.ang;
+      const renOk = Assembly.renamePose(halb.id, 'mittel');
+      const hasMittel = App.doc.poses.some(x => x.id === halb.id && x.name === 'mittel');
+      const remOk = Assembly.removePose(halb.id);
+      const gone = !App.doc.poses.some(x => x.id === halb.id);
+      return { updatedAng, renOk, hasMittel, remOk, gone };
+    """, {'jid2': chain['jid2']})
+
+    ok2 = (
+        chain['ok'] is True
+        and abs(chain_restored['a1'] - 60) < 1e-3
+        and abs(chain_restored['a2'] - 30) < 1e-3
+        and abs(chain_restored['x'] - chain['want']['x']) < 0.01
+        and abs(chain_restored['y'] - chain['want']['y']) < 0.01
+        and abs(chain_restored['rz'] - chain['want']['rz']) < 0.01
+        and abs(crud['updatedAng'] - 45) < 1e-3
+        and crud['renOk'] is True and crud['hasMittel'] is True
+        and crud['remOk'] is True and crud['gone'] is True
+    )
+
+    # 3. Speichern und Laden (Validierung, IndexedDB & JSON-Export/Import)
+    p.ev("""
+      Joints.setAngle(arg.jid2, 0);
+      Joints.setAngle(arg.jid1, 0);
+    """, {'jid1': info['jid'], 'jid2': chain['jid2']})
+    p.wait(200)
+    persist = p.ev("""return (async () => {
+      const raw = await Start.projectPayload();
+      const val = Store.validateProject(raw);
+      await Store.saveProject(App.doc);
+      const fromIdb = await Store.loadProject(App.doc.id);
+      const idbCount = (fromIdb && fromIdb.poses ? fromIdb.poses.length : 0);
+      const parsed = Model.migrate(JSON.parse(raw));
+      App.setDoc(parsed, { fit: false, noAutosave: true });
+      return {
+        valOk: val.ok,
+        idbCount,
+        names: (App.doc.poses || []).map(x => x.name),
+        angNow: (App.doc.joints || [])[0]?.ang,
+      };
+    })()""")
+    warte_rechnen(p, 30)
+    p.pg.click('#pose-tree .pose-row[data-pose-name="auf"]')
+    p.wait(250)
+    after_reload_auf = p.ev("return (App.doc.joints || [])[0]?.ang")
+
+    ok3 = (
+        persist['valOk'] is True
+        and persist['idbCount'] == 2
+        and 'auf' in persist['names'] and 'zu' in persist['names']
+        and abs(persist['angNow']) < 1e-3
+        and abs(after_reload_auf - 90) < 1e-3
+    )
+
+    # 4. Hilfetext, DE/EN-Schlüsselgleichheit, Befehlssuche & keine JS-Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'namedPoses';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.namedPoses && wh.namedPoses.tip && wh.namedPoses.hilfe && wh.namedPoses.tipp && desc && desc.text === wh.namedPoses.hilfe && desc.tip === wh.namedPoses.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmdOk = Commands.search('stellung').some(c => c.id === 'save-pose');
+      return { hOk, i18nOk, cmdOk };
+    })()""")
+    ok4 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmdOk'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -31036,6 +31244,7 @@ TESTS = [
     ('[A-153] Kurvenscheibe / Nocken: Exzentrische Scheibe (5 mm → 10 mm Hub) & Weg-Kurve-Diagramm (BG-15)', t_a153_kurvenscheibe_nocken),
     ('[A-151] Kopplungen: Zahnrad 1:2 (90° → 45°) & Zahnstange (π·d·Winkel/360) (BG-14)', t_a151_kopplungen_zahnrad_zahnstange),
     ('[A-156] Explosion in Schritten: Schritte / nacheinander abspielen / Wegen-Linien / Video-Export / Einfach & Profi', t_a156_explosion_schritte_video),
+    ('[A-157] Benannte Stellungen: speichern, einnehmen, Einfach/Profi & Speichern/Laden (BG-20)', t_a157_benannte_stellungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

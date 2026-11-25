@@ -467,6 +467,280 @@ const Assembly = (() => {
     if (ov) ov.append(banner);
   }
 
+  // ================= Benannte Stellungen (BG-20) =================
+  const MOVABLE_KINDS = new Set(['rot', 'slide', 'cyl', 'planar', 'ball', 'slot']);
+  const jointKind = (j) => (j && j.kind) || 'rot';
+  function isMovableJoint(j, doc = App.doc) {
+    return !!(j && MOVABLE_KINDS.has(jointKind(j)) && Model.find(doc, j.a) && Model.find(doc, j.b));
+  }
+  function movableJoints(doc = App.doc) {
+    return ((doc && doc.joints) || []).filter((j) => isMovableJoint(j, doc));
+  }
+  function poses(doc = App.doc) {
+    return (doc && Array.isArray(doc.poses)) ? doc.poses : [];
+  }
+  function captureJointState(j) {
+    const k = jointKind(j);
+    const st = { ang: round(Number(j.ang) || 0, 4) };
+    if (k === 'cyl' || k === 'slot') st.pos = round(Number(j.pos) || 0, 4);
+    else if (k === 'planar') { st.u = round(Number(j.u) || 0, 4); st.v = round(Number(j.v) || 0, 4); }
+    else if (k === 'ball') { st.rx = round(Number(j.rx) || 0, 4); st.ry = round(Number(j.ry) || 0, 4); }
+    return st;
+  }
+  function capturePoseStates(doc = App.doc) {
+    const out = {};
+    for (const j of movableJoints(doc)) out[j.id] = captureJointState(j);
+    return out;
+  }
+  function dofsOfKind(k) {
+    if (k === 'cyl' || k === 'slot') return ['ang', 'pos'];
+    if (k === 'planar') return ['u', 'v', 'ang'];
+    if (k === 'ball') return ['rx', 'ry', 'ang'];
+    return ['ang'];
+  }
+  function isPoseActive(ps, doc = App.doc) {
+    if (!ps || !ps.states || typeof ps.states !== 'object') return false;
+    let matched = 0;
+    for (const j of movableJoints(doc)) {
+      const saved = ps.states[j.id];
+      if (!saved || typeof saved !== 'object') continue;
+      matched++;
+      const cur = captureJointState(j);
+      for (const d of dofsOfKind(jointKind(j))) {
+        const sv = Number(saved[d]);
+        const cv = Number(cur[d]);
+        if (Number.isFinite(sv) && Math.abs(sv - cv) > 1e-3) return false;
+      }
+    }
+    return matched > 0;
+  }
+  function activePose(doc = App.doc) {
+    return poses(doc).find((ps) => isPoseActive(ps, doc)) || null;
+  }
+  function poseSummary(ps, doc = App.doc) {
+    if (!ps || !ps.states || typeof ps.states !== 'object') return '—';
+    const present = movableJoints(doc).filter((j) => ps.states[j.id] && typeof ps.states[j.id] === 'object');
+    if (!present.length) return '—';
+    const fmtJointVal = (j, s) => {
+      const k = jointKind(j);
+      if (k === 'slide') return Units.fmtLenU(Number(s.ang) || 0, 1);
+      if (k === 'cyl' || k === 'slot') return `${fmtAngleU(Number(s.ang) || 0)} · ${Units.fmtLenU(Number(s.pos) || 0, 1)}`;
+      if (k === 'planar') return `${Units.fmtLen(Number(s.u) || 0, 1)}/${Units.fmtLen(Number(s.v) || 0, 1)} ${Units.label()}`;
+      if (k === 'ball') return `${fmtAngle(Number(s.rx) || 0)}/${fmtAngle(Number(s.ry) || 0)}/${fmtAngleU(Number(s.ang) || 0)}`;
+      return fmtAngleU(Number(s.ang) || 0);
+    };
+    if (present.length === 1) return fmtJointVal(present[0], ps.states[present[0].id]);
+    if (present.length === 2 && present.every((j) => jointKind(j) === 'rot' || jointKind(j) === 'slide')) {
+      return `${fmtJointVal(present[0], ps.states[present[0].id])} · ${fmtJointVal(present[1], ps.states[present[1].id])}`;
+    }
+    return T('asm.poseJointCount', { n: present.length });
+  }
+  function findPose(idOrName, doc = App.doc) {
+    const key = String(idOrName || '').trim();
+    if (!key) return null;
+    const list = poses(doc);
+    return list.find((ps) => ps.id === key) || list.find((ps) => ps.name.toLowerCase() === key.toLowerCase()) || null;
+  }
+  function savePose(name, opts = {}) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const states = capturePoseStates(App.doc);
+    if (!Object.keys(states).length) {
+      if (!opts.silent) UI.toast(T('asm.poseNoJointsSave'), { icon: 'info' });
+      return null;
+    }
+    let savedEntry = null;
+    App.change(T('asm.poseSavedUndo', { name: clean }), (doc) => {
+      doc.poses = Array.isArray(doc.poses) ? doc.poses : [];
+      const low = clean.toLowerCase();
+      let idx = opts.id ? doc.poses.findIndex((p) => p.id === opts.id) : -1;
+      if (idx < 0) idx = doc.poses.findIndex((p) => p && typeof p.name === 'string' && p.name.toLowerCase() === low);
+      if (idx >= 0) {
+        doc.poses[idx] = { ...doc.poses[idx], name: clean, states };
+        savedEntry = doc.poses[idx];
+      } else {
+        savedEntry = { id: uid('ps'), name: clean, states };
+        doc.poses.push(savedEntry);
+      }
+    });
+    if (!opts.silent && savedEntry) {
+      UI.toast(T('asm.poseSavedToast', { name: savedEntry.name }), { icon: 'check', ms: 2200 });
+    }
+    return savedEntry;
+  }
+  function updatePose(id, opts = {}) {
+    const ps = findPose(id);
+    if (!ps) return null;
+    return savePose(ps.name, { ...opts, id: ps.id });
+  }
+  function renamePose(id, newName) {
+    const clean = String(newName || '').trim();
+    if (!clean) return false;
+    const low = clean.toLowerCase();
+    return App.change(T('asm.poseRenamedUndo', { name: clean }), (doc) => {
+      const list = Array.isArray(doc.poses) ? doc.poses : [];
+      const ps = list.find((p) => p.id === id);
+      if (!ps) return false;
+      if (list.some((p) => p.id !== id && p.name && p.name.toLowerCase() === low)) return false;
+      ps.name = clean;
+      return true;
+    }) !== false;
+  }
+  function removePose(id) {
+    const ps = findPose(id);
+    if (!ps) return false;
+    const ok = App.change(T('asm.poseRemovedUndo', { name: ps.name }), (doc) => {
+      doc.poses = (doc.poses || []).filter((p) => p.id !== ps.id);
+      return true;
+    }) !== false;
+    if (ok) UI.toast(T('asm.poseRemovedToast', { name: ps.name }), { icon: 'info', ms: 2000 });
+    return ok;
+  }
+  function applyPose(idOrName, opts = {}) {
+    const ps = findPose(idOrName);
+    if (!ps) return false;
+    if (typeof Joints !== 'undefined' && Joints.stopPlay) Joints.stopPlay();
+    const mj = movableJoints(App.doc);
+    if (!mj.some((j) => ps.states && ps.states[j.id])) {
+      if (!opts.silent) UI.toast(T('asm.poseMissingJoints'), { icon: 'warn' });
+      return false;
+    }
+    let res = null;
+    App.change(T('asm.poseAppliedUndo', { name: ps.name }), (doc) => {
+      res = Joints.applyStates(doc, ps.states, { live: doc === App.doc });
+      if (!res || !res.ok || res.applied === 0) return false;
+      return true;
+    });
+    if (res && res.jammed) {
+      if (!opts.silent) UI.toast(T('asm.poseJamErr'), { kind: 'bad' });
+      return false;
+    }
+    if (res && res.applied === 0 && res.locked > 0 && res.unchanged === 0) {
+      if (!opts.silent) UI.toast(T('asm.poseLockedErr'), { icon: 'lock' });
+      return false;
+    }
+    if (!opts.silent) UI.toast(T('asm.poseAppliedToast', { name: ps.name }), { icon: 'check', ms: 2000 });
+    return true;
+  }
+  function defaultPoseName(doc = App.doc) {
+    const existing = new Set(poses(doc).map((p) => p.name.toLowerCase()));
+    const suggestions = String(T('asm.poseDefaults') || 'auf,zu,halb').split(',').map((s) => s.trim()).filter(Boolean);
+    for (const s of suggestions) {
+      if (!existing.has(s.toLowerCase())) return s;
+    }
+    return T('asm.poseDefaultN', { n: poses(doc).length + 1 });
+  }
+  async function promptSavePose() {
+    if (!movableJoints().length) {
+      UI.toast(T('asm.poseNoJointsSave'), { icon: 'info' });
+      return null;
+    }
+    const n = await UI.prompt(T('asm.posePromptTitle'), T('asm.posePromptLabel'), defaultPoseName(), T('common.save'));
+    if (!n || !n.trim()) return null;
+    return savePose(n.trim());
+  }
+  function poseTreeSection() {
+    const mjs = movableJoints();
+    const psList = poses();
+    if (!mjs.length && !psList.length) return null;
+    const head = h('div', { class: 'section-h', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, h('span', null, T('asm.posesHeading')));
+    if (mjs.length) {
+      const addBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-pose-save', 'data-help': 'namedPoses' });
+      addBtn.innerHTML = icon('plus') + esc(T('asm.poseSaveShort'));
+      addBtn.onclick = (e) => { e.stopPropagation(); promptSavePose(); };
+      head.append(addBtn);
+    }
+    const sec = h('div', { class: 'datum-tree pose-tree', id: 'pose-tree', 'data-help': 'namedPoses' }, head);
+    if (!psList.length) {
+      sec.append(h('div', { class: 'hint-box' }, T('asm.posesEmptyHint')));
+      return sec;
+    }
+    for (const ps of psList) {
+      const act = isPoseActive(ps);
+      const row = h('div', {
+        class: 'tree-row pose-row' + (act ? ' sel' : ''),
+        tabindex: '0',
+        role: 'button',
+        'aria-pressed': act ? 'true' : 'false',
+        dataset: { pose: ps.id, poseName: ps.name },
+      });
+      const ic = h('span', { class: 'swatch pose' }); ic.innerHTML = icon(act ? 'check' : 'hinge');
+      const upd = h('button', { type: 'button', class: 'pose-upd', 'aria-label': T('asm.poseUpdateTip'), 'data-tip': T('asm.poseUpdateTip') });
+      upd.innerHTML = icon('save');
+      upd.onclick = (e) => { e.stopPropagation(); updatePose(ps.id); };
+      const del = h('button', { type: 'button', class: 'j-del pose-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); removePose(ps.id); };
+      row.append(
+        ic,
+        h('span', { class: 'nm', title: ps.name }, ps.name),
+        h('span', { class: 'sub mono' }, poseSummary(ps)),
+        h('span', { class: 'm-acts' }, upd, del)
+      );
+      row.onclick = () => applyPose(ps.id);
+      row.addEventListener('keydown', (e) => {
+        if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); applyPose(ps.id); }
+      });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'play', label: T('asm.poseApplyMenu'), run: () => applyPose(ps.id) },
+          { icon: 'save', label: T('asm.poseUpdateMenu'), run: () => updatePose(ps.id) },
+          { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('asm.poseRenameTitle'), T('common.name'), ps.name, T('common.rename')); if (n && n.trim()) renamePose(ps.id, n); } },
+          '-',
+          { icon: 'trash', label: T('common.delete'), run: () => removePose(ps.id) },
+        ]);
+      });
+      sec.append(row);
+    }
+    return sec;
+  }
+  function poseSection(ctx = 'proj') {
+    const mjs = movableJoints();
+    const psList = poses();
+    if (!mjs.length && !psList.length) return null;
+    const sec = h('div', { class: 'section pose-sec', id: ctx + '-poses-sec', 'data-help': 'namedPoses' }, h('div', { class: 'section-h' }, T('asm.posesHeading')));
+    if (psList.length) {
+      const chips = h('div', { class: 'pose-chips' });
+      for (const ps of psList) {
+        const act = isPoseActive(ps);
+        const btn = h('button', {
+          type: 'button',
+          class: 'btn small pose-chip' + (act ? ' primary' : ''),
+          'aria-pressed': act ? 'true' : 'false',
+          dataset: { poseApply: ps.id, poseName: ps.name },
+        }, h('span', { class: 'pose-chip-nm' }, ps.name), h('span', { class: 'sub mono' }, poseSummary(ps)));
+        btn.onclick = () => applyPose(ps.id);
+        chips.append(btn);
+      }
+      sec.append(chips);
+    } else {
+      sec.append(h('div', { class: 'hint-box' }, T('asm.posesEmptyHint')));
+    }
+    if (mjs.length) {
+      const inp = h('input', {
+        type: 'text',
+        id: ctx + '-pose-name',
+        class: 'pose-name-inp',
+        placeholder: T('asm.poseNamePh'),
+        'aria-label': T('asm.posePromptLabel'),
+        autocomplete: 'off',
+        spellcheck: 'false',
+      });
+      const saveBtn = h('button', { type: 'button', class: 'btn small', id: ctx + '-pose-save' });
+      saveBtn.innerHTML = icon('plus') + esc(T('asm.poseSaveShort'));
+      const doSave = () => {
+        const nm = inp.value.trim();
+        if (nm) { savePose(nm); inp.value = ''; }
+        else promptSavePose();
+      };
+      saveBtn.onclick = doSave;
+      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
+      sec.append(h('div', { class: 'pose-save-row' }, inp, saveBtn));
+    }
+    return sec;
+  }
+
   function init() {
     App.on('clean', () => {
       if (App.doc) syncPartDoc(App.doc);
@@ -730,5 +1004,19 @@ const Assembly = (() => {
     moveExplodeStep,
     clearExplodeSteps,
     evalExplodeSteps,
+    movableJoints,
+    poses,
+    capturePoseStates,
+    isPoseActive,
+    activePose,
+    poseSummary,
+    savePose,
+    updatePose,
+    renamePose,
+    removePose,
+    applyPose,
+    promptSavePose,
+    poseTreeSection,
+    poseSection,
   };
 })();
