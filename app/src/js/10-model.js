@@ -48,6 +48,8 @@ const KINDS = {
   circlipGroove: { get label() { return T('kind.circlipGroove'); }, params: [] },
   keyway: { get label() { return T('kind.keyway'); }, params: [] },
   splineProfile: { get label() { return T('kind.splineProfile'); }, params: [] },
+  knurl: { get label() { return T('kind.knurl'); }, params: [] },
+  gripPattern: { get label() { return T('kind.gripPattern'); }, params: [] },
   sketch3d: { get label() { return T('kind.sketch3d'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
 };
@@ -482,6 +484,8 @@ const Model = (() => {
       if (it.kind === 'circlipGroove' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Einstich an' });
       if (it.kind === 'keyway' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Passfeder-Nut in' });
       if (it.kind === 'splineProfile' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Keilwellen-Profil an' });
+      if (it.kind === 'knurl' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rändel an' });
+      if (it.kind === 'gripPattern' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Griffmuster auf' });
       if (it.kind === 'lipGroove' && it.p) {
         if (it.p.lipTarget) out.push({ from: me, to: top(it.p.lipTarget), what: 'Lippe an' });
         if (it.p.grooveTarget) out.push({ from: me, to: top(it.p.grooveTarget), what: 'Nut in' });
@@ -780,6 +784,42 @@ const Model = (() => {
           from: p.from === 'bottom' ? 'bottom' : 'top',
           offset: Math.max(0, num(p.offset, ownV, 0)),
           angle: num(p.angle, ownV, 0),
+        };
+      } else if (it.kind === 'knurl') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          style: p.style === 'straight' || p.style === 'angled' ? p.style : 'crossed',
+          pitch: num(p.pitch, ownV, 1.0),
+          depth: num(p.depth, ownV, 0.38),
+          angle: num(p.angle, ownV, 30),
+          length: Math.max(0, num(p.length, ownV, 0)),
+          from: p.from === 'top' || p.from === 'bottom' ? p.from : 'center',
+          offset: num(p.offset, ownV, 0),
+          margin: Math.max(0, num(p.margin, ownV, 0)),
+        };
+      } else if (it.kind === 'gripPattern') {
+        const p = it.p || {};
+        const kind = p.kind === 'bumps' ? 'bumps' : 'grooves';
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          kind,
+          mode: p.mode === 'join' || p.mode === 'cut' ? p.mode : (kind === 'bumps' ? 'join' : 'cut'),
+          profile: p.profile === 'round' || p.profile === 'rect' ? p.profile : 'v',
+          dir: p.dir === 'axial' ? 'axial' : 'ring',
+          layout: p.layout === 'grid' ? 'grid' : 'staggered',
+          shape: p.shape === 'cone' || p.shape === 'cyl' ? p.shape : 'dome',
+          pitch: num(p.pitch, ownV, kind === 'bumps' ? 3.5 : 2.5),
+          width: num(p.width, ownV, 1.2),
+          size: num(p.size, ownV, 2.0),
+          depth: num(p.depth, ownV, 0.8),
+          margin: Math.max(0, num(p.margin, ownV, 2)),
+          angle: num(p.angle, ownV, 0),
+          length: Math.max(0, num(p.length, ownV, 0)),
+          from: p.from === 'top' || p.from === 'bottom' ? p.from : 'center',
+          offset: num(p.offset, ownV, 0),
         };
       }
       else {
@@ -2185,6 +2225,8 @@ const Model = (() => {
       case 'circlipGroove': return `${(it.p && it.p.norm) === 'din472' ? 'DIN 472' : 'DIN 471'} · Ø ${f(p.grooveD ?? 19)}${u} × ${f(p.width ?? 1.3)}${u}`;
       case 'keyway': return `DIN 6885 · ${f(p.width ?? 6)} × ${f(p.length ?? 20)}${u}`;
       case 'splineProfile': return `DIN ISO 14 · ${Math.round(p.teeth ?? 6)}×${f(p.rootD ?? 16)}${u}`;
+      case 'knurl': return `${(it.p && it.p.style) === 'straight' ? 'Gerade' : (it.p && it.p.style) === 'angled' ? 'Schräg' : 'Gekreuzt'} · t ${f(p.pitch ?? 1)}${u}`;
+      case 'gripPattern': return (it.p && it.p.kind) === 'bumps' ? `Noppen · Ø ${f(p.size ?? 2)}${u}` : `Rillen · ${f(p.pitch ?? 2.5)}${u}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'deform': {
         const dm = (it.p && it.p.mode) || 'bend';
@@ -2385,7 +2427,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'fillPattern' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || s.item.kind === 'undercut' || s.item.kind === 'circlipGroove' || s.item.kind === 'keyway' || s.item.kind === 'splineProfile' || s.item.kind === 'knurl' || s.item.kind === 'gripPattern' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

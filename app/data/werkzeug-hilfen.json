@@ -1603,5 +1603,15 @@
     "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
     "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
     "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
+  },
+  "knurl": {
+    "tip": "Gerades, gekreuztes oder schräges Rändel auf einen Zylindermantel schneiden (Profi)",
+    "hilfe": "Wähle den Außenmantel eines Zylinders oder einer Welle und klicke auf „Rändel“. Du kannst zwischen gekreuztem Rändel (Diamantmuster), geraden Rillen und schrägen Rillen wählen sowie Teilung, Tiefe, Winkel und Länge exakt festlegen.",
+    "tipp": "Der maximale Außendurchmesser bleibt beim Rändeln erhalten – die Spitzen liegen genau auf dem ursprünglichen Zylindermantel."
+  },
+  "gripPattern": {
+    "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
+    "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",
+    "tipp": "Mit „Randabstand“ und „Länge“ grenzt du den Griffbereich sauber gegen Kanten und Schultern ab."
   }
 }

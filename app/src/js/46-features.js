@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2016,7 +2016,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -4500,7 +4500,7 @@ const Features = (() => {
       x && !ex.has(x.id) && x.role !== 'hole' && !x.suppressed
       && !(x.kind === 'group' && x.p && x.p.assembly)
       && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss'
-      && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile'
+      && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern'
       && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d'
       && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform'
       && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))
@@ -5181,6 +5181,297 @@ const Features = (() => {
     sec.append(row, h('div', { class: 'hint-box', html: 'Schneidet ein geradflankiges Keilwellen-Profil nach DIN ISO 14 in die gewählte Welle oder Nabenbohrung (Länge 0 = über die gesamte Zylinderlänge).' }));
   }
 
+  // ---------- Rändel & Griffmuster (KP-50) ----------
+  function knurl(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Rändel gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const ctx = resolveCylForStep(face);
+    if (!ctx) { startKnurl(opts); return null; }
+    if (ctx.isInner) {
+      UI.toast('Rändel funktioniert auf der Außenfläche (Mantel) eines Zylinders.', { icon: 'info' });
+      return null;
+    }
+    const style = opts.style === 'straight' || opts.style === 'angled' ? opts.style : 'crossed';
+    const pitch = opts.pitch ?? 1.0;
+    const autoDepth = opts.autoDepth ?? (opts.depth == null);
+    const depth = opts.depth ?? round(Math.max(0.1, (Number(pitch) || 1.0) * 0.38), 3);
+    const p = {
+      target: ctx.tgt.id,
+      face: ctx.faceSpec,
+      style,
+      pitch,
+      depth,
+      autoDepth,
+      angle: opts.angle ?? 30,
+      length: opts.length ?? 0,
+      from: opts.from === 'top' || opts.from === 'bottom' ? opts.from : 'center',
+      offset: opts.offset ?? 0,
+      margin: opts.margin ?? 0,
+    };
+    let step;
+    App.change('Rändel angelegt', (doc) => {
+      step = Model.newItem('knurl', p, { name: opts.name || T('kind.knurl'), color: ctx.tgt.color, role: 'solid', mat: ctx.tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      const stTxt = style === 'straight' ? 'Gerade' : style === 'angled' ? 'Schräg' : 'Gekreuzt';
+      UI.toast(`Rändel (${stTxt}, Teilung ${fmt(Number(pitch) || 1, 2)} mm) angelegt.`, { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startKnurl(opts = {}) {
+    return startCylStep(T('kind.knurl'), '<b>Rändel:</b> Klick auf die Mantelfläche eines Zylinders. <b>Esc</b> bricht ab.', knurl, null, opts);
+  }
+  function renderKnurl(it, sec, setP) {
+    const p = it.p || {};
+    const style = p.style === 'straight' || p.style === 'angled' ? p.style : 'crossed';
+    const res = App.resolvedOf ? App.resolvedOf(it.id) : null;
+    const dFace = p.face && p.face.r ? round(2 * p.face.r, 3) : 20;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'kn-style', label: 'Rändel-Art', value: style,
+      options: [['crossed', 'Gekreuzt (Diamant)'], ['straight', 'Gerade (achsparallel)'], ['angled', 'Schräg (geneigt)']],
+      onChange: (v) => setP('style', v),
+    }));
+    fl.append(UI.numField({
+      id: 'kn-pitch', label: 'Teilung (t)', value: p.pitch ?? 1.0, min: 0.3, unit: 'mm',
+      onCommit: (v) => App.change('Rändel-Teilung geändert', (doc) => {
+        const f = Model.find(doc, it.id).item;
+        f.p.pitch = v;
+        if (f.p.autoDepth !== false) {
+          const pv = Model.num(v, Model.vars(doc).v, 1.0);
+          if (pv > 0) f.p.depth = round(Math.max(0.08, pv * 0.38), 3);
+        }
+      }),
+    }));
+    fl.append(UI.numField({
+      id: 'kn-depth', label: 'Rändeltiefe', value: p.depth ?? 0.38, min: 0.05, unit: 'mm',
+      onCommit: (v) => App.change('Rändeltiefe geändert', (doc) => {
+        const f = Model.find(doc, it.id).item;
+        f.p.depth = v;
+        f.p.autoDepth = false;
+      }),
+    }));
+    if (style !== 'straight') {
+      fl.append(UI.numField({ id: 'kn-angle', label: 'Schrägungswinkel', value: p.angle ?? 30, min: 10, max: 60, unit: '°', onCommit: (v) => setP('angle', v) }));
+    }
+    fl.append(
+      UI.numField({ id: 'kn-length', label: 'Länge (0 = ganz)', value: p.length ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('length', v) }),
+      UI.selectField({ id: 'kn-from', label: 'Lage längs', value: p.from === 'top' || p.from === 'bottom' ? p.from : 'center', options: [['center', 'Mittig'], ['top', 'Von Ende 1 (oben)'], ['bottom', 'Von Ende 2 (unten)']], onChange: (v) => setP('from', v) }),
+      UI.numField({ id: 'kn-offset', label: 'Versatz längs', value: p.offset ?? 0, unit: 'mm', onCommit: (v) => setP('offset', v) }),
+      UI.numField({ id: 'kn-margin', label: 'Randabstand', value: p.margin ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('margin', v) }),
+    );
+    sec.append(fl);
+    const infoLeft = `DIN 82 · Ø ${Units.fmtLenU(dFace, 1)}`;
+    const infoRight = res && res.teeth ? `${res.teeth} Zähne${res.rows > 1 ? ` × ${res.rows}` : ''}` : (style === 'straight' ? 'Gerade' : style === 'angled' ? 'Schräg' : 'Gekreuzt');
+    sec.append(h('div', { class: 'mini-row', id: 'kn-info' }, h('span', { class: 'grow' }, infoLeft), h('b', { class: 'mono' }, infoRight)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'kn-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickStepCylFace(it.id, 'Zylinderfläche für Rändel gewählt');
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'kn-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Erzeugt ein griffiges Rändel direkt auf dem Zylindermantel (Außen-Ø bleibt exakt erhalten). Länge 0 = über die gesamte Mantellänge.' }));
+  }
+
+  function resolveGripFace(face = null) {
+    const f = face && face.id != null && face.idx != null ? face : Actions.selectedFace();
+    if (!f || !f.info) return null;
+    if (f.info.t === 'PLANE') {
+      const tgt = resolveTopTarget(f.id);
+      const sig = faceSigOf(f);
+      if (!tgt || tgt.role === 'hole' || !sig) return null;
+      return { isCyl: false, face: f, tgt, faceSpec: sig, isInner: false };
+    }
+    if (f.info.t === 'CYLINDRE') {
+      const ctx = resolveCylForStep(f);
+      if (!ctx) return null;
+      return { isCyl: true, face: ctx.face, tgt: ctx.tgt, faceSpec: ctx.faceSpec, isInner: ctx.isInner };
+    }
+    return null;
+  }
+  function pickGripFace(stepId, hintHtml, onPick) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && (fi.t === 'PLANE' || fi.t === 'CYLINDRE')) {
+          const info = resolveGripFace({ id: hit.id, idx: hit.faceIdx, info: fi });
+          if (info) {
+            if (info.isInner) {
+              UI.toast('Griffmuster funktioniert auf ebenen Flächen und äußeren Zylindermänteln.', { icon: 'info' });
+              return;
+            }
+            stopPick();
+            onPick(info);
+            return;
+          }
+        }
+      }
+      UI.toast('Bitte klick auf eine ebene Fläche oder einen Zylindermantel.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      const ok = fi && (fi.t === 'PLANE' || fi.t === 'CYLINDRE');
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(hintHtml);
+  }
+  function gripPattern(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Griffmuster gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const ctx = resolveGripFace(face);
+    if (!ctx) { startGripPattern(opts); return null; }
+    if (ctx.isInner) {
+      UI.toast('Griffmuster funktioniert auf ebenen Flächen und äußeren Zylindermänteln.', { icon: 'info' });
+      return null;
+    }
+    const kind = opts.kind === 'bumps' ? 'bumps' : 'grooves';
+    const mode = opts.mode === 'join' || opts.mode === 'cut' ? opts.mode : (kind === 'bumps' ? 'join' : 'cut');
+    const p = {
+      target: ctx.tgt.id,
+      face: ctx.faceSpec,
+      kind,
+      mode,
+      profile: opts.profile === 'round' || opts.profile === 'rect' ? opts.profile : 'v',
+      dir: opts.dir === 'axial' ? 'axial' : 'ring',
+      layout: opts.layout === 'grid' ? 'grid' : 'staggered',
+      shape: opts.shape === 'cone' || opts.shape === 'cyl' ? opts.shape : 'dome',
+      pitch: opts.pitch ?? (kind === 'bumps' ? (ctx.isCyl ? 4.0 : 3.5) : 2.5),
+      width: opts.width ?? 1.2,
+      size: opts.size ?? 2.0,
+      depth: opts.depth ?? 0.8,
+      margin: opts.margin ?? (ctx.isCyl && kind === 'bumps' ? 2.5 : 2),
+      angle: opts.angle ?? 0,
+      length: opts.length ?? 0,
+      from: opts.from === 'top' || opts.from === 'bottom' ? opts.from : 'center',
+      offset: opts.offset ?? 0,
+    };
+    let step;
+    App.change('Griffmuster angelegt', (doc) => {
+      step = Model.newItem('gripPattern', p, { name: opts.name || T('kind.gripPattern'), color: ctx.tgt.color, role: 'solid', mat: ctx.tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(`Griffmuster (${kind === 'bumps' ? 'Noppen' : 'Rillen'}) angelegt.`, { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startGripPattern(opts = {}) {
+    if (App.ctx) { UI.toast('Griffmuster gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für ein Griffmuster braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const ctx = resolveGripFace();
+    if (ctx && !ctx.isInner) { gripPattern(ctx.face, opts); return true; }
+    pickGripFace(null, '<b>Griffmuster:</b> Klick auf eine ebene Fläche oder einen Zylindermantel. <b>Esc</b> bricht ab.', (info) => { gripPattern(info.face, opts); });
+    return true;
+  }
+  function pickGripPatternFace(stepId) {
+    pickGripFace(stepId, '<b>Fläche für Griffmuster wählen:</b> Klick auf eine ebene Fläche oder einen Zylindermantel. <b>Esc</b> bricht ab.', (info) => {
+      App.change('Fläche für Griffmuster gewählt', (doc) => {
+        const f = Model.find(doc, stepId); if (!f) return false;
+        f.item.p.target = info.tgt.id;
+        f.item.p.face = info.faceSpec;
+      });
+      UI.toast('Fläche aktualisiert.', { icon: 'check' });
+    });
+  }
+  function renderGripPattern(it, sec, setP) {
+    const p = it.p || {};
+    const kind = p.kind === 'bumps' ? 'bumps' : 'grooves';
+    const mode = p.mode === 'join' || p.mode === 'cut' ? p.mode : (kind === 'bumps' ? 'join' : 'cut');
+    const isCyl = !!(p.face && p.face.t === 'CYLINDRE');
+    const res = App.resolvedOf ? App.resolvedOf(it.id) : null;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'gp-kind', label: 'Muster-Art', value: kind,
+      options: [['grooves', 'Rillen'], ['bumps', 'Noppen']],
+      onChange: (v) => App.change('Griffmuster-Art geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        item.p.kind = v === 'bumps' ? 'bumps' : 'grooves';
+        item.p.mode = item.p.kind === 'bumps' ? 'join' : 'cut';
+        if (item.p.kind === 'bumps' && (Number(item.p.pitch) || 0) <= 2.6) item.p.pitch = isCyl ? 4.0 : 3.5;
+        if (item.p.kind === 'grooves' && (Number(item.p.pitch) || 0) >= 3.4) item.p.pitch = 2.5;
+      }),
+    }));
+    fl.append(UI.selectField({
+      id: 'gp-mode', label: 'Ausführung', value: mode,
+      options: [['cut', 'Vertieft (eingeschnitten)'], ['join', 'Erhaben (aufgesetzt)']],
+      onChange: (v) => setP('mode', v),
+    }));
+    if (kind === 'grooves') {
+      if (isCyl) {
+        fl.append(UI.selectField({
+          id: 'gp-dir', label: 'Richtung', value: p.dir === 'axial' ? 'axial' : 'ring',
+          options: [['ring', 'Ringrillen (umlaufend)'], ['axial', 'Längsrillen (achsparallel)']],
+          onChange: (v) => setP('dir', v),
+        }));
+      }
+      fl.append(UI.selectField({
+        id: 'gp-profile', label: 'Profil', value: p.profile === 'round' || p.profile === 'rect' ? p.profile : 'v',
+        options: [['v', 'V-Profil'], ['round', 'Rund'], ['rect', 'Rechteck']],
+        onChange: (v) => setP('profile', v),
+      }));
+      fl.append(
+        UI.numField({ id: 'gp-width', label: 'Rillenbreite', value: p.width ?? 1.2, min: 0.2, unit: 'mm', onCommit: (v) => setP('width', v) }),
+        UI.numField({ id: 'gp-pitch', label: 'Teilung / Abstand', value: p.pitch ?? 2.5, min: 0.4, unit: 'mm', onCommit: (v) => setP('pitch', v) }),
+        UI.numField({ id: 'gp-depth', label: mode === 'join' ? 'Höhe' : 'Tiefe', value: p.depth ?? 0.8, min: 0.1, unit: 'mm', onCommit: (v) => setP('depth', v) }),
+      );
+    } else {
+      fl.append(UI.selectField({
+        id: 'gp-shape', label: 'Noppenform', value: p.shape === 'cone' || p.shape === 'cyl' ? p.shape : 'dome',
+        options: [['dome', 'Halbkugel (Kuppe)'], ['cone', 'Kegel'], ['cyl', 'Zylinder']],
+        onChange: (v) => setP('shape', v),
+      }));
+      fl.append(UI.selectField({
+        id: 'gp-layout', label: 'Anordnung', value: p.layout === 'grid' ? 'grid' : 'staggered',
+        options: [['staggered', 'Versetzt'], ['grid', 'Raster']],
+        onChange: (v) => setP('layout', v),
+      }));
+      fl.append(
+        UI.numField({ id: 'gp-size', label: 'Noppen-Ø', value: p.size ?? 2.0, min: 0.4, unit: 'mm', onCommit: (v) => setP('size', v) }),
+        UI.numField({ id: 'gp-pitch', label: 'Mittenabstand', value: p.pitch ?? (isCyl ? 4.0 : 3.5), min: 0.6, unit: 'mm', onCommit: (v) => setP('pitch', v) }),
+        UI.numField({ id: 'gp-depth', label: mode === 'join' ? 'Höhe' : 'Tiefe', value: p.depth ?? 0.8, min: 0.1, unit: 'mm', onCommit: (v) => setP('depth', v) }),
+      );
+    }
+    fl.append(UI.numField({ id: 'gp-margin', label: 'Randabstand', value: p.margin ?? 2, min: 0, unit: 'mm', onCommit: (v) => setP('margin', v) }));
+    if (!isCyl) {
+      fl.append(UI.numField({ id: 'gp-angle', label: 'Drehwinkel', value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }));
+    } else {
+      fl.append(
+        UI.numField({ id: 'gp-length', label: 'Länge (0 = ganz)', value: p.length ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('length', v) }),
+        UI.selectField({ id: 'gp-from', label: 'Lage längs', value: p.from === 'top' || p.from === 'bottom' ? p.from : 'center', options: [['center', 'Mittig'], ['top', 'Von Ende 1 (oben)'], ['bottom', 'Von Ende 2 (unten)']], onChange: (v) => setP('from', v) }),
+        UI.numField({ id: 'gp-offset', label: 'Versatz längs', value: p.offset ?? 0, unit: 'mm', onCommit: (v) => setP('offset', v) }),
+      );
+    }
+    sec.append(fl);
+    const cntTxt = res && res.count != null ? `${res.count}×` : '–';
+    sec.append(h('div', { class: 'mini-row', id: 'gp-info' }, h('span', { class: 'grow' }, `${isCyl ? 'Zylinder' : 'Fläche'} · ${kind === 'bumps' ? 'Noppen' : 'Rillen'}`), h('b', { class: 'mono' }, cntTxt)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'gp-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickGripPatternFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'gp-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Legt rutschfeste Rillen oder Noppen (erhaben oder vertieft) auf ebenen Flächen oder Zylindermänteln an.' }));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, pickStepCylFace };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace };
 })();

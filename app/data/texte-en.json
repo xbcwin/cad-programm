@@ -3383,5 +3383,13 @@
   "sil.scopeAll": "{n} bodies",
   "sil.scopeSel": "{n} selected",
   "sil.dimsInfo": "Projection {size} · {scope}",
-  "sil.hint": "Projected area in viewing direction (frontal drag area / cross-section)."
+  "sil.hint": "Projected area in viewing direction (frontal drag area / cross-section).",
+  "kind.knurl": "Knurl",
+  "kind.gripPattern": "Grip Pattern",
+  "ctx.knurl": "Knurl",
+  "ctx.knurlTip": "Cut straight, diamond (crossed), or angled knurling onto this cylindrical face",
+  "ctx.gripPattern": "Grip Pattern",
+  "ctx.gripPatternTip": "Add ribbed grooves or bumpy grip dots onto this planar or cylindrical face",
+  "dlg.tb.knurlTip": "Add straight, crossed, or angled knurling to a cylinder",
+  "dlg.tb.gripPatternTip": "Add groove or bump grip pattern to a planar or cylindrical face"
 }

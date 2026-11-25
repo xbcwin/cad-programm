@@ -26436,6 +26436,242 @@ def t_a133_vergleich_schattenriss(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a131_raendel_griffmuster(p):
+    # [A-131] Rändel (gerade, gekreuzt, Teilung) und Griffmuster (Rillen, Noppen) (KP-50)
+    p.empty()
+    p.ev("if (ViewPrefs.simple) ViewPrefs.setLevel('pro');")
+    p.pg.wait_for_timeout(120)
+
+    # 1. Zylinder d=20, h=20 mit gekreuztem Rändel Teilung 1 über Kontextleiste
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'GriffWelle', p: { d: 20, h: 20 } });
+    window.__knCyl = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    m0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__knCyl));")
+    p.ev("""
+    const fs = App.results.get(window.__knCyl).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    App.select([window.__knCyl], { face: { id: window.__knCyl, faceIdx: ci, info: fs[ci] } });
+    """)
+    p.pg.wait_for_timeout(120)
+
+    # Im Einfach-Modus verborgen, im Profi-Modus sichtbar
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.pg.wait_for_timeout(100)
+    simple_hidden = (not p.pg.locator('#ctx-knurl').is_visible()) and (not p.pg.locator('#ctx-grip-pattern').is_visible())
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.pg.wait_for_timeout(100)
+    pro_vis = p.pg.locator('#ctx-knurl').is_visible() and p.pg.locator('#ctx-grip-pattern').is_visible()
+
+    p.pg.locator('#ctx-knurl').click()
+    warte_rechnen(p, 40)
+    kn1 = p.ev("""return (async () => {
+      const st = App.doc.items.find(x => x.kind === 'knurl');
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__knCyl);
+      const gc = await GeomCheck.run();
+      const deps = st ? Model.dependencies(App.doc).filter(d => d.from === st.id && d.to === window.__knCyl) : [];
+      return {
+        id: st?.id, style: st?.p?.style, pitch: st?.p?.pitch,
+        area: part?.area || 0, vol: part?.volume || 0, bbox: part?.bbox || null,
+        errs: App.errors.length, geomErrs: gc.issues.length, depCount: deps.length
+      };
+    })();""")
+    dx1 = (kn1['bbox'][3] - kn1['bbox'][0]) if kn1['bbox'] else 0
+    dy1 = (kn1['bbox'][4] - kn1['bbox'][1]) if kn1['bbox'] else 0
+
+    # Unterdrücken & Rückgängig prüfen
+    p.ev("Timeline.toggleSuppress(App.doc.items.find(x=>x.kind==='knurl').id);")
+    warte_rechnen(p, 30)
+    m_supp = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__knCyl));")
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 30)
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    kn_after_undo = p.ev("return App.doc.items.filter(x=>x.kind==='knurl').length;")
+    ok1 = (
+        simple_hidden and pro_vis
+        and kn1['style'] == 'crossed' and abs(kn1['pitch'] - 1.0) < 0.01
+        and kn1['area'] > m0['area'] * 1.05
+        and 19.8 <= dx1 <= 20.001 and 19.8 <= dy1 <= 20.001
+        and kn1['errs'] == 0 and kn1['geomErrs'] == 0 and kn1['depCount'] >= 1
+        and abs(m_supp['area'] - m0['area']) < 0.2 and kn_after_undo == 0
+    )
+
+    # 2. Gerades & schräges Rändel + Teil-Rändel auf abgesetzter Welle
+    p.ev("""
+    const fs = App.results.get(window.__knCyl).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    Features.knurl({ id: window.__knCyl, idx: ci, info: fs[ci] });
+    """)
+    warte_rechnen(p, 40)
+    p.pg.select_option('#kn-style', 'straight')
+    warte_rechnen(p, 30)
+    kn_str = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__knCyl);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, bbox: part?.bbox || null, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.pg.select_option('#kn-style', 'angled')
+    warte_rechnen(p, 30)
+    field(p, '#kn-pitch', 1.2)
+    warte_rechnen(p, 30)
+    kn_ang = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__knCyl);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, bbox: part?.bbox || null, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+
+    # Abgesetzte Welle (d=30 Flansch unten + d=20 Schaft) mit Teil-Rändel (Länge 12, gerade)
+    p.ev("""
+    App.setDoc(Model.newDoc());
+    Actions.addPrimitive('cylinder', { name: 'Schaft', p: { d: 20, h: 20 } });
+    window.__sh = App.doc.items[App.doc.items.length - 1].id;
+    Actions.addPrimitive('cylinder', { name: 'Flansch', p: { d: 30, h: 4 }, pos: [0, 0, -4] });
+    const fl = App.doc.items[App.doc.items.length - 1];
+    Actions.setOp(fl.id, 'join', window.__sh);
+    """)
+    warte_rechnen(p, 25)
+    m_sh0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__sh));")
+    p.ev("""
+    const fs = App.results.get(window.__sh).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    Features.knurl({ id: window.__sh, idx: ci, info: fs[ci] }, { style: 'crossed', pitch: 1.5, length: 12, margin: 2 });
+    """)
+    warte_rechnen(p, 35)
+    kn_step = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__sh);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    dx_s = (kn_str['bbox'][3] - kn_str['bbox'][0]) if kn_str['bbox'] else 0
+    dx_a = (kn_ang['bbox'][3] - kn_ang['bbox'][0]) if kn_ang['bbox'] else 0
+    ok2 = (
+        kn_str['area'] > m0['area'] * 1.05 and 19.8 <= dx_s <= 20.001 and kn_str['errs'] == 0 and kn_str['geomErrs'] == 0
+        and kn_ang['area'] > m0['area'] * 1.05 and 19.8 <= dx_a <= 20.001 and kn_ang['errs'] == 0 and kn_ang['geomErrs'] == 0
+        and kn_step['area'] > m_sh0['area'] * 1.02 and kn_step['errs'] == 0 and kn_step['geomErrs'] == 0
+    )
+
+    # 3. Griffmuster: Rillen (eben + Ringrillen auf Zylinder)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("""
+    Actions.addPrimitive('box', { name: 'GriffPlatte', p: { w: 40, d: 30, h: 10 } });
+    window.__gpBox = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    mb0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__gpBox));")
+    p.ev("""
+    const fs = App.results.get(window.__gpBox).data.faces;
+    const fi = fs.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+    App.select([window.__gpBox], { face: { id: window.__gpBox, faceIdx: fi, info: fs[fi] } });
+    """)
+    p.pg.wait_for_timeout(120)
+    p.pg.locator('#ctx-grip-pattern').click()
+    warte_rechnen(p, 25)
+    gp_cut = p.ev("""return (async () => {
+      const st = App.doc.items.find(x => x.kind === 'gripPattern');
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__gpBox);
+      const gc = await GeomCheck.run();
+      return { kind: st?.p?.kind, mode: st?.p?.mode, area: part?.area || 0, vol: part?.volume || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.pg.select_option('#gp-profile', 'round')
+    warte_rechnen(p, 25)
+    p.pg.select_option('#gp-mode', 'join')
+    warte_rechnen(p, 25)
+    gp_join = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__gpBox);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, vol: part?.volume || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    p.ev("""
+    Actions.addPrimitive('cylinder', { name: 'GriffZyl', p: { d: 20, h: 25 }, pos: [50, 0, 0] });
+    window.__gpCyl = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    mc0 = p.ev("return Mass.measure().then(m => Mass.partOf(m, window.__gpCyl));")
+    p.ev("""
+    const fs = App.results.get(window.__gpCyl).data.faces;
+    const ci = fs.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    Features.gripPattern({ id: window.__gpCyl, idx: ci, info: fs[ci] }, { kind: 'grooves', dir: 'ring', mode: 'cut', pitch: 2.5, width: 1.2, depth: 0.8, margin: 2 });
+    """)
+    warte_rechnen(p, 25)
+    gp_cyl_ring = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const part = Mass.partOf(ms, window.__gpCyl);
+      const gc = await GeomCheck.run();
+      return { area: part?.area || 0, vol: part?.volume || 0, errs: App.errors.length, geomErrs: gc.issues.length };
+    })();""")
+    ok3 = (
+        gp_cut['kind'] == 'grooves' and gp_cut['mode'] == 'cut'
+        and gp_cut['area'] > mb0['area'] and gp_cut['vol'] < mb0['volume'] and gp_cut['errs'] == 0 and gp_cut['geomErrs'] == 0
+        and gp_join['area'] > mb0['area'] and gp_join['vol'] > mb0['volume'] and gp_join['errs'] == 0 and gp_join['geomErrs'] == 0
+        and gp_cyl_ring['area'] > mc0['area'] and gp_cyl_ring['vol'] < mc0['volume'] and gp_cyl_ring['errs'] == 0 and gp_cyl_ring['geomErrs'] == 0
+    )
+
+    # 4. Griffmuster: Noppen (eben + Zylindermantel)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(250)
+    p.ev("""
+    Actions.addPrimitive('box', { name: 'NoppenPlatte', p: { w: 30, d: 20, h: 8 } });
+    window.__nbBox = App.doc.items[App.doc.items.length - 1].id;
+    Actions.addPrimitive('cylinder', { name: 'NoppenZyl', p: { d: 20, h: 25 }, pos: [45, 0, 0] });
+    window.__nbCyl = App.doc.items[App.doc.items.length - 1].id;
+    """)
+    warte_rechnen(p)
+    mnb0 = p.ev("return Mass.measure().then(m => ({ b: Mass.partOf(m, window.__nbBox), c: Mass.partOf(m, window.__nbCyl) }));")
+    p.ev("""
+    const fsB = App.results.get(window.__nbBox).data.faces;
+    const fiB = fsB.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+    window.__stNbBox = Features.gripPattern({ id: window.__nbBox, idx: fiB, info: fsB[fiB] }, { kind: 'bumps', shape: 'dome', layout: 'staggered', mode: 'join', size: 2, pitch: 4, depth: 0.8, margin: 2 })?.id;
+    const fsC = App.results.get(window.__nbCyl).data.faces;
+    const ciC = fsC.findIndex(f => f.t === 'CYLINDRE' && Math.abs(f.r - 10) < 0.05);
+    window.__stNbCyl = Features.gripPattern({ id: window.__nbCyl, idx: ciC, info: fsC[ciC] }, { kind: 'bumps', shape: 'dome', layout: 'staggered', mode: 'join', size: 2, pitch: 5, depth: 0.8, margin: 3 })?.id;
+    """)
+    warte_rechnen(p, 35)
+    nb_res = p.ev("""return (async () => {
+      const ms = await Mass.measure();
+      const b = Mass.partOf(ms, window.__nbBox);
+      const c = Mass.partOf(ms, window.__nbCyl);
+      const gc = await GeomCheck.run();
+      return {
+        bArea: b?.area || 0, bVol: b?.volume || 0,
+        cArea: c?.area || 0, cVol: c?.volume || 0,
+        errs: App.errors.length, geomErrs: gc.issues.length
+      };
+    })();""")
+    ok4 = (
+        nb_res['bArea'] > mnb0['b']['area'] and nb_res['bVol'] > mnb0['b']['volume']
+        and nb_res['cArea'] > mnb0['c']['area'] and nb_res['cVol'] > mnb0['c']['volume']
+        and nb_res['errs'] == 0 and nb_res['geomErrs'] == 0
+    )
+
+    # 5. Erklärungen, Befehle, Hilfetexte und i18n
+    meta = p.ev("""
+    const expKn = Explain.local((() => {
+      const it = Model.newItem('knurl', { target: window.__nbCyl, style: 'crossed', pitch: 1, depth: 0.38 });
+      App.doc.items.push(it); return it.id;
+    })());
+    const expGp = Explain.local(window.__stNbBox);
+    const cmdKn = Commands.search('rändel').some(c => c.id === 'knurl');
+    const cmdGp = Commands.search('griffmuster').some(c => c.id === 'grip-pattern');
+    return {
+      expKnOk: !!expKn && expKn.lines.some(l => l.k === 'op' && l.t.includes('Rändel')),
+      expGpOk: !!expGp && expGp.lines.some(l => l.k === 'op' && l.t.includes('Griffmuster')),
+      cmdKn, cmdGp
+    };
+    """)
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('knurl', 'gripPattern'))
+    ok5 = meta['expKnOk'] and meta['expGpOk'] and meta['cmdKn'] and meta['cmdGp'] and i18n_ok and help_ok
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -26678,6 +26914,7 @@ TESTS = [
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
     ('[A-133] Vergleich zweier Versionen/Körper und Schattenriss-Fläche (PF-12, PF-15)', t_a133_vergleich_schattenriss),
+    ('[A-131] Rändel (gerade, gekreuzt, Teilung) und Griffmuster (Rillen, Noppen)', t_a131_raendel_griffmuster),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

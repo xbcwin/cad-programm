@@ -711,6 +711,8 @@ const IC = {
   dome: '<path d="M3 16h18v4H3z" opacity=".35" fill="currentColor"/><path d="M3 16h18v4H3z"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10" fill="currentColor" opacity=".2"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10"/>',
   undercut: '<path d="M4 6h7v4l3 2h6v6H4z" fill="currentColor" opacity=".2"/><path d="M4 6h7v4l3 2h6M4 18h16M11 6v4l3 2" />',
   circlipGroove: '<path d="M4 7h6v4h4V7h6v10H4z" fill="currentColor" opacity=".2"/><path d="M4 7h6v4h4V7h6M4 17h16" />',
+  knurl: '<rect x="5" y="4" width="14" height="16" rx="1.5" fill="currentColor" opacity=".15"/><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M5 9l5-5M5 15l10-10M8 20L19 9M14 20l5-5M19 9l-5-5M19 15L9 5M16 20L5 9M10 20l-5-5" opacity=".75"/>',
+  gripPattern: '<rect x="3" y="4" width="18" height="16" rx="2" fill="currentColor" opacity=".14"/><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="7.5" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.5" cy="9" r="1.2" fill="currentColor" stroke="none"/><path d="M6 13.5h12M6 16.5h12" stroke-width="1.8"/>',
   splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
 };
 function icon(name, extra = '') {
@@ -2343,6 +2345,16 @@ const HELP = {
   "tip": "Projizierte Schattenriss-Fläche der Körper in Blickrichtung in mm² messen (Profi)",
   "hilfe": "Berechnet die Fläche, die deine sichtbaren (oder ausgewählten) Körper aus der aktuellen Kamerarichtung oder einer gewählten Standardansicht bzw. Fläche verdecken – exakt in mm².",
   "tipp": "Ideal für die Stirnfläche gegen Fahrtwind, die Projektionsfläche beim Spritzguss oder den benötigten Bauraum in einer Richtung."
+ },
+ "knurl": {
+  "tip": "Gerades, gekreuztes oder schräges Rändel auf einen Zylindermantel schneiden (Profi)",
+  "hilfe": "Wähle den Außenmantel eines Zylinders oder einer Welle und klicke auf „Rändel“. Du kannst zwischen gekreuztem Rändel (Diamantmuster), geraden Rillen und schrägen Rillen wählen sowie Teilung, Tiefe, Winkel und Länge exakt festlegen.",
+  "tipp": "Der maximale Außendurchmesser bleibt beim Rändeln erhalten – die Spitzen liegen genau auf dem ursprünglichen Zylindermantel."
+ },
+ "gripPattern": {
+  "tip": "Rillen oder Noppen als Griffmuster auf Fläche oder Zylindermantel setzen (Profi)",
+  "hilfe": "Wähle eine ebene Fläche oder einen Zylindermantel und klicke auf „Griffmuster“. Entscheide dich für parallele bzw. umlaufende Rillen (V-Profil, rund oder rechteckig) oder für Noppen (Halbkugel, Kegel oder Zylinder, versetzt oder im Raster) – jeweils vertieft oder erhaben.",
+  "tipp": "Mit „Randabstand“ und „Länge“ grenzt du den Griffbereich sauber gegen Kanten und Schultern ab."
  }
 };
 

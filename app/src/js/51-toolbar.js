@@ -48,6 +48,8 @@ const Toolbar = (() => {
       { id: 'circlipGroove', group: T('dlg.tb.grpEdit'), domId: 't-circlip', icon: 'circlipGroove', label: T('kind.circlipGroove'), tip: T('dlg.tb.circlipTip'), cls: 'minor pro', help: 'circlipGroove', run: () => Features.startCirclipGroove() },
       { id: 'keyway', group: T('dlg.tb.grpEdit'), domId: 't-keyway', icon: 'keyway', label: T('kind.keyway'), tip: T('dlg.tb.keywayTip'), cls: 'minor pro', help: 'keywayStep', run: () => Features.startKeyway() },
       { id: 'splineProfile', group: T('dlg.tb.grpEdit'), domId: 't-splineProfile', icon: 'splineShaft', label: T('kind.splineProfile'), tip: T('dlg.tb.splineProfileTip'), cls: 'minor pro', help: 'splineProfile', run: () => Features.startSplineProfile() },
+      { id: 'knurl', group: T('dlg.tb.grpEdit'), domId: 't-knurl', icon: 'knurl', label: T('kind.knurl'), tip: T('dlg.tb.knurlTip'), cls: 'minor pro', help: 'knurl', run: () => Features.startKnurl() },
+      { id: 'gripPattern', group: T('dlg.tb.grpEdit'), domId: 't-gripPattern', icon: 'gripPattern', label: T('kind.gripPattern'), tip: T('dlg.tb.gripPatternTip'), cls: 'minor pro', help: 'gripPattern', run: () => Features.startGripPattern() },
       // Konstruktion
       { id: 'datum', group: T('dlg.tb.grpConstruct'), domId: 't-datum', icon: 'originPlanes', label: T('panel.title.datumPlane'), tip: T('dlg.tb.datumTip'), cls: 'minor', help: 'datum', run: (e) => Datums.dialog(e.currentTarget) },
       { id: 'datumAxis', group: T('dlg.tb.grpConstruct'), domId: 't-datumAxis', icon: 'axes', label: T('dlg.tb.datumAxis'), tip: T('dlg.tb.datumAxisTip'), cls: 'minor', help: 'datumAxis', run: (e) => Datums.axisDialog(e.currentTarget) },

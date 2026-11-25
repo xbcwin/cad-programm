@@ -2505,6 +2505,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Schattenriss-Fläche in Blickrichtung (`mm²`)**: Würfel `10×10×10` von vorn (`camera` / `front`) misst `≈ 100 mm²` (`99,88 mm²` bei `1024×1024`), schräge Ansicht (`iso`) steigt auf `> 130 mm²`, Würfel mit Durchgangsbohrung `Ø4` sinkt auf `≈ 100 − 4π mm²`; Hilfetexte (`werkzeug-hilfen.json`/`HELP`) und DE/EN-Schlüsselgleichheit geprüft (`t_a133_vergleich_schattenriss`).
 - [ ] **Von Hand**: Im Browser zwei leicht unterschiedliche Bauteile übereinanderlegen, einzelne Farb-Chips (`Neu` / `Weg` / `Gleich`) ein- und ausblenden sowie die Schattenriss-Fläche auf einer schräg angeklickten Fläche prüfen.
 
+## Rändel und Griffmuster (Auto [A-131], KP-50)
+
+- [x] **Gekreuztes Rändel auf Zylinder `d=20` mit Teilung `1`**: Über Kontextleiste `#ctx-knurl` (im Einfach-Modus verborgen) angelegt → Oberfläche steigt deutlich (`> 1,05×`), maximaler Durchmesser bleibt `≤ 20,0 mm`, `GeomCheck` 0 Funde, `Model.dependencies`, Unterdrücken und Rückgängig geprüft (`t_a131_raendel_griffmuster`).
+- [x] **Gerades, schräges & Teil-Rändel**: Umschalten auf `straight` und `angled` sowie Teil-Rändel (`length: 12`, `margin: 2`) auf abgesetzter Welle erzeugen gültige Geometrie mit größerer Oberfläche ohne Überschreitung des Außendurchmessers (`t_a131_raendel_griffmuster`).
+- [x] **Griffmuster Rillen & Noppen (Fläche & Zylinder)**: Rillen (`v`/`round`, vertieft & erhaben auf Quader und Ringrillen auf Zylinder) sowie versetzte Halbkugel-Noppen (`bumps` auf Quader-Oberseite und Zylindermantel) verändern Volumen und Oberfläche erwartungsgemäß ohne Geometriefehler; Erklärungen (`Explain.local`), Befehle (`Commands.search`), Hilfetexte (`werkzeug-hilfen.json`) und DE/EN-Schlüsselgleichheit geprüft (`t_a131_raendel_griffmuster`).
+- [ ] **Von Hand**: Im Browser ein schräges Rändel auf einem abgestuften Drehknopf und ein Noppen-Griffmuster auf einer gekrümmten Griffhülse im 3D-Bild optisch prüfen.
+
 ## Fehler melden
 
 ```
