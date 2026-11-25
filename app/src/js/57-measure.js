@@ -18,6 +18,7 @@ const Measure = (() => {
     Views.collapse();
     if (Sketch.active) return;
     if (Notes.active) Notes.stop();
+    if (pmiOn) pmiStop();
     stopDraftFacePick();
     on = true; pts = []; current = null; last = null; clearVis();
     App.clearSelection(); Handles.clear();
@@ -302,19 +303,28 @@ const Measure = (() => {
     const keepBtn = h('button', { type: 'button', class: 'tool primary', id: 'measure-keep', 'data-help': 'measureKeep', disabled: true });
     keepBtn.innerHTML = icon('plus') + `<span>${esc(T('measure.keep'))}</span>`;
     keepBtn.onclick = () => keep();
+    let pmiBtn = null;
+    if (pmiIsPro()) {
+      pmiBtn = h('button', { type: 'button', class: 'tool pro', id: 'measure-to-pmi', 'data-help': 'pmi3d', disabled: true });
+      pmiBtn.innerHTML = icon('dim') + `<span>${esc(T('pmi.fromMeasureBtn'))}</span>`;
+      pmiBtn.onclick = () => promoteCurrentToPmi();
+    }
     const doneBtn = h('button', { type: 'button', class: 'tool', id: 'measure-done', 'data-tip': T('measure.doneTip'), 'data-kbd': 'Esc' });
     doneBtn.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`;
     doneBtn.onclick = () => stop();
-    bar.append(cur, keepBtn, doneBtn);
+    bar.append(cur, keepBtn);
+    if (pmiBtn) bar.append(pmiBtn);
+    bar.append(doneBtn);
     $('#overlay').append(bar);
     updateBar();
   }
   function hideBar() { if (bar) { bar.remove(); bar = null; } }
   function updateBar() {
     if (!bar) return;
-    const cur = $('#measure-cur'), kb = $('#measure-keep');
+    const cur = $('#measure-cur'), kb = $('#measure-keep'), pb = $('#measure-to-pmi');
     if (cur) cur.textContent = current ? current.eval.text : T('measure.barEmpty');
     if (kb) kb.disabled = !current;
+    if (pb) pb.disabled = !current || current.kind === 'face';
   }
   function clearVis() { for (const o of objs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } objs = []; for (const e of els) e.remove(); els = []; lastLabel = null; Viewer.requestRender(); }
   function snapPoint(hit, cx, cy) {
@@ -1021,36 +1031,43 @@ const Measure = (() => {
     App.on('selection', () => {
       if (App.sel.length !== 2) clearDist();
       if (sel && App.sel.length) { sel = null; drawSaved(); }
+      if (pmiSel && App.sel.length) { pmiSel = null; drawPmi(); }
       updateStatus();
       if (silSt && silSt.onlySel) drawSilhouette();
     });
-    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); if (silSt) drawSilhouette(); if (tcSt) onTolChainResults(); });
-    App.on('remeshed', relink);
+    App.on('results', () => { relink(); pmiRelink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); if (silSt) drawSilhouette(); if (tcSt) onTolChainResults(); });
+    App.on('remeshed', () => { relink(); pmiRelink(); });
     App.on('rebuilt', updateCalc);
-    App.on('docLoaded', () => { stopFieldPick(); stopTolChainPick(); stopTolChainFacePick(); });
+    App.on('docLoaded', () => { stopFieldPick(); stopTolChainPick(); stopTolChainFacePick(); pmiStop(); pmiSel = null; pmiLive.clear(); pmiRelink(); });
     let lastUnit = Units.key();
     let lastFmt = `${FMT.dec}:${FMT.angle}`;
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
       ViewPrefs.on('change', () => {
         if (tcSt && ViewPrefs.simple) tolChain(false);
+        if (pmiOn && ViewPrefs.simple) pmiStop();
         const curFmt = `${FMT.dec}:${FMT.angle}`;
         if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); if (silSt) updateSilUI(); if (tcSt) updateTolChainUI(); }
+        drawPmi();
       });
     }
     if (typeof I18n !== 'undefined' && I18n.on) {
-      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } if (silSt) { buildSilBar(); updateSilUI(); } if (tcSt) { buildTolChainBar(); updateTolChainUI(); } });
+      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } if (silSt) { buildSilBar(); updateSilUI(); } if (tcSt) { buildTolChainBar(); updateTolChainUI(); } if (pmiOn) buildPmiBar(); drawPmi(); });
     }
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
-      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (draftSt) updateDraftUI(); if (silSt) updateSilUI(); if (tcSt) updateTolChainUI(); }
+      if (pmiSel && !pmiFind(pmiSel)) pmiSel = null;
+      const pIds = new Set(pmiList().map((x) => x.id));
+      for (const k of [...pmiLive.keys()]) if (!pIds.has(k)) pmiLive.delete(k);
+      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (pmiList().length) pmiRelink(); if (draftSt) updateDraftUI(); if (silSt) updateSilUI(); if (tcSt) updateTolChainUI(); }
       drawSaved();
+      drawPmi();
       updateStatus();
       if (tcSt) { syncTolChainStateFromDoc(); updateTolChainUI(); drawTolChainOverlay(); }
     });
-    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (draftSt) draft(false); if (silSt) silhouette(false); if (tcSt) tolChain(false); stopFieldPick(); } drawSaved(); updateStatus(); });
-    App.on('sketch', updateStatus);
+    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (pmiOn) pmiStop(); if (draftSt) draft(false); if (silSt) silhouette(false); if (tcSt) tolChain(false); stopFieldPick(); } drawSaved(); drawPmi(); updateStatus(); });
+    App.on('sketch', () => { if (pmiOn && Sketch.active) pmiStop(); drawPmi(); updateStatus(); });
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
     App.on('calcCancelable', updateCalc);
@@ -1066,10 +1083,18 @@ const Measure = (() => {
     const calcEl = $('#status-calc');
     if (calcEl) calcEl.addEventListener('click', () => { if (statusState.calcState === 'error' && typeof Notices !== 'undefined') Notices.open($('#status-bell')); });
     updateStatus();
-    let d0 = null;
-    Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
-    Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
+    let d0 = null, pmiD0 = null;
+    Viewer.canvas.addEventListener('pointerdown', (e) => {
+      if (on) d0 = { x: e.clientX, y: e.clientY };
+      if (pmiOn) pmiD0 = { x: e.clientX, y: e.clientY };
+    }, true);
+    Viewer.canvas.addEventListener('pointerup', (e) => {
+      if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e);
+      if (pmiOn && pmiD0 && Math.hypot(e.clientX - pmiD0.x, e.clientY - pmiD0.y) < 5) pmiOnDown(e);
+      d0 = null; pmiD0 = null;
+    });
     Viewer.on('camera', place);
+    Viewer.on('camera', placePmi);
     Viewer.on('camera', onSilCamera);
     // Lage unter der Maus in der Statusleiste (BE-17): im Modell X/Y/Z auf dem Körper oder dem Boden, in der Skizze X/Y der Skizze
     let timer = null, lastT = 0, lastPos = null;
@@ -3043,6 +3068,1219 @@ const Measure = (() => {
     return true;
   }
 
+  // ---------- Maße, Toleranzen & Hinweise am 3D-Modell (PMI, ZE-35) ----------
+  let pmiOn = false, pmiToolMode = 'dim', pmiSel = null, pmiBar = null;
+  let pmiPts = [], pmiObjs = [], pmiEls = [], pmiPreObjs = [];
+  const pmiLive = new Map();
+  const pmiBarTol = { mode: 'none', sym: 0.1, upper: 0.05, lower: -0.05, fit: 'H7', fitShow: 'both' };
+
+  const pmiIsPro = () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple;
+  const pmiList = (doc = App.doc) => (doc && Array.isArray(doc.pmi) ? doc.pmi : []);
+  const pmiFind = (id, doc = App.doc) => pmiList(doc).find((x) => x.id === id) || null;
+  const pmiVisible = () => pmiIsPro() && (typeof ViewPrefs === 'undefined' || ViewPrefs.get().pmi !== false);
+
+  function setPmiVisible(show) {
+    if (!pmiIsPro()) return false;
+    const next = !!show;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.set) ViewPrefs.set({ pmi: next });
+    drawPmi();
+    return next;
+  }
+  function togglePmiVisible() {
+    if (!pmiIsPro()) return false;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.toggle) ViewPrefs.toggle('pmi');
+    drawPmi();
+    return pmiVisible();
+  }
+
+  function pmiDecNeeded(v) {
+    const r = Math.round(Math.abs(v) * 10000) / 10000;
+    if (r < 1e-9) return 0;
+    const s = r.toFixed(4).replace(/\.?0+$/, '');
+    const dot = s.indexOf('.');
+    return dot >= 0 ? s.length - dot - 1 : 0;
+  }
+  function pmiFmtTolVal(vDisp, dec) {
+    const r = round(vDisp, dec);
+    const clean = Object.is(r, -0) ? 0 : r;
+    return clean.toFixed(dec).replace('.', ',');
+  }
+  function pmiFmtDevPair(upperMm, lowerMm, minDec = 0) {
+    const u = Units.fromMM(upperMm), l = Units.fromMM(lowerMm);
+    const isZero = (v) => Math.abs(round(v, 4)) < 1e-9;
+    const dec = Units.key() === 'mm'
+      ? Math.max(minDec, pmiDecNeeded(u), pmiDecNeeded(l))
+      : Math.max(minDec, Units.def().dec, pmiDecNeeded(u), pmiDecNeeded(l));
+    const fmtOne = (v) => {
+      if (isZero(v)) return '0';
+      return (v > 0 ? '+' : '\u2212') + pmiFmtTolVal(Math.abs(v), dec);
+    };
+    return { upStr: fmtOne(u), loStr: fmtOne(l), dec };
+  }
+  function pmiFmtLimitsPair(nominalMm, upperMm, lowerMm, minDec = 0) {
+    const loMm = Math.min(upperMm, lowerMm), hiMm = Math.max(upperMm, lowerMm);
+    const hi = Units.fromMM(nominalMm + hiMm), lo = Units.fromMM(nominalMm + loMm);
+    const dec = Units.key() === 'mm'
+      ? Math.max(minDec, pmiDecNeeded(hi), pmiDecNeeded(lo))
+      : Math.max(minDec, Units.def().dec, pmiDecNeeded(hi), pmiDecNeeded(lo));
+    return { maxStr: pmiFmtTolVal(hi, dec), minStr: pmiFmtTolVal(lo, dec), dec };
+  }
+  function pmiFmtSymVal(symMm) {
+    const v = Math.abs(Units.fromMM(symMm));
+    const dec = Units.key() === 'mm' ? Math.max(1, pmiDecNeeded(v)) : Math.max(Units.def().dec, pmiDecNeeded(v));
+    return fmtFixed(v, dec);
+  }
+  function sanitizePmiTol(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.mode || raw.mode === 'none') return null;
+    if (raw.mode === 'sym') {
+      const sym = Math.abs(Number(raw.sym) || 0);
+      return { mode: 'sym', sym: round(sym, 6) };
+    }
+    if (raw.mode === 'dev' || raw.mode === 'limits') {
+      let upper = Number(raw.upper) || 0, lower = Number(raw.lower) || 0;
+      if (lower > upper) [upper, lower] = [lower, upper];
+      return { mode: raw.mode, upper: round(upper, 6), lower: round(lower, 6) };
+    }
+    if (raw.mode === 'fit') {
+      const classes = (typeof Drawing !== 'undefined' && Drawing.ISO286 && Drawing.ISO286.klassen) || {};
+      const rawCode = String(raw.fit || 'H7').trim();
+      const code = classes[rawCode] ? rawCode : (Object.keys(classes).find((k) => k.toLowerCase() === rawCode.toLowerCase()) || rawCode || 'H7');
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(raw.fitShow) ? raw.fitShow : 'both';
+      return { mode: 'fit', fit: code, fitShow };
+    }
+    return null;
+  }
+  function formatPmiTol(tol, nominalVal, unit = 'mm') {
+    if (!tol || !tol.mode || tol.mode === 'none') return null;
+    if (unit === '°') {
+      if (tol.mode === 'sym') {
+        const sym = Math.abs(Number(tol.sym) || 0);
+        const s = fmtFixed(sym, Math.max(1, pmiDecNeeded(sym))) + '°';
+        return { mode: 'sym', symStr: s, plain: '±' + s, html: `±${esc(s)}`, upperMm: sym, lowerMm: -sym };
+      }
+      if (tol.mode === 'dev') {
+        const up = Number(tol.upper) || 0, lo = Number(tol.lower) || 0;
+        const dec = Math.max(1, pmiDecNeeded(up), pmiDecNeeded(lo));
+        const fmtA = (x) => (Math.abs(round(x, 4)) < 1e-9 ? '0°' : (x > 0 ? '+' : '\u2212') + fmtFixed(Math.abs(x), dec) + '°');
+        const upStr = fmtA(up), loStr = fmtA(lo);
+        return { mode: 'dev', upStr, loStr, plain: `${upStr}/${loStr}`, html: `<span class="pmi-tol-stack"><span>${esc(upStr)}</span><span>${esc(loStr)}</span></span>`, upperMm: up, lowerMm: lo };
+      }
+      return null;
+    }
+    if (tol.mode === 'sym') {
+      const sym = Math.abs(Number(tol.sym) || 0);
+      const symStr = pmiFmtSymVal(sym);
+      return { mode: 'sym', symStr, plain: '±' + symStr, html: `±${esc(symStr)}`, upperMm: sym, lowerMm: -sym };
+    }
+    if (tol.mode === 'dev') {
+      const up = Number(tol.upper) || 0, lo = Number(tol.lower) || 0;
+      const dev = pmiFmtDevPair(up, lo);
+      return { mode: 'dev', ...dev, plain: `${dev.upStr}/${dev.loStr}`, html: `<span class="pmi-tol-stack"><span>${esc(dev.upStr)}</span><span>${esc(dev.loStr)}</span></span>`, upperMm: up, lowerMm: lo };
+    }
+    if (tol.mode === 'limits') {
+      const up = Number(tol.upper) || 0, lo = Number(tol.lower) || 0;
+      const lim = pmiFmtLimitsPair(nominalVal, up, lo);
+      return { mode: 'limits', ...lim, plain: `${lim.minStr}–${lim.maxStr}`, html: `<span class="pmi-tol-stack"><span>${esc(lim.maxStr)}</span><span>${esc(lim.minStr)}</span></span>`, upperMm: up, lowerMm: lo };
+    }
+    if (tol.mode === 'fit') {
+      const info = typeof Drawing !== 'undefined' && Drawing.iso286 ? Drawing.iso286(tol.fit, nominalVal) : null;
+      const code = (info && info.code) || tol.fit || 'H7';
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(tol.fitShow) ? tol.fitShow : 'both';
+      if (!info || info.outOfRange) {
+        return { mode: 'fit', code, fitShow, outOfRange: !!(info && info.outOfRange), info, plain: code, html: esc(code) };
+      }
+      if (fitShow === 'code') return { mode: 'fit', code, fitShow, info, ...info, plain: code, html: esc(code) };
+      if (fitShow === 'limits') {
+        return { mode: 'fit', code, fitShow, info, ...info, plain: `${info.minStr}–${info.maxStr}`, html: `<span class="pmi-tol-stack"><span>${esc(info.maxStr)}</span><span>${esc(info.minStr)}</span></span>` };
+      }
+      if (fitShow === 'dev') {
+        return { mode: 'fit', code, fitShow, info, ...info, plain: `${info.upStr}/${info.loStr}`, html: `<span class="pmi-tol-stack"><span>${esc(info.upStr)}</span><span>${esc(info.loStr)}</span></span>` };
+      }
+      return {
+        mode: 'fit', code, fitShow, info, ...info,
+        plain: `${code} (${info.upStr}/${info.loStr})`,
+        html: `${esc(code)} <span class="pmi-tol-stack"><span>${esc(info.upStr)}</span><span>${esc(info.loStr)}</span></span>`,
+      };
+    }
+    return null;
+  }
+
+  function pmiFmtDimLabel(item, ev) {
+    if (!item || !ev) return { text: '', html: '' };
+    if (item.kind === 'note') {
+      const txt = String(item.text || '').trim();
+      return { text: txt, html: esc(txt) };
+    }
+    if (ev.lost) return { text: T('measure.lost'), html: esc(T('measure.lost')) };
+    const unit = ev.unit || 'mm';
+    const val = Number(ev.value || 0);
+    const dec = typeof FMT !== 'undefined' && Number.isFinite(FMT.dec) ? FMT.dec : 2;
+    const prefix = ev.dimType === 'dia' ? 'Ø' : ev.dimType === 'rad' ? 'R' : '';
+    const main = unit === '°' ? fmtAngleU(val) : (prefix + Units.fmtLen(val, dec));
+    const tf = formatPmiTol(item.tol, val, unit);
+    const noteSuffix = item.note && String(item.note).trim() ? ` · ${String(item.note).trim()}` : '';
+    if (!tf) {
+      return { text: main + noteSuffix, html: esc(main + noteSuffix) };
+    }
+    if (tf.mode === 'limits' || (tf.mode === 'fit' && tf.fitShow === 'limits')) {
+      return {
+        text: `${prefix}${tf.plain}${noteSuffix}`,
+        html: (prefix ? `<span class="pmi-prefix">${esc(prefix)}</span>` : '') + tf.html + (noteSuffix ? `<span class="pmi-note-sub">${esc(noteSuffix)}</span>` : ''),
+      };
+    }
+    return {
+      text: `${main} ${tf.plain}${noteSuffix}`,
+      html: `<span class="pmi-val">${esc(main)}</span> ${tf.html}` + (noteSuffix ? `<span class="pmi-note-sub">${esc(noteSuffix)}</span>` : ''),
+    };
+  }
+
+  function followMergedId(id) {
+    let rid = id;
+    while (rid && typeof App !== 'undefined' && App.mergedInto && App.mergedInto(rid)) rid = App.mergedInto(rid);
+    return rid;
+  }
+
+  function resolvePmiRef(ref) {
+    if (!ref) return null;
+    const direct = resolveRef(ref);
+    if (direct) return direct;
+    if (ref.id) {
+      const rid = followMergedId(ref.id);
+      if (rid && rid !== ref.id) return resolveRef({ ...ref, id: rid });
+    }
+    return null;
+  }
+
+  function boxCenterWorld(rid, bbox) {
+    if (!bbox || bbox.length < 6) return new THREE.Vector3(0, 0, 0);
+    const lc = new THREE.Vector3((bbox[0] + bbox[3]) * 0.5, (bbox[1] + bbox[4]) * 0.5, (bbox[2] + bbox[5]) * 0.5);
+    const W = Model.worldMatrix(App.doc, rid);
+    return lc.applyMatrix4(W);
+  }
+
+  function orthoOutDir(dir, centerToMid) {
+    const proj = centerToMid.clone().addScaledVector(dir, -centerToMid.dot(dir));
+    if (proj.lengthSq() > 1e-6) return proj.normalize();
+    for (const cand of [[0, 0, 1], [0, -1, 0], [1, 0, 0]]) {
+      const v = new THREE.Vector3(...cand);
+      const p = v.sub(dir.clone().multiplyScalar(v.dot(dir)));
+      if (p.lengthSq() > 1e-6) return p.normalize();
+    }
+    return new THREE.Vector3(0, 0, 1);
+  }
+
+  function resolvePmiItem(item) {
+    if (!item) return { lost: true, lines: [], dots: [] };
+    const off = clamp(Number(item.offset) || 12, 2, 120);
+    if (item.kind === 'note') {
+      let anchor = null, n = null, hitFace = null;
+      if (item.ref) {
+        if (item.ref.kind === 'edgeLen') {
+          const er = resolveMeasuredEdge(item.ref);
+          if (er && er.edge) {
+            const W = Model.worldMatrix(App.doc, er.rid);
+            anchor = V3(er.edge.m || er.edge.a).applyMatrix4(W);
+          }
+        } else {
+          const rr = resolvePmiRef(item.ref);
+          if (rr) {
+            anchor = (rr.hitP || rr.p || rr.c).clone();
+            if (rr.n) n = rr.n.clone();
+            else if (rr.normal) n = rr.normal.clone();
+            if (rr.faceIdx != null) hitFace = { id: rr.id, faceIdx: rr.faceIdx };
+          }
+        }
+      }
+      if (!anchor && Array.isArray(item.lastP)) {
+        if (item.ref && item.ref.id) return { lost: true, p: V3(item.lastP), lines: [], dots: [] };
+        anchor = V3(item.lastP);
+      }
+      if (!anchor) return { lost: true, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+      let delta = Array.isArray(item.noteOffset) && item.noteOffset.length >= 3 ? V3(item.noteOffset) : null;
+      if (!delta || delta.lengthSq() < 1e-4) {
+        const dir = n ? n.clone().add(new THREE.Vector3(0.25, -0.2, 0.45)).normalize() : new THREE.Vector3(0.45, -0.35, 0.82).normalize();
+        delta = dir.multiplyScalar(off);
+      }
+      const p = anchor.clone().add(delta);
+      return {
+        lost: false,
+        kind: 'note',
+        anchor,
+        n,
+        p,
+        lines: [[anchor.clone(), p.clone()]],
+        dots: [anchor.clone()],
+        faces: hitFace ? [hitFace] : [],
+      };
+    }
+
+    const refs = item.refs || [];
+    if (item.refKind === 'edge' && refs[0]) {
+      const res = resolveMeasuredEdge(refs[0]);
+      if (!res || !res.edge) return { lost: true, dimType: 'lin', unit: 'mm', value: item.value || 0, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+      const W = Model.worldMatrix(App.doc, res.rid);
+      const a = V3(res.edge.a).applyMatrix4(W);
+      const b = V3(res.edge.b).applyMatrix4(W);
+      const d = a.distanceTo(b);
+      if (!(d > 1e-5)) return { lost: true, dimType: 'lin', unit: 'mm', value: 0, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+      const dir = b.clone().sub(a).normalize();
+      const mid = a.clone().lerp(b, 0.5);
+      const outDir = orthoOutDir(dir, mid.clone().sub(boxCenterWorld(res.rid, res.bbox)));
+      const aOff = a.clone().addScaledVector(outDir, off);
+      const bOff = b.clone().addScaledVector(outDir, off);
+      const p = aOff.clone().lerp(bOff, 0.5);
+      return {
+        lost: false,
+        kind: 'dim',
+        dimType: 'lin',
+        typeLabel: T('pmi.typeEdge'),
+        unit: 'mm',
+        value: round(d, 6),
+        a, b, aOff, bOff, dir, outDir, p,
+        extLines: [
+          [a.clone().addScaledVector(outDir, 1), aOff.clone().addScaledVector(outDir, 2)],
+          [b.clone().addScaledVector(outDir, 1), bOff.clone().addScaledVector(outDir, 2)],
+        ],
+        dimLine: [aOff.clone(), bOff.clone()],
+        dots: [a.clone(), b.clone()],
+        faces: [],
+      };
+    }
+
+    if ((item.refKind === 'circle' || item.refKind === 'round') && refs[0]) {
+      const rr = resolvePmiRef(refs[0]);
+      if (!rr) return { lost: true, dimType: item.dimType || 'dia', unit: 'mm', value: item.value || 0, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+      const isRad = item.dimType === 'rad';
+      if (rr.kind === 'circle') {
+        const W = rr.W || Model.worldMatrix(App.doc, rr.id);
+        const c = rr.c.clone();
+        const r = rr.edge.r;
+        const n = rr.edge.n ? V3(rr.edge.n).transformDirection(W).normalize() : new THREE.Vector3(0, 0, 1);
+        const radDir = orthoOutDir(n, new THREE.Vector3(1, -1, 0.4));
+        const hitPt = c.clone().addScaledVector(radDir, r);
+        const p = hitPt.clone().addScaledVector(radDir, off);
+        return {
+          lost: false,
+          kind: 'dim',
+          dimType: isRad ? 'rad' : 'dia',
+          typeLabel: isRad ? T('pmi.typeRad') : T('pmi.typeDia'),
+          unit: 'mm',
+          value: round(isRad ? r : r * 2, 6),
+          c, n, r, omni: false, hitPt, radDir, p,
+          leader: isRad ? [[c.clone(), hitPt.clone()], [hitPt.clone(), p.clone()]] : [[hitPt.clone(), p.clone()]],
+          dots: [c.clone()],
+          circle: { id: rr.id, edgeIdx: rr.edgeIdx, W },
+          faces: [],
+        };
+      }
+      const c = V3(rr.f.c).applyMatrix4(Model.worldMatrix(App.doc, rr.id));
+      const r = rr.f.r;
+      const W = Model.worldMatrix(App.doc, rr.id);
+      const n = rr.f.t === 'CYLINDRE' && rr.f.axis ? V3(rr.f.axis.slice(3)).transformDirection(W).normalize() : new THREE.Vector3(0, 0, 1);
+      const radDir = rr.normal && rr.normal.lengthSq() > 1e-6 ? rr.normal.clone().normalize() : orthoOutDir(n, new THREE.Vector3(1, -1, 0.4));
+      const hitPt = (rr.hitP || c).clone();
+      const p = hitPt.clone().addScaledVector(radDir, off);
+      return {
+        lost: false,
+        kind: 'dim',
+        dimType: isRad ? 'rad' : 'dia',
+        typeLabel: isRad ? T('pmi.typeRad') : T('pmi.typeDia'),
+        unit: 'mm',
+        value: round(isRad ? r : r * 2, 6),
+        c, n, r, omni: rr.f.t === 'SPHERE', hitPt, radDir, p,
+        leader: [[hitPt.clone(), p.clone()]],
+        dots: [hitPt.clone()],
+        faces: [{ id: rr.id, faceIdx: rr.faceIdx }],
+      };
+    }
+
+    if (item.refKind === 'points' && Array.isArray(item.lastA) && Array.isArray(item.lastB)) {
+      const a = V3(item.lastA), b = V3(item.lastB), d = a.distanceTo(b);
+      if (!(d > 1e-5)) return { lost: true, dimType: 'lin', unit: 'mm', value: 0, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+      const dir = b.clone().sub(a).normalize();
+      const outDir = orthoOutDir(dir, new THREE.Vector3(0, -1, 1));
+      const aOff = a.clone().addScaledVector(outDir, off);
+      const bOff = b.clone().addScaledVector(outDir, off);
+      return {
+        lost: false,
+        kind: 'dim',
+        dimType: 'lin',
+        typeLabel: T('measure.distPP'),
+        unit: 'mm',
+        value: round(d, 6),
+        a, b, aOff, bOff, dir, outDir,
+        p: aOff.clone().lerp(bOff, 0.5),
+        extLines: [
+          [a.clone().addScaledVector(outDir, 1), aOff.clone().addScaledVector(outDir, 2)],
+          [b.clone().addScaledVector(outDir, 1), bOff.clone().addScaledVector(outDir, 2)],
+        ],
+        dimLine: [aOff.clone(), bOff.clone()],
+        dots: [a.clone(), b.clone()],
+        faces: [],
+      };
+    }
+
+    if (item.refKind === 'pair' && refs.length >= 2) {
+      const r0 = resolvePmiRef(refs[0]), r1 = resolvePmiRef(refs[1]);
+      if (!r0 || !r1) return { lost: true, dimType: item.dimType || 'lin', unit: item.unit || 'mm', value: item.value || 0, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+      const ev = evalEntities('pair', [r0, r1]);
+      if (ev.unit === '°') {
+        const pa = (r0.hitP || r0.p).clone(), pb = (r1.hitP || r1.p).clone();
+        const mid = pa.clone().lerp(pb, 0.5);
+        const nAvg = r0.n && r1.n ? r0.n.clone().add(r1.n).normalize() : new THREE.Vector3(0, 0, 1);
+        const p = mid.clone().addScaledVector(nAvg.lengthSq() > 1e-6 ? nAvg : new THREE.Vector3(0, 0, 1), off * 0.6);
+        return {
+          lost: false,
+          kind: 'dim',
+          dimType: 'ang',
+          typeLabel: ev.typeLabel,
+          unit: '°',
+          value: ev.value,
+          n1: r0.n ? r0.n.clone() : null,
+          n2: r1.n ? r1.n.clone() : null,
+          c1: r0.c ? r0.c.clone() : pa,
+          c2: r1.c ? r1.c.clone() : pb,
+          pa, pb, p,
+          extLines: [[pa.clone(), p.clone()], [pb.clone(), p.clone()]],
+          dots: [pa.clone(), pb.clone()],
+          faces: ev.faces || [],
+        };
+      }
+      const line = ev.lines && ev.lines[0];
+      const a = line ? line[0].clone() : (ev.dots && ev.dots[0] ? ev.dots[0].clone() : new THREE.Vector3());
+      const b = line ? line[1].clone() : (ev.dots && ev.dots[1] ? ev.dots[1].clone() : a.clone());
+      const distVal = a.distanceTo(b);
+      if (distVal < 1e-5) {
+        const p = a.clone().add(new THREE.Vector3(0, 0, off));
+        return { lost: false, kind: 'dim', dimType: 'lin', typeLabel: ev.typeLabel, unit: 'mm', value: 0, a, b, aOff: p, bOff: p, p, extLines: [[a, p]], dots: [a], faces: ev.faces || [] };
+      }
+      const dir = b.clone().sub(a).normalize();
+      const boxMid = r0.id ? (() => { const res0 = App.results.get(followMergedId(r0.id)); return res0 && res0.data ? boxCenterWorld(followMergedId(r0.id), res0.data.bbox) : new THREE.Vector3(); })() : new THREE.Vector3();
+      const outDir = orthoOutDir(dir, a.clone().lerp(b, 0.5).sub(boxMid));
+      const aOff = a.clone().addScaledVector(outDir, off);
+      const bOff = b.clone().addScaledVector(outDir, off);
+      return {
+        lost: false,
+        kind: 'dim',
+        dimType: 'lin',
+        typeLabel: ev.typeLabel,
+        unit: 'mm',
+        value: round(ev.value, 6),
+        a, b, aOff, bOff, dir, outDir,
+        p: aOff.clone().lerp(bOff, 0.5),
+        extLines: [
+          [a.clone().addScaledVector(outDir, 1), aOff.clone().addScaledVector(outDir, 2)],
+          [b.clone().addScaledVector(outDir, 1), bOff.clone().addScaledVector(outDir, 2)],
+        ],
+        dimLine: [aOff.clone(), bOff.clone()],
+        dots: [a.clone(), b.clone()],
+        faces: ev.faces || [],
+      };
+    }
+    return { lost: true, dimType: item.dimType || 'lin', unit: item.unit || 'mm', value: item.value || 0, p: item.lastP ? V3(item.lastP) : null, lines: [], dots: [] };
+  }
+
+  function pmiEvalOf(item) {
+    if (pmiLive.has(item.id)) return pmiLive.get(item.id);
+    const ev = resolvePmiItem(item);
+    pmiLive.set(item.id, ev);
+    return ev;
+  }
+
+  function pmiRelink() {
+    const items = pmiList(), seen = new Set();
+    for (const item of items) {
+      seen.add(item.id);
+      const ev = resolvePmiItem(item);
+      pmiLive.set(item.id, ev);
+      item.lost = !!ev.lost;
+      if (!ev.lost) {
+        if (item.kind === 'dim') {
+          item.value = ev.value;
+          item.unit = ev.unit;
+          item.short = pmiFmtDimLabel(item, ev).text;
+          if (ev.a) item.lastA = r6(ev.a.toArray());
+          if (ev.b) item.lastB = r6(ev.b.toArray());
+          if (ev.c) item.lastC = r6(ev.c.toArray());
+          if (ev.n) item.lastN = r6(ev.n.toArray());
+          if (ev.r != null) item.lastR = round(ev.r, 6);
+        } else if (item.kind === 'note' && ev.anchor) {
+          item.lastAnchor = r6(ev.anchor.toArray());
+          if (ev.n) item.lastN = r6(ev.n.toArray());
+        }
+        if (ev.p) item.lastP = r6(ev.p.toArray());
+      }
+    }
+    for (const k of [...pmiLive.keys()]) if (!seen.has(k)) pmiLive.delete(k);
+    drawPmi();
+    if (typeof Panels !== 'undefined') {
+      Panels.renderLeft();
+      if (pmiSel) Panels.renderRight({ preserveFocus: true });
+    }
+  }
+
+  function clearPmiVis() {
+    const g = Viewer.groups.measures;
+    if (g) for (const o of pmiObjs) { g.remove(o); Viewer.disposeFat(o); }
+    pmiObjs = [];
+    for (const x of pmiEls) x.el.remove();
+    pmiEls = [];
+  }
+  function clearPmiPreview() {
+    const g = Viewer.groups.overlay;
+    if (g) for (const o of pmiPreObjs) { g.remove(o); Viewer.disposeFat(o); }
+    pmiPreObjs = [];
+  }
+
+  function addArrow3D(g, tip, awayDir, outDir, col, w) {
+    const len = 2.4, hw = 0.85;
+    const pBase = tip.clone().addScaledVector(awayDir, len);
+    const p1 = pBase.clone().addScaledVector(outDir, hw);
+    const p2 = pBase.clone().addScaledVector(outDir, -hw);
+    const l1 = Viewer.makeFat([tip.x, tip.y, tip.z, p1.x, p1.y, p1.z], col, w, { depthTest: false, order: 36 });
+    const l2 = Viewer.makeFat([tip.x, tip.y, tip.z, p2.x, p2.y, p2.z], col, w, { depthTest: false, order: 36 });
+    g.add(l1, l2);
+    pmiObjs.push(l1, l2);
+  }
+
+  function placePmi() {
+    for (const x of pmiEls) {
+      if (!x.p) continue;
+      const s = Viewer.toScreen(x.p);
+      x.el.style.display = s.behind ? 'none' : '';
+      x.el.style.left = s.x + 'px';
+      x.el.style.top = s.y + 'px';
+    }
+  }
+
+  function drawPmi() {
+    clearPmiVis();
+    const g = Viewer.groups.measures;
+    if (!g || !pmiVisible() || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) {
+      Viewer.requestRender();
+      return;
+    }
+    for (const item of pmiList()) {
+      if (item.hidden) continue;
+      const ev = pmiEvalOf(item);
+      const isSel = item.id === pmiSel;
+      const col = ev.lost ? '#e03131' : isSel ? '#f08c00' : '#1971c2';
+      if (!ev.lost) {
+        if (ev.extLines) {
+          for (const [p1, p2] of ev.extLines) {
+            const l = Viewer.makeFat([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z], col, isSel ? 2.2 : 1.6, { depthTest: false, order: 35 });
+            g.add(l); pmiObjs.push(l);
+          }
+        }
+        if (ev.dimLine) {
+          const [aOff, bOff] = ev.dimLine;
+          const l = Viewer.makeFat([aOff.x, aOff.y, aOff.z, bOff.x, bOff.y, bOff.z], col, isSel ? 3.2 : 2.3, { depthTest: false, order: 36 });
+          g.add(l); pmiObjs.push(l);
+          const span = aOff.distanceTo(bOff);
+          if (span > 2 && ev.dir && ev.outDir) {
+            addArrow3D(g, aOff, ev.dir, ev.outDir, col, isSel ? 2.4 : 1.8);
+            addArrow3D(g, bOff, ev.dir.clone().negate(), ev.outDir, col, isSel ? 2.4 : 1.8);
+          }
+        }
+        if (ev.leader) {
+          for (const [p1, p2] of ev.leader) {
+            const l = Viewer.makeFat([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z], col, isSel ? 3.0 : 2.2, { depthTest: false, order: 36 });
+            g.add(l); pmiObjs.push(l);
+          }
+          if (ev.hitPt && ev.radDir) {
+            const perp = orthoOutDir(ev.radDir, ev.n || new THREE.Vector3(0, 0, 1));
+            addArrow3D(g, ev.hitPt, ev.radDir, perp, col, isSel ? 2.4 : 1.8);
+          }
+        }
+        if (ev.lines) {
+          for (const [p1, p2] of ev.lines) {
+            const l = Viewer.makeFat([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z], col, isSel ? 3.0 : 2.1, { depthTest: false, order: 36 });
+            g.add(l); pmiObjs.push(l);
+          }
+        }
+        for (const q of ev.dots || []) {
+          const d = Viewer.makeFat([q.x, q.y, q.z, q.x, q.y, q.z + 0.001], col, isSel ? 8 : 6, { depthTest: false, order: 36 });
+          g.add(d); pmiObjs.push(d);
+        }
+        if (ev.circle) {
+          const n = Viewer.nodes.get(ev.circle.id);
+          const eg = n && n.data && n.data.edgeGroups && n.data.edgeGroups.find((x) => x[2] === ev.circle.edgeIdx);
+          if (eg) {
+            const pos = Viewer.makeFat(n.data.lines.slice(eg[0] * 3, (eg[0] + eg[1]) * 3), col, isSel ? 3.5 : 2.5, { depthTest: false, order: 35 });
+            pos.matrixAutoUpdate = false; pos.matrix.copy(ev.circle.W); g.add(pos); pmiObjs.push(pos);
+          }
+        }
+        if (isSel) {
+          for (const fc of ev.faces || []) {
+            const fo = Viewer.faceOverlay(fc.id, fc.faceIdx, col, 0.2);
+            if (fo) { g.add(fo); pmiObjs.push(fo); }
+          }
+        }
+      }
+      if (ev.p) {
+        const lbl = pmiFmtDimLabel(item, ev);
+        const el = h('div', {
+          class: 'dimlabel pmi-tag' + (item.kind === 'note' ? ' pmi-note' : '') + (isSel ? ' sel' : '') + (ev.lost ? ' lost' : ''),
+          dataset: { pmi: item.id },
+          'data-tip': ev.lost ? T('measure.lostDesc') : `${item.name}: ${lbl.text}`,
+        });
+        el.innerHTML = lbl.html;
+        el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+        el.addEventListener('click', (e) => { e.stopPropagation(); selectPmi(item.id === pmiSel ? null : item.id); });
+        el.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          selectPmi(item.id);
+          const inp = document.getElementById(item.kind === 'note' ? 'pmi-text' : 'pmi-tol-mode');
+          if (inp) inp.focus();
+        });
+        $('#overlay').append(el);
+        pmiEls.push({ el, p: ev.p, id: item.id });
+      }
+    }
+    placePmi();
+    Viewer.requestRender();
+  }
+
+  function defaultPmiName(kind, doc = App.doc) {
+    const existing = pmiList(doc).filter((x) => x.kind === kind).length + 1;
+    return kind === 'note' ? T('pmi.defNote', { n: existing }) : T('pmi.defDim', { n: existing });
+  }
+
+  function commitPmiItem(item, undoLabel) {
+    const ev = resolvePmiItem(item);
+    pmiLive.set(item.id, ev);
+    if (!ev.lost) {
+      if (item.kind === 'dim') {
+        item.value = ev.value;
+        item.unit = ev.unit;
+        item.short = pmiFmtDimLabel(item, ev).text;
+        if (ev.a) item.lastA = r6(ev.a.toArray());
+        if (ev.b) item.lastB = r6(ev.b.toArray());
+        if (ev.c) item.lastC = r6(ev.c.toArray());
+        if (ev.n) item.lastN = r6(ev.n.toArray());
+        if (ev.r != null) item.lastR = round(ev.r, 6);
+      } else if (ev.anchor) {
+        item.lastAnchor = r6(ev.anchor.toArray());
+        if (ev.n) item.lastN = r6(ev.n.toArray());
+      }
+      if (ev.p) item.lastP = r6(ev.p.toArray());
+    }
+    pmiSel = item.id;
+    App.clearSelection();
+    if (!pmiVisible() && typeof ViewPrefs !== 'undefined' && ViewPrefs.set) {
+      ViewPrefs.set({ pmi: true });
+    }
+    App.change(undoLabel, (doc) => {
+      doc.pmi = doc.pmi || [];
+      doc.pmi.push(item);
+    });
+    drawPmi();
+    if (typeof Panels !== 'undefined') {
+      Panels.renderLeft();
+      Panels.renderRight();
+    }
+    return item;
+  }
+
+  function addPmiDim(spec = {}) {
+    if (!pmiIsPro() || !App.doc) return null;
+    const tol = sanitizePmiTol(spec.tol);
+    const offset = clamp(Number(spec.offset) || 12, 2, 120);
+    const note = typeof spec.note === 'string' ? spec.note.trim().slice(0, 120) : '';
+    const inDrawing = spec.inDrawing !== false;
+    let dimType = spec.dimType || 'lin';
+    let refKind = spec.refKind || null;
+    let refs = Array.isArray(spec.refs) ? deepClone(spec.refs) : null;
+    let lastA = null, lastB = null;
+
+    if (!refs) {
+      if (Array.isArray(spec.faces) && spec.faces.length >= 2) {
+        const fRefs = [];
+        for (const fs of spec.faces.slice(0, 2)) {
+          const rid = followMergedId(fs.itemId);
+          const r = App.results.get(rid) || App.results.get(fs.itemId);
+          const f = r && r.data && r.data.faces ? r.data.faces[fs.faceIdx] : null;
+          if (!f || f.t !== 'PLANE' || !f.n) return null;
+          fRefs.push({ kind: 'face', id: rid, n: r6(f.n), c: r6(f.c), lp: r6(f.c), frac: fracOf(f.c, r.data.bbox) });
+        }
+        refs = fRefs;
+        refKind = 'pair';
+      } else if (spec.itemId && spec.edgeIdx != null) {
+        const rid = followMergedId(spec.itemId);
+        const r = App.results.get(rid) || App.results.get(spec.itemId);
+        const edge = r && r.data && Array.isArray(r.data.edges) ? r.data.edges[spec.edgeIdx] : null;
+        if (!edge) return null;
+        if (edge.t === 'CIRCLE' && edge.r > 0) {
+          refKind = 'circle';
+          dimType = spec.dimType === 'rad' ? 'rad' : 'dia';
+          refs = [{ kind: 'circle', id: rid, tid: edge.tid || null, c: r6(edge.c), n: edge.n ? r6(edge.n) : null, r: round(edge.r, 6), frac: fracOf(edge.c, r.data.bbox) }];
+        } else {
+          const info = buildEdgeMeasureRef(rid, spec.edgeIdx);
+          if (!info) return null;
+          refKind = 'edge';
+          dimType = 'lin';
+          refs = [info.ref];
+        }
+      } else if (spec.itemId && spec.faceIdx != null) {
+        const rid = followMergedId(spec.itemId);
+        const r = App.results.get(rid) || App.results.get(spec.itemId);
+        const f = r && r.data && r.data.faces ? r.data.faces[spec.faceIdx] : null;
+        if (!f || !(f.t === 'CYLINDRE' || f.t === 'SPHERE') || !f.r) return null;
+        refKind = 'round';
+        dimType = spec.dimType === 'rad' ? 'rad' : 'dia';
+        refs = [{ kind: 'round', id: rid, t: f.t, c: r6(f.c), axis: f.axis ? r6(f.axis) : null, sc: f.sc ? r6(f.sc) : null, r: round(f.r, 6), lp: r6(f.c), frac: fracOf(f.c, r.data.bbox) }];
+      } else if (Array.isArray(spec.a) && Array.isArray(spec.b)) {
+        if (spec.itemId) {
+          const rid = followMergedId(spec.itemId);
+          const r = App.results.get(rid) || App.results.get(spec.itemId);
+          const invW = Model.worldMatrix(App.doc, rid).invert();
+          const lpA = V3(spec.a).applyMatrix4(invW).toArray();
+          const lpB = V3(spec.b).applyMatrix4(invW).toArray();
+          const bbox = r && r.data ? r.data.bbox : null;
+          refKind = 'pair';
+          dimType = 'lin';
+          refs = [
+            { kind: 'pt', id: rid, lp: r6(lpA), frac: fracOf(lpA, bbox) },
+            { kind: 'pt', id: rid, lp: r6(lpB), frac: fracOf(lpB, bbox) },
+          ];
+        } else {
+          refKind = 'points';
+          dimType = 'lin';
+          refs = [];
+          lastA = r6(spec.a);
+          lastB = r6(spec.b);
+        }
+      }
+    }
+    if (!refs) return null;
+    if (!refKind) refKind = refs.length >= 2 ? 'pair' : (refs[0] && refs[0].kind === 'circle' ? 'circle' : refs[0] && refs[0].kind === 'round' ? 'round' : 'edge');
+    const item = {
+      id: uid('pmi'),
+      kind: 'dim',
+      dimType,
+      refKind,
+      name: (spec.name && String(spec.name).trim()) || defaultPmiName('dim'),
+      refs,
+      tol,
+      note,
+      offset,
+      inDrawing,
+      hidden: false,
+      lost: false,
+      ...(lastA ? { lastA } : {}),
+      ...(lastB ? { lastB } : {}),
+    };
+    return commitPmiItem(item, `3D-Maß „${item.name}“ gesetzt`);
+  }
+
+  function addPmiNote(spec = {}) {
+    if (!pmiIsPro() || !App.doc) return null;
+    const text = String(spec.text || '').trim().slice(0, 240);
+    if (!text) return null;
+    const offset = clamp(Number(spec.offset) || 14, 2, 120);
+    let ref = spec.ref ? deepClone(spec.ref) : null;
+    let lastP = Array.isArray(spec.p) && spec.p.length >= 3 ? r6(spec.p) : null;
+    if (!ref && spec.itemId) {
+      const rid = followMergedId(spec.itemId);
+      const r = App.results.get(rid) || App.results.get(spec.itemId);
+      if (r && r.data) {
+        const W = Model.worldMatrix(App.doc, rid);
+        const invW = W.clone().invert();
+        if (spec.faceIdx != null && r.data.faces && r.data.faces[spec.faceIdx]) {
+          const f = r.data.faces[spec.faceIdx];
+          const lp = lastP ? V3(lastP).applyMatrix4(invW).toArray() : f.c;
+          if (f.t === 'PLANE' && f.n) ref = { kind: 'face', id: rid, n: r6(f.n), c: r6(f.c), lp: r6(lp), frac: fracOf(f.c, r.data.bbox) };
+          else if ((f.t === 'CYLINDRE' || f.t === 'SPHERE') && f.r) ref = { kind: 'round', id: rid, t: f.t, c: r6(f.c), axis: f.axis ? r6(f.axis) : null, sc: f.sc ? r6(f.sc) : null, r: round(f.r, 6), lp: r6(lp), frac: fracOf(f.c, r.data.bbox) };
+        } else if (spec.edgeIdx != null) {
+          const info = buildEdgeMeasureRef(rid, spec.edgeIdx);
+          if (info) ref = info.ref;
+        } else if (lastP) {
+          const lp = V3(lastP).applyMatrix4(invW).toArray();
+          ref = { kind: 'pt', id: rid, lp: r6(lp), frac: fracOf(lp, r.data.bbox) };
+        }
+      }
+    }
+    if (!ref && !lastP) return null;
+    const item = {
+      id: uid('pmi'),
+      kind: 'note',
+      name: (spec.name && String(spec.name).trim()) || defaultPmiName('note'),
+      text,
+      ref,
+      offset,
+      noteOffset: Array.isArray(spec.noteOffset) && spec.noteOffset.length >= 3 ? r6(spec.noteOffset) : null,
+      inDrawing: spec.inDrawing !== false,
+      hidden: false,
+      lost: false,
+      lastP,
+    };
+    return commitPmiItem(item, `3D-Hinweis „${item.name}“ gesetzt`);
+  }
+
+  function updatePmi(id, patch = {}) {
+    if (!pmiIsPro() || !id || !App.doc) return false;
+    const cur = pmiFind(id);
+    if (!cur) return false;
+    let changed = false;
+    App.change('3D-Maß geändert', (doc) => {
+      const target = pmiFind(id, doc);
+      if (!target) return false;
+      if (typeof patch.name === 'string') {
+        const clean = patch.name.trim();
+        if (clean && clean !== target.name) { target.name = clean; changed = true; }
+      }
+      if ('tol' in patch) {
+        target.tol = sanitizePmiTol(patch.tol);
+        changed = true;
+      }
+      if (typeof patch.note === 'string') {
+        target.note = patch.note.trim().slice(0, 120);
+        changed = true;
+      }
+      if (typeof patch.text === 'string' && target.kind === 'note') {
+        const clean = patch.text.trim().slice(0, 240);
+        if (!clean) return false;
+        target.text = clean;
+        changed = true;
+      }
+      if (patch.dimType === 'dia' || patch.dimType === 'rad') {
+        if (target.refKind === 'circle' || target.refKind === 'round') {
+          target.dimType = patch.dimType;
+          changed = true;
+        }
+      }
+      if (patch.offset != null && Number.isFinite(Number(patch.offset))) {
+        target.offset = round(clamp(Number(patch.offset), 2, 120), 2);
+        changed = true;
+      }
+      if ('inDrawing' in patch) {
+        target.inDrawing = !!patch.inDrawing;
+        changed = true;
+      }
+      if ('hidden' in patch) {
+        target.hidden = !!patch.hidden;
+        changed = true;
+      }
+      return changed;
+    });
+    if (changed) {
+      pmiRelink();
+      if (typeof Panels !== 'undefined') { Panels.renderLeft(); Panels.renderRight({ preserveFocus: true }); }
+    }
+    return changed;
+  }
+
+  function setPmiTol(id, tol) { return updatePmi(id, { tol }); }
+  function setPmiHidden(id, hidden) { return updatePmi(id, { hidden: !!hidden }); }
+  function removePmi(id) {
+    if (!pmiIsPro() || !id || !App.doc) return false;
+    if (!pmiFind(id)) return false;
+    App.change('3D-Maß gelöscht', (doc) => {
+      doc.pmi = pmiList(doc).filter((x) => x.id !== id);
+    });
+    if (pmiSel === id) selectPmi(null);
+    return true;
+  }
+  function selectPmi(id) {
+    pmiSel = id && pmiFind(id) ? id : null;
+    if (pmiSel) {
+      App.clearSelection();
+      if (sel) sel = null;
+      if (typeof Datums !== 'undefined' && Datums.selected) Datums.select(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedAxis) Datums.selectAxis(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedPoint) Datums.selectPoint(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
+      if (typeof Joints !== 'undefined' && Joints.selected) Joints.select(null);
+      if (typeof Notes !== 'undefined' && Notes.selectedPin) Notes.selectPin(null);
+    }
+    drawPmi();
+    if (typeof Panels !== 'undefined') {
+      Panels.renderLeft();
+      Panels.renderRight();
+    }
+    updateStatus();
+  }
+
+  function promoteCurrentToPmi() {
+    if (!pmiIsPro() || !current) return null;
+    let created = null;
+    if (current.kind === 'circle' || current.kind === 'round') {
+      created = addPmiDim({ refKind: current.kind, dimType: 'dia', refs: current.refs });
+    } else if (current.kind === 'pair') {
+      created = addPmiDim({ refKind: 'pair', dimType: current.eval && current.eval.unit === '°' ? 'ang' : 'lin', refs: current.refs });
+    }
+    if (created) {
+      pts = []; current = null; last = null; clearVis(); updateBar();
+      UI.toast(T('pmi.addedToast', { name: created.name }), { icon: 'check', ms: 2000 });
+    }
+    return created;
+  }
+
+  function buildPmiBar() {
+    hidePmiBar();
+    pmiBar = h('div', { class: 'sketchbar measurebar pmibar', id: 'pmi-bar', 'data-help': 'pmi3d' });
+    const title = h('span', { class: 'title' }, T('pmi.barTitle'));
+    const bDim = h('button', { type: 'button', class: 'tool' + (pmiToolMode === 'dim' ? ' active' : ''), id: 'pmi-mode-dim', 'aria-pressed': String(pmiToolMode === 'dim') });
+    bDim.innerHTML = icon('dim') + `<span>${esc(T('pmi.modeDim'))}</span>`;
+    bDim.onclick = () => pmiSetMode('dim');
+    const bNote = h('button', { type: 'button', class: 'tool' + (pmiToolMode === 'note' ? ' active' : ''), id: 'pmi-mode-note', 'aria-pressed': String(pmiToolMode === 'note') });
+    bNote.innerHTML = icon('noteText') + `<span>${esc(T('pmi.modeNote'))}</span>`;
+    bNote.onclick = () => pmiSetMode('note');
+
+    pmiBar.append(title, bDim, bNote);
+    if (pmiToolMode === 'dim') {
+      const tolSel = h('select', { class: 'pmi-bar-sel', id: 'pmi-bar-tol-mode', 'aria-label': T('draw.panel.tolLabel') },
+        h('option', { value: 'none', selected: pmiBarTol.mode === 'none' }, T('pmi.tolNoneShort')),
+        h('option', { value: 'sym', selected: pmiBarTol.mode === 'sym' }, '±'),
+        h('option', { value: 'fit', selected: pmiBarTol.mode === 'fit' }, T('pmi.tolFitShort')));
+      tolSel.onchange = () => { pmiBarTol.mode = tolSel.value; buildPmiBar(); };
+      pmiBar.append(tolSel);
+      if (pmiBarTol.mode === 'sym') {
+        const inp = h('input', { type: 'text', class: 'pmi-bar-inp mono', id: 'pmi-bar-tol-val', value: fmtFixed(pmiBarTol.sym, 2), 'aria-label': T('draw.panel.tolSymField') });
+        inp.addEventListener('keydown', (e) => e.stopPropagation());
+        inp.onchange = () => { const v = parseNum(inp.value); if (Number.isFinite(v) && v >= 0) pmiBarTol.sym = v; };
+        pmiBar.append(inp);
+      } else if (pmiBarTol.mode === 'fit') {
+        const inp = h('input', { type: 'text', class: 'pmi-bar-inp mono', id: 'pmi-bar-tol-val', value: pmiBarTol.fit, 'aria-label': T('draw.panel.fitLabel') });
+        inp.addEventListener('keydown', (e) => e.stopPropagation());
+        inp.onchange = () => { const v = inp.value.trim(); if (v) pmiBarTol.fit = v; };
+        pmiBar.append(inp);
+      }
+    }
+
+    const visOn = pmiVisible();
+    const bVis = h('button', { type: 'button', class: 'tool' + (visOn ? ' active' : ''), id: 'pmi-bar-vis', 'data-tip': T('vc.pmi'), 'aria-pressed': String(visOn) });
+    bVis.innerHTML = icon(visOn ? 'eye' : 'eyeOff');
+    bVis.onclick = () => { togglePmiVisible(); buildPmiBar(); };
+
+    const doneBtn = h('button', { type: 'button', class: 'tool primary', id: 'pmi-done', 'data-tip': T('common.done'), 'data-kbd': 'Esc' });
+    doneBtn.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`;
+    doneBtn.onclick = () => pmiStop();
+
+    pmiBar.append(bVis, doneBtn);
+    $('#overlay').append(pmiBar);
+  }
+  function hidePmiBar() { if (pmiBar) { pmiBar.remove(); pmiBar = null; } }
+  function pmiSetMode(mode) {
+    pmiToolMode = mode === 'note' ? 'note' : 'dim';
+    pmiPts = []; clearPmiPreview();
+    if (pmiOn) {
+      buildPmiBar();
+      UI.hint(pmiToolMode === 'note' ? T('pmi.hintNote') : T('pmi.hintDim'));
+    }
+  }
+  function pmiStart(mode = 'dim') {
+    if (!pmiIsPro()) return false;
+    Views.collapse();
+    if (Sketch.active) return false;
+    if (App.mode !== 'model' && typeof Commands !== 'undefined' && Commands.setMode) Commands.setMode('model');
+    if (on) stop();
+    if (typeof Notes !== 'undefined' && Notes.active) Notes.stop();
+    stopFieldPick();
+    stopDraftFacePick();
+    pmiOn = true;
+    pmiToolMode = mode === 'note' ? 'note' : 'dim';
+    pmiPts = []; clearPmiPreview();
+    App.clearSelection(); Handles.clear();
+    $('#t-pmi') && $('#t-pmi').classList.add('active');
+    Viewer.canvas.style.cursor = 'crosshair';
+    UI.hint(pmiToolMode === 'note' ? T('pmi.hintNote') : T('pmi.hintDim'));
+    buildPmiBar();
+    return true;
+  }
+  function pmiStop() {
+    if (!pmiOn) return false;
+    pmiOn = false;
+    pmiPts = []; clearPmiPreview(); hidePmiBar();
+    $('#t-pmi') && $('#t-pmi').classList.remove('active');
+    UI.hint(null);
+    if (Viewer.canvas) Viewer.canvas.style.cursor = '';
+    Handles.rebuild();
+    return true;
+  }
+  function pmiToggle(mode = 'dim') {
+    if (!pmiIsPro()) return false;
+    if (pmiOn) {
+      if (mode && mode !== pmiToolMode) { pmiSetMode(mode); return true; }
+      pmiStop();
+      return false;
+    }
+    return pmiStart(mode);
+  }
+
+  function currentBarTol() {
+    if (pmiBarTol.mode === 'sym') return { mode: 'sym', sym: Math.abs(Number(pmiBarTol.sym) || 0) };
+    if (pmiBarTol.mode === 'fit') return { mode: 'fit', fit: pmiBarTol.fit || 'H7', fitShow: 'both' };
+    return null;
+  }
+
+  async function pmiOnDown(e) {
+    if (!pmiOn || !pmiIsPro() || e.button !== 0) return false;
+    const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 11 });
+    if (!hit) return true;
+    if (pmiToolMode === 'note') {
+      const q = entityAt(hit, e.clientX, e.clientY);
+      const txt = await UI.prompt(T('pmi.notePromptTitle'), T('pmi.notePromptLabel'), '', T('common.add'));
+      if (!txt || !txt.trim()) return true;
+      const ref = q.edge && hit.edgeIdx != null
+        ? (buildEdgeMeasureRef(followMergedId(hit.id), hit.edgeIdx) || {}).ref || q.ref
+        : q.ref;
+      const created = addPmiNote({ text: txt.trim(), ref, p: (q.p || q.hitP).toArray() });
+      if (created) UI.toast(T('pmi.addedToast', { name: created.name }), { icon: 'check', ms: 2000 });
+      return true;
+    }
+    const ent = entityAt(hit, e.clientX, e.clientY);
+    const tol = currentBarTol();
+    if (pmiPts.length === 0 && hit.edgeIdx != null && ent.edge) {
+      if (ent.edge.t === 'CIRCLE' && ent.edge.r > 0) {
+        const created = addPmiDim({ itemId: hit.id, edgeIdx: hit.edgeIdx, dimType: 'dia', tol });
+        if (created) UI.toast(T('pmi.addedToast', { name: created.name }), { icon: 'check', ms: 2000 });
+        return true;
+      }
+      if (ent.edge.t === 'LINE' && ent.edge.a && ent.edge.b) {
+        const created = addPmiDim({ itemId: hit.id, edgeIdx: hit.edgeIdx, dimType: 'lin', tol });
+        if (created) UI.toast(T('pmi.addedToast', { name: created.name }), { icon: 'check', ms: 2000 });
+        return true;
+      }
+    }
+    if (pmiPts.length === 0 && ent.kind === 'round') {
+      const created = addPmiDim({ itemId: ent.id, faceIdx: ent.faceIdx, dimType: 'dia', tol });
+      if (created) UI.toast(T('pmi.addedToast', { name: created.name }), { icon: 'check', ms: 2000 });
+      return true;
+    }
+    const cleanEnt = ent.kind === 'round' ? { ...ent, kind: 'pt', ref: { kind: 'pt', id: ent.id, lp: ent.ref.lp, frac: ent.ref.frac } } : ent;
+    pmiPts.push(cleanEnt);
+    if (cleanEnt.kind === 'face') {
+      const m = Viewer.faceOverlay(cleanEnt.id, cleanEnt.faceIdx, Viewer.theme.accent, 0.28);
+      if (m) { Viewer.groups.overlay.add(m); pmiPreObjs.push(m); }
+    } else if (cleanEnt.p) {
+      const d = Viewer.makeFat([cleanEnt.p.x, cleanEnt.p.y, cleanEnt.p.z, cleanEnt.p.x, cleanEnt.p.y, cleanEnt.p.z + 0.001], Viewer.theme.accent, 9, { depthTest: false });
+      Viewer.groups.overlay.add(d); pmiPreObjs.push(d);
+    }
+    Viewer.requestRender();
+    if (pmiPts.length >= 2) {
+      const [a, b] = pmiPts;
+      pmiPts = []; clearPmiPreview();
+      const ev = evalEntities('pair', [a, b]);
+      const created = addPmiDim({ refKind: 'pair', dimType: ev.unit === '°' ? 'ang' : 'lin', refs: [a.ref, b.ref], tol });
+      if (created) UI.toast(T('pmi.addedToast', { name: created.name }), { icon: 'check', ms: 2000 });
+    }
+    return true;
+  }
+
+  function pmiTreeSection() {
+    if (!pmiIsPro()) return null;
+    const list = pmiList();
+    if (!list.length) return null;
+    const sec = h('div', { class: 'datum-tree pmi-tree pro', id: 'pmi-tree', 'data-help': 'pmi3d' });
+    const visOn = pmiVisible();
+    const head = h('div', { class: 'section-h pmi-tree-head' }, h('span', { class: 'grow' }, T('pmi.treeHeading', { n: list.length })));
+    const gEye = h('button', { type: 'button', class: 'm-eye pmi-tree-eye', id: 'pmi-tree-eye', 'aria-label': visOn ? T('common.hide') : T('common.show'), 'data-tip': T('vc.pmi') });
+    gEye.innerHTML = icon(visOn ? 'eye' : 'eyeOff');
+    gEye.onclick = (e) => { e.stopPropagation(); togglePmiVisible(); };
+    head.append(gEye);
+    sec.append(head);
+
+    for (const item of list) {
+      const ev = pmiEvalOf(item);
+      const isSel = item.id === pmiSel;
+      const lbl = pmiFmtDimLabel(item, ev);
+      const row = h('div', {
+        class: 'tree-row measure-row pmi-row' + (isSel ? ' sel' : '') + (item.hidden || !visOn ? ' dim' : '') + (ev.lost ? ' lost' : ''),
+        dataset: { pmi: item.id },
+      });
+      const ic = h('span', { class: 'swatch pmi' });
+      ic.innerHTML = icon(item.kind === 'note' ? 'noteText' : 'dim');
+      const val = h('span', { class: 'sub mono' + (ev.lost ? ' lost' : '') }, lbl.text);
+      const acts = h('span', { class: 'm-acts' });
+      const eye = h('button', { type: 'button', class: 'm-eye', 'aria-label': item.hidden ? T('common.show') : T('common.hide'), 'data-tip': item.hidden ? T('common.show') : T('common.hide') });
+      eye.innerHTML = icon(item.hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); setPmiHidden(item.id, !item.hidden); };
+      const del = h('button', { type: 'button', class: 'm-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); removePmi(item.id); };
+      acts.append(eye, del);
+      row.append(ic, h('span', { class: 'nm' }, item.name), val, acts);
+      row.onclick = () => selectPmi(isSel ? null : item.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+
+  function pmiTolNumField({ id, label, value, min = null, onCommit }) {
+    const inp = h('input', { id, type: 'text', class: 'mono', value: fmtFixed(value, 4) });
+    const commit = () => {
+      const n = parseNum(inp.value);
+      if (!Number.isFinite(n)) { inp.value = fmtFixed(value, 4); return; }
+      const v = min != null ? Math.max(min, n) : n;
+      onCommit(round(v, 6));
+    };
+    inp.addEventListener('change', commit);
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { commit(); inp.blur(); } });
+    return h('div', { class: 'field' }, h('label', { for: id }, label), h('div', { class: 'inp' }, inp));
+  }
+
+  function renderPmiPanel(body) {
+    const item = pmiFind(pmiSel);
+    if (!item || !pmiIsPro()) return false;
+    const ev = pmiEvalOf(item);
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'pmi-name', value: item.name, 'aria-label': T('common.name') });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) updatePmi(item.id, { name: v }); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+
+    if (item.kind === 'dim') {
+      const lbl = pmiFmtDimLabel(item, ev);
+      w.append(h('div', { class: 'mini-list' },
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('common.kind')), h('b', null, ev.typeLabel || T('pmi.typeFallback'))),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('measure.valueLabel')), h('b', { class: 'mono' + (ev.lost ? ' bad' : ''), id: 'pmi-val' }, lbl.text))));
+
+      if (item.refKind === 'circle' || item.refKind === 'round') {
+        w.append(UI.selectField({
+          id: 'pmi-dimtype',
+          label: T('pmi.dimModeLabel'),
+          value: item.dimType === 'rad' ? 'rad' : 'dia',
+          options: [['dia', T('draw.dimMode.dia')], ['rad', T('draw.dimMode.rad')]],
+          onChange: (v) => updatePmi(item.id, { dimType: v }),
+        }));
+      }
+
+      const curTol = item.tol || null;
+      const curMode = curTol && curTol.mode ? curTol.mode : 'none';
+      const tolBox = h('div', { class: 'section', id: 'pmi-tol-sec', 'data-help': 'pmi3d' },
+        h('div', { class: 'section-h' }, T('draw.panel.tolLabel')));
+      const prefillDev = () => {
+        if (curTol && curTol.mode === 'fit' && typeof Drawing !== 'undefined' && Drawing.iso286) {
+          const fi = Drawing.iso286(curTol.fit, ev.value);
+          if (fi && !fi.outOfRange) return { upper: fi.upperMm, lower: fi.lowerMm };
+        }
+        if (curTol && curTol.mode === 'sym') return { upper: curTol.sym || 0, lower: -(curTol.sym || 0) };
+        if (curTol && (curTol.mode === 'dev' || curTol.mode === 'limits')) return { upper: curTol.upper || 0, lower: curTol.lower || 0 };
+        return { upper: 0.05, lower: -0.05 };
+      };
+      const tolOpts = ev.unit === '°'
+        ? [['none', T('draw.panel.tolNone')], ['sym', T('draw.panel.tolSym')], ['dev', T('draw.panel.tolDev')]]
+        : [['none', T('draw.panel.tolNone')], ['sym', T('draw.panel.tolSym')], ['dev', T('draw.panel.tolDev')], ['limits', T('draw.panel.tolLimits')], ['fit', T('draw.panel.tolFit')]];
+      tolBox.append(UI.selectField({
+        id: 'pmi-tol-mode',
+        label: T('draw.panel.tolLabel'),
+        value: curMode,
+        options: tolOpts,
+        onChange: (m) => {
+          if (m === 'none') setPmiTol(item.id, null);
+          else if (m === 'sym') setPmiTol(item.id, { mode: 'sym', sym: curTol && curTol.sym != null ? curTol.sym : 0.1 });
+          else if (m === 'dev' || m === 'limits') setPmiTol(item.id, { mode: m, ...prefillDev() });
+          else if (m === 'fit') setPmiTol(item.id, { mode: 'fit', fit: (curTol && curTol.fit) || (item.dimType === 'dia' ? 'H7' : 'h6'), fitShow: (curTol && curTol.fitShow) || 'both' });
+        },
+      }));
+      if (curMode === 'sym') {
+        tolBox.append(pmiTolNumField({
+          id: 'pmi-tol-sym',
+          label: T('draw.panel.tolSymField'),
+          value: curTol.sym ?? 0.1,
+          min: 0,
+          onCommit: (v) => setPmiTol(item.id, { mode: 'sym', sym: Math.abs(v) }),
+        }));
+      } else if (curMode === 'dev') {
+        tolBox.append(h('div', { class: 'fields' },
+          pmiTolNumField({ id: 'pmi-tol-upper', label: T('draw.panel.tolUpper'), value: curTol.upper ?? 0, onCommit: (v) => setPmiTol(item.id, { mode: 'dev', upper: v, lower: curTol.lower ?? 0 }) }),
+          pmiTolNumField({ id: 'pmi-tol-lower', label: T('draw.panel.tolLower'), value: curTol.lower ?? 0, onCommit: (v) => setPmiTol(item.id, { mode: 'dev', upper: curTol.upper ?? 0, lower: v }) })));
+      } else if (curMode === 'limits') {
+        const nom = Number(ev.value) || 0;
+        tolBox.append(h('div', { class: 'fields' },
+          pmiTolNumField({ id: 'pmi-tol-max', label: T('draw.panel.tolMax'), value: nom + (curTol.upper ?? 0), onCommit: (v) => setPmiTol(item.id, { mode: 'limits', upper: v - nom, lower: curTol.lower ?? 0 }) }),
+          pmiTolNumField({ id: 'pmi-tol-min', label: T('draw.panel.tolMin'), value: nom + (curTol.lower ?? 0), onCommit: (v) => setPmiTol(item.id, { mode: 'limits', upper: curTol.upper ?? 0, lower: v - nom }) })));
+      } else if (curMode === 'fit') {
+        const classes = (typeof Drawing !== 'undefined' && Drawing.ISO286 && Drawing.ISO286.klassen) || {};
+        const holeOpts = Object.entries(classes).filter(([, v]) => v.art === 'bohrung').map(([k]) => [k, k]);
+        const shaftOpts = Object.entries(classes).filter(([, v]) => v.art === 'welle').map(([k]) => [k, k]);
+        tolBox.append(
+          UI.selectField({
+            id: 'pmi-tol-fit',
+            label: T('draw.panel.fitLabel'),
+            value: curTol.fit || 'H7',
+            options: [
+              { group: T('draw.panel.fitHoleGroup'), options: holeOpts },
+              { group: T('draw.panel.fitShaftGroup'), options: shaftOpts },
+            ],
+            onChange: (v) => setPmiTol(item.id, { mode: 'fit', fit: v, fitShow: curTol.fitShow || 'both' }),
+          }),
+          UI.selectField({
+            id: 'pmi-tol-fit-show',
+            label: T('draw.panel.fitShowLabel'),
+            value: curTol.fitShow || 'both',
+            options: [
+              ['both', T('draw.panel.fitShowBoth')],
+              ['code', T('draw.panel.fitShowCode')],
+              ['dev', T('draw.panel.fitShowDev')],
+              ['limits', T('draw.panel.fitShowLimits')],
+            ],
+            onChange: (v) => setPmiTol(item.id, { mode: 'fit', fit: curTol.fit || 'H7', fitShow: v }),
+          })
+        );
+      }
+      const tf = formatPmiTol(item.tol, Number(ev.value) || 0, ev.unit || 'mm');
+      if (tf) {
+        if (tf.outOfRange) {
+          tolBox.append(h('div', { class: 'hint-box', id: 'pmi-tol-info', html: T('draw.panel.tolOutOfRange', { code: esc(tf.code) }) }));
+        } else if (tf.upperMm != null && ev.unit !== '°') {
+          const fitDec = tf.mode === 'fit' && tf.info && (!Number.isInteger(tf.info.upperUm) || !Number.isInteger(tf.info.lowerUm)) ? 4 : 0;
+          const dev = pmiFmtDevPair(tf.upperMm, tf.lowerMm, fitDec);
+          const lim = pmiFmtLimitsPair(Number(ev.value) || 0, tf.upperMm, tf.lowerMm, fitDec);
+          tolBox.append(h('div', {
+            class: 'hint-box',
+            id: 'pmi-tol-info',
+            html: [
+              T('draw.panel.tolDevs', { up: esc(dev.upStr), lo: esc(dev.loStr), u: esc(Units.label()) }),
+              T('draw.panel.tolLimitsLine', { min: esc(lim.minStr), max: esc(lim.maxStr), u: esc(Units.label()) }),
+            ].join('<br>'),
+          }));
+        }
+      }
+      w.append(tolBox);
+
+      const noteInp = h('input', { id: 'pmi-note', type: 'text', value: item.note || '', placeholder: T('pmi.extraNotePh') });
+      noteInp.addEventListener('change', () => updatePmi(item.id, { note: noteInp.value }));
+      noteInp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') noteInp.blur(); });
+      w.append(h('div', { class: 'field' }, h('label', { for: 'pmi-note' }, T('pmi.extraNoteLabel')), h('div', { class: 'inp' }, noteInp)));
+    } else {
+      const txtInp = h('textarea', { id: 'pmi-text', rows: 3, value: item.text || '' });
+      txtInp.value = item.text || '';
+      txtInp.addEventListener('change', () => { const v = txtInp.value.trim(); if (v) updatePmi(item.id, { text: v }); });
+      txtInp.addEventListener('keydown', (e) => e.stopPropagation());
+      w.append(h('div', { class: 'field' }, h('label', { for: 'pmi-text' }, T('pmi.noteTextLabel')), h('div', { class: 'inp' }, txtInp)));
+    }
+
+    w.append(pmiTolNumField({
+      id: 'pmi-offset',
+      label: T('pmi.offsetLabel'),
+      value: item.offset ?? (item.kind === 'note' ? 14 : 12),
+      min: 2,
+      onCommit: (v) => updatePmi(item.id, { offset: v }),
+    }));
+
+    const inDwgChk = h('label', { class: 'check' },
+      h('input', { type: 'checkbox', id: 'pmi-in-drawing', checked: item.inDrawing !== false }),
+      T('pmi.inDrawingLabel'));
+    inDwgChk.querySelector('input').onchange = (e) => updatePmi(item.id, { inDrawing: e.target.checked });
+    w.append(inDwgChk);
+
+    if (ev.lost) w.append(h('div', { class: 'err-box' }, T('measure.lostDesc')));
+
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const bh = h('button', { type: 'button', class: 'btn', id: 'pmi-hide' });
+    bh.innerHTML = icon(item.hidden ? 'eye' : 'eyeOff') + esc(item.hidden ? T('common.show') : T('common.hide'));
+    bh.onclick = () => setPmiHidden(item.id, !item.hidden);
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'pmi-del' });
+    bd.innerHTML = icon('trash') + esc(T('common.delete'));
+    bd.onclick = () => removePmi(item.id);
+    row.append(bh, bd);
+    w.append(row);
+    body.append(w);
+    return true;
+  }
+
   return {
     showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
@@ -3102,6 +4340,32 @@ const Measure = (() => {
         result: res,
       };
     },
+    get pmiActive() { return pmiOn; },
+    get pmiMode() { return pmiToolMode; },
+    get selectedPmi() { return pmiSel; },
+    pmiList,
+    pmiFind,
+    pmiVisible,
+    setPmiVisible,
+    togglePmiVisible,
+    pmiStart,
+    pmiStop,
+    pmiToggle,
+    pmiSetMode,
+    addPmiDim,
+    addPmiNote,
+    updatePmi,
+    setPmiTol,
+    setPmiHidden,
+    removePmi,
+    selectPmi,
+    pmiRelink,
+    drawPmi,
+    placePmi,
+    pmiEvalOf,
+    pmiFmtDimLabel,
+    pmiTreeSection,
+    renderPmiPanel,
   };
 })();
 
