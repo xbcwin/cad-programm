@@ -2489,6 +2489,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Muster aus CSV-Tabelle (`pt: 'table'`)**: Quader `6×6×6` über `Features.patternTable` mit 3 CSV-Zeilen (`x;y;z`) → exakt 3 getrennte Kopien mit Gesamtvolumen `648 mm³` (`GeomCheck` 0 Funde), Relativ-Modus (`dX/dY/dZ/rot`), Hilfetexte (`werkzeug-hilfen.json`/`HELP`), DE/EN-Schlüsselgleichheit und Befehlssuche ohne Fehler.
 - [ ] **Von Hand**: Im Browser auf eine beliebige Fläche mit Durchbruch ein gedrehtes Waben-Füllmuster setzen, eine Schraube an eigenen Skizzenpunkten vervielfachen und eine `.csv`-Datei über „CSV laden …“ einlesen.
 
+## Varianten-Tabelle zum Ausfüllen (Auto [A-132], KP-52)
+
+- [x] **Profi-Sichtbarkeit & 3-Zeilen-Tabelle**: `#var-table` ist im Einfach-Modus verborgen und öffnet im Profi-Modus den Dialog `#var-table-dlg`; über „Zeile hinzufügen“ angelegte 3 Zeilen („Klein“ 10/20/`PLA`, „Mittel“ 20/25/`Alu 6061`, „Groß“ 30/30/`CFK`) werden direkt in `App.doc.variants` gespeichert.
+- [x] **Zeilenklick schaltet Variante & Werkstoff**: Klick auf Zeile 3 und anschließend auf Zeile 2 schaltet Breite, Tiefe, 3D-Hüllmaße (`20×25×10`) sowie den Projekt-Werkstoff (`Alu 6061`) um und markiert die aktive Zeile (`.vt-row.on`).
+- [x] **CSV-Export & -Reimport**: `Variants.toCSV()` exportiert `Variante;Breite;Tiefe;Werkstoff`, nach Leeren stellt `Variants.importCSV()` alle 3 Zeilen mit gleichen Maßen und Werkstoffen wieder her (ohne Duplikate bei erneutem Import), und ein Klick auf Zeile 2 setzt wieder Breite `20` und `Alu 6061`.
+- [x] **Varianten-Vergleich, Rückgängig, Migration & Hilfe**: `#vt-cmp` zeigt die Werkstoff-Spalte mit korrektem Gewichts-Unterschied (`Alu 6061` > `PLA`), `App.undo()` macht den Varianten-Wechsel rückgängig, `Model.migrate` erhält `v.material`, `HELP.variantTable` und Befehl `variants-table` sind vorhanden.
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Varianten-Tabelle mit 4 Zeilen und Formeln ausfüllen, über „CSV exportieren“ speichern, in Excel/Numbers bearbeiten, wieder über „CSV importieren“ laden und beim Umschalten prüfen, ob Werkstoff-Optik (z. B. Alu vs. PLA) und Maße im 3D-Bild sofort wechseln.
+
 ## Fehler melden
 
 ```

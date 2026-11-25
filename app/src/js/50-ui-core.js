@@ -77,7 +77,7 @@ const UI = (() => {
     }
     back.append(box);
     back.addEventListener('pointerdown', (e) => { if (e.target === back) close(null); });
-    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } };
+    const key = (e) => { if (e.key === 'Escape') { const backs = document.querySelectorAll('.modal-back'); if (backs.length && backs[backs.length - 1] !== back) return; e.stopPropagation(); close(null); } };
     document.addEventListener('keydown', key, true);
     document.body.append(back);
     setTimeout(() => { const f = box.querySelector('input,select,textarea,button.primary'); if (f) f.focus(); }, 30);
@@ -139,7 +139,7 @@ const UI = (() => {
   // ---------- Tooltips ----------
   let tipEl = null, tipTimer = 0, helpTimer = 0;
   // Hilfe-Schlüssel eines Elements: data-help, sonst nach id oder Beschriftung
-  const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist', 'var-new': 'variants', 'var-cmp': 'variants' };
+  const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist', 'var-new': 'variants', 'var-table': 'variantTable', 'var-cmp': 'variants' };
   const HELP_LABELS = { 'Spiegeln': 'mirror', 'Hochziehen': 'extrude', 'Skizze hierauf': 'sketchFace' };
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
   function initTips() {

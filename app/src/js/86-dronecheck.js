@@ -250,11 +250,27 @@ const Plates = (() => {
   return { candidates, file, dxf };
 })();
 
-// ---------- Varianten: benannte Sätze von Maßen und unterdrückten Schritten, zum Umschalten und Vergleichen ----------
+// ---------- Varianten: benannte Sätze von Maßen, Werkstoff und unterdrückten Schritten, zum Umschalten und Vergleichen ----------
 const Variants = (() => {
   let stepsOpen = true;
   const list = () => App.doc.variants || [];
   const snap = (doc = App.doc) => Object.fromEntries((doc.params || []).map((p) => [p.name, p.expr]));
+  const MAT_CATS = ['Metalle', 'Kunststoffe', 'Faserverbund', 'Holz & Platten'];
+  function currentMaterialKey(doc = App.doc) {
+    const k = doc && doc.settings && doc.settings.material;
+    if (k && typeof Mass !== 'undefined' && Mass.matOf && Mass.matOf(k)) return k;
+    return (typeof Mass !== 'undefined' && Mass.projectMaterial) ? Mass.projectMaterial(doc).k : (k || 'CFK');
+  }
+  function resolveMaterial(raw) {
+    if (raw == null) return '';
+    const s = String(raw).trim();
+    if (!s || s === '–' || s === '-') return '';
+    const low = s.toLowerCase();
+    const exact = MATERIALS.find((m) => m.k.toLowerCase() === low || (m.name && m.name.toLowerCase() === low));
+    if (exact) return exact.k;
+    const pref = MATERIALS.find((m) => m.name && m.name.toLowerCase().startsWith(low));
+    return pref ? pref.k : null;
+  }
   function collectSteps(doc = App.doc) {
     const out = [];
     const rec = (items, depth) => {
@@ -288,28 +304,175 @@ const Variants = (() => {
     for (const p of doc.params || []) if (Object.prototype.hasOwnProperty.call(vals, p.name)) p.expr = vals[p.name];
     const sup = new Set(Array.isArray(v && v.suppressed) ? v.suppressed : []);
     Model.walk(doc.items || [], (it) => { if (sup.has(it.id)) it.suppressed = true; else if (it.suppressed) delete it.suppressed; });
+    if (v && v.material && typeof Mass !== 'undefined' && Mass.matOf && Mass.matOf(v.material)) {
+      doc.settings = doc.settings || {};
+      doc.settings.material = v.material;
+    }
   }
   function active() { return list().find((v) => v.id === App.doc.variant) || null; }
   function changedParts(a = active(), doc = App.doc) {
-    if (!a) return { params: false, steps: false };
+    if (!a) return { params: false, steps: false, material: false };
     const s = snap(doc), av = a.values || {};
     const params = Object.keys({ ...av, ...s }).some((k) => String(av[k]) !== String(s[k]));
     const sa = new Set(suppressedIds(a, doc)), sb = new Set(snapSuppressed(doc));
     const steps = sa.size !== sb.size || [...sa].some((id) => !sb.has(id));
-    return { params, steps };
+    const material = !!(a.material && typeof Mass !== 'undefined' && Mass.matOf && Mass.matOf(a.material) && a.material !== currentMaterialKey(doc));
+    return { params, steps, material };
   }
-  function changed() { const c = changedParts(); return c.params || c.steps; }
+  function changed() { const c = changedParts(); return c.params || c.steps || c.material; }
+  function columns(doc = App.doc) {
+    const cols = [];
+    const seen = new Set();
+    for (const p of (doc && doc.params) || []) {
+      if (p && p.name && !seen.has(p.name)) { seen.add(p.name); cols.push(p.name); }
+    }
+    for (const v of (doc && doc.variants) || []) {
+      for (const k of Object.keys((v && v.values) || {})) {
+        if (k && !seen.has(k)) { seen.add(k); cols.push(k); }
+      }
+    }
+    return cols;
+  }
+  function uniqueName(base, doc = App.doc, ignoreId = null) {
+    const clean = (base || '').trim() || 'Variante 1';
+    const used = new Set(((doc && doc.variants) || []).filter((x) => x.id !== ignoreId).map((x) => String(x.name || '').trim().toLowerCase()));
+    if (!used.has(clean.toLowerCase())) return clean;
+    let n = 2;
+    while (used.has(`${clean} ${n}`.toLowerCase())) n++;
+    return `${clean} ${n}`;
+  }
   function save(name, opts = {}) {
     const sup = Array.isArray(opts.suppressed) ? [...new Set(opts.suppressed)] : snapSuppressed();
-    const v = { id: uid('va'), name: (name || '').trim() || 'Variante ' + (list().length + 1), values: snap(), suppressed: sup };
-    App.change(`Variante „${v.name}“ gespeichert`, (doc) => { doc.variants = doc.variants || []; doc.variants.push(v); doc.variant = v.id; });
+    const vals = opts.values && typeof opts.values === 'object' ? { ...snap(), ...opts.values } : snap();
+    const mat = opts.material !== undefined ? resolveMaterial(opts.material) : currentMaterialKey();
+    const v = { id: uid('va'), name: (name || '').trim() || 'Variante ' + (list().length + 1), values: vals, suppressed: sup };
+    if (mat) v.material = mat;
+    App.change(`Variante „${v.name}“ gespeichert`, (doc) => {
+      doc.variants = doc.variants || [];
+      doc.variants.push(v);
+      if (opts.activate !== false) {
+        doc.variant = v.id;
+        if (opts.values || opts.material !== undefined) applyToDoc(doc, v);
+      }
+    });
     return v;
+  }
+  function addRow(opts = {}) {
+    const sup = Array.isArray(opts.suppressed) ? [...new Set(opts.suppressed)] : snapSuppressed();
+    const vals = opts.values && typeof opts.values === 'object' ? { ...snap(), ...opts.values } : snap();
+    const mat = opts.material !== undefined ? resolveMaterial(opts.material) : currentMaterialKey();
+    const baseName = (opts.name || '').trim() || ('Variante ' + (list().length + 1));
+    const v = { id: uid('va'), name: uniqueName(baseName), values: vals, suppressed: sup };
+    if (mat) v.material = mat;
+    App.change('Variante hinzugefügt', (doc) => {
+      doc.variants = doc.variants || [];
+      doc.variants.push(v);
+      if (opts.activate === true || (!doc.variant && doc.variants.length === 1)) {
+        doc.variant = v.id;
+        applyToDoc(doc, v);
+      }
+    });
+    return v;
+  }
+  function duplicateRow(variantId) {
+    const vs = list();
+    const idx = vs.findIndex((x) => x.id === variantId);
+    if (idx < 0) return null;
+    const src = vs[idx];
+    const copy = {
+      id: uid('va'),
+      name: uniqueName((src.name || 'Variante') + ' Kopie'),
+      values: { ...(src.values || {}) },
+      suppressed: Array.isArray(src.suppressed) ? [...src.suppressed] : [],
+    };
+    if (src.material) copy.material = src.material;
+    App.change(`Variante „${copy.name}“ dupliziert`, (doc) => {
+      doc.variants = doc.variants || [];
+      const at = doc.variants.findIndex((x) => x.id === variantId);
+      doc.variants.splice(at >= 0 ? at + 1 : doc.variants.length, 0, copy);
+    });
+    return copy;
+  }
+  function setName(variantId, name) {
+    const clean = String(name == null ? '' : name).trim();
+    if (!clean) return false;
+    const v = list().find((x) => x.id === variantId);
+    if (!v) return false;
+    if (v.name === clean) return true;
+    App.change('Variante umbenannt', (doc) => {
+      const vv = (doc.variants || []).find((x) => x.id === variantId);
+      if (!vv) return false;
+      vv.name = clean;
+    });
+    return true;
+  }
+  function setValue(variantId, paramName, rawVal) {
+    const v = list().find((x) => x.id === variantId);
+    if (!v || !paramName) return { ok: false, error: 'Variante nicht gefunden.' };
+    let nextVal;
+    if (typeof rawVal === 'number' && isFinite(rawVal)) {
+      nextVal = rawVal;
+    } else {
+      const raw = String(rawVal == null ? '' : rawVal).trim();
+      if (!raw) return { ok: false, error: 'Bitte eine Zahl oder Formel eingeben.' };
+      const n = parseNum(raw);
+      if (!isNaN(n)) {
+        nextVal = n;
+      } else {
+        const tmp = { ...App.doc, params: (App.doc.params || []).map((p) => ({ ...p })), tables: App.doc.tables || [] };
+        const vals = (v && v.values) || {};
+        for (const p of tmp.params) if (Object.prototype.hasOwnProperty.call(vals, p.name)) p.expr = vals[p.name];
+        for (const [k, val] of Object.entries(vals)) {
+          if (!tmp.params.some((p) => p.name === k)) tmp.params.push({ id: uid('m'), name: k, expr: val });
+        }
+        const evalVars = Model.vars(tmp).v;
+        for (const k of Object.keys(evalVars)) if (k.toLowerCase() === paramName.toLowerCase()) delete evalVars[k];
+        const res = Expr.tryEval(raw, evalVars, App.doc.tables || []);
+        if (!res.ok) return { ok: false, error: res.error };
+        nextVal = raw;
+      }
+    }
+    const curVal = (v.values || {})[paramName];
+    const activeMismatch = App.doc.variant === v.id && (App.doc.params || []).some((p) => p.name === paramName && String(p.expr) !== String(nextVal));
+    if (String(curVal) === String(nextVal) && !activeMismatch) return { ok: true, value: nextVal };
+    App.change('Variantenwert geändert', (doc) => {
+      const vv = (doc.variants || []).find((x) => x.id === variantId);
+      if (!vv) return false;
+      vv.values = vv.values || {};
+      vv.values[paramName] = nextVal;
+      if (doc.variant === vv.id) {
+        const p = (doc.params || []).find((x) => x.name === paramName);
+        if (p) {
+          p.expr = nextVal;
+          if (p.measure) delete p.measure;
+        }
+      }
+    }, { merge: 'vartbl:' + variantId + ':' + paramName });
+    return { ok: true, value: nextVal };
+  }
+  function setMaterial(variantId, matKey) {
+    const v = list().find((x) => x.id === variantId);
+    if (!v) return false;
+    const norm = resolveMaterial(matKey);
+    if (norm === null) return false;
+    if ((v.material || '') === norm && (App.doc.variant !== v.id || !norm || currentMaterialKey() === norm)) return true;
+    App.change('Varianten-Werkstoff geändert', (doc) => {
+      const vv = (doc.variants || []).find((x) => x.id === variantId);
+      if (!vv) return false;
+      if (norm) vv.material = norm;
+      else delete vv.material;
+      if (doc.variant === vv.id && norm) {
+        doc.settings = doc.settings || {};
+        doc.settings.material = norm;
+      }
+    });
+    return true;
   }
   function update() {
     const a = active(); if (!a) return;
     App.change(`Variante „${a.name}“ aktualisiert`, (doc) => {
       const v = (doc.variants || []).find((x) => x.id === a.id);
-      if (v) { v.values = snap(doc); v.suppressed = snapSuppressed(doc); }
+      if (v) { v.values = snap(doc); v.suppressed = snapSuppressed(doc); v.material = currentMaterialKey(doc); }
     });
   }
   function apply(id) {
@@ -344,11 +507,126 @@ const Variants = (() => {
     return suppressedIds(v, App.doc);
   }
   function remove(id) { App.change('Variante gelöscht', (doc) => { doc.variants = (doc.variants || []).filter((x) => x.id !== id); if (doc.variant === id) doc.variant = null; }); }
+  function toCSV(doc = App.doc) {
+    const cols = columns(doc);
+    const q = (s) => (/[;"\r\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s));
+    const rows = [['Variante', ...cols, 'Werkstoff']];
+    for (const v of (doc && doc.variants) || []) {
+      rows.push([
+        v.name || '',
+        ...cols.map((c) => {
+          const x = (v.values || {})[c];
+          return x == null ? '' : typeof x === 'number' ? fmtFixed(x, 6) : String(x);
+        }),
+        v.material || '',
+      ]);
+    }
+    return rows.map((r) => r.map(q).join(';')).join('\r\n') + '\r\n';
+  }
+  function importCSV(txt) {
+    const lines = String(txt || '').replace(/^\ufeff/, '').split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) { UI.toast('Die CSV-Datei ist leer.', { icon: 'info' }); return { ok: false, count: 0 }; }
+    const sep = lines[0].includes(';') ? ';' : lines[0].includes('\t') ? '\t' : ',';
+    const parseLine = (l) => {
+      const out = []; let cur = '', qq = false;
+      for (let i = 0; i < l.length; i++) {
+        const c = l[i];
+        if (qq) { if (c === '"' && l[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') qq = false; else cur += c; }
+        else if (c === '"') qq = true;
+        else if (c === sep) { out.push(cur); cur = ''; }
+        else cur += c;
+      }
+      out.push(cur);
+      return out.map((x) => x.trim());
+    };
+    const head = parseLine(lines[0]);
+    let nameIdx = head.findIndex((c) => /^(variante|name|bezeichnung|variant)$/i.test(c));
+    if (nameIdx < 0) nameIdx = 0;
+    const matIdx = head.findIndex((c, i) => i !== nameIdx && /^(werkstoff|material|mat)$/i.test(c));
+    const paramCols = [];
+    const seenCols = new Set();
+    for (let i = 0; i < head.length; i++) {
+      if (i === nameIdx || i === matIdx) continue;
+      const pName = head[i].replace(/\s+/g, '_');
+      if (!pName || !/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(pName) || seenCols.has(pName)) continue;
+      seenCols.add(pName);
+      paramCols.push({ idx: i, name: pName });
+    }
+    if (lines.length < 2 || (!paramCols.length && matIdx < 0)) {
+      UI.toast('In der CSV-Datei wurden keine Varianten gefunden (Kopfzeile z. B.: Variante;Breite;Werkstoff).', { icon: 'info' });
+      return { ok: false, count: 0 };
+    }
+    const parsed = [];
+    const unknownMats = [];
+    const usedNames = new Set();
+    for (let r = 1; r < lines.length; r++) {
+      const cells = parseLine(lines[r]);
+      if (!cells.some((x) => x !== '')) continue;
+      let name = (cells[nameIdx] || '').trim() || ('Variante ' + (parsed.length + 1));
+      if (usedNames.has(name.toLowerCase())) {
+        let k = 2;
+        while (usedNames.has(`${name} ${k}`.toLowerCase())) k++;
+        name = `${name} ${k}`;
+      }
+      usedNames.add(name.toLowerCase());
+      const values = {};
+      for (const pc of paramCols) {
+        const raw = cells[pc.idx] != null ? cells[pc.idx] : '';
+        if (raw === '') continue;
+        const n = parseNum(raw);
+        values[pc.name] = isNaN(n) ? raw : n;
+      }
+      let material = '';
+      if (matIdx >= 0 && cells[matIdx]) {
+        const res = resolveMaterial(cells[matIdx]);
+        if (res === null) unknownMats.push(cells[matIdx]);
+        else material = res;
+      }
+      parsed.push({ name, values, material });
+    }
+    if (!parsed.length) {
+      UI.toast('In der CSV-Datei wurden keine Varianten-Zeilen gefunden.', { icon: 'info' });
+      return { ok: false, count: 0 };
+    }
+    App.change('Varianten aus CSV geladen', (doc) => {
+      doc.params = doc.params || [];
+      for (const pc of paramCols) {
+        if (!doc.params.some((p) => p.name === pc.name)) {
+          const first = parsed.find((x) => Object.prototype.hasOwnProperty.call(x.values, pc.name));
+          doc.params.push({ id: uid('m'), name: pc.name, expr: first ? first.values[pc.name] : 10 });
+        }
+      }
+      const oldList = Array.isArray(doc.variants) ? doc.variants : [];
+      const matched = new Set();
+      const nextList = [];
+      for (const row of parsed) {
+        const old = oldList.find((x) => !matched.has(x.id) && String(x.name || '').trim().toLowerCase() === row.name.toLowerCase());
+        if (old) matched.add(old.id);
+        const baseVals = old && old.values ? { ...old.values } : snap(doc);
+        const nextVar = {
+          id: old ? old.id : uid('va'),
+          name: row.name,
+          values: { ...baseVals, ...row.values },
+          suppressed: old && Array.isArray(old.suppressed) ? [...old.suppressed] : snapSuppressed(doc),
+        };
+        if (row.material) nextVar.material = row.material;
+        nextList.push(nextVar);
+      }
+      doc.variants = nextList;
+      const keepActive = nextList.find((x) => x.id === doc.variant) || nextList[0];
+      doc.variant = keepActive ? keepActive.id : null;
+      if (keepActive) applyToDoc(doc, keepActive);
+    });
+    const note = unknownMats.length ? ` (Unbekannter Werkstoff ignoriert: ${[...new Set(unknownMats)].join(', ')})` : '';
+    UI.toast(`${parsed.length} ${parsed.length === 1 ? 'Variante' : 'Varianten'} aus CSV geladen.${note}`, { icon: 'check' });
+    return { ok: true, count: parsed.length, unknownMaterials: unknownMats };
+  }
   // Vergleich: Maße und unterdrückte Schritte, die sich unterscheiden, dazu Gewicht und (bei Drohnen) Schub/Gewicht
   async function compareData() {
     const vs = list(); if (!vs.length) return null;
     const names = [...new Set(vs.flatMap((v) => Object.keys(v.values || {})))].filter((k) => new Set(vs.map((v) => String((v.values || {})[k]))).size > 1);
     const steps = collectSteps(App.doc).filter(({ item }) => new Set(vs.map((v) => isSuppressedIn(v, item.id))).size > 1);
+    const materialDiff = new Set(vs.map((v) => v.material || '')).size > 1;
     const rowsOut = [];
     for (const v of vs) {
       const d = JSON.parse(App.snapshot());
@@ -359,7 +637,7 @@ const Variants = (() => {
       const volume = m && m.parts ? m.parts.reduce((s, p) => s + (p.volume || 0), 0) : null;
       rowsOut.push({ v, volume, mass: m ? m.mass : null, tw: t && m && g ? (g.n * t) / m.mass : null, gap: g ? g.gap : null });
     }
-    return { names, steps, rows: rowsOut };
+    return { names, steps, materialDiff, rows: rowsOut };
   }
   async function compareDialog() {
     const body = h('div', { class: 'vcmp', style: { overflowX: 'auto' } }, h('div', { class: 'hint-box' }, 'Rechne alle Varianten …'));
@@ -367,18 +645,304 @@ const Variants = (() => {
     const c = await compareData(); body.innerHTML = '';
     if (!c) { body.append(h('div', { class: 'hint-box' }, 'Noch keine Varianten.')); return; }
     const tbl = h('table', { class: 'vtable', id: 'vtable' });
-    const head = h('tr', null, h('th', null, 'Variante'), ...c.names.map((n) => h('th', null, n)), ...c.steps.map((s) => h('th', null, s.label)), h('th', null, 'Gewicht'), h('th', null, 'Schub/Gewicht'), h('th', null, 'Luft Propeller'));
+    const head = h('tr', null, h('th', null, 'Variante'), ...c.names.map((n) => h('th', null, n)), ...(c.materialDiff ? [h('th', null, 'Werkstoff')] : []), ...c.steps.map((s) => h('th', null, s.label)), h('th', null, 'Gewicht'), h('th', null, 'Schub/Gewicht'), h('th', null, 'Luft Propeller'));
     tbl.append(head);
     for (const r of c.rows) {
       tbl.append(h('tr', { class: r.v.id === App.doc.variant ? 'on' : '' },
         h('td', null, h('b', null, r.v.name)),
         ...c.names.map((n) => h('td', { class: 'mono' }, (r.v.values || {})[n] == null ? '–' : String(r.v.values[n]).replace('.', ','))),
+        ...(c.materialDiff ? [h('td', null, r.v.material || '–')] : []),
         ...c.steps.map((s) => { const sup = isSuppressedIn(r.v, s.item.id); return h('td', { class: sup ? 'var-cmp-sup' : 'var-cmp-on' }, sup ? 'unterdrückt' : 'aktiv'); }),
         h('td', { class: 'mono' }, r.mass == null ? '–' : Mass.gText(r.mass)),
         h('td', { class: 'mono' }, r.tw == null ? '–' : fmtFixed(r.tw, 1) + ' : 1'),
         h('td', { class: 'mono' }, r.gap == null ? '–' : fmtFixed(r.gap, 1) + ' mm')));
     }
     body.append(tbl);
+  }
+  function buildMaterialSelect(value, vid) {
+    const sel = h('select', { class: 'vt-sel', 'data-vid': vid, 'data-col': '__mat', 'aria-label': 'Werkstoff' });
+    sel.append(h('option', { value: '' }, '– unverändert –'));
+    for (const cat of MAT_CATS) {
+      const items = MATERIALS.filter((m) => m.cat === cat);
+      if (!items.length) continue;
+      const og = h('optgroup', { label: cat });
+      for (const m of items) og.append(h('option', { value: m.k }, `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³`));
+      sel.append(og);
+    }
+    const rest = MATERIALS.filter((m) => !MAT_CATS.includes(m.cat));
+    if (rest.length) {
+      const og = h('optgroup', { label: 'Sonstige' });
+      for (const m of rest) og.append(h('option', { value: m.k }, `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³`));
+      sel.append(og);
+    }
+    sel.value = value || '';
+    return sel;
+  }
+  function formatCellVal(x) {
+    if (x == null || x === '') return '';
+    return typeof x === 'number' ? fmtFixed(x, 6) : String(x);
+  }
+  function tableDialog() {
+    const existing = document.getElementById('var-table-dlg');
+    if (existing) {
+      const f = existing.querySelector('input,select,button');
+      if (f) f.focus();
+      return;
+    }
+    const body = h('div', { class: 'var-tbl-dlg', id: 'var-table-dlg' });
+    body.append(h('div', { class: 'hint-box' }, 'Fülle Maße und Werkstoff Zeile für Zeile aus wie in einer Tabelle. Klick auf eine Zeile schaltet die Variante direkt im 3D-Modell um.'));
+
+    const addRowBtn = h('button', { type: 'button', class: 'btn small', id: 'vt-add-row' });
+    addRowBtn.innerHTML = icon('plus') + 'Zeile hinzufügen';
+    const addParamBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'vt-add-param' });
+    addParamBtn.innerHTML = icon('plus') + 'Maß-Spalte';
+    const csvOutBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'vt-csv-out', 'data-help': 'variantTable' });
+    csvOutBtn.innerHTML = icon('export') + 'CSV exportieren';
+    const csvInBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'vt-csv-in', 'data-help': 'variantTable' });
+    csvInBtn.innerHTML = icon('folder') + 'CSV importieren';
+    const cmpBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'vt-cmp' });
+    cmpBtn.innerHTML = icon('list') + 'Vergleichen';
+
+    const bar = h('div', { class: 'var-tbl-bar' },
+      h('div', { class: 'var-tbl-bar-grp' }, addRowBtn, addParamBtn),
+      h('div', { class: 'var-tbl-bar-grp' }, csvOutBtn, csvInBtn, cmpBtn));
+    const sheetWrap = h('div', { class: 'var-sheet-wrap' });
+    body.append(bar, sheetWrap);
+
+    let lastSig = null;
+    let pendingFocus = null;
+    let unsub = null;
+
+    const focusCell = (vid, col, selectAll = false) => {
+      const inp = sheetWrap.querySelector(`[data-vid="${CSS.escape(vid)}"][data-col="${CSS.escape(col)}"]`);
+      if (inp) {
+        inp.focus();
+        if (selectAll && typeof inp.select === 'function') inp.select();
+      }
+    };
+    const moveVertical = (inp, delta) => {
+      const tr = inp.closest('tr.vt-row');
+      if (!tr) return;
+      const rows = [...sheetWrap.querySelectorAll('tbody tr.vt-row')];
+      const next = rows[rows.indexOf(tr) + delta];
+      if (!next) return;
+      const col = inp.dataset.col;
+      const tgt = next.querySelector(`[data-col="${CSS.escape(col)}"]`);
+      if (tgt) { tgt.focus(); if (typeof tgt.select === 'function') tgt.select(); }
+    };
+    const updateToolbar = () => {
+      const vs = list();
+      csvOutBtn.disabled = !vs.length;
+      cmpBtn.disabled = vs.length < 2;
+    };
+    const syncInPlace = () => {
+      const vs = list();
+      const cols = columns();
+      const activeId = App.doc.variant;
+      const activeEl = document.activeElement;
+      const trs = [...sheetWrap.querySelectorAll('#var-sheet tbody tr.vt-row')];
+      if (trs.length !== vs.length) return false;
+      vs.forEach((v, i) => {
+        const tr = trs[i];
+        const isOn = v.id === activeId;
+        tr.classList.toggle('on', isOn);
+        const radio = tr.querySelector('.vt-radio');
+        if (radio) radio.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+        const nameInp = tr.querySelector('.vt-name');
+        if (nameInp && activeEl !== nameInp) {
+          nameInp.value = v.name || '';
+          nameInp._orig = nameInp.value;
+          nameInp.classList.remove('invalid');
+        }
+        for (const col of cols) {
+          const pInp = tr.querySelector(`[data-col="${CSS.escape('p:' + col)}"]`);
+          if (pInp && activeEl !== pInp) {
+            pInp.value = formatCellVal((v.values || {})[col]);
+            pInp._orig = pInp.value;
+            pInp.classList.remove('invalid');
+          }
+        }
+        const matSel = tr.querySelector('.vt-sel');
+        if (matSel && activeEl !== matSel) matSel.value = v.material || '';
+      });
+      updateToolbar();
+      return true;
+    };
+    const rebuild = () => {
+      const vs = list();
+      const cols = columns();
+      const sig = vs.map((v) => v.id).join(',') + '|' + cols.join(',');
+      if (sig === lastSig && sheetWrap.querySelector('#var-sheet') && !pendingFocus) {
+        if (syncInPlace()) return;
+      }
+      const ae = document.activeElement;
+      let restore = pendingFocus;
+      pendingFocus = null;
+      if (!restore && ae && sheetWrap.contains(ae) && ae.dataset && ae.dataset.vid && ae.dataset.col) {
+        restore = { vid: ae.dataset.vid, col: ae.dataset.col, selectAll: false };
+      }
+      lastSig = sig;
+      sheetWrap.innerHTML = '';
+      updateToolbar();
+      if (!vs.length) {
+        sheetWrap.append(h('div', { class: 'hint-box' }, 'Noch keine Varianten. Klicke auf „Zeile hinzufügen“ oder lade eine CSV-Datei.'));
+        return;
+      }
+      const tbl = h('table', { class: 'vtable var-sheet', id: 'var-sheet' });
+      const thead = h('thead', null, h('tr', null,
+        h('th', { class: 'vt-col-pick' }, 'Aktiv'),
+        h('th', null, 'Variante'),
+        ...cols.map((c) => h('th', { class: 'mono' }, c)),
+        h('th', null, 'Werkstoff'),
+        h('th', { class: 'vt-col-act' }, '')));
+      const tbody = h('tbody');
+      vs.forEach((v, rowIdx) => {
+        const isActive = v.id === App.doc.variant;
+        const tr = h('tr', { class: 'vt-row' + (isActive ? ' on' : ''), 'data-vid': v.id, 'data-row': String(rowIdx) });
+        tr.addEventListener('click', (e) => {
+          if (e.target.closest('.vt-act, select')) return;
+          const isPick = !!e.target.closest('.vt-pick');
+          if (App.doc.variant !== v.id || (isPick && changed())) apply(v.id);
+        });
+
+        const radio = h('button', { type: 'button', class: 'vt-radio', 'aria-pressed': isActive ? 'true' : 'false', 'aria-label': `Variante „${v.name}“ aktivieren`, title: `Variante „${v.name}“ aktivieren` });
+        const pickTd = h('td', { class: 'vt-pick' }, radio);
+
+        const nameInp = h('input', { type: 'text', class: 'vt-inp vt-name', 'data-vid': v.id, 'data-col': '__name', value: v.name || '', 'aria-label': 'Variantenname', spellcheck: 'false' });
+        nameInp._orig = nameInp.value;
+        nameInp.addEventListener('change', () => {
+          const val = nameInp.value.trim();
+          if (!val) { nameInp.classList.add('invalid'); nameInp.value = nameInp._orig; UI.toast('Bitte einen Namen eingeben.', { kind: 'bad' }); return; }
+          nameInp.classList.remove('invalid');
+          nameInp._orig = val;
+          setName(v.id, val);
+        });
+        nameInp.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') { e.preventDefault(); nameInp.blur(); moveVertical(nameInp, 1); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); nameInp.blur(); moveVertical(nameInp, 1); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); nameInp.blur(); moveVertical(nameInp, -1); }
+        });
+
+        const paramCells = cols.map((c) => {
+          const valStr = formatCellVal((v.values || {})[c]);
+          const pInp = h('input', { type: 'text', class: 'vt-inp vt-num mono', 'data-vid': v.id, 'data-col': 'p:' + c, 'data-param': c, value: valStr, placeholder: '–', 'aria-label': `${v.name}: ${c}`, spellcheck: 'false' });
+          pInp._orig = valStr;
+          pInp.addEventListener('change', () => {
+            const raw = pInp.value.trim();
+            if (raw === pInp._orig) { pInp.classList.remove('invalid'); return; }
+            const res = setValue(v.id, c, raw);
+            if (!res.ok) {
+              pInp.classList.add('invalid');
+              UI.toast(res.error || 'Ungültiger Wert.', { kind: 'bad' });
+              return;
+            }
+            pInp.classList.remove('invalid');
+            pInp._orig = formatCellVal(res.value);
+            pInp.value = pInp._orig;
+          });
+          pInp.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); pInp.blur(); moveVertical(pInp, 1); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); pInp.blur(); moveVertical(pInp, 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); pInp.blur(); moveVertical(pInp, -1); }
+          });
+          return h('td', null, pInp);
+        });
+
+        const matSel = buildMaterialSelect(v.material || '', v.id);
+        matSel.addEventListener('change', () => { setMaterial(v.id, matSel.value); });
+        matSel.addEventListener('keydown', (e) => { e.stopPropagation(); });
+
+        const dupBtn = h('button', { type: 'button', class: 'vt-icon-btn vt-dup', 'aria-label': `Variante „${v.name}“ duplizieren`, title: 'Zeile duplizieren' });
+        dupBtn.innerHTML = icon('copy');
+        dupBtn.onclick = (e) => {
+          e.stopPropagation();
+          const c = duplicateRow(v.id);
+          if (c) pendingFocus = { vid: c.id, col: '__name', selectAll: true };
+        };
+        const delBtn = h('button', { type: 'button', class: 'vt-icon-btn vt-del danger', 'aria-label': `Variante „${v.name}“ löschen`, title: 'Zeile löschen' });
+        delBtn.innerHTML = icon('trash');
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          remove(v.id);
+        };
+
+        tr.append(pickTd, h('td', null, nameInp), ...paramCells, h('td', null, matSel), h('td', { class: 'vt-act' }, dupBtn, delBtn));
+        tbody.append(tr);
+      });
+      tbl.append(thead, tbody);
+      sheetWrap.append(tbl);
+      if (restore) focusCell(restore.vid, restore.col, restore.selectAll);
+    };
+
+    addRowBtn.onclick = () => {
+      const v = addRow();
+      if (v) focusCell(v.id, '__name', true);
+    };
+    addParamBtn.onclick = async () => {
+      let n = 1;
+      while ((App.doc.params || []).some((x) => x.name === 'Maß' + n)) n++;
+      const raw = await UI.prompt('Neues Maß als Spalte', 'Name des Maßes', 'Maß' + n, 'Hinzufügen');
+      if (raw == null) return;
+      const nv = raw.trim().replace(/\s+/g, '_');
+      if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nv)) {
+        UI.toast('Namen dürfen nur Buchstaben, Ziffern und _ enthalten und nicht mit einer Ziffer beginnen.', { kind: 'bad' });
+        return;
+      }
+      if ((App.doc.params || []).some((x) => x.name.toLowerCase() === nv.toLowerCase())) {
+        UI.toast('Diesen Namen gibt es schon.', { kind: 'bad' });
+        return;
+      }
+      App.change('Maß-Spalte hinzugefügt', (doc) => {
+        doc.params = doc.params || [];
+        doc.params.push({ id: uid('m'), name: nv, expr: 10 });
+        for (const v of doc.variants || []) {
+          v.values = v.values || {};
+          if (!Object.prototype.hasOwnProperty.call(v.values, nv)) v.values[nv] = 10;
+        }
+      });
+    };
+    csvOutBtn.onclick = () => {
+      Print.save(Print.safeName(App.doc.name) + ' – Varianten.csv', new Blob(['\ufeff' + toCSV()], { type: 'text/csv;charset=utf-8' }));
+      UI.toast('Varianten als CSV gespeichert.', { icon: 'check' });
+    };
+    csvInBtn.onclick = () => {
+      const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } });
+      inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importCSV(await f.text()); };
+      document.body.append(inp); inp.click();
+      setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+    };
+    cmpBtn.onclick = () => compareDialog();
+
+    const onEsc = (e) => {
+      if (e.key !== 'Escape') return;
+      const backs = document.querySelectorAll('.modal-back');
+      const myBack = body.closest('.modal-back');
+      if (!myBack || backs[backs.length - 1] !== myBack) return;
+      const ae = document.activeElement;
+      if (ae && sheetWrap.contains(ae) && ae.classList.contains('vt-inp') && (ae.value !== ae._orig || ae.classList.contains('invalid'))) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        ae.value = ae._orig ?? '';
+        ae.classList.remove('invalid');
+        ae.blur();
+      }
+    };
+    window.addEventListener('keydown', onEsc, true);
+
+    unsub = App.on('doc', rebuild);
+    UI.modal({
+      title: 'Varianten-Tabelle',
+      body,
+      wide: true,
+      actions: [{ label: 'Schließen', primary: true }],
+      onClose: () => {
+        if (unsub) { unsub(); unsub = null; }
+        window.removeEventListener('keydown', onEsc, true);
+      },
+    });
+    rebuild();
   }
   // Abschnitt oben im Reiter „Maße“
   function section() {
@@ -387,22 +951,30 @@ const Variants = (() => {
     const a = active();
     if (vs.length) {
       sec.append(UI.selectField({ id: 'var-sel', label: 'Aktive Variante', value: a ? a.id : '', options: [...(a ? [] : [['', '– keine –']]), ...vs.map((v) => [v.id, v.name])], onChange: (id) => id && apply(id) }));
-      const cp = a ? changedParts(a) : { params: false, steps: false };
-      if (a && (cp.params || cp.steps)) {
-        const msg = cp.params && cp.steps
-          ? `Maße und unterdrückte Schritte weichen von „${a.name}“ ab.`
-          : cp.steps
-            ? `Die unterdrückten Schritte weichen von „${a.name}“ ab.`
-            : `Die Maße weichen von „${a.name}“ ab.`;
+      const cp = a ? changedParts(a) : { params: false, steps: false, material: false };
+      if (a && (cp.params || cp.steps || cp.material)) {
+        const diffNames = [];
+        if (cp.params) diffNames.push('Maße');
+        if (cp.steps) diffNames.push('unterdrückte Schritte');
+        if (cp.material) diffNames.push('Werkstoff');
+        let msg;
+        if (!cp.material && cp.params && cp.steps) msg = `Maße und unterdrückte Schritte weichen von „${a.name}“ ab.`;
+        else if (!cp.material && cp.steps) msg = `Die unterdrückten Schritte weichen von „${a.name}“ ab.`;
+        else if (!cp.material && cp.params) msg = `Die Maße weichen von „${a.name}“ ab.`;
+        else if (diffNames.length === 1) msg = `Der Werkstoff weicht von „${a.name}“ ab.`;
+        else msg = `${diffNames.slice(0, -1).join(', ')} und ${diffNames[diffNames.length - 1]} weichen von „${a.name}“ ab.`;
         sec.append(h('div', { class: 'hint-box warn' }, msg));
       }
     } else sec.append(h('div', { class: 'hint-box', html: 'Speichere Maße und unterdrückte Schritte als Variante – z. B. „mit Loch“ und „ohne Loch“ oder „klein“ und „groß“ – und schalte mit einem Klick um.' }));
     const row = h('div', { class: 'btn-row' });
-    const cp = a ? changedParts(a) : { params: false, steps: false };
-    if (a && (cp.params || cp.steps)) { const up = h('button', { type: 'button', class: 'btn small', id: 'var-update', 'data-help': 'variants', 'data-tip': `„${a.name}“ mit den jetzigen Maßen und Schritten überschreiben` }); up.innerHTML = icon('save') + 'Überschreiben'; up.onclick = () => update(); row.append(up); }
+    const cp = a ? changedParts(a) : { params: false, steps: false, material: false };
+    if (a && (cp.params || cp.steps || cp.material)) { const up = h('button', { type: 'button', class: 'btn small', id: 'var-update', 'data-help': 'variants', 'data-tip': `„${a.name}“ mit den jetzigen Maßen, Werkstoff und Schritten überschreiben` }); up.innerHTML = icon('save') + 'Überschreiben'; up.onclick = () => update(); row.append(up); }
     const nb = h('button', { type: 'button', class: 'btn small', id: 'var-new', 'data-help': 'variants' }); nb.innerHTML = icon('plus') + 'Neue Variante';
     nb.onclick = async () => { const n = await UI.prompt('Variante speichern', 'Name der Variante', 'Variante ' + (vs.length + 1), 'Speichern'); if (n != null) save(n); };
     row.append(nb);
+    const tb = h('button', { type: 'button', class: 'btn small', id: 'var-table', 'data-help': 'variantTable' }); tb.innerHTML = icon('grid') + 'Tabelle';
+    tb.onclick = () => tableDialog();
+    row.append(tb);
     if (vs.length > 1) { const cb = h('button', { type: 'button', class: 'btn small', id: 'var-cmp', 'data-help': 'variants' }); cb.innerHTML = icon('list') + 'Vergleichen'; cb.onclick = () => compareDialog(); row.append(cb); }
     if (a) { const db = h('button', { type: 'button', class: 'btn ghost small danger', id: 'var-del', 'aria-label': 'Variante löschen', 'data-tip': 'Aktive Variante löschen' }); db.innerHTML = icon('trash'); db.onclick = async () => { if (await UI.confirm('Variante löschen?', `„${a.name}“ wird gelöscht. Maße und Schritte bleiben, wie sie sind.`, 'Löschen', true)) remove(a.id); }; row.append(db); }
     sec.append(row);
@@ -438,5 +1010,5 @@ const Variants = (() => {
     }
     return sec;
   }
-  return { list, active, changed, save, update, apply, remove, setStepSuppressed, toggleStep, suppressedOf, compareData, compareDialog, section };
+  return { list, active, changed, save, update, apply, remove, setStepSuppressed, toggleStep, suppressedOf, columns, addRow, duplicateRow, setName, setValue, setMaterial, toCSV, importCSV, tableDialog, compareData, compareDialog, section };
 })();

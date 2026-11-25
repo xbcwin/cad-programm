@@ -1588,5 +1588,10 @@
     "tip": "Normteil: fertige Keilwelle nach DIN ISO 14 einfügen",
     "hilfe": "Erzeugt eine eigenständige Keilwelle nach DIN ISO 14 (6 oder 8 Keile, parallele Flanken, Innenzentrierung) mit wählbarem Profil, Länge und optionaler Mittenbohrung.",
     "tipp": "Wähle bei „Profil“ „Eigene Maße“, wenn du Zähnezahl, Innendurchmesser, Außendurchmesser und Keilbreite frei festlegen möchtest."
+  },
+  "variantTable": {
+    "tip": "Varianten als Tabelle ausfüllen, umschalten und als CSV tauschen (Profi)",
+    "hilfe": "Öffne im Profi-Modus unter „Maße“ → „Varianten“ auf „Tabelle“ (oder per Befehlssuche „Varianten-Tabelle“). Jede Zeile ist eine Variante, jede Spalte ein Maß sowie der Werkstoff. Du kannst Werte direkt eintippen, Zeilen hinzufügen oder duplizieren und die ganze Tabelle als CSV exportieren und wieder importieren.",
+    "tipp": "Ein Klick auf eine Zeile schaltet das Modell sofort auf diese Variante um; mit Enter oder den Pfeiltasten springst du senkrecht von Zeile zu Zeile."
   }
 }
