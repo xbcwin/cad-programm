@@ -578,10 +578,11 @@ const UI = (() => {
   function onScrollTip() {
     if (tipEl) { hideTip(); return; }
     if (!tipTimer || !tipTarget) return;
-    if (Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y) && typeof document.elementFromPoint === 'function') {
+    const live = reacquireTipTarget(tipTarget);
+    if (live && document.body.contains(live) && Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y) && typeof document.elementFromPoint === 'function') {
       const under = document.elementFromPoint(lastPtr.x, lastPtr.y);
       const cand = under && under.closest && under.closest(TIP_SEL);
-      if (cand && cand === tipTarget) return;
+      if (cand && cand === live) { tipTarget = live; return; }
     }
     hideTip();
   }

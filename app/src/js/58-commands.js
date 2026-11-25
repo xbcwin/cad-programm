@@ -523,15 +523,30 @@ const Commands = (() => {
     add('keys', 'Tastenkürzel anzeigen', 'help', 'hilfe tasten kürzel', () => showKeys(), { group: 'Hilfe' });
     add('what-is-this', T('whatis.cmdLabel'), 'help', 'was ist das hilfe erklaeren erklaerung modus fragezeichen element be-32', () => UI.toggleWhatIs(), { group: 'Hilfe' });
   }
+  function matchBonus(str, w) {
+    let best = 0, pos = 0;
+    while (pos <= str.length - w.length) {
+      const i = str.indexOf(w, pos);
+      if (i < 0) break;
+      const sb = i === 0 || !/[a-z0-9]/.test(str[i - 1]);
+      const eb = i + w.length === str.length || !/[a-z0-9]/.test(str[i + w.length]);
+      const v = sb ? (eb ? 4 : 3) : 1;
+      if (v > best) best = v;
+      if (best === 4) break;
+      pos = i + 1;
+    }
+    return best;
+  }
   function score(c, q) {
     if (!q) return 0;
     const words = q.split(/\s+/).filter(Boolean); let s = 0;
+    const lbl = normTxt(c.label);
     for (const w of words) {
       const i = c.keys.indexOf(w);
       if (i < 0) return -1;
       s += i === 0 ? 3 : !/[a-z0-9]/.test(c.keys[i - 1]) ? 2 : 1;
+      s += matchBonus(lbl, w);
     }
-    const lbl = normTxt(c.label);
     if (lbl.startsWith(q)) s += 5;
     if (words.length > 1) {
       if (lbl.includes(q)) s += 6;

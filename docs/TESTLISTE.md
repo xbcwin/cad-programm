@@ -2832,6 +2832,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus verborgen und gesperrt; PDF (`%PDF-1.4`) und DXF (`BEMASSUNG`, `ARC`), Rückgängig/Wiederholen, Speichern/Laden (`Store.validateProject`), `HELP.drawingOrdArc`/`HELP.drawingDualDims`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingDimOrdinate`, `drawingDimArcLen`, `drawingDualDims`) laufen fehlerfrei (`t_a172_zeichnung_koord_bogen_doppel`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ mehrere eng beieinander liegende Bohrungen ab einer Kante per Koordinatenmaß bemaßen, ein Bogenlängen-Maß nach innen und außen ziehen, Doppelmaße ein- und ausschalten und die PDF-Ausgabe prüfen.
 
+## Volltest-Reparatur (Auto [F-11251719])
+
+- [x] **Befehlssuche-Ranking bei Einzelwörtern (`58-commands.js`)**: `Commands.score()` (`matchBonus`) bevorzugt Treffer im Befehlsnamen, sodass bei der Suche nach „schraube“ auch mit gewählten Körpern `couple-screw` zusammen mit `auto-screws` und `lib-stdScrew` in den Top 6 erscheint (ebenso `couple-belt`, `couple-linear` und `mate-distance`, `t_f11251719`).
+- [x] **Tooltip-Scroll nach Panel-Neubau (`50-ui-core.js`)**: `UI.onScrollTip()` re-akquiriert ein unter der ruhenden Maus neu gerendertes Ziel (`#proj-print-cost`) vor einem verzögerten `scroll`-Event auf `#right-body` über `reacquireTipTarget()`, sodass der Tooltip planmäßig erscheint (`t_f11251719`).
+- [ ] **Von Hand**: Im Browser mit Strg/Cmd+K nach „schraube“ suchen und prüfen, ob „Kopplung: Schraube (Drehen → Vorschub)“ neben „Schrauben automatisch einsetzen“ unter den ersten Treffern steht, sowie im rechten Panel über mehrere Knöpfe ganz unten hovern.
+
 ## Fehler melden
 
 ```
