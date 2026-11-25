@@ -2253,6 +2253,21 @@ const HELP = {
   "tip": "Start und Ende des Übergangs tangential (G1) oder krümmungsglatt (G2) an Nachbarflächen anschließen (Profi)",
   "hilfe": "Im Profi-Modus legst du unter „Weicher Anschluss“ für Start und Ende einzeln fest, ob der Übergang frei, tangential (ohne Knick) oder krümmungsglatt (gleiche Wölbung) an den benachbarten Körper anschließt. Berührende Nachbarflächen erkennt Tracery automatisch oder du wählst sie über „Fläche wählen“ selbst aus.",
   "tipp": "Mit dem Regler „Stärke“ bestimmst du von 0,1 bis 3,0, wie weit der Übergang die Anschlussrichtung hält, bevor er zum nächsten Umriss einlenkt."
+ },
+ "fillPattern": {
+  "tip": "Ebene Fläche mit Löchern oder Sechseck-Waben füllen (Profi)",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Füllmuster“. Tracery schneidet gleichmäßige runde Löcher (im Raster oder versetzt) oder Sechseck-Waben direkt durch das Bauteil – und lässt dabei nur Löcher zu, die den eingestellten Randabstand zu Außenkanten und bestehenden Durchbrüchen einhalten.",
+  "tipp": "Mit „Tiefe“ größer als 0 entstehen Sacklöcher statt Durchbrüchen, und über „Drehwinkel“ drehst du das ganze Muster."
+ },
+ "patternPoints": {
+  "tip": "Körper, Bohrung oder Schritt an Skizzenpunkten vervielfachen (Profi)",
+  "hilfe": "Wähle einen Körper, eine Bohrung oder einen Formschritt und klicke auf „Muster an Skizzenpunkten“. Setze in der Skizze beliebig viele Punkte – oder wähle rechts unter „Punkt-Quelle“ eine bestehende Skizze mit Punkten. An jedem Punkt entsteht genau eine Kopie.",
+  "tipp": "Mit einem Klick auf eine Kopie im Bild oder auf ihre Nummer rechts lässt sich jeder einzelne Punkt auslassen."
+ },
+ "patternTable": {
+  "tip": "Körper, Bohrung oder Schritt aus einer CSV-Koordinatentabelle vervielfachen (Profi)",
+  "hilfe": "Wähle einen Körper, eine Bohrung oder einen Formschritt und klicke auf „Muster aus Tabelle (CSV)“. Trage Koordinaten (X, Y, optional Z und Drehwinkel rot) Zeile für Zeile ein oder lade eine CSV-Datei. Jede Zeile erzeugt eine Kopie.",
+  "tipp": "Du kannst wählen, ob die Zahlen als Zielposition im Modell oder als Versatz (dX, dY, dZ) vom Original gerechnet werden."
  }
 };
 

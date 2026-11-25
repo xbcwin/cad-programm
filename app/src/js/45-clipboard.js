@@ -198,7 +198,7 @@ const Clipboard = (() => {
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return true;
     if (it.kind === 'scale' || it.kind === 'deleteBody') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove') return true;
     if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) return true;
     return false;
   }
@@ -208,7 +208,7 @@ const Clipboard = (() => {
     if (!it) return out;
     if (it.op && it.op.target) out.push(it.op.target);
     if (it.p) {
-      if ((it.kind === 'transform' && !it.p.copy) || it.kind === 'scale' || (it.kind === 'thicken' && it.p.mode !== 'new') || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss') {
+      if ((it.kind === 'transform' && !it.p.copy) || it.kind === 'scale' || (it.kind === 'thicken' && it.p.mode !== 'new') || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'boss') {
         if (it.p.target) out.push(it.p.target);
       }
       if (it.kind === 'lipGroove') {
@@ -689,7 +689,7 @@ const Clipboard = (() => {
       it.t.y = shiftExpr(it.t.y || 0, dy);
       return;
     }
-    if (it.kind !== 'transform' && it.kind !== 'scale' && it.kind !== 'thicken' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && !(it.p && it.p.op)) {
+    if (it.kind !== 'transform' && it.kind !== 'scale' && it.kind !== 'thicken' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'fillPattern' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && !(it.p && it.p.op)) {
       it.t = it.t || Model.T0();
       it.t.x = shiftExpr(it.t.x || 0, dx);
       it.t.y = shiftExpr(it.t.y || 0, dy);

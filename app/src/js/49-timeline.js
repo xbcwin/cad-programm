@@ -5,7 +5,7 @@ const Timeline = (() => {
   let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', thicken: 'thicken', rib: 'rib', vent: 'vent', fins: 'fins', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', sketch3d: 'sketch3d' })[it.kind] || 'cube';
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', thicken: 'thicken', rib: 'rib', vent: 'vent', fins: 'fins', fillPattern: 'patternFill', web: 'web', wrap: 'wrap', emboss: 'emboss', splitFace: 'splitFace', dome: 'dome', mirrorStep: 'mirror', deleteBody: 'deleteBody', boss: 'boss', lipGroove: 'lipGroove', sketch3d: 'sketch3d' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }

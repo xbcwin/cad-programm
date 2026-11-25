@@ -319,5 +319,20 @@
     "was": "Setzt eine gewölbte oder flach gewölbte Kuppel über den Außenrand einer ebenen Körperfläche und verschmilzt sie mit dem Körper (oder schneidet sie nach innen).",
     "wozu": "Ideal für abgerundete Deckel, Kappen, Griffe, Drucktasten oder konkave Griffmulden, ohne Hilfsschnitte von Hand aufbauen zu müssen.",
     "achtung": "Wenn die Kuppel nach innen geschaltet ist und tiefer reicht als das Bauteil dick ist, durchstößt sie die Rückseite."
+  },
+  "fillPattern": {
+    "was": "Füllt eine gewählte ebene Körperfläche automatisch mit runden Löchern (Raster oder versetzt) oder Sechseck-Waben unter Einhaltung eines einstellbaren Randabstands.",
+    "wozu": "Spart Gewicht und Material an Platten, Deckeln oder Verkleidungen und schafft gleichmäßige Lüftungs- oder Wabenflächen, ohne dass ein Loch den Rand anschneidet.",
+    "achtung": "Der Mittenabstand muss immer größer sein als Lochdurchmesser bzw. Schlüsselweite, damit zwischen den Löchern ein tragender Steg bleibt."
+  },
+  "pattern_points": {
+    "was": "Vervielfältigt einen Körper, eine Bohrung oder einen Formschritt an jedem Punkt einer Skizze – entweder aus einer eigenen Punkt-Skizze oder aus den Punkten einer bestehenden Skizze.",
+    "wozu": "Ideal für unregelmäßige Lochbilder, asymmetrische Schraubpositionen oder Befestigungspunkte, die kein festes Raster und keinen Kreis bilden.",
+    "achtung": "Die Kopien sitzen nur an den gezeichneten Punkten (ohne zusätzliches Original am Startplatz, außer du hakst „Original zusätzlich behalten“ an)."
+  },
+  "pattern_table": {
+    "was": "Erzeugt anhand einer CSV-Koordinatentabelle (X, Y, optional Z und Drehwinkel) für jede Zeile eine Kopie eines Körpers oder Lochs.",
+    "wozu": "Nützlich für Bohrpläne, CNC-Koordinaten, Stücklisten-Positionen oder vermessene Punktlisten aus Messdaten oder Tabellenkalkulationen.",
+    "achtung": "Prüfe rechts zwischen „Zielposition“ und „Versatz zum Original“, wie die eingetragenen Koordinaten gerechnet werden sollen."
   }
 }

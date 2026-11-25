@@ -2443,6 +2443,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kuppel auf ebener Fläche (`dome`)**: 5 mm Kuppel auf Quader-Oberseite (20×20×20) erhöht die Gesamthöhe exakt auf 25 mm (`+5 mm`) als gültiger Einzelkörper (`GeomCheck` 0 Funde); Ändern der Höhe (8 mm), Umschalten auf Kugelkappe (`spherical`) und „Nach innen“ (`flip`), Unterdrücken sowie 5 mm Kuppel auf Zylinder-Oberseite (Ø20 × 20 → Höhe 25 mm) funktionieren; Hilfetexte (`werkzeug-hilfen.json`) und Schritt-Erklärungen (`Explain.local`) sind vollständig.
 - [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel eine geschwungene Kurve mit „Fläche teilen“ projizieren, die abgetrennte Teilfläche farbig markieren und eine nach außen sowie eine nach innen gewölbte Kuppel im 3D-Bild optisch prüfen.
 
+## Füllmuster auf Fläche, Muster an Skizzenpunkten und aus Tabelle (Auto [A-128], KP-44, KP-45)
+
+- [x] **Waben-Füllmuster in Platte 60×40×5 (`fillPattern`)**: Im Profi-Modus über `#ctx-fill-pattern` (in „Einfach“ ausgeblendet) angelegt → Waben (`SW 6`, Abstand `8`, Randabstand `4`) erzeugen gültige Durchbrüche ohne Rand-Schnitt (`outerSides == 4`, alle Lochwände strikt innerhalb des Randabstands, `GeomCheck` 0 Funde); Umschalten auf Raster/Versetzt, Randabstand `8`, Sackloch-Tiefe `2 mm` und Unterdrücken funktionieren fehlerfrei.
+- [x] **Muster an 4 Skizzenpunkten (`pt: 'points'`)**: Bohrung über `Features.patternPoints` mit 4 Punkten im Punkt-Skizzenmodus → exakt 4 zylindrische Bohrungen exakt an den 4 Skizzenpunkten (`GeomCheck` 0 Funde), Skip-Chips lassen einzelne Punkte aus, und `#op-points-source` übernimmt Punkte einer bestehenden Skizze.
+- [x] **Muster aus CSV-Tabelle (`pt: 'table'`)**: Quader `6×6×6` über `Features.patternTable` mit 3 CSV-Zeilen (`x;y;z`) → exakt 3 getrennte Kopien mit Gesamtvolumen `648 mm³` (`GeomCheck` 0 Funde), Relativ-Modus (`dX/dY/dZ/rot`), Hilfetexte (`werkzeug-hilfen.json`/`HELP`), DE/EN-Schlüsselgleichheit und Befehlssuche ohne Fehler.
+- [ ] **Von Hand**: Im Browser auf eine beliebige Fläche mit Durchbruch ein gedrehtes Waben-Füllmuster setzen, eine Schraube an eigenen Skizzenpunkten vervielfachen und eine `.csv`-Datei über „CSV laden …“ einlesen.
+
 ## Fehler melden
 
 ```

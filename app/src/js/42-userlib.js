@@ -36,7 +36,7 @@ const UserLib = (() => {
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return false;
     if (it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d') return false;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return false;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove') return false;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove') return false;
     return true;
   }
 
