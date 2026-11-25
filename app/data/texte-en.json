@@ -3761,5 +3761,16 @@
   "joint.beltModeDia": "Diameter (Ø 1 : Ø 2)",
   "joint.beltRevLabel": "Crossed belt (opposite direction)",
   "joint.linearRatioLabel": "Ratio",
-  "joint.linearRevLabel": "Opposite direction (reverse)"
+  "joint.linearRevLabel": "Opposite direction (reverse)",
+  "ctx.coupleCam": "Mate: Cam / Follower",
+  "joint.camKind": "Cam",
+  "joint.camContactLabel": "Follower contact",
+  "joint.camContactPoint": "Contour / point / roller",
+  "joint.camContactFlat": "Flat-faced follower",
+  "joint.camRollerLabel": "Roller radius",
+  "joint.camRevLabel": "Opposite side (reverse direction)",
+  "joint.camSnapBtn": "Snap to contour",
+  "joint.camChartTitle": "Displacement curve (0° – 360°)",
+  "joint.camStrokeLabel": "Stroke",
+  "joint.camAngleLabel": "Cam angle"
 }

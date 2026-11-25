@@ -2657,6 +2657,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert beide gekoppelten Teile live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-screw`, `couple-belt`, `couple-linear`) und Hilfetexte (`coupleScrew`, `coupleBelt`, `coupleLinear`) laufen fehlerfrei (`t_a152_kopplungen_schraube_riemen_linear`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus ein zylindrisches Bolzen-Gelenk mit Steigung `2 mm` sowie zwei Zahnräder (`20` und `40` Zähne) per Kontextleiste → „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild mit der Maus ziehen und das gleichzeitige Mitdrehen bzw. Verschieben optisch prüfen.
 
+## Kurvenscheibe / Nocken (Auto [A-153], BG-15)
+
+- [x] **Exzentrische Scheibe (5 mm Versatz → 10 mm Hub)**: Dreht eine um `5 mm` versetzte Scheibe über 0°–360°, folgt der Stößel der echten Außenkontur (Anlage über `#coupling-dialog` mit Vorschau-Kurve `#cp-cam-chart`), erreicht im Gelenk und real im 3D-Raum exakt `10,0 mm` Hub und kehrt bei `360°` an den Ausgangspunkt zurück (`t_a153_kurvenscheibe_nocken`).
+- [x] **Weg-Kurve als Diagramm, Flachstößel & „An Kontur anlegen“**: Das rechte Panel zeigt das SVG-Diagramm `#cam-chart` mit geschwungener Weg-Kurve (`path.cam-curve`), Hub-Anzeige (`#cam-stroke`), beweglichem Winkelfaden (`circle.cam-dot`) über `#cam-ang`, Flachstößel-Modus (`flat` vs. `point` bei 90°) und `snapCamContact` zum Anlegen eines abgerückten Stößels (`t_a153_kurvenscheibe_nocken`).
+- [x] **Beliebige Außenkontur (Ellipse)**: Eine aus einer Skizze extrudierte unrunde Ellipse (`rx = 18 mm`, `ry = 12 mm`) treibt den Stößel exakt mit `6,0 mm` Hub (`t_a153_kurvenscheibe_nocken`).
+- [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Baugruppen-Sync**: `#cp-play` animiert Scheibe und Stößel live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus und `Joints.invalidateCamCache` laufen fehlerfrei (`t_a153_kurvenscheibe_nocken`).
+- [x] **Hilfe, DE/EN-Schlüssel & Befehlssuche**: `HELP.coupleCam`, gleiche Schlüssel in `texte-de.json`/`texte-en.json` sowie Befehlssuche (`couple-cam` für „kurvenscheibe“ / „nocken“) geprüft (`t_a153_kurvenscheibe_nocken`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine unrunde Nockenscheibe (Skizze + Hochziehen) mit einem Stößel verbinden, im Diagramm „Weg-Kurve“ über verschiedene Winkel ziehen und „An Kontur anlegen“ sowie „Bewegung abspielen“ optisch prüfen.
+
 ## Fehler melden
 
 ```

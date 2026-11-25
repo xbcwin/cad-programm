@@ -2780,6 +2780,28 @@ const Joints = (() => {
         }
       }
     }
+    if (c.kind === 'cam' && j1 && j2) {
+      const prof = camProfile(App.doc, c);
+      if (prof && prof.valid) {
+        const { o, x, y } = prof.basis;
+        const curAng = Number(stateOf(j1)[c.dof1 || 'ang']) || 0;
+        const curRad = (curAng * Math.PI) / 180;
+        const loopPts = [];
+        for (let i = 0; i <= 360; i += 5) {
+          const k = i % 360;
+          const r = prof.samples[k];
+          const a = curRad - (k * Math.PI) / 180;
+          const pt = o.clone().addScaledVector(x, r * Math.cos(a)).addScaledVector(y, r * Math.sin(a));
+          loopPts.push(pt.x, pt.y, pt.z);
+        }
+        const contour = Viewer.makeFat(loopPts, '#0c7a70', 2.5, { depthTest: false });
+        const rCur = camRadiusAt(prof.samples, curAng);
+        const cp = o.clone().addScaledVector(x, rCur);
+        const cDot = Viewer.makeFat([cp.x, cp.y, cp.z, cp.x, cp.y, cp.z + 0.001], '#e03131', 11, { depthTest: false });
+        Viewer.groups.overlay.add(contour, cDot);
+        targetArr.push(contour, cDot);
+      }
+    }
   }
   function drawSelectedJoint() {
     clearSelVis();
@@ -3754,10 +3776,17 @@ const Joints = (() => {
   }
 
   // ---------- Freiheitsgrade setzen, Umkehren, Lage einhalten ----------
-  // ---------- Kopplungen: Schraube, Riemen, Linear (BG-14) ----------
+  // ---------- Kopplungen: Schraube, Riemen, Linear, Kurvenscheibe (BG-14, BG-15) ----------
   const couplingList = (doc = App.doc) => (doc && Array.isArray(doc.couplings) ? doc.couplings : []);
   const couplingsOf = (jid, doc = App.doc) => couplingList(doc).filter((c) => c.j1 === jid || c.j2 === jid);
-  const isCouplingKind = (k) => k === 'screw' || k === 'belt' || k === 'linear';
+  const isCouplingKind = (k) => k === 'screw' || k === 'belt' || k === 'linear' || k === 'cam';
+  const CAM_COS = new Float64Array(360);
+  const CAM_SIN = new Float64Array(360);
+  for (let i = 0; i < 360; i++) {
+    const rad = (i * Math.PI) / 180;
+    CAM_COS[i] = Math.cos(rad);
+    CAM_SIN[i] = Math.sin(rad);
+  }
   const rotDofOf = (j) => {
     const k = kindOf(j);
     return (k === 'rot' || k === 'cyl' || k === 'planar' || k === 'slot' || k === 'ball') ? 'ang' : null;
@@ -3819,6 +3848,411 @@ const Joints = (() => {
     }
     return 1;
   }
+
+  // ---------- Kurvenscheibe / Nocken (BG-15) ----------
+  const camCache = new Map();
+  function invalidateCamCache(itemId = null) {
+    if (itemId == null) { camCache.clear(); return; }
+    for (const k of camCache.keys()) {
+      if (k.startsWith(itemId + '|') || k.includes('|' + itemId + '|')) camCache.delete(k);
+    }
+  }
+  function followerDirOf(j, dof) {
+    if (isPlanar(j)) {
+      const pf = planeFrame(j);
+      return (dof === 'v' ? pf.v : pf.u).clone().normalize();
+    }
+    return new THREE.Vector3(...(j && j.ad ? j.ad : [1, 0, 0])).normalize();
+  }
+  function camBasis(doc, c, j1, j2) {
+    if (!j1 || !j2 || !Array.isArray(j1.ao) || !Array.isArray(j1.ad)) return { valid: false, cosA: 0 };
+    const o = new THREE.Vector3(...j1.ao);
+    const z = new THREE.Vector3(...j1.ad).normalize();
+    const dFol = followerDirOf(j2, c.dof2);
+    const sign = c.reverse ? -1 : 1;
+    const uOut = dFol.clone().multiplyScalar(sign);
+    const xRaw = uOut.clone().addScaledVector(z, -uOut.dot(z));
+    const cosA = xRaw.length();
+    if (cosA < 1e-4) return { valid: false, o, z, dFol, sign, cosA: 0 };
+    const x = xRaw.divideScalar(cosA);
+    const y = new THREE.Vector3().crossVectors(z, x).normalize();
+    return { valid: true, o, z, x, y, dFol, sign, cosA };
+  }
+  function camZeroWorldMatrix(doc, j1) {
+    const Wcur = Model.worldMatrix(doc, j1.b);
+    const curAng = Number(stateOf(j1).ang) || 0;
+    if (Math.abs(curAng) < 1e-9) return Wcur.clone();
+    const o = new THREE.Vector3(...(j1.ao || [0, 0, 0]));
+    const d = new THREE.Vector3(...(j1.ad || [0, 0, 1])).normalize();
+    return rotAbout(o, d, -curAng).multiply(Wcur);
+  }
+  function convexHull2D(pts) {
+    if (!pts || pts.length <= 2) return pts ? pts.slice() : [];
+    const sorted = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lo = [];
+    for (const p of sorted) {
+      while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop();
+      lo.push(p);
+    }
+    const hi = [];
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const p = sorted[i];
+      while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop();
+      hi.push(p);
+    }
+    lo.pop();
+    hi.pop();
+    return lo.concat(hi);
+  }
+  function itemBoxWorld(doc, itemId) {
+    if (typeof Actions !== 'undefined' && Actions.worldBox) {
+      const wb = Actions.worldBox(itemId);
+      if (wb && !wb.isEmpty()) return wb;
+    }
+    const it = top(itemId, doc);
+    if (!it) return null;
+    const lb = Model.itemLocalBox(it, Model.vars(doc).v);
+    if (!lb) return null;
+    return new THREE.Box3(new THREE.Vector3(lb[0], lb[1], lb[2]), new THREE.Vector3(lb[3], lb[4], lb[5])).applyMatrix4(Model.worldMatrix(doc, itemId));
+  }
+  function boxZRange(box, o, z) {
+    if (!box || box.isEmpty()) return null;
+    const xs = [box.min.x, box.max.x], ys = [box.min.y, box.max.y], zs = [box.min.z, box.max.z];
+    let lo = Infinity, hi = -Infinity;
+    for (const bx of xs) for (const by of ys) for (const bz of zs) {
+      const zv = (bx - o.x) * z.x + (by - o.y) * z.y + (bz - o.z) * z.z;
+      if (zv < lo) lo = zv;
+      if (zv > hi) hi = zv;
+    }
+    return [lo - 0.5, hi + 0.5];
+  }
+  function extractCam2D(doc, camId, W0, basis, folId) {
+    const { o, x, y, z } = basis;
+    const we = W0.elements;
+    const toUVZ = (lx, ly, lz) => {
+      const wx = we[0] * lx + we[4] * ly + we[8] * lz + we[12] - o.x;
+      const wy = we[1] * lx + we[5] * ly + we[9] * lz + we[13] - o.y;
+      const wz = we[2] * lx + we[6] * ly + we[10] * lz + we[14] - o.z;
+      return [
+        wx * x.x + wy * x.y + wz * x.z,
+        wx * y.x + wy * y.y + wz * y.z,
+        wx * z.x + wy * z.y + wz * z.z,
+      ];
+    };
+    const folBox = folId ? itemBoxWorld(doc, folId) : null;
+    const zRange = boxZRange(folBox, o, z);
+    const res = App.results.get(camId);
+    const vNode = (!res || !res.data) && typeof Viewer !== 'undefined' ? Viewer.nodes.get(camId) : null;
+    const data = (res && res.data) || (vNode && vNode.data) || null;
+    if (data && data.vertices && data.triangles && data.triangles.length >= 3) {
+      const V = data.vertices, T = data.triangles;
+      const nV = Math.floor(V.length / 3);
+      const U = new Float64Array(nV), W = new Float64Array(nV), Z = new Float64Array(nV);
+      for (let i = 0; i < nV; i++) {
+        const p = toUVZ(V[i * 3], V[i * 3 + 1], V[i * 3 + 2]);
+        U[i] = p[0]; W[i] = p[1]; Z[i] = p[2];
+      }
+      const collect = (useZ) => {
+        const pts = [], segs = [];
+        const zLo = useZ && zRange ? zRange[0] : -Infinity;
+        const zHi = useZ && zRange ? zRange[1] : Infinity;
+        const groups = Array.isArray(data.faceGroups) && data.faceGroups.length ? data.faceGroups : [[0, T.length, -1]];
+        const faces = data.faces || [];
+        for (const [start, count, fi] of groups) {
+          const f = fi >= 0 ? faces[fi] : null;
+          let cyl = null;
+          if (f && f.t === 'CYLINDRE' && Array.isArray(f.axis) && f.r > 0) {
+            const cDir = new THREE.Vector3(f.axis[3], f.axis[4], f.axis[5]).transformDirection(W0).normalize();
+            if (Math.abs(cDir.dot(z)) > 0.995) {
+              const { l, d } = cylPointOnAxis(f);
+              const c2 = toUVZ(l.x, l.y, l.z);
+              const refLocal = Math.abs(d.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+              const perpLocal = new THREE.Vector3().crossVectors(d, refLocal).normalize();
+              const sc = perpLocal.clone().applyMatrix4(W0).sub(new THREE.Vector3().applyMatrix4(W0)).length();
+              cyl = { cx: c2[0], cy: c2[1], r: f.r * (sc > 1e-6 ? sc : 1) };
+            }
+          }
+          const end = Math.min(T.length, start + count);
+          for (let i = start; i + 2 < end; i += 3) {
+            const a = T[i], b = T[i + 1], c = T[i + 2];
+            if (useZ && (Math.max(Z[a], Z[b], Z[c]) < zLo || Math.min(Z[a], Z[b], Z[c]) > zHi)) continue;
+            if (cyl) {
+              for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+                const aP = Math.atan2(W[p] - cyl.cy, U[p] - cyl.cx);
+                const aQ = Math.atan2(W[q] - cyl.cy, U[q] - cyl.cx);
+                const da = Math.atan2(Math.sin(aQ - aP), Math.cos(aQ - aP));
+                if (Math.abs(da) > 0.015) {
+                  const steps = Math.max(2, Math.ceil(Math.abs(da) / (Math.PI / 180)));
+                  let px = cyl.cx + cyl.r * Math.cos(aP), py = cyl.cy + cyl.r * Math.sin(aP);
+                  pts.push([px, py]);
+                  for (let s = 1; s <= steps; s++) {
+                    const ang = aP + (da * s) / steps;
+                    const nx = cyl.cx + cyl.r * Math.cos(ang), ny = cyl.cy + cyl.r * Math.sin(ang);
+                    segs.push([px, py, nx, ny]);
+                    pts.push([nx, ny]);
+                    px = nx; py = ny;
+                  }
+                } else if (Math.hypot(U[q] - U[p], W[q] - W[p]) > 1e-6) {
+                  segs.push([U[p], W[p], U[q], W[q]]);
+                  pts.push([U[p], W[p]], [U[q], W[q]]);
+                }
+              }
+            } else {
+              for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+                if (Math.hypot(U[q] - U[p], W[q] - W[p]) > 1e-6) {
+                  segs.push([U[p], W[p], U[q], W[q]]);
+                  pts.push([U[p], W[p]]);
+                }
+              }
+            }
+          }
+        }
+        return { pts, segs };
+      };
+      let out = zRange ? collect(true) : collect(false);
+      if (zRange && out.segs.length < 3) out = collect(false);
+      if (out.segs.length >= 3) return { pts: out.pts, segs: out.segs, dataKey: (res && res.key) || 'mesh' };
+    }
+
+    // Analytischer Fallback, falls das Kern-Netz noch nicht berechnet wurde
+    const it = top(camId, doc);
+    const vars = Model.vars(doc).v;
+    const pts = [], segs = [];
+    const pushSeg = (M, ax, ay, az, bx, by, bz) => {
+      const p1 = new THREE.Vector3(ax, ay, az).applyMatrix4(M);
+      const p2 = new THREE.Vector3(bx, by, bz).applyMatrix4(M);
+      const a = toUVZ(p1.x, p1.y, p1.z), b = toUVZ(p2.x, p2.y, p2.z);
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-6) {
+        segs.push([a[0], a[1], b[0], b[1]]);
+        pts.push([a[0], a[1]], [b[0], b[1]]);
+      }
+    };
+    const collectFallback = (item, M) => {
+      if (!item || item.role === 'hole' || item.suppressed) return;
+      if (item.kind === 'group' && Array.isArray(item.children)) {
+        for (const ch of item.children) collectFallback(ch, M.clone().multiply(Model.localMatrix(ch)));
+        return;
+      }
+      if (item.kind === 'cylinder' || item.kind === 'tube') {
+        const r = Math.max(0.1, Model.num(item.p && item.p.d, vars, 20) / 2);
+        const N = 360;
+        for (let i = 0; i < N; i++) {
+          const a0 = (i * 2 * Math.PI) / N, a1 = ((i + 1) * 2 * Math.PI) / N;
+          pushSeg(M, r * Math.cos(a0), r * Math.sin(a0), 0, r * Math.cos(a1), r * Math.sin(a1), 0);
+        }
+        return;
+      }
+      if (item.kind === 'box') {
+        const hw = Math.max(0.1, Model.num(item.p && item.p.w, vars, 20) / 2);
+        const hd = Math.max(0.1, Model.num(item.p && item.p.d, vars, 20) / 2);
+        pushSeg(M, -hw, -hd, 0, hw, -hd, 0);
+        pushSeg(M, hw, -hd, 0, hw, hd, 0);
+        pushSeg(M, hw, hd, 0, -hw, hd, 0);
+        pushSeg(M, -hw, hd, 0, -hw, -hd, 0);
+        return;
+      }
+      if (item.kind === 'extrude' && item.p && item.p.sketch && typeof SK !== 'undefined' && SK.segsOf) {
+        const sk = item.p.sketch;
+        const pl = sk.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+        const po = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+        const px = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize();
+        const pn = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize();
+        const py = new THREE.Vector3().crossVectors(pn, px).normalize();
+        const to3 = (pt) => po.clone().addScaledVector(px, pt[0]).addScaledVector(py, pt[1]);
+        for (const sg of SK.segsOf(sk.ents || [])) {
+          if (!sg || sg.con || !sg.a || !sg.b) continue;
+          const pa = to3(sg.a), pb = to3(sg.b);
+          pushSeg(M, pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
+        }
+        if (segs.length >= 3) return;
+      }
+      const lb = Model.itemLocalBox(item, vars);
+      if (lb) {
+        const [x0, y0, z0, x1, y1, z1] = lb;
+        for (const zv of [z0, z1]) {
+          pushSeg(M, x0, y0, zv, x1, y0, zv);
+          pushSeg(M, x1, y0, zv, x1, y1, zv);
+          pushSeg(M, x1, y1, zv, x0, y1, zv);
+          pushSeg(M, x0, y1, zv, x0, y0, zv);
+        }
+      }
+    };
+    collectFallback(it, new THREE.Matrix4());
+    return { pts, segs, dataKey: 'fb:' + (it ? it.kind : '') + ':' + JSON.stringify((it && it.p) || {}) };
+  }
+  function sampleCamCurve(pts, segs, contact, rollerR) {
+    const flatSamples = new Float64Array(360);
+    const hull = convexHull2D(pts);
+    if (hull.length) {
+      for (let k = 0; k < 360; k++) {
+        const c = CAM_COS[k], s = CAM_SIN[k];
+        let mx = -Infinity;
+        for (let i = 0; i < hull.length; i++) {
+          const u = hull[i][0] * c - hull[i][1] * s;
+          if (u > mx) mx = u;
+        }
+        flatSamples[k] = mx > -Infinity ? mx : 0;
+      }
+    }
+    if (contact === 'flat') return flatSamples;
+
+    const maxPos = new Float64Array(360).fill(-Infinity);
+    const maxLine = new Float64Array(360).fill(-Infinity);
+    const testDeg = (kk, x1, y1, x2, y2) => {
+      const c = CAM_COS[kk], s = CAM_SIN[kk];
+      const v1 = x1 * s + y1 * c, v2 = x2 * s + y2 * c;
+      if ((v1 <= 1e-9 && v2 >= -1e-9) || (v1 >= -1e-9 && v2 <= 1e-9)) {
+        const denom = v2 - v1;
+        if (Math.abs(denom) < 1e-12) {
+          for (const u of [x1 * c - y1 * s, x2 * c - y2 * s]) {
+            if (u > maxLine[kk]) maxLine[kk] = u;
+            if (u >= -1e-6 && u > maxPos[kk]) maxPos[kk] = u;
+          }
+        } else {
+          const t = clamp(-v1 / denom, 0, 1);
+          const u = (x1 * c - y1 * s) * (1 - t) + (x2 * c - y2 * s) * t;
+          if (u > maxLine[kk]) maxLine[kk] = u;
+          if (u >= -1e-6 && u > maxPos[kk]) maxPos[kk] = u;
+        }
+      }
+    };
+    for (let i = 0; i < segs.length; i++) {
+      const [x1, y1, x2, y2] = segs[i];
+      const a1 = Math.atan2(y1, x1), a2 = Math.atan2(y2, x2);
+      const da = Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1));
+      if (Math.abs(da) > Math.PI - 0.05) {
+        for (let k = 0; k < 360; k++) testDeg(k, x1, y1, x2, y2);
+      } else {
+        const loRad = Math.min(a1, a1 + da), hiRad = Math.max(a1, a1 + da);
+        const dLo = Math.floor((-hiRad * 180) / Math.PI) - 1;
+        const dHi = Math.ceil((-loRad * 180) / Math.PI) + 1;
+        for (let d = dLo; d <= dHi; d++) {
+          const k = ((d % 360) + 360) % 360;
+          testDeg(k, x1, y1, x2, y2);
+          testDeg((k + 180) % 360, x1, y1, x2, y2);
+        }
+      }
+    }
+    const baseSamples = new Float64Array(360);
+    for (let k = 0; k < 360; k++) {
+      baseSamples[k] = maxPos[k] > -Infinity ? maxPos[k] : (maxLine[k] > -Infinity ? maxLine[k] : flatSamples[k]);
+    }
+    if (!(rollerR > 1e-6)) return baseSamples;
+
+    // Rollenstößel (Rollenradius > 0): Hüllkurve aus Konturpunkten und -segmenten mit Abstand R_r
+    const cPts = new Array(360);
+    for (let i = 0; i < 360; i++) cPts[i] = [baseSamples[i] * CAM_COS[i], -baseSamples[i] * CAM_SIN[i]];
+    const r2 = rollerR * rollerR;
+    const rSamples = new Float64Array(360);
+    for (let k = 0; k < 360; k++) {
+      const c = CAM_COS[k], s = CAM_SIN[k];
+      let xcMax = -Infinity;
+      for (let i = 0; i < 360; i++) {
+        const [px, py] = cPts[i];
+        const rx = px * c - py * s, ry = px * s + py * c;
+        if (Math.abs(ry) <= rollerR) {
+          const xc = rx + Math.sqrt(Math.max(0, r2 - ry * ry));
+          if (xc > xcMax) xcMax = xc;
+        }
+        const [qx, qy] = cPts[(i + 1) % 360];
+        const qrx = qx * c - qy * s, qry = qx * s + qy * c;
+        const tx = qrx - rx, ty = qry - ry, tl = Math.hypot(tx, ty);
+        if (tl > 1e-6) {
+          const nx = -ty / tl, ny = tx / tl;
+          const ay = ry + ny * rollerR, by = qry + ny * rollerR;
+          if ((ay <= 1e-9 && by >= -1e-9) || (ay >= -1e-9 && by <= 1e-9)) {
+            const denom = by - ay;
+            const t = Math.abs(denom) < 1e-12 ? 0.5 : clamp(-ay / denom, 0, 1);
+            const xc = (rx + nx * rollerR) * (1 - t) + (qrx + nx * rollerR) * t;
+            if (xc > xcMax) xcMax = xc;
+          }
+        }
+      }
+      rSamples[k] = xcMax > -Infinity ? xcMax - rollerR : baseSamples[k];
+    }
+    return rSamples;
+  }
+  function camRadiusAt(samples, angDeg) {
+    const a = ((Number(angDeg) || 0) % 360 + 360) % 360;
+    const i0 = Math.floor(a) % 360;
+    const i1 = (i0 + 1) % 360;
+    const f = a - Math.floor(a);
+    return samples[i0] * (1 - f) + samples[i1] * f;
+  }
+  function camProfile(doc, c) {
+    const j1 = list(doc).find((x) => x.id === c.j1);
+    const j2 = list(doc).find((x) => x.id === c.j2);
+    const basis = camBasis(doc, c, j1, j2);
+    if (!basis.valid) return { valid: false };
+    const W0 = camZeroWorldMatrix(doc, j1);
+    const res = App.results.get(j1.b);
+    const dataKey = (res && res.key) || 'fb';
+    const contact = c.contact === 'flat' ? 'flat' : 'point';
+    const rollerR = contact === 'point' ? Math.max(0, Number(c.rollerR) || 0) : 0;
+    const key = [
+      j1.b, j2.b, dataKey,
+      j1.ao.map((v) => round(v, 4)).join(','),
+      j1.ad.map((v) => round(v, 5)).join(','),
+      basis.dFol.toArray().map((v) => round(v, 5)).join(','),
+      c.reverse ? '1' : '0', contact, round(rollerR, 4),
+      W0.elements.map((v) => round(v, 4)).join(','),
+    ].join('|');
+    let entry = camCache.get(key);
+    if (!entry) {
+      const geo2d = extractCam2D(doc, j1.b, W0, basis, j2.b);
+      const samples = sampleCamCurve(geo2d.pts, geo2d.segs, contact, rollerR);
+      let minR = Infinity, maxR = -Infinity;
+      for (let i = 0; i < 360; i++) {
+        if (samples[i] < minR) minR = samples[i];
+        if (samples[i] > maxR) maxR = samples[i];
+      }
+      if (!Number.isFinite(minR) || !Number.isFinite(maxR)) { minR = 0; maxR = 0; }
+      const stroke = Math.max(0, (maxR - minR) / basis.cosA);
+      if (camCache.size >= 64) camCache.clear();
+      entry = { valid: true, samples, minR, maxR, stroke, basis, contact, rollerR };
+      camCache.set(key, entry);
+    }
+    const ref1 = Number(c.ref1) || 0;
+    const refR = camRadiusAt(entry.samples, ref1);
+    return { ...entry, ref1, refR };
+  }
+  function camLiftAt(doc, c, angDeg) {
+    const prof = camProfile(doc, c);
+    if (!prof || !prof.valid) return null;
+    const r = camRadiusAt(prof.samples, angDeg);
+    const lift = (r - prof.minR) / prof.basis.cosA;
+    const delta = prof.basis.sign * (r - prof.refR) / prof.basis.cosA;
+    const targetPos = (Number(c.ref2) || 0) + delta;
+    const angNorm = ((Number(angDeg) || 0) % 360 + 360) % 360;
+    return { r, lift, delta, targetPos, stroke: prof.stroke, minR: prof.minR, maxR: prof.maxR, angNorm };
+  }
+  function camCurveData(cidOrObj, doc = App.doc) {
+    const c = typeof cidOrObj === 'string' ? couplingList(doc).find((x) => x.id === cidOrObj) : cidOrObj;
+    if (!c || c.kind !== 'cam') return { ok: false, samples: [], stroke: 0 };
+    const prof = camProfile(doc, c);
+    if (!prof || !prof.valid) return { ok: false, samples: [], stroke: 0 };
+    const j1 = list(doc).find((x) => x.id === c.j1);
+    const curAng = j1 ? (Number(stateOf(j1)[c.dof1 || 'ang']) || 0) : 0;
+    const cur = camLiftAt(doc, c, curAng);
+    const samples = [];
+    for (let a = 0; a <= 360; a++) {
+      const r = prof.samples[a % 360];
+      samples.push({ ang: a, r: round(r, 4), lift: round((r - prof.minR) / prof.basis.cosA, 4) });
+    }
+    return {
+      ok: true,
+      stroke: round(prof.stroke, 4),
+      minR: round(prof.minR, 4),
+      maxR: round(prof.maxR, 4),
+      curAng,
+      curAngNorm: cur ? cur.angNorm : 0,
+      curLift: cur ? round(cur.lift, 4) : 0,
+      contact: prof.contact,
+      rollerR: prof.rollerR,
+      samples,
+    };
+  }
   function couplingsConnected(doc, j1, dof1, j2, dof2) {
     const k1 = j1 + ':' + dof1, k2 = j2 + ':' + dof2;
     if (k1 === k2) return true;
@@ -3850,15 +4284,23 @@ const Joints = (() => {
     while (q.length) {
       const cur = q.shift();
       for (const c of cs) {
-        const g = couplingGain(c);
-        if (!Number.isFinite(g) || Math.abs(g) < 1e-12) continue;
         let nj = null, nd = null, nv = 0;
-        if (c.j1 === cur.jid && c.dof1 === cur.dof) {
-          nj = c.j2; nd = c.dof2;
-          nv = (Number(c.ref2) || 0) + (cur.val - (Number(c.ref1) || 0)) * g;
-        } else if (c.j2 === cur.jid && c.dof2 === cur.dof) {
-          nj = c.j1; nd = c.dof1;
-          nv = (Number(c.ref1) || 0) + (cur.val - (Number(c.ref2) || 0)) / g;
+        if (c.kind === 'cam') {
+          if (c.j1 === cur.jid && c.dof1 === cur.dof) {
+            const lv = camLiftAt(doc, c, cur.val);
+            if (!lv) continue;
+            nj = c.j2; nd = c.dof2; nv = lv.targetPos;
+          }
+        } else {
+          const g = couplingGain(c);
+          if (!Number.isFinite(g) || Math.abs(g) < 1e-12) continue;
+          if (c.j1 === cur.jid && c.dof1 === cur.dof) {
+            nj = c.j2; nd = c.dof2;
+            nv = (Number(c.ref2) || 0) + (cur.val - (Number(c.ref1) || 0)) * g;
+          } else if (c.j2 === cur.jid && c.dof2 === cur.dof) {
+            nj = c.j1; nd = c.dof1;
+            nv = (Number(c.ref1) || 0) + (cur.val - (Number(c.ref2) || 0)) / g;
+          }
         }
         if (!nj) continue;
         const nk = key(nj, nd);
@@ -3988,6 +4430,11 @@ const Joints = (() => {
         ? `${T('joint.beltKind')} · Ø ${fmt(c.d1)}:${fmt(c.d2)}${rev}`
         : `${T('joint.beltKind')} · ${fmt(c.z1)}:${fmt(c.z2)}${rev}`;
     }
+    if (c.kind === 'cam') {
+      const prof = camProfile(App.doc, c);
+      const st = prof && prof.valid ? Units.fmtLenU(prof.stroke, 1) : '—';
+      return `${T('joint.camKind')} · ${T('joint.camStrokeLabel')} ${st}${rev}`;
+    }
     return `${T('joint.linearKind')} · ${fmt(c.ratio)}×${rev}`;
   }
   function couplingLabel(c) {
@@ -4069,6 +4516,31 @@ const Joints = (() => {
       const ratio = parseNum(opts.ratio ?? 1);
       if (!Number.isFinite(ratio) || ratio <= 0) return { ok: false, msg: 'Bitte ein Übersetzungsverhältnis größer als 0 eingeben.' };
       payload.ratio = round(ratio, 6);
+    } else if (kind === 'cam') {
+      if (j1Orig.id === j2Orig.id) return { ok: false, msg: 'Für eine Kurvenscheibe zwei verschiedene Gelenke wählen (Scheibe + Stößel).' };
+      if (rotDofOf(j1Orig) && linDofOf(j2Orig)) {
+        dof1 = opts.dof1 && hasDof(j1Orig, opts.dof1) ? opts.dof1 : rotDofOf(j1Orig);
+        dof2 = opts.dof2 && hasDof(j2Orig, opts.dof2) ? opts.dof2 : linDofOf(j2Orig);
+      } else if (rotDofOf(j2Orig) && linDofOf(j1Orig)) {
+        j1 = j2Orig; j2 = j1Orig;
+        dof1 = rotDofOf(j1);
+        dof2 = linDofOf(j2);
+      } else {
+        return { ok: false, msg: 'Eine Kurvenscheibe verbindet ein Drehgelenk (Scheibe) mit einem Schiebegelenk (Stößel).' };
+      }
+      const bTest = camBasis(App.doc, { dof2, reverse: false }, j1, j2);
+      if (!bTest.valid || bTest.cosA < 0.1) {
+        return { ok: false, msg: 'Die Schieberichtung des Stößels muss quer zur Drehachse der Scheibe liegen.' };
+      }
+      if (opts.reverse === undefined && opts.flip === undefined) {
+        const fBox = itemBoxWorld(App.doc, j2.b);
+        const fCtr = fBox ? fBox.getCenter(new THREE.Vector3()) : new THREE.Vector3(...(j2.ao || [0, 0, 0]));
+        const dotSide = fCtr.sub(bTest.o).dot(bTest.dFol);
+        payload.reverse = dotSide < -1e-4;
+      }
+      payload.contact = opts.contact === 'flat' ? 'flat' : 'point';
+      const rr = parseNum(opts.rollerR ?? 0);
+      payload.rollerR = Number.isFinite(rr) && rr > 0 ? round(rr, 4) : 0;
     }
 
     if (couplingsConnected(App.doc, j1.id, dof1, j2.id, dof2)) {
@@ -4076,7 +4548,7 @@ const Joints = (() => {
     }
 
     let cid = null;
-    const undoLbl = kind === 'screw' ? 'Schrauben-Kopplung angelegt' : kind === 'belt' ? 'Riemen-Kopplung angelegt' : 'Lineare Kopplung angelegt';
+    const undoLbl = kind === 'screw' ? 'Schrauben-Kopplung angelegt' : kind === 'belt' ? 'Riemen-Kopplung angelegt' : kind === 'cam' ? 'Kurvenscheibe angelegt' : 'Lineare Kopplung angelegt';
     App.change(undoLbl, (doc) => {
       const dj1 = list(doc).find((x) => x.id === j1.id);
       const dj2 = list(doc).find((x) => x.id === j2.id);
@@ -4084,10 +4556,10 @@ const Joints = (() => {
       doc.couplings = doc.couplings || [];
       cid = uid('c');
       const idx = doc.couplings.length + 1;
-      const baseName = kind === 'screw' ? `Schraube ${idx}` : kind === 'belt' ? `Riemen ${idx}` : `Linear ${idx}`;
+      const baseName = kind === 'screw' ? `Schraube ${idx}` : kind === 'belt' ? `Riemen ${idx}` : kind === 'cam' ? `Kurvenscheibe ${idx}` : `Linear ${idx}`;
       const ref1 = round(stateOf(dj1)[dof1] || 0, 5);
       const ref2 = round(stateOf(dj2)[dof2] || 0, 5);
-      if ((kind === 'screw' || kind === 'belt') && !dj1.stopsLocked && dof1 === 'ang' && !slide(dj1)) {
+      if ((kind === 'screw' || kind === 'belt' || kind === 'cam') && !dj1.stopsLocked && dof1 === 'ang' && !slide(dj1)) {
         dj1.min = Math.min(dj1.min ?? -180, -360);
         dj1.max = Math.max(dj1.max ?? 180, 360);
       }
@@ -4095,7 +4567,7 @@ const Joints = (() => {
         dj2.min = Math.min(dj2.min ?? -180, -360);
         dj2.max = Math.max(dj2.max ?? 180, 360);
       }
-      doc.couplings.push({
+      const entry = {
         id: cid,
         name: opts.name || baseName,
         j1: dj1.id,
@@ -4105,7 +4577,32 @@ const Joints = (() => {
         ref1,
         ref2,
         ...payload,
-      });
+      };
+      doc.couplings.push(entry);
+      if (kind === 'cam') {
+        const prof = camProfile(doc, entry);
+        if (prof && prof.valid) {
+          if (opts.snapContact) {
+            const fb = itemBoxWorld(doc, dj2.b);
+            if (fb) {
+              const rCur = camRadiusAt(prof.samples, ref1);
+              let folMinX = Infinity;
+              for (const bx of [fb.min.x, fb.max.x]) for (const by of [fb.min.y, fb.max.y]) for (const bz of [fb.min.z, fb.max.z]) {
+                const vx = (bx - prof.basis.o.x) * prof.basis.x.x + (by - prof.basis.o.y) * prof.basis.x.y + (bz - prof.basis.o.z) * prof.basis.x.z;
+                if (vx < folMinX) folMinX = vx;
+              }
+              if (Number.isFinite(folMinX)) {
+                entry.ref2 = round(entry.ref2 + prof.basis.sign * (rCur - folMinX) / prof.basis.cosA, 5);
+                propagateCouplings(doc, dj1.id, [dof1], { includeSelf: true });
+              }
+            }
+          }
+          if (!dj2.stopsLocked) {
+            ensureRangeFor(dj2, dof2, entry.ref2 - prof.stroke);
+            ensureRangeFor(dj2, dof2, entry.ref2 + prof.stroke);
+          }
+        }
+      }
     });
     if (cid) drawSelectedJoint();
     return cid ? { ok: true, id: cid } : { ok: false, msg: 'Die Kopplung ließ sich nicht anlegen.' };
@@ -4113,6 +4610,36 @@ const Joints = (() => {
   function addScrew(j1Id, j2IdOrOpts, maybeOpts) { return addCoupling('screw', j1Id, j2IdOrOpts, maybeOpts); }
   function addBelt(j1Id, j2Id, opts = {}) { return addCoupling('belt', j1Id, j2Id, opts); }
   function addLinear(j1Id, j2Id, opts = {}) { return addCoupling('linear', j1Id, j2Id, opts); }
+  function addCam(j1Id, j2Id, opts = {}) { return addCoupling('cam', j1Id, j2Id, opts); }
+
+  function snapCamContact(cid) {
+    const cur = couplingList().find((x) => x.id === cid && x.kind === 'cam');
+    if (!cur) return false;
+    const prof = camProfile(App.doc, cur);
+    if (!prof || !prof.valid) return false;
+    const j1 = list().find((x) => x.id === cur.j1);
+    const j2 = list().find((x) => x.id === cur.j2);
+    if (!j1 || !j2) return false;
+    const fb = itemBoxWorld(App.doc, j2.b);
+    if (!fb) return false;
+    const ang = Number(stateOf(j1)[cur.dof1 || 'ang']) || 0;
+    const rCur = camRadiusAt(prof.samples, ang);
+    let folMinX = Infinity;
+    for (const bx of [fb.min.x, fb.max.x]) for (const by of [fb.min.y, fb.max.y]) for (const bz of [fb.min.z, fb.max.z]) {
+      const vx = (bx - prof.basis.o.x) * prof.basis.x.x + (by - prof.basis.o.y) * prof.basis.x.y + (bz - prof.basis.o.z) * prof.basis.x.z;
+      if (vx < folMinX) folMinX = vx;
+    }
+    if (!Number.isFinite(folMinX)) return false;
+    const dDof = prof.basis.sign * (rCur - folMinX) / prof.basis.cosA;
+    const ok = App.change('Stößel an Kontur angelegt', (doc) => {
+      const c = couplingList(doc).find((x) => x.id === cid);
+      if (!c) return false;
+      c.ref2 = round((Number(c.ref2) || 0) + dDof, 5);
+      propagateCouplings(doc, c.j1, [c.dof1], { includeSelf: true });
+    });
+    drawSelectedJoint();
+    return ok;
+  }
 
   function updateCoupling(cid, patch, opts = {}) {
     const cur = couplingList().find((x) => x.id === cid);
@@ -4156,6 +4683,12 @@ const Joints = (() => {
       if (r == null) return false;
       nextPatch.ratio = round(r, 6);
     }
+    if ('contact' in patch) nextPatch.contact = patch.contact === 'flat' ? 'flat' : 'point';
+    if ('rollerR' in patch) {
+      const rr = parseNum(patch.rollerR);
+      if (!Number.isFinite(rr) || rr < 0) { UI.toast('Bitte einen Rollenradius ≥ 0 mm eingeben.', { kind: 'bad' }); return false; }
+      nextPatch.rollerR = round(rr, 4);
+    }
     const label = opts.label || ('reverse' in nextPatch ? 'Kopplungs-Richtung geändert' : 'name' in nextPatch ? 'Kopplung umbenannt' : 'Kopplung geändert');
     const changeOpts = opts.merge ? { merge: opts.merge } : {};
     const ok = App.change(label, (doc) => {
@@ -4168,6 +4701,8 @@ const Joints = (() => {
       } else if (c.kind === 'belt') {
         if (!(c.z1 > 0)) c.z1 = c.d1 > 0 ? c.d1 : 20;
         if (!(c.z2 > 0)) c.z2 = c.d2 > 0 ? c.d2 : 40;
+      } else if (c.kind === 'cam') {
+        invalidateCamCache();
       }
       propagateCouplings(doc, c.j1, [c.dof1], { includeSelf: true });
     }, changeOpts);
@@ -4198,7 +4733,7 @@ const Joints = (() => {
     const selItemJoint = selItemId ? drivingOf(selItemId) : null;
     const preJ1 = opts.j1 || (selJoint && list().some((x) => x.id === selJoint) ? selJoint : null) || (selItemJoint && !isConstraint(selItemJoint) ? selItemJoint.id : null);
 
-    const wrap = h('div', { id: 'coupling-dialog', 'data-help': kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : 'coupleScrew', style: { display: 'grid', gap: '10px' } });
+    const wrap = h('div', { id: 'coupling-dialog', 'data-help': kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : kind === 'cam' ? 'coupleCam' : 'coupleScrew', style: { display: 'grid', gap: '10px' } });
     if (!kinJoints.length) {
       wrap.append(h('div', { class: 'hint-box' }, 'Lege zuerst mindestens ein bewegliches Gelenk an (z. B. Drehen, Schieben oder Zylindrisch), bevor du Bewegungen koppelst.'));
       UI.modal({
@@ -4217,8 +4752,9 @@ const Joints = (() => {
         ['screw', 'Schraube (Drehen → Vorschub je Umdrehung)'],
         ['belt', 'Riemen (gleiche Umfangsgeschwindigkeit)'],
         ['linear', 'Linear (Schieben → Schieben im Verhältnis)'],
+        ['cam', 'Kurvenscheibe / Nocken (Scheibe → Stößel)'],
       ],
-      onChange: (v) => { kind = v; wrap.dataset.help = kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : 'coupleScrew'; refreshForm(); },
+      onChange: (v) => { kind = v; wrap.dataset.help = kind === 'belt' ? 'coupleBelt' : kind === 'linear' ? 'coupleLinear' : kind === 'cam' ? 'coupleCam' : 'coupleScrew'; refreshForm(); },
     });
     const j1SelWrap = UI.selectField({ id: 'cp-j1', label: 'Antrieb (Gelenk 1)', value: preJ1 || '', options: [], onChange: () => { populateJ2(); autoDefaults(); updatePreview(); } });
     const j2SelWrap = UI.selectField({ id: 'cp-j2', label: 'Mitlauf (Gelenk 2)', value: opts.j2 || '', options: [], onChange: () => { autoDefaults(); updatePreview(); } });
@@ -4254,16 +4790,32 @@ const Joints = (() => {
     const ratioInp = h('input', { id: 'cp-ratio', type: 'text', inputmode: 'decimal', value: String(opts.ratio ?? 1) });
     const ratioWrap = h('div', { class: 'field' }, h('label', { for: 'cp-ratio' }, T('joint.linearRatioLabel') + ' (Weg 2 / Weg 1)'), h('div', { class: 'inp' }, ratioInp, h('span', { class: 'unit' }, '×')));
 
+    const camContactWrap = UI.selectField({
+      id: 'cp-cam-contact',
+      label: T('joint.camContactLabel'),
+      value: opts.contact === 'flat' ? 'flat' : 'point',
+      options: [
+        ['point', T('joint.camContactPoint')],
+        ['flat', T('joint.camContactFlat')],
+      ],
+      onChange: () => { syncCamFields(); updatePreview(); },
+    });
+    const camContactSel = camContactWrap.querySelector('select');
+    const camRollerInp = h('input', { id: 'cp-cam-roller', type: 'text', inputmode: 'decimal', value: String(opts.rollerR ?? 0) });
+    const camRollerWrap = h('div', { class: 'field' }, h('label', { for: 'cp-cam-roller' }, `${T('joint.camRollerLabel')} (${Units.label()})`), h('div', { class: 'inp' }, camRollerInp, h('span', { class: 'unit' }, 'mm')));
+    const camChartBox = h('div', { id: 'cp-cam-chart' });
+
     const revChk = h('input', { id: 'cp-reverse', type: 'checkbox', checked: !!opts.reverse });
     const revTxt = h('span', null, '');
     const revWrap = h('label', { class: 'check' }, revChk, revTxt);
     const previewEl = h('div', { class: 'hint-box', id: 'cp-preview' });
+    let revTouched = opts.reverse !== undefined;
 
-    for (const inp of [pitchInp, v1Inp, v2Inp, ratioInp]) {
+    for (const inp of [pitchInp, v1Inp, v2Inp, ratioInp, camRollerInp]) {
       inp.addEventListener('keydown', (e) => e.stopPropagation());
       inp.addEventListener('input', () => updatePreview());
     }
-    revChk.addEventListener('change', () => updatePreview());
+    revChk.addEventListener('change', () => { revTouched = true; updatePreview(); });
 
     const syncBeltUnit = () => {
       const dia = beltModeSel.value === 'diameter';
@@ -4271,6 +4823,9 @@ const Joints = (() => {
       v2Lbl.textContent = dia ? 'Rad 2 Ø (mm)' : 'Rad 2 (Zähne)';
       v1Unit.textContent = dia ? 'mm' : 'Z';
       v2Unit.textContent = dia ? 'mm' : 'Z';
+    };
+    const syncCamFields = () => {
+      camRollerWrap.style.display = camContactSel.value === 'flat' ? 'none' : '';
     };
 
     const setSelectOpts = (sel, items, preferred) => {
@@ -4309,13 +4864,29 @@ const Joints = (() => {
       } else {
         for (const j of kinJoints) {
           if (j1 && j.id === j1.id) continue;
-          if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (Schieben)`]);
+          if (linDofOf(j)) cand2.push([j.id, `${jointLabel(j)} (${slide(j) ? 'Schieben' : isCyl(j) ? 'Zylindrisch' : isSlot(j) ? 'Langloch' : 'Eben'})`]);
         }
       }
       setSelectOpts(j2Sel, cand2, opts.j2);
     };
 
     const autoDefaults = () => {
+      if (kind === 'cam') {
+        if (!revTouched) {
+          const j1 = kinJoints.find((j) => j.id === j1Sel.value);
+          const j2 = kinJoints.find((j) => j.id === j2Sel.value);
+          if (j1 && j2) {
+            const dof2 = linDofOf(j2);
+            const b = camBasis(App.doc, { dof2, reverse: false }, j1, j2);
+            if (b.valid) {
+              const fBox = itemBoxWorld(App.doc, j2.b);
+              const fCtr = fBox ? fBox.getCenter(new THREE.Vector3()) : new THREE.Vector3(...(j2.ao || [0, 0, 0]));
+              revChk.checked = fCtr.sub(b.o).dot(b.dFol) < -1e-4;
+            }
+          }
+        }
+        return;
+      }
       if (kind !== 'belt' || opts.z1 != null || opts.d1 != null) return;
       const j1 = kinJoints.find((j) => j.id === j1Sel.value);
       const j2 = kinJoints.find((j) => j.id === j2Sel.value);
@@ -4332,12 +4903,16 @@ const Joints = (() => {
       const j1 = kinJoints.find((j) => j.id === j1Sel.value);
       const j2 = kinJoints.find((j) => j.id === j2Sel.value);
       const btn = document.getElementById('cp-submit');
+      if (kind !== 'cam') camChartBox.innerHTML = '';
       if (!j1 || !j2) {
         previewEl.textContent = kind === 'screw'
           ? 'Es fehlt noch ein passendes Gelenk mit Dreh- oder Schiebebewegung.'
           : kind === 'belt'
             ? 'Für eine Riemen-Kopplung werden zwei verschiedene Drehgelenke benötigt.'
-            : 'Für eine lineare Kopplung werden zwei verschiedene Schiebegelenke benötigt.';
+            : kind === 'cam'
+              ? 'Für eine Kurvenscheibe werden ein Drehgelenk (Scheibe) und ein Schiebegelenk (Stößel) benötigt.'
+              : 'Für eine lineare Kopplung werden zwei verschiedene Schiebegelenke benötigt.';
+        if (kind === 'cam') camChartBox.innerHTML = '';
         if (btn) btn.disabled = true;
         return;
       }
@@ -4356,6 +4931,20 @@ const Joints = (() => {
         } else {
           previewEl.textContent = 'Bitte Werte > 0 für beide Räder eingeben.';
         }
+      } else if (kind === 'cam') {
+        const dof1 = rotDofOf(j1), dof2 = linDofOf(j2);
+        const rr = Math.max(0, parseNum(camRollerInp.value) || 0);
+        const mockC = { kind: 'cam', j1: j1.id, j2: j2.id, dof1, dof2, ref1: stateOf(j1)[dof1] || 0, ref2: stateOf(j2)[dof2] || 0, reverse: rev, contact: camContactSel.value, rollerR: rr };
+        const prof = camProfile(App.doc, mockC);
+        camChartBox.innerHTML = '';
+        if (!prof || !prof.valid || prof.basis.cosA < 0.1) {
+          previewEl.textContent = 'Die Schieberichtung des Stößels muss quer zur Drehachse der Scheibe liegen.';
+          if (btn) btn.disabled = true;
+          return;
+        }
+        const chart = buildCamChart(mockC, { interactive: false, strokeId: 'cp-cam-stroke' });
+        if (chart) camChartBox.append(chart);
+        previewEl.textContent = `Gesamthub über 360°: ${Units.fmtLenU(prof.stroke, 2)} (${camContactSel.value === 'flat' ? 'Flachstößel' : rr > 0 ? `Rolle R = ${Units.fmtLenU(rr, 1)}` : 'Kontur'}).`;
       } else {
         const r = parseNum(ratioInp.value);
         previewEl.textContent = Number.isFinite(r) && r > 0
@@ -4373,6 +4962,10 @@ const Joints = (() => {
         revTxt.textContent = T('joint.beltRevLabel');
         syncBeltUnit();
         paramsBox.append(beltModeWrap, beltFields);
+      } else if (kind === 'cam') {
+        revTxt.textContent = T('joint.camRevLabel');
+        syncCamFields();
+        paramsBox.append(camContactWrap, camRollerWrap, camChartBox);
       } else {
         revTxt.textContent = T('joint.linearRevLabel');
         paramsBox.append(ratioWrap);
@@ -4402,6 +4995,9 @@ const Joints = (() => {
               copts.mode = beltModeSel.value;
               if (copts.mode === 'diameter') { copts.d1 = v1Inp.value; copts.d2 = v2Inp.value; }
               else { copts.z1 = v1Inp.value; copts.z2 = v2Inp.value; }
+            } else if (kind === 'cam') {
+              copts.contact = camContactSel.value;
+              copts.rollerR = camRollerInp.value;
             } else {
               copts.ratio = ratioInp.value;
             }
@@ -4419,6 +5015,7 @@ const Joints = (() => {
   function startScrew(opts = {}) { return startCoupling('screw', opts); }
   function startBelt(opts = {}) { return startCoupling('belt', opts); }
   function startLinear(opts = {}) { return startCoupling('linear', opts); }
+  function startCam(opts = {}) { return startCoupling('cam', opts); }
 
   function clampState(j, st) {
     const k = kindOf(j);
@@ -4489,8 +5086,10 @@ const Joints = (() => {
         solvePartConstraints(doc, j.b, Model.vars(doc).v);
         next = stateOf(j);
       }
-      if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
-      if (targets && targets.size) applyTargetsMap(doc, targets, j.id);
+      const isLive = doc === App.doc;
+      if (isLive && isTop(b.id, doc)) Viewer.updateNode(b.id, { matrix: Model.localMatrix(b) });
+      if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next), { live: isLive });
+      if (targets && targets.size) applyTargetsMap(doc, targets, j.id, { live: isLive });
     }, { merge: 'joint:' + jid });
     drawSelectedJoint();
   }
@@ -5017,6 +5616,10 @@ const Joints = (() => {
     const b = anim.btn, jid = anim.jid; anim = null; Viewer.requestRender();
     const el = (b && b.isConnected) ? b : document.querySelector(`.joint-item[data-jid="${jid}"] [id^="jt-play"], #cp-play`);
     if (el) el.innerHTML = icon('play') + 'Bewegung abspielen';
+    if (selJoint) {
+      const sc = couplingList().find((c) => c.id === selJoint && c.kind === 'cam');
+      if (sc) updateCamChartCursor(sc.id);
+    }
   }
   function buildPlayLegs(j) {
     const k = kindOf(j), s0 = stateOf(j);
@@ -5108,14 +5711,12 @@ const Joints = (() => {
   function play(jid, btn) {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
     let j = list().find((x) => x.id === jid);
-    if (!j) {
-      const cp = couplingList().find((c) => c.id === jid);
-      if (cp) {
-        const j1 = list().find((x) => x.id === cp.j1);
-        const j2 = list().find((x) => x.id === cp.j2);
-        const b1 = j1 && top(j1.b);
-        j = (j1 && b1 && !b1.locked) ? j1 : j2;
-      }
+    const cpPlay = !j ? (couplingList().find((c) => c.id === jid) || null) : null;
+    if (!j && cpPlay) {
+      const j1 = list().find((x) => x.id === cpPlay.j1);
+      const j2 = list().find((x) => x.id === cpPlay.j2);
+      const b1 = j1 && top(j1.b);
+      j = cpPlay.kind === 'cam' ? j1 : ((j1 && b1 && !b1.locked) ? j1 : j2);
     }
     if (!j || isConstraint(j) || isLoose(j)) return;
     const B = top(j.b); if (!B) return;
@@ -5126,7 +5727,9 @@ const Joints = (() => {
       ? conj(App.doc, j.b, stateMatrix(j, st0)).invert().multiply(cur).toArray()
       : j.home;
     const down = downstream(App.doc, j.b, { stopAtLocked: true }).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
-    const { legs, T: dur } = buildPlayLegs(j);
+    const { legs, T: dur } = (cpPlay && cpPlay.kind === 'cam')
+      ? { legs: [{ s0: { ang: st0.ang }, s1: { ang: st0.ang + 360 }, t0: 0, t1: 3000 }], T: 3000 }
+      : buildPlayLegs(j);
     if (dur < 1 || !legs.length) return;
     const animDofs = Object.keys(legs[0].s0);
     const hasSelfCoup = couplingList().some((c) => c.j1 === j.id && c.j2 === j.id);
@@ -5173,6 +5776,7 @@ const Joints = (() => {
         const kD = deltaMatrix(ca.j, ca.st0, kSt);
         for (const kd of ca.down) Viewer.updateNode(kd.it.id, { matrix: kD.clone().multiply(kd.m) });
       }
+      if (cpPlay && cpPlay.kind === 'cam') updateCamChartCursor(cpPlay.id, stEff.ang);
     };
     anim = { jid, ids: [...allIds], btn, raf: 0, timer: 0, st: st0, get a() { return this.st.ang; }, applyPose };
     if (btn) btn.innerHTML = icon('close') + 'Stopp';
@@ -5184,7 +5788,7 @@ const Joints = (() => {
       if (t >= dur) { stopPlay(); return; }
       const L = legs.find((l) => t < l.t1) || legs[legs.length - 1];
       const u = (t - L.t0) / Math.max(1, L.t1 - L.t0);
-      const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      const e = (cpPlay && cpPlay.kind === 'cam') ? u : (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
       const st = { ...st0 };
       for (const key of Object.keys(L.s0)) st[key] = L.s0[key] + (L.s1[key] - L.s0[key]) * e;
       anim.st = st;
@@ -5498,6 +6102,7 @@ const Joints = (() => {
           { icon: 'helix', label: T('ctx.coupleScrew'), help: 'coupleScrew', run: () => startScrew() },
           { icon: 'link', label: T('ctx.coupleBelt'), help: 'coupleBelt', run: () => startBelt() },
           { icon: 'moveStep', label: T('ctx.coupleLinear'), help: 'coupleLinear', run: () => startLinear() },
+          { icon: 'cam', label: T('ctx.coupleCam'), help: 'coupleCam', run: () => startCam() },
         ]);
       };
       head.append(addCBtn);
@@ -5535,7 +6140,7 @@ const Joints = (() => {
     }
     for (const c of cs) {
       const row = h('div', { class: 'tree-row coupling-row pro' + (c.id === selJoint ? ' sel' : ''), 'data-coupling': c.id });
-      const icName = c.kind === 'screw' ? 'helix' : c.kind === 'belt' ? 'link' : 'moveStep';
+      const icName = c.kind === 'screw' ? 'helix' : c.kind === 'belt' ? 'link' : c.kind === 'cam' ? 'cam' : 'moveStep';
       const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(icName);
       const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
       del.innerHTML = icon('trash');
@@ -5557,11 +6162,125 @@ const Joints = (() => {
     return sec;
   }
 
+  function buildCamChart(cOrPreview, opts = {}) {
+    const data = camCurveData(cOrPreview);
+    if (!data || !data.ok || !data.samples.length) return null;
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const mkSvg = (tag, attrs = {}, txt = null) => {
+      const el = document.createElementNS(svgNS, tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+      if (txt != null) el.textContent = txt;
+      return el;
+    };
+    const W = 260, H = 116;
+    const x0 = 34, x1 = 248, y0 = 12, y1 = 92;
+    const pw = x1 - x0, ph = y1 - y0;
+    const maxY = Math.max(0.01, data.stroke);
+    const sx = (ang) => x0 + (clamp(ang, 0, 360) / 360) * pw;
+    const sy = (lift) => y1 - (clamp(lift, 0, maxY) / maxY) * ph;
+
+    const wrap = h('div', { class: 'cam-chart-wrap', id: opts.id || 'cam-chart' });
+    const strokeSpan = h('span', { class: 'mono', id: opts.strokeId || (opts.interactive === false ? '' : 'cam-stroke') }, `${T('joint.camStrokeLabel')}: ${Units.fmtLenU(data.stroke, 2)}`);
+    wrap.append(h('div', { class: 'cam-chart-head' }, h('span', null, T('joint.camChartTitle')), strokeSpan));
+
+    const svg = mkSvg('svg', {
+      class: 'cam-chart-svg',
+      viewBox: `0 0 ${W} ${H}`,
+      role: 'img',
+      'aria-label': T('joint.camChartTitle'),
+      'data-stroke': round(data.stroke, 4),
+      'data-samples': data.samples.length - 1,
+    });
+    for (const a of [90, 180, 270, 360]) {
+      const x = round(sx(a), 2);
+      svg.append(mkSvg('line', { class: 'cam-grid', x1: x, y1: y0, x2: x, y2: y1 }));
+    }
+    for (const f of [0.5, 1]) {
+      const y = round(y1 - f * ph, 2);
+      svg.append(mkSvg('line', { class: 'cam-grid', x1: x0, y1: y, x2: x1, y2: y }));
+    }
+    svg.append(
+      mkSvg('line', { class: 'cam-axis', x1: x0, y1: y0, x2: x0, y2: y1 }),
+      mkSvg('line', { class: 'cam-axis', x1: x0, y1: y1, x2: x1, y2: y1 })
+    );
+    for (const a of [0, 90, 180, 270, 360]) {
+      svg.append(mkSvg('text', { class: 'cam-axis-lbl', x: round(sx(a), 2), y: H - 6, 'text-anchor': a === 0 ? 'start' : a === 360 ? 'end' : 'middle' }, `${a}°`));
+    }
+    svg.append(
+      mkSvg('text', { class: 'cam-axis-lbl', x: x0 - 4, y: y1 + 3, 'text-anchor': 'end' }, '0'),
+      mkSvg('text', { class: 'cam-axis-lbl', x: x0 - 4, y: y0 + 6, 'text-anchor': 'end' }, Units.fmtLen(data.stroke, 1))
+    );
+
+    const pts = [];
+    for (let a = 0; a <= 360; a += 3) {
+      const s = data.samples[a];
+      pts.push(`${round(sx(a), 2)},${round(sy(s.lift), 2)}`);
+    }
+    const lineD = 'M' + pts.join(' L');
+    const areaD = lineD + ` L${x1},${y1} L${x0},${y1} Z`;
+    svg.append(mkSvg('path', { class: 'cam-area', d: areaD }));
+    svg.append(mkSvg('path', { class: 'cam-curve', d: lineD }));
+
+    const cx = round(sx(data.curAngNorm), 2), cy = round(sy(data.curLift), 2);
+    const cursor = mkSvg('line', { class: 'cam-cursor', x1: cx, y1: y0, x2: cx, y2: y1 });
+    const dot = mkSvg('circle', { class: 'cam-dot', cx, cy, r: 3.6 });
+    svg.append(cursor, dot);
+    wrap.append(svg);
+
+    if (opts.interactive !== false) {
+      const foot = h('div', { class: 'cam-chart-foot' },
+        h('span', { class: 'mono', id: 'cam-cur' }, `φ = ${fmtAngleU(data.curAngNorm)} → ${T('joint.camStrokeLabel')} ${Units.fmtLenU(data.curLift, 2)}`),
+        h('span', null, 'Klicken/Ziehen: Winkel')
+      );
+      wrap.append(foot);
+
+      const scrub = (ev) => {
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        const svgX = ((ev.clientX - rect.left) / rect.width) * W;
+        const ang = round(clamp(((svgX - x0) / pw) * 360, 0, 360), 1);
+        if (cOrPreview && cOrPreview.j1) setState(cOrPreview.j1, { [cOrPreview.dof1 || 'ang']: ang });
+      };
+      let down = false;
+      svg.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0) return;
+        down = true;
+        try { svg.setPointerCapture(ev.pointerId); } catch (_) {}
+        scrub(ev);
+      });
+      svg.addEventListener('pointermove', (ev) => { if (down) scrub(ev); });
+      svg.addEventListener('pointerup', (ev) => { down = false; try { svg.releasePointerCapture(ev.pointerId); } catch (_) {} });
+      svg.addEventListener('pointercancel', () => { down = false; });
+    }
+    return wrap;
+  }
+
+  function updateCamChartCursor(cid, angDeg = null) {
+    const wrap = document.getElementById('cam-chart');
+    if (!wrap) return;
+    const c = couplingList().find((x) => x.id === cid && x.kind === 'cam');
+    if (!c) return;
+    const j1 = list().find((x) => x.id === c.j1);
+    const ang = angDeg != null ? angDeg : (j1 ? (Number(stateOf(j1)[c.dof1 || 'ang']) || 0) : 0);
+    const lv = camLiftAt(App.doc, c, ang);
+    if (!lv) return;
+    const x0 = 34, x1 = 248, y0 = 12, y1 = 92;
+    const maxY = Math.max(0.01, lv.stroke);
+    const cx = round(x0 + (clamp(lv.angNorm, 0, 360) / 360) * (x1 - x0), 2);
+    const cy = round(y1 - (clamp(lv.lift, 0, maxY) / maxY) * (y1 - y0), 2);
+    const cur = wrap.querySelector('.cam-cursor');
+    const dot = wrap.querySelector('.cam-dot');
+    const txt = wrap.querySelector('#cam-cur');
+    if (cur) { cur.setAttribute('x1', cx); cur.setAttribute('x2', cx); }
+    if (dot) { dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); }
+    if (txt) txt.textContent = `φ = ${fmtAngleU(lv.angNorm)} → ${T('joint.camStrokeLabel')} ${Units.fmtLenU(lv.lift, 2)}`;
+  }
+
   function renderCouplingPanel(body, c) {
     const j1 = list().find((x) => x.id === c.j1);
     const j2 = list().find((x) => x.id === c.j2);
     if (!j1 || !j2) return false;
-    const helpKey = c.kind === 'belt' ? 'coupleBelt' : c.kind === 'linear' ? 'coupleLinear' : 'coupleScrew';
+    const helpKey = c.kind === 'belt' ? 'coupleBelt' : c.kind === 'linear' ? 'coupleLinear' : c.kind === 'cam' ? 'coupleCam' : 'coupleScrew';
     const w = h('div', { class: 'props', id: 'coupling-edit-panel', 'data-help': helpKey });
     const nm = h('input', { id: 'cp-edit-name', value: couplingLabel(c), 'aria-label': T('common.name') });
     nm.addEventListener('change', () => {
@@ -5579,8 +6298,54 @@ const Joints = (() => {
       r.onclick = () => select(j.id);
       return r;
     };
-    links.append(mkJRow('Antrieb', j1, c.dof1), mkJRow('Mitlauf', j2, c.dof2));
+    links.append(mkJRow(c.kind === 'cam' ? 'Scheibe' : 'Antrieb', j1, c.dof1), mkJRow(c.kind === 'cam' ? 'Stößel' : 'Mitlauf', j2, c.dof2));
     w.append(links);
+
+    if (c.kind === 'cam') {
+      const prof = camProfile(App.doc, c);
+      const stStr = prof && prof.valid ? Units.fmtLenU(prof.stroke, 2) : '—';
+      w.append(h('div', { class: 'hint-box', id: 'cp-edit-readout', html: `<b>${esc(jointLabel(j2))}</b> folgt der Außenkontur von <b>${esc(jointLabel(j1))}</b> · Gesamthub: <b class="mono">${esc(stStr)}</b>.` }));
+      const chart = buildCamChart(c, { id: 'cam-chart', interactive: true });
+      if (chart) w.append(chart);
+      const curAng = Number(stateOf(j1)[c.dof1 || 'ang']) || 0;
+      const angSlider = h('input', { type: 'range', id: 'cam-ang-range', min: j1.min ?? -360, max: j1.max ?? 360, step: 1, value: curAng, 'aria-label': T('joint.camAngleLabel'), style: { width: '100%' } });
+      angSlider.oninput = () => setState(j1.id, { [c.dof1 || 'ang']: +angSlider.value });
+      w.append(angSlider);
+      const camFields = h('div', { class: 'fields' });
+      camFields.append(UI.numField({
+        id: 'cam-ang', label: T('joint.camAngleLabel'), value: curAng, unit: '°', expr: false,
+        onCommit: (v) => setState(j1.id, { [c.dof1 || 'ang']: v }),
+      }));
+      if (c.contact !== 'flat') {
+        camFields.append(UI.numField({
+          id: 'cp-edit-roller', label: T('joint.camRollerLabel'), value: c.rollerR ?? 0, unit: 'mm', len: true, expr: false, min: 0,
+          onCommit: (v) => updateCoupling(c.id, { rollerR: v }, { merge: 'cp:' + c.id }),
+        }));
+      }
+      w.append(
+        UI.selectField({
+          id: 'cp-edit-contact', label: T('joint.camContactLabel'), value: c.contact === 'flat' ? 'flat' : 'point',
+          options: [['point', T('joint.camContactPoint')], ['flat', T('joint.camContactFlat')]],
+          onChange: (v) => updateCoupling(c.id, { contact: v }),
+        }),
+        camFields
+      );
+      const revChk = h('input', { type: 'checkbox', id: 'cp-edit-reverse', checked: !!c.reverse });
+      revChk.onchange = () => updateCoupling(c.id, { reverse: revChk.checked });
+      w.append(h('label', { class: 'check' }, revChk, T('joint.camRevLabel')));
+      const snapBtn = h('button', { type: 'button', class: 'btn', id: 'cp-cam-snap' }, icon('snap') + esc(T('joint.camSnapBtn')));
+      snapBtn.onclick = () => snapCamContact(c.id);
+      const pb = h('button', { type: 'button', class: 'btn', id: 'cp-play' });
+      const isPlaying = anim && (anim.jid === c.id || anim.jid === j1.id);
+      pb.innerHTML = icon(isPlaying ? 'close' : 'play') + (isPlaying ? 'Stopp' : 'Bewegung abspielen');
+      pb.onclick = () => play(c.id, pb);
+      const del = h('button', { type: 'button', class: 'btn danger', id: 'cp-del' });
+      del.innerHTML = icon('ungroup') + esc(T('joint.coupleRemoveBtn'));
+      del.onclick = () => removeCoupling(c.id);
+      w.append(h('div', { class: 'btn-row' }, snapBtn), h('div', { class: 'btn-row' }, pb, del));
+      body.append(w);
+      return true;
+    }
 
     const hintTxt = c.kind === 'screw'
       ? `Drehen um 360° an <b>${esc(jointLabel(j1))}</b> verschiebt um <b class="mono">${c.reverse ? '−' : '+'}${esc(Units.fmtLenU(c.pitch, 2))}</b>.`
@@ -5626,7 +6391,8 @@ const Joints = (() => {
     w.append(h('label', { class: 'check' }, revChk, revLbl));
 
     const pb = h('button', { type: 'button', class: 'btn', id: 'cp-play' });
-    pb.innerHTML = icon(anim && anim.jid === j1.id ? 'close' : 'play') + (anim && anim.jid === j1.id ? 'Stopp' : 'Bewegung abspielen');
+    const isPlaying = anim && (anim.jid === c.id || anim.jid === j1.id);
+    pb.innerHTML = icon(isPlaying ? 'close' : 'play') + (isPlaying ? 'Stopp' : 'Bewegung abspielen');
     pb.onclick = () => play(c.id, pb);
     const del = h('button', { type: 'button', class: 'btn danger', id: 'cp-del' });
     del.innerHTML = icon('ungroup') + esc(T('joint.coupleRemoveBtn'));
@@ -5716,9 +6482,14 @@ const Joints = (() => {
       }
     });
     App.on('results', () => {
+      invalidateCamCache();
       if (anim && anim.applyPose) anim.applyPose(anim.st);
       relinkFixed();
       drawSelectedJoint();
+      if (selJoint && document.getElementById('cam-chart')) {
+        const sc = couplingList().find((c) => c.id === selJoint && c.kind === 'cam');
+        if (sc) Panels.renderRight({ preserveFocus: true });
+      }
     });
     App.on('docLoaded', () => { stopPick(); clearDragVis(); closeDockPrompt(); });
     App.on('mode', () => { stopPick(); clearDragVis(); closeDockPrompt(); });
@@ -5741,6 +6512,7 @@ const Joints = (() => {
     startScrew,
     startBelt,
     startLinear,
+    startCam,
     stopPick,
     add,
     addFixed,
@@ -5769,6 +6541,10 @@ const Joints = (() => {
     addScrew,
     addBelt,
     addLinear,
+    addCam,
+    camCurveData,
+    snapCamContact,
+    invalidateCamCache,
     updateCoupling,
     removeCoupling,
     couplingsOf,

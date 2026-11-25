@@ -29770,6 +29770,235 @@ def t_a152_kopplungen_schraube_riemen_linear(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-153] Kurvenscheibe / Nocken (BG-15) ----------
+def t_a153_kurvenscheibe_nocken(p):
+    # 1. Exzentrische Scheibe (d = 30 mm, 5 mm versetzt) -> Stößel-Hub = 10 mm
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    cam_info = p.ev("""
+      App.change('Kurvenscheibe-Test', (d) => {
+        const base = Model.newItem('box', { w: 80, d: 80, h: 6 }, { name: 'Grundplatte' });
+        base.locked = true;
+        const cam = Model.newItem('cylinder', { d: 30, h: 10 }, { name: 'Exzenter' });
+        cam.t.x = 5; cam.t.z = 5;
+        const fol = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Stößel' });
+        fol.t.x = 25; fol.t.z = 5;
+        d.items.push(base, cam, fol);
+      });
+      const [bId, cId, fId] = App.doc.items.map(x => x.id);
+      const jCam = Joints.add(bId, cId, [0, 0, 5], [0, 0, 1], { kind: 'rot' });
+      const jFol = Joints.add(bId, fId, [25, 0, 5], [1, 0, 0], { kind: 'slide', min: -30, max: 30 });
+      return { bId, cId, fId, jCam: jCam.id, jFol: jFol.id, ok: !!(jCam.ok && jFol.ok) };
+    """)
+    warte_rechnen(p, 25)
+
+    # Über Dialog anlegen & Vorschau-Diagramm prüfen
+    p.ev("Joints.startCam({ j1: arg.jCam, j2: arg.jFol })", cam_info)
+    p.wait(250)
+    dlg_cam = p.ev("""
+      return {
+        open: !!document.querySelector('#coupling-dialog'),
+        kind: document.querySelector('#cp-kind')?.value,
+        hasPreviewCurve: !!document.querySelector('#cp-cam-chart svg path.cam-curve'),
+        strokeTxt: document.querySelector('#cp-cam-stroke')?.textContent || '',
+      };
+    """)
+    p.pg.click('#cp-submit')
+    p.wait(250)
+    cam_cid = p.ev("return (App.doc.couplings || [])[0]?.id || null")
+
+    sweeps = p.ev("""
+      const angs = [0, 45, 90, 135, 180, 270, 360];
+      const out = [];
+      for (const a of angs) {
+        Joints.setState(arg.jCam, { ang: a });
+        const jF = App.doc.joints.find(x => x.id === arg.jFol);
+        const minX = Actions.worldBox(arg.fId).min.x;
+        out.push({ a, pos: jF.ang, minX });
+      }
+      const curve = Joints.camCurveData(arg.cid);
+      return { out, stroke: curve.stroke };
+    """, {'jCam': cam_info['jCam'], 'jFol': cam_info['jFol'], 'fId': cam_info['fId'], 'cid': cam_cid})
+    warte_rechnen(p, 15)
+
+    xs = [s['minX'] for s in sweeps['out']]
+    ps = [s['pos'] for s in sweeps['out']]
+    stroke_3d = max(xs) - min(xs)
+    stroke_dof = max(ps) - min(ps)
+    ok1 = (
+        cam_info['ok'] and dlg_cam['open'] and dlg_cam['kind'] == 'cam'
+        and dlg_cam['hasPreviewCurve'] and '10' in dlg_cam['strokeTxt']
+        and cam_cid is not None
+        and abs(sweeps['stroke'] - 10.0) < 0.05
+        and abs(stroke_3d - 10.0) < 0.05
+        and abs(stroke_dof - 10.0) < 0.05
+        and abs(sweeps['out'][4]['pos'] + 10.0) < 0.05
+        and abs(sweeps['out'][6]['minX'] - sweeps['out'][0]['minX']) < 0.05
+    )
+
+    # 2. Weg-Kurve SVG-Diagramm im rechten Panel, Winkelfaden, Flachstößel & An Kontur anlegen
+    p.ev("Joints.select(arg)", cam_cid)
+    p.wait(250)
+    chart_chk = p.ev("""
+      const svg = document.querySelector('#cam-chart svg.cam-chart-svg');
+      const path = svg?.querySelector('path.cam-curve');
+      const dot0 = svg?.querySelector('circle.cam-dot');
+      const dStr = path?.getAttribute('d') || '';
+      const ys = [...dStr.matchAll(/,([0-9.-]+)/g)].map(m => parseFloat(m[1]));
+      const ySpread = ys.length ? (Math.max(...ys) - Math.min(...ys)) : 0;
+      const box = svg ? svg.getBoundingClientRect() : null;
+      return {
+        hasSvg: !!svg,
+        hasArea: !!(box && box.width > 80 && box.height > 40),
+        ptsCount: ys.length,
+        ySpread,
+        strokeTxt: document.querySelector('#cam-stroke')?.textContent || '',
+        dot0x: dot0 ? parseFloat(dot0.getAttribute('cx')) : null,
+        dot0y: dot0 ? parseFloat(dot0.getAttribute('cy')) : null,
+      };
+    """)
+    field(p, '#cam-ang', 180)
+    p.wait(200)
+    dot180 = p.ev("""
+      const dot = document.querySelector('#cam-chart circle.cam-dot');
+      return { x: parseFloat(dot.getAttribute('cx')), y: parseFloat(dot.getAttribute('cy')), cur: document.querySelector('#cam-cur')?.textContent || '' };
+    """)
+    # Punkt vs. Flachstößel bei 90° (Kontur ~ 14.142 -> pos ~ -5.858 vs. Flachstößel 15.0 -> pos = -5.0)
+    p.ev("Joints.setState(arg, { ang: 90 })", cam_info['jCam'])
+    pos_point_90 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", cam_info['jFol'])
+    p.ev("document.querySelector('#cp-edit-contact').value = 'flat'; document.querySelector('#cp-edit-contact').dispatchEvent(new Event('change'));")
+    p.wait(200)
+    pos_flat_90 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", cam_info['jFol'])
+
+    # An Kontur anlegen mit 5 mm Spalt (cam bei 0°, Stößel 5 mm abgerückt)
+    p.ev("""
+      Joints.setState(arg.jCam, { ang: 0 });
+      App.change('Spalt', d => {
+        const c = d.couplings.find(x => x.id === arg.cid);
+        c.ref2 = 5;
+        Joints.setState(arg.jCam, { ang: 0 });
+      });
+    """, {'jCam': cam_info['jCam'], 'cid': cam_cid})
+    p.pg.click('#cp-cam-snap')
+    p.wait(200)
+    x_snapped = p.ev("return Actions.worldBox(arg).min.x", cam_info['fId'])
+
+    ok2 = (
+        chart_chk['hasSvg'] and chart_chk['hasArea']
+        and chart_chk['ptsCount'] >= 60 and chart_chk['ySpread'] > 20
+        and '10' in chart_chk['strokeTxt']
+        and dot180['x'] > chart_chk['dot0x'] + 20
+        and dot180['y'] > chart_chk['dot0y'] + 20
+        and '180' in dot180['cur']
+        and abs(pos_point_90 - (math.sqrt(200) - 20)) < 0.1
+        and abs(pos_flat_90 + 5.0) < 0.05
+        and abs(x_snapped - 20.0) < 0.05
+    )
+
+    # 3. Unrunde Nocken-Kontur (Ellipse rx=18, ry=12 -> Hub = 6 mm)
+    ell = p.ev("""
+      Start.openNewTab(Model.newDoc('Ellipsen-Nocken'));
+      App.change('Ellipse-Cam', (d) => {
+        const base = Model.newItem('box', { w: 80, d: 80, h: 6 }, { name: 'Platte' });
+        base.locked = true;
+        const cam = Model.newItem('extrude', {
+          sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'e1', type: 'ellipse', c: [0, 0], rx: 18, ry: 12, rot: 0 }], dims: [], cons: [] },
+          dist: 10, dir: 1,
+        }, { name: 'Oval-Nocken' });
+        const fol = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Stößel' });
+        fol.t.x = 25; fol.t.z = 10;
+        d.items.push(base, cam, fol);
+      });
+      const [bId, cId, fId] = App.doc.items.map(x => x.id);
+      const jCam = Joints.add(bId, cId, [0, 0, 10], [0, 0, 1], { kind: 'rot' });
+      const jFol = Joints.add(bId, fId, [25, 0, 10], [1, 0, 0], { kind: 'slide', min: -30, max: 30 });
+      const cr = Joints.addCam(jCam.id, jFol.id);
+      return { ok: !!(jCam.ok && jFol.ok && cr.ok), cid: cr.id, jCam: jCam.id, jFol: jFol.id };
+    """)
+    warte_rechnen(p, 25)
+    ell_res = p.ev("""
+      Joints.invalidateCamCache();
+      const cd = Joints.camCurveData(arg.cid);
+      Joints.setState(arg.jCam, { ang: 0 });
+      const p0 = App.doc.joints.find(x => x.id === arg.jFol).ang;
+      Joints.setState(arg.jCam, { ang: 90 });
+      const p90 = App.doc.joints.find(x => x.id === arg.jFol).ang;
+      return { stroke: cd.stroke, diff: p0 - p90 };
+    """, ell)
+    ok3 = ell['ok'] and abs(ell_res['stroke'] - 6.0) < 0.15 and abs(ell_res['diff'] - 6.0) < 0.15
+
+    # 4. Abspielen, Validierung, Rückgängig, Profi-Sichtbarkeit & Cache-Invalidierung
+    p.ev("Joints.select(arg)", ell['cid'])
+    p.wait(250)
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+    rev_before = p.ev("return App.revision")
+    p.pg.click('#cp-play')
+    p.wait(400)
+    mid_play = p.ev("""
+      const c = App.doc.items[1], f = App.doc.items[2];
+      const nc = Viewer.nodes.get(c.id), nf = Viewer.nodes.get(f.id);
+      const mc = Model.localMatrix(c), mf = Model.localMatrix(f);
+      return [
+        !!Joints.playing,
+        nc.base.elements.some((v, i) => Math.abs(v - mc.elements[i]) > 1e-3),
+        nf.base.elements.some((v, i) => Math.abs(v - mf.elements[i]) > 1e-3),
+      ];
+    """)
+    p.ev("Joints.stopPlay()")
+    p.wait(150)
+    rev_after = p.ev("return App.revision")
+
+    p.pg.click('#cp-del')
+    p.wait(250)
+    cnt_del = p.ev("return (App.doc.couplings || []).length")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    cnt_undo = p.ev("return (App.doc.couplings || []).length")
+
+    simple_vis = p.ev("""
+      ViewPrefs.setLevel('simple');
+      Panels.renderLeft();
+      const btn = document.querySelector('#btn-add-coupling');
+      const row = document.querySelector('.coupling-row');
+      const hiddenInSimple = (!btn || getComputedStyle(btn).display === 'none') && (!row || getComputedStyle(row).display === 'none');
+      ViewPrefs.setLevel('pro');
+      Panels.renderLeft();
+      const visInPro = !!(document.querySelector('#btn-add-coupling') && getComputedStyle(document.querySelector('#btn-add-coupling')).display !== 'none');
+      Joints.invalidateCamCache();
+      return [hiddenInSimple, visInPro, typeof Joints.invalidateCamCache === 'function'];
+    """)
+
+    ok4 = (
+        val_ok is True
+        and mid_play == [True, True, True]
+        and rev_before == rev_after
+        and cnt_del == 0 and cnt_undo == 1
+        and simple_vis == [True, True, True]
+    )
+
+    # 5. Hilfe, DE/EN-Schlüssel, Befehlssuche & keine JS-Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'coupleCam';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.coupleCam && wh.coupleCam.tip && wh.coupleCam.hilfe && wh.coupleCam.tipp && desc && desc.text === wh.coupleCam.hilfe && desc.tip === wh.coupleCam.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('kurvenscheibe').some(c => c.id === 'couple-cam');
+      const c2 = Commands.search('nocken').some(c => c.id === 'couple-cam');
+      return { hOk, i18nOk, cmds: c1 && c2 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -30032,6 +30261,7 @@ TESTS = [
     ('[A-149] Beispiel-Galerie: 8 lokale Beispiele mit Vorschaubild / Kopie öffnen / Original unverändert', t_a149_beispiel_galerie),
     ('[A-150] Dateiformat offen beschreiben: DATEIFORMAT.md, Beispiel-Projekt gültig & kaputte Datei deutsch gemeldet (PL-12)', t_a150_dateiformat),
     ('[A-152] Kopplungen: Schraube (2 mm/U), Riemen (20/40 Zähne) & linear (BG-14)', t_a152_kopplungen_schraube_riemen_linear),
+    ('[A-153] Kurvenscheibe / Nocken: Exzentrische Scheibe (5 mm → 10 mm Hub) & Weg-Kurve-Diagramm (BG-15)', t_a153_kurvenscheibe_nocken),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -3761,5 +3761,16 @@
   "joint.beltModeDia": "Durchmesser (Ø 1 : Ø 2)",
   "joint.beltRevLabel": "Gekreuzter Riemen (Gegenrichtung)",
   "joint.linearRatioLabel": "Verhältnis",
-  "joint.linearRevLabel": "Gegenläufig (Richtung umkehren)"
+  "joint.linearRevLabel": "Gegenläufig (Richtung umkehren)",
+  "ctx.coupleCam": "Verbindung: Kurvenscheibe / Nocken",
+  "joint.camKind": "Kurvenscheibe",
+  "joint.camContactLabel": "Stößel-Kontakt",
+  "joint.camContactPoint": "Kontur / Spitze / Rolle",
+  "joint.camContactFlat": "Flachstößel (ebene Fläche)",
+  "joint.camRollerLabel": "Rollenradius",
+  "joint.camRevLabel": "Andere Seite (Richtung umkehren)",
+  "joint.camSnapBtn": "An Kontur anlegen",
+  "joint.camChartTitle": "Weg-Kurve (0° – 360°)",
+  "joint.camStrokeLabel": "Hub",
+  "joint.camAngleLabel": "Drehwinkel Scheibe"
 }

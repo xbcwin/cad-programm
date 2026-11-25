@@ -3476,6 +3476,7 @@ const Panels = (() => {
           { label: T('ctx.coupleScrew'), icon: 'helix', help: 'coupleScrew', run: () => Joints.startScrew() },
           { label: T('ctx.coupleBelt'), icon: 'link', help: 'coupleBelt', run: () => Joints.startBelt() },
           { label: T('ctx.coupleLinear'), icon: 'moveStep', help: 'coupleLinear', run: () => Joints.startLinear() },
+          { label: T('ctx.coupleCam'), icon: 'cam', help: 'coupleCam', run: () => Joints.startCam() },
         ]), '', T('ctx.mateTip'), true).dataset.help = 'mateCyl';
       }
       if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) {
