@@ -536,6 +536,7 @@ const IC = {
   trash: '<path d="M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3" />',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />',
   group: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4 M13 17H9a2 2 0 0 1-2-2v-4" />',
+  sketchBlock: '<rect x="3" y="3" width="12" height="12" rx="1.5"/><rect x="9" y="9" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2"/><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"/>',
   ungroup: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M15 7h2v2 M7 15v2h2" />',
   mirror: '<path d="M12 3v18 M8 6 3 18h5z M16 6l5 12h-5z" />',
   rotate: '<path d="M20 12a8 8 0 1 1-2.4-5.7 M20 4v5h-5" />',
@@ -2190,6 +2191,11 @@ const HELP = {
   "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
   "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
   "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
+ },
+ "sketchBlocks": {
+  "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
+  "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
+  "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
  }
 };
 

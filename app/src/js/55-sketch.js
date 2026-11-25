@@ -32,10 +32,11 @@ const Sketch = (() => {
     { id: 'patfill', icon: 'patternFill', get label() { return T('sk.tool.patfill'); }, key: '', get tip() { return T('sk.toolTip.patfill'); } },
     { id: 'xmove', icon: 'arrowR', get label() { return T('sk.tool.xmove'); }, key: 'H', get tip() { return T('sk.toolTip.xmove'); } },
     { id: 'stretch', icon: 'stretch', get label() { return T('sk.tool.stretch'); }, key: '', get tip() { return T('sk.toolTip.stretch'); }, pro: true },
+    { id: 'block', icon: 'sketchBlock', get label() { return T('sk.tool.block'); }, key: '', get tip() { return T('sk.toolTip.block'); }, pro: true },
     { id: 'dim', icon: 'dim', get label() { return T('sk.tool.dim'); }, key: 'D', get tip() { return T('sk.toolTip.dim'); }, sep: true },
     { id: 'bg', icon: 'image', get label() { return T('sk.tool.bg'); }, key: 'I', get tip() { return T('sk.toolTip.bg'); } },
   ];
-  const HELPKEY = { wall: 'wall2d', project: 'project2d', silhouette: 'silhouette2d', intersect: 'intersectCurve2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', conic: 'conic2d', bridge: 'bridge2d', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', patcurve: 'patternCurve2d', patfill: 'patternFill2d', stretch: 'stretch2d' };
+  const HELPKEY = { wall: 'wall2d', project: 'project2d', silhouette: 'silhouette2d', intersect: 'intersectCurve2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', conic: 'conic2d', bridge: 'bridge2d', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', patcurve: 'patternCurve2d', patfill: 'patternFill2d', stretch: 'stretch2d', block: 'sketchBlocks' };
   // Bedingungen (Regeln): zweite Leiste unter den Zeichenwerkzeugen
   const CTOOLS = [
     { id: 'horizontal', icon: 'cHoriz', get label() { return T('sk.con.horizontal'); }, help: 'cHoriz' },
@@ -79,6 +80,7 @@ const Sketch = (() => {
       if (S.draft.b) return T('sk.hint.conicApex');
     }
     if (id === 'bridge' && S && S.bridge && S.bridge.first) return T('sk.hint.bridge2');
+    if (S && S.blockEdit) return T('sk.hint.blockEdit', { name: esc(S.blockEdit.name) });
     return T('sk.hint.' + id);
   };
   const CICON = Object.fromEntries(CTOOLS.map((t) => [t.id, t.icon]));
@@ -255,7 +257,7 @@ const Sketch = (() => {
     if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
     const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
-    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), guides: deepClone(f.item.p.sketch.guides || []), gridMode: f.item.p.sketch.gridMode || 'rect', polar: f.item.p.sketch.polar ? deepClone(f.item.p.sketch.polar) : null, bg: f.item.p.sketch.bg, locked: !!f.item.p.sketch.locked, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
+    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), blockInsts: deepClone(f.item.p.sketch.blockInsts || []), guides: deepClone(f.item.p.sketch.guides || []), gridMode: f.item.p.sketch.gridMode || 'rect', polar: f.item.p.sketch.polar ? deepClone(f.item.p.sketch.polar) : null, bg: f.item.p.sketch.bg, locked: !!f.item.p.sketch.locked, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
     if (f.item.kind === 'group' || f.item.kind === 'rib' || f.item.kind === 'wrap' || f.item.kind === 'emboss') return;   // Muster entlang Kurve, Rippe, Wickeln & Prägen: Zielkörper bleibt sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
@@ -398,11 +400,12 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, icPick: null, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, splineMode: 'fit', selHandle: null, hoverHandle: null, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360, curveMode: 'count', curveN: 5, curveDist: 10, curveAlign: true, curveFlip: false }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, fill: { kind: 'grid', size: 5, pitch: 8, margin: 3, regionKey: null, hoverRegionKey: null }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, icPick: null, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, patCurve: null, patPickCurve: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0, blockInsts: Array.isArray(init.blockInsts) ? deepClone(init.blockInsts) : [], blocks0: App.doc && Array.isArray(App.doc.blocks) ? deepClone(App.doc.blocks) : [], selBlockInst: null, blockActive: (App.doc && Array.isArray(App.doc.blocks) && App.doc.blocks[0]) ? App.doc.blocks[0].id : null, blockEdit: null, blockRot: 0, blockLibOpen: false, gridMode: init.gridMode === 'polar' ? 'polar' : 'rect', polar: { rStep: clamp(Number(init.polar && init.polar.rStep) || 5, 0.1, 1000), aStep: clamp(Number(init.polar && init.polar.aStep) || 15, 1, 90) }, guides: Array.isArray(init.guides) ? deepClone(init.guides) : [], guideDrag: null, gridOpen: false, guideAxis: 'x', guideVal: 15, _lastSimple: isSimpleMode() };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
     ensureSketchFonts(S.tool === 'text' ? S.txt.font : null);
+    syncCurrentBlocks();
     reapply();   // Maße mit den aktuellen Werten aus „Maße“ nachrechnen
     App.clearSelection();
     Viewer.useButtons('sketch');
@@ -424,9 +427,10 @@ const Sketch = (() => {
   function showBar() {
     hideBar();
     bar = h('div', { class: 'sketchbar', role: 'toolbar', 'aria-label': T('sk.bar.aria') });
-    bar.append(h('span', { class: 'title' }, T('sk.bar.title')));
+    bar.append(h('span', { class: 'title' }, S.blockEdit ? T('sk.bar.blockEditTitle', { name: S.blockEdit.name }) : T('sk.bar.title')));
     const vsep = () => h('span', { class: 'vsep', style: { width: '1px', alignSelf: 'stretch', background: 'var(--line)', margin: '4px 4px' } });
     for (const t of TOOLS) {
+      if (t.id === 'block' && S.blockEdit) continue;
       if (t.sep) bar.append(vsep());
       const hk = HELPKEY[t.id] || t.id;
       const b = h('button', { type: 'button', class: 'tool' + (t.pro ? ' pro' : '') + (S.tool === t.id ? ' active' : ''), 'data-tip': t.tip, 'data-kbd': t.key || null, 'aria-label': t.label, dataset: { tool: t.id, help: hk } });
@@ -440,8 +444,8 @@ const Sketch = (() => {
     lm.innerHTML = icon('cSymmetric') + `<span>${esc(T('sk.bar.liveMir'))}</span>`; lm.onclick = () => toggleLiveMirror();
     bar.append(vsep(), cb, lm, vsep());
     const un = h('button', { type: 'button', class: 'tool', 'data-tip': T('topbar.undo'), 'data-kbd': 'Strg Z', 'aria-label': T('topbar.undo') }); un.innerHTML = icon('undo'); un.onclick = () => sketchUndo();
-    const cn = h('button', { type: 'button', class: 'tool', 'data-tip': T('sk.bar.cancelTip'), 'aria-label': T('common.cancel') }); cn.innerHTML = icon('close'); cn.onclick = () => cancel();
-    const ok = h('button', { type: 'button', class: 'tool primary', 'data-tip': T('sk.bar.doneTip'), 'data-kbd': 'Enter' }); ok.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`; ok.onclick = () => done();
+    const cn = h('button', { type: 'button', class: 'tool', 'data-tip': S.blockEdit ? T('sk.block.cancelEdit') : T('sk.bar.cancelTip'), 'aria-label': T('common.cancel') }); cn.innerHTML = icon('close'); cn.onclick = () => (S && S.blockEdit ? finishBlockEdit(false) : cancel());
+    const ok = h('button', { type: 'button', class: 'tool primary', id: S.blockEdit ? 'sk-block-bar-done' : undefined, 'data-tip': S.blockEdit ? T('sk.block.finishEdit') : T('sk.bar.doneTip'), 'data-kbd': 'Enter' }); ok.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`; ok.onclick = () => (S && S.blockEdit ? finishBlockEdit(true) : done());
     bar.append(un, cn, ok);
     bars = h('div', { class: 'skbars' });
     bars.append(bar);
@@ -622,7 +626,7 @@ const Sketch = (() => {
     if (uniq.length) S.selCon = null;
     if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel');
   }
-  function clearSel() { if (!S) return; S.sels = []; S.selHandle = null; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
+  function clearSel() { if (!S) return; S.sels = []; S.selHandle = null; S.selBlockInst = null; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   const isSimpleMode = () => typeof ViewPrefs !== 'undefined' && ViewPrefs.level === 'simple';
   function setSplineMode(mode) {
@@ -688,7 +692,12 @@ const Sketch = (() => {
     if (!S) return;
     if (S.locked && id !== 'select') { guardLocked(); return; }
     if (id === 'c:curvature' && isSimpleMode()) { UI.toast(T('sk.toast.curvProOnly'), { icon: 'info' }); return; }
-    if ((id === 'stretch' || id === 'silhouette' || id === 'intersect' || id === 'conic' || id === 'bridge') && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
+    if ((id === 'stretch' || id === 'silhouette' || id === 'intersect' || id === 'conic' || id === 'bridge' || id === 'block') && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
+    if (id === 'block' && S.blockEdit) { UI.toast(T('sk.toast.blockNoNest'), { icon: 'info' }); return; }
+    if (id === 'block') {
+      const blks = (App.doc && Array.isArray(App.doc.blocks)) ? App.doc.blocks : [];
+      if (!blks.some((b) => b.id === S.blockActive)) S.blockActive = blks[0] ? blks[0].id : null;
+    }
     commitDraftPolyline();
     clearBand();
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc' || id === 'patcurve') ? selectedIds() : [];
@@ -972,16 +981,269 @@ const Sketch = (() => {
     return { p: as.p, guides, tip: as.tip, kind: as.angle != null ? 'angle' : null, angle: as.angle, lenStep: as.step };
   }
   // ---------- Zeichnen ----------
-  function pushUndo() { if (S) { S.autoDef = null; S.conflict = null; stopWiggle(true); } S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons, guides: S.guides || [] })); if (S.undo.length > 100) S.undo.shift(); }
+  function pushUndo() { if (S) { S.autoDef = null; S.conflict = null; stopWiggle(true); } S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons, guides: S.guides || [], blockInsts: S.blockInsts || [], ...(!S.blockEdit && App.doc ? { blocks: App.doc.blocks || [] } : {}) })); if (S.undo.length > 100) S.undo.shift(); }
   function sketchUndo() {
     if (guardLocked()) return;
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; if (Array.isArray(st.guides)) S.guides = st.guides; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.dimPicks = []; S.ordBase = null; S.autoDef = null; S.conflict = null;
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || [];
+    if (Array.isArray(st.guides)) S.guides = st.guides;
+    if (Array.isArray(st.blockInsts)) S.blockInsts = st.blockInsts;
+    if (!S.blockEdit && Array.isArray(st.blocks) && App.doc) { App.doc.blocks = st.blocks; syncCurrentBlocks(); }
+    clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.dimPicks = []; S.ordBase = null; S.autoDef = null; S.conflict = null;
     if (S.liveMir && !ent(S.liveMir.axis)) { S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn(); }
     if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
     if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; }
     stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
+  }
+  // ---------- Skizzen-Blöcke (SK-31): Gruppen speichern, mehrfach einsetzen, zentral ändern ----------
+  function moveEntDirect(e, dx, dy) {
+    const sh = (p) => { if (Array.isArray(p)) { p[0] = round(p[0] + dx, 6); p[1] = round(p[1] + dy, 6); } };
+    for (const k of ['a', 'b', 'c', 'm']) sh(e[k]);
+    for (const k of ['pts', 'onP']) if (Array.isArray(e[k])) e[k].forEach(sh);
+  }
+  function docBlocks() {
+    if (!App.doc) return [];
+    if (!Array.isArray(App.doc.blocks)) App.doc.blocks = [];
+    return App.doc.blocks;
+  }
+  function instEnts(instId) { return S ? S.ents.filter((e) => e.blk === instId) : []; }
+  function syncCurrentBlocks() {
+    if (!S || S.blockEdit || typeof Model.syncSketchBlocks !== 'function') return;
+    Model.syncSketchBlocks(S, docBlocks(), vars());
+    if (S.selBlockInst && !(S.blockInsts || []).some((i) => i.id === S.selBlockInst)) S.selBlockInst = null;
+    if (S.sels && S.sels.length) S.sels = S.sels.filter((id) => ent(id));
+  }
+  function selectBlockInst(instId) {
+    if (!S) return false;
+    const inst = (S.blockInsts || []).find((i) => i.id === instId);
+    if (!inst) { clearSel(); return false; }
+    setSel(instEnts(instId).map((e) => e.id));
+    S.selBlockInst = instId;
+    S.selCon = null;
+    return true;
+  }
+  function createBlock(name, ids) {
+    if (!S || S.step || guardLocked()) return null;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return null; }
+    if (S.blockEdit) { UI.toast(T('sk.toast.blockNoNest'), { icon: 'info' }); return null; }
+    const srcIds = [...new Set(ids && ids.length ? ids : selectedIds())].filter((id) => { const e = ent(id); return e && !e.blk; });
+    if (!srcIds.length) { UI.toast(T('sk.toast.blockNeedSel'), { icon: 'info' }); return null; }
+    const srcSet = new Set(srcIds);
+    const srcEnts = srcIds.map((id) => ent(id));
+    const bb = SK.bounds(srcEnts) || [0, 0, 0, 0];
+    const cx = round((bb[0] + bb[2]) / 2, 4), cy = round((bb[1] + bb[3]) / 2, 4);
+    pushUndo();
+    const idMap = new Map();
+    for (const id of srcIds) idMap.set(id, uid('e'));
+    const re = (r) => (r && r.e && idMap.has(r.e) ? { ...r, e: idMap.get(r.e) } : r);
+    const inSet = (r) => !r || srcSet.has(r.e);
+    const blkEnts = srcEnts.map((src) => {
+      const c = deepClone(src);
+      c.id = idMap.get(src.id);
+      delete c.link; delete c.revAxis; delete c.blk; delete c.blkId; delete c.blkSrc;
+      moveEntDirect(c, -cx, -cy);
+      return c;
+    });
+    const blkCons = S.cons.filter((c) => CLIPCONS.has(c.type) && (c.refs || []).length && c.refs.every(inSet) && c.refs.some((r) => r && srcSet.has(r.e)))
+      .map((c) => ({ ...deepClone(c), id: uid('k'), refs: c.refs.map(re) }));
+    const blkDims = S.dims.filter((d) => (d.e ? srcSet.has(d.e) && d.k !== 'x' && d.k !== 'y' : (d.refs || []).length && d.refs.every((r) => r && srcSet.has(r.e))))
+      .map((d) => (d.e ? { ...deepClone(d), id: uid('m'), e: idMap.get(d.e) } : { ...deepClone(d), id: uid('m'), refs: d.refs.map(re) }));
+    const blocks = docBlocks();
+    const blk = { id: uid('blk'), name: (name || '').trim() || T('sk.block.defName', { n: blocks.length + 1 }), ents: blkEnts, dims: blkDims, cons: blkCons };
+    blocks.push(blk);
+    for (const id of srcIds) removeEntData(id);
+    if (!Array.isArray(S.blockInsts)) S.blockInsts = [];
+    const inst = { id: uid('bi'), blockId: blk.id, x: cx, y: cy, rot: 0 };
+    S.blockInsts.push(inst);
+    S.blockActive = blk.id;
+    S.blockLibOpen = true;
+    syncCurrentBlocks();
+    selectBlockInst(inst.id);
+    reapply(); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.blockCreated', { name: blk.name }), { icon: 'check', ms: 2600 });
+    return blk;
+  }
+  function insertBlock(blockId, x = 0, y = 0, rot = 0) {
+    if (!S || S.step || guardLocked()) return null;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return null; }
+    if (S.blockEdit) { UI.toast(T('sk.toast.blockNoNest'), { icon: 'info' }); return null; }
+    const blk = docBlocks().find((b) => b.id === blockId);
+    if (!blk) { UI.toast(T('sk.toast.blockSelectFirst'), { icon: 'info' }); return null; }
+    pushUndo();
+    if (!Array.isArray(S.blockInsts)) S.blockInsts = [];
+    const inst = { id: uid('bi'), blockId: blk.id, x: round(Number(x) || 0, 4), y: round(Number(y) || 0, 4), rot: round(Number(rot) || 0, 4) };
+    S.blockInsts.push(inst);
+    S.blockActive = blk.id;
+    syncCurrentBlocks();
+    selectBlockInst(inst.id);
+    reapply(); render(); Panels.renderRight();
+    return inst;
+  }
+  function updateBlockInst(instId, patch = {}, opts = {}) {
+    if (!S || S.step || (!opts.noUndo && guardLocked())) return false;
+    const inst = (S.blockInsts || []).find((i) => i.id === instId);
+    if (!inst) return false;
+    if (!opts.noUndo) pushUndo();
+    if (patch.x != null && isFinite(Number(patch.x))) inst.x = round(Number(patch.x), 4);
+    if (patch.y != null && isFinite(Number(patch.y))) inst.y = round(Number(patch.y), 4);
+    if (patch.rot != null && isFinite(Number(patch.rot))) inst.rot = round(Number(patch.rot), 4);
+    syncCurrentBlocks();
+    if (S.selBlockInst === instId) selectBlockInst(instId);
+    reapply({ fast: !!opts.fast });
+    render();
+    if (!opts.fast) Panels.renderRight();
+    return true;
+  }
+  function deleteBlockInst(instId) {
+    if (!S || S.step || guardLocked() || S.blockEdit) return false;
+    const had = (S.blockInsts || []).some((i) => i.id === instId);
+    if (!had) return false;
+    pushUndo();
+    S.blockInsts = S.blockInsts.filter((i) => i.id !== instId);
+    if (S.selBlockInst === instId) clearSel();
+    syncCurrentBlocks(); reapply(); render(); Panels.renderRight();
+    return true;
+  }
+  function explodeBlockInst(instId) {
+    if (!S || S.step || guardLocked() || S.blockEdit) return 0;
+    const inst = (S.blockInsts || []).find((i) => i.id === instId);
+    if (!inst) return 0;
+    const blk = docBlocks().find((b) => b.id === inst.blockId);
+    pushUndo();
+    let solvedEnts = blk ? (blk.ents || []) : [];
+    if (blk && ((blk.dims && blk.dims.length) || (blk.cons && blk.cons.length))) {
+      solvedEnts = Solver.cached({ ents: blk.ents || [], dims: blk.dims || [], cons: blk.cons || [] }, vars()).ents;
+    }
+    const ang = ((Number(inst.rot) || 0) * Math.PI) / 180, cs = Math.cos(ang), sn = Math.sin(ang);
+    const ix = Number(inst.x) || 0, iy = Number(inst.y) || 0;
+    const xf = (pt) => [round(ix + pt[0] * cs - pt[1] * sn, 6), round(iy + pt[0] * sn + pt[1] * cs, 6)];
+    const rot90 = Math.abs(sn) < 1e-6 || Math.abs(cs) < 1e-6;
+    const singleMap = new Map(), added = [];
+    for (const se of solvedEnts) {
+      const m = SKO.mapEnt(se, xf, (q) => (q.rot || 0) + ang, se.type === 'rect' && !rot90);
+      if (m.ents.length === 1) singleMap.set(se.id, m.ents[0].id);
+      for (const me of m.ents) added.push(me);
+    }
+    const re = (r) => (r && r.e && singleMap.has(r.e) ? { ...r, e: singleMap.get(r.e) } : r);
+    S.blockInsts = S.blockInsts.filter((i) => i.id !== instId);
+    S.ents = S.ents.filter((e) => e.blk !== instId);
+    S.ents.push(...added);
+    if (blk) {
+      for (const c of blk.cons || []) if ((c.refs || []).length && c.refs.every((r) => r && singleMap.has(r.e))) S.cons.push({ ...deepClone(c), id: uid('k'), refs: c.refs.map(re) });
+      for (const d of blk.dims || []) {
+        if (d.e && singleMap.has(d.e)) S.dims.push({ ...deepClone(d), id: uid('m'), e: singleMap.get(d.e) });
+        else if (!d.e && (d.refs || []).length && d.refs.every((r) => r && singleMap.has(r.e))) S.dims.push({ ...deepClone(d), id: uid('m'), refs: d.refs.map(re) });
+      }
+    }
+    S.selBlockInst = null;
+    setSel(added.map((e) => e.id));
+    reapply(); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.blockExploded', { name: blk ? blk.name : 'Block' }), { icon: 'check', ms: 2400 });
+    return added.length;
+  }
+  function editBlock(blockId) {
+    if (!S || S.step || guardLocked()) return false;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return false; }
+    if (S.blockEdit) { UI.toast(T('sk.toast.blockNoNest'), { icon: 'info' }); return false; }
+    const blk = docBlocks().find((b) => b.id === blockId);
+    if (!blk) return false;
+    S.blockEdit = {
+      blockId: blk.id,
+      name: blk.name,
+      saved: {
+        ents: S.ents, dims: S.dims, cons: S.cons,
+        blockInsts: S.blockInsts || [],
+        sels: selectedIds(), selBlockInst: S.selBlockInst,
+        undo: S.undo, tool: S.tool,
+      },
+    };
+    S.ents = deepClone(blk.ents || []);
+    S.dims = deepClone(blk.dims || []);
+    S.cons = deepClone(blk.cons || []);
+    S.blockInsts = [];
+    S.selBlockInst = null;
+    S.undo = [];
+    S.tool = 'select';
+    S.draft = null; S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; S.selCon = null; S.autoDef = null; S.conflict = null;
+    clearSel();
+    showBar(); reapply(); render(); Panels.renderRight();
+    UI.hint(hintFor(S.tool));
+    return true;
+  }
+  function finishBlockEdit(save = true) {
+    if (!S || !S.blockEdit) return false;
+    const be = S.blockEdit;
+    let newEnts = null, newDims = null, newCons = null;
+    if (save) {
+      reapply();
+      newEnts = deepClone(S.ents).map((e) => { delete e.blk; delete e.blkId; delete e.blkSrc; return e; });
+      newDims = deepClone(S.dims);
+      newCons = deepClone(S.cons);
+    }
+    const sv = be.saved;
+    S.ents = sv.ents; S.dims = sv.dims; S.cons = sv.cons;
+    S.blockInsts = sv.blockInsts || [];
+    S.undo = sv.undo || [];
+    S.tool = sv.tool === 'block' ? 'select' : (sv.tool || 'select');
+    S.draft = null; S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; S.selCon = null; S.autoDef = null; S.conflict = null;
+    S.blockEdit = null;
+    const blk = docBlocks().find((b) => b.id === be.blockId);
+    if (save && blk) {
+      pushUndo();
+      blk.name = be.name;
+      blk.ents = newEnts;
+      blk.dims = newDims;
+      blk.cons = newCons;
+      syncCurrentBlocks();
+      if (sv.selBlockInst) selectBlockInst(sv.selBlockInst); else setSel(sv.sels || []);
+      reapply();
+      UI.toast(T('sk.toast.blockUpdated', { name: blk.name }), { icon: 'check', ms: 2600 });
+    } else {
+      syncCurrentBlocks();
+      if (sv.selBlockInst) selectBlockInst(sv.selBlockInst); else setSel(sv.sels || []);
+      reapply();
+      UI.toast(T('sk.toast.blockEditCancelled'), { icon: 'info', ms: 1800 });
+    }
+    showBar(); render(); Panels.renderRight(); UI.hint(hintFor(S.tool));
+    return true;
+  }
+  function renameBlock(blockId, name) {
+    if (!S || !name || !String(name).trim()) return false;
+    const nm = String(name).trim();
+    const blk = docBlocks().find((b) => b.id === blockId);
+    if (!blk) return false;
+    if (!S.blockEdit) pushUndo();
+    blk.name = nm;
+    if (S.blockEdit && S.blockEdit.blockId === blockId) { S.blockEdit.name = nm; showBar(); UI.hint(hintFor(S.tool)); }
+    render(); Panels.renderRight();
+    return true;
+  }
+  function deleteBlockDef(blockId) {
+    if (!S || S.step || guardLocked() || S.blockEdit) return false;
+    const blocks = docBlocks();
+    const blk = blocks.find((b) => b.id === blockId);
+    if (!blk) return false;
+    let usedOther = false;
+    Model.walk(App.doc.items, (it) => {
+      if (S.ctx.mode === 'edit' && it.id === S.ctx.editId) return;
+      if (it.p && it.p.sketch && Array.isArray(it.p.sketch.blockInsts) && it.p.sketch.blockInsts.some((i) => i.blockId === blockId)) usedOther = true;
+    });
+    if (usedOther) { UI.toast(T('sk.toast.blockUsedElsewhere'), { icon: 'info' }); return false; }
+    pushUndo();
+    App.doc.blocks = blocks.filter((b) => b.id !== blockId);
+    const rmInsts = new Set((S.blockInsts || []).filter((i) => i.blockId === blockId).map((i) => i.id));
+    S.blockInsts = (S.blockInsts || []).filter((i) => i.blockId !== blockId);
+    if (S.selBlockInst && rmInsts.has(S.selBlockInst)) clearSel();
+    if (S.blockActive === blockId) S.blockActive = App.doc.blocks[0] ? App.doc.blocks[0].id : null;
+    syncCurrentBlocks(); reapply(); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.blockDeleted', { name: blk.name }), { icon: 'info', ms: 2000 });
+    return true;
+  }
+  function docBlocksForCommit() {
+    const next = deepClone(docBlocks());
+    if (S && S.blocks0 && App.doc) App.doc.blocks = deepClone(S.blocks0);
+    return next;
   }
   function addEnt(e, opts = {}) {
     pushUndo();
@@ -1186,7 +1448,7 @@ const Sketch = (() => {
   let clip = null;
   const CLIPCONS = new Set(['horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'curvature', 'equal', 'symmetric', 'coincident', 'midpoint', 'concentric']);
   function copySel() {
-    const ids = (S.patSel && S.patSel.length ? S.patSel : selectedIds()).filter((id) => ent(id));
+    const ids = (S.patSel && S.patSel.length ? S.patSel : selectedIds()).filter((id) => { const e = ent(id); return e && !e.blk; });
     if (!ids.length) { UI.toast(T('sk.toast.copyEmpty'), { icon: 'info' }); return 0; }
     const set = new Set(ids), inSet = (r) => !r || r.e === 'origin' || set.has(r.e);
     const ents = ids.map((id) => { const e = deepClone(ent(id)); delete e.link; delete e.revAxis; return e; });
@@ -1283,11 +1545,13 @@ const Sketch = (() => {
     pushUndo();
     const P = (q) => { q[0] = round(q[0] * f, 4); q[1] = round(q[1] * f, 4); }, fs = String(round(f, 6)).replace('.', ',');
     for (const e of S.ents) {
+      if (e.blk) continue;
       for (const k of ['a', 'b', 'm', 'c']) if (Array.isArray(e[k])) P(e[k]);
       for (const k of ['pts', 'onP']) if (Array.isArray(e[k])) e[k].forEach(P);
       if (Array.isArray(e.handles)) e.handles.forEach((h) => { if (Array.isArray(h)) P(h); });
       for (const k of ['r', 'rx', 'ry', 'bend', 'os', 'sp'].concat(e.type === 'text' ? ['h'] : [])) if (typeof e[k] === 'number') e[k] = round(e[k] * f, 4);
     }
+    for (const inst of S.blockInsts || []) { inst.x = round((inst.x || 0) * f, 4); inst.y = round((inst.y || 0) * f, 4); }
     for (const d of S.dims) { if (isAngDim(d.k) || d.k === 'n') continue; d.v = typeof d.v === 'number' ? round(d.v * f, 4) : `(${d.v})*${fs}`; }
     for (const c of S.cons) {
       for (const k of c.type === 'offset' ? ['v'] : c.type === 'xform' && c.mode !== 'rot' ? ['dx', 'dy'] : []) c[k] = typeof c[k] === 'number' ? round(c[k] * f, 4) : c[k] != null ? `(${c[k]})*${fs}` : c[k];
@@ -1295,7 +1559,7 @@ const Sketch = (() => {
       if (c.center && Array.isArray(c.center.at)) P(c.center.at);
       if (c.pm) for (const k of ['dx', 'dy', 'dist', 'curveDist']) if (typeof c.pm[k] === 'number') c.pm[k] = round(c.pm[k] * f, 4);
     }
-    reapply(); render(); Panels.renderRight();
+    syncCurrentBlocks(); reapply(); render(); Panels.renderRight();
     return true;
   }
   function removeDimSpec(sp) { if (guardLocked()) return; pushUndo(); S.dims = S.dims.filter((d) => !specMatch(d, sp)); reapply(); render(); Panels.renderRight(); }
@@ -1326,12 +1590,19 @@ const Sketch = (() => {
   function deleteEnts(ids) {
     if (guardLocked()) return 0;
     const list = [...new Set((ids || []).filter((id) => ent(id)))];
-    if (!list.length) return 0;
+    if (!list.length && !(S && S.selBlockInst)) return 0;
     pushUndo();
-    for (const id of list) removeEntData(id);
+    const blkInsts = new Set();
+    for (const id of list) { const e = ent(id); if (e && e.blk) blkInsts.add(e.blk); }
+    if (S.selBlockInst && !list.length) blkInsts.add(S.selBlockInst);
+    if (blkInsts.size) {
+      S.blockInsts = (S.blockInsts || []).filter((i) => !blkInsts.has(i.id));
+      for (const id of S.ents.filter((e) => e.blk && blkInsts.has(e.blk)).map((e) => e.id)) removeEntData(id);
+    }
+    for (const id of list) { const e = ent(id); if (e && !e.blk) removeEntData(id); }
     clearSel();
     reapply(); render(); Panels.renderRight();
-    return list.length;
+    return list.length || blkInsts.size;
   }
   function deleteEnt(id) { deleteEnts([id]); }
   // Nach einer Änderung am Aufbau (Trimmen, Versatz, Spiegeln, Muster): alles neu rechnen. Passt etwas nicht mehr,
@@ -1874,6 +2145,7 @@ const Sketch = (() => {
   }
   function trimAt(uv) {
     const hit = SK.hit(S.ents, uv, tolPx()); if (!hit) return false;
+    if (hit.blk) { UI.toast(T('sk.toast.blockExplodeFirst'), { icon: 'info' }); return false; }
     pushUndo();
     let target = hit;
     if (hit.type === 'text') return false;
@@ -1942,7 +2214,7 @@ const Sketch = (() => {
     const tol = pxSize() * 12; let best = null;
     const take = (p, d, shape) => { if (d < tol && (!best || d < best.d)) best = { p: p.slice(), d, shape }; };
     for (const en of S.ents) {
-      if (en.con) continue;
+      if (en.con || en.blk) continue;
       if (en.type === 'line') for (const k of ['a', 'b']) take(en[k], SK.d2(en[k], uv), null);
       else if (en.type === 'rect' || en.type === 'poly') for (const c of en.type === 'rect' ? SK.rectCorners(en) : SK.polyCorners(en)) take(c, SK.d2(c, uv), en.id);
     }
@@ -1956,7 +2228,7 @@ const Sketch = (() => {
     const pts = [];
     const add = (q) => { if (!pts.some((x) => SK.d2(x, q) < 1e-4)) pts.push(q.slice()); };
     for (const en of S.ents) {
-      if (en.con) continue;
+      if (en.con || en.blk) continue;
       if (en.type === 'rect' || en.type === 'poly') (en.type === 'rect' ? SK.rectCorners(en) : SK.polyCorners(en)).forEach(add);
       else if (en.type === 'line') for (const k of ['a', 'b']) if (cornerLines(en[k]).length === 2) add(en[k]);
     }
@@ -2059,7 +2331,8 @@ const Sketch = (() => {
     const C = S.corner;
     pushUndo();
     if (hv.shape) {
-      const sh = ent(hv.shape); const parts = SKO.explode(sh); const at = S.ents.indexOf(sh);
+      const sh = ent(hv.shape); if (sh && sh.blk) { sketchUndo(); UI.toast(T('sk.toast.blockExplodeFirst'), { icon: 'info' }); return false; }
+      const parts = SKO.explode(sh); const at = S.ents.indexOf(sh);
       removeEntData(sh.id); S.ents.splice(at, 0, ...parts);
       // die zerlegten Linien bleiben an den Ecken verbunden
       const lines = parts.filter((x) => x.type === 'line');
@@ -2068,6 +2341,7 @@ const Sketch = (() => {
     const L = cornerLines(hv.p);
     if (L.length !== 2) { sketchUndo(); UI.toast('Hier treffen nicht genau zwei Linien aufeinander.', { icon: 'info' }); return false; }
     const [[l1, k1], [l2, k2]] = L;
+    if (l1.blk || l2.blk) { sketchUndo(); UI.toast(T('sk.toast.blockExplodeFirst'), { icon: 'info' }); return false; }
     const g = cornerGeom(hv.p, l1, k1, l2, k2, C.mode, C.r);
     if (g.err) {
       sketchUndo();
@@ -2105,6 +2379,7 @@ const Sketch = (() => {
     }
     const hit = SK.hit(S.ents, uv0, tolPx());
     if (!hit || !OFFTYPES.includes(hit.type)) { UI.toast('Klick eine Linie, einen Bogen, Kreis oder eine Form an.', { icon: 'info' }); return; }
+    if (hit.blk) { UI.toast(T('sk.toast.blockExplodeFirst'), { icon: 'info' }); return; }
     const off = { id: hit.id };
     if (hit.type === 'line' || hit.type === 'arc') off.chain = SKO.chainOf(S.ents, hit);
     S.draft = { off }; S.offUV = uv0;
@@ -2851,6 +3126,7 @@ const Sketch = (() => {
       let minEndDist = Infinity;
       if (!e.shiftKey) {
         for (const en of S.ents) {
+          if (en.blk) continue;
           if (en.type === 'line' || en.type === 'arc') { for (const k of ['a', 'b']) { const dd = SK.d2(en[k], uv0); if (dd < tol) { endHit.push([en, k]); minEndDist = Math.min(minEndDist, dd); } } }
           else if (en.type === 'conic') { for (const k of ['a', 'b', 'm']) { const dd = SK.d2(en[k], uv0); if (dd < tol) { endHit.push([en, k]); minEndDist = Math.min(minEndDist, dd); } } }
           else if (en.type === 'spline') en.pts.forEach((q, i) => { const dd = SK.d2(q, uv0); if (dd < tol) { endHit.push([en, 'p' + i + '_']); minEndDist = Math.min(minEndDist, dd); } });
@@ -2867,6 +3143,21 @@ const Sketch = (() => {
       if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; S.selCon = null; return; }
       const hit = SK.hit(S.ents, uv0, tol);
       if (hit) {
+        if (hit.blk) {
+          if (e.shiftKey) {
+            const cur = selectedIds();
+            const bIds = instEnts(hit.blk).map((x) => x.id);
+            const allIn = bIds.every((id) => cur.includes(id));
+            const next = allIn ? cur.filter((id) => !bIds.includes(id)) : [...new Set([...cur, ...bIds])];
+            setSel(next);
+            const remBlks = new Set(next.map((id) => ent(id)).filter((x) => x && x.blk).map((x) => x.blk));
+            S.selBlockInst = remBlks.size === 1 && !next.some((id) => { const x = ent(id); return x && !x.blk; }) ? [...remBlks][0] : null;
+            S.selCon = null; render(); Panels.renderRight(); return;
+          }
+          const inst = (S.blockInsts || []).find((i) => i.id === hit.blk);
+          if (inst) { pushUndo(); S.drag = { blockInst: inst.id, start: uv0, orig: { x: inst.x || 0, y: inst.y || 0 } }; }
+          selectBlockInst(hit.blk); render(); Panels.renderRight(); return;
+        }
         if (e.shiftKey) {
           const cur = selectedIds(), idx = cur.indexOf(hit.id);
           if (idx >= 0) cur.splice(idx, 1); else cur.push(hit.id);
@@ -2888,6 +3179,12 @@ const Sketch = (() => {
       clearBand();
       S.band = { x: e.clientX, y: e.clientY, shift: e.shiftKey, el: null, moved: false };
       try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      return;
+    }
+    if (t === 'block') {
+      if (isSimpleMode() || S.blockEdit) return;
+      if (!S.blockActive) { UI.toast(T('sk.toast.blockSelectFirst'), { icon: 'info' }); return; }
+      insertBlock(S.blockActive, p[0], p[1], S.blockRot || 0);
       return;
     }
     if (t === 'corner') { if (S.corner.mode === 'meet') meetDo(uv0); else cornerDo(uv0); return; }
@@ -4366,6 +4663,7 @@ const Sketch = (() => {
   function splitAt(p) {
     const hit = SK.hit(S.ents, p, pxSize() * 9);
     if (!hit || (hit.type !== 'line' && hit.type !== 'arc')) { UI.toast('Klick auf eine Linie oder einen Bogen.', { icon: 'info' }); return; }
+    if (hit.blk) { UI.toast(T('sk.toast.blockExplodeFirst'), { icon: 'info' }); return; }
     const q = SKO.closest(SKO.curve(SK.segsOf(hit)[0]), p);
     if (SK.d2(q, hit.a) < 1e-4 || SK.d2(q, hit.b) < 1e-4) { UI.toast('Am Ende gibt es nichts zu teilen – klick weiter innen.', { icon: 'info' }); return; }
     pushUndo();
@@ -4393,7 +4691,7 @@ const Sketch = (() => {
   // Verlängern: Linienende bis zum nächsten Schnitt mit einem anderen Element
   function extendTarget(uv) {
     const hit = SK.hit(S.ents, uv, pxSize() * 9);
-    if (!hit || hit.type !== 'line') return null;
+    if (!hit || hit.type !== 'line' || hit.blk) return null;
     const k = SK.d2(uv, hit.a) < SK.d2(uv, hit.b) ? 'a' : 'b', P = hit[k], Q = k === 'a' ? hit.b : hit.a;
     const L = SK.d2(P, Q); if (L < 1e-9) return null;
     const u = [(P[0] - Q[0]) / L, (P[1] - Q[1]) / L];
@@ -4567,7 +4865,12 @@ const Sketch = (() => {
       if (hasPts && (cross ? anyTouch : allIn)) hits.push(e.id);
     }
     const next = additive ? [...selectedIds(), ...hits] : hits;
-    setSel(next);
+    const expandBlk = new Set(next);
+    const blkIds = new Set();
+    for (const id of next) { const en = ent(id); if (en && en.blk) blkIds.add(en.blk); }
+    if (blkIds.size) for (const en of S.ents) if (en.blk && blkIds.has(en.blk)) expandBlk.add(en.id);
+    setSel([...expandBlk]);
+    S.selBlockInst = blkIds.size === 1 && ![...expandBlk].some((id) => { const en = ent(id); return en && !en.blk; }) ? [...blkIds][0] : null;
     S.selCon = null;
     render(); Panels.renderRight();
     const n = selectedIds().length;
@@ -4603,6 +4906,13 @@ const Sketch = (() => {
     }
     if (S.drag) {
       if (S.locked) { S.drag = null; S.dragPins = null; return; }
+      if (S.drag.blockInst) {
+        const sn = snap(uv0, { fine: e.shiftKey, off: e.altKey, noLot: true, exclude: instEnts(S.drag.blockInst).map((x) => x.id) });
+        const dx = round(sn.p[0] - S.drag.start[0], 4), dy = round(sn.p[1] - S.drag.start[1], 4);
+        if (Math.hypot(dx, dy) > 1e-6) S.dragged = true;
+        updateBlockInst(S.drag.blockInst, { x: round(S.drag.orig.x + dx, 4), y: round(S.drag.orig.y + dy, 4) }, { noUndo: true, fast: true });
+        return;
+      }
       if (S.drag.handle) {
         const dh = S.drag.handle;
         const en = ent(dh.e);
@@ -4939,7 +5249,7 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.tool === 'patfill' && S.fill && S.fill.regionKey) { S.fill.regionKey = null; UI.hint(hintFor('patfill')); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
-    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); UI.hint(hintFor(S.tool)); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
+    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); UI.hint(hintFor(S.tool)); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else if (S.blockEdit) finishBlockEdit(false); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'conic' && S.draft.m) {
       addEnt({ type: 'conic', a: S.draft.a, m: S.draft.m, b: S.draft.b, rho: S.conicRho });
@@ -4950,7 +5260,7 @@ const Sketch = (() => {
     if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc' || (S.tool === 'patcurve' && S.patCurve)) && S.patSel.length) { createPattern(); return true; }
     if (e.key === 'Enter' && S.tool === 'patfill' && activeFillRegion().reg) { applyFillPattern(); return true; }
     if (e.key === 'Enter' && S.tool === 'xmove' && S.patSel.length) { applyXmove(); return true; }
-    if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); } else done(); return true; }
+    if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); } else if (S.blockEdit) finishBlockEdit(true); else done(); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.selCon) { removeCons(S.selCon); return true; }
     const selIds = selectedIds();
     if ((e.key === 'Delete' || e.key === 'Backspace') && selIds.length) { deleteEnts(selIds); return true; }
@@ -5085,12 +5395,13 @@ const Sketch = (() => {
       if (S.dimFirst && S.dimFirst.kind === 'circle' && S.dimFirst.ent) picked.add(S.dimFirst.ent.id);
       const hov = S.hoverPick;
       const revCol = th.dark ? '#da77f2' : '#9c36b5';
+      const blkCol = th.dark ? '#b197fc' : '#6741d9';
       for (const e of dispEnts) {
         const sel = selSet.has(e.id) || picked.has(e.id);
         const isFree = !st || !st.freeEnts || st.freeEnts.has(e.id);
         const isRevAxis = e.type === 'line' && !!e.revAxis;
         const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
-        const col = sel ? acc : isRevAxis ? revCol : S.locked ? ink : isFree ? (showFree ? freeOrange : free) : ink;
+        const col = sel ? acc : isRevAxis ? revCol : e.blk ? blkCol : S.locked ? ink : isFree ? (showFree ? freeOrange : free) : ink;
         if (showFree && isFree) {
           for (const p of entPts(e)) {
             const gl = lineObj(p, freeOrange, 6, { dashed: e.con, order: 24, opacity: pulsePhase });
@@ -5783,6 +6094,33 @@ const Sketch = (() => {
         label(T(B.mode === 'g2' ? 'sk.panel.bridgeG2' : 'sk.panel.bridgeG1'), B.hoverEnd.p);
       }
     }
+    if (S.blockEdit && !S.step) {
+      const ps = pxSize();
+      ring([0, 0], ps * 7, th.dark ? '#b197fc' : '#6741d9', 2.2);
+      const badge = h('div', { class: 'sk-blk-edit-badge', id: 'sk-blk-edit-badge' });
+      badge.innerHTML = icon('sketchBlock') + `<span>${esc(T('sk.bar.blockEditTitle', { name: S.blockEdit.name }))}</span>`;
+      $('#overlay').append(badge); labels.push(badge);
+    } else if (!S.step && (S.blockInsts || []).length) {
+      const ps = pxSize(), bcol = th.dark ? '#b197fc' : '#6741d9';
+      for (const inst of S.blockInsts) {
+        const isSel = S.selBlockInst === inst.id, c = isSel ? acc : bcol, r = ps * 4.5;
+        lineObj([[inst.x - r, inst.y], [inst.x + r, inst.y]], c, isSel ? 2.2 : 1.5, { order: 27 });
+        lineObj([[inst.x, inst.y - r], [inst.x, inst.y + r]], c, isSel ? 2.2 : 1.5, { order: 27 });
+        if (isSel) {
+          const bb = SK.bounds(instEnts(inst.id));
+          if (bb) lineObj([[bb[0] - ps * 4, bb[1] - ps * 4], [bb[2] + ps * 4, bb[1] - ps * 4], [bb[2] + ps * 4, bb[3] + ps * 4], [bb[0] - ps * 4, bb[3] + ps * 4], [bb[0] - ps * 4, bb[1] - ps * 4]], acc, 1.4, { dashed: true, order: 26 });
+        }
+      }
+    }
+    if (S.tool === 'block' && !S.blockEdit && !S.step && S.blockActive && cur) {
+      const blk = docBlocks().find((b) => b.id === S.blockActive);
+      if (blk && typeof Model.materializeBlockInst === 'function') {
+        const solved = ((blk.dims && blk.dims.length) || (blk.cons && blk.cons.length)) ? Solver.cached({ ents: blk.ents || [], dims: blk.dims || [], cons: blk.cons || [] }, vars()).ents : (blk.ents || []);
+        for (const pe of Model.materializeBlockInst({ id: '_pv', blockId: blk.id, x: cur[0], y: cur[1], rot: S.blockRot || 0 }, blk, solved)) {
+          for (const q of entPts(pe)) lineObj(q, acc, 1.8, { dashed: true, opacity: 0.65, order: 26 });
+        }
+      }
+    }
     // Einrast-Markierung
     if (S.cursor && !S.step && S.tool !== 'select') {
       const c = S.cursor;
@@ -6411,6 +6749,16 @@ const Sketch = (() => {
     lockBtn.onclick = () => toggleLocked();
     w.append(h('div', { class: 'btn-row' }, lockBtn));
     if (S.locked) w.append(h('div', { class: 'hint-box sk-lock-info', id: 'sk-lock-info', html: T('sk.panel.lockedInfo') }));
+    if (S.blockEdit) {
+      const be = S.blockEdit;
+      const box = h('div', { class: 'sk-blk-box', id: 'sk-blk-edit-box' });
+      box.append(h('div', { class: 'ok-box', html: T('sk.block.editBanner', { name: esc(be.name) }) }));
+      box.append(UI.textField({ id: 'blk-name', label: T('sk.block.nameLabel'), value: be.name, onCommit: (v) => renameBlock(be.blockId, v) }));
+      const fd = h('button', { type: 'button', class: 'btn primary', id: 'blk-edit-done' }); fd.innerHTML = icon('check') + esc(T('sk.block.finishEdit')); fd.onclick = () => finishBlockEdit(true);
+      const fc = h('button', { type: 'button', class: 'btn', id: 'blk-edit-cancel' }); fc.innerHTML = icon('close') + esc(T('sk.block.cancelEdit')); fc.onclick = () => finishBlockEdit(false);
+      box.append(h('div', { class: 'btn-row' }, fd, fc));
+      w.append(box);
+    }
     if (!S.locked && !isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit() && S.ctx.mode !== 'pushpull') {
       const lmBox = h('div', { class: 'pro sk-lm-box', id: 'sk-live-mir-box', dataset: { help: 'liveMirror' } });
       if (S.liveMir) {
@@ -6569,7 +6917,22 @@ const Sketch = (() => {
       w.append(h('div', { class: 'btn-row' }, del));
       body.append(w); return;
     }
-    if (sel) {
+    const selBlkInst = !S.blockEdit && S.selBlockInst ? (S.blockInsts || []).find((i) => i.id === S.selBlockInst) : null;
+    if (selBlkInst) {
+      const blk = docBlocks().find((b) => b.id === selBlkInst.blockId);
+      const nInst = (S.blockInsts || []).filter((i) => i.blockId === selBlkInst.blockId).length;
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' }, id: 'blk-inst-title' }, T('sk.block.instTitle', { name: blk ? blk.name : 'Block' }))));
+      w.append(h('div', { class: 'hint-box', html: T('sk.block.instHint', { n: nInst }) }));
+      const fb = h('div', { class: 'fields' });
+      fb.append(UI.numField({ id: 'bi-x', label: T('sk.block.posX'), value: round(selBlkInst.x || 0, 4), unit: 'mm', expr: false, onCommit: (v) => updateBlockInst(selBlkInst.id, { x: v }) }));
+      fb.append(UI.numField({ id: 'bi-y', label: T('sk.block.posY'), value: round(selBlkInst.y || 0, 4), unit: 'mm', expr: false, onCommit: (v) => updateBlockInst(selBlkInst.id, { y: v }) }));
+      fb.append(UI.numField({ id: 'bi-rot', label: T('sk.block.rot'), value: round(selBlkInst.rot || 0, 4), unit: '°', expr: false, onCommit: (v) => updateBlockInst(selBlkInst.id, { rot: v }) }));
+      w.append(fb);
+      const ed = h('button', { type: 'button', class: 'btn primary pro', id: 'blk-inst-edit', 'data-help': 'sketchBlocks' }); ed.innerHTML = icon('sketchBlock') + esc(T('sk.block.editBtn')); ed.onclick = () => editBlock(selBlkInst.blockId);
+      const ex = h('button', { type: 'button', class: 'btn', id: 'blk-inst-explode', 'data-help': 'sketchBlocks' }); ex.innerHTML = icon('ungroup') + esc(T('sk.block.explodeBtn')); ex.onclick = () => explodeBlockInst(selBlkInst.id);
+      const dl = h('button', { type: 'button', class: 'btn danger', id: 'blk-inst-del' }); dl.innerHTML = icon('trash') + esc(T('common.delete')); dl.onclick = () => deleteBlockInst(selBlkInst.id);
+      w.append(h('div', { class: 'btn-row' }, ed, ex), h('div', { class: 'btn-row' }, dl));
+    } else if (sel) {
       w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, T('sk.panel.ent.' + sel.type))));
       if (sel.link) {
         const src = Model.find(App.doc, sel.link.id);
@@ -6783,7 +7146,11 @@ const Sketch = (() => {
       if (sel.type === 'spline' || sel.type === 'arc' || sel.type === 'ellarc' || sel.type === 'ellipse') appendCurvControls(w);
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + esc(T('common.delete'));
       del.onclick = () => deleteEnt(sel.id);
-      w.append(h('div', { class: 'btn-row' }, del));
+      if (!S.blockEdit && !sel.blk) {
+        const mb = h('button', { type: 'button', class: 'btn pro', id: 'sk-make-block', 'data-help': 'sketchBlocks' }); mb.innerHTML = icon('sketchBlock') + esc(T('sk.block.makeBtn'));
+        mb.onclick = () => createBlock('', [sel.id]);
+        w.append(h('div', { class: 'btn-row' }, mb, del));
+      } else w.append(h('div', { class: 'btn-row' }, del));
     } else if (sels.length > 1) {
       w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' }, id: 'sk-sel-count' }, T('sk.panel.multiSelCount', { n: sels.length }))));
       w.append(h('div', { class: 'hint-box', html: T('sk.panel.multiSelHint') }));
@@ -6793,7 +7160,14 @@ const Sketch = (() => {
       cn.onclick = () => toggleConstruction();
       const del = h('button', { type: 'button', class: 'btn danger', id: 'sk-sel-del' }); del.innerHTML = icon('trash') + esc(T('common.delete'));
       del.onclick = () => deleteEnts(sels);
-      w.append(h('div', { class: 'btn-row' }, mv), h('div', { class: 'btn-row' }, cn, del));
+      const row2 = [cn];
+      if (!S.blockEdit && sels.some((id) => { const e = ent(id); return e && !e.blk; })) {
+        const mb = h('button', { type: 'button', class: 'btn pro', id: 'sk-make-block', 'data-help': 'sketchBlocks' }); mb.innerHTML = icon('sketchBlock') + esc(T('sk.block.makeBtn'));
+        mb.onclick = () => createBlock('', sels);
+        row2.push(mb);
+      }
+      row2.push(del);
+      w.append(h('div', { class: 'btn-row' }, mv), h('div', { class: 'btn-row' }, ...row2));
     } else {
       // Zustand der ganzen Skizze
       const st = S.status;
@@ -7457,6 +7831,49 @@ const Sketch = (() => {
         }
       }
     }
+    const appendBlockLibrary = (dst, withPick) => {
+      const blocks = docBlocks();
+      if (!blocks.length) {
+        dst.append(h('div', { class: 'hint-box', id: 'sk-blocks-empty' }, T('sk.block.none')));
+        return;
+      }
+      if (withPick) {
+        if (!blocks.some((b) => b.id === S.blockActive)) S.blockActive = blocks[0].id;
+        dst.append(UI.selectField({ id: 'blk-select', label: T('sk.block.activeLabel'), value: S.blockActive, options: blocks.map((b) => [b.id, b.name]), onChange: (v) => { S.blockActive = v; render(); Panels.renderRight(); } }));
+        dst.append(UI.numField({ id: 'blk-rot', label: T('sk.block.rot'), value: S.blockRot || 0, unit: '°', expr: false, onCommit: (v) => { S.blockRot = isFinite(v) ? v : 0; render(); } }));
+        const ins0 = h('button', { type: 'button', class: 'btn primary', id: 'blk-insert-origin' }); ins0.innerHTML = icon('plus') + esc(T('sk.block.insertAtOrigin'));
+        ins0.onclick = () => { if (S.blockActive) insertBlock(S.blockActive, 0, 0, S.blockRot || 0); };
+        dst.append(h('div', { class: 'btn-row' }, ins0));
+      }
+      const list = h('div', { class: 'sk-blk-list' });
+      for (const b of blocks) {
+        const nEnt = (b.ents || []).length, nInst = (S.blockInsts || []).filter((i) => i.blockId === b.id).length;
+        const cntTxt = (nEnt === 1 ? T('sk.block.entCountOne') : T('sk.block.entCountMany', { n: nEnt })) + (nInst ? ' · ' + T('sk.block.instCount', { n: nInst }) : '');
+        const row = h('div', { class: 'sk-blk-row' + (S.blockActive === b.id ? ' active' : ''), dataset: { blockId: b.id } });
+        row.append(h('div', { class: 'sk-blk-meta' }, h('b', null, b.name), h('small', null, cntTxt)));
+        const acts = h('div', { class: 'sk-blk-acts' });
+        const bIns = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': T('sk.block.insert'), 'aria-label': T('sk.block.insert') }); bIns.innerHTML = icon('plus'); bIns.onclick = () => { S.blockActive = b.id; setTool('block'); };
+        const bEd = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': T('sk.block.editBtn'), 'aria-label': T('sk.block.editBtn') }); bEd.innerHTML = icon('edit'); bEd.onclick = () => editBlock(b.id);
+        const bDel = h('button', { type: 'button', class: 'btn ghost small danger', 'data-tip': T('common.delete'), 'aria-label': T('common.delete') }); bDel.innerHTML = icon('trash'); bDel.onclick = () => deleteBlockDef(b.id);
+        acts.append(bIns, bEd, bDel);
+        row.append(acts);
+        list.append(row);
+      }
+      dst.append(list);
+    };
+    if (S.tool === 'block' && !S.blockEdit && !S.step) {
+      const box = h('div', { class: 'sk-blk-box pro', id: 'sk-block-tool-panel', 'data-help': 'sketchBlocks' });
+      appendBlockLibrary(box, true);
+      w.append(box);
+    }
+    if (!S.blockEdit && !S.step && !selBlkInst && !sel && sels.length <= 1 && !selCon && S.tool !== 'block' && !isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit()) {
+      const blocks = docBlocks();
+      const blkDet = h('details', { class: 'section pro', id: 'sk-blocks', 'data-help': 'sketchBlocks' }, h('summary', { class: 'section-h' }, T('sk.block.title', { n: blocks.length })));
+      if (S.blockLibOpen || blocks.length) blkDet.open = !!S.blockLibOpen;
+      blkDet.addEventListener('toggle', () => { S.blockLibOpen = blkDet.open; });
+      appendBlockLibrary(blkDet, false);
+      w.append(blkDet);
+    }
     w.append(h('div', { class: 'hint-box', html: T('sk.panel.navHint') }));
     body.append(w);
   }
@@ -7465,6 +7882,7 @@ const Sketch = (() => {
   let donePending = false;
   function done(skipFontWait = false) {
     if (!S || donePending) return;
+    if (S.blockEdit) { finishBlockEdit(true); return; }
     S.draft = null; hideEntry();
     if (!skipFontWait && SK.needsEntsFonts && SK.needsEntsFonts(S.ents)) {
       const sess = S;
@@ -7484,14 +7902,17 @@ const Sketch = (() => {
     if (isLoftLine()) {
       const rk = railKey(), nm = rk === 'rail2' ? 'zweiten Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie';
       if (!SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneNeedOpen', { what: rk === 'rail2' ? 'zweite Führungskurve' : nm }), { kind: 'bad', icon: 'info' }); return; }
-      const id = S.ctx.id, sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons, ...(S.locked ? { locked: true } : {}), ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}), ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}) };
+      const id = S.ctx.id, sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons, ...(S.blockInsts && S.blockInsts.length ? { blockInsts: deepClone(S.blockInsts) } : {}), ...(S.locked ? { locked: true } : {}), ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}), ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}) };
+      const commitBlocks = docBlocksForCommit();
       App.extra = []; finishSession();
-      App.change(rk === 'rail2' ? 'Zweite Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie', (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rk) { f.item.p[rk] = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; delete f.item.p.rail2; } });
+      App.change(rk === 'rail2' ? 'Zweite Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie', (doc) => { doc.blocks = commitBlocks; const f = Model.find(doc, id); if (!f) return false; if (rk) { f.item.p[rk] = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; delete f.item.p.rail2; } });
       App.select([id]); UI.toast(T('sk.toast.doneLoftFollow', { what: nm }), { icon: 'check' }); return;
     }
     if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast(T('sk.toast.donePathEmpty'), { kind: 'bad', icon: 'info' }); return; }
     if (S.ctx.mode === 'patpath') {
-      const sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons, ...(S.locked ? { locked: true } : {}), ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}), ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}) }, ids = S.ctx.ids;
+      const sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons, ...(S.blockInsts && S.blockInsts.length ? { blockInsts: deepClone(S.blockInsts) } : {}), ...(S.locked ? { locked: true } : {}), ...(S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {}), ...(S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {}) }, ids = S.ctx.ids;
+      const commitBlocks = docBlocksForCommit();
+      if (App.doc) App.doc.blocks = commitBlocks;
       finishSession(); Features.pathFromSketch(ids, sk); return;
     }
     if (S.ctx.mode === 'edit') {
@@ -7508,10 +7929,13 @@ const Sketch = (() => {
         if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast(T('sk.toast.doneThinNeed'), { kind: 'bad' }); return; }
         if (editKind !== 'sweep' && editKind !== 'rib' && editKind !== 'wrap' && !isThinEdit && !regs.length) { UI.toast(T('sk.toast.doneClosedNeed'), { kind: 'bad' }); return; }
       }
-      const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null, locked = !!S.locked, guides = S.guides && S.guides.length ? deepClone(S.guides) : null, gridMode = S.gridMode, polar = S.gridMode === 'polar' ? deepClone(S.polar) : null;
+      const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, blockInsts = deepClone(S.blockInsts || []), plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null, locked = !!S.locked, guides = S.guides && S.guides.length ? deepClone(S.guides) : null, gridMode = S.gridMode, polar = S.gridMode === 'polar' ? deepClone(S.polar) : null;
+      const commitBlocks = docBlocksForCommit();
       App.change('Skizze bearbeitet', (doc) => {
+        doc.blocks = commitBlocks;
         const f = Model.find(doc, id);
         f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane;
+        if (blockInsts.length) f.item.p.sketch.blockInsts = blockInsts; else delete f.item.p.sketch.blockInsts;
         if (locked) f.item.p.sketch.locked = true; else delete f.item.p.sketch.locked;
         if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg;
         if (guides) f.item.p.sketch.guides = guides; else delete f.item.p.sketch.guides;
@@ -7882,11 +8306,12 @@ const Sketch = (() => {
     const st = S.step;
     const pr = S.planeRef ? { planeRef: deepClone(S.planeRef) } : {};
     const lk = S.locked ? { locked: true } : {};
+    const bi = S.blockInsts && S.blockInsts.length ? { blockInsts: deepClone(S.blockInsts) } : {};
     const gd = S.guides && S.guides.length ? { guides: deepClone(S.guides) } : {};
     const pg = S.gridMode === 'polar' ? { gridMode: 'polar', polar: deepClone(S.polar) } : {};
     if (st.wrap) {
       return Model.newItem('wrap', {
-        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk, ...gd, ...pg },
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...bi, ...pr, ...lk, ...gd, ...pg },
         target: st.wrapTarget,
         face: st.wrapFace ? deepClone(st.wrapFace) : null,
         mode: st.openOnly ? 'line' : (st.wrapMode || 'emboss'),
@@ -7901,7 +8326,7 @@ const Sketch = (() => {
       const regs = SK.regions(S.ents);
       const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
       return Model.newItem('emboss', {
-        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk, ...gd, ...pg },
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...bi, ...pr, ...lk, ...gd, ...pg },
         sel,
         target: st.embossTarget,
         face: st.embossFace ? deepClone(st.embossFace) : null,
@@ -7912,7 +8337,7 @@ const Sketch = (() => {
     }
     if (st.rib) {
       return Model.newItem('rib', {
-        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk, ...gd, ...pg },
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...bi, ...pr, ...lk, ...gd, ...pg },
         target: st.ribTarget,
         thickness: st.ribThickness,
         side: st.ribSide || 'center',
@@ -7924,7 +8349,7 @@ const Sketch = (() => {
     }
     if (st.sweep) {
       const p = {
-        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk, ...gd, ...pg },
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...bi, ...pr, ...lk, ...gd, ...pg },
         shape: st.sweepShape === 'rect' ? 'rect' : st.sweepShape === 'sketch' ? 'sketch' : 'circle',
         d: st.sweepD ?? 6,
         w: st.sweepW ?? 6,
@@ -7951,7 +8376,7 @@ const Sketch = (() => {
     const target = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
     const name = st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : (st.thin && st.openOnly ? 'Dünne Wand' : 'Skizzenkörper');
     const it = Model.newItem(kind, {}, { name, role, color: st.color });
-    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk, ...gd, ...pg, ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
+    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...bi, ...pr, ...lk, ...gd, ...pg, ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
     if (kind === 'extrude') {
       const rd = (st.extent === 'toNext' || st.extent === 'toFace') ? App.resolvedDist('__preview') : null;
       p.dist = rd != null ? round(rd, 4) : st.dist;
@@ -8172,7 +8597,9 @@ const Sketch = (() => {
     App.extra = [];
     const lbl = it.kind === 'wrap' ? 'Um Zylinder gewickelt' : it.kind === 'emboss' ? 'Prägen erstellt' : it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'sweep' ? (it.op && it.op.type === 'cut' ? 'Nut entlang Pfad geschnitten' : 'Entlang Pfad gezogen') : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
     const hideProfId = it.kind === 'sweep' && S.step.sweepShape === 'sketch' ? S.step.sweepProfId : null;
+    const commitBlocks = docBlocksForCommit();
     App.change(lbl, (doc) => {
+      doc.blocks = commitBlocks;
       if (it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'sweep' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
       if (hideProfId) { const sp = doc.items.find((x) => x.id === hideProfId); if (sp) sp.hidden = true; }
@@ -8965,6 +9392,7 @@ const Sketch = (() => {
   function cancel(silent) {
     if (S3) { cancel3d(silent); return; }
     if (!S) return;
+    if (S.blocks0 && App.doc) App.doc.blocks = deepClone(S.blocks0);
     App.extra = []; App.rebuild();
     finishSession();
     if (!silent) UI.toast(T('sk.toast.cancelled'), { icon: 'close', ms: 1800 });
@@ -9086,12 +9514,12 @@ const Sketch = (() => {
     if (S.step) { renderStep(); return; }
     if (isSimpleMode()) {
       S.liveMir = null; S.liveMirPick = false;
-      if (S.tool === 'stretch' || S.tool === 'silhouette' || S.tool === 'intersect' || S.tool === 'conic' || S.tool === 'bridge') { S.tool = 'select'; S.icPick = null; Viewer.highlightFace('sel', null, null); S.stretch.box = null; S.stretch.sel = null; if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; } }
+      if (S.tool === 'stretch' || S.tool === 'silhouette' || S.tool === 'intersect' || S.tool === 'conic' || S.tool === 'bridge' || S.tool === 'block') { S.tool = 'select'; S.icPick = null; Viewer.highlightFace('sel', null, null); S.stretch.box = null; S.stretch.sel = null; if (S.bridge) { S.bridge.first = null; S.bridge.hoverEnd = null; } }
     }
     showBar(); showRulers();
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, rebindSilhouette, rebindFaceIntersect, projectSilhouette, projectFaceIntersect, whenRelinked, linkPointsWorld, copySel, pasteClip, createBlock, insertBlock, updateBlockInst, explodeBlockInst, deleteBlockInst, editBlock, finishBlockEdit, renameBlock, deleteBlockDef, selectBlockInst, setRefDim, setDimSpec, setDimMode, setDimCircMode, setSplineMode, setSplineHandle, resetSplineHandle, selectSplineHandle, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, start3d, edit3d, finish3d, cancel3d, set3dTool, add3dPoint, end3dChain, add3dLine, add3dArc, set3dLength, delete3dEnt, snap3dAt, render3dScene, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, setGridMode, togglePolarGrid, setPolarGrid, addGuide, moveGuide, removeGuide, clearGuides, get gridMode() { return S ? S.gridMode : 'rect'; }, get guides() { return S ? S.guides : []; }, lengthSnapStep, get active() { return !!S || !!S3; }, get active3d() { return !!S3; }, get state3d() { return S3; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

@@ -1463,5 +1463,10 @@
     "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
     "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
     "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
+  },
+  "sketchBlocks": {
+    "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
+    "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
+    "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
   }
 }

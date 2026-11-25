@@ -75,7 +75,7 @@ const Model = (() => {
     return {
       format: 'masswerk', version: 1, docType: (opts && opts.docType === 'assembly') ? 'assembly' : 'part',
       id: uid('p'), name, created: Date.now(), modified: Date.now(),
-      params: [], tables: [], items: [], notes: [],
+      params: [], tables: [], items: [], notes: [], blocks: [],
       settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, printBed: defBed(), grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
@@ -306,6 +306,66 @@ const Model = (() => {
       it.kind = s.kind; it.p = deepClone(s.p); it.finishes = deepClone(s.finishes || []); it.role = s.role;
       if (s.mir) it.mir = deepClone(s.mir); else delete it.mir;
       n++;
+    });
+    return n;
+  }
+  // ---------- Skizzen-Blöcke (SK-31) ----------
+  function materializeBlockInst(inst, block, solvedEnts) {
+    if (!inst || !block) return [];
+    const ang = ((Number(inst.rot) || 0) * Math.PI) / 180;
+    const x = Number(inst.x) || 0, y = Number(inst.y) || 0;
+    const cs = Math.cos(ang), sn = Math.sin(ang);
+    const xf = (p) => [Math.round((x + p[0] * cs - p[1] * sn) * 1e6) / 1e6, Math.round((y + p[0] * sn + p[1] * cs) * 1e6) / 1e6];
+    const rot90 = Math.abs(sn) < 1e-6 || Math.abs(cs) < 1e-6;
+    const srcList = solvedEnts || block.ents || [];
+    const out = [];
+    for (const se of srcList) {
+      const m = SKO.mapEnt(se, xf, (q) => (q.rot || 0) + ang, se.type === 'rect' && !rot90);
+      m.ents.forEach((me, i) => {
+        me.id = m.ents.length === 1 ? `${inst.id}:${se.id}` : `${inst.id}:${se.id}_${i}`;
+        me.blk = inst.id;
+        me.blkId = block.id;
+        me.blkSrc = se.id;
+        out.push(me);
+      });
+    }
+    return out;
+  }
+  function syncSketchBlocks(sketch, blocks, V) {
+    if (!sketch || !Array.isArray(sketch.ents)) return false;
+    const insts = Array.isArray(sketch.blockInsts) ? sketch.blockInsts : [];
+    const bmap = new Map((blocks || []).map((b) => [b.id, b]));
+    const solvedCache = new Map();
+    const getSolved = (blk) => {
+      if (solvedCache.has(blk.id)) return solvedCache.get(blk.id);
+      let ents = blk.ents || [];
+      if (typeof Solver !== 'undefined' && Solver.cached && ((blk.dims && blk.dims.length) || (blk.cons && blk.cons.length))) {
+        ents = Solver.cached({ ents: blk.ents || [], dims: blk.dims || [], cons: blk.cons || [] }, V || {}).ents;
+      }
+      solvedCache.set(blk.id, ents);
+      return ents;
+    };
+    const loose = sketch.ents.filter((e) => e && !e.blk);
+    const blkEnts = [];
+    for (const inst of insts) {
+      const blk = bmap.get(inst.blockId);
+      if (!blk) continue;
+      blkEnts.push(...materializeBlockInst(inst, blk, getSolved(blk)));
+    }
+    const next = [...loose, ...blkEnts];
+    if (JSON.stringify(sketch.ents) === JSON.stringify(next)) return false;
+    sketch.ents = next;
+    return true;
+  }
+  function syncBlocks(doc) {
+    if (!doc) return 0;
+    const blocks = Array.isArray(doc.blocks) ? doc.blocks : [];
+    const V = typeof vars === 'function' ? vars(doc).v : {};
+    let n = 0;
+    walk(doc.items, (it) => {
+      if (it.p && it.p.sketch && ((it.p.sketch.blockInsts && it.p.sketch.blockInsts.length) || (it.p.sketch.ents && it.p.sketch.ents.some((e) => e && e.blk)))) {
+        if (syncSketchBlocks(it.p.sketch, blocks, V)) n++;
+      }
     });
     return n;
   }
@@ -566,7 +626,12 @@ const Model = (() => {
   }
   function sketchParams(it, V) {
     const p = it.p || {};
-    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    let skForSolve = p.sketch;
+    if (skForSolve && Array.isArray(skForSolve.blockInsts) && skForSolve.blockInsts.length && curDoc && Array.isArray(curDoc.blocks)) {
+      skForSolve = { ...skForSolve, ents: (skForSolve.ents || []).slice() };
+      syncSketchBlocks(skForSolve, curDoc.blocks, V);
+    }
+    const ents = skForSolve ? Solver.cached(skForSolve, V).ents : [];
     const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
     let out;
     if (it.kind === 'extrude' && p.thin) {
@@ -1621,6 +1686,15 @@ const Model = (() => {
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
     if (doc.pointClouds != null && !Array.isArray(doc.pointClouds)) doc.pointClouds = [];
     if (doc.folders != null && !Array.isArray(doc.folders)) doc.folders = [];
+    if (doc.blocks != null && !Array.isArray(doc.blocks)) doc.blocks = [];
+    if (Array.isArray(doc.blocks)) {
+      doc.blocks = doc.blocks.filter((b) => b && b.id && Array.isArray(b.ents));
+      for (const b of doc.blocks) {
+        if (!b.name) b.name = 'Block';
+        if (!Array.isArray(b.dims)) b.dims = [];
+        if (!Array.isArray(b.cons)) b.cons = [];
+      }
+    }
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     cleanFolders(doc);
     return doc;
@@ -1917,6 +1991,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

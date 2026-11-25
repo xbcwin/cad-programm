@@ -2369,6 +2369,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Brückenkurve krümmungsglatt (G2) & 3D-Hochziehen**: Verbindet Kreisbogen (`R = 20`) und Linie mit `pts.length === 6`, Winkelfehler `< 0,1°` sowie passender Krümmung (`1/20` bzw. `0`) an beiden Enden, schließt zum Profil und lässt sich ohne Fehler hochziehen; Hilfetexte `conic2d` / `bridge2d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kegelschnitt`, `brückenkurve`) vollständig.
 - [ ] **Von Hand**: In einer Skizze einen Kegelschnitt frei mit der Maus aufziehen (Ellipsenstück, Parabel und Hyperbel am Schulterpunkt beobachten) und zwei schräge Splines bzw. Bögen mit „Brücke“ (G1 und G2) sowie Stärke 1/2 verbinden.
 
+## Skizzen-Blöcke (Auto [A-118], SK-31)
+- [x] **Profi-Modus**: Block-Werkzeug (`[data-tool="block"]`) und „Als Block speichern“ (`#sk-make-block`) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Block speichern & mehrfach einsetzen**: Zwei Kreise in der Skizze als Block speichern, 3 Einsätze platzieren, verschieben (`#bi-x`/`#bi-y`) und drehen (`#bi-rot`) → alle 3 Einsätze liegen exakt am Zielort.
+- [x] **Zentrale Block-Änderung & Rückgängig**: Block im eigenen Koordinatensystem bearbeiten (`#blk-inst-edit`), Kreisradius von `4 mm` auf `7 mm` ändern und speichern → alle 3 Einsätze in `S.ents` wechseln geschlossen auf `R = 7`; `Strg+Z` stellt den alten Radius `4 mm` über alle 3 Einsätze exakt wieder her.
+- [x] **Auflösen, 3D-Hochziehen & Dokument-Rückgängig**: Aufgelöster Einsatz bleibt bei späteren Block-Änderungen eigenständig; Hochziehen über alle Block-Konturen und `App.undo()` stellen Ausgangszustand sauber wieder her; `sketchBlocks` in `werkzeug-hilfen.json`/`HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`block`) geprüft.
+- [ ] **Von Hand**: In einer komplexen Skizze einen Block aus Rechteck + Bohrungen mit internen Regeln speichern, mehrfach gedreht einsetzen, durch Ziehen an einer Kontur direkt verschieben und mit „Block auflösen“ einzeln nachbearbeiten.
+
 ## Polares Raster und Hilfslinien (Auto [A-117], SK-52)
 - [x] **Profi-Modus**: Abschnitt `#sk-grid-sec` sowie die Skizzen-Lineale `#sk-ruler-t`, `#sk-ruler-l` und `#sk-ruler-c` sind im Modus „Einfach“ ausgeblendet (und `Sketch.setGridMode('polar')` gesperrt) und im Modus „Profi“ sichtbar.
 - [x] **Polares Raster & Fang**: Umschalten über `#sk-grid-polar` zeichnet konzentrische Ringe und Strahlen (`sketchGrid === 'polar'`); Punkt bei `r = 10, 30°` sowie nach Umstellen auf `10 mm / 45°` bei `r = 20, 45°` fangen exakt auf den Polarkoordinaten.
@@ -2389,6 +2396,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Entlang Pfad (Kreis-Profil)**: Nach Fertigstellen (`#sk3-done`) liegt `sketch3d` im Verlauf und wird in `Viewer.groups.sketch3d` angezeigt; Klick auf `#sk3-to-sweep` erzeugt einen geschlossenen, geometrisch gültigen 3D-Körper ohne Rechenfehler.
 - [x] **Fangen an Körperecke & 3D-Bogen**: `Sketch.snap3dAt` fängt exakt an der Ecke eines Quaders samt Bindung; 3-Punkt-3D-Bogen `(0,0,0) → (10,10,10) → (20,0,0)` ergibt exakte Bogenlänge und lässt sich fehlerfrei entlang des Pfads ziehen; Hilfetext `sketch3d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`3d-skizze`) vollständig.
 - [ ] **Von Hand**: Im Browser eine 3D-Skizze aus mehreren Linien und Bögen frei an Körperecken eines Modells fangen, dabei die Kamera drehen, ein Längenmaß über das 3D-Schildchen ändern und danach den Körper entlang des Pfads verschieben (prüfen, dass die gefangenen Punkte mitwandern).
+
+## Volltest-Reparatur (Auto [F-11250121])
+
+- [x] **Fokus-Vorschau bei rAF-Stau**: Bei blockiertem `requestAnimationFrame` zeichnet `Views.focus()` über den `60 ms`-Timer-Fallback (`requestFocusDraw` → `Viewer.renderNow()`) das gewählte Teil (`Views.focusDrawn === true`) und setzt `focusDrawn` beim Leeren der Auswahl sauber auf `false` zurück (`t_fokus`, `t_f11250121`).
+- [x] **Meldung überlebt Hauptthread-Hänger**: `UI.toast()` (`scheduleToast`) zählt die Restlaufzeit in `500 ms`-Scheiben herunter, sodass ein einzelner `900 ms`-Hänger eine `600 ms`-Meldung nicht vorzeitig löscht und sie danach sauber nach Ablauf der Restzeit verschwindet (`t_explosion_regeln`, `t_f11250121`).
+- [ ] **Von Hand**: Im Browser bei langsamer Darstellung die Fokus-Vorschau öffnen, ein Teil wählen und drehen sowie mit einem einzelnen Teil die Explosions-Meldung auslösen und prüfen, dass Vorschau und Hinweis zuverlässig sichtbar bleiben.
 
 ## Fehler melden
 
