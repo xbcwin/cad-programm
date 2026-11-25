@@ -1880,6 +1880,46 @@ body.quad-view-on .viewcube,body.quad-view-on .axis-gizmo{display:none}
 .cam-dot{fill:#e03131;stroke:var(--surface);stroke-width:1.5}
 .cam-chart-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted)}
 
+/* ---------- Bewegungs-Studie: Motoren, Zeitachse & Punkt-Kurven (BG-21) ---------- */
+.motion-panel{position:absolute;left:84px;right:62px;bottom:64px;z-index:17;max-height:52%;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:10px 12px;display:grid;gap:10px}
+body.sketching .motion-panel{display:none}
+body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
+.mot-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mot-title-wrap{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.mot-title-ic{display:grid;place-items:center;color:var(--accent)}
+.mot-title-ic svg{width:15px;height:15px}
+.mot-title{font:600 13.5px/1.2 var(--font-cond);letter-spacing:.03em;text-transform:uppercase;color:var(--ink)}
+.mot-tl{display:grid;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.mot-tl-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mot-tl-spacer{flex:1;min-width:4px}
+.mot-loop-chk{font-size:12.5px;padding:0 4px}
+.mot-inline-f{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.mot-num-inp{width:56px;height:26px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;text-align:right}
+.mot-time-lbl{font-size:12px;color:var(--accent);font-weight:600;padding-left:4px;white-space:nowrap}
+.mot-slider{width:100%;accent-color:var(--accent);cursor:pointer}
+.mot-grid{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:740px){.mot-grid{grid-template-columns:1.15fr .85fr}}
+.mot-col{display:grid;gap:6px;align-content:start}
+.mot-add-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mot-add-row select{height:28px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;max-width:170px}
+.mot-list,.mot-trace-list{display:grid;gap:6px}
+.mot-card{display:grid;gap:6px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.mot-card-head{display:flex;align-items:center;gap:6px}
+.mot-card-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mot-cur-val{font-size:12px;color:var(--accent);font-weight:600}
+.mot-keys{display:grid;gap:4px}
+.mot-key-row{display:flex;align-items:center;gap:5px;font-size:12px}
+.mot-key-row input{width:54px;height:24px;padding:0 5px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink);font-size:12px;text-align:right}
+.mot-trace-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);font-size:12.5px}
+.mot-trace-row .swatch{width:10px;height:10px;border-radius:50%;flex:none}
+.mot-trace-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mot-chart-wrap{display:grid;gap:4px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.mot-chart-svg{width:100%;height:auto;display:block;cursor:ew-resize;touch-action:none;user-select:none}
+.mot-curve{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.mot-cursor{stroke:#e03131;stroke-width:1.25;stroke-dasharray:3 2}
+.mot-dot{stroke:var(--surface);stroke-width:1.5}
+
+
 
 
 

@@ -55,6 +55,7 @@ const Toolbar = (() => {
       { id: 'datumAxis', group: T('dlg.tb.grpConstruct'), domId: 't-datumAxis', icon: 'axes', label: T('dlg.tb.datumAxis'), tip: T('dlg.tb.datumAxisTip'), cls: 'minor', help: 'datumAxis', run: (e) => Datums.axisDialog(e.currentTarget) },
       { id: 'datumPoint', group: T('dlg.tb.grpConstruct'), domId: 't-datumPoint', icon: 'point', label: T('dlg.tb.datumPoint'), tip: T('dlg.tb.datumPointTip'), cls: 'minor', help: 'datumPoint', run: (e) => Datums.pointDialog(e.currentTarget) },
       { id: 'fixedJoint', group: T('dlg.tb.grpConstruct'), domId: 't-fixedJoint', icon: 'lock', label: T('ctx.fixedJoint'), tip: T('ctx.fixedJointTip'), cls: 'minor', help: 'fixedJoint', run: () => Joints.startFixed() },
+      { id: 'motion', group: T('dlg.tb.grpConstruct'), domId: 't-motion', icon: 'play', label: T('motion.title'), tip: T('motion.toolbarTip'), cls: 'minor pro', help: 'motionStudy', run: () => Motion.toggle() },
       { id: 'params', group: T('dlg.tb.grpConstruct'), domId: 't-params', icon: 'sliders', label: T('topbar.params'), tip: T('dlg.tb.paramsTip'), cls: 'minor', help: 'params', run: () => Panels.showParams() },
       // Ansicht & Prüfen
       { id: 'section', group: T('dlg.tb.grpViewCheck'), domId: 't-section', icon: 'section', label: T('menu.view.section'), tip: T('dlg.tb.sectionTip'), kbd: 'C', cls: 'minor', help: 'section', run: () => Views.section() },
@@ -283,6 +284,7 @@ const Toolbar = (() => {
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
     if (def.id === 'check' && ((typeof GeomCheck !== 'undefined' && GeomCheck.active) || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && (Measure.draftActive || Measure.silhouetteActive)) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active) || (typeof Versions !== 'undefined' && !!Versions.comparing))) b.classList.add('active');
     if (def.id === 'clashes' && typeof ClashCheck !== 'undefined' && ClashCheck.active) b.classList.add('active');
+    if (def.id === 'motion' && typeof Motion !== 'undefined' && Motion.active) b.classList.add('active');
     return b;
   }
 

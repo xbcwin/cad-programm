@@ -2709,6 +2709,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Dialog, Kontext-Banner, Profi-Trennung, Validierung & Hilfen**: `#ctx-part-refs-btn`, `Comp.refsDialog` (`#part-refs-dialog`), `#proj-part-refs-sec`, Ausblenden im Einfach-Modus, `Store.validateProject`, `HELP.partRefs`, DE/EN-Schlüsselgleichheit und Befehlssuche (`part-refs` für „bezüge“ / „einfrieren“) laufen ohne JS-Fehler (`t_a159_bezuege_verwalten`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine Skizze auf die Fläche eines anderen Teils legen oder ein Maß per Pipette übernehmen, im rechten Panel unter „Bezüge auf andere Teile“ sowie im Dialog „Bezüge zwischen Teilen verwalten“ einzelne Bezüge einfrieren, das Ausgangsteil ändern, danach auftauen und dauerhaft lösen.
 
+## Bewegungs-Studie mit Motoren und Zeitachse (Auto [A-158], BG-21)
+
+- [x] **Motor `60°/s` & Zeitachse**: Im Profi-Modus öffnet `#btn-motion-tree` das Panel „Bewegung“ (`#motion-panel`); ein Motor mit `60°/s` am Drehgelenk fährt das Gelenk bei `1,5 s` (`#mot-time-inp`) exakt auf `90°` (3D-Armspitze `< 0,05 mm` am Ziel) und bei `2,5 s` auf `150°`; `#mot-reset` setzt auf `0°` zurück und `#mot-play` animiert live vorwärts (`t_a158_bewegungs_studie`).
+- [x] **Weg über Zeit (Stützpunkte)**: Ein Profil-Motor `[{t:0,v:0},{t:1,v:20},{t:2,v:5}]` an einem Schiebegelenk fährt bei `0,5 s` auf `10 mm`, bei `1,5 s` auf `12,5 mm` und bei `2,0 s` auf `5 mm` (`t_a158_bewegungs_studie`).
+- [x] **Punkt-Kurven in 3D & SVG-Diagramm**: Ein Verfolgungspunkt an der Armspitze (`R = 40 mm`) zeichnet den Viertelkreis über `1,5 s` als 3D-Bahnkurve in `Viewer.groups.overlay` und als `#motion-chart path.mot-curve` mit Bogenlänge `≈ 62,83 mm` (`t_a158_bewegungs_studie`).
+- [x] **Profi-Schutz, Speichern/Laden, Rückgängig & Hilfen**: Im Einfach-Modus ausgeblendet und gesperrt; `doc.motion` besteht `Store.validateProject`, bleibt nach JSON-Reload erhalten; `App.undo()`, `HELP.motionStudy`, DE/EN-Schlüsselgleichheit und Befehlssuche (`motion-study`) funktionieren ohne JS-Fehler (`t_a158_bewegungs_studie`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine Baugruppe mit mehreren Gelenken öffnen, einen Punkt über „Im Bild wählen“ direkt am 3D-Teil anklicken, die Zeitachse über „Abspielen“ und durch Ziehen im Weg-Zeit-Diagramm prüfen.
+
 ## Fehler melden
 
 ```

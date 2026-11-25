@@ -1778,5 +1778,10 @@
     "tip": "Bezüge zwischen Teilen verwalten: übernommene Maße, Kanten und Flächen einfrieren oder lösen (Profi)",
     "hilfe": "Zeigt alle Bezüge eines Teils auf andere Teile in der Baugruppe (z. B. übernommene Messwerte, Skizzen-Flächen, übernommene Kanten, Umrisse oder „bis Fläche“-Ziele). Eingefrorene Bezüge behalten ihren aktuellen Stand und rechnen nicht mehr mit; gelöste Bezüge werden dauerhaft getrennt.",
     "tipp": "Friere Bezüge kurz ein, wenn du ein Nachbarteil frei umbauen willst – danach taust du den Bezug mit einem Klick wieder auf."
+  },
+  "motionStudy": {
+    "tip": "Bewegungs-Studie: Motoren an Gelenken über eine Zeitachse abspielen und Punkt-Kurven zeichnen (Profi)",
+    "hilfe": "Treibt deine Baugruppe über eine echte Zeitachse an. Jeder Motor steuert ein Gelenk mit fester Drehzahl oder Geschwindigkeit (z. B. 60°/s) oder über eine Stützpunkt-Kurve (Weg über Zeit). Gleichzeitig verfolgt Tracery auf Wunsch den Weg einzelner Punkte am Bauteil als 3D-Bahnkurve im Bild und als Weg-Zeit-Diagramm.",
+    "tipp": "Ziehe am Zeitschieber oder klicke direkt ins Weg-Zeit-Diagramm, um jede Zwischenstellung sofort im 3D-Modell zu prüfen."
   }
 }
