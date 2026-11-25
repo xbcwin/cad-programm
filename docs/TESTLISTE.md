@@ -2869,6 +2869,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Trennung, Hilfetexte, I18n & Befehlssuche**: Im Einfach-Modus ist die Zeichnung ausgeblendet, `HELP.drawingBreakView` & `HELP.drawingAuxView` sind mit `werkzeug-hilfen.json` synchron, `data-help`-Attribute sitzen auf `#t-break`, `#t-aux`, `#dw-add-break`, `#dw-add-aux`, DE/EN-Schlüssel sind deckungsgleich und `Commands.search` findet `unterbrechen` und `hilfsansicht`.
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine lange abgestufte Welle per Werkzeugleiste („Unterbrechen“, Taste `U`) mit Wellen-Bruchlinien kürzen, danach an einer Schrägkante über „Hilfsansicht“ (Taste `H`) eine Ansicht anlegen, auf dem Blatt verschieben und als PDF öffnen.
 
+## Zeichnung: Schriftfeld-Editor und Vorlagen (Auto [A-178], ZE-30)
+
+- [x] **Vorlagen ISO, DIN & ANSI**: Wechsel zwischen `iso` (ISO 7200), `din` (DIN EN ISO 7200 mit `Benennung`, `Bearbeiter`, `Geprüft`, `Dokumentart`, `ISO 2768-mK`) und `ansi` (ANSI/ASME Y14.1 mit `TITLE`, `DWG. NO.`, `SIZE`, `REV`, `SCALE`, `SHEET`) über `#dw-tb-template` aktualisiert das Blatt sofort samt passenden Eingabefeldern rechts (`t_a178_zeichnung_schriftfeld`).
+- [x] **Schriftfeld-Editor (Felder, Logo, Linien & eigene Vorlage)**: Über `#dw-tb-edit` lassen sich eigene Felder (`Kunde`), Trennlinien (dünn/dick/gestrichelt) und ein Logo-Bild (`#dw-tbe-logo-file`) hinzufügen, direkt in `#tb-kunde` ausfüllen und als Vorlage (`tracery-schriftfelder`) speichern, die in einer neuen Zeichnung sofort wählbar ist und in SVG, PDF sowie DXF erscheint (`t_a178_zeichnung_schriftfeld`).
+- [x] **Einfach & Profi, Rückgängig, Speichern/Laden, Hilfen & I18n**: Schriftfeld-Auswahl und Editor funktionieren in Einfach und Profi, `App.undo()`/`redo()` und `Store.validateProject` bleiben stabil, `HELP.drawingTitleBlock` ist mit `werkzeug-hilfen.json` synchron, DE/EN-Schlüssel sind deckungsgleich und `Commands.search('schriftfeld')` findet Editor & Vorlagen (`t_a178_zeichnung_schriftfeld`).
+- [ ] **Von Hand**: Im Browser in „Zeichnung“ die Vorlage auf „DIN EN ISO 7200“ stellen, über „Schriftfeld gestalten …“ ein Firmenlogo und ein eigenes Feld hinzufügen, als eigene Vorlage speichern und in einem neuen Projekt laden.
+
 ## Fehler melden
 
 ```

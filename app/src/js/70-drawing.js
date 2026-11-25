@@ -277,6 +277,332 @@ const Drawing = (() => {
   function sheetDimStyle(sh = dwg()) {
     return normDimStyle(sh && sh.dimStyle);
   }
+  // ---------- Schriftfeld-Editor & Vorlagen (ZE-30) ----------
+  const TB_STORAGE_KEY = 'tracery-schriftfelder';
+  const TB_BUILTIN_IDS = ['iso', 'din', 'ansi'];
+  function builtinTplLabel(id) {
+    if (id === 'din') return T('draw.tb.tplDin');
+    if (id === 'ansi') return T('draw.tb.tplAnsi');
+    return T('draw.tb.tplIso');
+  }
+  function builtinTitleBlock(id = 'iso') {
+    if (id === 'din') {
+      return {
+        templateId: 'din',
+        templateName: 'DIN EN ISO 7200',
+        customized: false,
+        w: 180,
+        h: 36,
+        logo: null,
+        fields: [
+          { id: 'f_name', key: 'name', label: 'Bearbeiter', labelKey: null, kind: 'field', autoType: null, x: 0, y: 0, w: 36, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_datum', key: 'datum', label: 'Datum', labelKey: null, kind: 'field', autoType: null, x: 36, y: 0, w: 28, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_pruefer', key: 'pruefer', label: 'Geprüft', labelKey: null, kind: 'field', autoType: null, x: 0, y: 9, w: 36, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_genehmigt', key: 'genehmigt', label: 'Freigabe', labelKey: null, kind: 'field', autoType: null, x: 36, y: 9, w: 28, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_werkstoff', key: 'werkstoff', label: 'Werkstoff', labelKey: null, kind: 'field', autoType: null, x: 0, y: 18, w: 36, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_massstab', key: 'massstab', label: 'Maßstab', labelKey: null, kind: 'auto', autoType: 'scale', x: 36, y: 18, w: 28, h: 9, fontSize: 3.0, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_tol', key: 'allgemeintol', label: 'Allgemeintoleranz', labelKey: null, kind: 'field', autoType: null, x: 0, y: 27, w: 36, h: 9, fontSize: 2.5, align: 'start', bold: false, defaultValue: 'ISO 2768-mK', border: true },
+          { id: 'f_oberfl', key: 'oberflaeche', label: 'Oberfläche', labelKey: null, kind: 'field', autoType: null, x: 36, y: 27, w: 28, h: 9, fontSize: 2.6, align: 'start', bold: false, defaultValue: 'Ra 3,2', border: true },
+          { id: 'f_firma', key: 'firma', label: 'Firma / Eigentümer', labelKey: null, kind: 'field', autoType: null, x: 64, y: 0, w: 56, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_logo', key: 'logo', label: '', labelKey: null, kind: 'logo', autoType: null, x: 120, y: 0, w: 28, h: 9, fontSize: 2.4, align: 'middle', bold: false, defaultValue: '', border: true },
+          { id: 'f_titel', key: 'titel', label: 'Benennung', labelKey: null, kind: 'title', autoType: null, x: 64, y: 9, w: 84, h: 18, fontSize: 5.5, align: 'start', bold: true, defaultValue: '', border: true },
+          { id: 'f_nummer', key: 'nummer', label: 'Zeichnungsnummer', labelKey: null, kind: 'field', autoType: null, x: 64, y: 27, w: 48, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_dokart', key: 'dokumentart', label: 'Dokumentart', labelKey: null, kind: 'field', autoType: null, x: 112, y: 27, w: 36, h: 9, fontSize: 2.6, align: 'start', bold: false, defaultValue: 'Einzelteil', border: true },
+          { id: 'f_proj', key: 'projektion', label: 'Projektion', labelKey: null, kind: 'projection', autoType: null, x: 148, y: 0, w: 32, h: 20, fontSize: 2.2, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_format', key: 'format', label: 'Format', labelKey: null, kind: 'auto', autoType: 'format', x: 148, y: 20, w: 16, h: 8, fontSize: 2.6, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_blatt', key: 'blatt', label: 'Blatt', labelKey: null, kind: 'auto', autoType: 'sheet', x: 164, y: 20, w: 16, h: 8, fontSize: 2.6, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_rev', key: 'revision', label: 'Rev.', labelKey: null, kind: 'field', autoType: null, x: 148, y: 28, w: 16, h: 8, fontSize: 2.6, align: 'start', bold: false, defaultValue: 'A', border: true },
+          { id: 'f_unit', key: 'einheit', label: 'Einheit', labelKey: null, kind: 'auto', autoType: 'unit', x: 164, y: 28, w: 16, h: 8, fontSize: 2.6, align: 'start', bold: false, defaultValue: '', border: true },
+        ],
+        lines: [
+          { id: 'din_l1', x1: 64, y1: 0, x2: 64, y2: 36, style: 'thick' },
+          { id: 'din_l2', x1: 64, y1: 9, x2: 148, y2: 9, style: 'thick' },
+          { id: 'din_l3', x1: 64, y1: 27, x2: 148, y2: 27, style: 'thick' },
+        ],
+      };
+    }
+    if (id === 'ansi') {
+      return {
+        templateId: 'ansi',
+        templateName: 'ANSI / ASME Y14.1',
+        customized: false,
+        w: 180,
+        h: 36,
+        logo: null,
+        fields: [
+          { id: 'f_name', key: 'name', label: 'DRAWN', labelKey: null, kind: 'field', autoType: null, x: 0, y: 0, w: 36, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_datum', key: 'datum', label: 'DATE', labelKey: null, kind: 'field', autoType: null, x: 36, y: 0, w: 26, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_pruefer', key: 'pruefer', label: 'CHECKED', labelKey: null, kind: 'field', autoType: null, x: 0, y: 9, w: 36, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_genehmigt', key: 'genehmigt', label: 'APPROVED', labelKey: null, kind: 'field', autoType: null, x: 36, y: 9, w: 26, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_werkstoff', key: 'werkstoff', label: 'MATERIAL', labelKey: null, kind: 'field', autoType: null, x: 0, y: 18, w: 62, h: 9, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_tol', key: 'allgemeintol', label: 'UNLESS OTHERWISE SPECIFIED', labelKey: null, kind: 'field', autoType: null, x: 0, y: 27, w: 62, h: 9, fontSize: 2.4, align: 'start', bold: false, defaultValue: 'TOL: ±0.1 · ANGLES ±0.5°', border: true },
+          { id: 'f_firma', key: 'firma', label: 'COMPANY', labelKey: null, kind: 'field', autoType: null, x: 62, y: 0, w: 86, h: 9, fontSize: 3.0, align: 'middle', bold: true, defaultValue: '', border: true },
+          { id: 'f_logo', key: 'logo', label: '', labelKey: null, kind: 'logo', autoType: null, x: 148, y: 0, w: 32, h: 9, fontSize: 2.4, align: 'middle', bold: false, defaultValue: '', border: true },
+          { id: 'f_titel', key: 'titel', label: 'TITLE', labelKey: null, kind: 'title', autoType: null, x: 62, y: 9, w: 86, h: 15, fontSize: 5.2, align: 'start', bold: true, defaultValue: '', border: true },
+          { id: 'f_proj', key: 'projektion', label: 'PROJECTION', labelKey: null, kind: 'projection', autoType: null, x: 148, y: 9, w: 32, h: 15, fontSize: 2.2, align: 'start', bold: false, defaultValue: '', border: true },
+          { id: 'f_format', key: 'format', label: 'SIZE', labelKey: null, kind: 'auto', autoType: 'format', x: 62, y: 24, w: 16, h: 12, fontSize: 3.4, align: 'middle', bold: true, defaultValue: '', border: true },
+          { id: 'f_nummer', key: 'nummer', label: 'DWG. NO.', labelKey: null, kind: 'field', autoType: null, x: 78, y: 24, w: 48, h: 12, fontSize: 3.2, align: 'start', bold: true, defaultValue: '', border: true },
+          { id: 'f_rev', key: 'revision', label: 'REV', labelKey: null, kind: 'field', autoType: null, x: 126, y: 24, w: 14, h: 12, fontSize: 3.2, align: 'middle', bold: true, defaultValue: 'A', border: true },
+          { id: 'f_massstab', key: 'massstab', label: 'SCALE', labelKey: null, kind: 'auto', autoType: 'scale', x: 140, y: 24, w: 22, h: 12, fontSize: 2.8, align: 'middle', bold: false, defaultValue: '', border: true },
+          { id: 'f_blatt', key: 'blatt', label: 'SHEET', labelKey: null, kind: 'auto', autoType: 'sheet', x: 162, y: 24, w: 18, h: 12, fontSize: 2.8, align: 'middle', bold: false, defaultValue: '', border: true },
+        ],
+        lines: [
+          { id: 'ansi_l1', x1: 62, y1: 0, x2: 62, y2: 36, style: 'thick' },
+          { id: 'ansi_l2', x1: 62, y1: 24, x2: 180, y2: 24, style: 'thick' },
+        ],
+      };
+    }
+    return {
+      templateId: 'iso',
+      templateName: 'ISO 7200 (Standard)',
+      customized: false,
+      w: 180,
+      h: 32,
+      logo: null,
+      fields: [
+        { id: 'f_name', key: 'name', label: null, labelKey: 'draw.tb.drawn', kind: 'field', autoType: null, x: 0, y: 0, w: 32, h: 8, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_datum', key: 'datum', label: null, labelKey: 'draw.tb.date', kind: 'field', autoType: null, x: 32, y: 0, w: 40, h: 8, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_werkstoff', key: 'werkstoff', label: null, labelKey: 'draw.tb.material', kind: 'field', autoType: null, x: 0, y: 8, w: 32, h: 8, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_massstab', key: 'massstab', label: null, labelKey: 'draw.tb.scale', kind: 'auto', autoType: 'scale', x: 32, y: 8, w: 40, h: 8, fontSize: 3.2, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_firma', key: 'firma', label: null, labelKey: 'draw.tb.company', kind: 'field', autoType: null, x: 0, y: 16, w: 32, h: 8, fontSize: 2.6, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_blatt', key: 'blatt', label: null, labelKey: 'draw.tb.sheet', kind: 'auto', autoType: 'sheet', x: 32, y: 16, w: 22, h: 8, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_format', key: 'format', label: null, labelKey: 'draw.tb.format', kind: 'auto', autoType: 'format', x: 54, y: 16, w: 18, h: 8, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_nummer', key: 'nummer', label: null, labelKey: 'draw.tb.dwgNo', kind: 'field', autoType: null, x: 0, y: 24, w: 32, h: 8, fontSize: 2.8, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_tol', key: 'allgemeintol', label: null, labelKey: 'draw.tb.genTol', kind: 'field', autoType: null, x: 32, y: 24, w: 40, h: 8, fontSize: 2.6, align: 'start', bold: false, defaultValue: 'ISO 2768-m', border: true },
+        { id: 'f_titel', key: 'titel', label: null, labelKey: 'draw.tb.title', kind: 'title', autoType: null, x: 72, y: 0, w: 76, h: 24, fontSize: 6.0, align: 'start', bold: true, defaultValue: '', border: true },
+        { id: 'f_footer', key: 'footer', label: '', labelKey: null, kind: 'auto', autoType: 'footer', x: 72, y: 24, w: 76, h: 8, fontSize: 2.0, align: 'start', bold: false, defaultValue: '', border: true },
+        { id: 'f_proj', key: 'projektion', label: null, labelKey: 'draw.tb.projection', kind: 'projection', autoType: null, x: 148, y: 0, w: 32, h: 32, fontSize: 2.2, align: 'start', bold: false, defaultValue: '', border: true },
+      ],
+      lines: [],
+    };
+  }
+  function cleanFieldKey(raw, usedSet = null) {
+    let base = String(raw || '').toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 28);
+    if (!base) base = 'feld';
+    if (!usedSet) return base;
+    let cand = base, n = 2;
+    while (usedSet.has(cand)) { cand = `${base}_${n}`; n++; }
+    usedSet.add(cand);
+    return cand;
+  }
+  function normalizeTitleField(raw, W = 180, H = 32, usedKeys = null) {
+    if (!raw || typeof raw !== 'object') return null;
+    const kind = ['field', 'title', 'auto', 'projection', 'logo'].includes(raw.kind) ? raw.kind : 'field';
+    const autoType = kind === 'auto' && ['scale', 'sheet', 'format', 'unit', 'mass', 'footer'].includes(raw.autoType)
+      ? raw.autoType
+      : (kind === 'auto' ? 'scale' : null);
+    const x = round(clamp(Number(raw.x) || 0, 0, Math.max(0, W - 6)), 2);
+    const y = round(clamp(Number(raw.y) || 0, 0, Math.max(0, H - 4)), 2);
+    const w = round(clamp(Number(raw.w) || 30, 6, Math.max(6, W - x)), 2);
+    const h = round(clamp(Number(raw.h) || 8, 4, Math.max(4, H - y)), 2);
+    const key = cleanFieldKey(raw.key || raw.label || 'feld', usedKeys);
+    const labelKey = typeof raw.labelKey === 'string' && raw.labelKey ? raw.labelKey : null;
+    const label = raw.label !== undefined && raw.label !== null ? String(raw.label) : (labelKey ? null : '');
+    const fontSize = Number.isFinite(Number(raw.fontSize)) ? round(clamp(Number(raw.fontSize), 1.6, 10), 2) : (kind === 'title' ? 5.5 : 2.8);
+    const align = raw.align === 'middle' || raw.align === 'end' ? raw.align : 'start';
+    return {
+      id: raw.id ? String(raw.id) : uid('tbf'),
+      key,
+      label,
+      labelKey,
+      kind,
+      autoType,
+      x,
+      y,
+      w,
+      h,
+      fontSize,
+      align,
+      bold: !!raw.bold,
+      defaultValue: raw.defaultValue != null ? String(raw.defaultValue) : '',
+      border: raw.border !== false,
+    };
+  }
+  function normalizeTitleLine(raw, W = 180, H = 32) {
+    if (!raw || typeof raw !== 'object') return null;
+    const x1 = round(clamp(Number(raw.x1) || 0, 0, W), 2);
+    const y1 = round(clamp(Number(raw.y1) || 0, 0, H), 2);
+    const x2 = round(clamp(Number(raw.x2) != null ? Number(raw.x2) : W, 0, W), 2);
+    const y2 = round(clamp(Number(raw.y2) || 0, 0, H), 2);
+    const style = raw.style === 'thick' || raw.style === 'dashed' ? raw.style : 'thin';
+    return { id: raw.id ? String(raw.id) : uid('tbln'), x1, y1, x2, y2, style };
+  }
+  function normalizeTitleLogo(raw, W = 180, H = 32) {
+    if (!raw || typeof raw !== 'object' || typeof raw.src !== 'string' || !raw.src.trim()) return null;
+    const san = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl
+      ? Store.sanitizeImageDataUrl(raw.src, { allowSvg: true })
+      : raw.src.trim();
+    if (!san) return null;
+    let jpg = null;
+    if (typeof raw.jpg === 'string' && raw.jpg.trim()) {
+      jpg = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl
+        ? Store.sanitizeImageDataUrl(raw.jpg, { allowSvg: false })
+        : raw.jpg.trim();
+    }
+    const iw = Math.max(1, Math.round(Number(raw.iw) || 100));
+    const ih = Math.max(1, Math.round(Number(raw.ih) || 100));
+    const x = round(clamp(raw.x != null ? Number(raw.x) : Math.max(0, W - 56), 0, Math.max(0, W - 4)), 2);
+    const y = round(clamp(raw.y != null ? Number(raw.y) : 2, 0, Math.max(0, H - 4)), 2);
+    const w = round(clamp(raw.w != null ? Number(raw.w) : 24, 4, Math.max(4, W - x)), 2);
+    const h = round(clamp(raw.h != null ? Number(raw.h) : Math.min(18, H - 4), 4, Math.max(4, H - y)), 2);
+    return { src: san, jpg, iw, ih, name: String(raw.name || 'Logo'), x, y, w, h };
+  }
+  function normalizeTitleBlock(raw) {
+    if (!raw || typeof raw !== 'object') return builtinTitleBlock('iso');
+    const w = round(clamp(Number(raw.w) || 180, 80, 260), 1);
+    const h = round(clamp(Number(raw.h) || 32, 16, 80), 1);
+    const used = new Set();
+    const fields = Array.isArray(raw.fields)
+      ? raw.fields.map((f) => normalizeTitleField(f, w, h, used)).filter(Boolean)
+      : builtinTitleBlock('iso').fields;
+    const lines = Array.isArray(raw.lines)
+      ? raw.lines.map((l) => normalizeTitleLine(l, w, h)).filter(Boolean)
+      : [];
+    const logo = normalizeTitleLogo(raw.logo, w, h);
+    const templateId = typeof raw.templateId === 'string' && raw.templateId ? raw.templateId : 'iso';
+    const templateName = typeof raw.templateName === 'string' && raw.templateName
+      ? raw.templateName
+      : (TB_BUILTIN_IDS.includes(templateId) ? builtinTplLabel(templateId) : 'Eigenes');
+    return {
+      templateId,
+      templateName,
+      customized: !!raw.customized,
+      w,
+      h,
+      fields,
+      lines,
+      logo,
+    };
+  }
+  function sheetTitleBlock(sh = dwg()) {
+    return normalizeTitleBlock(sh && sh.titleBlock);
+  }
+  function titleBlockSize(sh, frame) {
+    const cfg = sheetTitleBlock(sh);
+    return {
+      w: Math.min(cfg.w, frame.w),
+      h: Math.min(cfg.h, Math.max(16, frame.h * 0.45)),
+    };
+  }
+  function fieldDisplayLabel(f) {
+    if (!f) return '';
+    if (f.label !== undefined && f.label !== null) return String(f.label);
+    return f.labelKey ? T(f.labelKey) : '';
+  }
+  function loadCustomTitleTemplates() {
+    try {
+      const raw = storageGet(TB_STORAGE_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((x) => x && typeof x === 'object' && x.id && x.name).map((x) => {
+        const norm = normalizeTitleBlock(x);
+        return {
+          ...norm,
+          id: String(x.id),
+          name: String(x.name),
+          templateId: String(x.id),
+          templateName: String(x.name),
+          customized: false,
+          builtin: false,
+        };
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+  function saveCustomTitleTemplates(list) {
+    try {
+      return storageSet(TB_STORAGE_KEY, JSON.stringify(list));
+    } catch (_) {
+      return false;
+    }
+  }
+  function titleBlockTemplates() {
+    const builtins = TB_BUILTIN_IDS.map((id) => {
+      const b = builtinTitleBlock(id);
+      return { ...b, id, name: builtinTplLabel(id), builtin: true };
+    });
+    return [...builtins, ...loadCustomTitleTemplates()];
+  }
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ''));
+      fr.onerror = () => reject(new Error(T('draw.tbe.logoLoadErr')));
+      fr.readAsDataURL(file);
+    });
+  }
+  async function prepareLogoImage(input, curBox = null) {
+    if (!input) return null;
+    if (typeof input === 'object' && !(input instanceof Blob) && typeof input.src === 'string') {
+      return normalizeTitleLogo(input, 260, 80);
+    }
+    let dataUrl = '';
+    let fileName = 'Logo';
+    if (input instanceof Blob) {
+      if (typeof Store !== 'undefined' && Store.checkFileSize) {
+        const chk = Store.checkFileSize(input, 'image');
+        if (!chk.ok) throw new Error(chk.message || chk.error);
+      }
+      fileName = input.name || 'Logo';
+      if (/svg/i.test(input.type) || /\.svg$/i.test(fileName)) {
+        const svgTxt = await input.text();
+        if (typeof Store !== 'undefined' && Store.sanitizeSVG) {
+          const san = Store.sanitizeSVG(svgTxt, { name: fileName });
+          if (!san.ok) throw new Error(san.error);
+          dataUrl = 'data:image/svg+xml;base64,' + Store.bytesToBase64(new TextEncoder().encode(san.svg));
+        } else {
+          dataUrl = await readFileAsDataUrl(input);
+        }
+      } else {
+        dataUrl = await readFileAsDataUrl(input);
+      }
+    } else if (typeof input === 'string') {
+      dataUrl = input;
+    }
+    const cleanSrc = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl
+      ? Store.sanitizeImageDataUrl(dataUrl, { allowSvg: true })
+      : dataUrl;
+    if (!cleanSrc) throw new Error(T('draw.tbe.logoFormatErr'));
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error(T('draw.tbe.logoLoadErr')));
+      im.src = cleanSrc;
+    });
+    const natW = Math.max(1, img.naturalWidth || img.width || 128);
+    const natH = Math.max(1, img.naturalHeight || img.height || 128);
+    const scale = Math.min(1, 512 / Math.max(natW, natH));
+    const cw = Math.max(1, Math.round(natW * scale));
+    const ch = Math.max(1, Math.round(natH * scale));
+    let jpg = null;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.drawImage(img, 0, 0, cw, ch);
+      jpg = canvas.toDataURL('image/jpeg', 0.9);
+    } catch (_) {
+      jpg = null;
+    }
+    return {
+      src: cleanSrc,
+      jpg,
+      iw: cw,
+      ih: ch,
+      name: fileName,
+      x: curBox && curBox.x != null ? curBox.x : 124,
+      y: curBox && curBox.y != null ? curBox.y : 2,
+      w: curBox && curBox.w != null ? curBox.w : 22,
+      h: curBox && curBox.h != null ? curBox.h : 16,
+    };
+  }
   function norm3(v, fb = [1, -1, 1]) {
     const a = Array.isArray(v) && v.length >= 3 ? v : fb;
     const L = Math.hypot(a[0], a[1], a[2]);
@@ -379,7 +705,9 @@ const Drawing = (() => {
       revTable: normalizeRevTable(opts.revTable),
       freeTables: Array.isArray(opts.freeTables) ? opts.freeTables.map(normalizeFreeTable).filter(Boolean) : [],
       viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
+      titleBlock: opts.titleBlock ? normalizeTitleBlock(opts.titleBlock) : (tpl && tpl.titleBlock ? normalizeTitleBlock(deepClone(tpl.titleBlock)) : builtinTitleBlock('iso')),
       title: {
+        ...t0,
         titel: t0.titel || '',
         nummer: t0.nummer || '',
         name: t0.name || '',
@@ -422,6 +750,7 @@ const Drawing = (() => {
       revTable: raw && raw.revTable && typeof raw.revTable === 'object' ? raw.revTable : undefined,
       freeTables: raw && Array.isArray(raw.freeTables) ? raw.freeTables : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
+      titleBlock: raw && raw.titleBlock && typeof raw.titleBlock === 'object' ? raw.titleBlock : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
       Object.assign(s.title, raw.title);
@@ -478,6 +807,7 @@ const Drawing = (() => {
       if (cur) {
         cur.dimStyle = normDimStyle(cur.dimStyle);
         cur.projection = normProjection(cur.projection);
+        cur.titleBlock = normalizeTitleBlock(cur.titleBlock);
       }
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
@@ -647,6 +977,7 @@ const Drawing = (() => {
       if (Array.isArray(v) && v.length >= 2) nextVP[idMap.get(k) || k] = [Number(v[0]) || 0, Number(v[1]) || 0];
     }
     clone.viewPos = nextVP;
+    clone.titleBlock = normalizeTitleBlock(src.titleBlock);
     if (clone.title) clone.title.blatt = '';
     App.change('Blatt dupliziert', () => {
       const st2 = dwgState();
@@ -3636,7 +3967,7 @@ const Drawing = (() => {
     // ISO 5457: Heft-Rand links 20 mm; übrige Ränder 10 mm bei A4–A2, 20 mm bei A1–A0
     const m = sh.sheet === 'A1' || sh.sheet === 'A0' ? 20 : 10;
     const frame = { x: 20, y: m, w: W - 20 - m, h: H - 2 * m };
-    const tb = { w: Math.min(180, frame.w), h: 32 };
+    const tb = titleBlockSize(sh, frame);
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
     const bomRect = bomTableRect(sh, frame, tb, bomData);
     const revRect = revTableRect(sh, frame);
@@ -5826,7 +6157,7 @@ const Drawing = (() => {
     for (const dat of sh.datums || []) drawDatum(dat, lines, texts, lay, sh, dimAnchors);
     for (const fr of sh.gdtFrames || []) drawGdtFrame(fr, lines, texts, lay, sh, dimAnchors);
     // Schriftfeld, Stückliste & Tabellen
-    titleBlock(sh, lay, idx, total, lines, texts);
+    titleBlock(sh, lay, idx, total, lines, texts, images);
     drawBomTable(sh, lay, lines, texts);
     drawHoleTags(sh, lay, lines, texts);
     drawHoleTable(sh, lay, lines, texts);
@@ -5861,67 +6192,175 @@ const Drawing = (() => {
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
   }
-  function titleBlock(sh, lay, idx, total, lines, texts) {
-    const { frame, tb } = lay; const tbT = sh.title || {};
+  function fitLogoInBox(logo, bx, by, bw, bh) {
+    if (!logo || !logo.src || bw <= 0.5 || bh <= 0.5) return null;
+    const ar = Math.max(0.05, (Number(logo.iw) || 100) / Math.max(1, Number(logo.ih) || 100));
+    let w = bw, h = w / ar;
+    if (h > bh) { h = bh; w = h * ar; }
+    return {
+      x: bx + (bw - w) * 0.5,
+      y: by + (bh - h) * 0.5,
+      w,
+      h,
+      png: logo.src,
+      jpg: logo.jpg || null,
+      iw: logo.iw || 100,
+      ih: logo.ih || 100,
+      cls: 'tb-logo',
+      tbLogo: true,
+    };
+  }
+  function titleBlock(sh, lay, idx, total, lines, texts, images = []) {
+    const { frame, tb } = lay;
+    const cfg = sheetTitleBlock(sh);
+    const tbT = sh.title || {};
     const x1 = frame.x + frame.w, y1 = frame.y + frame.h, x0 = x1 - tb.w, y0 = y1 - tb.h;
-    lines.push({ rect: [x0, y0, tb.w, tb.h], cls: 'frame' });
-    // links: 4 Zeilen × 2 Spalten (Blatt + Format geteilt) · Mitte: Benennung · rechts: Projektionssymbol
-    const cA = x0, cB = x0 + 32, cB2 = x0 + 54, cC = x0 + 72, cD = x1 - 32;
-    const rows = [y0, y0 + 8, y0 + 16, y0 + 24, y1];
-    for (const r of rows.slice(1, -1)) lines.push({ pts: [[cA, r], [cC, r]], cls: 'thin' });
-    lines.push({ pts: [[cB, y0], [cB, y1]], cls: 'thin' }, { pts: [[cB2, rows[2]], [cB2, rows[3]]], cls: 'thin' }, { pts: [[cC, y0], [cC, y1]], cls: 'thin' }, { pts: [[cD, y0], [cD, y1]], cls: 'thin' });
-    lines.push({ pts: [[cC, y0 + 24], [cD, y0 + 24]], cls: 'thin' }, { pts: [[cD, y0 + 20], [x1, y0 + 20]], cls: 'thin' });
-    const lab = (x, y, t) => texts.push({ x: x + 1.2, y: y + 2.6, t, size: 1.9, anchor: 'start', cls: 'lab' });
-    const val = (x, y, t, w, size = 3) => { const s = fitSize(t || '', w - 2.6, size, 1.8); texts.push({ x: x + 1.5, y: y + 6.6, t: clipText(t || '', w - 2.6, s), size: s, anchor: 'start', cls: 'val' }); };
-    lab(cA, rows[0], T('draw.tb.drawn')); val(cA, rows[0], tbT.name, 32, 2.8);
-    lab(cB, rows[0], T('draw.tb.date')); val(cB, rows[0], tbT.datum, 40, 2.8);
-    lab(cA, rows[1], T('draw.tb.material')); val(cA, rows[1], tbT.werkstoff, 32, 2.8);
-    lab(cB, rows[1], T('draw.tb.scale')); val(cB, rows[1], scaleText(lay.s), 40, 3.2);
-    lab(cA, rows[2], T('draw.tb.company')); val(cA, rows[2], tbT.firma, 32, 2.6);
-    lab(cB, rows[2], T('draw.tb.sheet')); val(cB, rows[2], tbT.blatt ? tbT.blatt : `${idx + 1}/${total}`, 22, 2.8);
-    lab(cB2, rows[2], T('draw.tb.format')); val(cB2, rows[2], sh.sheet, 18, 2.8);
-    lab(cA, rows[3], T('draw.tb.dwgNo')); val(cA, rows[3], tbT.nummer, 32, 2.8);
-    lab(cB, rows[3], T('draw.tb.genTol')); val(cB, rows[3], 'ISO 2768-m', 40, 2.6);
-    // Benennung, bei Bedarf zweizeilig
-    lab(cC, rows[0], T('draw.tb.title'));
-    const title = String(tbT.titel || App.doc.name || '');
-    const tw = cD - cC - 3;
-    let ts = fitSize(title, tw, 6, 3.4);
-    if (textW(title, ts) > tw) {
-      const words = title.split(/\s+/); let l1 = '', l2 = '';
-      for (const w of words) { if (!l2 && textW((l1 + ' ' + w).trim(), 4.2) <= tw) l1 = (l1 + ' ' + w).trim(); else l2 = (l2 + ' ' + w).trim(); }
-      ts = Math.min(fitSize(l1, tw, 4.2, 2.6), fitSize(l2, tw, 4.2, 2.6));
-      texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
-      texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
-    } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
+    const sx = tb.w / Math.max(1, cfg.w), sy = tb.h / Math.max(1, cfg.h);
+    lines.push({ rect: [x0, y0, tb.w, tb.h], cls: 'frame', tbPart: 'frame' });
     const unitLabel = sheetDimStyle(sh).dual ? (Units.key() === 'in' ? 'in [mm]' : `${Units.label()} [in]`) : Units.label();
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: unitLabel }), tw, 2), size: 2, anchor: 'start', cls: 'lab' });
-    // Projektionssymbol nach ISO 5456-2: Methode 1 (Europa / ISO E) oder Methode 3 (USA / ISO A)
-    const projMode = normProjection(sh.projection);
-    lab(cD, rows[0], T('draw.tb.projection'));
-    const cy = y0 + 11.5;
-    if (projMode === 'us') {
-      const ccx = cD + 8.5;
-      lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
-      lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
-      const tx = cD + 16.5;
-      lines.push({ pts: [[tx, cy - 1.6], [tx + 10, cy - 3], [tx + 10, cy + 3], [tx, cy + 1.6], [tx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
-      lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr' });
-      texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2 (A)', size: 2, anchor: 'start', cls: 'lab', projMode: 'us' });
-      const mTxt = T('draw.tb.method3');
-      const mSz = fitSize(mTxt, 29.6, 2.5, 1.8);
-      texts.push({ x: cD + 1.2, y: y0 + 30.4, t: clipText(mTxt, 29.6, mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'us' });
-    } else {
-      const sx = cD + 4.5;
-      lines.push({ pts: [[sx, cy - 1.6], [sx + 10, cy - 3], [sx + 10, cy + 3], [sx, cy + 1.6], [sx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
-      lines.push({ pts: [[sx - 1.5, cy], [sx + 11.5, cy]], cls: 'ctr' });
-      const ccx = sx + 18.5;
-      lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
-      lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
-      texts.push({ x: cD + 1.2, y: y0 + 26.2, t: 'ISO 5456-2 (E)', size: 2, anchor: 'start', cls: 'lab', projMode: 'eu' });
-      const mTxt = T('draw.tb.method1Iso');
-      const mSz = fitSize(mTxt, 29.6, 2.5, 1.8);
-      texts.push({ x: cD + 1.2, y: y0 + 30.4, t: clipText(mTxt, 29.6, mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'eu' });
+    const edgeSeen = new Set();
+    const pushCellEdge = (ax, ay, bx, by) => {
+      const eps = 0.05;
+      if (Math.abs(ax - bx) < eps && (Math.abs(ax - x0) < eps || Math.abs(ax - x1) < eps)) return;
+      if (Math.abs(ay - by) < eps && (Math.abs(ay - y0) < eps || Math.abs(ay - y1) < eps)) return;
+      const k = (n) => Math.round(n * 20);
+      const p1 = `${k(ax)},${k(ay)}`, p2 = `${k(bx)},${k(by)}`;
+      const key = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
+      if (edgeSeen.has(key)) return;
+      edgeSeen.add(key);
+      lines.push({ pts: [[ax, ay], [bx, by]], cls: 'thin', tbPart: 'grid' });
+    };
+    let logoDrawn = false;
+    for (const f of cfg.fields) {
+      const fx = x0 + f.x * sx, fy = y0 + f.y * sy, fw = f.w * sx, fh = f.h * sy;
+      if (f.border !== false) {
+        pushCellEdge(fx, fy, fx + fw, fy);
+        pushCellEdge(fx + fw, fy, fx + fw, fy + fh);
+        pushCellEdge(fx, fy + fh, fx + fw, fy + fh);
+        pushCellEdge(fx, fy, fx, fy + fh);
+      }
+      const lbl = fieldDisplayLabel(f);
+      if (f.kind === 'projection') {
+        const projMode = normProjection(sh.projection);
+        if (lbl) texts.push({ x: fx + 1.2, y: fy + Math.min(2.6, fh * 0.25), t: clipText(lbl, Math.max(2, fw - 2.4), 1.9), size: 1.9, anchor: 'start', cls: 'lab', tbField: f.id, tbKey: f.key, tbRole: 'label' });
+        if (fh >= 26 && fw >= 28) {
+          lines.push({ pts: [[fx, fy + 20 * sy], [fx + fw, fy + 20 * sy]], cls: 'thin', tbPart: 'grid' });
+          const cy = fy + 11.5 * sy;
+          if (projMode === 'us') {
+            const ccx = fx + 8.5 * sx;
+            lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
+            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+            const tx = fx + 16.5 * sx;
+            lines.push({ pts: [[tx, cy - 1.6], [tx + 10, cy - 3], [tx + 10, cy + 3], [tx, cy + 1.6], [tx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
+            lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr' });
+            texts.push({ x: fx + 1.2, y: fy + 26.2 * sy, t: 'ISO 5456-2 (A)', size: 2, anchor: 'start', cls: 'lab', projMode: 'us' });
+            const mTxt = T('draw.tb.method3');
+            const mSz = fitSize(mTxt, Math.max(6, fw - 2.4), 2.5, 1.8);
+            texts.push({ x: fx + 1.2, y: fy + 30.4 * sy, t: clipText(mTxt, Math.max(6, fw - 2.4), mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'us' });
+          } else {
+            const sx0 = fx + 4.5 * sx;
+            lines.push({ pts: [[sx0, cy - 1.6], [sx0 + 10, cy - 3], [sx0 + 10, cy + 3], [sx0, cy + 1.6], [sx0, cy - 1.6]], cls: 'thin', projSym: 'cone' });
+            lines.push({ pts: [[sx0 - 1.5, cy], [sx0 + 11.5, cy]], cls: 'ctr' });
+            const ccx = sx0 + 18.5;
+            lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
+            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+            texts.push({ x: fx + 1.2, y: fy + 26.2 * sy, t: 'ISO 5456-2 (E)', size: 2, anchor: 'start', cls: 'lab', projMode: 'eu' });
+            const mTxt = T('draw.tb.method1Iso');
+            const mSz = fitSize(mTxt, Math.max(6, fw - 2.4), 2.5, 1.8);
+            texts.push({ x: fx + 1.2, y: fy + 30.4 * sy, t: clipText(mTxt, Math.max(6, fw - 2.4), mSz), size: mSz, anchor: 'start', cls: 'val', projMode: 'eu' });
+          }
+        } else {
+          const sc = clamp(Math.min(fw / 30, Math.max(0.35, (fh - 5) / 10)), 0.35, 0.9);
+          const cy = fy + (lbl ? fh * 0.5 : fh * 0.44);
+          const r1 = 1.6 * sc, r2 = 3.0 * sc, cW = 10 * sc, gap = 2.5 * sc, totW = r2 * 2 + gap + cW;
+          const xStart = fx + (fw - totW) * 0.5;
+          if (projMode === 'us') {
+            const ccx = xStart + r2;
+            lines.push({ circle: [ccx, cy, r1], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, r2], cls: 'thin', projSym: 'circles' });
+            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr' });
+            const tx = xStart + r2 * 2 + gap;
+            lines.push({ pts: [[tx, cy - r1], [tx + cW, cy - r2], [tx + cW, cy + r2], [tx, cy + r1], [tx, cy - r1]], cls: 'thin', projSym: 'cone' });
+            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr' });
+            texts.push({ x: fx + fw * 0.5, y: fy + fh - 1.3, t: 'ISO 5456-2 (A)', size: clamp(fh * 0.11, 1.5, 1.9), anchor: 'middle', cls: 'lab', projMode: 'us' });
+          } else {
+            const tx = xStart;
+            lines.push({ pts: [[tx, cy - r1], [tx + cW, cy - r2], [tx + cW, cy + r2], [tx, cy + r1], [tx, cy - r1]], cls: 'thin', projSym: 'cone' });
+            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr' });
+            const ccx = tx + cW + gap + r2;
+            lines.push({ circle: [ccx, cy, r1], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, r2], cls: 'thin', projSym: 'circles' });
+            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr' });
+            texts.push({ x: fx + fw * 0.5, y: fy + fh - 1.3, t: 'ISO 5456-2 (E)', size: clamp(fh * 0.11, 1.5, 1.9), anchor: 'middle', cls: 'lab', projMode: 'eu' });
+          }
+        }
+        continue;
+      }
+      if (f.kind === 'logo') {
+        const padT = lbl ? 3.2 : 1.0;
+        if (lbl) texts.push({ x: fx + 1.2, y: fy + 2.4, t: clipText(lbl, Math.max(2, fw - 2.4), 1.8), size: 1.8, anchor: 'start', cls: 'lab', tbField: f.id, tbKey: f.key, tbRole: 'label' });
+        if (cfg.logo && cfg.logo.src) {
+          const placed = fitLogoInBox(cfg.logo, fx + 1.0, fy + padT, Math.max(1, fw - 2.0), Math.max(1, fh - padT - 1.0));
+          if (placed) { images.push(placed); logoDrawn = true; }
+        }
+        continue;
+      }
+      if (f.kind === 'title') {
+        if (lbl) texts.push({ x: fx + 1.2, y: fy + 2.6, t: clipText(lbl, Math.max(2, fw - 2.4), 1.9), size: 1.9, anchor: 'start', cls: 'lab', tbField: f.id, tbKey: f.key, tbRole: 'label' });
+        const rawVal = tbT[f.key] != null && tbT[f.key] !== '' ? tbT[f.key] : (f.defaultValue || App.doc.name || '');
+        const title = String(rawVal);
+        const tw = Math.max(6, fw - 3);
+        const maxTs = Math.min(Number(f.fontSize) || 6, Math.max(2.6, fh * 0.34));
+        const tx = f.align === 'middle' ? fx + fw * 0.5 : f.align === 'end' ? fx + fw - 1.5 : fx + 1.5;
+        const anc = f.align || 'start';
+        let ts = fitSize(title, tw, maxTs, 2.8);
+        if (textW(title, ts) > tw && fh >= 14) {
+          const words = title.split(/\s+/); let l1 = '', l2 = '';
+          for (const w of words) { if (!l2 && textW((l1 + ' ' + w).trim(), 4.2) <= tw) l1 = (l1 + ' ' + w).trim(); else l2 = (l2 + ' ' + w).trim(); }
+          ts = Math.min(fitSize(l1, tw, 4.2, 2.4), fitSize(l2, tw, 4.2, 2.4));
+          const yBase = fy + Math.min(fh * 0.45, 10.5);
+          texts.push({ x: tx, y: yBase, t: clipText(l1, tw, ts), size: ts, anchor: anc, cls: 'title', bold: true, tbField: f.id, tbKey: f.key, tbRole: 'value' });
+          texts.push({ x: tx, y: yBase + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: anc, cls: 'title', bold: true, tbField: f.id, tbKey: f.key, tbRole: 'value' });
+        } else {
+          texts.push({ x: tx, y: fy + Math.min(fh - 2.2, Math.max(fh * 0.62, (lbl ? 4.2 : 1.5) + ts * 0.95)), t: clipText(title, tw, ts), size: ts, anchor: anc, cls: 'title', bold: true, tbField: f.id, tbKey: f.key, tbRole: 'value' });
+        }
+        continue;
+      }
+      if (f.kind === 'auto' && f.autoType === 'footer') {
+        const tw = Math.max(4, fw - 3);
+        texts.push({ x: fx + 1.5, y: fy + fh * 0.675, t: clipText(T('draw.tb.footer', { sheet: sh.name, u: unitLabel }), tw, 2), size: 2, anchor: 'start', cls: 'lab', tbField: f.id, tbKey: f.key, tbRole: 'value' });
+        continue;
+      }
+      const labSize = clamp(fh * 0.24, 1.5, 1.9);
+      if (lbl) texts.push({ x: fx + 1.2, y: fy + Math.min(2.6, fh * 0.34), t: clipText(lbl, Math.max(2, fw - 2.4), labSize), size: labSize, anchor: 'start', cls: 'lab', tbField: f.id, tbKey: f.key, tbRole: 'label' });
+      let valStr = '';
+      if (f.kind === 'auto') {
+        if (f.autoType === 'scale') valStr = scaleText(lay.s);
+        else if (f.autoType === 'sheet') {
+          const sk = f.key || 'blatt';
+          valStr = tbT[sk] ? String(tbT[sk]) : `${idx + 1}/${total}`;
+        } else if (f.autoType === 'format') valStr = sh.sheet;
+        else if (f.autoType === 'unit') valStr = unitLabel;
+        else if (f.autoType === 'mass') {
+          valStr = bomMeasure && bomMeasure.mass != null
+            ? (bomMeasure.mass >= 1000 ? `${fmtFixed(bomMeasure.mass / 1000, 2)} kg` : `${fmtFixed(bomMeasure.mass, 1)} g`)
+            : '–';
+        }
+      } else {
+        valStr = tbT[f.key] !== undefined ? String(tbT[f.key]) : String(f.defaultValue || '');
+      }
+      const vw = Math.max(2, fw - 2.6);
+      const maxS = Math.min(Number(f.fontSize) || 2.8, Math.max(1.8, fh * 0.45));
+      const s = fitSize(valStr, vw, maxS, 1.5);
+      const vx = f.align === 'middle' ? fx + fw * 0.5 : f.align === 'end' ? fx + fw - 1.5 : fx + 1.5;
+      const vy = lbl ? (fy + Math.min(fh - 1.4, Math.max(fh * 0.78, 2.6 + s * 1.15))) : (fy + fh * 0.5 + s * 0.35);
+      texts.push({ x: vx, y: vy, t: clipText(valStr, vw, s), size: s, anchor: f.align || 'start', cls: f.bold ? 'val tb-bold' : 'val', bold: !!f.bold, tbField: f.id, tbKey: f.key, tbRole: 'value' });
+    }
+    if (cfg.logo && cfg.logo.src && !logoDrawn) {
+      const placed = fitLogoInBox(cfg.logo, x0 + cfg.logo.x * sx, y0 + cfg.logo.y * sy, cfg.logo.w * sx, cfg.logo.h * sy);
+      if (placed) images.push(placed);
+    }
+    for (const ln of cfg.lines || []) {
+      const cls = ln.style === 'thick' ? 'frame' : ln.style === 'dashed' ? 'hid' : 'thin';
+      lines.push({ pts: [[x0 + ln.x1 * sx, y0 + ln.y1 * sy], [x0 + ln.x2 * sx, y0 + ln.y2 * sy]], cls, tbLine: ln.id });
     }
   }
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
@@ -5932,7 +6371,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}text.tb-bold{font-weight:700}.tb-logo{pointer-events:none}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -5985,6 +6424,8 @@ const Drawing = (() => {
         if (l.dimId) el.dataset.dimId = l.dimId;
         if (l.tableKind) el.dataset.tableKind = l.tableKind;
         if (l.htTag) el.dataset.htTag = l.htTag;
+        if (l.tbLine) el.dataset.tbLine = l.tbLine;
+        if (l.tbPart) el.dataset.tbPart = l.tbPart;
       }
       g.append(el);
     };
@@ -5993,13 +6434,14 @@ const Drawing = (() => {
       const src = im.png || im.jpg;
       if (!src) continue;
       const el = document.createElementNS(NS, 'image');
-      el.setAttribute('class', 'shade-img');
+      el.setAttribute('class', im.cls || 'shade-img');
       el.setAttribute('x', f(im.x)); el.setAttribute('y', f(im.y));
       el.setAttribute('width', f(im.w)); el.setAttribute('height', f(im.h));
       el.setAttribute('preserveAspectRatio', 'none');
       el.setAttribute('href', src);
       if (!interactive) el.setAttributeNS(XLINK, 'xlink:href', src);
       if (interactive && im.viewKey) el.dataset.view = im.viewKey;
+      if (interactive && im.tbLogo) el.dataset.tbLogo = '1';
       g.append(el);
     }
     for (const l of lines) if (l.cls !== 'paper') appendLine(l);
@@ -6032,6 +6474,9 @@ const Drawing = (() => {
         if (t.revCol) el.dataset.revCol = t.revCol;
         if (t.ftRow != null) el.dataset.ftRow = String(t.ftRow);
         if (t.ftCol != null) el.dataset.ftCol = String(t.ftCol);
+        if (t.tbField) el.dataset.tbField = t.tbField;
+        if (t.tbKey) el.dataset.tbKey = t.tbKey;
+        if (t.tbRole) el.dataset.tbRole = t.tbRole;
       }
       el.textContent = t.t;
       g.append(el);
@@ -10495,6 +10940,10 @@ const Drawing = (() => {
           };
       box.append(c);
     }
+    const bTb = h('button', { type: 'button', class: 'btn', id: 'dw-menu-titleblock', 'data-help': 'drawingTitleBlock' });
+    bTb.innerHTML = icon('edit') + esc(T('draw.tb.editBtn'));
+    bTb.onclick = () => { UI.closePop(); openTitleBlockEditor(); };
+    box.append(bTb);
     UI.pop(anchor, box);
   }
   function viewMenu(anchor) {
@@ -10688,7 +11137,7 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'auxlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'tbl-title' || t.cls === 'tbl-th' || t.cls === 'ht-tag-text' || t.cls === 'balloon-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
+      const fnt = (t.bold || t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'auxlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'tbl-title' || t.cls === 'tbl-th' || t.cls === 'ht-tag-text' || t.cls === 'balloon-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
       const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' ? '0.333' : '0.067');
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
@@ -10830,8 +11279,8 @@ const Drawing = (() => {
       stats.lines++; bumpLayer(ly);
     };
     for (const l of cur.lines || []) {
-      const ly = (l.thread || l.threadEnd) ? 'GEWINDE' : (l.cls === 'breakline' && l.secId ? 'SCHNITTLINIE' : layer[l.cls]); if (!ly) continue;
-      const lt = l.cls === 'breakline' ? 'CONTINUOUS' : ((l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
+      const ly = l.tbLine ? 'RAHMEN' : (l.thread || l.threadEnd) ? 'GEWINDE' : (l.cls === 'breakline' && l.secId ? 'SCHNITTLINIE' : layer[l.cls]); if (!ly) continue;
+      const lt = l.tbLine ? (l.cls === 'hid' ? 'DASHED' : null) : l.cls === 'breakline' ? 'CONTINUOUS' : ((l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
       if (l.rect) {
         const [x, y, w, hh] = l.rect;
         const c = [[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]];
@@ -11336,9 +11785,67 @@ const Drawing = (() => {
     }
     w.append(vSec);
 
-    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.titleBlock')));
-    const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); const inp = f.querySelector('input'); inp.addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }); return f; };
-    sec.append(tf('titel', T('draw.tb.title'), App.doc.name), h('div', { class: 'fields' }, tf('nummer', T('draw.tb.dwgNo')), tf('blatt', T('draw.tb.sheet'), `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', T('draw.panel.drawnBy')), tf('datum', T('draw.tb.date'))), h('div', { class: 'fields' }, tf('werkstoff', T('draw.tb.material')), tf('firma', T('draw.tb.company'))));
+    const cfg = sheetTitleBlock(d);
+    const sec = h('div', { class: 'section', id: 'dw-tb-sec', 'data-help': 'drawingTitleBlock' }, h('div', { class: 'section-h' }, T('draw.panel.titleBlock')));
+    const allTpls = titleBlockTemplates();
+    const builtins = allTpls.filter((t) => t.builtin).map((t) => [t.id, t.name]);
+    const customs = allTpls.filter((t) => !t.builtin).map((t) => [t.id, t.name]);
+    const hasMatch = !cfg.customized && allTpls.some((t) => t.id === cfg.templateId);
+    const tplOpts = [];
+    if (!hasMatch) tplOpts.push(['__edited__', T('draw.tb.tplEdited', { name: cfg.templateName || 'Eigenes' })]);
+    tplOpts.push({ group: T('draw.tb.tplGroupBuiltin'), options: builtins });
+    if (customs.length) tplOpts.push({ group: T('draw.tb.tplGroupCustom'), options: customs });
+    const tplFld = UI.selectField({
+      id: 'dw-tb-template',
+      label: T('draw.tb.tplLabel'),
+      value: hasMatch ? cfg.templateId : '__edited__',
+      options: tplOpts,
+      onChange: (v) => { if (v !== '__edited__') applyTitleBlockTemplate(v); },
+    });
+    tplFld.dataset.help = 'drawingTitleBlock';
+    sec.append(tplFld);
+    const bTbEdit = h('button', { type: 'button', class: 'btn', id: 'dw-tb-edit', 'data-help': 'drawingTitleBlock' });
+    bTbEdit.innerHTML = icon('edit') + esc(T('draw.tb.editBtn'));
+    bTbEdit.onclick = () => openTitleBlockEditor();
+    const bTbSave = h('button', { type: 'button', class: 'btn', id: 'dw-tb-save-tpl', 'data-help': 'drawingTitleBlock' });
+    bTbSave.innerHTML = icon('save') + esc(T('draw.tb.saveTplBtn'));
+    bTbSave.onclick = async () => {
+      const defName = cfg.customized ? `${cfg.templateName || 'Schriftfeld'} Eigen` : (cfg.templateName || 'Meine Vorlage');
+      const nm = await UI.prompt(T('draw.tb.saveTplTitle'), T('draw.tb.saveTplPrompt'), defName, T('common.save') || 'Speichern');
+      if (nm != null) saveTitleBlockTemplate(nm);
+    };
+    sec.append(h('div', { class: 'btn-row', style: { marginBottom: '8px' } }, bTbEdit, bTbSave));
+    const tf = (k, label, ph, defVal = '') => {
+      const curVal = d.title[k] !== undefined ? d.title[k] : defVal;
+      const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: curVal, placeholder: ph || '', style: { fontFamily: 'var(--font)' } })));
+      const inp = f.querySelector('input');
+      inp.addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert'));
+      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+      return f;
+    };
+    const seenKeys = new Set();
+    const titleFields = [];
+    const subFields = [];
+    for (const f of cfg.fields) {
+      const isEdit = f.kind === 'title' || f.kind === 'field' || (f.kind === 'auto' && f.autoType === 'sheet');
+      if (!isEdit || !f.key || seenKeys.has(f.key)) continue;
+      seenKeys.add(f.key);
+      if (f.kind === 'title') titleFields.push(f);
+      else subFields.push(f);
+    }
+    for (const f of titleFields) {
+      sec.append(tf(f.key, fieldDisplayLabel(f) || T('draw.tb.title'), App.doc.name, ''));
+    }
+    for (let i = 0; i < subFields.length; i += 2) {
+      const pair = subFields.slice(i, i + 2).map((f) => {
+        const lbl = fieldDisplayLabel(f) || (f.key === 'name' ? T('draw.panel.drawnBy') : f.key);
+        const ph = f.autoType === 'sheet' ? `${idx + 1}/${all.length}` : (f.defaultValue || '');
+        const def = f.kind === 'field' ? (f.defaultValue || '') : '';
+        return tf(f.key, lbl, ph, def);
+      });
+      if (pair.length === 2) sec.append(h('div', { class: 'fields' }, pair[0], pair[1]));
+      else sec.append(pair[0]);
+    }
     w.append(sec);
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.sheetHeading')));
     info.append(h('div', { class: 'mini-list' },
@@ -12535,6 +13042,631 @@ const Drawing = (() => {
     w.append(h('div', { class: 'hint-box', html: T('draw.panel.helpHintHtml') }));
     body.append(w);
   }
+  // ---------- Schriftfeld-Aktionen & Editor (ZE-30) ----------
+  function setTitleBlock(nextCfg, undoLabel = 'Schriftfeld geändert') {
+    const norm = normalizeTitleBlock(nextCfg);
+    App.change(undoLabel, () => {
+      dwg().titleBlock = norm;
+    });
+    if (App.mode === 'drawing') {
+      render();
+      Panels.renderRight();
+    }
+    return norm;
+  }
+  function applyTitleBlockTemplate(id) {
+    const tpl = titleBlockTemplates().find((t) => t.id === id);
+    if (!tpl) return false;
+    const next = normalizeTitleBlock(deepClone(tpl));
+    next.templateId = tpl.id;
+    next.templateName = tpl.name;
+    next.customized = false;
+    setTitleBlock(next, 'Schriftfeld-Vorlage gewechselt');
+    UI.toast(T('draw.tb.tplAppliedToast', { name: tpl.name }), { icon: 'sheet', ms: 2600 });
+    return true;
+  }
+  function saveTitleBlockTemplate(name, cfg = null) {
+    const clean = String(name || '').trim();
+    if (!clean) {
+      UI.toast(T('draw.tb.tplNeedName'), { kind: 'warn', icon: 'info' });
+      return null;
+    }
+    const base = normalizeTitleBlock(deepClone(cfg || sheetTitleBlock()));
+    const list = loadCustomTitleTemplates();
+    const existing = list.find((x) => x.name.toLowerCase() === clean.toLowerCase());
+    const id = existing ? existing.id : uid('tbtpl');
+    const entry = {
+      ...base,
+      id,
+      name: clean,
+      templateId: id,
+      templateName: clean,
+      customized: false,
+      builtin: false,
+    };
+    const nextList = existing ? list.map((x) => (x.id === id ? entry : x)) : [...list, entry];
+    saveCustomTitleTemplates(nextList);
+    if (App.doc && App.doc.drawing) {
+      App.change('Schriftfeld-Vorlage gespeichert', () => {
+        const cur = dwg();
+        const curCfg = normalizeTitleBlock(deepClone(cfg || cur.titleBlock));
+        curCfg.templateId = id;
+        curCfg.templateName = clean;
+        curCfg.customized = false;
+        cur.titleBlock = curCfg;
+      });
+    }
+    if (App.mode === 'drawing') {
+      render();
+      Panels.renderRight();
+    }
+    UI.toast(T('draw.tb.tplSavedToast', { name: clean }), { icon: 'save', ms: 3200 });
+    return entry;
+  }
+  function deleteTitleBlockTemplate(id) {
+    const list = loadCustomTitleTemplates();
+    const hit = list.find((x) => x.id === id);
+    if (!hit) return false;
+    saveCustomTitleTemplates(list.filter((x) => x.id !== id));
+    if (App.doc && App.doc.drawing) {
+      const s = dwg();
+      if (s && s.titleBlock && s.titleBlock.templateId === id) {
+        s.titleBlock.customized = true;
+      }
+    }
+    if (App.mode === 'drawing') {
+      render();
+      Panels.renderRight();
+    }
+    UI.toast(T('draw.tb.tplDeletedToast', { name: hit.name }), { icon: 'trash', ms: 2400 });
+    return true;
+  }
+  function nextNewFieldPlacement(cfg) {
+    const rowH = 8;
+    if (cfg.h + rowH <= 80) {
+      const y = cfg.h;
+      cfg.h = round(cfg.h + rowH, 1);
+      return { x: 0, y, w: cfg.w, h: rowH };
+    }
+    return { x: 0, y: Math.max(0, cfg.h - rowH), w: Math.min(60, cfg.w), h: rowH };
+  }
+  function addTitleBlockField(opts = {}) {
+    const cfg = deepClone(sheetTitleBlock());
+    const used = new Set((cfg.fields || []).map((f) => f.key));
+    const place = (opts.x != null && opts.y != null)
+      ? { x: opts.x, y: opts.y, w: opts.w || 40, h: opts.h || 8 }
+      : nextNewFieldPlacement(cfg);
+    const lbl = opts.label != null ? String(opts.label) : T('draw.tbe.newFieldLabel');
+    const nf = normalizeTitleField({
+      id: uid('tbf'),
+      key: cleanFieldKey(opts.key || lbl, used),
+      label: lbl,
+      labelKey: null,
+      kind: opts.kind || 'field',
+      autoType: opts.autoType || null,
+      ...place,
+      fontSize: opts.fontSize || 2.8,
+      align: opts.align || 'start',
+      bold: !!opts.bold,
+      defaultValue: opts.defaultValue || '',
+      border: opts.border !== false,
+    }, cfg.w, cfg.h);
+    cfg.fields.push(nf);
+    cfg.customized = true;
+    setTitleBlock(cfg, 'Schriftfeld-Feld ergänzt');
+    return nf;
+  }
+  function removeTitleBlockField(fieldId) {
+    const cfg = deepClone(sheetTitleBlock());
+    const n0 = cfg.fields.length;
+    cfg.fields = cfg.fields.filter((f) => f.id !== fieldId);
+    if (cfg.fields.length === n0) return false;
+    cfg.customized = true;
+    setTitleBlock(cfg, 'Schriftfeld-Feld entfernt');
+    return true;
+  }
+  function addTitleBlockLine(opts = {}) {
+    const cfg = deepClone(sheetTitleBlock());
+    const nl = normalizeTitleLine({
+      id: uid('tbln'),
+      x1: opts.x1 != null ? opts.x1 : 0,
+      y1: opts.y1 != null ? opts.y1 : round(cfg.h * 0.5, 1),
+      x2: opts.x2 != null ? opts.x2 : cfg.w,
+      y2: opts.y2 != null ? opts.y2 : round(cfg.h * 0.5, 1),
+      style: opts.style || 'thick',
+    }, cfg.w, cfg.h);
+    cfg.lines.push(nl);
+    cfg.customized = true;
+    setTitleBlock(cfg, 'Schriftfeld-Linie ergänzt');
+    return nl;
+  }
+  function removeTitleBlockLine(lineId) {
+    const cfg = deepClone(sheetTitleBlock());
+    const n0 = cfg.lines.length;
+    cfg.lines = cfg.lines.filter((l) => l.id !== lineId);
+    if (cfg.lines.length === n0) return false;
+    cfg.customized = true;
+    setTitleBlock(cfg, 'Schriftfeld-Linie entfernt');
+    return true;
+  }
+  async function setTitleBlockLogo(input) {
+    const cfg = deepClone(sheetTitleBlock());
+    if (!input) {
+      cfg.logo = null;
+      cfg.customized = true;
+      setTitleBlock(cfg, 'Schriftfeld-Logo entfernt');
+      return null;
+    }
+    const prepared = await prepareLogoImage(input, cfg.logo);
+    cfg.logo = normalizeTitleLogo(prepared, cfg.w, cfg.h);
+    cfg.customized = true;
+    setTitleBlock(cfg, 'Schriftfeld-Logo geändert');
+    return cfg.logo;
+  }
+  function openTitleBlockEditor() {
+    const sh = dwg();
+    const all = sheets(), idx = activeIndex();
+    let draft = deepClone(sheetTitleBlock(sh));
+    let activeTab = 'fields';
+    let selFieldId = draft.fields[0] ? draft.fields[0].id : null;
+    let selLineId = draft.lines[0] ? draft.lines[0].id : null;
+
+    const wrapEl = h('div', { class: 'dw-tbe-wrap' });
+    const topBar = h('div', { class: 'dw-tbe-bar' });
+    const prevWrap = h('div', { class: 'dw-tbe-preview', id: 'dw-tbe-preview' });
+    const tabsRow = h('div', { class: 'dw-tbe-tabs' });
+    const bodyEl = h('div');
+    wrapEl.append(topBar, prevWrap, tabsRow, bodyEl);
+
+    const numInp = (id, label, val, min, max, step, onCommit) => {
+      const inp = h('input', { id, type: 'number', min: String(min), max: String(max), step: String(step), value: String(val) });
+      inp.addEventListener('keydown', (e) => e.stopPropagation());
+      const commit = () => {
+        const n = Number(String(inp.value).replace(',', '.'));
+        if (!Number.isFinite(n)) return;
+        const c = round(clamp(n, min, max), 2);
+        inp.value = String(c);
+        onCommit(c);
+      };
+      inp.addEventListener('change', commit);
+      return h('div', { class: 'field' }, h('label', { for: id }, label), h('div', { class: 'inp' }, inp, h('span', { class: 'unit' }, 'mm')));
+    };
+
+    const txtInp = (id, label, val, { live = false, ph = '', onCommit }) => {
+      const inp = h('input', { id, type: 'text', value: val ?? '', placeholder: ph, autocomplete: 'off', spellcheck: 'false' });
+      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+      if (live) inp.addEventListener('input', () => onCommit(inp.value));
+      inp.addEventListener('change', () => onCommit(inp.value));
+      return h('div', { class: 'field' }, h('label', { for: id }, label), h('div', { class: 'inp' }, inp));
+    };
+
+    function renderPreview() {
+      prevWrap.innerHTML = '';
+      const W = draft.w + 8, H = draft.h + 8;
+      const tmpSh = { ...sh, titleBlock: draft };
+      const lay = { frame: { x: 4, y: 4, w: draft.w, h: draft.h }, tb: { w: draft.w, h: draft.h }, s: layout ? layout.s : 1 };
+      const lines = [], texts = [], images = [];
+      titleBlock(tmpSh, lay, idx, all.length, lines, texts, images);
+      const svgEl = buildSheetSVGElement({ layout: { W, H }, lines, texts, images }, {
+        widthAttr: `${Math.min(720, draft.w * 3.4)}px`,
+        heightAttr: `${Math.min(200, (draft.h + 8) * 3.4)}px`,
+        transparent: true,
+        interactive: true,
+      });
+      const NS = 'http://www.w3.org/2000/svg';
+      const g = svgEl.querySelector('g') || svgEl;
+      if (activeTab === 'lines' && selLineId) {
+        const sl = draft.lines.find((l) => l.id === selLineId);
+        if (sl) {
+          const hl = document.createElementNS(NS, 'line');
+          hl.setAttribute('x1', String(4 + sl.x1));
+          hl.setAttribute('y1', String(4 + sl.y1));
+          hl.setAttribute('x2', String(4 + sl.x2));
+          hl.setAttribute('y2', String(4 + sl.y2));
+          hl.setAttribute('class', 'tbe-line-sel');
+          g.append(hl);
+        }
+      }
+      for (const f of draft.fields) {
+        const r = document.createElementNS(NS, 'rect');
+        r.setAttribute('x', String(4 + f.x));
+        r.setAttribute('y', String(4 + f.y));
+        r.setAttribute('width', String(f.w));
+        r.setAttribute('height', String(f.h));
+        r.setAttribute('class', 'tbe-hit' + (activeTab === 'fields' && f.id === selFieldId ? ' tbe-sel' : ''));
+        r.dataset.fieldId = f.id;
+        r.onclick = () => {
+          selFieldId = f.id;
+          activeTab = 'fields';
+          renderPreview();
+          renderTabs();
+          renderBody();
+        };
+        g.append(r);
+      }
+      prevWrap.append(svgEl);
+    }
+
+    function renderTopBar() {
+      topBar.innerHTML = '';
+      const allTpls = titleBlockTemplates();
+      const builtins = allTpls.filter((t) => t.builtin).map((t) => [t.id, t.name]);
+      const customs = allTpls.filter((t) => !t.builtin).map((t) => [t.id, t.name]);
+      const hasMatch = !draft.customized && allTpls.some((t) => t.id === draft.templateId);
+      const tplOpts = [];
+      if (!hasMatch) tplOpts.push(['__edited__', T('draw.tb.tplEdited', { name: draft.templateName || 'Eigenes' })]);
+      tplOpts.push({ group: T('draw.tb.tplGroupBuiltin'), options: builtins });
+      if (customs.length) tplOpts.push({ group: T('draw.tb.tplGroupCustom'), options: customs });
+      const tplSel = UI.selectField({
+        id: 'dw-tbe-tpl',
+        label: T('draw.tb.tplLabel'),
+        value: hasMatch ? draft.templateId : '__edited__',
+        options: tplOpts,
+        onChange: (v) => {
+          if (v === '__edited__') return;
+          const hit = titleBlockTemplates().find((t) => t.id === v);
+          if (!hit) return;
+          draft = normalizeTitleBlock(deepClone(hit));
+          draft.templateId = hit.id;
+          draft.templateName = hit.name;
+          draft.customized = false;
+          selFieldId = draft.fields[0] ? draft.fields[0].id : null;
+          selLineId = draft.lines[0] ? draft.lines[0].id : null;
+          renderAll();
+        },
+      });
+      tplSel.style.minWidth = '175px';
+      const wFld = numInp('dw-tbe-w', T('draw.tbe.width'), draft.w, 80, 260, 2, (v) => {
+        draft.w = v; draft.customized = true; draft = normalizeTitleBlock(draft); renderPreview(); renderBody();
+      });
+      wFld.style.width = '92px';
+      const hFld = numInp('dw-tbe-h', T('draw.tbe.height'), draft.h, 16, 80, 2, (v) => {
+        draft.h = v; draft.customized = true; draft = normalizeTitleBlock(draft); renderPreview(); renderBody();
+      });
+      hFld.style.width = '92px';
+      const nameInp = h('input', { id: 'dw-tbe-tpl-name', type: 'text', placeholder: T('draw.tbe.tplNamePh'), autocomplete: 'off', spellcheck: 'false' });
+      nameInp.addEventListener('keydown', (e) => e.stopPropagation());
+      const saveBtn = h('button', { type: 'button', class: 'btn', id: 'dw-tbe-tpl-save' });
+      saveBtn.innerHTML = icon('save') + esc(T('draw.tbe.tplSave'));
+      saveBtn.onclick = () => {
+        const saved = saveTitleBlockTemplate(nameInp.value, draft);
+        if (saved) {
+          draft.templateId = saved.id;
+          draft.templateName = saved.name;
+          draft.customized = false;
+          nameInp.value = '';
+          renderTopBar();
+          renderPreview();
+        }
+      };
+      const saveWrap = h('div', { class: 'field', style: { flex: '1', minWidth: '185px' } },
+        h('label', { for: 'dw-tbe-tpl-name' }, T('draw.tb.saveTplBtn')),
+        h('div', { style: { display: 'flex', gap: '4px' } },
+          h('div', { class: 'inp', style: { flex: '1' } }, nameInp),
+          saveBtn,
+        ));
+      topBar.append(tplSel, wFld, hFld, saveWrap);
+      const curCustom = customs.find(([id]) => id === draft.templateId);
+      if (curCustom && !draft.customized) {
+        const delTplBtn = h('button', { type: 'button', class: 'btn danger', id: 'dw-tbe-tpl-del' }, T('draw.tbe.tplDel'));
+        delTplBtn.onclick = () => {
+          if (deleteTitleBlockTemplate(curCustom[0])) {
+            draft.customized = true;
+            renderTopBar();
+          }
+        };
+        topBar.append(delTplBtn);
+      }
+    }
+
+    function renderTabs() {
+      tabsRow.innerHTML = '';
+      for (const [key, lbl] of [
+        ['fields', `${T('draw.tbe.tabFields')} (${draft.fields.length})`],
+        ['logo', T('draw.tbe.tabLogo')],
+        ['lines', `${T('draw.tbe.tabLines')} (${draft.lines.length})`],
+      ]) {
+        const b = h('button', {
+          type: 'button',
+          class: 'btn' + (activeTab === key ? ' active' : ''),
+          id: 'dw-tbe-tab-' + key,
+          'aria-pressed': String(activeTab === key),
+        }, lbl);
+        b.onclick = () => { activeTab = key; renderTabs(); renderBody(); renderPreview(); };
+        tabsRow.append(b);
+      }
+    }
+
+    function renderBody() {
+      bodyEl.innerHTML = '';
+      if (activeTab === 'fields') {
+        const split = h('div', { class: 'dw-tbe-split' });
+        const left = h('div', { style: { display: 'grid', gap: '6px' } });
+        const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-tbe-add-field' }, T('draw.tbe.addField'));
+        bAdd.onclick = () => {
+          const used = new Set(draft.fields.map((f) => f.key));
+          const place = nextNewFieldPlacement(draft);
+          const lbl = T('draw.tbe.newFieldLabel');
+          const nf = normalizeTitleField({
+            id: uid('tbf'),
+            key: cleanFieldKey(lbl, used),
+            label: lbl,
+            labelKey: null,
+            kind: 'field',
+            autoType: null,
+            ...place,
+            fontSize: 2.8,
+            align: 'start',
+            bold: false,
+            defaultValue: '',
+            border: true,
+          }, draft.w, draft.h);
+          nf._autoKey = true;
+          draft.fields.push(nf);
+          draft.customized = true;
+          selFieldId = nf.id;
+          renderAll();
+        };
+        left.append(bAdd);
+        const list = h('div', { class: 'dw-tbe-list', id: 'dw-tbe-field-list' });
+        for (const f of draft.fields) {
+          const row = h('div', { class: 'dw-tbe-row' + (f.id === selFieldId ? ' active' : ''), 'data-field-id': f.id });
+          const disp = fieldDisplayLabel(f) || f.key;
+          const del = h('button', { type: 'button', class: 'btn danger dw-tbe-f-del', style: { padding: '2px 6px', fontSize: '11px' }, 'aria-label': T('draw.tbe.delField') });
+          del.innerHTML = icon('trash');
+          del.onclick = (e) => {
+            e.stopPropagation();
+            draft.fields = draft.fields.filter((x) => x.id !== f.id);
+            draft.customized = true;
+            if (selFieldId === f.id) selFieldId = draft.fields[0] ? draft.fields[0].id : null;
+            renderAll();
+          };
+          row.append(
+            h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, disp),
+            h('span', { class: 'dw-tbe-badge' }, f.kind === 'auto' ? (f.autoType || 'auto') : f.kind),
+            del
+          );
+          row.onclick = () => { selFieldId = f.id; renderPreview(); renderBody(); };
+          list.append(row);
+        }
+        if (!draft.fields.length) list.append(h('div', { class: 'hint-box' }, T('draw.tbe.noFields')));
+        left.append(list);
+
+        const right = h('div', { class: 'dw-tbe-props', id: 'dw-tbe-field-props' });
+        const sf = draft.fields.find((x) => x.id === selFieldId);
+        if (sf) {
+          right.append(h('div', { class: 'fields' },
+            txtInp('dw-tbe-f-label', T('draw.tbe.fieldLabel'), fieldDisplayLabel(sf), {
+              live: true,
+              onCommit: (v) => {
+                sf.label = v;
+                sf.labelKey = null;
+                if (sf._autoKey) {
+                  const used = new Set(draft.fields.filter((x) => x.id !== sf.id).map((x) => x.key));
+                  sf.key = cleanFieldKey(v, used);
+                  const ki = right.querySelector('#dw-tbe-f-key');
+                  if (ki) ki.value = sf.key;
+                }
+                draft.customized = true;
+                const rowTxt = list.querySelector(`.dw-tbe-row[data-field-id="${sf.id}"] .grow`);
+                if (rowTxt) rowTxt.textContent = v || sf.key;
+                renderPreview();
+              },
+            }),
+            txtInp('dw-tbe-f-key', T('draw.tbe.fieldKey'), sf.key, {
+              onCommit: (v) => {
+                const used = new Set(draft.fields.filter((x) => x.id !== sf.id).map((x) => x.key));
+                sf.key = cleanFieldKey(v, used);
+                sf._autoKey = false;
+                draft.customized = true;
+                renderBody();
+                renderPreview();
+              },
+            }),
+          ));
+          right.append(UI.selectField({
+            id: 'dw-tbe-f-kind',
+            label: T('draw.tbe.fieldKind'),
+            value: sf.kind,
+            options: [
+              ['field', T('draw.tbe.kindField')],
+              ['title', T('draw.tbe.kindTitle')],
+              ['auto', T('draw.tbe.kindAuto')],
+              ['projection', T('draw.tbe.kindProj')],
+              ['logo', T('draw.tbe.kindLogo')],
+            ],
+            onChange: (v) => {
+              sf.kind = v;
+              if (v === 'auto' && !sf.autoType) sf.autoType = 'scale';
+              if (v !== 'auto') sf.autoType = null;
+              draft.customized = true;
+              renderPreview();
+              renderBody();
+            },
+          }));
+          if (sf.kind === 'auto') {
+            right.append(UI.selectField({
+              id: 'dw-tbe-f-auto',
+              label: T('draw.tbe.autoType'),
+              value: sf.autoType || 'scale',
+              options: [
+                ['scale', T('draw.tbe.autoScale')],
+                ['sheet', T('draw.tbe.autoSheet')],
+                ['format', T('draw.tbe.autoFormat')],
+                ['unit', T('draw.tbe.autoUnit')],
+                ['mass', T('draw.tbe.autoMass')],
+                ['footer', T('draw.tbe.autoFooter')],
+              ],
+              onChange: (v) => { sf.autoType = v; draft.customized = true; renderPreview(); },
+            }));
+          } else if (sf.kind === 'field') {
+            right.append(txtInp('dw-tbe-f-def', T('draw.tbe.defaultVal'), sf.defaultValue || '', {
+              live: true,
+              onCommit: (v) => { sf.defaultValue = v; draft.customized = true; renderPreview(); },
+            }));
+          }
+          right.append(h('div', { class: 'fields' },
+            numInp('dw-tbe-f-x', 'X', sf.x, 0, draft.w - 6, 1, (v) => { sf.x = v; draft.customized = true; renderPreview(); }),
+            numInp('dw-tbe-f-y', 'Y', sf.y, 0, draft.h - 4, 1, (v) => { sf.y = v; draft.customized = true; renderPreview(); }),
+          ), h('div', { class: 'fields' },
+            numInp('dw-tbe-f-w', T('draw.tbe.width'), sf.w, 6, draft.w - sf.x, 1, (v) => { sf.w = v; draft.customized = true; renderPreview(); }),
+            numInp('dw-tbe-f-h', T('draw.tbe.height'), sf.h, 4, draft.h - sf.y, 1, (v) => { sf.h = v; draft.customized = true; renderPreview(); }),
+          ));
+          right.append(h('div', { class: 'fields' },
+            numInp('dw-tbe-f-size', T('draw.tbe.fontSize'), sf.fontSize, 1.6, 10, 0.2, (v) => { sf.fontSize = v; draft.customized = true; renderPreview(); }),
+            UI.selectField({
+              id: 'dw-tbe-f-align',
+              label: T('draw.tbe.align'),
+              value: sf.align || 'start',
+              options: [['start', T('draw.tbe.alignStart')], ['middle', T('draw.tbe.alignMiddle')], ['end', T('draw.tbe.alignEnd')]],
+              onChange: (v) => { sf.align = v; draft.customized = true; renderPreview(); },
+            }),
+          ));
+          const boldChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-tbe-f-bold', checked: !!sf.bold }), T('draw.tbe.bold'));
+          boldChk.querySelector('input').onchange = (e) => { sf.bold = e.target.checked; draft.customized = true; renderPreview(); };
+          const brdChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-tbe-f-border', checked: sf.border !== false }), T('draw.tbe.border'));
+          brdChk.querySelector('input').onchange = (e) => { sf.border = e.target.checked; draft.customized = true; renderPreview(); };
+          right.append(h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, boldChk, brdChk));
+        } else {
+          right.append(h('div', { class: 'hint-box' }, T('draw.tbe.noFields')));
+        }
+        split.append(left, right);
+        bodyEl.append(split);
+      } else if (activeTab === 'logo') {
+        const box = h('div', { class: 'dw-tbe-props' });
+        const fInp = h('input', { type: 'file', id: 'dw-tbe-logo-file', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', style: { display: 'none' } });
+        fInp.onchange = async () => {
+          const file = fInp.files && fInp.files[0];
+          fInp.value = '';
+          if (!file) return;
+          try {
+            const prep = await prepareLogoImage(file, draft.logo);
+            draft.logo = normalizeTitleLogo(prep, draft.w, draft.h);
+            draft.customized = true;
+            renderPreview();
+            renderBody();
+          } catch (err) {
+            UI.toast(err.message || T('draw.tbe.logoLoadErr'), { kind: 'bad' });
+          }
+        };
+        const bPick = h('button', { type: 'button', class: 'btn', id: 'dw-tbe-logo-pick' });
+        bPick.innerHTML = icon('image') + esc(T('draw.tbe.logoUpload'));
+        bPick.onclick = () => fInp.click();
+        const bClr = h('button', { type: 'button', class: 'btn danger', id: 'dw-tbe-logo-clear', disabled: !draft.logo }, T('draw.tbe.logoClear'));
+        bClr.onclick = () => { draft.logo = null; draft.customized = true; renderPreview(); renderBody(); };
+        const logoSlot = draft.fields.find((f) => f.kind === 'logo');
+        const btnRow = h('div', { class: 'btn-row' }, bPick, bClr);
+        if (!logoSlot) {
+          const bAddSlot = h('button', { type: 'button', class: 'btn', id: 'dw-tbe-logo-add-cell' }, T('draw.tbe.logoAddCell'));
+          bAddSlot.onclick = () => {
+            const used = new Set(draft.fields.map((f) => f.key));
+            const place = nextNewFieldPlacement(draft);
+            const nf = normalizeTitleField({ id: uid('tbf'), key: cleanFieldKey('logo', used), label: '', kind: 'logo', ...place }, draft.w, draft.h);
+            draft.fields.push(nf);
+            draft.customized = true;
+            selFieldId = nf.id;
+            renderAll();
+          };
+          btnRow.append(bAddSlot);
+        }
+        box.append(fInp, btnRow);
+        if (draft.logo) {
+          box.append(h('div', { class: 'mini-row' }, h('b', null, draft.logo.name || 'Logo'), h('span', { class: 'mono', style: { color: 'var(--muted)' } }, `${draft.logo.iw}×${draft.logo.ih} px`)));
+        } else {
+          box.append(h('div', { class: 'hint-box' }, T('draw.tbe.logoEmpty')));
+        }
+        if (logoSlot) {
+          const bJump = h('button', { type: 'button', class: 'btn', id: 'dw-tbe-logo-jump-cell' }, T('draw.tbe.logoJumpCell'));
+          bJump.onclick = () => { selFieldId = logoSlot.id; activeTab = 'fields'; renderTabs(); renderBody(); renderPreview(); };
+          box.append(h('div', { class: 'hint-box' }, T('draw.tbe.logoInCell')), bJump);
+        } else if (draft.logo) {
+          box.append(h('div', { class: 'fields' },
+            numInp('dw-tbe-logo-x', 'X', draft.logo.x, 0, draft.w - 4, 1, (v) => { draft.logo.x = v; draft.customized = true; renderPreview(); }),
+            numInp('dw-tbe-logo-y', 'Y', draft.logo.y, 0, draft.h - 4, 1, (v) => { draft.logo.y = v; draft.customized = true; renderPreview(); }),
+          ), h('div', { class: 'fields' },
+            numInp('dw-tbe-logo-w', T('draw.tbe.width'), draft.logo.w, 4, draft.w - draft.logo.x, 1, (v) => { draft.logo.w = v; draft.customized = true; renderPreview(); }),
+            numInp('dw-tbe-logo-h', T('draw.tbe.height'), draft.logo.h, 4, draft.h - draft.logo.y, 1, (v) => { draft.logo.h = v; draft.customized = true; renderPreview(); }),
+          ));
+        }
+        bodyEl.append(box);
+      } else {
+        const split = h('div', { class: 'dw-tbe-split' });
+        const left = h('div', { style: { display: 'grid', gap: '6px' } });
+        const bAddL = h('button', { type: 'button', class: 'btn', id: 'dw-tbe-add-line' }, T('draw.tbe.addLine'));
+        bAddL.onclick = () => {
+          const nl = normalizeTitleLine({ id: uid('tbln'), x1: 0, y1: round(draft.h * 0.5, 1), x2: draft.w, y2: round(draft.h * 0.5, 1), style: 'thick' }, draft.w, draft.h);
+          draft.lines.push(nl);
+          draft.customized = true;
+          selLineId = nl.id;
+          renderAll();
+        };
+        left.append(bAddL);
+        const list = h('div', { class: 'dw-tbe-list', id: 'dw-tbe-line-list' });
+        for (const l of draft.lines) {
+          const row = h('div', { class: 'dw-tbe-row' + (l.id === selLineId ? ' active' : ''), 'data-line-id': l.id });
+          const del = h('button', { type: 'button', class: 'btn danger dw-tbe-l-del', style: { padding: '2px 6px', fontSize: '11px' }, 'aria-label': T('draw.tbe.delLine') });
+          del.innerHTML = icon('trash');
+          del.onclick = (e) => {
+            e.stopPropagation();
+            draft.lines = draft.lines.filter((x) => x.id !== l.id);
+            draft.customized = true;
+            if (selLineId === l.id) selLineId = draft.lines[0] ? draft.lines[0].id : null;
+            renderAll();
+          };
+          row.append(
+            h('span', { class: 'grow mono' }, `(${l.x1},${l.y1}) → (${l.x2},${l.y2})`),
+            h('span', { class: 'dw-tbe-badge' }, l.style),
+            del
+          );
+          row.onclick = () => { selLineId = l.id; renderPreview(); renderBody(); };
+          list.append(row);
+        }
+        if (!draft.lines.length) list.append(h('div', { class: 'hint-box' }, T('draw.tbe.noLines')));
+        left.append(list);
+
+        const right = h('div', { class: 'dw-tbe-props', id: 'dw-tbe-line-props' });
+        const sl = draft.lines.find((x) => x.id === selLineId);
+        if (sl) {
+          right.append(h('div', { class: 'fields' },
+            numInp('dw-tbe-l-x1', 'X1', sl.x1, 0, draft.w, 1, (v) => { sl.x1 = v; draft.customized = true; renderPreview(); renderBody(); }),
+            numInp('dw-tbe-l-y1', 'Y1', sl.y1, 0, draft.h, 1, (v) => { sl.y1 = v; draft.customized = true; renderPreview(); renderBody(); }),
+          ), h('div', { class: 'fields' },
+            numInp('dw-tbe-l-x2', 'X2', sl.x2, 0, draft.w, 1, (v) => { sl.x2 = v; draft.customized = true; renderPreview(); renderBody(); }),
+            numInp('dw-tbe-l-y2', 'Y2', sl.y2, 0, draft.h, 1, (v) => { sl.y2 = v; draft.customized = true; renderPreview(); renderBody(); }),
+          ), UI.selectField({
+            id: 'dw-tbe-l-style',
+            label: T('draw.tbe.lineStyle'),
+            value: sl.style,
+            options: [['thin', T('draw.tbe.styleThin')], ['thick', T('draw.tbe.styleThick')], ['dashed', T('draw.tbe.styleDashed')]],
+            onChange: (v) => { sl.style = v; draft.customized = true; renderPreview(); renderBody(); },
+          }));
+        } else {
+          right.append(h('div', { class: 'hint-box' }, T('draw.tbe.noLines')));
+        }
+        split.append(left, right);
+        bodyEl.append(split);
+      }
+    }
+
+    function renderAll() {
+      renderTopBar();
+      renderPreview();
+      renderTabs();
+      renderBody();
+    }
+    renderAll();
+    const m = UI.modal({
+      title: T('draw.tbe.title'),
+      body: wrapEl,
+      wide: true,
+      actions: [
+        { label: T('common.cancel') },
+        { id: 'dw-tbe-apply', label: T('draw.tbe.apply'), primary: true, run: () => { setTitleBlock(draft, 'Schriftfeld angepasst'); } },
+      ],
+    });
+    if (m && m.el) m.el.id = 'dw-tbe-dialog';
+    return m;
+  }
   function refreshUI() {
     if (App.mode !== 'drawing') return;
     renderTabs();
@@ -12551,6 +13683,7 @@ const Drawing = (() => {
     open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, tablesMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
+    TITLE_TEMPLATES: TB_BUILTIN_IDS, titleBlock: () => deepClone(sheetTitleBlock()), setTitleBlock, titleBlockTemplates, applyTitleBlockTemplate, saveTitleBlockTemplate, deleteTitleBlockTemplate, addTitleBlockField, removeTitleBlockField, addTitleBlockLine, removeTitleBlockLine, setTitleBlockLogo, openTitleBlockEditor,
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera, updateExplodeView, explodeViewInfo,
     get selectedView() { return currentViewKey(); },
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,

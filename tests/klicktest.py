@@ -35847,6 +35847,262 @@ def t_a169_zeichnung_bruch_hilfsansicht(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a178_zeichnung_schriftfeld(p):
+    # [A-178] Zeichnung (Einfach & Profi): Schriftfeld-Editor und Vorlagen ISO, DIN, ANSI & eigene Vorlage (ZE-30)
+    p.empty()
+    p.ev("""
+      localStorage.removeItem('tracery-schriftfelder');
+      ViewPrefs.setLevel('pro');
+      App.change('Quader', d => d.items.push(Model.newItem('box', { w: 80, d: 50, h: 20 }, { name: 'Gehäuse' })));
+    """)
+    warte_rechnen(p)
+
+    # 1. Zeichnung öffnen: Standard ISO, dann DIN & ANSI Vorlagen testen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    iso_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txt = svg ? svg.textContent : '';
+      return { tpl: Drawing.titleBlock().templateId, hasIsoTol: txt.includes('ISO 2768-m'), hasSym: txt.includes('ISO 5456-2 (E)') };
+    """)
+
+    p.pg.select_option('#dw-tb-template', 'din')
+    p.wait(200)
+    din_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txt = svg ? svg.textContent : '';
+      return {
+        tpl: Drawing.titleBlock().templateId,
+        hasBenennung: txt.includes('Benennung'),
+        hasBearbeiter: txt.includes('Bearbeiter'),
+        hasGeprueft: txt.includes('Geprüft'),
+        hasDok: txt.includes('Dokumentart'),
+        hasTol: txt.includes('ISO 2768-mK'),
+        hasInputs: !!document.querySelector('#tb-titel') && !!document.querySelector('#tb-pruefer'),
+      };
+    """)
+
+    p.pg.select_option('#dw-tb-template', 'ansi')
+    p.wait(200)
+    ansi_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txt = svg ? svg.textContent : '';
+      return {
+        tpl: Drawing.titleBlock().templateId,
+        hasTitle: txt.includes('TITLE'),
+        hasDwgNo: txt.includes('DWG. NO.'),
+        hasSize: txt.includes('SIZE'),
+        hasRev: txt.includes('REV'),
+        hasScale: txt.includes('SCALE'),
+        hasSheet: txt.includes('SHEET'),
+      };
+    """)
+
+    p.pg.select_option('#dw-tb-template', 'din')
+    p.wait(150)
+
+    ok1 = bool(
+        iso_chk['tpl'] == 'iso' and iso_chk['hasIsoTol'] and iso_chk['hasSym']
+        and din_chk['tpl'] == 'din' and din_chk['hasBenennung'] and din_chk['hasBearbeiter']
+        and din_chk['hasGeprueft'] and din_chk['hasDok'] and din_chk['hasTol'] and din_chk['hasInputs']
+        and ansi_chk['tpl'] == 'ansi' and ansi_chk['hasTitle'] and ansi_chk['hasDwgNo']
+        and ansi_chk['hasSize'] and ansi_chk['hasRev'] and ansi_chk['hasScale'] and ansi_chk['hasSheet']
+    )
+
+    # 2. Schriftfeld-Editor: eigenes Feld, Linie, Logo & als Vorlage speichern
+    p.pg.click('#dw-tb-edit')
+    p.pg.wait_for_selector('#dw-tbe-dialog #dw-tbe-preview svg', timeout=10000)
+    p.wait(150)
+
+    p.pg.click('#dw-tbe-add-field')
+    p.wait(120)
+    p.pg.fill('#dw-tbe-f-label', 'Kunde')
+    p.pg.locator('#dw-tbe-f-label').dispatch_event('change')
+    p.wait(150)
+    prev_field_ok = p.ev("return (document.querySelector('#dw-tbe-preview svg')?.textContent || '').includes('Kunde')")
+
+    p.pg.click('#dw-tbe-tab-lines')
+    p.wait(120)
+    p.pg.click('#dw-tbe-add-line')
+    p.wait(120)
+    p.pg.select_option('#dw-tbe-l-style', 'dashed')
+    p.wait(120)
+
+    p.pg.click('#dw-tbe-tab-logo')
+    p.wait(120)
+    p.ev("""return new Promise((resolve) => {
+      const c = document.createElement('canvas');
+      c.width = 48; c.height = 24;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#0c7a70'; ctx.fillRect(0, 0, 48, 24);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(8, 6, 32, 12);
+      c.toBlob((blob) => {
+        const file = new File([blob], 'firma-logo.png', { type: 'image/png' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const inp = document.querySelector('#dw-tbe-logo-file');
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+        resolve(true);
+      }, 'image/png');
+    })""")
+    p.pg.wait_for_selector('#dw-tbe-preview svg image.tb-logo', timeout=10000)
+    p.wait(120)
+
+    p.pg.fill('#dw-tbe-tpl-name', 'Meine DIN-Vorlage')
+    p.pg.click('#dw-tbe-tpl-save')
+    p.wait(200)
+    p.pg.click('#dw-tbe-apply')
+    p.wait(200)
+
+    p.pg.fill('#tb-kunde', 'Muster GmbH')
+    p.pg.locator('#tb-kunde').dispatch_event('change')
+    p.wait(200)
+
+    sheet_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txt = svg ? svg.textContent : '';
+      return {
+        hasKunde: txt.includes('Kunde'),
+        hasVal: txt.includes('Muster GmbH'),
+        hasLine: !!svg.querySelector('[data-tb-line]'),
+        hasLogo: !!svg.querySelector('image.tb-logo'),
+        hasCustomFieldCfg: Drawing.titleBlock().fields.some(f => f.key === 'kunde' && f.label === 'Kunde'),
+      };
+    """)
+    ok2 = bool(
+        prev_field_ok and sheet_chk['hasKunde'] and sheet_chk['hasVal']
+        and sheet_chk['hasLine'] and sheet_chk['hasLogo'] and sheet_chk['hasCustomFieldCfg']
+    )
+
+    # 3. SVG-, PDF-, DXF-Export & Verfügbarkeit in brandneuer Zeichnung
+    exp_chk = p.ev("""return (async () => {
+      const svgStr = await Drawing.buildSVGString();
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        svgOk: svgStr.includes('Benennung') && svgStr.includes('Kunde') && svgStr.includes('Muster GmbH') && svgStr.includes('tb-logo'),
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('Benennung') && pdfStr.includes('Kunde') && pdfStr.includes('Muster GmbH') && pdfStr.includes('/XObject'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('Benennung') && dxf.text.includes('Kunde') && dxf.text.includes('Muster GmbH') && dxf.text.includes('RAHMEN')),
+      };
+    })()""")
+
+    saved_with_tb = p.ev("return JSON.stringify(App.doc)")
+
+    p.ev("""
+      Commands.setMode('model');
+      App.setDoc(Model.newDoc());
+      App.change('Welle', d => d.items.push(Model.newItem('cylinder', { d: 30, h: 20 }, { name: 'Welle' })));
+    """)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    tpl_id = p.ev("""
+      const t = Drawing.titleBlockTemplates().find(x => !x.builtin && x.name === 'Meine DIN-Vorlage');
+      return t ? t.id : null;
+    """)
+    if tpl_id:
+        p.pg.select_option('#dw-tb-template', tpl_id)
+        p.wait(200)
+    new_dwg_chk = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txt = svg ? svg.textContent : '';
+      return {
+        hasBenennung: txt.includes('Benennung'),
+        hasKunde: txt.includes('Kunde'),
+        hasLine: !!svg.querySelector('[data-tb-line]'),
+        hasLogo: !!svg.querySelector('image.tb-logo'),
+        hasInput: !!document.querySelector('#tb-kunde'),
+      };
+    """)
+    ok3 = bool(
+        exp_chk['svgOk'] and exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and tpl_id and new_dwg_chk['hasBenennung'] and new_dwg_chk['hasKunde']
+        and new_dwg_chk['hasLine'] and new_dwg_chk['hasLogo'] and new_dwg_chk['hasInput']
+    )
+
+    # 4. Einfach & Profi, Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    simple_chk = p.ev("""
+      const sel = document.querySelector('#dw-tb-template');
+      const ed = document.querySelector('#dw-tb-edit');
+      const sv = document.querySelector('#dw-tb-save-tpl');
+      const cmds = Commands.search('schriftfeld');
+      return {
+        selVis: !!(sel && sel.offsetParent !== null),
+        edVis: !!(ed && ed.offsetParent !== null),
+        svVis: !!(sv && sv.offsetParent !== null),
+        cmdEdit: cmds.some(c => c.id === 'drawingTitleBlock'),
+        cmdDin: cmds.some(c => c.id === 'drawingTplDin'),
+      };
+    """)
+
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('drawing');")
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(150)
+    p.ev("Drawing.applyTitleBlockTemplate('ansi');")
+    p.wait(150)
+    after_ansi = p.ev("return Drawing.titleBlock().templateId")
+    p.ev("App.undo()")
+    p.wait(150)
+    after_undo = p.ev("return Drawing.titleBlock().templateId")
+    p.ev("App.redo()")
+    p.wait(150)
+    after_redo = p.ev("return Drawing.titleBlock().templateId")
+
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved_with_tb)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved_with_tb)
+    warte_rechnen(p)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const tb = Drawing.titleBlock();
+      return {
+        hasKunde: tb.fields.some(f => f.key === 'kunde'),
+        hasLine: tb.lines.length >= 1,
+        hasLogo: !!(tb.logo && tb.logo.src),
+        val: Drawing.activeSheet().title.kunde === 'Muster GmbH',
+      };
+    """)
+    if tpl_id:
+        p.ev("Drawing.deleteTitleBlockTemplate(arg)", tpl_id)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h = wh.drawingTitleBlock;
+      const domHelpOk = document.querySelector('#dw-tb-edit')?.dataset.help === 'drawingTitleBlock';
+      const helpOk = !!(h && h.tip && h.hilfe && h.tipp && domHelpOk);
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nOk = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      return helpOk && i18nOk;
+    })()""")
+
+    ok4 = bool(
+        simple_chk['selVis'] and simple_chk['edVis'] and simple_chk['svVis']
+        and simple_chk['cmdEdit'] and simple_chk['cmdDin']
+        and after_ansi == 'ansi' and after_undo == tpl_id and after_redo == 'ansi'
+        and val_ok and reload_chk['hasKunde'] and reload_chk['hasLine']
+        and reload_chk['hasLogo'] and reload_chk['val']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -36137,6 +36393,7 @@ TESTS = [
     ('[A-174] Zeichnung: Form- und Lagetoleranzen (ZE-24)', t_a174_zeichnung_form_lagetoleranzen),
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('[A-176] Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)', t_a176_zeichnung_tabellen),
+    ('[A-178] Zeichnung: Schriftfeld-Editor und Vorlagen (ISO, DIN, ANSI & eigene Vorlage)', t_a178_zeichnung_schriftfeld),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

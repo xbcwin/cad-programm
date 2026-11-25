@@ -689,6 +689,26 @@ body.sketching .timeline{display:none}
 .dw-ft-grid{display:grid;gap:4px;overflow-x:auto;padding-bottom:2px}
 .dw-ft-grid-row{display:grid;gap:4px}
 .dw-ft-grid-row.is-head input{font-weight:700;background:var(--surface-2)}
+.dw-tbe-wrap{display:grid;gap:10px;min-width:min(760px,86vw)}
+.dw-tbe-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.dw-tbe-bar .field{min-width:0}
+.dw-tbe-preview{border:1px solid var(--line-strong);border-radius:10px;background:var(--surface-2);padding:10px;display:grid;place-items:center;overflow:auto;max-height:220px}
+.dw-tbe-preview svg{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);max-width:100%;height:auto;display:block}
+.dw-tbe-preview .tbe-hit{fill:transparent;stroke:transparent;cursor:pointer}
+.dw-tbe-preview .tbe-hit:hover{fill:rgba(12,122,112,.06);stroke:rgba(12,12,112,.35);stroke-width:.35}
+.dw-tbe-preview .tbe-hit.tbe-sel{fill:rgba(12,122,112,.1);stroke:#0c7a70;stroke-width:.55}
+.dw-tbe-preview .tbe-line-sel{stroke:#0c7a70;stroke-width:.85;pointer-events:none}
+.dw-tbe-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.dw-tbe-tabs .btn{padding:5px 11px;font-size:12.5px}
+.dw-tbe-tabs .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.dw-tbe-split{display:grid;grid-template-columns:minmax(190px,.95fr) minmax(240px,1.25fr);gap:10px;align-items:start}
+.dw-tbe-list{display:grid;gap:4px;max-height:215px;overflow-y:auto;padding-right:2px}
+.dw-tbe-row{display:flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);cursor:pointer;font-size:12px}
+.dw-tbe-row:hover{border-color:var(--line-2)}
+.dw-tbe-row.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.dw-tbe-row .dw-tbe-badge{font:600 10.5px/1 var(--font-mono);color:var(--muted);padding:2px 5px;border-radius:4px;background:var(--surface)}
+.dw-tbe-props{display:grid;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
+@media (max-width:720px){.dw-tbe-split{grid-template-columns:1fr}}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }

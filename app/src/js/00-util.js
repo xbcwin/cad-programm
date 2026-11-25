@@ -2682,6 +2682,11 @@ const HELP = {
   "tip": "Frei bearbeitbare Tabelle mit eigenen Überschriften, Spalten und Zeilen (Profi)",
   "hilfe": "Erstellt eine beliebige Tabelle auf dem Zeichnungsblatt – zum Beispiel für Prüfwerte, Anzugsmomente, Werkstoffhinweise oder Pinbelegungen. Anzahl der Spalten und Zeilen sowie alle Zelleninhalte lassen sich rechts frei bearbeiten.",
   "tipp": "Lass die Überschrift leer, wenn nur Spaltenköpfe und Werte ohne Titelzeile erscheinen sollen."
+ },
+ "drawingTitleBlock": {
+  "tip": "Schriftfeld-Vorlage wählen (ISO, DIN, ANSI) oder eigene Felder, Logo und Linien gestalten",
+  "hilfe": "Über die Vorlagen wechselst du mit einem Klick zwischen ISO 7200, DIN EN ISO 7200 und ANSI/ASME Y14.1. Mit „Schriftfeld gestalten …“ passt du Breite, Höhe, beliebige Text- und Automatik-Felder, Trennlinien sowie ein Firmenlogo an und speicherst deinen Entwurf als eigene Vorlage für alle künftigen Zeichnungen.",
+  "tipp": "Klicke in der Live-Vorschau des Schriftfeld-Editors direkt auf ein Feld, um Beschriftung, Lage oder Größe sofort zu ändern."
  }
 };
 
