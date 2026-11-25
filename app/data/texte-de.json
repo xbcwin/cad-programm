@@ -3593,5 +3593,9 @@
   "paint.countFaces": "{n} Flächen",
   "paint.countEdges": "{n} Kanten",
   "paint.clear": "Leeren",
-  "paint.done": "Fertig"
+  "paint.done": "Fertig",
+  "dlg.settings.highContrast": "Hoher Kontrast (stärkere Rahmen und Fokus)",
+  "dlg.settings.highContrastHint": "Zeichnet Ränder, Schriften und den Tastatur-Fokus extra deutlich – im hellen und dunklen Design.",
+  "dlg.settings.tHighContrastOn": "Hoher Kontrast an",
+  "dlg.settings.tHighContrastOff": "Hoher Kontrast aus"
 }

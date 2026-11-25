@@ -259,6 +259,8 @@ const Toolbar = (() => {
     const cls = ['tool'];
     if (def.cls) cls.push(def.cls);
     if (fav) cls.push('fav');
+    const hasPopup = ['body', 'parts', 'views', 'check', 'holeWizard', 'datum', 'datumAxis', 'datumPoint'].includes(def.id);
+    const hasFly = def.id === 'body' || def.id === 'parts';
     const b = h('button', {
       type: 'button',
       class: cls.join(' '),
@@ -268,6 +270,8 @@ const Toolbar = (() => {
       'data-kbd': def.kbd || null,
       'data-help': def.help || null,
       'aria-label': def.label,
+      'aria-haspopup': hasPopup ? 'true' : null,
+      'aria-expanded': hasFly ? 'false' : null,
     });
     const labelHtml = def.short
       ? `<span class="l-full">${esc(def.label)}</span><span class="l-short">${esc(def.short)}</span>`
@@ -289,6 +293,7 @@ const Toolbar = (() => {
       id: 't-more',
       'data-tip': T('tool.moreTip'),
       'aria-label': T('tool.more'),
+      'aria-haspopup': 'menu',
     });
     b.innerHTML = icon('menu') + `<span>${esc(T('tool.more'))}</span>`;
     b.addEventListener('click', (e) => UI.menu(e.currentTarget, [
@@ -368,7 +373,7 @@ const Toolbar = (() => {
     if (!moreInserted) el.append(makeMoreButton());
 
     if (!list.length) {
-      const emptyBtn = h('button', { type: 'button', class: 'tool', id: 't-empty-customize', 'data-help': 'toolbarCustomize' });
+      const emptyBtn = h('button', { type: 'button', class: 'tool', id: 't-empty-customize', 'data-help': 'toolbarCustomize', 'aria-label': T('dlg.tb.customizeMenu') });
       emptyBtn.innerHTML = icon('sliders') + '<span>Werkzeugleiste anpassen …</span>';
       emptyBtn.onclick = () => dialog();
       el.append(emptyBtn);

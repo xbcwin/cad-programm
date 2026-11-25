@@ -2417,6 +2417,11 @@ const HELP = {
   "tip": "Malen-Auswahl (V): Mit gedrückter Maus über mehrere Flächen oder Kanten streichen",
   "hilfe": "Aktiviert die Malen-Auswahl: Fahre mit gedrückter linker Maustaste einfach über Flächen oder Kanten, um sie der Reihe nach auszuwählen – ideal zum gemeinsamen Abrunden, Abschrägen oder Einfärben.",
   "tipp": "Umschalt hält die bestehende Auswahl zum Dazunehmen, Alt streicht ausgewählte Flächen oder Kanten wieder ab, und Esc beendet den Modus."
+ },
+ "highContrast": {
+  "tip": "Hoher Kontrast: kräftige Rahmen, klare Farben und extra deutlicher Fokusrahmen",
+  "hilfe": "Verstärkt alle Ränder, Schriften, Knöpfe und Fokus-Umrandungen im hellen und dunklen Design, damit die Oberfläche auch bei grellem Licht oder schwachem Sehvermögen leicht lesbar bleibt.",
+  "tipp": "Alle Knöpfe lassen sich außerdem per Tab, Pfeiltasten, Enter und Esc komplett ohne Maus bedienen."
  }
 };
 

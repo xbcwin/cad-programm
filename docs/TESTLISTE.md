@@ -2560,6 +2560,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, DE/EN-Texte & Befehle**: `werkzeug-hilfen.json`/`HELP` enthalten `radialMenu` und `paintSelect`, DE/EN-Schlüssel sind gleich, Befehlssuche findet Kreis-Menü und Malen-Auswahl (`t_kreis_malen`).
 - [ ] **Von Hand**: Im Browser mit rechter Maustaste kurz gedrückt halten, direkt auf ein Feld ziehen und loslassen (flüssige Geste ohne zweiten Klick) sowie auf einem abgerundeten Bauteil mit Malen-Auswahl mehrere Flächen einfärben und Kantenketten abrunden.
 
+## Tastaturbedienung, hoher Kontrast und Vorlese-Texte (Auto [A-141], BE-24)
+
+- [x] **Nur mit Tastatur bis zum Quader (`BE-24`)**: In einem leeren Projekt per `Tab` bis `#t-body` (sichtbarer Fokusrahmen), `Enter` öffnet das Körper-Flyout, `Tab` zur Quader-Kachel (`data-kind="box"`), `Esc` schließt wieder mit Fokus zurück auf `#t-body`, erneutes `Enter` + `Tab` + `Enter` legt den Quader an (`t_a141_barrierefreiheit`).
+- [x] **Esc & Tab-Erreichbarkeit**: `Esc` schließt Menüs, Einstellungen und Werkzeuge-Dialog; linkes/rechtes Panel, Verlaufseinträge, Zeitleiste, Eingabezeile und ViewCube-Flächen (`tabindex="0"`) sind per Tab erreichbar (`t_a141_barrierefreiheit`).
+- [x] **Vorlese-Texte (`aria-label`)**: Kein sichtbarer Knopf oder `role="button"` in Modellansicht, Flyout, Einstellungen, Werkzeugleisten-Dialog, Skizze und Zeichnung bleibt ohne Beschriftung oder Fokusierbarkeit (`t_a141_barrierefreiheit`).
+- [x] **Hoher Kontrast, Hilfe & DE/EN**: Einstellung `#set-highContrast` setzt `body.high-contrast` und speichert `highContrast` dauerhaft in `masswerk.view`; `HELP.highContrast`, DE/EN-Schlüsselgleichheit und Befehlssuche (`high-contrast`) geprüft (`t_a141_barrierefreiheit`).
+- [ ] **Von Hand**: Im Browser ein komplettes Teil nur per Tastatur (Tab, Pfeiltasten, Enter, Esc) im Modus „Hoher Kontrast“ (hell & dunkel) erstellen und mit VoiceOver (macOS) oder NVDA (Windows) prüfen, ob alle Symbolknöpfe verständlich vorgelesen werden.
+
 ## Fehler melden
 
 ```

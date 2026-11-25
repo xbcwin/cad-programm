@@ -5796,7 +5796,7 @@ const Drawing = (() => {
         const badge = h('b', { class: 'mono' }, n.tip === 'dot' ? '●' : '→');
         const txt = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, n.text.replace(/\s+/g, ' '));
         const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, n.view ? viewLabel(n.view, d) : T('draw.tb.sheet'));
-        const db = h('button', { type: 'button', class: 'btn danger note-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.leaderDelTip') });
+        const db = h('button', { type: 'button', class: 'btn danger note-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.leaderDelTip'), 'aria-label': T('draw.panel.leaderDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = (e) => { e.stopPropagation(); removeNote(n.id); };
         row.append(badge, txt, vw, db);
@@ -5859,7 +5859,7 @@ const Drawing = (() => {
         const badge = h('b', { class: 'mono' }, `(${bPos})`);
         const nm = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, matchRow ? matchRow.name : T('draw.panel.posShort', { pos: bPos }));
         const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, bl.view ? viewLabel(bl.view, d) : T('draw.tb.sheet'));
-        const db = h('button', { type: 'button', class: 'btn danger balloon-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.balloonDelTip') });
+        const db = h('button', { type: 'button', class: 'btn danger balloon-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.balloonDelTip'), 'aria-label': T('draw.panel.balloonDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = (e) => { e.stopPropagation(); removeBalloon(bl.id); };
         row.append(badge, nm, vw, db);
@@ -5885,7 +5885,7 @@ const Drawing = (() => {
         lbl.onclick = () => { selDim = sec.id; render(); Panels.renderRight(); };
         const fb = h('button', { type: 'button', class: 'btn sec-flip', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secFlipTip') }, T('draw.panel.secFlipShort'));
         fb.onclick = () => flipSection(sec.id);
-        const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secDelTip') });
+        const db = h('button', { type: 'button', class: 'btn danger sec-del', style: { padding: '3px 7px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.secDelTip'), 'aria-label': T('draw.panel.secDelTip') });
         db.innerHTML = icon('trash');
         db.onclick = () => removeSection(sec.id);
         row.append(lbl, fb, db);
@@ -5959,6 +5959,7 @@ const Drawing = (() => {
           type: 'button',
           class: 'btn ctr-toggle',
           'aria-pressed': String(!c.hidden),
+          'aria-label': T(c.hidden ? 'panel.tree.show' : 'common.hide'),
           'data-tip': T(c.hidden ? 'panel.tree.show' : 'common.hide'),
           style: { padding: '2px 6px' },
         });

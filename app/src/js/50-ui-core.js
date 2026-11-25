@@ -63,13 +63,76 @@ const UI = (() => {
     scheduleToast(el, el._ttl);
     return el;
   }
+  // ---------- Fokus & Barrierefreiheit (BE-24) ----------
+  function focusables(root = document) {
+    if (!root || !root.querySelectorAll) return [];
+    const sel = 'a[href],button:not(:disabled),input:not(:disabled):not([type="hidden"]),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex="-1"])';
+    return [...root.querySelectorAll(sel)].filter((el) => {
+      if (el.hidden || el.closest('[hidden]')) return false;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 || r.height > 0;
+    });
+  }
+  function restoreFocusEl(el) {
+    if (el && el.isConnected && typeof el.focus === 'function') {
+      try { el.focus({ preventScroll: true }); } catch (_) { el.focus(); }
+    }
+  }
+  function ensureA11yLabels(root = document.body) {
+    if (!root || root.nodeType !== 1) return;
+    const list = root.matches && root.matches('button,[role="button"]') ? [root, ...root.querySelectorAll('button,[role="button"]')] : [...root.querySelectorAll('button,[role="button"]')];
+    for (const el of list) {
+      for (const sv of el.querySelectorAll('svg')) {
+        if (!sv.getAttribute('aria-label') && !sv.getAttribute('aria-labelledby') && !sv.hasAttribute('aria-hidden')) {
+          sv.setAttribute('aria-hidden', 'true');
+        }
+      }
+      if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) continue;
+      if ((el.textContent || '').trim()) continue;
+      const helpTip = el.dataset && el.dataset.help && typeof HELP !== 'undefined' && HELP[el.dataset.help] ? HELP[el.dataset.help].tip : '';
+      const lbl = ((el.dataset && el.dataset.tip) || el.getAttribute('title') || helpTip || '').trim();
+      if (lbl) el.setAttribute('aria-label', lbl);
+    }
+  }
+  let a11yInited = false;
+  function initA11y() {
+    if (a11yInited || typeof document === 'undefined' || !document.body) return;
+    a11yInited = true;
+    ensureA11yLabels(document.body);
+    if (typeof MutationObserver !== 'undefined') {
+      const obs = new MutationObserver((muts) => {
+        for (const m of muts) {
+          for (const n of m.addedNodes) {
+            if (n && n.nodeType === 1) ensureA11yLabels(n);
+          }
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !e.defaultPrevented && typeof ViewPrefs !== 'undefined' && ViewPrefs.lookPanelOpen) {
+        ViewPrefs.closeLookPanel();
+      }
+    });
+  }
   // ---------- Dialog ----------
   function modal({ title, body, actions = [], wide = false, onClose }) {
+    const prevFocus = document.activeElement;
     const back = h('div', { class: 'modal-back' });
-    const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title || T('common.dialog') });
+    const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title || T('common.dialog'), tabindex: '-1' });
     if (title) box.append(h('h2', null, title));
     if (body) box.append(typeof body === 'string' ? h('p', null, body) : body);
-    const close = (v) => { back.remove(); document.removeEventListener('keydown', key, true); onClose && onClose(v); };
+    const close = (v) => {
+      if (!back.isConnected) return;
+      back.remove();
+      document.removeEventListener('keydown', key, true);
+      onClose && onClose(v);
+      if (!document.querySelector('.modal-back') && (!document.activeElement || document.activeElement === document.body)) {
+        restoreFocusEl(prevFocus);
+      }
+    };
     if (actions.length) {
       const row = h('div', { class: 'actions' });
       for (const a of actions) row.append(h('button', { type: 'button', id: a.id || null, 'data-help': a.help || null, class: 'btn ' + (a.primary ? 'primary' : a.danger ? 'danger' : ''), onclick: () => { if (a.run && a.run() === false) return; close(a.value); } }, a.label));
@@ -77,10 +140,29 @@ const UI = (() => {
     }
     back.append(box);
     back.addEventListener('pointerdown', (e) => { if (e.target === back) close(null); });
-    const key = (e) => { if (e.key === 'Escape') { const backs = document.querySelectorAll('.modal-back'); if (backs.length && backs[backs.length - 1] !== back) return; e.stopPropagation(); close(null); } };
+    const key = (e) => {
+      const backs = document.querySelectorAll('.modal-back');
+      if (backs.length && backs[backs.length - 1] !== back) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); return; }
+      if (e.key === 'Tab') {
+        const f = focusables(box);
+        if (!f.length) { e.preventDefault(); box.focus({ preventScroll: true }); return; }
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !box.contains(document.activeElement))) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
+          e.preventDefault(); first.focus();
+        }
+      }
+    };
     document.addEventListener('keydown', key, true);
     document.body.append(back);
-    setTimeout(() => { const f = box.querySelector('input,select,textarea,button.primary'); if (f) f.focus(); }, 30);
+    setTimeout(() => {
+      if (!box.isConnected) return;
+      const f = box.querySelector('input:not([type="hidden"]):not(:disabled),select:not(:disabled),textarea:not(:disabled),button.primary:not(:disabled),button:not(:disabled),[tabindex="0"]');
+      if (f) f.focus();
+      else box.focus({ preventScroll: true });
+    }, 30);
     return { close, el: box };
   }
   function confirm(title, text, okLabel = T('common.ok'), danger = false) {
@@ -97,13 +179,23 @@ const UI = (() => {
     });
   }
   // ---------- Menüs ----------
-  let openMenu = null;
-  function closeMenu() { if (openMenu) { openMenu.remove(); openMenu = null; document.removeEventListener('pointerdown', outside, true); } }
+  let openMenu = null, openMenuState = null;
+  function closeMenu(restore = false) {
+    if (!openMenu) return;
+    const st = openMenuState;
+    openMenu.remove();
+    openMenu = null;
+    openMenuState = null;
+    document.removeEventListener('pointerdown', outside, true);
+    if (st && st.onKey) document.removeEventListener('keydown', st.onKey, true);
+    if (restore && st && st.prevFocus) restoreFocusEl(st.prevFocus);
+  }
   function outside(e) { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }
   function menu(anchor, entries, opts = {}) {
     closeRadial();
     closeMenu();
-    const m = h('div', { class: 'menu', role: 'menu' });
+    const prevFocus = (anchor && anchor.isConnected && typeof anchor.focus === 'function') ? anchor : document.activeElement;
+    const m = h('div', { class: 'menu', role: 'menu', tabindex: '-1' });
     for (const en of entries) {
       if (en === '-') { m.append(h('hr')); continue; }
       if (en.hidden) continue;
@@ -113,28 +205,72 @@ const UI = (() => {
       if (en.kbd) b.append(h('span', { class: 'k' }, en.kbd));
       m.append(b);
     }
-    document.body.append(m); openMenu = m;
+    const onKey = (e) => {
+      if (openMenu !== m) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); return; }
+      const items = [...m.querySelectorAll('button[role="menuitem"]:not(:disabled)')];
+      if (!items.length) return;
+      const idx = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault(); e.stopPropagation();
+        items[idx < 0 ? 0 : (idx + 1) % items.length].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopPropagation();
+        items[idx < 0 ? items.length - 1 : (idx - 1 + items.length) % items.length].focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault(); e.stopPropagation();
+        items[0].focus();
+      } else if (e.key === 'End') {
+        e.preventDefault(); e.stopPropagation();
+        items[items.length - 1].focus();
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); e.stopPropagation();
+        const next = e.shiftKey
+          ? (idx <= 0 ? items.length - 1 : idx - 1)
+          : (idx < 0 || idx >= items.length - 1 ? 0 : idx + 1);
+        items[next].focus();
+      }
+    };
+    document.body.append(m); openMenu = m; openMenuState = { el: m, anchor, prevFocus, onKey };
     const r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect();
     let x = opts.alignRight ? r.right - mr.width : r.left, y = opts.up ? r.top - mr.height - 6 : r.bottom + 6;
     x = clamp(x, 8, Math.max(8, innerWidth - mr.width - 8)); y = clamp(y, 8, Math.max(8, innerHeight - mr.height - 8));
     m.style.left = x + 'px'; m.style.top = y + 'px';
-    setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+    m.focus({ preventScroll: true });
+    document.addEventListener('keydown', onKey, true);
+    setTimeout(() => { if (openMenu === m) document.addEventListener('pointerdown', outside, true); }, 0);
     return m;
   }
   let openPop = null;
-  function closePop() { if (openPop) { openPop.el.remove(); document.removeEventListener('pointerdown', openPop.outside, true); const cb = openPop.onClose; openPop = null; cb && cb(); } }
+  function closePop(restore = false) {
+    if (!openPop) return;
+    const cur = openPop;
+    cur.el.remove();
+    document.removeEventListener('pointerdown', cur.outside, true);
+    if (cur.onKey) document.removeEventListener('keydown', cur.onKey, true);
+    openPop = null;
+    cur.onClose && cur.onClose();
+    if (restore && cur.prevFocus) restoreFocusEl(cur.prevFocus);
+  }
   function pop(anchor, content, opts = {}) {
     closeRadial();
     closePop();
-    const el = h('div', { class: 'pop' }); el.append(content);
+    const prevFocus = (anchor && anchor.isConnected && typeof anchor.focus === 'function') ? anchor : document.activeElement;
+    const el = h('div', { class: 'pop', role: 'dialog', tabindex: '-1', ...(opts.label ? { 'aria-label': opts.label } : {}) }); el.append(content);
     document.body.append(el);
     const r = anchor.getBoundingClientRect(), pr = el.getBoundingClientRect();
     let x = opts.alignRight ? r.right - pr.width : r.left, y = opts.up ? r.top - pr.height - 8 : r.bottom + 8;
     x = clamp(x, 8, innerWidth - pr.width - 8); y = clamp(y, 8, innerHeight - pr.height - 8);
     el.style.left = x + 'px'; el.style.top = y + 'px';
     const outside2 = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closePop(); };
-    openPop = { el, outside: outside2, onClose: opts.onClose, anchor };
-    setTimeout(() => document.addEventListener('pointerdown', outside2, true), 0);
+    const onKey = (e) => {
+      if (!openPop || openPop.el !== el) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(true); }
+    };
+    openPop = { el, outside: outside2, onKey, onClose: opts.onClose, anchor, prevFocus };
+    if (!el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    document.addEventListener('keydown', onKey, true);
+    setTimeout(() => { if (openPop && openPop.el === el) document.addEventListener('pointerdown', outside2, true); }, 0);
     if (typeof App !== 'undefined' && App.emit) App.emit('pop');
     return el;
   }
@@ -216,8 +352,9 @@ const UI = (() => {
       el.classList.toggle('active', Number(el.dataset.slot) === slot);
     }
   }
-  function closeRadial() {
+  function closeRadial(restore = false) {
     if (!radialEl) return;
+    const prev = radialState && radialState.prevFocus;
     radialEl.remove();
     radialEl = null;
     if (radialState) {
@@ -227,11 +364,13 @@ const UI = (() => {
       window.removeEventListener('resize', closeRadial);
       radialState = null;
     }
+    if (restore && prev) restoreFocusEl(prev);
   }
   function openRadial(cx, cy, opts = {}) {
     closeMenu();
     closePop();
     closeRadial();
+    const prevFocus = document.activeElement;
     let x = cx, y = cy;
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       if (Number.isFinite(lastPtr.x) && Number.isFinite(lastPtr.y) && lastPtr.x >= 0 && lastPtr.y >= 0 && lastPtr.x <= innerWidth && lastPtr.y <= innerHeight) {
@@ -253,7 +392,7 @@ const UI = (() => {
     const map = new Map(radialCatalog().map((c) => [c.id, c]));
     const ids = radialItems();
     const cmds = ids.map((id) => map.get(id) || map.get('box'));
-    const root = h('div', { id: 'radial-menu', class: 'radial-menu', role: 'menu', 'aria-label': T('radial.aria') });
+    const root = h('div', { id: 'radial-menu', class: 'radial-menu', role: 'menu', 'aria-label': T('radial.aria'), tabindex: '-1' });
     root.style.left = Math.round(x) + 'px';
     root.style.top = Math.round(y) + 'px';
 
@@ -300,6 +439,7 @@ const UI = (() => {
 
     const st = {
       x, y,
+      prevFocus,
       holdMode: !!opts.holdMode,
       activeSlot: -1,
       cmds,
@@ -315,13 +455,25 @@ const UI = (() => {
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          closeRadial();
+          closeRadial(true);
+          return;
+        }
+        if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+          e.preventDefault();
+          e.stopPropagation();
+          const btns = [...root.querySelectorAll('.radial-item, .radial-gear')];
+          if (!btns.length) return;
+          const idx = btns.indexOf(document.activeElement);
+          const dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+          const next = idx < 0 ? 0 : (idx + dir + btns.length) % btns.length;
+          btns[next].focus();
         }
       },
     };
     radialEl = root;
     radialState = st;
     document.body.append(root);
+    if (!opts.holdMode) root.focus({ preventScroll: true });
     setTimeout(() => {
       if (radialState !== st) return;
       document.addEventListener('pointerdown', st.onOut, true);
@@ -668,6 +820,6 @@ const UI = (() => {
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
   }
-  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, openRadial, closeRadial, toggleRadial, finishRadialHold, radialItems, setRadialItems, resetRadial, radialCatalog, radialDialog, get radialOpen() { return !!radialEl; }, lastPointer: () => ({ ...lastPtr }), initTips, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
+  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, openRadial, closeRadial, toggleRadial, finishRadialHold, radialItems, setRadialItems, resetRadial, radialCatalog, radialDialog, get radialOpen() { return !!radialEl; }, get menuOpen() { return !!openMenu; }, get popOpen() { return !!openPop; }, lastPointer: () => ({ ...lastPtr }), focusables, ensureA11yLabels, initA11y, initTips, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
 })();
 

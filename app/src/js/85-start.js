@@ -253,7 +253,7 @@ const Templates = (() => {
 })();
 
 const Start = (() => {
-  let el = null;
+  let el = null, escHandler = null;
   let recBaseDoc = null, recPending = null, recBarEl = null, recTimer = null, recTracking = false, recBusy = false;
   function tplThumb(t) {
     return `<svg viewBox="0 0 110 56" aria-hidden="true"><style>.a1{fill:var(--accent);fill-opacity:.3;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a2{fill:var(--accent);fill-opacity:.55;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a3{fill:var(--accent);fill-opacity:.8;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b1{fill:#e8833a;fill-opacity:.35;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b2{fill:#e8833a;fill-opacity:.6;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b3{fill:#e8833a;fill-opacity:.85;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.hole{fill:var(--surface);stroke:var(--ink);stroke-opacity:.6;stroke-width:1}.line{stroke:var(--ink);stroke-opacity:.6;stroke-width:1.4}</style>${t.svg}</svg>`;
@@ -507,10 +507,10 @@ const Start = (() => {
     if (App.doc.items.length) el.append(close);
     document.body.append(el);
     if (recPending) renderRecoveryBanner();
-    const onKey = (e) => { if (e.key === 'Escape' && el && App.doc.items.length) hide(); };
-    document.addEventListener('keydown', onKey, { once: true });
+    escHandler = (e) => { if (e.key === 'Escape' && el && App.doc.items.length) { e.preventDefault(); hide(); } };
+    document.addEventListener('keydown', escHandler);
   }
-  function hide() { if (el) { el.remove(); el = null; if (recPending) renderRecoveryBanner(); } }
+  function hide() { if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; } if (el) { el.remove(); el = null; if (recPending) renderRecoveryBanner(); } }
   function openDrone(t) {
     App.setDoc(t.build()); hide();
     UI.toast(T('start.droneToast', { name: t.name }), { icon: 'check', ms: 6000 });

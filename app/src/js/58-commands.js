@@ -438,6 +438,7 @@ const Commands = (() => {
     add('settings-export', 'Einstellungen als Datei speichern', 'save', 'einstellungen sichern exportieren datei json backup tastenkuerzel favoriten maus genauigkeit', () => ViewPrefs.saveToFile(), { group: 'Ansicht' });
     add('settings-import', 'Einstellungen aus Datei laden', 'folder', 'einstellungen laden importieren datei json wiederherstellen tastenkuerzel favoriten maus genauigkeit', () => ViewPrefs.openFilePicker(), { group: 'Ansicht' });
     add('settings-scale', 'Oberflächen-Größe einstellen (80–150 %)', 'sliders', 'oberflaeche groesse skalierung zoom schrift groesser kleiner prozent 80 125 150 einstellungen', () => ViewPrefs.dialog('general', { focus: 'set-uiscale' }), { group: 'Ansicht' });
+    add('high-contrast', 'Hoher Kontrast ein/aus', 'sun', 'kontrast hoher kontrast barrierefreiheit lesbarkeit a11y fokus be-24', () => ViewPrefs.toggle('highContrast'), { group: 'Ansicht' });
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer vorlage vorlagen zoll 3d-druck laser gehäuse anfangen', () => Start.newProjectDialog(), { group: 'Projekt' });
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });
@@ -569,7 +570,8 @@ const Commands = (() => {
     if ((e.key === '?' || e.key === 'F1') && !mod && !e.altKey) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape' && Views.presenting) { Views.present(false); return; }
-    if (e.key === 'Escape') { if (UI.radialOpen) UI.closeRadial(); else if (Select.paintActive) Select.stopPaint(); else if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
+    if (e.key === 'Escape') { if (UI.menuOpen) UI.closeMenu(true); else if (UI.popOpen) UI.closePop(true); else if (UI.radialOpen) UI.closeRadial(true); else if (ViewPrefs.lookPanelOpen) ViewPrefs.closeLookPanel(); else if (Select.paintActive) Select.stopPaint(); else if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(true); App.clearSelection(); } return; }
+    if (combo === 'space' && e.target && e.target.closest && e.target.closest('button, a[href], [role="button"], [role="tab"], [role="menuitem"], summary')) return;
     const mHit = combo && SHORTCUTS.find((s) => !s.global && getCombo(s.id) === combo);
     if (mHit) {
       if (mHit.id === 'delete' && !App.sel.length && typeof Joints !== 'undefined' && Joints.selected) { e.preventDefault(); Joints.remove(Joints.selected); return; }

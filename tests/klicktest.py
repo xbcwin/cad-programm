@@ -27629,6 +27629,130 @@ def t_kreis_malen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a141_barrierefreiheit(p):
+    p.empty()
+    # 1. Mit Tab bis zum Körper-Knopf (#t-body), sichtbarer Fokus, Enter öffnet Flyout
+    p.pg.evaluate("document.body.focus()")
+    hit_body = False
+    for _ in range(45):
+        p.pg.keyboard.press('Tab')
+        if p.ev("return document.activeElement && document.activeElement.id === 't-body'"):
+            hit_body = True
+            break
+    focus_vis = p.ev("const a = document.activeElement; if (!a) return false; const cs = getComputedStyle(a); return cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;")
+    p.pg.keyboard.press('Enter'); p.wait(300)
+    fly_open1 = p.pg.locator('.flyout').count() == 1 and p.pg.locator('#t-body').get_attribute('aria-expanded') == 'true'
+    ok1 = hit_body and bool(focus_vis) and fly_open1
+
+    # 2. Tab zur Quader-Kachel, Esc schließt Flyout (Fokus zurück), erneut Enter + Tab + Enter → Quader
+    hit_box = False
+    for _ in range(12):
+        p.pg.keyboard.press('Tab')
+        if p.ev("return !!(document.activeElement && document.activeElement.dataset && document.activeElement.dataset.kind === 'box')"):
+            hit_box = True
+            break
+    p.pg.keyboard.press('Escape'); p.wait(250)
+    fly_closed_esc = p.pg.locator('.flyout').count() == 0 and p.ev("return document.activeElement && document.activeElement.id === 't-body'")
+    p.pg.keyboard.press('Enter'); p.wait(300)
+    hit_box2 = False
+    for _ in range(12):
+        p.pg.keyboard.press('Tab')
+        if p.ev("return !!(document.activeElement && document.activeElement.dataset && document.activeElement.dataset.kind === 'box')"):
+            hit_box2 = True
+            break
+    p.pg.keyboard.press('Enter'); warte_rechnen(p)
+    box_created = p.ev("return App.doc.items.length === 1 && App.doc.items[0].kind === 'box'")
+    ok2 = hit_box and fly_closed_esc and hit_box2 and box_created
+
+    # 3. Esc schließt Menü & Dialoge; Panels & ViewCube per Tab erreichbar
+    p.pg.locator('#btn-menu').click(); p.wait(200)
+    menu_open = p.pg.locator('.menu').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    menu_closed = p.pg.locator('.menu').count() == 0
+
+    p.ev("ViewPrefs.dialog()"); p.wait(250)
+    set_open = p.pg.locator('.modal-back').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    set_closed = p.pg.locator('.modal-back').count() == 0
+
+    p.ev("Toolbar.dialog()"); p.wait(250)
+    tb_open = p.pg.locator('.modal-back').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    tb_closed = p.pg.locator('.modal-back').count() == 0
+
+    panels_ok = p.ev("""
+      const hasTab = (sel) => { const el = document.querySelector(sel); return !!(el && UI.focusables(el).length > 0); };
+      const faces = [...document.querySelectorAll('.viewcube .face')];
+      const facesOk = faces.length === 6 && faces.every((f) => f.tabIndex >= 0);
+      const treeNodes = [...document.querySelectorAll('#left-body .node')];
+      const treeOk = treeNodes.length >= 1 && treeNodes.every((n) => n.tabIndex >= 0);
+      return hasTab('#left') && hasTab('#right') && hasTab('.timeline') && hasTab('.bottombar') && facesOk && treeOk;
+    """)
+    ok3 = menu_open and menu_closed and set_open and set_closed and tb_open and tb_closed and bool(panels_ok)
+
+    # 4. Kein sichtbarer Knopf ohne Beschriftung (Modell, Flyout, Dialoge, Skizze, Zeichnung)
+    AUDIT_JS = """(() => {
+      const bad = [];
+      for (const el of document.querySelectorAll('button, [role="button"]')) {
+        if (el.hidden || el.closest('[hidden]')) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        const aria = (el.getAttribute('aria-label') || '').trim();
+        const lby = (el.getAttribute('aria-labelledby') || '').trim();
+        const txt = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+        if (!aria && !lby && !txt) bad.push('no-label:' + (el.id || el.className || el.tagName));
+        if (el.tagName !== 'BUTTON' && el.tabIndex < 0) bad.push('no-tab:' + (el.id || el.className || el.tagName));
+      }
+      return bad;
+    })()"""
+    b_model = p.pg.evaluate(AUDIT_JS)
+    p.pg.locator('#t-body').click(); p.wait(250)
+    b_fly = p.pg.evaluate(AUDIT_JS)
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("ViewPrefs.dialog()"); p.wait(250)
+    b_set = p.pg.evaluate(AUDIT_JS)
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("Toolbar.dialog()"); p.wait(250)
+    b_tb = p.pg.evaluate(AUDIT_JS)
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(400)
+    b_sk = p.pg.evaluate(AUDIT_JS)
+    p.ev("Sketch.cancel()"); p.wait(300)
+    p.ev("Commands.setMode('drawing')"); p.wait(800)
+    b_dw = p.pg.evaluate(AUDIT_JS)
+    p.ev("Commands.setMode('model')"); p.wait(400)
+    ok4 = not (b_model or b_fly or b_set or b_tb or b_sk or b_dw)
+
+    # 5. Hoher Kontrast + Hilfe + DE/EN-Gleichheit + Befehlssuche
+    p.ev("ViewPrefs.dialog()"); p.wait(250)
+    p.pg.locator('#set-highContrast').click(); p.wait(200)
+    hc_on = p.ev("return document.body.classList.contains('high-contrast') && document.documentElement.classList.contains('high-contrast') && ViewPrefs.highContrast === true")
+    hc_saved = p.ev("return JSON.parse(localStorage.getItem('masswerk.view') || '{}').highContrast === true")
+    p.pg.locator('[data-help="highContrast"]').hover()
+    p.pg.wait_for_selector('.tooltip', timeout=5000)
+    tip_hc = p.pg.locator('.tooltip').text_content()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("ViewPrefs.toggle('highContrast')"); p.wait(150)
+    hc_off = p.ev("return !document.body.classList.contains('high-contrast') && ViewPrefs.highContrast === false")
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then((r) => r.json()),
+        fetch('data/texte-de.json').then((r) => r.json()),
+        fetch('data/texte-en.json').then((r) => r.json()),
+      ]);
+      const hc = h && h.highContrast;
+      const helpOk = !!(hc && hc.tip && hc.hilfe && hc.tipp) && String(arg || '').includes(hc.tip);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdOk = Commands.search('hoher kontrast').some((c) => c.id === 'high-contrast');
+      return { helpOk, i18nEq, cmdOk };
+    })()""", tip_hc)
+    ok5 = bool(hc_on and hc_saved and hc_off and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdOk') and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -27878,6 +28002,7 @@ TESTS = [
     ('[A-135] Boden mit Spiegelung, Umgebungsbild und Lichter von Hand (AN-11, AN-12)', t_a135_boden_licht),
     ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
+    ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

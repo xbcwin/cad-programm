@@ -10,7 +10,7 @@ const ViewPrefs = (() => {
   ];
   const DEF = {
     grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal',
-    adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1,
+    adaptive: true, multiWorker: true, theme: 'system', highContrast: false, decimals: 2, angleDecimals: 1,
     notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true,
     display: 'edges', lang: 'auto', mouse: 'tracery', uiScale: 100,
     floorReflect: false, floorReflectStrength: 45, envImageName: '', envImageData: '',
@@ -67,6 +67,7 @@ const ViewPrefs = (() => {
   v.envImageData = typeof v.envImageData === 'string' && v.envImageData.length <= 400000 ? v.envImageData : '';
   v.manualLights = !!v.manualLights;
   v.lights = normLights(v.lights);
+  v.highContrast = !!v.highContrast;
   const ev = makeEmitter();
   function persist() {
     const copy = { ...v, lights: normLights(v.lights) };
@@ -84,7 +85,15 @@ const ViewPrefs = (() => {
       document.documentElement.dataset.uiScale = String(pct);
     }
   }
+  function applyContrast() {
+    const on = !!v.highContrast;
+    if (typeof document !== 'undefined') {
+      if (document.documentElement) document.documentElement.classList.toggle('high-contrast', on);
+      if (document.body) document.body.classList.toggle('high-contrast', on);
+    }
+  }
   applyUiScale();
+  applyContrast();
   const simple = () => v.level === 'simple';
   function apply() {
     if (typeof I18n !== 'undefined' && I18n.use) {
@@ -119,6 +128,7 @@ const ViewPrefs = (() => {
     if (typeof Kernel !== 'undefined' && Kernel.setMultiWorker) Kernel.setMultiWorker(v.multiWorker !== false);
     applyTheme();
     applyUiScale();
+    applyContrast();
     FMT.dec = normDec(v.decimals, DEF.decimals);
     FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
     Viewer.setMouseStyle(v.mouse || 'tracery');
@@ -141,6 +151,7 @@ const ViewPrefs = (() => {
     if ('floorReflect' in next) next.floorReflect = !!next.floorReflect;
     if ('floorReflectStrength' in next) next.floorReflectStrength = normReflectStrength(next.floorReflectStrength);
     if ('manualLights' in next) next.manualLights = !!next.manualLights;
+    if ('highContrast' in next) next.highContrast = !!next.highContrast;
     if ('lights' in next) next.lights = normLights(next.lights);
     if ('envImageName' in next) next.envImageName = typeof next.envImageName === 'string' ? next.envImageName : '';
     if ('envImageData' in next) next.envImageData = typeof next.envImageData === 'string' && next.envImageData.length <= 400000 ? next.envImageData : '';
@@ -176,8 +187,12 @@ const ViewPrefs = (() => {
       planes: ['dlg.settings.tPlanesOn', 'dlg.settings.tPlanesOff'],
       axes: ['dlg.settings.tAxesOn', 'dlg.settings.tAxesOff'],
       notes: ['dlg.settings.tNotesOn', 'dlg.settings.tNotesOff'],
+      highContrast: ['dlg.settings.tHighContrastOn', 'dlg.settings.tHighContrastOff'],
     }[k];
     set({ [k]: !v[k] }, labels ? T(labels[v[k] ? 1 : 0]) : null);
+  }
+  function setHighContrast(on) {
+    set({ highContrast: !!on }, T(on ? 'dlg.settings.tHighContrastOn' : 'dlg.settings.tHighContrastOff'));
   }
   // Schild oben rechts: Einfach ↔ Profi
   function syncLevel() {
@@ -223,7 +238,7 @@ const ViewPrefs = (() => {
     const out = { ...DEF, lights: normLights(DEF.lights) };
     if (!src || typeof src !== 'object') return out;
     if (src.grid === 'auto' || (typeof src.grid === 'number' && isFinite(src.grid) && src.grid > 0)) out.grid = src.grid;
-    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows', 'floorReflect', 'manualLights']) {
+    for (const k of ['gridOn', 'planes', 'axes', 'ortho', 'adaptive', 'multiWorker', 'notes', 'cog', 'shadows', 'floorReflect', 'manualLights', 'highContrast']) {
       if (typeof src[k] === 'boolean') out[k] = src[k];
     }
     if (VALID_QUALITY.has(src.quality)) out.quality = src.quality;
@@ -710,11 +725,14 @@ const ViewPrefs = (() => {
       presets,
       h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, T('dlg.settings.uiScaleHint')),
     );
+    const hcChk = chk('highContrast', T('dlg.settings.highContrast'), T('dlg.settings.highContrastHint'));
+    hcChk.dataset.help = 'highContrast';
     paneGen.append(
       lvlField,
       langSel,
       unitSel,
       sel('set-theme', T('dlg.settings.themeLabel'), v.theme, [['system', T('dlg.settings.themeSys')], ['light', T('dlg.settings.themeLight')], ['dark', T('dlg.settings.themeDark')]], (x) => set({ theme: x })),
+      hcChk,
       scaleField,
       decBlock,
       sel('set-quality', T('dlg.settings.qualityLabel'), v.quality, [['coarse', T('dlg.settings.qCoarse')], ['normal', T('dlg.settings.qNormal')], ['fine', T('dlg.settings.qFine')], ['ultra', T('dlg.settings.qUltra')]], (x) => set({ quality: x }), T('dlg.settings.qualityHint')),
@@ -796,6 +814,6 @@ const ViewPrefs = (() => {
     openDialogState = { handle: modalHandle, get tab() { return curTab; } };
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
-  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v, lights: normLights(v.lights) }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get uiScale() { return v.uiScale; }, setUiScale, get highContrast() { return !!v.highContrast; }, setHighContrast, exportData, importData, saveToFile, loadFromFile, openFilePicker, resetAll, addLight, removeLight, updateLight, resetLights, loadEnvImage, clearEnvImage, openLookPanel, closeLookPanel, toggleLookPanel, get lookPanelOpen() { return !!(lookPanel && lookPanel.isConnected); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 

@@ -3592,5 +3592,9 @@
   "paint.countFaces": "{n} faces",
   "paint.countEdges": "{n} edges",
   "paint.clear": "Clear",
-  "paint.done": "Done"
+  "paint.done": "Done",
+  "dlg.settings.highContrast": "High contrast (stronger borders and focus)",
+  "dlg.settings.highContrastHint": "Draws borders, text and keyboard focus rings extra clearly in both light and dark themes.",
+  "dlg.settings.tHighContrastOn": "High contrast on",
+  "dlg.settings.tHighContrastOff": "High contrast off"
 }
