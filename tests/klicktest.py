@@ -27868,6 +27868,201 @@ def t_a141_barrierefreiheit(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a137_illustration_vierfach(p):
+    p.empty()
+    p.ev("""
+      App.change('a137-setup', d => {
+        const b = Model.newItem('box', { w: 40, d: 30, h: 15 }, { name: 'Klotz', color: '#d9483f' });
+        const c = Model.newItem('cylinder', { d: 20, h: 25 }, { name: 'Welle', color: '#3067d0' });
+        c.t.x = 45;
+        d.items.push(b, c);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("ViewPrefs.set({ level: 'simple', display: 'edges', look: 'studio' }); if (Views.quadActive) Views.quad(false);")
+    p.wait(250)
+
+    # 1. Profi-Sichtbarkeit: in Einfach ausgeblendet, in Profi vorhanden
+    p.pg.click('#t-more'); p.wait(200)
+    p.pg.locator('.menu button').filter(has_text='Ansicht:').first.click(); p.wait(200)
+    simple_hidden = p.pg.locator('#disp-illustration').count() == 0 and p.pg.locator('#view-quad').count() == 0
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    p.pg.click('#t-views'); p.wait(200)
+    pro_vis = p.pg.locator('#disp-illustration').count() == 1 and p.pg.locator('#view-quad').count() == 1
+    ok1 = bool(simple_hidden and pro_vis)
+
+    # 2. Technische Illustration (AN-17): weiße Flächen, dunkle Kanten, Silhouetten-Umriss, weißer Grund
+    p.pg.click('#disp-illustration'); p.wait(350)
+    ill = p.ev("""
+      const ids = App.doc.items.map(it => it.id);
+      const nodes = ids.map(id => {
+        const n = Viewer.nodes.get(id);
+        const m = n && n.mesh && n.mesh.material;
+        const em = n && n.edges && n.edges.material;
+        return n ? {
+          isBasic: !!(m && m.isMeshBasicMaterial),
+          col: m && m.color ? m.color.getHexString() : null,
+          vc: !!(m && m.vertexColors),
+          edgeVis: !!(n.edges && n.edges.visible),
+          edgeCol: em && em.color ? em.color.getHexString() : null,
+          edgeOp: em ? em.opacity : null,
+          outlineVis: !!(n.outline && n.outline.visible),
+        } : null;
+      });
+      return {
+        disp: ViewPrefs.get().display,
+        cls: document.body.classList.contains('tech-illustration'),
+        bg: getComputedStyle(document.querySelector('.center')).backgroundColor,
+        floorVis: !!(Viewer.floor && Viewer.floor.visible),
+        nodes,
+      };
+    """)
+    p.pg.click('#t-views'); p.wait(200)
+    p.pg.click('#disp-edges'); p.wait(300)
+    ill_off = p.ev("""
+      const n0 = Viewer.nodes.get(App.doc.items[0].id);
+      return {
+        disp: ViewPrefs.get().display,
+        cls: document.body.classList.contains('tech-illustration'),
+        hasOutline: !!(n0 && n0.outline),
+        isBasic: !!(n0 && n0.mesh && n0.mesh.material && n0.mesh.material.isMeshBasicMaterial),
+      };
+    """)
+    ok2 = (
+        ill['disp'] == 'illustration' and ill['cls'] is True and ill['bg'] == 'rgb(255, 255, 255)'
+        and ill['floorVis'] is False and len(ill['nodes']) == 2
+        and all(n and n['isBasic'] and n['col'] == 'ffffff' and not n['vc'] and n['edgeVis'] and n['edgeCol'] == '11161c' and n['edgeOp'] == 1 and n['outlineVis'] for n in ill['nodes'])
+        and ill_off['disp'] == 'edges' and ill_off['cls'] is False and ill_off['hasOutline'] is False and ill_off['isBasic'] is False
+    )
+
+    # 3. Vierfach-Ansicht (AN-18): einschalten -> 4 Bereiche (Vorn, Oben, Rechts, Schräg)
+    p.pg.click('#t-views'); p.wait(200)
+    p.pg.click('#view-quad'); p.wait(450)
+    q_info = p.ev("""
+      const panes = [...document.querySelectorAll('.quad-pane')].map(el => {
+        const r = el.getBoundingClientRect();
+        const lbl = el.querySelector('.quad-label');
+        return { key: el.dataset.quad, label: lbl ? lbl.textContent.trim() : '', x: r.left, y: r.top, w: r.width, h: r.height };
+      });
+      const vPanes = Viewer.quadPanes.map(q => {
+        const d = [q.camPos[0] - q.target[0], q.camPos[1] - q.target[1], q.camPos[2] - q.target[2]];
+        const L = Math.hypot(d[0], d[1], d[2]) || 1;
+        return { key: q.key, ortho: q.ortho, camPos: q.camPos, dir: [d[0] / L, d[1] / L, d[2] / L] };
+      });
+      return {
+        active: Views.quadActive,
+        vQuad: Viewer.quad,
+        cls: document.body.classList.contains('quad-view-on'),
+        ctrlDisabled: !Viewer.controls.enabled,
+        panes,
+        vPanes,
+      };
+    """)
+    p_by_k = {x['key']: x for x in q_info['panes']}
+    vp_by_k = {x['key']: x for x in q_info['vPanes']}
+    ok3 = (
+        q_info['active'] is True and q_info['vQuad'] is True and q_info['cls'] is True and q_info['ctrlDisabled'] is True
+        and len(q_info['panes']) == 4 and len(q_info['vPanes']) == 4
+        and p_by_k['front']['label'] == 'Vorn' and p_by_k['top']['label'] == 'Oben'
+        and p_by_k['right']['label'] == 'Rechts' and p_by_k['iso']['label'] == 'Schräg'
+        and all(x['w'] > 100 and x['h'] > 100 for x in q_info['panes'])
+        and p_by_k['front']['x'] < p_by_k['top']['x'] and p_by_k['front']['y'] < p_by_k['right']['y']
+        and vp_by_k['front']['dir'][1] < -0.99 and vp_by_k['top']['dir'][2] > 0.99 and vp_by_k['right']['dir'][0] > 0.99
+        and vp_by_k['iso']['ortho'] is False and vp_by_k['front']['ortho'] is True
+    )
+
+    # 4. Jede Ansicht einzeln drehbar + Reset + Ortho/Persp
+    def cam_dist(a, b):
+        return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
+
+    def wait_settled(key):
+        prev = {x['key']: x['camPos'] for x in p.ev("return Viewer.quadPanes")}
+        stable = 0
+        for _ in range(20):
+            p.wait(300)
+            cur = {x['key']: x['camPos'] for x in p.ev("return Viewer.quadPanes")}
+            if cam_dist(prev[key], cur[key]) < 1e-4:
+                stable += 1
+                if stable >= 2:
+                    return cur
+            else:
+                stable = 0
+            prev = cur
+        return prev
+
+    before = {x['key']: x['camPos'] for x in p.ev("return Viewer.quadPanes")}
+    fb = p.pg.locator('.quad-pane[data-quad="front"] .quad-hit').bounding_box()
+    fx, fy = fb['x'] + fb['width'] * 0.5, fb['y'] + fb['height'] * 0.5
+    p.pg.mouse.move(fx, fy); p.pg.mouse.down(); p.pg.mouse.move(fx + 90, fy - 50, steps=8); p.pg.mouse.up()
+    after_front = wait_settled('front')
+
+    ib = p.pg.locator('.quad-pane[data-quad="iso"] .quad-hit').bounding_box()
+    ix, iy = ib['x'] + ib['width'] * 0.5, ib['y'] + ib['height'] * 0.5
+    p.pg.mouse.move(ix, iy); p.pg.mouse.down(); p.pg.mouse.move(ix - 80, iy + 45, steps=8); p.pg.mouse.up()
+    after_iso = wait_settled('iso')
+
+    p.pg.click('.quad-pane[data-quad="front"] .quad-reset'); p.wait(250)
+    front_dir_reset = p.ev("""
+      const f = Viewer.quadPanes.find(x => x.key === 'front');
+      const d = [f.camPos[0] - f.target[0], f.camPos[1] - f.target[1], f.camPos[2] - f.target[2]];
+      const L = Math.hypot(d[0], d[1], d[2]) || 1;
+      return d[1] / L;
+    """)
+    p.pg.click('.quad-pane[data-quad="iso"] .quad-proj'); p.wait(200)
+    iso_ortho = p.ev("return { ortho: Viewer.quadPanes.find(x => x.key === 'iso').ortho, txt: document.querySelector('.quad-pane[data-quad=\"iso\"] .quad-proj').textContent.trim() }")
+    ok4 = (
+        cam_dist(before['front'], after_front['front']) > 1.0
+        and cam_dist(before['top'], after_front['top']) < 1e-3
+        and cam_dist(before['right'], after_front['right']) < 1e-3
+        and cam_dist(before['iso'], after_front['iso']) < 1e-3
+        and cam_dist(after_front['iso'], after_iso['iso']) > 1.0
+        and cam_dist(after_front['front'], after_iso['front']) < 1e-3
+        and cam_dist(after_front['top'], after_iso['top']) < 1e-3
+        and cam_dist(after_front['right'], after_iso['right']) < 1e-3
+        and front_dir_reset < -0.99
+        and iso_ortho['ortho'] is True and iso_ortho['txt'] == 'Ortho'
+    )
+
+    # 5. Ausschalten -> wieder 1 Ansicht + Hilfen/DE-EN/Befehle
+    p.pg.click('#quad-close'); p.wait(300)
+    closed = p.ev("""
+      return {
+        active: Views.quadActive,
+        vQuad: Viewer.quad,
+        cls: document.body.classList.contains('quad-view-on'),
+        domCount: document.querySelectorAll('.quad-pane').length,
+        paneLen: Viewer.quadPanes.length,
+        ctrlEnabled: !!Viewer.controls.enabled,
+        vcVis: getComputedStyle(document.querySelector('.viewcube')).display !== 'none',
+      };
+    """)
+    meta = p.ev("""return (async () => {
+      const [h, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const chkHelp = (k) => { const b = document.createElement('button'); b.dataset.help = k; return Explain.describeElement(b); };
+      const eIll = chkHelp('illustration'), eQuad = chkHelp('quadView');
+      const helpOk = !!(h.illustration && h.illustration.tip && h.illustration.hilfe && h.illustration.tipp
+        && h.quadView && h.quadView.tip && h.quadView.hilfe && h.quadView.tipp
+        && eIll && eIll.text === h.illustration.hilfe && eQuad && eQuad.text === h.quadView.hilfe);
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const cmdIll = Commands.search('illustration').some(c => c.id === 'disp-illustration');
+      const cmdQuad = Commands.search('vierfach').some(c => c.id === 'quad-view');
+      return { helpOk, i18nEq, cmdIll, cmdQuad };
+    })()""")
+    ok5 = bool(
+        closed['active'] is False and closed['vQuad'] is False and closed['cls'] is False
+        and closed['domCount'] == 0 and closed['paneLen'] == 0 and closed['ctrlEnabled'] is True and closed['vcVis'] is True
+        and meta.get('helpOk') and meta.get('i18nEq') and meta.get('cmdIll') and meta.get('cmdQuad') and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -28119,6 +28314,7 @@ TESTS = [
     ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
     ('[A-141] Tastaturbedienung, hoher Kontrast und Vorlese-Texte', t_a141_barrierefreiheit),
+    ('[A-137] Technische Illustration (weiß/Kanten) und Vierfach-Ansicht (4 drehbare Ansichten)', t_a137_illustration_vierfach),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -28,7 +28,18 @@ const Viewer = (() => {
   // Die Steuerung arbeitet immer mit der Perspektiv-Kamera. Im Ortho-Modus folgt eine
   // orthografische Kamera exakt ihrer Richtung, der Ausschnitt ergibt sich aus dem Abstand.
   let orthoCam = null, ortho = false;
-  function orthoHalfH() { return camera.position.distanceTo(controls.target) * Math.tan((camera.fov * Math.PI) / 360); }
+  const QUAD_DEFS = [
+    { key: 'front', dir: [0, -1, 0], up: [0, 0, 1], ortho: true },
+    { key: 'top', dir: [0, -0.0001, 1], up: [0, 0, 1], ortho: true },
+    { key: 'right', dir: [1, 0, 0], up: [0, 0, 1], ortho: true },
+    { key: 'iso', dir: [0.62, -0.9, 0.7], up: [0, 0, 1], ortho: false },
+  ];
+  let quadState = null; // { active: 'iso', panes: [...] }
+  function orthoHalfH() {
+    const ap = quadState ? (quadState.panes.find((p) => p.key === quadState.active) || quadState.panes[0]) : null;
+    const c = ap ? ap.cam : camera, t = ap ? ap.controls.target : controls.target;
+    return c.position.distanceTo(t) * Math.tan((c.fov * Math.PI) / 360);
+  }
   function syncOrtho() {
     const hh = orthoHalfH(), hw = hh * camera.aspect;
     orthoCam.left = -hw; orthoCam.right = hw; orthoCam.top = hh; orthoCam.bottom = -hh;
@@ -67,7 +78,8 @@ const Viewer = (() => {
   const view = { grid: 'auto', gridOn: true, planes: true, axes: true };
   let gridStep = 10;
   function autoStep() {
-    const d = camera.position.distanceTo(controls.target);
+    const ap = quadState ? (quadState.panes.find((p) => p.key === quadState.active) || quadState.panes[0]) : null;
+    const d = ap ? ap.cam.position.distanceTo(ap.controls.target) : camera.position.distanceTo(controls.target);
     return Math.pow(10, Math.round(Math.log10(Math.max(0.05, d / 45))));
   }
   // Linien werden in kurze Stücke geteilt: Grafiktreiber verwerfen sonst manchmal ganze Linien,
@@ -135,12 +147,17 @@ const Viewer = (() => {
     dot.userData.originDot = true; groups.origin.add(dot);
   }
   function updateViewAids() {
-    const dist = camera.position.distanceTo(controls.target);
+    const ap = quadState ? (quadState.panes.find((p) => p.key === quadState.active) || quadState.panes[0]) : null;
+    const refCam = ap ? ap.cam : camera;
+    const refTarget = ap ? ap.controls.target : controls.target;
+    const dist = refCam.position.distanceTo(refTarget);
     // Nah- und Fernebene mitführen: erlaubt tiefes Hineinzoomen ohne Flimmern
-    const nr = clamp(dist * 0.01, 0.002, 2), fr = dist * 60 + 8000;
-    if (Math.abs(camera.near - nr) > nr * 0.2 || Math.abs(camera.far - fr) > fr * 0.2) { camera.near = nr; camera.far = fr; camera.updateProjectionMatrix(); }
+    if (!quadState) {
+      const nr = clamp(dist * 0.01, 0.002, 2), fr = dist * 60 + 8000;
+      if (Math.abs(camera.near - nr) > nr * 0.2 || Math.abs(camera.far - fr) > fr * 0.2) { camera.near = nr; camera.far = fr; camera.updateProjectionMatrix(); }
+    }
     if (view.grid === 'auto') { const st = autoStep(); if (st !== gridStep) buildGrid(st); }
-    const tg = controls.target;
+    const tg = refTarget;
     if (Math.abs(tg.x - gridCenter[0]) > gridHalf * 0.3 || Math.abs(tg.y - gridCenter[1]) > gridHalf * 0.3) buildGrid(gridStep);
     // Raster blendet weich aus, wenn die Linien zu dicht werden
     const px = (gridStep / (2 * orthoHalfH())) * (container.clientHeight || 1);
@@ -293,9 +310,12 @@ const Viewer = (() => {
     renderer.setSize(w, hgt, false);
     camera.aspect = w / hgt; camera.updateProjectionMatrix();
     for (const m of fatMaterials) m.resolution.set(w, hgt);
+    for (const m of outlineMaterials) m.uniforms.uRes.value.set(w, hgt);
     needsRender = true; listeners.emit('camera');
   }
   const fatMaterials = new Set();
+  const outlineMaterials = new Set();
+  const isIllust = () => LOOK.display === 'illustration';
 
   // ---------- Aussehen: Studio-Licht, Werkstoff, Schatten, Boden-Spiegelung, eigene Umgebung ----------
   // look: 'studio' (Werkstoff mit Glanz, Umgebung, Schatten) · 'plain' (einfach, matt) · 'clay' / 'chrome' (Prüfansicht)
@@ -336,7 +356,7 @@ const Viewer = (() => {
   function updateReflectFloor(c, r, z0) {
     if (!reflectFloor || !reflectFloor.material) return;
     const strength = clamp(Number(LOOK.floorReflectStrength) || 0, 0, 1);
-    const on = LOOK.look === 'studio' && !!LOOK.floorReflect && strength > 0;
+    const on = LOOK.look === 'studio' && !isIllust() && !!LOOK.floorReflect && strength > 0;
     reflectFloor.visible = on;
     const m = reflectFloor.material;
     m.color.set(theme.dark ? '#242c36' : '#e6ecf2');
@@ -665,7 +685,9 @@ const Viewer = (() => {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; matcaps[kind] = t; return t;
   }
   function applyLook() {
-    const st = LOOK.look === 'studio';
+    const ill = isIllust();
+    if (typeof document !== 'undefined' && document.body) document.body.classList.toggle('tech-illustration', ill);
+    const st = LOOK.look === 'studio' && !ill;
     scene.environment = st ? (customEnvTex || buildEnv(LOOK.mood)) : null;
     renderer.toneMapping = st ? THREE.NeutralToneMapping : THREE.NoToneMapping; renderer.toneMappingExposure = st ? 1.05 : 1;
     syncLights();
@@ -674,7 +696,7 @@ const Viewer = (() => {
   }
   // Schatten-Kamera und Boden an die Teile anpassen (nach jeder Änderung der Teile)
   function fitShadow() {
-    const st = LOOK.look === 'studio';
+    const st = LOOK.look === 'studio' && !isIllust();
     let box = null;
     if (nodes.size > 0) {
       const b = new THREE.Box3();
@@ -733,6 +755,31 @@ const Viewer = (() => {
     const loopNow = performance.now();
     const loopDt = lastLoopAt > 0 ? loopNow - lastLoopAt : 0;
     lastLoopAt = loopNow;
+    if (quadState) {
+      inLoopCam = true;
+      let qMoved = false;
+      const dampDt = loopDt > 24 ? (1 - Math.pow(1 - BASE_DAMP, clamp(loopDt / (1000 / 60), 1, 60))) : BASE_DAMP;
+      for (const p of quadState.panes) {
+        p.controls.dampingFactor = !p.orbitActive ? dampDt : BASE_DAMP;
+        if (p.controls.update()) qMoved = true;
+        p.controls.dampingFactor = BASE_DAMP;
+      }
+      inLoopCam = false;
+      if (qMoved) {
+        for (const p of quadState.panes) p.cam.updateMatrixWorld();
+        listeners.emit('camera');
+      }
+      if (needsRender || qMoved) {
+        needsRender = false;
+        updateViewAids();
+        listeners.emit('beforeRender');
+        const t0 = performance.now();
+        renderQuad();
+        frameMs = frameMs * 0.7 + (performance.now() - t0) * 0.3;
+        listeners.emit('afterRender');
+      }
+      return;
+    }
     let camMoved = false;
     if (camAnim) {
       const t = Math.min(1, (loopNow - camAnim.t0) / camAnim.dur);
@@ -825,7 +872,8 @@ const Viewer = (() => {
     needsRender = false;
     updateViewAids();
     listeners.emit('beforeRender');
-    renderer.render(scene, cam());
+    if (quadState) renderQuad();
+    else renderer.render(scene, cam());
     listeners.emit('afterRender');
   }
 
@@ -986,8 +1034,143 @@ const Viewer = (() => {
   }
 
   // ---------- Objekte ----------
+  function getSmoothNormalAttr(geo) {
+    if (geo.userData && geo.userData._smoothNormal) return geo.userData._smoothNormal;
+    const pos = geo.getAttribute('position');
+    const cnt = pos ? pos.count : 0;
+    const out = new Float32Array(cnt * 3);
+    if (!pos || !cnt) {
+      const attr = new THREE.BufferAttribute(out, 3);
+      if (geo.userData) geo.userData._smoothNormal = attr;
+      return attr;
+    }
+    const P = pos.array;
+    const idx = geo.index ? geo.index.array : null;
+    const sums = new Map();
+    const keyOf = (vi) => Math.round(P[vi * 3] * 1e4) + ',' + Math.round(P[vi * 3 + 1] * 1e4) + ',' + Math.round(P[vi * 3 + 2] * 1e4);
+    const vKeys = new Array(cnt);
+    for (let i = 0; i < cnt; i++) {
+      const k = keyOf(i);
+      vKeys[i] = k;
+      if (!sums.has(k)) sums.set(k, [0, 0, 0]);
+    }
+    const tLen = idx ? idx.length : cnt;
+    for (let t = 0; t + 2 < tLen; t += 3) {
+      const i0 = idx ? idx[t] : t, i1 = idx ? idx[t + 1] : t + 1, i2 = idx ? idx[t + 2] : t + 2;
+      const ax = P[i0 * 3], ay = P[i0 * 3 + 1], az = P[i0 * 3 + 2];
+      const e1x = P[i1 * 3] - ax, e1y = P[i1 * 3 + 1] - ay, e1z = P[i1 * 3 + 2] - az;
+      const e2x = P[i2 * 3] - ax, e2y = P[i2 * 3 + 1] - ay, e2z = P[i2 * 3 + 2] - az;
+      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      for (const vi of [i0, i1, i2]) {
+        const s = sums.get(vKeys[vi]);
+        s[0] += nx; s[1] += ny; s[2] += nz;
+      }
+    }
+    const nAttr = geo.getAttribute('normal');
+    for (let i = 0; i < cnt; i++) {
+      const s = sums.get(vKeys[i]);
+      let nx = s[0], ny = s[1], nz = s[2];
+      let len = Math.hypot(nx, ny, nz);
+      if (len < 1e-12 && nAttr) {
+        nx = nAttr.array[i * 3]; ny = nAttr.array[i * 3 + 1]; nz = nAttr.array[i * 3 + 2];
+        len = Math.hypot(nx, ny, nz);
+      }
+      if (len > 1e-12) { out[i * 3] = nx / len; out[i * 3 + 1] = ny / len; out[i * 3 + 2] = nz / len; }
+      else { out[i * 3 + 2] = 1; }
+    }
+    const attr = new THREE.BufferAttribute(out, 3);
+    if (geo.userData) geo.userData._smoothNormal = attr;
+    return attr;
+  }
+  function makeOutlineMaterial(colorHex, clip, flipSide) {
+    const hasClip = !!(clip && clip.length);
+    const w = (container && container.clientWidth) || 1;
+    const hgt = (container && container.clientHeight) || 1;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(colorHex || '#11161c') },
+        uWidth: { value: 1.6 },
+        uRes: { value: new THREE.Vector2(w, hgt) },
+      },
+      vertexShader: [
+        'attribute vec3 smoothNormal;',
+        'uniform float uWidth;',
+        'uniform vec2 uRes;',
+        '#include <clipping_planes_pars_vertex>',
+        'void main() {',
+        '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
+        '  vec4 clipPos = projectionMatrix * mvPosition;',
+        '  vec3 viewN = normalize(normalMatrix * smoothNormal);',
+        '  vec4 clipN = projectionMatrix * vec4(viewN, 0.0);',
+        '  vec2 ndcDir = clipN.xy;',
+        '  float len = length(ndcDir);',
+        '  if (len > 1e-5) {',
+        '    ndcDir /= len;',
+        '    clipPos.xy += ndcDir * (uWidth * 2.0 / max(uRes, vec2(1.0))) * clipPos.w;',
+        '  }',
+        '  gl_Position = clipPos;',
+        '  #include <clipping_planes_vertex>',
+        '}',
+      ].join('\n'),
+      fragmentShader: [
+        'uniform vec3 uColor;',
+        '#include <clipping_planes_pars_fragment>',
+        'void main() {',
+        '  #include <clipping_planes_fragment>',
+        '  gl_FragColor = vec4(uColor, 1.0);',
+        '}',
+      ].join('\n'),
+      side: flipSide ? THREE.FrontSide : THREE.BackSide,
+      depthWrite: true,
+      depthTest: true,
+      clipping: hasClip,
+      clippingPlanes: hasClip ? clip : [],
+    });
+    outlineMaterials.add(mat);
+    return mat;
+  }
+  function disposeOutline(n) {
+    if (!n || !n.outline) return;
+    n.obj.remove(n.outline);
+    if (n.outline.geometry) n.outline.geometry.dispose();
+    if (n.outline.material) {
+      outlineMaterials.delete(n.outline.material);
+      n.outline.material.dispose();
+    }
+    n.outline = null;
+  }
+  function applyOutline(n, colorHex) {
+    disposeOutline(n);
+    if (!isIllust() || !n || n.role === 'hole' || n.allBodiesHidden || n.ctxDim || !n.mesh || !n.mesh.geometry) return;
+    const src = n.mesh.geometry;
+    const posAttr = src.getAttribute('position');
+    if (!posAttr) return;
+    const smoothAttr = getSmoothNormalAttr(src);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', posAttr);
+    geo.setAttribute('smoothNormal', smoothAttr);
+    if (src.index) geo.setIndex(src.index);
+    const clip = vis.clips.length ? vis.clips : null;
+    const flip = !!(n.base && n.base.determinant() < 0);
+    const mat = makeOutlineMaterial(colorHex || '#11161c', clip, flip);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData = { noPick: true, outline: true };
+    mesh.renderOrder = 0;
+    n.outline = mesh;
+    n.obj.add(mesh);
+  }
   function makeMaterial(role, color, look, texture) {
     const clip = vis.clips.length ? vis.clips : null;
+    if (role !== 'hole' && isIllust()) {
+      return new THREE.MeshBasicMaterial({
+        color: new THREE.Color('#ffffff'),
+        polygonOffset: true,
+        polygonOffsetFactor: 1.5,
+        polygonOffsetUnits: 1.5,
+        clippingPlanes: clip,
+        side: clip ? THREE.DoubleSide : THREE.FrontSide,
+      });
+    }
     if (role !== 'hole' && (LOOK.look === 'clay' || LOOK.look === 'chrome')) {
       const m = new THREE.MeshMatcapMaterial({ matcap: matcap(LOOK.look), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
       if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, '#9c8370'); }
@@ -1030,31 +1213,34 @@ const Viewer = (() => {
     m.customProgramCacheKey = () => 'cap';
   }
   function styleNode(n) {
-    const sel = n.selected, hov = n.hover;
-    if (n.texture && BODY_TEXTURES[n.texture.kind] && n.role !== 'hole') ensureMeshUVs(n);
+    const sel = n.selected, hov = n.hover, ill = isIllust();
+    if (n.texture && BODY_TEXTURES[n.texture.kind] && n.role !== 'hole' && !ill) ensureMeshUVs(n);
     disposeNodeMaterial(n.mesh.material);
     n.mesh.material = makeMaterial(n.role, n.color, n.look, n.texture);
-    n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole';
+    n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole' && !ill;
     applyFaceColors(n);
     applyThreads(n);
     applyDecals(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
+      disposeOutline(n);
       const clip = vis.clips.length ? vis.clips : null;
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
       if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18, clippingPlanes: clip }); }
       n.mesh.renderOrder = 4; needsRender = true; return;
     }
-    if (n.role !== 'hole' && n.mesh.material.isMeshMatcapMaterial) {
+    if (n.role !== 'hole' && ill) {
+      n.mesh.material.color.set('#ffffff');
+    } else if (n.role !== 'hole' && n.mesh.material.isMeshMatcapMaterial) {
       if (sel || hov) n.mesh.material.color.lerp(new THREE.Color(theme.accent), sel ? 0.45 : 0.2);
-    } else if (n.role !== 'hole') {
+    } else if (n.role !== 'hole' && !n.mesh.material.isMeshBasicMaterial) {
       const em = new THREE.Color(theme.accent);
       n.mesh.material.emissive = em; n.mesh.material.emissiveIntensity = sel ? 0.16 : hov ? 0.07 : 0;
-    } else {
+    } else if (n.role === 'hole') {
       n.mesh.material.opacity = sel ? 0.34 : hov ? 0.28 : n.dim ? 0.1 : 0.2;
     }
     // Durchsichtig je Teil (Eigenschaft des Teils)
     if (n.role !== 'hole' && n.opacity != null && n.opacity < 1) { const mt = n.mesh.material; mt.transparent = true; mt.opacity = Math.max(0.05, n.opacity); mt.depthWrite = false; }
-    // Anzeige-Art: nur Flächen, Drahtgitter (nur Kanten) oder mit verdeckten Kanten
+    // Anzeige-Art: nur Flächen, Drahtgitter (nur Kanten), mit verdeckten Kanten oder Technische Illustration
     const disp = LOOK.display;
     if (n.role !== 'hole') {
       const mt = n.mesh.material;
@@ -1068,13 +1254,16 @@ const Viewer = (() => {
     if (n.edges) {
       n.edges.material.dispose();
       if (n.role === 'hole') { n.edges.material = new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.2, transparent: true, opacity: sel ? 1 : 0.75, depthTest: !vis.xray, clippingPlanes: clip }); n.edges.computeLineDistances(); }
+      else if (ill) n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : '#11161c'), transparent: xr, opacity: sel ? 1 : xr ? 0.55 : 1, depthTest: !xr, clippingPlanes: clip });
       else n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : theme.edge), transparent: true, opacity: sel ? 1 : xr ? 0.42 : 0.5, depthTest: !xr, clippingPlanes: clip });
     }
     n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
     if (n.edges) { n.edges.renderOrder = xr ? 5 : 0; n.edges.visible = disp !== 'shaded' || sel || n.role === 'hole'; if (disp === 'wire' && n.role !== 'hole' && !sel) { n.edges.material.opacity = 0.9; n.edges.material.color = new THREE.Color(theme.edge).lerp(new THREE.Color(n.color || '#2f9e91'), 0.5); } }
-    if (disp === 'wire' || disp === 'hidden') n.mesh.castShadow = false;
-    if (n.allBodiesHidden) { n.mesh.visible = false; if (n.edges) n.edges.visible = false; if (n.decalGroup) n.decalGroup.visible = false; }
-    else { n.mesh.visible = true; if (n.decalGroup) n.decalGroup.visible = true; }
+    if (disp === 'wire' || disp === 'hidden' || disp === 'illustration') n.mesh.castShadow = false;
+    if (ill && n.role !== 'hole' && !n.allBodiesHidden) applyOutline(n, sel ? theme.accent : '#11161c');
+    else disposeOutline(n);
+    if (n.allBodiesHidden) { n.mesh.visible = false; if (n.edges) n.edges.visible = false; if (n.outline) n.outline.visible = false; if (n.decalGroup) n.decalGroup.visible = false; }
+    else { n.mesh.visible = true; if (n.outline) n.outline.visible = true; if (n.decalGroup) n.decalGroup.visible = true; }
     needsRender = true;
   }
   function applyBodies(n) {
@@ -1176,7 +1365,7 @@ const Viewer = (() => {
     const g = n.mesh.geometry, m = n.mesh.material;
     const hasFace = !!(n.faceColors && n.faceColors.length && n.data.faceGroups);
     const hasBody = !!(n.bodyColors && n.bodyColors.size && n.data.faceBody && n.data.faceGroups);
-    if ((!hasFace && !hasBody) || n.role === 'hole' || !m || m.isMeshMatcapMaterial) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
+    if ((!hasFace && !hasBody) || n.role === 'hole' || isIllust() || !m || m.isMeshMatcapMaterial) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
     const base = m.color.clone(), cnt = g.getAttribute('position').count, arr = new Float32Array(cnt * 3);
     for (let i = 0; i < cnt; i++) { arr[i * 3] = base.r; arr[i * 3 + 1] = base.g; arr[i * 3 + 2] = base.b; }
     const tri = n.data.triangles, map = new Map(); n.faceIdx = [];
@@ -1280,7 +1469,7 @@ const Viewer = (() => {
   }
   function applyThreads(n) {
     disposeThreads(n);
-    if (!n.threads || !n.threads.length || n.role === 'hole') return;
+    if (isIllust() || !n.threads || !n.threads.length || n.role === 'hole') return;
     const tg = new THREE.Group();
     tg.userData.threadGroup = true;
     const clip = vis.clips.length ? vis.clips : null;
@@ -1384,7 +1573,7 @@ const Viewer = (() => {
   }
   function applyDecals(n) {
     disposeDecals(n);
-    if (!n.decals || !n.decals.length || n.role === 'hole') return;
+    if (isIllust() || !n.decals || !n.decals.length || n.role === 'hole') return;
     const dg = new THREE.Group();
     dg.userData.decalGroup = true;
     const clip = vis.clips.length ? vis.clips : null;
@@ -1480,7 +1669,7 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, texture: info.texture ? { ...info.texture } : null, _texJson: JSON.stringify(info.texture || null), decals: info.decals ? info.decals.map((d) => ({ ...d })) : null, _decalsJson: JSON.stringify(info.decals || null), decalGroup: null, bodies: info.bodies || null, hiddenBodies: null, bodyColors: null, visFaceGroups: null, visEdgeGroups: null, visLines: null, allBodiesHidden: false, _filtered: false, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, texture: info.texture ? { ...info.texture } : null, _texJson: JSON.stringify(info.texture || null), decals: info.decals ? info.decals.map((d) => ({ ...d })) : null, _decalsJson: JSON.stringify(info.decals || null), decalGroup: null, outline: null, bodies: info.bodies || null, hiddenBodies: null, bodyColors: null, visFaceGroups: null, visEdgeGroups: null, visLines: null, allBodiesHidden: false, _filtered: false, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
     nodes.set(id, n); applyBodies(n); styleNode(n);
     fitShadowSoon();
@@ -1520,6 +1709,7 @@ const Viewer = (() => {
     const n = nodes.get(id); if (!n) return;
     disposeThreads(n);
     disposeDecals(n);
+    disposeOutline(n);
     groups.nodes.remove(n.obj);
     n.mesh.geometry.dispose(); disposeNodeMaterial(n.mesh.material); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
@@ -2492,6 +2682,7 @@ const Viewer = (() => {
   }
   function emptyBox() { return new THREE.Box3(new THREE.Vector3(-40, -40, 0), new THREE.Vector3(40, 40, 20)); }
   function fit(ids, animate = true) {
+    if (quadState) { fitQuad(ids); return; }
     let box = sceneBox(ids);
     if (box.isEmpty()) box = emptyBox();
     const c = box.getCenter(new THREE.Vector3());
@@ -2541,7 +2732,11 @@ const Viewer = (() => {
     if (ctx === 'place') return { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE };
     return { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
   }
-  function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) { controls.mouseButtons = buttonsFor(mouseStyle, ctx); controls.touches = touchesFor(ctx); } }
+  function useButtons(ctx = mouseCtx) {
+    mouseCtx = ctx;
+    if (controls) { controls.mouseButtons = buttonsFor(mouseStyle, ctx); controls.touches = touchesFor(ctx); }
+    if (quadState) for (const p of quadState.panes) { p.controls.mouseButtons = buttonsFor(mouseStyle, ctx); p.controls.touches = touchesFor(ctx); }
+  }
   function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
   function stopDamping() {
     if (!controls) return;
@@ -2594,6 +2789,17 @@ const Viewer = (() => {
   }
   const VIEWDIRS = { front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, -0.0001, 1], bottom: [0, -0.0001, -1], iso: [0.62, -0.9, 0.7] };
   function setView(name, animate = true) {
+    if (quadState) {
+      const ap = quadState.panes.find((p) => p.key === quadState.active) || quadState.panes[0];
+      if (ap) {
+        ap.dir = (VIEWDIRS[name] || VIEWDIRS.iso).slice();
+        let box = sceneBox(); if (box.isEmpty()) box = emptyBox();
+        const aspect = ap.rect ? (ap.rect.w / Math.max(1, ap.rect.h)) : ((container.clientWidth || 1) / Math.max(1, container.clientHeight || 1));
+        placeQuadPane(ap, box, aspect);
+        needsRender = true; listeners.emit('camera');
+      }
+      return;
+    }
     const d = VIEWDIRS[name] || VIEWDIRS.iso;
     let box = sceneBox(); if (box.isEmpty()) box = emptyBox();
     const c = box.getCenter(new THREE.Vector3());
@@ -2645,12 +2851,204 @@ const Viewer = (() => {
     const gv = {}; for (const k of Object.keys(groups)) if (k !== 'nodes') { gv[k] = groups[k].visible; groups[k].visible = false; }
     const y = size.y - r.y - r.h;
     renderer.setScissorTest(true); renderer.setScissor(r.x, y, r.w, r.h); renderer.setViewport(r.x, y, r.w, r.h);
-    renderer.setClearColor(new THREE.Color(bg || theme.surface), 1);
+    renderer.setClearColor(new THREE.Color(bg || (isIllust() ? '#ffffff' : theme.surface)), 1);
     renderer.render(scene, insetCam);
     renderer.setScissorTest(false); renderer.setViewport(0, 0, size.x, size.y); renderer.setClearColor(0x000000, 0);
     for (const [n, v] of before) n.obj.visible = v;
     for (const k of Object.keys(gv)) groups[k].visible = gv[k];
     return true;
+  }
+
+  // ---------- Vierfach-Ansicht (AN-18): Vorn, Oben, Rechts, Schräg einzeln drehbar ----------
+  function paneCameraFor(p, w, h) {
+    const aspect = w / Math.max(1, h);
+    const dist = Math.max(0.2, p.cam.position.distanceTo(p.controls.target));
+    p.cam.aspect = aspect;
+    p.cam.near = clamp(dist * 0.01, 0.002, 2);
+    p.cam.far = dist * 60 + 8000;
+    p.cam.updateProjectionMatrix();
+    p.cam.updateMatrixWorld();
+    if (!p.ortho) return p.cam;
+    const hh = dist * Math.tan((p.cam.fov * Math.PI) / 360);
+    const hw = hh * aspect;
+    p.orthoCam.left = -hw; p.orthoCam.right = hw; p.orthoCam.top = hh; p.orthoCam.bottom = -hh;
+    const dir = p.cam.position.clone().sub(p.controls.target).normalize();
+    p.orthoCam.position.copy(p.controls.target).addScaledVector(dir, 20000);
+    p.orthoCam.quaternion.copy(p.cam.quaternion);
+    p.orthoCam.up.copy(p.cam.up);
+    p.orthoCam.updateProjectionMatrix();
+    p.orthoCam.updateMatrixWorld();
+    return p.orthoCam;
+  }
+  function clearPaneDamping(ctrl) {
+    if (!ctrl) return;
+    if (ctrl._sphericalDelta) ctrl._sphericalDelta.set(0, 0, 0);
+    if (ctrl._panOffset) ctrl._panOffset.set(0, 0, 0);
+    if ('_scale' in ctrl) ctrl._scale = 1;
+  }
+  function placeQuadPane(p, box, aspect) {
+    const c = box.getCenter(new THREE.Vector3());
+    const r = Math.max(38, box.getSize(new THREE.Vector3()).length() / 2);
+    const dist = (r / Math.sin((p.cam.fov * Math.PI) / 360)) * 1.15 / Math.max(0.55, Math.min(1, aspect));
+    const dir = new THREE.Vector3(...p.dir).normalize();
+    clearPaneDamping(p.controls);
+    p.cam.up.set(...p.up);
+    p.cam.position.copy(c).addScaledVector(dir, dist);
+    p.controls.target.copy(c);
+    inLoopCam = true;
+    p.controls.update();
+    inLoopCam = false;
+    p.cam.updateMatrixWorld();
+  }
+  function setActiveQuadPane(key) {
+    if (!quadState || quadState.active === key) return;
+    if (!quadState.panes.some((p) => p.key === key)) return;
+    for (const p of quadState.panes) {
+      if (p.key !== key) {
+        p.orbitActive = false;
+        clearPaneDamping(p.controls);
+      }
+    }
+    quadState.active = key;
+    needsRender = true;
+    listeners.emit('viewmode');
+  }
+  function setQuadPaneOrtho(key, on) {
+    if (!quadState) return false;
+    const p = quadState.panes.find((x) => x.key === key);
+    if (!p) return false;
+    p.ortho = !!on;
+    needsRender = true;
+    listeners.emit('viewmode');
+    return true;
+  }
+  function resetQuadPane(key) {
+    if (!quadState) return false;
+    const p = quadState.panes.find((x) => x.key === key);
+    if (!p) return false;
+    const def = QUAD_DEFS.find((d) => d.key === key);
+    if (def) { p.dir = def.dir.slice(); p.up = def.up.slice(); }
+    let box = sceneBox(); if (box.isEmpty()) box = emptyBox();
+    const aspect = p.rect ? (p.rect.w / Math.max(1, p.rect.h)) : ((container.clientWidth || 1) / Math.max(1, container.clientHeight || 1));
+    placeQuadPane(p, box, aspect);
+    needsRender = true;
+    listeners.emit('camera');
+    return true;
+  }
+  function fitQuad(ids) {
+    if (!quadState) return;
+    let box = sceneBox(ids); if (box.isEmpty()) box = emptyBox();
+    const c = box.getCenter(new THREE.Vector3());
+    const r = Math.max(38, box.getSize(new THREE.Vector3()).length() / 2);
+    for (const p of quadState.panes) {
+      const aspect = p.rect ? (p.rect.w / Math.max(1, p.rect.h)) : ((container.clientWidth || 1) / Math.max(1, container.clientHeight || 1));
+      const dist = (r / Math.sin((p.cam.fov * Math.PI) / 360)) * 1.15 / Math.max(0.55, Math.min(1, aspect));
+      const dir = p.cam.position.clone().sub(p.controls.target);
+      if (dir.lengthSq() < 1e-8) dir.set(...p.dir);
+      dir.normalize();
+      clearPaneDamping(p.controls);
+      p.cam.position.copy(c).addScaledVector(dir, dist);
+      p.controls.target.copy(c);
+      inLoopCam = true;
+      p.controls.update();
+      inLoopCam = false;
+      p.cam.updateMatrixWorld();
+    }
+    needsRender = true;
+    listeners.emit('camera');
+  }
+  function setQuad(on, hostMap = {}) {
+    if (!on) {
+      if (!quadState) return;
+      for (const p of quadState.panes) p.controls.dispose();
+      quadState = null;
+      if (controls) controls.enabled = true;
+      renderer.setScissorTest(false);
+      resize();
+      listeners.emit('viewmode');
+      return;
+    }
+    if (quadState) setQuad(false);
+    cancelCamAnim();
+    stopDamping();
+    if (controls) controls.enabled = false;
+    let box = sceneBox(); if (box.isEmpty()) box = emptyBox();
+    const W = container.clientWidth || 1, H = container.clientHeight || 1;
+    const aspect = (W / 2) / Math.max(1, H / 2);
+    const panes = [];
+    for (const def of QUAD_DEFS) {
+      const hitEl = hostMap[def.key] || renderer.domElement;
+      const pCam = new THREE.PerspectiveCamera(32, aspect, 0.5, 30000);
+      pCam.up.set(...def.up);
+      const pOrtho = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
+      const pCtrl = new OrbitControls(pCam, hitEl);
+      pCtrl.enableDamping = true; pCtrl.dampingFactor = BASE_DAMP;
+      pCtrl.screenSpacePanning = true; pCtrl.zoomToCursor = true;
+      pCtrl.rotateSpeed = 0.85; pCtrl.zoomSpeed = 1.1; pCtrl.panSpeed = 0.9;
+      pCtrl.minDistance = 0.2; pCtrl.maxDistance = 12000;
+      pCtrl.mouseButtons = buttonsFor(mouseStyle, 'model');
+      pCtrl.touches = touchesFor('model');
+      const pane = { key: def.key, dir: def.dir.slice(), up: def.up.slice(), ortho: def.ortho, cam: pCam, orthoCam: pOrtho, controls: pCtrl, el: hitEl, rect: null, orbitActive: false };
+      placeQuadPane(pane, box, aspect);
+      pCtrl.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
+      pCtrl.addEventListener('start', () => { pane.orbitActive = true; setActiveQuadPane(def.key); });
+      pCtrl.addEventListener('end', () => { pane.orbitActive = false; });
+      panes.push(pane);
+    }
+    quadState = { active: 'iso', panes };
+    needsRender = true;
+    listeners.emit('viewmode');
+    listeners.emit('camera');
+  }
+  function renderQuad() {
+    if (!quadState) return;
+    const size = renderer.getSize(new THREE.Vector2());
+    const cr = renderer.domElement.getBoundingClientRect();
+    const hw = Math.max(1, size.x / 2), hh = Math.max(1, size.y / 2);
+    const fb = [[0, 0], [hw, 0], [0, hh], [hw, hh]];
+    for (let i = 0; i < quadState.panes.length; i++) {
+      const p = quadState.panes[i];
+      const br = p.el && p.el.getBoundingClientRect ? p.el.getBoundingClientRect() : null;
+      const useDom = !!(br && br.width >= 4 && br.height >= 4 && cr.width >= 4 && cr.height >= 4);
+      const x = useDom ? Math.max(0, br.left - cr.left) : fb[i][0];
+      const y = useDom ? Math.max(0, br.top - cr.top) : fb[i][1];
+      const w = useDom ? Math.max(1, br.width) : hw;
+      const h = useDom ? Math.max(1, br.height) : hh;
+      p.rect = { x, y, w, h };
+      const rc = paneCameraFor(p, w, h);
+      for (const m of fatMaterials) m.resolution.set(w, h);
+      for (const m of outlineMaterials) m.uniforms.uRes.value.set(w, h);
+      const vy = Math.max(0, size.y - y - h);
+      renderer.setScissorTest(true);
+      renderer.setScissor(x, vy, w, h);
+      renderer.setViewport(x, vy, w, h);
+      renderer.render(scene, rc);
+    }
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, size.x, size.y);
+    for (const m of fatMaterials) m.resolution.set(size.x, size.y);
+    for (const m of outlineMaterials) m.uniforms.uRes.value.set(size.x, size.y);
+  }
+  function pickInPane(key, cx, cy) {
+    if (!quadState) return null;
+    const p = quadState.panes.find((x) => x.key === key);
+    if (!p || !p.el || !p.el.getBoundingClientRect) return null;
+    const br = p.el.getBoundingClientRect();
+    if (br.width < 2 || br.height < 2) return null;
+    _ndc.set(((cx - br.left) / br.width) * 2 - 1, -((cy - br.top) / br.height) * 2 + 1);
+    raycaster.setFromCamera(_ndc, paneCameraFor(p, br.width, br.height));
+    const meshes = [];
+    for (const n of nodes.values()) { if (!n.obj.visible || n.allBodiesHidden || n.ctxDim) continue; meshes.push(n.mesh); }
+    let hits = raycaster.intersectObjects(meshes, false);
+    if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
+    if (!hits.length) return null;
+    const hit = hits[0];
+    const n = nodes.get(hit.object.userData.nodeId);
+    if (!n) return null;
+    const tri = hit.faceIndex * 3;
+    let faceIdx = -1;
+    for (const g of n.visFaceGroups || n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
+    return { id: n.id, faceIdx, point: hit.point.clone(), distance: hit.distance };
   }
 
   // ---------- Vergleich: älterer Stand als roter, gestrichelter Umriss oder 3-Farben-Diff (neu/weg/gleich) ----------
@@ -2842,6 +3240,7 @@ const Viewer = (() => {
     hide.forEach((o) => { o.visible = false; });
     const c = cam(), oldAspect = camera.aspect;
     renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
+    for (const m of outlineMaterials) m.uniforms.uRes.value.set(w, hgt);
     if (c.isPerspectiveCamera) { c.aspect = w / hgt; c.updateProjectionMatrix(); }
     else { const o = { l: c.left, r: c.right, t: c.top, b: c.bottom }; const hh = (c.top - c.bottom) / 2, ww = (hh * w) / hgt, cx = (c.left + c.right) / 2; c.left = cx - ww; c.right = cx + ww; c.updateProjectionMatrix(); c.userData.restore = o; }
     renderer.setClearColor(new THREE.Color(opts.bg || '#ffffff'), opts.transparent ? 0 : 1);
@@ -2850,6 +3249,7 @@ const Viewer = (() => {
     const url = renderer.domElement.toDataURL('image/png');
     hide.forEach((o, i) => { o.visible = was[i]; });
     renderer.setClearColor(0x000000, 0); renderer.setPixelRatio(oldPR); renderer.setSize(old.x, old.y, false);
+    for (const m of outlineMaterials) m.uniforms.uRes.value.set(old.x, old.y);
     if (c.isPerspectiveCamera) { c.aspect = oldAspect; c.updateProjectionMatrix(); }
     else if (c.userData.restore) { Object.assign(c, { left: c.userData.restore.l, right: c.userData.restore.r, top: c.userData.restore.t, bottom: c.userData.restore.b }); c.updateProjectionMatrix(); delete c.userData.restore; }
     renderer.shadowMap.needsUpdate = true; needsRender = true;
@@ -3020,6 +3420,9 @@ const Viewer = (() => {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK, lights: LOOK.lights.map((l) => ({ ...l })), hasCustomEnv: !!customEnvTex, envImageName: customEnvName }; }, TEXTURES: BODY_TEXTURES, setEnvImage, get hasCustomEnv() { return !!customEnvTex; }, get envImageName() { return customEnvName; }, get floor() { return reflectFloor; }, get customLights() { return customLights.slice(); }, get lights() { return LOOK.manualLights ? customLights.slice() : [lights.key, lights.fill, lights.rim]; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setCompareDiff, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedFaces, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
+    setQuad, setActiveQuadPane, setQuadPaneOrtho, resetQuadPane, fitQuad, pickInPane,
+    get quad() { return !!quadState; }, get activeQuadPane() { return quadState ? quadState.active : null; },
+    get quadPanes() { return quadState ? quadState.panes.map((p) => ({ key: p.key, ortho: p.ortho, active: quadState.active === p.key, rect: p.rect ? { ...p.rect } : null, camPos: p.cam.position.toArray(), target: p.controls.target.toArray() })) : []; },
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,

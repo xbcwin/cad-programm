@@ -22,7 +22,7 @@ const ViewPrefs = (() => {
   const VALID_LEVEL = new Set(['simple', 'pro']);
   const VALID_LOOK = new Set(['studio', 'plain', 'clay', 'chrome', 'simple']);
   const VALID_MOOD = new Set(['studio', 'hell', 'werkstatt', 'bright', 'workshop']);
-  const VALID_DISPLAY = new Set(['edges', 'shaded', 'wire', 'hidden']);
+  const VALID_DISPLAY = new Set(['edges', 'shaded', 'wire', 'hidden', 'illustration']);
   const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
   const normLang = (x) => (x === 'de' || x === 'en' ? x : 'auto');
   const normUiScale = (x) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 80, 150) : 100; };
@@ -164,6 +164,7 @@ const ViewPrefs = (() => {
     if (v.level !== oldL) {
       // Oberfläche gewechselt: Werkzeuge, Leisten und Kontextleiste neu aufbauen
       if (simple() && App.mode !== 'model') Commands.setMode('model');
+      if (simple() && typeof Views !== 'undefined' && Views.quadActive) Views.quad(false);
       Panels.closeFlyout(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx();
       if (typeof Commands !== 'undefined' && Commands.syncCmdKbds) Commands.syncCmdKbds();
     }

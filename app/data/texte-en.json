@@ -3663,5 +3663,20 @@
   "dlg.settings.highContrast": "High contrast (stronger borders and focus)",
   "dlg.settings.highContrastHint": "Draws borders, text and keyboard focus rings extra clearly in both light and dark themes.",
   "dlg.settings.tHighContrastOn": "High contrast on",
-  "dlg.settings.tHighContrastOff": "High contrast off"
+  "dlg.settings.tHighContrastOff": "High contrast off",
+  "menu.view.disp.illustration": "Technical illustration (outlines)",
+  "menu.view.quad": "Quad view (4 viewports)",
+  "quad.front": "Front",
+  "quad.top": "Top",
+  "quad.right": "Right",
+  "quad.iso": "Isometric",
+  "quad.ortho": "Ortho",
+  "quad.persp": "Persp",
+  "quad.toggleProj": "Toggle orthographic and perspective",
+  "quad.resetPane": "Reset this view",
+  "quad.exit": "Single view",
+  "quad.exitAria": "Exit quad view",
+  "quad.toastOn": "Quad view on: Front, Top, Right and Isometric – each can be orbited independently.",
+  "quad.toastOff": "Returned to single 3D view.",
+  "quad.aria": "Quad view"
 }

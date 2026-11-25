@@ -3663,5 +3663,20 @@
   "dlg.settings.highContrast": "Hoher Kontrast (stärkere Rahmen und Fokus)",
   "dlg.settings.highContrastHint": "Zeichnet Ränder, Schriften und den Tastatur-Fokus extra deutlich – im hellen und dunklen Design.",
   "dlg.settings.tHighContrastOn": "Hoher Kontrast an",
-  "dlg.settings.tHighContrastOff": "Hoher Kontrast aus"
+  "dlg.settings.tHighContrastOff": "Hoher Kontrast aus",
+  "menu.view.disp.illustration": "Technische Illustration (Umrisse)",
+  "menu.view.quad": "Vierfach-Ansicht (4 Ansichten)",
+  "quad.front": "Vorn",
+  "quad.top": "Oben",
+  "quad.right": "Rechts",
+  "quad.iso": "Schräg",
+  "quad.ortho": "Ortho",
+  "quad.persp": "Persp",
+  "quad.toggleProj": "Zwischen orthografisch und perspektivisch umschalten",
+  "quad.resetPane": "Diese Ansicht zurücksetzen",
+  "quad.exit": "1 Ansicht",
+  "quad.exitAria": "Vierfach-Ansicht beenden",
+  "quad.toastOn": "Vierfach-Ansicht an: Vorn, Oben, Rechts und Schräg – jede einzeln drehbar.",
+  "quad.toastOff": "Wieder einzelne 3D-Ansicht.",
+  "quad.aria": "Vierfach-Ansicht"
 }

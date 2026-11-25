@@ -2575,6 +2575,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hoher Kontrast, Hilfe & DE/EN**: Einstellung `#set-highContrast` setzt `body.high-contrast` und speichert `highContrast` dauerhaft in `masswerk.view`; `HELP.highContrast`, DE/EN-Schlüsselgleichheit und Befehlssuche (`high-contrast`) geprüft (`t_a141_barrierefreiheit`).
 - [ ] **Von Hand**: Im Browser ein komplettes Teil nur per Tastatur (Tab, Pfeiltasten, Enter, Esc) im Modus „Hoher Kontrast“ (hell & dunkel) erstellen und mit VoiceOver (macOS) oder NVDA (Windows) prüfen, ob alle Symbolknöpfe verständlich vorgelesen werden.
 
+## Technische Illustration und vier Ansichten (Auto [A-137], AN-17, AN-18)
+
+- [x] **Profi-Sichtbarkeit**: `#disp-illustration` und `#view-quad` sind im Einfach-Modus ausgeblendet und im Profi-Ansichtsmenü (`#t-views`) verfügbar (`t_a137_illustration_vierfach`).
+- [x] **Technische Illustration (`AN-17`)**: `#disp-illustration` schaltet `body.tech-illustration` mit rein weißem Hintergrund (`rgb(255, 255, 255)`), weißen Flächen ohne Werkstoff-/Flächenfarben oder Boden-Schatten sowie dunklen Kanten (`#11161c`) und Silhouetten-Umriss (`n.outline`) ein; Zurückschalten auf `#disp-edges` stellt die normale Darstellung wieder her (`t_a137_illustration_vierfach`).
+- [x] **Vierfach-Ansicht (`AN-18`)**: `#view-quad` teilt das 3D-Fenster in vier Bereiche (Vorn, Oben, Rechts, Schräg) mit eigenen Kameras und `OrbitControls`; Ziehen in einem Bereich dreht nur diesen Bereich, `.quad-reset` und `.quad-proj` (Ortho/Persp) steuern ihn gezielt, `#quad-close` kehrt sauber zur Einzelansicht zurück (`t_a137_illustration_vierfach`).
+- [x] **Hilfen, DE/EN & Befehle**: `HELP.illustration`/`HELP.quadView`, DE/EN-Schlüsselgleichheit und Befehlssuche (`disp-illustration`, `quad-view`) geprüft (`t_a137_illustration_vierfach`).
+- [ ] **Von Hand**: Im Browser einen abgerundeten Körper mit Bohrungen in „Technische Illustration“ drehen, die Kanten- und Umrissqualität (auch per „Bild speichern“) prüfen und in der Vierfach-Ansicht gleichzeitig aus allen vier Blickrichtungen modellieren.
+
 ## Fehler melden
 
 ```

@@ -716,6 +716,8 @@ const IC = {
   splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
   commentPin: '<path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" fill="currentColor" opacity=".18"/><path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.2" />',
   layout: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8.5 4v16 M15.5 4v16" />',
+  illustration: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z M4 7.5 12 12l8-4.5 M12 12v9" stroke-width="1.9" />',
+  quadView: '<rect x="3" y="3" width="8" height="8" rx="1.2"/><rect x="13" y="3" width="8" height="8" rx="1.2"/><rect x="3" y="13" width="8" height="8" rx="1.2"/><rect x="13" y="13" width="8" height="8" rx="1.2"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2427,6 +2429,16 @@ const HELP = {
   "tip": "Hoher Kontrast: kräftige Rahmen, klare Farben und extra deutlicher Fokusrahmen",
   "hilfe": "Verstärkt alle Ränder, Schriften, Knöpfe und Fokus-Umrandungen im hellen und dunklen Design, damit die Oberfläche auch bei grellem Licht oder schwachem Sehvermögen leicht lesbar bleibt.",
   "tipp": "Alle Knöpfe lassen sich außerdem per Tab, Pfeiltasten, Enter und Esc komplett ohne Maus bedienen."
+ },
+ "illustration": {
+  "tip": "Technische Illustration: weiße Flächen mit klaren Umrissen und Kanten auf weißem Grund (Profi)",
+  "hilfe": "Stellt alle Körper wie in einer technischen Zeichnung oder Anleitung dar: weiße Flächen verdecken die Rückseite, während alle Kanten und äußeren Umrisse als scharfe dunkle Linien auf weißem Hintergrund gezeichnet werden.",
+  "tipp": "Ideal zusammen mit „Bild speichern (PNG)“ für Anleitungen, Dokumentationen oder Patentskizzen."
+ },
+ "quadView": {
+  "tip": "Vierfach-Ansicht: Vorn, Oben, Rechts und Schräg gleichzeitig im Bild (Profi)",
+  "hilfe": "Teilt das 3D-Fenster in vier Bereiche (Vorn, Oben, Rechts und Schräg). Jeden Bereich kannst du einzeln mit der Maus drehen, zoomen und verschieben, per Knopf zwischen orthografisch und perspektivisch umschalten oder auf seine Grundrichtung zurücksetzen.",
+  "tipp": "Ein Klick auf „1 Ansicht“ oben rechts oder erneut auf „Vierfach-Ansicht“ im Ansicht-Menü kehrt sofort zur großen Einzelansicht zurück."
  }
 };
 
