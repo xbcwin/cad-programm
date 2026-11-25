@@ -2528,6 +2528,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Hilfen, Übersetzung & Befehlssuche**: Knöpfe im Projekt-Panel, im Mehr-Menü (`#t-more` in „Einfach“) und im Prüfen-Menü (`#t-check` in „Profi“), Hilfetexte (`printCost`, `reportPdf` in JSON/`HELP`), DE/EN-Schlüsselgleichheit und Befehle `print-cost` / `report-pdf` geprüft (`t_a134_druckkosten_pruefbericht`).
 - [ ] **Von Hand**: Im Browser bei einem komplexen Modell mit dünner Wand und mehreren Teilen den Dialog „Druckkosten & Zeit“ anpassen und den erzeugten PDF-Prüfbericht in einem PDF-Viewer öffnen, um Layout, Umlaute, €-Zeichen, Bildqualität und Teileliste visuell zu prüfen.
 
+## Kreis-Menü und Malen-Auswahl (Auto [A-138], BE-19, BE-20)
+
+- [x] **Kreis-Menü per Taste `Q` & Befehl ausführen (`BE-19`)**: `Q` öffnet `#radial-menu` mit 8 Einträgen am Mauszeiger; Klick auf „Quader“ schließt das Menü und legt einen Quader an (`t_kreis_malen`).
+- [x] **Kreis-Menü anpassen & Rechtsklick-Halten (`BE-19`)**: Über `#radial-config-btn` lassen sich alle 8 Plätze frei belegen und in `tracery-kreismenue` speichern; rechte Maustaste > 320 ms halten öffnet das Kreis-Menü mit der geänderten Belegung, kurzer Rechtsklick öffnet weiterhin das Kontextmenü (`t_kreis_malen`).
+- [x] **Malen-Auswahl über mehrere Flächen & Kanten (`BE-20`)**: Überstreichen von 3 Quader-Flächen mit gedrückter linker Maustaste wählt alle 3 Flächen (`App.faces.length == 3`, Statusleiste und Kontextleiste zeigen „3 Flächen“); im Kanten-Modus wählt Streichen mehrere Kanten, `Alt`-Streichen wählt wieder ab, `Esc` / „Fertig“ beendet den Modus (`t_kreis_malen`).
+- [x] **Hilfen, DE/EN-Texte & Befehle**: `werkzeug-hilfen.json`/`HELP` enthalten `radialMenu` und `paintSelect`, DE/EN-Schlüssel sind gleich, Befehlssuche findet Kreis-Menü und Malen-Auswahl (`t_kreis_malen`).
+- [ ] **Von Hand**: Im Browser mit rechter Maustaste kurz gedrückt halten, direkt auf ein Feld ziehen und loslassen (flüssige Geste ohne zweiten Klick) sowie auf einem abgerundeten Bauteil mit Malen-Auswahl mehrere Flächen einfärben und Kantenketten abrunden.
+
 ## Fehler melden
 
 ```
