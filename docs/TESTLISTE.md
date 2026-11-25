@@ -2635,6 +2635,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfe & DE/EN-Schlüssel**: `HELP.exampleGallery` und identische Schlüssel in `texte-de.json`/`texte-en.json` geprüft (`t_a149_beispiel_galerie`).
 - [ ] **Von Hand**: Im Browser in „Einfach“ und „Profi“ alle 8 Beispiele auf der Startseite durchsehen, „Vase“, „Baugruppe Scharnier“ (Gelenk bewegen) und „Lagerbock mit Zeichnung“ (Reiter „Zeichnung“ öffnen) anklicken und umbauen.
 
+## Dateiformat offen beschreiben (Auto [A-150], PL-12)
+
+- [x] **`docs/DATEIFORMAT.md` vollständig**: Beschreibt `.tracery.json`-Aufbau (`format: "masswerk"`, `version: 1`, `id`, `name`, `items`, `params`, `settings`, `sketch`, `docType`), Einheiten/Formeln, Versionen sowie `Store.validateProject` samt drei vollständigen JSON-Beispielen (`t_a150_dateiformat`).
+- [x] **Beispiele & echte Projekte gültig**: Alle drei Beispiel-Projekte aus `docs/DATEIFORMAT.md` (als JSON-Text und Objekt) sowie Vorlagen (`Templates.LIST[0].build()`) und `Start.projectPayload()` bestehen `Store.validateProject()` fehler- und warnungsfrei; Beispiel 1 („Schild mit Loch“) öffnet über `Start.openBlob` und rechnet fehlerfrei (`t_a150_dateiformat`).
+- [x] **Kaputte Dateien & Vorwärtskompatibilität**: Fehlendes oder falsches `format`, fehlendes `version`/`items`/`id`/`name`, fehlendes `kind`, doppelte Schritt-IDs und kaputtes JSON liefern klare deutsche Fehlermeldungen (`ok: false`), während eine neuere `version` oder unbekannte Schritt-Art nur Warnungen auslöst (`t_a150_dateiformat`).
+- [ ] **Von Hand**: `docs/DATEIFORMAT.md` einmal durchlesen, eines der Beispiele als `.tracery.json` speichern und per Drag-and-Drop in Tracery öffnen sowie in der Browser-Konsole `Store.validateProject(...)` mit einer eigenen leicht veränderten Datei ausprobieren.
+
 ## Fehler melden
 
 ```
