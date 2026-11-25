@@ -10,7 +10,7 @@ const Assembly = (() => {
     return !!(it && it.partRef && typeof it.partRef.docId === 'string' && it.partRef.docId);
   }
   function isStepMod(it) {
-    return !it || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'deleteBody' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
+    return !it || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'deleteBody' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'));
   }
   function canOpenInTab(it, doc = App.doc) {
     if (!it || it.kind === 'ref') return false;

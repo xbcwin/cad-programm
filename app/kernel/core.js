@@ -525,6 +525,381 @@ export function createKernel(R, oc) {
     }
     return scaleNonUniform(shape, center, [sx, sy, sz]);
   }
+  const deformBasisInvMemo = new Map();
+  function bsplineBasisInv(n) {
+    if (deformBasisInvMemo.has(n)) return deformBasisInvMemo.get(n);
+    const deg = Math.min(3, n - 1);
+    const ts = Array.from({ length: n }, (_, i) => i / (n - 1));
+    const knots = [0], mults = [deg + 1];
+    if (deg === 3 && n > 4) {
+      for (let i = 2; i <= n - 3; i++) { knots.push(ts[i]); mults.push(1); }
+    } else if (deg === 2 && n > 3) {
+      for (let i = 1; i <= n - 2; i++) { knots.push((ts[i] + ts[i + 1]) / 2); mults.push(1); }
+    }
+    knots.push(1); mults.push(deg + 1);
+    const U = [];
+    for (let i = 0; i < knots.length; i++) for (let k = 0; k < mults[i]; k++) U.push(knots[i]);
+    const evalBasis = (t) => {
+      const B = new Array(n).fill(0);
+      if (t <= 0) { B[0] = 1; return B; }
+      if (t >= 1) { B[n - 1] = 1; return B; }
+      let span = deg;
+      while (span < n - 1 && t >= U[span + 1]) span++;
+      const N = new Array(deg + 1).fill(0);
+      N[0] = 1;
+      for (let d = 1; d <= deg; d++) {
+        for (let r = d; r >= 0; r--) {
+          const j = span - d + r;
+          let v = 0;
+          if (r > 0 && U[j + d] > U[j]) v += ((t - U[j]) / (U[j + d] - U[j])) * N[r - 1];
+          if (r < d && U[j + d + 1] > U[j + 1]) v += ((U[j + d + 1] - t) / (U[j + d + 1] - U[j + 1])) * N[r];
+          N[r] = v;
+        }
+      }
+      for (let r = 0; r <= deg; r++) B[span - deg + r] = N[r];
+      return B;
+    };
+    const A = ts.map((t) => evalBasis(t));
+    const I = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+    for (let col = 0; col < n; col++) {
+      let piv = col;
+      for (let r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+      if (piv !== col) { [A[col], A[piv]] = [A[piv], A[col]]; [I[col], I[piv]] = [I[piv], I[col]]; }
+      const diag = A[col][col];
+      for (let j = 0; j < n; j++) { A[col][j] /= diag; I[col][j] /= diag; }
+      for (let r = 0; r < n; r++) {
+        if (r === col) continue;
+        const f = A[r][col];
+        if (Math.abs(f) < 1e-15) continue;
+        for (let j = 0; j < n; j++) { A[r][j] -= f * A[col][j]; I[r][j] -= f * I[col][j]; }
+      }
+    }
+    const entry = { deg, knots, mults, inv: I };
+    deformBasisInvMemo.set(n, entry);
+    return entry;
+  }
+  function makeBSplineCurveFromPoints(pts) {
+    const n = pts.length, b = bsplineBasisInv(n);
+    const poles = new oc.NCollection_Array1_gp_Pnt(1, n);
+    for (let i = 0; i < n; i++) {
+      const row = b.inv[i];
+      let x = 0, y = 0, z = 0;
+      for (let k = 0; k < n; k++) { const w = row[k], q = pts[k]; x += w * q[0]; y += w * q[1]; z += w * q[2]; }
+      const gp = new oc.gp_Pnt(x, y, z);
+      poles.SetValue(i + 1, gp);
+      gp.delete();
+    }
+    const uk = makeArr1D(b.knots), um = makeArr1I(b.mults);
+    const crv = new oc.Geom_BSplineCurve(poles, uk, um, b.deg, false);
+    poles.delete(); uk.delete(); um.delete();
+    return crv;
+  }
+  function fitCoplanarPlane(Q, nu, nv) {
+    const p0 = Q[0][0];
+    const d1 = [Q[nu - 1][nv - 1][0] - p0[0], Q[nu - 1][nv - 1][1] - p0[1], Q[nu - 1][nv - 1][2] - p0[2]];
+    let d2 = [Q[nu - 1][0][0] - Q[0][nv - 1][0], Q[nu - 1][0][1] - Q[0][nv - 1][1], Q[nu - 1][0][2] - Q[0][nv - 1][2]];
+    let nx = d1[1] * d2[2] - d1[2] * d2[1], ny = d1[2] * d2[0] - d1[0] * d2[2], nz = d1[0] * d2[1] - d1[1] * d2[0];
+    let nl = Math.hypot(nx, ny, nz);
+    if (nl < 1e-6) {
+      const pm = Q[Math.floor(nu / 2)][Math.floor(nv / 2)];
+      d2 = [pm[0] - p0[0], pm[1] - p0[1], pm[2] - p0[2]];
+      nx = d1[1] * d2[2] - d1[2] * d2[1]; ny = d1[2] * d2[0] - d1[0] * d2[2]; nz = d1[0] * d2[1] - d1[1] * d2[0];
+      nl = Math.hypot(nx, ny, nz);
+    }
+    if (nl < 1e-8) return null;
+    nx /= nl; ny /= nl; nz /= nl;
+    const c = Q[Math.floor(nu / 2)][Math.floor(nv / 2)];
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+      const q = Q[i][j];
+      const err = Math.abs((q[0] - c[0]) * nx + (q[1] - c[1]) * ny + (q[2] - c[2]) * nz);
+      if (err > 1e-4) return null;
+    }
+    return { o: c, n: [nx, ny, nz] };
+  }
+  function deformFace(face, mapPt, gridN = 17) {
+    const fw = oc.TopoDS.Face(face.wrapped);
+    const fOri = fw.Orientation();
+    const loc = new oc.TopLoc_Location();
+    const surf = oc.BRep_Tool.Surface(fw, loc);
+    const trsf = !loc.IsIdentity() ? loc.Transformation() : null;
+    const uv = oc.BRepTools.UVBounds(fw);
+    const wires = collectWires(fw);
+    const uSpan = uv.UMax - uv.UMin, vSpan = uv.VMax - uv.VMin;
+    const isFullPerU = surf.IsUPeriodic() && Math.abs(uSpan - surf.UPeriod()) < 1e-4;
+    const isFullPerV = surf.IsVPeriodic() && Math.abs(vSpan - surf.VPeriod()) < 1e-4;
+    const nu = isFullPerU ? Math.max(gridN, 25) : gridN;
+    const nv = isFullPerV ? Math.max(gridN, 25) : gridN;
+    const du = uSpan / (nu - 1), dv = vSpan / (nv - 1);
+    const Q = Array.from({ length: nu }, (_, iu) => {
+      const u = iu === nu - 1 ? uv.UMax : uv.UMin + iu * du;
+      return Array.from({ length: nv }, (_, iv) => {
+        const v = iv === nv - 1 ? uv.VMax : uv.VMin + iv * dv;
+        const pt = surf.Value(u, v);
+        let x = pt.X(), y = pt.Y(), z = pt.Z();
+        if (trsf) { const p2 = pt.Transformed(trsf); x = p2.X(); y = p2.Y(); z = p2.Z(); p2.delete(); }
+        pt.delete();
+        return mapPt([x, y, z]);
+      });
+    });
+
+    const pln = face.geomType === 'PLANE' ? fitCoplanarPlane(Q, nu, nv) : null;
+    if (pln) {
+      let gpPln = null, mf = null;
+      try {
+        const origN = face.normalAt(), origC = face.center;
+        const pA = mapPt([origC.x, origC.y, origC.z]);
+        const pB = mapPt([origC.x + origN.x * 0.01, origC.y + origN.y * 0.01, origC.z + origN.z * 0.01]);
+        const dotN = (pB[0] - pA[0]) * pln.n[0] + (pB[1] - pA[1]) * pln.n[1] + (pB[2] - pA[2]) * pln.n[2];
+        const nn = dotN < 0 ? [-pln.n[0], -pln.n[1], -pln.n[2]] : pln.n;
+        const gpO = new oc.gp_Pnt(pln.o[0], pln.o[1], pln.o[2]);
+        const gpD = new oc.gp_Dir(nn[0], nn[1], nn[2]);
+        gpPln = new oc.gp_Pln(gpO, gpD); gpO.delete(); gpD.delete();
+        const proj = (q) => {
+          const d = (q[0] - pln.o[0]) * nn[0] + (q[1] - pln.o[1]) * nn[1] + (q[2] - pln.o[2]) * nn[2];
+          return [q[0] - d * nn[0], q[1] - d * nn[1], q[2] - d * nn[2]];
+        };
+        const buildPlaneWire = (w) => {
+          const neList = [];
+          for (const ew of collectEdges(w)) {
+            if (oc.BRep_Tool.Degenerated(ew)) continue;
+            const ad = new oc.BRepAdaptor_Curve(ew);
+            const f0 = ad.FirstParameter(), f1 = ad.LastParameter();
+            const isLine = ad.GetType() === oc.GeomAbs_CurveType.GeomAbs_Line;
+            const M = isLine ? gridN : Math.max(gridN, 25);
+            const pts = [];
+            for (let k = 0; k < M; k++) {
+              const t = k === M - 1 ? f1 : f0 + (f1 - f0) * (k / (M - 1));
+              const pt = ad.Value(t);
+              pts.push(proj(mapPt([pt.X(), pt.Y(), pt.Z()])));
+              pt.delete();
+            }
+            ad.delete();
+            const a = pts[0], b = pts[M - 1];
+            const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+            const abL = Math.hypot(ab[0], ab[1], ab[2]);
+            let straight = abL > 1e-7;
+            if (straight) {
+              for (let k = 1; k < M - 1; k++) {
+                const ap = [pts[k][0] - a[0], pts[k][1] - a[1], pts[k][2] - a[2]];
+                const cx = ap[1] * ab[2] - ap[2] * ab[1], cy = ap[2] * ab[0] - ap[0] * ab[2], cz = ap[0] * ab[1] - ap[1] * ab[0];
+                if (Math.hypot(cx, cy, cz) / abL > 1e-4) { straight = false; break; }
+              }
+            }
+            let ne;
+            if (straight) {
+              const p0 = new oc.gp_Pnt(a[0], a[1], a[2]), p1 = new oc.gp_Pnt(b[0], b[1], b[2]);
+              const me = new oc.BRepBuilderAPI_MakeEdge(p0, p1);
+              ne = me.Edge(); me.delete(); p0.delete(); p1.delete();
+            } else {
+              const crv = makeBSplineCurveFromPoints(pts);
+              const me = new oc.BRepBuilderAPI_MakeEdge(crv);
+              ne = me.Edge(); me.delete(); crv.delete();
+            }
+            if (ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+            neList.push(ne);
+          }
+          return makeWireFromEdges(neList);
+        };
+        mf = new oc.BRepBuilderAPI_MakeFace(gpPln, buildPlaneWire(wires[0]), true);
+        for (let i = 1; i < wires.length; i++) mf.Add(buildPlaneWire(wires[i]));
+        if (mf.IsDone()) {
+          let nf = mf.Face();
+          mf.delete(); mf = null; gpPln.delete(); gpPln = null;
+          if (trsf) trsf.delete();
+          loc.delete();
+          const sff = new oc.ShapeFix_Face(nf); sff.FixOrientation(); sff.Perform(); nf = sff.Face(); sff.delete();
+          return nf;
+        }
+      } catch (_) {
+      } finally {
+        if (mf) try { mf.delete(); } catch (_) {}
+        if (gpPln) try { gpPln.delete(); } catch (_) {}
+      }
+    }
+
+    const bu = bsplineBasisInv(nu), bv = bsplineBasisInv(nv);
+    const tmp = Array.from({ length: nu }, (_, iu) => {
+      const row = bu.inv[iu];
+      return Array.from({ length: nv }, (_, iv) => {
+        let x = 0, y = 0, z = 0;
+        for (let k = 0; k < nu; k++) { const w = row[k], q = Q[k][iv]; x += w * q[0]; y += w * q[1]; z += w * q[2]; }
+        return [x, y, z];
+      });
+    });
+    const poles = new oc.NCollection_Array2_gp_Pnt(1, nu, 1, nv);
+    for (let iu = 0; iu < nu; iu++) for (let iv = 0; iv < nv; iv++) {
+      const row = bv.inv[iv];
+      let x = 0, y = 0, z = 0;
+      for (let k = 0; k < nv; k++) { const w = row[k], q = tmp[iu][k]; x += w * q[0]; y += w * q[1]; z += w * q[2]; }
+      const gp = new oc.gp_Pnt(x, y, z);
+      poles.SetValue(iu + 1, iv + 1, gp);
+      gp.delete();
+    }
+    const uKnots = bu.knots.map((t, i) => i === 0 ? uv.UMin : i === bu.knots.length - 1 ? uv.UMax : uv.UMin + t * uSpan);
+    const vKnots = bv.knots.map((t, i) => i === 0 ? uv.VMin : i === bv.knots.length - 1 ? uv.VMax : uv.VMin + t * vSpan);
+    const uk = makeArr1D(uKnots), vk = makeArr1D(vKnots), um = makeArr1I(bu.mults), vm = makeArr1I(bv.mults);
+    const bsp = new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, bu.deg, bv.deg, false, false);
+    poles.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete();
+    if (trsf) trsf.delete();
+    loc.delete();
+    const isFullNatural = wires.length === 1 && (
+      face.geomType === 'SPHERE' || face.geomType === 'TORUS' ||
+      ((face.geomType === 'CYLINDRE' || face.geomType === 'CONE') && isFullPerU && collectEdges(wires[0]).length <= 4)
+    );
+    let nf;
+    if (isFullNatural) {
+      const mf = new oc.BRepBuilderAPI_MakeFace(bsp, 1e-6);
+      nf = mf.Face(); mf.delete();
+      if (fOri === oc.TopAbs_Orientation.TopAbs_REVERSED) nf = oc.TopoDS.Face(nf.Reversed());
+    } else {
+      const buildW = (w) => {
+        const neList = [];
+        for (const ew of collectEdges(w)) {
+          const ad = new oc.BRepAdaptor_Curve2d(ew, fw);
+          const pc = ad.Curve();
+          const me = new oc.BRepBuilderAPI_MakeEdge(pc, bsp, ad.FirstParameter(), ad.LastParameter());
+          let ne = me.Edge();
+          if (ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+          neList.push(ne); me.delete(); ad.delete();
+        }
+        return makeWireFromEdges(neList);
+      };
+      const mf = new oc.BRepBuilderAPI_MakeFace(bsp, buildW(wires[0]), true);
+      for (let i = 1; i < wires.length; i++) mf.Add(buildW(wires[i]));
+      nf = mf.Face(); mf.delete();
+      if (fOri === oc.TopAbs_Orientation.TopAbs_REVERSED) nf = oc.TopoDS.Face(nf.Reversed());
+    }
+    bsp.delete();
+    oc.BRepLib.BuildCurves3d(nf);
+    const sff = new oc.ShapeFix_Face(nf); sff.Perform(); nf = sff.Face(); sff.delete();
+    return nf;
+  }
+  function deformSolid(shape, mapPt, gridN = 17) {
+    const outSolids = [];
+    for (const solIn of shape.solids) {
+      const faces = solIn.faces;
+      if (faces.length === 1 && (faces[0].geomType === 'SPHERE' || faces[0].geomType === 'TORUS')) {
+        const nf = deformFace(faces[0], mapPt, gridN);
+        const sf = oc.BRep_Tool.Surface(nf);
+        const sh = R.cast(new oc.BRepBuilderAPI_MakeShell(sf, false).Shell());
+        let res = R.makeSolid([sh]);
+        if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+        outSolids.push(res);
+        continue;
+      }
+      const newFaces = faces.map((f) => deformFace(f, mapPt, gridN));
+      let sewed = null;
+      for (const tol of [1e-2, 5e-2]) {
+        const sew = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
+        for (const nf of newFaces) sew.Add(nf);
+        sew.Perform();
+        const cand = sew.SewedShape();
+        sew.delete();
+        if (cand && cand.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_SHELL) { sewed = cand; break; }
+        const sExp = new oc.TopExp_Explorer(cand, oc.TopAbs_ShapeEnum.TopAbs_SHELL, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+        if (sExp.More()) { sewed = oc.TopoDS.Shell(sExp.Current()); sExp.delete(); safeDelete(cand); break; }
+        sExp.delete();
+        safeDelete(cand);
+      }
+      for (const nf of newFaces) safeDelete(nf);
+      if (!sewed) throw new Error('Verformen: Flächen konnten nicht zu einem geschlossenen Körper vernäht werden.');
+      const sh = oc.TopoDS.Shell(sewed);
+      const ms = new oc.BRepBuilderAPI_MakeSolid(sh);
+      let sol = ms.Solid(); ms.delete(); safeDelete(sewed);
+      const sfs = new oc.ShapeFix_Solid(sol); sfs.Perform(); sol = oc.TopoDS.Solid(sfs.Solid()); sfs.delete();
+      let res = R.cast(sol);
+      if (R.measureVolume(res) < 0) res = R.cast(sol.Reversed());
+      outSolids.push(res);
+    }
+    return outSolids.length === 1 ? outSolids[0] : R.makeCompound(outSolids);
+  }
+  function applyDeform(shape, p, wb) {
+    const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+    const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+    const IDX = { x: 0, y: 1, z: 2 };
+    const uIdx = IDX[axis];
+    const b = wb || bboxOf(shape);
+    const u0 = b[uIdx], u1 = b[uIdx + 3], L = u1 - u0;
+    if (!(L > 1e-5)) throw new Error('Verformen: Der Körper hat entlang dieser Achse keine Ausdehnung.');
+
+    let mapPt, gridN = 17;
+    if (mode === 'bend') {
+      const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis
+        ? p.bendAxis
+        : (axis === 'y' ? 'x' : 'y');
+      const aIdx = IDX[bendAxis];
+      const bAx = ['x', 'y', 'z'].find((k) => k !== axis && k !== bendAxis);
+      const bIdx = IDX[bAx];
+      const angleDeg = num(p.angle, 90) * (p.flip ? -1 : 1);
+      if (!isFinite(angleDeg) || Math.abs(angleDeg) > 360) {
+        throw new Error('Verformen (Biegen): Der Biegewinkel darf höchstens ±360° betragen.');
+      }
+      if (Math.abs(angleDeg) < 1e-6) return shape.clone();
+      const theta = (angleDeg * Math.PI) / 180;
+      const R_bend = L / theta;
+      const anchor = p.anchor === 'start' || p.anchor === 'end' ? p.anchor : 'center';
+      const uRef = anchor === 'start' ? u0 : anchor === 'end' ? u1 : (u0 + u1) / 2;
+      const vCenter = (b[bIdx] + b[bIdx + 3]) / 2;
+      const vHalf = (b[bIdx + 3] - b[bIdx]) / 2;
+      if (Math.abs(R_bend) <= vHalf * 1.01 + 1e-4) {
+        throw new Error('Verformen (Biegen): Der Biegewinkel ist für die Dicke dieses Körpers zu groß (er würde sich selbst durchdringen).');
+      }
+      mapPt = (pt) => {
+        const s = pt[uIdx] - uRef;
+        const v = pt[bIdx] - vCenter;
+        const phi = s / R_bend;
+        const out = [0, 0, 0];
+        out[uIdx] = uRef + (R_bend - v) * Math.sin(phi);
+        out[bIdx] = vCenter + R_bend - (R_bend - v) * Math.cos(phi);
+        out[aIdx] = pt[aIdx];
+        return out;
+      };
+      gridN = Math.max(15, Math.min(45, Math.ceil(Math.abs(angleDeg) / 10) + 8));
+    } else if (mode === 'twist') {
+      const angleDeg = num(p.angle, 90) * (p.flip ? -1 : 1);
+      if (!isFinite(angleDeg) || Math.abs(angleDeg) > 1080) {
+        throw new Error('Verformen (Verdrehen): Der Verdrehwinkel darf höchstens ±1080° (3 Umdrehungen) betragen.');
+      }
+      if (Math.abs(angleDeg) < 1e-6) return shape.clone();
+      const [i1, i2] = uIdx === 2 ? [0, 1] : uIdx === 0 ? [1, 2] : [2, 0];
+      const c1 = (b[i1] + b[i1 + 3]) / 2;
+      const c2 = (b[i2] + b[i2 + 3]) / 2;
+      const anchor = p.anchor === 'center' || p.anchor === 'end' ? p.anchor : 'start';
+      const uRef = anchor === 'center' ? (u0 + u1) / 2 : anchor === 'end' ? u1 : u0;
+      const theta = (angleDeg * Math.PI) / 180;
+      mapPt = (pt) => {
+        const phi = theta * ((pt[uIdx] - uRef) / L);
+        const dx = pt[i1] - c1, dy = pt[i2] - c2;
+        const cs = Math.cos(phi), sn = Math.sin(phi);
+        const out = [0, 0, 0];
+        out[i1] = c1 + dx * cs - dy * sn;
+        out[i2] = c2 + dx * sn + dy * cs;
+        out[uIdx] = pt[uIdx];
+        return out;
+      };
+      gridN = Math.max(15, Math.min(49, Math.ceil(Math.abs(angleDeg) / 10) + 8));
+    } else {
+      const factor = num(p.factor, 0.5);
+      if (!isFinite(factor) || factor <= 0.01 || factor > 100) {
+        throw new Error('Verformen (Verjüngen): Der Faktor muss zwischen 0,02 und 100 liegen.');
+      }
+      if (Math.abs(factor - 1) < 1e-6) return shape.clone();
+      const [i1, i2] = uIdx === 2 ? [0, 1] : uIdx === 0 ? [1, 2] : [2, 0];
+      const c1 = (b[i1] + b[i1 + 3]) / 2;
+      const c2 = (b[i2] + b[i2 + 3]) / 2;
+      mapPt = (pt) => {
+        const t = p.flip ? (u1 - pt[uIdx]) / L : (pt[uIdx] - u0) / L;
+        const s = 1 + (factor - 1) * t;
+        const out = [0, 0, 0];
+        out[i1] = c1 + (pt[i1] - c1) * s;
+        out[i2] = c2 + (pt[i2] - c2) * s;
+        out[uIdx] = pt[uIdx];
+        return out;
+      };
+      gridN = 11;
+    }
+    return deformSolid(shape, mapPt, gridN);
+  }
   function matchFace(shape, spec) {
     if (!spec || !Array.isArray(spec.c)) return null;
     const b = bboxOf(shape), tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
@@ -4325,7 +4700,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -7157,6 +7532,58 @@ export function createKernel(R, oc) {
           if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         } else if (track && track.stepKeys) {
           track.stepKeys.set(it.id, keyOf([src.key, 'scale', 1]));
+        }
+        continue;
+      }
+      if (it.kind === 'deform') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape) {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Verformen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+        const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+        const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis ? p.bendAxis : (axis === 'y' ? 'x' : 'y');
+        const angle = num(p.angle, 90);
+        const factor = num(p.factor, 0.5);
+        const anchor = p.anchor === 'start' || p.anchor === 'end' || p.anchor === 'center' ? p.anchor : '';
+        const flip = !!p.flip;
+        consumed.set(it.id, tid);
+        const isNoop = (mode === 'taper' && Math.abs(factor - 1) < 1e-6) || (mode !== 'taper' && Math.abs(angle) < 1e-6);
+        if (!isNoop) {
+          const r6 = (v) => Math.round(v * 1e6) / 1e6;
+          const k = keyOf([src.key, 'deform', mode, axis, bendAxis, r6(angle), r6(factor), anchor, flip ? 1 : 0, src.m.map(r6)]);
+          const ce = cacheEntry(k);
+          let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+          if (!next) {
+            if (track) track.rebuilt.add(it.id);
+            try {
+              const idM = isIdentity(src.m);
+              const wShape = idM ? src.shape : applyMatrix(src.shape, src.m);
+              const wDeformed = applyDeform(wShape, { mode, axis, bendAxis, angle, factor, anchor, flip }, bboxOf(wShape));
+              if (!idM) safeDelete(wShape);
+              if (idM) {
+                next = wDeformed;
+              } else {
+                next = applyMatrix(wDeformed, matInvRigid(src.m));
+                safeDelete(wDeformed);
+              }
+              nextTopo = ensureTopoComplete(next, createTopoMap(), src.it.id);
+              cachePut(k, next, null, null, null, nextTopo);
+            } catch (err) {
+              errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              continue;
+            }
+          }
+          src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+          bodies.set(tid, src);
+          if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        } else if (track && track.stepKeys) {
+          track.stepKeys.set(it.id, keyOf([src.key, 'deform', 'id']));
         }
         continue;
       }

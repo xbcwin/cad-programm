@@ -2430,6 +2430,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zeichnung wartet auf Erstprojektion**: Während `ensureProjections()` erstmals für ein nicht-leeres Modell läuft (`loadingProjPromise && !proj`), unterdrückt `Drawing.render()` das Einhängen eines vorzeitigen leeren `<svg>`, und erst nach Projektionsabschluss erscheint das vollständige Blatt samt Ansichtsgeometrie (`t_a064_zeichnung_detailansicht`, `t_f11250227`).
 - [ ] **Von Hand**: Im Browser bei einem Drehgelenk zuerst den Winkel ändern, im Feld bleiben und direkt „Gelenk lösen“ klicken sowie bei einem größeren Modell beim Wechsel auf „Zeichnung“ ein Werkzeug wählen und prüfen, dass kein leeres Blatt aufblitzt.
 
+## Verformen: Biegen, Verdrehen, Verjüngen (Auto [A-125], KP-37)
+
+- [x] **Biegen (90° & 180°)**: Quader `100×10×10` im Profi-Modus per `#ctx-deform` um 90° biegen → Volumen ≈ 10 000 mm³, 0 Geometrie-Fehler, die beiden Endflächen stehen senkrecht zueinander (`|n1 · n2| < 0,02`); bei 180° zeigen beide Endflächen parallel in dieselbe Richtung (`n1 · n2 > 0,98`).
+- [x] **Verdrehen (90°)**: Quader `20×10×40` entlang Z um 90° verdrehen → Volumen ≈ 8 000 mm³, 0 Geometrie-Fehler, obere Fläche gegenüber unten um 90° gedreht (Spanne X/Y von 20×10 auf 10×20).
+- [x] **Verjüngen (Faktor 0,5 & Umkehren)**: Quader `20×20×40` entlang Z mit Faktor 0,5 verjüngen → Volumen ≈ 9 333 mm³, 0 Geometrie-Fehler, oben halb so breit wie unten (10 mm statt 20 mm); „Richtung umkehren“ dreht unten/oben sauber um.
+- [x] **Profi-Modus, Zeitleiste, Formeln, Bezüge & Hilfe**: `#ctx-deform` und `#add-deform` nur im Profi-Modus sichtbar; Unterdrücken/Reaktivieren, Rückgängig/Wiederholen, Formel im Winkel, `Model.dependencies`, `Explain.local` und `HELP.deform` geprüft.
+- [ ] **Von Hand**: Einen Körper mit Durchgangsbohrung im 3D-Bild um 90° biegen und visuell prüfen, dass die Flächen und Bohrungskanten glatt ohne sichtbare Lücken dargestellt werden.
+
 ## Fehler melden
 
 ```

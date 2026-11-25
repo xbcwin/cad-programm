@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -1335,7 +1335,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -1470,6 +1470,129 @@ const Features = (() => {
       sec.append(h('div', { class: 'btn-row' }, gb));
     }
     sec.append(h('div', { class: 'hint-box', html: 'Skaliert den Zielkörper um seinen <b>Schwerpunkt</b> oder den <b>Ursprung</b> – gleichmäßig oder je Achse getrennt. Im Verlauf jederzeit änderbar, unterdrückbar und rückrollbar.' }));
+  }
+  // ---------- Körper verformen: Biegen, Verdrehen, Verjüngen (KP-37) ----------
+  function deform(targetOrIds, opts = {}) {
+    if (App.ctx) { UI.toast('Schritte zum Verformen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const tgt = resolveTopTarget(targetOrIds);
+    if (!tgt) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
+    const mode = opts.mode === 'twist' || opts.mode === 'taper' ? opts.mode : 'bend';
+    let axis = opts.axis === 'x' || opts.axis === 'y' || opts.axis === 'z' ? opts.axis : null;
+    if (!axis) {
+      if (mode === 'bend') {
+        const wb = Actions.worldBox(tgt.id);
+        if (wb && !wb.isEmpty()) {
+          const sx = wb.max.x - wb.min.x, sy = wb.max.y - wb.min.y, sz = wb.max.z - wb.min.z;
+          axis = sx >= sy && sx >= sz ? 'x' : sy >= sz ? 'y' : 'z';
+        } else axis = 'x';
+      } else {
+        axis = 'z';
+      }
+    }
+    const bendAxis = (opts.bendAxis === 'x' || opts.bendAxis === 'y' || opts.bendAxis === 'z') && opts.bendAxis !== axis
+      ? opts.bendAxis
+      : (axis === 'y' ? 'x' : 'y');
+    const p = {
+      target: tgt.id,
+      mode,
+      axis,
+      bendAxis,
+      angle: opts.angle ?? 90,
+      factor: opts.factor ?? 0.5,
+      anchor: opts.anchor === 'start' || opts.anchor === 'end' || opts.anchor === 'center' ? opts.anchor : null,
+      flip: !!opts.flip,
+    };
+    let step;
+    App.change('Verformen angelegt', (doc) => {
+      step = Model.newItem('deform', p, { name: opts.name || T('kind.deform'), color: tgt.color, role: tgt.role, mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.deformAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderDeform(it, sec, setP) {
+    const p = it.p || {};
+    const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+    const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+    const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis
+      ? p.bendAxis
+      : (axis === 'y' ? 'x' : 'y');
+    const targets = activeTargetsBefore(it);
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    if (opts.length) {
+      sec.append(UI.selectField({
+        id: 'df-target', label: 'Zielkörper', value: p.target || '', options: opts,
+        onChange: (v) => App.change('Zielkörper gewählt', (doc) => { Model.find(doc, it.id).item.p.target = v; }),
+      }));
+    }
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'df-mode', label: T('panel.deform.mode'), value: mode,
+      options: [['bend', T('panel.deform.bend')], ['twist', T('panel.deform.twist')], ['taper', T('panel.deform.taper')]],
+      onChange: (v) => App.change('Verformungs-Art geändert', (doc) => {
+        const T0 = Model.find(doc, it.id).item;
+        T0.p.mode = v;
+        if (v === 'bend' && (!T0.p.bendAxis || T0.p.bendAxis === T0.p.axis)) {
+          T0.p.bendAxis = T0.p.axis === 'y' ? 'x' : 'y';
+        }
+      }),
+    }));
+    const axLbl = mode === 'bend' ? T('panel.deform.lenAxis') : mode === 'twist' ? T('panel.deform.twistAxis') : T('panel.deform.axis');
+    fl.append(UI.selectField({
+      id: 'df-axis', label: axLbl, value: axis,
+      options: [['x', 'X'], ['y', 'Y'], ['z', 'Z']],
+      onChange: (v) => App.change('Achse geändert', (doc) => {
+        const T0 = Model.find(doc, it.id).item;
+        T0.p.axis = v;
+        if (T0.p.bendAxis === v) T0.p.bendAxis = v === 'y' ? 'x' : 'y';
+      }),
+    }));
+    if (mode === 'bend') {
+      const perp = ['x', 'y', 'z'].filter((a) => a !== axis);
+      const bOpts = perp.map((ba) => {
+        const dirAx = ['x', 'y', 'z'].find((a) => a !== axis && a !== ba).toUpperCase();
+        return [ba, `${ba.toUpperCase()}-Achse (biegt in ${dirAx})`];
+      });
+      fl.append(UI.selectField({
+        id: 'df-bendAxis', label: T('panel.deform.bendAxis'), value: bendAxis, options: bOpts,
+        onChange: (v) => App.change('Biegeachse geändert', (doc) => { Model.find(doc, it.id).item.p.bendAxis = v; }),
+      }));
+    }
+    if (mode === 'taper') {
+      fl.append(UI.numField({ id: 'df-factor', label: T('panel.deform.factor'), value: p.factor ?? 0.5, unit: '×', min: 0.02, step: 0.1, onCommit: (v) => setP('factor', v) }));
+    } else {
+      fl.append(UI.numField({
+        id: 'df-angle',
+        label: mode === 'bend' ? T('panel.deform.bendAngle') : T('panel.deform.twistAngle'),
+        value: p.angle ?? 90, unit: '°', step: 5,
+        onCommit: (v) => setP('angle', v),
+      }));
+      const defAnchor = mode === 'bend' ? 'center' : 'start';
+      const anchorVal = p.anchor === 'start' || p.anchor === 'end' || p.anchor === 'center' ? p.anchor : defAnchor;
+      fl.append(UI.selectField({
+        id: 'df-anchor', label: T('panel.deform.anchor'), value: anchorVal,
+        options: [['center', T('panel.deform.anchorCenter')], ['start', T('panel.deform.anchorStart')], ['end', T('panel.deform.anchorEnd')]],
+        onChange: (v) => App.change('Haltepunkt geändert', (doc) => { Model.find(doc, it.id).item.p.anchor = v; }),
+      }));
+    }
+    sec.append(fl);
+    const flipL = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'df-flip', checked: !!p.flip }), T('panel.deform.flip'));
+    flipL.querySelector('input').onchange = (e) => App.change('Richtung umgekehrt', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(flipL);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'df-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      sec.append(h('div', { class: 'btn-row' }, gb));
+    }
+    const hintKey = mode === 'taper' ? 'panel.deform.hintTaper' : mode === 'twist' ? 'panel.deform.hintTwist' : 'panel.deform.hintBend';
+    sec.append(h('div', { class: 'hint-box', html: T(hintKey) }));
   }
   // ---------- Körper als Schritt löschen (KP-51) ----------
   function deleteBody(targetOrIds, opts = {}) {
@@ -3459,7 +3582,7 @@ const Features = (() => {
       && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss'
       && x.kind !== 'boss' && x.kind !== 'lipGroove'
       && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d'
-      && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale'
+      && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform'
       && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))
     ));
   }
@@ -3561,5 +3684,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, renderLoft };
 })();

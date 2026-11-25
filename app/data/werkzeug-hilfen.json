@@ -1503,5 +1503,10 @@
     "tip": "Übergang direkt als Schnitt von einem Körper abziehen (Profi)",
     "hilfe": "Wähle zwei oder mehr Skizzenkörper (und bei Bedarf gleich den Zielkörper mit) und klicke auf „Übergang abziehen“. Der Übergang wird direkt vom Zielkörper abgezogen, um verjüngte Kanäle, Aussparungen oder konische Taschen zu schneiden.",
     "tipp": "Auch einen bestehenden Übergang kannst du jederzeit rechts unter „Körper“ auf „Abziehen von …“, „Vereinigen mit …“ oder „Schnittmenge mit …“ umstellen."
+  },
+  "deform": {
+    "tip": "Körper biegen, verdrehen oder verjüngen (Profi)",
+    "hilfe": "Wähle einen Körper und klicke auf „Verformen“ (im Profi-Modus in der Kontextleiste, unter Körper oder per Rechtsklick im Verlauf). Rechts wählst du zwischen „Biegen“ (Winkel um eine Achse), „Verdrehen“ (Grad über die Länge) und „Verjüngen“ (Faktor am Ende, z. B. 0,5 für halb so breit).",
+    "tipp": "Alle Winkel und Faktoren akzeptieren Formeln. Beim Biegen wählst du die Längs- und die Biegeachse getrennt; mit „Richtung umkehren“ biegst oder verjüngst du zur anderen Seite."
   }
 }

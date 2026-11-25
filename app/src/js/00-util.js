@@ -681,6 +681,7 @@ const IC = {
   thread: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 8l12-2M6 12l12-2M6 16l12-2M6 19l8-1.3"/>',
   moveStep: '<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />',
   scaleBody: '<rect x="3" y="13" width="8" height="8" rx="1" opacity=".5"/><rect x="7" y="3" width="14" height="14" rx="1.5" fill="currentColor" opacity=".18"/><rect x="7" y="3" width="14" height="14" rx="1.5"/><path d="M11 13l7-7M14 6h4v4" />',
+  deform: '<path d="M5 18C5 10.5 10.5 5 18 5v4.5C13 9.5 9.5 13 9.5 18z" fill="currentColor" opacity=".2"/><path d="M5 18C5 10.5 10.5 5 18 5v4.5C13 9.5 9.5 13 9.5 18zM14 14l4 4M18 14v4h-4" />',
   thicken: '<path d="M4 15l8 4 8-4-8-4z" opacity=".45" stroke-dasharray="2.5 2"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM4 9v6l8 4 8-4V9" />',
   rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
   wrap: '<ellipse cx="12" cy="5.5" rx="6.5" ry="2.2"/><path d="M5.5 5.5v13c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-13"/><path d="M5.5 10.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v4.5c0 1.2-2.9 2.2-6.5 2.2s-6.5-1-6.5-2.2z" fill="currentColor" opacity=".25"/>',
@@ -2236,6 +2237,11 @@ const HELP = {
   "tip": "Übergang direkt als Schnitt von einem Körper abziehen (Profi)",
   "hilfe": "Wähle zwei oder mehr Skizzenkörper (und bei Bedarf gleich den Zielkörper mit) und klicke auf „Übergang abziehen“. Der Übergang wird direkt vom Zielkörper abgezogen, um verjüngte Kanäle, Aussparungen oder konische Taschen zu schneiden.",
   "tipp": "Auch einen bestehenden Übergang kannst du jederzeit rechts unter „Körper“ auf „Abziehen von …“, „Vereinigen mit …“ oder „Schnittmenge mit …“ umstellen."
+ },
+ "deform": {
+  "tip": "Körper biegen, verdrehen oder verjüngen (Profi)",
+  "hilfe": "Wähle einen Körper und klicke auf „Verformen“ (im Profi-Modus in der Kontextleiste, unter Körper oder per Rechtsklick im Verlauf). Rechts wählst du zwischen „Biegen“ (Winkel um eine Achse), „Verdrehen“ (Grad über die Länge) und „Verjüngen“ (Faktor am Ende, z. B. 0,5 für halb so breit).",
+  "tipp": "Alle Winkel und Faktoren akzeptieren Formeln. Beim Biegen wählst du die Längs- und die Biegeachse getrennt; mit „Richtung umkehren“ biegst oder verjüngst du zur anderen Seite."
  }
 };
 

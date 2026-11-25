@@ -29,6 +29,7 @@ const KINDS = {
   part: { get label() { return T('kind.part'); }, params: [] },
   transform: { get label() { return T('kind.transform'); }, params: [] },
   scale: { get label() { return T('kind.scale'); }, params: [] },
+  deform: { get label() { return T('kind.deform'); }, params: [] },
   thicken: { get label() { return T('kind.thicken'); }, params: [] },
   rib: { get label() { return T('kind.rib'); }, params: [] },
   vent: { get label() { return T('kind.vent'); }, params: [] },
@@ -388,6 +389,7 @@ const Model = (() => {
       if (it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) out.push({ from: me, to: top(it.p.toFace.id), what: 'hochgezogen bis Fläche von' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
+      if (it.kind === 'deform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'verformt' });
       if (it.kind === 'deleteBody' && it.p) {
         const tgs = Array.isArray(it.p.targets) ? it.p.targets : (it.p.target ? [it.p.target] : []);
         for (const tid of tgs) if (tid) out.push({ from: me, to: top(tid), what: 'löscht Körper' });
@@ -592,6 +594,21 @@ const Model = (() => {
           s: num(p.s, ownV, 1),
           sx: num(p.sx, ownV, 1), sy: num(p.sy, ownV, 1), sz: num(p.sz, ownV, 1),
           pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
+        };
+      } else if (it.kind === 'deform') {
+        const p = it.p || {};
+        const mode = p.mode === 'twist' || p.mode === 'taper' ? p.mode : 'bend';
+        const axis = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+        const bendAxis = (p.bendAxis === 'x' || p.bendAxis === 'y' || p.bendAxis === 'z') && p.bendAxis !== axis ? p.bendAxis : (axis === 'y' ? 'x' : 'y');
+        o.p = {
+          target: p.target || null,
+          mode,
+          axis,
+          bendAxis,
+          angle: num(p.angle, ownV, 90),
+          factor: num(p.factor, ownV, 0.5),
+          anchor: p.anchor === 'start' || p.anchor === 'end' || p.anchor === 'center' ? p.anchor : null,
+          flip: !!p.flip,
         };
       } else if (it.kind === 'thicken') {
         const p = it.p || {};
@@ -1706,6 +1723,12 @@ const Model = (() => {
       }
       case 'lipGroove': return `H ${f(p.height ?? 2)}${u} · Spiel ${f(p.clearance ?? 0.2)}${u}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
+      case 'deform': {
+        const dm = (it.p && it.p.mode) || 'bend';
+        if (dm === 'taper') return `${T('panel.deform.taper')} ×${fmt(p.factor ?? 0.5, 2)}`;
+        if (dm === 'twist') return `${T('panel.deform.twist')} ${fmtAngleU(p.angle ?? 90)}`;
+        return `${T('panel.deform.bend')} ${fmtAngleU(p.angle ?? 90)}`;
+      }
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'mirrorStep': {
         const mp = it.p || {};

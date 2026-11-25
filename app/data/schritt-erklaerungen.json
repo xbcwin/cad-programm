@@ -309,5 +309,10 @@
     "was": "Verbindet zwei oder mehr Querschnitts-Skizzen zu einem glatten oder geradflächigen Körper – wahlweise geschlossen als Ring und auch als Schnitt in einem Körper.",
     "wozu": "Ideal für Übergänge zwischen verschiedenen Formen, konische Kanäle, Düsen, Griffe sowie nahtlose Ringe und umlaufende Nuten.",
     "achtung": "Für einen geschlossenen Ring brauchst du mindestens drei Umrisse; als Schnitt wählst du unter „Körper“ den Modus „Abziehen von“."
+  },
+  "deform": {
+    "was": "Verformt einen bestehenden Körper als eigenen Schritt im Verlauf – durch Biegen um eine Achse, Verdrehen über die Länge oder Verjüngen bis zu einem Endfaktor.",
+    "wozu": "Ideal für gebogene Halter, tordierte Streben, konische Griffe und verjüngte Gehäuse ohne umständliches Neuzeichnen.",
+    "achtung": "Der Biegewinkel darf den Körper nicht in sich selbst knicken; im Verlauf bleibt der Schritt jederzeit änderbar und unterdrückbar."
   }
 }
