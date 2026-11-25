@@ -421,6 +421,8 @@ const Panels = (() => {
     if (App.mode === 'model') {
       Toolbar.renderModelTools(el);
     } else {
+      const finBtn = btn('t-finish-drawing', 'spark', T('tool.finishDrawing'), T('tool.finishDrawingTip'), '', () => Drawing.finishDrawing(), '', T('tool.finishDrawingShort'));
+      finBtn.dataset.help = 'drawingFinish';
       const sheetBtn = btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
       sheetBtn.dataset.help = 'drawingFormat';
       const viewBtn = btn('t-view-add', 'cube', T('tool.viewAdd'), T('tool.viewAddTip'), '', (e) => Drawing.viewMenu(e.currentTarget));

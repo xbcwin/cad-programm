@@ -931,6 +931,22 @@ const Print = (() => {
       h('div', null, bundleBtn),
     );
     body.append(bundleBox);
+    if (typeof ViewPrefs === 'undefined' || !ViewPrefs.simple) {
+      const tiledBtn = h('button', { type: 'button', class: 'btn', id: 'ex-tiled-print-btn', style: { marginTop: '6px' } }, T('dlg.export.tiledPrintBtn'));
+      tiledBtn.onclick = async () => {
+        if (dlg) dlg.close();
+        if (App.mode !== 'drawing' && typeof Commands !== 'undefined' && Commands.setMode) Commands.setMode('drawing');
+        if (typeof Drawing !== 'undefined' && Drawing.waitReady) await Drawing.waitReady();
+        if (typeof Drawing !== 'undefined' && Drawing.tiledPrintDialog) Drawing.tiledPrintDialog();
+      };
+      const tiledBox = h('div', { class: 'hint-box pro', id: 'ex-tiled-box', 'data-help': 'drawingTiledPrint' },
+        h('b', null, T('dlg.export.tiledPrintTitle')),
+        h('br'),
+        h('small', { style: { color: 'var(--muted)' } }, T('dlg.export.tiledPrintDesc')),
+        h('div', null, tiledBtn),
+      );
+      body.append(tiledBox);
+    }
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
     const stepRow = mk('step', T('dlg.export.step'), T('dlg.export.stepSub')); stepRow.setAttribute('data-help', 'exportStep');
     const igesRow = mk('iges', T('dlg.export.iges'), T('dlg.export.igesSub')); igesRow.setAttribute('data-help', 'exportIgesBrep');
@@ -1309,8 +1325,9 @@ const Print = (() => {
         files.push({ name: 'STL/' + base + '.stl', data: STL([o], base) });
       }
 
-      // 4. Zeichnungen (PDF)
+      // 4. Zeichnungen (PDF & ggf. Prüftabelle CSV)
       let pdfIncluded = false;
+      let inspCsvIncluded = false;
       if (typeof Drawing !== 'undefined' && Drawing.buildPDFBytes) {
         try {
           const pdfBytes = await Drawing.buildPDFBytes();
@@ -1322,6 +1339,18 @@ const Print = (() => {
           console.warn('Paket-Zeichnung (PDF):', pdfErr);
         }
       }
+      if (typeof Drawing !== 'undefined' && Drawing.inspectionDims && Drawing.inspectionCSV) {
+        try {
+          const inspList = Drawing.inspectionDims();
+          if (inspList && inspList.length > 0) {
+            const csvTxt = Drawing.inspectionCSV();
+            files.push({ name: 'Zeichnungen/' + name + ' Prüftabelle.csv', data: new TextEncoder().encode(csvTxt) });
+            inspCsvIncluded = true;
+          }
+        } catch (csvErr) {
+          console.warn('Paket-Prüftabelle (CSV):', csvErr);
+        }
+      }
 
       // 5. LIESMICH.txt
       files.push({
@@ -1330,6 +1359,7 @@ const Print = (() => {
           `${App.doc.name}\nPaket erstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nInhalt:\n` +
           `- ${name}.tracery.json: vollständiges Tracery-Projekt zum Weiterbearbeiten\n` +
           (pdfIncluded ? `- Zeichnungen/${name}.pdf: technische Zeichnungen als mehrseitiges PDF\n` : '') +
+          (inspCsvIncluded ? `- Zeichnungen/${name} Prüftabelle.csv: Prüfmaße als Tabelle (CSV)\n` : '') +
           `- ${name}.step: exakte 3D-Geometrie mit Namen, Farben und Struktur (STEP)\n` +
           `- STL/: ${objs.length} ${objs.length === 1 ? 'STL-Datei' : 'STL-Dateien'} (eine pro Körper, Millimeter)\n`,
         ),
@@ -1716,12 +1746,113 @@ const Print = (() => {
     return body;
   }
 
+  // ---------- ZE-36: Seiten-Aufteilung für 1:1-Schablonendruck auf mehreren Blättern ----------
+  const TILE_PAPERS = {
+    A4: [297, 210],
+    A3: [420, 297],
+    Letter: [279.4, 215.9],
+  };
+  function tileColLetter(idx) {
+    let n = Math.max(0, Math.floor(idx));
+    let out = '';
+    do {
+      out = String.fromCharCode(65 + (n % 26)) + out;
+      n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return out;
+  }
+  function planTiledPages(contentW, contentH, opts = {}) {
+    const paper = TILE_PAPERS[opts.paper] ? opts.paper : 'A4';
+    const [big, small] = TILE_PAPERS[paper];
+    const cw = Math.max(1, Number(contentW) || 1);
+    const ch = Math.max(1, Number(contentH) || 1);
+    const margin = opts.margin != null && Number.isFinite(Number(opts.margin)) ? clamp(Number(opts.margin), 0, 25) : 4;
+    const overlap = opts.overlap != null && Number.isFinite(Number(opts.overlap)) ? clamp(Number(opts.overlap), 0, 40) : 0;
+    const originX = Number(opts.originX) || 0;
+    const originY = Number(opts.originY) || 0;
+
+    const evalOrient = (orient) => {
+      const tileW = orient === 'portrait' ? small : big;
+      const tileH = orient === 'portrait' ? big : small;
+      const usableW = Math.max(20, tileW - 2 * margin);
+      const usableH = Math.max(20, tileH - 2 * margin);
+      const effOverlap = Math.min(overlap, Math.max(0, usableW - 20), Math.max(0, usableH - 20));
+      const stepW = Math.max(20, usableW - effOverlap);
+      const stepH = Math.max(20, usableH - effOverlap);
+      const cols = cw <= usableW + 1e-6 ? 1 : 1 + Math.ceil((cw - usableW - 1e-6) / stepW);
+      const rows = ch <= usableH + 1e-6 ? 1 : 1 + Math.ceil((ch - usableH - 1e-6) / stepH);
+      return { orient, tileW, tileH, usableW, usableH, overlap: effOverlap, stepW, stepH, cols, rows, totalPages: cols * rows };
+    };
+
+    let best;
+    if (opts.orient === 'landscape' || opts.orient === 'portrait') {
+      best = evalOrient(opts.orient);
+    } else {
+      const candL = evalOrient('landscape');
+      const candP = evalOrient('portrait');
+      if (candL.totalPages !== candP.totalPages) best = candL.totalPages < candP.totalPages ? candL : candP;
+      else best = cw >= ch ? candL : candP;
+    }
+
+    const spanW = best.usableW + (best.cols - 1) * best.stepW;
+    const spanH = best.usableH + (best.rows - 1) * best.stepH;
+    const startX = originX - (spanW - cw) * 0.5;
+    const startY = originY - (spanH - ch) * 0.5;
+    const tiles = [];
+    for (let r = 0; r < best.rows; r++) {
+      for (let c = 0; c < best.cols; c++) {
+        const idx = r * best.cols + c;
+        tiles.push({
+          index: idx,
+          page: idx + 1,
+          col: c,
+          row: r,
+          code: tileColLetter(c) + (r + 1),
+          srcX: startX + c * best.stepW,
+          srcY: startY + r * best.stepH,
+          srcW: best.usableW,
+          srcH: best.usableH,
+          hasLeft: c > 0,
+          hasRight: c < best.cols - 1,
+          hasTop: r > 0,
+          hasBottom: r < best.rows - 1,
+          leftCode: c > 0 ? tileColLetter(c - 1) + (r + 1) : null,
+          rightCode: c < best.cols - 1 ? tileColLetter(c + 1) + (r + 1) : null,
+          topCode: r > 0 ? tileColLetter(c) + r : null,
+          bottomCode: r < best.rows - 1 ? tileColLetter(c) + (r + 2) : null,
+        });
+      }
+    }
+    return {
+      paper,
+      orient: best.orient,
+      tileW: best.tileW,
+      tileH: best.tileH,
+      margin,
+      overlap: best.overlap,
+      usableW: best.usableW,
+      usableH: best.usableH,
+      stepW: best.stepW,
+      stepH: best.stepH,
+      cols: best.cols,
+      rows: best.rows,
+      totalPages: best.totalPages,
+      contentW: cw,
+      contentH: ch,
+      startX,
+      startY,
+      spanW,
+      spanH,
+      tiles,
+    };
+  }
+
   function init() {
     App.on('results', () => { wallCache = null; updateAmpel(); });
     App.on('doc', debounce(() => { wallCache = null; updateAmpel(); }, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { PRINTERS, PRINT_FILAMENTS, SPEED_PROFILES, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, printCostSettings, setPrintCostSettings, computePrintEstimate, estimatePrint, costDialog, formatDuration, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, buildAMF, buildPLY, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, get lastBundle() { return lastBundle; }, runExport, exportBundle, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, PRINT_FILAMENTS, SPEED_PROFILES, TILE_PAPERS, planTiledPages, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, printCostSettings, setPrintCostSettings, computePrintEstimate, estimatePrint, costDialog, formatDuration, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, buildAMF, buildPLY, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, get lastBundle() { return lastBundle; }, runExport, exportBundle, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------

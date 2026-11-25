@@ -2715,6 +2715,21 @@ const HELP = {
   "tip": "Maße, Toleranzen und Hinweise direkt am 3D-Modell anbringen (PMI, Profi)",
   "hilfe": "Setzt bleibende Maße (Kanten, Durchmesser, Radien, Abstände, Winkel), Toleranzen (±, Abmaße, Grenzmaße, ISO-Passungen wie H7) und Hinweislinien direkt ans 3D-Modell. Über das Auge am Ansichtswürfel oder im Verlauf blendest du alle 3D-Maße gemeinsam oder einzeln aus, und neue Zeichnungen übernehmen sie automatisch samt Toleranz.",
   "tipp": "Klicke auf ein 3D-Maßschildchen im Bild, um rechts im Panel jederzeit seine Toleranz oder den Abstand zu ändern."
+ },
+ "drawingInspection": {
+  "tip": "Maße als Prüfmaße (1, 2, 3 …) markieren und als Prüftabelle (CSV) exportieren (Profi)",
+  "hilfe": "Markiere wichtige Maße direkt am gewählten Maß rechts im Panel als Prüfmaß. Sie erhalten fortlaufende Nummern-Ballons (1, 2, 3 …), lassen sich auf Wunsch als Prüftabelle auf dem Blatt einblenden und als CSV-Datei mit Nennmaß, Toleranz, Min/Max sowie leeren Spalten für Istwert und Prüfung speichern.",
+  "tipp": "Wähle zuerst ein Maß auf dem Blatt an, hake rechts „Als Prüfmaß markieren“ an und exportiere danach die fertige Prüftabelle als CSV."
+ },
+ "drawingTiledPrint": {
+  "tip": "Große Zeichnungen im Maßstab 1:1 über mehrere A4-Seiten mit Klebemarken drucken (Profi)",
+  "hilfe": "Teilt große Blätter (wie A3, A2, A1 oder A0) exakt im Maßstab 1:1 auf mehrere A4- oder A3-Seiten auf. Jede Kachel enthält Schnitt- und Klebemarken (A1, B1, A2 …) und auf Seite 1 einen 50-mm-Kontrollbalken zum Nachmessen nach dem Ausdruck.",
+  "tipp": "Stelle im Druckdialog deines PDF-Betrachters immer „Tatsächliche Größe“ oder „100 %“ (ohne Seitenanpassung) ein, damit die 1:1-Schablone exakt stimmt."
+ },
+ "drawingFinish": {
+  "tip": "Zeichnung auf Knopfdruck mit Ansichten, Maßstab, Maßen, Mittellinien und Schriftfeld fertig machen",
+  "hilfe": "Schaltet Vorder-, Drauf-, Seiten- und isometrische Ansicht ein, wählt einen passenden Standard-Maßstab ohne Überlauf über den Blattrand, übernimmt die Maße aus dem Modell ohne Überlappen, blendet Mittellinien an allen Bohrungen und Zylindern ein und füllt leere Felder im Schriftfeld automatisch aus.",
+  "tipp": "Du kannst jederzeit einzelne Maße, Ansichten oder Schriftfeld-Angaben nachträglich ändern – und mit Rückgängig stellst du den vorherigen Stand wieder her."
  }
 };
 

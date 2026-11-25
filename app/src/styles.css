@@ -2113,6 +2113,12 @@ body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
 .tc-bar-legend{font-size:10.5px;color:var(--muted)}
 .tc-res-foot{display:flex;align-items:center;justify-content:space-between;gap:6px}
 
+/* Zeichnung: Prüfmaße & 1:1-Kacheldruck (ZE-33, ZE-36) */
+.dw-insp-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;border:1.5px solid var(--ink);background:var(--surface);font-size:11px;font-weight:700;flex-shrink:0}
+.dw-tile-dlg{display:grid;gap:10px;min-width:min(460px,86vw)}
+.dw-tile-prev{width:100%;max-height:210px;border:1px solid var(--line);border-radius:var(--radius-s);background:#fff;display:block}
+
+
 
 
 

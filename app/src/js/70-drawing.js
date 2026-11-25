@@ -250,7 +250,7 @@ const Drawing = (() => {
   let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null, dragTable = null, dragImage = null, dragSurface = null, dragWeld = null, dragEdgeSym = null, dragSymbol = null;
   let selLayerKey = 'vis';
   let lastDimAnchors = new Map();
-  let lastDXF = null, lastPNG = null;
+  let lastDXF = null, lastPNG = null, lastInspectionCSV = null, lastTiledPDF = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let noteDraft = { tip: 'auto', text: '' };
   let breakDraft = { dir: 'auto', gap: 6, style: 'zigzag' };
@@ -497,6 +497,23 @@ const Drawing = (() => {
       colWidths,
       pos: Array.isArray(raw.pos) && raw.pos.length >= 2
         ? [Number(raw.pos[0]) || 0, Number(raw.pos[1]) || 0]
+        : null,
+    };
+  }
+  function normalizeInspection(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.dimId) return null;
+    return {
+      id: raw.id ? String(raw.id) : uid('ins'),
+      dimId: String(raw.dimId),
+      note: String(raw.note ?? ''),
+    };
+  }
+  function normalizeInspectionTable(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {};
+    return {
+      show: !!o.show,
+      pos: Array.isArray(o.pos) && o.pos.length >= 2
+        ? [Number(o.pos[0]) || 0, Number(o.pos[1]) || 0]
         : null,
     };
   }
@@ -1018,6 +1035,8 @@ const Drawing = (() => {
       holeTable: normalizeHoleTable(opts.holeTable),
       revTable: normalizeRevTable(opts.revTable),
       freeTables: Array.isArray(opts.freeTables) ? opts.freeTables.map(normalizeFreeTable).filter(Boolean) : [],
+      inspections: Array.isArray(opts.inspections) ? opts.inspections.map(normalizeInspection).filter(Boolean) : [],
+      inspectionTable: normalizeInspectionTable(opts.inspectionTable),
       viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
       lineGroup: normLineGroup(opts.lineGroup || (tpl && tpl.lineGroup)),
       layers: normalizeLayers(opts.layers || (tpl && tpl.layers), normLineGroup(opts.lineGroup || (tpl && tpl.lineGroup))),
@@ -1070,6 +1089,8 @@ const Drawing = (() => {
       holeTable: raw && raw.holeTable && typeof raw.holeTable === 'object' ? raw.holeTable : undefined,
       revTable: raw && raw.revTable && typeof raw.revTable === 'object' ? raw.revTable : undefined,
       freeTables: raw && Array.isArray(raw.freeTables) ? raw.freeTables : undefined,
+      inspections: raw && Array.isArray(raw.inspections) ? raw.inspections : undefined,
+      inspectionTable: raw && raw.inspectionTable && typeof raw.inspectionTable === 'object' ? raw.inspectionTable : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
       lineGroup: raw && raw.lineGroup,
       layers: raw && raw.layers && typeof raw.layers === 'object' ? raw.layers : undefined,
@@ -1135,6 +1156,8 @@ const Drawing = (() => {
         cur.holeTable = normalizeHoleTable(cur.holeTable);
         cur.revTable = normalizeRevTable(cur.revTable);
         cur.freeTables = Array.isArray(cur.freeTables) ? cur.freeTables.map(normalizeFreeTable).filter(Boolean) : [];
+        cur.inspections = Array.isArray(cur.inspections) ? cur.inspections.map(normalizeInspection).filter(Boolean) : [];
+        cur.inspectionTable = normalizeInspectionTable(cur.inspectionTable);
       }
       if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
       if (cur) {
@@ -1310,6 +1333,8 @@ const Drawing = (() => {
     clone.revTable = normalizeRevTable(src.revTable);
     clone.revTable.rows = clone.revTable.rows.map((r) => ({ ...r, id: uid('rev') }));
     clone.freeTables = (src.freeTables || []).map((f) => normalizeFreeTable({ ...JSON.parse(JSON.stringify(f)), id: uid('tbl') })).filter(Boolean);
+    clone.inspections = (src.inspections || []).map((x) => normalizeInspection({ ...x, id: uid('ins'), dimId: remapDimId(x.dimId) })).filter(Boolean);
+    clone.inspectionTable = normalizeInspectionTable(src.inspectionTable);
     clone.normThreads = src.normThreads !== false;
     clone.materialHatch = src.materialHatch !== false;
     const nextVP = {};
@@ -4114,6 +4139,34 @@ const Drawing = (() => {
     }
     return { x, y, w, h, th, hh, rh, cols: [cTag, cX, cY, cDia, cDepth], view: res.view, origin2D: res.origin2D, rows: res.rows };
   }
+  function inspectionTableRect(sh = dwg(), frame, lay = null) {
+    const it = sh && sh.inspectionTable;
+    if (isSimpleMode() || !(it && it.show)) return null;
+    const rows = inspectionDims(sh, lay);
+    const baseW = 136;
+    const w = Math.min(baseW, frame.w);
+    const sc = w / baseW;
+    const cNr = round(12 * sc, 2);
+    const cDim = round(30 * sc, 2);
+    const cTol = round(26 * sc, 2);
+    const cMin = round(20 * sc, 2);
+    const cMax = round(20 * sc, 2);
+    const cView = round(w - cNr - cDim - cTol - cMin - cMax, 2);
+    const th = 6.2, hh = 6.0, rh = 5.8;
+    const h = th + hh + Math.max(1, rows.length) * rh;
+    let x = frame.x;
+    let y = lay && lay.holeRect && Math.abs(lay.holeRect.x - frame.x) < 20 && Math.abs(lay.holeRect.y - frame.y) < 20
+      ? Math.min(frame.y + frame.h - h, lay.holeRect.y + lay.holeRect.h + 4)
+      : frame.y;
+    if (dragTable && dragTable.kind === 'insp' && dragTable.curPos) {
+      x = clamp(dragTable.curPos[0], frame.x, frame.x + frame.w - w);
+      y = clamp(dragTable.curPos[1], frame.y, frame.y + frame.h - h);
+    } else if (Array.isArray(it.pos) && it.pos.length >= 2) {
+      x = clamp(Number(it.pos[0]) || 0, frame.x, frame.x + frame.w - w);
+      y = clamp(Number(it.pos[1]) || 0, frame.y, frame.y + frame.h - h);
+    }
+    return { x, y, w, h, th, hh, rh, cols: [cNr, cDim, cTol, cMin, cMax, cView], rows };
+  }
   function bomTableRect(sh = dwg(), frame, tb, bom = bomData) {
     if (!(sh && sh.bomTable && sh.bomTable.show)) return null;
     const rows = bomItems(bom);
@@ -4388,11 +4441,12 @@ const Drawing = (() => {
       }
     }
     const holeRect = holeTableRect(sh, frame, { views });
+    const inspRect = inspectionTableRect(sh, frame, { views, holeRect });
     // Detailansichten platzieren
     if (Array.isArray(sh.details) && sh.details.length) {
       const occupied = [[frame.x + frame.w - tb.w - 4, frame.y + frame.h - tb.h - 4, tb.w + 4, tb.h + 4]];
       if (bomRect) occupied.push([bomRect.x - 4, bomRect.y - 4, bomRect.w + 8, bomRect.h + 8]);
-      for (const r of [holeRect, revRect, ...freeRects.values()]) {
+      for (const r of [holeRect, inspRect, revRect, ...freeRects.values()]) {
         if (r) occupied.push([r.x - 4, r.y - 4, r.w + 8, r.h + 8]);
       }
       for (const [k, v] of Object.entries(views)) {
@@ -4415,7 +4469,7 @@ const Drawing = (() => {
     }
     // frei Gezeichnetes liegt fest auf dem Papier: Millimeter ab der linken unteren Blattecke, 1:1
     if (G.free) views.free = { geo: G.free, s: 1, ox: 0, oy: H };
-    return { W, H, frame, tb, area, s, views, bomRect, holeRect, revRect, freeRects };
+    return { W, H, frame, tb, area, s, views, bomRect, holeRect, inspRect, revRect, freeRects };
   }
   const toSheetRaw = (v, dp) => [v.ox + dp[0] * v.s, v.oy - dp[1] * v.s];
   const toSheet = (v, p) => {
@@ -4550,6 +4604,112 @@ const Drawing = (() => {
     const nominalMm = dimNominal(dim);
     const { mainLabel } = dimLabelParts(dim, nominalMm, sheetDimStyle(sh));
     return { dim, nominalMm, label: mainLabel };
+  }
+  function dimTypeLabel(type) {
+    const map = {
+      lin: T('draw.insp.typeLin'),
+      dia: T('draw.insp.typeDia'),
+      rad: T('draw.insp.typeRad'),
+      arclen: T('draw.insp.typeArc'),
+      ang: T('draw.insp.typeAng'),
+      chamfer: T('draw.insp.typeChamfer'),
+    };
+    return map[type] || String(type || '');
+  }
+  function findInspectableDim(id, sh = dwg(), lay = layout) {
+    if (!id || !sh) return null;
+    const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
+    const dim = list.find((x) => x.id === id);
+    if (!dim || !['lin', 'dia', 'rad', 'arclen', 'ang', 'chamfer'].includes(dim.type)) return null;
+    const st = sheetDimStyle(sh);
+    if (dim.type === 'ang') {
+      const deg = ((Number(dim.a1) - Number(dim.a0)) * 180) / Math.PI;
+      return { dim, nominalMm: deg, deg, isAngle: true, label: fmtDimAngle(deg, st) };
+    }
+    if (dim.type === 'chamfer') {
+      const nominalMm = Number(dim.dist) || 0;
+      const angTxt = Math.abs(Number(dim.ang) - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(Number(dim.ang) || 45, st);
+      return { dim, nominalMm, isAngle: false, label: `${fmtDim(nominalMm, st)}×${angTxt}` };
+    }
+    const nominalMm = dimNominal(dim);
+    const { mainLabel } = dimLabelParts(dim, nominalMm, st);
+    return { dim, nominalMm, isAngle: false, label: mainLabel };
+  }
+  function inspectionTolDisplay(dim, info, st = sheetDimStyle()) {
+    if (!info || info.isAngle || dim.type === 'chamfer') {
+      return { tolText: '', lowerMm: null, upperMm: null, minMm: null, maxMm: null, minStr: '', maxStr: '', loDevStr: '', upDevStr: '' };
+    }
+    const tolInfo = resolveDimTol(dim, info.nominalMm);
+    if (!tolInfo) {
+      return { tolText: '', lowerMm: null, upperMm: null, minMm: null, maxMm: null, minStr: '', maxStr: '', loDevStr: '', upDevStr: '' };
+    }
+    if (tolInfo.outOfRange) {
+      return { tolText: tolInfo.code || '', lowerMm: null, upperMm: null, minMm: null, maxMm: null, minStr: '', maxStr: '', loDevStr: '', upDevStr: '' };
+    }
+    const fitDec = tolInfo.mode === 'fit' ? ((!Number.isInteger(tolInfo.upperUm) || !Number.isInteger(tolInfo.lowerUm)) ? 4 : 3) : 0;
+    const dev = fmtDevPair(tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
+    const lim = fmtLimitsPair(info.nominalMm, tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
+    let tolText = '';
+    if (tolInfo.mode === 'sym') tolText = `±${tolInfo.symStr}`;
+    else if (tolInfo.mode === 'fit') tolText = `${tolInfo.code} (${dev.upStr} / ${dev.loStr})`;
+    else tolText = `${dev.upStr} / ${dev.loStr}`;
+    return {
+      tolText,
+      lowerMm: tolInfo.lowerMm,
+      upperMm: tolInfo.upperMm,
+      minMm: info.nominalMm + Math.min(tolInfo.lowerMm, tolInfo.upperMm),
+      maxMm: info.nominalMm + Math.max(tolInfo.lowerMm, tolInfo.upperMm),
+      minStr: lim.minStr,
+      maxStr: lim.maxStr,
+      loDevStr: dev.loStr,
+      upDevStr: dev.upStr,
+    };
+  }
+  function inspectionDims(sh = dwg(), lay = layout) {
+    if (!sh) return [];
+    const useLay = lay || computeLayout(sh);
+    const list = autoDimList(sh, useLay);
+    const byId = new Map(list.map((d) => [d.id, d]));
+    const st = sheetDimStyle(sh);
+    const seen = new Set();
+    const out = [];
+    for (const raw of sh.inspections || []) {
+      const entry = normalizeInspection(raw);
+      if (!entry || seen.has(entry.dimId)) continue;
+      const dim = byId.get(entry.dimId);
+      if (!dim) continue;
+      const info = findInspectableDim(entry.dimId, sh, useLay);
+      if (!info) continue;
+      seen.add(entry.dimId);
+      const td = inspectionTolDisplay(dim, info, st);
+      out.push({
+        num: out.length + 1,
+        id: entry.id,
+        dimId: dim.id,
+        view: dim.view,
+        viewName: viewLabel(dim.view, sh),
+        type: dim.type,
+        typeLabel: dimTypeLabel(dim.type),
+        label: info.label,
+        fullLabel: td.tolText ? `${info.label} ${td.tolText}` : info.label,
+        nominalMm: info.nominalMm,
+        isAngle: !!info.isAngle,
+        deg: info.isAngle ? info.deg : null,
+        tol: dim.tol ? { ...dim.tol } : null,
+        tolText: td.tolText,
+        lowerMm: td.lowerMm,
+        upperMm: td.upperMm,
+        minMm: td.minMm,
+        maxMm: td.maxMm,
+        minStr: td.minStr,
+        maxStr: td.maxStr,
+        loDevStr: td.loDevStr,
+        upDevStr: td.upDevStr,
+        note: entry.note || '',
+        unit: info.isAngle ? '°' : Units.label(),
+      });
+    }
+    return out;
   }
   function sanitizeTol(raw) {
     if (!raw || typeof raw !== 'object' || !raw.mode || raw.mode === 'none') return null;
@@ -6553,6 +6713,81 @@ const Drawing = (() => {
       }
     }
   }
+  function drawInspectionBalloons(sh, lay, dimAnchors, lines, texts) {
+    if (isSimpleMode() || !sh || !lay || !dimAnchors) return;
+    const list = inspectionDims(sh, lay);
+    if (!list.length) return;
+    const st = sheetDimStyle(sh);
+    const { frame } = lay;
+    const baseR = clamp(st.fontSize * 0.88, 2.8, 5.5);
+    const fs = clamp(st.fontSize * 0.88, 2.4, 5.0);
+    const placed = [];
+    for (const item of list) {
+      const anc = dimAnchors.get(item.dimId);
+      if (!anc) continue;
+      const numStr = String(item.num);
+      const R = Math.max(baseR, (textW(numStr, fs) + 2.6) * 0.5);
+      const cy0 = clamp((anc.topY + anc.bottomY) * 0.5, frame.y + R + 1, frame.y + frame.h - R - 1);
+      const rightOk = anc.rightX + 2 * R + 2.4 <= frame.x + frame.w - 1;
+      const bx = rightOk
+        ? clamp(anc.rightX + R + 1.8, frame.x + R + 1, frame.x + frame.w - R - 1)
+        : clamp(anc.leftX - R - 1.8, frame.x + R + 1, frame.x + frame.w - R - 1);
+      let by = cy0;
+      for (let k = 0; k < 6; k++) {
+        if (!placed.some(([px, py, pr]) => Math.hypot(bx - px, by - py) < R + pr + 1.2)) break;
+        by = clamp(cy0 + (k % 2 === 0 ? 1 : -1) * Math.ceil((k + 1) / 2) * (R * 2 + 1.4), frame.y + R + 1, frame.y + frame.h - R - 1);
+      }
+      placed.push([bx, by, R]);
+      const edgeX = rightOk ? anc.rightX + 0.5 : anc.leftX - 0.5;
+      const rimX = bx + (rightOk ? -R : R);
+      if ((rightOk && rimX > edgeX + 0.2) || (!rightOk && rimX < edgeX - 0.2)) {
+        lines.push({ pts: [[edgeX, cy0], [rimX, by]], cls: 'insp-line', id: item.dimId, dimId: item.dimId, inspNum: item.num, view: item.view });
+      }
+      lines.push({ circle: [bx, by, R], cls: 'insp-circle', id: item.dimId, dimId: item.dimId, inspNum: item.num, view: item.view });
+      if (R >= 2.2) {
+        lines.push({ circle: [bx, by, Math.max(1.2, R - 0.65)], cls: 'insp-ring', id: item.dimId, dimId: item.dimId, inspNum: item.num, view: item.view });
+      }
+      texts.push({ x: bx, y: by + fs * 0.35, t: numStr, size: fs, rot: 0, anchor: 'middle', cls: 'insp-text', id: item.dimId, dimId: item.dimId, inspNum: item.num, view: item.view });
+    }
+  }
+  function drawInspectionTable(sh, lay, lines, texts) {
+    const ir = lay && lay.inspRect;
+    if (!ir) return;
+    const id = '__insptable__', tableKind = 'insp';
+    drawTableShell(ir.x, ir.y, ir.w, ir.h, ir.th, ir.hh, ir.rh, ir.cols, ir.rows.length, id, tableKind, lines);
+    const title = T('draw.insp.tableTitle');
+    texts.push({ x: ir.x + 1.8, y: ir.y + ir.th * 0.68, t: title, size: 2.9, anchor: 'start', cls: 'tbl-title', id, tableKind });
+    const headers = [T('draw.insp.colNr'), T('draw.insp.colDim'), T('draw.insp.colTol'), T('draw.insp.colMin'), T('draw.insp.colMax'), T('draw.insp.colView')];
+    const aligns = ['middle', 'start', 'start', 'end', 'end', 'start'];
+    const hy = ir.y + ir.th + ir.hh * 0.67;
+    let cx = ir.x;
+    for (let c = 0; c < ir.cols.length; c++) {
+      const cw = ir.cols[c], al = aligns[c];
+      const tx = al === 'middle' ? cx + cw * 0.5 : al === 'end' ? cx + cw - 1.6 : cx + 1.6;
+      const fsH = fitSize(headers[c], cw - 2.4, 2.7, 1.7);
+      texts.push({ x: tx, y: hy, t: clipText(headers[c], cw - 2.4, fsH), size: fsH, anchor: al, cls: 'tbl-th', id, tableKind });
+      cx += cw;
+    }
+    if (!ir.rows.length) {
+      texts.push({ x: ir.x + ir.w * 0.5, y: ir.y + ir.th + ir.hh + ir.rh * 0.67, t: T('draw.insp.emptyCsv'), size: 2.5, anchor: 'middle', cls: 'tbl-td', id, tableKind });
+      return;
+    }
+    const colKeys = ['nr', 'dim', 'tol', 'min', 'max', 'view'];
+    for (let i = 0; i < ir.rows.length; i++) {
+      const r = ir.rows[i];
+      const ry = ir.y + ir.th + ir.hh + i * ir.rh;
+      const ty = ry + ir.rh * 0.68;
+      const vals = [String(r.num), r.label, r.tolText || '–', r.minStr || '–', r.maxStr || '–', r.viewName];
+      let xC = ir.x;
+      for (let c = 0; c < ir.cols.length; c++) {
+        const cw = ir.cols[c], al = aligns[c];
+        const tx = al === 'middle' ? xC + cw * 0.5 : al === 'end' ? xC + cw - 1.6 : xC + 1.6;
+        const fsC = fitSize(vals[c], cw - 2.4, 2.65, 1.65);
+        texts.push({ x: tx, y: ty, t: clipText(vals[c], cw - 2.4, fsC), size: fsC, anchor: al, cls: 'tbl-td', id, tableKind, inspNum: r.num, inspCol: colKeys[c] });
+        xC += cw;
+      }
+    }
+  }
   function getShadedImage(name, v) {
     if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
     const pv = proj.views[name];
@@ -6840,9 +7075,11 @@ const Drawing = (() => {
     for (const sym of sh.symbols || []) drawPlacedSymbol(sym, lines, texts, lay, sh);
     // Schriftfeld, Stückliste & Tabellen
     titleBlock(sh, lay, idx, total, lines, texts, images);
+    drawInspectionBalloons(sh, lay, dimAnchors, lines, texts);
     drawBomTable(sh, lay, lines, texts);
     drawHoleTags(sh, lay, lines, texts);
     drawHoleTable(sh, lay, lines, texts);
+    drawInspectionTable(sh, lay, lines, texts);
     drawRevTable(sh, lay, lines, texts);
     drawFreeTables(sh, lay, lines, texts);
     // Bilder / Logos frei auf dem Blatt (ZE-31)
@@ -6907,6 +7144,7 @@ const Drawing = (() => {
     if (c === 'dim' || c === 'arrow' || c === 'arrow-open' || c === 'arrow-slash' || c === 'arrow-dot'
       || c === 'leader' || c === 'leader-arrow' || c === 'leader-dot' || c === 'detail' || c === 'auxarrow'
       || c === 'balloon-line' || c === 'balloon-arrow' || c === 'balloon-dot' || c === 'balloon-circle'
+      || c === 'insp-line' || c === 'insp-circle' || c === 'insp-ring'
       || c === 'gdt-bg' || c === 'gdt-frame' || c === 'gdt-line' || c === 'gdt-sym' || c === 'gdt-arrow' || c === 'gdt-datum-tri'
       || c === 'sym-line' || c === 'sym-dash' || c === 'sym-sym' || c === 'sym-arrow' || c === 'sym-fill' || c === 'sym-hit'
       || c === 'ht-origin' || c === 'ht-tag-line' || c === 'ht-tag-arrow') return 'dim';
@@ -6915,7 +7153,7 @@ const Drawing = (() => {
   function textLayerKey(t) {
     if (!t || t.cls === 'note') return null;
     const c = String(t.cls || '');
-    if (c.startsWith('dimtext') || c === 'leadertext' || c === 'detail-lbl' || c === 'balloon-text' || c === 'auxlabel' || c === 'gdt-text' || c === 'ht-tag-text' || c === 'sym-text') return 'dim';
+    if (c.startsWith('dimtext') || c === 'leadertext' || c === 'detail-lbl' || c === 'balloon-text' || c === 'insp-text' || c === 'auxlabel' || c === 'gdt-text' || c === 'ht-tag-text' || c === 'sym-text') return 'dim';
     if (c === 'cutlabel' || c === 'viewlabel') return 'cut';
     return 'frame';
   }
@@ -7021,10 +7259,10 @@ const Drawing = (() => {
           if (projMode === 'us') {
             const ccx = fx + 8.5 * sx;
             lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr', projSym: 'ctr' });
             const tx = fx + 16.5 * sx;
             lines.push({ pts: [[tx, cy - 1.6], [tx + 10, cy - 3], [tx + 10, cy + 3], [tx, cy + 1.6], [tx, cy - 1.6]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr' });
+            lines.push({ pts: [[tx - 1.5, cy], [tx + 11.5, cy]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + 1.2, y: fy + 26.2 * sy, t: 'ISO 5456-2 (A)', size: 2, anchor: 'start', cls: 'lab', projMode: 'us' });
             const mTxt = T('draw.tb.method3');
             const mSz = fitSize(mTxt, Math.max(6, fw - 2.4), 2.5, 1.8);
@@ -7032,10 +7270,10 @@ const Drawing = (() => {
           } else {
             const sx0 = fx + 4.5 * sx;
             lines.push({ pts: [[sx0, cy - 1.6], [sx0 + 10, cy - 3], [sx0 + 10, cy + 3], [sx0, cy + 1.6], [sx0, cy - 1.6]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[sx0 - 1.5, cy], [sx0 + 11.5, cy]], cls: 'ctr' });
+            lines.push({ pts: [[sx0 - 1.5, cy], [sx0 + 11.5, cy]], cls: 'ctr', projSym: 'ctr' });
             const ccx = sx0 + 18.5;
             lines.push({ circle: [ccx, cy, 1.6], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, 3], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - 4, cy], [ccx + 4, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - 4], [ccx, cy + 4]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + 1.2, y: fy + 26.2 * sy, t: 'ISO 5456-2 (E)', size: 2, anchor: 'start', cls: 'lab', projMode: 'eu' });
             const mTxt = T('draw.tb.method1Iso');
             const mSz = fitSize(mTxt, Math.max(6, fw - 2.4), 2.5, 1.8);
@@ -7049,18 +7287,18 @@ const Drawing = (() => {
           if (projMode === 'us') {
             const ccx = xStart + r2;
             lines.push({ circle: [ccx, cy, r1], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, r2], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr', projSym: 'ctr' });
             const tx = xStart + r2 * 2 + gap;
             lines.push({ pts: [[tx, cy - r1], [tx + cW, cy - r2], [tx + cW, cy + r2], [tx, cy + r1], [tx, cy - r1]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr' });
+            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + fw * 0.5, y: fy + fh - 1.3, t: 'ISO 5456-2 (A)', size: clamp(fh * 0.11, 1.5, 1.9), anchor: 'middle', cls: 'lab', projMode: 'us' });
           } else {
             const tx = xStart;
             lines.push({ pts: [[tx, cy - r1], [tx + cW, cy - r2], [tx + cW, cy + r2], [tx, cy + r1], [tx, cy - r1]], cls: 'thin', projSym: 'cone' });
-            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr' });
+            lines.push({ pts: [[tx - 1, cy], [tx + cW + 1, cy]], cls: 'ctr', projSym: 'ctr' });
             const ccx = tx + cW + gap + r2;
             lines.push({ circle: [ccx, cy, r1], cls: 'thin', projSym: 'circles' }, { circle: [ccx, cy, r2], cls: 'thin', projSym: 'circles' });
-            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr' });
+            lines.push({ pts: [[ccx - r2 - 0.8, cy], [ccx + r2 + 0.8, cy]], cls: 'ctr', projSym: 'ctr' }, { pts: [[ccx, cy - r2 - 0.8], [ccx, cy + r2 + 0.8]], cls: 'ctr', projSym: 'ctr' });
             texts.push({ x: fx + fw * 0.5, y: fy + fh - 1.3, t: 'ISO 5456-2 (E)', size: clamp(fh * 0.11, 1.5, 1.9), anchor: 'middle', cls: 'lab', projMode: 'eu' });
           }
         }
@@ -7143,7 +7381,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow,.sym-arrow,.sym-fill{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line,.sym-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.sym-dash{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:1.6 1;cursor:pointer}.sym-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;cursor:grab}.sym-hit{fill:transparent;stroke:none;cursor:grab}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel,.sym-arrow.sel,.sym-fill.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text,text.sym-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}text.tb-bold{font-weight:700}.tb-logo{pointer-events:none}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow,.sym-arrow,.sym-fill{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line,.insp-line,.sym-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.sym-dash{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:1.6 1;cursor:pointer}.sym-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;cursor:grab}.sym-hit{fill:transparent;stroke:none;cursor:grab}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle,.insp-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.insp-circle{cursor:pointer}.insp-ring{fill:none;stroke:#111;stroke-width:.2;pointer-events:none}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.insp-circle.sel,.insp-ring.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.insp-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel,.sym-arrow.sel,.sym-fill.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text,text.sym-text{font-weight:600;cursor:grab}text.insp-text{font-weight:700;cursor:pointer}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}text.tb-bold{font-weight:700}.tb-logo{pointer-events:none}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function dashCss(ltKey, cutDefault = false) {
     if (cutDefault && ltKey === 'center') return 'stroke-dasharray:7 1.2 .7 1.2';
     const meta = lineTypeMeta(ltKey);
@@ -7163,7 +7401,7 @@ const Drawing = (() => {
       `.hatch.hatch-dash{stroke-dasharray:3 1.2}`,
       `.cutline{stroke-width:${ly.cut.width};${dashCss(ly.cut.lineType, true)}}`,
       `.cutend{stroke-width:${cutEndW}}`,
-      `.dim,.leader,.balloon-line,.gdt-line,.ht-tag-line,.detail{stroke-width:${ly.dim.width};${dashCss(ly.dim.lineType)}}`,
+      `.dim,.leader,.balloon-line,.insp-line,.gdt-line,.ht-tag-line,.detail{stroke-width:${ly.dim.width};${dashCss(ly.dim.lineType)}}`,
       `.frame{stroke-width:${ly.frame.width};${dashCss(ly.frame.lineType)}}`,
       `.thin{stroke-width:${thinW};${dashCss(ly.frame.lineType)}}`,
       `.thread{stroke-width:${ly.thread.width};${dashCss(ly.thread.lineType)}}`,
@@ -7173,8 +7411,8 @@ const Drawing = (() => {
       `.sheet-img-border{stroke-width:${ly.image.width};${dashCss(ly.image.lineType)}}`,
       `.ctr.sel,.breakline.sel,.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}`,
       `.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}`,
-      `.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}`,
-      `.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}`,
+      `.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.insp-circle.sel,.insp-ring.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}`,
+      `.dim.sel,.leader.sel,.balloon-line.sel,.insp-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}`,
       `.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}`,
       `.dim.lost{stroke-dasharray:2 1}`,
       `.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}`,
@@ -7236,6 +7474,7 @@ const Drawing = (() => {
         if (l.dimId) el.dataset.dimId = l.dimId;
         if (l.tableKind) el.dataset.tableKind = l.tableKind;
         if (l.htTag) el.dataset.htTag = l.htTag;
+        if (l.inspNum != null) el.dataset.inspNum = String(l.inspNum);
         if (l.tbLine) el.dataset.tbLine = l.tbLine;
         if (l.tbPart) el.dataset.tbPart = l.tbPart;
         if (l.layer) el.dataset.layer = l.layer;
@@ -7295,6 +7534,8 @@ const Drawing = (() => {
         if (t.revCol) el.dataset.revCol = t.revCol;
         if (t.ftRow != null) el.dataset.ftRow = String(t.ftRow);
         if (t.ftCol != null) el.dataset.ftCol = String(t.ftCol);
+        if (t.inspNum != null) el.dataset.inspNum = String(t.inspNum);
+        if (t.inspCol) el.dataset.inspCol = t.inspCol;
         if (t.tbField) el.dataset.tbField = t.tbField;
         if (t.tbKey) el.dataset.tbKey = t.tbKey;
         if (t.tbRole) el.dataset.tbRole = t.tbRole;
@@ -9312,11 +9553,165 @@ const Drawing = (() => {
     render(); Panels.renderRight();
     return true;
   }
+  // ---------- Prüfmaße & Prüftabelle (ZE-33, Profi) ----------
+  function setInspectionDim(dimId, on = true, opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.insp.proOnly'), { icon: 'info' }); return false; }
+    if (!dimId) return false;
+    const d = dwg();
+    const want = !!on;
+    if (want) {
+      const info = findInspectableDim(dimId, d, layout || computeLayout(d));
+      if (!info) return false;
+    }
+    let changed = false;
+    App.change(want ? 'Prüfmaß markiert' : 'Prüfmaß entfernt', () => {
+      const sh = dwg();
+      if (!Array.isArray(sh.inspections)) sh.inspections = [];
+      const idx = sh.inspections.findIndex((x) => x.dimId === dimId);
+      if (want) {
+        if (idx >= 0) {
+          if (opts.note !== undefined && sh.inspections[idx].note !== String(opts.note)) {
+            sh.inspections[idx].note = String(opts.note);
+            changed = true;
+          }
+        } else {
+          sh.inspections.push(normalizeInspection({ dimId, note: opts.note || '' }));
+          changed = true;
+        }
+      } else if (idx >= 0) {
+        sh.inspections.splice(idx, 1);
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function toggleInspectionDim(dimId) {
+    if (isSimpleMode()) { UI.toast(T('draw.insp.proOnly'), { icon: 'info' }); return false; }
+    const exists = ((dwg().inspections) || []).some((x) => x.dimId === dimId);
+    return setInspectionDim(dimId, !exists);
+  }
+  function updateInspectionDim(dimId, patch = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.insp.proOnly'), { icon: 'info' }); return false; }
+    let changed = false;
+    App.change('Prüfhinweis geändert', () => {
+      const entry = ((dwg().inspections) || []).find((x) => x.dimId === dimId);
+      if (!entry) return;
+      if (patch.note !== undefined && entry.note !== String(patch.note)) {
+        entry.note = String(patch.note);
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function clearInspectionDims() {
+    if (isSimpleMode()) { UI.toast(T('draw.insp.proOnly'), { icon: 'info' }); return false; }
+    const cur = dwg().inspections || [];
+    if (!cur.length) return false;
+    App.change('Alle Prüfmaße entfernt', () => {
+      dwg().inspections = [];
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function setInspectionTable(show) {
+    const val = !!show;
+    if (val && isSimpleMode()) { UI.toast(T('draw.insp.proOnly'), { icon: 'info' }); return false; }
+    const cur = dwg();
+    if ((cur.inspectionTable && !!cur.inspectionTable.show) === val) return false;
+    App.change(val ? 'Prüftabelle eingeblendet' : 'Prüftabelle ausgeblendet', () => {
+      const d = dwg();
+      d.inspectionTable = normalizeInspectionTable({ ...(d.inspectionTable || {}), show: val });
+    });
+    if (!val && selDim === '__insptable__') selDim = null;
+    else if (val) selDim = '__insptable__';
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetInspectionTablePos() {
+    const d = dwg();
+    if (!d.inspectionTable || !Array.isArray(d.inspectionTable.pos)) return false;
+    App.change('Prüftabellen-Lage zurückgesetzt', () => {
+      const sh = dwg();
+      if (sh.inspectionTable) sh.inspectionTable.pos = null;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function inspectionCSV(sh = dwg(), lay = layout) {
+    const rows = inspectionDims(sh, lay);
+    const st = sheetDimStyle(sh);
+    const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const fmtNumCsv = (v, isAngle) => {
+      if (v == null || !Number.isFinite(Number(v))) return '';
+      if (isAngle) return String(round(Number(v), 3)).replace('.', ',');
+      const uv = round(Units.fromMM(Number(v)), Units.key() === 'm' ? 5 : 4);
+      return String(uv).replace('.', ',');
+    };
+    const header = [
+      T('draw.insp.colNr'),
+      T('draw.insp.colView'),
+      T('draw.insp.colType'),
+      T('draw.insp.colDim'),
+      `${T('draw.insp.colNominal')} (${Units.label()}/°)`,
+      T('draw.insp.colTol'),
+      T('draw.insp.colDevLo'),
+      T('draw.insp.colDevHi'),
+      T('draw.insp.colMin'),
+      T('draw.insp.colMax'),
+      T('draw.insp.colActual'),
+      T('draw.insp.colResult'),
+      T('draw.insp.colNote'),
+    ].map(q).join(';');
+    const lines = [header];
+    for (const r of rows) {
+      const nomStr = r.isAngle ? fmtNumCsv(r.deg, true) : fmtNumCsv(r.nominalMm, false);
+      const loDev = r.lowerMm != null ? fmtNumCsv(r.lowerMm, false) : '';
+      const upDev = r.upperMm != null ? fmtNumCsv(r.upperMm, false) : '';
+      const minV = r.minMm != null ? fmtNumCsv(r.minMm, false) : (r.isAngle ? nomStr : '');
+      const maxV = r.maxMm != null ? fmtNumCsv(r.maxMm, false) : (r.isAngle ? nomStr : '');
+      lines.push([
+        r.num,
+        q(r.viewName),
+        q(r.typeLabel),
+        q(r.fullLabel),
+        q(nomStr),
+        q(r.tolText || ''),
+        q(loDev),
+        q(upDev),
+        q(minV),
+        q(maxV),
+        q(''),
+        q(''),
+        q(r.note || ''),
+      ].join(';'));
+    }
+    void st;
+    return '\ufeff' + lines.join('\r\n') + '\r\n';
+  }
+  async function exportInspectionCSV() {
+    if (isSimpleMode()) { UI.toast(T('draw.insp.proOnly'), { icon: 'info' }); return null; }
+    await ensureProjections();
+    const sh = dwg();
+    const rows = inspectionDims(sh, layout || computeLayout(sh));
+    if (!rows.length) {
+      UI.toast(T('draw.insp.emptyCsv'), { icon: 'info' });
+      return null;
+    }
+    const csv = inspectionCSV(sh, layout || computeLayout(sh));
+    lastInspectionCSV = csv;
+    const filename = fileBase(true, sh) + ' Prüftabelle.csv';
+    await Print.save(filename, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    return { filename, csv, count: rows.length };
+  }
   function tablesMenu(anchor) {
     if (isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return; }
     const sh = dwg();
     const hasHt = !!(sh.holeTable && sh.holeTable.show);
     const hasRt = !!(sh.revTable && sh.revTable.show);
+    const hasIt = !!(sh.inspectionTable && sh.inspectionTable.show);
+    const hasInsp = inspectionDims(sh, layout || computeLayout(sh)).length > 0;
     UI.menu(anchor, [
       { id: 'dw-menu-hole-table', label: T('menu.draw.holeTable'), icon: 'layout', help: 'drawingHoleTable', checked: hasHt, run: () => setHoleTable(!hasHt) },
       { id: 'dw-menu-hole-origin', label: T('menu.draw.holeOrigin'), icon: 'target', help: 'drawingHoleTable', checked: tool === 'hole-origin', run: () => tool_('hole-origin') },
@@ -9325,6 +9720,9 @@ const Drawing = (() => {
       { id: 'dw-menu-rev-add', label: T('draw.panel.revAdd'), icon: 'plus', help: 'drawingRevTable', run: () => addRevRow() },
       '-',
       { id: 'dw-menu-free-table', label: T('menu.draw.freeTable'), icon: 'plus', help: 'drawingFreeTable', run: () => addFreeTable() },
+      '-',
+      { id: 'dw-menu-insp-table', label: T('menu.draw.inspTable'), icon: 'layout', help: 'drawingInspection', checked: hasIt, run: () => setInspectionTable(!hasIt) },
+      { id: 'dw-menu-insp-csv', label: T('menu.draw.inspCsv'), icon: 'file', help: 'drawingInspection', disabled: !hasInsp, run: () => exportInspectionCSV() },
     ]);
   }
   function pickHoleOriginSnap(P) {
@@ -9735,6 +10133,8 @@ const Drawing = (() => {
     } else if (selDim === '__holetable__' && layout && layout.holeRect) {
       const isTblCell = t && (t.classList.contains('tbl-bg') || t.classList.contains('tbl-frame') || t.classList.contains('tbl-th') || t.classList.contains('tbl-td') || t.classList.contains('tbl-title'));
       if (isTblCell) dragTable = { kind: 'hole', id: '__holetable__', startP: P, origPos: [layout.holeRect.x, layout.holeRect.y], curPos: null, moved: false };
+    } else if (selDim === '__insptable__' && layout && layout.inspRect) {
+      dragTable = { kind: 'insp', id: '__insptable__', startP: P, origPos: [layout.inspRect.x, layout.inspRect.y], curPos: null, moved: false };
     } else if (selDim === '__rev__' && layout && layout.revRect) {
       dragTable = { kind: 'rev', id: '__rev__', startP: P, origPos: [layout.revRect.x, layout.revRect.y], curPos: null, moved: false };
     } else if (selDim && layout && layout.freeRects && layout.freeRects.has(selDim)) {
@@ -9853,13 +10253,14 @@ const Drawing = (() => {
       dragTable = null;
       if (d.moved && d.curPos) {
         const lay = layout || computeLayout(dwg());
-        const rect = d.kind === 'hole' ? lay.holeRect : d.kind === 'rev' ? lay.revRect : (lay.freeRects && lay.freeRects.get(d.id));
+        const rect = d.kind === 'hole' ? lay.holeRect : d.kind === 'insp' ? lay.inspRect : d.kind === 'rev' ? lay.revRect : (lay.freeRects && lay.freeRects.get(d.id));
         const w = rect ? rect.w : 80, h = rect ? rect.h : 20;
         const nx = round(clamp(d.curPos[0], lay.frame.x, lay.frame.x + lay.frame.w - w), 2);
         const ny = round(clamp(d.curPos[1], lay.frame.y, lay.frame.y + lay.frame.h - h), 2);
         App.change('Tabelle verschoben', () => {
           const sh = dwg();
           if (d.kind === 'hole') sh.holeTable = normalizeHoleTable({ ...(sh.holeTable || {}), show: true, pos: [nx, ny] });
+          else if (d.kind === 'insp') sh.inspectionTable = normalizeInspectionTable({ ...(sh.inspectionTable || {}), show: true, pos: [nx, ny] });
           else if (d.kind === 'rev') sh.revTable = normalizeRevTable({ ...(sh.revTable || {}), show: true, pos: [nx, ny] });
           else if (d.kind === 'free') {
             const ft = (sh.freeTables || []).find((x) => x.id === d.id);
@@ -10885,6 +11286,7 @@ const Drawing = (() => {
       sh.dims = (sh.dims || []).filter((x) => x.id !== id);
       sh.datums = (sh.datums || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
       sh.gdtFrames = (sh.gdtFrames || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
+      sh.inspections = (sh.inspections || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
     });
     if (selDim === id) selDim = null;
     if (tool === 'dim' && toolState && toolState.rebindId === id) {
@@ -10906,6 +11308,7 @@ const Drawing = (() => {
       sh.dims = (sh.dims || []).filter((x) => !ids.has(x.id));
       sh.datums = (sh.datums || []).filter((x) => !x.dimId || !ids.has(x.dimId));
       sh.gdtFrames = (sh.gdtFrames || []).filter((x) => !x.dimId || !ids.has(x.dimId));
+      sh.inspections = (sh.inspections || []).filter((x) => !ids.has(x.dimId));
     });
     if (selDim && ids.has(selDim)) selDim = null;
     if (tool === 'dim' && toolState && toolState.rebindId && ids.has(toolState.rebindId)) {
@@ -11298,6 +11701,7 @@ const Drawing = (() => {
     const id = selDim; if (!id) return;
     if (id === '__bom__') { setBomTable(false); return; }
     if (id === '__holetable__') { setHoleTable(false); return; }
+    if (id === '__insptable__') { setInspectionTable(false); return; }
     if (id === '__rev__') { setRevTable(false); return; }
     if ((dwg().freeTables || []).some((x) => x.id === id)) { removeFreeTable(id); return; }
     if (String(id).startsWith('ctr|')) { hideCenter(id); return; }
@@ -11316,12 +11720,14 @@ const Drawing = (() => {
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
+        const dropIds = new Set(d.dims.filter((x) => x.view === id).map((x) => x.id));
         d.details = (d.details || []).filter((x) => x.id !== id);
         d.dims = d.dims.filter((x) => x.view !== id);
         d.notes = (d.notes || []).filter((x) => x.view !== id);
         d.balloons = (d.balloons || []).filter((x) => x.view !== id);
         d.datums = (d.datums || []).filter((x) => x.view !== id);
         d.gdtFrames = (d.gdtFrames || []).filter((x) => x.view !== id);
+        d.inspections = (d.inspections || []).filter((x) => !dropIds.has(x.dimId) && ![...dropIds].some((did) => x.dimId.startsWith(did + '_')));
         d.surfaces = (d.surfaces || []).filter((x) => x.view !== id);
         d.welds = (d.welds || []).filter((x) => x.view !== id);
         d.edges = (d.edges || []).filter((x) => x.view !== id);
@@ -11336,6 +11742,7 @@ const Drawing = (() => {
       else d.dims = d.dims.filter((x) => x.id !== id);
       d.datums = (d.datums || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
       d.gdtFrames = (d.gdtFrames || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
+      d.inspections = (d.inspections || []).filter((x) => x.dimId !== id && !(x.dimId && x.dimId.startsWith(id + '_')));
       d.free = d.free.filter((x) => x.id !== id);
     });
     selDim = null;
@@ -12337,7 +12744,6 @@ const Drawing = (() => {
     }
     return moved;
   }
-  // ---------- 3D-Maße, Toleranzen & Hinweise (PMI, ZE-35) übernehmen ----------
   function hasTransferablePmi(doc = App.doc) {
     return !!(doc && Array.isArray(doc.pmi) && doc.pmi.some((x) => x && x.inDrawing !== false));
   }
@@ -12650,6 +13056,73 @@ const Drawing = (() => {
     UI.toast(n ? T('draw.importPmiToast', { n }) : T('draw.importPmiEmptyToast'), { icon: 'dim' });
     return res;
   }
+  function lineBoundsOf(l) {
+    if (!l) return null;
+    if (Array.isArray(l.rect) && l.rect.length >= 4) {
+      return [l.rect[0], l.rect[1], l.rect[0] + l.rect[2], l.rect[1] + l.rect[3]];
+    }
+    if (Array.isArray(l.circle) && l.circle.length >= 3) {
+      const r = Math.abs(l.circle[2]);
+      return [l.circle[0] - r, l.circle[1] - r, l.circle[0] + r, l.circle[1] + r];
+    }
+    const pts = Array.isArray(l.poly) ? l.poly : l.pts;
+    if (!Array.isArray(pts) || !pts.length) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      if (!p || p.length < 2) continue;
+      if (p[0] < x0) x0 = p[0];
+      if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1];
+      if (p[1] > y1) y1 = p[1];
+    }
+    return isFinite(x0) ? [x0, y0, x1, y1] : null;
+  }
+  function sheetOverflowInfo(cur) {
+    if (!cur || !cur.layout) return { outsidePaper: 0, outsideFrame: 0, tbOverlap: 0, ok: true, bounds: [0, 0, 0, 0] };
+    const { W, H, frame, tb } = cur.layout;
+    const fx0 = frame.x, fy0 = frame.y, fx1 = frame.x + frame.w, fy1 = frame.y + frame.h;
+    const tbBox = [fx1 - tb.w + 0.5, fy1 - tb.h + 0.5, fx1, fy1];
+    const skip = new Set(['paper', 'frame', 'view-sel', 'prev', 'snap']);
+    let outsidePaper = 0, outsideFrame = 0, tbOverlap = 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const checkRect = (r, isTbItem) => {
+      if (!r) return;
+      if (r[0] < minX) minX = r[0];
+      if (r[1] < minY) minY = r[1];
+      if (r[2] > maxX) maxX = r[2];
+      if (r[3] > maxY) maxY = r[3];
+      if (r[0] < -0.05 || r[1] < -0.05 || r[2] > W + 0.05 || r[3] > H + 0.05) outsidePaper++;
+      if (r[0] < fx0 - 0.5 || r[1] < fy0 - 0.5 || r[2] > fx1 + 0.5 || r[3] > fy1 + 0.5) outsideFrame++;
+      if (!isTbItem && rectsOverlap(r, tbBox)) tbOverlap++;
+    };
+    for (const l of cur.lines || []) {
+      if (!l || skip.has(l.cls)) continue;
+      const isTbItem = !!(l.tbPart || l.tbLine || l.projSym);
+      checkRect(lineBoundsOf(l), isTbItem);
+    }
+    for (const t of cur.texts || []) {
+      if (!t || (t.cls === 'note' && !Object.keys(cur.layout.views || {}).length)) continue;
+      const isTbItem = !!(t.tbField || t.projMode);
+      checkRect(textRectOf(t, 0), isTbItem);
+    }
+    for (const im of cur.images || []) {
+      if (!im) continue;
+      checkRect([im.x, im.y, im.x + im.w, im.y + im.h], !!im.tbLogo);
+    }
+    return {
+      outsidePaper,
+      outsideFrame,
+      tbOverlap,
+      ok: outsidePaper === 0 && outsideFrame === 0 && tbOverlap === 0,
+      bounds: isFinite(minX) ? [minX, minY, maxX, maxY] : [0, 0, 0, 0],
+    };
+  }
+  function sheetBoundsCheck(sh = dwg()) {
+    const all = sheets();
+    const idx = Math.max(0, all.findIndex((x) => x.id === sh.id));
+    const cur = buildSheetContent(sh, idx, all.length);
+    return sheetOverflowInfo(cur);
+  }
   function importModelDims() {
     const sh0 = dwg();
     const lay = layout || computeLayout(sh0);
@@ -12712,6 +13185,242 @@ const Drawing = (() => {
       d.dims.push({ id: uid('d'), auto: 'width', view: 'front' }, { id: uid('d'), auto: 'height', view: 'front' }, { id: uid('d'), auto: 'depth', view: 'left' }, { id: uid('d'), auto: 'circles', view: 'top' });
     });
     render(); UI.toast(T('draw.autoDimsToast'), { icon: 'dim' });
+  }
+  function detectDrawingMaterial(doc = App.doc) {
+    const mats = new Set();
+    if (doc && Array.isArray(doc.items)) {
+      Model.walk(doc.items, (it) => {
+        if (!isItemActiveVisible(doc, it)) return;
+        if (it.role === 'hole' || (it.op && it.op.type === 'cut')) return;
+        const m = String(it.mat || '').trim();
+        if (m) mats.add(m);
+      });
+    }
+    if (!mats.size) {
+      for (const r of bomItems(bomData)) {
+        const m = String(r.mat || '').trim();
+        if (m && m !== '–') mats.add(m);
+      }
+    }
+    if (!mats.size) {
+      const dm = doc && doc.settings && String(doc.settings.material || '').trim();
+      if (dm) mats.add(dm);
+    }
+    const list = [...mats];
+    if (list.length === 1) return list[0];
+    if (list.length === 2) return list.join(' / ');
+    if (list.length > 2) return 'Verschiedene';
+    return null;
+  }
+  function detectDrawingPartNo(doc = App.doc) {
+    let partNo = '';
+    if (doc && Array.isArray(doc.items)) {
+      Model.walk(doc.items, (it) => {
+        if (partNo || !isItemActiveVisible(doc, it)) return;
+        if (it.role === 'hole' || (it.op && it.op.type === 'cut')) return;
+        const pn = it.props && String(it.props.partNo || '').trim();
+        if (pn) partNo = pn;
+      });
+    }
+    return partNo || 'Z-001';
+  }
+  function buildFinishDims(rawDims, sh, lay) {
+    const mapped = mapModelDimsToViews(rawDims, sh, lay);
+    const hasDia = mapped.some((d) => d.type === 'dia');
+    if (!hasDia) {
+      const toRad = Math.PI / 180;
+      for (const vk of ['top', 'front', 'left']) {
+        const v = lay.views[vk];
+        if (!v || !v.geo || v.noDims) continue;
+        const fullCircles = (v.geo.circles || []).filter((c) => c.full && c.r > 0.05);
+        if (!fullCircles.length) continue;
+        const groups = new Map();
+        for (const c of fullCircles) {
+          const rk = Math.round(c.r * 200);
+          if (!groups.has(rk)) groups.set(rk, []);
+          groups.get(rk).push(c);
+        }
+        const b = v.geo.box, mx = (b[0] + b[2]) * 0.5, my = (b[1] + b[3]) * 0.5;
+        for (const grp of groups.values()) {
+          let pick = grp[0], bd = -1;
+          for (const c of grp) {
+            const dist = Math.hypot(c.c[0] - mx, c.c[1] - my);
+            if (dist > bd) { bd = dist; pick = c; }
+          }
+          const away = Math.hypot(pick.c[0] - mx, pick.c[1] - my) > 1e-4 ? (Math.atan2(pick.c[1] - my, pick.c[0] - mx) * 180) / Math.PI : 45;
+          const ang = [45, 135, 225, 315].sort((p, q) => Math.abs(angleDiff(p * toRad, away * toRad)) - Math.abs(angleDiff(q * toRad, away * toRad)))[0] || 45;
+          mapped.push(attachSafeRef({
+            id: uid('d'),
+            view: vk,
+            type: 'dia',
+            c: pick.c,
+            r: pick.r,
+            ang,
+            count: grp.length,
+            fromModel: true,
+          }, v, lay, sh));
+        }
+        break;
+      }
+    }
+    const hasLin = mapped.some((d) => d.type === 'lin');
+    if (!hasLin) {
+      const addEnvLin = (vk, dir, a, b) => {
+        const v = lay.views[vk];
+        if (!v || v.noDims || Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.2) return;
+        mapped.push(attachSafeRef({ id: uid('d'), view: vk, type: 'lin', dir, a, b, off: -(9 / v.s), fromModel: true }, v, lay, sh));
+      };
+      if (lay.views.front) {
+        const b = lay.views.front.geo.box;
+        addEnvLin('front', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addEnvLin('front', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top) {
+        const b = lay.views.top.geo.box;
+        addEnvLin('top', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addEnvLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+      if (lay.views.left) {
+        const b = lay.views.left.geo.box;
+        addEnvLin('left', 'h', [b[0], b[1]], [b[2], b[1]]);
+        if (!lay.views.front) addEnvLin('left', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top && lay.views.front) {
+        const b = lay.views.top.geo.box;
+        addEnvLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+    }
+    return mapped;
+  }
+  function dedupDimsInto(existing, candidates) {
+    const out = [];
+    for (const nd of candidates) {
+      if (nd.type === 'lin') {
+        const dup = existing.some((m) => m.view === nd.view && m.type === 'lin' && m.dir === nd.dir
+          && ((Math.hypot(m.a[0] - nd.a[0], m.a[1] - nd.a[1]) < 0.35 && Math.hypot(m.b[0] - nd.b[0], m.b[1] - nd.b[1]) < 0.35)
+            || (Math.hypot(m.a[0] - nd.b[0], m.a[1] - nd.b[1]) < 0.35 && Math.hypot(m.b[0] - nd.a[0], m.b[1] - nd.a[1]) < 0.35)));
+        if (dup) continue;
+      } else if (nd.type === 'dia' || nd.type === 'rad') {
+        const dup = existing.some((m) => m.view === nd.view && m.type === nd.type && Math.hypot(m.c[0] - nd.c[0], m.c[1] - nd.c[1]) < 0.35 && Math.abs(m.r - nd.r) < 0.25);
+        if (dup) continue;
+      }
+      out.push(nd);
+    }
+    return out;
+  }
+  async function finishDrawing() {
+    if (!Model.activeItems(App.doc).length) {
+      UI.toast(T('draw.finishEmptyToast'), { icon: 'info' });
+      return { ok: false, reason: 'empty' };
+    }
+    await ensureProjections();
+    if (!proj || !proj.views || !proj.views.front) {
+      return { ok: false, reason: 'no-proj' };
+    }
+    if (!proj.views.iso) {
+      try {
+        const scene = Model.kernelScene(App.doc);
+        const isoRes = await Kernel.call('project', { scene, views: ['iso'], sections: [] });
+        if (isoRes && isoRes.views && isoRes.views.iso) {
+          proj.views.iso = isoRes.views.iso;
+          projSigs.set('iso', 'std');
+          for (const ck of [...geoCache.keys()]) if (ck.startsWith('iso|')) geoCache.delete(ck);
+        }
+      } catch (_) {}
+    }
+    const rawModelDims = collectModelDims(App.doc);
+    const autoMat = detectDrawingMaterial(App.doc);
+    const autoPartNo = detectDrawingPartNo(App.doc);
+    const todayStr = new Date().toLocaleDateString('de-DE');
+    const isAsm = (typeof Model.isAssembly === 'function' && Model.isAssembly(App.doc)) || bomItems(bomData).length > 1;
+    const hasIso = !!(proj && proj.views && proj.views.iso);
+
+    App.change('Zeichnung fertig gemacht', () => {
+      const all = sheets();
+      const idx = activeIndex();
+      const d = all[idx] || dwg();
+      d.views = { front: true, top: true, left: true, iso: hasIso };
+      d.viewPos = {};
+      d.hidden = true;
+      if (d.viewOpts) {
+        for (const k of ['front', 'top', 'left']) {
+          if (d.viewOpts[k]) {
+            delete d.viewOpts[k].scale;
+            delete d.viewOpts[k].hidden;
+          }
+        }
+        if (d.viewOpts.iso) delete d.viewOpts.iso.scale;
+      }
+      d.centers = true;
+      d.hiddenCenters = [];
+      d.title = d.title || {};
+      if (!String(d.title.titel || '').trim()) d.title.titel = App.doc.name || T('draw.finishDefaultTitle');
+      if (!String(d.title.datum || '').trim()) d.title.datum = todayStr;
+      if (autoMat && (!String(d.title.werkstoff || '').trim() || d.title.werkstoff === 'PLA')) d.title.werkstoff = autoMat;
+      else if (!String(d.title.werkstoff || '').trim()) d.title.werkstoff = (App.doc.settings && App.doc.settings.material) || 'PLA';
+      if (!String(d.title.nummer || '').trim()) d.title.nummer = autoPartNo;
+      if (!String(d.title.allgemeintol || '').trim()) d.title.allgemeintol = 'ISO 2768-m';
+      if (!String(d.title.dokumentart || '').trim()) d.title.dokumentart = isAsm ? 'Baugruppe' : 'Einzelteil';
+
+      const preserved = (d.dims || []).filter((x) => !x.auto && !x.fromModel);
+      const tryWithIso = (useIso) => {
+        d.views.iso = useIso;
+        d.scale = 'auto';
+        const autoLay = computeLayout(d);
+        const startIdx = Math.max(0, SCALES.indexOf(autoLay.s));
+        let best = null;
+        for (let si = startIdx; si < SCALES.length; si++) {
+          const sc = SCALES[si];
+          d.scale = sc;
+          const tryLay = computeLayout(d);
+          const baseDims = deepClone(preserved);
+          const candDims = buildFinishDims(rawModelDims, d, tryLay);
+          d.dims = [...baseDims, ...dedupDimsInto(baseDims, candDims)];
+          arrangeSheetDims(d, tryLay);
+          const cur = buildSheetContent(d, idx, all.length);
+          const ov = sheetOverflowInfo(cur);
+          const boxes = dimTextBoxes(d, cur.layout);
+          const isoPlaced = !useIso || !!cur.layout.views.iso;
+          const score = (ov.outsidePaper * 1e6) + (ov.outsideFrame * 1e4) + (ov.tbOverlap * 1e4) + (isoPlaced ? 0 : 500) + (boxes.overlaps * 100);
+          if (!best || score < best.score) {
+            best = { sc, dims: deepClone(d.dims), score, ov, overlaps: boxes.overlaps, useIso };
+          }
+          if (ov.ok && isoPlaced && boxes.overlaps === 0) break;
+        }
+        return best;
+      };
+
+      let best = tryWithIso(hasIso);
+      if (hasIso && (!best || !best.ov.ok)) {
+        const bestNoIso = tryWithIso(false);
+        if (bestNoIso && (!best || bestNoIso.score < best.score)) best = bestNoIso;
+      }
+      if (best) {
+        d.views.iso = best.useIso;
+        d.scale = best.sc;
+        d.dims = best.dims;
+      }
+    });
+
+    tool = null; toolState = null; selDim = null;
+    fitZoom();
+    render();
+    Panels.renderTools();
+    Panels.renderRight();
+
+    const viewCount = Object.keys((layout && layout.views) || {}).filter((k) => k !== 'free').length;
+    const dimCount = autoDimList(dwg(), layout).length;
+    const ctrCount = centers().length;
+    const ov = sheetBoundsCheck();
+    const boxes = dimTextBoxes(dwg(), layout);
+    UI.toast(T('draw.finishToast', { views: viewCount, dims: dimCount, scale: scaleText(layout.s) }), { icon: 'spark' });
+    return {
+      ok: true,
+      views: viewCount,
+      dims: dimCount,
+      centers: ctrCount,
+      scale: layout.s,
+      overflow: ov,
+      overlaps: boxes.overlaps,
+    };
   }
   // ---------- Freies Zeichnen (2D) ----------
   const freeHint = (t) => T('draw.freeHint.' + String(t || '').slice(5));
@@ -12886,11 +13595,20 @@ const Drawing = (() => {
   function exportMenu(anchor) {
     const entries = [
       { id: 'dw-exp-pdf', label: T('menu.draw.exportPdf'), icon: 'file', run: () => exportPDF() },
+    ];
+    if (!isSimpleMode()) {
+      entries.push({ id: 'dw-exp-tiled-pdf', label: T('menu.draw.exportTiledPdf'), icon: 'file', help: 'drawingTiledPrint', run: () => tiledPrintDialog() });
+    }
+    entries.push(
       { id: 'dw-exp-svg', label: T('menu.draw.exportSvg'), icon: 'file', run: () => exportSVG() },
       { id: 'dw-exp-dxf', label: T('menu.draw.exportDxf'), icon: 'file', help: 'drawingExportDxf', run: () => exportDXF() },
-    ];
+    );
     if (sheets().length > 1) {
       entries.push({ id: 'dw-exp-dxf-all', label: T('menu.draw.exportDxfAll'), icon: 'file', help: 'drawingExportDxf', run: () => exportDXF({ allSheets: true }) });
+    }
+    if (!isSimpleMode()) {
+      const hasInsp = inspectionDims().length > 0;
+      entries.push({ id: 'dw-exp-insp-csv', label: T('menu.draw.exportInspCsv'), icon: 'file', help: 'drawingInspection', disabled: !hasInsp, run: () => exportInspectionCSV() });
     }
     entries.push('-', { id: 'dw-exp-png', label: T('menu.draw.exportPng'), icon: 'image', help: 'drawingExportPng', run: () => pngDialog() });
     UI.menu(anchor, entries);
@@ -12946,7 +13664,16 @@ const Drawing = (() => {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   }
-  function pageStream(W, H, lines, texts, pdfImages = [], layers = null) {
+  function pageStream(W, H, lines, texts, pdfImages = [], layers = null, tileOpts = null) {
+    if (tileOpts) {
+      const dxPt = (tileOpts.margin - tileOpts.srcX) * PT;
+      const dyPt = (H - tileOpts.srcH - tileOpts.margin + tileOpts.srcY) * PT;
+      const clipX = tileOpts.margin * PT;
+      const clipY = (H - tileOpts.margin - tileOpts.usableH) * PT;
+      const inner = pageStream(tileOpts.srcW, tileOpts.srcH, lines, texts, pdfImages, layers, null);
+      const overlay = pageStream(W, H, tileOpts.overlayLines || [], tileOpts.overlayTexts || [], [], null, null);
+      return `q\n${pf(clipX)} ${pf(clipY)} ${pf(tileOpts.usableW * PT)} ${pf(tileOpts.usableH * PT)} re W n\n1 0 0 1 ${pf(dxPt)} ${pf(dyPt)} cm\n${inner}Q\n${overlay}`;
+    }
     const out = ['1 J 1 j'];
     const ly = layers ? normalizeLayers(layers) : null;
     const lyDash = (k, cutDef = false) => {
@@ -12979,6 +13706,9 @@ const Drawing = (() => {
       leader: [dimW, dimD],
       'balloon-line': [dimW, dimD],
       'balloon-circle': [0.35, null],
+      'insp-line': [0.25, null],
+      'insp-circle': [0.35, null],
+      'insp-ring': [0.2, null],
       'gdt-frame': [0.3, null],
       'gdt-line': [dimW, dimD],
       'gdt-sym': [0.3, null],
@@ -12995,6 +13725,9 @@ const Drawing = (() => {
       'ht-tag-line': [dimW, dimD],
       detail: [dimW, dimD],
       'detail-border': [0.25, [3, 1.5]],
+      'tile-cut': [0.2, [3, 2]],
+      'tile-mark': [0.25, null],
+      'tile-cal': [0.35, null],
     };
     const px = (x) => pf(x * PT);
     const py = (y) => pf((H - y) * PT);
@@ -13037,7 +13770,7 @@ const Drawing = (() => {
       } else if (ly && (l.thread || l.threadEnd)) {
         st = l.threadEnd ? [ly.vis.width, null] : [ly.thread.width, (l.cls === 'hid' && ly.thread.lineType === 'continuous') ? [2.4, 1.2] : lyDash('thread')];
       }
-      out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : '0.067')} G ${pf(st[0] * PT)} w`);
+      out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : l.cls === 'tile-cut' ? '0.45' : '0.067')} G ${pf(st[0] * PT)} w`);
       if (l.lost && l.cls === 'dim') out.push(`[${pf(2 * PT)} ${pf(1 * PT)}] 0 d`);
       else if (l.cls === 'hatch' && l.dashed) out.push(`[${pf(3 * PT)} ${pf(1.2 * PT)}] 0 d`);
       else if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
@@ -13048,8 +13781,9 @@ const Drawing = (() => {
       } else if (l.circle) {
         const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
         const k = 0.5522847498 * R;
-        const op = l.cls === 'balloon-circle' ? 'B' : 'S';
-        if (l.cls === 'balloon-circle') out.push('1 g');
+        const filledCircle = l.cls === 'balloon-circle' || l.cls === 'insp-circle';
+        const op = filledCircle ? 'B' : 'S';
+        if (filledCircle) out.push('1 g');
         out.push(
           `${pf(cx + R)} ${pf(cy)} m`,
           `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
@@ -13070,8 +13804,8 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = (t.bold || t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'auxlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'tbl-title' || t.cls === 'tbl-th' || t.cls === 'ht-tag-text' || t.cls === 'balloon-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
-      const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' ? '0.333' : '0.067');
+      const fnt = (t.bold || t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'auxlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'tbl-title' || t.cls === 'tbl-th' || t.cls === 'ht-tag-text' || t.cls === 'balloon-text' || t.cls === 'insp-text' || (t.cls === 'gdt-text' && t.gdtKind === 'datum')) ? '/F2' : '/F1';
+      const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' || t.cls === 'tile-lbl' ? '0.333' : '0.067');
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
       const dx = t.anchor === 'middle' ? -pdfTextW(raw, fs) / 2 : t.anchor === 'end' ? -pdfTextW(raw, fs) : 0;
@@ -13101,7 +13835,7 @@ const Drawing = (() => {
         const imId = addObj(imObj);
         pdfImages.push({ ...im, name: 'Im' + (pdfImages.length + 1), id: imId });
       }
-      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts, pdfImages, p.layers));
+      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts, pdfImages, p.layers || null, p.tileOpts || null));
       const head = toPdfBytes(`<< /Length ${sBytes.length} >>\nstream\n`);
       const tail = toPdfBytes('\nendstream');
       const cObj = new Uint8Array(head.length + sBytes.length + tail.length);
@@ -13205,6 +13939,7 @@ const Drawing = (() => {
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
       'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
+      'insp-line': 'BEMASSUNG', 'insp-circle': 'BEMASSUNG', 'insp-ring': 'BEMASSUNG',
       'gdt-frame': 'BEMASSUNG', 'gdt-line': 'BEMASSUNG', 'gdt-sym': 'BEMASSUNG', 'gdt-arrow': 'BEMASSUNG', 'gdt-datum-tri': 'BEMASSUNG',
       'sym-line': 'BEMASSUNG', 'sym-dash': 'BEMASSUNG', 'sym-sym': 'BEMASSUNG', 'sym-arrow': 'BEMASSUNG', 'sym-fill': 'BEMASSUNG',
       'ht-origin': 'BEMASSUNG', 'ht-tag-line': 'BEMASSUNG', 'ht-tag-arrow': 'BEMASSUNG',
@@ -13273,7 +14008,7 @@ const Drawing = (() => {
       if (tk && layers[tk] && layers[tk].visible === false) continue;
       const cls = String(t.cls || '');
       const tLy = (tk && layers[tk] ? layers[tk].dxfName : null)
-        || ((cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel' || cls === 'gdt-text' || cls === 'ht-tag-text' || cls === 'sym-text') ? 'BEMASSUNG'
+        || ((cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'insp-text' || cls === 'auxlabel' || cls === 'gdt-text' || cls === 'ht-tag-text' || cls === 'sym-text') ? 'BEMASSUNG'
           : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN');
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
@@ -13486,6 +14221,236 @@ const Drawing = (() => {
       actions: [
         { label: T('common.cancel') },
         { id: 'dw-png-save', label: T('draw.png.saveBtn'), primary: true, run: () => { exportPNG({ width: st.width, transparent: st.transparent }); } },
+      ],
+    });
+  }
+  // ---------- ZE-36: Drucken 1:1 auf mehreren A4-Seiten (Schablone mit Klebemarken) ----------
+  function tiledPrintPlan(opts = {}, sh = dwg(), layOverride = null) {
+    const lay = layOverride || ((sh === dwg() && layout) ? layout : computeLayout(sh));
+    let contentX = lay.frame.x, contentY = lay.frame.y, contentW = lay.frame.w, contentH = lay.frame.h;
+    let source = 'sheet';
+    if (opts.source === 'view' && opts.view && lay.views && lay.views[opts.view]) {
+      const v = lay.views[opts.view];
+      const b = v.geo.box;
+      const TL = toSheetRaw(v, [b[0], b[3]]), BR = toSheetRaw(v, [b[2], b[1]]);
+      contentX = Math.min(TL[0], BR[0]) - 8;
+      contentY = Math.min(TL[1], BR[1]) - 8;
+      contentW = Math.max(20, Math.abs(BR[0] - TL[0]) + 16);
+      contentH = Math.max(20, Math.abs(BR[1] - TL[1]) + 16);
+      source = 'view';
+    }
+    const plan = Print.planTiledPages(contentW, contentH, {
+      paper: opts.paper || 'A4',
+      orient: opts.orient || 'auto',
+      margin: opts.margin != null ? opts.margin : 4,
+      overlap: opts.overlap != null ? opts.overlap : 0,
+      originX: contentX,
+      originY: contentY,
+    });
+    return {
+      ...plan,
+      source,
+      sheet: sh.sheet,
+      sheetOrient: sh.orient,
+      sheetW: lay.W,
+      sheetH: lay.H,
+    };
+  }
+  function buildTileOverlay(tile, plan, opts = {}) {
+    const overlayLines = [];
+    const overlayTexts = [];
+    const W = plan.tileW, H = plan.tileH, m = plan.margin;
+    const uW = plan.usableW, uH = plan.usableH, ov = plan.overlap || 0;
+    const x0 = m, y0 = m, x1 = m + uW, y1 = m + uH;
+    const cross = (cx, cy, r = 2.0, arm = 3.2) => {
+      overlayLines.push({ circle: [cx, cy, r], cls: 'tile-mark' });
+      overlayLines.push({ pts: [[cx - arm, cy], [cx + arm, cy]], cls: 'tile-mark' });
+      overlayLines.push({ pts: [[cx, cy - arm], [cx, cy + arm]], cls: 'tile-mark' });
+    };
+    if (opts.marks !== false) {
+      if (tile.hasLeft) overlayLines.push({ pts: [[x0, y0], [x0, y1]], cls: 'tile-cut' });
+      if (tile.hasRight) overlayLines.push({ pts: [[x1, y0], [x1, y1]], cls: 'tile-cut' });
+      if (tile.hasTop) overlayLines.push({ pts: [[x0, y0], [x1, y0]], cls: 'tile-cut' });
+      if (tile.hasBottom) overlayLines.push({ pts: [[x0, y1], [x1, y1]], cls: 'tile-cut' });
+      if (ov > 0) {
+        if (tile.hasLeft) overlayLines.push({ pts: [[x0 + ov, y0], [x0 + ov, y1]], cls: 'tile-cut' });
+        if (tile.hasRight) overlayLines.push({ pts: [[x1 - ov, y0], [x1 - ov, y1]], cls: 'tile-cut' });
+        if (tile.hasTop) overlayLines.push({ pts: [[x0, y0 + ov], [x1, y0 + ov]], cls: 'tile-cut' });
+        if (tile.hasBottom) overlayLines.push({ pts: [[x0, y1 - ov], [x1, y1 - ov]], cls: 'tile-cut' });
+      }
+      cross(x0, y0);
+      cross(x1, y0);
+      cross(x0, y1);
+      cross(x1, y1);
+      const mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5;
+      if (tile.hasLeft) {
+        cross(x0 + ov * 0.5, my, 1.5, 2.5);
+        overlayTexts.push({ x: x0 + ov * 0.5 + 3.2, y: my + 1, t: `<- ${tile.leftCode}`, size: 2.6, anchor: 'start', cls: 'tile-lbl' });
+      }
+      if (tile.hasRight) {
+        cross(x1 - ov * 0.5, my, 1.5, 2.5);
+        overlayTexts.push({ x: x1 - ov * 0.5 - 3.2, y: my + 1, t: `${tile.rightCode} ->`, size: 2.6, anchor: 'end', cls: 'tile-lbl' });
+      }
+      if (tile.hasTop) {
+        cross(mx, y0 + ov * 0.5, 1.5, 2.5);
+        overlayTexts.push({ x: mx, y: y0 + ov * 0.5 + 4.8, t: `^ ${tile.topCode}`, size: 2.6, anchor: 'middle', cls: 'tile-lbl' });
+      }
+      if (tile.hasBottom) {
+        cross(mx, y1 - ov * 0.5, 1.5, 2.5);
+        overlayTexts.push({ x: mx, y: y1 - ov * 0.5 - 2.6, t: `v ${tile.bottomCode}`, size: 2.6, anchor: 'middle', cls: 'tile-lbl' });
+      }
+      const hdr = `Schablone 1:1 - Kachel ${tile.code} (Seite ${tile.page}/${plan.totalPages}, Spalte ${tile.col + 1}/${plan.cols}, Zeile ${tile.row + 1}/${plan.rows})`;
+      overlayTexts.push({ x: x0 + 4, y: Math.max(2.8, y0 - 0.8), t: hdr, size: 2.5, anchor: 'start', cls: 'tile-lbl' });
+      if (tile.page === 1) {
+        const bx = x0 + 4, by = H - Math.max(2.5, m) - 4.5;
+        overlayLines.push({ pts: [[bx, by], [bx + 50, by]], cls: 'tile-cal' });
+        for (const tMm of [0, 10, 25, 50]) {
+          overlayLines.push({ pts: [[bx + tMm, by - 1.6], [bx + tMm, by + 1.6]], cls: 'tile-cal' });
+        }
+        overlayTexts.push({ x: bx + 53, y: by + 0.9, t: 'Kontrolle 1:1: 50 mm (100% / ohne Skalierung drucken)', size: 2.4, anchor: 'start', cls: 'tile-lbl' });
+      }
+    }
+    return { overlayLines, overlayTexts };
+  }
+  async function buildTiledPDFBytes(opts = {}) {
+    if (isSimpleMode()) return null;
+    await ensureProjections();
+    const all = sheets();
+    const idx = opts.sheetIndex != null ? clamp(opts.sheetIndex, 0, all.length - 1) : activeIndex();
+    const sh = all[idx] || dwg();
+    const targetSh = opts.forceScale1 !== false ? { ...sh, scale: 1 } : sh;
+    const cur = buildSheetContent(targetSh, idx, all.length);
+    const plan = tiledPrintPlan(opts, targetSh, cur.layout);
+    const pages = plan.tiles.map((tile) => {
+      const ov = buildTileOverlay(tile, plan, opts);
+      return {
+        W: plan.tileW,
+        H: plan.tileH,
+        lines: cur.lines,
+        texts: cur.texts,
+        images: cur.images,
+        layers: cur.layers,
+        tileOpts: {
+          srcW: cur.layout.W,
+          srcH: cur.layout.H,
+          srcX: tile.srcX,
+          srcY: tile.srcY,
+          margin: plan.margin,
+          usableW: plan.usableW,
+          usableH: plan.usableH,
+          overlayLines: ov.overlayLines,
+          overlayTexts: ov.overlayTexts,
+        },
+      };
+    });
+    const title = ((sh.title && sh.title.titel) || App.doc.name) + ' 1:1';
+    const bytes = buildPDF(pages, { title });
+    lastTiledPDF = { bytes, plan, pageCount: plan.totalPages, sheet: sh.sheet };
+    return bytes;
+  }
+  async function exportTiledPDF(opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.tile.proOnly'), { icon: 'info' }); return null; }
+    const tst = UI.toast('1:1-PDF wird erstellt …', { icon: 'file', ms: 15000 });
+    try {
+      const all = sheets();
+      const idx = opts.sheetIndex != null ? clamp(opts.sheetIndex, 0, all.length - 1) : activeIndex();
+      const sh = all[idx] || dwg();
+      const bytes = await buildTiledPDFBytes(opts);
+      const plan = lastTiledPDF ? lastTiledPDF.plan : tiledPrintPlan(opts, sh);
+      const filename = fileBase(true, sh) + ' 1zu1-Schablone.pdf';
+      tst.remove();
+      await Print.save(filename, new Blob([bytes], { type: 'application/pdf' }));
+      return { bytes, plan, filename, pageCount: plan.totalPages };
+    } catch (e) {
+      tst.remove();
+      UI.toast(T('draw.tile.err', { msg: e.message }), { kind: 'bad' });
+      return null;
+    }
+  }
+  function tiledPrintDialog() {
+    if (isSimpleMode()) { UI.toast(T('draw.tile.proOnly'), { icon: 'info' }); return null; }
+    const sh = dwg();
+    const st = { paper: 'A4', orient: 'auto', overlap: 0, forceScale1: true, marks: true };
+    const body = h('div', { class: 'dw-tile-dlg', id: 'dw-tiled-dlg', 'data-help': 'drawingTiledPrint' });
+    const prevWrap = h('div', { id: 'dw-tile-preview-wrap' });
+    const infoEl = h('div', { class: 'mini-row', id: 'dw-tile-info', style: { fontWeight: '600' } });
+
+    const refresh = () => {
+      const targetSh = st.forceScale1 ? { ...sh, scale: 1 } : sh;
+      const lay = computeLayout(targetSh);
+      const plan = tiledPrintPlan(st, targetSh, lay);
+      const sOri = T(sh.orient === 'portrait' ? 'menu.draw.portrait' : 'menu.draw.landscape').toLowerCase();
+      const tOri = T(plan.orient === 'portrait' ? 'menu.draw.portrait' : 'menu.draw.landscape').toLowerCase();
+      infoEl.textContent = T('draw.tile.info', {
+        sheet: sh.sheet,
+        sheetOrient: sOri,
+        w: Math.round(plan.sheetW),
+        h: Math.round(plan.sheetH),
+        pages: plan.totalPages,
+        pagesUnit: plan.totalPages === 1 ? T('draw.tile.pageOne') : T('draw.tile.pageMany'),
+        paper: plan.paper,
+        tileOrient: tOri,
+        cols: plan.cols,
+        rows: plan.rows,
+      });
+      const minX = Math.min(0, plan.startX) - 6;
+      const minY = Math.min(0, plan.startY) - 6;
+      const maxX = Math.max(plan.sheetW, plan.startX + plan.spanW) + 6;
+      const maxY = Math.max(plan.sheetH, plan.startY + plan.spanH) + 6;
+      const rects = [
+        `<rect x="0" y="0" width="${plan.sheetW}" height="${plan.sheetH}" fill="#f8fafc" stroke="#111" stroke-width="1.4"/>`,
+        `<rect x="${lay.frame.x}" y="${lay.frame.y}" width="${lay.frame.w}" height="${lay.frame.h}" fill="none" stroke="#64748b" stroke-width="0.8"/>`,
+      ];
+      for (const tile of plan.tiles) {
+        const fs = clamp(Math.min(tile.srcW, tile.srcH) * 0.12, 10, 26);
+        rects.push(`<rect class="dw-tile-cell" data-tile-code="${tile.code}" x="${tile.srcX.toFixed(2)}" y="${tile.srcY.toFixed(2)}" width="${tile.srcW.toFixed(2)}" height="${tile.srcH.toFixed(2)}" fill="rgba(12,122,112,0.08)" stroke="#0c7a70" stroke-width="1.1" stroke-dasharray="6 3"/>`);
+        rects.push(`<text x="${(tile.srcX + tile.srcW * 0.5).toFixed(2)}" y="${(tile.srcY + tile.srcH * 0.5 + fs * 0.35).toFixed(2)}" font-size="${fs.toFixed(1)}" font-weight="700" text-anchor="middle" fill="#0c7a70">${tile.code}</text>`);
+      }
+      prevWrap.innerHTML = `<svg id="dw-tile-preview" class="dw-tile-prev" viewBox="${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}">${rects.join('')}</svg>`;
+    };
+
+    const paperFld = UI.selectField({
+      id: 'dw-tile-paper',
+      label: T('draw.tile.paper'),
+      value: st.paper,
+      options: [['A4', 'DIN A4 (210 × 297 mm)'], ['A3', 'DIN A3 (297 × 420 mm)'], ['Letter', 'US Letter (215,9 × 279,4 mm)']],
+      onChange: (v) => { st.paper = v; refresh(); },
+    });
+    const orientFld = UI.selectField({
+      id: 'dw-tile-orient',
+      label: T('draw.tile.orient'),
+      value: st.orient,
+      options: [['auto', T('draw.tile.orientAuto')], ['landscape', T('draw.tile.orientLand')], ['portrait', T('draw.tile.orientPort')]],
+      onChange: (v) => { st.orient = v; refresh(); },
+    });
+    const overlapFld = UI.selectField({
+      id: 'dw-tile-overlap',
+      label: T('draw.tile.overlap'),
+      value: String(st.overlap),
+      options: [['0', '0 mm (exakt auf Kante)'], ['5', '5 mm'], ['10', '10 mm'], ['15', '15 mm']],
+      onChange: (v) => { st.overlap = +v || 0; refresh(); },
+    });
+    const scaleChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-tile-scale1', checked: st.forceScale1 }), T('draw.tile.scale1'));
+    scaleChk.querySelector('input').onchange = (e) => { st.forceScale1 = e.target.checked; refresh(); };
+    const marksChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-tile-marks', checked: st.marks }), T('draw.tile.marks'));
+    marksChk.querySelector('input').onchange = (e) => { st.marks = e.target.checked; refresh(); };
+
+    refresh();
+    body.append(
+      prevWrap,
+      infoEl,
+      h('div', { class: 'fields' }, paperFld, orientFld),
+      overlapFld,
+      scaleChk,
+      marksChk,
+      h('div', { class: 'hint-box' }, T('draw.tile.hint'))
+    );
+    return UI.modal({
+      title: T('draw.tile.dialogTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel') },
+        { id: 'dw-tile-export', label: T('draw.tile.exportBtn'), primary: true, run: () => { exportTiledPDF({ ...st }); } },
       ],
     });
   }
@@ -13838,6 +14803,12 @@ const Drawing = (() => {
       }
       w.append(lostSec);
     }
+    const finSec = h('div', { class: 'section', id: 'dw-finish-sec', 'data-help': 'drawingFinish' });
+    const bFinish = h('button', { type: 'button', class: 'btn primary', id: 'dw-finish-drawing', 'data-help': 'drawingFinish', style: { width: '100%' } });
+    bFinish.innerHTML = icon('spark') + esc(T('draw.panel.finishBtn'));
+    bFinish.onclick = () => finishDrawing();
+    finSec.append(bFinish);
+    w.append(finSec);
     const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     const bIso = h('button', { type: 'button', class: 'btn', id: 'dw-add-iso', 'data-help': 'drawingViews' });
     bIso.innerHTML = icon('plus') + esc(T('draw.panel.addIso'));
@@ -13997,6 +14968,12 @@ const Drawing = (() => {
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + esc(T('draw.panel.sheetAndViews')); b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + esc(T('draw.panel.newSheet')); bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd));
+    if (!isSimpleMode()) {
+      const bTiled = h('button', { type: 'button', class: 'btn pro', id: 'dw-tiled-print-btn', style: { marginTop: '6px' }, 'data-help': 'drawingTiledPrint' });
+      bTiled.innerHTML = icon('file') + esc(T('draw.tile.btn'));
+      bTiled.onclick = () => tiledPrintDialog();
+      info.append(bTiled);
+    }
     if (d.viewPos && Object.keys(d.viewPos).length) {
       const bResetV = h('button', { type: 'button', class: 'btn', id: 'dw-reset-views', style: { marginTop: '6px' } }, T('draw.panel.resetViews'));
       bResetV.onclick = () => resetViewPos();
@@ -14480,6 +15457,50 @@ const Drawing = (() => {
       }
       tblSec.append(ftBox);
       w.append(tblSec);
+
+      // Prüfmaße & Prüftabelle (ZE-33, Profi)
+      const inspSec = h('div', { class: 'section pro', id: 'dw-insp-sec', 'data-help': 'drawingInspection' }, h('div', { class: 'section-h' }, T('draw.insp.sec')));
+      const inspList = inspectionDims(d, layout);
+      const itCfg = normalizeInspectionTable(d.inspectionTable);
+      const itChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-insp-table-show', checked: !!itCfg.show }), T('draw.insp.tableShow'));
+      itChk.querySelector('input').onchange = (e) => setInspectionTable(e.target.checked);
+      inspSec.append(itChk);
+      if (inspList.length) {
+        const il = h('div', { class: 'mini-list', id: 'dw-insp-list', style: { marginTop: '6px' } });
+        for (const item of inspList) {
+          const row = h('div', {
+            class: 'mini-row insp-row',
+            'data-dim-id': item.dimId,
+            'data-insp-num': String(item.num),
+            style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === item.dimId ? 'var(--accent-soft)' : '' },
+          });
+          const del = h('button', { type: 'button', class: 'btn danger insp-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.insp.delTip'), 'aria-label': T('draw.insp.delTip') });
+          del.innerHTML = icon('trash');
+          del.onclick = (e) => { e.stopPropagation(); setInspectionDim(item.dimId, false); };
+          row.append(
+            h('span', { class: 'dw-insp-badge mono' }, String(item.num)),
+            h('span', { class: 'grow mono', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.fullLabel),
+            h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, item.viewName),
+            del,
+          );
+          row.onclick = () => { selDim = item.dimId; render(); Panels.renderRight(); };
+          il.append(row);
+        }
+        inspSec.append(il);
+      } else {
+        inspSec.append(h('div', { class: 'hint-box', style: { marginTop: '4px' } }, T('draw.insp.emptyHint')));
+      }
+      const bInspCsv = h('button', { type: 'button', class: 'btn', id: 'dw-insp-csv', disabled: !inspList.length, 'data-help': 'drawingInspection' });
+      bInspCsv.innerHTML = icon('file') + esc(T('draw.insp.csvBtn'));
+      bInspCsv.onclick = () => exportInspectionCSV();
+      const inspBtns = [bInspCsv];
+      if (inspList.length) {
+        const bInspClr = h('button', { type: 'button', class: 'btn danger', id: 'dw-insp-clear' }, T('draw.insp.clearBtn'));
+        bInspClr.onclick = () => clearInspectionDims();
+        inspBtns.push(bInspClr);
+      }
+      inspSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, ...inspBtns));
+      w.append(inspSec);
     }
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, T('draw.panel.sectionsSec')));
@@ -14959,14 +15980,16 @@ const Drawing = (() => {
       const selPlacedSym = (d.symbols || []).find((x) => x.id === selDim);
       const isBomSel = selDim === '__bom__';
       const isHoleTblSel = selDim === '__holetable__';
+      const isInspTblSel = selDim === '__insptable__';
       const isRevTblSel = selDim === '__rev__';
       const selFreeTbl = (d.freeTables || []).find((x) => x.id === selDim) || null;
       const selImg = (d.sheetImages || []).find((x) => x.id === selDim) || null;
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const hasNonDimSel = selDet || isSec || selBrk || selAux || selNote || selBalloon || selDatum || selGdt || selSurface || selWeld || selEdgeSym || selPlacedSym || isBomSel || isHoleTblSel || isRevTblSel || selFreeTbl || selImg || selCtr;
+      const hasNonDimSel = selDet || isSec || selBrk || selAux || selNote || selBalloon || selDatum || selGdt || selSurface || selWeld || selEdgeSym || selPlacedSym || isBomSel || isHoleTblSel || isInspTblSel || isRevTblSel || selFreeTbl || selImg || selCtr;
       const selDimInfo = !hasNonDimSel ? findDimById(selDim, d, layout) : null;
+      const selInspInfo = !hasNonDimSel ? findInspectableDim(selDim, d, layout) : null;
       const selResolved = selDimInfo ? selDimInfo.dim : (!hasNonDimSel && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : selSurface ? T('draw.panel.selSurface', { val: selSurface.value ? `${selSurface.param} ${selSurface.value}` : selSurface.param }) : selWeld ? T('draw.panel.selWeld', { type: (WELD_TYPES.find((w) => w.key === selWeld.type)?.label) || selWeld.type }) : selEdgeSym ? T('draw.panel.selEdgeSym', { state: selEdgeSym.maxVal || selEdgeSym.state }) : selPlacedSym ? T('draw.panel.selPlacedSym', { name: symLibMeta(selPlacedSym.key).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selImg ? (selImg.name || T('draw.panel.selImage')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : selSurface ? T('draw.panel.selSurface', { val: selSurface.value ? `${selSurface.param} ${selSurface.value}` : selSurface.param }) : selWeld ? T('draw.panel.selWeld', { type: (WELD_TYPES.find((w) => w.key === selWeld.type)?.label) || selWeld.type }) : selEdgeSym ? T('draw.panel.selEdgeSym', { state: selEdgeSym.maxVal || selEdgeSym.state }) : selPlacedSym ? T('draw.panel.selPlacedSym', { name: symLibMeta(selPlacedSym.key).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isInspTblSel ? T('draw.insp.selTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selImg ? (selImg.name || T('draw.panel.selImage')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selInspInfo ? T('draw.panel.selDim', { lbl: selInspInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
       if (selImg) {
         const posRow = h('div', { class: 'fields' });
         posRow.append(
@@ -15029,6 +16052,10 @@ const Drawing = (() => {
       if (isHoleTblSel) {
         const htCnt = holeTableRows(d, layout).rows.length;
         selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.panel.holeCount')), h('b', { class: 'mono' }, String(htCnt)))));
+      }
+      if (isInspTblSel) {
+        const itCnt = inspectionDims(d, layout).length;
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.insp.count')), h('b', { class: 'mono' }, String(itCnt)))));
       }
       if (isRevTblSel) {
         const rtCnt = (d.revTable && Array.isArray(d.revTable.rows)) ? d.revTable.rows.length : 0;
@@ -15336,6 +16363,28 @@ const Drawing = (() => {
           selSec.append(h('div', { class: 'btn-row pro', style: { marginBottom: '8px' } }, bDimDat, bDimGdt));
         }
       }
+      if (selInspInfo && !simpleMode) {
+        const inspList = inspectionDims(d, layout);
+        const curInsp = inspList.find((x) => x.dimId === selInspInfo.dim.id) || null;
+        const inspBox = h('div', { class: 'pro', id: 'dw-dim-insp-box', 'data-help': 'drawingInspection', style: { display: 'grid', gap: '6px', marginBottom: '8px' } });
+        const chkLbl = curInsp ? T('draw.insp.markedNum', { n: curInsp.num }) : T('draw.insp.mark');
+        const inspChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-dim-insp', checked: !!curInsp }), chkLbl);
+        inspChk.querySelector('input').onchange = (e) => setInspectionDim(selInspInfo.dim.id, e.target.checked);
+        inspBox.append(inspChk);
+        if (curInsp) {
+          const noteFld = UI.textField({
+            id: 'dw-dim-insp-note',
+            label: T('draw.insp.noteLabel'),
+            value: curInsp.note || '',
+            placeholder: T('draw.insp.notePh'),
+            onCommit: (v) => updateInspectionDim(selInspInfo.dim.id, { note: v }),
+          });
+          const noteInp = noteFld.querySelector('input');
+          if (noteInp) noteInp.addEventListener('keydown', (e) => e.stopPropagation());
+          inspBox.append(noteFld);
+        }
+        selSec.append(inspBox);
+      }
       if (selResolved && selResolved.lost) {
         selSec.append(h('div', { class: 'hint-box', id: 'dw-dim-lost-hint', html: T('draw.panel.lostRefHint', { reason: esc(selResolved.lostReason || T('draw.panel.lostDefaultReason')) }) }));
       }
@@ -15425,6 +16474,16 @@ const Drawing = (() => {
         const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ht-hide' });
         hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
         hb.onclick = () => setHoleTable(false);
+        row.append(hb);
+      } else if (isInspTblSel) {
+        if (d.inspectionTable && Array.isArray(d.inspectionTable.pos)) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-insp-sel-reset' }, T('draw.panel.holeResetPos'));
+          rb.onclick = () => resetInspectionTablePos();
+          row.append(rb);
+        }
+        const hb = h('button', { type: 'button', class: 'btn', id: 'dw-insp-hide' });
+        hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
+        hb.onclick = () => setInspectionTable(false);
         row.append(hb);
       } else if (isRevTblSel) {
         const ab = h('button', { type: 'button', class: 'btn', id: 'dw-rt-sel-add' }, T('draw.panel.revAdd'));
@@ -16092,7 +17151,7 @@ const Drawing = (() => {
   if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
-    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, tablesMenu, exportMenu, drawMenu, autoDims, importModelDims, importPmi, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, tablesMenu, exportMenu, drawMenu, autoDims, importModelDims, importPmi, arrangeDims, finishDrawing, sheetBoundsCheck, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
     TITLE_TEMPLATES: TB_BUILTIN_IDS, titleBlock: () => deepClone(sheetTitleBlock()), setTitleBlock, titleBlockTemplates, applyTitleBlockTemplate, saveTitleBlockTemplate, deleteTitleBlockTemplate, addTitleBlockField, removeTitleBlockField, addTitleBlockLine, removeTitleBlockLine, setTitleBlockLogo, openTitleBlockEditor,
@@ -16113,6 +17172,10 @@ const Drawing = (() => {
     revTable: () => normalizeRevTable(dwg().revTable), setRevTable, addRevRow, updateRevRow, removeRevRow, resetRevTablePos,
     freeTables: () => (dwg().freeTables || []).map((f) => JSON.parse(JSON.stringify(f))),
     addFreeTable, updateFreeTable, setFreeTableCell, addFreeTableRow, removeFreeTableRow, addFreeTableCol, removeFreeTableCol, removeFreeTable, resetFreeTablePos,
+    inspectionDims, setInspectionDim, toggleInspectionDim, updateInspectionDim, clearInspectionDims,
+    inspectionTable: () => normalizeInspectionTable(dwg().inspectionTable), setInspectionTable, resetInspectionTablePos,
+    inspectionCSV, exportInspectionCSV,
+    get lastInspectionCSV() { return lastInspectionCSV; },
     bomRows: () => bomItems(),
     balloons: () => (dwg().balloons || []).map((b) => ({ ...b, pos: resolveBalloonPos(b, bomData) })),
     autoBalloons, addBalloon, updateBalloon, removeBalloon, clearBalloons,
@@ -16139,8 +17202,10 @@ const Drawing = (() => {
     lostDims, removeDim, removeLostDims, startRebind, rebindDim, addDim,
     getDimTol, setDimTol,
     exportPDF, buildPDFBytes, exportSVG, buildSVGString, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
+    tiledPrintPlan, buildTiledPDFBytes, exportTiledPDF, tiledPrintDialog,
     get lastDXF() { return lastDXF; },
     get lastPNG() { return lastPNG; },
+    get lastTiledPDF() { return lastTiledPDF; },
     get layout() { return layout; },
     get activeTool() { return tool; },
     get dimMode() { return dimMode; },
