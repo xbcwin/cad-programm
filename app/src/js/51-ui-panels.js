@@ -895,7 +895,8 @@ const Panels = (() => {
       const subDoc = isSubAsm ? Model.resolveDoc(it.p && it.p.docId) : null;
       const hasSubKids = !!(subDoc && (subDoc.items || []).some((x) => x && !x.suppressed));
       const delBy = App.deletedBy && App.deletedBy(it.id);
-      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (delBy ? ' dim' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), tabindex: '0', 'aria-selected': selSet.has(it.id) ? 'true' : 'false', draggable: 'true', dataset: { id: it.id } });
+      const isLw = typeof Assembly !== 'undefined' && Assembly.isLightweightItem && Assembly.isLightweightItem(it.id);
+      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (delBy ? ' dim' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (isLw ? ' lw-item' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), tabindex: '0', 'aria-selected': selSet.has(it.id) ? 'true' : 'false', draggable: 'true', dataset: { id: it.id, ...(isLw ? { lightweight: 'true' } : {}) } });
       const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': T('left.tree.expand') });
       if ((it.kind === 'group' && !it.partRef) || (it.finishes || []).length || hasSubKids) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
       else { tw.style.visibility = 'hidden'; tw.tabIndex = -1; tw.setAttribute('aria-hidden', 'true'); }
@@ -932,6 +933,7 @@ const Panels = (() => {
       if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? T('left.tree.activate') : T('common.suppress'), 'data-tip': it.suppressed ? T('common.unsuppress') : T('left.tree.suppressTip'), 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
       acts.append(dup, eye, del);
       row.append(tw, sw, nm);
+      if (isLw) row.append(h('span', { class: 'lw-badge', 'data-tip': T('asm.lwBadgeTip'), 'data-help': 'lightweightMode' }, T('asm.lwBadge')));
       if (it.locked) { const lm = h('span', { class: 'lock-mark', 'data-tip': T('asm.groundedTip'), title: T('asm.groundedTip'), 'data-help': 'groundPart' }); lm.innerHTML = icon('lock'); row.append(lm); }
       if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': it.ai.edit ? T('left.tree.aiEditTip', { q: it.ai.q }) : T('left.tree.aiNewTip', { q: it.ai.q }) }); am.innerHTML = icon('spark'); row.append(am); }
       const hardErrs = RefFix.hardErrorsFor(it.id);
@@ -954,6 +956,7 @@ const Panels = (() => {
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
+          ...(isLw && typeof Assembly !== 'undefined' && Assembly.resolveLightweight ? [{ icon: 'cube', label: T('asm.lwResolveMenu'), id: 'tm-lw-resolve', help: 'lightweightMode', run: () => Assembly.resolveLightweight(it.id) }] : []),
           ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'tm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
           ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), id: 'tm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
           ...(typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc) ? [{ icon: 'replace', label: T('asm.replacePart'), id: 'tm-replace-part', help: 'replacePart', run: () => Comp.replacePartDialog(it.id) }] : []),
@@ -1598,6 +1601,8 @@ const Panels = (() => {
     if (motSec) w.append(motSec);
     const asmStepsSec = typeof Assembly !== 'undefined' && Assembly.stepsSection ? Assembly.stepsSection('proj') : null;
     if (asmStepsSec) w.append(asmStepsSec);
+    const asmPerfSec = typeof Assembly !== 'undefined' && Assembly.performanceSection ? Assembly.performanceSection('proj') : null;
+    if (asmPerfSec) w.append(asmPerfSec);
     const unitF = UI.selectField({ id: 'proj-unit', label: T('panel.proj.unit'), value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
     unitF.dataset.help = 'projectUnit';
     w.append(unitF);
@@ -1935,6 +1940,10 @@ const Panels = (() => {
     const exb = h('button', { type: 'button', class: 'icon-btn', id: 'item-explain', 'aria-label': T('common.explainStep'), 'data-tip': T('common.explainStep'), 'data-help': 'explainStep' }); exb.innerHTML = icon('help');
     exb.onclick = () => Explain.dialog(it.id); title.append(exb);
     w.append(title);
+    if (typeof Assembly !== 'undefined' && Assembly.lightweightItemSection) {
+      const lwSec = Assembly.lightweightItemSection(it);
+      if (lwSec) w.append(lwSec);
+    }
     // Notiz am Schritt (KP-55): eigener Text, steht auch in der Zeitleiste
     {
       const nd = h('details', { class: 'section note-sec', id: 'note-sec', 'data-help': 'stepNote' }, h('summary', { class: 'section-h' }, it.note ? T('panel.item.note') : T('panel.item.addNote')));
@@ -3591,6 +3600,11 @@ const Panels = (() => {
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', T('ctx.toTip'), () => Actions.loft([it.id], { tip: 10 }), '', T('ctx.toTipTip'), true);
       if (!App.edges.length) b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarPartsTip'), true);
       if (!App.edges.length && !face && !hole && App.results.get(it.id) && App.doc.items.includes(it)) b('fillet', T('ctx.selectEdges'), (e) => edgeRuleMenu(it.id, e.currentTarget), '', T('ctx.selectEdgesTip'), true);
+      if (typeof Assembly !== 'undefined' && Assembly.isLightweightItem && Assembly.isLightweightItem(it.id)) {
+        const lwb = b('cube', T('asm.lwResolveShort'), () => Assembly.resolveLightweight(it.id), 'accent', T('asm.lwResolveTip'));
+        lwb.id = 'ctx-lw-resolve';
+        lwb.dataset.help = 'lightweightMode';
+      }
       if (typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc)) {
         const ob = b('edit', T('asm.openInTab'), () => Assembly.openPartTab(it.id), 'accent', T('asm.openInTabTip'));
         ob.id = 'ctx-open-part-tab';

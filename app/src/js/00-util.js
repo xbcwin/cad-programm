@@ -2576,6 +2576,16 @@ const HELP = {
   "tip": "Varianten für Baugruppen: verschiedene Längen, aktive Teile oder Ersatz-Bauteile umschalten (Profi)",
   "hilfe": "Speichert verschiedene Ausführungen deiner Baugruppe – etwa „Standard“ und „lang“ – mit eigenen Baugruppen-Maßen, ein- oder ausgeschalteten Teilen, eingesetzten Bauteil-Varianten oder getauschten Verweisen auf andere Bauteile. Beim Umschalten passt sich die ganze Baugruppe automatisch an.",
   "tipp": "Im Fenster „Verwalten“ kannst du jeder Variante auch gleich einen passenden Anzeige-Zustand zuordnen."
+ },
+ "lightweightMode": {
+  "tip": "Leichtmodus für große Baugruppen (Profi): zeigt Teile zuerst nur als schnelles Netz",
+  "hilfe": "Im Leichtmodus speichert Tracery die fertigen Dreiecks-Netze aller Teile. Beim nächsten Öffnen werden unveränderte Teile sofort aus diesem Netz-Speicher angezeigt, ohne den CAD-Kern jedes Mal neu zu rechnen. Sobald du ein Teil bearbeitest, ein Maß änderst oder auf „Voll laden“ klickst, rechnet der Kern dieses einzelne Teil exakt nach.",
+  "tipp": "Verschieben und Drehen ganzer Teile klappt auch im Leichtmodus sofort ohne Neuberechnung."
+ },
+ "simplifiedEnvelope": {
+  "tip": "Vereinfachte Hülle (Profi): fasst eine ganze Baugruppe zu einem einfachen Teil zusammen",
+  "hilfe": "Erzeugt aus vielen Einzelteilen einen einzigen einfachen Körper, der nur die Außenhaut mit gleichen Außenmaßen behält. Verdeckte Innenteile, innere Hohlräume und wahlweise Bohrungen oder kleine Rundungen fallen weg – ideal, um eine große Unterbaugruppe leicht und schnell weiterzuverwenden.",
+  "tipp": "Als „Außenhaut“ bleiben abgestufte Formen erhalten; „Einzel-Kästchen“ oder „Hüllquader“ machen die Hülle noch kleiner."
  }
 };
 

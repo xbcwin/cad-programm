@@ -1369,6 +1369,7 @@ const Interact = (() => {
       const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace') && it.p && it.p.sketch;
       const isSubAsm = it.kind === 'ref' && typeof Model !== 'undefined' && Model.isSubAssemblyRef && Model.isSubAssemblyRef(it);
       items = [
+        ...(typeof Assembly !== 'undefined' && Assembly.isLightweightItem && Assembly.isLightweightItem(it.id) ? [{ icon: 'cube', label: T('asm.lwResolveMenu'), id: 'cm-lw-resolve', help: 'lightweightMode', run: () => Assembly.resolveLightweight(it.id) }] : []),
         ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'cm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
         ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), kbd: 'E', id: 'cm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
         ...(typeof Comp !== 'undefined' && Comp.canReplace && Comp.canReplace(it, App.doc) ? [{ icon: 'replace', label: T('asm.replacePart'), id: 'cm-replace-part', help: 'replacePart', run: () => Comp.replacePartDialog(it.id) }] : []),

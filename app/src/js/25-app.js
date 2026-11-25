@@ -1126,15 +1126,37 @@ const App = (() => {
         ev.emit('rebuilt');
         continue;
       }
+      const tBuild0 = performance.now();
       if (!calcEmitted) {
         calcEmitted = true;
         ev.emit('calc', true);
         clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
       }
+      if (typeof Store !== 'undefined') {
+        const ids = Store.collectBlobIds(S.doc);
+        if ([...ids].some((id) => !Store.getBlobSync(id))) {
+          await Store.hydrateDoc(S.doc);
+          if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
+          if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+        }
+      }
       if (typeof Comp !== 'undefined' && Comp.ensureRefs) {
         await Comp.ensureRefs(S.doc).catch((e) => console.warn(e));
         if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
         if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+      }
+      const lw = typeof Assembly !== 'undefined' && Assembly.partitionLightweight
+        ? Assembly.partitionLightweight(S.doc, S.extra, S.peek)
+        : null;
+      if (lw && lw.evalItems.length && S.doc.lightweight && Assembly.markResolved) {
+        const editedLw = lw.evalItems.filter((it) => it && S.results.get(it.id)?.lightweight).map((it) => it.id);
+        if (editedLw.length) Assembly.markResolved(editedLw, S.doc);
+      }
+      if (lw && lw.evalItems.length === 0 && (!S.extra || !S.extra.length)) {
+        apply({ nodes: lw.lightNodes, errors: [], resolved: {}, times: {} });
+        if (Assembly.recordLightOpen) Assembly.recordLightOpen(S.doc.id, performance.now() - tBuild0, lw.lightNodes.length, 0);
+        ev.emit('rebuilt');
+        continue;
       }
       if (typeof SK !== 'undefined' && SK.ensureDocFonts) {
         await SK.ensureDocFonts(S.doc, S.extra).catch((e) => console.warn(e));
@@ -1152,17 +1174,12 @@ const App = (() => {
         if (!Kernel.ready) break;
         if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
-      if (typeof Store !== 'undefined') {
-        const ids = Store.collectBlobIds(S.doc);
-        if ([...ids].some((id) => !Store.getBlobSync(id))) {
-          await Store.hydrateDoc(S.doc);
-          if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
-          if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
-        }
-      }
       const scene = Model.kernelScene(S.doc, S.extra, S.peek);
+      if (lw && lw.lightIds && lw.lightIds.size) {
+        scene.items = scene.items.filter((x) => !lw.lightIds.has(x.id));
+      }
       scene.quality = ViewPrefs.get().quality || 'normal';
-      const known = {}; if (!S.forceMesh) for (const [id, r] of S.results) known[id] = r.key;
+      const known = {}; if (!S.forceMesh) for (const [id, r] of S.results) if (!r.lightweight && r.key) known[id] = r.key;
       S.forceMesh = false;
       clearTimeout(cancelTimer);
       cancelTimer = setTimeout(() => {
@@ -1183,7 +1200,22 @@ const App = (() => {
       }
       if (cancelRunId === myRunId) { wasCancelled = true; dirty = false; break; }
       if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+      if (lw && lw.lightNodes.length) {
+        const byId = new Map();
+        for (const n of lw.lightNodes) byId.set(n.id, n);
+        for (const n of (res && res.nodes) || []) byId.set(n.id, n);
+        const ordered = [];
+        for (const it of Model.activeItems(S.doc)) {
+          const n = byId.get(it.id);
+          if (n) { ordered.push(n); byId.delete(it.id); }
+        }
+        for (const n of byId.values()) ordered.push(n);
+        res = { ...(res || {}), nodes: ordered };
+      }
       apply(res);
+      if (typeof Assembly !== 'undefined' && Assembly.recordLightOpen) {
+        Assembly.recordLightOpen(S.doc.id, performance.now() - tBuild0, lw ? lw.lightNodes.length : 0, lw ? lw.evalItems.length : ((res && res.nodes && res.nodes.length) || 0));
+      }
       if (S.doc.noHistory && S.peek == null && !(S.extra && S.extra.length) && !(res && res.errors && res.errors.length) && S.revision !== lastBakedRev && needsDirectBake(S.doc)) {
         const bakeRev = S.revision;
         try {
@@ -1263,15 +1295,28 @@ const App = (() => {
       const it = topItem(n.id); if (!it) continue;
       const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, texture: it.texture || null, decals: it.decals || null, bodies: it.bodies || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
+      if (n.lightweight) {
+        const prevR = S.results.get(n.id);
+        if (prevR && prevR.lightweight && prevR.lightFp === n.lightFp) {
+          Viewer.updateNode(n.id, info);
+          continue;
+        }
+        Viewer.setNode(n.id, n, info);
+        S.results.set(n.id, { key: null, lightweight: true, lightFp: n.lightFp, data: n });
+        continue;
+      }
       if (n.same && S.results.has(n.id)) {
         if (n.bodies) { S.results.get(n.id).data.bodies = n.bodies; Viewer.updateNode(n.id, { ...info, forceBodies: true }); }
         else Viewer.updateNode(n.id, info);
         continue;
       }
       Viewer.setNode(n.id, n, info);
-      S.results.set(n.id, { key: n.key, data: n });
+      S.results.set(n.id, { key: n.key, lightweight: false, data: n });
     }
     for (const id of [...S.results.keys()]) if (!seen.has(id)) { Viewer.removeNode(id); S.results.delete(id); }
+    if (typeof Assembly !== 'undefined' && Assembly.captureLightMeshes && S.doc && (S.doc.lightweight || Model.isAssembly(S.doc))) {
+      Assembly.captureLightMeshes(S.doc, S.results);
+    }
     const oldErr = new Set(S.errors.map((e) => e.itemId + '|' + e.code + '|' + e.message));
     S.errors = (res.errors || []).concat(dimErrors(), refErrors(S.doc));
     for (const e of S.errors) if (!oldErr.has(e.itemId + '|' + e.code + '|' + e.message)) ev.emit('log', { kind: 'error', text: e.message, itemId: e.itemId, code: e.code });
@@ -1344,6 +1389,9 @@ const App = (() => {
   function setCtx(id) {
     const it = id ? S.doc.items.find((x) => x.id === id) : null;
     if (it && it.kind !== 'group') return;
+    if (it && typeof Assembly !== 'undefined' && Assembly.isLightweightItem && Assembly.isLightweightItem(it.id)) {
+      Assembly.resolveLightweight(it.id, { silent: true });
+    }
     S.ctx = it ? it.id : null; applyView(); ev.emit('ctx'); ev.emit('doc');
     ev.emit('log', { kind: 'info', text: it ? `Bauteil bearbeiten: ${Model.label(it)}` : 'Bauteil-Bearbeitung beendet' });
   }

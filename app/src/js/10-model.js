@@ -2718,6 +2718,18 @@ const Model = (() => {
       }
       if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor();
     });
+    if (doc.lightweight) doc.lightweight = true;
+    else delete doc.lightweight;
+    if (doc.lightCache && typeof doc.lightCache === 'object' && !Array.isArray(doc.lightCache)) {
+      const cleanCache = {};
+      for (const [k, v] of Object.entries(doc.lightCache)) {
+        if (typeof k === 'string' && k && typeof v === 'string' && v) cleanCache[k] = v;
+      }
+      if (Object.keys(cleanCache).length) doc.lightCache = cleanCache;
+      else delete doc.lightCache;
+    } else {
+      delete doc.lightCache;
+    }
     cleanFolders(doc);
     return doc;
   }

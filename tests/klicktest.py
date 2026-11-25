@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Motion,Handles,DragInput,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,Refine,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -32503,6 +32503,337 @@ def t_a155_kollision_und_luft(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a164_leichtmodus_huelle(p):
+    # 1. Profi-only Sichtbarkeit in einer Baugruppe
+    p.empty()
+    p.ev("""
+      const doc = Model.newAssemblyDoc('Baugruppe-Leicht');
+      App.setDoc(doc);
+    """)
+    warte_rechnen(p, 15)
+
+    p.ev("ViewPrefs.setLevel('simple'); Panels.renderTools();")
+    p.wait(300)
+    simple_hidden = p.ev("""
+      return ['#t-asm-lightweight', '#t-asm-envelope', '#proj-asm-perf-sec']
+        .every(sel => { const el = document.querySelector(sel); return !el || el.offsetParent === null; });
+    """)
+
+    p.ev("ViewPrefs.setLevel('pro'); Panels.renderTools();")
+    p.wait(300)
+    pro_visible = p.ev("""
+      return ['#t-asm-lightweight', '#t-asm-envelope', '#proj-asm-perf-sec']
+        .every(sel => { const el = document.querySelector(sel); return el && el.offsetParent !== null; });
+    """)
+    ok1 = bool(simple_hidden and pro_visible)
+
+    # 2. Baugruppe mit 20 Teilen: Leichtmodus cachen, speichern & Cold-Open-Zeit vergleichen
+    part_ids = p.ev("""
+      const doc = Model.newAssemblyDoc('BG-20-Teile');
+      const ids = [];
+      for (let i = 0; i < 20; i++) {
+        const col = i % 5, row = Math.floor(i / 5);
+        const w = 18 + col * 0.45, d = 18 + row * 0.45, h = 12;
+        const grp = Model.newItem('group', {}, { name: 'Teil-' + (i + 1) });
+        grp.t = { x: col * 28, y: row * 28, z: 0, rx: 0, ry: 0, rz: 0 };
+        const box = Model.newItem('box', { w, d, h }, { name: 'Klotz-' + (i + 1) });
+        box.finishes = [{ id: 'f_lw_' + i, type: 'fillet', r: 1.4, edges: 'all' }];
+        const hole = Model.newItem('cylinder', { d: 5 + (i % 3) * 0.4, h: h + 4 }, { name: 'Loch-' + (i + 1), role: 'hole' });
+        hole.t = { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 };
+        grp.children = [box, hole];
+        doc.items.push(grp);
+        ids.push(grp.id);
+      }
+      App.setDoc(doc);
+      return ids;
+    """)
+    warte_rechnen(p, 80)
+
+    p.pg.click('#t-asm-lightweight')
+    p.wait(600)
+    cache_ready = p.ev("""return (async () => {
+      for (let i = 0; i < 40; i++) {
+        if (!App.busy && Assembly.lightweightStats().cachedCount >= 20) break;
+        await new Promise(r => setTimeout(r, 150));
+      }
+      await App.saveNow();
+      return {
+        lw: Assembly.isLightweight(),
+        stats: Assembly.lightweightStats(),
+        cacheKeys: Object.keys(App.doc.lightCache || {}).length,
+      };
+    })();""")
+
+    bench = p.ev("""return (async () => {
+      const deepCloneLocal = (x) => JSON.parse(JSON.stringify(x));
+      const waitSettled = async (wantCount) => {
+        await new Promise(r => setTimeout(r, 25));
+        const deadline = performance.now() + 90000;
+        while (performance.now() < deadline) {
+          if (!App.busy && App.results.size >= wantCount) break;
+          await new Promise(r => setTimeout(r, 15));
+        }
+      };
+
+      const lightDoc = deepCloneLocal(App.doc);
+      lightDoc.lightweight = true;
+      const normalDoc = deepCloneLocal(App.doc);
+      normalDoc.lightweight = false;
+      delete normalDoc.lightCache;
+
+      App.setDoc(Model.newAssemblyDoc('Leer'), { fit: false, noAutosave: true, forceReplace: true });
+      await waitSettled(0);
+      await Kernel.clearCache();
+
+      const tN0 = performance.now();
+      App.setDoc(deepCloneLocal(normalDoc), { fit: false, noAutosave: true, forceReplace: true });
+      await waitSettled(20);
+      const tNormal = performance.now() - tN0;
+      const normalFaces = arg.reduce((s, id) => s + ((App.results.get(id)?.data?.faces || []).length), 0);
+
+      App.setDoc(Model.newAssemblyDoc('Leer2'), { fit: false, noAutosave: true, forceReplace: true });
+      await waitSettled(0);
+      await Kernel.clearCache();
+
+      const tL0 = performance.now();
+      let tLRebuilt = 0;
+      const offL = App.on('rebuilt', () => { if (!tLRebuilt) tLRebuilt = performance.now() - tL0; });
+      App.setDoc(deepCloneLocal(lightDoc), { fit: false, noAutosave: true, forceReplace: true });
+      const tLSetDoc = performance.now() - tL0;
+      await waitSettled(20);
+      offL();
+      const tLight = performance.now() - tL0;
+
+      const stats = Assembly.lightweightStats();
+      const allLw = arg.every(id => App.results.get(id)?.lightweight === true);
+      const allRefineSkipped = arg.every(id => Refine.isSkipped(id) === true);
+      const allMeshRendered = arg.every(id => {
+        const nd = Viewer.nodes && Viewer.nodes.get(id);
+        return !!(nd && nd.mesh && nd.data && nd.data.vertices && nd.data.vertices.length > 0);
+      });
+      const badges = document.querySelectorAll('#left-body .lw-badge').length;
+      return { tNormal, tLight, tLSetDoc, tLRebuilt, normalFaces, stats, allLw, allRefineSkipped, allMeshRendered, badges };
+    })();""", part_ids)
+
+    ok2 = bool(
+        cache_ready['lw']
+        and cache_ready['cacheKeys'] == 20
+        and bench['allLw']
+        and bench['allRefineSkipped']
+        and bench['allMeshRendered']
+        and bench['badges'] >= 20
+        and bench['stats']['lightweight'] == 20
+        and bench['stats']['resolved'] == 0
+        and bench['normalFaces'] > 100
+        and bench['tLight'] < bench['tNormal']
+    )
+
+    # 3. Verschieben bleibt leicht; Klicken auf "Voll laden" und Bearbeiten rechnen gezielt nach
+    p.ev("""
+      App.change('Teil 1 verschieben', d => {
+        const it = d.items.find(x => x.id === arg);
+        if (it) it.t.x += 12;
+      });
+    """, part_ids[0])
+    p.wait(500)
+    after_move = p.ev("""
+      const r0 = App.results.get(arg);
+      const b0 = Actions.worldBox(arg);
+      return {
+        stats: Assembly.lightweightStats(),
+        r0Lw: !!(r0 && r0.lightweight),
+        minX: b0 ? b0.min.x : null,
+      };
+    """, part_ids[0])
+
+    p.ev("App.select([arg]);", part_ids[0])
+    p.wait(300)
+    item_ui_ok = p.ev("""
+      const sec = document.querySelector('#item-lw-sec');
+      const btn = document.querySelector('#btn-lw-resolve');
+      const ctx = document.querySelector('#ctx-lw-resolve');
+      return !!(sec && btn && btn.offsetParent !== null && ctx && ctx.offsetParent !== null);
+    """)
+    p.pg.click('#btn-lw-resolve')
+    warte_rechnen(p, 40)
+
+    after_resolve_one = p.ev("""
+      const r0 = App.results.get(arg[0]);
+      const r1 = App.results.get(arg[1]);
+      return {
+        stats: Assembly.lightweightStats(),
+        r0Lw: !!(r0 && r0.lightweight),
+        r0Faces: r0 && r0.data && r0.data.faces ? r0.data.faces.length : 0,
+        r0RefineSkip: Refine.isSkipped(arg[0]),
+        r1Lw: !!(r1 && r1.lightweight),
+      };
+    """, part_ids[:2])
+
+    # Parameteränderung an Teil 2 löst Teil 2 automatisch voll auf, andere 18 bleiben leicht
+    p.ev("""
+      App.change('Teil 2 verbreitern', d => {
+        const it = d.items.find(x => x.id === arg);
+        if (it && it.children && it.children[0]) it.children[0].p.w += 2;
+      });
+    """, part_ids[1])
+    warte_rechnen(p, 40)
+    after_edit = p.ev("""
+      const r1 = App.results.get(arg[1]);
+      const r2 = App.results.get(arg[2]);
+      return {
+        stats: Assembly.lightweightStats(),
+        r1Lw: !!(r1 && r1.lightweight),
+        r1Faces: r1 && r1.data && r1.data.faces ? r1.data.faces.length : 0,
+        r2Lw: !!(r2 && r2.lightweight),
+      };
+    """, part_ids[:3])
+
+    p.ev("App.clearSelection();")
+    p.wait(300)
+    p.pg.click('#proj-lw-resolve-all')
+    warte_rechnen(p, 60)
+    after_resolve_all = p.ev("return Assembly.lightweightStats();")
+
+    ok3 = bool(
+        after_move['r0Lw']
+        and after_move['stats']['lightweight'] == 20
+        and after_move['minX'] is not None and abs(after_move['minX'] - (12 - 9)) < 0.3
+        and item_ui_ok
+        and (not after_resolve_one['r0Lw']) and after_resolve_one['r0Faces'] > 0
+        and (not after_resolve_one['r0RefineSkip']) and after_resolve_one['r1Lw']
+        and after_resolve_one['stats']['resolved'] == 1
+        and after_resolve_one['stats']['lightweight'] == 19
+        and (not after_edit['r1Lw']) and after_edit['r1Faces'] > 0 and after_edit['r2Lw']
+        and after_edit['stats']['resolved'] == 2
+        and after_edit['stats']['lightweight'] == 18
+        and after_resolve_all['lightweight'] == 0
+        and after_resolve_all['resolved'] == 20
+    )
+
+    # 4. Vereinfachte Hülle (BG-30): komplexe Baugruppe mit Löchern, Stufe & Innenteil -> Außenhaut als Teil
+    asm_tab_id = p.ev("""
+      const doc = Model.newAssemblyDoc('BG-Huelle');
+      const outerGrp = Model.newItem('group', {}, { name: 'Gehaeuse' });
+      const base = Model.newItem('box', { w: 80, d: 60, h: 30 }, { name: 'Basis' });
+      base.finishes = [{ id: 'f_env_base', type: 'fillet', r: 2, edges: 'all' }];
+      const h1 = Model.newItem('cylinder', { d: 10, h: 36 }, { name: 'Bohrung1', role: 'hole' });
+      h1.t = { x: 20, y: 12, z: -3, rx: 0, ry: 0, rz: 0 };
+      const h2 = Model.newItem('cylinder', { d: 8, h: 36 }, { name: 'Bohrung2', role: 'hole' });
+      h2.t = { x: 20, y: -12, z: -3, rx: 0, ry: 0, rz: 0 };
+      outerGrp.children = [base, h1, h2];
+
+      const topStep = Model.newItem('box', { w: 30, d: 24, h: 15 }, { name: 'Aufbau' });
+      topStep.t = { x: 0, y: 0, z: 30, rx: 0, ry: 0, rz: 0 };
+      topStep.finishes = [{ id: 'f_env_top', type: 'chamfer', r: 1.5, edges: 'all' }];
+
+      const innerPart = Model.newItem('box', { w: 14, d: 14, h: 10 }, { name: 'Innenblock' });
+      innerPart.t = { x: -16, y: 0, z: 10, rx: 0, ry: 0, rz: 0 };
+
+      doc.items.push(outerGrp, topStep, innerPart);
+      App.setDoc(doc);
+      return App.activeTabId;
+    """)
+    warte_rechnen(p, 50)
+
+    orig_info = p.ev("""
+      let faces = 0;
+      const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      for (const it of App.doc.items) {
+        const d = App.results.get(it.id)?.data;
+        if (!d) continue;
+        faces += (d.faces || []).length;
+        const wb = Actions.worldBox(it.id);
+        if (wb) {
+          bb[0] = Math.min(bb[0], wb.min.x);
+          bb[1] = Math.min(bb[1], wb.min.y);
+          bb[2] = Math.min(bb[2], wb.min.z);
+          bb[3] = Math.max(bb[3], wb.max.x);
+          bb[4] = Math.max(bb[4], wb.max.y);
+          bb[5] = Math.max(bb[5], wb.max.z);
+        }
+      }
+      return { faces, bbox: bb };
+    """)
+
+    p.pg.click('#t-asm-envelope')
+    p.pg.wait_for_selector('#asm-envelope-dialog', timeout=5000)
+    p.pg.click('#env-apply')
+    warte_rechnen(p, 50)
+
+    env_tab_info = p.ev("""
+      const it = App.doc.items[0];
+      const d = it ? App.results.get(it.id)?.data : null;
+      return {
+        docType: App.doc.docType,
+        count: App.doc.items.length,
+        kind: it ? it.kind : null,
+        hasBrep: !!(it && it.p && (it.p.brepB64 || it.p.blobId)),
+        faces: d && d.faces ? d.faces.length : 0,
+        bbox: d ? d.bbox : null,
+        val: Store.validateProject(App.doc),
+      };
+    """)
+
+    # Zurück zur Baugruppe und Box-Modus direkt als Teil einfügen + Rückgängig
+    box_res = p.ev("""return (async () => {
+      App.switchTab(arg);
+      await new Promise(r => setTimeout(r, 80));
+      const res = await Assembly.createEnvelope({ mode: 'box', target: 'insert', name: 'Hüllbox-Test' });
+      const inserted = !!App.doc.items.find(x => x.name === 'Hüllbox-Test');
+      App.undo();
+      const undone = !App.doc.items.find(x => x.name === 'Hüllbox-Test');
+      return { res, inserted, undone, asmVal: Store.validateProject(App.doc) };
+    })();""", asm_tab_id)
+
+    bbox_match = (
+        env_tab_info['bbox'] is not None
+        and all(abs(env_tab_info['bbox'][k] - orig_info['bbox'][k]) < 0.25 for k in range(6))
+    )
+    box_bbox_match = (
+        box_res['res'] and box_res['res'].get('ok')
+        and all(abs(box_res['res']['envBbox'][k] - orig_info['bbox'][k]) < 0.25 for k in range(6))
+    )
+    ok4 = bool(
+        env_tab_info['docType'] == 'part'
+        and env_tab_info['count'] == 1
+        and env_tab_info['kind'] == 'import'
+        and env_tab_info['hasBrep']
+        and env_tab_info['faces'] > 0
+        and env_tab_info['faces'] < orig_info['faces']
+        and bbox_match
+        and env_tab_info['val']['ok']
+        and box_res['res'] and box_res['res'].get('ok')
+        and box_res['res']['envFaces'] == 6
+        and box_res['res']['envFaces'] < orig_info['faces']
+        and box_bbox_match
+        and box_res['inserted'] and box_res['undone']
+        and box_res['asmVal']['ok']
+    )
+
+    # 5. Hilfen, i18n, Befehlssuche & keine Seitenfehler
+    meta = p.ev("""return (async () => {
+      ViewPrefs.setLevel('pro');
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const hOk = ['lightweightMode', 'simplifiedEnvelope'].every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('leichtmodus').some(c => c.id === 'asm-lightweight');
+      const c2 = Commands.search('vereinfachte hülle').some(c => c.id === 'asm-envelope');
+      const c3 = Commands.search('alle teile voll').some(c => c.id === 'asm-lw-resolve-all');
+      return { hOk, i18nOk, cmds: c1 && c2 && c3 };
+    })();""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+
+    res_list = [ok1, ok2, ok3, ok4, ok5]
+    if not all(res_list):
+        print('A164_DIAG:', res_list, 'cache_ready=', cache_ready, 'bench=', bench, 'after_move=', after_move, 'after_resolve_one=', after_resolve_one, 'after_edit=', after_edit, 'after_resolve_all=', after_resolve_all, 'orig_info=', orig_info, 'env_tab_info=', env_tab_info, 'box_res=', box_res, 'meta=', meta, 'errs=', p.errs[:3])
+    return res_list
+
+
 def t_a163_anzeige_zustaende_varianten(p):
     # [A-163] Baugruppe (Profi): Anzeige-Zustände (BG-27) und Varianten (BG-28)
     p.empty()
@@ -33060,6 +33391,7 @@ TESTS = [
     ('[A-160] Schrauben automatisch einsetzen: Bohrungen erkennen, M5-Schrauben & Stückliste (BG-23)', t_a160_schrauben_einsetzen),
     ('[A-162] Baugruppe: Teile spiegeln, Rechteck- und Kreismuster als verknüpfte Kopien', t_a162_baugruppe_spiegeln_muster),
     ('[A-155] Kollision beim Ziehen und Abstands-Prüfung (BG-17, BG-18)', t_a155_kollision_und_luft),
+    ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

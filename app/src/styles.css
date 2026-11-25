@@ -1960,6 +1960,11 @@ body.high-contrast .motion-panel{border:1.5px solid var(--line-strong)}
 .asm-pat-row .swatch{display:grid;place-items:center;background:var(--surface-2);color:var(--accent);border:1px solid var(--line)}
 .asm-pat-row .swatch svg{width:12px;height:12px}
 
+/* Leichtmodus & Vereinfachte Hülle (BG-29, BG-30) */
+.lw-badge{display:inline-flex;align-items:center;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:600;color:var(--accent);background:var(--surface-2);border:1px solid var(--line);flex:none}
+.node.lw-item .swatch{opacity:.72;outline:1px dashed var(--line)}
+.lw-card .hint-box{margin-bottom:8px}
+.env-dlg{display:grid;gap:10px}
 /* Anzeige-Zustände & Varianten für Baugruppen (BG-27, BG-28) */
 .ds-tree .swatch,.av-tree .swatch{display:grid;place-items:center;background:var(--surface-2);color:var(--accent);border:1px solid var(--line)}
 .ds-tree .swatch svg,.av-tree .swatch svg{width:12px;height:12px}

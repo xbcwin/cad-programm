@@ -366,7 +366,7 @@ const Assembly = (() => {
       });
       if (changed) { updatedTabs++; updatedItems += hit; }
     }
-    return { updatedTabs, updatedItems };
+  return { updatedTabs, updatedItems };
   }
 
   async function syncCurrentAssembly(opts = {}) {
@@ -791,6 +791,7 @@ const Assembly = (() => {
       });
     });
     App.on('docLoaded', ({ doc }) => {
+      if (doc && doc.id) resolvedByDoc.delete(doc.id);
       renderBanner();
       if (doc) {
         let hasRef = false;
@@ -1002,7 +1003,7 @@ const Assembly = (() => {
       }
     }
     if (activeStep < 0 && f >= 1 - 1e-4) activeStep = n - 1;
-    return { offsets, paths, stepProgress, activeStep };
+  return { offsets, paths, stepProgress, activeStep };
   }
 
   // ================= Bohrung durch Stapel & Baugruppen-Schritte (BG-24, BG-25) =================
@@ -1049,7 +1050,7 @@ const Assembly = (() => {
     const nW = Array.isArray(face.normal) && face.normal.length >= 3
       ? new THREE.Vector3(...face.normal).normalize()
       : new THREE.Vector3(...(face.info.n || [0, 0, 1])).transformDirection(W).normalize();
-    return {
+  return {
       x: round(pt.x, 4),
       y: round(pt.y, 4),
       z: round(pt.z, 4),
@@ -1068,7 +1069,7 @@ const Assembly = (() => {
     const tx = d[0] > 0.5 ? box.min.x : d[0] < -0.5 ? box.max.x : cx;
     const ty = d[1] > 0.5 ? box.min.y : d[1] < -0.5 ? box.max.y : cy;
     const tz = d[2] > 0.5 ? box.min.z : d[2] < -0.5 ? box.max.z : cz;
-    return { x: round(tx, 4), y: round(ty, 4), z: round(tz, 4) };
+  return { x: round(tx, 4), y: round(ty, 4), z: round(tz, 4) };
   }
 
   function stackHole(opts = {}) {
@@ -1328,7 +1329,7 @@ const Assembly = (() => {
       const hh = Math.max(0.2, Number(opts.h ?? 12) / 2);
       ents.push({ id: uid('e'), type: 'rect', a: [-hw, -hh], b: [hw, hh] });
     }
-    return { plane, ents, dims: [], cons: [] };
+  return { plane, ents, dims: [], cons: [] };
   }
 
   function asmCut(opts = {}) {
@@ -1878,7 +1879,7 @@ const Assembly = (() => {
     const active = list.filter((s) => s && Array.isArray(s.entryPt) && Array.isArray(s.headDir));
     if (!active.length) {
       if (!opts.silent) UI.toast(T('asm.autoScrewsNoneSelected'), { icon: 'info' });
-      return { screws: [], washers: [], nuts: [], count: 0 };
+    return { screws: [], washers: [], nuts: [], count: 0 };
     }
 
     const screws = [];
@@ -1963,7 +1964,7 @@ const Assembly = (() => {
     if (!opts.silent) {
       UI.toast(T('asm.autoScrewsToast', { n: screws.length }), { icon: 'check', ms: 3200 });
     }
-    return { screws, washers, nuts, count: screws.length };
+  return { screws, washers, nuts, count: screws.length };
   }
 
   function autoScrewsDialog() {
@@ -2216,13 +2217,13 @@ const Assembly = (() => {
     if (pat && pat.plane === 'DATUM' && pat.datumId) {
       const d = (doc && Array.isArray(doc.datums) ? doc.datums : []).find((x) => x && x.id === pat.datumId);
       if (d && d.plane && Array.isArray(d.plane.o) && Array.isArray(d.plane.n)) {
-        return { o: d.plane.o.map(Number), n: d.plane.n.map(Number) };
+      return { o: d.plane.o.map(Number), n: d.plane.n.map(Number) };
       }
     }
     const pl = ['XY', 'XZ', 'YZ'].includes(pat && pat.plane) ? pat.plane : 'YZ';
     const off = Model.num(pat && pat.off, V, 0);
     const n = pl === 'XY' ? [0, 0, 1] : pl === 'XZ' ? [0, 1, 0] : [1, 0, 0];
-    return { o: [n[0] * off, n[1] * off, n[2] * off], n };
+  return { o: [n[0] * off, n[1] * off, n[2] * off], n };
   }
   function reflectionMatrix(o, n) {
     const v = new THREE.Vector3(Number(n[0]) || 0, Number(n[1]) || 0, Number(n[2]) || 0);
@@ -2886,6 +2887,705 @@ const Assembly = (() => {
       sec.append(row);
     }
     return sec;
+  }
+
+  // ================= Leichtmodus für große Baugruppen (BG-29) =================
+  const LIGHT_MAGIC = 0x4d574c54; // 'TLWM' little-endian
+  const LIGHT_MEM_CAP = 500;
+  const lightMeshMem = new Map(); // fp -> unpacked lightweight mesh
+  const resolvedByDoc = new Map(); // docId -> Set<itemId>
+  let lastLightOpen = { ms: 0, lightweight: 0, evaluated: 0, docId: null };
+
+  function rememberLightMem(fp, mesh) {
+    if (!fp || !mesh) return;
+    if (lightMeshMem.has(fp)) lightMeshMem.delete(fp);
+    lightMeshMem.set(fp, mesh);
+    while (lightMeshMem.size > LIGHT_MEM_CAP) {
+      const oldest = lightMeshMem.keys().next().value;
+      if (oldest === undefined) break;
+      lightMeshMem.delete(oldest);
+    }
+  }
+
+  function packLightMesh(data) {
+    if (!data || !data.vertices || !data.triangles) return null;
+    const verts = data.vertices instanceof Float32Array ? data.vertices : new Float32Array(data.vertices);
+    const norms = data.normals instanceof Float32Array ? data.normals : new Float32Array(data.normals || verts.length);
+    const tris = data.triangles instanceof Uint32Array ? data.triangles : new Uint32Array(data.triangles);
+    const lines = data.lines instanceof Float32Array ? data.lines : new Float32Array(data.lines || 0);
+    const bb = Array.isArray(data.bbox) && data.bbox.length >= 6 ? data.bbox : [0, 0, 0, 0, 0, 0];
+
+    const headerBytes = 48; // 12 * 4 bytes: magic, ver, vLen, nLen, tLen, lLen, 6*bbox
+    const totalBytes = headerBytes + verts.byteLength + norms.byteLength + tris.byteLength + lines.byteLength;
+    const buf = new ArrayBuffer(totalBytes);
+    const dv = new DataView(buf);
+    dv.setUint32(0, LIGHT_MAGIC, true);
+    dv.setUint32(4, 1, true);
+    dv.setUint32(8, verts.length, true);
+    dv.setUint32(12, norms.length, true);
+    dv.setUint32(16, tris.length, true);
+    dv.setUint32(20, lines.length, true);
+    for (let i = 0; i < 6; i++) dv.setFloat32(24 + i * 4, Number(bb[i]) || 0, true);
+
+    const outU8 = new Uint8Array(buf);
+    let off = headerBytes;
+    const put = (typed) => {
+      const src = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
+      outU8.set(src, off);
+      off += src.byteLength;
+    };
+    put(verts);
+    put(norms);
+    put(tris);
+    put(lines);
+    return outU8;
+  }
+
+  function unpackLightMesh(u8) {
+    if (!u8 || u8.byteLength < 48) return null;
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    if (dv.getUint32(0, true) !== LIGHT_MAGIC || dv.getUint32(4, true) !== 1) return null;
+    const vLen = dv.getUint32(8, true);
+    const nLen = dv.getUint32(12, true);
+    const tLen = dv.getUint32(16, true);
+    const lLen = dv.getUint32(20, true);
+    const expected = 48 + (vLen + nLen + tLen + lLen) * 4;
+    if (u8.byteLength < expected) return null;
+    const bbox = [];
+    for (let i = 0; i < 6; i++) bbox.push(dv.getFloat32(24 + i * 4, true));
+
+    let off = 48;
+    const takeF32 = (len) => {
+      const byteLen = len * 4;
+      const ab = u8.slice(off, off + byteLen).buffer;
+      off += byteLen;
+      return new Float32Array(ab);
+    };
+    const takeU32 = (len) => {
+      const byteLen = len * 4;
+      const ab = u8.slice(off, off + byteLen).buffer;
+      off += byteLen;
+      return new Uint32Array(ab);
+    };
+    const vertices = takeF32(vLen);
+    const normals = takeF32(nLen);
+    const triangles = takeU32(tLen);
+    const lines = takeF32(lLen);
+    return {
+      bbox,
+      tol: 0.5,
+      vertices,
+      normals,
+      triangles,
+      lines,
+      faceGroups: [],
+      edgeGroups: [],
+      faces: [],
+      edges: [],
+      bodies: null,
+      faceBody: null,
+      edgeBody: null,
+      lightweight: true,
+    };
+  }
+
+  function cloneLightPayload(m) {
+    return {
+      bbox: Array.isArray(m.bbox) ? m.bbox.slice() : [0, 0, 0, 0, 0, 0],
+      tol: m.tol || 0.5,
+      vertices: m.vertices ? m.vertices.slice() : new Float32Array(0),
+      normals: m.normals ? m.normals.slice() : new Float32Array(0),
+      triangles: m.triangles ? m.triangles.slice() : new Uint32Array(0),
+      lines: m.lines ? m.lines.slice() : new Float32Array(0),
+      faceGroups: [],
+      edgeGroups: [],
+      faces: [],
+      edges: [],
+      bodies: null,
+      faceBody: null,
+      edgeBody: null,
+      lightweight: true,
+    };
+  }
+
+  function lightGeomSig(doc, it, V, includeLocalT = false, seenDocs = null) {
+    if (!it || typeof it !== 'object') return null;
+    let ownV = V || {};
+    if (it.partRef) ownV = Model.scopeVars(ownV, it.partRef);
+    if (it.userPart) ownV = Model.scopeVars(ownV, it.userPart);
+    const sig = {
+      kind: it.kind,
+      role: it.role || 'solid',
+      p: it.p || {},
+      finishes: it.finishes || [],
+      mir: it.mir || null,
+      rollback: it.rollback != null ? it.rollback : null,
+      partRef: it.partRef ? { docId: it.partRef.docId, rev: it.partRef.rev, params: it.partRef.params, tables: it.partRef.tables } : null,
+      userPart: it.userPart ? { params: it.userPart.params, tables: it.userPart.tables } : null,
+    };
+    if (includeLocalT) sig.t = it.t || null;
+    if (it.kind === 'group') {
+      let kids = Array.isArray(it.children) ? it.children : [];
+      if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
+      sig.children = kids.filter((c) => c && !c.suppressed).map((c) => lightGeomSig(doc, c, ownV, true, seenDocs));
+    } else if (it.kind === 'ref' && it.p && it.p.docId) {
+      const seen = seenDocs || new Set(doc && doc.id ? [doc.id] : []);
+      const refDoc = !seen.has(it.p.docId) ? Model.resolveDoc(it.p.docId) : null;
+      if (refDoc) {
+        const nextSeen = new Set(seen);
+        nextSeen.add(refDoc.id);
+        const refV = Model.vars(refDoc).v;
+        const refAct = Model.activeItems(refDoc);
+        sig.refDoc = {
+          id: refDoc.id,
+          vars: refV,
+          items: refAct.map((c) => lightGeomSig(refDoc, c, refV, true, nextSeen)),
+        };
+      }
+    }
+    return sig;
+  }
+
+  function lightGeomKey(doc, it, V) {
+    const varsObj = V || (doc ? Model.vars(doc).v : {});
+    return Kernel.fingerprint({
+      sig: lightGeomSig(doc, it, varsObj, false),
+      vars: varsObj,
+    });
+  }
+
+  function isLightweight(doc = App.doc) {
+    return !!(doc && doc.lightweight);
+  }
+
+  function isLightweightItem(id, doc = App.doc) {
+    if (!id || typeof App === 'undefined' || !App.results) return false;
+    const r = App.results.get(id);
+    return !!(r && r.lightweight);
+  }
+
+  function getResolvedSet(doc = App.doc) {
+    const did = doc && doc.id;
+    if (!did) return new Set();
+    let set = resolvedByDoc.get(did);
+    if (!set) { set = new Set(); resolvedByDoc.set(did, set); }
+    return set;
+  }
+
+  function resolveCachedLightMesh(doc, fp) {
+    if (!fp) return null;
+    const mem = lightMeshMem.get(fp);
+    if (mem) return mem;
+    const bid = doc && doc.lightCache && doc.lightCache[fp];
+    if (!bid || typeof Store === 'undefined' || !Store.getBlobSync) return null;
+    const u8 = Store.getBlobSync(bid);
+    if (!u8) return null;
+    const unpacked = unpackLightMesh(u8);
+    if (unpacked) rememberLightMem(fp, unpacked);
+    return unpacked;
+  }
+
+  function hasDynamicChild(it) {
+    if (!it) return false;
+    const p = it.p || {};
+    if (it.kind === 'extrude' && (p.extent === 'toNext' || p.extent === 'toFace')) return true;
+    if (it.kind === 'revolve' && p.dir === 'toFace') return true;
+    return Array.isArray(it.children) && it.children.some(hasDynamicChild);
+  }
+
+  function partitionLightweight(doc, extra = [], peek = null) {
+    if (!doc || !isLightweight(doc) || peek != null) return null;
+    const act = Model.activeItems(doc);
+    if (!act.length) return { lightNodes: [], lightIds: new Set(), evalItems: [], fps: new Map() };
+
+    const resolvedSet = getResolvedSet(doc);
+    const mustEval = new Set(resolvedSet);
+    if (typeof App !== 'undefined' && App.ctx) mustEval.add(App.ctx);
+
+    let hasTopHole = false;
+    let firstHoleIdx = Infinity;
+    for (let i = 0; i < act.length; i++) {
+      const it = act[i];
+      if (!it) continue;
+      if (it.hidden || it.role === 'hole' || isStepMod(it) || (it.op && it.op.target) || hasDynamicChild(it)) {
+        mustEval.add(it.id);
+      }
+      if (it.role === 'hole' && !it.hidden) {
+        hasTopHole = true;
+        if (i < firstHoleIdx) firstHoleIdx = i;
+      }
+      if (it.op && it.op.target) mustEval.add(it.op.target);
+      if (it.p) {
+        if (it.p.target) mustEval.add(it.p.target);
+        if (Array.isArray(it.p.targets)) for (const tid of it.p.targets) if (tid) mustEval.add(tid);
+        if (it.p.lipTarget) mustEval.add(it.p.lipTarget);
+        if (it.p.grooveTarget) mustEval.add(it.p.grooveTarget);
+        if (it.p.wrapId) mustEval.add(it.p.wrapId);
+        if (it.p.toFace && it.p.toFace.id) mustEval.add(it.p.toFace.id);
+        if (it.p.toFace && it.p.toFace.targetId) mustEval.add(it.p.toFace.targetId);
+        if (Array.isArray(it.p.features)) for (const fid of it.p.features) if (fid) mustEval.add(fid);
+        if ((it.kind === 'stackHole' || it.kind === 'asmCut') && it.p.scope !== 'selected') {
+          for (let k = 0; k < i; k++) if (act[k]) mustEval.add(act[k].id);
+        }
+      }
+    }
+    if (hasTopHole) {
+      for (let i = 0; i < act.length; i++) {
+        if (act[i] && act[i].role !== 'hole' && i >= firstHoleIdx) {
+          // konservative Kopplung nur für Körper nach/mit Löchern
+        }
+      }
+      // Jedes Teil, das von einem aktiven Top-Level-Loch geschnitten werden könnte, muss voll rechnen
+      for (let i = 0; i < act.length; i++) {
+        if (act[i] && act[i].role !== 'hole' && !act[i].hidden) mustEval.add(act[i].id);
+      }
+    }
+
+    const V = Model.vars(doc).v;
+    const lightNodes = [];
+    const lightIds = new Set();
+    const evalItems = [];
+    const fps = new Map();
+
+    for (const it of act) {
+      if (!it) continue;
+      if (mustEval.has(it.id)) {
+        evalItems.push(it);
+        continue;
+      }
+      const fp = lightGeomKey(doc, it, V);
+      fps.set(it.id, fp);
+      const cached = resolveCachedLightMesh(doc, fp);
+      if (cached) {
+        lightNodes.push({
+          id: it.id,
+          key: null,
+          lightweight: true,
+          lightFp: fp,
+          ...cloneLightPayload(cached),
+        });
+        lightIds.add(it.id);
+      } else {
+        evalItems.push(it);
+      }
+    }
+    if (Array.isArray(extra) && extra.length) evalItems.push(...extra);
+    return { lightNodes, lightIds, evalItems, fps };
+  }
+
+  function captureLightMeshes(doc, results) {
+    if (!doc || !results || !results.size) return 0;
+    const act = Model.activeItems(doc);
+    if (!act.length) return 0;
+    const V = Model.vars(doc).v;
+    const activeFps = new Set();
+    let captured = 0;
+    let cache = (doc.lightCache && typeof doc.lightCache === 'object') ? doc.lightCache : null;
+
+    for (const it of act) {
+      if (!it || it.hidden || it.role === 'hole' || isStepMod(it)) continue;
+      const fp = lightGeomKey(doc, it, V);
+      activeFps.add(fp);
+      const r = results.get(it.id);
+      if (!r || r.lightweight || !r.data || !r.data.vertices || !r.data.triangles) continue;
+      const existingBid = cache && cache[fp];
+      const existingMem = lightMeshMem.get(fp);
+      if (existingMem && (!existingBid || (typeof Store !== 'undefined' && Store.getBlobSync && Store.getBlobSync(existingBid)))) {
+        continue;
+      }
+      const packed = packLightMesh(r.data);
+      if (!packed) continue;
+      const decoded = unpackLightMesh(packed);
+      if (decoded) rememberLightMem(fp, decoded);
+      if (typeof Store !== 'undefined' && Store.registerBlob) {
+        const bid = Store.registerBlob(packed);
+        if (!cache) { cache = {}; doc.lightCache = cache; }
+        cache[fp] = bid;
+      }
+      captured++;
+    }
+    if (doc.lightweight && cache && activeFps.size) {
+      for (const k of Object.keys(cache)) {
+        if (!activeFps.has(k)) delete cache[k];
+      }
+    }
+    return captured;
+  }
+
+  function recordLightOpen(docId, ms, lightCount, evalCount) {
+    lastLightOpen = {
+      docId: docId || null,
+      ms: round(Number(ms) || 0, 2),
+      lightweight: Number(lightCount) || 0,
+      evaluated: Number(evalCount) || 0,
+    };
+  }
+
+  async function setLightweight(on, opts = {}) {
+    if (!App.doc) return false;
+    const target = !!on;
+    if (target && !opts.force && typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      UI.toast(T('asm.proOnly'), { icon: 'info' });
+      return false;
+    }
+    if (target && !isAssembly(App.doc) && !opts.force) {
+      UI.toast(T('asm.lwOnlyAsm'), { icon: 'info' });
+      return false;
+    }
+    if (target === isLightweight(App.doc)) return true;
+
+    if (target) captureLightMeshes(App.doc, App.results);
+    const did = App.doc.id;
+    if (did) resolvedByDoc.delete(did);
+
+    const snapshotCache = App.doc.lightCache ? { ...App.doc.lightCache } : null;
+    App.change(target ? T('asm.lwOnUndo') : T('asm.lwOffUndo'), (doc) => {
+      if (target) {
+        doc.lightweight = true;
+        if (snapshotCache) doc.lightCache = { ...snapshotCache };
+      } else {
+        delete doc.lightweight;
+      }
+    });
+    if (typeof Panels !== 'undefined') {
+      if (Panels.renderTools) Panels.renderTools();
+      if (Panels.renderLeft) Panels.renderLeft();
+      if (Panels.renderRight) Panels.renderRight({ preserveFocus: true });
+    }
+    await App.rebuild();
+    if (!opts.silent) {
+      UI.toast(target ? T('asm.lwOnToast') : T('asm.lwOffToast'), { icon: 'check', ms: 2600 });
+    }
+    return true;
+  }
+
+  function toggleLightweight() {
+    return setLightweight(!isLightweight());
+  }
+
+  function markResolved(ids, doc = App.doc) {
+    if (!doc) return 0;
+    const list = Array.isArray(ids) ? ids : [ids];
+    const resolvedSet = getResolvedSet(doc);
+    let added = 0;
+    for (const rawId of list) {
+      const top = Model.topOf(doc, rawId);
+      const id = (top && top.id) || rawId;
+      if (!id || resolvedSet.has(id)) continue;
+      resolvedSet.add(id);
+      added++;
+    }
+    return added;
+  }
+
+  async function resolveLightweight(ids, opts = {}) {
+    if (!App.doc) return 0;
+    const list = Array.isArray(ids) ? ids : [ids];
+    const resolvedSet = getResolvedSet(App.doc);
+    let added = 0;
+    for (const rawId of list) {
+      const top = Model.topOf(App.doc, rawId);
+      const id = (top && top.id) || rawId;
+      if (!id) continue;
+      if (!resolvedSet.has(id)) {
+        resolvedSet.add(id);
+        added++;
+      }
+      if (typeof Refine !== 'undefined' && Refine.clear) Refine.clear(id);
+    }
+    if (!added && !list.some((id) => isLightweightItem(id))) return 0;
+    await App.rebuild();
+    if (typeof Panels !== 'undefined') {
+      if (Panels.renderLeft) Panels.renderLeft();
+      if (Panels.renderRight) Panels.renderRight({ preserveFocus: true });
+      if (Panels.renderCtx) Panels.renderCtx();
+    }
+    if (!opts.silent) {
+      UI.toast(added > 1 ? T('asm.lwResolvedManyToast', { n: added }) : T('asm.lwResolvedOneToast'), { icon: 'check', ms: 2000 });
+    }
+    return added;
+  }
+
+  async function resolveAllLightweight(opts = {}) {
+    if (!App.doc) return 0;
+    const resolvedSet = getResolvedSet(App.doc);
+    const ids = [];
+    for (const it of Model.activeItems(App.doc)) {
+      if (!it || it.hidden || it.role === 'hole' || isStepMod(it)) continue;
+      resolvedSet.add(it.id);
+      if (isLightweightItem(it.id)) ids.push(it.id);
+    }
+    if (!ids.length) return 0;
+    return resolveLightweight(ids, opts);
+  }
+
+  function lightweightStats(doc = App.doc) {
+    let total = 0, lightweight = 0, resolved = 0;
+    const act = doc ? Model.activeItems(doc) : [];
+    const rSet = getResolvedSet(doc);
+    const useResults = typeof App !== 'undefined' && App.doc && doc && App.doc.id === doc.id && App.results;
+    for (const it of act) {
+      if (!it || it.hidden || it.role === 'hole' || isStepMod(it)) continue;
+      total++;
+      if (isLightweightItem(it.id, doc)) lightweight++;
+      else if (rSet.has(it.id) || (useResults && App.results.has(it.id))) resolved++;
+    }
+    return {
+      enabled: isLightweight(doc),
+      total,
+      lightweight,
+      resolved,
+      cachedCount: doc && doc.lightCache ? Object.keys(doc.lightCache).length : 0,
+      lastOpenMs: lastLightOpen.docId === (doc && doc.id) ? lastLightOpen.ms : 0,
+    };
+  }
+
+  function performanceSection(ctx = 'proj') {
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) return null;
+    if (!App.doc) return null;
+    const parts = assemblyPartTargets(App.doc);
+    if (!isAssembly() && parts.length < 2 && !isLightweight()) return null;
+
+    const st = lightweightStats(App.doc);
+    const sec = h('div', { class: 'section pro asm-perf-sec', id: ctx + '-asm-perf-sec' },
+      h('div', { class: 'section-h' }, T('asm.perfHeading'))
+    );
+
+    const lwChk = h('label', { class: 'check', 'data-help': 'lightweightMode' },
+      h('input', { type: 'checkbox', id: ctx + '-lightweight', checked: st.enabled }),
+      T('asm.lwToggleLabel')
+    );
+    lwChk.querySelector('input').onchange = (e) => setLightweight(e.target.checked);
+    sec.append(lwChk);
+
+    const statusTxt = st.enabled
+      ? (st.lightweight > 0
+        ? T('asm.lwStatusActive', { n: st.lightweight, total: st.total })
+        : T('asm.lwStatusAllFull', { total: st.total }))
+      : T('asm.lwStatusOff');
+    sec.append(h('div', { class: 'hint-box', id: ctx + '-lw-status' }, statusTxt));
+
+    const row = h('div', { class: 'btn-row' });
+    if (st.lightweight > 0) {
+      const rb = h('button', { type: 'button', class: 'btn small', id: ctx + '-lw-resolve-all', 'data-help': 'lightweightMode' });
+      rb.innerHTML = icon('cube') + esc(T('asm.lwResolveAllBtn'));
+      rb.onclick = () => resolveAllLightweight();
+      row.append(rb);
+    }
+    if (parts.length >= 1) {
+      const eb = h('button', { type: 'button', class: 'btn small', id: ctx + '-asm-envelope', 'data-help': 'simplifiedEnvelope' });
+      eb.innerHTML = icon('box') + esc(T('asm.envBtn'));
+      eb.onclick = () => envelopeDialog();
+      row.append(eb);
+    }
+    if (row.children.length) sec.append(row);
+    return sec;
+  }
+
+  function lightweightItemSection(it) {
+    if (!it || !isLightweightItem(it.id)) return null;
+    const sec = h('div', { class: 'section pro lw-card', id: 'item-lw-sec', 'data-help': 'lightweightMode' },
+      h('div', { class: 'section-h' }, T('asm.lwItemTitle')),
+      h('div', { class: 'hint-box' }, T('asm.lwItemHint'))
+    );
+    const btn = h('button', { type: 'button', class: 'btn primary', id: 'btn-lw-resolve' });
+    btn.innerHTML = icon('cube') + esc(T('asm.lwResolveBtn'));
+    btn.onclick = () => resolveLightweight(it.id);
+    sec.append(h('div', { class: 'btn-row' }, btn));
+    return sec;
+  }
+
+  // ================= Vereinfachte Hülle einer Baugruppe (BG-30) =================
+  async function createEnvelope(opts = {}) {
+    if (!opts.force && typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      UI.toast(T('asm.proOnly'), { icon: 'info' });
+      return null;
+    }
+    if (!App.doc) return null;
+    const avail = assemblyPartTargets(App.doc);
+    if (!avail.length) {
+      UI.toast(T('asm.needPart'), { icon: 'info' });
+      return null;
+    }
+    const mode = opts.mode === 'box' || opts.mode === 'boxes' ? opts.mode : 'outer';
+    const fillHoles = opts.fillHoles !== false;
+    const removeInternal = opts.removeInternal !== false;
+    const simplifyDetails = opts.simplifyDetails !== false;
+    const minPartSize = Math.max(0, Number(opts.minPartSize) || 0);
+    const target = opts.target === 'insert' ? 'insert' : 'newTab';
+    const baseName = (App.doc.name && App.doc.name.trim()) ? App.doc.name.trim() : T('asm.defaultName');
+    const name = (typeof opts.name === 'string' && opts.name.trim())
+      ? opts.name.trim()
+      : T('asm.envDefaultName', { name: baseName });
+
+    await Kernel.ensure();
+    if (typeof Comp !== 'undefined' && Comp.ensureRefs) {
+      await Comp.ensureRefs(App.doc).catch(() => {});
+    }
+    if (typeof Store !== 'undefined' && Store.hydrateDoc) {
+      await Store.hydrateDoc(App.doc).catch(() => {});
+    }
+    const scene = Model.kernelScene(App.doc);
+    const res = await Kernel.call('buildEnvelope', {
+      scene,
+      opts: { mode, fillHoles, removeInternal, simplifyDetails, minPartSize, only: opts.only || null },
+    });
+    const bytes = res && res.brepBytes ? (res.brepBytes instanceof Uint8Array ? res.brepBytes : new Uint8Array(res.brepBytes)) : null;
+    if (!bytes || !bytes.byteLength) {
+      throw new Error('Vereinfachte Hülle enthält keine Geometrie.');
+    }
+
+    const blobId = typeof Store !== 'undefined' && Store.putBlob ? await Store.putBlob(bytes) : null;
+    const item = Model.newItem('import', {
+      fmt: 'brep',
+      frozen: true,
+      envelope: true,
+      envelopeMode: res.mode || mode,
+      file: name + '.brep',
+      ...(blobId ? { blobId } : {}),
+      size: bytes.byteLength,
+      ...(!blobId && typeof Store !== 'undefined' && Store.bytesToBase64 ? { data: Store.bytesToBase64(bytes) } : {}),
+    }, { name });
+    item.t = Model.T0();
+
+    let targetDoc = App.doc;
+    let tabId = App.activeTabId;
+    if (target === 'insert') {
+      App.change(T('asm.envUndo'), (doc) => {
+        doc.items.push(item);
+      });
+      App.select([item.id]);
+      await App.rebuild();
+    } else {
+      const partDoc = Model.newDoc(name, { docType: 'part' });
+      if (App.doc.settings && App.doc.settings.unit) partDoc.settings.unit = App.doc.settings.unit;
+      if (App.doc.settings && App.doc.settings.material) partDoc.settings.material = App.doc.settings.material;
+      partDoc.items = [item];
+      if (typeof Store !== 'undefined' && Store.saveProject) {
+        await Store.saveProject(partDoc, 1, { keepLast: true });
+      }
+      tabId = App.openTab(partDoc, { saved: true });
+      targetDoc = partDoc;
+      await App.rebuild();
+    }
+
+    if (!opts.silent) {
+      UI.toast(T('asm.envCreatedToast', { after: res.envFaces, before: res.origFaces }), { icon: 'check', ms: 3600 });
+    }
+    return {
+      ok: true,
+      doc: targetDoc,
+      item,
+      tabId,
+      origFaces: res.origFaces,
+      envFaces: res.envFaces,
+      origParts: res.origParts,
+      envSolids: res.envSolids,
+      origBbox: res.origBbox,
+      envBbox: res.envBbox,
+      removedInternal: res.removedInternal,
+      filledHoles: res.filledHoles,
+      mode: res.mode,
+    };
+  }
+
+  function envelopeDialog() {
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      UI.toast(T('asm.proOnly'), { icon: 'info' });
+      return null;
+    }
+    if (!App.doc) return null;
+    const avail = assemblyPartTargets(App.doc);
+    if (!avail.length) {
+      UI.toast(T('asm.needPart'), { icon: 'info' });
+      return null;
+    }
+    const baseName = (App.doc.name && App.doc.name.trim()) ? App.doc.name.trim() : T('asm.defaultName');
+    const st = {
+      name: T('asm.envDefaultName', { name: baseName }),
+      mode: 'outer',
+      fillHoles: true,
+      removeInternal: true,
+      simplifyDetails: true,
+      minPartSize: 0,
+      target: 'newTab',
+    };
+
+    const body = h('div', { id: 'asm-envelope-dialog', class: 'env-dlg', 'data-help': 'simplifiedEnvelope' });
+    const nameInp = h('input', { type: 'text', id: 'env-name', value: st.name, autocomplete: 'off', spellcheck: 'false' });
+    nameInp.oninput = () => { st.name = nameInp.value; };
+    const nameFld = h('div', { class: 'field' }, h('label', { for: 'env-name' }, T('common.name')), h('div', { class: 'inp' }, nameInp));
+
+    const modeSel = UI.selectField({
+      id: 'env-mode',
+      label: T('asm.envModeLabel'),
+      value: st.mode,
+      options: [
+        ['outer', T('asm.envModeOuter')],
+        ['boxes', T('asm.envModeBoxes')],
+        ['box', T('asm.envModeBox')],
+      ],
+      onChange: (v) => { st.mode = v; syncOpts(); },
+    });
+    const targetSel = UI.selectField({
+      id: 'env-target',
+      label: T('asm.envTargetLabel'),
+      value: st.target,
+      options: [
+        ['newTab', T('asm.envTargetNewTab')],
+        ['insert', T('asm.envTargetInsert')],
+      ],
+      onChange: (v) => { st.target = v; },
+    });
+
+    const fillChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'env-fill-holes', checked: st.fillHoles }), T('asm.envFillHoles'));
+    fillChk.querySelector('input').onchange = (e) => { st.fillHoles = e.target.checked; };
+    const intChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'env-remove-internal', checked: st.removeInternal }), T('asm.envRemoveInternal'));
+    intChk.querySelector('input').onchange = (e) => { st.removeInternal = e.target.checked; };
+    const minSizeFld = UI.numField({
+      id: 'env-min-size',
+      label: T('asm.envMinSizeLabel'),
+      value: st.minPartSize,
+      min: 0,
+      unit: 'mm',
+      onCommit: (v) => { st.minPartSize = Math.max(0, Number(v) || 0); },
+    });
+    const optsWrap = h('div', { id: 'env-opts-wrap', style: { display: 'grid', gap: '8px' } }, fillChk, intChk, minSizeFld);
+    const syncOpts = () => {
+      fillChk.hidden = st.mode !== 'outer';
+      intChk.hidden = st.mode === 'box';
+      minSizeFld.hidden = st.mode === 'box';
+    };
+    syncOpts();
+
+    body.append(
+      nameFld,
+      h('div', { class: 'fields' }, modeSel, targetSel),
+      optsWrap,
+      h('div', { class: 'hint-box' }, T('asm.envHint'))
+    );
+
+    return UI.modal({
+      title: T('asm.envTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel'), value: false },
+        {
+          id: 'env-apply',
+          label: T('asm.envApplyBtn'),
+          primary: true,
+          run: () => {
+            if (document.activeElement && body.contains(document.activeElement) && typeof document.activeElement.blur === 'function') {
+              document.activeElement.blur();
+            }
+            createEnvelope(st).catch((e) => {
+              console.error(e);
+              UI.toast((e && e.message) || T('asm.envErr'), { kind: 'bad' });
+            });
+          },
+        },
+      ],
+    });
   }
 
   // ================= Anzeige-Zustände für Baugruppen (BG-27) =================
@@ -4305,6 +5005,22 @@ const Assembly = (() => {
     findHoles,
     insertAutoScrews,
     autoScrewsDialog,
+    isLightweight,
+    isLightweightItem,
+    lightGeomKey,
+    partitionLightweight,
+    captureLightMeshes,
+    recordLightOpen,
+    setLightweight,
+    toggleLightweight,
+    markResolved,
+    resolveLightweight,
+    resolveAllLightweight,
+    lightweightStats,
+    performanceSection,
+    lightweightItemSection,
+    createEnvelope,
+    envelopeDialog,
     displayStates,
     findDisplayState,
     captureDisplayState,

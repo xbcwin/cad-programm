@@ -10,13 +10,19 @@ const Refine = (() => {
     const px = Viewer.pixelSizeAt(near);
     return Math.max(px * 0.6, diag * 2e-5, 0.0005);
   }
+  function isSkipped(id) {
+    const r = App.results.get(id);
+    if (!r || !r.key || r.lightweight) return true;
+    return !!(typeof Assembly !== 'undefined' && Assembly.isLightweightItem && Assembly.isLightweightItem(id));
+  }
   async function run() {
     if (busy) { again = true; return; }
     if (!ViewPrefs.get().adaptive || !Kernel.ready || App.busy || App.mode !== 'model') return;
     busy = true;
     try {
       for (const [id, n] of Viewer.nodes) {
-        const r = App.results.get(id); if (!r || !r.key || !n.obj.visible) continue;
+        if (isSkipped(id)) continue;
+        const r = App.results.get(id); if (!r || !r.key || !n.obj.visible || !n.mesh || !n.mesh.geometry || !n.mesh.geometry.boundingBox) continue;
         let c = cur.get(id);
         if (!c || c.key !== r.key) { const b0 = (r.data && r.data.tol) || 0.05; c = { key: r.key, tol: b0, base: b0 }; cur.set(id, c); }
         const base = c.base;
@@ -34,7 +40,8 @@ const Refine = (() => {
     if (again) { again = false; schedule(); }
   }
   const schedule = debounce(run, 450);
-  function init() { Viewer.on('camera', schedule); App.on('results', () => { for (const [id, c] of cur) { const r = App.results.get(id); if (!r || r.key !== c.key || (r.data && r.data.tol > c.tol && c.tol === c.base)) cur.delete(id); } schedule(); }); ViewPrefs.on('change', () => { cur.clear(); schedule(); }); }
-  return { init };
+  function clear(id) { if (id) cur.delete(id); else cur.clear(); }
+  function init() { Viewer.on('camera', schedule); App.on('results', () => { for (const [id, c] of cur) { const r = App.results.get(id); if (!r || r.lightweight || !r.key || r.key !== c.key || (r.data && r.data.tol > c.tol && c.tol === c.base)) cur.delete(id); } schedule(); }); ViewPrefs.on('change', () => { cur.clear(); schedule(); }); }
+  return { init, clear, isSkipped };
 })();
 
