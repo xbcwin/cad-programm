@@ -2390,6 +2390,62 @@ const Panels = (() => {
           if (se && se.scheibe) {
             sec.append(h('div', { id: 'p-stdwasher-hint', class: 'hint-box', html: T('panel.item.stdWasherHint', { size: esc(se.groesse), norm: esc(se.scheibe.norm), d1: Units.fmtLenU(se.scheibe.innen_d_mm, 2), d2: Units.fmtLenU(se.scheibe.aussen_d_mm, 1), h: Units.fmtLenU(se.scheibe.dicke_mm, 2) }) }));
           }
+        } else if (def.lib === 'internalGear' && typeof internalGearMetrics === 'function') {
+          const gm = internalGearMetrics({
+            teeth: Model.num(it.p.teeth, V, 40), module: Model.num(it.p.module, V, 1.5),
+            h: Model.num(it.p.h, V, 6), wall: Model.num(it.p.wall, V, 5),
+          });
+          sec.append(h('div', { id: 'p-internalgear-hint', class: 'hint-box', html: `<b>Innenzahnrad (Modul ${fmt(gm.m, 2)}):</b> Teilkreis Ø <b>${Units.fmtLenU(gm.dp, 2)}</b> · Kopfkreis innen Ø ${Units.fmtLenU(gm.da, 2)} · Fußkreis Ø ${Units.fmtLenU(gm.df, 2)} · Außen-Ø <b>${Units.fmtLenU(gm.outerD, 2)}</b>` }));
+        } else if (def.lib === 'gearRack' && typeof gearRackMetrics === 'function') {
+          const gm = gearRackMetrics({
+            teeth: Model.num(it.p.teeth, V, 10), module: Model.num(it.p.module, V, 1.5),
+            h: Model.num(it.p.h, V, 6), baseH: Model.num(it.p.baseH, V, 6),
+          });
+          sec.append(h('div', { id: 'p-gearrack-hint', class: 'hint-box', html: `<b>Zahnstange (Modul ${fmt(gm.m, 2)}):</b> Länge <b>${Units.fmtLenU(gm.length, 3)}</b> (π · ${fmt(gm.m, 2)} · ${gm.z}) · Teilung ${Units.fmtLenU(gm.pitch, 3)} · Zahnhöhe ${Units.fmtLenU(gm.toothH, 2)} · Gesamthöhe ${Units.fmtLenU(gm.totalH, 2)}` }));
+        } else if (def.lib === 'worm' && typeof wormMetrics === 'function') {
+          const gm = wormMetrics({
+            module: Model.num(it.p.module, V, 1.5), starts: Model.num(it.p.starts, V, 1),
+            d: Model.num(it.p.d, V, 16), length: Model.num(it.p.length, V, 30),
+            bore: Model.num(it.p.bore, V, 6), dir: it.p.dir,
+          });
+          sec.append(h('div', { id: 'p-worm-hint', class: 'hint-box', html: `<b>Schnecke (Modul ${fmt(gm.m, 2)}, ${gm.starts}-gängig):</b> Axialteilung ${Units.fmtLenU(gm.px, 2)} · Steigung ${Units.fmtLenU(gm.pz, 2)} · Steigungswinkel γ <b>${fmtFixed(gm.leadAngleDeg, 2)}°</b> · Außen-Ø ${Units.fmtLenU(gm.da1, 2)}` }));
+          const row = h('div', { class: 'btn-row' });
+          const wwBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-worm-wheel' }, 'Passendes Schneckenrad hinzufügen');
+          wwBtn.onclick = () => {
+            const z2 = 24;
+            const h2 = Math.max(6, Math.round(gm.d1 * 0.65));
+            const a = (gm.d1 + gm.m * z2) / 2;
+            const wx = Number(it.t && it.t.x) || 0, wy = Number(it.t && it.t.y) || 0, wz = Number(it.t && it.t.z) || 0;
+            const ww = Model.newItem('part', {
+              lib: 'wormWheel', teeth: z2, module: gm.m, h: h2,
+              wormD: gm.d1, wormStarts: gm.starts, bore: gm.bore, dir: gm.dir,
+            }, { name: 'Schneckenrad', role: 'solid' });
+            Object.assign(ww.t, { x: wx + h2 / 2, y: wy - a, z: wz + gm.length / 2, rx: 0, ry: -90, rz: 0 });
+            App.change('Passendes Schneckenrad hinzugefügt', (doc) => { doc.items.push(ww); });
+            App.select([ww.id]);
+          };
+          row.append(wwBtn); sec.append(row);
+        } else if (def.lib === 'wormWheel' && typeof wormWheelMetrics === 'function') {
+          const gm = wormWheelMetrics({
+            teeth: Model.num(it.p.teeth, V, 24), module: Model.num(it.p.module, V, 1.5),
+            h: Model.num(it.p.h, V, 10), wormD: Model.num(it.p.wormD, V, 16),
+            wormStarts: Model.num(it.p.wormStarts, V, 1), bore: Model.num(it.p.bore, V, 6), dir: it.p.dir,
+          });
+          sec.append(h('div', { id: 'p-wormwheel-hint', class: 'hint-box', html: `<b>Schneckenrad (Modul ${fmt(gm.m, 2)}):</b> Teilkreis Ø <b>${Units.fmtLenU(gm.d2, 2)}</b> · Übersetzung <b>${fmt(gm.ratio, 2)} : 1</b> · Achsabstand a <b>${Units.fmtLenU(gm.centerDist, 2)}</b> · Winkel γ ${fmtFixed(gm.leadAngleDeg, 2)}°` }));
+          const row = h('div', { class: 'btn-row' });
+          const wBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-worm' }, 'Passende Schnecke hinzufügen');
+          wBtn.onclick = () => {
+            const len = Math.max(24, Math.round(gm.d1 * 1.8));
+            const tx = Number(it.t && it.t.x) || 0, ty = Number(it.t && it.t.y) || 0, tz = Number(it.t && it.t.z) || 0;
+            const wm = Model.newItem('part', {
+              lib: 'worm', module: gm.m, starts: gm.starts, d: gm.d1,
+              length: len, bore: gm.bore, dir: gm.dir,
+            }, { name: 'Schnecke', role: 'solid' });
+            Object.assign(wm.t, { x: tx - len / 2, y: ty + gm.centerDist, z: tz + gm.h / 2, rx: 0, ry: 90, rz: 0 });
+            App.change('Passende Schnecke hinzugefügt', (doc) => { doc.items.push(wm); });
+            App.select([wm.id]);
+          };
+          row.append(wBtn); sec.append(row);
         } else if (def.lib === 'helicalGear' && typeof helicalGearMetrics === 'function') {
           const rp = Model.resolveP(it.p, V);
           const g = helicalGearMetrics(rp);

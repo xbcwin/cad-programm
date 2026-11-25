@@ -37568,6 +37568,207 @@ def t_a180_zeichnung_fertig_machen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a184_bibliothek_schnecke_innenzahnrad_zahnstange(p):
+    p.empty()
+
+    # 1. Einfach-Modus: neue Verzahnungsteile sind ausgeblendet; Profi-Modus: alle 4 sichtbar
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(200)
+    p.pg.click('#t-parts')
+    p.wait(250)
+    simple_chk = p.ev("""return (() => {
+      const libs = ['internalGear', 'gearRack', 'worm', 'wormWheel'];
+      const vis = libs.filter(k => {
+        const el = document.querySelector(`.flyout [data-lib="${k}"]`);
+        return el && el.offsetParent !== null;
+      });
+      const cmds = ['zahnstange', 'innenzahnrad', 'schnecke', 'schneckenrad'].flatMap(q => Commands.search(q).map(c => c.id));
+      const leaked = libs.filter(k => cmds.includes('lib-' + k));
+      Panels.closeFlyout();
+      return { vis, leaked };
+    })()""")
+    ok1 = simple_chk['vis'] == [] and simple_chk['leaked'] == []
+
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(200)
+    p.pg.click('#t-parts')
+    p.wait(250)
+    pro_chk = p.ev("""return (() => {
+      const libs = ['internalGear', 'gearRack', 'worm', 'wormWheel'];
+      const vis = libs.every(k => {
+        const el = document.querySelector(`.flyout [data-lib="${k}"]`);
+        return el && el.offsetParent !== null;
+      });
+      const cmdOk = libs.every((k, i) => {
+        const q = ['innenzahnrad', 'zahnstange', 'schnecke', 'schneckenrad'][i];
+        return Commands.search(q).some(c => c.id === 'lib-' + k);
+      });
+      return { vis, cmdOk };
+    })()""")
+    ok2 = bool(pro_chk['vis'] and pro_chk['cmdOk'])
+
+    # 2. Zahnstange Modul 1 mit 10 Zähnen = pi * 10 mm lang
+    p.pg.locator('.flyout [data-lib="gearRack"]').click()
+    warte_rechnen(p)
+    p.pg.fill('#lp-module', '1')
+    p.pg.locator('#lp-module').press('Enter')
+    p.wait(150)
+    p.pg.fill('#lp-teeth', '10')
+    p.pg.locator('#lp-teeth').press('Enter')
+    p.wait(150)
+    p.pg.fill('#lp-baseH', '5')
+    p.pg.locator('#lp-baseH').press('Enter')
+    warte_rechnen(p)
+    rack_chk = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const b = Actions.worldBox(it.id);
+      const lenX = b ? (b.max.x - b.min.x) : 0;
+      const m = await Mass.measure();
+      const gc = await GeomCheck.run({ minEdge: 0.01 });
+      const hint = document.querySelector('#p-gearrack-hint')?.textContent || '';
+      return {
+        lib: it.p.lib,
+        lenX,
+        vol: (m.parts && m.parts[0] && m.parts[0].volume) || 0,
+        issues: gc ? gc.issues.length : -1,
+        checked: gc ? gc.checkedCount : 0,
+        hintOk: hint.includes('31,42') || hint.includes('31,41'),
+      };
+    })()""")
+    ok3 = (
+        rack_chk['lib'] == 'gearRack'
+        and abs(rack_chk['lenX'] - math.pi * 10) < 0.05
+        and rack_chk['vol'] > 50
+        and rack_chk['checked'] == 1
+        and rack_chk['issues'] == 0
+        and rack_chk['hintOk']
+    )
+
+    # 3. Innenzahnrad mit 40 Zähnen ist ein geschlossener Körper
+    p.ev("App.change('Reset', d => { d.items = []; })")
+    p.wait(200)
+    p.pg.click('#t-parts')
+    p.wait(200)
+    p.pg.locator('.flyout [data-lib="internalGear"]').click()
+    warte_rechnen(p)
+    ig_chk = p.ev("""return (async () => {
+      const it = App.doc.items[0];
+      const b = Actions.worldBox(it.id);
+      const dx = b ? (b.max.x - b.min.x) : 0;
+      const dy = b ? (b.max.y - b.min.y) : 0;
+      const dz = b ? (b.max.z - b.min.z) : 0;
+      const m = await Mass.measure();
+      const gc = await GeomCheck.run({ minEdge: 0.01 });
+      const hint = document.querySelector('#p-internalgear-hint')?.textContent || '';
+      return {
+        lib: it.p.lib,
+        teeth: it.p.teeth,
+        dx, dy, dz,
+        vol: (m.parts && m.parts[0] && m.parts[0].volume) || 0,
+        issues: gc ? gc.issues.length : -1,
+        checked: gc ? gc.checkedCount : 0,
+        hintOk: hint.includes('73,75'),
+      };
+    })()""")
+    exp_ring_vol = math.pi * (36.875 ** 2 - 30.0 ** 2) * 6.0
+    ok4 = (
+        ig_chk['lib'] == 'internalGear'
+        and ig_chk['teeth'] == 40
+        and ig_chk['checked'] == 1
+        and ig_chk['issues'] == 0
+        and abs(ig_chk['dx'] - 73.75) < 0.2
+        and abs(ig_chk['dy'] - 73.75) < 0.2
+        and abs(ig_chk['dz'] - 6.0) < 0.1
+        and abs(ig_chk['vol'] - exp_ring_vol) < exp_ring_vol * 0.18
+        and ig_chk['hintOk']
+    )
+
+    # 4. Schnecke mit passendem Schneckenrad (Modul, Gänge, Achsabstand, Steigung links/rechts)
+    p.ev("App.change('Reset', d => { d.items = []; })")
+    p.wait(200)
+    p.pg.click('#t-parts')
+    p.wait(200)
+    p.pg.locator('.flyout [data-lib="worm"]').click()
+    warte_rechnen(p)
+    p.pg.locator('#btn-add-worm-wheel').click()
+    warte_rechnen(p)
+    worm_pair = p.ev("""return (async () => {
+      const w = App.doc.items[0], ww = App.doc.items[1];
+      const bw = Actions.worldBox(w.id), bww = Actions.worldBox(ww.id);
+      const m = await Mass.measure();
+      const gc = await GeomCheck.run({ minEdge: 0.01 });
+      const dyAxes = Math.abs((w.t.y || 0) - (ww.t.y || 0));
+      return {
+        count: App.doc.items.length,
+        wLib: w && w.p.lib,
+        wwLib: ww && ww.p.lib,
+        modMatch: w && ww && w.p.module === ww.p.module && ww.p.wormD === w.p.d && ww.p.wormStarts === w.p.starts && ww.p.dir === w.p.dir,
+        dyAxes,
+        wLen: bw ? (bw.max.z - bw.min.z) : 0,
+        wDia: bw ? (bw.max.x - bw.min.x) : 0,
+        wwDia: bww ? (bww.max.y - bww.min.y) : 0,
+        vols: (m.parts || []).map(x => x.volume || 0),
+        issues: gc ? gc.issues.length : -1,
+        checked: gc ? gc.checkedCount : 0,
+      };
+    })()""")
+    ok5 = (
+        worm_pair['count'] == 2
+        and worm_pair['wLib'] == 'worm'
+        and worm_pair['wwLib'] == 'wormWheel'
+        and worm_pair['modMatch']
+        and abs(worm_pair['dyAxes'] - 26.0) < 0.05
+        and abs(worm_pair['wLen'] - 30.0) < 0.2
+        and abs(worm_pair['wDia'] - 19.0) < 0.4
+        and abs(worm_pair['wwDia'] - 39.0) < 0.4
+        and len(worm_pair['vols']) == 2
+        and all(v > 100 for v in worm_pair['vols'])
+        and worm_pair['checked'] == 2
+        and worm_pair['issues'] == 0
+    )
+
+    # 5. Zweigängige linksgängige Schnecke + Hilfetexte (eingebettet + JSON) + Rückgängig
+    p.ev("""
+      App.change('Schnecke 2G', d => {
+        d.items.push(Model.newItem('part', { lib: 'worm', module: 1.5, starts: 2, d: 16, length: 24, bore: 5, dir: 'left' }, { name: 'Schnecke 2G' }));
+      });
+    """)
+    warte_rechnen(p)
+    p.pg.click('#t-parts')
+    p.wait(250)
+    p.pg.locator('.flyout [data-lib="worm"]').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip.big', timeout=5000)
+        worm_tip = p.pg.locator('.tooltip').text_content()
+    except Exception:
+        worm_tip = ''
+    p.ev("Panels.closeFlyout()")
+    extra = p.ev("""return (async () => {
+      const [wh, se] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+      ]);
+      const keys = ['internalGear', 'gearRack', 'worm', 'wormWheel'];
+      const helpOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp) && String(arg || '').includes(wh.worm.hilfe) && String(arg || '').includes(wh.worm.tipp);
+      const explainOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const gc = await GeomCheck.run({ minEdge: 0.01 });
+      const m = await Mass.measure();
+      const v3 = (m.parts && m.parts[2] && m.parts[2].volume) || 0;
+      App.undo();
+      return { helpOk, explainOk, issues: gc ? gc.issues.length : -1, checked: gc ? gc.checkedCount : 0, v3, afterUndo: App.doc.items.length };
+    })()""", worm_tip)
+    ok6 = (
+        extra['helpOk']
+        and extra['explainOk']
+        and extra['checked'] == 3
+        and extra['issues'] == 0
+        and extra['v3'] > 100
+        and extra['afterUndo'] == 2
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 def t_a183_zahnraeder_schraeg_kegel(p):
     p.empty()
 
@@ -38364,6 +38565,7 @@ TESTS = [
     ('[A-182] Bibliothek: O-Ringe mit Nut, Wellendichtringe, Druck- & Zugfedern (BI-09, BI-10)', t_a182_oringe_und_federn),
     ('[A-181] Maße und Toleranzen am 3D-Modell (PMI) & Übernahme in Zeichnung (ZE-35)', t_a181_pmi_3d_und_zeichnung),
     ('[A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)', t_a180_zeichnung_fertig_machen),
+    ('[A-184] Bibliothek (Profi): Zahnstange (π·10 mm), Innenzahnrad (40 Zähne geschlossen), Schnecke & Schneckenrad (BI-11)', t_a184_bibliothek_schnecke_innenzahnrad_zahnstange),
     ('[A-183] Bibliothek: Schrägzahnrad & Kegelrad-Paar 90°', t_a183_zahnraeder_schraeg_kegel),
     ('[A-186] Bibliothek: Wellen, Stellringe & Kupplungen (BI-13)', t_a186_wellen_stellringe_kupplungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

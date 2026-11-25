@@ -694,6 +694,44 @@ const printFitBoltOptions = () => [
 const PRINT_FIT_PROJ_OPTIONS = printFitProjOptions();
 const PRINT_FIT_HOLE_OPTIONS = printFitHoleOptions();
 const PRINT_FIT_BOLT_OPTIONS = printFitBoltOptions();
+function gearRackMetrics(p) {
+  const z = Math.max(2, Math.min(200, Math.round(Number(p && p.teeth) || 10)));
+  const m = Math.max(0.1, Number(p && p.module) || 1.5);
+  const h = Math.max(0.2, Number(p && p.h) || 6);
+  const baseH = Math.max(0.5, Number(p && p.baseH) || 6);
+  const pitch = Math.PI * m;
+  return { z, m, h, baseH, pitch, length: pitch * z, ha: m, hf: 1.25 * m, toothH: 2.25 * m, totalH: baseH + 2.25 * m };
+}
+function internalGearMetrics(p) {
+  const z = Math.max(12, Math.min(200, Math.round(Number(p && p.teeth) || 40)));
+  const m = Math.max(0.1, Number(p && p.module) || 1.5);
+  const h = Math.max(0.2, Number(p && p.h) || 6);
+  const wall = Math.max(0.5, Number(p && p.wall) || 5);
+  const dp = m * z, da = Math.max(1, dp - 2 * m), df = dp + 2.5 * m, outerD = df + 2 * wall;
+  return { z, m, h, wall, dp, da, df, outerD };
+}
+function wormMetrics(p) {
+  const m = Math.max(0.1, Number(p && p.module) || 1.5);
+  const starts = Math.max(1, Math.min(4, Math.round(Number(p && p.starts) || 1)));
+  const d1 = Math.max(Number(p && p.d) || 16, 2.5 * m + 2.4);
+  const length = Math.max(1, Number(p && p.length) || 30);
+  const bore = Math.max(0, Number(p && p.bore) || 0);
+  const px = Math.PI * m, pz = starts * px, da1 = d1 + 2 * m, df1 = Math.max(1.2, d1 - 2.5 * m);
+  const leadAngleDeg = (Math.atan((m * starts) / d1) * 180) / Math.PI;
+  return { m, starts, d1, length, bore, px, pz, da1, df1, leadAngleDeg, dir: p && p.dir === 'left' ? 'left' : 'right' };
+}
+function wormWheelMetrics(p) {
+  const z2 = Math.max(10, Math.min(120, Math.round(Number(p && p.teeth) || 24)));
+  const m = Math.max(0.1, Number(p && p.module) || 1.5);
+  const h = Math.max(0.2, Number(p && p.h) || 10);
+  const d1 = Math.max(Number(p && p.wormD) || 16, 2.5 * m + 2.4);
+  const starts = Math.max(1, Math.min(4, Math.round(Number(p && p.wormStarts) || 1)));
+  const bore = Math.max(0, Number(p && p.bore) || 0);
+  const d2 = m * z2, da2 = d2 + 2 * m, df2 = Math.max(1, d2 - 2.5 * m);
+  const centerDist = (d1 + d2) / 2, ratio = z2 / starts;
+  const leadAngleDeg = (Math.atan((m * starts) / d1) * 180) / Math.PI;
+  return { z2, m, h, d1, starts, bore, d2, da2, df2, centerDist, ratio, leadAngleDeg, dir: p && p.dir === 'left' ? 'left' : 'right' };
+}
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
@@ -898,6 +936,43 @@ const LIB = [
   { lib: 'gear', label: 'Zahnrad', role: 'solid', icon: 'gear', desc: 'Stirnrad mit Evolventen-Zähnen', params: [
     { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' }, { k: 'module', label: 'Modul', type: 'num', def: 1.5 }, { k: 'h', label: 'Dicke', type: 'num', def: 6 }, { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
   ] },
+  { lib: 'internalGear', label: 'Innenzahnrad', role: 'solid', icon: 'internalGear', pro: true,
+    keys: 'hohlrad innenverzahnung zahnrad planetengetriebe modul bi-11',
+    desc: 'Hohlrad mit innenliegenden Evolventen-Zähnen passend zum Modul', params: [
+      { k: 'teeth', label: 'Zähne', type: 'num', def: 40, int: true, unit: '' },
+      { k: 'module', label: 'Modul', type: 'num', def: 1.5 },
+      { k: 'h', label: 'Dicke', type: 'num', def: 6 },
+      { k: 'wall', label: 'Außenwand', type: 'num', def: 5 },
+    ] },
+  { lib: 'gearRack', label: 'Zahnstange', role: 'solid', icon: 'gearRack', pro: true,
+    keys: 'zahnstange ritzel modul linear antrieb bi-11',
+    desc: 'Gerade Zahnstange passend zum Modul (Länge = π · Modul · Zähne)', params: [
+      { k: 'teeth', label: 'Zähne', type: 'num', def: 10, int: true, unit: '' },
+      { k: 'module', label: 'Modul', type: 'num', def: 1.5 },
+      { k: 'h', label: 'Dicke', type: 'num', def: 6 },
+      { k: 'baseH', label: 'Sockelhöhe', type: 'num', def: 6 },
+    ] },
+  { lib: 'worm', label: 'Schnecke', role: 'solid', icon: 'worm', pro: true,
+    keys: 'schnecke schneckengetriebe schneckenrad schraube modul bi-11',
+    desc: 'Zylinderschnecke passend zum Modul (1- bis 4-gängig) für Schneckengetriebe', params: [
+      { k: 'module', label: 'Modul', type: 'num', def: 1.5 },
+      { k: 'starts', label: 'Gänge (z₁)', type: 'num', def: 1, int: true, unit: '' },
+      { k: 'd', label: 'Teilkreis-Ø (d₁)', type: 'num', def: 16 },
+      { k: 'length', label: 'Länge', type: 'num', def: 30 },
+      { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 6 },
+      { k: 'dir', label: 'Steigung', type: 'select', options: [['right', 'Rechtsgängig'], ['left', 'Linksgängig']], def: 'right' },
+    ] },
+  { lib: 'wormWheel', label: 'Schneckenrad', role: 'solid', icon: 'wormWheel', pro: true,
+    keys: 'schneckenrad schnecke schneckengetriebe zahnrad schraeg modul bi-11',
+    desc: 'Schrägverzahntes Schneckenrad passend zu Modul und Schnecke', params: [
+      { k: 'teeth', label: 'Zähne (z₂)', type: 'num', def: 24, int: true, unit: '' },
+      { k: 'module', label: 'Modul', type: 'num', def: 1.5 },
+      { k: 'h', label: 'Breite', type: 'num', def: 10 },
+      { k: 'wormD', label: 'Schnecken-Ø (d₁)', type: 'num', def: 16 },
+      { k: 'wormStarts', label: 'Schnecken-Gänge', type: 'num', def: 1, int: true, unit: '' },
+      { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 6 },
+      { k: 'dir', label: 'Steigung', type: 'select', options: [['right', 'Rechtsgängig'], ['left', 'Linksgängig']], def: 'right' },
+    ] },
   { lib: 'helicalGear', label: 'Schrägzahnrad', role: 'solid', icon: 'helicalGear', pro: true, kw: 'schraegzahnrad schrägzahnrad zahnrad helical pfeilverzahnung schraeg getriebe bi-11', desc: 'Stirnrad mit schrägen Evolventen-Zähnen (rechts, links oder Pfeil)', params: [
     { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' },
     { k: 'module', label: 'Modul', type: 'num', def: 1.5 },

@@ -2923,6 +2923,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export, Validierung, Hilfen, I18n & Befehlssuche**: `buildPDFBytes()`, `buildSVGString()`, `buildDXF()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP.drawingFinish`, DE/EN-Schlüsselgleichheit und `Commands.search('zeichnung fertig machen')` bestehen ohne JS-Fehler (`t_a180_zeichnung_fertig_machen`).
 - [ ] **Von Hand**: Im Browser ein beliebiges Bauteil mit mehreren Bohrungen in „Zeichnung“ öffnen, auf „Zeichnung fertig machen“ klicken und die gedruckte/gespeicherte PDF-Vorschau auf Vollständigkeit und Ränder prüfen.
 
+## Bibliothek: Schnecke, Innenzahnrad, Zahnstange (Auto [A-184], BI-11)
+
+- [x] **Nur im Profi-Modus**: Im Einfach-Modus sind `Innenzahnrad`, `Zahnstange`, `Schnecke` und `Schneckenrad` in der Bauteile-Leiste (`#t-parts`) und in der Befehlssuche ausgeblendet; im Profi-Modus erscheinen alle vier Kacheln und Befehle (`t_a184_bibliothek_schnecke_innenzahnrad_zahnstange`).
+- [x] **Zahnstange Modul 1 mit 10 Zähnen**: Die erzeugte Zahnstange (`module: 1, teeth: 10`) hat exakt die Länge `π · 10 ≈ 31,416 mm`, positives Volumen, 0 Geometrie-Fehler und zeigt die berechneten Maße im Panel (`#p-gearrack-hint`).
+- [x] **Innenzahnrad mit 40 Zähnen**: `internalGear` (`teeth: 40, module: 1.5, wall: 5`) erzeugt einen fehlerfreien, geschlossenen Volumenkörper (`checkGeometry` ohne Fehler, Außen-Ø `73,75 mm`, plausibles Ringvolumen).
+- [x] **Schnecke & Schneckenrad passend zum Modul**: `worm` (1-gängig rechts und 2-gängig links) sowie das über `#btn-add-worm-wheel` angelegte `wormWheel` bilden fehlerfreie geschlossene Körper, stehen genau im Achsabstand `(d₁ + d₂) / 2` und lassen sich sauber per `App.undo()` zurücknehmen; alle Hilfetexte sind vorhanden und synchron.
+- [ ] **Von Hand**: Im Browser im Profi-Modus über „Bauteile“ eine Schnecke einsetzen, per „Passendes Schneckenrad hinzufügen“ paaren, ein Innenzahnrad und eine Zahnstange dazusetzen und die Verzahnung optisch rundum prüfen.
+
 ## Bibliothek: Zahnräder schräg und Kegel (Auto [A-183], BI-11)
 
 - [x] **Profi-Trennung & Oberfläche**: Im Profi-Modus sind die Kacheln `helicalGear` („Schrägzahnrad“) und `bevelGear` („Kegelrad“) im Bauteile-Menü `#t-parts` sichtbar (mit `.pro` und `data-help`) und über die Befehlssuche (`Commands.search`) auffindbar; im Einfach-Modus bleiben Kacheln und Befehle ausgeblendet (`t_a183_zahnraeder_schraeg_kegel`).
