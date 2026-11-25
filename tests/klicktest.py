@@ -30110,6 +30110,486 @@ def t_a154_geschlossene_mechanismen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-153] Kurvenscheibe / Nocken (BG-15) ----------
+def t_a153_kurvenscheibe_nocken(p):
+    # 1. Exzentrische Scheibe (d = 30 mm, 5 mm versetzt) -> Stößel-Hub = 10 mm
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    cam_info = p.ev("""
+      App.change('Kurvenscheibe-Test', (d) => {
+        const base = Model.newItem('box', { w: 80, d: 80, h: 6 }, { name: 'Grundplatte' });
+        base.locked = true;
+        const cam = Model.newItem('cylinder', { d: 30, h: 10 }, { name: 'Exzenter' });
+        cam.t.x = 5; cam.t.z = 5;
+        const fol = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Stößel' });
+        fol.t.x = 25; fol.t.z = 5;
+        d.items.push(base, cam, fol);
+      });
+      const [bId, cId, fId] = App.doc.items.map(x => x.id);
+      const jCam = Joints.add(bId, cId, [0, 0, 5], [0, 0, 1], { kind: 'rot' });
+      const jFol = Joints.add(bId, fId, [25, 0, 5], [1, 0, 0], { kind: 'slide', min: -30, max: 30 });
+      return { bId, cId, fId, jCam: jCam.id, jFol: jFol.id, ok: !!(jCam.ok && jFol.ok) };
+    """)
+    warte_rechnen(p, 25)
+
+    # Über Dialog anlegen & Vorschau-Diagramm prüfen
+    p.ev("Joints.startCam({ j1: arg.jCam, j2: arg.jFol })", cam_info)
+    p.wait(250)
+    dlg_cam = p.ev("""
+      return {
+        open: !!document.querySelector('#coupling-dialog'),
+        kind: document.querySelector('#cp-kind')?.value,
+        hasPreviewCurve: !!document.querySelector('#cp-cam-chart svg path.cam-curve'),
+        strokeTxt: document.querySelector('#cp-cam-stroke')?.textContent || '',
+      };
+    """)
+    p.pg.click('#cp-submit')
+    p.wait(250)
+    cam_cid = p.ev("return (App.doc.couplings || [])[0]?.id || null")
+
+    sweeps = p.ev("""
+      const angs = [0, 45, 90, 135, 180, 270, 360];
+      const out = [];
+      for (const a of angs) {
+        Joints.setState(arg.jCam, { ang: a });
+        const jF = App.doc.joints.find(x => x.id === arg.jFol);
+        const minX = Actions.worldBox(arg.fId).min.x;
+        out.push({ a, pos: jF.ang, minX });
+      }
+      const curve = Joints.camCurveData(arg.cid);
+      return { out, stroke: curve.stroke };
+    """, {'jCam': cam_info['jCam'], 'jFol': cam_info['jFol'], 'fId': cam_info['fId'], 'cid': cam_cid})
+    warte_rechnen(p, 15)
+
+    xs = [s['minX'] for s in sweeps['out']]
+    ps = [s['pos'] for s in sweeps['out']]
+    stroke_3d = max(xs) - min(xs)
+    stroke_dof = max(ps) - min(ps)
+    ok1 = (
+        cam_info['ok'] and dlg_cam['open'] and dlg_cam['kind'] == 'cam'
+        and dlg_cam['hasPreviewCurve'] and '10' in dlg_cam['strokeTxt']
+        and cam_cid is not None
+        and abs(sweeps['stroke'] - 10.0) < 0.05
+        and abs(stroke_3d - 10.0) < 0.05
+        and abs(stroke_dof - 10.0) < 0.05
+        and abs(sweeps['out'][4]['pos'] + 10.0) < 0.05
+        and abs(sweeps['out'][6]['minX'] - sweeps['out'][0]['minX']) < 0.05
+    )
+
+    # 2. Weg-Kurve SVG-Diagramm im rechten Panel, Winkelfaden, Flachstößel & An Kontur anlegen
+    p.ev("Joints.select(arg)", cam_cid)
+    p.wait(250)
+    chart_chk = p.ev("""
+      const svg = document.querySelector('#cam-chart svg.cam-chart-svg');
+      const path = svg?.querySelector('path.cam-curve');
+      const dot0 = svg?.querySelector('circle.cam-dot');
+      const dStr = path?.getAttribute('d') || '';
+      const ys = [...dStr.matchAll(/,([0-9.-]+)/g)].map(m => parseFloat(m[1]));
+      const ySpread = ys.length ? (Math.max(...ys) - Math.min(...ys)) : 0;
+      const box = svg ? svg.getBoundingClientRect() : null;
+      return {
+        hasSvg: !!svg,
+        hasArea: !!(box && box.width > 80 && box.height > 40),
+        ptsCount: ys.length,
+        ySpread,
+        strokeTxt: document.querySelector('#cam-stroke')?.textContent || '',
+        dot0x: dot0 ? parseFloat(dot0.getAttribute('cx')) : null,
+        dot0y: dot0 ? parseFloat(dot0.getAttribute('cy')) : null,
+      };
+    """)
+    field(p, '#cam-ang', 180)
+    p.wait(200)
+    dot180 = p.ev("""
+      const dot = document.querySelector('#cam-chart circle.cam-dot');
+      return { x: parseFloat(dot.getAttribute('cx')), y: parseFloat(dot.getAttribute('cy')), cur: document.querySelector('#cam-cur')?.textContent || '' };
+    """)
+    # Punkt vs. Flachstößel bei 90° (Kontur ~ 14.142 -> pos ~ -5.858 vs. Flachstößel 15.0 -> pos = -5.0)
+    p.ev("Joints.setState(arg, { ang: 90 })", cam_info['jCam'])
+    pos_point_90 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", cam_info['jFol'])
+    p.ev("document.querySelector('#cp-edit-contact').value = 'flat'; document.querySelector('#cp-edit-contact').dispatchEvent(new Event('change'));")
+    p.wait(200)
+    pos_flat_90 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", cam_info['jFol'])
+
+    # An Kontur anlegen mit 5 mm Spalt (cam bei 0°, Stößel 5 mm abgerückt)
+    p.ev("""
+      Joints.setState(arg.jCam, { ang: 0 });
+      App.change('Spalt', d => {
+        const c = d.couplings.find(x => x.id === arg.cid);
+        c.ref2 = 5;
+        Joints.setState(arg.jCam, { ang: 0 });
+      });
+    """, {'jCam': cam_info['jCam'], 'cid': cam_cid})
+    p.pg.click('#cp-cam-snap')
+    p.wait(200)
+    x_snapped = p.ev("return Actions.worldBox(arg).min.x", cam_info['fId'])
+
+    ok2 = (
+        chart_chk['hasSvg'] and chart_chk['hasArea']
+        and chart_chk['ptsCount'] >= 60 and chart_chk['ySpread'] > 20
+        and '10' in chart_chk['strokeTxt']
+        and dot180['x'] > chart_chk['dot0x'] + 20
+        and dot180['y'] > chart_chk['dot0y'] + 20
+        and '180' in dot180['cur']
+        and abs(pos_point_90 - (math.sqrt(200) - 20)) < 0.1
+        and abs(pos_flat_90 + 5.0) < 0.05
+        and abs(x_snapped - 20.0) < 0.05
+    )
+
+    # 3. Unrunde Nocken-Kontur (Ellipse rx=18, ry=12 -> Hub = 6 mm)
+    ell = p.ev("""
+      Start.openNewTab(Model.newDoc('Ellipsen-Nocken'));
+      App.change('Ellipse-Cam', (d) => {
+        const base = Model.newItem('box', { w: 80, d: 80, h: 6 }, { name: 'Platte' });
+        base.locked = true;
+        const cam = Model.newItem('extrude', {
+          sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'e1', type: 'ellipse', c: [0, 0], rx: 18, ry: 12, rot: 0 }], dims: [], cons: [] },
+          dist: 10, dir: 1,
+        }, { name: 'Oval-Nocken' });
+        const fol = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Stößel' });
+        fol.t.x = 25; fol.t.z = 10;
+        d.items.push(base, cam, fol);
+      });
+      const [bId, cId, fId] = App.doc.items.map(x => x.id);
+      const jCam = Joints.add(bId, cId, [0, 0, 10], [0, 0, 1], { kind: 'rot' });
+      const jFol = Joints.add(bId, fId, [25, 0, 10], [1, 0, 0], { kind: 'slide', min: -30, max: 30 });
+      const cr = Joints.addCam(jCam.id, jFol.id);
+      return { ok: !!(jCam.ok && jFol.ok && cr.ok), cid: cr.id, jCam: jCam.id, jFol: jFol.id };
+    """)
+    warte_rechnen(p, 25)
+    ell_res = p.ev("""
+      Joints.invalidateCamCache();
+      const cd = Joints.camCurveData(arg.cid);
+      Joints.setState(arg.jCam, { ang: 0 });
+      const p0 = App.doc.joints.find(x => x.id === arg.jFol).ang;
+      Joints.setState(arg.jCam, { ang: 90 });
+      const p90 = App.doc.joints.find(x => x.id === arg.jFol).ang;
+      return { stroke: cd.stroke, diff: p0 - p90 };
+    """, ell)
+    ok3 = ell['ok'] and abs(ell_res['stroke'] - 6.0) < 0.15 and abs(ell_res['diff'] - 6.0) < 0.15
+
+    # 4. Abspielen, Validierung, Rückgängig, Profi-Sichtbarkeit & Cache-Invalidierung
+    p.ev("Joints.select(arg)", ell['cid'])
+    p.wait(250)
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+    rev_before = p.ev("return App.revision")
+    p.pg.click('#cp-play')
+    p.wait(400)
+    mid_play = p.ev("""
+      const c = App.doc.items[1], f = App.doc.items[2];
+      const nc = Viewer.nodes.get(c.id), nf = Viewer.nodes.get(f.id);
+      const mc = Model.localMatrix(c), mf = Model.localMatrix(f);
+      return [
+        !!Joints.playing,
+        nc.base.elements.some((v, i) => Math.abs(v - mc.elements[i]) > 1e-3),
+        nf.base.elements.some((v, i) => Math.abs(v - mf.elements[i]) > 1e-3),
+      ];
+    """)
+    p.ev("Joints.stopPlay()")
+    p.wait(150)
+    rev_after = p.ev("return App.revision")
+
+    p.pg.click('#cp-del')
+    p.wait(250)
+    cnt_del = p.ev("return (App.doc.couplings || []).length")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    cnt_undo = p.ev("return (App.doc.couplings || []).length")
+
+    simple_vis = p.ev("""
+      ViewPrefs.setLevel('simple');
+      Panels.renderLeft();
+      const btn = document.querySelector('#btn-add-coupling');
+      const row = document.querySelector('.coupling-row');
+      const hiddenInSimple = (!btn || getComputedStyle(btn).display === 'none') && (!row || getComputedStyle(row).display === 'none');
+      ViewPrefs.setLevel('pro');
+      Panels.renderLeft();
+      const visInPro = !!(document.querySelector('#btn-add-coupling') && getComputedStyle(document.querySelector('#btn-add-coupling')).display !== 'none');
+      Joints.invalidateCamCache();
+      return [hiddenInSimple, visInPro, typeof Joints.invalidateCamCache === 'function'];
+    """)
+
+    ok4 = (
+        val_ok is True
+        and mid_play == [True, True, True]
+        and rev_before == rev_after
+        and cnt_del == 0 and cnt_undo == 1
+        and simple_vis == [True, True, True]
+    )
+
+    # 5. Hilfe, DE/EN-Schlüssel, Befehlssuche & keine JS-Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const b = document.createElement('button');
+      b.dataset.help = 'coupleCam';
+      const desc = Explain.describeElement(b);
+      const hOk = !!(wh.coupleCam && wh.coupleCam.tip && wh.coupleCam.hilfe && wh.coupleCam.tipp && desc && desc.text === wh.coupleCam.hilfe && desc.tip === wh.coupleCam.tipp);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('kurvenscheibe').some(c => c.id === 'couple-cam');
+      const c2 = Commands.search('nocken').some(c => c.id === 'couple-cam');
+      return { hOk, i18nOk, cmds: c1 && c2 };
+    })()""")
+    ok5 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+# ---------- [A-151] Kopplungen: Zahnrad und Zahnstange (BG-14) ----------
+def t_a151_kopplungen_zahnrad_zahnstange(p):
+    # 1. Zwei Drehgelenke koppeln 1:2 (20 / 40 Zähne & Verhältnis) -> 90° drehen -> zweites steht bei 45°
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(150)
+    g_info = p.ev("""
+      App.change('Zahnrad-Test', (d) => {
+        const base = Model.newItem('box', { w: 90, d: 35, h: 6 }, { name: 'Platte' });
+        base.locked = true;
+        const g1 = Model.newItem('part', { lib: 'gear', teeth: 20, module: 1.5, h: 6, bore: 5 }, { name: 'Zahnrad 1' });
+        g1.t.x = -25; g1.t.z = 8;
+        const g2 = Model.newItem('part', { lib: 'gear', teeth: 40, module: 1.5, h: 6, bore: 5 }, { name: 'Zahnrad 2' });
+        g2.t.x = 20; g2.t.z = 8;
+        d.items.push(base, g1, g2);
+      });
+      const [bId, g1Id, g2Id] = App.doc.items.map(x => x.id);
+      const j1 = Joints.add(bId, g1Id, [-25, 0, 8], [0, 0, 1], { kind: 'rot' });
+      const j2 = Joints.add(bId, g2Id, [20, 0, 8], [0, 0, 1], { kind: 'rot' });
+      return { bId, g1Id, g2Id, j1: j1.id, j2: j2.id, ok: !!(j1.ok && j2.ok) };
+    """)
+    warte_rechnen(p, 30)
+
+    p.ev("Joints.startGear({ j1: arg.j1, j2: arg.j2 })", g_info)
+    p.wait(250)
+    dlg_gear = p.ev("""
+      return {
+        open: !!document.querySelector('#coupling-dialog'),
+        mode: document.querySelector('#cp-gear-mode')?.value,
+        z1: document.querySelector('#cp-z1')?.value,
+        z2: document.querySelector('#cp-z2')?.value,
+      };
+    """)
+    p.pg.click('#cp-submit')
+    p.wait(250)
+    gear_cid = p.ev("return (App.doc.couplings || [])[0]?.id || null")
+
+    def wheel_world_deg(bid, origin_x):
+        return p.ev("""
+          const V3 = window.__masswerk.THREE.Vector3;
+          const W = Model.worldMatrix(App.doc, arg.bid);
+          const p0 = new V3(10, 0, 0).applyMatrix4(W);
+          return Math.atan2(p0.y, p0.x - arg.ox) * 180 / Math.PI;
+        """, {'bid': bid, 'ox': origin_x})
+
+    # Zahnrad 1 über UI um 90° drehen -> Zahnrad 2 steht bei 45°
+    p.ev("App.select([arg])", g_info['g1Id'])
+    p.wait(250)
+    field(p, '#jt-ang', 90)
+    warte_rechnen(p, 15)
+    g2_at_90 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", g_info['j2'])
+    g2_world_90 = wheel_world_deg(g_info['g2Id'], 20)
+
+    # Gegenläufig -> -45°; zurück auf gleichlaufend und Verhältnis-Modus 0.5 + bidirektional + '1:2'-String
+    p.ev("Joints.select(arg)", gear_cid)
+    p.wait(250)
+    p.pg.click('#cp-edit-reverse')
+    p.wait(200)
+    g2_rev = p.ev("return App.doc.joints.find(x => x.id === arg).ang", g_info['j2'])
+    p.pg.click('#cp-edit-reverse')
+    p.wait(150)
+    p.ev("document.querySelector('#cp-edit-mode').value = 'ratio'; document.querySelector('#cp-edit-mode').dispatchEvent(new Event('change'));")
+    p.wait(150)
+    field(p, '#cp-edit-ratio', 0.5)
+    p.wait(150)
+    g2_ratio_90 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", g_info['j2'])
+    p.ev("Joints.setState(arg, { ang: 30 })", g_info['j2'])
+    g1_back_30 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", g_info['j1'])
+
+    ratio_str_ok = p.ev("""
+      Start.openNewTab(Model.newDoc('Zahnrad-Verhältnis-Test'));
+      App.change('Ratio-Str', (d) => {
+        const b = Model.newItem('box', { w: 60, d: 20, h: 6 }, { name: 'Basis' });
+        b.locked = true;
+        const a = Model.newItem('cylinder', { d: 12, h: 6 }, { name: 'A' });
+        const c = Model.newItem('cylinder', { d: 24, h: 6 }, { name: 'B' });
+        c.t.x = 25;
+        d.items.push(b, a, c);
+      });
+      const [bId, aId, cId] = App.doc.items.map(x => x.id);
+      const ja = Joints.add(bId, aId, [0, 0, 0], [0, 0, 1], { kind: 'rot' });
+      const jb = Joints.add(bId, cId, [25, 0, 0], [0, 0, 1], { kind: 'rot' });
+      const cp = Joints.addGear(ja.id, jb.id, { ratio: '1:2' });
+      Joints.setState(ja.id, { ang: 90 });
+      const bAng = App.doc.joints.find(x => x.id === jb.id).ang;
+      return !!(cp.ok && Math.abs(bAng - 45) < 1e-4);
+    """)
+    warte_rechnen(p, 20)
+
+    ok1 = (
+        g_info['ok'] and dlg_gear['open']
+        and dlg_gear['mode'] == 'teeth' and dlg_gear['z1'] == '20' and dlg_gear['z2'] == '40'
+        and gear_cid is not None
+        and abs(g2_at_90 - 45.0) < 1e-4
+        and abs(g2_world_90 - 45.0) < 0.1
+        and abs(g2_rev + 45.0) < 1e-4
+        and abs(g2_ratio_90 - 45.0) < 1e-4
+        and abs(g1_back_30 - 60.0) < 1e-4
+        and ratio_str_ok is True
+    )
+
+    # 2. Zahnrad-Zahnstange: Bewegung = pi * d * Winkel / 360
+    r_info = p.ev("""
+      Start.openNewTab(Model.newDoc('Zahnstange-Test'));
+      App.change('Zahnstange', (d) => {
+        const base = Model.newItem('box', { w: 90, d: 40, h: 6 }, { name: 'Gestell' });
+        base.locked = true;
+        const pinion = Model.newItem('part', { lib: 'gear', teeth: 20, module: 1.5, h: 6, bore: 5 }, { name: 'Ritzel' });
+        pinion.t.x = 0; pinion.t.z = 8;
+        const rack = Model.newItem('box', { w: 60, d: 10, h: 6 }, { name: 'Zahnstange' });
+        rack.t.x = 0; rack.t.y = -20; rack.t.z = 8;
+        d.items.push(base, pinion, rack);
+      });
+      const [bId, pId, rId] = App.doc.items.map(x => x.id);
+      const jRot = Joints.add(bId, pId, [0, 0, 8], [0, 0, 1], { kind: 'rot' });
+      const jSld = Joints.add(bId, rId, [0, -20, 8], [1, 0, 0], { kind: 'slide', min: -100, max: 100 });
+      const x0 = Actions.worldBox(rId).min.x;
+      return { bId, pId, rId, jRot: jRot.id, jSld: jSld.id, x0, ok: !!(jRot.ok && jSld.ok) };
+    """)
+    warte_rechnen(p, 30)
+
+    p.ev("Joints.startRack({ j1: arg.jRot, j2: arg.jSld })", r_info)
+    p.wait(250)
+    dlg_rack = p.ev("""
+      return {
+        open: !!document.querySelector('#coupling-dialog'),
+        mode: document.querySelector('#cp-rack-mode')?.value,
+        mod: document.querySelector('#cp-rack-mod')?.value,
+        z: document.querySelector('#cp-rack-z')?.value,
+      };
+    """)
+    p.pg.click('#cp-submit')
+    p.wait(250)
+    rack_cid = p.ev("return (App.doc.couplings || [])[0]?.id || null")
+
+    # d = 1.5 * 20 = 30 mm -> 90° -> pi * 30 * 90 / 360
+    p.ev("Joints.setState(arg, { ang: 90 })", r_info['jRot'])
+    warte_rechnen(p, 15)
+    rack_90 = p.ev("""
+      const j = App.doc.joints.find(x => x.id === arg.jSld);
+      const dx = Actions.worldBox(arg.rId).min.x - arg.x0;
+      return { ang: j.ang, dx };
+    """, r_info)
+    exp_mod_90 = math.pi * 30.0 * 90.0 / 360.0
+
+    # Durchmesser-Modus (d = 20 mm), 180° -> pi * 20 * 180 / 360; Gegenrichtung -> -...; Rückwärts von Zahnstange -> 90°
+    p.ev("Joints.select(arg)", rack_cid)
+    p.wait(250)
+    p.ev("document.querySelector('#cp-edit-mode').value = 'diameter'; document.querySelector('#cp-edit-mode').dispatchEvent(new Event('change'));")
+    p.wait(150)
+    field(p, '#cp-edit-d', 20)
+    p.wait(150)
+    p.ev("Joints.setState(arg, { ang: 180 })", r_info['jRot'])
+    warte_rechnen(p, 15)
+    rack_180 = p.ev("return App.doc.joints.find(x => x.id === arg).ang", r_info['jSld'])
+    exp_dia_180 = math.pi * 20.0 * 180.0 / 360.0
+
+    p.ev("Joints.select(arg)", rack_cid)
+    p.wait(250)
+    p.pg.click('#cp-edit-reverse')
+    p.wait(200)
+    rack_180_rev = p.ev("return App.doc.joints.find(x => x.id === arg).ang", r_info['jSld'])
+    p.pg.click('#cp-edit-reverse')
+    p.wait(150)
+    p.ev("Joints.setState(arg.jSld, { ang: Math.PI * 20 * 90 / 360 })", r_info)
+    pinion_back = p.ev("return App.doc.joints.find(x => x.id === arg).ang", r_info['jRot'])
+
+    ok2 = (
+        r_info['ok'] and dlg_rack['open']
+        and dlg_rack['mode'] == 'module' and dlg_rack['mod'] == '1.5' and dlg_rack['z'] == '20'
+        and rack_cid is not None
+        and abs(rack_90['ang'] - exp_mod_90) < 1e-3
+        and abs(rack_90['dx'] - exp_mod_90) < 0.02
+        and abs(rack_180 - exp_dia_180) < 1e-3
+        and abs(rack_180_rev + exp_dia_180) < 1e-3
+        and abs(pinion_back - 90.0) < 1e-2
+    )
+
+    # 3. Abspielen, Validierung, Rückgängig, Lösen & Profi-Sichtbarkeit
+    p.ev("Joints.select(arg)", rack_cid)
+    p.wait(250)
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+    rev_before = p.ev("return App.revision")
+    p.pg.click('#cp-play')
+    p.wait(350)
+    mid_play = p.ev("""
+      const pItem = App.doc.items[1], rItem = App.doc.items[2];
+      const n1 = Viewer.nodes.get(pItem.id), n2 = Viewer.nodes.get(rItem.id);
+      const m1 = Model.localMatrix(pItem), m2 = Model.localMatrix(rItem);
+      return [
+        !!Joints.playing,
+        n1.base.elements.some((v, i) => Math.abs(v - m1.elements[i]) > 1e-3),
+        n2.base.elements.some((v, i) => Math.abs(v - m2.elements[i]) > 1e-3),
+      ];
+    """)
+    p.ev("Joints.stopPlay()")
+    p.wait(150)
+    rev_after = p.ev("return App.revision")
+
+    p.pg.click('#cp-del')
+    p.wait(250)
+    cnt_del = p.ev("return (App.doc.couplings || []).length")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    cnt_undo = p.ev("return (App.doc.couplings || []).length")
+
+    simple_vis = p.ev("""
+      ViewPrefs.setLevel('simple');
+      Panels.renderLeft();
+      const btn = document.querySelector('#btn-add-coupling');
+      const row = document.querySelector('.coupling-row');
+      const hiddenInSimple = (!btn || getComputedStyle(btn).display === 'none') && (!row || getComputedStyle(row).display === 'none');
+      ViewPrefs.setLevel('pro');
+      Panels.renderLeft();
+      const visInPro = !!(document.querySelector('#btn-add-coupling') && getComputedStyle(document.querySelector('#btn-add-coupling')).display !== 'none');
+      return [hiddenInSimple, visInPro];
+    """)
+
+    ok3 = (
+        val_ok is True
+        and mid_play == [True, True, True]
+        and rev_before == rev_after
+        and cnt_del == 0 and cnt_undo == 1
+        and simple_vis == [True, True]
+    )
+
+    # 4. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine JS-Fehler
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const keys = ['coupleGear', 'coupleRack'];
+      const hOk = keys.every(k => {
+        const b = document.createElement('button');
+        b.dataset.help = k;
+        const desc = Explain.describeElement(b);
+        return wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp && desc && desc.text === wh[k].hilfe && desc.tip === wh[k].tipp;
+      });
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('zahnrad').some(c => c.id === 'couple-gear');
+      const c2 = Commands.search('zahnstange').some(c => c.id === 'couple-rack');
+      return { hOk, i18nOk, cmds: c1 && c2 };
+    })()""")
+    ok4 = bool(meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -30374,6 +30854,8 @@ TESTS = [
     ('[F-11251012] Volltest-Reparatur: Automatisches Raster bei rAF-Stau & Kamera-Schutz beim Neubau', t_f11251012),
     ('[A-152] Kopplungen: Schraube (2 mm/U), Riemen (20/40 Zähne) & linear (BG-14)', t_a152_kopplungen_schraube_riemen_linear),
     ('[A-154] Geschlossene Mechanismen: Viergelenk, Kurbeltrieb & Klemmen (BG-16)', t_a154_geschlossene_mechanismen),
+    ('[A-153] Kurvenscheibe / Nocken: Exzentrische Scheibe (5 mm → 10 mm Hub) & Weg-Kurve-Diagramm (BG-15)', t_a153_kurvenscheibe_nocken),
+    ('[A-151] Kopplungen: Zahnrad 1:2 (90° → 45°) & Zahnstange (π·d·Winkel/360) (BG-14)', t_a151_kopplungen_zahnrad_zahnstange),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

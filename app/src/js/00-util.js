@@ -593,6 +593,7 @@ const IC = {
   hex: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z" /><circle cx="12" cy="12" r="3"/>',
   gear: '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z M10.5 3h3l.5 2.5 2 1 2.3-1.3 2.1 2.1L19.1 9.6l1 2L22.5 12v3l-2.4.5-1 2 1.3 2.3-2.1 2.1-2.3-1.3-2 1-.5 2.4h-3l-.5-2.4-2-1-2.3 1.3-2.1-2.1 1.3-2.3-1-2L1.5 15v-3l2.4-.4 1-2L3.6 7.3l2.1-2.1L8 6.5l2-1z" />',
   hinge: '<rect x="3" y="5" width="7" height="14" rx="1"/><rect x="14" y="5" width="7" height="14" rx="1"/><path d="M10 8h4 M10 12h4 M10 16h4" />',
+  cam: '<path d="M12 4c3.8 0 6.5 3.6 6.5 7.5A6.5 6.5 0 1 1 5.5 11.5C5.5 7.6 8.2 4 12 4z" /><circle cx="12" cy="13" r="2.2" /><path d="M12 1.5v2.5" />',
   snap: '<path d="M6 20V6h4v10l4-3 4 3" />',
   ruler: '<path d="M3 16.5 16.5 3 21 7.5 7.5 21z" />',
   arrowR: '<path d="M5 12h13 M13 6l6 6-6 6" />',
@@ -2489,6 +2490,21 @@ const HELP = {
   "tip": "Lineare Kopplung: Zwei Schiebebewegungen im festen Verhältnis koppeln (Profi)",
   "hilfe": "Verbindet zwei Schiebegelenke (oder Schubrichtungen) so, dass sich das zweite Teil immer im eingestellten Verhältnis mitbewegt – zum Beispiel 1:1 synchron, 2:1 doppelt so weit oder gegenläufig bei umgekehrter Richtung.",
   "tipp": "Die Kopplung wirkt in beide Richtungen: Egal welches der beiden Teile du schiebst oder ziehst, das andere folgt sofort."
+ },
+ "coupleCam": {
+  "tip": "Kurvenscheibe / Nocken: Ein Stößel folgt beim Drehen der Außenkontur einer Scheibe – mit Weg-Kurve als Diagramm (Profi)",
+  "hilfe": "Verbindet ein Drehgelenk an einer Scheibe (Nocken oder Exzenter) mit einem Schiebegelenk an einem Stößel. Dreht sich die Scheibe, tastet der Stößel automatisch ihre Außenkontur ab – als Kontur-/Rollenstößel oder als Flachstößel. Das Weg-Kurven-Diagramm zeigt den gesamten Hub über 360° und lässt sich direkt anklicken.",
+  "tipp": "Klicke im Diagramm auf einen Winkel oder nutze „An Kontur anlegen“, um den Stößel direkt an die Scheibe zu fahren."
+ },
+ "coupleGear": {
+  "tip": "Zahnrad-Kopplung: Zwei Drehgelenke über Zähnezahl oder Verhältnis koppeln (Profi)",
+  "hilfe": "Verbindet zwei Drehgelenke wie ein Zahnradpaar. Aus den Zähnezahlen (z. B. 20 : 40) oder einem eigenen Verhältnis (z. B. 1:2) dreht sich das zweite Zahnrad im passenden Verhältnis mit – und zwar in beide Richtungen.",
+  "tipp": "Wenn beide Teile Zahnräder aus der Bibliothek sind, übernimmt Tracery die Zähnezahlen automatisch."
+ },
+ "coupleRack": {
+  "tip": "Zahnstangen-Kopplung: Drehen eines Ritzels schiebt die Zahnstange um π · d · Winkel / 360 (Profi)",
+  "hilfe": "Verbindet ein Drehgelenk (Ritzel) mit einem Schiebegelenk (Zahnstange). Aus dem Teilkreis-Durchmesser d (oder aus Modul × Zähnezahl) schiebt jede Drehung die Zahnstange genau um den abgerollten Umfang π · d · Winkel / 360 weiter.",
+  "tipp": "Auch Ziehen an der Zahnstange dreht das Ritzel sofort im passenden Winkel zurück."
  }
 };
 

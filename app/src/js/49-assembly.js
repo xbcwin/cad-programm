@@ -97,6 +97,7 @@ const Assembly = (() => {
       if (firstSolid) it.color = firstSolid.color;
     }
     it.partRef = nextRef;
+    if (typeof Joints !== 'undefined' && Joints.invalidateCamCache) Joints.invalidateCamCache(it.id);
     if (asmDoc && Array.isArray(partDoc.fonts) && partDoc.fonts.length) {
       asmDoc.fonts = Array.isArray(asmDoc.fonts) ? asmDoc.fonts : [];
       for (const f of partDoc.fonts) {

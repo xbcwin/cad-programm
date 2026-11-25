@@ -2672,6 +2672,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Schutz, Live-Ziehen & Abspielen**: Im Einfach-Modus werden geschlossene Gelenkketten abgelehnt; im Profi-Modus bewegen `applyDrag` und `play` alle Glieder gemeinsam (`t_a154_geschlossene_mechanismen`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus vier Stäbe als Viergelenk über „Gelenk“ im Kreis verbinden, die Kurbel mit der Maus im 3D-Bild ziehen und mit dem Schieberegler über einen Totpunkt fahren, bis die Meldung „Dieser Mechanismus klemmt hier“ erscheint.
 
+## Kurvenscheibe / Nocken (Auto [A-153], BG-15)
+
+- [x] **Exzentrische Scheibe (5 mm Versatz → 10 mm Hub)**: Dreht eine um `5 mm` versetzte Scheibe über 0°–360°, folgt der Stößel der echten Außenkontur (Anlage über `#coupling-dialog` mit Vorschau-Kurve `#cp-cam-chart`), erreicht im Gelenk und real im 3D-Raum exakt `10,0 mm` Hub und kehrt bei `360°` an den Ausgangspunkt zurück (`t_a153_kurvenscheibe_nocken`).
+- [x] **Weg-Kurve als Diagramm, Flachstößel & „An Kontur anlegen“**: Das rechte Panel zeigt das SVG-Diagramm `#cam-chart` mit geschwungener Weg-Kurve (`path.cam-curve`), Hub-Anzeige (`#cam-stroke`), beweglichem Winkelfaden (`circle.cam-dot`) über `#cam-ang`, Flachstößel-Modus (`flat` vs. `point` bei 90°) und `snapCamContact` zum Anlegen eines abgerückten Stößels (`t_a153_kurvenscheibe_nocken`).
+- [x] **Beliebige Außenkontur (Ellipse)**: Eine aus einer Skizze extrudierte unrunde Ellipse (`rx = 18 mm`, `ry = 12 mm`) treibt den Stößel exakt mit `6,0 mm` Hub (`t_a153_kurvenscheibe_nocken`).
+- [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Baugruppen-Sync**: `#cp-play` animiert Scheibe und Stößel live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus und `Joints.invalidateCamCache` laufen fehlerfrei (`t_a153_kurvenscheibe_nocken`).
+- [x] **Hilfe, DE/EN-Schlüssel & Befehlssuche**: `HELP.coupleCam`, gleiche Schlüssel in `texte-de.json`/`texte-en.json` sowie Befehlssuche (`couple-cam` für „kurvenscheibe“ / „nocken“) geprüft (`t_a153_kurvenscheibe_nocken`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine unrunde Nockenscheibe (Skizze + Hochziehen) mit einem Stößel verbinden, im Diagramm „Weg-Kurve“ über verschiedene Winkel ziehen und „An Kontur anlegen“ sowie „Bewegung abspielen“ optisch prüfen.
+
+## Kopplungen Zahnrad und Zahnstange (Auto [A-151], BG-14)
+
+- [x] **Zahnrad – Zahnrad 1:2 (Zähnezahlen & Verhältnis)**: Zwei Drehgelenke an Zahnrädern (`20` / `40` Zähne, automatisch aus `#coupling-dialog` übernommen) drehen Zahnrad 2 bei `90°` an Zahnrad 1 exakt auf `+45,0°` (auch im 3D-Raum geprüft); Gegenlauf kehrt auf `-45,0°` um, im Verhältnis-Modus (`0,5` und `'1:2'`) wirkt die Kopplung bidirektional (`30° → 60°`) (`t_a151_kopplungen_zahnrad_zahnstange`).
+- [x] **Zahnrad – Zahnstange (`π·d·Winkel/360`)**: Ritzel (`20` Zähne, Modul `1,5` → Teilkreis-Ø `30 mm`) und Schieber werden über `#coupling-dialog` automatisch erkannt; bei `90°` verschiebt sich die Zahnstange um `π·30·90/360 ≈ 23,5619 mm`, im Durchmesser-Modus (`d = 20 mm`) bei `180°` um `10π ≈ 31,4159 mm` (Gegenrichtung `-10π`) sowie rückwärts vom Weg zurück auf `90,0°` (`t_a151_kopplungen_zahnrad_zahnstange`).
+- [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert Ritzel und Zahnstange live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-gear`, `couple-rack`) und Hilfetexte (`coupleGear`, `coupleRack`) laufen ohne JS-Fehler (`t_a151_kopplungen_zahnrad_zahnstange`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus das Beispiel „Zahnrad-Paar“ mit zwei Drehgelenken sowie ein Ritzel mit Zahnstange per „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild ziehen und das gleichzeitige Mitdrehen bzw. Verschieben prüfen.
+
 ## Fehler melden
 
 ```

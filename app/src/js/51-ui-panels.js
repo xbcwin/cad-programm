@@ -3473,9 +3473,12 @@ const Panels = (() => {
           { label: T('ctx.mateRot'), icon: 'hinge', run: () => Joints.start('rot') },
           { label: T('ctx.mateSlide'), icon: 'moveStep', run: () => Joints.start('slide') },
           '-',
+          { label: T('ctx.coupleGear'), icon: 'gear', help: 'coupleGear', run: () => Joints.startGear() },
+          { label: T('ctx.coupleRack'), icon: 'moveStep', help: 'coupleRack', run: () => Joints.startRack() },
           { label: T('ctx.coupleScrew'), icon: 'helix', help: 'coupleScrew', run: () => Joints.startScrew() },
           { label: T('ctx.coupleBelt'), icon: 'link', help: 'coupleBelt', run: () => Joints.startBelt() },
           { label: T('ctx.coupleLinear'), icon: 'moveStep', help: 'coupleLinear', run: () => Joints.startLinear() },
+          { label: T('ctx.coupleCam'), icon: 'cam', help: 'coupleCam', run: () => Joints.startCam() },
         ]), '', T('ctx.mateTip'), true).dataset.help = 'mateCyl';
       }
       if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) {
