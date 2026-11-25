@@ -5199,6 +5199,454 @@ export function createKernel(R, oc) {
       freeOrig();
     }
   }
+  function solve3(M, rhs) {
+    const col = (j) => [M[0][j], M[1][j], M[2][j]];
+    const det3 = (c0, c1, c2) => dot(c0, cross(c1, c2));
+    const D = det3(col(0), col(1), col(2));
+    if (Math.abs(D) < 1e-10) return null;
+    return [
+      det3(rhs, col(1), col(2)) / D,
+      det3(col(0), rhs, col(2)) / D,
+      det3(col(0), col(1), rhs) / D,
+    ];
+  }
+  function makeArc3Edge(O, t1, t2, s, r) {
+    const A = add(O, mul(t1, s)), B = add(O, mul(t2, s));
+    const bis = norm(add(t1, t2));
+    const cosH = Math.max(-0.9999, Math.min(0.9999, dot(t1, bis)));
+    const sinH = Math.sqrt(Math.max(1e-12, 1 - cosH * cosH));
+    const C = add(O, mul(bis, r / sinH));
+    const M = sub(C, mul(bis, r));
+    let pA = null, pM = null, pB = null, ga = null, me = null;
+    try {
+      pA = new oc.gp_Pnt(A[0], A[1], A[2]);
+      pM = new oc.gp_Pnt(M[0], M[1], M[2]);
+      pB = new oc.gp_Pnt(B[0], B[1], B[2]);
+      ga = new oc.GC_MakeArcOfCircle(pA, pM, pB);
+      me = new oc.BRepBuilderAPI_MakeEdge(ga.Value());
+      return me.Edge();
+    } finally {
+      safeDelete(me); safeDelete(ga); safeDelete(pA); safeDelete(pM); safeDelete(pB);
+    }
+  }
+  function makeG2CrossEdge(O, t1, t2, s) {
+    return makeBez5Edge([
+      add(O, mul(t1, s)),
+      add(O, mul(t1, (1 - G2_A) * s)),
+      add(O, mul(t1, (1 - G2_B) * s)),
+      add(O, mul(t2, (1 - G2_B) * s)),
+      add(O, mul(t2, (1 - G2_A) * s)),
+      add(O, mul(t2, s)),
+    ]);
+  }
+  function tryCornerFilletWithTopo(shape, topo, r, matchedEdges, fin, itemId, skipTopo = false, profile = 'round', cornerMode = 'sphere') {
+    if (!matchedEdges || matchedEdges.length < 3) return null;
+    const origFaces = [];
+    const origFaceEdges = [];
+    const tmp = [];
+    const track = (x) => { if (x) tmp.push(x); return x; };
+    const freeOrig = () => {
+      for (const x of tmp) safeDelete(x);
+      for (const es of origFaceEdges) for (const e of es) safeDelete(e);
+      for (const f of origFaces) safeDelete(f);
+    };
+    const dist3 = (a, b) => len(sub(a, b));
+    const rawLineEdge = (a, b) => {
+      let pa = null, pb = null, me = null;
+      try {
+        pa = new oc.gp_Pnt(a[0], a[1], a[2]);
+        pb = new oc.gp_Pnt(b[0], b[1], b[2]);
+        me = new oc.BRepBuilderAPI_MakeEdge(pa, pb);
+        return track(me.Edge());
+      } finally { safeDelete(me); safeDelete(pa); safeDelete(pb); }
+    };
+    const rawPlanarFace = (edges) => {
+      let wb = null, w = null, mf = null;
+      try {
+        wb = new oc.BRepBuilderAPI_MakeWire();
+        for (const e of edges) wb.Add(e);
+        wb.Build();
+        w = wb.Wire();
+        mf = new oc.BRepBuilderAPI_MakeFace(w, true);
+        return track(mf.Face());
+      } finally { safeDelete(mf); safeDelete(w); safeDelete(wb); }
+    };
+    const rawPrismFace = (edge, v) => {
+      let gv = null, pr = null;
+      try {
+        gv = new oc.gp_Vec(v[0], v[1], v[2]);
+        pr = new oc.BRepPrimAPI_MakePrism(edge, gv, false, true);
+        pr.Build();
+        return track(oc.TopoDS.Face(pr.Shape()));
+      } finally { safeDelete(pr); safeDelete(gv); }
+    };
+    const rawPlaneFace = (o, n) => {
+      let po = null, dn = null, pln = null, mf = null;
+      try {
+        po = new oc.gp_Pnt(o[0], o[1], o[2]);
+        dn = new oc.gp_Dir(n[0], n[1], n[2]);
+        pln = new oc.gp_Pln(po, dn);
+        mf = new oc.BRepBuilderAPI_MakeFace(pln, -500, 500, -500, 500);
+        return track(mf.Face());
+      } finally { safeDelete(mf); safeDelete(pln); safeDelete(dn); safeDelete(po); }
+    };
+    const rawEdgeEnds = (rawE) => {
+      let ad = null, p0 = null, p1 = null;
+      try {
+        ad = new oc.BRepAdaptor_Curve(rawE);
+        p0 = ad.Value(ad.FirstParameter());
+        p1 = ad.Value(ad.LastParameter());
+        return [[p0.X(), p0.Y(), p0.Z()], [p1.X(), p1.Y(), p1.Z()]];
+      } finally { safeDelete(p1); safeDelete(p0); safeDelete(ad); }
+    };
+    const findFaceEdgeBetween = (rawFace, pFrom, pTo) => {
+      const ee = new oc.TopExp_Explorer(rawFace, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+      let found = null;
+      try {
+        while (ee.More()) {
+          const e = oc.TopoDS.Edge(ee.Current());
+          const [a, b] = rawEdgeEnds(e);
+          if (dist3(a, pFrom) < 1e-2 && dist3(b, pTo) < 1e-2) { found = track(e); break; }
+          if (dist3(a, pTo) < 1e-2 && dist3(b, pFrom) < 1e-2) {
+            const rev = oc.TopoDS.Edge(e.Reversed());
+            safeDelete(e);
+            found = track(rev);
+            break;
+          }
+          safeDelete(e);
+          ee.Next();
+        }
+      } finally { ee.delete(); }
+      return found;
+    };
+    const cutFaceWithMasks = (origRawFace, masks) => {
+      let cur = origRawFace, owns = false;
+      for (const m of masks) {
+        const c = new oc.BRepAlgoAPI_Cut(cur, m);
+        try {
+          c.Build();
+          const res = c.Shape();
+          if (owns) safeDelete(cur);
+          cur = res;
+          owns = true;
+        } finally { c.delete(); }
+      }
+      const out = [];
+      const fe = new oc.TopExp_Explorer(cur, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+      try {
+        while (fe.More()) { out.push(track(oc.TopoDS.Face(fe.Current()))); fe.Next(); }
+      } finally { fe.delete(); }
+      if (owns) safeDelete(cur);
+      return out;
+    };
+    try {
+      try { for (const f of shape.faces) origFaces.push(f); } catch (_) {}
+      for (const f of origFaces) {
+        const es = [];
+        try { for (const e of f.edges) es.push(e); } catch (_) {}
+        origFaceEdges.push(es);
+      }
+      const origNormals = origFaces.map((f) => {
+        try { return f.geomType === 'PLANE' ? norm(vec(f.normalAt())) : null; } catch (_) { return null; }
+      });
+      const origFacePt = origFaces.map((f, i) => {
+        try {
+          if (origFaceEdges[i] && origFaceEdges[i].length) return vec(origFaceEdges[i][0].startPoint);
+          return vec(f.center);
+        } catch (_) { return [0, 0, 0]; }
+      });
+      const faceDirFromEdge = (fIdx, origin, dirCand) => {
+        let maxPos = 0, maxNeg = 0;
+        for (const fe of origFaceEdges[fIdx]) {
+          for (const pt of [vec(fe.startPoint), vec(fe.endPoint), vec(fe.pointAt(0.5))]) {
+            const pr = dot(sub(pt, origin), dirCand);
+            if (pr > maxPos) maxPos = pr;
+            if (-pr > maxNeg) maxNeg = -pr;
+          }
+        }
+        return maxPos >= maxNeg ? { dir: dirCand, reach: maxPos } : { dir: mul(dirCand, -1), reach: maxNeg };
+      };
+
+      const edgeInfos = [];
+      const faceSpanEntries = [];
+      for (const e of matchedEdges) {
+        if (e.geomType !== 'LINE') return null;
+        const adj = [];
+        for (let i = 0; i < origFaces.length; i++) {
+          if (origFaceEdges[i].some((fe) => fe.isSame(e))) adj.push(i);
+        }
+        if (adj.length !== 2) return null;
+        const f1 = adj[0], f2 = adj[1];
+        if (origFaces[f1].geomType !== 'PLANE' || origFaces[f2].geomType !== 'PLANE') return null;
+        const n1 = origNormals[f1], n2 = origNormals[f2];
+        if (!n1 || !n2) return null;
+        const A = vec(e.startPoint), B = vec(e.endPoint), dAB = sub(B, A), L = len(dAB);
+        if (!(L > 1e-6)) return null;
+        const u = mul(dAB, 1 / L);
+        const t1Info = faceDirFromEdge(f1, A, norm(cross(u, n1)));
+        const t2Info = faceDirFromEdge(f2, A, norm(cross(u, n2)));
+        const t1 = t1Info.dir, t2 = t2Info.dir;
+        if (!(dot(n1, t2) < -1e-4 && dot(n2, t1) < -1e-4)) return null; // nur konvexe Kanten
+        const gamma = Math.acos(Math.max(-0.9999, Math.min(0.9999, dot(t1, t2))));
+        const tanHalf = Math.tan(gamma / 2);
+        if (!(tanHalf > 1e-4)) return null;
+        const s = r / tanHalf;
+        if (!(s < t1Info.reach - 1e-3 && s < t2Info.reach - 1e-3)) {
+          throw new Error('Rundung zu groß.');
+        }
+        faceSpanEntries.push({ fIdx: f1, t: t1, s, reach: t1Info.reach });
+        faceSpanEntries.push({ fIdx: f2, t: t2, s, reach: t2Info.reach });
+        edgeInfos.push({ A, B, L, u, f1, f2, n1, n2, t1, t2, s, startTrim: 0, endTrim: 0 });
+      }
+
+      for (let i = 0; i < faceSpanEntries.length; i++) {
+        for (let j = i + 1; j < faceSpanEntries.length; j++) {
+          const ei = faceSpanEntries[i], ej = faceSpanEntries[j];
+          if (ei.fIdx === ej.fIdx && dot(ei.t, ej.t) < -0.99) {
+            if (!(ei.s + ej.s < ei.reach - 1e-3)) throw new Error('Rundung zu groß.');
+          }
+        }
+      }
+
+      const verts = [];
+      const addVert = (pt, ei, atStart) => {
+        let v = verts.find((x) => dist3(x.pt, pt) < 1e-3);
+        if (!v) { v = { pt, inc: [] }; verts.push(v); }
+        v.inc.push({ ei, atStart });
+      };
+      edgeInfos.forEach((info, ei) => { addVert(info.A, ei, true); addVert(info.B, ei, false); });
+
+      if (verts.some((v) => v.inc.length === 2 || v.inc.length > 3)) return null;
+      const val3 = verts.filter((v) => v.inc.length === 3);
+      if (!val3.length) return null;
+
+      const corners = [];
+      for (const v of val3) {
+        const fSet = new Set();
+        for (const x of v.inc) { fSet.add(edgeInfos[x.ei].f1); fSet.add(edgeInfos[x.ei].f2); }
+        if (fSet.size !== 3) return null;
+        const inc = v.inc.slice();
+        const uOf = (x) => (x.atStart ? edgeInfos[x.ei].u : mul(edgeInfos[x.ei].u, -1));
+        if (dot(uOf(inc[0]), cross(uOf(inc[1]), uOf(inc[2]))) < 0) {
+          [inc[1], inc[2]] = [inc[2], inc[1]];
+        }
+        const fArr = [...fSet];
+        const oppFace = inc.map((x) => {
+          const info = edgeInfos[x.ei];
+          return fArr.find((fi) => fi !== info.f1 && fi !== info.f2);
+        });
+        const ns = oppFace.map((fi) => origNormals[fi]);
+        const us = inc.map(uOf);
+        const dC = solve3([mul(ns[0], -1), mul(ns[1], -1), mul(ns[2], -1)], [r, r, r]);
+        if (!dC) return null;
+        const C = add(v.pt, dC);
+        const Q = [0, 1, 2].map((k) => add(C, mul(ns[k], r)));
+        const d0 = [0, 1, 2].map((k) => dot(dC, us[k]));
+        if (d0.some((dk) => !(dk > 1e-4))) return null;
+        corners.push({ V: v.pt, inc, oppFace, ns, us, C, Q, d0, d: d0.slice(), delta: [0, 0, 0], isSmooth: false });
+      }
+
+      for (const co of corners) {
+        if (cornerMode === 'smooth') {
+          const want = co.d0.map((d0k, k) => {
+            const info = edgeInfos[co.inc[k].ei];
+            const otherCorner = corners.some((c2) => c2 !== co && c2.inc.some((x) => x.ei === co.inc[k].ei));
+            const maxD = otherCorner ? info.L * 0.44 : info.L * 0.85;
+            return Math.min(d0k * 1.8, maxD);
+          });
+          if (want.every((dk, k) => dk > co.d0[k] + 0.08 * edgeInfos[co.inc[k].ei].s)) {
+            co.d = want;
+            co.delta = want.map((dk, k) => dk - co.d0[k]);
+            co.isSmooth = true;
+          }
+        }
+        co.inc.forEach((x, k) => {
+          const info = edgeInfos[x.ei];
+          if (x.atStart) info.startTrim = co.d[k];
+          else info.endTrim = co.d[k];
+        });
+      }
+
+      // Prüfen, ob alle freien Kantenenden senkrecht auf eine ebene Fläche treffen
+      const freeEndFace = (info, endPt, dirOut) => {
+        for (let fi = 0; fi < origFaces.length; fi++) {
+          if (fi === info.f1 || fi === info.f2 || !origNormals[fi]) continue;
+          if (Math.abs(dot(origNormals[fi], dirOut)) > 0.999) {
+            if (Math.abs(dot(sub(endPt, origFacePt[fi]), origNormals[fi])) < 1e-3) return fi;
+          }
+        }
+        return -1;
+      };
+      for (const info of edgeInfos) {
+        if (!(info.L - info.startTrim - info.endTrim > 1e-3)) throw new Error('Rundung zu groß.');
+        if (info.startTrim === 0) {
+          info.freeFaceA = freeEndFace(info, info.A, mul(info.u, -1));
+          if (info.freeFaceA < 0) return null;
+        }
+        if (info.endTrim === 0) {
+          info.freeFaceB = freeEndFace(info, info.B, info.u);
+          if (info.freeFaceB < 0) return null;
+        }
+      }
+
+      const curveOf = (O, t1, t2, s) => track(profile === 'g2' ? makeG2CrossEdge(O, t1, t2, s) : makeArc3Edge(O, t1, t2, s, r));
+      const faceMasks = origFaces.map(() => []);
+      const newFaces = [];
+
+      for (const info of edgeInfos) {
+        const pad = Math.max(0.5, info.s * 0.5);
+        const lenRem = info.L - info.startTrim - info.endTrim;
+        const O0 = add(info.A, mul(info.u, info.startTrim));
+        const cStart = curveOf(O0, info.t1, info.t2, info.s);
+        const fStrip = rawPrismFace(cStart, mul(info.u, lenRem));
+        newFaces.push(fStrip);
+        info.stripFace = fStrip;
+        const extA = info.startTrim > 0 ? 0 : pad;
+        const extB = info.endTrim > 0 ? 0 : pad;
+        const pA = add(info.A, mul(info.u, -extA));
+        const pB = add(info.B, mul(info.u, extB));
+        for (const [fi, ti] of [[info.f1, info.t1], [info.f2, info.t2]]) {
+          const q0 = add(pA, mul(ti, -pad));
+          const q1 = add(pB, mul(ti, -pad));
+          const q2 = add(pB, mul(ti, info.s));
+          const q3 = add(pA, mul(ti, info.s));
+          faceMasks[fi].push(rawPlanarFace([rawLineEdge(q0, q1), rawLineEdge(q1, q2), rawLineEdge(q2, q3), rawLineEdge(q3, q0)]));
+        }
+        const addEndCapMask = (fi, endPt) => {
+          const cEnd = curveOf(endPt, info.t1, info.t2, info.s);
+          const P0 = add(endPt, mul(info.t1, info.s));
+          const P5 = add(endPt, mul(info.t2, info.s));
+          const denom = Math.max(0.1, 1 + dot(info.n1, info.n2));
+          const E1 = add(P0, mul(info.n1, pad));
+          const E2 = add(P5, mul(info.n2, pad));
+          const E0 = add(endPt, mul(add(info.n1, info.n2), pad / denom));
+          faceMasks[fi].push(rawPlanarFace([cEnd, rawLineEdge(P5, E2), rawLineEdge(E2, E0), rawLineEdge(E0, E1), rawLineEdge(E1, P0)]));
+        };
+        if (info.startTrim === 0) addEndCapMask(info.freeFaceA, info.A);
+        if (info.endTrim === 0) addEndCapMask(info.freeFaceB, info.B);
+      }
+
+      for (const co of corners) {
+        const Ccurves = [], suppFaces = [];
+        for (let k = 0; k < 3; k++) {
+          const info = edgeInfos[co.inc[k].ei];
+          const fromM = (k + 2) % 3, toM = (k + 1) % 3;
+          const pFrom = add(co.Q[fromM], mul(co.us[k], co.delta[k]));
+          const pTo = add(co.Q[toM], mul(co.us[k], co.delta[k]));
+          const ck = findFaceEdgeBetween(info.stripFace, pFrom, pTo);
+          if (!ck) return null;
+          Ccurves.push(ck);
+          suppFaces.push(info.stripFace);
+        }
+        const fill = new oc.BRepOffsetAPI_MakeFilling(3, 15, 2, false, 1e-4, 1e-4, 1e-2, 0.1, 8, 9);
+        try {
+          if (!co.isSmooth) {
+            fill.Add(Ccurves[0], suppFaces[0], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(Ccurves[2], suppFaces[2], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(Ccurves[1], suppFaces[1], oc.GeomAbs_Shape.GeomAbs_G1, true);
+          } else {
+            const bridge = (A, tA, dA, B, tB, dB) => track(makeBez5Edge([
+              A, add(A, mul(tA, 0.35 * dA)), add(A, mul(tA, 0.70 * dA)),
+              add(B, mul(tB, 0.70 * dB)), add(B, mul(tB, 0.35 * dB)), B,
+            ]));
+            const makeBridgeForFace = (m, eStart, eEnd) => {
+              const A = add(co.Q[m], mul(co.us[eStart], co.delta[eStart]));
+              const B = add(co.Q[m], mul(co.us[eEnd], co.delta[eEnd]));
+              const bCrv = bridge(A, mul(co.us[eStart], -1), co.delta[eStart], B, mul(co.us[eEnd], -1), co.delta[eEnd]);
+              const backLen = 0.25 * Math.min(co.d0[eStart], co.d0[eEnd]);
+              const Qback = add(co.Q[m], mul(add(co.us[eStart], co.us[eEnd]), -backLen));
+              const Aback = add(A, mul(co.us[eEnd], -0.25 * co.d0[eEnd]));
+              const Bback = add(B, mul(co.us[eStart], -0.25 * co.d0[eStart]));
+              const bRev = bridge(B, mul(co.us[eEnd], -1), co.delta[eEnd], A, mul(co.us[eStart], -1), co.delta[eStart]);
+              faceMasks[co.oppFace[m]].push(rawPlanarFace([bRev, rawLineEdge(A, Aback), rawLineEdge(Aback, Qback), rawLineEdge(Qback, Bback), rawLineEdge(Bback, B)]));
+              return bCrv;
+            };
+            const b1 = makeBridgeForFace(1, 0, 2);
+            const b0 = makeBridgeForFace(0, 2, 1);
+            const b2 = makeBridgeForFace(2, 1, 0);
+            const fp = [0, 1, 2].map((m) => rawPlaneFace(co.V, co.ns[m]));
+            fill.Add(Ccurves[0], suppFaces[0], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(b1, fp[1], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(Ccurves[2], suppFaces[2], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(b0, fp[0], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(Ccurves[1], suppFaces[1], oc.GeomAbs_Shape.GeomAbs_G1, true);
+            fill.Add(b2, fp[2], oc.GeomAbs_Shape.GeomAbs_G1, true);
+          }
+          fill.Build();
+          if (!fill.IsDone()) throw new Error('Rundung fehlgeschlagen.');
+          newFaces.push(track(oc.TopoDS.Face(fill.Shape())));
+        } finally { fill.delete(); }
+      }
+
+      const finalFaces = [...newFaces];
+      for (let fi = 0; fi < origFaces.length; fi++) {
+        if (faceMasks[fi].length) {
+          const trimmed = cutFaceWithMasks(origFaces[fi].wrapped, faceMasks[fi]);
+          if (!trimmed.length) throw new Error('Rundung zu groß.');
+          finalFaces.push(...trimmed);
+        } else {
+          finalFaces.push(origFaces[fi].wrapped);
+        }
+      }
+
+      const volBefore = R.measureVolume(shape);
+      let sew = null, sewed = null, ms = null, sol = null, sfs = null, fixed = null, res = null, chk = null;
+      try {
+        sew = new oc.BRepBuilderAPI_Sewing(1e-3, true, true, true, false);
+        for (const f of finalFaces) sew.Add(f);
+        sew.Perform();
+        if (sew.NbFreeEdges() > 0) throw new Error('Rundung fehlgeschlagen.');
+        sewed = sew.SewedShape();
+        ms = new oc.BRepBuilderAPI_MakeSolid(oc.TopoDS.Shell(sewed));
+        sol = ms.Solid();
+        sfs = new oc.ShapeFix_Solid(sol);
+        sfs.Perform();
+        fixed = oc.TopoDS.Solid(sfs.Solid());
+        res = R.cast(fixed);
+        fixed = null;
+        if (!res || !R.isShape3D(res)) { safeDelete(res); throw new Error('Rundung fehlgeschlagen.'); }
+        if (R.measureVolume(res) < 0) {
+          const rev = R.cast(res.wrapped.Reversed());
+          safeDelete(res);
+          res = rev;
+        }
+        chk = new oc.BRepCheck_Analyzer(res.wrapped, true);
+        if (!chk.IsValid()) { safeDelete(res); throw new Error('Rundung fehlgeschlagen.'); }
+        const volAfter = R.measureVolume(res);
+        if (!(volBefore - volAfter > 1e-4)) { safeDelete(res); throw new Error('Rundung fehlgeschlagen.'); }
+
+        let outTopo = null;
+        if (!skipTopo) {
+          outTopo = createTopoMap();
+          const origMeta = origFaces.map((f, i) => ({
+            tid: topo ? tmGet(topo.faces, f.wrapped) : null,
+            n: origNormals[i],
+            o: origFacePt[i],
+          }));
+          const resFaces = exploreUnique(res, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+          for (const rf of resFaces) {
+            const rObj = new R.Face(oc.TopoDS.Face(rf.s));
+            try {
+              if (rObj.geomType === 'PLANE') {
+                const rn = norm(vec(rObj.normalAt())), rc = vec(rObj.center);
+                const match = origMeta.find((m) => m.tid && m.n && dot(m.n, rn) > 0.999 && Math.abs(dot(sub(rc, m.o), m.n)) < 1e-3);
+                if (match) tmAdd(outTopo.faces, rf.s, match.tid);
+                else rf.s.delete();
+              } else {
+                rf.s.delete();
+              }
+            } finally { rObj.delete(); }
+          }
+          ensureTopoComplete(res, outTopo, 'FiC:' + (fin.id || 'f'));
+        }
+        return { shape: res, topo: outTopo };
+      } finally {
+        safeDelete(chk); safeDelete(fixed); safeDelete(sfs); safeDelete(sol); safeDelete(ms); safeDelete(sewed); safeDelete(sew);
+      }
+    } finally {
+      freeOrig();
+    }
+  }
   function runFilletChamferWithTopo(shape, topo, type, r, matchedEdges, fin, itemId, skipTopo = false) {
     if (!matchedEdges.length) throw new Error('Keine Kante gewählt.');
     if (type === 'chamfer') {
@@ -5232,7 +5680,15 @@ export function createKernel(R, oc) {
         return { shape: res, topo: outTopo };
       } finally { builder.delete(); }
     }
-    if (fin && fin.shape === 'g2') {
+    const wantG2 = !!(fin && fin.shape === 'g2');
+    const cornerMode = fin && fin.corner === 'smooth' ? 'smooth' : 'sphere';
+    const r2 = fin && fin.vr ? num(fin.r2, r) * (r / Math.max(1e-9, num(fin.r, r))) : r;
+    const isVar = !!(fin && fin.vr && r2 > 0 && Math.abs(r2 - r) > 1e-9);
+    if (!isVar && matchedEdges.length >= 3 && (wantG2 || cornerMode === 'smooth')) {
+      const cornerRes = tryCornerFilletWithTopo(shape, topo, r, matchedEdges, fin, itemId, skipTopo, wantG2 ? 'g2' : 'round', cornerMode);
+      if (cornerRes) return cornerRes;
+    }
+    if (wantG2) {
       return runG2FilletWithTopo(shape, topo, r, matchedEdges, fin, itemId, skipTopo);
     }
     const builder = new oc.BRepFilletAPI_MakeFillet(shape.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);

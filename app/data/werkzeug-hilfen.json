@@ -1718,5 +1718,10 @@
     "tip": "Ohne Verlauf arbeiten: Körper einfrieren und direkt verschieben, bohren und runden (Profi)",
     "hilfe": "Friert deinen aktuellen Körper als feste Form ein und blendet die Schritte-Liste aus. Neue Änderungen wie Verschieben, Bohren oder Abrunden wirken sofort direkt am Körper, ohne neue Schritte zu sammeln. Rückgängig (Strg Z) funktioniert weiter wie gewohnt.",
     "tipp": "Wenn du wieder mit Schritten arbeiten willst, nimm das Häkchen einfach wieder heraus – nach einer kurzen Rückfrage startet der eingefrorene Stand als erster Schritt im Verlauf."
+  },
+  "filletCorner": {
+    "tip": "Eck-Übergang bei drei abgerundeten Kanten an einer Ecke wählen: Kugel-Ecke oder weicher Übergang (Profi)",
+    "hilfe": "Treffen drei abgerundete Kanten an einer Ecke zusammen, füllt „Kugel-Ecke“ die dreieckige Ecke direkt bündig zwischen den drei Rundungen. „Weicher Übergang“ zieht die Rundungen vor der Ecke etwas früher zurück und spannt ein größeres, sanft überlaufendes Eckfeld auf.",
+    "tipp": "Funktioniert sowohl bei krümmungsglatten (G2) als auch bei klassisch runden Kanten."
   }
 }

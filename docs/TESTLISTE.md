@@ -2628,6 +2628,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zurückschalten & Metadaten**: Zurückschalten fragt per Bestätigungs-Dialog (`#nh-resume-cancel` / `#nh-resume-ok`) nach und legt den eingefrorenen Stand als ersten Schritt im neuen Verlauf an; `HELP.noHistory`, Befehl `toggle-no-history` und DE/EN-Schlüsselgleichheit geprüft (`t_verlauf_abschalten`).
 - [ ] **Von Hand**: Im Browser in „Profi“ ein Teil mit mehreren Schritten anlegen, „Ohne Verlauf arbeiten“ aktivieren, den Körper per Ziehgriff im Bild verschieben, per Rechtsklick-/Kontextleiste eine Bohrung setzen und abrunden, mit `Strg Z` zurückgehen und über „Verlauf einschalten“ wieder mit einzelnen Schritten weiterbauen.
 
+## Krümmungsglatte Rundung, Schritt 2: Ecken-Übergänge (Auto [A-146], KP-40)
+
+- [x] **3-Kanten-Ecke mit Kugel-Ecke & Weichem Übergang (G2 & Rund)**: Quader (`30 × 30 × 30`), drei Kanten an einer Ecke mit `r = 5 mm` gerundet, liefert im Profi-Modus `#fin-corner-…` (`Kugel-Ecke` / `Weicher Übergang`), baut für `G2 + Kugel-Ecke`, `G2 + Weicher Übergang`, `Rund + Weicher Übergang` und `Rund + Kugel-Ecke` jeweils einen geschlossenen 10-Flächen-Körper mit 0 Fehlern und grüner Geometrie-Prüfung (`GeomCheck.run` ohne Lücke/Selbstschnitt/winzige Kante) sowie deutlich unterschiedenen Eck-Volumina (`t_a146_ecken_uebergaenge`).
+- [x] **Einfach/Profi, Speichern/Laden & alle 12 Kanten**: Im Modus „Einfach“ ist `#fin-corner-…` ausgeblendet, in „Profi“ wieder sichtbar; Export/Neu-Laden über `Model.migrate` erhält `shape: 'g2'` und `corner: 'smooth'` mit identischem Volumen; alle 12 Kanten eines Würfels (8 Ecken) mit `G2 + Weicher Übergang` erzeugen einen gültigen 26-Flächen-Körper mit grüner Geometrie-Prüfung (`t_a146_ecken_uebergaenge`).
+- [x] **Hilfe, DE/EN, Befehlssuche & Erklärung**: `HELP.filletCorner` stimmt mit `werkzeug-hilfen.json` überein, `texte-de.json` und `texte-en.json` sind schlüsselgleich, `Commands.search('eckübergang')` findet `fillet-corner-smooth` und `Explain.local` nennt `weichem Eckübergang` (`t_a146_ecken_uebergaenge`).
+- [ ] **Von Hand**: Im Browser einen Würfel an drei zusammenlaufenden Kanten einer Ecke mit `r = 5 mm` und „Krümmungsglatt (G2)“ abrunden, zwischen „Kugel-Ecke“ und „Weicher Übergang“ umschalten und die Lichtreflexe an der Ecke im „Studio-Look“ vergleichen.
+
 ## Fehler melden
 
 ```
