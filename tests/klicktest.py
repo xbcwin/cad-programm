@@ -25620,6 +25620,149 @@ def t_a128_fuellmuster_punkte_tabelle(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a132_varianten_tabelle(p):
+    p.empty()
+    p.ev("""
+    App.change('Quader mit Maßen', d => {
+      d.params.push({ id: 'm_b', name: 'Breite', expr: 10 }, { id: 'm_t', name: 'Tiefe', expr: 20 });
+      d.items.push(Model.newItem('box', { w: 'Breite', d: 'Tiefe', h: 10 }, { name: 'Quader' }));
+    });
+    """)
+    warte_rechnen(p)
+
+    # 1. Im Einfach-Modus verborgen, im Profi-Modus sichtbar -> Tabelle mit 3 Zeilen anlegen
+    p.ev("ViewPrefs.set({ level: 'simple' })")
+    p.pg.locator('#lt-params').click(); p.wait(250)
+    simple_hidden = p.pg.locator('#var-table').is_hidden()
+
+    p.ev("ViewPrefs.set({ level: 'pro' })"); p.wait(200)
+    pro_visible = p.pg.locator('#var-table').is_visible()
+    p.pg.locator('#var-table').click()
+    p.pg.wait_for_selector('#var-table-dlg', timeout=10000); p.wait(200)
+
+    for _ in range(3):
+        p.pg.locator('#vt-add-row').click(); p.wait(150)
+    row_count = p.pg.locator('#var-sheet tbody tr.vt-row').count()
+
+    rows_data = [
+        ('Klein', '10', '20', 'PLA'),
+        ('Mittel', '20', '25', 'Alu 6061'),
+        ('Groß', '30', '30', 'CFK'),
+    ]
+    for idx, (name, b_val, t_val, mat) in enumerate(rows_data):
+        tr = p.pg.locator('#var-sheet tbody tr.vt-row').nth(idx)
+        tr.locator('.vt-name').fill(name)
+        tr.locator('.vt-name').press('Tab')
+        tr.locator('[data-param="Breite"]').fill(b_val)
+        tr.locator('[data-param="Breite"]').press('Tab')
+        tr.locator('[data-param="Tiefe"]').fill(t_val)
+        tr.locator('[data-param="Tiefe"]').press('Tab')
+        tr.locator('.vt-sel').select_option(mat)
+        p.wait(150)
+    warte_rechnen(p)
+
+    saved = p.ev("return App.doc.variants.map(v => ({ name: v.name, b: v.values.Breite, t: v.values.Tiefe, mat: v.material || '' }))")
+    ok1 = (
+        simple_hidden and pro_visible and row_count == 3
+        and saved == [
+            {'name': 'Klein', 'b': 10, 't': 20, 'mat': 'PLA'},
+            {'name': 'Mittel', 'b': 20, 't': 25, 'mat': 'Alu 6061'},
+            {'name': 'Groß', 'b': 30, 't': 30, 'mat': 'CFK'},
+        ]
+    )
+
+    # 2. Klick auf Zeile 3 und dann Zeile 2 schaltet Breite, Tiefe, 3D-Geometrie und Werkstoff
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(2).click()
+    warte_rechnen(p)
+    b3 = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    bb3 = bbox(p, 0)
+    mat3 = p.ev("return App.doc.settings.material")
+
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(1).click()
+    warte_rechnen(p)
+    b2 = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    t2 = p.ev("return App.doc.params.find(x => x.name === 'Tiefe').expr")
+    bb2 = bbox(p, 0)
+    mat2 = p.ev("return App.doc.settings.material")
+    row2_on = p.pg.locator('#var-sheet tbody tr.vt-row').nth(1).evaluate("el => el.classList.contains('on')")
+    ok2 = (
+        b3 == 30 and abs((bb3[3] - bb3[0]) - 30) < 0.05 and mat3 == 'CFK'
+        and b2 == 20 and t2 == 25
+        and abs((bb2[3] - bb2[0]) - 20) < 0.05 and abs((bb2[4] - bb2[1]) - 25) < 0.05
+        and mat2 == 'Alu 6061' and row2_on
+    )
+
+    # 3. CSV exportieren, Tabelle leeren, CSV wieder importieren -> gleiche Tabelle
+    csv_txt = p.ev("return Variants.toCSV()")
+    p.ev("App.change('Leeren', d => { d.variants = []; d.variant = null; })")
+    p.wait(200)
+    empty_rows = p.pg.locator('#var-sheet tbody tr.vt-row').count()
+    imp_res = p.ev("return Variants.importCSV(arg)", csv_txt)
+    warte_rechnen(p)
+    reimp_res = p.ev("return Variants.importCSV(arg)", csv_txt)
+    p.wait(200)
+    after_rows = p.pg.evaluate("""[...document.querySelectorAll('#var-sheet tbody tr.vt-row')].map(tr => ({
+      name: tr.querySelector('.vt-name').value,
+      b: tr.querySelector('[data-param="Breite"]').value,
+      t: tr.querySelector('[data-param="Tiefe"]').value,
+      mat: tr.querySelector('.vt-sel').value,
+    }))""")
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(0).click(); warte_rechnen(p)
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(1).click(); warte_rechnen(p)
+    b2_re = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    bb2_re = bbox(p, 0)
+    mat2_re = p.ev("return App.doc.settings.material")
+    ok3 = (
+        'Variante;Breite;Tiefe;Werkstoff' in csv_txt
+        and empty_rows == 0
+        and imp_res.get('ok') and imp_res.get('count') == 3
+        and reimp_res.get('ok') and reimp_res.get('count') == 3
+        and after_rows == [
+            {'name': 'Klein', 'b': '10', 't': '20', 'mat': 'PLA'},
+            {'name': 'Mittel', 'b': '20', 't': '25', 'mat': 'Alu 6061'},
+            {'name': 'Groß', 'b': '30', 't': '30', 'mat': 'CFK'},
+        ]
+        and b2_re == 20 and abs((bb2_re[3] - bb2_re[0]) - 20) < 0.05 and mat2_re == 'Alu 6061'
+    )
+
+    # 4. Vergleich mit Werkstoff, Undo/Redo und Migration
+    p.pg.locator('#vt-cmp').click()
+    p.pg.wait_for_selector('#vtable', timeout=90000); p.wait(200)
+    cmp_rows = p.pg.evaluate("[...document.querySelectorAll('#vtable tr')].map(r => [...r.children].map(c => c.textContent))")
+    mat_col = cmp_rows[0].index('Werkstoff') if 'Werkstoff' in cmp_rows[0] else -1
+    gew_col = cmp_rows[0].index('Gewicht') if 'Gewicht' in cmp_rows[0] else -1
+    w1 = float(cmp_rows[1][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    w2 = float(cmp_rows[2][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.pg.locator('#var-sheet tbody tr.vt-row').nth(0).click(); warte_rechnen(p)
+    b_before_undo = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    p.ev("App.undo()"); warte_rechnen(p)
+    b_after_undo = p.ev("return App.doc.params.find(x => x.name === 'Breite').expr")
+    mat_after_undo = p.ev("return App.doc.settings.material")
+    mig_mats = p.ev("return Model.migrate(JSON.parse(App.snapshot())).variants.map(v => v.material)")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    ok4 = (
+        mat_col >= 0 and gew_col >= 0
+        and cmp_rows[1][mat_col] == 'PLA' and cmp_rows[2][mat_col] == 'Alu 6061'
+        and w2 > w1
+        and b_before_undo == 10 and b_after_undo == 20 and mat_after_undo == 'Alu 6061'
+        and mig_mats == ['PLA', 'Alu 6061', 'CFK']
+    )
+
+    # 5. Hilfetexte und Befehlssuche
+    meta = p.ev("""return (async () => {
+      const h = await fetch('data/werkzeug-hilfen.json').then(r => r.json());
+      const vt = h.variantTable || {};
+      const btn = document.querySelector('#var-table');
+      const helpOk = !!(vt.tip && vt.hilfe && vt.tipp && btn && btn.dataset.help === 'variantTable');
+      const cmdOk = Commands.search('varianten-tabelle').some(c => c.id === 'variants-table');
+      return { helpOk, cmdOk };
+    })()""")
+    ok5 = bool(meta.get('helpOk') and meta.get('cmdOk'))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -25858,6 +26001,7 @@ TESTS = [
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
     ('[A-129] Muster mit wachsender Größe/Abstand & Teilen mit Fläche oder Skizze', t_a129_muster_wachstum_teilen),
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
+    ('[A-132] Varianten-Tabelle: 3 Zeilen / Klick schaltet / Werkstoff / CSV-Export & -Import / Profi & Undo', t_a132_varianten_tabelle),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
