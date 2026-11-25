@@ -2931,6 +2931,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Validierung, Hilfen, Erklärungen & I18n**: `App.undo()`/`redo()`, `Store.validateProject()`, Synchronität von `werkzeug-hilfen.json`/`HELP`, Einträge in `schritt-erklaerungen.json`, DE/EN-Schlüsselgleichheit und Ausführung ohne JS-Konsolenfehler sind geprüft (`t_a183_zahnraeder_schraeg_kegel`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus über „Bauteile“ ein Schrägzahnrad und ein Kegelrad einfügen, per „Passendes Gegenrad hinzufügen“ paaren, aus verschiedenen Blickwinkeln das Ineinandergreifen der Zähne ansehen und optional über Kopplungen drehen.
 
+## Bibliothek: Wellen, Stellringe, Kupplungen (Auto [A-186], BI-13)
+
+- [x] **Abgesetzte Welle mit Fasen (`steppedShaft`)**: Welle Ø 10 × 100 mm mit Absatz Ø 8 × 20 mm erzeugt fehlerfrei zwei messbare zylindrische Durchmesser (Ø 10 mm und Ø 8 mm) sowie konische Fasenflächen; ein zweiter Absatz (Ø 6 × 15 mm) liefert alle drei Zylinderdurchmesser ohne Fehler (`t_a186_wellen_stellringe_kupplungen`).
+- [x] **Stellring nach DIN 705 (`shaftCollar`)**: Ein-Klick-Knopf `#btn-add-shaft-collar` setzt den passenden DIN-705-Stellring Ø 10 (`20 × 20 × 10 mm`, effektive Bohrung Ø 10,05 mm) konzentrisch auf den Ø-10-Abschnitt der Welle mit 0 Durchdringungen (`Kernel.clashes`); auch die geschlitzte Klemm-Ausführung (`style: 'clamp'`) baut und passt durchdringungsfrei (`t_a186_wellen_stellringe_kupplungen`).
+- [x] **Einfache Wellenkupplungen (`shaftCoupling`)**: Ein-Klick-Knopf `#btn-add-shaft-coupling` setzt eine starre Kupplung `10×10` (`30 × 30 × 45 mm`) durchdringungsfrei auf das obere Wellenende; abgestufte Klemmkupplung (`8×10`, zwei Bohrungsdurchmesser messbar) und Flanschkupplung (`style: 'flange'`) bauen fehlerfrei (`t_a186_wellen_stellringe_kupplungen`).
+- [x] **Einfach & Profi, GeomCheck, Undo/Redo, Validierung, Hilfen & I18n**: Alle 3 Teile erscheinen im Profi-Flyout, bleiben in „Einfach“ über Befehlssuche und rechtes Panel nutzbar (ohne `t_einfach`-Kachelzahl zu verändern), bestehen `GeomCheck` ohne Befund sowie `App.undo()`/`redo()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit (`t_a186_wellen_stellringe_kupplungen`).
+- [ ] **Von Hand**: Im Browser im Bauteil-Menü eine abgesetzte Welle einfügen, per Klick einen DIN-705-Stellring und eine Wellenkupplung aufsetzen, auf Klemm-/Flanschkupplung umschalten und den Sitz aus verschiedenen Winkeln prüfen.
+
 ## Fehler melden
 
 ```

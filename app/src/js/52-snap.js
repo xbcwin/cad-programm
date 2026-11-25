@@ -299,6 +299,9 @@ const Snap = (() => {
     stdShaftSeal: 'Dichtringachse',
     stdCompSpring: 'Federachse',
     stdExtSpring: 'Federachse',
+    steppedShaft: 'Wellenachse',
+    shaftCollar: 'Stellring-Mitte',
+    shaftCoupling: 'Kupplungsachse',
   };
   let dockDrag = null;
 

@@ -4282,6 +4282,219 @@ export function createKernel(R, oc) {
     }
     return revolveProfile([[ri + c, 0], [ro - c, 0], [ro, c], [ro, L - c], [ro - c, L], [ri + c, L], [ri, L - c], [ri, c]]);
   }
+  function buildSteppedShaft(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, pos(p.d, 10));
+    const L = pos(sp.L, pos(p.length, 100));
+    const endChamfer = Math.max(0, num(sp.endChamfer, num(p.endChamfer, 0.5)));
+    const stepChamfer = Math.max(0, num(sp.stepChamfer, num(p.stepChamfer, 0.3)));
+    let sections = Array.isArray(sp.sections) && sp.sections.length
+      ? sp.sections.map((s) => ({ d: pos(s.d, d), z0: num(s.z0, 0), z1: num(s.z1, L), len: pos(s.len, L) }))
+      : null;
+    if (!sections) {
+      const s1D = Math.max(0, num(p.step1D, 0)), s1L = Math.max(0, num(p.step1Len, 0));
+      const s2D = Math.max(0, num(p.step2D, 0)), s2L = Math.max(0, num(p.step2Len, 0));
+      const has1 = s1D >= 0.5 && s1L >= 0.5 && Math.abs(s1D - d) > 0.05;
+      const has2 = s2D >= 0.5 && s2L >= 0.5 && Math.abs(s2D - d) > 0.05;
+      let l1 = has1 ? s1L : 0, l2 = has2 ? s2L : 0;
+      const maxSum = Math.max(0, L - Math.max(1, Math.min(2, L * 0.1)));
+      if (l1 + l2 > maxSum && l1 + l2 > 0) { const f = maxSum / (l1 + l2); l1 *= f; l2 *= f; }
+      sections = [];
+      let z = 0;
+      if (has1 && l1 >= 0.3) { sections.push({ d: s1D, z0: 0, z1: l1, len: l1 }); z = l1; }
+      const zMidEnd = has2 && l2 >= 0.3 ? L - l2 : L;
+      sections.push({ d, z0: z, z1: zMidEnd, len: zMidEnd - z });
+      if (has2 && l2 >= 0.3) sections.push({ d: s2D, z0: zMidEnd, z1: L, len: L - zMidEnd });
+    }
+    const pts = [[0, 0]];
+    const r0 = sections[0].d / 2;
+    const ce0 = Math.min(endChamfer, r0 * 0.4, sections[0].len * 0.35);
+    let zCur = 0;
+    if (ce0 > 1e-4) {
+      pts.push([r0 - ce0, 0], [r0, ce0]);
+      zCur = ce0;
+    } else {
+      pts.push([r0, 0]);
+    }
+    for (let i = 0; i < sections.length - 1; i++) {
+      const sA = sections[i], sB = sections[i + 1];
+      const rA = sA.d / 2, rB = sB.d / 2, zT = sA.z1;
+      const dr = Math.abs(rB - rA);
+      const roomA = Math.max(0, zT - zCur - 0.05);
+      const roomB = Math.max(0, sB.len * 0.35);
+      const cs = Math.min(stepChamfer, dr * 0.45, roomA, roomB);
+      if (rB > rA) {
+        pts.push([rA, zT]);
+        if (cs > 1e-4) {
+          pts.push([rB - cs, zT], [rB, zT + cs]);
+          zCur = zT + cs;
+        } else {
+          pts.push([rB, zT]);
+          zCur = zT;
+        }
+      } else {
+        if (cs > 1e-4) {
+          pts.push([rA, zT - cs], [rA - cs, zT], [rB, zT]);
+        } else {
+          pts.push([rA, zT], [rB, zT]);
+        }
+        zCur = zT;
+      }
+    }
+    const last = sections[sections.length - 1];
+    const rLast = last.d / 2;
+    const ce1 = Math.min(endChamfer, rLast * 0.4, Math.max(0, L - zCur - 0.05) * 0.4);
+    if (ce1 > 1e-4) {
+      pts.push([rLast, L - ce1], [rLast - ce1, L], [0, L]);
+    } else {
+      pts.push([rLast, L], [0, L]);
+    }
+    const clean = [];
+    for (const q of pts) {
+      if (!clean.length || Math.hypot(q[0] - clean[clean.length - 1][0], q[1] - clean[clean.length - 1][1]) > 1e-5) {
+        clean.push(q);
+      }
+    }
+    return revolveProfile(clean);
+  }
+  function buildShaftCollar(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, pos(p.d, 10));
+    const D = pos(sp.D, pos(p.D, Math.max(d + 6, d * 1.8)));
+    const b = pos(sp.b, pos(p.width, Math.max(5, d * 0.8)));
+    const boreEff = pos(sp.boreEff, d + Math.max(0, num(p.clear, 0.05)) + printFitDelta(p.printFit));
+    const style = (sp.style || p.style) === 'clamp' ? 'clamp' : 'setscrew';
+    const screwD = pos(sp.screwD, d <= 5 ? 3 : d <= 8 ? 4 : d <= 11 ? 5 : 6);
+    const ri = Math.max(0.5, boreEff / 2);
+    const ro = Math.max(ri + 1.0, D / 2);
+    const wall = ro - ri;
+    const c = Math.min(0.4, wall * 0.15, b * 0.12);
+    let shape = revolveProfile([[ri + c, 0], [ro - c, 0], [ro, c], [ro, b - c], [ro - c, b], [ri + c, b], [ri, b - c], [ri, c]]);
+    if (style === 'clamp') {
+      const slotW = Math.min(Math.max(0.8, d * 0.1), 2.5);
+      const slot = R.makeBox([ri - 0.5, -slotW / 2, -1], [ro + 1, slotW / 2, b + 1]);
+      let next = null;
+      try {
+        next = shape.cut(slot);
+        safeDelete(shape);
+        shape = next;
+        next = null;
+      } finally { safeDelete(slot); safeDelete(next); }
+      const xM = (ri + ro) / 2;
+      const rScrew = Math.min(screwD * 0.45, wall * 0.34, b * 0.30);
+      if (rScrew > 0.3) {
+        const yHalf = Math.sqrt(Math.max(1, ro * ro - xM * xM)) + 1.5;
+        const hole = R.makeCylinder(rScrew, 2 * yHalf, [xM, -yHalf, b / 2], [0, 1, 0]);
+        try {
+          next = shape.cut(hole);
+          safeDelete(shape);
+          shape = next;
+          next = null;
+        } finally { safeDelete(hole); safeDelete(next); }
+      }
+    } else {
+      const rTap = Math.min(screwD * 0.42, b * 0.32);
+      if (rTap > 0.3) {
+        const hole = R.makeCylinder(rTap, ro - ri + 2, [ri - 0.5, 0, b / 2], [1, 0, 0]);
+        let next = null;
+        try {
+          next = shape.cut(hole);
+          safeDelete(shape);
+          shape = next;
+          next = null;
+        } finally { safeDelete(hole); safeDelete(next); }
+      }
+    }
+    return shape;
+  }
+  function buildShaftCoupling(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d1 = pos(sp.d1, pos(p.d1, 10));
+    const d2 = pos(sp.d2, pos(p.d2, d1));
+    const clr = Math.max(0, num(p.clear, 0.05)) + printFitDelta(p.printFit);
+    const d1Eff = pos(sp.d1Eff, d1 + clr);
+    const d2Eff = pos(sp.d2Eff, d2 + clr);
+    const maxBore = Math.max(d1Eff, d2Eff);
+    const D = Math.max(maxBore + 4, pos(sp.D, pos(p.D, 30)));
+    const L = Math.max(10, pos(sp.L, pos(p.length, 45)));
+    const style = (sp.style || p.style);
+    const st = style === 'clamp' || style === 'flange' ? style : 'rigid';
+    const screwD = pos(sp.screwD, maxBore <= 6 ? 3 : maxBore <= 10 ? 4 : maxBore <= 16 ? 5 : 6);
+    const r1 = Math.max(0.5, d1Eff / 2), r2 = Math.max(0.5, d2Eff / 2);
+    const rMaxBore = Math.max(r1, r2);
+    const ro = Math.max(rMaxBore + 2, D / 2);
+    const wall = ro - rMaxBore;
+    const c = Math.min(0.6, wall * 0.15, L * 0.04);
+    const zMid = L / 2;
+    const pts = [];
+    let rHub = ro, rFl = ro, zF0 = 0, zF1 = L;
+    if (st === 'flange') {
+      rHub = Math.max(rMaxBore + 2.5, ro * 0.78);
+      rFl = Math.max(rHub + 5, ro * 1.45);
+      const tFl = Math.min(Math.max(4, L * 0.28), L * 0.45);
+      zF0 = (L - tFl) / 2;
+      zF1 = (L + tFl) / 2;
+      const cf = Math.min(0.5, tFl * 0.12, (rFl - rHub) * 0.15);
+      const ch = Math.min(c, (rHub - rMaxBore) * 0.15);
+      pts.push(
+        [rHub - ch, 0], [rHub, ch], [rHub, zF0],
+        [rFl - cf, zF0], [rFl, zF0 + cf], [rFl, zF1 - cf], [rFl - cf, zF1],
+        [rHub, zF1], [rHub, L - ch], [rHub - ch, L],
+      );
+    } else {
+      pts.push([ro - c, 0], [ro, c], [ro, L - c], [ro - c, L]);
+    }
+    if (Math.abs(r1 - r2) < 1e-4) {
+      pts.push([r1 + c, L], [r1, L - c], [r1, c], [r1 + c, 0]);
+    } else {
+      pts.push([r2 + c, L], [r2, L - c], [r2, zMid], [r1, zMid], [r1, c], [r1 + c, 0]);
+    }
+    const clean = [];
+    for (const q of pts) {
+      if (!clean.length || Math.hypot(q[0] - clean[clean.length - 1][0], q[1] - clean[clean.length - 1][1]) > 1e-5) {
+        clean.push(q);
+      }
+    }
+    let shape = revolveProfile(clean);
+    const cutWith = (tool) => {
+      let next = null;
+      try {
+        next = shape.cut(tool);
+        safeDelete(shape);
+        shape = next;
+        next = null;
+      } finally { safeDelete(tool); safeDelete(next); }
+    };
+    if (st === 'rigid') {
+      const rTap = Math.min(screwD * 0.42, L * 0.12);
+      if (rTap > 0.3) {
+        cutWith(R.makeCylinder(rTap, ro - r1 + 2, [r1 - 0.5, 0, L * 0.25], [1, 0, 0]));
+        cutWith(R.makeCylinder(rTap, ro - r1 + 2, [0, r1 - 0.5, L * 0.25], [0, 1, 0]));
+        cutWith(R.makeCylinder(rTap, ro - r2 + 2, [r2 - 0.5, 0, L * 0.75], [1, 0, 0]));
+        cutWith(R.makeCylinder(rTap, ro - r2 + 2, [0, r2 - 0.5, L * 0.75], [0, 1, 0]));
+      }
+    } else if (st === 'clamp') {
+      const slotW = Math.min(Math.max(1.0, Math.max(d1Eff, d2Eff) * 0.1), 2.5);
+      cutWith(R.makeBox([Math.min(r1, r2) - 0.5, -slotW / 2, -1], [ro + 1, slotW / 2, L + 1]));
+      const xM = (rMaxBore + ro) / 2;
+      const rScrew = Math.min(screwD * 0.45, wall * 0.34, L * 0.10);
+      if (rScrew > 0.3) {
+        const yHalf = Math.sqrt(Math.max(1, ro * ro - xM * xM)) + 1.5;
+        cutWith(R.makeCylinder(rScrew, 2 * yHalf, [xM, -yHalf, L * 0.25], [0, 1, 0]));
+        cutWith(R.makeCylinder(rScrew, 2 * yHalf, [xM, -yHalf, L * 0.75], [0, 1, 0]));
+      }
+    } else if (st === 'flange') {
+      const rBC = (rHub + rFl) / 2;
+      const rBolt = Math.min(screwD * 0.55, (rFl - rHub) * 0.28);
+      if (rBolt > 0.3) {
+        for (let k = 0; k < 4; k++) {
+          const a = (k * Math.PI) / 2;
+          cutWith(R.makeCylinder(rBolt, zF1 - zF0 + 2, [rBC * Math.cos(a), rBC * Math.sin(a), zF0 - 1], [0, 0, 1]));
+        }
+      }
+    }
+    return shape;
+  }
   function buildStdORing(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
     const d1 = pos(sp.d1, pos(p.d1, 20));
@@ -4507,6 +4720,9 @@ export function createKernel(R, oc) {
     if (lib === 'stdShaftSeal') return buildStdShaftSeal(p);
     if (lib === 'stdCompSpring') return buildStdCompSpring(p);
     if (lib === 'stdExtSpring') return buildStdExtSpring(p);
+    if (lib === 'steppedShaft') return buildSteppedShaft(p);
+    if (lib === 'shaftCollar') return buildShaftCollar(p);
+    if (lib === 'shaftCoupling') return buildShaftCoupling(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {

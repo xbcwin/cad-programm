@@ -5027,5 +5027,15 @@
   "panel.item.helicalGearHint": "Pitch Ø <b>{d}</b> · Tip Ø <b>{da}</b> · Root Ø <b>{df}</b> · Normal module {mn} · Helix {beta} (twist {twist}).",
   "panel.item.addHelicalMate": "Add mating helical gear",
   "panel.item.bevelGearHint": "Pitch Ø <b>{d}</b> · Outer tip Ø <b>{da}</b> · Cone angle <b>{delta}</b> (mate {delta2}) · Cone distance R<sub>e</sub> = {re} · Face width {b} · Apex height {apex}.",
-  "panel.item.addBevelMate": "Add mating bevel gear"
+  "panel.item.addBevelMate": "Add mating bevel gear",
+  "panel.item.steppedShaftHint": "Shaft <b>Ø {d} × {L}</b> · {steps} · End chamfer {ec}, step chamfer {sc}.",
+  "panel.item.addShaftCollar": "Add matching shaft collar",
+  "panel.item.addShaftCoupling": "Add matching shaft coupling",
+  "panel.item.shaftCollarHint": "<b>{style}</b> · Nominal Ø <b>{d}</b> (bore {boreEff}) · Outer Ø <b>{D}</b> · Width <b>{b}</b> · Screw {screw}.",
+  "panel.item.shaftCollarStyleSet": "Shaft collar DIN 705 (set screw)",
+  "panel.item.shaftCollarStyleClamp": "Clamp collar (slotted)",
+  "panel.item.shaftCouplingHint": "<b>{style}</b> · Bores <b>Ø {d1} / Ø {d2}</b> (effective {d1Eff} / {d2Eff}) · Outer Ø <b>{D}</b> · Length <b>{L}</b> · Screw {screw}.",
+  "panel.item.shaftCouplingStyleRigid": "Rigid coupling (set screws)",
+  "panel.item.shaftCouplingStyleClamp": "Clamp coupling (slotted)",
+  "panel.item.shaftCouplingStyleFlange": "Flange coupling"
 }

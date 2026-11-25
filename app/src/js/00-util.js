@@ -723,6 +723,9 @@ const IC = {
   splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
   helicalGear: '<circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M9.5 3l3.2 1.8M15.5 4.2l1.8 3.2M19.8 9.2l-.5 3.6M19 15.8l-2.7 2.5M14.2 20.4l-3.6.3M8.5 19.6l-2.8-2.4M4.2 14.8l.5-3.6M5 8.2L7.7 5.7"/><path d="M8.5 7.5l7 9" opacity=".45" stroke-dasharray="2 1.5"/>',
   bevelGear: '<ellipse cx="12" cy="16.5" rx="9" ry="3.5" fill="currentColor" opacity=".2"/><ellipse cx="12" cy="16.5" rx="9" ry="3.5"/><ellipse cx="12" cy="7.5" rx="4.5" ry="1.8"/><path d="M3 16.5L7.5 7.5M21 16.5L16.5 7.5M7 19l2.6-10M12 20V9.3M17 19l-2.6-10"/>',
+  steppedShaft: '<path d="M3 9h5V7h8v2h5v6h-5v2H8v-2H3z" fill="currentColor" opacity=".18"/><path d="M3 9h5V7h8v2h5v6h-5v2H8v-2H3z"/><path d="M8 7v10M16 7v10M1 12h22" opacity=".45" stroke-dasharray="2 1.5"/>',
+  shaftCollar: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5" fill="currentColor" opacity=".18"/><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.8"/><path d="M12 4v3M10.5 2.5h3" stroke-width="1.9"/>',
+  shaftCoupling: '<rect x="3" y="6.5" width="18" height="11" rx="2" fill="currentColor" opacity=".18"/><rect x="3" y="6.5" width="18" height="11" rx="2"/><path d="M12 6.5v11M7.5 6.5v3M16.5 6.5v3M2 12h20" stroke-dasharray="2 1.5" opacity=".6"/>',
   commentPin: '<path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" fill="currentColor" opacity=".18"/><path d="M12 21s-6-5.6-6-10.5a6 6 0 1 1 12 0C18 15.4 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.2" />',
   layout: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8.5 4v16 M15.5 4v16" />',
   illustration: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z M4 7.5 12 12l8-4.5 M12 12v9" stroke-width="1.9" />',
@@ -2772,6 +2775,21 @@ const HELP = {
   "tip": "Geradverzahntes Kegelrad für abgewinkelte Wellen (z. B. 90°-Winkelgetriebe, Profi)",
   "hilfe": "Erzeugt ein Kegelrad nach der Tredgold-Näherung mit wählbarem Modul, eigener Zähnezahl, Gegenrad-Zähnezahl und Achswinkel (Standard 90°). Der Kegelwinkel wird automatisch passend zur Übersetzung berechnet, und über „Passendes Gegenrad hinzufügen“ entsteht sofort das im Achswinkel greifende Paar mit gemeinsamer Kegelspitze.",
   "tipp": "Lass „Kegelwinkel“, „Zahnbreite“ und „Rückenhöhe“ leer für automatische Normwerte – oder trag eigene Maße ein, wenn du ein bestehendes Gehäuse nachbaust."
+ },
+ "steppedShaft": {
+  "tip": "Runde Welle mit Absätzen sowie End- und Absatzfasen (Einfach & Profi)",
+  "hilfe": "Erzeugt eine abgesetzte Antriebs- oder Lagerwelle mit Hauptdurchmesser d, Gesamtlänge L, bis zu zwei kleineren oder größeren Absätzen an den Enden sowie einstellbaren Fasen an Enden und Schultern. Im rechten Panel kannst du per Klick gleich einen passenden Stellring oder eine Wellenkupplung direkt auf die Welle setzen.",
+  "tipp": "Setze „Absatz 2 Ø“ auf 0, wenn du nur einen Absatz am unteren Wellenende brauchst."
+ },
+ "shaftCollar": {
+  "tip": "Stellring nach DIN 705 mit Gewindestift oder als geschlitzter Klemm-Stellring",
+  "hilfe": "Erzeugt einen genormten Stellring (DIN 705, Ø 3–40 mm) oder eigene Maße als axialen Anschlag auf Wellen – wahlweise mit radialer Gewindestift-Bohrung (Form A) oder als geschlitzter Klemm-Stellring mit tangentialer Klemmschraube. Ein kleines Laufspiel (0,05 mm) sorgt dafür, dass der Stellring sauber über die Welle passt.",
+  "tipp": "Für den 3D-Druck wählst du rechts unter „Druck-Passung“ einfach „locker“ oder „gleitend“, damit der Ring ohne Nacharbeit auf die Welle gleitet."
+ },
+ "shaftCoupling": {
+  "tip": "Einfache Wellenkupplung (starr mit Gewindestiften, Klemm- oder Flanschkupplung)",
+  "hilfe": "Verbindet zwei Wellenenden koaxial miteinander – mit gleichen oder unterschiedlichen Bohrungsdurchmessern (d₁ × d₂) und wahlweise als starre Hülsenkupplung mit Gewindestiften, als geschlitzte Klemmkupplung oder als Flanschkupplung mit 4 Schraubenlöchern.",
+  "tipp": "Wähle „Eigene Maße“, um unterschiedliche Wellendurchmesser wie Ø 8 mm auf Ø 10 mm direkt zu verbinden."
  }
 };
 

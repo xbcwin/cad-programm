@@ -2013,5 +2013,20 @@
     "tip": "Geradverzahntes Kegelrad für abgewinkelte Wellen (z. B. 90°-Winkelgetriebe, Profi)",
     "hilfe": "Erzeugt ein Kegelrad nach der Tredgold-Näherung mit wählbarem Modul, eigener Zähnezahl, Gegenrad-Zähnezahl und Achswinkel (Standard 90°). Der Kegelwinkel wird automatisch passend zur Übersetzung berechnet, und über „Passendes Gegenrad hinzufügen“ entsteht sofort das im Achswinkel greifende Paar mit gemeinsamer Kegelspitze.",
     "tipp": "Lass „Kegelwinkel“, „Zahnbreite“ und „Rückenhöhe“ leer für automatische Normwerte – oder trag eigene Maße ein, wenn du ein bestehendes Gehäuse nachbaust."
+  },
+  "steppedShaft": {
+    "tip": "Runde Welle mit Absätzen sowie End- und Absatzfasen (Einfach & Profi)",
+    "hilfe": "Erzeugt eine abgesetzte Antriebs- oder Lagerwelle mit Hauptdurchmesser d, Gesamtlänge L, bis zu zwei kleineren oder größeren Absätzen an den Enden sowie einstellbaren Fasen an Enden und Schultern. Im rechten Panel kannst du per Klick gleich einen passenden Stellring oder eine Wellenkupplung direkt auf die Welle setzen.",
+    "tipp": "Setze „Absatz 2 Ø“ auf 0, wenn du nur einen Absatz am unteren Wellenende brauchst."
+  },
+  "shaftCollar": {
+    "tip": "Stellring nach DIN 705 mit Gewindestift oder als geschlitzter Klemm-Stellring",
+    "hilfe": "Erzeugt einen genormten Stellring (DIN 705, Ø 3–40 mm) oder eigene Maße als axialen Anschlag auf Wellen – wahlweise mit radialer Gewindestift-Bohrung (Form A) oder als geschlitzter Klemm-Stellring mit tangentialer Klemmschraube. Ein kleines Laufspiel (0,05 mm) sorgt dafür, dass der Stellring sauber über die Welle passt.",
+    "tipp": "Für den 3D-Druck wählst du rechts unter „Druck-Passung“ einfach „locker“ oder „gleitend“, damit der Ring ohne Nacharbeit auf die Welle gleitet."
+  },
+  "shaftCoupling": {
+    "tip": "Einfache Wellenkupplung (starr mit Gewindestiften, Klemm- oder Flanschkupplung)",
+    "hilfe": "Verbindet zwei Wellenenden koaxial miteinander – mit gleichen oder unterschiedlichen Bohrungsdurchmessern (d₁ × d₂) und wahlweise als starre Hülsenkupplung mit Gewindestiften, als geschlitzte Klemmkupplung oder als Flanschkupplung mit 4 Schraubenlöchern.",
+    "tipp": "Wähle „Eigene Maße“, um unterschiedliche Wellendurchmesser wie Ø 8 mm auf Ø 10 mm direkt zu verbinden."
   }
 }

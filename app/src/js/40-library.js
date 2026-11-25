@@ -510,6 +510,165 @@ function extSpringMetrics(p = {}) {
     d, Dm, De, Di, n, coilPitch, Lk, rEye, L0, Lges, hookAngle, rate,
   };
 }
+// Stellringe (DIN 705) & einfache Wellenkupplungen (BI-13)
+const SHAFT_COLLAR_DIN705 = [
+  { id: '3', d1: 3, d2: 7, b: 5, screw: 'M2', screwD: 2 },
+  { id: '4', d1: 4, d2: 8, b: 5, screw: 'M2.5', screwD: 2.5 },
+  { id: '5', d1: 5, d2: 10, b: 6, screw: 'M3', screwD: 3 },
+  { id: '6', d1: 6, d2: 12, b: 8, screw: 'M4', screwD: 4 },
+  { id: '8', d1: 8, d2: 16, b: 8, screw: 'M4', screwD: 4 },
+  { id: '10', d1: 10, d2: 20, b: 10, screw: 'M5', screwD: 5 },
+  { id: '12', d1: 12, d2: 22, b: 12, screw: 'M6', screwD: 6 },
+  { id: '14', d1: 14, d2: 25, b: 12, screw: 'M6', screwD: 6 },
+  { id: '15', d1: 15, d2: 25, b: 12, screw: 'M6', screwD: 6 },
+  { id: '16', d1: 16, d2: 28, b: 12, screw: 'M6', screwD: 6 },
+  { id: '18', d1: 18, d2: 32, b: 14, screw: 'M6', screwD: 6 },
+  { id: '20', d1: 20, d2: 32, b: 14, screw: 'M6', screwD: 6 },
+  { id: '25', d1: 25, d2: 40, b: 16, screw: 'M6', screwD: 6 },
+  { id: '28', d1: 28, d2: 45, b: 16, screw: 'M8', screwD: 8 },
+  { id: '30', d1: 30, d2: 45, b: 16, screw: 'M8', screwD: 8 },
+  { id: '32', d1: 32, d2: 50, b: 16, screw: 'M8', screwD: 8 },
+  { id: '35', d1: 35, d2: 56, b: 16, screw: 'M8', screwD: 8 },
+  { id: '40', d1: 40, d2: 63, b: 18, screw: 'M10', screwD: 10 },
+];
+const SHAFT_COLLAR_BY_ID = new Map(SHAFT_COLLAR_DIN705.map((x) => [String(x.id), x]));
+const SHAFT_COLLAR_OPTIONS = SHAFT_COLLAR_DIN705.map((x) => [x.id, `Ø ${x.d1} (Außen Ø ${x.d2} × ${x.b} mm)`]);
+function shaftCollarEntry(size) {
+  const s = String(size ?? '10').trim().replace(',', '.');
+  if (SHAFT_COLLAR_BY_ID.has(s)) return SHAFT_COLLAR_BY_ID.get(s);
+  const n = Number(s);
+  if (isFinite(n)) {
+    const hit = SHAFT_COLLAR_DIN705.find((x) => Math.abs(x.d1 - n) < 1e-6);
+    if (hit) return hit;
+  }
+  return SHAFT_COLLAR_BY_ID.get('10') || SHAFT_COLLAR_DIN705[0] || null;
+}
+function shaftCollarForShaft(d) {
+  const n = Math.max(1, Number(d) || 10);
+  const hit = SHAFT_COLLAR_DIN705.find((x) => Math.abs(x.d1 - n) < 0.05);
+  return hit ? { ...hit } : { id: 'custom', d: n };
+}
+function collarScrewForDia(d) {
+  if (d <= 4) return { screw: 'M2.5', screwD: 2.5 };
+  if (d <= 5) return { screw: 'M3', screwD: 3 };
+  if (d <= 8) return { screw: 'M4', screwD: 4 };
+  if (d <= 11) return { screw: 'M5', screwD: 5 };
+  if (d <= 25) return { screw: 'M6', screwD: 6 };
+  if (d <= 36) return { screw: 'M8', screwD: 8 };
+  return { screw: 'M10', screwD: 10 };
+}
+function shaftCollarMetrics(p = {}) {
+  const isCustom = p.size === 'custom';
+  const e = isCustom ? null : shaftCollarEntry(p.size);
+  const rawD = Number(p.d);
+  const rawOuter = Number(p.D);
+  const rawW = Number(p.width);
+  const d = rawD > 0 ? rawD : (e ? e.d1 : 10);
+  const D = Math.max(d + 2, rawOuter > 0 ? rawOuter : (e ? e.d2 : round(Math.max(d * 1.8, d + 6), 1)));
+  const b = Math.max(2, rawW > 0 ? rawW : (e ? e.b : round(Math.max(5, d * 0.8), 1)));
+  const hasClear = p.clear !== null && p.clear !== undefined && p.clear !== '';
+  const clear = hasClear ? Math.max(0, Number(p.clear) || 0) : 0.05;
+  const pf = printFitMm(p.printFit);
+  const boreEff = round(d + clear + pf, 3);
+  const style = p.style === 'clamp' ? 'clamp' : 'setscrew';
+  const sc = e && !(rawD > 0) ? { screw: e.screw, screwD: e.screwD } : collarScrewForDia(d);
+  const isNorm = !!(e && !(rawD > 0) && !(rawOuter > 0) && !(rawW > 0));
+  return {
+    id: isNorm ? `DIN 705 Ø${e.d1}` : `Ø${round(d, 2)}`,
+    d, D, b, clear, pf, boreEff, style,
+    screw: sc.screw, screwD: sc.screwD, isNorm,
+  };
+}
+const SHAFT_COUPLING_SIZES = [
+  { id: '5x5', d1: 5, d2: 5, D: 16, L: 25, screw: 'M3', screwD: 3 },
+  { id: '6x6', d1: 6, d2: 6, D: 20, L: 30, screw: 'M3', screwD: 3 },
+  { id: '6x8', d1: 6, d2: 8, D: 24, L: 35, screw: 'M4', screwD: 4 },
+  { id: '8x8', d1: 8, d2: 8, D: 25, L: 35, screw: 'M4', screwD: 4 },
+  { id: '8x10', d1: 8, d2: 10, D: 30, L: 45, screw: 'M4', screwD: 4 },
+  { id: '10x10', d1: 10, d2: 10, D: 30, L: 45, screw: 'M4', screwD: 4 },
+  { id: '12x12', d1: 12, d2: 12, D: 32, L: 45, screw: 'M5', screwD: 5 },
+  { id: '15x15', d1: 15, d2: 15, D: 36, L: 50, screw: 'M5', screwD: 5 },
+  { id: '16x16', d1: 16, d2: 16, D: 36, L: 50, screw: 'M5', screwD: 5 },
+  { id: '20x20', d1: 20, d2: 20, D: 45, L: 65, screw: 'M6', screwD: 6 },
+  { id: '25x25', d1: 25, d2: 25, D: 50, L: 75, screw: 'M6', screwD: 6 },
+  { id: '30x30', d1: 30, d2: 30, D: 58, L: 83, screw: 'M8', screwD: 8 },
+];
+const SHAFT_COUPLING_BY_ID = new Map(SHAFT_COUPLING_SIZES.map((x) => [String(x.id).toLowerCase(), x]));
+const SHAFT_COUPLING_OPTIONS = SHAFT_COUPLING_SIZES.map((x) => [x.id, `Ø ${x.d1} × Ø ${x.d2} (Außen Ø ${x.D} × ${x.L} mm)`]);
+function shaftCouplingEntry(size) {
+  const s = String(size || '10x10').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x').replace(/,/g, '.');
+  return SHAFT_COUPLING_BY_ID.get(s) || SHAFT_COUPLING_BY_ID.get('10x10') || SHAFT_COUPLING_SIZES[0] || null;
+}
+function shaftCouplingMetrics(p = {}) {
+  const isCustom = p.size === 'custom';
+  const e = isCustom ? null : shaftCouplingEntry(p.size);
+  const rawD1 = Number(p.d1);
+  const rawD2 = Number(p.d2);
+  const rawD = Number(p.D);
+  const rawL = Number(p.length);
+  const d1 = rawD1 > 0 ? rawD1 : (e ? e.d1 : 10);
+  const d2 = rawD2 > 0 ? rawD2 : (e ? e.d2 : d1);
+  const maxBore = Math.max(d1, d2);
+  const D = Math.max(maxBore + 4, rawD > 0 ? rawD : (e ? e.D : round(Math.max(maxBore * 2.2, maxBore + 14), 1)));
+  const L = Math.max(10, rawL > 0 ? rawL : (e ? e.L : round(Math.max(20, maxBore * 3.5), 1)));
+  const hasClear = p.clear !== null && p.clear !== undefined && p.clear !== '';
+  const clear = hasClear ? Math.max(0, Number(p.clear) || 0) : 0.05;
+  const pf = printFitMm(p.printFit);
+  const d1Eff = round(d1 + clear + pf, 3);
+  const d2Eff = round(d2 + clear + pf, 3);
+  const style = p.style === 'clamp' || p.style === 'flange' ? p.style : 'rigid';
+  const sc = e && !(rawD1 > 0) && !(rawD2 > 0) ? { screw: e.screw, screwD: e.screwD } : collarScrewForDia(maxBore);
+  const flangeD = style === 'flange' ? round(Math.max(D * 1.45, maxBore + 16), 1) : D;
+  const outerD = style === 'flange' ? flangeD : D;
+  return {
+    id: e && !(rawD1 > 0) && !(rawD2 > 0) && !(rawD > 0) && !(rawL > 0) ? e.id : `${round(d1, 2)}x${round(d2, 2)}`,
+    d1, d2, d1Eff, d2Eff, D, flangeD, outerD, L, clear, pf, style,
+    screw: sc.screw, screwD: sc.screwD,
+  };
+}
+function steppedShaftMetrics(p = {}) {
+  const d = Math.max(1, Number(p.d ?? 10) || 10);
+  const L = Math.max(2, Number(p.length ?? 100) || 100);
+  const rawS1D = Math.max(0, Number(p.step1D ?? 0) || 0);
+  const rawS1L = Math.max(0, Number(p.step1Len ?? 0) || 0);
+  const hasStep1 = rawS1D >= 0.5 && rawS1L >= 0.5 && Math.abs(rawS1D - d) > 0.05;
+  const rawS2D = Math.max(0, Number(p.step2D ?? 0) || 0);
+  const rawS2L = Math.max(0, Number(p.step2Len ?? 0) || 0);
+  const hasStep2 = rawS2D >= 0.5 && rawS2L >= 0.5 && Math.abs(rawS2D - d) > 0.05;
+  const minMid = Math.max(1, Math.min(2, L * 0.1));
+  const maxStepSum = Math.max(0, L - minMid);
+  let l1 = hasStep1 ? rawS1L : 0;
+  let l2 = hasStep2 ? rawS2L : 0;
+  if (l1 + l2 > maxStepSum) {
+    const sum = l1 + l2;
+    const f = sum > 0 ? maxStepSum / sum : 0;
+    l1 = hasStep1 ? round(l1 * f, 4) : 0;
+    l2 = hasStep2 ? round(l2 * f, 4) : 0;
+  }
+  const midLen = Math.max(0.5, round(L - l1 - l2, 4));
+  const hasEc = p.endChamfer !== null && p.endChamfer !== undefined && p.endChamfer !== '';
+  const endChamfer = hasEc ? Math.max(0, Number(p.endChamfer) || 0) : 0.5;
+  const hasSc = p.stepChamfer !== null && p.stepChamfer !== undefined && p.stepChamfer !== '';
+  const stepChamfer = hasSc ? Math.max(0, Number(p.stepChamfer) || 0) : 0.3;
+  const sections = [];
+  let z = 0;
+  if (hasStep1 && l1 >= 0.3) {
+    sections.push({ role: 'step1', d: rawS1D, z0: z, z1: round(z + l1, 4), len: l1 });
+    z = round(z + l1, 4);
+  }
+  const midZ1 = hasStep2 && l2 >= 0.3 ? round(L - l2, 4) : L;
+  sections.push({ role: 'main', d, z0: z, z1: midZ1, len: round(midZ1 - z, 4) });
+  if (hasStep2 && l2 >= 0.3) {
+    sections.push({ role: 'step2', d: rawS2D, z0: midZ1, z1: L, len: round(L - midZ1, 4) });
+  }
+  const maxD = Math.max(...sections.map((s) => s.d));
+  return {
+    d, L,
+    hasStep1: hasStep1 && l1 >= 0.3, d1: hasStep1 ? rawS1D : 0, l1: hasStep1 && l1 >= 0.3 ? l1 : 0,
+    hasStep2: hasStep2 && l2 >= 0.3, d2: hasStep2 ? rawS2D : 0, l2: hasStep2 && l2 >= 0.3 ? l2 : 0,
+    midLen, maxD, endChamfer, stepChamfer, sections,
+  };
+}
 // 3D-Druck-Passungs-Vorgaben (DR-03): Spiel wird bei Löchern addiert, bei Bolzen abgezogen
 const PRINT_FITS = [
   { id: 'loose', get label() { return T('printFit.loose.label'); }, mm: 0.4, get desc() { return T('printFit.loose.desc'); } },
@@ -659,6 +818,35 @@ const LIB = [
     { k: 'Dm', label: 'Mittl. Ø (Dm)', type: 'num', def: null, auto: true },
     { k: 'turns', label: 'Windungen (n)', type: 'num', def: null, auto: true, unit: '' },
     { k: 'hookAngle', label: 'Ösen-Stellung', type: 'select', options: [['0', '0° (in einer Ebene)'], ['90', '90° (gedreht)']], def: '0' },
+  ] },
+  { lib: 'steppedShaft', label: 'Welle (abgesetzt)', role: 'solid', icon: 'steppedShaft', std: true, mat: 'Baustahl', kw: 'welle absatz abgesetzt fase stufenwelle achse antriebswelle bi-13', desc: 'Runde Welle mit optionalen Absätzen (z. B. Ø10 / Ø8) sowie End- und Absatzfasen', params: [
+    { k: 'd', label: 'Haupt-Ø (d)', type: 'num', def: 10 },
+    { k: 'length', label: 'Gesamtlänge (L)', type: 'num', def: 100 },
+    { k: 'step1D', label: 'Absatz 1 Ø (unten)', type: 'num', def: 8 },
+    { k: 'step1Len', label: 'Absatz 1 Länge', type: 'num', def: 20 },
+    { k: 'step2D', label: 'Absatz 2 Ø (oben, 0=aus)', type: 'num', def: 0 },
+    { k: 'step2Len', label: 'Absatz 2 Länge', type: 'num', def: 15 },
+    { k: 'endChamfer', label: 'Endfase', type: 'num', def: 0.5 },
+    { k: 'stepChamfer', label: 'Absatzfase', type: 'num', def: 0.3 },
+  ] },
+  { lib: 'shaftCollar', label: 'Stellring (DIN 705)', role: 'solid', icon: 'shaftCollar', std: true, mat: 'Baustahl', kw: 'stellring din 705 klemmring klemmstellring welle anschlag bi-13', desc: 'Stellring nach DIN 705 mit Gewindestift oder als Klemm-Stellring mit Schlitz', params: [
+    { k: 'size', label: 'Wellen-Ø (DIN 705)', type: 'select', options: [...SHAFT_COLLAR_OPTIONS, ['custom', 'Eigene Maße']], def: '10' },
+    { k: 'style', label: 'Bauform', type: 'select', options: [['setscrew', 'Gewindestift (DIN 705 A)'], ['clamp', 'Klemm-Stellring (geschlitzt)']], def: 'setscrew' },
+    { k: 'd', label: 'Bohrung Ø (d₁)', type: 'num', def: null, auto: true },
+    { k: 'D', label: 'Außen-Ø (d₂)', type: 'num', def: null, auto: true },
+    { k: 'width', label: 'Breite (b)', type: 'num', def: null, auto: true },
+    { k: 'clear', label: 'Laufspiel', type: 'num', def: 0.05 },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
+  ] },
+  { lib: 'shaftCoupling', label: 'Wellenkupplung', role: 'solid', icon: 'shaftCoupling', std: true, mat: 'Alu 6061', kw: 'kupplung wellenkupplung klemmkupplung flanschkupplung starr welle antrieb bi-13', desc: 'Einfache Wellenkupplung (starr mit Gewindestiften, Klemmkupplung oder Flanschkupplung)', params: [
+    { k: 'size', label: 'Bohrungen (d₁ × d₂)', type: 'select', options: [...SHAFT_COUPLING_OPTIONS, ['custom', 'Eigene Maße']], def: '10x10' },
+    { k: 'style', label: 'Bauform', type: 'select', options: [['rigid', 'Starr (Gewindestifte)'], ['clamp', 'Klemmkupplung (geschlitzt)'], ['flange', 'Flanschkupplung']], def: 'rigid' },
+    { k: 'd1', label: 'Bohrung 1 Ø (d₁)', type: 'num', def: null, auto: true },
+    { k: 'd2', label: 'Bohrung 2 Ø (d₂)', type: 'num', def: null, auto: true },
+    { k: 'D', label: 'Außen-Ø (D)', type: 'num', def: null, auto: true },
+    { k: 'length', label: 'Länge (L)', type: 'num', def: null, auto: true },
+    { k: 'clear', label: 'Laufspiel', type: 'num', def: 0.05 },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'slotHole', label: 'Langloch', role: 'hole', icon: 'slot', desc: 'Längliches Loch zum Verstellen', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 20 }, { k: 'w', label: 'Breite', type: 'num', def: 4.5 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
@@ -895,6 +1083,41 @@ function bevelGearMateTransform(p1 = {}, t1 = null) {
     rz: rz2,
   };
   return { params: p2, t: gearComposeWorldTransform(t1, rel), m1, m2 };
+}
+
+// Passender Stellring (DIN 705) konzentrisch auf dem Hauptabschnitt einer Welle
+function shaftCollarOnShaftTransform(shaftP = {}, shaftT = null) {
+  const m = steppedShaftMetrics(shaftP);
+  const match = shaftCollarForShaft(m.d);
+  const params = match.id === 'custom'
+    ? { size: 'custom', style: 'setscrew', d: m.d, D: null, width: null, clear: 0.05, printFit: '' }
+    : { size: match.id, style: 'setscrew', d: null, D: null, width: null, clear: 0.05, printFit: '' };
+  const cm = shaftCollarMetrics(params);
+  const zPos = m.l1 + Math.max(0, (m.midLen - cm.b) / 2);
+  return {
+    params,
+    t: gearComposeWorldTransform(shaftT, { x: 0, y: 0, z: zPos, rx: 0, ry: 0, rz: 0 }),
+    shaft: m,
+    collar: cm,
+  };
+}
+
+// Passende Wellenkupplung auf das obere Wellenende setzen
+function shaftCouplingOnShaftTransform(shaftP = {}, shaftT = null) {
+  const m = steppedShaftMetrics(shaftP);
+  const endD = m.hasStep2 ? m.d2 : m.d;
+  const hit = SHAFT_COUPLING_SIZES.find((x) => Math.abs(x.d1 - endD) < 0.05 && Math.abs(x.d2 - endD) < 0.05);
+  const params = hit
+    ? { size: hit.id, style: 'rigid', d1: null, d2: null, D: null, length: null, clear: 0.05, printFit: '' }
+    : { size: 'custom', style: 'rigid', d1: endD, d2: endD, D: null, length: null, clear: 0.05, printFit: '' };
+  const cm = shaftCouplingMetrics(params);
+  const zPos = m.L - cm.L / 2;
+  return {
+    params,
+    t: gearComposeWorldTransform(shaftT, { x: 0, y: 0, z: zPos, rx: 0, ry: 0, rz: 0 }),
+    shaft: m,
+    coupling: cm,
+  };
 }
 
 // kleine Vorschaubilder der Grundkörper (isometrisch)

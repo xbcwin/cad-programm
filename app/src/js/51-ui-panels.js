@@ -2430,6 +2430,62 @@ const Panels = (() => {
             if (added) App.select([added.id]);
           };
           row.append(mateBtn); sec.append(row);
+        } else if (def.lib === 'steppedShaft' && typeof steppedShaftMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = steppedShaftMetrics(rp);
+          const parts = [];
+          if (m.hasStep1) parts.push(`Absatz 1: Ø ${Units.fmtLenU(m.d1, 2)} × ${Units.fmtLenU(m.l1, 1)}`);
+          if (m.hasStep2) parts.push(`Absatz 2: Ø ${Units.fmtLenU(m.d2, 2)} × ${Units.fmtLenU(m.l2, 1)}`);
+          const stepsTxt = parts.length ? parts.join(' · ') : 'ohne Absatz';
+          sec.append(h('div', { id: 'p-steppedshaft-hint', class: 'hint-box', html: T('panel.item.steppedShaftHint', {
+            d: Units.fmtLenU(m.d, 2), L: Units.fmtLenU(m.L, 1), steps: esc(stepsTxt),
+            ec: Units.fmtLenU(m.endChamfer, 2), sc: Units.fmtLenU(m.stepChamfer, 2),
+          }) }));
+          const row = h('div', { class: 'btn-row' });
+          const colBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-shaft-collar' }, T('panel.item.addShaftCollar'));
+          colBtn.onclick = () => {
+            const fit = shaftCollarOnShaftTransform(rp, it.t);
+            let added = null;
+            App.change('Stellring auf Welle gesetzt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              added = Model.newItem('part', { lib: 'shaftCollar', ...fit.params }, { name: `Stellring Ø ${fit.collar.d}`, role: 'solid', color: '#4f6272', mat: it.mat || 'Baustahl' });
+              Object.assign(added.t, fit.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          const cplBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-shaft-coupling' }, T('panel.item.addShaftCoupling'));
+          cplBtn.onclick = () => {
+            const fit = shaftCouplingOnShaftTransform(rp, it.t);
+            let added = null;
+            App.change('Wellenkupplung auf Welle gesetzt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              added = Model.newItem('part', { lib: 'shaftCoupling', ...fit.params }, { name: `Wellenkupplung Ø ${fit.coupling.d1}×${fit.coupling.d2}`, role: 'solid', color: '#8a99a8', mat: 'Alu 6061' });
+              Object.assign(added.t, fit.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          row.append(colBtn, cplBtn); sec.append(row);
+        } else if (def.lib === 'shaftCollar' && typeof shaftCollarMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = shaftCollarMetrics(rp);
+          const styleTxt = m.style === 'clamp' ? T('panel.item.shaftCollarStyleClamp') : T('panel.item.shaftCollarStyleSet');
+          sec.append(h('div', { id: 'p-shaftcollar-hint', class: 'hint-box', html: T('panel.item.shaftCollarHint', {
+            style: esc(styleTxt), d: Units.fmtLenU(m.d, 2), boreEff: Units.fmtLenU(m.boreEff, 2),
+            D: Units.fmtLenU(m.D, 1), b: Units.fmtLenU(m.b, 1), screw: esc(m.screw),
+          }) }));
+        } else if (def.lib === 'shaftCoupling' && typeof shaftCouplingMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = shaftCouplingMetrics(rp);
+          const styleTxt = m.style === 'clamp' ? T('panel.item.shaftCouplingStyleClamp') : m.style === 'flange' ? T('panel.item.shaftCouplingStyleFlange') : T('panel.item.shaftCouplingStyleRigid');
+          sec.append(h('div', { id: 'p-shaftcoupling-hint', class: 'hint-box', html: T('panel.item.shaftCouplingHint', {
+            style: esc(styleTxt), d1: Units.fmtLenU(m.d1, 2), d2: Units.fmtLenU(m.d2, 2),
+            d1Eff: Units.fmtLenU(m.d1Eff, 2), d2Eff: Units.fmtLenU(m.d2Eff, 2),
+            D: Units.fmtLenU(m.outerD, 1), L: Units.fmtLenU(m.L, 1), screw: esc(m.screw),
+          }) }));
         }
         w.append(sec);
       }

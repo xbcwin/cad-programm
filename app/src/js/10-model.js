@@ -1074,6 +1074,12 @@ const Model = (() => {
           } else if (o.p.lib === 'stdExtSpring' && typeof extSpringMetrics === 'function') {
             const m = extSpringMetrics(o.p);
             o.p.spec = { d: m.d, Dm: m.Dm, n: m.n, coilPitch: m.coilPitch, rEye: m.rEye, L0: m.L0, Lges: m.Lges, hookAngle: m.hookAngle };
+          } else if (o.p.lib === 'steppedShaft' && typeof steppedShaftMetrics === 'function') {
+            o.p.spec = steppedShaftMetrics(o.p);
+          } else if (o.p.lib === 'shaftCollar' && typeof shaftCollarMetrics === 'function') {
+            o.p.spec = shaftCollarMetrics(o.p);
+          } else if (o.p.lib === 'shaftCoupling' && typeof shaftCouplingMetrics === 'function') {
+            o.p.spec = shaftCouplingMetrics(o.p);
           }
         }
       }
@@ -2547,6 +2553,9 @@ const Model = (() => {
         if (L === 'stdShaftSeal') { const m = typeof shaftSealMetrics === 'function' ? shaftSealMetrics(p) : { D: 35, b: 7 }; const r = m.D / 2; return [-r, -r, 0, r, r, m.b]; }
         if (L === 'stdCompSpring') { const m = typeof compSpringMetrics === 'function' ? compSpringMetrics(p) : { De: 18, L0: 43 }; const r = m.De / 2; return [-r, -r, 0, r, r, m.L0]; }
         if (L === 'stdExtSpring') { const m = typeof extSpringMetrics === 'function' ? extSpringMetrics(p) : { De: 16.5, Lges: 60 }; const r = m.De / 2; return [-r, -r, 0, r, r, m.Lges]; }
+        if (L === 'steppedShaft') { const m = typeof steppedShaftMetrics === 'function' ? steppedShaftMetrics(p) : { maxD: 10, L: 100 }; const r = m.maxD / 2; return [-r, -r, 0, r, r, m.L]; }
+        if (L === 'shaftCollar') { const m = typeof shaftCollarMetrics === 'function' ? shaftCollarMetrics(p) : { D: 20, b: 10 }; const r = m.D / 2; return [-r, -r, 0, r, r, m.b]; }
+        if (L === 'shaftCoupling') { const m = typeof shaftCouplingMetrics === 'function' ? shaftCouplingMetrics(p) : { outerD: 30, L: 45 }; const r = m.outerD / 2; return [-r, -r, 0, r, r, m.L]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -2831,6 +2840,9 @@ const Model = (() => {
         if (L === 'stdShaftSeal' && typeof shaftSealMetrics === 'function') { const m = shaftSealMetrics(p); return `${f(m.d)} × ${f(m.D)} × ${f(m.b)}${u}`; }
         if (L === 'stdCompSpring' && typeof compSpringMetrics === 'function') { const m = compSpringMetrics(p); return `${f(m.De)} × ${f(m.L0)}${u}`; }
         if (L === 'stdExtSpring' && typeof extSpringMetrics === 'function') { const m = extSpringMetrics(p); return `${f(m.De)} × ${f(m.L0)}${u}`; }
+        if (L === 'steppedShaft' && typeof steppedShaftMetrics === 'function') { const m = steppedShaftMetrics(p); return `Ø ${f(m.d)} × ${f(m.L)}${u}`; }
+        if (L === 'shaftCollar' && typeof shaftCollarMetrics === 'function') { const m = shaftCollarMetrics(p); return `Ø ${f(m.d)} × ${f(m.D)} × ${f(m.b)}${u}`; }
+        if (L === 'shaftCoupling' && typeof shaftCouplingMetrics === 'function') { const m = shaftCouplingMetrics(p); return `Ø ${f(m.d1)}${Math.abs(m.d1 - m.d2) > 0.01 ? '/' + f(m.d2) : ''} × ${f(m.L)}${u}`; }
         return p.size || '';
       }
     }

@@ -37801,6 +37801,272 @@ def t_a183_zahnraeder_schraeg_kegel(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a186_wellen_stellringe_kupplungen(p):
+    p.empty()
+
+    # 1. Welle Ø10 × 100 mit Absatz Ø8 -> zwei Durchmesser messbar (+ zweiter Absatz Ø6 & Fasen)
+    p.ev("""
+      App.change('Abgesetzte Welle Ø10/Ø8', (doc) => {
+        const sh = Model.newItem('part', {
+          lib: 'steppedShaft', d: 10, length: 100,
+          step1D: 8, step1Len: 20, step2D: 0, step2Len: 15,
+          endChamfer: 0.5, stepChamfer: 0.3,
+        }, { name: 'Welle Ø10' });
+        doc.items.push(sh);
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    sh1 = p.ev("""return (() => {
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      const cones = faces.filter(f => f.t === 'CONE').length;
+      const hint = document.querySelector('#p-steppedshaft-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        ok: !!(r && r.data && bb && r.data.vertices && r.data.vertices.length > 0),
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        cylR,
+        cones,
+        hint,
+      };
+    })()""")
+    p.ev("""
+      App.change('Zweiter Absatz Ø6', (doc) => { doc.items[0].p.step2D = 6; doc.items[0].p.step2Len = 15; });
+    """)
+    warte_rechnen(p, 45)
+    sh2 = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[0].id);
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      return { errs: App.errors.length, cylR };
+    })()""")
+    p.ev("""
+      App.change('Zurück auf einen Absatz', (doc) => { doc.items[0].p.step2D = 0; });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 45)
+    ok1 = bool(
+        sh1['errs'] == 0 and sh1['ok']
+        and abs(sh1['dx'] - 10.0) < 0.03 and abs(sh1['dy'] - 10.0) < 0.03 and abs(sh1['dz'] - 100.0) < 0.03
+        and len(sh1['cylR']) == 2
+        and abs(sh1['cylR'][0] - 4.0) < 0.01 and abs(sh1['cylR'][1] - 5.0) < 0.01
+        and sh1['cones'] >= 1
+        and '10' in sh1['hint'] and '8' in sh1['hint']
+        and sh2['errs'] == 0 and len(sh2['cylR']) == 3
+        and abs(sh2['cylR'][0] - 3.0) < 0.01 and abs(sh2['cylR'][1] - 4.0) < 0.01 and abs(sh2['cylR'][2] - 5.0) < 0.01
+    )
+
+    # 2. Stellring Ø10 (DIN 705) auf die Welle setzen -> passt ohne Durchdringung + Klemm-Stellring
+    p.pg.click('#btn-add-shaft-collar')
+    warte_rechnen(p, 45)
+    col_res = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const sh = items[0], col = items[1];
+      const rCol = col && App.results.get(col.id);
+      const bbCol = rCol && rCol.data && rCol.data.bbox;
+      const facesCol = (rCol && rCol.data && rCol.data.faces) || [];
+      const cylR = [...new Set(facesCol.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const b0 = wb(sh.id), b1 = wb(col.id);
+      const overlapZ = !!(b0 && b1 && b1[2] >= 20 - 0.01 && b1[5] <= 100 + 0.01 && b1[2] < b0[5] && b1[5] > b0[2]);
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const hint = document.querySelector('#p-shaftcollar-hint')?.textContent || '';
+      return {
+        count: items.length,
+        lib: col && col.p && col.p.lib,
+        errs: App.errors.length,
+        dx: bbCol ? bbCol[3] - bbCol[0] : 0,
+        dy: bbCol ? bbCol[4] - bbCol[1] : 0,
+        dz: bbCol ? bbCol[5] - bbCol[2] : 0,
+        cylR,
+        overlapZ,
+        checked: res.checkedCount,
+        clashes: (res.pairs || []).length,
+        clashErrs: (res.errors || []).length,
+        hint,
+      };
+    })()""")
+    p.ev("App.change('Klemm-Stellring', (doc) => { doc.items[1].p.style = 'clamp'; }); App.select([App.doc.items[1].id]);")
+    warte_rechnen(p, 45)
+    col_clamp = p.ev("""return (async () => {
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const hint = document.querySelector('#p-shaftcollar-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        checked: res.checkedCount,
+        clashes: (res.pairs || []).length,
+        clashErrs: (res.errors || []).length,
+        hint,
+      };
+    })()""")
+    ok2 = bool(
+        col_res['count'] == 2 and col_res['lib'] == 'shaftCollar' and col_res['errs'] == 0
+        and abs(col_res['dx'] - 20.0) < 0.03 and abs(col_res['dy'] - 20.0) < 0.03 and abs(col_res['dz'] - 10.0) < 0.03
+        and any(abs(r - 5.025) < 0.01 for r in col_res['cylR'])
+        and col_res['overlapZ']
+        and col_res['checked'] == 2 and col_res['clashes'] == 0 and col_res['clashErrs'] == 0
+        and 'DIN 705' in col_res['hint'] and '10,05' in col_res['hint']
+        and col_clamp['errs'] == 0 and col_clamp['checked'] == 2
+        and col_clamp['clashes'] == 0 and col_clamp['clashErrs'] == 0
+        and 'Klemm' in col_clamp['hint']
+    )
+
+    # 3. Einfache Kupplungen: starr auf Welle Ø10 (0 Durchdringung), abgestuft 8x10 Klemmkupplung, Flanschkupplung
+    p.ev("App.select([App.doc.items[0].id]);")
+    p.wait(250)
+    p.pg.click('#btn-add-shaft-coupling')
+    warte_rechnen(p, 45)
+    cpl_res = p.ev("""return (async () => {
+      const items = App.doc.items;
+      const sh = items[0], cpl = items[2];
+      const rCpl = cpl && App.results.get(cpl.id);
+      const bb = rCpl && rCpl.data && rCpl.data.bbox;
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const b0 = wb(sh.id), b2 = wb(cpl.id);
+      const overlapZ = !!(b0 && b2 && b2[2] < b0[5] - 1 && b2[5] > b0[5] + 1);
+      const res = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      return {
+        count: items.length,
+        lib: cpl && cpl.p && cpl.p.lib,
+        errs: App.errors.length,
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        overlapZ,
+        checked: res.checkedCount,
+        clashes: (res.pairs || []).length,
+        clashErrs: (res.errors || []).length,
+      };
+    })()""")
+    p.ev("""
+      App.change('Abgestufte Klemmkupplung 8x10', (doc) => {
+        doc.items[2].p.size = '8x10';
+        doc.items[2].p.style = 'clamp';
+      });
+      App.select([App.doc.items[2].id]);
+    """)
+    warte_rechnen(p, 45)
+    cpl_step = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[2].id);
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      return { errs: App.errors.length, cylR };
+    })()""")
+    p.ev("""
+      App.change('Flanschkupplung 10x10', (doc) => {
+        doc.items[2].p.size = '10x10';
+        doc.items[2].p.style = 'flange';
+      });
+      App.select([App.doc.items[2].id]);
+    """)
+    warte_rechnen(p, 45)
+    cpl_flange = p.ev("""return (() => {
+      const r = App.results.get(App.doc.items[2].id);
+      const bb = r && r.data && r.data.bbox;
+      const hint = document.querySelector('#p-shaftcoupling-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        hint,
+      };
+    })()""")
+    ok3 = bool(
+        cpl_res['count'] == 3 and cpl_res['lib'] == 'shaftCoupling' and cpl_res['errs'] == 0
+        and abs(cpl_res['dx'] - 30.0) < 0.03 and abs(cpl_res['dy'] - 30.0) < 0.03 and abs(cpl_res['dz'] - 45.0) < 0.03
+        and cpl_res['overlapZ']
+        and cpl_res['checked'] == 3 and cpl_res['clashes'] == 0 and cpl_res['clashErrs'] == 0
+        and cpl_step['errs'] == 0
+        and any(abs(r - 4.025) < 0.01 for r in cpl_step['cylR'])
+        and any(abs(r - 5.025) < 0.01 for r in cpl_step['cylR'])
+        and cpl_flange['errs'] == 0 and cpl_flange['dx'] > 40.0 and cpl_flange['dy'] > 40.0
+        and 'Flanschkupplung' in cpl_flange['hint']
+    )
+
+    # 4. Einfach & Profi, Flyout, GeomCheck, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts [data-lib="steppedShaft"]', timeout=5000)
+    pro_fly = p.ev("""return ['steppedShaft', 'shaftCollar', 'shaftCoupling'].every(k => {
+      const el = document.querySelector(`.flyout.parts [data-lib="${k}"]`);
+      return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === k);
+    })""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("App.change('Leeren', d => { d.items = []; }); ViewPrefs.setLevel('simple');")
+    p.wait(180)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts', timeout=5000)
+    simple_fly_cnt = p.ev("return [...document.querySelectorAll('.flyout.parts .tile')].filter(t => t.offsetParent !== null).length")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+    simple_res = p.ev("""return (() => {
+      const q = ['welle', 'stellring', 'kupplung'];
+      const cmds = q.map(s => Commands.search(s).length);
+      const hit = Commands.search('welle').find(c => c.id === 'lib-steppedShaft');
+      if (hit) hit.run();
+      return { cmds, added: App.doc.items.length === 1 && App.doc.items[0].p.lib === 'steppedShaft' };
+    })()""")
+    warte_rechnen(p, 45)
+    simple_ui = p.ev("""return {
+      hasHint: !!document.querySelector('#p-steppedshaft-hint'),
+      hasBtn: !!document.querySelector('#btn-add-shaft-collar'),
+      hasField: !!document.querySelector('#lp-d'),
+    }""")
+
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Alle 3 Teile', (doc) => {
+        const w = Model.newItem('part', { lib: 'steppedShaft', d: 10, length: 100, step1D: 8, step1Len: 20, step2D: 0, step2Len: 15, endChamfer: 0.5, stepChamfer: 0.3 }, { name: 'Welle' });
+        const s = Model.newItem('part', { lib: 'shaftCollar', size: '10', style: 'setscrew' }, { name: 'Stellring' }); s.t.x = 40;
+        const k = Model.newItem('part', { lib: 'shaftCoupling', size: '10x10', style: 'rigid' }, { name: 'Kupplung' }); k.t.x = 90;
+        doc.items = [w, s, k];
+      });
+    """)
+    warte_rechnen(p, 60)
+    p.ev("App.undo();")
+    warte_rechnen(p, 35)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 35)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en, gc] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        GeomCheck.run({ silent: true }),
+      ]);
+      const keys = ['steppedShaft', 'shaftCollar', 'shaftCoupling'];
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { valOk: !!(val && val.ok), hOk, sOk, i18nOk, gcIssues: gc.issues.length, gcChecked: gc.checkedCount };
+    })()""")
+    ok4 = bool(
+        pro_fly
+        and simple_fly_cnt == 5
+        and all(n >= 1 for n in simple_res['cmds']) and simple_res['added']
+        and simple_ui['hasHint'] and simple_ui['hasBtn'] and simple_ui['hasField']
+        and undo_len == 1 and redo_len == 3
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and meta['gcIssues'] == 0 and meta['gcChecked'] == 3
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -38099,6 +38365,7 @@ TESTS = [
     ('[A-181] Maße und Toleranzen am 3D-Modell (PMI) & Übernahme in Zeichnung (ZE-35)', t_a181_pmi_3d_und_zeichnung),
     ('[A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)', t_a180_zeichnung_fertig_machen),
     ('[A-183] Bibliothek: Schrägzahnrad & Kegelrad-Paar 90°', t_a183_zahnraeder_schraeg_kegel),
+    ('[A-186] Bibliothek: Wellen, Stellringe & Kupplungen (BI-13)', t_a186_wellen_stellringe_kupplungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

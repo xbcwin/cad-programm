@@ -394,5 +394,20 @@
     "was": "Erzeugt ein geradverzahntes Kegelrad mit berechneten Kegelwinkeln für abgewinkelte Antriebswellen (Standard 90°).",
     "wozu": "Überträgt Drehbewegungen über Eck, z. B. im Winkelgetriebe, Differential oder Handrad-Antrieb.",
     "achtung": "Beide Kegelräder müssen denselben Modul und abgestimmte Zähnezahlen haben und ihre Kegelspitzen am Schnittpunkt der Achsen treffen."
+  },
+  "steppedShaft": {
+    "was": "Erzeugt eine abgesetzte Welle mit Hauptdurchmesser, bis zu zwei Endabsätzen und passenden Fasen an Kanten und Absätzen.",
+    "wozu": "Dient als Achse oder Antriebswelle mit klaren Axialanschlägen für Kugellager, Zahnräder, Stellringe und Kupplungen.",
+    "achtung": "Achte darauf, dass die Summe aus Absatz 1 und Absatz 2 kürzer bleibt als die Gesamtlänge der Welle."
+  },
+  "shaftCollar": {
+    "was": "Erzeugt einen Stellring nach DIN 705 (mit Gewindestift oder als geschlitzter Klemm-Stellring) mit leichtem Laufspiel.",
+    "wozu": "Sichert Bauteile wie Lager, Räder oder Hebel axial auf einer Welle gegen Verrutschen.",
+    "achtung": "Wähle beim Stellring denselben Nenn-Durchmesser wie bei der zugehörigen Welle – das Laufspiel hält die Bohrung automatisch passend."
+  },
+  "shaftCoupling": {
+    "was": "Erzeugt eine Wellenkupplung als starre Hülse mit Gewindestiften, geschlitzte Klemmkupplung oder Flanschkupplung.",
+    "wozu": "Verbindet zwei gleich oder unterschiedlich dicke Wellenenden fluchtend miteinander.",
+    "achtung": "Für nicht genau fluchtende Wellen musst du später echte Ausgleichskupplungen vorsehen – starre Kupplungen verlangen koaxiale Wellen."
   }
 }
