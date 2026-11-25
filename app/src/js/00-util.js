@@ -700,6 +700,8 @@ const IC = {
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
   conic: '<path d="M4 17l8-11 8 11" stroke-dasharray="2.2 2" opacity=".5"/><path d="M4 17Q12 6 20 17" /><circle cx="12" cy="11.5" r="1.7" fill="currentColor"/><circle cx="4" cy="17" r="1.4" fill="currentColor"/><circle cx="20" cy="17" r="1.4" fill="currentColor"/>',
   bridge: '<path d="M3 16h3.5M17.5 8H21" opacity=".55"/><path d="M6.5 16C11 16 13 8 17.5 8" /><circle cx="6.5" cy="16" r="1.6" fill="currentColor"/><circle cx="17.5" cy="8" r="1.6" fill="currentColor"/>',
+  boss: '<ellipse cx="12" cy="7" rx="5" ry="2.2"/><ellipse cx="12" cy="7" rx="2.2" ry="1"/><path d="M7 7v9c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2V7"/><path d="M3 18l4-3v3H3zM21 18l-4-3v3h4z" fill="currentColor" opacity=".25"/><path d="M3 18h4M17 18h4M3 18l4-3M21 18l-4-3" />',
+  lipGroove: '<path d="M4 4h16v5h-6v3h-4V9H4z" fill="currentColor" opacity=".2"/><path d="M4 4h16v5h-6v3h-4V9H4zM4 20h16v-5h-5v-2.5h-6V15H4z" />',
   vent: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6.5 8h11M6.5 12h11M6.5 16h11" stroke-width="2.1"/>',
   fins: '<path d="M3 19h18"/><path d="M5 19V7M9.5 19V7M14.5 19V7M19 19V7" stroke-width="2"/><path d="M5 7v12M9.5 7v12M14.5 7v12M19 7v12" opacity=".3"/>',
   web: '<rect x="3" y="3" width="18" height="18" rx="1.5" opacity=".45"/><path d="M3 12h18M12 3v18M6 6l12 12M18 6L6 18" />',
@@ -2236,6 +2238,21 @@ const HELP = {
   "tip": "Glatte Kuppel auf eine ebene Fläche setzen (Profi)",
   "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kuppel“. Tracery wölbt eine nahtlose Kuppel vom Außenrand der Fläche bis zur gewählten Höhe (auch per Formel) und verschmilzt sie direkt mit dem Körper.",
   "tipp": "Mit „Flach gewölbt (Kugelkappe)“ wird die Kuppel flacher, und mit „Nach innen (Vertiefung)“ entsteht eine glatte Schale im Körper."
+ },
+ "boss": {
+  "tip": "Schraubdom mit 0–6 Stützrippen und Loch auf eine Fläche setzen",
+  "hilfe": "Wähle eine ebene Fläche eines Körpers und klicke auf „Schraubdom“. Tracery baut einen zylindrischen Dom mit Außen- und Lochdurchmesser, Höhe und bis zu 6 strahlenförmigen Rippen rundherum – alles wird direkt mit dem Körper vereinigt.",
+  "tipp": "Rechts kannst du Versatz U/V, Rippenlänge, Rippendicke und Winkel genau einstellen oder Formeln nutzen."
+ },
+ "lipGroove": {
+  "tip": "Lippe und Nut mit Spiel für zwei Gehäusehälften anlegen",
+  "hilfe": "Wähle eine Trennkante, eine ebene Trennfläche oder beide Gehäusehälften und starte „Lippe und Nut“. Die eine Hälfte bekommt eine umlaufende Stecklippe (innen oder außen), die andere Hälfte die passende Nut samt einstellbarem Spiel.",
+  "tipp": "Mit 0,2 mm Spiel lassen sich gedruckte Gehäusehälften ohne Klemmen zusammenstecken und zentrieren."
+ },
+ "loftContinuity": {
+  "tip": "Start und Ende des Übergangs tangential (G1) oder krümmungsglatt (G2) an Nachbarflächen anschließen (Profi)",
+  "hilfe": "Im Profi-Modus legst du unter „Weicher Anschluss“ für Start und Ende einzeln fest, ob der Übergang frei, tangential (ohne Knick) oder krümmungsglatt (gleiche Wölbung) an den benachbarten Körper anschließt. Berührende Nachbarflächen erkennt Tracery automatisch oder du wählst sie über „Fläche wählen“ selbst aus.",
+  "tipp": "Mit dem Regler „Stärke“ bestimmst du von 0,1 bis 3,0, wie weit der Übergang die Anschlussrichtung hält, bevor er zum nächsten Umriss einlenkt."
  }
 };
 

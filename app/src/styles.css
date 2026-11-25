@@ -1500,4 +1500,12 @@ body.sketching:not(.simple) .sk-live-mir-badge{top:28px}
 .sk-guide-ax{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;background:color-mix(in srgb,#0b93a8 16%,transparent);color:#0b93a8;font:700 11px/1 var(--font-cond)}
 [data-theme="dark"] .sk-guide-ax{background:color-mix(in srgb,#3bc9db 18%,transparent);color:#3bc9db}
 
+/* Übergang mit weichem Anschluss (KP-31) */
+.loft-cont-card{display:grid;gap:6px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);margin-top:6px}
+.loft-weight-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.loft-weight-row input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.loft-weight-val{min-width:34px;text-align:right;font-weight:600;color:var(--ink)}
+.loft-face-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.loft-face-row .grow{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 

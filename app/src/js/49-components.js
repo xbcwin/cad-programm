@@ -162,7 +162,7 @@ const Comp = (() => {
     if (typeof App !== 'undefined' && App.ctx) return false;
     if (it.role === 'hole') return false;
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return false;
-    if (it.kind === 'scale' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'deleteBody') return false;
+    if (it.kind === 'scale' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'deleteBody' || it.kind === 'boss' || it.kind === 'lipGroove') return false;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return false;
     if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)) return false;
     return true;

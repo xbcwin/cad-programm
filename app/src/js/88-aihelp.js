@@ -108,6 +108,15 @@ const Explain = (() => {
       const hTxt = Units.fmtLenU(Model.num(p.height, V, 5), 2, doc);
       lines.push({ k: 'op', t: `Setzt eine ${p.flip ? 'nach innen vertiefte ' : ''}${p.shape === 'spherical' ? 'flache Kugelkappe' : 'gewölbte Kuppel'} (${hTxt} hoch) auf eine ebene Fläche von „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
     }
+    if (it.kind === 'boss') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const ribs = Math.max(0, Math.min(6, Math.round(Model.num(p.ribs, V, 4))));
+      lines.push({ k: 'op', t: `Setzt einen Schraubdom (Ø ${Units.fmtLenU(Model.num(p.outerD, V, 8), 2, doc)}, Loch Ø ${Units.fmtLenU(Model.num(p.holeD, V, 3), 2, doc)}, Höhe ${Units.fmtLenU(Model.num(p.height, V, 10), 2, doc)}, ${ribs} Rippen) auf „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
+    }
+    if (it.kind === 'lipGroove') {
+      const p = it.p || {}, lf = p.lipTarget ? Model.find(doc, p.lipTarget) : null, gf = p.grooveTarget ? Model.find(doc, p.grooveTarget) : null;
+      lines.push({ k: 'op', t: `Erzeugt Lippe (${p.side === 'outer' ? 'außen' : 'innen'}, Höhe ${Units.fmtLenU(Model.num(p.height, V, 2), 2, doc)}, Breite ${Units.fmtLenU(Model.num(p.width, V, 1.2), 2, doc)}) an „${lf ? Model.label(lf.item) : 'fehlendes Ziel'}“ und Nut mit ${Units.fmtLenU(Model.num(p.clearance, V, 0.2), 2, doc)} Spiel in „${gf ? Model.label(gf.item) : 'fehlendes Ziel'}“.` });
+    }
     if (it.kind === 'sketch3d') {
       const res = Model.sketch3dResolve(it.p && it.p.sketch3d, V);
       const ents = (res.ents || []).filter((e) => !e.con);
@@ -115,10 +124,17 @@ const Explain = (() => {
     }
     if (it.kind === 'loft') {
       const p = it.p || {}, n = (p.sketches || []).length;
+      const condName = (c) => (c === 'curvature' ? 'krümmungsglatt (G2)' : c === 'tangent' ? 'tangential (G1)' : '');
+      const cParts = [];
+      if (!p.closed && !p.path && !p.rail && !p.rail2) {
+        if (p.startCond === 'tangent' || p.startCond === 'curvature') cParts.push(`Start ${condName(p.startCond)}, Stärke ${fmt(Model.num(p.startWeight, V, 1), 2)}`);
+        if (p.endCond === 'tangent' || p.endCond === 'curvature') cParts.push(`Ende ${condName(p.endCond)}, Stärke ${fmt(Model.num(p.endWeight, V, 1), 2)}`);
+      }
+      const contInfo = cParts.length ? ` mit weichem Anschluss (${cParts.join('; ')})` : '';
       const style = p.closed ? 'geschlossen als Ring' : p.path ? 'entlang einer Mittellinie' : (p.rail || p.rail2) ? 'mit Führungskurve' : Model.num(p.tip, V, 0) > 0 ? `zur Spitze (${Units.fmtLenU(Model.num(p.tip, V, 0), 2, doc)})` : (p.ruled ? 'mit geraden Flächen' : 'weich');
       const tf = it.op && it.op.target ? Model.find(doc, it.op.target) : null;
       const opTxt = it.op && it.op.type === 'cut' ? ` – wird von „${tf ? Model.label(tf.item) : 'Zielkörper'}“ als Schnitt abgezogen` : it.op && it.op.type === 'join' ? ` – wird mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ vereinigt` : it.op && it.op.type === 'common' ? ` – bildet mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ die Schnittmenge` : '';
-      lines.push({ k: 'op', t: `Verbindet ${n} Umrisse ${style}${opTxt}.` });
+      lines.push({ k: 'op', t: `Verbindet ${n} Umrisse ${style}${contInfo}${opTxt}.` });
     }
     if (it.kind === 'sweep') {
       const p = it.p || {};
@@ -162,7 +178,7 @@ const Explain = (() => {
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });

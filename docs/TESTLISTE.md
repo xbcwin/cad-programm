@@ -2403,6 +2403,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Meldung überlebt Hauptthread-Hänger**: `UI.toast()` (`scheduleToast`) zählt die Restlaufzeit in `500 ms`-Scheiben herunter, sodass ein einzelner `900 ms`-Hänger eine `600 ms`-Meldung nicht vorzeitig löscht und sie danach sauber nach Ablauf der Restzeit verschwindet (`t_explosion_regeln`, `t_f11250121`).
 - [ ] **Von Hand**: Im Browser bei langsamer Darstellung die Fokus-Vorschau öffnen, ein Teil wählen und drehen sowie mit einem einzelnen Teil die Explosions-Meldung auslösen und prüfen, dass Vorschau und Hinweis zuverlässig sichtbar bleiben.
 
+## Schraubdom, Lippe und Nut (Auto [A-120], KP-24, KP-25)
+- [x] **Einfach & Profi**: `#add-boss` und `#add-lip-groove` sind im Körper-Flyout in beiden Stufen sichtbar; an einer ebenen Fläche erscheint `#ctx-boss` in der Kontextleiste.
+- [x] **Schraubdom (KP-24)**: Dom `d = 8/3`, Höhe `10`, `4` Rippen auf Platte `40×40×4` (`6400` mm³) vereinigt sauber ohne Fehler (`> 6850` mm³), Bohrung `Ø 3,0 mm`, Rippenzahl `0 / 4 / 6` ändert das Volumen, Unterdrücken und Rückgängig stellen `6400` mm³ wieder her.
+- [x] **Lippe und Nut (KP-25)**: Zwei ausgehöhlte Gehäusehälften (`60×40×15`, Wand `3` mm) mit Lippe (`2,5` mm hoch, `1,2` mm breit) und `0,2` mm Spiel (innen, außen und getauscht) erzeugen Lippe und Nut fehlerfrei mit `0` Durchdringung (`clashes`); Rückgängig stellt Ausgangsvolumen wieder her.
+- [x] **Hilfetexte, DE/EN-Schlüssel & Befehlssuche**: `HELP.boss` und `HELP.lipGroove` samt `texte-de`/`texte-en`-Schlüsselgleichheit und Suche nach `schraubdom` / `lippe` grün.
+- [ ] **Von Hand**: Im Browser an einer runden und einer geschrägten Gehäuseschale eine Trennkante per Klick wählen und das Spiel der Lippe im Schnitt (Taste C) prüfen.
+
 ## Lüftungsgitter, Kühlrippen und Steg-Netz (Auto [A-121], KP-26, KP-27)
 - [x] **Lüftungsgitter (`vent`)**: 6 Schlitze (3 mm breit, 4 mm Rahmen, 0°) in einer 60×40×4-Platte erzeugen exakt 6 Durchbrüche (7 Schleifen oben und unten) bei sauberem Restvolumen; Winkel 45° mit 4 eckigen Schlitzen sowie Unterdrücken/Reaktivieren über die Zeitleiste funktionieren fehlerfrei.
 - [x] **Kühlrippen (`fins`)**: 6 Rippen (1,5 mm dick, 10 mm hoch, 2 mm Randabstand) auf einer 50×30×4-Platte verschmelzen zu 1 Körper mit exaktem Volumen (10140 mm³) und lassen Höhe sowie Schräge (2°) sauber nachstellen.
@@ -2416,6 +2423,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Übergang als Schnitt in Quader & Ring-Schnitt**: Offener Übergang und geschlossener Ring über `#ctx-loft-cut` bzw. `#op-type = 'cut'` direkt von einem Quader abgezogen → Volumen sinkt deutlich, `GeomCheck` 0 Funde, Wechsel zwischen `new` und `cut` samt Rückgängig/Wiederholen fehlerfrei.
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftClosed` und `loftCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang ring`, `übergang schnitt`) und `Explain.local` vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser 4 leicht unterschiedlich große Kreise im Kreis zeichnen, auf „Übergang (Ring)“ klicken, das nahtlose Schließen rundherum drehen und prüfen sowie den Ring mit „Körper → Abziehen von“ als umlaufende Nut aus einer Platte schneiden.
+
+## Übergang mit weichem Anschluss (Auto [A-123], KP-31)
+
+- [x] **Tangentialer Anschluss an Zylinder-Stirnfläche (< 1°)**: Übergang von Zylinder-Stirnfläche (Ø 20 × 20) zu Kreis (Ø 40) über `#loft-start-mode = 'tangent'` → Normalenwinkel an der Anschlusskante sinkt von > 18° auf unter 1°, Nachbarfläche automatisch erkannt, `GeomCheck` 0 Funde.
+- [x] **Stärke-Regler, G2, schräger Kegel & Kreis→Rechteck**: Stärke-Regler `#loft-start-weight` (0,3 vs. 2,5) hält den knickfreien Anschluss (< 1°) und steuert sichtbar die Bauchigkeit; krümmungsglatt (`curvature`, G2), beidseitiges `G2` + `G1`, Vereinigen mit dem Zylinder, Anschluss an einen schrägen Kegelstumpf (< 1° zur Kegelwand) sowie Kreis→Rechteck tangential samt Rückgängig/Wiederholen und Einfach/Profi-Umschaltung laufen ohne Fehler.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftContinuity` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang tangential`, `krümmungsglatt`) und `Explain.local` vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser auf der Stirnfläche eines Zylinders oder Kegelstumpfs skizzieren, einen Übergang zu einer größeren versetzten Ebene anlegen, rechts zwischen „Frei“, „Tangential (G1)“ und „Krümmungsglatt (G2)“ wechseln, den Stärke-Regler ziehen und im Lichtglanz den nahtlosen Verlauf prüfen.
 
 ## Volltest-Reparatur (Auto [F-11250227])
 

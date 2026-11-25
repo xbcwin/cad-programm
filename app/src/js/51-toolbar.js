@@ -31,6 +31,8 @@ const Toolbar = (() => {
       { id: 'mirror', group: T('dlg.tb.grpEdit'), domId: 't-mirror', icon: 'mirror', label: T('ctx.mirror'), tip: T('dlg.tb.mirrorTip'), cls: 'minor', help: 'mirror', run: () => Features.pattern('mirror') },
       { id: 'split', group: T('dlg.tb.grpEdit'), domId: 't-split', icon: 'split', label: T('ctx.split'), tip: T('dlg.tb.splitTip'), cls: 'minor', help: 'split', run: () => Features.split() },
       { id: 'rib', group: T('dlg.tb.grpEdit'), domId: 't-rib', icon: 'rib', label: T('kind.rib'), tip: T('dlg.tb.ribTip'), cls: 'minor', help: 'rib', run: () => Features.startRib() },
+      { id: 'boss', group: T('dlg.tb.grpEdit'), domId: 't-boss', icon: 'boss', label: T('kind.boss'), tip: T('dlg.tb.bossTip'), cls: 'minor', help: 'boss', run: () => Features.startBoss() },
+      { id: 'lipGroove', group: T('dlg.tb.grpEdit'), domId: 't-lipGroove', icon: 'lipGroove', label: T('kind.lipGroove'), tip: T('dlg.tb.lipGrooveTip'), cls: 'minor', help: 'lipGroove', run: () => Features.startLipGroove() },
       { id: 'vent', group: T('dlg.tb.grpEdit'), domId: 't-vent', icon: 'vent', label: T('kind.vent'), tip: T('dlg.tb.ventTip'), cls: 'minor', help: 'vent', run: () => Features.startVent() },
       { id: 'fins', group: T('dlg.tb.grpEdit'), domId: 't-fins', icon: 'fins', label: T('kind.fins'), tip: T('dlg.tb.finsTip'), cls: 'minor', help: 'fins', run: () => Features.startFins() },
       { id: 'web', group: T('dlg.tb.grpEdit'), domId: 't-web', icon: 'web', label: T('kind.web'), tip: T('dlg.tb.webTip'), cls: 'minor', help: 'web', run: () => Features.startWeb() },

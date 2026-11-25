@@ -40,6 +40,8 @@ const KINDS = {
   dome: { get label() { return T('kind.dome'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
+  boss: { get label() { return T('kind.boss'); }, params: [] },
+  lipGroove: { get label() { return T('kind.lipGroove'); }, params: [] },
   sketch3d: { get label() { return T('kind.sketch3d'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
 };
@@ -426,6 +428,11 @@ const Model = (() => {
       if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
       if (it.kind === 'splitFace' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'teilt Fläche von' });
       if (it.kind === 'dome' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Kuppel auf' });
+      if (it.kind === 'boss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Schraubdom auf' });
+      if (it.kind === 'lipGroove' && it.p) {
+        if (it.p.lipTarget) out.push({ from: me, to: top(it.p.lipTarget), what: 'Lippe an' });
+        if (it.p.grooveTarget) out.push({ from: me, to: top(it.p.grooveTarget), what: 'Nut in' });
+      }
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
@@ -448,6 +455,17 @@ const Model = (() => {
       for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
       if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.targetId) {
         out.push({ from: me, to: top(it.p.toFace.targetId), what: 'dreht bis Fläche von' });
+      }
+      if (it.kind === 'loft' && it.p) {
+        if (it.p.startFace && it.p.startFace.id) out.push({ from: me, to: top(it.p.startFace.id), what: 'weicher Anschluss (Start) an' });
+        if (it.p.endFace && it.p.endFace.id) out.push({ from: me, to: top(it.p.endFace.id), what: 'weicher Anschluss (Ende) an' });
+        const sks = Array.isArray(it.p.sketches) ? it.p.sketches : [];
+        if ((it.p.startCond === 'tangent' || it.p.startCond === 'curvature') && !it.p.startFace && sks[0] && sks[0].planeRef && sks[0].planeRef.id) {
+          out.push({ from: me, to: top(sks[0].planeRef.id), what: 'weicher Anschluss (Start) an' });
+        }
+        if ((it.p.endCond === 'tangent' || it.p.endCond === 'curvature') && !it.p.endFace && sks[sks.length - 1] && sks[sks.length - 1].planeRef && sks[sks.length - 1].planeRef.id) {
+          out.push({ from: me, to: top(sks[sks.length - 1].planeRef.id), what: 'weicher Anschluss (Ende) an' });
+        }
       }
     });
     for (const d of doc.datums || []) {
@@ -607,6 +625,35 @@ const Model = (() => {
         const p = it.p || {};
         const targets = Array.isArray(p.targets) ? p.targets.filter(Boolean) : (p.target ? [p.target] : []);
         o.p = { targets };
+      } else if (it.kind === 'boss') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          outerD: num(p.outerD, ownV, 8),
+          holeD: num(p.holeD, ownV, 3),
+          height: num(p.height, ownV, 10),
+          holeDepth: num(p.holeDepth, ownV, 0),
+          ribs: Math.max(0, Math.min(6, Math.round(num(p.ribs, ownV, 4)))),
+          ribT: num(p.ribT, ownV, 1.5),
+          ribL: num(p.ribL, ownV, 4),
+          ribH: num(p.ribH, ownV, 0),
+          ribAngle: num(p.ribAngle, ownV, 0),
+          u: num(p.u, ownV, 0),
+          v: num(p.v, ownV, 0),
+        };
+      } else if (it.kind === 'lipGroove') {
+        const p = it.p || {};
+        o.p = {
+          lipTarget: p.lipTarget || null,
+          grooveTarget: p.grooveTarget || null,
+          face: p.face || null,
+          edge: p.edge || null,
+          side: p.side === 'outer' ? 'outer' : 'inner',
+          height: num(p.height, ownV, 2),
+          width: num(p.width, ownV, 1.2),
+          clearance: Math.max(0, num(p.clearance, ownV, 0.2)),
+        };
       }
       else {
         o.p = resolveP(it.p, ownV);
@@ -984,7 +1031,17 @@ const Model = (() => {
       const regs = SK.regions(Solver.cached(sk, V).ents).sort((a, b) => b.area - a.area);
       if (!regs.length) continue;
       const L = regs[0].outer; let cx = 0, cy = 0; for (const q of L.poly) { cx += q[0]; cy += q[1]; } cx /= L.poly.length || 1; cy /= L.poly.length || 1;
-      profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly });
+      const prof = { plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly };
+      if (sk.planeRef && sk.planeRef.kind === 'face' && sk.planeRef.id) {
+        prof.planeRef = {
+          kind: 'face',
+          id: sk.planeRef.id,
+          tid: sk.planeRef.tid || null,
+          c: sk.planeRef.c || null,
+          n: sk.planeRef.n || null,
+        };
+      }
+      profiles.push(prof);
     }
     const out = { profiles, ruled: !!p.ruled };
     if (p.closed) {
@@ -1006,7 +1063,21 @@ const Model = (() => {
       out.path = { plane: p.path.plane, segs };
       return out;   // mit Mittellinie: keine Spitze, kein „gerade“
     }
+    const normCond = (c) => (c === 'tangent' || c === 'curvature' ? c : 'none');
+    const startCond = normCond(p.startCond);
+    let endCond = normCond(p.endCond);
     const tip = num(p.tip, V, 0);
+    if (tip > 0 && endCond !== 'none') endCond = 'none';
+    if ((startCond !== 'none' || endCond !== 'none') && profiles.length >= 2) {
+      out.ruled = false;
+      out.startCond = startCond;
+      out.endCond = endCond;
+      out.startWeight = clamp(num(p.startWeight, V, 1), 0.1, 3);
+      out.endWeight = clamp(num(p.endWeight, V, 1), 0.1, 3);
+      if (p.startFace && p.startFace.id) out.startFace = p.startFace;
+      if (p.endFace && p.endFace.id) out.endFace = p.endFace;
+      return out;
+    }
     if (tip > 0 && profiles.length) {
       const last = profiles[profiles.length - 1], pl = last.plane;
       const n = pl.n, x = pl.x, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
@@ -1627,8 +1698,11 @@ const Model = (() => {
       case 'loft': {
         const n = (it.p && Array.isArray(it.p.sketches)) ? it.p.sketches.length : 0;
         const base = it.p && it.p.closed ? `Ring (${n} Umrisse)` : `${n} Umrisse`;
+        const sc = it.p && !it.p.closed && !it.p.path && !it.p.rail && !it.p.rail2 ? it.p.startCond : null;
+        const ec = it.p && !it.p.closed && !it.p.path && !it.p.rail && !it.p.rail2 ? it.p.endCond : null;
+        const contTxt = (sc === 'curvature' || ec === 'curvature') ? ' · G2' : (sc === 'tangent' || ec === 'tangent') ? ' · G1' : '';
         const opTxt = it.op && it.op.type === 'cut' ? ' · Schnitt' : it.op && it.op.type === 'join' ? ' · Vereinigen' : it.op && it.op.type === 'common' ? ' · Schnittmenge' : '';
-        return base + opTxt;
+        return base + contTxt + opTxt;
       }
       case 'sweep': {
         const shp = p.shape === 'rect' ? `${f(p.w ?? 6)} × ${f(p.h ?? 4)}${u}` : p.shape === 'sketch' ? 'eigene Form' : `Ø ${f(p.d ?? 6)}${u}`;
@@ -1699,6 +1773,11 @@ const Model = (() => {
       case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
       case 'splitFace': return p.side === 'both' ? 'beide Seiten' : p.side === 'back' ? 'Rückseite' : 'Vorderseite';
       case 'dome': return `${it.p && it.p.flip ? '−' : '+'}${f(p.height ?? 5)}${u}${it.p && it.p.shape === 'spherical' ? ' · Kugelkappe' : ''}`;
+      case 'boss': {
+        const ribs = Math.max(0, Math.min(6, Math.round(p.ribs ?? 4)));
+        return `Ø ${f(p.outerD ?? 8)}/${f(p.holeD ?? 3)}${u} · H ${f(p.height ?? 10)}${u}${ribs > 0 ? ` · ${ribs} Rippen` : ''}`;
+      }
+      case 'lipGroove': return `H ${f(p.height ?? 2)}${u} · Spiel ${f(p.clearance ?? 0.2)}${u}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'mirrorStep': {
@@ -1892,7 +1971,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'vent' || s.item.kind === 'fins' || s.item.kind === 'web' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'splitFace' || s.item.kind === 'dome' || s.item.kind === 'deleteBody' || s.item.kind === 'boss' || s.item.kind === 'lipGroove' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
