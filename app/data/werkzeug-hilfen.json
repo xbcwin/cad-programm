@@ -2058,5 +2058,10 @@
     "tip": "Rollenkettenrad nach Teilung (DIN 8187 / ISO 606, z. B. 1/2\", 3/8\" oder eigene Teilung)",
     "hilfe": "Erzeugt ein Kettenrad für genormte Rollenketten (04B–16B inkl. 1/2\" Standard- und Fahrradkette) oder eine eigene Kettenteilung mit exaktem Teilkreis Ø = p / sin(π / Zähne), Zahnbreite, optionaler Nabe und Bohrung.",
     "tipp": "Für eigene Teilungen oder Kettenräder mit Bund stellst du rechts einfach „Eigene Teilung“ bzw. eine Nabenhöhe größer 0 ein."
+  },
+  "mountPattern": {
+    "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) und Servos",
+    "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt passendem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23) sowie gängige Servos (Standard, Mini, Micro 9g, Groß-Servo). Alle Durchmesser, der Ausschnitt, die Lage (X/Y), Drehung, Tiefe und eine optionale 3D-Druck-Passung lassen sich rechts anpassen.",
+    "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben und Zentrierbund nach dem 3D-Druck sauber passen."
   }
 }

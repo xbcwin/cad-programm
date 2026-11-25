@@ -8831,7 +8831,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || it.kind === 'knurl' || it.kind === 'gripPattern' || it.kind === 'stackHole' || it.kind === 'asmCut' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -10560,6 +10560,93 @@ export function createKernel(R, oc) {
         return { tool, count: centers.length, kind };
       } catch (err) {
         for (const s of holeSolids) safeDelete(s);
+        throw err;
+      }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function buildMountPatternOn(baseShape, p, topo = null, tid = null) {
+    const holes = Array.isArray(p.holes) ? p.holes : [];
+    const holeD = num(p.holeD, 3.4);
+    if (!holes.length) throw new Error('Lochbild: Mindestens ein Befestigungsloch erforderlich.');
+    if (!(holeD >= 0.2 && isFinite(holeD))) throw new Error('Lochbild: Der Lochdurchmesser muss mindestens 0,2 mm sein.');
+    const includeCenter = p.includeCenter !== false;
+    const centerKind = p.centerKind === 'rect' ? 'rect' : 'circle';
+    const centerD = num(p.centerD, 0);
+    const cutW = num(p.cutW, 0);
+    const cutH = num(p.cutH, 0);
+    const u = num(p.u, 0);
+    const v = num(p.v, 0);
+    const angle = num(p.angle, 0);
+    const depth = Math.max(0, num(p.depth, 0));
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Lochbild: Wähle eine ebene Körperfläche.');
+      const F = planarFaceFrame(f);
+      const centerO = add(F.o, add(mul(F.x, u), mul(F.y, v)));
+      const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+      const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+      const Muv = {
+        o: centerO, x: U, y: V, n: F.n,
+        P: (uv) => [centerO[0] + U[0] * uv[0] + V[0] * uv[1], centerO[1] + U[1] * uv[0] + V[1] * uv[1], centerO[2] + U[2] * uv[0] + V[2] * uv[1]],
+      };
+      const bb = bboxOf(baseShape);
+      let sMax = 0;
+      for (const q of cornersOf(bb)) sMax = Math.max(sMax, dot(sub(q, centerO), mul(F.n, -1)));
+      let Hcut;
+      if (depth > 1e-4) {
+        Hcut = depth;
+      } else {
+        const probePts = holes.slice(0, 2).concat([[0, 0]]);
+        const probed = probeWallDepth(baseShape, Muv, probePts.map((pt) => ({ uA: pt[0] - 0.2, uB: pt[0] + 0.2, v: pt[1] })), Math.max(1, sMax));
+        Hcut = Math.max(0.2, probed) + 0.15;
+      }
+
+      const holeR = holeD / 2;
+      const holeSolids = [];
+      let overlapsCenter = false;
+      try {
+        for (const q of holes) {
+          if (!Array.isArray(q) || q.length < 2) continue;
+          const hx = Number(q[0]) || 0, hy = Number(q[1]) || 0;
+          holeSolids.push(R.makeCylinder(holeR, Hcut + 0.05, add(Muv.P([hx, hy]), mul(F.n, 0.05)), mul(F.n, -1)));
+          if (includeCenter) {
+            if (centerKind === 'circle' && centerD > 0.2) {
+              if (Math.hypot(hx, hy) < holeR + centerD / 2 + 0.05) overlapsCenter = true;
+            } else if (centerKind === 'rect' && cutW > 0.2 && cutH > 0.2) {
+              if (Math.abs(hx) < cutW / 2 + holeR + 0.05 && Math.abs(hy) < cutH / 2 + holeR + 0.05) overlapsCenter = true;
+            }
+          }
+        }
+        let hasCenter = false;
+        if (includeCenter && centerKind === 'circle' && centerD > 0.2) {
+          holeSolids.push(R.makeCylinder(centerD / 2, Hcut + 0.05, add(centerO, mul(F.n, 0.05)), mul(F.n, -1)));
+          hasCenter = true;
+        } else if (includeCenter && centerKind === 'rect' && cutW > 0.2 && cutH > 0.2) {
+          const hw = cutW / 2, hh = cutH / 2;
+          const segs = [
+            { t: 'line', a: [-hw, -hh], b: [hw, -hh] },
+            { t: 'line', a: [hw, -hh], b: [hw, hh] },
+            { t: 'line', a: [hw, hh], b: [-hw, hh] },
+            { t: 'line', a: [-hw, hh], b: [-hw, -hh] },
+          ];
+          const fc = regionFace({ outer: { segs }, holes: [] }, Muv);
+          const fcTop = fc.translate(mul(F.n, 0.05));
+          safeDelete(fc);
+          const sol = R.basicFaceExtrusion(fcTop, new R.Vector(mul(F.n, -(Hcut + 0.05))));
+          safeDelete(fcTop);
+          holeSolids.push(sol);
+          hasCenter = true;
+        }
+        if (!holeSolids.length) throw new Error('Lochbild: Keine gültigen Löcher zum Schneiden.');
+        const tool = overlapsCenter
+          ? fuseAll(holeSolids, true)
+          : (holeSolids.length === 1 ? holeSolids[0] : R.makeCompound(holeSolids));
+        return { tool, holeCount: holes.length, hasCenter, preset: p.preset || '' };
+      } catch (err) {
+        if (!overlapsCenter) for (const s of holeSolids) safeDelete(s);
         throw err;
       }
     } finally {
@@ -13499,6 +13586,55 @@ export function createKernel(R, oc) {
             if (!next) {
               const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
               const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Fp:' + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(toolTopo);
+              cachePut(k, next, null, resMeta, null, nextTopo);
+            }
+            if (anyMirror) cachePut(kTool, tool);
+            else safeDelete(tool);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (resolved && resMeta) resolved[it.id] = resMeta;
+        if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType: 'cut', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'mountPattern') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Lochbild: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Lochbild: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, 'mountPattern', p]);
+        const kTool = keyOf([src.key, 'mountPatternTool', p]);
+        const ce = cacheEntry(k);
+        let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+        let resMeta = ce ? ce.resolved : null;
+        let tool = anyMirror ? cacheGet(kTool) : null;
+        if (!next || (anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = buildMountPatternOn(src.shape, p, src.topo, src.it.id);
+            tool = built.tool;
+            resMeta = { holeCount: built.holeCount, hasCenter: built.hasCenter, preset: built.preset };
+            if (!next) {
+              const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
+              const br = boolWithTopo('cut', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, 'Mp:' + it.id);
               next = br.shape; nextTopo = br.topo;
               freeTopoMap(toolTopo);
               cachePut(k, next, null, resMeta, null, nextTopo);

@@ -2955,6 +2955,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **GeomCheck, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n**: Beide Körper bestehen `GeomCheck` ohne Befund, `App.undo()`/`redo()`, `Store.validateProject()`, Synchronität von `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json`, DE/EN-Schlüsselgleichheit und 0 JS-Konsolenfehler (`t_a185_zahnriemenscheiben_kettenraeder`).
 - [ ] **Von Hand**: Im Browser über „Bauteile“ eine GT2-Zahnriemenscheibe und ein 1/2"-Kettenrad einfügen, Profile, Zähnezahl, Bordscheiben und Nabe variieren und die Verzahnung aus mehreren Blickwinkeln prüfen.
 
+## Bibliothek: Lochbilder für Lüfter, Motoren, Servos (Auto [A-188], BI-16)
+
+- [x] **NEMA 17 auf Platte (31 mm Abstand, Ø 22 mm Mittelloch)**: `Features.mountPattern(topFace, { preset: 'nema17' })` erzeugt auf einer 80×80×6-mm-Platte fehlerfrei 5 zylindrische Bohrungen: 4 Befestigungslöcher Ø 3,4 mm exakt im Quadratabstand 31,0 mm (Diagonale ≈ 43,84 mm) sowie das zentrale Mittelloch Ø 22,0 mm exakt in der Mitte; `GeomCheck` findet 0 Geometrie-Fehler (`t_a188_lochbilder_luefter_motoren_servos`).
+- [x] **Lüfter (25–140 mm), NEMA 14/23 & Servos**: Umschalten über `#mp-preset` auf `fan25`, `fan40`, `fan140`, `nema14`, `nema23` sowie Servo-Lochbilder `servoStd` (4 Löcher 48,5 × 10 mm + Ausschnitt 40,5 × 20,5 mm) und `servoMicro` (2 Löcher 27,5 mm + Ausschnitt 23 × 12,5 mm) erzeugt jeweils alle erwarteten Bohrungen und Ausschnitte ohne Fehler (`t_a188_lochbilder_luefter_motoren_servos`).
+- [x] **Optionen, Einfach & Profi, Undo/Redo, Validierung & Hilfen**: Deaktivieren von `#mp-center`, 3D-Druck-Passung (`slide` +0,2 mm), X/Y-Versatz (`u`/`v`), Sichtbarkeit in Einfach (`#add-mount-pattern`, `#ctx-mount-pattern` bei unveränderter Kachelzahl) und Profi, Befehlssuche (`nema 17`), `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a188_lochbilder_luefter_motoren_servos`).
+- [ ] **Von Hand**: Im Browser im Bauteil-Menü auf „Lochbild (Lüfter, Motor, Servo)“ oder auf eine ebene Plattenfläche klicken, zwischen Lüfter, NEMA 17 und Standard-Servo wechseln und die Löcher rundum prüfen.
+
 ## Fehler melden
 
 ```

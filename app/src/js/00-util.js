@@ -740,6 +740,7 @@ const IC = {
   wormWheel: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3"/><path d="M8.5 5.3l7 1.4M7.2 8.8l9.6 2M7.2 13.2l9.6 2M8.5 16.7l7 1.4" opacity=".6"/>',
   timingPulley: '<circle cx="12" cy="12" r="9.5" stroke-dasharray="2.4 1.6"/><circle cx="12" cy="12" r="6.8"/><circle cx="12" cy="12" r="2.8"/><path d="M12 5.2V3.5M16.8 7.2l1.2-1.2M18.8 12h1.7M16.8 16.8l1.2 1.2M12 18.8v1.7M7.2 16.8L6 18M5.2 12H3.5M7.2 7.2L6 6"/>',
   sprocket: '<circle cx="12" cy="12" r="3.4"/><path d="M10.8 2.8h2.4l.7 2.7a6.6 6.6 0 0 1 2.2.9l2.1-1.8 1.7 1.7-1.8 2.1a6.6 6.6 0 0 1 .9 2.2l2.7.7v2.4l-2.7.7a6.6 6.6 0 0 1-.9 2.2l1.8 2.1-1.7 1.7-2.1-1.8a6.6 6.6 0 0 1-2.2.9l-.7 2.7h-2.4l-.7-2.7a6.6 6.6 0 0 1-2.2-.9l-2.1 1.8-1.7-1.7 1.8-2.1a6.6 6.6 0 0 1-.9-2.2l-2.7-.7v-2.4l2.7-.7a6.6 6.6 0 0 1 .9-2.2L4.2 6.3l1.7-1.7 2.1 1.8a6.6 6.6 0 0 1 2.2-.9z"/>',
+  mountPattern: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="currentColor" opacity=".14"/><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="17" r="1.2" fill="currentColor" stroke="none"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2826,6 +2827,11 @@ const HELP = {
   "tip": "Rollenkettenrad nach Teilung (DIN 8187 / ISO 606, z. B. 1/2\", 3/8\" oder eigene Teilung)",
   "hilfe": "Erzeugt ein Kettenrad für genormte Rollenketten (04B–16B inkl. 1/2\" Standard- und Fahrradkette) oder eine eigene Kettenteilung mit exaktem Teilkreis Ø = p / sin(π / Zähne), Zahnbreite, optionaler Nabe und Bohrung.",
   "tipp": "Für eigene Teilungen oder Kettenräder mit Bund stellst du rechts einfach „Eigene Teilung“ bzw. eine Nabenhöhe größer 0 ein."
+ },
+ "mountPattern": {
+  "tip": "Norm-Lochbilder für Lüfter (25–140 mm), Schrittmotoren (NEMA 14/17/23) und Servos",
+  "hilfe": "Schneidet komplette Befestigungs-Lochbilder samt passendem Mittel- oder Gehäuseausschnitt als eigenen Formschritt in eine ebene Fläche. Enthält Axiallüfter von 25 bis 140 mm, Schrittmotoren nach NEMA ICS 16 (NEMA 14, 17, 23) sowie gängige Servos (Standard, Mini, Micro 9g, Groß-Servo). Alle Durchmesser, der Ausschnitt, die Lage (X/Y), Drehung, Tiefe und eine optionale 3D-Druck-Passung lassen sich rechts anpassen.",
+  "tipp": "Schalte „Mittelloch schneiden“ aus, wenn du nur die Befestigungslöcher brauchst, oder wähle „gleitend“ unter Druck-Passung, damit Schrauben und Zentrierbund nach dem 3D-Druck sauber passen."
  }
 };
 

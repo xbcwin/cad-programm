@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2113,7 +2113,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2834,6 +2834,141 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: T('panel.fillPattern.hint') }));
   }
+  function mountPattern(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Lochbilder gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigWithTid(face);
+    if (!tgt || tgt.role === 'hole' || !sig || (face.info && face.info.t !== 'PLANE')) {
+      startMountPattern(opts);
+      return null;
+    }
+    const e = typeof mountPatternEntry === 'function' ? mountPatternEntry(opts.preset || 'nema17') : { id: 'nema17', label: 'NEMA 17 (42 mm)' };
+    const p = {
+      target: tgt.id,
+      face: sig,
+      preset: e.id,
+      includeCenter: opts.includeCenter !== false,
+      holeD: opts.holeD ?? null,
+      centerD: opts.centerD ?? null,
+      cutW: opts.cutW ?? null,
+      cutH: opts.cutH ?? null,
+      u: opts.u ?? 0,
+      v: opts.v ?? 0,
+      angle: opts.angle ?? 0,
+      depth: opts.depth ?? 0,
+      printFit: opts.printFit || '',
+    };
+    let step;
+    App.change('Lochbild angelegt', (doc) => {
+      step = Model.newItem('mountPattern', p, { name: opts.name || `${T('kind.mountPattern')} ${e.label.split(' (')[0]}`, color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.mountPatternAdded', { name: e.label }), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startMountPattern(opts = {}) {
+    if (App.ctx) { UI.toast('Lochbilder gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für ein Lochbild braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') { mountPattern(f, opts); return true; }
+    pickPlanarBodyFace('<b>Lochbild setzen:</b> Klick auf eine ebene Fläche für Lüfter-, Motor- oder Servo-Löcher. <b>Esc</b> bricht ab.', (picked) => { mountPattern(picked, opts); });
+    return true;
+  }
+  function pickMountPatternFace(stepId) {
+    pickPlanarStepFace(stepId, 'Fläche für Lochbild gewählt', 'Fläche aktualisiert.');
+  }
+  function renderMountPattern(it, sec, setP) {
+    const p = it.p || {};
+    const V = Model.vars(App.doc).v;
+    const optNum = (val) => (val == null || val === '' ? null : Model.num(val, V, null));
+    const m = typeof mountPatternMetrics === 'function'
+      ? mountPatternMetrics({
+        ...p,
+        holeD: optNum(p.holeD),
+        centerD: optNum(p.centerD),
+        cutW: optNum(p.cutW),
+        cutH: optNum(p.cutH),
+        u: Model.num(p.u, V, 0),
+        v: Model.num(p.v, V, 0),
+        angle: Model.num(p.angle, V, 0),
+        depth: Math.max(0, Model.num(p.depth, V, 0)),
+      })
+      : null;
+    if (!m) return;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'mp-preset', label: T('panel.mountPattern.preset'), value: m.id,
+      options: typeof MOUNT_PATTERN_GROUPED_OPTIONS !== 'undefined' ? MOUNT_PATTERN_GROUPED_OPTIONS : [[m.id, m.label]],
+      onChange: (v) => App.change('Lochbild-Vorlage geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        const ne = typeof mountPatternEntry === 'function' ? mountPatternEntry(v) : null;
+        item.p.preset = ne ? ne.id : v;
+        item.p.holeD = null;
+        item.p.centerD = null;
+        item.p.cutW = null;
+        item.p.cutH = null;
+        if (ne && (!item.name || item.name.startsWith(T('kind.mountPattern')))) {
+          item.name = `${T('kind.mountPattern')} ${ne.label.split(' (')[0]}`;
+        }
+      }),
+    }));
+    sec.append(fl);
+    const ctrLabel = m.centerKind === 'circle' ? T('panel.mountPattern.includeCircle') : T('panel.mountPattern.includeRect');
+    const ctrCb = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'mp-center', checked: m.includeCenter }), ctrLabel);
+    ctrCb.querySelector('input').onchange = (e) => setP('includeCenter', e.target.checked);
+    sec.append(ctrCb);
+    const fl2 = h('div', { class: 'fields', style: { marginTop: '6px' } });
+    fl2.append(UI.numField({
+      id: 'mp-holeD', label: T('panel.mountPattern.holeD'),
+      value: p.holeD != null && p.holeD !== '' ? p.holeD : m.holeD, min: 0.2, unit: 'mm',
+      onCommit: (v) => setP('holeD', v),
+    }));
+    if (m.includeCenter && m.centerKind === 'circle') {
+      fl2.append(UI.numField({
+        id: 'mp-centerD', label: T('panel.mountPattern.centerD'),
+        value: p.centerD != null && p.centerD !== '' ? p.centerD : m.centerD, min: 0, unit: 'mm',
+        onCommit: (v) => setP('centerD', v),
+      }));
+    } else if (m.includeCenter && m.centerKind === 'rect') {
+      fl2.append(
+        UI.numField({ id: 'mp-cutW', label: T('panel.mountPattern.cutW'), value: p.cutW != null && p.cutW !== '' ? p.cutW : m.cutW, min: 0.5, unit: 'mm', onCommit: (v) => setP('cutW', v) }),
+        UI.numField({ id: 'mp-cutH', label: T('panel.mountPattern.cutH'), value: p.cutH != null && p.cutH !== '' ? p.cutH : m.cutH, min: 0.5, unit: 'mm', onCommit: (v) => setP('cutH', v) }),
+      );
+    }
+    fl2.append(
+      UI.numField({ id: 'mp-u', label: T('panel.mountPattern.offsetX'), value: p.u ?? 0, unit: 'mm', onCommit: (v) => setP('u', v) }),
+      UI.numField({ id: 'mp-v', label: T('panel.mountPattern.offsetY'), value: p.v ?? 0, unit: 'mm', onCommit: (v) => setP('v', v) }),
+      UI.numField({ id: 'mp-angle', label: T('panel.mountPattern.angle'), value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }),
+      UI.numField({ id: 'mp-depth', label: T('panel.mountPattern.depth'), value: p.depth ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('depth', v) }),
+      UI.selectField({ id: 'mp-printFit', label: T('printFit.label'), value: p.printFit || '', options: printFitHoleOptions, onChange: (v) => setP('printFit', v) }),
+    );
+    sec.append(fl2);
+    const pitchTxt = m.layout === 'square'
+      ? `${Units.fmtLenU(m.pitch, 2)} × ${Units.fmtLenU(m.pitch, 2)}`
+      : m.layout === 'rect4'
+        ? `${Units.fmtLenU(m.pitchX, 2)} × ${Units.fmtLenU(m.pitchY, 2)}`
+        : `${Units.fmtLenU(m.pitchX, 2)}`;
+    const ctrTxt = m.includeCenter
+      ? (m.centerKind === 'circle' ? ` · Mitte Ø ${Units.fmtLenU(m.centerDEff, 2)}` : ` · Ausschnitt ${Units.fmtLenU(m.cutWEff, 2)} × ${Units.fmtLenU(m.cutHEff, 2)}`)
+      : '';
+    sec.append(h('div', { class: 'mini-row', id: 'mp-info' },
+      h('span', { class: 'grow' }, `${m.holes.length}× Ø ${Units.fmtLenU(m.holeDEff, 2)} (${m.screw}) · ${pitchTxt}${ctrTxt}`),
+      h('b', { class: 'mono' }, m.source)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'mp-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickMountPatternFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'mp-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: T('panel.mountPattern.hint') }));
+  }
   function startWeb(face) {
     if (App.ctx) { UI.toast('Steg-Netze gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
     if (!ribTargets().length) { UI.toast('Für ein Steg-Netz braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
@@ -3222,7 +3357,7 @@ const Features = (() => {
   function canMirrorStep(it, parent) {
     if (!it) return false;
     if (it.op && it.op.target) return true;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'dome') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'web' || it.kind === 'dome') return true;
     if (it.kind === 'wrap' && (!it.p || it.p.mode !== 'line')) return true;
     if (it.kind === 'emboss') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
@@ -3270,7 +3405,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -4613,7 +4748,7 @@ const Features = (() => {
     return doc.items.filter((x) => (
       x && !ex.has(x.id) && x.role !== 'hole' && !x.suppressed
       && !(x.kind === 'group' && x.p && x.p.assembly)
-      && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss'
+      && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mountPattern'
       && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern'
       && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d'
       && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform'
@@ -6294,5 +6429,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
 })();

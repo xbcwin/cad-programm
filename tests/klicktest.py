@@ -38514,6 +38514,226 @@ def t_a185_zahnriemenscheiben_kettenraeder(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a188_lochbilder_luefter_motoren_servos(p):
+    p.empty()
+
+    # 1. NEMA 17 auf 80×80×6-mm-Platte -> 4 Löcher Ø 3,4 mm im Abstand 31 mm + Mittelloch Ø 22 mm
+    p.ev("""
+      App.change('Platte 80x80x6', (doc) => {
+        const b = Model.newItem('box', { w: 80, d: 80, h: 6 }, { name: 'Platte' });
+        doc.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 45)
+    p.ev("""
+      const plate = App.doc.items[0];
+      const r = App.results.get(plate.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Features.mountPattern({ id: plate.id, idx: fi, info: r.data.faces[fi] }, { preset: 'nema17' });
+    """)
+    warte_rechnen(p, 45)
+
+    def cyl_stats():
+        return p.ev("""return (() => {
+          const plate = App.doc.items[0];
+          const step = App.doc.items[1];
+          const r = App.results.get(plate.id);
+          const faces = (r && r.data && r.data.faces) || [];
+          const cyls = faces.filter(f => f.t === 'CYLINDRE' && f.axis).map(f => ({
+            r: Math.round(f.r * 1000) / 1000,
+            d: Math.round(f.r * 2000) / 1000,
+            x: Math.round(f.axis[0] * 1000) / 1000,
+            y: Math.round(f.axis[1] * 1000) / 1000,
+          }));
+          const planes = faces.filter(f => f.t === 'PLANE').length;
+          return {
+            errs: App.errors.length,
+            cylCount: cyls.length,
+            cyls,
+            planes,
+            info: document.querySelector('#mp-info')?.textContent || '',
+            stepKind: step ? step.kind : null,
+          };
+        })()""")
+
+    def hole_dists(cyls, hole_r):
+        small = [c for c in cyls if abs(c['r'] - hole_r) < 0.08]
+        dists = []
+        for i in range(len(small)):
+            for j in range(i + 1, len(small)):
+                dists.append(round(((small[i]['x'] - small[j]['x']) ** 2 + (small[i]['y'] - small[j]['y']) ** 2) ** 0.5, 3))
+        dists.sort()
+        return small, dists
+
+    nema17 = cyl_stats()
+    small17, dists17 = hole_dists(nema17['cyls'], 1.7)
+    center17 = [c for c in nema17['cyls'] if abs(c['r'] - 11.0) < 0.08]
+    gc17 = p.ev("return GeomCheck.run({ silent: true }).then(g => ({ issues: g.issues.length, checked: g.checkedCount }))")
+    ok1 = (
+        nema17['errs'] == 0
+        and nema17['stepKind'] == 'mountPattern'
+        and nema17['cylCount'] == 5
+        and len(small17) == 4
+        and len(center17) == 1
+        and all(abs(d - 31.0) < 0.05 for d in dists17[:4])
+        and all(abs(d - (31.0 * (2 ** 0.5))) < 0.05 for d in dists17[4:])
+        and abs(center17[0]['x']) < 0.05 and abs(center17[0]['y']) < 0.05
+        and '31' in nema17['info'] and '22' in nema17['info']
+        and gc17['issues'] == 0 and gc17['checked'] >= 1
+    )
+
+    # 2. Lüfter (25–140 mm) und NEMA 14 / 23 über #mp-preset
+    p.pg.locator('#mp-preset').select_option('fan40')
+    warte_rechnen(p, 45)
+    fan40 = cyl_stats()
+    _, dfan40 = hole_dists(fan40['cyls'], 1.7)
+    cfan40 = [c for c in fan40['cyls'] if abs(c['r'] - 19.0) < 0.08]
+
+    p.pg.locator('#mp-preset').select_option('fan25')
+    warte_rechnen(p, 45)
+    fan25 = cyl_stats()
+    _, dfan25 = hole_dists(fan25['cyls'], 1.4)
+    cfan25 = [c for c in fan25['cyls'] if abs(c['r'] - 11.5) < 0.08]
+
+    p.pg.locator('#mp-preset').select_option('nema14')
+    warte_rechnen(p, 45)
+    nema14 = cyl_stats()
+    _, dn14 = hole_dists(nema14['cyls'], 1.7)
+    cn14 = [c for c in nema14['cyls'] if abs(c['r'] - 11.0) < 0.08]
+
+    p.pg.locator('#mp-preset').select_option('nema23')
+    warte_rechnen(p, 45)
+    nema23 = cyl_stats()
+    _, dn23 = hole_dists(nema23['cyls'], 2.75)
+    cn23 = [c for c in nema23['cyls'] if abs(c['r'] - 19.05) < 0.08]
+
+    # Platte vergrößern für 140-mm-Lüfter
+    p.ev("App.change('Platte 160', d => { d.items[0].p.w = 160; d.items[0].p.d = 160; })")
+    warte_rechnen(p, 45)
+    p.ev("App.select([App.doc.items[1].id])")
+    p.wait(300)
+    p.pg.locator('#mp-preset').select_option('fan140')
+    warte_rechnen(p, 45)
+    fan140 = cyl_stats()
+    _, dfan140 = hole_dists(fan140['cyls'], 2.25)
+    cfan140 = [c for c in fan140['cyls'] if abs(c['r'] - 67.5) < 0.08]
+
+    ok2 = (
+        fan40['errs'] == 0 and len(cfan40) == 1 and len(dfan40) == 6 and all(abs(d - 32.0) < 0.05 for d in dfan40[:4])
+        and fan25['errs'] == 0 and len(cfan25) == 1 and len(dfan25) == 6 and all(abs(d - 20.0) < 0.05 for d in dfan25[:4])
+        and nema14['errs'] == 0 and len(cn14) == 1 and len(dn14) == 6 and all(abs(d - 26.0) < 0.05 for d in dn14[:4])
+        and nema23['errs'] == 0 and len(cn23) == 1 and len(dn23) == 6 and all(abs(d - 47.14) < 0.05 for d in dn23[:4])
+        and fan140['errs'] == 0 and len(cfan140) == 1 and len(dfan140) == 6 and all(abs(d - 124.5) < 0.05 for d in dfan140[:4])
+    )
+
+    # 3. Servos (Standard-Servo 4 Löcher + Rechteckausschnitt, Micro-Servo 2 Löcher + Ausschnitt) & Optionen
+    p.pg.locator('#mp-preset').select_option('servoStd')
+    warte_rechnen(p, 45)
+    s_std = cyl_stats()
+    _, d_std = hole_dists(s_std['cyls'], 1.6)
+
+    p.pg.locator('#mp-preset').select_option('servoMicro')
+    warte_rechnen(p, 45)
+    s_mic = cyl_stats()
+    _, d_mic = hole_dists(s_mic['cyls'], 1.1)
+
+    # Zurück auf NEMA 17: Mittelloch abwählen, Druck-Passung 'slide' (+0,2 mm), Versatz u=10, v=-5
+    p.pg.locator('#mp-preset').select_option('nema17')
+    warte_rechnen(p, 45)
+    p.pg.locator('#mp-center').uncheck()
+    warte_rechnen(p, 45)
+    no_ctr = cyl_stats()
+
+    p.pg.locator('#mp-center').check()
+    warte_rechnen(p, 35)
+    p.pg.locator('#mp-printFit').select_option('slide')
+    warte_rechnen(p, 45)
+    fit_st = cyl_stats()
+
+    p.ev("App.change('Versatz', d => { const s = d.items[1]; s.p.printFit = ''; s.p.u = 10; s.p.v = -5; })")
+    warte_rechnen(p, 45)
+    shift_st = cyl_stats()
+    shift_ctr = [c for c in shift_st['cyls'] if abs(c['r'] - 11.0) < 0.08]
+
+    ok3 = (
+        s_std['errs'] == 0 and s_std['cylCount'] == 4 and len(d_std) == 6 and s_std['planes'] >= 10
+        and abs(d_std[0] - 10.0) < 0.05 and abs(d_std[2] - 48.5) < 0.05
+        and s_mic['errs'] == 0 and s_mic['cylCount'] == 2 and len(d_mic) == 1 and abs(d_mic[0] - 27.5) < 0.05 and s_mic['planes'] >= 10
+        and no_ctr['errs'] == 0 and no_ctr['cylCount'] == 4
+        and fit_st['errs'] == 0 and fit_st['cylCount'] == 5
+        and any(abs(c['d'] - 3.6) < 0.05 for c in fit_st['cyls'])
+        and any(abs(c['d'] - 22.2) < 0.05 for c in fit_st['cyls'])
+        and shift_st['errs'] == 0 and len(shift_ctr) == 1
+        and abs(shift_ctr[0]['x'] - 10.0) < 0.05 and abs(shift_ctr[0]['y'] + 5.0) < 0.05
+    )
+
+    # 4. Einfach & Profi, Kontextleiste, Befehlssuche, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    simple_fly = p.ev("""return {
+      tileCount: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      mpBtn: !!document.querySelector('#add-mount-pattern') && !!document.querySelector('#add-mount-pattern').offsetParent,
+      cmds: Commands.search('nema 17').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("""
+      const plate = App.doc.items[0];
+      const r = App.results.get(plate.id);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([plate.id], { face: { id: plate.id, faceIdx: fi, info: r.data.faces[fi] } });
+    """); p.wait(200)
+    simple_ctx = p.ev("return !!document.querySelector('#ctx-mount-pattern') && !!document.querySelector('#ctx-mount-pattern').offsetParent")
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    pro_fly = p.ev("""return {
+      mpBtn: !!document.querySelector('#add-mount-pattern') && !!document.querySelector('#add-mount-pattern').offsetParent,
+      cmds: Commands.search('lüfter 120').map(c => c.id),
+    }""")
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # Undo -> wieder nur Platte (0 runde Flächen), Redo -> Lochbild wieder da
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(200)
+    while p.ev("return App.doc.items.length") > 1:
+        p.ev("App.undo()")
+    warte_rechnen(p, 35)
+    undo_cyls = p.ev("return App.results.get(App.doc.items[0].id).data.faces.filter(f => f.t === 'CYLINDRE').length")
+    p.ev("App.redo()"); warte_rechnen(p, 35)
+    redo_cyls = p.ev("return App.results.get(App.doc.items[0].id).data.faces.filter(f => f.t === 'CYLINDRE').length")
+    p.ev("if (App.doc.items[1]) App.select([App.doc.items[1].id])"); p.wait(200)
+
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = !!(wh.mountPattern && wh.mountPattern.tip && wh.mountPattern.hilfe && wh.mountPattern.tipp && document.querySelector('[data-help="mountPattern"]'));
+      const sOk = !!(se.mountPattern && se.mountPattern.was && se.mountPattern.wozu && se.mountPattern.achtung);
+      const step = App.doc.items.find(x => x.kind === 'mountPattern');
+      const exp = step ? Explain.local(step.id) : null;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return {
+        valOk: !!(val && val.ok),
+        hOk, sOk, i18nOk,
+        expOk: !!(exp && exp.lines && exp.lines.some(l => l.k === 'op' && l.t.includes('NEMA'))),
+      };
+    })()""")
+
+    ok4 = bool(
+        simple_fly['tileCount'] == 5 and simple_fly['mpBtn'] and 'mount-pattern' in simple_fly['cmds']
+        and simple_ctx
+        and pro_fly['mpBtn'] and 'mount-pattern' in pro_fly['cmds']
+        and undo_cyls == 0 and redo_cyls == 5
+        and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk'] and meta['expOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -38815,6 +39035,7 @@ TESTS = [
     ('[A-183] Bibliothek: Schrägzahnrad & Kegelrad-Paar 90°', t_a183_zahnraeder_schraeg_kegel),
     ('[A-186] Bibliothek: Wellen, Stellringe & Kupplungen (BI-13)', t_a186_wellen_stellringe_kupplungen),
     ('[A-185] Bibliothek: Zahnriemenscheiben (GT2, HTD) & Kettenräder nach Teilung (BI-12)', t_a185_zahnriemenscheiben_kettenraeder),
+    ('[A-188] Bibliothek: Lochbilder für Lüfter, Motoren, Servos (BI-16)', t_a188_lochbilder_luefter_motoren_servos),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

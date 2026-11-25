@@ -1449,7 +1449,7 @@ const App = (() => {
       const top = Model.topOf(S.doc, id);
       if (top) {
         selTop.add(top.id);
-        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'deform' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'vent' || top.kind === 'fins' || top.kind === 'fillPattern' || top.kind === 'web' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'splitFace' || top.kind === 'dome' || top.kind === 'mirrorStep' || top.kind === 'boss' || top.kind === 'undercut' || top.kind === 'circlipGroove' || top.kind === 'keyway' || top.kind === 'splineProfile' || top.kind === 'knurl' || top.kind === 'gripPattern') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'deform' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'vent' || top.kind === 'fins' || top.kind === 'fillPattern' || top.kind === 'mountPattern' || top.kind === 'web' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'splitFace' || top.kind === 'dome' || top.kind === 'mirrorStep' || top.kind === 'boss' || top.kind === 'undercut' || top.kind === 'circlipGroove' || top.kind === 'keyway' || top.kind === 'splineProfile' || top.kind === 'knurl' || top.kind === 'gripPattern') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
         if (top.kind === 'lipGroove' && top.p) {
           for (const tid of [top.p.lipTarget, top.p.grooveTarget]) {
             if (!tid) continue;
