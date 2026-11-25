@@ -2631,6 +2631,11 @@ const HELP = {
   "tip": "Projektion zwischen Europa (ISO E) und USA (ISO A) umschalten",
   "hilfe": "Bestimmt, wo Draufsicht und Seitenansicht rund um die Vorderansicht liegen: Bei Europa (ISO E, Methode 1) stehen Draufsicht unten und Seitenansicht rechts; bei USA (ISO A, Methode 3) stehen Draufsicht oben und Seitenansicht links. Das Normsymbol im Schriftfeld wechselt automatisch mit.",
   "tipp": "Die Einstellung gilt pro Blatt – so kannst du bei Bedarf auch internationale Fertigungsblätter kombinieren."
+ },
+ "drawingModelDims": {
+  "tip": "Maße aus Skizzen und Schritten des 3D-Modells übernehmen und ohne Überlappen auf dem Blatt ordnen",
+  "hilfe": "Liest die gespeicherten Maße aus deinen Skizzen, Grundkörpern, Auszügen, Bohrungen, Rundungen und Fasen aus, legt sie in die jeweils passenden Ansichten (Vorder-, Drauf- oder Seitenansicht) und rückt alle Maßtexte so zurecht, dass sich nichts überdeckt.",
+  "tipp": "Mit „Maße ordnen“ kannst du auch später hinzugefügte Maße jederzeit wieder sauber auseinanderrücken."
  }
 };
 

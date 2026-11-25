@@ -3417,9 +3417,9 @@ const Drawing = (() => {
       const out = [];
       const v = lay.views[dim.view]; if (!v) continue;
       const b = v.geo.box;
-      if (dim.auto === 'width') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: -(9 / v.s) });
-      if (dim.auto === 'height') out.push({ ...dim, type: 'lin', dir: 'v', a: [b[0], b[1]], b: [b[0], b[3]], off: -(9 / v.s) });
-      if (dim.auto === 'depth') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: -(9 / v.s) });
+      if (dim.auto === 'width') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: typeof dim.off === 'number' && isFinite(dim.off) ? dim.off : -(9 / v.s) });
+      if (dim.auto === 'height') out.push({ ...dim, type: 'lin', dir: 'v', a: [b[0], b[1]], b: [b[0], b[3]], off: typeof dim.off === 'number' && isFinite(dim.off) ? dim.off : -(9 / v.s) });
+      if (dim.auto === 'depth') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: typeof dim.off === 'number' && isFinite(dim.off) ? dim.off : -(9 / v.s) });
       if (dim.auto === 'circles') {
         // Gleiche Durchmesser nur einmal bemaßen („2× Ø4,5“). Verschiedene Durchmesser möglichst an verschiedenen
         // Bohrungen, sonst in verschiedene Richtungen – immer vom Teil weg, damit sich nichts überdeckt.
@@ -3530,7 +3530,8 @@ const Drawing = (() => {
       const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
       const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
       const tEx = Math.min(tx, ty);
-      const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
+      const autoLead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
+      const lead = typeof dim.lead === 'number' && isFinite(dim.lead) && dim.lead > 0 ? dim.lead : autoLead;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
       const nomVal = dim.type === 'dia' ? dim.r * 2 : dim.r;
       const { mainLabel, prefix } = dimLabelParts(dim, nomVal, st);
@@ -3567,7 +3568,8 @@ const Drawing = (() => {
       const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
       const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
       const tEx = Math.min(tx, ty);
-      const lead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+      const autoLead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+      const lead = typeof dim.lead === 'number' && isFinite(dim.lead) && dim.lead > 0 ? dim.lead : autoLead;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
       const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
       const label = `${fmtDim(dim.dist, st)}×${angTxt}`;
@@ -6559,6 +6561,949 @@ const Drawing = (() => {
     );
     Panels.renderTools(); Panels.renderRight(); render();
   }
+  // ---------- Maße aus dem Modell übernehmen & ordnen (ZE-23) ----------
+  function vec3FromPt(p, M) {
+    const v = new THREE.Vector3(Number(p[0]) || 0, Number(p[1]) || 0, Number(p[2]) || 0);
+    return M ? v.applyMatrix4(M) : v;
+  }
+  function normalToWorld3(n, M) {
+    const v = new THREE.Vector3(Number(n[0]) || 0, Number(n[1]) || 0, Number(n[2]) || 0);
+    if (M) v.applyMatrix3(new THREE.Matrix3().getNormalMatrix(M));
+    return v.lengthSq() > 1e-12 ? v.normalize() : new THREE.Vector3(0, 0, 1);
+  }
+  function sketchRefPt2(ref, entById) {
+    if (!ref) return null;
+    if (ref.e === 'origin') return [0, 0];
+    const e = entById.get(ref.e);
+    if (!e) return null;
+    if (e.type === 'rect' && ref.p && /^k[0-3]$/.test(ref.p)) {
+      const c = SK.rectCorners(e);
+      return c[Number(ref.p[1])] || null;
+    }
+    if (e.type === 'circle' || e.type === 'ellipse') return e.c ? [...e.c] : null;
+    if (e.type === 'poly') return e.c ? [...e.c] : null;
+    if (e.type === 'point' || e.type === 'text') return e.a ? [...e.a] : null;
+    if (ref.p === 'a' && e.a) return [...e.a];
+    if (ref.p === 'b' && e.b) return [...e.b];
+    if (ref.p === 'm' && e.m) return [...e.m];
+    if (ref.p === 'c' && e.c) return [...e.c];
+    return e.a ? [...e.a] : e.c ? [...e.c] : null;
+  }
+  function sketchRefLine2(ref, entById) {
+    if (!ref) return null;
+    const e = entById.get(ref.e);
+    if (!e) return null;
+    if (e.type === 'line' && e.a && e.b) return [e.a, e.b];
+    if (e.type === 'rect' && ref.edge != null) {
+      const c = SK.rectCorners(e);
+      const i = ((Number(ref.edge) % 4) + 4) % 4;
+      return [c[i], c[(i + 1) % 4]];
+    }
+    return null;
+  }
+  function collectSketchModelDims(sk, M, V, itemId, out, isHole = false, addFallback = true) {
+    if (!sk) return null;
+    const ents = (typeof Solver !== 'undefined' && Solver.cached) ? Solver.cached(sk, V).ents : (sk.ents || []);
+    const entById = new Map();
+    for (const e of ents) if (e && e.id) entById.set(e.id, e);
+    const pl = sk.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const px = new THREE.Vector3(...(pl.x || [1, 0, 0])).normalize();
+    const pn = new THREE.Vector3(...(pl.n || [0, 0, 1])).normalize();
+    const py = new THREE.Vector3().crossVectors(pn, px).normalize();
+    const po = new THREE.Vector3(...(pl.o || [0, 0, 0]));
+    const wn = normalToWorld3([pn.x, pn.y, pn.z], M);
+    const skPt = (pt) => {
+      const v = po.clone().addScaledVector(px, Number(pt[0]) || 0).addScaledVector(py, Number(pt[1]) || 0);
+      return M ? v.applyMatrix4(M) : v;
+    };
+    const pushLin = (a2, b2, valHint = null, axisHint = null) => {
+      if (!a2 || !b2 || Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) < 0.15) return;
+      out.push({ kind: 'lin', p0: skPt(a2), p1: skPt(b2), planeNormal: wn, valHint, axisHint, itemId, source: 'sketch' });
+    };
+    let addedHere = 0;
+    for (const dm of sk.dims || []) {
+      if (!dm || dm.ref) continue;
+      const val = Model.num(dm.v, V, NaN);
+      if (!isFinite(val)) continue;
+      if (dm.e) {
+        const e = entById.get(dm.e);
+        if (!e || e.con) continue;
+        if (dm.k === 'w' && e.type === 'rect' && e.a && e.b) {
+          const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]);
+          const y0 = Math.min(e.a[1], e.b[1]);
+          pushLin([x0, y0], [x1, y0], val);
+          addedHere++;
+        } else if (dm.k === 'h' && e.type === 'rect' && e.a && e.b) {
+          const x0 = Math.min(e.a[0], e.b[0]);
+          const y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
+          pushLin([x0, y0], [x0, y1], val);
+          addedHere++;
+        } else if (dm.k === 'w' && e.type === 'slot' && e.a && e.r > 0.05) {
+          out.push({ kind: 'dia', c: skPt(e.a), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (dm.k === 'len' && (e.type === 'line' || e.type === 'slot') && e.a && e.b) {
+          pushLin(e.a, e.b, val);
+          addedHere++;
+        } else if (dm.k === 'd' && e.type === 'circle' && e.c && e.r > 0.05) {
+          out.push({ kind: 'dia', c: skPt(e.c), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (dm.k === 'r' && e.type === 'circle' && e.c && e.r > 0.05) {
+          out.push({ kind: 'rad', c: skPt(e.c), n: wn, r: e.r, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (dm.k === 'r' && e.type === 'arc' && e.a && e.m && e.b) {
+          const ai = SK.arcInfo(e.a, e.m, e.b);
+          if (ai && ai.r > 0.05) {
+            out.push({ kind: 'rad', c: skPt(ai.c), n: wn, r: ai.r, pMid: skPt(e.m), itemId, source: 'sketch' });
+            addedHere++;
+          }
+        } else if ((dm.k === 'rx' || dm.k === 'ry') && e.type === 'ellipse' && e.c) {
+          const rot = e.rot || 0;
+          const dir = dm.k === 'rx' ? [Math.cos(rot), Math.sin(rot)] : [-Math.sin(rot), Math.cos(rot)];
+          const rVal = dm.k === 'rx' ? e.rx : e.ry;
+          if (rVal > 0.05) {
+            pushLin(e.c, [e.c[0] + dir[0] * rVal, e.c[1] + dir[1] * rVal], val);
+            addedHere++;
+          }
+        }
+      } else if (Array.isArray(dm.refs) && dm.refs.length >= 2) {
+        if (dm.k === 'dist') {
+          const a2 = sketchRefPt2(dm.refs[0], entById), b2 = sketchRefPt2(dm.refs[1], entById);
+          if (a2 && b2) { pushLin(a2, b2, val); addedHere++; }
+        } else if (dm.k === 'distPL') {
+          const p2 = sketchRefPt2(dm.refs[0], entById), L = sketchRefLine2(dm.refs[1], entById);
+          if (p2 && L) {
+            const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1], L2 = dx * dx + dy * dy;
+            if (L2 > 1e-8) {
+              const t = ((p2[0] - L[0][0]) * dx + (p2[1] - L[0][1]) * dy) / L2;
+              const q2 = [L[0][0] + t * dx, L[0][1] + t * dy];
+              pushLin(p2, q2, val);
+              addedHere++;
+            }
+          }
+        } else if (dm.k === 'distCC') {
+          const e0 = entById.get(dm.refs[0].e), e1 = entById.get(dm.refs[1].e);
+          const c0 = e0 && e0.c, c1 = e1 && e1.c;
+          if (c0 && c1) { pushLin(c0, c1, val); addedHere++; }
+        } else if (dm.k === 'ord') {
+          const p2 = sketchRefPt2(dm.refs[0], entById);
+          const L = sketchRefLine2(dm.refs[1], entById);
+          const o2 = sketchRefPt2(dm.refs[1], entById);
+          if (p2 && L) {
+            const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1], L2 = dx * dx + dy * dy;
+            if (L2 > 1e-8) {
+              const t = ((p2[0] - L[0][0]) * dx + (p2[1] - L[0][1]) * dy) / L2;
+              pushLin(p2, [L[0][0] + t * dx, L[0][1] + t * dy], Math.abs(val));
+              addedHere++;
+            }
+          } else if (p2 && o2) {
+            const ax = dm.axis === 'y' ? 1 : 0;
+            const q2 = ax === 0 ? [o2[0], p2[1]] : [p2[0], o2[1]];
+            pushLin(p2, q2, Math.abs(val));
+            addedHere++;
+          }
+        } else if (dm.k === 'angLL') {
+          const L1 = sketchRefLine2(dm.refs[0], entById), L2 = sketchRefLine2(dm.refs[1], entById);
+          if (L1 && L2) {
+            const V2 = lineIntersect2D(L1[0], L1[1], L2[0], L2[1]);
+            if (V2) {
+              out.push({
+                kind: 'ang',
+                v: skPt(V2),
+                e1: [skPt(L1[0]), skPt(L1[1])],
+                e2: [skPt(L2[0]), skPt(L2[1])],
+                n: wn,
+                itemId,
+                source: 'sketch',
+              });
+              addedHere++;
+            }
+          }
+        } else if (dm.k === 'ang3' && dm.refs.length >= 3) {
+          const A2 = sketchRefPt2(dm.refs[0], entById), V2 = sketchRefPt2(dm.refs[1], entById), B2 = sketchRefPt2(dm.refs[2], entById);
+          if (A2 && V2 && B2) {
+            out.push({
+              kind: 'ang',
+              v: skPt(V2),
+              e1: [skPt(V2), skPt(A2)],
+              e2: [skPt(V2), skPt(B2)],
+              n: wn,
+              itemId,
+              source: 'sketch',
+            });
+            addedHere++;
+          }
+        }
+      }
+    }
+    if (addedHere === 0 && addFallback) {
+      const visEnts = ents.filter((e) => e && !e.con);
+      for (const e of visEnts) {
+        if (e.type === 'circle' && e.c && e.r > 0.05) {
+          out.push({ kind: 'dia', c: skPt(e.c), n: wn, r: e.r, isHole, itemId, source: 'sketch' });
+          addedHere++;
+        } else if (e.type === 'rect' && e.a && e.b) {
+          const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]);
+          const y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
+          pushLin([x0, y0], [x1, y0]);
+          pushLin([x0, y0], [x0, y1]);
+          addedHere += 2;
+        }
+      }
+      if (addedHere === 0) {
+        const b = SK.bounds(visEnts);
+        if (b && b.w > 0.1 && b.h > 0.1) {
+          pushLin([b.minX, b.minY], [b.maxX, b.minY]);
+          pushLin([b.minX, b.minY], [b.minX, b.maxY]);
+        }
+      }
+    }
+    return { ents, plane: pl, px, py, pn, po, wn, skPt };
+  }
+  function collectModelDims(doc = App.doc, extraMat = null, visited = null, out = []) {
+    if (!doc || !Array.isArray(doc.items)) return out;
+    const vis = visited || new Set();
+    if (doc.id && vis.has(doc.id)) return out;
+    if (doc.id) vis.add(doc.id);
+    try {
+      Model.walk(doc.items, (it) => {
+        if (!isItemActiveVisible(doc, it)) return;
+        const V = Model.itemVars(doc, it.id);
+        const mats = Model.instanceMatrices(doc, it.id, V).map((m) => (extraMat ? extraMat.clone().multiply(m) : m));
+        if (!mats.length) return;
+        const M = mats[0];
+        if (it.kind === 'ref' && it.p && it.p.docId && typeof Model.resolveDoc === 'function') {
+          const rd = Model.resolveDoc(it.p.docId);
+          if (rd) collectModelDims(rd, M, vis, out);
+          return;
+        }
+        if (it.kind === 'group') return;
+        const isCut = it.role === 'hole' || (it.op && it.op.type === 'cut');
+        const p = Model.resolveP(it.p || {}, V);
+        const wN = (n) => normalToWorld3(n, M);
+        const wP = (pt) => vec3FromPt(pt, M);
+
+        if (it.kind === 'box' || it.kind === 'pyramid' || it.kind === 'wedge') {
+          const w = Number(p.w) || 0, d = Number(p.d) || 0, h = Number(p.h) || 0;
+          if (w > 0.1) out.push({ kind: 'lin', p0: wP([-w / 2, -d / 2, 0]), p1: wP([w / 2, -d / 2, 0]), axisHint: 'x', itemId: it.id, source: 'step' });
+          if (d > 0.1) out.push({ kind: 'lin', p0: wP([-w / 2, -d / 2, 0]), p1: wP([-w / 2, d / 2, 0]), axisHint: 'y', itemId: it.id, source: 'step' });
+          if (h > 0.1 && !(isCut && p.thru)) out.push({ kind: 'lin', p0: wP([-w / 2, -d / 2, 0]), p1: wP([-w / 2, -d / 2, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'cylinder') {
+          const r = (Number(p.d) || 0) / 2, h = Number(p.h) || 0;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r, isHole: isCut, itemId: it.id, source: 'step' });
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'tube') {
+          const r = (Number(p.d) || 0) / 2, wall = Number(p.wall) || 0, h = Number(p.h) || 0;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r, isHole: false, itemId: it.id, source: 'step' });
+          if (r - wall > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: r - wall, isHole: true, itemId: it.id, source: 'step' });
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'cone') {
+          const r1 = (Number(p.d1) || 0) / 2, r2 = (Number(p.d2) || 0) / 2, h = Number(p.h) || 0;
+          if (r1 > 0.05) out.push({ kind: 'dia', c: wP([0, 0, 0]), n: wN([0, 0, 1]), r: r1, isHole: isCut, itemId: it.id, source: 'step' });
+          if (r2 > 0.05 && Math.abs(r2 - r1) > 0.1) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: r2, isHole: isCut, itemId: it.id, source: 'step' });
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([Math.max(r1, r2), 0, 0]), p1: wP([Math.max(r1, r2), 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'sphere' || it.kind === 'hemisphere') {
+          const r = (Number(p.d) || 0) / 2;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, it.kind === 'sphere' ? r : 0]), n: wN([0, 0, 1]), r, omni: true, isHole: isCut, itemId: it.id, source: 'step' });
+        } else if (it.kind === 'prism') {
+          const r = (Number(p.d) || 0) / 2, h = Number(p.h) || 0;
+          if (h > 0.1 && !isCut) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'torus') {
+          const r = (Number(p.d) || 0) / 2, t = (Number(p.t) || 0) / 2;
+          if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, t]), n: wN([0, 0, 1]), r: r + t, itemId: it.id, source: 'step' });
+        } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
+          const skInfo = collectSketchModelDims(it.p.sketch, M, V, it.id, out, isCut, true);
+          if (skInfo && !p.thru) {
+            const dist = Number(p.dist) || 0, dir = p.dir || 'normal';
+            const b = SK.bounds(skInfo.ents);
+            if (b && dist > 0.1) {
+              const base2 = [b.minX, b.minY];
+              const pBase = skInfo.skPt(base2);
+              const w0 = dir === 'both' ? -dist / 2 : dir === 'two' ? -(Number(p.dist2) || dist) : dir === 'reverse' ? -dist : 0;
+              const w1 = dir === 'both' ? dist / 2 : dir === 'reverse' ? 0 : dist;
+              if (Math.abs(w1 - w0) > 0.1) {
+                out.push({
+                  kind: 'lin',
+                  p0: pBase.clone().addScaledVector(skInfo.wn, w0),
+                  p1: pBase.clone().addScaledVector(skInfo.wn, w1),
+                  itemId: it.id,
+                  source: 'step',
+                });
+              }
+            }
+          }
+        } else if ((it.kind === 'revolve' || it.kind === 'rib' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace') && it.p && it.p.sketch) {
+          collectSketchModelDims(it.p.sketch, M, V, it.id, out, isCut, true);
+        } else if (it.kind === 'loft' && it.p && Array.isArray(it.p.sketches)) {
+          for (const sk of it.p.sketches) collectSketchModelDims(sk, M, V, it.id, out, isCut, false);
+        } else if (it.kind === 'sweep' && it.p && it.p.sketch) {
+          collectSketchModelDims(it.p.sketch, M, V, it.id, out, isCut, false);
+        } else if (it.kind === 'boss') {
+          const rOut = (Number(p.outerD) || 0) / 2, rHole = (Number(p.holeD) || 0) / 2, h = Number(p.height) || 0;
+          if (rOut > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: rOut, itemId: it.id, source: 'step' });
+          if (rHole > 0.05) out.push({ kind: 'dia', c: wP([0, 0, h]), n: wN([0, 0, 1]), r: rHole, isHole: true, itemId: it.id, source: 'step' });
+          if (h > 0.1) out.push({ kind: 'lin', p0: wP([rOut, 0, 0]), p1: wP([rOut, 0, h]), axisHint: 'z', itemId: it.id, source: 'step' });
+        } else if (it.kind === 'part') {
+          const L = String(p.lib || '');
+          if (L === 'screwHole') {
+            const r = (Number(p.d) || 0) / 2, dep = Number(p.depth) || 0;
+            if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, 0]), n: wN([0, 0, 1]), r, isHole: true, itemId: it.id, source: 'step' });
+            if (!p.thru && dep > 0.1) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, -dep]), axisHint: 'z', itemId: it.id, source: 'step' });
+          } else if (L === 'slotHole') {
+            const r = (Number(p.d) || 0) / 2, len = Number(p.len) || 0;
+            if (r > 0.05) out.push({ kind: 'dia', c: wP([-len / 2, 0, 0]), n: wN([0, 0, 1]), r, isHole: true, itemId: it.id, source: 'step' });
+            if (len > 0.1) out.push({ kind: 'lin', p0: wP([-len / 2, 0, 0]), p1: wP([len / 2, 0, 0]), itemId: it.id, source: 'step' });
+          } else if (L === 'stdPin') {
+            const pe = typeof pinEntry === 'function' ? pinEntry(p.size ?? p.d) : null;
+            const r = (pe ? pe.d_mm : 6) / 2, len = Number(p.length) || 20;
+            if (r > 0.05) out.push({ kind: 'dia', c: wP([0, 0, len]), n: wN([0, 0, 1]), r, itemId: it.id, source: 'step' });
+            if (len > 0.1) out.push({ kind: 'lin', p0: wP([r, 0, 0]), p1: wP([r, 0, len]), axisHint: 'z', itemId: it.id, source: 'step' });
+          } else if (L === 'stdBearing') {
+            const be = typeof bearingEntry === 'function' ? bearingEntry(p.size) : null;
+            if (be) {
+              if (be.D_mm > 0.1) out.push({ kind: 'dia', c: wP([0, 0, be.B_mm || 7]), n: wN([0, 0, 1]), r: be.D_mm / 2, itemId: it.id, source: 'step' });
+              if (be.d_mm > 0.1) out.push({ kind: 'dia', c: wP([0, 0, be.B_mm || 7]), n: wN([0, 0, 1]), r: be.d_mm / 2, isHole: true, itemId: it.id, source: 'step' });
+            }
+          }
+        }
+        for (const f of it.finishes || []) {
+          if (!f) continue;
+          if (f.type === 'fillet' || f.type === 'faceFillet' || f.type === 'fullFillet') {
+            const r = Model.num(f.r, V, 0);
+            if (r > 0.05) out.push({ kind: 'finishRad', r, itemId: it.id, source: 'step' });
+          } else if (f.type === 'chamfer') {
+            const dist = Model.num(f.r, V, 0);
+            const ang = f.cm === 'angle' ? Model.num(f.a, V, 45) : 45;
+            if (dist > 0.05) out.push({ kind: 'finishChamfer', dist, ang, itemId: it.id, source: 'step' });
+          }
+        }
+      });
+    } finally {
+      if (doc.id) vis.delete(doc.id);
+    }
+    return out;
+  }
+  function project3ToView2(p, basis) {
+    return [
+      p.x * basis.x[0] + p.y * basis.x[1] + p.z * basis.x[2],
+      p.x * basis.y[0] + p.y * basis.y[1] + p.z * basis.y[2],
+    ];
+  }
+  function snapPtToView(v, pt2, tol = 0.45) {
+    let best = pt2, bd = tol;
+    for (const q of viewVertexPoints(v)) {
+      const d = Math.hypot(q[0] - pt2[0], q[1] - pt2[1]);
+      if (d < bd) { bd = d; best = [q[0], q[1]]; }
+    }
+    if (bd === tol) {
+      for (const c of viewCirclesPool(v)) {
+        const d = Math.hypot(c.c[0] - pt2[0], c.c[1] - pt2[1]);
+        if (d < bd) { bd = d; best = [c.c[0], c.c[1]]; }
+      }
+    }
+    return best;
+  }
+  function inViewBox2(v, pt2, tol = 0.8) {
+    const b = v && v.geo && v.geo.box;
+    if (!b) return false;
+    return pt2[0] >= b[0] - tol && pt2[0] <= b[2] + tol && pt2[1] >= b[1] - tol && pt2[1] <= b[3] + tol;
+  }
+  function attachSafeRef(dim, v, lay, sh) {
+    if (!v || !v.geo) return dim;
+    const ref = buildDimRef(dim, v);
+    if (!ref) return dim;
+    const check = resolveManualDim({ ...dim, ref }, lay, sh);
+    if (!check.lost) return { ...dim, ref };
+    return dim;
+  }
+  function mapModelDimsToViews(rawDims, sh, lay) {
+    const avail = ['front', 'top', 'left'].filter((k) => lay.views[k] && lay.views[k].geo && !lay.views[k].noDims);
+    if (!avail.length) return [];
+    const bases = {};
+    for (const vk of avail) bases[vk] = viewBasis(vk, sh);
+    const viewCount = { front: 0, top: 0, left: 0 };
+    const mapped = [];
+    const globalLinKeys = [];
+    const hasLinInView = (vk, dir, a, b) => mapped.some((d) => {
+      if (d.view !== vk || d.type !== 'lin' || d.dir !== dir) return false;
+      const d1 = Math.hypot(d.a[0] - a[0], d.a[1] - a[1]) + Math.hypot(d.b[0] - b[0], d.b[1] - b[1]);
+      const d2 = Math.hypot(d.a[0] - b[0], d.a[1] - b[1]) + Math.hypot(d.b[0] - a[0], d.b[1] - a[1]);
+      if (Math.min(d1, d2) < 0.45) return true;
+      if (dir === 'h' && Math.abs(Math.min(d.a[0], d.b[0]) - Math.min(a[0], b[0])) < 0.35 && Math.abs(Math.max(d.a[0], d.b[0]) - Math.max(a[0], b[0])) < 0.35) return true;
+      if (dir === 'v' && Math.abs(Math.min(d.a[1], d.b[1]) - Math.min(a[1], b[1])) < 0.35 && Math.abs(Math.max(d.a[1], d.b[1]) - Math.max(a[1], b[1])) < 0.35) return true;
+      return false;
+    });
+    const isDuplicateGlobalLin = (item) => {
+      const len = item.p0.distanceTo(item.p1);
+      const u = item.p1.clone().sub(item.p0).normalize();
+      for (const g of globalLinKeys) {
+        if (g.itemId === item.itemId && Math.abs(g.len - len) < 0.25 && Math.abs(g.u.dot(u)) > 0.985) return true;
+      }
+      return false;
+    };
+    const pendingCircleGroups = new Map();
+    const pendingFinishRad = new Set();
+    const pendingFinishChamfer = new Set();
+
+    for (const item of rawDims) {
+      if (item.kind === 'lin') {
+        const L3 = item.p0.distanceTo(item.p1);
+        if (L3 < 0.2) continue;
+        if (isDuplicateGlobalLin(item)) continue;
+        const u3 = item.p1.clone().sub(item.p0).normalize();
+        let best = null;
+        for (const vk of avail) {
+          const v = lay.views[vk], basis = bases[vk];
+          if (!v || !basis) continue;
+          const aRaw = project3ToView2(item.p0, basis);
+          const bRaw = project3ToView2(item.p1, basis);
+          const L2 = Math.hypot(bRaw[0] - aRaw[0], bRaw[1] - aRaw[1]);
+          if (L2 < 0.2 || Math.abs(L2 - L3) > Math.max(0.18, L3 * 0.02)) continue;
+          if (!inViewBox2(v, aRaw) || !inViewBox2(v, bRaw)) continue;
+          let a = snapPtToView(v, aRaw), b = snapPtToView(v, bRaw);
+          if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.2) { a = aRaw; b = bRaw; }
+          const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+          const dir = dy <= 0.12 ? 'h' : dx <= 0.12 ? 'v' : 'a';
+          if (dir === 'h' && a[0] > b[0]) [a, b] = [b, a];
+          if (dir === 'v' && a[1] > b[1]) [a, b] = [b, a];
+          if (hasLinInView(vk, dir, a, b)) continue;
+          let score = 0;
+          if (item.planeNormal) {
+            const dn = Math.abs(item.planeNormal.x * basis.dir[0] + item.planeNormal.y * basis.dir[1] + item.planeNormal.z * basis.dir[2]);
+            if (dn > 0.98) score += 50;
+          }
+          const verts = viewVertexPoints(v);
+          const hitA = verts.some((q) => Math.hypot(q[0] - a[0], q[1] - a[1]) <= 0.45);
+          const hitB = verts.some((q) => Math.hypot(q[0] - b[0], q[1] - b[1]) <= 0.45);
+          if (hitA) score += 12;
+          if (hitB) score += 12;
+          const ax = Math.abs(u3.x) > 0.9 ? 'x' : Math.abs(u3.y) > 0.9 ? 'y' : Math.abs(u3.z) > 0.9 ? 'z' : item.axisHint;
+          if (ax === 'x') score += vk === 'front' ? 14 : vk === 'top' ? 8 : 0;
+          else if (ax === 'z') score += vk === 'front' ? 14 : vk === 'left' ? 8 : 0;
+          else if (ax === 'y') score += vk === 'left' ? 14 : vk === 'top' ? 10 : 0;
+          if (dir !== 'a') score += 4;
+          score -= viewCount[vk] * 2.5;
+          if (!best || score > best.score) best = { vk, v, dir, a, b, score };
+        }
+        if (best) {
+          const dObj = attachSafeRef({ id: uid('d'), view: best.vk, type: 'lin', dir: best.dir, a: best.a, b: best.b, off: -(9 / best.v.s), fromModel: true }, best.v, lay, sh);
+          mapped.push(dObj);
+          viewCount[best.vk]++;
+          globalLinKeys.push({ itemId: item.itemId, len: L3, u: u3 });
+        }
+      } else if (item.kind === 'dia' || item.kind === 'rad') {
+        let best = null;
+        for (const vk of avail) {
+          const v = lay.views[vk], basis = bases[vk];
+          if (!v || !basis) continue;
+          if (!item.omni && item.n) {
+            const dn = Math.abs(item.n.x * basis.dir[0] + item.n.y * basis.dir[1] + item.n.z * basis.dir[2]);
+            if (dn <= 0.96) continue;
+          }
+          const c2 = project3ToView2(item.c, basis);
+          if (!inViewBox2(v, c2, item.r + 1)) continue;
+          const visPool = v.geo.circles || [];
+          const allPool = viewCirclesPool(v);
+          const matchC = (cc) => Math.hypot(cc.c[0] - c2[0], cc.c[1] - c2[1]) <= 0.55 && Math.abs(cc.r - item.r) <= 0.3;
+          let hit = item.kind === 'dia'
+            ? (visPool.find((cc) => cc.full && matchC(cc)) || allPool.find((cc) => cc.full && matchC(cc)) || visPool.find(matchC) || allPool.find(matchC))
+            : visPool.find(matchC);
+          if (!hit && !item.omni) continue;
+          const cUse = hit ? hit.c : c2;
+          const rUse = hit ? hit.r : item.r;
+          let score = hit ? (hit.hidden ? 22 : hit.full ? 40 : 32) : 10;
+          if (vk === 'top') score += 8;
+          else if (vk === 'front') score += 6;
+          score -= viewCount[vk] * 2.0;
+          if (!best || score > best.score) best = { vk, v, c: cUse, r: rUse, hit, score };
+        }
+        if (best) {
+          const rk = `${best.vk}|${item.kind}|${Math.round(best.r * 200)}`;
+          if (!pendingCircleGroups.has(rk)) pendingCircleGroups.set(rk, []);
+          pendingCircleGroups.get(rk).push({ vk: best.vk, v: best.v, c: best.c, r: best.r, hit: best.hit });
+          viewCount[best.vk]++;
+        }
+      } else if (item.kind === 'ang') {
+        for (const vk of avail) {
+          const v = lay.views[vk], basis = bases[vk];
+          if (!v || !basis) continue;
+          if (item.n && Math.abs(item.n.x * basis.dir[0] + item.n.y * basis.dir[1] + item.n.z * basis.dir[2]) <= 0.96) continue;
+          const V2 = snapPtToView(v, project3ToView2(item.v, basis));
+          const e1 = [project3ToView2(item.e1[0], basis), project3ToView2(item.e1[1], basis)];
+          const e2 = [project3ToView2(item.e2[0], basis), project3ToView2(item.e2[1], basis)];
+          const midPt = [(e1[0][0] + e1[1][0] + e2[0][0] + e2[1][0]) * 0.25, (e1[0][1] + e1[1][1] + e2[0][1] + e2[1][1]) * 0.25];
+          const sec = angularSector(V2, { a: e1[0], b: e1[1] }, { a: e2[0], b: e2[1] }, midPt);
+          const span = sec.a1 - sec.a0;
+          if (span > 1e-3 && span < Math.PI - 1e-3) {
+            const dObj = attachSafeRef({ id: uid('d'), view: vk, type: 'ang', v: V2, e1, e2, a0: sec.a0, a1: sec.a1, r: Math.max(6, 12 / v.s), fromModel: true }, v, lay, sh);
+            mapped.push(dObj);
+            viewCount[vk]++;
+            break;
+          }
+        }
+      } else if (item.kind === 'finishRad') {
+        const rk = Math.round(item.r * 200);
+        if (pendingFinishRad.has(rk)) continue;
+        pendingFinishRad.add(rk);
+        let best = null;
+        for (const vk of avail) {
+          const v = lay.views[vk];
+          const arcs = (v.geo.circles || []).filter((c) => !c.full && c.arc && c.arc[1] - c.arc[0] >= 0.35 && Math.abs(c.r - item.r) <= 0.28);
+          if (!arcs.length) continue;
+          const b = v.geo.box, mx = (b[0] + b[2]) * 0.5, my = (b[1] + b[3]) * 0.5;
+          let pick = arcs[0], bd = -1;
+          for (const c of arcs) {
+            const mid = (c.arc[0] + c.arc[1]) * 0.5;
+            const d = Math.hypot(c.c[0] + c.r * Math.cos(mid) - mx, c.c[1] + c.r * Math.sin(mid) - my);
+            if (d > bd) { bd = d; pick = c; }
+          }
+          const score = arcs.length * 10 - viewCount[vk] * 2;
+          if (!best || score > best.score) best = { vk, v, pick, count: arcs.length, score };
+        }
+        if (best) {
+          const mid = (best.pick.arc[0] + best.pick.arc[1]) * 0.5;
+          const rkKey = `${best.vk}|rad|${Math.round(best.pick.r * 200)}`;
+          if (!pendingCircleGroups.has(rkKey)) {
+            const dObj = attachSafeRef({ id: uid('d'), view: best.vk, type: 'rad', c: best.pick.c, r: best.pick.r, ang: (mid * 180) / Math.PI, count: best.count, partial: true, fromModel: true }, best.v, lay, sh);
+            mapped.push(dObj);
+            viewCount[best.vk]++;
+          }
+        }
+      } else if (item.kind === 'finishChamfer') {
+        const ck = `${Math.round(item.dist * 100)}|${Math.round(item.ang * 10)}`;
+        if (pendingFinishChamfer.has(ck)) continue;
+        pendingFinishChamfer.add(ck);
+        for (const vk of avail) {
+          const v = lay.views[vk];
+          let foundInfo = null;
+          for (const seg of straightSegsOf(v, false)) {
+            const info = analyzeChamfer(v, seg);
+            if (!info) continue;
+            if (Math.abs(info.dist - item.dist) <= 0.35 && Math.abs(info.ang - item.ang) <= 3.0) {
+              foundInfo = info; break;
+            }
+          }
+          if (foundInfo) {
+            const dObj = attachSafeRef({ id: uid('d'), view: vk, type: 'chamfer', p: foundInfo.p, dir: foundInfo.dir, dist: foundInfo.dist, ang: foundInfo.ang, fromModel: true }, v, lay, sh);
+            mapped.push(dObj);
+            viewCount[vk]++;
+            break;
+          }
+        }
+      }
+    }
+
+    const st = sheetDimStyle(sh);
+    for (const [rk, list] of pendingCircleGroups.entries()) {
+      const first = list[0];
+      const v = first.v, b = v.geo.box, mx = (b[0] + b[2]) * 0.5, my = (b[1] + b[3]) * 0.5;
+      const type = rk.split('|')[1];
+      let pick = first;
+      if (list.length > 1) {
+        let bd = -1;
+        for (const it of list) {
+          const d = Math.hypot(it.c[0] - mx, it.c[1] - my);
+          if (d > bd) { bd = d; pick = it; }
+        }
+      }
+      const away = Math.hypot(pick.c[0] - mx, pick.c[1] - my) > 1e-4 ? (Math.atan2(pick.c[1] - my, pick.c[0] - mx) * 180) / Math.PI : 45;
+      const toRad = Math.PI / 180;
+      const ang = type === 'rad' && pick.hit && pick.hit.arc
+        ? (((pick.hit.arc[0] + pick.hit.arc[1]) * 0.5) * 180) / Math.PI
+        : ([45, 135, 225, 315].sort((p, q) => Math.abs(angleDiff(p * toRad, away * toRad)) - Math.abs(angleDiff(q * toRad, away * toRad)))[0] || 45);
+      const mt = type === 'dia' ? (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - pick.c[0], th.c[1] - pick.c[1]) < 0.3 && (Math.abs(th.r - pick.r) < 0.45 || Math.abs(th.rThread - pick.r) < 0.45)) : null;
+      const thLbl = mt ? ((mt.source === 'cosmetic' || mt.blind0 || mt.blind1) ? `${mt.size} × ${fmtDim(mt.length, st)}` : `${mt.size}`) : null;
+      const dObj = attachSafeRef({
+        id: uid('d'),
+        view: first.vk,
+        type,
+        c: pick.c,
+        r: pick.r,
+        ang,
+        count: list.length,
+        ...(type === 'rad' && pick.hit && !pick.hit.full ? { partial: true } : {}),
+        ...(thLbl ? { threadLabel: thLbl } : {}),
+        fromModel: true,
+      }, v, lay, sh);
+      mapped.push(dObj);
+    }
+
+    if (!mapped.length && avail.length) {
+      const addFallbackLin = (vk, dir, a, b) => {
+        const v = lay.views[vk];
+        if (!v || Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.2) return;
+        mapped.push(attachSafeRef({ id: uid('d'), view: vk, type: 'lin', dir, a, b, off: -(9 / v.s), fromModel: true }, v, lay, sh));
+      };
+      if (lay.views.front) {
+        const b = lay.views.front.geo.box;
+        addFallbackLin('front', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addFallbackLin('front', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top) {
+        const b = lay.views.top.geo.box;
+        addFallbackLin('top', 'h', [b[0], b[1]], [b[2], b[1]]);
+        addFallbackLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+      if (lay.views.left) {
+        const b = lay.views.left.geo.box;
+        addFallbackLin('left', 'h', [b[0], b[1]], [b[2], b[1]]);
+        if (!lay.views.front) addFallbackLin('left', 'v', [b[0], b[1]], [b[0], b[3]]);
+      } else if (lay.views.top && lay.views.front) {
+        const b = lay.views.top.geo.box;
+        addFallbackLin('top', 'v', [b[0], b[1]], [b[0], b[3]]);
+      }
+    }
+    return mapped;
+  }
+  function textRectOf(t, pad = 0) {
+    const str = String((t && t.t) || '');
+    const sz = Math.max(1, Number(t && t.size) || 3.5);
+    const w = Math.max(sz * 0.85, str.length * sz * 0.64);
+    const lx0 = t.anchor === 'middle' ? -w * 0.5 : t.anchor === 'end' ? -w : 0;
+    const lx1 = lx0 + w;
+    const ly0 = -sz * 0.98, ly1 = sz * 0.34;
+    const rad = ((t.rot || 0) * Math.PI) / 180;
+    const cs = Math.cos(rad), sn = Math.sin(rad);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [lx, ly] of [[lx0, ly0], [lx1, ly0], [lx1, ly1], [lx0, ly1]]) {
+      const gx = t.x + lx * cs - ly * sn;
+      const gy = t.y + lx * sn + ly * cs;
+      if (gx < x0) x0 = gx; if (gx > x1) x1 = gx;
+      if (gy < y0) y0 = gy; if (gy > y1) y1 = gy;
+    }
+    return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+  }
+  function rectsOverlap(a, b) {
+    return a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+  }
+  function rectOverlapArea(a, b) {
+    const ox = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+    const oy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    return ox * oy;
+  }
+  function measureDimTexts(dim, lay, sh, pad = 1.3) {
+    const tmpTexts = [];
+    dimSVG(dim, [], tmpTexts, lay, sh);
+    return tmpTexts
+      .filter((t) => t && String(t.cls || '').includes('dimtext'))
+      .map((t) => ({ rect: textRectOf(t, pad), rawRect: textRectOf(t, 0), t }));
+  }
+  function dimTextBoxes(sh = dwg(), lay = layout) {
+    const useLay = lay || computeLayout(sh);
+    const items = [];
+    for (const dim of autoDimList(sh, useLay)) {
+      if (!useLay.views[dim.view] || useLay.views[dim.view].noDims) continue;
+      for (const m of measureDimTexts(dim, useLay, sh, 0)) {
+        items.push({ id: dim.id, view: dim.view, text: m.t.t, rect: m.rawRect });
+      }
+    }
+    let overlaps = 0;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        if (items[i].id === items[j].id) continue;
+        if (rectsOverlap(items[i].rect, items[j].rect)) overlaps++;
+      }
+    }
+    return { items, overlaps };
+  }
+  function arrangeSheetDims(sh, lay) {
+    if (!sh || !lay || !lay.views) return 0;
+    const st = sheetDimStyle(sh);
+    const TXT = st.fontSize;
+    const { frame, tb } = lay;
+    const viewRects = new Map();
+    for (const [k, v] of Object.entries(lay.views)) {
+      if (k === 'free' || !v || !v.geo || !v.geo.box) continue;
+      const b = v.geo.box;
+      const TL = toSheet(v, [b[0], b[3]]), BR = toSheet(v, [b[2], b[1]]);
+      viewRects.set(k, [Math.min(TL[0], BR[0]), Math.min(TL[1], BR[1]), Math.max(TL[0], BR[0]), Math.max(TL[1], BR[1])]);
+    }
+    const staticObs = [
+      [frame.x + frame.w - tb.w - 2, frame.y + frame.h - tb.h - 2, frame.x + frame.w, frame.y + frame.h],
+    ];
+    if (lay.bomRect) {
+      staticObs.push([lay.bomRect.x - 2, lay.bomRect.y - 2, lay.bomRect.x + lay.bomRect.w + 2, lay.bomRect.y + lay.bomRect.h + 2]);
+    }
+    for (const [k, v] of Object.entries(lay.views)) {
+      const r = viewRects.get(k);
+      if (!r) continue;
+      if (v.isSection) staticObs.push([r[0], r[3] + 1, r[2], r[3] + 8.5]);
+      else if (v.is3d) staticObs.push([r[0], r[3] + 0.5, r[2], r[3] + 6.5]);
+      else if (v.customScale) staticObs.push([r[0], r[1] - 6, r[2], r[1] - 0.5]);
+    }
+    const placedTexts = [];
+    for (const dim of autoDimList(sh, lay)) {
+      if (!lay.views[dim.view] || lay.views[dim.view].noDims) continue;
+      if (dim.auto === 'circles' || dim.type === 'chain' || dim.type === 'base') {
+        for (const m of measureDimTexts(dim, lay, sh, 1.3)) placedTexts.push(m.rect);
+      }
+    }
+    const evalCost = (dim, viewKey, preferPen = 0) => {
+      const boxes = measureDimTexts(dim, lay, sh, 1.3);
+      if (!boxes.length) return preferPen;
+      let cost = preferPen;
+      for (const { rect } of boxes) {
+        for (const pt of placedTexts) {
+          if (rectsOverlap(rect, pt)) cost += 1e6 + rectOverlapArea(rect, pt) * 1e4;
+        }
+        for (const ob of staticObs) {
+          if (rectsOverlap(rect, ob)) cost += 5e5 + rectOverlapArea(rect, ob) * 1e3;
+        }
+        if (rect[0] < frame.x + 1 || rect[1] < frame.y + 1 || rect[2] > frame.x + frame.w - 1 || rect[3] > frame.y + frame.h - 1) {
+          const ox = Math.max(0, (frame.x + 1) - rect[0], rect[2] - (frame.x + frame.w - 1));
+          const oy = Math.max(0, (frame.y + 1) - rect[1], rect[3] - (frame.y + frame.h - 1));
+          cost += 4e5 + (ox + oy) * 1e3;
+        }
+        for (const [, vr] of viewRects.entries()) {
+          const padVr = [vr[0] - 0.8, vr[1] - 0.8, vr[2] + 0.8, vr[3] + 0.8];
+          if (rectsOverlap(rect, padVr)) cost += 2e5 + rectOverlapArea(rect, padVr) * 500;
+        }
+      }
+      return cost;
+    };
+    const clearSpace = (viewKey, side) => {
+      const vr = viewRects.get(viewKey);
+      if (!vr) return 0;
+      let limit = side === 'left' ? vr[0] - frame.x : side === 'right' ? (frame.x + frame.w) - vr[2] : side === 'top' ? vr[1] - frame.y : (frame.y + frame.h) - vr[3];
+      for (const [ok, or] of viewRects.entries()) {
+        if (ok === viewKey) continue;
+        if ((side === 'left' || side === 'right') && Math.min(vr[3], or[3]) > Math.max(vr[1], or[1]) - 14) {
+          if (side === 'left' && or[2] <= vr[0]) limit = Math.min(limit, vr[0] - or[2]);
+          if (side === 'right' && or[0] >= vr[2]) limit = Math.min(limit, or[0] - vr[2]);
+        }
+        if ((side === 'top' || side === 'bottom') && Math.min(vr[2], or[2]) > Math.max(vr[0], or[0]) - 14) {
+          if (side === 'top' && or[3] <= vr[1]) limit = Math.min(limit, vr[1] - or[3]);
+          if (side === 'bottom' && or[1] >= vr[3]) limit = Math.min(limit, or[1] - vr[3]);
+        }
+      }
+      return limit;
+    };
+
+    const resolvedAll = autoDimList(sh, lay);
+    const linGroups = new Map();
+    const otherDims = [];
+    for (const rawDim of sh.dims) {
+      if (rawDim.auto === 'circles' || rawDim.type === 'chain' || rawDim.type === 'base') continue;
+      const res = resolvedAll.find((x) => x.id === rawDim.id) || rawDim;
+      const v = lay.views[res.view];
+      if (!v || v.noDims || res.lost) continue;
+      if (res.type === 'lin') {
+        const gk = `${res.view}|${res.dir || 'a'}`;
+        if (!linGroups.has(gk)) linGroups.set(gk, []);
+        linGroups.get(gk).push({ raw: rawDim, res, v });
+      } else if (res.type === 'dia' || res.type === 'rad' || res.type === 'chamfer' || res.type === 'ang') {
+        otherDims.push({ raw: rawDim, res, v });
+      }
+    }
+
+    const firstClear = Math.max(8, TXT * 2.4);
+    const stepClear = Math.max(7.5, TXT * 2.2);
+    let moved = 0;
+
+    for (const [gk, list] of linGroups.entries()) {
+      const [vk, dir] = gk.split('|');
+      const v = list[0].v;
+      const vr = viewRects.get(vk);
+      if (!vr) continue;
+      list.sort((a, b) => dimNominal(a.res) - dimNominal(b.res));
+      let sides = ['bottom', 'top'];
+      if (dir === 'h') {
+        const spBot = clearSpace(vk, 'bottom'), spTop = clearSpace(vk, 'top');
+        sides = spBot >= spTop ? ['bottom', 'top'] : ['top', 'bottom'];
+      } else if (dir === 'v') {
+        const spL = clearSpace(vk, 'left'), spR = clearSpace(vk, 'right');
+        sides = spL >= spR ? ['left', 'right'] : ['right', 'left'];
+      } else {
+        sides = ['out', 'in'];
+      }
+      const usedBands = [];
+      for (const item of list) {
+        const A = toSheet(v, item.res.a), B = toSheet(v, item.res.b);
+        let bestOff = item.res.off, bestCost = Infinity;
+        for (let si = 0; si < sides.length; si++) {
+          const side = sides[si];
+          for (let tier = 0; tier < 14; tier++) {
+            const clr = firstClear + tier * stepClear;
+            let off;
+            let lineCoord = null, span0 = 0, span1 = 0;
+            if (dir === 'h') {
+              const targetY = side === 'bottom' ? vr[3] + clr : vr[1] - clr;
+              off = side === 'bottom' ? (Math.max(A[1], B[1]) - targetY) / v.s : (Math.min(A[1], B[1]) - targetY) / v.s;
+              if (Math.abs(off) < 1e-4) off = side === 'bottom' ? -0.1 : 0.1;
+              lineCoord = targetY; span0 = Math.min(A[0], B[0]); span1 = Math.max(A[0], B[0]);
+            } else if (dir === 'v') {
+              const targetX = side === 'left' ? vr[0] - clr : vr[2] + clr;
+              off = side === 'left' ? (targetX - Math.min(A[0], B[0])) / v.s : (targetX - Math.max(A[0], B[0])) / v.s;
+              if (Math.abs(off) < 1e-4) off = side === 'left' ? -0.1 : 0.1;
+              lineCoord = targetX; span0 = Math.min(A[1], B[1]); span1 = Math.max(A[1], B[1]);
+            } else {
+              const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1;
+              const nx = -dy / L, ny = dx / L;
+              const vcx = (vr[0] + vr[2]) * 0.5, vcy = (vr[1] + vr[3]) * 0.5;
+              const mx = (A[0] + B[0]) * 0.5, my = (A[1] + B[1]) * 0.5;
+              const outSign = ((mx - vcx) * nx + (my - vcy) * ny) >= 0 ? 1 : -1;
+              off = (side === 'out' ? outSign : -outSign) * (clr / v.s);
+            }
+            let bandPen = si * 12 + tier * 2.5;
+            if (lineCoord != null) {
+              for (const ub of usedBands) {
+                if (ub.side === side && Math.abs(ub.coord - lineCoord) < 4.5 && Math.min(span1, ub.s1) > Math.max(span0, ub.s0) - 4) {
+                  bandPen += 1500;
+                }
+              }
+            }
+            const cand = { ...item.res, off };
+            const c = evalCost(cand, vk, bandPen);
+            if (c < bestCost) {
+              bestCost = c;
+              bestOff = off;
+            }
+            if (c < 20) break;
+          }
+          if (bestCost < 20) break;
+        }
+        let chosenLine = null;
+        if (dir === 'h' || dir === 'v') {
+          const lineC = dir === 'h'
+            ? (bestOff < 0 ? Math.max(A[1], B[1]) - bestOff * v.s : Math.min(A[1], B[1]) - bestOff * v.s)
+            : (bestOff < 0 ? Math.min(A[0], B[0]) + bestOff * v.s : Math.max(A[0], B[0]) + bestOff * v.s);
+          const sideTag = dir === 'h' ? (bestOff < 0 ? 'bottom' : 'top') : (bestOff < 0 ? 'left' : 'right');
+          chosenLine = { side: sideTag, coord: lineC, s0: dir === 'h' ? Math.min(A[0], B[0]) : Math.min(A[1], B[1]), s1: dir === 'h' ? Math.max(A[0], B[0]) : Math.max(A[1], B[1]) };
+        }
+        if (chosenLine) usedBands.push(chosenLine);
+        if (Math.abs((item.raw.off ?? 0) - bestOff) > 1e-4) moved++;
+        item.raw.off = bestOff;
+        item.res.off = bestOff;
+        for (const m of measureDimTexts(item.res, lay, sh, 1.3)) placedTexts.push(m.rect);
+      }
+    }
+
+    const baseAngles = [45, 135, 225, 315, 30, 60, 120, 150, 210, 240, 300, 330, 15, 75, 165, 195, 255, 285, 345, 105];
+    for (const item of otherDims) {
+      const { raw, res, v } = item;
+      const vr = viewRects.get(res.view);
+      if (res.type === 'dia' || res.type === 'rad') {
+        const C = toSheet(v, res.c);
+        const vcx = vr ? (vr[0] + vr[2]) * 0.5 : C[0], vcy = vr ? (vr[1] + vr[3]) * 0.5 : C[1];
+        const away = Math.hypot(C[0] - vcx, C[1] - vcy) > 1e-3 ? (-Math.atan2(C[1] - vcy, C[0] - vcx) * 180) / Math.PI : (res.ang ?? 45);
+        const toRad = Math.PI / 180;
+        const angs = [...new Set([Math.round(res.ang ?? 45), ...baseAngles])].sort((p, q) => angleDiff(p * toRad, away * toRad) - angleDiff(q * toRad, away * toRad));
+        let bestAng = res.ang ?? 45, bestLead = raw.lead ?? null, bestCost = Infinity;
+        for (const leadExtra of [0, 6, 12, 18, 26, 35]) {
+          for (let ai = 0; ai < angs.length; ai++) {
+            const ang = angs[ai];
+            const rad = (ang * Math.PI) / 180;
+            const ux = Math.cos(rad), uy = -Math.sin(rad);
+            const P = [C[0] + ux * res.r * v.s, C[1] + uy * res.r * v.s];
+            const bx = v.geo.box, TL = toSheet(v, [bx[0], bx[3]]), BR = toSheet(v, [bx[2], bx[1]]), M = 3;
+            const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
+            const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
+            const tEx = Math.min(tx, ty);
+            const autoLead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
+            const lead = leadExtra > 0 ? autoLead + leadExtra : undefined;
+            const cand = { ...res, ang, ...(lead != null ? { lead } : {}) };
+            if (!lead) delete cand.lead;
+            const c = evalCost(cand, res.view, leadExtra * 1.5 + ai * 0.5);
+            if (c < bestCost) { bestCost = c; bestAng = ang; bestLead = lead ?? null; }
+            if (c < 15) break;
+          }
+          if (bestCost < 15) break;
+        }
+        if (Math.abs((raw.ang ?? 45) - bestAng) > 0.1 || (raw.lead ?? null) !== bestLead) moved++;
+        raw.ang = bestAng;
+        if (bestLead != null) raw.lead = bestLead;
+        else delete raw.lead;
+        const fin = { ...res, ang: bestAng, ...(bestLead != null ? { lead: bestLead } : {}) };
+        if (bestLead == null) delete fin.lead;
+        for (const m of measureDimTexts(fin, lay, sh, 1.3)) placedTexts.push(m.rect);
+      } else if (res.type === 'chamfer') {
+        const P = toSheet(v, res.p);
+        const ux = res.dir[0], uy = -res.dir[1];
+        const bx = v.geo.box, TL = toSheet(v, [bx[0], bx[3]]), BR = toSheet(v, [bx[2], bx[1]]), M = 3.5;
+        const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
+        const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
+        const tEx = Math.min(tx, ty);
+        const autoLead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+        let bestLead = null, bestCost = Infinity;
+        for (const leadExtra of [0, 6, 12, 18, 26, 34]) {
+          const lead = leadExtra > 0 ? autoLead + leadExtra : undefined;
+          const cand = { ...res, ...(lead != null ? { lead } : {}) };
+          if (!lead) delete cand.lead;
+          const c = evalCost(cand, res.view, leadExtra);
+          if (c < bestCost) { bestCost = c; bestLead = lead ?? null; }
+          if (c < 15) break;
+        }
+        if ((raw.lead ?? null) !== bestLead) moved++;
+        if (bestLead != null) raw.lead = bestLead;
+        else delete raw.lead;
+        const fin = { ...res, ...(bestLead != null ? { lead: bestLead } : {}) };
+        if (bestLead == null) delete fin.lead;
+        for (const m of measureDimTexts(fin, lay, sh, 1.3)) placedTexts.push(m.rect);
+      } else if (res.type === 'ang') {
+        const baseR = Math.max(6, res.r || 10);
+        let bestR = baseR, bestCost = Infinity;
+        for (const step of [0, 5 / v.s, 10 / v.s, 16 / v.s, 22 / v.s]) {
+          const cand = { ...res, r: baseR + step };
+          const c = evalCost(cand, res.view, step);
+          if (c < bestCost) { bestCost = c; bestR = baseR + step; }
+          if (c < 15) break;
+        }
+        if (Math.abs((raw.r ?? baseR) - bestR) > 1e-4) moved++;
+        raw.r = bestR;
+        for (const m of measureDimTexts({ ...res, r: bestR }, lay, sh, 1.3)) placedTexts.push(m.rect);
+      }
+    }
+    return moved;
+  }
+  function importModelDims() {
+    const sh0 = dwg();
+    const lay = layout || computeLayout(sh0);
+    const hasViews = ['front', 'top', 'left'].some((k) => lay.views[k] && lay.views[k].geo && !lay.views[k].noDims);
+    if (!hasViews) {
+      UI.toast(T('draw.modelDimsEmptyToast'), { icon: 'info' });
+      return { added: 0, total: (sh0.dims || []).length, arranged: 0, overlaps: 0 };
+    }
+    const raw = collectModelDims(App.doc);
+    const newDims = mapModelDimsToViews(raw, sh0, lay);
+    let added = 0;
+    let arranged = 0;
+    App.change('Maße aus dem Modell übernommen', () => {
+      const d = dwg();
+      d.dims = (d.dims || []).filter((x) => !x.auto && !x.fromModel);
+      for (const nd of newDims) {
+        if (nd.type === 'lin') {
+          const dup = d.dims.some((m) => m.view === nd.view && m.type === 'lin' && m.dir === nd.dir
+            && ((Math.hypot(m.a[0] - nd.a[0], m.a[1] - nd.a[1]) < 0.35 && Math.hypot(m.b[0] - nd.b[0], m.b[1] - nd.b[1]) < 0.35)
+              || (Math.hypot(m.a[0] - nd.b[0], m.a[1] - nd.b[1]) < 0.35 && Math.hypot(m.b[0] - nd.a[0], m.b[1] - nd.a[1]) < 0.35)));
+          if (dup) continue;
+        } else if (nd.type === 'dia' || nd.type === 'rad') {
+          const dup = d.dims.some((m) => m.view === nd.view && m.type === nd.type && Math.hypot(m.c[0] - nd.c[0], m.c[1] - nd.c[1]) < 0.35 && Math.abs(m.r - nd.r) < 0.25);
+          if (dup) continue;
+        }
+        d.dims.push(nd);
+        added++;
+      }
+      const curLay = computeLayout(d);
+      arranged = arrangeSheetDims(d, curLay);
+    });
+    render();
+    Panels.renderRight();
+    const res = dimTextBoxes(dwg(), layout);
+    UI.toast(added === 1 ? T('draw.modelDimsOneToast') : T('draw.modelDimsToast', { n: added }), { icon: 'dim' });
+    return { added, total: res.items.length, arranged, overlaps: res.overlaps };
+  }
+  function arrangeDims() {
+    const sh0 = dwg();
+    const lay = layout || computeLayout(sh0);
+    let moved = 0;
+    App.change('Maße geordnet', () => {
+      const d = dwg();
+      moved = arrangeSheetDims(d, lay);
+    });
+    render();
+    Panels.renderRight();
+    const res = dimTextBoxes(dwg(), layout);
+    UI.toast(T('draw.arrangeDimsToast'), { icon: 'dim' });
+    return { moved, overlaps: res.overlaps };
+  }
   function autoDims() {
     App.change('Automatisch bemaßt', () => {
       const d = dwg();
@@ -7448,6 +8393,13 @@ const Drawing = (() => {
       dimGrid.append(db);
     }
     dimSec.append(dimGrid);
+    const bModelDims = h('button', { type: 'button', class: 'btn', id: 'dw-model-dims', 'data-help': 'drawingModelDims' });
+    bModelDims.innerHTML = icon('dim') + esc(T('draw.panel.modelDimsBtn'));
+    bModelDims.onclick = () => importModelDims();
+    const bArrangeDims = h('button', { type: 'button', class: 'btn', id: 'dw-arrange-dims', 'data-help': 'drawingModelDims' });
+    bArrangeDims.innerHTML = icon('sliders') + esc(T('draw.panel.arrangeDimsBtn'));
+    bArrangeDims.onclick = () => arrangeDims();
+    dimSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bModelDims, bArrangeDims));
     if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
       const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, T('draw.panel.finishChain'));
       fin.onclick = () => { toolState = { stage: 0 }; render(); Panels.renderRight(); };
@@ -8115,7 +9067,7 @@ const Drawing = (() => {
   if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) ViewPrefs.on('change', () => { if (App.mode === 'drawing') refreshUI(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); }, 150);
   return {
-    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, importModelDims, arrangeDims, dimTextBoxes, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     PROJECTIONS, projection: () => normProjection(dwg().projection), setProjection,
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera, updateExplodeView, explodeViewInfo,

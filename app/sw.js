@@ -1,6 +1,6 @@
 // Service Worker für Tracery – speichert alle eigenen Dateien für die Nutzung ohne Internet.
 // CACHE_NAME und PRECACHE_FILES werden von tools/build.py automatisch eingesetzt.
-const CACHE_NAME = "tracery-offline-2099e704bec7";
+const CACHE_NAME = "tracery-offline-66db92cccd64";
 const PRECACHE_FILES = [
   "assets/app-icon.svg",
   "assets/icon-192.png",

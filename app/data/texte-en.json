@@ -4482,5 +4482,14 @@
   "draw.proj.us": "USA (ISO A · Third angle)",
   "draw.tb.method3": "Third angle (ISO A)",
   "draw.tb.method1Iso": "First angle (ISO E)",
-  "draw.explodeNeedTwo": "An exploded view needs at least two parts — currently shown assembled."
+  "draw.explodeNeedTwo": "An exploded view needs at least two parts — currently shown assembled.",
+  "tool.modelDims": "Model dimensions",
+  "tool.modelDimsShort": "Model dims",
+  "tool.modelDimsTip": "Import sketch and feature dimensions from the model and arrange without overlaps",
+  "draw.panel.modelDimsBtn": "Model dimensions",
+  "draw.panel.arrangeDimsBtn": "Arrange dims",
+  "draw.modelDimsToast": "Imported and arranged {n} model dimensions.",
+  "draw.modelDimsOneToast": "Imported and arranged 1 model dimension.",
+  "draw.modelDimsEmptyToast": "No model available to import dimensions from.",
+  "draw.arrangeDimsToast": "Dimensions arranged without overlaps."
 }
