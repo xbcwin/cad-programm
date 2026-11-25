@@ -1938,59 +1938,7 @@ const Panels = (() => {
       }
       w.append(sec);
     } else if (it.kind === 'loft') {
-      const n = (it.p.sketches || []).length, hasPath = !!it.p.path, hasRail1 = !!it.p.rail, hasRail2 = !!it.p.rail2, hasRail = hasRail1 || hasRail2;
-      sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('panel.loft.profiles')), h('b', { class: 'mono' }, String(n))));
-      if (!hasPath && !hasRail) {
-        const fl = h('div', { class: 'fields' });
-        fl.append(UI.numField({ id: 'p-tip', label: T('panel.loft.extendTip'), value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
-        fl.append(UI.selectField({ id: 'p-ruled', label: T('kind.loft'), value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', T('panel.loft.smooth')], ['ruled', T('panel.loft.ruled')]], onChange: (v) => setP('ruled', v === 'ruled') }));
-        sec.append(fl);
-        sec.append(h('div', { class: 'hint-box', html: T('panel.loft.tipHint') }));
-      }
-      // Mittellinie: der Übergang folgt einer gebogenen Linie statt dem kürzesten Weg
-      const ml = h('div', { class: 'section', id: 'loft-path' }, h('div', { class: 'section-h' }, T('panel.loft.centerline')));
-      if (n >= 2) {
-        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-path-edit' }); eb.innerHTML = icon(hasPath ? 'edit' : 'spline') + esc(hasPath ? T('panel.loft.editPath') : T('panel.loft.drawPath'));
-        eb.onclick = () => Sketch.startLoftPath(it.id);
-        const row = h('div', { class: 'btn-row' }, eb);
-        if (hasPath) {
-          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-path-off' }); rb.innerHTML = icon('close') + esc(T('panel.loft.noPath'));
-          rb.onclick = () => App.change('Mittellinie entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.path; });
-          row.append(rb);
-        }
-        const ang = hasPath ? Model.loftPathAngles(it, Model.vars(App.doc).v) : [];
-        const bad = ang.map((a, i) => [a, i]).filter(([a]) => a > 30);
-        if (bad.length) ml.append(h('div', { class: 'hint-box warn', id: 'loft-path-warn', html: T('panel.loft.pathAngleWarn', { which: bad.length === ang.length ? T('panel.loft.allProfiles') : bad.map(([, i]) => T('panel.loft.profileWord', { which: i === 0 ? T('panel.loft.firstProfile') : i === ang.length - 1 ? T('panel.loft.lastProfile') : T('panel.loft.nthProfile', { n: i + 1 }) })).join(T('panel.loft.andJoin')), angs: bad.map(([a]) => a + '°').join(', ') }) }));
-        ml.append(row, h('div', { class: 'hint-box', html: hasPath ? T('panel.loft.pathActiveHint') : T('panel.loft.pathIdleHint') }));
-      } else ml.append(h('div', { class: 'hint-box', html: T('panel.loft.needTwoPath') }));
-      // Führungskurve: gibt die Seitenlinie vor – der Übergang wird zwischen den Umrissen so weit, dass er sie berührt
-      const fk = h('div', { class: 'section', id: 'loft-rail' }, h('div', { class: 'section-h' }, T('panel.loft.rail')));
-      if (n >= 2 && !hasPath) {
-        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail1 ? 'edit' : 'spline') + esc(hasRail1 ? T('panel.loft.editRail') : T('panel.loft.drawRail'));
-        eb.onclick = () => Sketch.startLoftPath(it.id, 'rail');
-        const row = h('div', { class: 'btn-row' }, eb);
-        if (hasRail1) {
-          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-off' }); rb.innerHTML = icon('close') + esc(T('panel.loft.noRail'));
-          rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; delete f.item.p.rail2; });
-          row.append(rb);
-        }
-        fk.append(row, h('div', { class: 'hint-box', html: hasRail ? T('panel.loft.railActiveHint') : T('panel.loft.railIdleHint') }));
-      } else fk.append(h('div', { class: 'hint-box', html: hasPath ? T('panel.loft.railBlockedPath') : T('panel.loft.needTwoRail') }));
-      // zweite Führungskurve quer zur ersten (z. B. Gehäuse: erste von der Seite für die Höhe, zweite von oben für die Breite)
-      const fk2 = hasRail1 && n >= 2 && !hasPath ? h('div', { class: 'section', id: 'loft-rail2' }, h('div', { class: 'section-h' }, T('panel.loft.rail2'))) : null;
-      if (fk2) {
-        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-edit' }); eb.innerHTML = icon(hasRail2 ? 'edit' : 'spline') + esc(hasRail2 ? T('panel.loft.editRail2') : T('panel.loft.drawRail2'));
-        eb.onclick = () => Sketch.startLoftPath(it.id, 'rail2');
-        const row = h('div', { class: 'btn-row' }, eb);
-        if (hasRail2) {
-          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-off' }); rb.innerHTML = icon('close') + esc(T('panel.loft.noRail2'));
-          rb.onclick = () => App.change('Zweite Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail2; });
-          row.append(rb);
-        }
-        fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? T('panel.loft.rail2ActiveHint') : T('panel.loft.rail2IdleHint') }));
-      }
-      if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, T('panel.loft.centerline')), h('div', { class: 'hint-box', html: T('panel.loft.pathBlockedRail') })); }
-      w.append(sec, ml, fk); if (fk2) w.append(fk2);
+      Features.renderLoft(it, sec, setP, w);
     } else if (it.kind === 'transform') {
       sec.firstChild.textContent = T('kind.transform');
       Features.renderTransform(it, sec, setP); w.append(sec);
@@ -2717,7 +2665,20 @@ const Panels = (() => {
           { label: T('ctx.mateSlide'), icon: 'moveStep', run: () => Joints.start('slide') },
         ]), '', T('ctx.mateTip'), true).dataset.help = 'mateCyl';
       }
-      if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
+      if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) {
+        b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
+        if (items.length >= 3) {
+          const lc = b('loft', T('ctx.loftClosed'), () => Features.loftClosed(), 'pro', T('ctx.loftClosedTip'));
+          lc.id = 'ctx-loft-closed'; lc.dataset.help = 'loftClosed';
+        }
+      }
+      const loftExtrudes = items.filter((x) => x.item.kind === 'extrude' && x.item.p && x.item.p.sketch);
+      const loftNonExtrudes = items.filter((x) => x.item.kind !== 'extrude' || !x.item.p || !x.item.p.sketch);
+      const loftCutTargets = loftExtrudes.length >= 2 ? Features.loftTargets(App.doc, loftExtrudes.map((x) => x.item.id)) : [];
+      if (!hasRef && items.every((x) => App.doc.items.includes(x.item)) && loftExtrudes.length >= 2 && ((loftNonExtrudes.length === 0 && loftCutTargets.length > 0) || (loftNonExtrudes.length === 1 && loftCutTargets.some((t) => t.id === loftNonExtrudes[0].item.id)))) {
+        const lcut = b('loft', T('ctx.loftCut'), () => Features.loftCut(), 'pro', T('ctx.loftCutTip'));
+        lcut.id = 'ctx-loft-cut'; lcut.dataset.help = 'loftCut';
+      }
       if (!hasRef) b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
       b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', T('ctx.alignTip'));
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);

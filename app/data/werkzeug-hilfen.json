@@ -1478,5 +1478,15 @@
     "tip": "Lippe und Nut mit Spiel für zwei Gehäusehälften anlegen",
     "hilfe": "Wähle eine Trennkante, eine ebene Trennfläche oder beide Gehäusehälften und starte „Lippe und Nut“. Die eine Hälfte bekommt eine umlaufende Stecklippe (innen oder außen), die andere Hälfte die passende Nut samt einstellbarem Spiel.",
     "tipp": "Mit 0,2 mm Spiel lassen sich gedruckte Gehäusehälften ohne Klemmen zusammenstecken und zentrieren."
+  },
+  "loftClosed": {
+    "tip": "Geschlossener Übergang (Ring): verbindet den letzten Umriss zurück zum ersten (Profi)",
+    "hilfe": "Wähle mindestens drei Skizzenkörper im Kreis oder schalte rechts beim Übergang „Geschlossen (Ring)“ ein. Tracery schließt die Form nahtlos vom letzten Querschnitt wieder an den ersten an – wahlweise weich oder mit geraden Flächen.",
+    "tipp": "Ideal für nahtlose Ringe, Rahmen, Griffe oder geschlossene Kanäle – mit „Körper → Abziehen von“ lässt sich der Ring direkt als Nut oder Kanal aus einem Körper schneiden."
+  },
+  "loftCut": {
+    "tip": "Übergang direkt als Schnitt von einem Körper abziehen (Profi)",
+    "hilfe": "Wähle zwei oder mehr Skizzenkörper (und bei Bedarf gleich den Zielkörper mit) und klicke auf „Übergang abziehen“. Der Übergang wird direkt vom Zielkörper abgezogen, um verjüngte Kanäle, Aussparungen oder konische Taschen zu schneiden.",
+    "tipp": "Auch einen bestehenden Übergang kannst du jederzeit rechts unter „Körper“ auf „Abziehen von …“, „Vereinigen mit …“ oder „Schnittmenge mit …“ umstellen."
   }
 }

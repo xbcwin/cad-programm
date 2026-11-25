@@ -2410,6 +2410,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte, DE/EN-Schlüssel & Befehlssuche**: `HELP.boss` und `HELP.lipGroove` samt `texte-de`/`texte-en`-Schlüsselgleichheit und Suche nach `schraubdom` / `lippe` grün.
 - [ ] **Von Hand**: Im Browser an einer runden und einer geschrägten Gehäuseschale eine Trennkante per Klick wählen und das Spiel der Lippe im Schnitt (Taste C) prüfen.
 
+## Übergang als Schnitt und als Ring (Auto [A-122], KP-30)
+
+- [x] **Geschlossener Ring durch 4 Kreise im Quadrat**: 4 runde Umrisse im Quadrat per `#ctx-loft-closed` im Profi-Modus verbunden → geschlossener Ring (`p.closed = true`) ohne Lücke und ohne Geometrie-Fehler (`GeomCheck` 0 Funde, offenes Zentrum, alle 4 Seiten und Quadranten voll geschlossen).
+- [x] **Umschalten Weich/Gerade, Offen/Geschlossen & Einfach/Profi**: Wechsel zwischen weichem Ring und geraden Flächen (`#p-ruled = 'ruled'`), Öffnen/Schließen über `#p-closed` mit Rückgängig sowie Ausblenden der Profi-Option im Modus „Einfach“ funktionieren ohne Fehler.
+- [x] **Übergang als Schnitt in Quader & Ring-Schnitt**: Offener Übergang und geschlossener Ring über `#ctx-loft-cut` bzw. `#op-type = 'cut'` direkt von einem Quader abgezogen → Volumen sinkt deutlich, `GeomCheck` 0 Funde, Wechsel zwischen `new` und `cut` samt Rückgängig/Wiederholen fehlerfrei.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftClosed` und `loftCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang ring`, `übergang schnitt`) und `Explain.local` vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser 4 leicht unterschiedlich große Kreise im Kreis zeichnen, auf „Übergang (Ring)“ klicken, das nahtlose Schließen rundherum drehen und prüfen sowie den Ring mit „Körper → Abziehen von“ als umlaufende Nut aus einer Platte schneiden.
+
 ## Fehler melden
 
 ```

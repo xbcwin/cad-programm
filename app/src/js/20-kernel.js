@@ -586,6 +586,38 @@ const Kernel = (() => {
         }
         break;
       }
+      case 'loft': {
+        if (p.path || p.sections3 || !Array.isArray(p.profiles) || !p.profiles.length) return null;
+        let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+        const add3 = (pt) => {
+          if (!Array.isArray(pt) || pt.length < 3) return;
+          const px = Number(pt[0]), py = Number(pt[1]), pz = Number(pt[2]);
+          if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return;
+          if (px < x0) x0 = px; if (py < y0) y0 = py; if (pz < z0) z0 = pz;
+          if (px > x1) x1 = px; if (py > y1) y1 = py; if (pz > z1) z1 = pz;
+        };
+        for (const pr of p.profiles) {
+          const pl = pr && pr.plane;
+          if (!pl || !Array.isArray(pl.o) || !Array.isArray(pl.x) || !Array.isArray(pl.n) || !Array.isArray(pr.poly)) return null;
+          const nl = Math.hypot(pl.n[0], pl.n[1], pl.n[2]), xl = Math.hypot(pl.x[0], pl.x[1], pl.x[2]);
+          if (!(nl > 1e-9) || !(xl > 1e-9)) return null;
+          const nv = [pl.n[0] / nl, pl.n[1] / nl, pl.n[2] / nl];
+          const xv = [pl.x[0] / xl, pl.x[1] / xl, pl.x[2] / xl];
+          const yv = [nv[1] * xv[2] - nv[2] * xv[1], nv[2] * xv[0] - nv[0] * xv[2], nv[0] * xv[1] - nv[1] * xv[0]];
+          for (const q of pr.poly) {
+            if (!Array.isArray(q) || q.length < 2) return null;
+            const u = Number(q[0]), v = Number(q[1]);
+            if (!Number.isFinite(u) || !Number.isFinite(v)) return null;
+            add3([pl.o[0] + u * xv[0] + v * yv[0], pl.o[1] + u * xv[1] + v * yv[1], pl.o[2] + u * xv[2] + v * yv[2]]);
+          }
+        }
+        if (Array.isArray(p.tipPoint)) add3(p.tipPoint);
+        if (!Number.isFinite(x0)) return null;
+        const span = Math.max(x1 - x0, y1 - y0, z1 - z0, 1);
+        const pad = Math.max(4, span * 0.45);
+        box = [x0 - pad, y0 - pad, z0 - pad, x1 + pad, y1 + pad, z1 + pad];
+        break;
+      }
       case 'group': {
         const kids = (it.children || []).filter((c) => c && !c.hidden);
         if (!kids.length) return [0, 0, 0, 0, 0, 0];
