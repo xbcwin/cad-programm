@@ -1059,6 +1059,21 @@ const Model = (() => {
           } else if (o.p.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
             const se = sleeveEntry(o.p.size);
             if (se) o.p.spec = { d: se.d_mm, D: se.D_mm, wall: se.wand_mm, fD: se.flansch_d_mm || (se.D_mm + 4 * se.wand_mm) };
+          } else if (o.p.lib === 'stdORing' && typeof oringMetrics === 'function') {
+            const m = oringMetrics(o.p);
+            o.p.spec = { d1: m.d1, d2: m.d2, Da: m.Da };
+          } else if (o.p.lib === 'stdORingGroove' && typeof oringGrooveMetrics === 'function') {
+            const m = oringGrooveMetrics(o.p);
+            o.p.spec = { mode: m.mode, b: m.b, t: m.t, ri: m.ri, ro: m.ro, extra: m.extra };
+          } else if (o.p.lib === 'stdShaftSeal' && typeof shaftSealMetrics === 'function') {
+            const m = shaftSealMetrics(o.p);
+            o.p.spec = { d: m.d, D: m.D, b: m.b, form: m.form };
+          } else if (o.p.lib === 'stdCompSpring' && typeof compSpringMetrics === 'function') {
+            const m = compSpringMetrics(o.p);
+            o.p.spec = { d: m.d, Dm: m.Dm, n: m.n, pitch: m.pitch, L0: m.L0, ends: m.ends };
+          } else if (o.p.lib === 'stdExtSpring' && typeof extSpringMetrics === 'function') {
+            const m = extSpringMetrics(o.p);
+            o.p.spec = { d: m.d, Dm: m.Dm, n: m.n, coilPitch: m.coilPitch, rEye: m.rEye, L0: m.L0, Lges: m.Lges, hookAngle: m.hookAngle };
           }
         }
       }
@@ -2530,6 +2545,11 @@ const Model = (() => {
         if (L === 'gearRack' && typeof gearRackMetrics === 'function') { const gm = gearRackMetrics({ teeth: n('teeth', 10), module: n('module', 1.5), h: n('h', 6), baseH: n('baseH', 6) }); return [-gm.length / 2, 0, 0, gm.length / 2, gm.totalH, gm.h]; }
         if (L === 'worm' && typeof wormMetrics === 'function') { const gm = wormMetrics({ module: n('module', 1.5), starts: n('starts', 1), d: n('d', 16), length: n('length', 30) }); const r = gm.da1 / 2; return [-r, -r, 0, r, r, gm.length]; }
         if (L === 'wormWheel' && typeof wormWheelMetrics === 'function') { const gm = wormWheelMetrics({ teeth: n('teeth', 24), module: n('module', 1.5), h: n('h', 10), wormD: n('wormD', 16), wormStarts: n('wormStarts', 1) }); const r = gm.da2 / 2; return [-r, -r, 0, r, r, gm.h]; }
+        if (L === 'stdORing') { const m = typeof oringMetrics === 'function' ? oringMetrics(p) : { Da: 24, d2: 2 }; const r = m.Da / 2; return [-r, -r, 0, r, r, m.d2]; }
+        if (L === 'stdORingGroove') { const m = typeof oringGrooveMetrics === 'function' ? oringGrooveMetrics(p) : { mode: 'axial', ro: 12.4, t: 1.55, b: 2.8, extra: 0.5 }; return m.mode === 'axial' ? [-m.ro, -m.ro, -m.t, m.ro, m.ro, m.extra] : [-m.ro, -m.ro, 0, m.ro, m.ro, m.b]; }
+        if (L === 'stdShaftSeal') { const m = typeof shaftSealMetrics === 'function' ? shaftSealMetrics(p) : { D: 35, b: 7 }; const r = m.D / 2; return [-r, -r, 0, r, r, m.b]; }
+        if (L === 'stdCompSpring') { const m = typeof compSpringMetrics === 'function' ? compSpringMetrics(p) : { De: 18, L0: 43 }; const r = m.De / 2; return [-r, -r, 0, r, r, m.L0]; }
+        if (L === 'stdExtSpring') { const m = typeof extSpringMetrics === 'function' ? extSpringMetrics(p) : { De: 16.5, Lges: 60 }; const r = m.De / 2; return [-r, -r, 0, r, r, m.Lges]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -2809,6 +2829,11 @@ const Model = (() => {
         if (L === 'buyAntenna') return `${f(p.L)}${u} lang`;
         if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}${u}`;
         if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;
+        if (L === 'stdORing' && typeof oringMetrics === 'function') { const m = oringMetrics(p); return `${f(m.d1)} × ${f(m.d2)}${u}`; }
+        if (L === 'stdORingGroove' && typeof oringGrooveMetrics === 'function') { const m = oringGrooveMetrics(p); return `${f(m.b)} × ${f(m.t)}${u}`; }
+        if (L === 'stdShaftSeal' && typeof shaftSealMetrics === 'function') { const m = shaftSealMetrics(p); return `${f(m.d)} × ${f(m.D)} × ${f(m.b)}${u}`; }
+        if (L === 'stdCompSpring' && typeof compSpringMetrics === 'function') { const m = compSpringMetrics(p); return `${f(m.De)} × ${f(m.L0)}${u}`; }
+        if (L === 'stdExtSpring' && typeof extSpringMetrics === 'function') { const m = extSpringMetrics(p); return `${f(m.De)} × ${f(m.L0)}${u}`; }
         return p.size || '';
       }
     }

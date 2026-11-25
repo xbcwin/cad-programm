@@ -96,6 +96,8 @@ const THREAD_DATA = /*JSON:gewinde.json*/null;
 const PIN_DATA = /*JSON:passstifte.json*/null;
 const KEY_DATA = /*JSON:passfedern.json*/null;
 const BEARING_DATA = /*JSON:lager.json*/null;
+const SEAL_DATA = /*JSON:dichtungen.json*/null;
+const SPRING_DATA = /*JSON:federn.json*/null;
 const THREAD_NORMS = (THREAD_DATA && THREAD_DATA.normen) || [];
 const THREAD_NORM_OPTIONS = THREAD_NORMS.map((n) => [n.id, n.name]);
 const THREAD_BY_NORM = new Map(THREAD_NORMS.map((n) => [n.id, n]));
@@ -332,6 +334,182 @@ function sleeveEntry(size) {
   const s = String(size || '8x10').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x').replace(',', '.');
   return SLEEVE_BY_ID.get(s) || SLEEVE_BY_ID.get('8x10') || SLEEVE_LIST[0] || null;
 }
+// O-Ringe & Einbaunuten (DIN 3771 / ISO 3601) sowie Wellendichtringe (DIN 3760 / ISO 6194-1)
+const ORING_DATA = (SEAL_DATA && SEAL_DATA.oringe) || {};
+const ORING_GROOVE_RULES = ORING_DATA.nut_regeln || [];
+const ORING_LIST = ORING_DATA.groessen || [];
+const ORING_BY_ID = new Map(ORING_LIST.map((x) => [String(x.id).toLowerCase(), x]));
+const ORING_OPTIONS = ORING_LIST.map((x) => [x.id, `${String(x.d1_mm).replace('.', ',')} × ${String(x.d2_mm).replace('.', ',')} mm`]);
+function oringEntry(size) {
+  const s = String(size || '20x2').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x').replace(/,/g, '.');
+  return ORING_BY_ID.get(s) || ORING_BY_ID.get('20x2') || ORING_LIST[0] || null;
+}
+function oringGrooveRule(d2) {
+  const n = Number(d2);
+  if (!(n > 0) || !ORING_GROOVE_RULES.length) {
+    return { d2_mm: 2.0, t_stat_mm: 1.55, b_stat_mm: 2.7, t_dyn_mm: 1.65, b_dyn_mm: 2.8, t_axial_mm: 1.55, b_axial_mm: 2.8, r1_mm: 0.4 };
+  }
+  let best = ORING_GROOVE_RULES[0], bd = Infinity;
+  for (const r of ORING_GROOVE_RULES) {
+    const dd = Math.abs(r.d2_mm - n);
+    if (dd < bd) { bd = dd; best = r; }
+  }
+  if (bd < 0.05) return best;
+  const ratio = n / best.d2_mm;
+  return {
+    d2_mm: n,
+    t_stat_mm: round(best.t_stat_mm * ratio, 2),
+    b_stat_mm: round(best.b_stat_mm * ratio, 2),
+    t_dyn_mm: round(best.t_dyn_mm * ratio, 2),
+    b_dyn_mm: round(best.b_dyn_mm * ratio, 2),
+    t_axial_mm: round(best.t_axial_mm * ratio, 2),
+    b_axial_mm: round(best.b_axial_mm * ratio, 2),
+    r1_mm: round(Math.max(0.2, best.r1_mm * ratio), 2),
+  };
+}
+function oringMetrics(p = {}) {
+  const isCustom = p.size === 'custom';
+  const e = isCustom ? null : oringEntry(p.size);
+  const rawD1 = Number(p.d1);
+  const rawD2 = Number(p.d2);
+  const d1 = rawD1 > 0 ? rawD1 : (e ? e.d1_mm : 20);
+  const d2 = rawD2 > 0 ? rawD2 : (e ? e.d2_mm : 2);
+  const Da = round(d1 + 2 * d2, 3);
+  const Dm = round(d1 + d2, 3);
+  const rule = oringGrooveRule(d2);
+  return {
+    id: isCustom || rawD1 > 0 || rawD2 > 0 ? `${round(d1, 2)}x${round(d2, 2)}` : (e ? e.id : '20x2'),
+    d1,
+    d2,
+    Da,
+    Dm,
+    rule,
+  };
+}
+function oringGrooveMetrics(p = {}) {
+  const m = oringMetrics(p);
+  const mode = p.mode === 'radial_shaft' || p.mode === 'radial_bore' ? p.mode : 'axial';
+  const use = p.use === 'dynamic' ? 'dynamic' : 'static';
+  const extra = Math.max(0.2, Number(p.extra) || 0.5);
+  let b, t, ri, ro, dGrund;
+  if (mode === 'axial') {
+    b = m.rule.b_axial_mm;
+    t = m.rule.t_axial_mm;
+    const rm = m.Dm / 2;
+    ri = Math.max(0.3, rm - b / 2);
+    ro = rm + b / 2;
+    dGrund = round(m.Dm, 2);
+  } else if (mode === 'radial_shaft') {
+    b = use === 'dynamic' ? m.rule.b_dyn_mm : m.rule.b_stat_mm;
+    t = use === 'dynamic' ? m.rule.t_dyn_mm : m.rule.t_stat_mm;
+    dGrund = Math.max(0.6, round(m.Da - 2 * t, 2));
+    ri = dGrund / 2;
+    ro = m.Da / 2 + extra;
+  } else {
+    b = use === 'dynamic' ? m.rule.b_dyn_mm : m.rule.b_stat_mm;
+    t = use === 'dynamic' ? m.rule.t_dyn_mm : m.rule.t_stat_mm;
+    dGrund = round(m.d1 + 2 * t, 2);
+    ri = Math.max(0.2, m.d1 / 2 - extra);
+    ro = dGrund / 2;
+  }
+  return {
+    ...m,
+    mode,
+    use,
+    b,
+    t,
+    r1: m.rule.r1_mm,
+    ri: round(ri, 3),
+    ro: round(ro, 3),
+    dGrund,
+    extra,
+  };
+}
+const SHAFT_SEAL_DATA = (SEAL_DATA && SEAL_DATA.wellendichtringe) || {};
+const SHAFT_SEAL_LIST = SHAFT_SEAL_DATA.groessen || [];
+const SHAFT_SEAL_BY_ID = new Map(SHAFT_SEAL_LIST.map((x) => [String(x.id).toLowerCase(), x]));
+const SHAFT_SEAL_OPTIONS = SHAFT_SEAL_LIST.map((x) => [x.id, `${x.d_mm} × ${x.D_mm} × ${x.b_mm} mm`]);
+function shaftSealEntry(size) {
+  const s = String(size || '20x35x7').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x').replace(/,/g, '.');
+  return SHAFT_SEAL_BY_ID.get(s) || SHAFT_SEAL_BY_ID.get('20x35x7') || SHAFT_SEAL_LIST[0] || null;
+}
+function shaftSealMetrics(p = {}) {
+  const e = shaftSealEntry(p.size);
+  const d = e ? e.d_mm : 20;
+  const D = e ? e.D_mm : 35;
+  const b = Number(p.b) > 0 ? Number(p.b) : (e ? e.b_mm : 7);
+  const form = p.form === 'A' ? 'A' : 'AS';
+  return { id: e ? e.id : '20x35x7', d, D, b, form };
+}
+// Druck- und Zugfedern (DIN EN 13906-1 / -2, EN 10270-1)
+const SPRING_G = (SPRING_DATA && SPRING_DATA.schubmodul_mpa) || 81500;
+const COMP_SPRING_LIST = (SPRING_DATA && SPRING_DATA.druckfedern && SPRING_DATA.druckfedern.groessen) || [];
+const COMP_SPRING_BY_ID = new Map(COMP_SPRING_LIST.map((x) => [String(x.id).toLowerCase(), x]));
+const COMP_SPRING_OPTIONS = COMP_SPRING_LIST.map((x) => [x.id, `d ${String(x.d_mm).replace('.', ',')} × Dm ${x.Dm_mm} × L₀ ${x.L0_mm} (${x.n} Wdg.)`]);
+function compSpringEntry(size) {
+  const s = String(size || '2x16x43').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x').replace(/,/g, '.');
+  return COMP_SPRING_BY_ID.get(s) || COMP_SPRING_BY_ID.get('2x16x43') || COMP_SPRING_LIST[0] || null;
+}
+function compSpringMetrics(p = {}) {
+  const isCustom = p.size === 'custom';
+  const e = isCustom ? null : compSpringEntry(p.size);
+  const rawD = Number(p.d);
+  const rawDm = Number(p.Dm);
+  const rawN = Number(p.turns);
+  const rawLen = Number(p.length);
+  const rawPitch = Number(p.pitch);
+  const d = rawD > 0 ? rawD : (e ? e.d_mm : 2);
+  const Dm = Math.max(d * 1.6, rawDm > 0 ? rawDm : (e ? e.Dm_mm : 16));
+  const n = Math.max(0.5, Math.min(60, rawN > 0 ? rawN : (e ? e.n : 8)));
+  const ends = p.ends === 'open' ? 'open' : 'ground';
+  const endAdd = ends === 'open' ? d : 1.5 * d;
+  let L0, pitch;
+  if (rawLen > endAdd + 0.1) {
+    L0 = rawLen;
+    pitch = round((L0 - endAdd) / n, 3);
+  } else {
+    pitch = rawPitch > 0 ? rawPitch : (e ? e.pitch_mm : Math.max(d * 2, 5));
+    L0 = round(n * pitch + endAdd, 3);
+  }
+  const De = round(Dm + d, 3);
+  const Di = round(Math.max(0.2, Dm - d), 3);
+  const Lc = round((ends === 'open' ? n + 1 : n + 1.5) * d, 2);
+  const rate = round((SPRING_G * Math.pow(d, 4)) / (8 * Math.pow(Dm, 3) * n), 3);
+  return {
+    id: e && !(rawD > 0 || rawDm > 0 || rawN > 0 || rawLen > 0 || rawPitch > 0) ? e.id : `${round(d, 2)}x${round(Dm, 1)}x${round(L0, 1)}`,
+    d, Dm, De, Di, n, pitch, L0, Lc, ends, rate,
+  };
+}
+const EXT_SPRING_LIST = (SPRING_DATA && SPRING_DATA.zugfedern && SPRING_DATA.zugfedern.groessen) || [];
+const EXT_SPRING_BY_ID = new Map(EXT_SPRING_LIST.map((x) => [String(x.id).toLowerCase(), x]));
+const EXT_SPRING_OPTIONS = EXT_SPRING_LIST.map((x) => [x.id, `d ${String(x.d_mm).replace('.', ',')} × Dm ${x.Dm_mm} (${x.n} Wdg.)`]);
+function extSpringEntry(size) {
+  const s = String(size || '1.5x15-24').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x').replace(/,/g, '.');
+  return EXT_SPRING_BY_ID.get(s) || EXT_SPRING_BY_ID.get('1.5x15-24') || EXT_SPRING_LIST[0] || null;
+}
+function extSpringMetrics(p = {}) {
+  const isCustom = p.size === 'custom';
+  const e = isCustom ? null : extSpringEntry(p.size);
+  const rawD = Number(p.d);
+  const rawDm = Number(p.Dm);
+  const rawN = Number(p.turns);
+  const d = rawD > 0 ? rawD : (e ? e.d_mm : 1.5);
+  const Dm = Math.max(d * 2.2, rawDm > 0 ? rawDm : (e ? e.Dm_mm : 15));
+  const n = Math.max(2, Math.min(60, rawN > 0 ? rawN : (e ? e.n : 24)));
+  const hookAngle = Number(p.hookAngle) === 90 ? 90 : 0;
+  const De = round(Dm + d, 3);
+  const Di = round(Math.max(0.2, Dm - d), 3);
+  const coilPitch = round(d * 1.08, 4);
+  const Lk = round(n * coilPitch + d, 2);
+  const rEye = round(Math.max(d * 1.15, Dm * 0.45), 3);
+  const L0 = round(n * coilPitch + 4 * rEye, 2);
+  const Lges = round(L0 + 2 * d, 2);
+  const rate = round((SPRING_G * Math.pow(d, 4)) / (8 * Math.pow(Dm, 3) * n), 3);
+  return {
+    id: e && !(rawD > 0 || rawDm > 0 || rawN > 0) ? e.id : `${round(d, 2)}x${round(Dm, 1)}-${Math.round(n)}`,
+    d, Dm, De, Di, n, coilPitch, Lk, rEye, L0, Lges, hookAngle, rate,
+  };
+}
 // 3D-Druck-Passungs-Vorgaben (DR-03): Spiel wird bei Löchern addiert, bei Bolzen abgezogen
 const PRINT_FITS = [
   { id: 'loose', get label() { return T('printFit.loose.label'); }, mm: 0.4, get desc() { return T('printFit.loose.desc'); } },
@@ -485,6 +663,40 @@ const LIB = [
     { k: 'size', label: 'Größe (d × D)', type: 'select', options: SLEEVE_OPTIONS, def: '8x10' },
     { k: 'length', label: 'Länge (B)', type: 'num', def: 10 },
     { k: 'flange', label: 'Bauform', type: 'select', options: [['cyl', 'Zylindrisch (Form C)'], ['flange', 'Mit Bund (Form F)']], def: 'cyl' },
+  ] },
+  { lib: 'stdORing', label: 'O-Ring (Norm)', role: 'solid', icon: 'oring', mat: 'TPU 95A', std: true, desc: 'O-Ring nach DIN 3771 / ISO 3601 mit passenden Nut-Maßen', params: [
+    { k: 'size', label: 'Größe (d₁ × d₂)', type: 'select', options: [...ORING_OPTIONS, ['custom', 'Eigene Maße']], def: '20x2' },
+    { k: 'd1', label: 'Innen-Ø (d₁)', type: 'num', def: null, auto: true },
+    { k: 'd2', label: 'Schnurstärke (d₂)', type: 'num', def: null, auto: true },
+  ] },
+  { lib: 'stdORingGroove', label: 'O-Ring-Nut (Norm)', role: 'hole', icon: 'oringGroove', std: true, desc: 'Passende Einbaunut nach DIN 3771 / ISO 3601-2 (axial oder radial)', params: [
+    { k: 'size', label: 'O-Ring (d₁ × d₂)', type: 'select', options: [...ORING_OPTIONS, ['custom', 'Eigene Maße']], def: '20x2' },
+    { k: 'mode', label: 'Einbau-Art', type: 'select', options: [['axial', 'Axial (Planfläche)'], ['radial_shaft', 'Radial (Welle / Kolben)'], ['radial_bore', 'Radial (Bohrung / Gehäuse)']], def: 'axial' },
+    { k: 'use', label: 'Dichtfall', type: 'select', options: [['static', 'Statisch (ruhend)'], ['dynamic', 'Dynamisch (bewegt)']], def: 'static' },
+    { k: 'd1', label: 'Innen-Ø (d₁)', type: 'num', def: null, auto: true },
+    { k: 'd2', label: 'Schnurstärke (d₂)', type: 'num', def: null, auto: true },
+    { k: 'extra', label: 'Überstand', type: 'num', def: 0.5 },
+  ] },
+  { lib: 'stdShaftSeal', label: 'Wellendichtring (DIN 3760)', role: 'solid', icon: 'shaftSeal', mat: 'TPU 95A', std: true, desc: 'Radial-Wellendichtring nach DIN 3760 / ISO 6194 (Form AS mit Staublippe oder Form A)', params: [
+    { k: 'size', label: 'Größe (d × D × b)', type: 'select', options: SHAFT_SEAL_OPTIONS, def: '20x35x7' },
+    { k: 'form', label: 'Bauform', type: 'select', options: [['AS', 'Form AS (mit Staublippe)'], ['A', 'Form A (ohne Staublippe)']], def: 'AS' },
+    { k: 'b', label: 'Breite (b)', type: 'num', def: null, auto: true },
+  ] },
+  { lib: 'stdCompSpring', label: 'Druckfeder (Norm)', role: 'solid', icon: 'compSpring', mat: 'Stahl 42CrMo4', std: true, desc: 'Zylindrische Schrauben-Druckfeder nach DIN EN 13906-1 / DIN 2098 mit Federrate', params: [
+    { k: 'size', label: 'Größe (d × Dm × L₀)', type: 'select', options: [...COMP_SPRING_OPTIONS, ['custom', 'Eigene Maße']], def: '2x16x43' },
+    { k: 'd', label: 'Draht-Ø (d)', type: 'num', def: null, auto: true },
+    { k: 'Dm', label: 'Mittl. Ø (Dm)', type: 'num', def: null, auto: true },
+    { k: 'turns', label: 'Windungen (n)', type: 'num', def: null, auto: true, unit: '' },
+    { k: 'pitch', label: 'Steigung (P)', type: 'num', def: null, auto: true },
+    { k: 'length', label: 'Länge (L₀)', type: 'num', def: null, auto: true },
+    { k: 'ends', label: 'Federenden', type: 'select', options: [['ground', 'Angelegt & geschliffen'], ['open', 'Offen (ungeschliffen)']], def: 'ground' },
+  ] },
+  { lib: 'stdExtSpring', label: 'Zugfeder (Norm)', role: 'solid', icon: 'extSpring', mat: 'Stahl 42CrMo4', std: true, desc: 'Zylindrische Schrauben-Zugfeder nach DIN EN 13906-2 mit 1/1 deutschen Ösen', params: [
+    { k: 'size', label: 'Größe (d × Dm - n)', type: 'select', options: [...EXT_SPRING_OPTIONS, ['custom', 'Eigene Maße']], def: '1.5x15-24' },
+    { k: 'd', label: 'Draht-Ø (d)', type: 'num', def: null, auto: true },
+    { k: 'Dm', label: 'Mittl. Ø (Dm)', type: 'num', def: null, auto: true },
+    { k: 'turns', label: 'Windungen (n)', type: 'num', def: null, auto: true, unit: '' },
+    { k: 'hookAngle', label: 'Ösen-Stellung', type: 'select', options: [['0', '0° (in einer Ebene)'], ['90', '90° (gedreht)']], def: '0' },
   ] },
   { lib: 'slotHole', label: 'Langloch', role: 'hole', icon: 'slot', desc: 'Längliches Loch zum Verstellen', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 20 }, { k: 'w', label: 'Breite', type: 'num', def: 4.5 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },

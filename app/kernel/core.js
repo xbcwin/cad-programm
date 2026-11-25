@@ -4282,6 +4282,164 @@ export function createKernel(R, oc) {
     }
     return revolveProfile([[ri + c, 0], [ro - c, 0], [ro, c], [ro, L - c], [ro - c, L], [ri + c, L], [ri, L - c], [ri, c]]);
   }
+  function buildStdORing(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d1 = pos(sp.d1, pos(p.d1, 20));
+    const d2 = pos(sp.d2, pos(p.d2, 2));
+    if (d1 < 0.2 || d2 < 0.1) throw new Error('O-Ring: Durchmesser und Schnurstärke müssen positiv sein.');
+    const rr = d2 / 2, rm = (d1 + d2) / 2;
+    let circ = null, wire = null, face = null;
+    try {
+      circ = R.makeCircle(rr, [rm, 0, rr], [0, 1, 0]);
+      wire = R.assembleWire([circ]);
+      face = R.makeFace(wire);
+      return R.revolution(face, [0, 0, 0], [0, 0, 1], 360);
+    } finally {
+      safeDelete(circ); safeDelete(wire); safeDelete(face);
+    }
+  }
+  function buildStdORingGroove(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const mode = sp.mode || p.mode || 'axial';
+    const b = pos(sp.b, 2.8);
+    const t = pos(sp.t, 1.55);
+    const extra = Math.max(0.2, num(sp.extra, num(p.extra, 0.5)));
+    const ri = Math.max(0.2, pos(sp.ri, 9.6));
+    const ro = Math.max(ri + 0.4, pos(sp.ro, 12.4));
+    if (mode === 'axial') {
+      return revolveProfile([[ri, -t], [ro, -t], [ro, extra], [ri, extra]]);
+    }
+    return revolveProfile([[ri, 0], [ro, 0], [ro, b], [ri, b]]);
+  }
+  function buildStdShaftSeal(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, 20), D = pos(sp.D, 35), b = pos(sp.b, pos(p.b, 7));
+    const form = (sp.form || p.form) === 'A' ? 'A' : 'AS';
+    const ri = d / 2, ro = Math.max(ri + 1.5, D / 2), rw = ro - ri;
+    const c = Math.min(0.4, rw * 0.08, b * 0.08);
+    const rCavIn = ri + rw * 0.25;
+    const rRim = ri + rw * 0.46;
+    const rCavOut = Math.min(ro - c - 0.3, ri + rw * 0.58);
+    const pts = [
+      [ro - c, 0],
+      [ro, c],
+      [ro, b - c],
+      [ro - c, b],
+      [rRim, b],
+    ];
+    if (form === 'AS') {
+      pts.push([ri, b * 0.88]);
+    }
+    pts.push(
+      [rCavIn, b * 0.64],
+      [ri, b * 0.32],
+      [rCavIn, b * 0.12],
+      [rCavIn, b * 0.46],
+      [rCavOut, b * 0.46],
+      [rCavOut, 0],
+    );
+    return revolveProfile(pts);
+  }
+  function sweepRoundWire(spine, p0, t0, rWire) {
+    let cEdge = null, prof = null;
+    try {
+      cEdge = R.makeCircle(rWire, p0, t0);
+      prof = R.assembleWire([cEdge]);
+      try {
+        return R.genericSweep(prof, spine, { frenet: true, forceProfileSpineOthogonality: true });
+      } catch (_) {
+        return R.genericSweep(prof, spine, { frenet: false, transitionMode: 'round', forceProfileSpineOthogonality: true });
+      }
+    } finally {
+      safeDelete(cEdge); safeDelete(prof);
+    }
+  }
+  function buildStdCompSpring(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, 2);
+    const Dm = Math.max(d * 1.6, pos(sp.Dm, 16));
+    const n = Math.max(0.5, Math.min(60, pos(sp.n, 8)));
+    const ends = (sp.ends || p.ends) === 'open' ? 'open' : 'ground';
+    const endAdd = ends === 'open' ? d : 1.5 * d;
+    const L0 = Math.max(endAdd + n * d * 1.04, pos(sp.L0, n * 5 + endAdd));
+    const Rm = Dm / 2, rw = d / 2;
+    let spine = null, swept = null, boxCyl = null;
+    try {
+      if (ends === 'open') {
+        const H = L0 - d, pEff = H / n, z0 = rw;
+        const t0 = norm([0, 2 * Math.PI * Rm, pEff]);
+        spine = R.makeHelix(pEff, H, Rm, [0, 0, z0], [0, 0, 1], false);
+        return sweepRoundWire(spine, [Rm, 0, z0], t0, rw);
+      }
+      const nSwept = n + 0.5;
+      const H = L0 - 0.5 * d;
+      const pEff = H / nSwept;
+      const z0 = 0.25 * d;
+      const t0 = norm([0, 2 * Math.PI * Rm, pEff]);
+      spine = R.makeHelix(pEff, H, Rm, [0, 0, z0], [0, 0, 1], false);
+      swept = sweepRoundWire(spine, [Rm, 0, z0], t0, rw);
+      boxCyl = R.makeCylinder(Rm + rw + 2, L0, [0, 0, 0], [0, 0, 1]);
+      const out = swept.intersect(boxCyl);
+      if (!out || out.isNull) throw new Error('Druckfeder konnte nicht geschliffen werden.');
+      return out;
+    } finally {
+      safeDelete(spine); safeDelete(swept); safeDelete(boxCyl);
+    }
+  }
+  function buildStdExtSpring(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const d = pos(sp.d, 1.5);
+    const Dm = Math.max(d * 2.2, pos(sp.Dm, 15));
+    const n = Math.max(2, Math.min(60, pos(sp.n, 24)));
+    const hookAngle = Number(sp.hookAngle ?? p.hookAngle) === 90 ? 90 : 0;
+    const Rm = Dm / 2, rw = d / 2;
+    const coilPitch = pos(sp.coilPitch, d * 1.08);
+    const rEye = pos(sp.rEye, Math.max(d * 1.15, Dm * 0.45));
+    const turnsEff = hookAngle === 90 ? n + 0.25 : n;
+    const H = Math.max(turnsEff * d * 1.04, n * coilPitch);
+    const pEff = H / turnsEff;
+    const zBotEye = rEye + rw;
+    const zCoilStart = 2 * rEye + d;
+    const zCoilEnd = zCoilStart + H;
+    const zTopEye = zCoilEnd + rw + rEye;
+    const k = 0.45, dz = k * (pEff / (2 * Math.PI));
+    const th = (hookAngle * Math.PI) / 180, cs = Math.cos(th), sn = Math.sin(th);
+    const rotZ = ([x, y, z]) => [x * cs - y * sn, x * sn + y * cs, z];
+    const ptBot = (a) => [rEye * Math.cos(a), 0, zBotEye + rEye * Math.sin(a)];
+    const ptTop = (a) => rotZ([rEye * Math.cos(a), 0, zTopEye + rEye * Math.sin(a)]);
+
+    let coilSpine = null, spine = null;
+    const edges = [];
+    try {
+      // Untere 1/1 deutsche Öse (zwei Kreisbögen) + G1-stetiger Übergang zum Wicklungsanfang
+      const b0 = ptBot(-0.12 * Math.PI), b1 = ptBot(-Math.PI), b2 = ptBot(-1.5 * Math.PI);
+      edges.push(R.makeThreePointArc(b0, ptBot(-0.56 * Math.PI), b1));
+      edges.push(R.makeThreePointArc(b1, ptBot(-1.25 * Math.PI), b2));
+      edges.push(R.makeBezierCurve([b2, [Rm * k, 0, zBotEye + rEye], [Rm, -Rm * k, zCoilStart - dz], [Rm, 0, zCoilStart]]));
+
+      // Zylindrische Federwicklung
+      coilSpine = R.makeHelix(pEff, H, Rm, [0, 0, zCoilStart], [0, 0, 1], false);
+      for (const ce of coilSpine.edges) edges.push(ce);
+
+      // G1-stetiger Übergang vom Wicklungsende + obere 1/1 deutsche Öse (0° oder 90° gedreht)
+      const tA = rotZ([Rm, 0, zCoilEnd]);
+      const tP1 = rotZ([Rm, Rm * k, zCoilEnd + dz]);
+      const tP2 = rotZ([Rm * k, 0, zCoilEnd + rw]);
+      const tB = ptTop(1.5 * Math.PI);
+      edges.push(R.makeBezierCurve([tA, tP1, tP2, tB]));
+      const t1 = ptTop(0.5 * Math.PI), t2 = ptTop(0.12 * Math.PI);
+      edges.push(R.makeThreePointArc(tB, ptTop(Math.PI), t1));
+      edges.push(R.makeThreePointArc(t1, ptTop(0.31 * Math.PI), t2));
+
+      spine = R.assembleWire(edges);
+      const tStart = norm([-Math.sin(-0.12 * Math.PI), 0, Math.cos(-0.12 * Math.PI)]);
+      return sweepRoundWire(spine, b0, tStart, rw);
+    } finally {
+      for (const e of edges) safeDelete(e);
+      safeDelete(coilSpine);
+      safeDelete(spine);
+    }
+  }
   // Lochdurchmesser je nach Passung: eng, mittel (Standard), weit oder Kernloch zum Gewindeschneiden
   const holeD = (s, fit) => (fit === 'fine' ? s.fine : fit === 'coarse' ? s.coarse : fit === 'tap' ? s.tap : s.hole);
   const LIFT = 0.2; // Löcher ragen ein wenig über die Fläche hinaus, damit sie sauber schneiden
@@ -4344,6 +4502,11 @@ export function createKernel(R, oc) {
     if (lib === 'splineShaft') return buildSplineShaft(p);
     if (lib === 'stdBearing') return buildStdBearing(p);
     if (lib === 'stdSleeve') return buildStdSleeve(p);
+    if (lib === 'stdORing') return buildStdORing(p);
+    if (lib === 'stdORingGroove') return buildStdORingGroove(p);
+    if (lib === 'stdShaftSeal') return buildStdShaftSeal(p);
+    if (lib === 'stdCompSpring') return buildStdCompSpring(p);
+    if (lib === 'stdExtSpring') return buildStdExtSpring(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {

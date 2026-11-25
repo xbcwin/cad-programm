@@ -12151,6 +12151,15 @@ const Drawing = (() => {
               if (be.D_mm > 0.1) out.push({ kind: 'dia', c: wP([0, 0, be.B_mm || 7]), n: wN([0, 0, 1]), r: be.D_mm / 2, itemId: it.id, source: 'step' });
               if (be.d_mm > 0.1) out.push({ kind: 'dia', c: wP([0, 0, be.B_mm || 7]), n: wN([0, 0, 1]), r: be.d_mm / 2, isHole: true, itemId: it.id, source: 'step' });
             }
+          } else if (L === 'stdORing' && typeof oringMetrics === 'function') {
+            const m = oringMetrics(p);
+            if (m.Da > 0.1) out.push({ kind: 'dia', c: wP([0, 0, m.d2 / 2]), n: wN([0, 0, 1]), r: m.Da / 2, itemId: it.id, source: 'step' });
+            if (m.d1 > 0.1) out.push({ kind: 'dia', c: wP([0, 0, m.d2 / 2]), n: wN([0, 0, 1]), r: m.d1 / 2, isHole: true, itemId: it.id, source: 'step' });
+          } else if (L === 'stdShaftSeal' && typeof shaftSealMetrics === 'function') {
+            const m = shaftSealMetrics(p);
+            if (m.D > 0.1) out.push({ kind: 'dia', c: wP([0, 0, m.b]), n: wN([0, 0, 1]), r: m.D / 2, itemId: it.id, source: 'step' });
+            if (m.d > 0.1) out.push({ kind: 'dia', c: wP([0, 0, m.b]), n: wN([0, 0, 1]), r: m.d / 2, isHole: true, itemId: it.id, source: 'step' });
+            if (m.b > 0.1) out.push({ kind: 'lin', p0: wP([m.D / 2, 0, 0]), p1: wP([m.D / 2, 0, m.b]), axisHint: 'z', itemId: it.id, source: 'step' });
           }
         }
         for (const f of it.finishes || []) {
