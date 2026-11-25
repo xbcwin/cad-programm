@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2113,7 +2113,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile' || x.kind === 'knurl' || x.kind === 'gripPattern' || x.kind === 'stackHole' || x.kind === 'asmCut';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2969,6 +2969,153 @@ const Features = (() => {
     }
     sec.append(row, h('div', { class: 'hint-box', html: T('panel.mountPattern.hint') }));
   }
+  function portCutout(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Ausschnitte gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigWithTid(face);
+    if (!tgt || tgt.role === 'hole' || !sig || (face.info && face.info.t !== 'PLANE')) {
+      startPortCutout(opts);
+      return null;
+    }
+    const e = typeof portCutoutEntry === 'function' ? portCutoutEntry(opts.preset || 'usbc') : { id: 'usbc', label: 'USB-C (Buchse)' };
+    const p = {
+      target: tgt.id,
+      face: sig,
+      preset: e.id,
+      w: opts.w ?? null,
+      h: opts.h ?? null,
+      d: opts.d ?? null,
+      r: opts.r ?? null,
+      chamfer: opts.chamfer ?? null,
+      includeHoles: opts.includeHoles !== false,
+      holeD: opts.holeD ?? null,
+      u: opts.u ?? 0,
+      v: opts.v ?? 0,
+      angle: opts.angle ?? 0,
+      depth: opts.depth ?? 0,
+      printFit: opts.printFit || '',
+    };
+    let step;
+    App.change('Ausschnitt angelegt', (doc) => {
+      step = Model.newItem('portCutout', p, { name: opts.name || `${T('kind.portCutout')} ${e.label.split(' (')[0]}`, color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.portCutoutAdded', { name: e.label }), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startPortCutout(opts = {}) {
+    if (App.ctx) { UI.toast('Ausschnitte gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für einen Ausschnitt braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') { portCutout(f, opts); return true; }
+    pickPlanarBodyFace('<b>Ausschnitt setzen:</b> Klick auf eine ebene Fläche (z. B. Gehäusewand) für Stecker, Schalter oder Display. <b>Esc</b> bricht ab.', (picked) => { portCutout(picked, opts); });
+    return true;
+  }
+  function pickPortCutoutFace(stepId) {
+    pickPlanarStepFace(stepId, 'Fläche für Ausschnitt gewählt', 'Fläche aktualisiert.');
+  }
+  function renderPortCutout(it, sec, setP) {
+    const p = it.p || {};
+    const V = Model.vars(App.doc).v;
+    const optNum = (val) => (val == null || val === '' ? null : Model.num(val, V, null));
+    const m = typeof portCutoutMetrics === 'function'
+      ? portCutoutMetrics({
+        ...p,
+        w: optNum(p.w),
+        h: optNum(p.h),
+        d: optNum(p.d),
+        r: optNum(p.r),
+        chamfer: optNum(p.chamfer),
+        holeD: optNum(p.holeD),
+        u: Model.num(p.u, V, 0),
+        v: Model.num(p.v, V, 0),
+        angle: Model.num(p.angle, V, 0),
+        depth: Math.max(0, Model.num(p.depth, V, 0)),
+      })
+      : null;
+    if (!m) return;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'pc-preset', label: T('panel.portCutout.preset'), value: m.id,
+      options: typeof PORT_CUTOUT_GROUPED_OPTIONS !== 'undefined' ? PORT_CUTOUT_GROUPED_OPTIONS : [[m.id, m.label]],
+      onChange: (v) => App.change('Ausschnitt-Vorlage geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        const ne = typeof portCutoutEntry === 'function' ? portCutoutEntry(v) : null;
+        item.p.preset = ne ? ne.id : v;
+        item.p.w = null;
+        item.p.h = null;
+        item.p.d = null;
+        item.p.r = null;
+        item.p.chamfer = null;
+        item.p.holeD = null;
+        if (ne && (!item.name || item.name.startsWith(T('kind.portCutout')))) {
+          item.name = `${T('kind.portCutout')} ${ne.label.split(' (')[0]}`;
+        }
+      }),
+    }));
+    sec.append(fl);
+    if (m.hasHoles) {
+      const hCb = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'pc-holes', checked: m.includeHoles }), T('panel.portCutout.includeHoles'));
+      hCb.querySelector('input').onchange = (e) => setP('includeHoles', e.target.checked);
+      sec.append(hCb);
+    }
+    const fl2 = h('div', { class: 'fields', style: { marginTop: '6px' } });
+    if (m.shape === 'circle') {
+      fl2.append(UI.numField({
+        id: 'pc-d', label: T('panel.portCutout.diameter'),
+        value: p.d != null && p.d !== '' ? p.d : m.d, min: 0.2, unit: 'mm',
+        onCommit: (v) => setP('d', v),
+      }));
+    } else {
+      fl2.append(
+        UI.numField({ id: 'pc-w', label: T('panel.portCutout.width'), value: p.w != null && p.w !== '' ? p.w : m.w, min: 0.2, unit: 'mm', onCommit: (v) => setP('w', v) }),
+        UI.numField({ id: 'pc-h', label: T('panel.portCutout.height'), value: p.h != null && p.h !== '' ? p.h : m.h, min: 0.2, unit: 'mm', onCommit: (v) => setP('h', v) }),
+      );
+      if (m.shape === 'rect') {
+        fl2.append(UI.numField({ id: 'pc-r', label: T('panel.portCutout.cornerR'), value: p.r != null && p.r !== '' ? p.r : m.r, min: 0, unit: 'mm', onCommit: (v) => setP('r', v) }));
+      } else if (m.shape === 'hdmi') {
+        fl2.append(UI.numField({ id: 'pc-chamfer', label: T('panel.portCutout.chamfer'), value: p.chamfer != null && p.chamfer !== '' ? p.chamfer : m.chamfer, min: 0, unit: 'mm', onCommit: (v) => setP('chamfer', v) }));
+      }
+    }
+    if (m.hasHoles && m.includeHoles) {
+      fl2.append(UI.numField({
+        id: 'pc-holeD', label: T('panel.portCutout.holeD'),
+        value: p.holeD != null && p.holeD !== '' ? p.holeD : m.holeD, min: 0.2, unit: 'mm',
+        onCommit: (v) => setP('holeD', v),
+      }));
+    }
+    fl2.append(
+      UI.numField({ id: 'pc-u', label: T('panel.portCutout.offsetX'), value: p.u ?? 0, unit: 'mm', onCommit: (v) => setP('u', v) }),
+      UI.numField({ id: 'pc-v', label: T('panel.portCutout.offsetY'), value: p.v ?? 0, unit: 'mm', onCommit: (v) => setP('v', v) }),
+      UI.numField({ id: 'pc-angle', label: T('panel.portCutout.angle'), value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }),
+      UI.numField({ id: 'pc-depth', label: T('panel.portCutout.depth'), value: p.depth ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('depth', v) }),
+      UI.selectField({ id: 'pc-printFit', label: T('printFit.label'), value: p.printFit || '', options: printFitHoleOptions, onChange: (v) => setP('printFit', v) }),
+    );
+    sec.append(fl2);
+    const shapeTxt = m.shape === 'circle'
+      ? `Ø ${Units.fmtLenU(m.dEff, 2)}`
+      : `${Units.fmtLenU(m.wEff, 2)} × ${Units.fmtLenU(m.hEff, 2)}${m.shape === 'slot' ? ' (runde Enden)' : m.shape === 'hdmi' && m.chamferEff > 0.05 ? ` (Fase ${Units.fmtLenU(m.chamferEff, 2)})` : m.shape === 'rect' && m.rEff > 0.05 ? ` (R ${Units.fmtLenU(m.rEff, 2)})` : ''}`;
+    const holeTxt = m.hasHoles && m.includeHoles
+      ? ` · ${m.holes.length}× Ø ${Units.fmtLenU(m.holeDEff, 2)} (${Units.fmtLenU(m.pitchX, 2)} × ${Units.fmtLenU(m.pitchY, 2)})`
+      : '';
+    sec.append(h('div', { class: 'mini-row', id: 'pc-info' },
+      h('span', { class: 'grow' }, `${shapeTxt}${holeTxt}`),
+      h('b', { class: 'mono' }, m.source)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'pc-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickPortCutoutFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'pc-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: T('panel.portCutout.hint') }));
+  }
   function startWeb(face) {
     if (App.ctx) { UI.toast('Steg-Netze gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
     if (!ribTargets().length) { UI.toast('Für ein Steg-Netz braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
@@ -3357,7 +3504,7 @@ const Features = (() => {
   function canMirrorStep(it, parent) {
     if (!it) return false;
     if (it.op && it.op.target) return true;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'web' || it.kind === 'dome') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'mountPattern' || it.kind === 'portCutout' || it.kind === 'web' || it.kind === 'dome') return true;
     if (it.kind === 'wrap' && (!it.p || it.p.mode !== 'line')) return true;
     if (it.kind === 'emboss') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
@@ -3405,7 +3552,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'mountPattern' || x.kind === 'portCutout' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -4748,7 +4895,7 @@ const Features = (() => {
     return doc.items.filter((x) => (
       x && !ex.has(x.id) && x.role !== 'hole' && !x.suppressed
       && !(x.kind === 'group' && x.p && x.p.assembly)
-      && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mountPattern'
+      && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mountPattern' && x.kind !== 'portCutout'
       && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile' && x.kind !== 'knurl' && x.kind !== 'gripPattern'
       && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d'
       && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform'
@@ -6429,5 +6576,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, mountPattern, startMountPattern, pickMountPatternFace, renderMountPattern, portCutout, startPortCutout, pickPortCutoutFace, renderPortCutout, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, startCablePick, pickCablePort, stopCablePick, renderCable, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route || !!cablePick; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, setFilletShape, setFilletCorner, filletG2, renderFilletMore, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, knurl, startKnurl, renderKnurl, gripPattern, startGripPattern, pickGripPatternFace, renderGripPattern, pickStepCylFace, pickStackHolePoint, pickAsmCutFace, renderStackHole, renderAsmCut };
 })();

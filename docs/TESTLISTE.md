@@ -2962,6 +2962,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Optionen, Einfach & Profi, Undo/Redo, Validierung & Hilfen**: Deaktivieren von `#mp-center`, 3D-Druck-Passung (`slide` +0,2 mm), X/Y-Versatz (`u`/`v`), Sichtbarkeit in Einfach (`#add-mount-pattern`, `#ctx-mount-pattern` bei unveränderter Kachelzahl) und Profi, Befehlssuche (`nema 17`), `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a188_lochbilder_luefter_motoren_servos`).
 - [ ] **Von Hand**: Im Browser im Bauteil-Menü auf „Lochbild (Lüfter, Motor, Servo)“ oder auf eine ebene Plattenfläche klicken, zwischen Lüfter, NEMA 17 und Standard-Servo wechseln und die Löcher rundum prüfen.
 
+## Bibliothek: Ausschnitte für Stecker und Schalter (Auto [A-190], BI-18)
+
+- [x] **USB-C-Ausschnitt in Gehäusewand (9 × 3,5 mm mit runden Enden)**: `Features.portCutout(wallFace, { preset: 'usbc' })` schneidet auf einer 60×4×30-mm-Wand fehlerfrei ein Langloch mit 2 runden Enden (`r = 1,75 mm`, Mittenabstand `5,5 mm`, Gesamtöffnung `9,0 × 3,5 mm`) ohne Geometrie-Fehler (`GeomCheck`) (`t_a190_ausschnitte_stecker_schalter`).
+- [x] **RJ45-Ausschnitt (16,2 × 13,8 mm)**: Umschalten über `#pc-preset` auf `rj45` erzeugt eine rechteckige Durchgangsöffnung exakt `16,2 × 13,8 mm` ohne Geometrie-Fehler (`t_a190_ausschnitte_stecker_schalter`).
+- [x] **HDMI, Klinke, SD, Schalter, Taster, Displays & Optionen**: Geprüft für `hdmi` (6 Innenflächen inkl. 2 Fasen, `15,0 × 5,5 mm`), `jack35` (`Ø 6,3 mm`), `sd` (`25,0 × 2,8 mm`), `rockerSmall` (`19,2 × 13,0 mm`), `button12` (`Ø 12,2 mm`) sowie `oled096` (abgerundeter Ausschnitt + 4 M2-Befestigungslöcher `Ø 2,2 mm`, abschaltbar über `#pc-holes`), 3D-Druck-Passung (`slide` +0,2 mm) und X/Y-Versatz (`u`/`v`) (`t_a190_ausschnitte_stecker_schalter`).
+- [x] **Einfach & Profi, Undo/Redo, Validierung & Hilfen**: Sichtbarkeit in Einfach (`#add-port-cutout`, `#ctx-port-cutout` bei unveränderter Kachelzahl) und Profi, Befehlssuche (`usb-c`, `rj45`), `App.undo()`/`redo()`, `Store.validateProject()`, `Explain.local()`, `werkzeug-hilfen.json`/`HELP`, `schritt-erklaerungen.json` und DE/EN-Schlüsselgleichheit bestehen ohne JS-Fehler (`t_a190_ausschnitte_stecker_schalter`).
+- [ ] **Von Hand**: Im Browser eine Gehäusewand aufbauen, über „Bauteile → Ausschnitt (Stecker, Schalter, Display)“ oder Rechtsklick auf eine Wandfläche zwischen USB-C, HDMI, RJ45, Wippschalter und OLED-Display wechseln und Öffnungen sowie Befestigungslöcher prüfen.
+
 ## Fehler melden
 
 ```
