@@ -22857,6 +22857,171 @@ def t_a110_strecken_live_spiegeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a114_silhouette_schnittkurve(p):
+    # 1. Profi-Sichtbarkeit prüfen
+    sketch_xy(p)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_hidden = (
+        not sichtbar(p, '#sk-silhouette')
+        and not sichtbar(p, '#sk-intersect')
+    )
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_shown = (
+        sichtbar(p, '#sk-silhouette')
+        and sichtbar(p, '#sk-intersect')
+    )
+    ok1 = simple_hidden and pro_shown
+
+    # 2. Silhouette (SK-42): liegender Zylinder d=20, h=40 auf XZ-Ebene -> Rechteck 40x20
+    p.ev("if (Sketch.active) Sketch.cancel(true); Start.newProject(true)"); p.wait(500)
+    p.ev("App.change('cyl', d=>{ const c=Model.newItem('cylinder',{d:20,h:40},{name:'Welle'}); c.t.x=-20; c.t.ry=90; d.items.push(c); })")
+    warte_rechnen(p, 30)
+    p.ev("Sketch.startOnPlane('XZ', 0)"); p.wait(1200)
+    p.pg.click('#sk-silhouette'); p.wait(150)
+    s_cyl = world_screen(p, 0, -10, 0)
+    p.pg.mouse.click(s_cyl[0], s_cyl[1]); p.wait(2000)
+    sil1 = SS(p, """
+      const lines = S.ents.filter(e => e.type === 'line');
+      const xs = lines.flatMap(e => [e.a[0], e.b[0]]);
+      const ys = lines.flatMap(e => [e.a[1], e.b[1]]);
+      const regs = SK.regions(S.ents);
+      const linked = S.ents.length > 0 && S.ents.every(e => e.link && e.link.kind === 'silhouette' && e.link.id === App.doc.items[0].id);
+      return {
+        n: S.ents.length,
+        nl: lines.length,
+        w: xs.length ? Math.max(...xs) - Math.min(...xs) : 0,
+        h: ys.length ? Math.max(...ys) - Math.min(...ys) : 0,
+        area: regs[0] ? regs[0].area : 0,
+        linked,
+      };
+    """)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    undone_sil = SS(p, "return S.ents.length === 0")
+    p.pg.mouse.click(s_cyl[0], s_cyl[1]); p.wait(2000)
+    fertig_hoch(p, '5')
+    ok2 = (
+        sil1['n'] == 4 and sil1['nl'] == 4
+        and abs(sil1['w'] - 40) < 0.2 and abs(sil1['h'] - 20) < 0.2
+        and abs(sil1['area'] - 800) < 5
+        and sil1['linked'] and undone_sil
+        and p.ev("return App.doc.items.length === 2 && App.errors.length === 0")
+    )
+
+    # 3. Assoziativität & RefFix bei Silhouette: Zylinder 60x30 -> Umriss wächst mit; Unterdrücken -> RefFix -> Lösen
+    p.ev("App.change('grow', d=>{ d.items[0].p.d=30; d.items[0].p.h=60; d.items[0].t.x=-30; })")
+    warte_rechnen(p, 30)
+    p.ev("return Sketch.whenRelinked()")
+    p.wait(250)
+    sil_grow = p.ev("""
+      const sk = App.doc.items[1] && App.doc.items[1].p && App.doc.items[1].p.sketch;
+      const lines = (sk ? sk.ents : []).filter(e => e.type === 'line');
+      const xs = lines.flatMap(e => [e.a[0], e.b[0]]);
+      const ys = lines.flatMap(e => [e.a[1], e.b[1]]);
+      return {
+        n: lines.length,
+        w: xs.length ? Math.max(...xs) - Math.min(...xs) : 0,
+        h: ys.length ? Math.max(...ys) - Math.min(...ys) : 0,
+      };
+    """)
+    p.ev("App.change('off', d=>{ d.items[0].suppressed = true; })")
+    for _ in range(20):
+        p.wait(300)
+        if not p.ev("return App.busy"):
+            break
+    p.wait(300)
+    rf_sil_warn = (
+        p.ev("const iss = RefFix.issuesOf(App.doc.items[1].id); return iss.length === 1 && iss[0].kind === 'sketch-silhouette'")
+        and p.pg.locator('.node .warn-ref').count() >= 1
+    )
+    p.pg.locator('.node .warn-ref').first.click(); p.wait(350)
+    rf_sil_bar = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return RefFix.active && Viewer.hasRefGhost()")
+    p.pg.click('#reffix-unlink'); p.wait(300)
+    rf_sil_cleared = p.ev("return RefFix.issuesOf(App.doc.items[1].id).length === 0 && !RefFix.active && App.errors.length === 0")
+    ok3 = (
+        sil_grow['n'] == 4 and abs(sil_grow['w'] - 60) < 0.3 and abs(sil_grow['h'] - 30) < 0.3
+        and rf_sil_warn and rf_sil_bar and rf_sil_cleared
+    )
+
+    # 4. Schnittkurve (SK-43): zwei sich kreuzende Zylinder -> Schnittkurve + Rückgängig + Nachführen + RefFix
+    p.ev("if (Sketch.active) Sketch.cancel(true); Start.newProject(true)"); p.wait(500)
+    p.ev("""App.change('cross', d=>{
+      const a = Model.newItem('cylinder', {d:20, h:40}, {name:'Senkrecht'}); a.t.z = -20;
+      const b = Model.newItem('cylinder', {d:16, h:40}, {name:'Quer'}); b.t.x = -20; b.t.ry = 90;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p, 30)
+    p.ev("Sketch.startOnPlane('XZ', 0)"); p.wait(1200)
+    p.pg.click('#sk-intersect'); p.wait(150)
+    s_a = world_screen(p, 0, -10, 14)
+    s_b = world_screen(p, 14, -8, 0)
+    p.pg.mouse.click(s_a[0], s_a[1]); p.wait(250)
+    picked_one = SS(p, "return !!S.icPick") and sichtbar(p, '#ic-picked')
+    p.pg.mouse.click(s_b[0], s_b[1]); p.wait(2200)
+    ic1 = SS(p, """
+      const ents = S.ents.filter(e => e.link && e.link.kind === 'faceIntersect');
+      const pts = ents.flatMap(e => SK.segsOf(e).flatMap(s => SK.segPoints(s)));
+      const maxX = pts.length ? Math.max(...pts.map(q => Math.abs(q[0]))) : 999;
+      const maxY = pts.length ? Math.max(...pts.map(q => Math.abs(q[1]))) : 999;
+      return { n: S.ents.length, linked: ents.length, maxX, maxY, id1: ents[0]?.link?.id, id2: ents[0]?.link?.id2 };
+    """)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    undone_ic = SS(p, "return S.ents.length === 0")
+    p.pg.mouse.click(s_a[0], s_a[1]); p.wait(200)
+    p.pg.mouse.click(s_b[0], s_b[1]); p.wait(2200)
+    ic2_n = SS(p, "return S.ents.filter(e => e.link && e.link.kind === 'faceIntersect').length")
+    SS(p, "S.ents.forEach(e=>{ if (e.link) e.con = true; }); S.ents.push({id:'r_ic',type:'rect',a:[-3,-3],b:[3,3]}); Sketch.render();")
+    fertig_hoch(p, '5')
+    ok4 = (
+        picked_one and undone_ic
+        and ic1['n'] >= 1 and ic1['linked'] == ic1['n']
+        and ic1['maxX'] <= 10.2 and ic1['maxY'] <= 8.2
+        and ic1['id1'] != ic1['id2'] and ic2_n >= 1
+        and p.ev("return App.doc.items.length === 3 && App.errors.length === 0")
+    )
+
+    # Schnittkurve wächst bei kleinerem 2. Zylinder mit, und meldet Verlust beim Auseinanderschieben
+    p.ev("App.change('shrink', d=>{ d.items[1].p.d = 10; })")
+    warte_rechnen(p, 30)
+    p.ev("return Sketch.whenRelinked()")
+    p.wait(250)
+    ic_shrink = p.ev("""
+      const sk = App.doc.items[2] && App.doc.items[2].p && App.doc.items[2].p.sketch;
+      const ents = (sk ? sk.ents : []).filter(e => e.link && e.link.kind === 'faceIntersect');
+      const pts = ents.flatMap(e => SK.segsOf(e).flatMap(s => SK.segPoints(s)));
+      return { n: ents.length, maxY: pts.length ? Math.max(...pts.map(q => Math.abs(q[1]))) : 999 };
+    """)
+    p.ev("App.change('apart', d=>{ d.items[1].t.x = 120; })")
+    warte_rechnen(p, 30)
+    p.ev("return Sketch.whenRelinked()")
+    p.wait(250)
+    rf_ic_warn = p.ev("const iss = RefFix.issuesOf(App.doc.items[2].id); return iss.length === 1 && iss[0].kind === 'sketch-intersect'")
+    p.ev("RefFix.start(App.doc.items[2].id)"); p.wait(300)
+    rf_ic_bar = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return RefFix.active && Viewer.hasRefGhost()")
+    p.pg.click('#reffix-unlink'); p.wait(300)
+    rf_ic_cleared = p.ev("return RefFix.issuesOf(App.doc.items[2].id).length === 0 && App.errors.length === 0")
+
+    # 5. Hilfetexte, Befehle & DE/EN-Schlüsselgleichheit
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("""
+      const a = Commands.search('umriss').some(c => c.id === 'sketch-silhouette');
+      const b = Commands.search('schnittkurve').some(c => c.id === 'sketch-intersect');
+      return a && b;
+    """)
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('silhouette2d', 'intersectCurve2d'))
+    ok5 = (
+        ic_shrink['n'] >= 1 and ic_shrink['maxY'] <= 5.2
+        and rf_ic_warn and rf_ic_bar and rf_ic_cleared
+        and de_keys == en_keys and cmd_ok and help_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a115_kurvenmuster_fuellmuster(p):
     # 1. Start in XY-Skizze: beide Werkzeuge sind in Einfach und Profi sichtbar
     sketch_xy(p)
@@ -23486,6 +23651,115 @@ def t_a118_skizzen_bloecke(p):
     return [ok1, ok2, ok3]
 
 
+def t_a117_polares_raster_hilfslinien(p):
+    # 1. Nur Profi-Modus: polares Raster und Lineale im Modus „Einfach“ ausgeblendet/gesperrt, in „Profi“ sichtbar
+    p.empty()
+    p.ev("ViewPrefs.set({ level: 'simple', firstStart: false }); Sketch.startOnPlane('XY')"); p.wait(1200)
+    vis_simple = (
+        not sichtbar(p, '#sk-grid-sec')
+        and not sichtbar(p, '#sk-ruler-t')
+        and not sichtbar(p, '#sk-ruler-l')
+        and not sichtbar(p, '#sk-ruler-c')
+        and p.ev("return Sketch.setGridMode('polar')") is False
+    )
+    p.ev("ViewPrefs.set({ level: 'pro', firstStart: false });"); p.wait(300)
+    vis_pro = (
+        sichtbar(p, '#sk-grid-sec')
+        and sichtbar(p, '#sk-ruler-t')
+        and sichtbar(p, '#sk-ruler-l')
+        and sichtbar(p, '#sk-ruler-c')
+    )
+    ok1 = bool(vis_simple and vis_pro)
+
+    # 2. Polares Raster einschalten, Punkt bei r=10, 30° setzen -> exakte Polarkoordinaten; Schrittweite ändern -> r=20, 45°
+    p.pg.locator('#sk-grid-sec summary').click(); p.wait(150)
+    p.pg.click('#sk-grid-polar'); p.wait(250)
+    has_polar_mesh = p.ev("return Viewer.groups.sketch.children.some(o => o.userData && o.userData.sketchGrid === 'polar')")
+    p.pg.keyboard.press('o'); p.wait(150)
+    s30 = to_screen(p, 8.9, 5.15)
+    p.pg.mouse.click(s30[0], s30[1]); p.wait(200)
+    pt1 = p.ev("const pt = Sketch.state.ents.find(e => e.type === 'point'); return pt ? pt.a : null")
+    exp_x = 10.0 * math.cos(math.radians(30.0))
+    exp_y = 10.0 * math.sin(math.radians(30.0))
+    ok2a = bool(
+        has_polar_mesh and pt1
+        and abs(pt1[0] - exp_x) < 1e-4 and abs(pt1[1] - exp_y) < 1e-4
+    )
+    p.pg.fill('#sk-polar-r', '10'); p.pg.press('#sk-polar-r', 'Enter'); p.wait(150)
+    p.pg.fill('#sk-polar-a', '45'); p.pg.press('#sk-polar-a', 'Enter'); p.wait(150)
+    s45 = to_screen(p, 14.3, 14.0)
+    p.pg.mouse.click(s45[0], s45[1]); p.wait(200)
+    pt2 = p.ev("const pts = Sketch.state.ents.filter(e => e.type === 'point'); return pts.length >= 2 ? pts[1].a : null")
+    exp_45 = 20.0 * math.cos(math.radians(45.0))
+    ok2 = bool(ok2a and pt2 and abs(pt2[0] - exp_45) < 1e-4 and abs(pt2[1] - exp_45) < 1e-4)
+
+    # 3. Hilfslinie bei x=15 vom linken Lineal herausziehen -> neuer Punkt fängt auf x=15 (polar und rechteckig)
+    rl = p.pg.locator('#sk-ruler-l').bounding_box()
+    sx15 = to_screen(p, 15.0, 0.0)
+    p.pg.mouse.move(rl['x'] + rl['width'] / 2, rl['y'] + rl['height'] / 2)
+    p.pg.mouse.down()
+    p.pg.mouse.move(sx15[0], sx15[1], steps=8)
+    p.pg.mouse.up(); p.wait(250)
+    gx_ok = p.ev("return Sketch.guides.some(g => g.axis === 'x' && Math.abs(g.v - 15) < 1e-4)")
+    s_near_x15 = to_screen(p, 15.25, 12.3)
+    p.pg.mouse.click(s_near_x15[0], s_near_x15[1]); p.wait(200)
+    pt3 = p.ev("const pts = Sketch.state.ents.filter(e => e.type === 'point'); return pts.length >= 3 ? pts[2].a : null")
+    # Über Eck-Knopf zurück auf rechteckiges Raster schalten und nochmals an x=15 fangen
+    p.pg.click('#sk-ruler-c'); p.wait(200)
+    mode_rect = p.ev("return Sketch.gridMode === 'rect'")
+    s_near_x15b = to_screen(p, 14.78, -6.4)
+    p.pg.mouse.click(s_near_x15b[0], s_near_x15b[1]); p.wait(200)
+    pt4 = p.ev("const pts = Sketch.state.ents.filter(e => e.type === 'point'); return pts.length >= 4 ? pts[3].a : null")
+    ok3 = bool(
+        gx_ok and pt3 and abs(pt3[0] - 15.0) < 1e-4
+        and mode_rect and pt4 and abs(pt4[0] - 15.0) < 1e-4
+    )
+
+    # 4. Waagerechte Y-Hilfslinie vom oberen Lineal bei y=-10 -> Schnittpunkt (15, -10), Zurückziehen löscht, Undo, Panel, Hilfen & i18n
+    rt = p.pg.locator('#sk-ruler-t').bounding_box()
+    sy10 = to_screen(p, 0.0, -10.0)
+    p.pg.mouse.move(rt['x'] + rt['width'] / 2, rt['y'] + rt['height'] / 2)
+    p.pg.mouse.down()
+    p.pg.mouse.move(sy10[0], sy10[1], steps=8)
+    p.pg.mouse.up(); p.wait(250)
+    gy_ok = p.ev("return Sketch.guides.some(g => g.axis === 'y' && Math.abs(g.v + 10) < 1e-4)")
+    s_cross = to_screen(p, 15.2, -9.8)
+    p.pg.mouse.click(s_cross[0], s_cross[1]); p.wait(200)
+    pt5 = p.ev("const pts = Sketch.state.ents.filter(e => e.type === 'point'); return pts.length >= 5 ? pts[4].a : null")
+    # X-Hilfslinie im Auswahl-Werkzeug zurück aufs linke Lineal ziehen -> entfernt, Strg+Z holt zurück
+    p.pg.keyboard.press('v'); p.wait(150)
+    sg_drag = to_screen(p, 15.0, 5.0)
+    p.pg.mouse.move(sg_drag[0], sg_drag[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(rl['x'] + rl['width'] / 2, sg_drag[1], steps=8)
+    p.pg.mouse.up(); p.wait(250)
+    removed_x = p.ev("return !Sketch.guides.some(g => g.axis === 'x' && Math.abs(g.v - 15) < 1e-4)")
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(200)
+    restored_x = p.ev("return Sketch.guides.some(g => g.axis === 'x' && Math.abs(g.v - 15) < 1e-4)")
+    # Über Panel weitere Hilfslinie setzen und alle entfernen
+    p.pg.select_option('#sk-guide-axis', 'y'); p.wait(100)
+    p.pg.fill('#sk-guide-val', '25'); p.wait(100)
+    p.pg.click('#sk-guide-add'); p.wait(200)
+    added_panel = p.ev("return Sketch.guides.some(g => g.axis === 'y' && Math.abs(g.v - 25) < 1e-4)")
+    p.pg.click('#sk-guides-clear'); p.wait(200)
+    cleared_ok = p.ev("return Sketch.guides.length === 0")
+
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("""
+      return Commands.search('polar').some((c) => c.id === 'sketch-polar-grid')
+          && Commands.search('hilfslinien').some((c) => c.id === 'sketch-guides-clear');
+    """)
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('polarGrid', 'rulerGuides'))
+    ok4 = bool(
+        gy_ok and pt5 and abs(pt5[0] - 15.0) < 1e-4 and abs(pt5[1] + 10.0) < 1e-4
+        and removed_x and restored_x and added_panel and cleared_ok
+        and de_keys == en_keys and cmd_ok and help_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -23707,9 +23981,11 @@ TESTS = [
     ('[A-111] Spline mit Kontrollpunkten und Tangenten-Griffen (SK-32, SK-33)', t_spline_kontrollpunkte_griffe),
     ('[A-112] Krümmungskamm und Regel „krümmungsglatt“ (SK-34, SK-35)', t_a112_kruemmung_g2),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
+    ('[A-114] Silhouette und Schnittkurve in die Skizze (SK-42, SK-43)', t_a114_silhouette_schnittkurve),
     ('[A-115] Muster entlang Kurve und Füllmuster in der Skizze (SK-44, SK-45)', t_a115_kurvenmuster_fuellmuster),
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('[A-118] Skizzen-Blöcke (SK-31)', t_a118_skizzen_bloecke),
+    ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

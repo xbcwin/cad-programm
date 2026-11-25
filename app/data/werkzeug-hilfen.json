@@ -1443,5 +1443,25 @@
     "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
     "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
     "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
+  },
+  "silhouette2d": {
+    "tip": "Umriss holen (Silhouette): Äußeren Schatten-Umriss eines Körpers auf die Skizzen-Ebene projizieren (Profi)",
+    "hilfe": "Klick im Profi-Modus einen Körper im Bild an – Tracery projiziert seinen äußeren Umriss (ohne innere Kanten) auf die Skizzen-Ebene. Ändert sich der Körper später, wandert der Umriss automatisch mit.",
+    "tipp": "Ideal für Schattenrisse von Rohren, Wellen oder liegenden Zylindern, um passende Ausschnitte oder Halter drum herum zu zeichnen."
+  },
+  "intersectCurve2d": {
+    "tip": "Schnittkurve zweier Flächen verbunden in die Skizze holen (Profi)",
+    "hilfe": "Klick im Profi-Modus nacheinander zwei sich schneidende Flächen an (vom selben oder von zwei verschiedenen Körpern). Die exakte 3D-Schnittlinie wird auf die Skizzen-Ebene projiziert und bleibt mit beiden Flächen verbunden.",
+    "tipp": "Damit übernimmst du z. B. die genaue Durchdringungskurve zweier Rohre oder gebogener Schalen direkt in deine Skizze."
+  },
+  "polarGrid": {
+    "tip": "Zwischen rechteckigem und polarem Raster (Ringe und Strahlen) umschalten (Profi)",
+    "hilfe": "Im Profi-Modus schaltet das polare Raster konzentrische Ringe um den Nullpunkt und Winkelstrahlen ein. Punkte und Zeichenwerkzeuge fangen genau auf jedem Ring-Abstand und Winkel-Schritt.",
+    "tipp": "Mit einem Klick auf das Ecksymbol links oben zwischen den Linealen schaltest du jederzeit direkt zwischen rechteckig und polar um."
+  },
+  "rulerGuides": {
+    "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
+    "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
+    "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
   }
 }

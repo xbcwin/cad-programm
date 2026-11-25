@@ -1472,3 +1472,23 @@ body.simple:not(.tablet) .panel-body{font-size:calc(14.5px * var(--ui-scale,1))}
 [data-theme="dark"] .sk-blk-edit-badge{border-color:#b197fc}
 
 
+/* ---------- Skizzen-Lineale, Hilfslinien & Polares Raster (SK-52) ---------- */
+.sk-ruler{position:absolute;z-index:14;background:color-mix(in srgb,var(--surface) 88%,transparent);border-color:var(--line);user-select:none;touch-action:none;backdrop-filter:blur(4px)}
+.sk-ruler canvas{display:block;width:100%;height:100%;pointer-events:none}
+.sk-ruler-t{top:0;left:20px;right:0;height:20px;border-bottom:1px solid var(--line);cursor:ns-resize}
+.sk-ruler-l{top:20px;left:0;bottom:0;width:20px;border-right:1px solid var(--line);cursor:ew-resize}
+.sk-ruler-corner{position:absolute;top:0;left:0;width:20px;height:20px;z-index:15;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center;padding:0;cursor:pointer}
+.sk-ruler-corner:hover{background:var(--surface-2);color:var(--ink)}
+.sk-ruler-corner.polar{background:var(--accent-soft);color:var(--accent)}
+.sk-ruler-corner svg{width:12px;height:12px}
+body.sketching:not(.simple) .skbars{top:28px}
+body.sketching:not(.simple) .consbar.vert{left:28px}
+body.sketching:not(.simple) .sk-free-badge,body.sketching:not(.simple) .sk-lock-badge{top:28px;left:28px}
+body.sketching:not(.simple) .sk-live-mir-badge{top:28px}
+.sk-guides-box{display:grid;gap:6px}
+.sk-guide-list{display:grid;gap:4px;max-height:140px;overflow:auto}
+.sk-guide-row{display:flex;align-items:center;gap:8px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);font-size:12.5px}
+.sk-guide-ax{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;background:color-mix(in srgb,#0b93a8 16%,transparent);color:#0b93a8;font:700 11px/1 var(--font-cond)}
+[data-theme="dark"] .sk-guide-ax{background:color-mix(in srgb,#3bc9db 18%,transparent);color:#3bc9db}
+
+

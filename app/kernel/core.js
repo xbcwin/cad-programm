@@ -6756,6 +6756,383 @@ export function createKernel(R, oc) {
       return out;
     } finally { sec.delete(); pln.delete(); P.delete(); D.delete(); }
   }
+  // Äußerer Umriss (Silhouette) einer Form auf einer Ebene (Form-Koordinaten)
+  function silhouetteOf(key, o, x, n) {
+    const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher. Bitte noch einmal anklicken.');
+    e.gen = gen;
+    const nDir = norm(n);
+    let x0 = sub(x, mul(nDir, dot(x, nDir)));
+    if (len(x0) < 1e-6) x0 = cross(Math.abs(nDir[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1], nDir);
+    const xDir = norm(x0), yDir = cross(nDir, xDir);
+    const cam = new R.ProjectionCamera(o, nDir, xDir);
+    const hlr = new oc.HLRBRep_Algo();
+    const projector = new oc.HLRAlgo_Projector(cam.wrapped);
+    let hlrShapes = null;
+    const rawEdges = [];
+    try {
+      hlr.Add(e.shape.wrapped, 0);
+      hlr.Projector(projector);
+      hlr.Update();
+      hlr.Hide();
+      hlrShapes = new oc.HLRBRep_HLRToShape(hlr);
+      for (const comp of [hlrShapes.VCompound(), hlrShapes.OutLineVCompound()]) {
+        if (!comp || comp.IsNull()) continue;
+        const s = R.cast(comp);
+        for (const ed of s.edges) {
+          try { oc.BRepLib.BuildCurves3d(ed.wrapped); } catch (_) {}
+          rawEdges.push(edge2d(ed));
+        }
+      }
+    } finally {
+      safeDelete(hlrShapes);
+      safeDelete(projector);
+      safeDelete(hlr);
+      try { cam.delete(); } catch (_) {}
+    }
+
+    const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const r6 = (v) => Math.round(v * 1e6) / 1e6;
+    const edgeLen2D = (ed) => {
+      if (ed.t === 'LINE') return d2(ed.a, ed.b);
+      const pts = ed.pts || [];
+      let s = 0;
+      for (let i = 1; i < pts.length; i++) s += d2(pts[i - 1], pts[i]);
+      return s;
+    };
+    const sameEdge2D = (A, B) => {
+      if (A.t !== B.t) return false;
+      if (A.t === 'LINE') {
+        return (d2(A.a, B.a) < 1e-3 && d2(A.b, B.b) < 1e-3) || (d2(A.a, B.b) < 1e-3 && d2(A.b, B.a) < 1e-3);
+      }
+      if (A.t === 'CIRCLE' && A.full && B.full && A.c && B.c) {
+        return d2(A.c, B.c) < 1e-3 && Math.abs((A.r || 0) - (B.r || 0)) < 1e-3;
+      }
+      const ap = A.pts || [], bp = B.pts || [];
+      if (ap.length < 2 || bp.length < 2) return false;
+      const am = ap[Math.floor(ap.length / 2)], bm = bp[Math.floor(bp.length / 2)];
+      if (d2(am, bm) > 2e-2) return false;
+      return (d2(ap[0], bp[0]) < 1e-3 && d2(ap[ap.length - 1], bp[bp.length - 1]) < 1e-3)
+        || (d2(ap[0], bp[bp.length - 1]) < 1e-3 && d2(ap[ap.length - 1], bp[0]) < 1e-3);
+    };
+
+    const flattenCollinearEdge = (ed) => {
+      if (!ed || ed.t === 'LINE' || !Array.isArray(ed.pts) || ed.pts.length < 2) return ed;
+      const pts = ed.pts, p0 = pts[0];
+      let farIdx = 0, maxD = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const d = d2(p0, pts[i]);
+        if (d > maxD) { maxD = d; farIdx = i; }
+      }
+      if (maxD < 1e-4) return ed;
+      const ux = (pts[farIdx][0] - p0[0]) / maxD, uy = (pts[farIdx][1] - p0[1]) / maxD;
+      let tMin = 0, tMax = 0;
+      for (const q of pts) {
+        const dx = q[0] - p0[0], dy = q[1] - p0[1];
+        const perp = Math.abs(dx * -uy + dy * ux);
+        if (perp > 1e-3) return ed;
+        const t = dx * ux + dy * uy;
+        if (t < tMin) tMin = t;
+        if (t > tMax) tMax = t;
+      }
+      if (tMax - tMin < 1e-4) return ed;
+      return {
+        t: 'LINE',
+        a: [p0[0] + ux * tMin, p0[1] + uy * tMin],
+        b: [p0[0] + ux * tMax, p0[1] + uy * tMax],
+      };
+    };
+
+    const dedup = [];
+    for (const rawEd of rawEdges) {
+      const ed = flattenCollinearEdge(rawEd);
+      if (!ed) continue;
+      if (ed.t === 'LINE' && (!ed.a || !ed.b || d2(ed.a, ed.b) < 1e-4)) continue;
+      if (ed.t !== 'LINE' && (!(ed.pts && ed.pts.length >= 2) || edgeLen2D(ed) < 1e-4)) continue;
+      if (dedup.some((k) => sameEdge2D(k, ed))) continue;
+      dedup.push(ed);
+    }
+    if (!dedup.length) return [];
+
+    // 2. Geraden an echten Kreuzungen teilen, damit sichtbare/innere Stücke getrennt bewertet werden
+    const lines = dedup.filter((ed) => ed.t === 'LINE');
+    const others = dedup.filter((ed) => ed.t !== 'LINE');
+    const splitLines = [];
+    for (let i = 0; i < lines.length; i++) {
+      const L = lines[i];
+      const dx = L.b[0] - L.a[0], dy = L.b[1] - L.a[1];
+      const ts = [0, 1];
+      for (let j = 0; j < lines.length; j++) {
+        if (i === j) continue;
+        const M = lines[j];
+        const ex = M.b[0] - M.a[0], ey = M.b[1] - M.a[1];
+        const den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-9) continue;
+        const wx = M.a[0] - L.a[0], wy = M.a[1] - L.a[1];
+        const t = (wx * ey - wy * ex) / den;
+        const u = (wx * dy - wy * dx) / den;
+        if (t > 1e-4 && t < 1 - 1e-4 && u > -1e-4 && u < 1 + 1e-4) ts.push(t);
+      }
+      ts.sort((a, b) => a - b);
+      let prev = ts[0];
+      for (let k = 1; k < ts.length; k++) {
+        if (ts[k] - prev < 1e-4) continue;
+        const pa = [L.a[0] + dx * prev, L.a[1] + dy * prev];
+        const pb = [L.a[0] + dx * ts[k], L.a[1] + dy * ts[k]];
+        if (d2(pa, pb) >= 1e-4) splitLines.push({ t: 'LINE', a: pa, b: pb });
+        prev = ts[k];
+      }
+    }
+    const candidates = [...splitLines, ...others];
+
+    // 3. Schatten-Test gegen das projizierte Dreiecksnetz: Innenkanten verwerfen
+    const bb = bboxOf(e.shape);
+    const diag = bb ? Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) : 50;
+    const meshT = Math.max(0.005, Math.min(0.05, diag * 0.0005));
+    const tris2 = [];
+    try {
+      const m = e.shape.mesh({ tolerance: meshT, angularTolerance: 0.15 });
+      const V = m.vertices || [], I = m.triangles || [];
+      const proj = (idx) => {
+        const vx = V[idx * 3] - o[0], vy = V[idx * 3 + 1] - o[1], vz = V[idx * 3 + 2] - o[2];
+        return [vx * xDir[0] + vy * xDir[1] + vz * xDir[2], vx * yDir[0] + vy * yDir[1] + vz * yDir[2]];
+      };
+      for (let i = 0; i + 2 < I.length; i += 3) {
+        const p0 = proj(I[i]), p1 = proj(I[i + 1]), p2 = proj(I[i + 2]);
+        const area2 = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]);
+        if (Math.abs(area2) < 1e-8) continue;
+        tris2.push({
+          ax: p0[0], ay: p0[1], bx: p1[0], by: p1[1], cx: p2[0], cy: p2[1],
+          area2: Math.abs(area2),
+          minX: Math.min(p0[0], p1[0], p2[0]), maxX: Math.max(p0[0], p1[0], p2[0]),
+          minY: Math.min(p0[1], p1[1], p2[1]), maxY: Math.max(p0[1], p1[1], p2[1]),
+        });
+      }
+    } catch (_) {}
+
+    const inAnyTri = (px, py) => {
+      for (const tr of tris2) {
+        if (px < tr.minX - 1e-5 || px > tr.maxX + 1e-5 || py < tr.minY - 1e-5 || py > tr.maxY + 1e-5) continue;
+        const c1 = (tr.bx - tr.ax) * (py - tr.ay) - (tr.by - tr.ay) * (px - tr.ax);
+        const c2 = (tr.cx - tr.bx) * (py - tr.by) - (tr.cy - tr.by) * (px - tr.bx);
+        const c3 = (tr.ax - tr.cx) * (py - tr.cy) - (tr.ay - tr.cy) * (px - tr.cx);
+        const tol = tr.area2 * 1e-5;
+        if ((c1 >= -tol && c2 >= -tol && c3 >= -tol) || (c1 <= tol && c2 <= tol && c3 <= tol)) return true;
+      }
+      return false;
+    };
+
+    const edgeSamples = (ed) => {
+      const res = [];
+      if (ed.t === 'LINE') {
+        const dx = ed.b[0] - ed.a[0], dy = ed.b[1] - ed.a[1], L = Math.hypot(dx, dy);
+        if (L < 1e-6) return res;
+        const nv = [-dy / L, dx / L];
+        for (const t of [0.25, 0.5, 0.75]) res.push({ p: [ed.a[0] + dx * t, ed.a[1] + dy * t], nv });
+        return res;
+      }
+      const pts = ed.pts || [];
+      if (pts.length < 2) return res;
+      for (const t of [0.25, 0.5, 0.75]) {
+        const idx = Math.max(0, Math.min(pts.length - 2, Math.floor(t * (pts.length - 1))));
+        const a = pts[idx], b = pts[idx + 1];
+        const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+        if (L < 1e-6) continue;
+        res.push({ p: [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5], nv: [-dy / L, dx / L] });
+      }
+      return res;
+    };
+
+    let kept = candidates;
+    if (tris2.length) {
+      const eps = Math.max(meshT * 3.5, Math.min(0.12, diag * 0.002));
+      const filtered = [];
+      for (const ed of candidates) {
+        const smp = edgeSamples(ed);
+        if (!smp.length) continue;
+        const interior = smp.every(({ p, nv }) => (
+          inAnyTri(p[0] + nv[0] * eps, p[1] + nv[1] * eps)
+          && inAnyTri(p[0] - nv[0] * eps, p[1] - nv[1] * eps)
+        ));
+        if (!interior) filtered.push(ed);
+      }
+      if (filtered.length) kept = filtered;
+    }
+
+    // 4. Kollineare sich berührende oder überlappende Linien verschmelzen
+    const keptLines = kept.filter((ed) => ed.t === 'LINE').map((ed) => ({ a: ed.a.slice(), b: ed.b.slice() }));
+    const keptOther = kept.filter((ed) => ed.t !== 'LINE');
+    const hasThirdAt = (pt, iA, iB) => {
+      for (let k = 0; k < keptLines.length; k++) {
+        if (k === iA || k === iB) continue;
+        if (d2(keptLines[k].a, pt) < 2e-3 || d2(keptLines[k].b, pt) < 2e-3) return true;
+      }
+      for (const ed of keptOther) {
+        const pts = ed.pts || [];
+        if (pts.length >= 2 && (d2(pts[0], pt) < 2e-3 || d2(pts[pts.length - 1], pt) < 2e-3)) return true;
+      }
+      return false;
+    };
+    let merged = true;
+    while (merged) {
+      merged = false;
+      for (let i = 0; i < keptLines.length && !merged; i++) {
+        const A = keptLines[i];
+        const La = d2(A.a, A.b); if (La < 1e-6) continue;
+        const ux = (A.b[0] - A.a[0]) / La, uy = (A.b[1] - A.a[1]) / La;
+        for (let j = i + 1; j < keptLines.length && !merged; j++) {
+          const B = keptLines[j];
+          const Lb = d2(B.a, B.b); if (Lb < 1e-6) continue;
+          const vx = (B.b[0] - B.a[0]) / Lb, vy = (B.b[1] - B.a[1]) / Lb;
+          if (Math.abs(ux * vx + uy * vy) < 0.9999) continue;
+          const perp = Math.abs((B.a[0] - A.a[0]) * -uy + (B.a[1] - A.a[1]) * ux);
+          if (perp > 1e-3) continue;
+          const tB0 = (B.a[0] - A.a[0]) * ux + (B.a[1] - A.a[1]) * uy;
+          const tB1 = (B.b[0] - A.a[0]) * ux + (B.b[1] - A.a[1]) * uy;
+          const loA = 0, hiA = La;
+          const loB = Math.min(tB0, tB1), hiB = Math.max(tB0, tB1);
+          const overlap = Math.min(hiA, hiB) - Math.max(loA, loB);
+          if (overlap < -1e-3) continue;
+          if (overlap <= 1e-3) {
+            const jt = Math.abs(hiA - loB) <= 1e-3 ? hiA : loA;
+            const jpt = [A.a[0] + ux * jt, A.a[1] + uy * jt];
+            if (hasThirdAt(jpt, i, j)) continue;
+          }
+          const lo = Math.min(loA, loB), hi = Math.max(hiA, hiB);
+          keptLines[i] = {
+            a: [A.a[0] + ux * lo, A.a[1] + uy * lo],
+            b: [A.a[0] + ux * hi, A.a[1] + uy * hi],
+          };
+          keptLines.splice(j, 1);
+          merged = true;
+        }
+      }
+    }
+
+    const out = [];
+    for (const L of keptLines) {
+      if (d2(L.a, L.b) < 1e-4) continue;
+      out.push({ t: 'LINE', a: [r6(L.a[0]), r6(L.a[1])], b: [r6(L.b[0]), r6(L.b[1])] });
+    }
+    for (const ed of keptOther) {
+      const cp = { ...ed };
+      if (Array.isArray(cp.c)) cp.c = [r6(cp.c[0]), r6(cp.c[1])];
+      if (Array.isArray(cp.pts)) cp.pts = cp.pts.map((q) => [r6(q[0]), r6(q[1])]);
+      out.push(cp);
+    }
+    return out;
+  }
+  // Schnittkurve zweier Flächen (Welt-Koordinaten): Kanten als 3D-Punktfolgen
+  function faceIntersectOf(args) {
+    const { a, b, scene } = args || {};
+    if (!a || !b) return [];
+    const pickFaceFromShape = (shape, faceIdx, sig) => {
+      const fl = topoList(shape, 'face');
+      let chosen = null;
+      try {
+        if (faceIdx != null && faceIdx >= 0 && faceIdx < fl.length && !sig) {
+          chosen = fl[faceIdx].shape.clone();
+        } else {
+          if (faceIdx != null && faceIdx >= 0 && faceIdx < fl.length) {
+            const cand = fl[faceIdx].shape;
+            if (!sig || !sig.t || cand.geomType === sig.t) {
+              const cc = cand.center ? vec(cand.center) : null;
+              if (!sig || !sig.c || !cc || len(sub(cc, sig.c)) < 0.5) chosen = cand.clone();
+            }
+          }
+          if (!chosen && sig && Array.isArray(sig.c)) {
+            let best = null, bs = Infinity;
+            for (const f of fl) {
+              if (sig.t && f.shape.geomType !== sig.t) continue;
+              const cc = f.shape.center ? vec(f.shape.center) : null;
+              if (!cc) continue;
+              const s = len(sub(cc, sig.c));
+              if (sig.t === 'PLANE' && Array.isArray(sig.n)) {
+                try {
+                  const fn = vec(f.shape.normalAt());
+                  if (dot(fn, sig.n) < 0.98) continue;
+                } catch (_) {}
+              }
+              if (s < bs) { bs = s; best = f.shape; }
+            }
+            if (best) chosen = best.clone();
+          }
+          if (!chosen && faceIdx != null && faceIdx >= 0 && faceIdx < fl.length) {
+            chosen = fl[faceIdx].shape.clone();
+          }
+        }
+      } finally {
+        for (const x of fl) x.shape.delete();
+      }
+      return chosen;
+    };
+
+    const eA = a.key ? cache.get(a.key) : null;
+    const eB = b.key ? cache.get(b.key) : null;
+    if (eA) eA.gen = gen;
+    if (eB) eB.gen = gen;
+    let fa = null, fb = null;
+    const fallbackSolids = [];
+    try {
+      if (eA && eB) {
+        const fA0 = pickFaceFromShape(eA.shape, a.faceIdx, a.faceSig);
+        const fB0 = pickFaceFromShape(eB.shape, b.faceIdx, b.faceSig);
+        if (fA0) { fa = applyMatrix(fA0, a.m); fA0.delete(); }
+        if (fB0) { fb = applyMatrix(fB0, b.m); fB0.delete(); }
+      } else if (scene) {
+        ingestBlobs(scene);
+        const solids = evaluateShapes(scene, []);
+        fallbackSolids.push(...solids);
+        const sA = solids.find((s) => s.id === a.id);
+        const sB = solids.find((s) => s.id === b.id);
+        if (sA) fa = pickFaceFromShape(sA.shape, a.faceIdx, null);
+        if (sB) fb = pickFaceFromShape(sB.shape, b.faceIdx, null);
+      }
+      if (!fa || !fb) return [];
+      let sec = null, sh = null;
+      const out = [];
+      try {
+        try {
+          sec = new oc.BRepAlgoAPI_Section(fa.wrapped, fb.wrapped, false);
+          if (sec.Approximation) sec.Approximation(true);
+          sec.Build();
+          if (sec.IsDone && !sec.IsDone()) return [];
+          sh = R.cast(sec.Shape());
+        } catch (_) {
+          if (sec) try { sec.delete(); } catch (_2) {}
+          sec = new oc.BRepAlgoAPI_Section(fa.wrapped, fb.wrapped, true);
+          if (sec.IsDone && !sec.IsDone()) return [];
+          sh = R.cast(sec.Shape());
+        }
+        if (sh && (!sh.wrapped || !sh.wrapped.IsNull())) {
+          for (const ed of sh.edges) {
+            try { oc.BRepLib.BuildCurves3d(ed.wrapped); } catch (_) {}
+            const L = ed.length || 0;
+            if (L < 1e-4) continue;
+            const t = ed.geomType;
+            const N = t === 'LINE' ? 1 : Math.max(16, Math.min(64, Math.ceil(L / 0.8)));
+            const pts = [];
+            for (let i = 0; i <= N; i++) pts.push(vec(ed.pointAt(i / N)));
+            const p0 = pts[0], pm = pts[Math.floor(pts.length / 2)], p1 = pts[pts.length - 1];
+            const dup = out.some((k) => {
+              const kp = k.pts, km = kp[Math.floor(kp.length / 2)];
+              if (len(sub(km, pm)) > 1e-2) return false;
+              return (len(sub(kp[0], p0)) < 1e-3 && len(sub(kp[kp.length - 1], p1)) < 1e-3)
+                || (len(sub(kp[0], p1)) < 1e-3 && len(sub(kp[kp.length - 1], p0)) < 1e-3);
+            });
+            if (!dup) out.push({ t, pts, l: L });
+          }
+        }
+      } finally {
+        safeDelete(sh);
+        if (sec) try { sec.delete(); } catch (_) {}
+      }
+      return out;
+    } finally {
+      safeDelete(fa);
+      safeDelete(fb);
+      for (const s of fallbackSolids) safeDelete(s.shape);
+    }
+  }
   function faceGridOf(key, faceIdx) {
     const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher. Bitte noch einmal anklicken.');
     e.gen = gen;
@@ -9620,5 +9997,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkSymmetry, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, silhouetteOf, faceIntersectOf, checkGeometry, checkSymmetry, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
 }
