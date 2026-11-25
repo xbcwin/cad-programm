@@ -24138,6 +24138,116 @@ def t_a122_uebergang_schnitt_ring(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11250227(p):
+    # 1. Gelenk lösen aktualisiert rechtes & linkes Panel sofort – auch bei Fokus im rechten Panel & Auswahl im Verlauf
+    p.empty()
+    ids = p.ev("""
+      let aId, bId;
+      App.change('Arme', d => {
+        const a = Model.newItem('box', { w: 20, d: 10, h: 4 }, { name: 'Arm A' });
+        const b = Model.newItem('box', { w: 20, d: 10, h: 4 }, { name: 'Arm B', more: { t: { x: 20, y: 0, z: 0, rx: 0, ry: 0, rz: 0 } } });
+        d.items.push(a, b);
+        aId = a.id; bId = b.id;
+      });
+      return [aId, bId];
+    """)
+    warte_rechnen(p, 20)
+    p.ev("Joints.add(arg[0], arg[1], [10, 0, 4], [0, 1, 0])", ids)
+    p.ev("App.select([arg])", ids[1])
+    p.wait(300)
+    res1a = p.ev("""
+      const sec = document.querySelector('#joint-sec');
+      const ang = document.querySelector('#jt-ang');
+      const del = document.querySelector('#jt-del');
+      if (!sec || !ang || !del) return { ok: false };
+      ang.focus();
+      del.click();
+      return {
+        ok: true,
+        joints: (App.doc.joints || []).length,
+        hasSec: !!document.querySelector('#joint-sec'),
+        hasTree: !!document.querySelector('#joint-tree'),
+      };
+    """)
+    j2 = p.ev("const r = Joints.add(arg[0], arg[1], [10, 0, 4], [0, 1, 0]); return r && r.id ? r.id : null", ids)
+    p.wait(200)
+    res1b = p.ev("""
+      if (!arg) return { ok: false };
+      Joints.select(arg);
+      const selBefore = Joints.selected === arg;
+      Joints.remove(arg);
+      return {
+        ok: selBefore,
+        selAfter: Joints.selected,
+        joints: (App.doc.joints || []).length,
+        hasSec: !!document.querySelector('#joint-sec'),
+        hasTree: !!document.querySelector('#joint-tree'),
+      };
+    """, j2)
+    ok1 = (
+        res1a.get('ok')
+        and res1a.get('joints') == 0
+        and not res1a.get('hasSec')
+        and not res1a.get('hasTree')
+        and res1b.get('ok')
+        and res1b.get('selAfter') is None
+        and res1b.get('joints') == 0
+        and not res1b.get('hasSec')
+        and not res1b.get('hasTree')
+    )
+
+    # 2. Zeichnung rendert kein leeres <svg> während laufender Erstprojektion
+    p.ev("""
+      App.setDoc(Model.newDoc('Zeichnungstest'), { fit: false, forceReplace: true });
+      App.change('Quader', d => {
+        d.items.push(Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Quader' }));
+      });
+    """)
+    warte_rechnen(p, 20)
+    ok_no_svg = False
+    ok_ready_svg = False
+    try:
+        p.ev("""
+          window.__origKernelCallF1125 = Kernel.call;
+          window.__resolveProjF1125 = null;
+          Kernel.call = function(cmd, args, transfer) {
+            if (cmd === 'project') {
+              const callArgs = arguments;
+              return new Promise((resolve, reject) => {
+                window.__resolveProjF1125 = () => {
+                  window.__resolveProjF1125 = null;
+                  window.__origKernelCallF1125.apply(Kernel, callArgs).then(resolve, reject);
+                };
+              });
+            }
+            return window.__origKernelCallF1125.apply(Kernel, arguments);
+          };
+        """)
+        p.pg.click('#tab-drawing')
+        p.wait(200)
+        p.ev("Drawing.tool('detail'); Drawing.refreshUI();")
+        p.wait(100)
+        ok_no_svg = p.ev("return document.querySelector('#sheet .sheet-holder svg') === null")
+        p.ev("if (window.__resolveProjF1125) window.__resolveProjF1125();")
+        p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+        ok_ready_svg = p.ev("""
+          return !!(Drawing.layout && Drawing.layout.views && Drawing.layout.views.top
+            && Drawing.layout.views.top.geo && Drawing.layout.views.top.geo.polys
+            && Drawing.layout.views.top.geo.polys.length > 0);
+        """)
+    finally:
+        p.ev("""
+          if (window.__resolveProjF1125) { try { window.__resolveProjF1125(); } catch (_) {} }
+          if (window.__origKernelCallF1125) {
+            Kernel.call = window.__origKernelCallF1125;
+            window.__origKernelCallF1125 = null;
+          }
+          if (App.mode !== 'model') Commands.setMode('model');
+        """)
+    ok2 = bool(ok_no_svg and ok_ready_svg)
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -24367,6 +24477,7 @@ TESTS = [
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
     ('[F-11250121] Volltest-Reparatur: Fokus-Vorschau zeichnet bei rAF-Stau / Meldung überlebt Hauptthread-Hänger', t_f11250121),
     ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
+    ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

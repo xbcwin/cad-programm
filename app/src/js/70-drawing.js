@@ -2906,6 +2906,7 @@ const Drawing = (() => {
   }
   function render() {
     if (!holder) return;
+    if (loadingProjPromise && !proj && Model.activeItems(App.doc).length > 0) return;
     const all = sheets(), idx = activeIndex(), sh = all[idx] || dwg();
     const cur = buildSheetContent(sh, idx, all.length);
     layout = cur.layout;

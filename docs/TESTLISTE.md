@@ -2411,6 +2411,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftClosed` und `loftCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang ring`, `übergang schnitt`) und `Explain.local` vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser 4 leicht unterschiedlich große Kreise im Kreis zeichnen, auf „Übergang (Ring)“ klicken, das nahtlose Schließen rundherum drehen und prüfen sowie den Ring mit „Körper → Abziehen von“ als umlaufende Nut aus einer Platte schneiden.
 
+## Volltest-Reparatur (Auto [F-11250227])
+
+- [x] **Gelenk lösen aktualisiert Panels sofort**: `Joints.remove()` merkt `selJoint` vor `App.change()` und baut rechtes und linkes Panel sofort neu auf – auch bei fokussiertem `#jt-ang` oder direkt im Verlauf ausgewähltem Gelenk (`t_gelenk`, `t_f11250227`).
+- [x] **Zeichnung wartet auf Erstprojektion**: Während `ensureProjections()` erstmals für ein nicht-leeres Modell läuft (`loadingProjPromise && !proj`), unterdrückt `Drawing.render()` das Einhängen eines vorzeitigen leeren `<svg>`, und erst nach Projektionsabschluss erscheint das vollständige Blatt samt Ansichtsgeometrie (`t_a064_zeichnung_detailansicht`, `t_f11250227`).
+- [ ] **Von Hand**: Im Browser bei einem Drehgelenk zuerst den Winkel ändern, im Feld bleiben und direkt „Gelenk lösen“ klicken sowie bei einem größeren Modell beim Wechsel auf „Zeichnung“ ein Werkzeug wählen und prüfen, dass kein leeres Blatt aufblitzt.
+
 ## Fehler melden
 
 ```
