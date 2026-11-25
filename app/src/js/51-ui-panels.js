@@ -465,6 +465,10 @@ const Panels = (() => {
       const tblBtn = btn('t-tables', 'layout', T('tool.tables'), T('tool.tablesTip'), '', (e) => Drawing.tablesMenu(e.currentTarget), 'pro' + (Drawing.activeTool === 'hole-origin' ? ' active' : ''), T('tool.tablesShort'));
       tblBtn.dataset.help = 'drawingTables';
       tblBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'hole-origin'));
+      const layBtn = btn('t-layers', 'layers', T('tool.dlayers'), T('tool.dlayersTip'), '', (e) => Drawing.layersMenu(e.currentTarget), 'pro', T('tool.dlayersShort'));
+      layBtn.dataset.help = 'drawingLayers';
+      const imgBtn = btn('t-sheet-img', 'image', T('tool.dsheetImg'), T('tool.dsheetImgTip'), '', () => Drawing.pickSheetImage(), 'pro', T('tool.dsheetImgShort'));
+      imgBtn.dataset.help = 'drawingSheetImage';
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
       const dexBtn = btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));

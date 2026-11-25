@@ -20,6 +20,132 @@ const Drawing = (() => {
   ];
   const DIM_FONT_SIZES = [2.5, 3.5, 5, 7, 10];
   const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null, dual: false, dualDecimals: 3 };
+  // ---------- Linienarten, Strichstärken & Ebenen nach ISO 128 (ZE-29) ----------
+  const LINE_GROUPS = {
+    '0.35': { key: '0.35', wide: 0.35, narrow: 0.18, extra: 0.50 },
+    '0.5':  { key: '0.5',  wide: 0.50, narrow: 0.25, extra: 0.70 },
+    '0.7':  { key: '0.7',  wide: 0.70, narrow: 0.35, extra: 1.00 },
+  };
+  const LINE_WIDTHS = [0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 1.0];
+  const LINE_TYPES = {
+    continuous: { key: 'continuous', iso: '01', dxf: 'CONTINUOUS', dash: null,                     get label() { return T('draw.ltype.continuous'); } },
+    dashed:     { key: 'dashed',     iso: '02', dxf: 'DASHED',     dash: [2.4, 1.2],               get label() { return T('draw.ltype.dashed'); } },
+    center:     { key: 'center',     iso: '04', dxf: 'CENTER',     dash: [5, 1.2, 0.6, 1.2],       get label() { return T('draw.ltype.center'); } },
+    phantom:    { key: 'phantom',    iso: '05', dxf: 'PHANTOM',    dash: [7, 1.2, 0.7, 1.2, 0.7, 1.2], get label() { return T('draw.ltype.phantom'); } },
+    dotted:     { key: 'dotted',     iso: '07', dxf: 'DOTTED',     dash: [0.6, 1.2],               get label() { return T('draw.ltype.dotted'); } },
+  };
+  const DRAWING_LAYERS = [
+    { key: 'vis',    dxfName: 'SICHTBAR',     dxfColor: 7, defaultType: 'continuous', widthRole: 'wide',   get label() { return T('draw.layer.vis'); } },
+    { key: 'hid',    dxfName: 'VERDECKT',     dxfColor: 8, defaultType: 'dashed',     widthRole: 'narrow', get label() { return T('draw.layer.hid'); } },
+    { key: 'tan',    dxfName: 'TANGENTIAL',   dxfColor: 9, defaultType: 'continuous', widthRole: 'tan',    get label() { return T('draw.layer.tan'); } },
+    { key: 'ctr',    dxfName: 'MITTELLINIE',  dxfColor: 1, defaultType: 'center',     widthRole: 'narrow', get label() { return T('draw.layer.ctr'); } },
+    { key: 'dim',    dxfName: 'BEMASSUNG',    dxfColor: 3, defaultType: 'continuous', widthRole: 'narrow', get label() { return T('draw.layer.dim'); } },
+    { key: 'hatch',  dxfName: 'SCHRAFFUR',    dxfColor: 8, defaultType: 'continuous', widthRole: 'hatch',  get label() { return T('draw.layer.hatch'); } },
+    { key: 'cut',    dxfName: 'SCHNITTLINIE', dxfColor: 1, defaultType: 'center',     widthRole: 'cut',    get label() { return T('draw.layer.cut'); } },
+    { key: 'thread', dxfName: 'GEWINDE',      dxfColor: 4, defaultType: 'continuous', widthRole: 'narrow', get label() { return T('draw.layer.thread'); } },
+    { key: 'frame',  dxfName: 'RAHMEN',       dxfColor: 7, defaultType: 'continuous', widthRole: 'extra',  get label() { return T('draw.layer.frame'); } },
+    { key: 'image',  dxfName: 'BILDER',       dxfColor: 7, defaultType: 'continuous', widthRole: 'narrow', get label() { return T('draw.layer.image'); } },
+  ];
+  function normLineGroup(val) {
+    const s = String(val || '').replace(',', '.');
+    return LINE_GROUPS[s] ? s : '0.5';
+  }
+  function lineTypeMeta(key) {
+    return LINE_TYPES[key] || LINE_TYPES.continuous;
+  }
+  function defaultLayerWidth(role, grpKey = '0.5') {
+    const g = normLineGroup(grpKey);
+    if (g === '0.35') {
+      if (role === 'wide') return 0.35;
+      if (role === 'extra') return 0.50;
+      if (role === 'tan') return 0.15;
+      if (role === 'hatch') return 0.16;
+      if (role === 'cut') return 0.25;
+      return 0.18;
+    }
+    if (g === '0.7') {
+      if (role === 'wide') return 0.70;
+      if (role === 'extra') return 1.00;
+      if (role === 'tan') return 0.28;
+      if (role === 'hatch') return 0.30;
+      if (role === 'cut') return 0.50;
+      return 0.35;
+    }
+    if (role === 'wide') return 0.50;
+    if (role === 'extra') return 0.70;
+    if (role === 'tan') return 0.20;
+    if (role === 'hatch') return 0.22;
+    if (role === 'cut') return 0.35;
+    return 0.25;
+  }
+  function defaultLayersForGroup(grpKey = '0.5') {
+    const out = {};
+    for (const meta of DRAWING_LAYERS) {
+      out[meta.key] = {
+        key: meta.key,
+        visible: true,
+        lineType: meta.defaultType,
+        width: defaultLayerWidth(meta.widthRole, grpKey),
+        dxfName: meta.dxfName,
+        dxfColor: meta.dxfColor,
+      };
+    }
+    return out;
+  }
+  function normalizeLayers(raw, grpKey = '0.5') {
+    const def = defaultLayersForGroup(grpKey);
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const out = {};
+    for (const meta of DRAWING_LAYERS) {
+      const d = def[meta.key];
+      const r = src[meta.key] && typeof src[meta.key] === 'object' ? src[meta.key] : {};
+      const wNum = Number(r.width);
+      out[meta.key] = {
+        key: meta.key,
+        visible: r.visible !== false,
+        lineType: LINE_TYPES[r.lineType] ? r.lineType : d.lineType,
+        width: Number.isFinite(wNum) && wNum > 0 ? round(clamp(wNum, 0.1, 2.0), 2) : d.width,
+        dxfName: meta.dxfName,
+        dxfColor: meta.dxfColor,
+      };
+    }
+    return out;
+  }
+  function sheetLayers(sh = dwg()) {
+    return normalizeLayers(sh && sh.layers, normLineGroup(sh && sh.lineGroup));
+  }
+  function normalizeSheetImage(raw) {
+    if (!raw || typeof raw !== 'object' || typeof raw.src !== 'string' || !raw.src.trim()) return null;
+    const san = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl
+      ? Store.sanitizeImageDataUrl(raw.src, { allowSvg: true })
+      : raw.src.trim();
+    if (!san) return null;
+    let jpg = null;
+    if (typeof raw.jpg === 'string' && raw.jpg.trim()) {
+      jpg = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl
+        ? Store.sanitizeImageDataUrl(raw.jpg, { allowSvg: false })
+        : raw.jpg.trim();
+    }
+    const iw = Math.max(1, Math.round(Number(raw.iw) || 100));
+    const ih = Math.max(1, Math.round(Number(raw.ih) || 100));
+    const w = round(clamp(Number(raw.w) || 40, 4, 600), 2);
+    const h = round(clamp(Number(raw.h) || (w * ih) / iw, 4, 600), 2);
+    return {
+      id: raw.id ? String(raw.id) : uid('img'),
+      name: String(raw.name || 'Bild'),
+      src: san,
+      jpg,
+      iw,
+      ih,
+      x: round(Number(raw.x) || 24, 2),
+      y: round(Number(raw.y) || 16, 2),
+      w,
+      h,
+      keepAspect: raw.keepAspect !== false,
+      opacity: round(clamp(raw.opacity != null ? Number(raw.opacity) : 1, 0.1, 1), 2),
+      border: !!raw.border,
+    };
+  }
   const NOTE_TIPS = [
     { key: 'auto', get label() { return T('draw.noteTip.auto'); } },
     { key: 'arrow', get label() { return T('draw.noteTip.arrow'); } },
@@ -120,7 +246,8 @@ const Drawing = (() => {
   let dimMode = 'lin';
   let sectionMode = 'full';
   let sectionDraft = { halfAxis: 'v', halfSide: 'right', depth: null };
-  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null, dragTable = null, dragSurface = null, dragWeld = null, dragEdgeSym = null, dragSymbol = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null, dragDatum = null, dragGdt = null, dragTable = null, dragImage = null, dragSurface = null, dragWeld = null, dragEdgeSym = null, dragSymbol = null;
+  let selLayerKey = 'vis';
   let lastDimAnchors = new Map();
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
@@ -683,19 +810,15 @@ const Drawing = (() => {
       fr.readAsDataURL(file);
     });
   }
-  async function prepareLogoImage(input, curBox = null) {
-    if (!input) return null;
-    if (typeof input === 'object' && !(input instanceof Blob) && typeof input.src === 'string') {
-      return normalizeTitleLogo(input, 260, 80);
-    }
+  async function decodeSheetRasterImage(input, { maxDim = 512, defaultName = 'Logo', loadErrKey = 'draw.tbe.logoLoadErr', formatErrKey = 'draw.tbe.logoFormatErr' } = {}) {
     let dataUrl = '';
-    let fileName = 'Logo';
+    let fileName = defaultName;
     if (input instanceof Blob) {
       if (typeof Store !== 'undefined' && Store.checkFileSize) {
         const chk = Store.checkFileSize(input, 'image');
         if (!chk.ok) throw new Error(chk.message || chk.error);
       }
-      fileName = input.name || 'Logo';
+      fileName = input.name || defaultName;
       if (/svg/i.test(input.type) || /\.svg$/i.test(fileName)) {
         const svgTxt = await input.text();
         if (typeof Store !== 'undefined' && Store.sanitizeSVG) {
@@ -714,16 +837,16 @@ const Drawing = (() => {
     const cleanSrc = typeof Store !== 'undefined' && Store.sanitizeImageDataUrl
       ? Store.sanitizeImageDataUrl(dataUrl, { allowSvg: true })
       : dataUrl;
-    if (!cleanSrc) throw new Error(T('draw.tbe.logoFormatErr'));
+    if (!cleanSrc) throw new Error(T(formatErrKey));
     const img = await new Promise((resolve, reject) => {
       const im = new Image();
       im.onload = () => resolve(im);
-      im.onerror = () => reject(new Error(T('draw.tbe.logoLoadErr')));
+      im.onerror = () => reject(new Error(T(loadErrKey)));
       im.src = cleanSrc;
     });
     const natW = Math.max(1, img.naturalWidth || img.width || 128);
     const natH = Math.max(1, img.naturalHeight || img.height || 128);
-    const scale = Math.min(1, 512 / Math.max(natW, natH));
+    const scale = Math.min(1, maxDim / Math.max(natW, natH));
     const cw = Math.max(1, Math.round(natW * scale));
     const ch = Math.max(1, Math.round(natH * scale));
     let jpg = null;
@@ -739,17 +862,55 @@ const Drawing = (() => {
     } catch (_) {
       jpg = null;
     }
+    return { src: cleanSrc, jpg, iw: cw, ih: ch, name: fileName };
+  }
+  async function prepareLogoImage(input, curBox = null) {
+    if (!input) return null;
+    if (typeof input === 'object' && !(input instanceof Blob) && typeof input.src === 'string') {
+      return normalizeTitleLogo(input, 260, 80);
+    }
+    const decoded = await decodeSheetRasterImage(input, { maxDim: 512, defaultName: 'Logo', loadErrKey: 'draw.tbe.logoLoadErr', formatErrKey: 'draw.tbe.logoFormatErr' });
     return {
-      src: cleanSrc,
-      jpg,
-      iw: cw,
-      ih: ch,
-      name: fileName,
+      ...decoded,
       x: curBox && curBox.x != null ? curBox.x : 124,
       y: curBox && curBox.y != null ? curBox.y : 2,
       w: curBox && curBox.w != null ? curBox.w : 22,
       h: curBox && curBox.h != null ? curBox.h : 16,
     };
+  }
+  async function prepareSheetImage(input, sh = dwg(), opts = {}) {
+    if (!input) return null;
+    if (typeof input === 'object' && !(input instanceof Blob) && typeof input.src === 'string') {
+      return normalizeSheetImage(input);
+    }
+    const decoded = await decodeSheetRasterImage(input, { maxDim: 1024, defaultName: 'Bild', loadErrKey: 'draw.img.loadErr', formatErrKey: 'draw.img.formatErr' });
+    const [W, H] = sheetSize(sh);
+    const m = sh.sheet === 'A1' || sh.sheet === 'A0' ? 20 : 10;
+    const frame = { x: 20, y: m, w: W - 20 - m, h: H - 2 * m };
+    let w = opts.w != null ? clamp(Number(opts.w), 4, frame.w) : round(clamp(40, 12, frame.w * 0.35), 2);
+    let h = opts.h != null ? clamp(Number(opts.h), 4, frame.h) : round((w * decoded.ih) / decoded.iw, 2);
+    if (opts.h == null && h > frame.h * 0.45) {
+      h = round(frame.h * 0.45, 2);
+      w = round(clamp((h * decoded.iw) / decoded.ih, 4, frame.w), 2);
+    }
+    const idx = Array.isArray(sh.sheetImages) ? sh.sheetImages.length : 0;
+    const x = opts.x != null ? Number(opts.x) : round(clamp(frame.x + frame.w - w - 8 - (idx % 3) * 6, frame.x + 2, frame.x + frame.w - w - 2), 2);
+    const y = opts.y != null ? Number(opts.y) : round(clamp(frame.y + 8 + (idx % 4) * 6, frame.y + 2, frame.y + frame.h - h - 2), 2);
+    return normalizeSheetImage({
+      id: uid('img'),
+      name: opts.name || decoded.name,
+      src: decoded.src,
+      jpg: decoded.jpg,
+      iw: decoded.iw,
+      ih: decoded.ih,
+      x,
+      y,
+      w,
+      h,
+      keepAspect: opts.keepAspect !== false,
+      opacity: opts.opacity != null ? opts.opacity : 1,
+      border: !!opts.border,
+    });
   }
   function norm3(v, fb = [1, -1, 1]) {
     const a = Array.isArray(v) && v.length >= 3 ? v : fb;
@@ -857,6 +1018,9 @@ const Drawing = (() => {
       revTable: normalizeRevTable(opts.revTable),
       freeTables: Array.isArray(opts.freeTables) ? opts.freeTables.map(normalizeFreeTable).filter(Boolean) : [],
       viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
+      lineGroup: normLineGroup(opts.lineGroup || (tpl && tpl.lineGroup)),
+      layers: normalizeLayers(opts.layers || (tpl && tpl.layers), normLineGroup(opts.lineGroup || (tpl && tpl.lineGroup))),
+      sheetImages: Array.isArray(opts.sheetImages) ? opts.sheetImages.map(normalizeSheetImage).filter(Boolean) : [],
       titleBlock: opts.titleBlock ? normalizeTitleBlock(opts.titleBlock) : (tpl && tpl.titleBlock ? normalizeTitleBlock(deepClone(tpl.titleBlock)) : builtinTitleBlock('iso')),
       title: {
         ...t0,
@@ -906,6 +1070,9 @@ const Drawing = (() => {
       revTable: raw && raw.revTable && typeof raw.revTable === 'object' ? raw.revTable : undefined,
       freeTables: raw && Array.isArray(raw.freeTables) ? raw.freeTables : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
+      lineGroup: raw && raw.lineGroup,
+      layers: raw && raw.layers && typeof raw.layers === 'object' ? raw.layers : undefined,
+      sheetImages: raw && Array.isArray(raw.sheetImages) ? raw.sheetImages : undefined,
       titleBlock: raw && raw.titleBlock && typeof raw.titleBlock === 'object' ? raw.titleBlock : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
@@ -971,6 +1138,9 @@ const Drawing = (() => {
       if (cur) {
         cur.dimStyle = normDimStyle(cur.dimStyle);
         cur.projection = normProjection(cur.projection);
+        cur.lineGroup = normLineGroup(cur.lineGroup);
+        cur.layers = normalizeLayers(cur.layers, cur.lineGroup);
+        cur.sheetImages = Array.isArray(cur.sheetImages) ? cur.sheetImages.map(normalizeSheetImage).filter(Boolean) : [];
         cur.titleBlock = normalizeTitleBlock(cur.titleBlock);
       }
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
@@ -1006,7 +1176,7 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragImage = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin' || tool === 'surface' || tool === 'weld' || tool === 'edge' || tool === 'symbol') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
@@ -1022,7 +1192,7 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null; selView = null;
-    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragImage = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon' || tool === 'break' || tool === 'aux' || tool === 'datum' || tool === 'gdt' || tool === 'hole-origin' || tool === 'surface' || tool === 'weld' || tool === 'edge' || tool === 'symbol') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
@@ -1145,6 +1315,9 @@ const Drawing = (() => {
       if (Array.isArray(v) && v.length >= 2) nextVP[idMap.get(k) || k] = [Number(v[0]) || 0, Number(v[1]) || 0];
     }
     clone.viewPos = nextVP;
+    clone.lineGroup = normLineGroup(src.lineGroup);
+    clone.layers = normalizeLayers(src.layers, clone.lineGroup);
+    clone.sheetImages = (src.sheetImages || []).map((im) => normalizeSheetImage({ ...im, id: uid('img') })).filter(Boolean);
     clone.titleBlock = normalizeTitleBlock(src.titleBlock);
     if (clone.title) clone.title.blatt = '';
     App.change('Blatt dupliziert', () => {
@@ -1216,7 +1389,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragImage = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -6659,7 +6832,85 @@ const Drawing = (() => {
     drawHoleTable(sh, lay, lines, texts);
     drawRevTable(sh, lay, lines, texts);
     drawFreeTables(sh, lay, lines, texts);
-    return { layout: lay, lines, texts, images, dimAnchors };
+    // Bilder / Logos frei auf dem Blatt (ZE-31)
+    for (const si of sh.sheetImages || []) {
+      const ix = dragImage && dragImage.id === si.id && dragImage.curPos ? dragImage.curPos[0] : si.x;
+      const iy = dragImage && dragImage.id === si.id && dragImage.curPos ? dragImage.curPos[1] : si.y;
+      images.push({
+        id: si.id,
+        name: si.name,
+        x: ix,
+        y: iy,
+        w: si.w,
+        h: si.h,
+        png: si.src,
+        jpg: si.jpg,
+        iw: si.iw,
+        ih: si.ih,
+        opacity: si.opacity,
+        cls: 'sheet-img',
+        sheetImg: true,
+        layer: 'image',
+      });
+      if (si.border) {
+        lines.push({ rect: [ix, iy, si.w, si.h], cls: 'thin', extraCls: 'sheet-img-border', id: si.id, sheetImgBorder: true, layer: 'image' });
+      }
+    }
+    const lineGroup = normLineGroup(sh.lineGroup);
+    const layers = sheetLayers(sh);
+    const visLines = [];
+    for (const l of lines) {
+      const lk = l.layer || lineLayerKey(l);
+      if (lk) l.layer = lk;
+      if (!lk || !layers[lk] || layers[lk].visible !== false) visLines.push(l);
+    }
+    const visTexts = [];
+    for (const t of texts) {
+      const lk = t.layer || textLayerKey(t);
+      if (lk) t.layer = lk;
+      if (!lk || !layers[lk] || layers[lk].visible !== false) visTexts.push(t);
+    }
+    const visImages = [];
+    for (const im of images) {
+      const lk = im.layer || imageLayerKey(im);
+      if (lk) im.layer = lk;
+      if (!lk || !layers[lk] || layers[lk].visible !== false) visImages.push(im);
+    }
+    return { layout: lay, lines: visLines, texts: visTexts, images: visImages, dimAnchors, layers, lineGroup };
+  }
+  function lineLayerKey(l) {
+    if (!l || l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap' || l.cls === 'view-sel') return null;
+    if (l.sheetImgBorder) return 'image';
+    if (l.tbLine || l.tbPart) return 'frame';
+    if (l.thread || l.threadEnd) return 'thread';
+    if (l.cls === 'breakline' && l.secId) return 'cut';
+    const c = l.cls;
+    if (c === 'vis') return 'vis';
+    if (c === 'tan') return 'tan';
+    if (c === 'hid') return 'hid';
+    if (c === 'ctr' || c === 'explode-trail') return 'ctr';
+    if (c === 'hatch') return 'hatch';
+    if (c === 'cutline' || c === 'cutend') return 'cut';
+    if (c === 'dim' || c === 'arrow' || c === 'arrow-open' || c === 'arrow-slash' || c === 'arrow-dot'
+      || c === 'leader' || c === 'leader-arrow' || c === 'leader-dot' || c === 'detail' || c === 'auxarrow'
+      || c === 'balloon-line' || c === 'balloon-arrow' || c === 'balloon-dot' || c === 'balloon-circle'
+      || c === 'gdt-bg' || c === 'gdt-frame' || c === 'gdt-line' || c === 'gdt-sym' || c === 'gdt-arrow' || c === 'gdt-datum-tri'
+      || c === 'sym-line' || c === 'sym-dash' || c === 'sym-sym' || c === 'sym-arrow' || c === 'sym-fill' || c === 'sym-hit'
+      || c === 'ht-origin' || c === 'ht-tag-line' || c === 'ht-tag-arrow') return 'dim';
+    return 'frame';
+  }
+  function textLayerKey(t) {
+    if (!t || t.cls === 'note') return null;
+    const c = String(t.cls || '');
+    if (c.startsWith('dimtext') || c === 'leadertext' || c === 'detail-lbl' || c === 'balloon-text' || c === 'auxlabel' || c === 'gdt-text' || c === 'ht-tag-text' || c === 'sym-text') return 'dim';
+    if (c === 'cutlabel' || c === 'viewlabel') return 'cut';
+    return 'frame';
+  }
+  function imageLayerKey(im) {
+    if (!im) return 'vis';
+    if (im.sheetImg) return 'image';
+    if (im.tbLogo) return 'frame';
+    return 'vis';
   }
   function render() {
     if (!holder) return;
@@ -6672,6 +6923,14 @@ const Drawing = (() => {
     if (svKey && layout.views[svKey] && layout.views[svKey].rect && !tool) {
       const r = layout.views[svKey].rect;
       cur.lines.push({ rect: [r[0] - 2, r[1] - 2, r[2] - r[0] + 4, r[3] - r[1] + 4], cls: 'view-sel' });
+    }
+    if (selDim && !tool && (!cur.layers || !cur.layers.image || cur.layers.image.visible !== false)) {
+      const selSi = (sh.sheetImages || []).find((x) => x.id === selDim);
+      if (selSi) {
+        const ix = dragImage && dragImage.id === selSi.id && dragImage.curPos ? dragImage.curPos[0] : selSi.x;
+        const iy = dragImage && dragImage.id === selSi.id && dragImage.curPos ? dragImage.curPos[1] : selSi.y;
+        cur.lines.push({ rect: [ix - 0.8, iy - 0.8, selSi.w + 1.6, selSi.h + 1.6], cls: 'view-sel' });
+      }
     }
     // Werkzeug-Vorschau
     if (tool === 'dim' && toolState) previewDim(cur.lines, cur.texts);
@@ -6688,7 +6947,7 @@ const Drawing = (() => {
     if (tool === 'edge' && toolState) previewEdgeSym(cur.lines, cur.texts);
     if (tool === 'symbol' && toolState) previewSymbol(cur.lines, cur.texts);
     if (tool === 'hole-origin' && toolState) previewHoleOrigin(cur.lines, cur.texts);
-    buildSVG(cur.lines, cur.texts, cur.images);
+    buildSVG(cur.lines, cur.texts, cur.images, cur.layers, cur.lineGroup);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
   }
@@ -6872,6 +7131,43 @@ const Drawing = (() => {
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
   const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.explode-trail{fill:none;stroke:#444;stroke-width:.22;stroke-dasharray:3 1.4}.hatch{fill:none;stroke:#111;stroke-width:.22}.hatch.hatch-dash{stroke-dasharray:3 1.2}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.breakline{fill:none;stroke:#111;stroke-width:.25;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}.breakline.sel{stroke:#0c7a70;stroke-width:.45}.auxarrow{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow,.gdt-arrow,.gdt-datum-tri,.ht-tag-arrow,.sym-arrow,.sym-fill{fill:#111;stroke:none}.leader,.balloon-line,.gdt-line,.ht-tag-line,.sym-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.sym-dash{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:1.6 1;cursor:pointer}.sym-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;cursor:grab}.sym-hit{fill:transparent;stroke:none;cursor:grab}.ht-origin{fill:none;stroke:#111;stroke-width:.35;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.gdt-bg,.tbl-bg{fill:#fff;stroke:none;cursor:grab}.gdt-frame{fill:none;stroke:#111;stroke-width:.3;cursor:grab}.gdt-sym{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame,.tbl-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line,.tbl-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid,.tbl-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel,.tbl-frame.sel,.tbl-head-line.sel,.tbl-grid.sel,.ht-origin.sel,.ht-tag-line.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel,.gdt-arrow.sel,.gdt-datum-tri.sel,.ht-tag-arrow.sel,.sym-arrow.sel,.sym-fill.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.auxlabel,text.viewlabel,text.bom-th,text.tbl-title,text.tbl-th{font-weight:700}text.auxlabel{cursor:pointer}text.balloon-text,text.gdt-text,text.ht-tag-text,text.sym-text{font-weight:600;cursor:grab}text.bom-td,text.tbl-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}text.tb-bold{font-weight:700}.tb-logo{pointer-events:none}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  function dashCss(ltKey, cutDefault = false) {
+    if (cutDefault && ltKey === 'center') return 'stroke-dasharray:7 1.2 .7 1.2';
+    const meta = lineTypeMeta(ltKey);
+    return meta.dash ? `stroke-dasharray:${meta.dash.join(' ')}` : 'stroke-dasharray:none';
+  }
+  function buildSheetCss(layers = null, lineGroup = '0.5') {
+    if (!layers) return SHEET_SVG_CSS + '.sheet-img{cursor:grab}';
+    const ly = normalizeLayers(layers, lineGroup);
+    const thinW = round(ly.frame.width * (0.25 / 0.7), 2);
+    const cutEndW = round(ly.cut.width * 2, 2);
+    const dyn = [
+      `.vis{stroke-width:${ly.vis.width};${dashCss(ly.vis.lineType)}}`,
+      `.tan{stroke-width:${ly.tan.width};${dashCss(ly.tan.lineType)}}`,
+      `.hid{stroke-width:${ly.hid.width};${dashCss(ly.hid.lineType)}}`,
+      `.ctr{stroke-width:${ly.ctr.width};${dashCss(ly.ctr.lineType)}}`,
+      `.hatch{stroke-width:${ly.hatch.width};${dashCss(ly.hatch.lineType)}}`,
+      `.hatch.hatch-dash{stroke-dasharray:3 1.2}`,
+      `.cutline{stroke-width:${ly.cut.width};${dashCss(ly.cut.lineType, true)}}`,
+      `.cutend{stroke-width:${cutEndW}}`,
+      `.dim,.leader,.balloon-line,.gdt-line,.ht-tag-line,.detail{stroke-width:${ly.dim.width};${dashCss(ly.dim.lineType)}}`,
+      `.frame{stroke-width:${ly.frame.width};${dashCss(ly.frame.lineType)}}`,
+      `.thin{stroke-width:${thinW};${dashCss(ly.frame.lineType)}}`,
+      `.thread{stroke-width:${ly.thread.width};${dashCss(ly.thread.lineType)}}`,
+      ...(ly.thread.lineType === 'continuous' ? [`.thread.hid{stroke-dasharray:2.4 1.2}`] : []),
+      `.thread-end{stroke-width:${ly.vis.width}}`,
+      `.sheet-img{cursor:grab}`,
+      `.sheet-img-border{stroke-width:${ly.image.width};${dashCss(ly.image.lineType)}}`,
+      `.ctr.sel,.breakline.sel,.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}`,
+      `.auxarrow.sel{stroke:#0c7a70;stroke-width:.5}`,
+      `.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel,.gdt-frame.sel,.gdt-sym.sel,.sym-sym.sel{stroke:#0c7a70}`,
+      `.dim.sel,.leader.sel,.balloon-line.sel,.gdt-line.sel,.sym-line.sel,.sym-dash.sel{stroke:#0c7a70;stroke-width:.4}`,
+      `.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}`,
+      `.dim.lost{stroke-dasharray:2 1}`,
+      `.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}`,
+    ].join('');
+    return SHEET_SVG_CSS + dyn;
+  }
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -6884,7 +7180,7 @@ const Drawing = (() => {
     s.setAttribute('width', widthAttr != null ? widthAttr : `${W}mm`);
     s.setAttribute('height', heightAttr != null ? heightAttr : `${H}mm`);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = SHEET_SVG_CSS;
+    style.textContent = buildSheetCss(cur.layers || sheetLayers(dwg()), cur.lineGroup || normLineGroup(dwg().lineGroup));
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
@@ -6929,6 +7225,7 @@ const Drawing = (() => {
         if (l.htTag) el.dataset.htTag = l.htTag;
         if (l.tbLine) el.dataset.tbLine = l.tbLine;
         if (l.tbPart) el.dataset.tbPart = l.tbPart;
+        if (l.layer) el.dataset.layer = l.layer;
       }
       g.append(el);
     };
@@ -6937,14 +7234,18 @@ const Drawing = (() => {
       const src = im.png || im.jpg;
       if (!src) continue;
       const el = document.createElementNS(NS, 'image');
-      el.setAttribute('class', im.cls || 'shade-img');
+      el.setAttribute('class', (im.cls || 'shade-img') + (interactive && im.id && im.id === selDim ? ' sel' : ''));
       el.setAttribute('x', f(im.x)); el.setAttribute('y', f(im.y));
       el.setAttribute('width', f(im.w)); el.setAttribute('height', f(im.h));
       el.setAttribute('preserveAspectRatio', 'none');
+      if (im.opacity != null && im.opacity < 1) el.setAttribute('opacity', f(im.opacity));
       el.setAttribute('href', src);
       if (!interactive) el.setAttributeNS(XLINK, 'xlink:href', src);
+      if (interactive && im.id) el.dataset.id = im.id;
       if (interactive && im.viewKey) el.dataset.view = im.viewKey;
       if (interactive && im.tbLogo) el.dataset.tbLogo = '1';
+      if (interactive && im.sheetImg) el.dataset.sheetImg = '1';
+      if (interactive && im.layer) el.dataset.layer = im.layer;
       g.append(el);
     }
     for (const l of lines) if (l.cls !== 'paper') appendLine(l);
@@ -6954,6 +7255,7 @@ const Drawing = (() => {
       if (t.rot) el.setAttribute('transform', `rotate(${f(t.rot)} ${f(t.x)} ${f(t.y)})`);
       el.setAttribute('class', (t.cls || '') + (t.lost ? ' lost' : '') + (interactive && t.id && t.id === selDim ? ' sel' : ''));
       if (interactive) {
+        if (t.layer) el.dataset.layer = t.layer;
         if (t.id) el.dataset.id = t.id;
         if (t.lost) el.dataset.lost = '1';
         if (t.view) el.dataset.view = t.view;
@@ -6989,9 +7291,9 @@ const Drawing = (() => {
     }
     return s;
   }
-  function buildSVG(lines, texts, images = []) {
+  function buildSVG(lines, texts, images = [], layers = null, lineGroup = '0.5') {
     const { W, H } = layout;
-    const s = buildSheetSVGElement({ layout, lines, texts, images }, {
+    const s = buildSheetSVGElement({ layout, lines, texts, images, layers, lineGroup }, {
       widthAttr: W * zoom * 3.2,
       heightAttr: H * zoom * 3.2,
       transparent: false,
@@ -9179,6 +9481,16 @@ const Drawing = (() => {
       render();
       return;
     }
+    if (dragImage) {
+      const P = sheetPt(e);
+      const lay = layout || computeLayout(dwg());
+      const nx = clamp(dragImage.origPos[0] + (P[0] - dragImage.startP[0]), 0, Math.max(0, lay.W - dragImage.w));
+      const ny = clamp(dragImage.origPos[1] + (P[1] - dragImage.startP[1]), 0, Math.max(0, lay.H - dragImage.h));
+      dragImage.curPos = [nx, ny];
+      if (Math.hypot(P[0] - dragImage.startP[0], P[1] - dragImage.startP[1]) > 0.5) dragImage.moved = true;
+      render();
+      return;
+    }
     if (dragView) {
       const P = sheetPt(e);
       const dx = P[0] - dragView.startP[0], dy = P[1] - dragView.startP[1];
@@ -9415,6 +9727,9 @@ const Drawing = (() => {
     } else if (selDim && layout && layout.freeRects && layout.freeRects.has(selDim)) {
       const fr = layout.freeRects.get(selDim);
       dragTable = { kind: 'free', id: selDim, startP: P, origPos: [fr.x, fr.y], curPos: null, moved: false };
+    } else if (selDim && (dwg().sheetImages || []).some((x) => x.id === selDim)) {
+      const imgObj = dwg().sheetImages.find((x) => x.id === selDim);
+      dragImage = { id: selDim, startP: P, origPos: [imgObj.x, imgObj.y], w: imgObj.w, h: imgObj.h, curPos: null, moved: false };
     } else if (!selDim) {
       const hitV = viewAtAll(P);
       if (hitV) selView = hitV;
@@ -9509,6 +9824,14 @@ const Drawing = (() => {
           sh.bomTable = { ...(sh.bomTable || { show: true }), show: true, pos: [round(nx, 2), round(ny, 2)] };
         });
         render(); Panels.renderRight();
+      }
+      return;
+    }
+    if (dragImage) {
+      const d = dragImage;
+      dragImage = null;
+      if (d.moved && d.curPos) {
+        updateSheetImage(d.id, { x: round(d.curPos[0], 2), y: round(d.curPos[1], 2) }, 'Bild verschoben');
       }
       return;
     }
@@ -10739,6 +11062,186 @@ const Drawing = (() => {
     App.change(val ? 'Schraffur je Werkstoff aktiviert' : 'Schraffur je Werkstoff deaktiviert', () => { dwg().materialHatch = val; });
     render(); Panels.renderRight();
   }
+  // ---------- Ebenen, Linienarten (ZE-29) & Bilder auf dem Blatt (ZE-31) ----------
+  function setLineGroup(grpKey) {
+    if (isSimpleMode()) { UI.toast(T('draw.layersProOnly'), { icon: 'info' }); return false; }
+    const next = normLineGroup(grpKey);
+    const cur = dwg();
+    const curGrp = normLineGroup(cur.lineGroup);
+    const curLayers = sheetLayers(cur);
+    const nextDefs = defaultLayersForGroup(next);
+    const sameWidths = DRAWING_LAYERS.every((m) => Math.abs((curLayers[m.key]?.width || 0) - nextDefs[m.key].width) < 1e-4);
+    if (curGrp === next && sameWidths) return false;
+    App.change('Liniengruppe geändert', () => {
+      const sh = dwg();
+      const prev = sheetLayers(sh);
+      sh.lineGroup = next;
+      const merged = {};
+      for (const m of DRAWING_LAYERS) {
+        merged[m.key] = { ...prev[m.key], width: nextDefs[m.key].width };
+      }
+      sh.layers = merged;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function setLayer(key, patch = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.layersProOnly'), { icon: 'info' }); return false; }
+    if (!DRAWING_LAYERS.some((m) => m.key === key)) return false;
+    const cur = dwg();
+    const prev = sheetLayers(cur);
+    const oldL = prev[key];
+    const nextL = { ...oldL };
+    if (patch.visible !== undefined) nextL.visible = !!patch.visible;
+    if (patch.lineType !== undefined && LINE_TYPES[patch.lineType]) nextL.lineType = patch.lineType;
+    if (patch.width !== undefined && Number.isFinite(Number(patch.width)) && Number(patch.width) > 0) {
+      nextL.width = round(clamp(Number(patch.width), 0.1, 2.0), 2);
+    }
+    if (oldL.visible === nextL.visible && oldL.lineType === nextL.lineType && oldL.width === nextL.width) return false;
+    App.change('Ebene geändert', () => {
+      const sh = dwg();
+      const layers = sheetLayers(sh);
+      layers[key] = nextL;
+      sh.layers = layers;
+    });
+    if (!nextL.visible && selDim) {
+      const selImg = (dwg().sheetImages || []).find((x) => x.id === selDim);
+      if (key === 'image' && selImg) selDim = null;
+      else if (key === 'ctr' && String(selDim).startsWith('ctr|')) selDim = null;
+    }
+    render(); Panels.renderRight();
+    return true;
+  }
+  function setLayerVisible(key, visible) {
+    return setLayer(key, { visible: !!visible });
+  }
+  function toggleLayer(key) {
+    const cur = sheetLayers()[key];
+    if (!cur) return false;
+    return setLayer(key, { visible: !cur.visible });
+  }
+  function showAllLayers() {
+    if (isSimpleMode()) { UI.toast(T('draw.layersProOnly'), { icon: 'info' }); return false; }
+    const cur = sheetLayers();
+    if (DRAWING_LAYERS.every((m) => cur[m.key].visible !== false)) return false;
+    App.change('Alle Ebenen eingeblendet', () => {
+      const sh = dwg();
+      const layers = sheetLayers(sh);
+      for (const m of DRAWING_LAYERS) layers[m.key].visible = true;
+      sh.layers = layers;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetLayers() {
+    if (isSimpleMode()) { UI.toast(T('draw.layersProOnly'), { icon: 'info' }); return false; }
+    App.change('Ebenen auf Norm zurückgesetzt', () => {
+      const sh = dwg();
+      sh.lineGroup = normLineGroup(sh.lineGroup);
+      sh.layers = defaultLayersForGroup(sh.lineGroup);
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  async function addSheetImage(input, opts = {}) {
+    if (isSimpleMode()) { UI.toast(T('draw.imagesProOnly'), { icon: 'info' }); return null; }
+    const sh = dwg();
+    const img = await prepareSheetImage(input, sh, opts);
+    if (!img) return null;
+    App.change('Bild auf Blatt eingefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.sheetImages)) d.sheetImages = [];
+      d.sheetImages.push(img);
+      const layers = sheetLayers(d);
+      if (layers.image && layers.image.visible === false) {
+        layers.image.visible = true;
+        d.layers = layers;
+      }
+    });
+    selDim = img.id;
+    render(); Panels.renderRight();
+    UI.toast(T('draw.img.addedToast', { name: img.name }), { icon: 'image', ms: 2600 });
+    return img;
+  }
+  function updateSheetImage(id, patch = {}, undoLabel = 'Bild geändert') {
+    if (isSimpleMode()) { UI.toast(T('draw.imagesProOnly'), { icon: 'info' }); return false; }
+    const cur = (dwg().sheetImages || []).find((x) => x.id === id);
+    if (!cur) return false;
+    let changed = false;
+    App.change(undoLabel, () => {
+      const d = dwg();
+      const im = (d.sheetImages || []).find((x) => x.id === id);
+      if (!im) return;
+      const keep = patch.keepAspect !== undefined ? !!patch.keepAspect : im.keepAspect !== false;
+      const ar = Math.max(0.05, (Number(im.iw) || 100) / Math.max(1, Number(im.ih) || 100));
+      if (patch.keepAspect !== undefined && im.keepAspect !== keep) { im.keepAspect = keep; changed = true; }
+      if (patch.x != null && Number.isFinite(Number(patch.x))) {
+        const nx = round(Number(patch.x), 2);
+        if (nx !== im.x) { im.x = nx; changed = true; }
+      }
+      if (patch.y != null && Number.isFinite(Number(patch.y))) {
+        const ny = round(Number(patch.y), 2);
+        if (ny !== im.y) { im.y = ny; changed = true; }
+      }
+      if (patch.w != null && Number.isFinite(Number(patch.w))) {
+        const nw = round(clamp(Number(patch.w), 4, 600), 2);
+        if (nw !== im.w) {
+          im.w = nw;
+          if (keep && patch.h == null) im.h = round(clamp(nw / ar, 4, 600), 2);
+          changed = true;
+        }
+      }
+      if (patch.h != null && Number.isFinite(Number(patch.h))) {
+        const nh = round(clamp(Number(patch.h), 4, 600), 2);
+        if (nh !== im.h) {
+          im.h = nh;
+          if (keep && patch.w == null) im.w = round(clamp(nh * ar, 4, 600), 2);
+          changed = true;
+        }
+      }
+      if (patch.opacity != null && Number.isFinite(Number(patch.opacity))) {
+        const no = round(clamp(Number(patch.opacity), 0.1, 1), 2);
+        if (no !== im.opacity) { im.opacity = no; changed = true; }
+      }
+      if (patch.border !== undefined) {
+        const nb = !!patch.border;
+        if (nb !== !!im.border) { im.border = nb; changed = true; }
+      }
+      if (patch.name !== undefined) {
+        const nn = String(patch.name || '').trim();
+        if (nn && nn !== im.name) { im.name = nn; changed = true; }
+      }
+    });
+    if (!changed) return false;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function removeSheetImage(id) {
+    if (isSimpleMode()) { UI.toast(T('draw.imagesProOnly'), { icon: 'info' }); return false; }
+    if (!(dwg().sheetImages || []).some((x) => x.id === id)) return false;
+    App.change('Bild entfernt', () => {
+      const d = dwg();
+      d.sheetImages = (d.sheetImages || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function pickSheetImage() {
+    if (isSimpleMode()) { UI.toast(T('draw.imagesProOnly'), { icon: 'info' }); return false; }
+    const existing = document.getElementById('dw-img-file');
+    if (existing) { existing.value = ''; existing.click(); return true; }
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg';
+    inp.onchange = async () => {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      try { await addSheetImage(file); } catch (err) { UI.toast(err.message || T('draw.img.loadErr'), { kind: 'bad' }); }
+    };
+    inp.click();
+    return true;
+  }
   function hideCenter(id) {
     if (!id || !String(id).startsWith('ctr|')) return false;
     const d = dwg();
@@ -10792,6 +11295,7 @@ const Drawing = (() => {
     if ((dwg().balloons || []).some((x) => x.id === id)) { removeBalloon(id); return; }
     if ((dwg().datums || []).some((x) => x.id === id)) { removeDatum(id); return; }
     if ((dwg().gdtFrames || []).some((x) => x.id === id)) { removeGdtFrame(id); return; }
+    if ((dwg().sheetImages || []).some((x) => x.id === id)) { removeSheetImage(id); return; }
     if ((dwg().surfaces || []).some((x) => x.id === id)) { removeSurface(id); return; }
     if ((dwg().welds || []).some((x) => x.id === id)) { removeWeld(id); return; }
     if ((dwg().edges || []).some((x) => x.id === id)) { removeEdgeSym(id); return; }
@@ -10836,7 +11340,7 @@ const Drawing = (() => {
     const m = DIM_MODES.find((x) => x.key === mode) || DIM_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.dimProOnly'), { icon: 'info' }); return false; }
     dimMode = m.key;
-    dragDetail = null; dragDatum = null; dragGdt = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    dragDetail = null; dragDatum = null; dragGdt = null; dragImage = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     tool = 'dim';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -10864,7 +11368,7 @@ const Drawing = (() => {
     const m = SECTION_MODES.find((x) => x.key === mode) || SECTION_MODES[0];
     if (m.pro && isSimpleMode()) { UI.toast(T('draw.secProOnly'), { icon: 'info' }); return false; }
     sectionMode = m.key;
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragImage = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     tool = 'section';
     toolState = { stage: 0 };
     if (svg) svg.style.cursor = 'crosshair';
@@ -10886,7 +11390,7 @@ const Drawing = (() => {
     if ((t === 'datum' || t === 'gdt') && isSimpleMode()) { UI.toast(T('draw.gdtProOnly'), { icon: 'info' }); return false; }
     if ((t === 'surface' || t === 'weld' || t === 'edge' || t === 'symbol') && isSimpleMode()) { UI.toast(T('draw.symProOnly'), { icon: 'info' }); return false; }
     if (t === 'hole-origin' && isSimpleMode()) { UI.toast(T('draw.tablesProOnly'), { icon: 'info' }); return false; }
-    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; dragDatum = null; dragGdt = null; dragTable = null; dragImage = null; dragSurface = null; dragWeld = null; dragEdgeSym = null; dragSymbol = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'section' && (!SECTION_MODES.some((x) => x.key === sectionMode) || (sectionMode !== 'full' && isSimpleMode()))) sectionMode = 'full';
@@ -12291,6 +12795,39 @@ const Drawing = (() => {
     box.append(bTb);
     UI.pop(anchor, box);
   }
+  function layersMenu(anchor) {
+    if (isSimpleMode()) { UI.toast(T('draw.layersProOnly'), { icon: 'info' }); return; }
+    const d = dwg();
+    const layers = sheetLayers(d);
+    const box = h('div', { style: { display: 'grid', gap: '8px', minWidth: '240px' } });
+    box.append(h('div', { class: 'section-h' }, T('draw.panel.layersSec')));
+    box.append(UI.selectField({
+      id: 'dw-pop-line-group',
+      label: T('draw.panel.lineGroup'),
+      value: normLineGroup(d.lineGroup),
+      options: [
+        ['0.35', T('draw.lineGroup.035')],
+        ['0.5', T('draw.lineGroup.05')],
+        ['0.7', T('draw.lineGroup.07')],
+      ],
+      onChange: (v) => setLineGroup(v),
+    }));
+    const list = h('div', { class: 'mini-list' });
+    for (const meta of DRAWING_LAYERS) {
+      const ly = layers[meta.key];
+      const chk = h('label', { class: 'check' },
+        h('input', { type: 'checkbox', 'data-pop-layer': meta.key, checked: ly.visible !== false }),
+        h('span', { class: 'grow' }, meta.label),
+        h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, fmtFixed(ly.width, 2)));
+      chk.querySelector('input').onchange = (e) => setLayerVisible(meta.key, e.target.checked);
+      list.append(chk);
+    }
+    box.append(list);
+    const bAll = h('button', { type: 'button', class: 'btn', id: 'dw-pop-layers-all' }, T('draw.panel.layersShowAll'));
+    bAll.onclick = () => { showAllLayers(); UI.closePop(); };
+    box.append(bAll);
+    UI.pop(anchor, box);
+  }
   function viewMenu(anchor) {
     UI.menu(anchor, [
       { label: T('menu.draw.addIso'), icon: 'cube', run: () => addView('iso') },
@@ -12382,30 +12919,41 @@ const Drawing = (() => {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   }
-  function pageStream(W, H, lines, texts, pdfImages = []) {
+  function pageStream(W, H, lines, texts, pdfImages = [], layers = null) {
     const out = ['1 J 1 j'];
+    const ly = layers ? normalizeLayers(layers) : null;
+    const lyDash = (k, cutDef = false) => {
+      if (!ly || !ly[k]) return null;
+      if (cutDef && ly[k].lineType === 'center') return [7, 1.2, 0.7, 1.2];
+      return lineTypeMeta(ly[k].lineType).dash;
+    };
+    const dimW = ly ? ly.dim.width : 0.25;
+    const dimD = ly ? lyDash('dim') : null;
+    const frameW = ly ? ly.frame.width : 0.7;
+    const thinW = ly ? round(frameW * (0.25 / 0.7), 2) : 0.25;
+    const frameD = ly ? lyDash('frame') : null;
+    const cutW = ly ? ly.cut.width : 0.35;
     const style = {
-      frame: [0.7, null],
-      thin: [0.25, null],
-      vis: [0.5, null],
-      tan: [0.2, null],
-      hid: [0.25, [2.4, 1.2]],
-      ctr: [0.25, [5, 1.2, 0.6, 1.2]],
+      frame: [frameW, frameD],
+      thin: [thinW, frameD],
+      vis: [ly ? ly.vis.width : 0.5, ly ? lyDash('vis') : null],
+      tan: [ly ? ly.tan.width : 0.2, ly ? lyDash('tan') : null],
+      hid: [ly ? ly.hid.width : 0.25, ly ? lyDash('hid') : [2.4, 1.2]],
+      ctr: [ly ? ly.ctr.width : 0.25, ly ? lyDash('ctr') : [5, 1.2, 0.6, 1.2]],
       'explode-trail': [0.22, [3, 1.4]],
-      hatch: [0.22, null],
+      hatch: [ly ? ly.hatch.width : 0.22, ly ? lyDash('hatch') : null],
       breakline: [0.25, null],
       auxarrow: [0.35, null],
-      cutline: [0.35, [7, 1.2, 0.7, 1.2]],
-      cutend: [0.7, null],
-      breakline: [0.25, null],
-      dim: [0.25, null],
+      cutline: [cutW, ly ? lyDash('cut', true) : [7, 1.2, 0.7, 1.2]],
+      cutend: [round(cutW * 2, 2), null],
+      dim: [dimW, dimD],
       'arrow-open': [0.3, null],
       'arrow-slash': [0.45, null],
-      leader: [0.25, null],
-      'balloon-line': [0.25, null],
+      leader: [dimW, dimD],
+      'balloon-line': [dimW, dimD],
       'balloon-circle': [0.35, null],
       'gdt-frame': [0.3, null],
-      'gdt-line': [0.25, null],
+      'gdt-line': [dimW, dimD],
       'gdt-sym': [0.3, null],
       'sym-line': [0.25, null],
       'sym-dash': [0.25, [1.6, 1.0]],
@@ -12417,8 +12965,8 @@ const Drawing = (() => {
       'tbl-head-line': [0.35, null],
       'tbl-grid': [0.22, null],
       'ht-origin': [0.35, null],
-      'ht-tag-line': [0.25, null],
-      detail: [0.25, null],
+      'ht-tag-line': [dimW, dimD],
+      detail: [dimW, dimD],
       'detail-border': [0.25, [3, 1.5]],
     };
     const px = (x) => pf(x * PT);
@@ -12455,8 +13003,13 @@ const Drawing = (() => {
         );
         continue;
       }
-      const st = style[l.cls];
+      let st = style[l.cls];
       if (!st) continue;
+      if (ly && l.sheetImgBorder && ly.image) {
+        st = [ly.image.width, lyDash('image')];
+      } else if (ly && (l.thread || l.threadEnd)) {
+        st = l.threadEnd ? [ly.vis.width, null] : [ly.thread.width, (l.cls === 'hid' && ly.thread.lineType === 'continuous') ? [2.4, 1.2] : lyDash('thread')];
+      }
       out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : '0.067')} G ${pf(st[0] * PT)} w`);
       if (l.lost && l.cls === 'dim') out.push(`[${pf(2 * PT)} ${pf(1 * PT)}] 0 d`);
       else if (l.cls === 'hatch' && l.dashed) out.push(`[${pf(3 * PT)} ${pf(1.2 * PT)}] 0 d`);
@@ -12521,7 +13074,7 @@ const Drawing = (() => {
         const imId = addObj(imObj);
         pdfImages.push({ ...im, name: 'Im' + (pdfImages.length + 1), id: imId });
       }
-      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts, pdfImages));
+      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts, pdfImages, p.layers));
       const head = toPdfBytes(`<< /Length ${sBytes.length} >>\nstream\n`);
       const tail = toPdfBytes('\nendstream');
       const cObj = new Uint8Array(head.length + sBytes.length + tail.length);
@@ -12564,7 +13117,7 @@ const Drawing = (() => {
     const all = sheets();
     const pages = all.map((sh, i) => {
       const content = buildSheetContent(sh, i, all.length);
-      return { W: content.layout.W, H: content.layout.H, lines: content.lines, texts: content.texts, images: content.images };
+      return { W: content.layout.W, H: content.layout.H, lines: content.lines, texts: content.texts, images: content.images, layers: content.layers };
     });
     const active = dwg();
     return buildPDF(pages, { title: (active.title && active.title.titel) || App.doc.name });
@@ -12587,6 +13140,7 @@ const Drawing = (() => {
     ['BEMASSUNG', 'CONTINUOUS', 3],
     ['GEWINDE', 'CONTINUOUS', 4],
     ['RAHMEN', 'CONTINUOUS', 7],
+    ['BILDER', 'CONTINUOUS', 7],
   ];
   function dxfEscText(s) {
     return String(s ?? '')
@@ -12602,15 +13156,21 @@ const Drawing = (() => {
   }
   function buildSheetDXF(cur) {
     const W = cur.layout.W, H = cur.layout.H;
+    const layers = cur.layers || sheetLayers(dwg());
+    const dxfLayerList = DRAWING_LAYERS.map((m) => layers[m.key] || { key: m.key, dxfName: m.dxfName, dxfColor: m.dxfColor, lineType: m.defaultType, visible: true });
     const out = [];
     const P = (...a) => out.push(...a.map(String));
     P(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 4, 9, '$MEASUREMENT', 70, 1, 9, '$EXTMIN', 10, 0, 20, 0, 30, 0, 9, '$EXTMAX', 10, W, 20, H, 30, 0, 0, 'ENDSEC');
-    P(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LTYPE', 70, 3);
+    P(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LTYPE', 70, 5);
     P(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0.0);
     P(0, 'LTYPE', 2, 'DASHED', 70, 0, 3, '__ __ __', 72, 65, 73, 2, 40, 3.6, 49, 2.4, 49, -1.2);
     P(0, 'LTYPE', 2, 'CENTER', 70, 0, 3, '____ _ ____', 72, 65, 73, 4, 40, 8, 49, 5, 49, -1.2, 49, 0.6, 49, -1.2);
-    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, DXF_LAYERS.length);
-    for (const [n, lt, col] of DXF_LAYERS) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
+    P(0, 'LTYPE', 2, 'PHANTOM', 70, 0, 3, '____ _ _ ____', 72, 65, 73, 6, 40, 10.8, 49, 7, 49, -1.2, 49, 0.7, 49, -1.2, 49, 0.7, 49, -1.2);
+    P(0, 'LTYPE', 2, 'DOTTED', 70, 0, 3, '. . . . . .', 72, 65, 73, 2, 40, 1.8, 49, 0.6, 49, -1.2);
+    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, dxfLayerList.length);
+    for (const ly of dxfLayerList) {
+      P(0, 'LAYER', 2, ly.dxfName, 70, 0, 62, ly.visible === false ? -ly.dxfColor : ly.dxfColor, 6, lineTypeMeta(ly.lineType).dxf);
+    }
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
     const layer = {
       vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE', 'explode-trail': 'MITTELLINIE',
@@ -12633,7 +13193,11 @@ const Drawing = (() => {
       stats.lines++; bumpLayer(ly);
     };
     for (const l of cur.lines || []) {
-      const ly = l.tbLine ? 'RAHMEN' : (l.thread || l.threadEnd) ? 'GEWINDE' : (l.cls === 'breakline' && l.secId ? 'SCHNITTLINIE' : layer[l.cls]); if (!ly) continue;
+      if (l.cls === 'bom-bg' || l.cls === 'gdt-bg' || l.cls === 'tbl-bg' || l.cls === 'sym-hit') continue;
+      const lk = l.layer || lineLayerKey(l);
+      if (lk && layers[lk] && layers[lk].visible === false) continue;
+      const ly = l.sheetImgBorder ? 'BILDER' : l.tbLine ? 'RAHMEN' : (l.thread || l.threadEnd) ? 'GEWINDE' : (l.cls === 'breakline' && l.secId ? 'SCHNITTLINIE' : (lk && layers[lk] ? layers[lk].dxfName : layer[l.cls]));
+      if (!ly) continue;
       const lt = l.tbLine ? (l.cls === 'hid' ? 'DASHED' : null) : l.cls === 'breakline' ? 'CONTINUOUS' : (l.cls === 'sym-dash' || (l.cls === 'hatch' && l.dashed) || ((l.thread || l.threadEnd) && l.cls === 'hid')) ? 'DASHED' : null;
       if (l.rect) {
         const [x, y, w, hh] = l.rect;
@@ -12670,11 +13234,20 @@ const Drawing = (() => {
         stats.polylines++; bumpLayer(ly);
       }
     }
+    for (const im of cur.images || []) {
+      if (!im.sheetImg || (layers.image && layers.image.visible === false)) continue;
+      const [ix, iy, iw, ih] = [im.x, im.y, im.w, im.h];
+      const box = [[ix, iy], [ix + iw, iy], [ix + iw, iy + ih], [ix, iy + ih]];
+      for (let i = 0; i < 4; i++) line(box[i], box[(i + 1) % 4], 'BILDER', null);
+    }
     for (const t of cur.texts || []) {
       if (t.cls === 'note') continue;
+      const tk = t.layer || textLayerKey(t);
+      if (tk && layers[tk] && layers[tk].visible === false) continue;
       const cls = String(t.cls || '');
-      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel' || cls === 'gdt-text' || cls === 'ht-tag-text' || cls === 'sym-text') ? 'BEMASSUNG'
-        : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
+      const tLy = (tk && layers[tk] ? layers[tk].dxfName : null)
+        || ((cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text' || cls === 'auxlabel' || cls === 'gdt-text' || cls === 'ht-tag-text' || cls === 'sym-text') ? 'BEMASSUNG'
+          : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN');
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
       P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfEscText(t.t), 50, (-(t.rot || 0)).toFixed(3), ...align);
@@ -12683,7 +13256,8 @@ const Drawing = (() => {
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new TextEncoder().encode(text);
-    return { text, bytes, layers: DXF_LAYERS.map((x) => x[0]), stats };
+    const layerStates = Object.fromEntries(dxfLayerList.map((ly) => [ly.key, { dxfName: ly.dxfName, visible: ly.visible !== false, lineType: ly.lineType, width: ly.width }]));
+    return { text, bytes, layers: dxfLayerList.map((x) => x.dxfName), layerStates, stats };
   }
   async function buildDXF(opts = {}) {
     await ensureProjections();
@@ -14134,6 +14708,133 @@ const Drawing = (() => {
         }
       }
       w.append(normSec);
+      // Linienarten, Strichstärken & Ebenen (ZE-29, Profi)
+      const layersSec = h('div', { class: 'section pro', id: 'dw-layers-sec', 'data-help': 'drawingLayers' }, h('div', { class: 'section-h' }, T('draw.panel.layersSec')));
+      const curGrp = normLineGroup(d.lineGroup);
+      const curLayers = sheetLayers(d);
+      layersSec.append(UI.selectField({
+        id: 'dw-line-group',
+        label: T('draw.panel.lineGroup'),
+        value: curGrp,
+        options: [
+          ['0.35', T('draw.lineGroup.035')],
+          ['0.5', T('draw.lineGroup.05')],
+          ['0.7', T('draw.lineGroup.07')],
+        ],
+        onChange: (v) => setLineGroup(v),
+      }));
+      if (!curLayers[selLayerKey]) selLayerKey = 'vis';
+      const lList = h('div', { class: 'dw-layer-list', id: 'dw-layers-list' });
+      const layerSwatchSvg = (ly) => {
+        const dash = lineTypeMeta(ly.lineType).dash;
+        const da = dash ? ` stroke-dasharray="${dash.map((x) => round(x * 1.4, 1)).join(' ')}"` : '';
+        const sw = round(clamp(ly.width * 2.4, 0.8, 3.2), 2);
+        return `<span class="dw-layer-swatch" aria-hidden="true"><svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#111" stroke-width="${sw}"${da}/></svg></span>`;
+      };
+      for (const meta of DRAWING_LAYERS) {
+        const ly = curLayers[meta.key];
+        const isAct = selLayerKey === meta.key;
+        const isVis = ly.visible !== false;
+        const row = h('div', {
+          class: 'dw-layer-row' + (isAct ? ' active' : '') + (!isVis ? ' is-hidden' : ''),
+          'data-layer-key': meta.key,
+          title: `DXF: ${meta.dxfName}`,
+        });
+        const eyeBtn = h('button', {
+          type: 'button',
+          class: 'dw-layer-vis',
+          id: 'dw-layer-vis-' + meta.key,
+          'aria-pressed': String(isVis),
+          'aria-label': T(isVis ? 'common.hide' : 'panel.tree.show'),
+          'data-tip': T(isVis ? 'common.hide' : 'panel.tree.show'),
+        });
+        eyeBtn.innerHTML = icon(isVis ? 'eye' : 'eyeOff');
+        eyeBtn.onclick = (e) => { e.stopPropagation(); toggleLayer(meta.key); };
+        const swEl = h('span');
+        swEl.innerHTML = layerSwatchSvg(ly);
+        row.append(
+          eyeBtn,
+          swEl.firstChild,
+          h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, meta.label),
+          h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, fmtFixed(ly.width, 2)),
+        );
+        row.onclick = () => { selLayerKey = meta.key; Panels.renderRight(); };
+        lList.append(row);
+      }
+      layersSec.append(lList);
+      const actMeta = DRAWING_LAYERS.find((m) => m.key === selLayerKey) || DRAWING_LAYERS[0];
+      const actLayer = curLayers[actMeta.key];
+      const lProps = h('div', { class: 'dw-layer-props', id: 'dw-layer-props' });
+      lProps.append(h('div', { class: 'dw-layer-props-h' }, h('span', null, actMeta.label), h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, `DXF: ${actMeta.dxfName}`)));
+      const wOpts = LINE_WIDTHS.includes(actLayer.width) ? LINE_WIDTHS : [...LINE_WIDTHS, actLayer.width].sort((a, b) => a - b);
+      lProps.append(
+        UI.selectField({
+          id: 'dw-layer-ltype',
+          label: T('draw.panel.layerType'),
+          value: actLayer.lineType,
+          options: Object.values(LINE_TYPES).map((lt) => [lt.key, lt.label]),
+          onChange: (v) => setLayer(actMeta.key, { lineType: v }),
+        }),
+        UI.selectField({
+          id: 'dw-layer-width',
+          label: T('draw.panel.layerWidth'),
+          value: String(actLayer.width),
+          options: wOpts.map((wVal) => [String(wVal), fmtFixed(wVal, 2) + ' mm']),
+          onChange: (v) => setLayer(actMeta.key, { width: +v || actLayer.width }),
+        }),
+      );
+      layersSec.append(lProps);
+      const allVis = DRAWING_LAYERS.every((m) => curLayers[m.key].visible !== false);
+      const bShowAllL = h('button', { type: 'button', class: 'btn', id: 'dw-layers-show-all', disabled: allVis }, T('draw.panel.layersShowAll'));
+      bShowAllL.onclick = () => showAllLayers();
+      const bResetL = h('button', { type: 'button', class: 'btn', id: 'dw-layers-reset' }, T('draw.panel.layersReset'));
+      bResetL.onclick = () => resetLayers();
+      layersSec.append(h('div', { class: 'btn-row', style: { marginTop: '6px' } }, bShowAllL, bResetL));
+      w.append(layersSec);
+
+      // Bilder / Logos auf dem Blatt (ZE-31, Profi)
+      const imgSec = h('div', { class: 'section pro', id: 'dw-images-sec', 'data-help': 'drawingSheetImage' }, h('div', { class: 'section-h' }, T('draw.panel.imagesSec')));
+      const imgInp = h('input', {
+        type: 'file',
+        id: 'dw-img-file',
+        accept: 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg',
+        style: { display: 'none' },
+      });
+      imgInp.addEventListener('change', async () => {
+        const file = imgInp.files && imgInp.files[0];
+        imgInp.value = '';
+        if (!file) return;
+        try { await addSheetImage(file); } catch (err) { UI.toast(err.message || T('draw.img.loadErr'), { kind: 'bad' }); }
+      });
+      const bImgAdd = h('button', { type: 'button', class: 'btn', id: 'dw-img-add', 'data-help': 'drawingSheetImage' });
+      bImgAdd.innerHTML = icon('image') + esc(T('draw.panel.imageAdd'));
+      bImgAdd.onclick = () => imgInp.click();
+      imgSec.append(imgInp, h('div', { class: 'btn-row' }, bImgAdd));
+      const imgList = d.sheetImages || [];
+      if (imgList.length) {
+        const il = h('div', { class: 'mini-list', id: 'dw-images-list', style: { marginTop: '6px' } });
+        for (const si of imgList) {
+          const row = h('div', {
+            class: 'mini-row dw-img-row',
+            'data-img-id': si.id,
+            style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === si.id ? 'var(--accent-soft)' : '' },
+          });
+          const db = h('button', { type: 'button', class: 'btn danger img-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.imageDelTip'), 'aria-label': T('draw.panel.imageDelTip') });
+          db.innerHTML = icon('trash');
+          db.onclick = (e) => { e.stopPropagation(); removeSheetImage(si.id); };
+          row.append(
+            h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, si.name),
+            h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, `${Math.round(si.w)}×${Math.round(si.h)}`),
+            db,
+          );
+          row.onclick = () => { selDim = si.id; render(); Panels.renderRight(); };
+          il.append(row);
+        }
+        imgSec.append(il);
+      } else {
+        imgSec.append(h('div', { class: 'mini-row', style: { fontSize: '11.5px', color: 'var(--muted)', marginTop: '4px' } }, T('draw.panel.imageEmpty')));
+      }
+      w.append(imgSec);
     }
     // Detailansichten (ZE-03)
     const detSec = h('div', { class: 'section', 'data-help': 'drawingDetail' }, h('div', { class: 'section-h' }, T('draw.panel.detailsSec')));
@@ -14232,11 +14933,35 @@ const Drawing = (() => {
       const isHoleTblSel = selDim === '__holetable__';
       const isRevTblSel = selDim === '__rev__';
       const selFreeTbl = (d.freeTables || []).find((x) => x.id === selDim) || null;
+      const selImg = (d.sheetImages || []).find((x) => x.id === selDim) || null;
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const hasNonDimSel = selDet || isSec || selBrk || selAux || selNote || selBalloon || selDatum || selGdt || selSurface || selWeld || selEdgeSym || selPlacedSym || isBomSel || isHoleTblSel || isRevTblSel || selFreeTbl || selCtr;
+      const hasNonDimSel = selDet || isSec || selBrk || selAux || selNote || selBalloon || selDatum || selGdt || selSurface || selWeld || selEdgeSym || selPlacedSym || isBomSel || isHoleTblSel || isRevTblSel || selFreeTbl || selImg || selCtr;
       const selDimInfo = !hasNonDimSel ? findDimById(selDim, d, layout) : null;
       const selResolved = selDimInfo ? selDimInfo.dim : (!hasNonDimSel && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : selSurface ? T('draw.panel.selSurface', { val: selSurface.value ? `${selSurface.param} ${selSurface.value}` : selSurface.param }) : selWeld ? T('draw.panel.selWeld', { type: (WELD_TYPES.find((w) => w.key === selWeld.type)?.label) || selWeld.type }) : selEdgeSym ? T('draw.panel.selEdgeSym', { state: selEdgeSym.maxVal || selEdgeSym.state }) : selPlacedSym ? T('draw.panel.selPlacedSym', { name: symLibMeta(selPlacedSym.key).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selSecObj ? sectionTitle(selSecObj) : selBrk ? T('draw.panel.selBreak') : selAux ? T('draw.panel.selAux', { lbl: selAux.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : selDatum ? T('draw.panel.selDatum', { lbl: selDatum.label }) : selGdt ? T('draw.panel.selGdtFrame', { sym: gdtSymMeta(selGdt.symbol).label }) : selSurface ? T('draw.panel.selSurface', { val: selSurface.value ? `${selSurface.param} ${selSurface.value}` : selSurface.param }) : selWeld ? T('draw.panel.selWeld', { type: (WELD_TYPES.find((w) => w.key === selWeld.type)?.label) || selWeld.type }) : selEdgeSym ? T('draw.panel.selEdgeSym', { state: selEdgeSym.maxVal || selEdgeSym.state }) : selPlacedSym ? T('draw.panel.selPlacedSym', { name: symLibMeta(selPlacedSym.key).label }) : isBomSel ? T('menu.draw.bomTable') : isHoleTblSel ? T('draw.panel.selHoleTable') : isRevTblSel ? T('draw.panel.selRevTable') : selFreeTbl ? (selFreeTbl.title || T('draw.panel.selFreeTable')) : selImg ? (selImg.name || T('draw.panel.selImage')) : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      if (selImg) {
+        const posRow = h('div', { class: 'fields' });
+        posRow.append(
+          UI.numField({ id: 'dw-img-x', label: T('draw.img.posX'), unit: 'mm', len: false, value: selImg.x, onCommit: (v) => updateSheetImage(selImg.id, { x: v }) }),
+          UI.numField({ id: 'dw-img-y', label: T('draw.img.posY'), unit: 'mm', len: false, value: selImg.y, onCommit: (v) => updateSheetImage(selImg.id, { y: v }) }),
+        );
+        const sizeRow = h('div', { class: 'fields' });
+        sizeRow.append(
+          UI.numField({ id: 'dw-img-w', label: T('draw.img.width'), unit: 'mm', len: false, min: 4, value: selImg.w, onCommit: (v) => updateSheetImage(selImg.id, { w: v }) }),
+          UI.numField({ id: 'dw-img-h', label: T('draw.img.height'), unit: 'mm', len: false, min: 4, value: selImg.h, onCommit: (v) => updateSheetImage(selImg.id, { h: v }) }),
+        );
+        const aspChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-img-aspect', checked: selImg.keepAspect !== false }), T('draw.img.keepAspect'));
+        aspChk.querySelector('input').onchange = (e) => updateSheetImage(selImg.id, { keepAspect: e.target.checked });
+        const opPct = Math.round((selImg.opacity ?? 1) * 100);
+        const opVal = h('b', { class: 'mono', id: 'dw-img-op-val' }, opPct + ' %');
+        const opRng = h('input', { type: 'range', id: 'dw-img-opacity', min: '10', max: '100', step: '5', value: String(opPct), style: { flex: '1' } });
+        opRng.addEventListener('input', () => { opVal.textContent = opRng.value + ' %'; });
+        opRng.addEventListener('change', () => updateSheetImage(selImg.id, { opacity: Number(opRng.value) / 100 }));
+        const opFld = h('div', { class: 'field' }, h('div', { class: 'mini-row' }, h('label', { for: 'dw-img-opacity', class: 'grow' }, T('draw.img.opacity')), opVal), opRng);
+        const brdChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-img-border', checked: !!selImg.border }), T('draw.img.border'));
+        brdChk.querySelector('input').onchange = (e) => updateSheetImage(selImg.id, { border: e.target.checked });
+        selSec.append(posRow, sizeRow, aspChk, opFld, brdChk);
+      }
       if (selBrk) {
         selSec.append(
           UI.selectField({
@@ -15373,6 +16098,12 @@ const Drawing = (() => {
     normThreads: () => normThreadsActive(),
     materialHatch: () => materialHatchActive(),
     threads: () => docThreads(),
+    LINE_GROUPS, LINE_WIDTHS, LINE_TYPES, DRAWING_LAYERS,
+    lineGroup: () => normLineGroup(dwg().lineGroup),
+    layers: () => sheetLayers(),
+    setLineGroup, setLayer, setLayerVisible, toggleLayer, showAllLayers, resetLayers, layersMenu,
+    sheetImages: () => (dwg().sheetImages || []).map((x) => ({ ...x })),
+    addSheetImage, updateSheetImage, removeSheetImage, pickSheetImage,
     get sectionMode() { return sectionMode; },
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
