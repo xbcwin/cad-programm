@@ -98,7 +98,11 @@ const Panels = (() => {
       routeBtn.onclick = () => { closeFlyout(); Features.route3d(); };
       const helixBtn = h('button', { type: 'button', class: 'btn small', id: 'add-helix', 'data-help': 'helix' }); helixBtn.innerHTML = icon('helix') + esc(ViewPrefs.simple ? T('tool.fly.springSimple') : T('tool.fly.helix'));
       helixBtn.onclick = () => { closeFlyout(); Features.helix(); };
-      row.append(holeBtn, boxHole, routeBtn, helixBtn); el.append(row);
+      const bossBtn = h('button', { type: 'button', class: 'btn small', id: 'add-boss', 'data-help': 'boss' }); bossBtn.innerHTML = icon('boss') + esc(T('tool.fly.boss'));
+      bossBtn.onclick = () => { closeFlyout(); Features.startBoss(); };
+      const lipBtn = h('button', { type: 'button', class: 'btn small', id: 'add-lip-groove', 'data-help': 'lipGroove' }); lipBtn.innerHTML = icon('lipGroove') + esc(T('tool.fly.lipGroove'));
+      lipBtn.onclick = () => { closeFlyout(); Features.startLipGroove(); };
+      row.append(holeBtn, boxHole, routeBtn, helixBtn, bossBtn, lipBtn); el.append(row);
       el.append(h('div', { class: 'foot' }, T('tool.fly.bodiesFoot')));
     } else if (kind === 'drone') {
       el.classList.add('drone');
@@ -502,8 +506,8 @@ const Panels = (() => {
           ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(it.kind === 'sketch3d' ? [{ icon: 'edit', label: T('sk3.editBtn'), id: 'tm-sk3-edit', run: () => Sketch.edit3d(it.id) }, { icon: 'sweep', label: T('ctx.alongPath'), id: 'tm-sk3-sweep', run: () => Features.sweepFromSketch3d(it.id) }] : []),
-          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
-          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
+          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && it.kind !== 'boss' && it.kind !== 'lipGroove' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
+          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -1284,8 +1288,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && x.kind !== 'boss' && x.kind !== 'lipGroove' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -1426,7 +1430,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'folgt 3D-Skizze': 'läuft als Profil entlang dieser 3D-Skizze', '3D-Skizze fängt an': '3D-Skizze hängt an einer Ecke hiervon', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'folgt 3D-Skizze': 'läuft als Profil entlang dieser 3D-Skizze', '3D-Skizze fängt an': '3D-Skizze hängt an einer Ecke hiervon', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'Schraubdom auf': 'trägt einen Schraubdom auf', 'Lippe an': 'bekommt hiervon eine Stecklippe', 'Nut in': 'bekommt hiervon eine Nut', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? T('panel.item.depDatum', { name: x.datum }) : x.axis ? T('panel.item.depAxis', { name: x.axis }) : x.point ? T('panel.item.depPoint', { name: x.point }) : x.csys ? T('panel.item.depCsys', { name: x.csys }) : T('panel.item.depChild', { name: nm(x.from), what: back[x.what] || T('panel.item.depDefault') }), x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -1436,7 +1440,7 @@ const Panels = (() => {
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
     const isRef = it.kind === 'ref';
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
-    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss';
+    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'boss' || it.kind === 'lipGroove';
     if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
     // Maße aus „Meine Teile“ (lokale Parameter je eingesetztem Teil)
@@ -2011,6 +2015,12 @@ const Panels = (() => {
     } else if (it.kind === 'emboss') {
       sec.firstChild.textContent = T('kind.emboss');
       Features.renderEmboss(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'boss') {
+      sec.firstChild.textContent = T('kind.boss');
+      Features.renderBoss(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'lipGroove') {
+      sec.firstChild.textContent = T('kind.lipGroove');
+      Features.renderLipGroove(it, sec, setP); w.append(sec);
     } else if (it.kind === 'mirrorStep') {
       sec.firstChild.textContent = T('kind.mirrorStep');
       Features.renderMirrorStep(it, sec, setP); w.append(sec);
@@ -2493,6 +2503,30 @@ const Panels = (() => {
       Features.syncPatternMarkers();
       return;
     }
+    if (items.length === 1 && items[0].item.kind === 'boss') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('kind.boss')));
+      b('cursor', T('ctx.bossPickFace'), () => Features.pickBossFace(it.id), 'accent', T('ctx.bossTip')).dataset.help = 'boss';
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'lipGroove') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('kind.lipGroove')));
+      b('cursor', T('ctx.lipPickEdge'), () => Features.pickLipGrooveEdge(it.id), 'accent', T('ctx.lipGrooveTip')).dataset.help = 'lipGroove';
+      b('replace', T('ctx.lipSwap'), () => Features.swapLipGroove(it.id), '', T('ctx.lipGrooveTip')).dataset.help = 'lipGroove';
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
     const face = Actions.selectedFace();
     // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
     const valLbl = (txt, val, unit, tip) => {
@@ -2517,6 +2551,10 @@ const Panels = (() => {
       b('chainEdges', T('ctx.chain'), () => Select.chain(), '', T('ctx.chainTip'), true);
       b('similar', T('ctx.byKind'), (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', T('ctx.byKindTip'), true);
       if (App.edges.length === 1 && one) {
+        if (App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !x.op).length >= 2) {
+          const lg = b('lipGroove', T('ctx.lipGroove'), () => Features.lipGroove({ edge: App.edges[0] }), '', T('ctx.lipGrooveTip'));
+          lg.id = 'ctx-edge-lip-groove'; lg.dataset.help = 'lipGroove';
+        }
         if (one.t === 'LINE') {
           const eb = b('originPlanes', T('ctx.planeAngle'), () => Datums.startEdgeAnglePick(30, App.edges[0]), 'pro', T('ctx.planeAngleTip'));
           eb.dataset.help = 'datumEdgeAngle';
@@ -2542,6 +2580,12 @@ const Panels = (() => {
       }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
+        const bs = b('boss', T('ctx.boss'), () => Features.boss(face), '', T('ctx.bossTip'));
+        bs.id = 'ctx-boss'; bs.dataset.help = 'boss';
+        if (App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !x.op).length >= 2) {
+          const lg = b('lipGroove', T('ctx.lipGroove'), () => Features.lipGroove({ face }), '', T('ctx.lipGrooveTip'));
+          lg.id = 'ctx-lip-groove'; lg.dataset.help = 'lipGroove';
+        }
         b('emboss', T('ctx.emboss'), () => Features.startEmboss(face), '', T('ctx.embossTip')).dataset.help = 'emboss';
         b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
         b('rib', T('kind.rib'), () => Features.startRib(face), 'pro', T('ctx.ribFaceTip')).dataset.help = 'rib';
@@ -2582,6 +2626,12 @@ const Panels = (() => {
       }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
+        const bs = b('boss', T('ctx.boss'), () => Features.boss(face), '', T('ctx.bossTip'));
+        bs.id = 'ctx-boss'; bs.dataset.help = 'boss';
+        if (App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !x.op).length >= 2) {
+          const lg = b('lipGroove', T('ctx.lipGroove'), () => Features.lipGroove({ face }), '', T('ctx.lipGrooveTip'));
+          lg.id = 'ctx-lip-groove'; lg.dataset.help = 'lipGroove';
+        }
         b('emboss', T('ctx.emboss'), () => Features.startEmboss(face), '', T('ctx.embossTip')).dataset.help = 'emboss';
       }
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
@@ -2644,6 +2694,10 @@ const Panels = (() => {
       if (!hasRef && items.every((x) => App.doc.items.includes(x.item))) b('deleteBody', T('ctx.deleteBody'), () => Features.deleteBody(items.map((x) => x.item.id)), '', T('ctx.deleteBodyTip'), true).dataset.help = 'deleteBody';
       if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
       if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) {
+        if (items.every((x) => x.item.role !== 'hole' && App.doc.items.includes(x.item))) {
+          const lg = b('lipGroove', T('ctx.lipGroove'), () => Features.lipGroove({ targets: items.map((x) => x.item.id) }), '', T('ctx.lipGrooveTip'));
+          lg.id = 'ctx-two-lip-groove'; lg.dataset.help = 'lipGroove';
+        }
         const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(), '', T('ctx.fixedJointTip'));
         fj.id = 'ctx-fixed-joint'; fj.dataset.help = 'fixedJoint';
         b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);

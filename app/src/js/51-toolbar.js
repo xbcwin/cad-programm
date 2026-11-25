@@ -31,6 +31,8 @@ const Toolbar = (() => {
       { id: 'mirror', group: T('dlg.tb.grpEdit'), domId: 't-mirror', icon: 'mirror', label: T('ctx.mirror'), tip: T('dlg.tb.mirrorTip'), cls: 'minor', help: 'mirror', run: () => Features.pattern('mirror') },
       { id: 'split', group: T('dlg.tb.grpEdit'), domId: 't-split', icon: 'split', label: T('ctx.split'), tip: T('dlg.tb.splitTip'), cls: 'minor', help: 'split', run: () => Features.split() },
       { id: 'rib', group: T('dlg.tb.grpEdit'), domId: 't-rib', icon: 'rib', label: T('kind.rib'), tip: T('dlg.tb.ribTip'), cls: 'minor', help: 'rib', run: () => Features.startRib() },
+      { id: 'boss', group: T('dlg.tb.grpEdit'), domId: 't-boss', icon: 'boss', label: T('kind.boss'), tip: T('dlg.tb.bossTip'), cls: 'minor', help: 'boss', run: () => Features.startBoss() },
+      { id: 'lipGroove', group: T('dlg.tb.grpEdit'), domId: 't-lipGroove', icon: 'lipGroove', label: T('kind.lipGroove'), tip: T('dlg.tb.lipGrooveTip'), cls: 'minor', help: 'lipGroove', run: () => Features.startLipGroove() },
       { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
       { id: 'helix', group: T('dlg.tb.grpEdit'), domId: 't-helix', icon: 'helix', label: T('kind.helix'), tip: T('dlg.tb.helixTip'), cls: 'minor', help: 'helix', run: () => Features.helix() },
       // Konstruktion

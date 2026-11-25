@@ -279,5 +279,15 @@
     "was": "Speichert eine räumliche 3D-Skizze aus Linien und 3-Punkt-Bögen samt Punkt-Bindungen an Körperecken und Längenmaßen.",
     "wozu": "Dient als dreidimensionaler Pfad für „Entlang Pfad“, um Rohre, Bügel, Gestelle oder Kabelkanäle frei durch den Raum zu führen.",
     "achtung": "Hilfslinien werden in der 3D-Ansicht gestrichelt gezeichnet und beim Ziehen „Entlang Pfad“ übersprungen."
+  },
+  "boss": {
+    "was": "Erzeugt auf einer ebenen Körperfläche einen zylindrischen Schraubdom mit Mittelbohrung und 0–6 Stützrippen.",
+    "wozu": "Typisches Befestigungselement für Gehäuse, Deckel und Halterungen, das sich direkt mit dem Zielkörper vereinigt.",
+    "achtung": "Der Lochdurchmesser muss kleiner als der Außendurchmesser bleiben, damit noch genug Wandstärke stehen bleibt."
+  },
+  "lipGroove": {
+    "was": "Erzeugt entlang der Trennfläche zweier Gehäusehälften eine umlaufende Stecklippe an der einen und die passende Nut mit Spiel in der anderen Hälfte.",
+    "wozu": "Zentriert Ober- und Unterteil eines Gehäuses sauber gegeneinander und verhindert seitliches Verrutschen.",
+    "achtung": "Für den 3D-Druck sind 0,15 bis 0,3 mm Spiel sinnvoll, damit die Lippe ohne Durchdringung leicht in die Nut passt."
   }
 }

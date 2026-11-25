@@ -198,7 +198,7 @@ const Clipboard = (() => {
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return true;
     if (it.kind === 'scale' || it.kind === 'deleteBody') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
-    if (it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return true;
+    if (it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'boss' || it.kind === 'lipGroove') return true;
     if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) return true;
     return false;
   }
@@ -208,8 +208,12 @@ const Clipboard = (() => {
     if (!it) return out;
     if (it.op && it.op.target) out.push(it.op.target);
     if (it.p) {
-      if ((it.kind === 'transform' && !it.p.copy) || it.kind === 'scale' || (it.kind === 'thicken' && it.p.mode !== 'new') || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss') {
+      if ((it.kind === 'transform' && !it.p.copy) || it.kind === 'scale' || (it.kind === 'thicken' && it.p.mode !== 'new') || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'boss') {
         if (it.p.target) out.push(it.p.target);
+      }
+      if (it.kind === 'lipGroove') {
+        if (it.p.lipTarget) out.push(it.p.lipTarget);
+        if (it.p.grooveTarget) out.push(it.p.grooveTarget);
       }
       if (it.kind === 'deleteBody') {
         const tgs = Array.isArray(it.p.targets) ? it.p.targets : (it.p.target ? [it.p.target] : []);

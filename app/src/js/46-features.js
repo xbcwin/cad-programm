@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody' || x.kind === 'sketch3d')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -1335,7 +1335,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2699,6 +2699,516 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: T('helix.hint') }));
   }
 
+  // ---------- Schraubdom (KP-24) ----------
+  function basisFromNormal(fnArr) {
+    const fn = new THREE.Vector3(...fnArr).normalize();
+    const ref = Math.abs(fn.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+    const bx = new THREE.Vector3().crossVectors(ref, fn).normalize();
+    const by = new THREE.Vector3().crossVectors(fn, bx).normalize();
+    return { bx, by, fn };
+  }
+  function faceSigWithTid(face) {
+    if (!face || !face.info || !Array.isArray(face.info.c)) return null;
+    return {
+      c: face.info.c.map((v) => round(v, 6)),
+      n: Array.isArray(face.info.n) ? face.info.n.map((v) => round(v, 6)) : null,
+      t: face.info.t || null,
+      ...(face.info.tid ? { tid: face.info.tid } : {}),
+    };
+  }
+  function bossUVFromWorldPoint(targetId, faceInfo, worldPt) {
+    if (!worldPt || !faceInfo || !Array.isArray(faceInfo.c) || !Array.isArray(faceInfo.n)) return { u: 0, v: 0 };
+    const inv = Model.worldMatrix(App.doc, targetId).invert();
+    const ptW = Array.isArray(worldPt) ? new THREE.Vector3(...worldPt) : new THREE.Vector3(worldPt.x, worldPt.y, worldPt.z);
+    const ptL = ptW.applyMatrix4(inv);
+    const fc = new THREE.Vector3(...faceInfo.c);
+    const { bx, by } = basisFromNormal(faceInfo.n);
+    const d = ptL.sub(fc);
+    return { u: round(d.dot(bx), 2) || 0, v: round(d.dot(by), 2) || 0 };
+  }
+  function boss(face, opts = {}) {
+    if (App.ctx) { UI.toast('Schraubdome gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = opts.target ? resolveTopTarget(opts.target) : (face ? resolveTopTarget(face.id) : null);
+    const sig = opts.face || faceSigWithTid(face);
+    const faceType = (face && face.info && face.info.t) || (sig && sig.t);
+    if (!tgt || tgt.role === 'hole' || !sig || (faceType && faceType !== 'PLANE')) {
+      UI.toast('Klick zuerst eine ebene Fläche eines Körpers an.', { icon: 'info' });
+      return null;
+    }
+    let u = opts.u, v = opts.v;
+    if (u == null && v == null) {
+      const pt = opts.point || (face && face.point) || null;
+      if (pt && face && face.info) {
+        const uv = bossUVFromWorldPoint(tgt.id, face.info, pt);
+        u = uv.u; v = uv.v;
+      } else {
+        u = 0; v = 0;
+      }
+    }
+    const p = {
+      target: tgt.id,
+      face: sig,
+      outerD: opts.outerD ?? 8,
+      holeD: opts.holeD ?? 3,
+      height: opts.height ?? 10,
+      holeDepth: opts.holeDepth ?? 0,
+      ribs: opts.ribs ?? 4,
+      ribT: opts.ribT ?? 1.5,
+      ribL: opts.ribL ?? 4,
+      ribH: opts.ribH ?? 0,
+      ribAngle: opts.ribAngle ?? 0,
+      u: u ?? 0,
+      v: v ?? 0,
+    };
+    let step;
+    App.change('Schraubdom angelegt', (doc) => {
+      step = Model.newItem('boss', p, { name: opts.name || T('kind.boss'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Schraubdom angelegt. Rechts stellst du Durchmesser, Höhe, Loch und Rippen ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function pickBossFace(stepId = null, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && fi.t === 'PLANE' && Array.isArray(fi.c)) {
+          stopPick();
+          const faceObj = { id: hit.id, idx: hit.faceIdx, info: fi, point: hit.point || null };
+          if (!stepId) {
+            boss(faceObj, opts);
+            return;
+          }
+          const sig = faceSigWithTid(faceObj);
+          const uv = hit.point ? bossUVFromWorldPoint(tgt.id, fi, hit.point) : { u: 0, v: 0 };
+          App.change('Fläche für Schraubdom gewählt', (doc) => {
+            const f = Model.find(doc, stepId); if (!f) return false;
+            f.item.p.target = tgt.id;
+            f.item.p.face = sig;
+            f.item.p.u = uv.u;
+            f.item.p.v = uv.v;
+          });
+          UI.toast('Fläche für Schraubdom aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine ebene Fläche eines Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? hit.id : null, fi && fi.t === 'PLANE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Schraubdom platzieren:</b> Klick auf eine ebene Fläche eines Körpers. <b>Esc</b> bricht ab.');
+  }
+  function startBoss(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Schraubdome gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const f = face && face.info ? face : Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') return boss(f, opts);
+    if (!App.doc.items.some((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !isModifierStep(x))) {
+      UI.toast('Für einen Schraubdom braucht es zuerst einen Körper im Projekt.', { icon: 'info' });
+      return null;
+    }
+    pickBossFace(null, opts);
+    return true;
+  }
+  function renderBoss(it, sec, setP) {
+    const p = it.p || {};
+    const V = Model.vars(App.doc).v;
+    const fl = h('div', { class: 'fields' });
+    fl.append(
+      UI.numField({ id: 'boss-outerD', label: 'Außendurchmesser', value: p.outerD ?? 8, min: 0.5, unit: 'mm', onCommit: (v) => setP('outerD', v) }),
+      UI.numField({ id: 'boss-holeD', label: 'Lochdurchmesser', value: p.holeD ?? 3, min: 0, unit: 'mm', onCommit: (v) => setP('holeD', v) }),
+      UI.numField({ id: 'boss-height', label: 'Höhe', value: p.height ?? 10, min: 0.2, unit: 'mm', onCommit: (v) => setP('height', v) }),
+      UI.numField({ id: 'boss-ribs', label: 'Rippen (0–6)', value: p.ribs ?? 4, unit: '', int: true, min: 0, max: 6, step: 1, onCommit: (v) => setP('ribs', Math.max(0, Math.min(6, Math.round(Number(v) || 0)))) }),
+    );
+    const ribsVal = Model.num(p.ribs, V, 4);
+    if (ribsVal > 0 || typeof p.ribs === 'string') {
+      fl.append(
+        UI.numField({ id: 'boss-ribT', label: 'Rippendicke', value: p.ribT ?? 1.5, min: 0.2, unit: 'mm', onCommit: (v) => setP('ribT', v) }),
+        UI.numField({ id: 'boss-ribL', label: 'Rippenlänge', value: p.ribL ?? 4, min: 0.2, unit: 'mm', onCommit: (v) => setP('ribL', v) }),
+        UI.numField({ id: 'boss-ribH', label: 'Rippenhöhe (0 = 75 %)', value: p.ribH ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('ribH', v) }),
+        UI.numField({ id: 'boss-ribAngle', label: 'Rippenwinkel', value: p.ribAngle ?? 0, unit: '°', onCommit: (v) => setP('ribAngle', v) }),
+      );
+    }
+    fl.append(
+      UI.numField({ id: 'boss-u', label: 'Versatz U', value: p.u ?? 0, unit: 'mm', onCommit: (v) => setP('u', v) }),
+      UI.numField({ id: 'boss-v', label: 'Versatz V', value: p.v ?? 0, unit: 'mm', onCommit: (v) => setP('v', v) }),
+      UI.numField({ id: 'boss-holeDepth', label: 'Lochtiefe (0 = ganz durch)', value: p.holeDepth ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('holeDepth', v) }),
+    );
+    sec.append(fl);
+    const outerV = Model.num(p.outerD, V, 8), holeV = Model.num(p.holeD, V, 3);
+    const wall = Math.max(0, (outerV - holeV) / 2);
+    sec.append(h('div', { class: 'mini-row', id: 'boss-info' },
+      h('span', { class: 'grow' }, 'Wandstärke am Dom'),
+      h('b', { class: 'mono' }, Units.fmtLenU(wall, 2))));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'boss-pick' }); pb.innerHTML = icon('cursor') + esc(T('ctx.bossPickFace'));
+    pb.onclick = () => pickBossFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'boss-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Setzt einen zylindrischen Schraubdom mit 0–6 Stützrippen und optionaler Bohrung auf die gewählte Fläche und vereinigt ihn mit dem Körper.' }));
+  }
+
+  // ---------- Lippe und Nut (KP-25) ----------
+  function findOpposingPartingFaces(idA, idB) {
+    const rIdA = App.mergedInto(idA) || idA, rIdB = App.mergedInto(idB) || idB;
+    const fA = App.results.get(rIdA)?.data?.faces || [];
+    const fB = App.results.get(rIdB)?.data?.faces || [];
+    const wA = Model.worldMatrix(App.doc, rIdA), wB = Model.worldMatrix(App.doc, rIdB);
+    let best = null;
+    for (let ia = 0; ia < fA.length; ia++) {
+      const fa = fA[ia];
+      if (!fa || fa.t !== 'PLANE' || !Array.isArray(fa.n) || !Array.isArray(fa.c)) continue;
+      const nAW = new THREE.Vector3(...fa.n).transformDirection(wA).normalize();
+      const cAW = new THREE.Vector3(...fa.c).applyMatrix4(wA);
+      for (let ib = 0; ib < fB.length; ib++) {
+        const fb = fB[ib];
+        if (!fb || fb.t !== 'PLANE' || !Array.isArray(fb.n) || !Array.isArray(fb.c)) continue;
+        const nBW = new THREE.Vector3(...fb.n).transformDirection(wB).normalize();
+        if (nAW.dot(nBW) > -0.99) continue;
+        const cBW = new THREE.Vector3(...fb.c).applyMatrix4(wB);
+        const planeDist = Math.abs(cBW.clone().sub(cAW).dot(nAW));
+        const centerDist = cBW.distanceTo(cAW);
+        const score = planeDist * 100 + centerDist;
+        if (!best || score < best.score) {
+          best = {
+            score,
+            dist: planeDist,
+            faceA: { id: idA, idx: ia, info: fa },
+            faceB: { id: idB, idx: ib, info: fb },
+          };
+        }
+      }
+    }
+    return best;
+  }
+  function findRimFaceForEdge(itemId, edgeIdx, partnerId = null) {
+    const rId = App.mergedInto(itemId) || itemId;
+    const data = App.results.get(rId)?.data;
+    if (!data || !Array.isArray(data.edges) || !Array.isArray(data.faces)) return null;
+    const eg = data.edges[edgeIdx];
+    if (!eg || !Array.isArray(eg.a) || !Array.isArray(eg.b)) return null;
+    const mPt = Array.isArray(eg.m) ? eg.m : [(eg.a[0] + eg.b[0]) / 2, (eg.a[1] + eg.b[1]) / 2, (eg.a[2] + eg.b[2]) / 2];
+    const pts = [new THREE.Vector3(...eg.a), new THREE.Vector3(...eg.b), new THREE.Vector3(...mPt)];
+    const cands = [];
+    for (let i = 0; i < data.faces.length; i++) {
+      const fi = data.faces[i];
+      if (!fi || fi.t !== 'PLANE' || !Array.isArray(fi.c) || !Array.isArray(fi.n)) continue;
+      const fc = new THREE.Vector3(...fi.c), fn = new THREE.Vector3(...fi.n).normalize();
+      if (pts.every((q) => Math.abs(q.clone().sub(fc).dot(fn)) < 0.05)) cands.push({ idx: i, info: fi });
+    }
+    if (!cands.length) return null;
+    if (cands.length === 1 || !partnerId) return { id: itemId, idx: cands[0].idx, info: cands[0].info };
+    const W = Model.worldMatrix(App.doc, rId);
+    const prId = App.mergedInto(partnerId) || partnerId;
+    const pb = Actions.worldBox(prId);
+    const pCenter = pb && !pb.isEmpty() ? pb.getCenter(new THREE.Vector3()) : null;
+    const opp = findOpposingPartingFaces(itemId, partnerId);
+    if (opp) {
+      const matchOpp = cands.find((c) => c.idx === opp.faceA.idx);
+      if (matchOpp) return { id: itemId, idx: matchOpp.idx, info: matchOpp.info };
+    }
+    let best = cands[0], bestDot = -Infinity;
+    for (const c of cands) {
+      const nW = new THREE.Vector3(...c.info.n).transformDirection(W).normalize();
+      const cW = new THREE.Vector3(...c.info.c).applyMatrix4(W);
+      const d = pCenter ? pCenter.clone().sub(cW).normalize().dot(nW) : 0;
+      if (d > bestDot) { bestDot = d; best = c; }
+    }
+    return { id: itemId, idx: best.idx, info: best.info };
+  }
+  function findPartnerBody(lipId, faceInfo = null) {
+    const cands = App.doc.items.filter((x) => x.id !== lipId && !x.hidden && !x.suppressed && x.role !== 'hole' && !isModifierStep(x) && !(x.op && x.op.target));
+    if (!cands.length) return null;
+    const W = Model.worldMatrix(App.doc, App.mergedInto(lipId) || lipId);
+    const fcW = faceInfo && Array.isArray(faceInfo.c) ? new THREE.Vector3(...faceInfo.c).applyMatrix4(W) : null;
+    const fnW = faceInfo && Array.isArray(faceInfo.n) ? new THREE.Vector3(...faceInfo.n).transformDirection(W).normalize() : null;
+    let best = null;
+    for (const c of cands) {
+      const opp = findOpposingPartingFaces(lipId, c.id);
+      if (opp) {
+        let sc = opp.dist;
+        if (fnW && new THREE.Vector3(...opp.faceA.info.n).transformDirection(W).dot(fnW) > 0.99) sc -= 1000;
+        if (!best || sc < best.score) best = { item: c, score: sc };
+      } else if (fcW && fnW) {
+        const cb = Actions.worldBox(c.id);
+        if (cb && !cb.isEmpty()) {
+          const cc = cb.getCenter(new THREE.Vector3());
+          const d = cc.clone().sub(fcW).dot(fnW);
+          const sc = (d > 0 ? 100 : 500) + cc.distanceTo(fcW);
+          if (!best || sc < best.score) best = { item: c, score: sc };
+        }
+      }
+    }
+    return best ? best.item : cands[0];
+  }
+  function edgeSigFor(itemId, edgeIdx) {
+    const rId = App.mergedInto(itemId) || itemId;
+    const eg = App.results.get(rId)?.data?.edges?.[edgeIdx];
+    if (!eg || !Array.isArray(eg.a) || !Array.isArray(eg.b)) return null;
+    return {
+      a: eg.a.map((v) => round(v, 5)),
+      b: eg.b.map((v) => round(v, 5)),
+      m: (Array.isArray(eg.m) ? eg.m : [(eg.a[0] + eg.b[0]) / 2, (eg.a[1] + eg.b[1]) / 2, (eg.a[2] + eg.b[2]) / 2]).map((v) => round(v, 5)),
+      ...(eg.tid ? { tid: eg.tid } : {}),
+    };
+  }
+  function lipGroove(opts = {}) {
+    if (App.ctx) { UI.toast('Lippe und Nut gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    let lipTgt = opts.lipTarget ? resolveTopTarget(opts.lipTarget) : null;
+    let grvTgt = opts.grooveTarget ? resolveTopTarget(opts.grooveTarget) : null;
+    if (!lipTgt && !grvTgt && Array.isArray(opts.targets) && opts.targets.length >= 2) {
+      lipTgt = resolveTopTarget(opts.targets[0]);
+      grvTgt = resolveTopTarget(opts.targets[1]);
+    }
+    let faceObj = opts.face && opts.face.info ? opts.face : null;
+    let edgeSig = opts.edge && Array.isArray(opts.edge.a) ? opts.edge : null;
+
+    if (opts.edge && opts.edge.id != null && opts.edge.edgeIdx != null) {
+      if (!lipTgt) lipTgt = resolveTopTarget(opts.edge.id);
+      if (!grvTgt && lipTgt) grvTgt = findPartnerBody(lipTgt.id, null);
+      if (lipTgt && !faceObj) faceObj = findRimFaceForEdge(lipTgt.id, opts.edge.edgeIdx, grvTgt ? grvTgt.id : null);
+      if (!edgeSig) edgeSig = edgeSigFor(opts.edge.id, opts.edge.edgeIdx);
+    }
+    if (faceObj && !lipTgt) lipTgt = resolveTopTarget(faceObj.id);
+    if (lipTgt && !grvTgt) grvTgt = findPartnerBody(lipTgt.id, faceObj ? faceObj.info : null);
+    if (lipTgt && grvTgt && !faceObj) {
+      const opp = findOpposingPartingFaces(lipTgt.id, grvTgt.id);
+      if (opp) faceObj = opp.faceA;
+    }
+
+    if (!lipTgt || !grvTgt || lipTgt.id === grvTgt.id || lipTgt.role === 'hole' || grvTgt.role === 'hole') {
+      UI.toast('Für Lippe und Nut werden zwei verschiedene Gehäusehälften benötigt.', { icon: 'info' });
+      return null;
+    }
+    const faceSig = faceObj ? faceSigWithTid(faceObj) : (opts.face && Array.isArray(opts.face.c) ? opts.face : null);
+    if (!faceSig && !edgeSig) {
+      UI.toast('Keine ebene Trennfläche zwischen den beiden Hälften gefunden.', { icon: 'info' });
+      return null;
+    }
+    const p = {
+      lipTarget: lipTgt.id,
+      grooveTarget: grvTgt.id,
+      face: faceSig,
+      edge: edgeSig,
+      side: opts.side === 'outer' ? 'outer' : 'inner',
+      height: opts.height ?? 2,
+      width: opts.width ?? 1.2,
+      clearance: opts.clearance ?? 0.2,
+    };
+    let step;
+    App.change('Lippe und Nut angelegt', (doc) => {
+      step = Model.newItem('lipGroove', p, { name: opts.name || T('kind.lipGroove'), color: lipTgt.color, role: 'solid', mat: lipTgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Lippe und Nut angelegt. Rechts stellst du Seite, Höhe, Breite und Spiel ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function pickLipGrooveEdge(stepId = null, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      if (hit && hit.id !== stepId) {
+        const tgt = resolveTopTarget(hit.id);
+        if (tgt && tgt.role !== 'hole') {
+          if (hit.edgeIdx != null) {
+            stopPick();
+            if (!stepId) {
+              lipGroove({ ...opts, edge: { id: hit.id, edgeIdx: hit.edgeIdx } });
+              return;
+            }
+            const cur = Model.find(App.doc, stepId)?.item;
+            let grvId = cur && cur.p ? cur.p.grooveTarget : null;
+            if (!grvId || grvId === tgt.id) {
+              const partner = findPartnerBody(tgt.id, null);
+              grvId = partner ? partner.id : grvId;
+            }
+            const faceObj = findRimFaceForEdge(tgt.id, hit.edgeIdx, grvId);
+            const sig = faceObj ? faceSigWithTid(faceObj) : null;
+            const esig = edgeSigFor(hit.id, hit.edgeIdx);
+            App.change('Trennkante für Lippe und Nut gewählt', (doc) => {
+              const f = Model.find(doc, stepId); if (!f) return false;
+              f.item.p.lipTarget = tgt.id;
+              if (grvId && grvId !== tgt.id) f.item.p.grooveTarget = grvId;
+              f.item.p.face = sig;
+              f.item.p.edge = esig;
+            });
+            UI.toast('Trennkante aktualisiert.', { icon: 'check' });
+            return;
+          }
+          if (hit.faceIdx >= 0) {
+            const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+            if (fi && fi.t === 'PLANE' && Array.isArray(fi.c)) {
+              stopPick();
+              const faceObj = { id: hit.id, idx: hit.faceIdx, info: fi };
+              if (!stepId) {
+                lipGroove({ ...opts, face: faceObj });
+                return;
+              }
+              const sig = faceSigWithTid(faceObj);
+              let grvId = Model.find(App.doc, stepId)?.item?.p?.grooveTarget;
+              if (!grvId || grvId === tgt.id) {
+                const partner = findPartnerBody(tgt.id, fi);
+                grvId = partner ? partner.id : grvId;
+              }
+              App.change('Trennfläche für Lippe und Nut gewählt', (doc) => {
+                const f = Model.find(doc, stepId); if (!f) return false;
+                f.item.p.lipTarget = tgt.id;
+                if (grvId && grvId !== tgt.id) f.item.p.grooveTarget = grvId;
+                f.item.p.face = sig;
+                f.item.p.edge = null;
+              });
+              UI.toast('Trennfläche aktualisiert.', { icon: 'check' });
+              return;
+            }
+          }
+        }
+      }
+      UI.toast('Bitte klick auf eine Trennkante oder ebene Trennfläche einer Gehäusehälfte.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      if (hit && hit.edgeIdx != null) {
+        Viewer.highlightEdge(hit.id, hit.edgeIdx);
+        Viewer.highlightFace('hover', null, null);
+      } else {
+        Viewer.highlightEdge(null, null);
+        const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+        Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? hit.id : null, fi && fi.t === 'PLANE' ? hit.faceIdx : null);
+      }
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Trennkante wählen:</b> Klick auf die Randkante oder ebene Trennfläche der Lippen-Hälfte. <b>Esc</b> bricht ab.');
+  }
+  function startLipGroove(opts = {}) {
+    if (App.ctx) { UI.toast('Lippe und Nut gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const solids = App.doc.items.filter((x) => !x.hidden && !x.suppressed && x.role !== 'hole' && !isModifierStep(x) && !(x.op && x.op.target));
+    if (solids.length < 2) {
+      UI.toast('Für Lippe und Nut braucht es mindestens zwei Gehäusehälften im Projekt.', { icon: 'info' });
+      return null;
+    }
+    if (App.edges.length === 1) return lipGroove({ ...opts, edge: App.edges[0] });
+    const face = Actions.selectedFace();
+    if (face && face.info && face.info.t === 'PLANE') return lipGroove({ ...opts, face });
+    if (App.sel.length === 2) return lipGroove({ ...opts, targets: App.sel.slice(0, 2) });
+    pickLipGrooveEdge(null, opts);
+    return true;
+  }
+  function swapLipGroove(stepId) {
+    const f = Model.find(App.doc, stepId);
+    if (!f || f.item.kind !== 'lipGroove') return false;
+    const p = f.item.p || {};
+    if (!p.lipTarget || !p.grooveTarget) return false;
+    const newLip = p.grooveTarget, newGrv = p.lipTarget;
+    const opp = findOpposingPartingFaces(newLip, newGrv);
+    const newFace = opp ? faceSigWithTid(opp.faceA) : p.face;
+    App.change('Lippe und Nut getauscht', (doc) => {
+      const T = Model.find(doc, stepId)?.item; if (!T) return false;
+      T.p.lipTarget = newLip;
+      T.p.grooveTarget = newGrv;
+      T.p.face = newFace;
+      T.p.edge = null;
+    });
+    UI.toast('Lippe und Nut zwischen den beiden Hälften getauscht.', { icon: 'check' });
+    return true;
+  }
+  function renderLipGroove(it, sec, setP) {
+    const p = it.p || {};
+    const idx = App.doc.items.indexOf(it);
+    const targets = activeTargetsBefore(it).filter((x) => x.role !== 'hole');
+    const makeOpts = (curId) => {
+      const opts = targets.map((x) => [x.id, Model.label(x)]);
+      if (curId && !targets.some((x) => x.id === curId)) {
+        const f = Model.find(App.doc, curId);
+        opts.unshift([curId, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+      }
+      return opts;
+    };
+    const fl = h('div', { class: 'fields' });
+    const lipOpts = makeOpts(p.lipTarget);
+    const grvOpts = makeOpts(p.grooveTarget);
+    if (lipOpts.length) {
+      fl.append(UI.selectField({
+        id: 'lg-lip-target', label: 'Lippe an', value: p.lipTarget || '', options: lipOpts,
+        onChange: (v) => App.change('Lippen-Körper gewählt', (doc) => {
+          const T = Model.find(doc, it.id).item;
+          T.p.lipTarget = v;
+          if (T.p.grooveTarget && v !== T.p.grooveTarget) {
+            const opp = findOpposingPartingFaces(v, T.p.grooveTarget);
+            if (opp) { T.p.face = faceSigWithTid(opp.faceA); T.p.edge = null; }
+          }
+        }),
+      }));
+    }
+    if (grvOpts.length) {
+      fl.append(UI.selectField({
+        id: 'lg-groove-target', label: 'Nut in', value: p.grooveTarget || '', options: grvOpts,
+        onChange: (v) => App.change('Nut-Körper gewählt', (doc) => {
+          const T = Model.find(doc, it.id).item;
+          T.p.grooveTarget = v;
+          if (T.p.lipTarget && v !== T.p.lipTarget) {
+            const opp = findOpposingPartingFaces(T.p.lipTarget, v);
+            if (opp) { T.p.face = faceSigWithTid(opp.faceA); T.p.edge = null; }
+          }
+        }),
+      }));
+    }
+    fl.append(
+      UI.selectField({ id: 'lg-side', label: 'Lage der Lippe', value: p.side === 'outer' ? 'outer' : 'inner', options: [['inner', 'Innen (Feder innen)'], ['outer', 'Außen (Feder außen)']], onChange: (v) => setP('side', v) }),
+      UI.numField({ id: 'lg-height', label: 'Lippenhöhe', value: p.height ?? 2, min: 0.1, unit: 'mm', onCommit: (v) => setP('height', v) }),
+      UI.numField({ id: 'lg-width', label: 'Lippenbreite', value: p.width ?? 1.2, min: 0.1, unit: 'mm', onCommit: (v) => setP('width', v) }),
+      UI.numField({ id: 'lg-clearance', label: 'Spiel', value: p.clearance ?? 0.2, min: 0, step: 0.05, unit: 'mm', onCommit: (v) => setP('clearance', v) }),
+    );
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'lg-pick' }); pb.innerHTML = icon('cursor') + esc(T('ctx.lipPickEdge'));
+    pb.onclick = () => pickLipGrooveEdge(it.id);
+    const sb = h('button', { type: 'button', class: 'btn small', id: 'lg-swap' }); sb.innerHTML = icon('replace') + esc(T('ctx.lipSwap'));
+    sb.onclick = () => swapLipGroove(it.id);
+    row.append(pb, sb);
+    if (p.lipTarget && Model.find(App.doc, p.lipTarget)) {
+      const gl = h('button', { type: 'button', class: 'btn small', id: 'lg-goto-lip' }); gl.innerHTML = icon('pointer') + 'Lippen-Hälfte';
+      gl.onclick = () => App.select([p.lipTarget]);
+      row.append(gl);
+    }
+    if (p.grooveTarget && Model.find(App.doc, p.grooveTarget)) {
+      const gg = h('button', { type: 'button', class: 'btn small', id: 'lg-goto-groove' }); gg.innerHTML = icon('pointer') + 'Nut-Hälfte';
+      gg.onclick = () => App.select([p.grooveTarget]);
+      row.append(gg);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Erzeugt eine umlaufende Stecklippe an der ersten Hälfte und schneidet die passende Nut samt <b>Spiel</b> (Luft) in die zweite Gehäusehälfte.' }));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove };
 })();

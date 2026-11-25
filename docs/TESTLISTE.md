@@ -2403,6 +2403,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Meldung überlebt Hauptthread-Hänger**: `UI.toast()` (`scheduleToast`) zählt die Restlaufzeit in `500 ms`-Scheiben herunter, sodass ein einzelner `900 ms`-Hänger eine `600 ms`-Meldung nicht vorzeitig löscht und sie danach sauber nach Ablauf der Restzeit verschwindet (`t_explosion_regeln`, `t_f11250121`).
 - [ ] **Von Hand**: Im Browser bei langsamer Darstellung die Fokus-Vorschau öffnen, ein Teil wählen und drehen sowie mit einem einzelnen Teil die Explosions-Meldung auslösen und prüfen, dass Vorschau und Hinweis zuverlässig sichtbar bleiben.
 
+## Schraubdom, Lippe und Nut (Auto [A-120], KP-24, KP-25)
+- [x] **Einfach & Profi**: `#add-boss` und `#add-lip-groove` sind im Körper-Flyout in beiden Stufen sichtbar; an einer ebenen Fläche erscheint `#ctx-boss` in der Kontextleiste.
+- [x] **Schraubdom (KP-24)**: Dom `d = 8/3`, Höhe `10`, `4` Rippen auf Platte `40×40×4` (`6400` mm³) vereinigt sauber ohne Fehler (`> 6850` mm³), Bohrung `Ø 3,0 mm`, Rippenzahl `0 / 4 / 6` ändert das Volumen, Unterdrücken und Rückgängig stellen `6400` mm³ wieder her.
+- [x] **Lippe und Nut (KP-25)**: Zwei ausgehöhlte Gehäusehälften (`60×40×15`, Wand `3` mm) mit Lippe (`2,5` mm hoch, `1,2` mm breit) und `0,2` mm Spiel (innen, außen und getauscht) erzeugen Lippe und Nut fehlerfrei mit `0` Durchdringung (`clashes`); Rückgängig stellt Ausgangsvolumen wieder her.
+- [x] **Hilfetexte, DE/EN-Schlüssel & Befehlssuche**: `HELP.boss` und `HELP.lipGroove` samt `texte-de`/`texte-en`-Schlüsselgleichheit und Suche nach `schraubdom` / `lippe` grün.
+- [ ] **Von Hand**: Im Browser an einer runden und einer geschrägten Gehäuseschale eine Trennkante per Klick wählen und das Spiel der Lippe im Schnitt (Taste C) prüfen.
+
 ## Fehler melden
 
 ```

@@ -1468,5 +1468,15 @@
     "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
     "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
     "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
+  },
+  "boss": {
+    "tip": "Schraubdom mit 0–6 Stützrippen und Loch auf eine Fläche setzen",
+    "hilfe": "Wähle eine ebene Fläche eines Körpers und klicke auf „Schraubdom“. Tracery baut einen zylindrischen Dom mit Außen- und Lochdurchmesser, Höhe und bis zu 6 strahlenförmigen Rippen rundherum – alles wird direkt mit dem Körper vereinigt.",
+    "tipp": "Rechts kannst du Versatz U/V, Rippenlänge, Rippendicke und Winkel genau einstellen oder Formeln nutzen."
+  },
+  "lipGroove": {
+    "tip": "Lippe und Nut mit Spiel für zwei Gehäusehälften anlegen",
+    "hilfe": "Wähle eine Trennkante, eine ebene Trennfläche oder beide Gehäusehälften und starte „Lippe und Nut“. Die eine Hälfte bekommt eine umlaufende Stecklippe (innen oder außen), die andere Hälfte die passende Nut samt einstellbarem Spiel.",
+    "tipp": "Mit 0,2 mm Spiel lassen sich gedruckte Gehäusehälften ohne Klemmen zusammenstecken und zentrieren."
   }
 }

@@ -700,6 +700,8 @@ const IC = {
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
   conic: '<path d="M4 17l8-11 8 11" stroke-dasharray="2.2 2" opacity=".5"/><path d="M4 17Q12 6 20 17" /><circle cx="12" cy="11.5" r="1.7" fill="currentColor"/><circle cx="4" cy="17" r="1.4" fill="currentColor"/><circle cx="20" cy="17" r="1.4" fill="currentColor"/>',
   bridge: '<path d="M3 16h3.5M17.5 8H21" opacity=".55"/><path d="M6.5 16C11 16 13 8 17.5 8" /><circle cx="6.5" cy="16" r="1.6" fill="currentColor"/><circle cx="17.5" cy="8" r="1.6" fill="currentColor"/>',
+  boss: '<ellipse cx="12" cy="7" rx="5" ry="2.2"/><ellipse cx="12" cy="7" rx="2.2" ry="1"/><path d="M7 7v9c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2V7"/><path d="M3 18l4-3v3H3zM21 18l-4-3v3h4z" fill="currentColor" opacity=".25"/><path d="M3 18h4M17 18h4M3 18l4-3M21 18l-4-3" />',
+  lipGroove: '<path d="M4 4h16v5h-6v3h-4V9H4z" fill="currentColor" opacity=".2"/><path d="M4 4h16v5h-6v3h-4V9H4zM4 20h16v-5h-5v-2.5h-6V15H4z" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2196,6 +2198,16 @@ const HELP = {
   "tip": "Skizzen-Blöcke: Gruppen aus Elementen speichern, mehrfach einsetzen und zentral ändern (Profi)",
   "hilfe": "Wähle in der Skizze ein oder mehrere zusammengehörige Elemente (z. B. ein Lochbild oder Profil) und speichere sie mit „Als Block speichern“ als wiederverwendbaren Block. Mit dem Block-Werkzeug setzt du beliebig viele Einsätze ab und kannst jeden Einsatz verschieben oder drehen.",
   "tipp": "Wenn du einen Block über „Block bearbeiten“ öffnest und zum Beispiel einen Kreisradius änderst, passen sich sofort alle Einsätze dieses Blocks in der Skizze automatisch an. Mit „Block auflösen“ wird ein einzelner Einsatz wieder zu normalen Skizzen-Elementen."
+ },
+ "boss": {
+  "tip": "Schraubdom mit 0–6 Stützrippen und Loch auf eine Fläche setzen",
+  "hilfe": "Wähle eine ebene Fläche eines Körpers und klicke auf „Schraubdom“. Tracery baut einen zylindrischen Dom mit Außen- und Lochdurchmesser, Höhe und bis zu 6 strahlenförmigen Rippen rundherum – alles wird direkt mit dem Körper vereinigt.",
+  "tipp": "Rechts kannst du Versatz U/V, Rippenlänge, Rippendicke und Winkel genau einstellen oder Formeln nutzen."
+ },
+ "lipGroove": {
+  "tip": "Lippe und Nut mit Spiel für zwei Gehäusehälften anlegen",
+  "hilfe": "Wähle eine Trennkante, eine ebene Trennfläche oder beide Gehäusehälften und starte „Lippe und Nut“. Die eine Hälfte bekommt eine umlaufende Stecklippe (innen oder außen), die andere Hälfte die passende Nut samt einstellbarem Spiel.",
+  "tipp": "Mit 0,2 mm Spiel lassen sich gedruckte Gehäusehälften ohne Klemmen zusammenstecken und zentrieren."
  }
 };
 
