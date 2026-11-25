@@ -864,6 +864,94 @@ function sprocketMetrics(p = {}) {
     z, pitch, d1, ri, dp, da, df, thickness, bore, hubH, hubD, totalH,
   };
 }
+// Griffe, Drehknöpfe, Rändelschrauben & Gerätefüße (BI-14)
+function pullHandleMetrics(p = {}) {
+  const style = p.style === 'bridge' || p.style === 'tHandle' ? p.style : 'bow';
+  const gripD = Math.max(4, Math.min(40, Number(p.gripD ?? 12) || 12));
+  const holeDist = Math.max(Math.max(20, gripD * 2.6), Number(p.holeDist ?? 96) || 96);
+  const height = Math.max(Math.max(16, gripD * 2.1), Number(p.height ?? 35) || 35);
+  const rawHoleD = p.holeD === 0 || p.holeD === '0' ? 0 : Number(p.holeD ?? 4.2);
+  const holeD = isFinite(rawHoleD) && rawHoleD > 0 ? Math.min(gripD - 1.2, rawHoleD) : 0;
+  const rawHoleDepth = p.holeDepth === 0 || p.holeDepth === '0' ? 0 : Number(p.holeDepth ?? 12);
+  const holeDepth = isFinite(rawHoleDepth) && rawHoleDepth > 0 ? Math.min(height - 3, rawHoleDepth) : 0;
+  const flangeL = style === 'bridge' ? round(Math.max(gripD * 1.6, holeD + 6), 3) : 0;
+  const flangeH = style === 'bridge' ? round(Math.max(3, Math.min(6, height * 0.2)), 3) : 0;
+  const outerW = style === 'bridge' ? round(holeDist + flangeL, 3) : round(holeDist + gripD, 3);
+  const outerD = round(gripD, 3);
+  const outerH = round(height, 3);
+  return { style, holeDist, height, gripD, holeD, holeDepth, flangeL, flangeH, outerW, outerD, outerH };
+}
+function rotaryKnobMetrics(p = {}) {
+  const style = p.style === 'smooth' || p.style === 'pointer' ? p.style : 'fluted';
+  const D = Math.max(8, Math.min(120, Number(p.D ?? 24) || 24));
+  const h = Math.max(6, Math.min(80, Number(p.h ?? 16) || 16));
+  const rawShaftD = p.shaftD === 0 || p.shaftD === '0' ? 0 : Number(p.shaftD ?? 6);
+  const shaftD = isFinite(rawShaftD) && rawShaftD > 0 ? Math.min(D - 3, rawShaftD) : 0;
+  const shaftType = p.shaftType === 'round' || p.shaftType === 'setscrew' ? p.shaftType : 'dShaft';
+  const hasDepth = p.boreDepth != null && p.boreDepth !== '' && isFinite(Number(p.boreDepth)) && Number(p.boreDepth) > 0;
+  const boreDepth = hasDepth ? Math.min(h - 1.5, Number(p.boreDepth)) : round(h * 0.72, 2);
+  const flutes = Math.max(4, Math.min(24, Math.round(Number(p.flutes ?? 12) || 12)));
+  const pf = printFitMm(p.printFit);
+  const shaftEff = shaftD > 0 ? round(shaftD + pf, 3) : 0;
+  const noseLen = style === 'pointer' ? round(D * 0.22, 3) : 0;
+  const outerR = round(D / 2, 3);
+  const outerXPos = round(outerR + noseLen, 3);
+  return { style, D, h, shaftD, shaftEff, shaftType, boreDepth, flutes, pf, noseLen, outerR, outerXPos };
+}
+const THUMBSCREW_DIN = [
+  { id: 'M3', d: 3, d1: 12, kHigh: 7.5, k1: 2.5, d2: 6, kLow: 2.5 },
+  { id: 'M4', d: 4, d1: 16, kHigh: 9.5, k1: 3.5, d2: 8, kLow: 3.5 },
+  { id: 'M5', d: 5, d1: 20, kHigh: 11.5, k1: 4.0, d2: 10, kLow: 4.0 },
+  { id: 'M6', d: 6, d1: 24, kHigh: 15.0, k1: 5.0, d2: 12, kLow: 5.0 },
+  { id: 'M8', d: 8, d1: 30, kHigh: 18.0, k1: 6.0, d2: 16, kLow: 6.0 },
+  { id: 'M10', d: 10, d1: 36, kHigh: 23.0, k1: 8.0, d2: 20, kLow: 8.0 },
+];
+const THUMBSCREW_BY_ID = new Map(THUMBSCREW_DIN.map((x) => [x.id, x]));
+const THUMBSCREW_SIZES = THUMBSCREW_DIN.map((x) => x.id);
+function thumbScrewEntry(size) {
+  const s = String(size || 'M4').trim().toUpperCase();
+  return THUMBSCREW_BY_ID.get(s) || THUMBSCREW_BY_ID.get('M4') || THUMBSCREW_DIN[1];
+}
+function thumbScrewMetrics(p = {}) {
+  const e = thumbScrewEntry(p.size);
+  const form = p.form === 'low' ? 'low' : 'high';
+  const knurl = p.knurl === 'diamond' || p.knurl === 'none' ? p.knurl : 'straight';
+  const length = Math.max(3, Number(p.length ?? 12) || 12);
+  const rawHD = Number(p.headD);
+  const headD = p.headD != null && p.headD !== '' && isFinite(rawHD) && rawHD > e.d + 2 ? rawHD : e.d1;
+  const rawHH = Number(p.headH);
+  const defHH = form === 'low' ? e.kLow : e.kHigh;
+  const headH = p.headH != null && p.headH !== '' && isFinite(rawHH) && rawHH > 1.5 ? rawHH : defHH;
+  const shoulderD = form === 'high' ? Math.min(headD - 2, e.d2) : 0;
+  const knurlH = form === 'high' ? Math.min(headH - 1.5, e.k1 * (headH / e.kHigh)) : headH;
+  const shoulderH = form === 'high' ? round(Math.max(0, headH - knurlH), 3) : 0;
+  const norm = form === 'low' ? 'DIN 653' : 'DIN 464';
+  return { size: e.id, d: e.d, form, norm, length, headD, headH, shoulderD, shoulderH, knurlH, knurl };
+}
+function deviceFootMetrics(p = {}) {
+  const style = p.style === 'cylindrical' || p.style === 'bumper' ? p.style : 'conical';
+  const D = Math.max(6, Math.min(120, Number(p.D ?? 20) || 20));
+  const h = Math.max(3, Math.min(80, Number(p.h ?? 10) || 10));
+  const topD = style === 'conical' ? round(D * 0.8, 2) : D;
+  const screw = p.screw === 'M3' || p.screw === 'M5' || p.screw === 'none' ? p.screw : 'M4';
+  const pf = printFitMm(p.printFit);
+  const holeFb = { M3: 3.4, M4: 4.5, M5: 5.5 };
+  const cbFb = { M3: 6.2, M4: 7.8, M5: 9.4 };
+  let holeD = 0, cbD = 0, cbH = 0;
+  if (screw !== 'none') {
+    const se = typeof screwEntry === 'function' ? screwEntry(screw) : null;
+    const baseHole = (se && se.durchgang_mittel_mm) || holeFb[screw] || 4.5;
+    const baseHead = (se && se.zylinderkopf && se.zylinderkopf.kopf_d_mm ? se.zylinderkopf.kopf_d_mm + 0.6 : cbFb[screw]) || 7.8;
+    const maxHole = Math.max(1.5, Math.min(D, topD) - 3);
+    holeD = round(Math.min(maxHole, baseHole + pf), 3);
+    const maxCb = Math.min(D, topD) - 1.6;
+    if (h >= 4.5 && maxCb >= holeD + 1.2) {
+      cbD = round(Math.min(maxCb, baseHead + pf), 3);
+      cbH = round(Math.min(h - 2.0, Math.max(2.2, h * 0.48)), 3);
+    }
+  }
+  return { style, D, topD, h, screw, holeD, cbD, cbH, pf };
+}
 
 // ---------- Typenschild, QR-Code & Barcode (BI-22, BI-23, lokal ohne Netz) ----------
 const QR_EXP = new Uint8Array(512);
@@ -1766,6 +1854,47 @@ const LIB = [
       { k: 'mountHoles', label: 'Boden-Schraublöcher', type: 'select', options: [['nein', 'Nein'], ['ja', 'Ja (2× M3)']], def: 'nein' },
       { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
     ] },
+  { lib: 'pullHandle', label: 'Griff (Bügelgriff)', role: 'solid', icon: 'pullHandle', mat: 'Alu 6061',
+    kw: 'griff buegelgriff bügelgriff brueckengriff brückengriff t-griff handgriff schrankgriff gehaeusegriff bi-14',
+    desc: 'Parametrischer Bügel-, Brücken- oder T-Griff mit wählbarem Lochabstand', params: [
+      { k: 'style', label: 'Bauform', type: 'select', options: [['bow', 'Bügelgriff (rund)'], ['bridge', 'Brückengriff (Flansch)'], ['tHandle', 'T-Griff']], def: 'bow' },
+      { k: 'holeDist', label: 'Lochabstand / Breite', type: 'num', def: 96 },
+      { k: 'height', label: 'Höhe', type: 'num', def: 35 },
+      { k: 'gripD', label: 'Griffstärke Ø', type: 'num', def: 12 },
+      { k: 'holeD', label: 'Befestigungsloch Ø (0 = ohne)', type: 'num', def: 4.2 },
+      { k: 'holeDepth', label: 'Lochtiefe', type: 'num', def: 12 },
+    ] },
+  { lib: 'rotaryKnob', label: 'Drehknopf', role: 'solid', icon: 'rotaryKnob', mat: 'ABS',
+    kw: 'drehknopf knopf regler poti potentiometer encoder drehregler geraeteknopf zeigerknopf bi-14',
+    desc: 'Drehknopf für Potis und Drehgeber (geriffelt, glatt oder Zeigerknopf) mit Wellenaufnahme', params: [
+      { k: 'style', label: 'Bauform', type: 'select', options: [['fluted', 'Geriffelt (Griffmulden)'], ['smooth', 'Glatt mit Zeigerstrich'], ['pointer', 'Zeigerknopf']], def: 'fluted' },
+      { k: 'D', label: 'Durchmesser (D)', type: 'num', def: 24 },
+      { k: 'h', label: 'Höhe (h)', type: 'num', def: 16 },
+      { k: 'shaftD', label: 'Wellen-Ø (0 = ohne)', type: 'num', def: 6 },
+      { k: 'shaftType', label: 'Wellenaufnahme', type: 'select', options: [['dShaft', 'D-Welle (abgeflacht)'], ['round', 'Rundbohrung'], ['setscrew', 'Mit Madenschraube']], def: 'dShaft' },
+      { k: 'boreDepth', label: 'Lochtiefe', type: 'num', def: null, auto: true },
+      { k: 'flutes', label: 'Griffmulden', type: 'num', def: 12, int: true, unit: '' },
+      { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
+    ] },
+  { lib: 'thumbScrew', label: 'Rändelschraube', role: 'solid', icon: 'thumbScrew', mat: 'V2A Edelstahl',
+    kw: 'raendelschraube rändelschraube daumenschraube fingerschraube din 464 din 653 schraube griffschraube bi-14',
+    desc: 'Rändelschraube nach DIN 464 (hohe Form) oder DIN 653 (flache Form) für M3–M10', params: [
+      { k: 'size', label: 'Gewinde', type: 'select', options: THUMBSCREW_SIZES, def: 'M4' },
+      { k: 'form', label: 'Bauform', type: 'select', options: [['high', 'DIN 464 (hohe Form)'], ['low', 'DIN 653 (flache Form)']], def: 'high' },
+      { k: 'length', label: 'Schaftlänge', type: 'num', def: 12 },
+      { k: 'headD', label: 'Kopf-Ø', type: 'num', def: null, auto: true },
+      { k: 'headH', label: 'Kopfhöhe', type: 'num', def: null, auto: true },
+      { k: 'knurl', label: 'Rändel', type: 'select', options: [['straight', 'Geraderändel'], ['diamond', 'Kreuzrändel'], ['none', 'Glatt (ohne Rändel)']], def: 'straight' },
+    ] },
+  { lib: 'deviceFoot', label: 'Gerätefuß', role: 'solid', icon: 'deviceFoot', mat: 'TPU 95A',
+    kw: 'geraetefuss gerätefuß fuss fuß gummifuss gummifuß standfuss standfuß puffer gehaeusefuss bi-14',
+    desc: 'Gerätefuß oder Gummipuffer (konisch, zylindrisch, Halbkugel) mit optionalem Schraubenloch', params: [
+      { k: 'style', label: 'Form', type: 'select', options: [['conical', 'Konisch (Standard)'], ['cylindrical', 'Zylindrisch'], ['bumper', 'Halbkugel-Puffer']], def: 'conical' },
+      { k: 'D', label: 'Stand-Ø (D)', type: 'num', def: 20 },
+      { k: 'h', label: 'Höhe (h)', type: 'num', def: 10 },
+      { k: 'screw', label: 'Schraubenloch', type: 'select', options: [['M4', 'M4 (versenkt)'], ['M3', 'M3 (versenkt)'], ['M5', 'M5 (versenkt)'], ['none', 'Ohne Loch (Klebepuffer)']], def: 'M4' },
+      { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
+    ] },
   { lib: 'nameplate', label: 'Typenschild', role: 'solid', icon: 'nameplate',
     kw: 'typenschild schild beschriftung text gravur praegung prägung platte plakette seriennummer bi-22',
     desc: 'Parametrisches Typenschild mit bis zu drei Textzeilen als erhabene oder vertiefte Schrift', params: [
@@ -2365,6 +2494,79 @@ function portCutoutMetrics(p = {}) {
     v: Number(p.v) || 0,
     angle: Number(p.angle) || 0,
     depth: Math.max(0, Number(p.depth) || 0),
+  };
+}
+
+// Vorlagen & Kennwerte für Magnet-Taschen (BI-15)
+const MAGNET_PRESETS = [
+  { id: 'd5x2', group: 'round', label: 'Scheibe Ø 5 × 2 mm', shape: 'round', d: 5, h: 2 },
+  { id: 'd6x2', group: 'round', label: 'Scheibe Ø 6 × 2 mm', shape: 'round', d: 6, h: 2 },
+  { id: 'd6x3', group: 'round', label: 'Scheibe Ø 6 × 3 mm', shape: 'round', d: 6, h: 3 },
+  { id: 'd8x2', group: 'round', label: 'Scheibe Ø 8 × 2 mm', shape: 'round', d: 8, h: 2 },
+  { id: 'd8x3', group: 'round', label: 'Scheibe Ø 8 × 3 mm', shape: 'round', d: 8, h: 3 },
+  { id: 'd10x2', group: 'round', label: 'Scheibe Ø 10 × 2 mm', shape: 'round', d: 10, h: 2 },
+  { id: 'd10x3', group: 'round', label: 'Scheibe Ø 10 × 3 mm (Standard)', shape: 'round', d: 10, h: 3 },
+  { id: 'd10x5', group: 'round', label: 'Scheibe Ø 10 × 5 mm', shape: 'round', d: 10, h: 5 },
+  { id: 'd12x3', group: 'round', label: 'Scheibe Ø 12 × 3 mm', shape: 'round', d: 12, h: 3 },
+  { id: 'd15x3', group: 'round', label: 'Scheibe Ø 15 × 3 mm', shape: 'round', d: 15, h: 3 },
+  { id: 'd20x3', group: 'round', label: 'Scheibe Ø 20 × 3 mm', shape: 'round', d: 20, h: 3 },
+  { id: 'r10x5x2', group: 'rect', label: 'Quader 10 × 5 × 2 mm', shape: 'rect', w: 10, l: 5, h: 2 },
+  { id: 'r15x5x3', group: 'rect', label: 'Quader 15 × 5 × 3 mm', shape: 'rect', w: 15, l: 5, h: 3 },
+  { id: 'r20x10x2', group: 'rect', label: 'Quader 20 × 10 × 2 mm', shape: 'rect', w: 20, l: 10, h: 2 },
+  { id: 'r20x10x3', group: 'rect', label: 'Quader 20 × 10 × 3 mm', shape: 'rect', w: 20, l: 10, h: 3 },
+  { id: 'r30x10x3', group: 'rect', label: 'Quader 30 × 10 × 3 mm', shape: 'rect', w: 30, l: 10, h: 3 },
+  { id: 'customRound', group: 'custom', label: 'Eigene Größe (rund)', shape: 'round', d: 10, h: 3 },
+  { id: 'customRect', group: 'custom', label: 'Eigene Größe (eckig)', shape: 'rect', w: 20, l: 10, h: 3 },
+];
+const MAGNET_PRESET_GROUPS = [
+  ['round', 'Scheibenmagnete (rund)'],
+  ['rect', 'Quadermagnete (eckig)'],
+  ['custom', 'Eigene Größe'],
+];
+const MAGNET_PRESET_BY_ID = new Map(MAGNET_PRESETS.map((x) => [x.id, x]));
+const MAGNET_PRESET_GROUPED_OPTIONS = MAGNET_PRESET_GROUPS.map(([gid, gname]) => ({
+  group: gname,
+  options: MAGNET_PRESETS.filter((x) => x.group === gid).map((x) => [x.id, x.label]),
+}));
+function magnetPresetEntry(id) {
+  return MAGNET_PRESET_BY_ID.get(String(id || '')) || MAGNET_PRESET_BY_ID.get('d10x3') || MAGNET_PRESETS[0];
+}
+function magnetPocketMetrics(p = {}) {
+  const e = magnetPresetEntry(p.preset);
+  const shape = e.shape === 'rect' ? 'rect' : 'round';
+  const hasClear = p.clear != null && p.clear !== '' && isFinite(Number(p.clear));
+  const clear = hasClear ? Math.max(0, Number(p.clear)) : 0.1;
+  const pf = printFitMm(p.printFit);
+  const rawH = Number(p.h);
+  const h = Math.max(0.3, p.h != null && p.h !== '' && isFinite(rawH) && rawH > 0 ? rawH : e.h);
+  let d = 0, w = 0, l = 0, r = 0;
+  if (shape === 'round') {
+    const rawD = Number(p.d);
+    d = Math.max(1, p.d != null && p.d !== '' && isFinite(rawD) && rawD > 0 ? rawD : e.d);
+  } else {
+    const rawW = Number(p.w), rawL = Number(p.l), rawR = Number(p.r);
+    w = Math.max(1, p.w != null && p.w !== '' && isFinite(rawW) && rawW > 0 ? rawW : e.w);
+    l = Math.max(1, p.l != null && p.l !== '' && isFinite(rawL) && rawL > 0 ? rawL : e.l);
+    r = Math.max(0, p.r != null && p.r !== '' && isFinite(rawR) ? Math.min(rawR, Math.min(w, l) / 2 - 0.05) : 0);
+  }
+  const embed = Math.max(0, Number(p.embed) || 0);
+  const chamfer = embed > 1e-4 ? 0 : Math.max(0, Number(p.chamfer) || 0);
+  const dEff = shape === 'round' ? round(d + 2 * clear + pf, 3) : 0;
+  const wEff = shape === 'rect' ? round(w + 2 * clear + pf, 3) : 0;
+  const lEff = shape === 'rect' ? round(l + 2 * clear + pf, 3) : 0;
+  const depthEff = round(h + clear, 3);
+  return {
+    id: e.id,
+    label: e.label,
+    group: e.group,
+    shape,
+    d, w, l, h, r,
+    clear, pf,
+    dEff, wEff, lEff, depthEff,
+    chamfer, embed,
+    u: Number(p.u) || 0,
+    v: Number(p.v) || 0,
+    angle: Number(p.angle) || 0,
   };
 }
 
