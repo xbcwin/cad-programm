@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody' || x.kind === 'sketch3d')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -1335,7 +1335,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2062,11 +2062,175 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: 'Projiziert die Skizze (Text, Logo oder Form) auf die gewählte Fläche – auch auf Zylinder, Kugel oder Kegel – und überträgt sie erhaben oder vertieft.' }));
   }
+  // ---------- Kurve auf Fläche projizieren & Fläche teilen (KP-35) ----------
+  function pickAnyBodyFace(hintHtml, onPick) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const tgt = hit ? resolveTopTarget(hit.id) : null;
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+        stopPick();
+        onPick({ id: tgt.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null }, tgt);
+        return;
+      }
+      UI.toast('Bitte klick auf eine Fläche eines Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi ? hit.id : null, fi ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(hintHtml);
+  }
+  function startSplitFace(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Fläche teilen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig) {
+      if (!ribTargets().length) { UI.toast('Für „Fläche teilen“ braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+      pickAnyBodyFace('<b>Fläche teilen:</b> Klick auf eine Fläche (z. B. Zylindermantel oder Kugel), die geteilt werden soll. <b>Esc</b> bricht ab.', (picked) => { startSplitFace(picked, opts); });
+      return true;
+    }
+    const plane = embossPlaneForFace(face, tgt);
+    Sketch.startSplitFace(face, plane, { ...opts, targetId: tgt.id, faceSig: sig });
+    UI.toast('Zeichne die Kurve oder den Umriss zum Teilen und klick „Fertig“.', { icon: 'info', ms: 4200 });
+    return true;
+  }
+  function splitFace(face, sketch, opts = {}) {
+    if (App.ctx) { UI.toast('Fläche teilen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig || !sketch) return null;
+    const p = {
+      target: tgt.id,
+      face: sig,
+      sketch: deepClone(sketch),
+      side: opts.side === 'back' || opts.side === 'both' ? opts.side : 'front',
+    };
+    let step;
+    App.change('Fläche geteilt', (doc) => {
+      step = Model.newItem('splitFace', p, { name: opts.name || T('kind.splitFace'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      Model.setFromMatrix(step, Model.worldMatrix(doc, tgt.id));
+      insertAtMarker(doc, step);
+    });
+    if (step) App.select([step.id]);
+    return step || null;
+  }
+  function pickSplitFace(stepId) {
+    pickAnyBodyFace('<b>Fläche wählen:</b> Klick auf die Fläche des Körpers, die geteilt werden soll. <b>Esc</b> bricht ab.', (face, tgt) => {
+      const sig = faceSigOf(face);
+      if (!sig) return;
+      App.change('Zielfläche für Fläche teilen gewählt', (doc) => {
+        const f = Model.find(doc, stepId); if (!f) return false;
+        f.item.p.target = tgt.id;
+        f.item.p.face = sig;
+      });
+      UI.toast('Zielfläche aktualisiert.', { icon: 'check' });
+    });
+  }
+  function renderSplitFace(it, sec, setP) {
+    const p = it.p || {};
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'sf-side', label: T('panel.splitFace.side'), value: p.side === 'back' || p.side === 'both' ? p.side : 'front',
+      options: [['front', T('panel.splitFace.front')], ['back', T('panel.splitFace.back')], ['both', T('panel.splitFace.both')]],
+      onChange: (v) => App.change('Projektionsseite geändert', (doc) => { Model.find(doc, it.id).item.p.side = v; }),
+    }));
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'sf-edit-sketch' }); eb.innerHTML = icon('edit') + esc(T('panel.item.editSketch'));
+    eb.onclick = () => Sketch.editItem(it.id);
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'sf-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickSplitFace(it.id);
+    row.append(eb, pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'sf-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.splitFace.hint') }));
+  }
+  // ---------- Kuppel auf ebener Fläche (KP-36) ----------
+  function dome(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Kuppeln gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig || (face.info && face.info.t !== 'PLANE')) {
+      startDome(opts);
+      return null;
+    }
+    const p = {
+      target: tgt.id,
+      face: sig,
+      height: opts.height ?? 5,
+      shape: opts.shape === 'spherical' ? 'spherical' : 'elliptical',
+      flip: !!opts.flip,
+    };
+    let step;
+    App.change('Kuppel angelegt', (doc) => {
+      step = Model.newItem('dome', p, { name: opts.name || T('kind.dome'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.domeAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startDome(opts = {}) {
+    if (App.ctx) { UI.toast('Kuppeln gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für eine Kuppel braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') { dome(f, opts); return true; }
+    pickPlanarBodyFace('<b>Kuppel:</b> Klick auf eine ebene Fläche, auf der die Kuppel entstehen soll. <b>Esc</b> bricht ab.', (picked) => { dome(picked, opts); });
+    return true;
+  }
+  function pickDomeFace(stepId) {
+    pickPlanarStepFace(stepId, 'Fläche für Kuppel gewählt', 'Fläche aktualisiert.');
+  }
+  function renderDome(it, sec, setP) {
+    const p = it.p || {};
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.numField({ id: 'dome-h', label: T('panel.dome.height'), value: p.height ?? 5, min: 0.1, unit: 'mm', onCommit: (v) => setP('height', v) }));
+    fl.append(UI.selectField({
+      id: 'dome-shape', label: T('panel.dome.shape'), value: p.shape === 'spherical' ? 'spherical' : 'elliptical',
+      options: [['elliptical', T('panel.dome.elliptical')], ['spherical', T('panel.dome.spherical')]],
+      onChange: (v) => App.change('Kuppelform geändert', (doc) => { Model.find(doc, it.id).item.p.shape = v; }),
+    }));
+    sec.append(fl);
+    const flpL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'dome-flip', checked: !!p.flip }), T('panel.dome.flip'));
+    flpL.querySelector('input').onchange = (e) => App.change('Kuppel-Richtung geändert', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(flpL);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'dome-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickDomeFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'dome-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.dome.hint') }));
+  }
   // ---------- Schritt spiegeln (KP-14) ----------
   function canMirrorStep(it, parent) {
     if (!it) return false;
     if (it.op && it.op.target) return true;
-    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'dome') return true;
     if (it.kind === 'wrap' && (!it.p || it.p.mode !== 'line')) return true;
     if (it.kind === 'emboss') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
@@ -2114,7 +2278,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'dome' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -3050,5 +3214,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, loftTargets, loftClosed, loftCut, setLoftClosed, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix, loftTargets, loftClosed, loftCut, setLoftClosed, renderLoft };
 })();

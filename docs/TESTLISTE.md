@@ -2423,6 +2423,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zeichnung wartet auf Erstprojektion**: Während `ensureProjections()` erstmals für ein nicht-leeres Modell läuft (`loadingProjPromise && !proj`), unterdrückt `Drawing.render()` das Einhängen eines vorzeitigen leeren `<svg>`, und erst nach Projektionsabschluss erscheint das vollständige Blatt samt Ansichtsgeometrie (`t_a064_zeichnung_detailansicht`, `t_f11250227`).
 - [ ] **Von Hand**: Im Browser bei einem Drehgelenk zuerst den Winkel ändern, im Feld bleiben und direkt „Gelenk lösen“ klicken sowie bei einem größeren Modell beim Wechsel auf „Zeichnung“ ein Werkzeug wählen und prüfen, dass kein leeres Blatt aufblitzt.
 
+## Kurve auf Fläche projizieren, Fläche teilen & Kuppel (Auto [A-124], KP-35, KP-36)
+
+- [x] **Kreis auf Zylindermantel projizieren & teilen (`splitFace`)**: Kreis (r = 5 mm) auf Zylindermantel (Ø30 × 40) projiziert → Flächenzahl steigt exakt von 3 auf 4 (1 Solid, Volumen unverändert, `GeomCheck` 0 Funde), beide Teilflächen sind über `faceColors`/`Viewer.faceIndexOf` getrennt färbbar; Umschalten auf „Beide Seiten“ teilt Vorder- und Rückseite (5 Flächen); im Modus „Einfach“ bleibt `#ctx-split-face` verborgen; Unterdrücken und Zeitleisten-Marker funktionieren sauber.
+- [x] **Kuppel auf ebener Fläche (`dome`)**: 5 mm Kuppel auf Quader-Oberseite (20×20×20) erhöht die Gesamthöhe exakt auf 25 mm (`+5 mm`) als gültiger Einzelkörper (`GeomCheck` 0 Funde); Ändern der Höhe (8 mm), Umschalten auf Kugelkappe (`spherical`) und „Nach innen“ (`flip`), Unterdrücken sowie 5 mm Kuppel auf Zylinder-Oberseite (Ø20 × 20 → Höhe 25 mm) funktionieren; Hilfetexte (`werkzeug-hilfen.json`) und Schritt-Erklärungen (`Explain.local`) sind vollständig.
+- [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel eine geschwungene Kurve mit „Fläche teilen“ projizieren, die abgetrennte Teilfläche farbig markieren und eine nach außen sowie eine nach innen gewölbte Kuppel im 3D-Bild optisch prüfen.
+
 ## Fehler melden
 
 ```

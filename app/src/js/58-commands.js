@@ -245,6 +245,8 @@ const Commands = (() => {
     add('web', 'Steg-Netz aus Skizze (viele Rippen)', 'web', 'steg stegnetz steg-netz rippen rippennetz kreuz gitter schale versteifung skizze', () => Features.startWeb(), { group: 'Bearbeiten' });
     add('wrap-cyl', 'Um Zylinder wickeln (Prägung oder Linie)', 'wrap', 'wickeln zylinder prägen prägung erhaben vertieft gravieren linie kurve mantel abwickeln', () => Features.startWrap(), { group: 'Bearbeiten' });
     add('emboss', 'Prägen auf Fläche (Text / Logo)', 'emboss', 'praegen prägen text logo gravur gravieren erhaben vertieft zylinder kugel flaeche gewölbt emboss deboss', () => { const f = Actions.selectedFace(); if (f) Features.startEmboss(f); else UI.toast('Klick zuerst eine Fläche an (z. B. einen Zylindermantel oder eine Kugel).', { icon: 'info' }); }, { group: 'Bearbeiten' });
+    add('split-face', 'Fläche teilen (Kurve auf Fläche projizieren)', 'splitFace', 'flaeche fläche teilen projizieren kurve kreis linie trennen farbe zylinder kugel kp-35', () => Features.startSplitFace(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('dome', 'Kuppel auf ebener Fläche', 'dome', 'kuppel wölbung dom haube rundung flaeche höhe höhe kugelkappe kp-36', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'PLANE') Features.dome(f); else Features.startDome(); }, { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('reffix', 'Kaputten Bezug neu wählen', 'warn', 'kaputt bezug neu wählen kante fläche warnung gelb rundung fase skizze', () => {
       const selIssue = App.sel.length ? RefFix.issuesOf(App.sel[0])[0] : null;
       const iss = selIssue || RefFix.allIssues()[0];
