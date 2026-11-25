@@ -8098,6 +8098,10 @@ const Joints = (() => {
     };
     parts.append(mkPartRow('Teil 1 (fest)', A), mkPartRow('Teil 2 (angelegt)', B));
     w.append(parts, renderJointControls(j, '', { full: true }));
+    if (!isConstraint(j) && !isLoose(j) && typeof Assembly !== 'undefined' && Assembly.poseSection) {
+      const ps = Assembly.poseSection('joint');
+      if (ps) w.append(ps);
+    }
     body.append(w);
     return true;
   }
@@ -8131,6 +8135,172 @@ const Joints = (() => {
       sec.append(h('div', { class: 'btn-row pro', style: { marginTop: '6px' } }, addBtn));
     }
     return sec;
+  }
+
+  // Mehrere Gelenk-Stellungen auf einmal setzen (für benannte Stellungen, BG-20)
+  function applyStates(doc, stateMap, opts = {}) {
+    doc = doc || App.doc;
+    if (!stateMap || typeof stateMap !== 'object') {
+      return { ok: false, jammed: false, applied: 0, unchanged: 0, locked: 0 };
+    }
+    const movable = list(doc).filter((j) => !isConstraint(j) && !isLoose(j) && top(j.a, doc) && top(j.b, doc));
+    const byB = new Map(movable.map((j) => [j.b, j]));
+    const depthOf = (j) => {
+      let d = 0, cur = j;
+      const seen = new Set([j.id]);
+      while (cur && byB.has(cur.a)) {
+        const prev = byB.get(cur.a);
+        if (!prev || seen.has(prev.id)) break;
+        seen.add(prev.id);
+        cur = prev;
+        d++;
+      }
+      return d;
+    };
+    const ordered = movable
+      .map((j, idx) => ({ j, idx, d: depthOf(j) }))
+      .sort((a, b) => (a.d - b.d) || (a.idx - b.idx))
+      .map((x) => x.j);
+
+    const extractPatch = (j, raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const k = kindOf(j);
+      const patch = {};
+      if (Number.isFinite(Number(raw.ang))) patch.ang = Number(raw.ang);
+      if ((k === 'cyl' || k === 'slot') && Number.isFinite(Number(raw.pos))) patch.pos = Number(raw.pos);
+      if (k === 'planar') {
+        if (Number.isFinite(Number(raw.u))) patch.u = Number(raw.u);
+        if (Number.isFinite(Number(raw.v))) patch.v = Number(raw.v);
+      }
+      if (k === 'ball') {
+        if (Number.isFinite(Number(raw.rx))) patch.rx = Number(raw.rx);
+        if (Number.isFinite(Number(raw.ry))) patch.ry = Number(raw.ry);
+      }
+      return Object.keys(patch).length ? patch : null;
+    };
+
+    const isLive = opts.live !== undefined ? !!opts.live : doc === App.doc;
+    let applied = 0, unchanged = 0, locked = 0, jammed = false;
+    const handledJoints = new Set();
+
+    for (const j of ordered) {
+      if (handledJoints.has(j.id)) continue;
+      const patch = extractPatch(j, stateMap[j.id]);
+      if (!patch) continue;
+
+      const core = cyclicCore(doc, j.id, true);
+      if (core) {
+        for (const cj of core.joints) handledJoints.add(cj.id);
+        let driveJ = null, drivePatch = null;
+        const candidates = [j, ...core.joints.filter((cj) => cj.id !== j.id)];
+        for (const cj of candidates) {
+          const cp = extractPatch(cj, stateMap[cj.id]);
+          if (!cp) continue;
+          const cNext = clampState(cj, cp);
+          if (stateChanged(stateOf(cj), cNext, kindOf(cj))) {
+            driveJ = cj;
+            drivePatch = cp;
+            break;
+          }
+        }
+        if (!driveJ) { unchanged++; continue; }
+        const a = top(driveJ.a, doc), b = top(driveJ.b, doc);
+        if (!a || !b || (a.locked && b.locked)) { locked++; continue; }
+
+        const snapItems = deepClone(doc.items);
+        const snapJoints = deepClone(doc.joints || []);
+        const prev = stateOf(driveJ);
+        const seedDofs = pickPrimaryDofs(doc, driveJ, drivePatch, prev);
+        const driveDofs = seedDofs.length ? [...seedDofs] : Object.keys(drivePatch).filter((d) => hasDof(driveJ, d));
+        const tmpJ = { ...driveJ };
+        if (couplingsOf(driveJ.id, doc).length && !tmpJ.stopsLocked) {
+          for (const d of driveDofs) {
+            const val = Number(drivePatch[d]);
+            if (Number.isFinite(val)) ensureRangeFor(tmpJ, d, val);
+          }
+        }
+        const next = clampState(tmpJ, drivePatch);
+        const targets = driveDofs.length ? computeCoupledTargets(doc, driveDofs.map((d) => ({ jid: driveJ.id, dof: d, val: next[d] }))) : null;
+        const extraTargets = [];
+        const coreJSet = new Set(core.joints.map((x) => x.id));
+        if (targets && targets.has(driveJ.id)) {
+          for (const [d, rawVal] of targets.get(driveJ.id)) {
+            if (!hasDof(driveJ, d)) continue;
+            next[d] = driveJ.stopsLocked ? round(clampDofVal(driveJ, d, rawVal), 4) : round(rawVal, 4);
+            if (!driveDofs.includes(d)) driveDofs.push(d);
+          }
+        }
+        if (targets) {
+          for (const [kjId, dofMap] of targets) {
+            if (kjId === driveJ.id || !coreJSet.has(kjId)) continue;
+            const kj = list(doc).find((x) => x.id === kjId);
+            if (!kj) continue;
+            const kjFrom = stateOf(kj), kjTo = { ...kjFrom }, kjDofs = [];
+            for (const [d, rawVal] of dofMap) {
+              if (!hasDof(kj, d)) continue;
+              kjTo[d] = kj.stopsLocked ? round(clampDofVal(kj, d, rawVal), 4) : round(rawVal, 4);
+              kjDofs.push(d);
+            }
+            if (kjDofs.length) extraTargets.push({ jid: kjId, dofs: kjDofs, fromSt: kjFrom, toSt: kjTo });
+          }
+        }
+        const sol = solveClosedPoses(doc, core, driveJ, driveDofs, prev, next, { clampToReachable: false, extraTargets });
+        if (!sol.ok) {
+          doc.items = snapItems;
+          doc.joints = snapJoints;
+          jammed = true;
+          break;
+        }
+        applyClosedPoses(doc, core, sol.poses, driveJ, next, { live: isLive });
+        if (targets && targets.size) {
+          for (const [kjId, dofMap] of targets) {
+            if (kjId === driveJ.id || coreJSet.has(kjId)) continue;
+            const sub = new Map([[kjId, dofMap]]);
+            applyTargetsMap(doc, sub, driveJ.id, { live: isLive });
+          }
+        }
+        applied++;
+        continue;
+      }
+
+      const b = top(j.b, doc);
+      if (!b) continue;
+      if (b.locked) { locked++; continue; }
+      syncHome(b, j, doc);
+      const prev = stateOf(j);
+      const seedDofs = pickPrimaryDofs(doc, j, patch, prev);
+      const effDofs = seedDofs.length ? seedDofs : Object.keys(patch).filter((d) => hasDof(j, d));
+      if (couplingsOf(j.id, doc).length && !j.stopsLocked) {
+        for (const d of effDofs) {
+          const val = Number(patch[d]);
+          if (Number.isFinite(val)) ensureRangeFor(j, d, val);
+        }
+      }
+      let next = clampState(j, patch);
+      if (!stateChanged(prev, next, kindOf(j))) { unchanged++; continue; }
+      const targets = effDofs.length ? computeCoupledTargets(doc, effDofs.map((d) => ({ jid: j.id, dof: d, val: next[d] }))) : null;
+      if (targets && targets.has(j.id)) {
+        for (const [d, rawVal] of targets.get(j.id)) {
+          if (!hasDof(j, d)) continue;
+          if (j.stopsLocked) next[d] = round(clampDofVal(j, d, rawVal), 4);
+          else { ensureRangeFor(j, d, rawVal); next[d] = round(rawVal, 4); }
+        }
+      }
+      writeState(j, next);
+      Model.setFromMatrix(b, pose(j, next, null, doc));
+      if (looseOf(j.b, doc).length) {
+        solvePartConstraints(doc, j.b, Model.vars(doc).v);
+        next = stateOf(j);
+      }
+      if (isLive && isTop(b.id, doc)) Viewer.updateNode(b.id, { matrix: Model.localMatrix(b) });
+      if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next), { live: isLive });
+      if (targets && targets.size) applyTargetsMap(doc, targets, j.id, { live: isLive });
+      applied++;
+    }
+
+    if (!jammed && applied > 0) syncAll(doc, { live: isLive });
+    if (isLive) drawSelectedJoint();
+    return { ok: !jammed, jammed, applied, unchanged, locked };
   }
 
   // Gelöschte Teile: Gelenke / Verbindungen, die an ihnen hängen, fallen weg
@@ -8237,6 +8407,7 @@ const Joints = (() => {
     closeDockPrompt,
     setAngle,
     setState,
+    applyStates,
     setKind,
     setRange,
     flip,

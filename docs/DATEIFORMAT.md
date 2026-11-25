@@ -51,6 +51,7 @@ Die oberste Ebene der Datei ist ein JSON-Objekt (`doc`).
 | `points` | `Array` | Bezugspunkte (`[{ id, name, base, point: [x, y, z], hidden }]`). |
 | `csys` | `Array` | Eigene Koordinatensysteme (`[{ id, name, base, csys: { o, x, y, z }, hidden }]`). |
 | `joints` | `Array` | Gelenke und Verbindungen (`rot`, `slide`, `cyl`, `planar`, `ball`, `slot`, `fixed`, `angle`, `center`, `parallel`, `tangent`, `distance`). |
+| `poses` | `Array` | Benannte Stellungen der Gelenke (`[{ id, name, states: { [jointId]: { ang, pos?, u?, v?, rx?, ry? } } }]`). |
 | `measures` | `Array` | Dauerhafte Messungen im 3D-Bild. |
 | `notes` | `Array` | Notizstift-Striche, Textnotizen und Kommentar-Pins (`kind: "stroke" \| "text" \| "pin"`). |
 | `pointClouds` | `Array` | Eingelesene Punktwolken (`CSV`/`XYZ`/`PLY`). |

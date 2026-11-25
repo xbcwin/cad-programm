@@ -2505,6 +2505,11 @@ const HELP = {
   "tip": "Zahnstangen-Kopplung: Drehen eines Ritzels schiebt die Zahnstange um π · d · Winkel / 360 (Profi)",
   "hilfe": "Verbindet ein Drehgelenk (Ritzel) mit einem Schiebegelenk (Zahnstange). Aus dem Teilkreis-Durchmesser d (oder aus Modul × Zähnezahl) schiebt jede Drehung die Zahnstange genau um den abgerollten Umfang π · d · Winkel / 360 weiter.",
   "tipp": "Auch Ziehen an der Zahnstange dreht das Ritzel sofort im passenden Winkel zurück."
+ },
+ "namedPoses": {
+  "tip": "Benannte Stellungen: Gelenk-Positionen wie „auf“, „zu“ oder „halb“ speichern und per Klick einnehmen",
+  "hilfe": "Merkt sich die aktuellen Winkel und Wege aller beweglichen Gelenke unter einem Namen wie „auf“, „zu“ oder „halb“. Ein Klick auf eine gespeicherte Stellung fährt alle zugehörigen Teile sofort wieder genau dorthin – auch über ganze Gelenk-Ketten hinweg und dauerhaft mit dem Projekt gespeichert.",
+  "tipp": "Über das Speichern-Symbol an einer vorhandenen Stellung überschreibst du sie mit der aktuellen Lage; per Rechtsklick kannst du sie umbenennen."
  }
 };
 

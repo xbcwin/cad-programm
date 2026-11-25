@@ -778,6 +778,7 @@ const Panels = (() => {
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+      const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
@@ -803,6 +804,7 @@ const Panels = (() => {
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+      const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
       const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
       return;
     }
@@ -1158,6 +1160,7 @@ const Panels = (() => {
     const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
     const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
+    const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
     const pns = typeof Notes !== 'undefined' && Notes.treeSection ? Notes.treeSection() : null; if (pns) body.append(pns);
   }
   function moveInTree(srcId, dstId, mode) {
@@ -1539,6 +1542,8 @@ const Panels = (() => {
       fb.onclick = () => Comp.insertFromFile();
       w.append(h('div', { class: 'btn-row' }, ib, fb));
     }
+    const poseSec = typeof Assembly !== 'undefined' && Assembly.poseSection ? Assembly.poseSection('proj') : null;
+    if (poseSec) w.append(poseSec);
     const unitF = UI.selectField({ id: 'proj-unit', label: T('panel.proj.unit'), value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
     unitF.dataset.help = 'projectUnit';
     w.append(unitF);
@@ -2565,6 +2570,10 @@ const Panels = (() => {
     }
     }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
+    if (jsec && typeof Assembly !== 'undefined' && Assembly.poseSection) {
+      const poseSec = Assembly.poseSection('item');
+      if (poseSec) w.append(poseSec);
+    }
     // Lage
     if (!isMergedStep && it.kind !== 'transform') {
       const fixedJ = typeof Joints !== 'undefined' && Joints.fixedJointOf ? Joints.fixedJointOf(it.id) : null;

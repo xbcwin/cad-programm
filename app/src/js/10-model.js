@@ -2370,6 +2370,16 @@ const Model = (() => {
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
     if (doc.pointClouds != null && !Array.isArray(doc.pointClouds)) doc.pointClouds = [];
     if (doc.folders != null && !Array.isArray(doc.folders)) doc.folders = [];
+    if (doc.poses != null && !Array.isArray(doc.poses)) doc.poses = [];
+    if (Array.isArray(doc.poses)) {
+      doc.poses = doc.poses
+        .filter((ps) => ps && typeof ps === 'object' && typeof ps.name === 'string' && ps.name.trim())
+        .map((ps) => ({
+          id: typeof ps.id === 'string' && ps.id ? ps.id : uid('ps'),
+          name: ps.name.trim(),
+          states: ps.states && typeof ps.states === 'object' && !Array.isArray(ps.states) ? ps.states : {},
+        }));
+    }
     if (doc.blocks != null && !Array.isArray(doc.blocks)) doc.blocks = [];
     if (Array.isArray(doc.blocks)) {
       doc.blocks = doc.blocks.filter((b) => b && b.id && Array.isArray(b.ents));

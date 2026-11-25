@@ -2688,6 +2688,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert Ritzel und Zahnstange live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-gear`, `couple-rack`) und Hilfetexte (`coupleGear`, `coupleRack`) laufen ohne JS-Fehler (`t_a151_kopplungen_zahnrad_zahnstange`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus das Beispiel „Zahnrad-Paar“ mit zwei Drehgelenken sowie ein Ritzel mit Zahnstange per „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild ziehen und das gleichzeitige Mitdrehen bzw. Verschieben prüfen.
 
+## Benannte Stellungen (Auto [A-157], BG-20)
+
+- [x] **Einfach-Modus: Speichern, Einnehmen & Rückgängig**: Scharnier auf `90°` über `#proj-pose-name` / `#proj-pose-save` als „auf“ und bei `0°` über `#btn-pose-save` als „zu“ gespeichert; Klick auf `.pose-row[data-pose-name="auf"]` fährt Gelenk und 3D-Bauteil exakt zurück auf `90°`, `.pose-chip[data-pose-name="zu"]` auf `0°` und `Strg+Z` macht den Wechsel in einem Schritt rückgängig (`t_a157_benannte_stellungen`).
+- [x] **Profi-Modus: Gelenk-Kette, Überschreiben, Umbenennen & Löschen**: Eine Kette aus zwei Drehgelenken (`60°` / `30°` als „halb“) stellt beim Klick auf die gespeicherte Stellung beide Gelenke sowie die 3D-Lage des Endglieds auf `< 0,01 mm` exakt wieder her; `updatePose`, `renamePose` und `removePose` funktionieren fehlerfrei (`t_a157_benannte_stellungen`).
+- [x] **Speichern & Laden, Validierung & Hilfen**: `doc.poses` besteht `Store.validateProject`, bleibt nach `Store.saveProject`/`loadProject` sowie `.tracery.json`-Export und erneutem Laden erhalten und fährt „auf“ wieder auf `90°`; `HELP.namedPoses`, DE/EN-Texte und Befehlssuche (`save-pose`) sind vollständig (`t_a157_benannte_stellungen`).
+- [ ] **Von Hand**: Im Browser das Beispiel „Baugruppe Scharnier“ im Modus „Einfach“ und „Profi“ öffnen, Stellungen wie „auf“ (90°) und „zu“ (0°) über den Verlauf „Stellungen“ und die Eigenschaften speichern, per Klick umschalten und nach „Projekt als Datei speichern“ und erneutem Öffnen prüfen.
+
 ## Fehler melden
 
 ```
