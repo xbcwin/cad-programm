@@ -696,9 +696,10 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
         const ents = formEnts(pr.form || []); if (!ents.length) continue;
         sketches.push({ plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] });
       }
-      const tip = num(o.p && o.p.spitze, 0);
+      const closed = !!(o.p && o.p.geschlossen) && sketches.length >= 3;
+      const tip = closed ? 0 : num(o.p && o.p.spitze, 0);
       if (sketches.length < (tip > 0 ? 1 : 2)) { notes.push('Ein Übergang braucht mindestens zwei Profile (oder ein Profil mit Spitze).'); return null; }
-      it = Model.newItem('loft', { sketches, ruled: !!(o.p && o.p.gerade), tip }, { name: o.name || 'Übergang', role });
+      it = Model.newItem('loft', { sketches, ruled: !!(o.p && o.p.gerade), tip, ...(closed ? { closed: true } : {}) }, { name: o.name || 'Übergang', role });
       const ml = o.p && o.p.mittellinie;
       if (ml && sketches.length >= 2) {
         const pl = PLANEDEF[String(ml.ebene || 'XZ').toUpperCase()] || PLANEDEF.XZ, off = num(ml.versatz, 0);

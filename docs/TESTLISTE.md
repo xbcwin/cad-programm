@@ -2409,6 +2409,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Steg-Netz (`web`)**: Offenes Kreuz und verzweigte 4-Linien-Kreuzung auf einer 40×40×20-Schale (2 mm Wand) verbinden alle vier Wände als 1 Körper bei fester Tiefe (10 mm) und bis zum Schalenboden (Tiefe 0), inkl. Skizzen-Bearbeitung, Zeitleisten-Marker, Bezügen, Erklärungen, Befehlen und Hilfetexten.
 - [ ] **Von Hand**: Auf der Oberseite eines ausgehöhlten Gehäuses mit Deckel und Boden ein Lüftungsgitter (Tiefe 0) schneiden und prüfen, dass die Rückwand geschlossen bleibt, sowie ein gekreuztes Steg-Netz mit Schräge im 3D-Bild optisch kontrollieren.
 
+## Übergang als Schnitt und als Ring (Auto [A-122], KP-30)
+
+- [x] **Geschlossener Ring durch 4 Kreise im Quadrat**: 4 runde Umrisse im Quadrat per `#ctx-loft-closed` im Profi-Modus verbunden → geschlossener Ring (`p.closed = true`) ohne Lücke und ohne Geometrie-Fehler (`GeomCheck` 0 Funde, offenes Zentrum, alle 4 Seiten und Quadranten voll geschlossen).
+- [x] **Umschalten Weich/Gerade, Offen/Geschlossen & Einfach/Profi**: Wechsel zwischen weichem Ring und geraden Flächen (`#p-ruled = 'ruled'`), Öffnen/Schließen über `#p-closed` mit Rückgängig sowie Ausblenden der Profi-Option im Modus „Einfach“ funktionieren ohne Fehler.
+- [x] **Übergang als Schnitt in Quader & Ring-Schnitt**: Offener Übergang und geschlossener Ring über `#ctx-loft-cut` bzw. `#op-type = 'cut'` direkt von einem Quader abgezogen → Volumen sinkt deutlich, `GeomCheck` 0 Funde, Wechsel zwischen `new` und `cut` samt Rückgängig/Wiederholen fehlerfrei.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `loftClosed` und `loftCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`übergang ring`, `übergang schnitt`) und `Explain.local` vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser 4 leicht unterschiedlich große Kreise im Kreis zeichnen, auf „Übergang (Ring)“ klicken, das nahtlose Schließen rundherum drehen und prüfen sowie den Ring mit „Körper → Abziehen von“ als umlaufende Nut aus einer Platte schneiden.
+
 ## Fehler melden
 
 ```

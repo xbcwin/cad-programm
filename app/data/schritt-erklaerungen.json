@@ -294,5 +294,10 @@
     "was": "Speichert eine räumliche 3D-Skizze aus Linien und 3-Punkt-Bögen samt Punkt-Bindungen an Körperecken und Längenmaßen.",
     "wozu": "Dient als dreidimensionaler Pfad für „Entlang Pfad“, um Rohre, Bügel, Gestelle oder Kabelkanäle frei durch den Raum zu führen.",
     "achtung": "Hilfslinien werden in der 3D-Ansicht gestrichelt gezeichnet und beim Ziehen „Entlang Pfad“ übersprungen."
+  },
+  "loft": {
+    "was": "Verbindet zwei oder mehr Querschnitts-Skizzen zu einem glatten oder geradflächigen Körper – wahlweise geschlossen als Ring und auch als Schnitt in einem Körper.",
+    "wozu": "Ideal für Übergänge zwischen verschiedenen Formen, konische Kanäle, Düsen, Griffe sowie nahtlose Ringe und umlaufende Nuten.",
+    "achtung": "Für einen geschlossenen Ring brauchst du mindestens drei Umrisse; als Schnitt wählst du unter „Körper“ den Modus „Abziehen von“."
   }
 }

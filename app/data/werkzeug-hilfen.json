@@ -1483,5 +1483,15 @@
     "tip": "3D-Skizze mit Linien und Bögen frei im Raum zeichnen (Profi)",
     "hilfe": "Im Profi-Modus startest du eine 3D-Skizze ohne feste Ebene (über „Skizze → 3D-Skizze“ oder die Befehlssuche). Setze Punkte per Klick im Raum, fange exakt an Körperecken und Kantenmitten oder gib X, Y und Z rechts ein. Jede Linie und jeder 3-Punkt-Bogen lässt sich über Längenmaße (auch Formeln) festlegen und anschließend mit „Entlang Pfad“ zu einem Körper ziehen.",
     "tipp": "Wenn du an einer Körperecke fängst, merkt sich die 3D-Skizze diesen Körper und wandert mit, falls sich der Körper verschiebt."
+  },
+  "loftClosed": {
+    "tip": "Geschlossener Übergang (Ring): verbindet den letzten Umriss zurück zum ersten (Profi)",
+    "hilfe": "Wähle mindestens drei Skizzenkörper im Kreis oder schalte rechts beim Übergang „Geschlossen (Ring)“ ein. Tracery schließt die Form nahtlos vom letzten Querschnitt wieder an den ersten an – wahlweise weich oder mit geraden Flächen.",
+    "tipp": "Ideal für nahtlose Ringe, Rahmen, Griffe oder geschlossene Kanäle – mit „Körper → Abziehen von“ lässt sich der Ring direkt als Nut oder Kanal aus einem Körper schneiden."
+  },
+  "loftCut": {
+    "tip": "Übergang direkt als Schnitt von einem Körper abziehen (Profi)",
+    "hilfe": "Wähle zwei oder mehr Skizzenkörper (und bei Bedarf gleich den Zielkörper mit) und klicke auf „Übergang abziehen“. Der Übergang wird direkt vom Zielkörper abgezogen, um verjüngte Kanäle, Aussparungen oder konische Taschen zu schneiden.",
+    "tipp": "Auch einen bestehenden Übergang kannst du jederzeit rechts unter „Körper“ auf „Abziehen von …“, „Vereinigen mit …“ oder „Schnittmenge mit …“ umstellen."
   }
 }

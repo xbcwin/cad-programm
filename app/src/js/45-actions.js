@@ -635,19 +635,57 @@ const Actions = (() => {
   function loft(ids, opts = {}) {
     ids = ids || App.sel.slice();
     const its = ids.map((id) => App.doc.items.find((x) => x.id === id)).filter(Boolean);
-    const ok = its.filter((it) => it.kind === 'extrude' && it.p && it.p.sketch);
-    if (ok.length < (opts.tip ? 1 : 2) || ok.length !== its.length) { UI.toast('Wähle mindestens zwei Skizzenkörper (z. B. zwei Umrisse auf verschiedenen Ebenen) – in der Reihenfolge, in der der Übergang laufen soll.', { icon: 'info', ms: 5000 }); return null; }
+    const opType = typeof opts.op === 'string' ? opts.op : (opts.op && opts.op.type) || null;
+    let opTarget = opts.target || (opts.op && opts.op.target) || null;
+    const isExtrude = (it) => it && it.kind === 'extrude' && it.p && it.p.sketch;
+    let ok = its.filter(isExtrude);
+    const nonExtrudes = its.filter((it) => !isExtrude(it));
+    if (opType && !opTarget && nonExtrudes.length === 1 && nonExtrudes[0].role !== 'hole' && !nonExtrudes[0].suppressed) {
+      opTarget = nonExtrudes[0].id;
+    } else if (nonExtrudes.length) {
+      ok = [];
+    }
+    if (opts.closed) {
+      if (ok.length < 3 || (!opType && nonExtrudes.length)) {
+        UI.toast('Für einen geschlossenen Übergang (Ring) wähle mindestens drei Skizzenkörper.', { icon: 'info', ms: 5000 });
+        return null;
+      }
+    } else if (ok.length < (opts.tip ? 1 : 2) || (!opType && ok.length !== its.length) || (opType && !opTarget && nonExtrudes.length)) {
+      UI.toast('Wähle mindestens zwei Skizzenkörper (z. B. zwei Umrisse auf verschiedenen Ebenen) – in der Reihenfolge, in der der Übergang laufen soll.', { icon: 'info', ms: 5000 });
+      return null;
+    }
+    const okIds = ok.map((it) => it.id);
+    if (opType && !opTarget) {
+      const minIdx = Math.min(...ok.map((it) => App.doc.items.indexOf(it)));
+      const cands = typeof Features !== 'undefined' && Features.loftTargets ? Features.loftTargets(App.doc, okIds) : [];
+      const before = cands.filter((x) => App.doc.items.indexOf(x) < minIdx);
+      const picked = before.length ? before[before.length - 1] : cands[cands.length - 1];
+      if (picked) opTarget = picked.id;
+    }
+    if (opType && !opTarget) {
+      UI.toast('Kein Zielkörper zum Abziehen vorhanden. Lege zuerst einen Körper an.', { icon: 'info' });
+      return null;
+    }
     const sketches = ok.map((it) => {
       const M = Model.localMatrix(it), sk = deepClone(it.p.sketch);
       const o = new THREE.Vector3(...sk.plane.o).applyMatrix4(M), x = new THREE.Vector3(...sk.plane.x).transformDirection(M), n = new THREE.Vector3(...sk.plane.n).transformDirection(M);
       sk.plane = { o: o.toArray().map((v) => round(v, 6)), x: x.toArray(), n: n.toArray() };
       return sk;
     });
+    const closed = !!opts.closed;
+    const label = opType === 'cut' ? 'Übergang als Schnitt erstellt' : closed ? 'Geschlossenen Übergang erstellt' : 'Übergang erstellt';
     let nid = null;
-    App.change('Übergang erstellt', (doc) => {
-      const idx = Math.min(...ok.map((it) => doc.items.findIndex((x) => x.id === it.id)));
-      const L = Model.newItem('loft', { sketches, ruled: false, tip: opts.tip || 0 }, { name: 'Übergang', color: ok[0].color });
-      doc.items = doc.items.filter((x) => !ids.includes(x.id));
+    App.change(label, (doc) => {
+      let idx = Math.min(...ok.map((it) => doc.items.findIndex((x) => x.id === it.id)));
+      const p = { sketches, ruled: !!opts.ruled, tip: closed ? 0 : (opts.tip || 0), ...(closed ? { closed: true } : {}) };
+      const defName = opts.name || (opType === 'cut' ? 'Übergang-Schnitt' : closed ? 'Übergang (Ring)' : 'Übergang');
+      const L = Model.newItem('loft', p, { name: defName, color: ok[0].color });
+      if (opType && opTarget) L.op = { type: opType, target: opTarget };
+      doc.items = doc.items.filter((x) => !okIds.includes(x.id));
+      if (opType && opTarget) {
+        const tIdx = doc.items.findIndex((x) => x.id === opTarget);
+        if (tIdx >= 0 && idx <= tIdx) idx = tIdx + 1;
+      }
       doc.items.splice(Math.max(0, Math.min(idx, doc.items.length)), 0, L); nid = L.id;
     });
     if (nid) App.select([nid]);
