@@ -2691,6 +2691,16 @@ const HELP = {
   "hilfe": "Über die Vorlagen wechselst du mit einem Klick zwischen ISO 7200, DIN EN ISO 7200 und ANSI/ASME Y14.1. Mit „Schriftfeld gestalten …“ passt du Breite, Höhe, beliebige Text- und Automatik-Felder, Trennlinien sowie ein Firmenlogo an und speicherst deinen Entwurf als eigene Vorlage für alle künftigen Zeichnungen.",
   "tipp": "Klicke in der Live-Vorschau des Schriftfeld-Editors direkt auf ein Feld, um Beschriftung, Lage oder Größe sofort zu ändern."
  },
+ "drawingInspection": {
+  "tip": "Maße als Prüfmaße (1, 2, 3 …) markieren und als Prüftabelle (CSV) exportieren (Profi)",
+  "hilfe": "Markiere wichtige Maße direkt am gewählten Maß rechts im Panel als Prüfmaß. Sie erhalten fortlaufende Nummern-Ballons (1, 2, 3 …), lassen sich auf Wunsch als Prüftabelle auf dem Blatt einblenden und als CSV-Datei mit Nennmaß, Toleranz, Min/Max sowie leeren Spalten für Istwert und Prüfung speichern.",
+  "tipp": "Wähle zuerst ein Maß auf dem Blatt an, hake rechts „Als Prüfmaß markieren“ an und exportiere danach die fertige Prüftabelle als CSV."
+ },
+ "drawingTiledPrint": {
+  "tip": "Große Zeichnungen im Maßstab 1:1 über mehrere A4-Seiten mit Klebemarken drucken (Profi)",
+  "hilfe": "Teilt große Blätter (wie A3, A2, A1 oder A0) exakt im Maßstab 1:1 auf mehrere A4- oder A3-Seiten auf. Jede Kachel enthält Schnitt- und Klebemarken (A1, B1, A2 …) und auf Seite 1 einen 50-mm-Kontrollbalken zum Nachmessen nach dem Ausdruck.",
+  "tipp": "Stelle im Druckdialog deines PDF-Betrachters immer „Tatsächliche Größe“ oder „100 %“ (ohne Seitenanpassung) ein, damit die 1:1-Schablone exakt stimmt."
+ },
  "drawingLayers": {
   "tip": "Linienarten und Strichstärken nach Norm einstellen sowie Ebenen (Layer) ein- und ausblenden (Profi)",
   "hilfe": "Hier steuerst du die Liniengruppe nach ISO 128 (0,35 / 0,50 / 0,70 mm) sowie jede Zeichnungsebene einzeln: Sichtbare Kanten, Verdeckte Kanten, Mittellinien, Maße, Schraffur, Schnittlinien, Gewinde, Rahmen und Bilder lassen sich getrennt ein- und ausblenden und in Linienart sowie Strichstärke anpassen – alle Layer-Namen und Zustände landen auch im DXF-Export.",

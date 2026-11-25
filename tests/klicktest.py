@@ -36103,6 +36103,228 @@ def t_a178_zeichnung_schriftfeld(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a179_pruefmasse_und_drucken_1zu1(p):
+    # [A-179] Zeichnung (Profi): Prüfmaße (Nummern-Ballons 1-3, Prüftabelle & CSV) und Drucken 1:1 auf A4 (ZE-33, ZE-36)
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte 120x80x12 mit Ø16 Bohrung', d => {
+        const platte = Model.newItem('box', { w: 120, d: 80, h: 12 }, { name: 'Prüfplatte' });
+        const loch = Model.newItem('cylinder', { d: 16, h: 20 }, { name: 'Loch', role: 'hole' });
+        loch.t = { x: 0, y: 0, z: -4, rx: 0, ry: 0, rz: 0 };
+        d.items.push(platte, loch);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+
+    # 1. Drei Maße als Prüfmaß markieren (Breite 120 mit ±0,1, Höhe 80/12, Bohrung Ø16 mit H7 & Hinweis)
+    pick_info = p.ev("""
+      const dims = Drawing.dims().filter(d => !d.lost);
+      const widthDim = dims.find(d => d.view === 'front' && d.type === 'lin' && Math.abs(d.nominalMm - 120) < 0.2);
+      const heightDim = dims.find(d => d.view === 'front' && d.type === 'lin' && Math.abs(d.nominalMm - 12) < 0.2);
+      const holeDim = dims.find(d => d.view === 'top' && d.type === 'dia' && Math.abs(d.nominalMm - 16) < 0.2);
+      return { wId: widthDim?.id || null, hId: heightDim?.id || null, dId: holeDim?.id || null };
+    """)
+    w_id, h_id, d_id = pick_info['wId'], pick_info['hId'], pick_info['dId']
+    assert w_id and h_id and d_id, f"Fehlende Maße: {pick_info}"
+
+    # Toleranzen + Prüfmaß-Häkchen über die echte Panel-UI setzen
+    p.ev("Drawing.select(arg)", w_id); p.wait(100)
+    p.pg.select_option('#dw-tol-mode', 'sym'); p.wait(100)
+    p.pg.fill('#dw-tol-sym', '0.1')
+    p.pg.press('#dw-tol-sym', 'Enter'); p.wait(120)
+    p.pg.click('#dw-dim-insp'); p.wait(150)
+
+    p.ev("Drawing.select(arg)", h_id); p.wait(100)
+    p.pg.click('#dw-dim-insp'); p.wait(150)
+
+    p.ev("Drawing.select(arg)", d_id); p.wait(100)
+    p.pg.select_option('#dw-tol-mode', 'fit'); p.wait(100)
+    p.pg.select_option('#dw-tol-fit', 'H7'); p.wait(120)
+    p.pg.click('#dw-dim-insp'); p.wait(150)
+    p.pg.fill('#dw-dim-insp-note', 'Messschieber')
+    p.pg.press('#dw-dim-insp-note', 'Enter'); p.wait(150)
+
+    # Prüftabelle auf dem Blatt einblenden
+    p.pg.click('#dw-insp-table-show'); p.wait(150)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const list = Drawing.inspectionDims();
+      const circles = [...svg.querySelectorAll('circle.insp-circle[data-insp-num]')].map(el => el.dataset.inspNum);
+      const texts = [...svg.querySelectorAll('text.insp-text[data-insp-num]')].map(el => ({ num: el.dataset.inspNum, t: el.textContent.trim() }));
+      const tblTexts = [...svg.querySelectorAll('text[data-table-kind="insp"]')].map(el => el.textContent);
+      const panelRows = [...document.querySelectorAll('#dw-insp-list .insp-row')].map(el => el.dataset.inspNum);
+      return {
+        nums: list.map(x => x.num),
+        circles,
+        texts,
+        panelRows,
+        hasTblTitle: tblTexts.some(t => t.includes('Prüftabelle')),
+        hasTbl16: tblTexts.some(t => t.includes('Ø16')),
+      };
+    """)
+
+    # Zweites Prüfmaß löschen -> Nummern rücken auf 1, 2 nach; Rückgängig stellt 1, 2, 3 wieder her
+    p.ev("Drawing.setInspectionDim(arg, false)", h_id); p.wait(120)
+    after_del = p.ev("return Drawing.inspectionDims().map(x => ({ num: x.num, dimId: x.dimId }))")
+    p.ev("App.undo()"); p.wait(150)
+    after_undo = p.ev("return Drawing.inspectionDims().map(x => ({ num: x.num, dimId: x.dimId }))")
+
+    ok1 = bool(
+        s1['nums'] == [1, 2, 3]
+        and sorted(s1['circles']) == ['1', '2', '3']
+        and sorted([x['t'] for x in s1['texts']]) == ['1', '2', '3']
+        and s1['panelRows'] == ['1', '2', '3']
+        and s1['hasTblTitle'] and s1['hasTbl16']
+        and len(after_del) == 2 and [x['num'] for x in after_del] == [1, 2]
+        and len(after_undo) == 3 and [x['num'] for x in after_undo] == [1, 2, 3]
+    )
+
+    # 2. CSV (3 Datenzeilen) + SVG/PDF/DXF-Export
+    exp_chk = p.ev("""return (async () => {
+      const csv = Drawing.inspectionCSV();
+      const lines = csv.replace(/^\\uFEFF/, '').trim().split(/\\r?\\n/);
+      const svgStr = await Drawing.buildSVGString();
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfTxt = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      return {
+        hasBom: csv.startsWith('\\uFEFF'),
+        totalLines: lines.length,
+        dataLines: lines.length - 1,
+        row1Ok: lines[1]?.startsWith('1;') && lines[1].includes('120') && lines[1].includes('0,1'),
+        row2Ok: lines[2]?.startsWith('2;') && lines[2].includes('12'),
+        row3Ok: lines[3]?.startsWith('3;') && lines[3].includes('16') && lines[3].includes('H7') && lines[3].includes('Messschieber'),
+        svgOk: svgStr.includes('insp-circle') && svgStr.includes('Prüftabelle'),
+        pdfOk: pdfTxt.startsWith('%PDF-1.4') && pdfTxt.includes('Prüftabelle') && pdfTxt.includes('H7'),
+        dxfOk: dxf.text.includes('Prüftabelle') && dxf.stats.circles >= 3,
+      };
+    })()""")
+
+    ok2 = bool(
+        exp_chk['hasBom'] and exp_chk['dataLines'] == 3
+        and exp_chk['row1Ok'] and exp_chk['row2Ok'] and exp_chk['row3Ok']
+        and exp_chk['svgOk'] and exp_chk['pdfOk'] and exp_chk['dxfOk']
+    )
+
+    # 3. Drucken 1:1 auf mehreren A4-Seiten: A2-Blatt -> 4 Seiten im PDF, A3-Blatt -> 2 Seiten
+    p.pg.select_option('#dw-panel-sheet', 'A2'); p.wait(200)
+    p.pg.click('#dw-tiled-print-btn'); p.wait(200)
+    dlg_chk = p.ev("""
+      const dlg = document.querySelector('#dw-tiled-dlg');
+      const info = document.querySelector('#dw-tile-info')?.textContent || '';
+      const cells = [...document.querySelectorAll('#dw-tile-preview .dw-tile-cell')].map(el => el.dataset.tileCode);
+      return { open: !!dlg, info, cells };
+    """)
+    p.pg.click('.modal .actions .btn:not(.primary)'); p.wait(120)
+
+    tiled_chk = p.ev("""return (async () => {
+      const planA2 = Drawing.tiledPrintPlan({ paper: 'A4', orient: 'auto' });
+      const bytesA2 = await Drawing.buildTiledPDFBytes({ paper: 'A4', orient: 'auto', forceScale1: true, marks: true });
+      const txtA2 = new TextDecoder('latin1').decode(bytesA2);
+      const pageCountA2 = (txtA2.match(/\\/Type \\/Page\\b/g) || []).length;
+      const hasA4Box = txtA2.includes('/MediaBox [0 0 841.89 595.28]') || txtA2.includes('/MediaBox [0 0 595.28 841.89]');
+      const hasMarksA2 = ['A1', 'B1', 'A2', 'B2'].every(c => txtA2.includes('Kachel ' + c))
+        && txtA2.includes('Kontrolle 1:1: 50 mm');
+      const noQMark = !txtA2.includes('(?') && !txtA2.includes('?)');
+
+      // Mit Überlappung 10 mm ebenfalls gültiges PDF
+      const bytesOv = await Drawing.buildTiledPDFBytes({ paper: 'A4', orient: 'auto', overlap: 10, marks: true });
+      const txtOv = new TextDecoder('latin1').decode(bytesOv);
+      const ovPages = (txtOv.match(/\\/Type \\/Page\\b/g) || []).length;
+
+      // Zum Vergleich A3 auf A4 -> 2 Seiten
+      const planA3 = Drawing.tiledPrintPlan({ paper: 'A4', orient: 'auto' }, { ...Drawing.activeSheet(), sheet: 'A3', orient: 'landscape', scale: 1 });
+      return {
+        planTotal: planA2.totalPages,
+        cols: planA2.cols,
+        rows: planA2.rows,
+        pageCountA2,
+        hasPdfCount4: txtA2.includes('/Count 4'),
+        hasA4Box,
+        hasMarksA2,
+        noQMark,
+        ovValid: txtOv.startsWith('%PDF-1.4') && ovPages >= 4,
+        a3Pages: planA3.totalPages,
+      };
+    })()""")
+
+    ok3 = bool(
+        dlg_chk['open'] and '4 Seiten' in dlg_chk['info'] and dlg_chk['cells'] == ['A1', 'B1', 'A2', 'B2']
+        and tiled_chk['planTotal'] == 4 and tiled_chk['cols'] == 2 and tiled_chk['rows'] == 2
+        and tiled_chk['pageCountA2'] == 4 and tiled_chk['hasPdfCount4']
+        and tiled_chk['hasA4Box'] and tiled_chk['hasMarksA2'] and tiled_chk['noQMark']
+        and tiled_chk['ovValid'] and tiled_chk['a3Pages'] == 2
+    )
+
+    # 4. Speichern/Laden, Einfach-Modus (Profi-Schutz), Hilfetexte, I18n & Befehlssuche
+    val_ok = p.ev("return Store.validateProject(App.doc).ok")
+    saved_json = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(Model.newDoc(), { fit: false }); App.setDoc(JSON.parse(arg), { fit: false })", saved_json)
+    warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const list = Drawing.inspectionDims();
+      return {
+        cnt: list.length,
+        nums: list.map(x => x.num),
+        note3: list[2]?.note || '',
+        tblShow: Drawing.inspectionTable().show,
+      };
+    """)
+
+    # Im Einfach-Modus ausgeblendet und gesperrt
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(150)
+    simple_chk = p.ev("""return (async () => {
+      return {
+        inspSecAbsent: !document.querySelector('#dw-insp-sec'),
+        tiledBtnAbsent: !document.querySelector('#dw-tiled-print-btn'),
+        inspBlocked: Drawing.setInspectionDim(arg, true) === false,
+        tblBlocked: Drawing.setInspectionTable(true) === false,
+        tiledBlocked: (await Drawing.buildTiledPDFBytes()) === null,
+        cmdsHidden: Commands.search('prüftabelle').length === 0 && Commands.search('schablone').length === 0,
+      };
+    })()""", w_id)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(150)
+    p.ev("return Drawing.waitReady()")
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const domHelpOk = document.querySelector('#dw-insp-sec')?.dataset.help === 'drawingInspection'
+        && document.querySelector('#dw-tiled-print-btn')?.dataset.help === 'drawingTiledPrint';
+      const helpOk = domHelpOk && ['drawingInspection', 'drawingTiledPrint']
+        .every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const dk = Object.keys(de).sort(), ek = Object.keys(en).sort();
+      const i18nOk = dk.length === ek.length && dk.every((k, i) => k === ek[i]);
+      const cmdsOk = Commands.search('prüftabelle').some(c => c.id === 'drawingInspectionCsv')
+        && Commands.search('prüftabelle').some(c => c.id === 'drawingInspectionTable')
+        && Commands.search('schablone').some(c => c.id === 'drawingTiledPrint');
+      return helpOk && i18nOk && cmdsOk;
+    })()""")
+
+    ok4 = bool(
+        val_ok and reload_chk['cnt'] == 3 and reload_chk['nums'] == [1, 2, 3]
+        and reload_chk['note3'] == 'Messschieber' and reload_chk['tblShow']
+        and simple_chk['inspSecAbsent'] and simple_chk['tiledBtnAbsent']
+        and simple_chk['inspBlocked'] and simple_chk['tblBlocked'] and simple_chk['tiledBlocked'] and simple_chk['cmdsHidden']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a177_zeichnung_ebenen_bild(p):
     # [A-177] Zeichnung (Profi): Linienarten & Strichstärken nach Norm, Ebenen (Layer) auch im DXF, Bild/Logo auf dem Blatt (ZE-29, ZE-31)
     p.empty()
@@ -37180,6 +37402,7 @@ TESTS = [
     ('[F-11251719] Volltest-Reparatur: Befehlssuche bevorzugt Treffer im Befehlsnamen („schraube“) & Tooltip übersteht Re-Render vor Scroll', t_f11251719),
     ('[A-176] Zeichnung: Bohrungstabelle, Änderungstabelle, freie Tabelle (ZE-26)', t_a176_zeichnung_tabellen),
     ('[A-178] Zeichnung: Schriftfeld-Editor und Vorlagen (ISO, DIN, ANSI & eigene Vorlage)', t_a178_zeichnung_schriftfeld),
+    ('[A-179] Zeichnung: Prüfmaße (Ballons & CSV) und Drucken 1:1 auf A4 (ZE-33, ZE-36)', t_a179_pruefmasse_und_drucken_1zu1),
     ('[A-177] Zeichnung: Linienarten, Ebenen (Layer) und Bild auf dem Blatt (ZE-29, ZE-31)', t_a177_zeichnung_ebenen_bild),
     ('[A-175] Zeichnung: Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)', t_a175_zeichnung_oberflaechen_symbole),
     ('[A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)', t_a180_zeichnung_fertig_machen),
