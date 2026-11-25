@@ -1948,5 +1948,15 @@
     "tip": "Bild oder Firmenlogo aus einer lokalen Datei frei auf dem Zeichnungsblatt platzieren (Profi)",
     "hilfe": "Lädt ein lokales Bild (PNG, JPG, WebP oder SVG) ohne Internetverbindung direkt auf das aktuelle Blatt. Du kannst das Bild frei über das Blatt ziehen, Breite und Höhe (wahlweise proportional), Deckkraft und einen Rahmen einstellen – und beim Export in SVG, PDF und PNG bleibt es gestochen scharf erhalten.",
     "tipp": "Klicke das Bild auf dem Blatt an, um es mit der Maus zu verschieben oder rechts exakt auf den Millimeter auszurichten."
+  },
+  "drawingSymbols": {
+    "tip": "Oberflächenzeichen (Ra), Schweißsymbole, Kantenzustand und Symbol-Sammlung auf dem Blatt (Profi)",
+    "hilfe": "Setzt normgerechte Oberflächenzeichen nach ISO 1302 (z. B. Ra 1,6 mit spanend/ohne Abtrag und Rillenrichtung), Schweißsymbole nach ISO 2553 (Kehlnaht, V-Naht, Rundum, Baustelle), Kantenzustände nach ISO 13715 (Grat/Entgraten) sowie Norm-Symbole aus der Sammlung direkt an Kanten oder frei aufs Blatt.",
+    "tipp": "Alle Symbole lassen sich nachträglich per Ziehen verschieben, rechts im Panel anpassen und werden in SVG, PDF und DXF als echte Vektoren ausgegeben."
+  },
+  "drawingSymbolLibrary": {
+    "tip": "Symbol-Sammlung mit Normzeichen für Geometrie, Bohrungen, Toleranzen und Fertigung (Profi)",
+    "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
+    "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
   }
 }
