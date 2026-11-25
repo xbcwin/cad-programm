@@ -34267,6 +34267,271 @@ def t_a170_zeichnung_explosion_projektion(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a172_zeichnung_koord_bogen_doppel(p):
+    # [A-172] Zeichnung (Profi): Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      App.change('Platte mit Rundung und 3 Löchern', d => {
+        d.items.push(Model.newItem('box', { w: 80, d: 50, h: 25.4 }, { name: 'Platte' }));
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("""
+      const it = App.doc.items[0];
+      const edges = App.results.get(it.id).data.edges;
+      const eFil = edges.findIndex(e => e && e.m && Math.hypot(e.m[0] - 40, e.m[1] - 25, e.m[2] - 12.7) < 0.25);
+      if (eFil >= 0) Actions.addFinish('fillet', 10, [{ id: it.id, edgeIdx: eFil }]);
+      App.change('3 Bohrungen hinzufügen', d => {
+        const holes = [[-25, -5], [0, 5], [20, 10]];
+        holes.forEach(([x, y], i) => {
+          d.items.push(Model.newItem('cylinder', { d: 8, h: 30 }, { name: 'Loch' + (i + 1), role: 'hole', more: { t: { x, y, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+        });
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(150)
+    p.pg.click('#t-sheet'); p.wait(150)
+    p.pg.select_option('#dw-scale', '2')
+    p.pg.click('#sheet-tabs'); p.wait(200)
+
+    # 1. Koordinatenmaße ab unterer linker Ecke (-40, -25) an die 3 Löcher (X: 15, 40, 60; Y: 20, 30, 35)
+    p.pg.click('#dw-dm-ordinate'); p.wait(150)
+    ord_h_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        origin: toS([b[0], b[1]]),
+        h1: toS([-25, -5]),
+        place: toS([0, b[1] - 10]),
+        h2: toS([0, 5]),
+        h3: toS([20, 10]),
+      };
+    """)
+    for key in ('origin', 'h1', 'place', 'h2', 'h3'):
+        pt = sheet_screen(*ord_h_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(140)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+
+    s_ord_h = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'h');
+      const texts = d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+      const circles = d ? svg.querySelectorAll(`circle.dim[data-id="${d.id}"]`).length : 0;
+      return { ok: !!d, id: d?.id, nPts: d?.pts?.length || 0, texts, circles };
+    """)
+
+    # Vertikale Koordinatenmaße (Y: 0, 20, 30, 35)
+    ord_v_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        origin: toS([b[0], b[1]]),
+        h1: toS([-25, -5]),
+        place: toS([b[0] - 10, 0]),
+        h2: toS([0, 5]),
+        h3: toS([20, 10]),
+      };
+    """)
+    for key in ('origin', 'h1', 'place', 'h2', 'h3'):
+        pt = sheet_screen(*ord_v_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(140)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+
+    s_ord_v = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'v');
+      const texts = d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+      return { ok: !!d, nPts: d?.pts?.length || 0, texts };
+    """)
+
+    # Plattenbreite im Modell auf 90 mm ändern -> linke Ecke wandert nach -45, Koordinatenmaße folgen auf 20, 45, 65
+    p.ev("""
+      App.change('Plattenbreite auf 90 mm', d => {
+        const box = d.items.find(x => x.kind === 'box');
+        if (box) box.p.w = 90;
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    ord_moved = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'h');
+      return d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)].map(t => t.textContent) : [];
+    """)
+
+    ok1 = bool(
+        s_ord_h['ok'] and s_ord_h['nPts'] == 3 and s_ord_h['circles'] == 1
+        and s_ord_h['texts'] == ['0', '15', '40', '60']
+        and s_ord_v['ok'] and s_ord_v['nPts'] == 3
+        and s_ord_v['texts'] == ['35', '30', '20', '0']
+        and ord_moved == ['0', '20', '45', '65']
+    )
+
+    # 2. Bogenlängen-Maß an der R10-Rundung (90° -> 15,71 mm)
+    p.pg.click('#dw-dm-arclen'); p.wait(150)
+    arc_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const c = v.geo.circles.find(x => !x.full && x.arc && Math.abs(x.r - 10) < 0.25);
+      const mid = c ? (c.arc[0] + c.arc[1]) * 0.5 : Math.PI * 0.25;
+      return c ? {
+        hit: toS([c.c[0] + c.r * Math.cos(mid), c.c[1] + c.r * Math.sin(mid)]),
+        place: toS([c.c[0] + (c.r + 7) * Math.cos(mid), c.c[1] + (c.r + 7) * Math.sin(mid)]),
+      } : null;
+    """)
+    for key in ('hit', 'place'):
+        pt = sheet_screen(*arc_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    s_arc = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.dims().find(x => x.type === 'arclen');
+      const txt = d ? svg.querySelector(`text.dimtext[data-id="${d.id}"]`)?.textContent : '';
+      const arrows = d ? svg.querySelectorAll(`polygon.arrow[data-id="${d.id}"]`).length : 0;
+      return { ok: !!d, id: d?.id, r: d?.r, nom: d?.nominalMm, txt, arrows };
+    """)
+    ok2 = bool(
+        s_arc['ok']
+        and abs((s_arc['r'] or 0) - 10) < 0.1
+        and abs((s_arc['nom'] or 0) - 15.708) < 0.15
+        and s_arc['txt'] == '⌒15,71'
+        and s_arc['arrows'] == 2
+    )
+
+    # 3. Doppelmaße: 25,4 mm -> "25,4 [1.000]", Bogenlänge -> "⌒15,71 [0.618]", Koordinaten -> "45 [1.772]"
+    p.pg.click('#dw-style-dual'); p.wait(200)
+    s_dual = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const allT = [...svg.querySelectorAll('text.dimtext')].map(e => e.textContent);
+      const ordD = Drawing.activeSheet().dims.find(x => x.type === 'ordinate' && x.dir === 'h');
+      const ordT = ordD ? [...svg.querySelectorAll(`text.dimtext[data-id="${ordD.id}"]`)].map(e => e.textContent) : [];
+      const arcD = Drawing.activeSheet().dims.find(x => x.type === 'arclen');
+      const arcT = arcD ? svg.querySelector(`text.dimtext[data-id="${arcD.id}"]`)?.textContent : '';
+      return { allT, ordT, arcT };
+    """)
+    # Zweites Blatt ohne Doppelmaße -> Blatt 1 behält Doppelmaße
+    p.pg.click('#dw-panel-add'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.uncheck('#dw-style-dual'); p.wait(150)
+    s2_texts = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+    p.pg.locator('#sheet-tabs .sheet-tab').first.click(); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    s1_back = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+
+    ok3 = bool(
+        '25,4 [1.000]' in s_dual['allT']
+        and s_dual['arcT'] == '⌒15,71 [0.618]'
+        and '0' in s_dual['ordT'] and '45 [1.772]' in s_dual['ordT']
+        and '25,4' in s2_texts and '25,4 [1.000]' not in s2_texts
+        and '25,4 [1.000]' in s1_back
+    )
+
+    # 4. Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(150)
+    simple_chk = p.ev("""
+      return {
+        ordBtn: !!document.querySelector('#dw-dm-ordinate'),
+        arcBtn: !!document.querySelector('#dw-dm-arclen'),
+        dualChk: !!document.querySelector('#dw-style-dual'),
+        setOrd: Drawing.setDimMode('ordinate'),
+        setArc: Drawing.setDimMode('arclen'),
+        setDual: Drawing.setDualDims(true),
+        cmdsBlocked: Commands.search('koordinatenmaße').length === 0
+          && Commands.search('bogenlängen-maß').length === 0
+          && Commands.search('doppelmaße').length === 0,
+      };
+    """)
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    exp_chk = p.ev("""return (async () => {
+      const bytes = await Drawing.buildPDFBytes();
+      let pdfStr = '';
+      for (let i = 0; i < bytes.length; i++) pdfStr += String.fromCharCode(bytes[i]);
+      const dxf = await Drawing.buildDXF();
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfStr.includes('25,4 [1.000]') && pdfStr.includes('Bogen 15,71 [0.618]'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('25,4 [1.000]') && dxf.text.includes('BEMASSUNG') && dxf.stats.arcs >= 1),
+      };
+    })()""")
+
+    p.ev("Drawing.select(arg)", s_arc['id']); p.wait(120)
+    p.pg.click('#dw-del-sel'); p.wait(150)
+    n_after_del = p.ev("return Drawing.activeSheet().dims.some(x => x.type === 'arclen')")
+    p.ev("App.undo()"); p.wait(150)
+    n_after_undo = p.ev("return Drawing.activeSheet().dims.some(x => x.type === 'arclen')")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    val_ok = p.ev("return Store.validateProject(JSON.parse(arg)).ok", saved)
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    reload_chk = p.ev("""
+      const sh = Drawing.activeSheet();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const allT = [...svg.querySelectorAll('text.dimtext')].map(e => e.textContent);
+      return {
+        hasOrd: sh.dims.some(x => x.type === 'ordinate'),
+        hasArc: sh.dims.some(x => x.type === 'arclen'),
+        dual: !!(sh.dimStyle && sh.dimStyle.dual),
+        hasDualTxt: allT.includes('25,4 [1.000]'),
+      };
+    """)
+
+    meta_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const h1 = wh['drawingOrdArc'], h2 = wh['drawingDualDims'];
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('koordinatenmaße').some(c => c.id === 'drawingDimOrdinate')
+        && Commands.search('bogenlänge').some(c => c.id === 'drawingDimArcLen')
+        && Commands.search('doppelmaße').some(c => c.id === 'drawingDualDims');
+      return !!(h1 && h1.tip && h1.hilfe && h1.tipp && h2 && h2.tip && h2.hilfe && h2.tipp && i18nOk && cmds);
+    })()""")
+
+    ok4 = bool(
+        not simple_chk['ordBtn'] and not simple_chk['arcBtn'] and not simple_chk['dualChk']
+        and simple_chk['setOrd'] is False and simple_chk['setArc'] is False and simple_chk['setDual'] is False
+        and simple_chk['cmdsBlocked']
+        and exp_chk['pdfOk'] and exp_chk['dxfOk']
+        and not n_after_del and n_after_undo
+        and val_ok and reload_chk['hasOrd'] and reload_chk['hasArc'] and reload_chk['dual'] and reload_chk['hasDualTxt']
+        and meta_chk and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -34550,6 +34815,7 @@ TESTS = [
     ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
     ('[A-167] Kabel und Schläuche: weiche Kurve, Biegeradius & Länge in Stückliste (BG-34)', t_a167_kabel_schlaeuche),
     ('[A-170] Zeichnung: Explosionsansicht und Projektion umschalten (ZE-18, ZE-19)', t_a170_zeichnung_explosion_projektion),
+    ('[A-172] Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (ZE-21, ZE-22)', t_a172_zeichnung_koord_bogen_doppel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

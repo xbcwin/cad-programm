@@ -2621,6 +2621,16 @@ const HELP = {
   "tip": "Projektion zwischen Europa (ISO E) und USA (ISO A) umschalten",
   "hilfe": "Bestimmt, wo Draufsicht und Seitenansicht rund um die Vorderansicht liegen: Bei Europa (ISO E, Methode 1) stehen Draufsicht unten und Seitenansicht rechts; bei USA (ISO A, Methode 3) stehen Draufsicht oben und Seitenansicht links. Das Normsymbol im Schriftfeld wechselt automatisch mit.",
   "tipp": "Die Einstellung gilt pro Blatt – so kannst du bei Bedarf auch internationale Fertigungsblätter kombinieren."
+ },
+ "drawingOrdArc": {
+  "tip": "Koordinatenmaße ab einem Nullpunkt und Bogenlängen-Maße (Profi)",
+  "hilfe": "Mit „Koordinaten“ bemaßt du mehrere Löcher oder Kanten übersichtlich ab einem gemeinsamen Nullpunkt (0) entlang der X- oder Y-Achse ohne viele Maßlinien. Mit „Bogenlänge“ misst du die gekrümmte Länge entlang eines Kreisbogens oder einer Rundung (⌒).",
+  "tipp": "Beim Koordinatenmaß kannst du nach dem ersten Ziel einfach weitere Lochmitten oder Ecken anklicken und mit Enter abschließen."
+ },
+ "drawingDualDims": {
+  "tip": "Doppelmaße in Millimetern und Zoll [eckige Klammer] je Blatt einblenden (Profi)",
+  "hilfe": "Schreibt auf dem aktuellen Blatt hinter jedes Maß zusätzlich den umgerechneten Wert in Zoll in eckigen Klammern, zum Beispiel 25,4 [1.000]. Steht das Projekt auf Zoll, erscheint umgekehrt der Wert in Millimetern in Klammern.",
+  "tipp": "Die Nachkommastellen der Zoll-Angabe (2, 3 oder 4 Stellen) kannst du direkt darunter unter „Maß-Stil“ wählen."
  }
 };
 

@@ -4471,5 +4471,19 @@
   "draw.proj.us": "USA (ISO A · Methode 3)",
   "draw.tb.method3": "Methode 3 (ISO A)",
   "draw.tb.method1Iso": "Methode 1 (ISO E)",
-  "draw.explodeNeedTwo": "Für eine Explosionsansicht braucht die Baugruppe mindestens zwei Teile – aktuell werden sie normal gezeigt."
+  "draw.explodeNeedTwo": "Für eine Explosionsansicht braucht die Baugruppe mindestens zwei Teile – aktuell werden sie normal gezeigt.",
+  "menu.draw.dimOrdinate": "Koordinatenmaße (ab Nullpunkt)",
+  "menu.draw.dimArcLen": "Bogenlänge (⌒)",
+  "draw.dimMode.ordinate": "Koordinaten",
+  "draw.dimMode.arclen": "Bogenlänge",
+  "draw.dimHint.ordinate": "<b>Koordinatenmaße:</b> Zuerst Nullpunkt (z. B. Ecke) anklicken, dann erstes Loch/Ziel und Ausrichtung außen platzieren, dann weitere Punkte anklicken. <b>Enter</b> schließt ab, <b>Esc</b> beendet.",
+  "draw.dimHint.arclen": "<b>Bogenlänge:</b> Auf einen Kreisbogen oder eine Rundung klicken, dann die Maßlinie außen oder innen platzieren. <b>Esc</b> beendet.",
+  "draw.dimProOnly": "Diese Bemaßungs-Funktion ist nur im Profi-Modus verfügbar.",
+  "draw.panel.dualDims": "Doppelmaße mm / Zoll […]",
+  "draw.panel.dualDec": "Zoll-Stellen […]",
+  "draw.panel.dualDec2": "2 Stellen [1.00]",
+  "draw.panel.dualDec3": "3 Stellen [1.000]",
+  "draw.panel.dualDec4": "4 Stellen [1.0000]",
+  "draw.toast.pickArc": "Klick auf einen Kreisbogen oder eine abgerundete Ecke.",
+  "draw.toast.pickOrigin": "Klick auf einen Nullpunkt (z. B. eine Ecke oder Lochmitte)."
 }

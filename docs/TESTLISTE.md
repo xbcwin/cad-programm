@@ -2817,6 +2817,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export, Speichern/Laden, Hilfen & I18n**: PDF (`%PDF-1.4`), DXF (`ISO 5456-2 (A)`, `MITTELLINIE`), `Store.validateProject`, `HELP.drawingExplode`/`HELP.drawingProjection`, DE/EN-Schlüsselgleichheit und Befehlssuche laufen fehlerfrei (`t_a170_zeichnung_explosion_projektion`).
 - [ ] **Von Hand**: Im Browser in „Zeichnung“ eine Explosionsansicht schattiert anlegen, den Blickwinkel aus dem 3D-Modell übernehmen, Positionsnummern automatisch setzen und ein Blatt im Format USA (ISO A) als PDF exportieren.
 
+## Zeichnung: Koordinatenmaße, Bogenlänge, Doppelmaße (Auto [A-172], ZE-21, ZE-22)
+
+- [x] **Koordinatenmaße ab Ecke an 3 Löchern & Nachführung (ZE-21)**: Nullpunkt `(-40, -25)` und drei Bohrungen zeigen waagerecht `0`, `15`, `40`, `60` (mit Nullpunkt-Kreis) sowie senkrecht `0`, `20`, `30`, `35`; nach Ändern der Plattenbreite von `80` auf `90 mm` aktualisiert sich das Koordinatenmaß automatisch auf `0`, `20`, `45`, `65` (`t_a172_zeichnung_koord_bogen_doppel`).
+- [x] **Bogenlängen-Maß (ZE-21)**: Klicken auf eine R10-Eckenrundung erzeugt ein konzentrisches Bogenlängen-Maß mit Maßtext `⌒15,71` und zwei Bogenpfeilen (`t_a172_zeichnung_koord_bogen_doppel`).
+- [x] **Doppelmaße mm / Zoll (ZE-22)**: Einschalten von `#dw-style-dual` ergänzt alle Maße je Blatt um Zoll in eckigen Klammern – `25,4 [1.000]`, `⌒15,71 [0.618]`, `45 [1.772]` (Nullpunkt bleibt `0`); ein zweites Blatt ohne Doppelmaße beeinflusst Blatt 1 nicht (`t_a172_zeichnung_koord_bogen_doppel`).
+- [x] **Profi-Schutz, PDF/DXF, Undo/Redo, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus verborgen und gesperrt; PDF (`%PDF-1.4`) und DXF (`BEMASSUNG`, `ARC`), Rückgängig/Wiederholen, Speichern/Laden (`Store.validateProject`), `HELP.drawingOrdArc`/`HELP.drawingDualDims`, DE/EN-Schlüsselgleichheit und Befehlssuche (`drawingDimOrdinate`, `drawingDimArcLen`, `drawingDualDims`) laufen fehlerfrei (`t_a172_zeichnung_koord_bogen_doppel`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus in „Zeichnung“ mehrere eng beieinander liegende Bohrungen ab einer Kante per Koordinatenmaß bemaßen, ein Bogenlängen-Maß nach innen und außen ziehen, Doppelmaße ein- und ausschalten und die PDF-Ausgabe prüfen.
+
 ## Fehler melden
 
 ```
