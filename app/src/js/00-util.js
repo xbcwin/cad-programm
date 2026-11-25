@@ -752,6 +752,12 @@ const IC = {
   nameplate: '<rect x="2.5" y="5.5" width="19" height="13" rx="2" fill="currentColor" opacity=".14"/><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M7 10h10M7 14h6"/><circle cx="5" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r=".8" fill="currentColor" stroke="none"/><circle cx="5" cy="16" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="16" r=".8" fill="currentColor" stroke="none"/>',
   qrCode: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="5.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="16.2" y="5.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5.2" y="16.2" width="2.6" height="2.6" fill="currentColor" stroke="none"/><path d="M14 14h3v3h-3zM18 14h3M14 20h4M19 17v4" stroke-width="2"/>',
   barcode: '<rect x="2.5" y="4.5" width="19" height="15" rx="1.5" opacity=".35"/><path d="M5.5 7.5v9M8 7.5v9M10.5 7.5v9M12.5 7.5v9M15.5 7.5v9M18.5 7.5v9" stroke-width="1.6"/>',
+  stdPipe: '<ellipse cx="7" cy="12" rx="3" ry="6" fill="currentColor" opacity=".18"/><ellipse cx="7" cy="12" rx="3" ry="6"/><path d="M7 6h10a3 6 0 0 1 0 12H7"/><ellipse cx="7" cy="12" rx="1.3" ry="3"/>',
+  pipeElbow: '<path d="M5 19v-4A10 10 0 0 1 15 5h4v6h-4a4 4 0 0 0-4 4v4z" fill="currentColor" opacity=".18"/><path d="M5 19v-4A10 10 0 0 1 15 5h4v6h-4a4 4 0 0 0-4 4v4z"/>',
+  pipeTee: '<path d="M4 15v-6h16v6h-5v5h-6v-5z" fill="currentColor" opacity=".18"/><path d="M4 15v-6h16v6h-5v5h-6v-5z"/>',
+  pipeFlange: '<circle cx="12" cy="12" r="9" fill="currentColor" opacity=".16"/><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="5.8" r="1.1"/><circle cx="12" cy="18.2" r="1.1"/><circle cx="5.8" cy="12" r="1.1"/><circle cx="18.2" cy="12" r="1.1"/>',
+  stdBelt: '<rect x="3" y="7" width="18" height="10" rx="5" fill="currentColor" opacity=".14"/><rect x="3" y="7" width="18" height="10" rx="5"/><rect x="6" y="9.6" width="12" height="4.8" rx="2.4" stroke-dasharray="2 1.4"/>',
+  stdChain: '<rect x="3" y="9" width="7.5" height="6" rx="3" fill="currentColor" opacity=".18"/><rect x="3" y="9" width="7.5" height="6" rx="3"/><rect x="13.5" y="9" width="7.5" height="6" rx="3" fill="currentColor" opacity=".18"/><rect x="13.5" y="9" width="7.5" height="6" rx="3"/><path d="M8.5 12h7" stroke-width="2.2"/><circle cx="6.2" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="17.8" cy="12" r="1" fill="currentColor" stroke="none"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2898,6 +2904,36 @@ const HELP = {
   "tip": "Lokal erzeugter Strichcode (Code 128, EAN-13, EAN-8) als Platte oder Präge-Balken",
   "hilfe": "Erzeugt ohne Internetverbindung einen lesbaren Strichcode: Code 128 für beliebige Texte, Seriennummern und Ziffern oder EAN-13 bzw. EAN-8 mit automatischer Prüfziffer. Wie beim QR-Code kannst du eine Platte mit erhabenen oder vertieften Balken erzeugen oder „Nur Balken“ zum Einprägen in andere Körper wählen.",
   "tipp": "Bei EAN-13 und EAN-8 berechnet Tracery die letzte Prüfziffer automatisch nach Norm, wenn du 12 bzw. 7 Ziffern eintippst."
+ },
+ "stdPipe": {
+  "tip": "Rohr nach Norm (DIN EN 10220 / ISO 4200, DN10 bis DN200)",
+  "hilfe": "Erstellt ein genormtes Rohr für die gewählte Nennweite (z. B. DN25 mit Außen-Ø 33,7 mm und 3,2 mm Wandstärke) oder mit eigenen Maßen. Im Eigenschaften-Panel kannst du mit einem Klick gleich einen passenden Flansch, Rohrbogen oder ein T-Stück ans Rohrende setzen.",
+  "tipp": "Wähle „Eigene Maße“ bei Nennweite, wenn du einen beliebigen Außen-Ø und eine eigene Wandstärke angeben möchtest."
+ },
+ "pipeElbow": {
+  "tip": "Genormter Rohrbogen (DIN EN 10253-2, Typ 3D) für 45°, 60°, 90° oder 180°",
+  "hilfe": "Erzeugt einen glatten Rohrbogen mit passendem Außen-Ø, Wandstärke, Norm-Biegeradius und optionalen geraden Rohransätzen an beiden Enden.",
+  "tipp": "Mit dem Button „Bogen ansetzen“ direkt am Normrohr landet der Bogen bündig am oberen Rohrende."
+ },
+ "pipeTee": {
+  "tip": "T-Stück nach Norm (DIN EN 10253-2), gleich oder mit reduziertem Abzweig",
+  "hilfe": "Erstellt ein Rohr-T-Stück mit Durchgang in Z-Richtung und Abzweig in +X-Richtung. Du kannst für den Abzweig entweder dieselbe Nennweite oder eine kleinere Nennweite als Reduzier-T-Stück wählen.",
+  "tipp": "Das Mittenmaß C bestimmt die halbe Baulänge des T-Stücks – für eigene Längen einfach überschreiben."
+ },
+ "pipeFlange": {
+  "tip": "Normflansch nach EN 1092-1 PN16 (Glatt-, Vorschweiß- oder Blindflansch)",
+  "hilfe": "Erzeugt einen Flansch mit genormtem Außendurchmesser, Lochkreis, Schraubenlöchern und Dichtleiste (Form B1). Der Glattflansch (Typ 01) bekommt automatisch ein leichtes Aufschiebe-Spiel (Standard 0,4 mm), damit er direkt auf das passende Normrohr gesteckt werden kann.",
+  "tipp": "Nutze am Normrohr den Knopf „Flansch aufs Rohr“, um den passenden Glattflansch ohne Durchdringung direkt aufzusetzen."
+ },
+ "stdBelt": {
+  "tip": "Zahn-, Keil- oder Flachriemen nach gewünschter Wirklänge",
+  "hilfe": "Erstellt einen Riemen (GT2, HTD, Keilriemen DIN 2215 / SPZ / SPA oder Flachriemen) entweder als endlose Schleife mit exakter Wirklänge L = π · d + 2 · Achsabstand oder als gerades offenes Band.",
+  "tipp": "Stell bei geschlossenen Riemen optional den gewünschten Scheiben-Teilkreisdurchmesser ein – der Achsabstand passt sich automatisch an die Länge an."
+ },
+ "stdChain": {
+  "tip": "Rollenkette nach Norm (DIN 8187 / ISO 606) mit fester Teilung und Länge",
+  "hilfe": "Erzeugt eine vollständige Rollenkette aus Innen- und Außenlaschen, Bolzen und Rollen passend zu deinen Kettenrädern (z. B. 08B 1/2\" oder 06B 3/8\"). Wahlweise gerade abgelängt oder als geschlossene Endlosschleife mit gerader Gliederzahl.",
+  "tipp": "Die tatsächliche Kettenlänge ist immer ein ganzzahliges Vielfaches der Teilung p (bei geschlossenen Ketten eine gerade Gliederzahl)."
  }
 };
 

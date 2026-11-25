@@ -5315,6 +5315,12 @@ export function createKernel(R, oc) {
     if (lib === 'nameplate') return buildNameplate(p);
     if (lib === 'qrCode') return buildQrCode(p);
     if (lib === 'barcode') return buildBarcode(p);
+    if (lib === 'stdPipe') return buildStdPipe(p);
+    if (lib === 'pipeElbow') return buildPipeElbow(p);
+    if (lib === 'pipeTee') return buildPipeTee(p);
+    if (lib === 'pipeFlange') return buildPipeFlange(p);
+    if (lib === 'stdBelt') return buildStdBelt(p);
+    if (lib === 'stdChain') return buildStdChain(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
@@ -6528,6 +6534,449 @@ export function createKernel(R, oc) {
       return out;
     } finally {
       safeDelete(shape);
+    }
+  }
+  function buildStdPipe(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const od = Math.max(3, pos(sp.od ?? p.od, 33.7));
+    const wall = Math.max(0.4, Math.min(od / 2 - 0.3, pos(sp.wall ?? p.wall, 3.2)));
+    const id = Math.max(0.6, num(sp.id, od - 2 * wall));
+    const L = Math.max(2, pos(sp.length ?? p.length, 100));
+    let outer = null, inner = null, shape = null;
+    try {
+      outer = R.makeCylinder(od / 2, L, [0, 0, 0], [0, 0, 1]);
+      inner = R.makeCylinder(id / 2, L + 2, [0, 0, -1], [0, 0, 1]);
+      shape = outer.cut(inner);
+      if (!isClosedValidSolid(shape)) throw new Error('Normrohr ergab keinen geschlossenen Körper.');
+      const out = shape; shape = null;
+      return out;
+    } finally {
+      safeDelete(outer); safeDelete(inner); safeDelete(shape);
+    }
+  }
+  function buildPipeElbow(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const od = Math.max(3, pos(sp.od ?? p.od, 33.7));
+    const wall = Math.max(0.4, Math.min(od / 2 - 0.3, pos(sp.wall ?? p.wall, 3.2)));
+    const id = Math.max(0.6, num(sp.id, od - 2 * wall));
+    const ro = od / 2;
+    const ri = id / 2;
+    const angle = Math.max(15, Math.min(180, pos(sp.angle ?? p.angle, 90)));
+    const bendR = Math.max(ro + 1.5, pos(sp.bendR ?? p.bendR, 38));
+    const stub = Math.max(0, num(sp.stub ?? p.stub, 0));
+    const rad = (angle * Math.PI) / 180;
+    const pArc0 = [0, 0, stub];
+    const pArcM = [bendR * (1 - Math.cos(rad / 2)), 0, stub + bendR * Math.sin(rad / 2)];
+    const pArc1 = [bendR * (1 - Math.cos(rad)), 0, stub + bendR * Math.sin(rad)];
+    const dir = [Math.sin(rad), 0, Math.cos(rad)];
+    const sweepWire = (w, spine) => {
+      try { return R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true }); }
+      catch (_) { return R.genericSweep(w, spine, { transitionMode: 'right', forceProfileSpineOthogonality: true }); }
+    };
+
+    const outEdges = [], inEdges = [];
+    let outSpine = null, inSpine = null;
+    let cOut = null, wOut = null, outer = null;
+    let cIn = null, wIn = null, inner = null;
+    let shape = null;
+    try {
+      if (stub > 0.05) outEdges.push(R.makeLine([0, 0, 0], pArc0));
+      outEdges.push(R.makeThreePointArc(pArc0, pArcM, pArc1));
+      if (stub > 0.05) outEdges.push(R.makeLine(pArc1, [pArc1[0] + stub * dir[0], 0, pArc1[2] + stub * dir[2]]));
+      outSpine = R.assembleWire(outEdges);
+      cOut = R.makeCircle(ro, [0, 0, 0], [0, 0, 1]);
+      wOut = R.assembleWire([cOut]);
+      outer = sweepWire(wOut, outSpine);
+
+      inEdges.push(R.makeLine([0, 0, -1], pArc0));
+      inEdges.push(R.makeThreePointArc(pArc0, pArcM, pArc1));
+      inEdges.push(R.makeLine(pArc1, [pArc1[0] + (stub + 1) * dir[0], 0, pArc1[2] + (stub + 1) * dir[2]]));
+      inSpine = R.assembleWire(inEdges);
+      cIn = R.makeCircle(ri, [0, 0, -1], [0, 0, 1]);
+      wIn = R.assembleWire([cIn]);
+      inner = sweepWire(wIn, inSpine);
+
+      shape = outer.cut(inner);
+      if (!isClosedValidSolid(shape)) throw new Error('Rohrbogen ergab keinen geschlossenen Körper.');
+      const out = shape; shape = null;
+      return out;
+    } finally {
+      for (const e of outEdges) safeDelete(e);
+      for (const e of inEdges) safeDelete(e);
+      safeDelete(outSpine); safeDelete(inSpine);
+      safeDelete(cOut); safeDelete(wOut); safeDelete(outer);
+      safeDelete(cIn); safeDelete(wIn); safeDelete(inner);
+      safeDelete(shape);
+    }
+  }
+  function buildPipeTee(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const od = Math.max(3, pos(sp.od ?? p.od, 33.7));
+    const wall = Math.max(0.4, Math.min(od / 2 - 0.3, pos(sp.wall ?? p.wall, 3.2)));
+    const id = Math.max(0.6, num(sp.id, od - 2 * wall));
+    const branchOd = Math.max(3, Math.min(od, pos(sp.branchOd, od)));
+    const branchWall = Math.max(0.4, Math.min(branchOd / 2 - 0.3, pos(sp.branchWall, wall)));
+    const branchId = Math.max(0.6, num(sp.branchId, branchOd - 2 * branchWall));
+    const C = Math.max(od * 0.7, branchOd * 0.7, pos(sp.centerLen ?? p.centerLen, 38));
+
+    let shape = null, bore1 = null, bore2 = null, tmp = null;
+    try {
+      const mainOuter = R.makeCylinder(od / 2, 2 * C, [0, 0, 0], [0, 0, 1]);
+      const brOuter = R.makeCylinder(branchOd / 2, C, [0, 0, C], [1, 0, 0]);
+      shape = fuseAll([mainOuter, brOuter], true);
+      bore1 = R.makeCylinder(id / 2, 2 * C + 2, [0, 0, -1], [0, 0, 1]);
+      tmp = shape.cut(bore1);
+      safeDelete(shape); shape = tmp; tmp = null;
+      bore2 = R.makeCylinder(branchId / 2, C + 1, [0, 0, C], [1, 0, 0]);
+      tmp = shape.cut(bore2);
+      safeDelete(shape); shape = tmp; tmp = null;
+      if (!isClosedValidSolid(shape)) throw new Error('T-Stück ergab keinen geschlossenen Körper.');
+      const out = shape; shape = null;
+      return out;
+    } finally {
+      safeDelete(bore1); safeDelete(bore2); safeDelete(tmp); safeDelete(shape);
+    }
+  }
+  function buildPipeFlange(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const style = (sp.style || p.style) === 'weldNeck' || (sp.style || p.style) === 'blind' ? (sp.style || p.style) : 'slipOn';
+    const od = Math.max(3, pos(sp.od ?? p.od, 33.7));
+    const pipeId = Math.max(1, pos(sp.pipeId, od - 6.4));
+    const boreD = style === 'blind' ? 0 : Math.max(1, num(sp.boreD, style === 'weldNeck' ? pipeId : od + 0.4));
+    const boltHoleD = Math.max(2, pos(sp.boltHoleD ?? p.boltHoleD, 14));
+    const boltCount = Math.max(2, Math.min(24, Math.round(pos(sp.boltCount ?? p.boltCount, 4))));
+    const boltCircle = Math.max(Math.max(boreD, od) + boltHoleD + 8, pos(sp.boltCircle ?? p.boltCircle, 85));
+    const flangeD = Math.max(boltCircle + boltHoleD + 6, pos(sp.flangeD ?? p.flangeD, 115));
+    const thickness = Math.max(3, pos(sp.thickness ?? p.thickness, 16));
+    const rfH = Math.min(thickness * 0.35, Math.max(0, num(sp.rfH, 2)));
+    const plateT = Math.max(2, num(sp.plateT, thickness - rfH));
+    const rfD = Math.max(Math.max(boreD, od) + 2, Math.min(boltCircle - boltHoleD - 2, flangeD - 4, pos(sp.rfD, 68)));
+    const neckH = style === 'weldNeck' ? Math.max(6, num(sp.neckH, thickness * 1.4)) : 0;
+    const hubD = style === 'weldNeck' ? Math.max(od + 2, Math.min(rfD - 1, boltCircle - boltHoleD - 3, num(sp.hubD, od * 1.38))) : 0;
+    const totalH = style === 'weldNeck' ? thickness + neckH : thickness;
+
+    const ro = flangeD / 2;
+    const rRf = rfD / 2;
+    const hasRf = rfH >= 0.2 && rRf < ro - 0.1;
+
+    let shape = null;
+    try {
+      if (style === 'blind') {
+        const pts = [[0, 0], [ro, 0], [ro, plateT]];
+        if (hasRf) pts.push([rRf, plateT], [rRf, thickness]);
+        pts.push([0, thickness]);
+        shape = revolveProfile(pts);
+      } else if (style === 'weldNeck') {
+        const rIn = pipeId / 2;
+        const rOut = od / 2;
+        const rHub = hubD / 2;
+        const pts = [[rIn, 0], [rOut, 0], [rHub, neckH], [ro, neckH], [ro, neckH + plateT]];
+        if (hasRf && rRf > rIn + 0.1) pts.push([rRf, neckH + plateT], [rRf, totalH]);
+        pts.push([rIn, totalH]);
+        shape = revolveProfile(pts);
+      } else {
+        const ri = boreD / 2;
+        const pts = [[ri, 0], [ro, 0], [ro, plateT]];
+        if (hasRf && rRf > ri + 0.1) pts.push([rRf, plateT], [rRf, thickness]);
+        pts.push([ri, thickness]);
+        shape = revolveProfile(pts);
+      }
+
+      const zH0 = style === 'weldNeck' ? neckH - 1 : -1;
+      const zHLen = (style === 'weldNeck' ? thickness : thickness) + 2;
+      const rBolt = boltCircle / 2;
+      for (let i = 0; i < boltCount; i++) {
+        const a = ((i + 0.5) * 2 * Math.PI) / boltCount;
+        const hole = R.makeCylinder(boltHoleD / 2, zHLen, [rBolt * Math.cos(a), rBolt * Math.sin(a), zH0], [0, 0, 1]);
+        try {
+          const next = shape.cut(hole);
+          safeDelete(shape);
+          shape = next;
+        } finally {
+          safeDelete(hole);
+        }
+      }
+      if (!isClosedValidSolid(shape)) throw new Error('Flansch ergab keinen geschlossenen Körper.');
+      const out = shape; shape = null;
+      return out;
+    } finally {
+      safeDelete(shape);
+    }
+  }
+  function buildStdBelt(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const family = sp.family || 'GT2';
+    const shapeMode = (sp.shape || p.shape) === 'open' ? 'open' : 'loop';
+    const L = Math.max(20, Math.min(5000, pos(sp.length ?? p.length, 200)));
+    const width = Math.max(1.5, pos(sp.width ?? p.width, 6));
+    const thickness = Math.max(0.5, pos(sp.thickness ?? p.thickness, 1.38));
+    const pitch = num(sp.pitch, family === 'GT2' ? 2 : family === 'HTD' ? 3 : 0);
+    const pld = Math.max(0, num(sp.pld, 0.254));
+    const toothH = pitch > 0 ? Math.min(thickness * 0.72, num(sp.toothH, 0.75)) : 0;
+    const backT = Math.max(0.3, num(sp.backT, thickness - toothH));
+    const teeth = pitch > 0 ? Math.max(4, Math.round(num(sp.teeth, L / pitch))) : 0;
+    const vAngle = pos(sp.vAngle, 38);
+
+    const stadiumSolid = (halfC, r, z0, h) => {
+      if (halfC < 0.05) {
+        return R.makeCylinder(r, h, [0, 0, z0], [0, 0, 1]);
+      }
+      const edges = [];
+      let w = null, f = null;
+      try {
+        edges.push(R.makeLine([-halfC, -r, z0], [halfC, -r, z0]));
+        edges.push(R.makeThreePointArc([halfC, -r, z0], [halfC + r, 0, z0], [halfC, r, z0]));
+        edges.push(R.makeLine([halfC, r, z0], [-halfC, r, z0]));
+        edges.push(R.makeThreePointArc([-halfC, r, z0], [-halfC - r, 0, z0], [-halfC, -r, z0]));
+        w = R.assembleWire(edges);
+        f = R.makeFace(w);
+        return R.basicFaceExtrusion(f, new R.Vector([0, 0, h]));
+      } finally {
+        for (const e of edges) safeDelete(e);
+        safeDelete(w); safeDelete(f);
+      }
+    };
+
+    if (shapeMode === 'open') {
+      if (family === 'V') {
+        const wTop = width;
+        const wBot = Math.max(1.2, wTop - 2 * thickness * Math.tan((vAngle * Math.PI) / 360));
+        const dw = (wTop - wBot) / 2;
+        let fc = null;
+        try {
+          fc = polygonFace([[-L / 2, thickness, 0], [-L / 2, thickness, wTop], [-L / 2, 0, dw + wBot], [-L / 2, 0, dw]]);
+          return R.basicFaceExtrusion(fc, new R.Vector([L, 0, 0]));
+        } finally { safeDelete(fc); }
+      }
+      if (family === 'flat' || !(pitch > 0 && toothH > 0.05) || teeth > 140) {
+        return R.makeBox([-L / 2, 0, 0], [L / 2, thickness, width]);
+      }
+      const nT = Math.max(2, Math.floor(L / pitch));
+      const xStart = -(nT * pitch) / 2;
+      const pts = [[-L / 2, backT, 0], [L / 2, backT, 0]];
+      if (L / 2 > xStart + nT * pitch + 0.02) pts.push([L / 2, 0, 0]);
+      pts.push([xStart + nT * pitch, 0, 0]);
+      for (let i = nT - 1; i >= 0; i--) {
+        const x0 = xStart + i * pitch;
+        const xR = x0 + pitch * 0.72;
+        const xL = x0 + pitch * 0.28;
+        pts.push([xR + 0.12 * pitch, 0, 0], [xR, -toothH, 0], [xL, -toothH, 0], [xL - 0.12 * pitch, 0, 0], [x0, 0, 0]);
+      }
+      if (-L / 2 < xStart - 0.02) pts.push([-L / 2, 0, 0]);
+      let fc = null;
+      try {
+        fc = polygonFace(pts);
+        return R.basicFaceExtrusion(fc, new R.Vector([0, 0, width]));
+      } finally { safeDelete(fc); }
+    }
+
+    const dp = pos(sp.dp, L / (Math.PI + 2));
+    const C = Math.max(0, num(sp.centerDist, (L - Math.PI * dp) / 2));
+    const rPitch = dp / 2;
+    const rLand = Math.max(2, num(sp.rLand, rPitch - pld));
+    const rOut = pos(sp.rOut, family === 'V' ? rPitch + thickness * 0.4 : rLand + backT);
+    const rIn = Math.max(1.2, pos(sp.rIn, family === 'V' ? rOut - thickness : rLand - toothH));
+
+    if (family === 'V') {
+      const wTop = width;
+      const wBot = Math.max(1.2, wTop - 2 * thickness * Math.tan((vAngle * Math.PI) / 360));
+      const z0 = (wTop - wBot) / 2;
+      const z1 = z0 + wBot;
+      if (C < 0.05) {
+        return revolveProfile([[rIn, z0], [rOut, 0], [rOut, wTop], [rIn, z1]]);
+      }
+      let fL = null, fR = null, fB = null, fT = null;
+      try {
+        fL = polygonFace([[-C / 2, rIn, z0], [-C / 2, rOut, 0], [-C / 2, rOut, wTop], [-C / 2, rIn, z1]]);
+        const leftArc = R.revolution(fL, [-C / 2, 0, 0], [0, 0, 1], 180);
+        fR = polygonFace([[C / 2, -rIn, z0], [C / 2, -rOut, 0], [C / 2, -rOut, wTop], [C / 2, -rIn, z1]]);
+        const rightArc = R.revolution(fR, [C / 2, 0, 0], [0, 0, 1], 180);
+        fB = polygonFace([[-C / 2 - 0.02, -rIn, z0], [-C / 2 - 0.02, -rOut, 0], [-C / 2 - 0.02, -rOut, wTop], [-C / 2 - 0.02, -rIn, z1]]);
+        const botRun = R.basicFaceExtrusion(fB, new R.Vector([C + 0.04, 0, 0]));
+        fT = polygonFace([[-C / 2 - 0.02, rIn, z0], [-C / 2 - 0.02, rOut, 0], [-C / 2 - 0.02, rOut, wTop], [-C / 2 - 0.02, rIn, z1]]);
+        const topRun = R.basicFaceExtrusion(fT, new R.Vector([C + 0.04, 0, 0]));
+        const shape = fuseAll([leftArc, rightArc, botRun, topRun], true);
+        if (!isClosedValidSolid(shape)) throw new Error('Keilriemen ergab keinen geschlossenen Körper.');
+        return shape;
+      } finally {
+        safeDelete(fL); safeDelete(fR); safeDelete(fB); safeDelete(fT);
+      }
+    }
+
+    let outer = null, inner = null, shape = null;
+    try {
+      outer = stadiumSolid(C / 2, rOut, 0, width);
+      if (pitch > 0 && toothH > 0.05 && teeth >= 4 && teeth <= 140) {
+        try {
+          const arcL = Math.PI * rPitch;
+          const totalL = 2 * C + 2 * arcL;
+          const halfC = C / 2;
+          const pointAndNormalAt = (sRaw) => {
+            const s = ((sRaw % totalL) + totalL) % totalL;
+            if (s < C) {
+              return { p: [-halfC + s, -rPitch], nIn: [0, 1] };
+            }
+            if (s < C + arcL) {
+              const a = -Math.PI / 2 + ((s - C) / arcL) * Math.PI;
+              return { p: [halfC + rPitch * Math.cos(a), rPitch * Math.sin(a)], nIn: [-Math.cos(a), -Math.sin(a)] };
+            }
+            if (s < 2 * C + arcL) {
+              return { p: [halfC - (s - C - arcL), rPitch], nIn: [0, -1] };
+            }
+            const a = Math.PI / 2 + ((s - 2 * C - arcL) / arcL) * Math.PI;
+            return { p: [-halfC + rPitch * Math.cos(a), rPitch * Math.sin(a)], nIn: [-Math.cos(a), -Math.sin(a)] };
+          };
+          const toothPts = [];
+          const d0 = pld;
+          const d1 = pld + toothH;
+          for (let i = 0; i < teeth; i++) {
+            const sBase = (i / teeth) * totalL;
+            const step = totalL / teeth;
+            const samples = [
+              [0.08 * step, d0],
+              [0.24 * step, d0],
+              [0.34 * step, d1],
+              [0.66 * step, d1],
+              [0.76 * step, d0],
+              [0.92 * step, d0],
+            ];
+            for (const [ds, off] of samples) {
+              const { p: pt, nIn } = pointAndNormalAt(sBase + ds);
+              toothPts.push([pt[0] + nIn[0] * off, pt[1] + nIn[1] * off, -1]);
+            }
+          }
+          const inFace = polygonFace(toothPts);
+          try {
+            inner = R.basicFaceExtrusion(inFace, new R.Vector([0, 0, width + 2]));
+          } finally {
+            safeDelete(inFace);
+          }
+          shape = outer.cut(inner);
+          if (!isClosedValidSolid(shape)) {
+            safeDelete(shape); shape = null;
+          }
+        } catch (_) {
+          safeDelete(inner); inner = null;
+          safeDelete(shape); shape = null;
+        }
+      }
+      if (!shape) {
+        safeDelete(inner);
+        inner = stadiumSolid(C / 2, pitch > 0 ? rLand : rIn, -1, width + 2);
+        shape = outer.cut(inner);
+      }
+      if (!isClosedValidSolid(shape)) throw new Error('Riemen ergab keinen geschlossenen Körper.');
+      const out = shape; shape = null;
+      return out;
+    } finally {
+      safeDelete(outer); safeDelete(inner); safeDelete(shape);
+    }
+  }
+  function buildStdChain(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const shapeMode = (sp.shape || p.shape) === 'loop' ? 'loop' : 'straight';
+    const pitch = Math.max(3, pos(sp.pitch ?? p.pitch, 12.7));
+    const rollerD = Math.max(1.5, pos(sp.rollerD, pitch * 0.625));
+    const b1 = Math.max(1.2, pos(sp.b1, pitch * 0.6));
+    const pinD = Math.max(0.8, Math.min(rollerD - 0.6, pos(sp.pinD, pitch * 0.35)));
+    const plateH = Math.max(pinD + 1.5, pos(sp.plateH, pitch * 0.92));
+    const plateT = Math.max(0.4, pos(sp.plateT, pitch * 0.125));
+    const gap = Math.max(0.02, num(sp.gap, 0.05));
+    const pinOverhang = Math.max(0.2, num(sp.pinOverhang, plateT * 0.45));
+    const totalW = pos(sp.totalW, b1 + 4 * plateT + 2 * gap + 2 * pinOverhang);
+    const links = Math.max(2, Math.min(80, Math.round(pos(sp.links, 12))));
+
+    const pts = [];
+    if (shapeMode === 'loop') {
+      const zHalf = Math.max(3, Math.round(pos(sp.zHalf, 7)));
+      const nStr = Math.max(0, Math.round(num(sp.nStr, (links - 2 * zHalf) / 2)));
+      const arcR = pos(sp.arcR, pitch / (2 * Math.sin(Math.PI / (2 * zHalf))));
+      const C = Math.max(0, num(sp.centerDist, nStr * pitch));
+      const halfC = C / 2;
+      for (let j = 0; j <= zHalf; j++) {
+        const a = -Math.PI / 2 + (j / zHalf) * Math.PI;
+        pts.push([halfC + arcR * Math.cos(a), arcR * Math.sin(a)]);
+      }
+      for (let j = 1; j < nStr; j++) pts.push([halfC - j * pitch, arcR]);
+      for (let j = 0; j <= zHalf; j++) {
+        const a = Math.PI / 2 + (j / zHalf) * Math.PI;
+        pts.push([-halfC + arcR * Math.cos(a), arcR * Math.sin(a)]);
+      }
+      for (let j = 1; j < nStr; j++) pts.push([-halfC + j * pitch, -arcR]);
+    } else {
+      for (let i = 0; i <= links; i++) pts.push([(i - links / 2) * pitch, 0]);
+    }
+
+    const rPl = plateH / 2;
+    const zMid = totalW / 2;
+    const zRoller0 = zMid - b1 / 2;
+    const zRoller1 = zMid + b1 / 2;
+    const zInBot = zRoller0 - plateT - 0.02;
+    const zInTop = zRoller1 + 0.02;
+    const zOutBot = zInBot - plateT - gap;
+    const zOutTop = zInTop + plateT + gap;
+    const pinCapBotH = Math.max(0.4, zRoller0 - 0.02);
+    const pinCapTopZ0 = zRoller1 + 0.02;
+    const pinCapTopH = Math.max(0.4, totalW - pinCapTopZ0);
+
+    let plateProto = null, rollerProto = null, pinBotProto = null, pinTopProto = null;
+    const solids = [];
+    try {
+      const pEdges = [];
+      let pWire = null, pFace = null;
+      try {
+        pEdges.push(R.makeLine([0, -rPl, 0], [pitch, -rPl, 0]));
+        pEdges.push(R.makeThreePointArc([pitch, -rPl, 0], [pitch + rPl, 0, 0], [pitch, rPl, 0]));
+        pEdges.push(R.makeLine([pitch, rPl, 0], [0, rPl, 0]));
+        pEdges.push(R.makeThreePointArc([0, rPl, 0], [-rPl, 0, 0], [0, -rPl, 0]));
+        pWire = R.assembleWire(pEdges);
+        pFace = R.makeFace(pWire);
+        plateProto = R.basicFaceExtrusion(pFace, new R.Vector([0, 0, plateT]));
+        const holeR = pinD / 2 + 0.03;
+        for (const hx of [0, pitch]) {
+          const hc = R.makeCylinder(holeR, plateT + 2, [hx, 0, -1], [0, 0, 1]);
+          try {
+            const pCut = plateProto.cut(hc);
+            safeDelete(plateProto);
+            plateProto = pCut;
+          } finally { safeDelete(hc); }
+        }
+      } finally {
+        for (const e of pEdges) safeDelete(e);
+        safeDelete(pWire); safeDelete(pFace);
+      }
+
+      rollerProto = R.makeCylinder(rollerD / 2, b1, [0, 0, zRoller0], [0, 0, 1]);
+      pinBotProto = R.makeCylinder(pinD / 2, pinCapBotH, [0, 0, 0], [0, 0, 1]);
+      pinTopProto = R.makeCylinder(pinD / 2, pinCapTopH, [0, 0, pinCapTopZ0], [0, 0, 1]);
+
+      const nPins = shapeMode === 'loop' ? pts.length : pts.length;
+      for (let i = 0; i < nPins; i++) {
+        const [px, py] = pts[i];
+        solids.push(rollerProto.clone().translate([px, py, 0]));
+        solids.push(pinBotProto.clone().translate([px, py, 0]));
+        solids.push(pinTopProto.clone().translate([px, py, 0]));
+      }
+
+      const nLinks = shapeMode === 'loop' ? pts.length : pts.length - 1;
+      for (let k = 0; k < nLinks; k++) {
+        const a = pts[k];
+        const b = pts[(k + 1) % pts.length];
+        const angDeg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+        const isInner = k % 2 === 0;
+        const z0 = isInner ? zInBot : zOutBot;
+        const z1 = isInner ? zInTop : zOutTop;
+        const pl0 = Math.abs(angDeg) > 1e-4 ? plateProto.clone().rotate(angDeg, [0, 0, 0], [0, 0, 1]) : plateProto.clone();
+        const pl1 = Math.abs(angDeg) > 1e-4 ? plateProto.clone().rotate(angDeg, [0, 0, 0], [0, 0, 1]) : plateProto.clone();
+        solids.push(pl0.translate([a[0], a[1], z0]));
+        solids.push(pl1.translate([a[0], a[1], z1]));
+      }
+
+      const comp = R.makeCompound(solids);
+      return comp;
+    } finally {
+      safeDelete(plateProto); safeDelete(rollerProto); safeDelete(pinBotProto); safeDelete(pinTopProto);
+      for (const s of solids) safeDelete(s);
     }
   }
   // ---------- Kanten-Veredelung ----------

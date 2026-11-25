@@ -40285,6 +40285,285 @@ def t_f11252354(p):
     return [ok1, ok2, ok3]
 
 
+def t_a196_rohre_fittings_flansche_riemen_ketten(p):
+    p.empty()
+    p.ev("ViewPrefs.setLevel('simple');")
+    p.wait(250)
+
+    # 1. Einfach-Modus: Rohr DN25 einfügen (Außen-Ø 33,7), Flansch passt ohne Durchdringung aufs Rohr
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#add-std-pipe', timeout=5000)
+    simple_fly = p.ev("""return {
+      tiles: [...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length,
+      btns: ['add-std-pipe', 'add-pipe-elbow', 'add-pipe-tee', 'add-pipe-flange', 'add-std-belt', 'add-std-chain']
+        .every(id => !!document.getElementById(id)?.offsetParent),
+    }""")
+    p.pg.locator('#add-std-pipe').click()
+    warte_rechnen(p, 45)
+    pipe_res = p.ev("""return (() => {
+      const it = App.doc.items[0];
+      const r = it && App.results.get(it.id);
+      const bb = r && r.data && r.data.bbox;
+      const faces = (r && r.data && r.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      const hint = document.querySelector('#p-stdpipe-hint')?.textContent || '';
+      return {
+        errs: App.errors.length,
+        lib: it && it.p && it.p.lib,
+        dn: it && it.p && it.p.dn,
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        cylR,
+        hint,
+      };
+    })()""")
+    p.pg.locator('#btn-add-pipe-flange').click()
+    warte_rechnen(p, 45)
+    flange_res = p.ev("""return (async () => {
+      const pipe = App.doc.items[0], fl = App.doc.items[1];
+      const rFl = fl && App.results.get(fl.id);
+      const bb = rFl && rFl.data && rFl.data.bbox;
+      const faces = (rFl && rFl.data && rFl.data.faces) || [];
+      const cylR = [...new Set(faces.filter(f => f.t === 'CYLINDRE' && f.r > 0).map(f => Math.round(f.r * 1000) / 1000))].sort((a, b) => a - b);
+      const wb = (id) => { const b = Actions.worldBox(id); return b ? [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] : null; };
+      const bp = wb(pipe.id), bf = wb(fl.id);
+      const overlapZ = !!(bp && bf && bf[2] < bp[5] - 1 && bf[5] <= bp[5] + 0.1);
+      const clash = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const hint = document.querySelector('#p-pipeflange-hint')?.textContent || '';
+      return {
+        count: App.doc.items.length,
+        errs: App.errors.length,
+        lib: fl && fl.p && fl.p.lib,
+        dn: fl && fl.p && fl.p.dn,
+        dx: bb ? bb[3] - bb[0] : 0,
+        dy: bb ? bb[4] - bb[1] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        cylR,
+        overlapZ,
+        checked: clash.checkedCount,
+        clashes: (clash.pairs || []).length,
+        clashErrs: (clash.errors || []).length,
+        hint,
+      };
+    })()""")
+    p.ev("""
+      App.change('Vorschweiß- & Blindflansch testen', (doc) => {
+        doc.items[1].p.style = 'weldNeck';
+        const b = Model.newItem('part', { lib: 'pipeFlange', dn: 'DN25', style: 'blind' }, { name: 'Blindflansch' });
+        b.t.x = 140;
+        doc.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 45)
+    flange_vars = p.ev("""return {
+      errs: App.errors.length,
+      wnHint: document.querySelector('#p-pipeflange-hint')?.textContent || '',
+      wnDz: (() => { const b = App.results.get(App.doc.items[1].id)?.data?.bbox; return b ? b[5] - b[2] : 0; })(),
+      blindDz: (() => { const b = App.results.get(App.doc.items[2].id)?.data?.bbox; return b ? b[5] - b[2] : 0; })(),
+    }""")
+    ok1 = bool(
+        simple_fly['tiles'] == 5 and simple_fly['btns']
+        and pipe_res['errs'] == 0 and pipe_res['lib'] == 'stdPipe' and pipe_res['dn'] == 'DN25'
+        and abs(pipe_res['dx'] - 33.7) < 0.05 and abs(pipe_res['dy'] - 33.7) < 0.05 and abs(pipe_res['dz'] - 100.0) < 0.05
+        and any(abs(r - 16.85) < 0.02 for r in pipe_res['cylR'])
+        and any(abs(r - 13.65) < 0.02 for r in pipe_res['cylR'])
+        and 'DN25' in pipe_res['hint'] and '33,7' in pipe_res['hint']
+        and flange_res['count'] == 2 and flange_res['errs'] == 0 and flange_res['lib'] == 'pipeFlange'
+        and abs(flange_res['dx'] - 115.0) < 0.05 and abs(flange_res['dy'] - 115.0) < 0.05 and abs(flange_res['dz'] - 16.0) < 0.05
+        and any(abs(r - 17.05) < 0.02 for r in flange_res['cylR'])
+        and flange_res['overlapZ']
+        and flange_res['checked'] == 2 and flange_res['clashes'] == 0 and flange_res['clashErrs'] == 0
+        and 'DN25' in flange_res['hint'] and '115' in flange_res['hint']
+        and flange_vars['errs'] == 0 and flange_vars['wnDz'] > 30.0 and abs(flange_vars['blindDz'] - 16.0) < 0.05
+    )
+
+    # 2. Rohrbögen (90°, 45°, 180° mit Ansatz) & T-Stücke (gleich + reduziert)
+    p.ev("App.change('Rohr allein', (doc) => { doc.items = [doc.items[0]]; }); App.select([App.doc.items[0].id]);")
+    warte_rechnen(p, 30)
+    p.pg.locator('#btn-add-pipe-elbow').click()
+    warte_rechnen(p, 45)
+    elbow_res = p.ev("""return (async () => {
+      const pipe = App.doc.items[0], el = App.doc.items[1];
+      const clash = await Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.05 } });
+      const bb = App.results.get(el.id)?.data?.bbox;
+      return {
+        errs: App.errors.length,
+        lib: el && el.p && el.p.lib,
+        dx: bb ? bb[3] - bb[0] : 0,
+        dz: bb ? bb[5] - bb[2] : 0,
+        clashes: (clash.pairs || []).length,
+        hint: document.querySelector('#p-pipeelbow-hint')?.textContent || '',
+      };
+    })()""")
+    p.ev("""
+      App.change('45/180 Bogen & T-Stücke', (doc) => {
+        doc.items[1].p.angle = '180';
+        doc.items[1].p.stub = 15;
+        const e45 = Model.newItem('part', { lib: 'pipeElbow', dn: 'DN25', angle: '45', stub: 10 }, { name: 'Bogen 45' });
+        e45.t.x = 120;
+        const tee1 = Model.newItem('part', { lib: 'pipeTee', dn: 'DN25', branchDn: 'same' }, { name: 'T DN25' });
+        tee1.t.x = 220;
+        const tee2 = Model.newItem('part', { lib: 'pipeTee', dn: 'DN25', branchDn: 'DN15' }, { name: 'T DN25x15' });
+        tee2.t.x = 320;
+        doc.items.push(e45, tee1, tee2);
+      });
+    """)
+    warte_rechnen(p, 45)
+    fit_res = p.ev("""return (() => {
+      const b180 = App.results.get(App.doc.items[1].id)?.data?.bbox;
+      const b45 = App.results.get(App.doc.items[2].id)?.data?.bbox;
+      const bt1 = App.results.get(App.doc.items[3].id)?.data?.bbox;
+      const bt2 = App.results.get(App.doc.items[4].id)?.data?.bbox;
+      return {
+        errs: App.errors.length,
+        dx180: b180 ? b180[3] - b180[0] : 0,
+        dz180: b180 ? b180[5] - b180[2] : 0,
+        dx45: b45 ? b45[3] - b45[0] : 0,
+        dzTee1: bt1 ? bt1[5] - bt1[2] : 0,
+        dxTee1: bt1 ? bt1[3] - bt1[0] : 0,
+        dzTee2: bt2 ? bt2[5] - bt2[2] : 0,
+      };
+    })()""")
+    ok2 = bool(
+        elbow_res['errs'] == 0 and elbow_res['lib'] == 'pipeElbow'
+        and abs(elbow_res['dx'] - 54.85) < 0.2 and abs(elbow_res['dz'] - 54.85) < 0.2
+        and elbow_res['clashes'] == 0 and '90°' in elbow_res['hint']
+        and fit_res['errs'] == 0
+        and abs(fit_res['dx180'] - 109.7) < 0.2 and abs(fit_res['dz180'] - 69.85) < 0.2
+        and fit_res['dx45'] > 30.0
+        and abs(fit_res['dzTee1'] - 76.0) < 0.1 and abs(fit_res['dzTee2'] - 76.0) < 0.1
+    )
+
+    # 3. Riemen nach Länge (GT2 geschlossen 200 mm, GT2 offen 120 mm, Keilriemen SPZ 300 mm)
+    p.ev("""
+      App.change('Riemen testen', (doc) => {
+        const b1 = Model.newItem('part', { lib: 'stdBelt', profile: 'GT2', shape: 'loop', length: 200 }, { name: 'GT2 200' });
+        const b2 = Model.newItem('part', { lib: 'stdBelt', profile: 'GT2', shape: 'open', length: 120 }, { name: 'GT2 offen' });
+        b2.t.y = 60;
+        const b3 = Model.newItem('part', { lib: 'stdBelt', profile: 'SPZ', shape: 'loop', length: 300 }, { name: 'Keilriemen SPZ' });
+        b3.t.y = -80;
+        doc.items = [b1, b2, b3];
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 60)
+    belt_res = p.ev("""return (() => {
+      const r0 = App.results.get(App.doc.items[0].id);
+      const r1 = App.results.get(App.doc.items[1].id);
+      const r2 = App.results.get(App.doc.items[2].id);
+      const bb0 = r0?.data?.bbox, bb1 = r1?.data?.bbox, bb2 = r2?.data?.bbox;
+      return {
+        errs: App.errors.length,
+        dz0: bb0 ? bb0[5] - bb0[2] : 0,
+        dx1: bb1 ? bb1[3] - bb1[0] : 0,
+        dz1: bb1 ? bb1[5] - bb1[2] : 0,
+        dz2: bb2 ? bb2[5] - bb2[2] : 0,
+        hint: document.querySelector('#p-stdbelt-hint')?.textContent || '',
+      };
+    })()""")
+    ok3 = bool(
+        belt_res['errs'] == 0
+        and abs(belt_res['dz0'] - 6.0) < 0.05
+        and abs(belt_res['dx1'] - 120.0) < 0.05 and abs(belt_res['dz1'] - 6.0) < 0.05
+        and abs(belt_res['dz2'] - 9.7) < 0.05
+        and 'GT2' in belt_res['hint'] and '200' in belt_res['hint'] and '100 Zähne' in belt_res['hint']
+    )
+
+    # 4. Rollenketten nach Länge (08B gerade 152,4 mm = 12 Glieder & geschlossen 304,8 mm = 24 Glieder)
+    p.ev("""
+      App.change('Ketten testen', (doc) => {
+        const c1 = Model.newItem('part', { lib: 'stdChain', chain: '08B', shape: 'straight', length: 152.4 }, { name: 'Kette 08B gerade' });
+        const c2 = Model.newItem('part', { lib: 'stdChain', chain: '08B', shape: 'loop', length: 304.8, sprocketZ: 15 }, { name: 'Kette 08B Schleife' });
+        c2.t.y = 80;
+        doc.items = [c1, c2];
+      });
+      App.select([App.doc.items[0].id]);
+    """)
+    warte_rechnen(p, 60)
+    chain_res = p.ev("""return (() => {
+      const r0 = App.results.get(App.doc.items[0].id);
+      const r1 = App.results.get(App.doc.items[1].id);
+      const bb0 = r0?.data?.bbox, bb1 = r1?.data?.bbox;
+      return {
+        errs: App.errors.length,
+        dx0: bb0 ? bb0[3] - bb0[0] : 0,
+        dy0: bb0 ? bb0[4] - bb0[1] : 0,
+        dx1: bb1 ? bb1[3] - bb1[0] : 0,
+        dy1: bb1 ? bb1[4] - bb1[1] : 0,
+        hint: document.querySelector('#p-stdchain-hint')?.textContent || '',
+      };
+    })()""")
+    ok4 = bool(
+        chain_res['errs'] == 0
+        and abs(chain_res['dx0'] - (152.4 + 11.8)) < 0.1
+        and abs(chain_res['dy0'] - 11.8) < 0.1
+        and chain_res['dx1'] > chain_res['dy1'] > 40.0
+        and '12 Glieder' in chain_res['hint'] and '152,4' in chain_res['hint']
+    )
+
+    # 5. Profi-Flyout, Commands-Suche, GeomCheck, Undo/Redo, Validierung, Hilfen, Erklärungen & I18n
+    p.ev("ViewPrefs.setLevel('pro'); Commands.setMode('model');")
+    p.wait(150)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('.flyout.parts [data-lib="stdPipe"]', timeout=5000)
+    pro_fly = p.ev("""return (() => {
+      const keys = ['stdPipe', 'pipeElbow', 'pipeTee', 'pipeFlange', 'stdBelt', 'stdChain'];
+      const tilesOk = keys.every(k => {
+        const el = document.querySelector(`.flyout.parts [data-lib="${k}"]`);
+        return !!(el && el.offsetParent !== null && el.getAttribute('data-help') === k);
+      });
+      const cmdOk = ['normrohr', 'rohrbogen', 't-stück', 'flansch', 'riemen', 'rollenkette']
+        .every(q => Commands.search(q).some(c => c.id.startsWith('lib-')));
+      return { tilesOk, cmdOk };
+    })()""")
+    p.pg.keyboard.press('Escape')
+    p.wait(120)
+
+    p.ev("""
+      App.change('Alle 6 Normteile', (doc) => {
+        const p1 = Model.newItem('part', { lib: 'stdPipe', dn: 'DN25', length: 60 }, { name: 'Rohr' });
+        const p2 = Model.newItem('part', { lib: 'pipeElbow', dn: 'DN25', angle: '90' }, { name: 'Bogen' }); p2.t.x = 90;
+        const p3 = Model.newItem('part', { lib: 'pipeTee', dn: 'DN25' }, { name: 'T-Stück' }); p3.t.x = 200;
+        const p4 = Model.newItem('part', { lib: 'pipeFlange', dn: 'DN25', style: 'slipOn' }, { name: 'Flansch' }); p4.t.x = 320;
+        const p5 = Model.newItem('part', { lib: 'stdBelt', profile: 'GT2', shape: 'loop', length: 200 }, { name: 'Riemen' }); p5.t.y = 120;
+        const p6 = Model.newItem('part', { lib: 'stdChain', chain: '08B', shape: 'straight', length: 101.6 }, { name: 'Kette' }); p6.t.y = -120;
+        doc.items = [p1, p2, p3, p4, p5, p6];
+      });
+    """)
+    warte_rechnen(p, 60)
+    p.ev("App.undo();")
+    warte_rechnen(p, 35)
+    undo_len = p.ev("return App.doc.items.length")
+    p.ev("App.redo();")
+    warte_rechnen(p, 35)
+    redo_len = p.ev("return App.doc.items.length")
+    meta = p.ev("""return (async () => {
+      const [wh, se, de, en, gc] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/schritt-erklaerungen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        GeomCheck.run({ silent: true }),
+      ]);
+      const keys = ['stdPipe', 'pipeElbow', 'pipeTee', 'pipeFlange', 'stdBelt', 'stdChain'];
+      const val = Store.validateProject(JSON.parse(JSON.stringify(App.doc)));
+      const hOk = keys.every(k => wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp);
+      const sOk = keys.every(k => se[k] && se[k].was && se[k].wozu && se[k].achtung);
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      return { errs: App.errors.length, valOk: !!(val && val.ok), hOk, sOk, i18nOk, gcIssues: gc.issues.length, gcChecked: gc.checkedCount };
+    })()""")
+    ok5 = bool(
+        pro_fly['tilesOk'] and pro_fly['cmdOk']
+        and undo_len == 2 and redo_len == 6
+        and meta['errs'] == 0 and meta['valOk'] and meta['hOk'] and meta['sOk'] and meta['i18nOk']
+        and meta['gcIssues'] == 0 and meta['gcChecked'] == 6
+    )
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -40594,6 +40873,7 @@ TESTS = [
     ('[A-192] Bibliothek: Gehäuse-Generator Schritt 2 (Schnapphaken, Lüftung, Kabeldurchführung, BI-20, BI-21)', t_a192_gehaeuse_erweitert),
     ('[A-193] Bibliothek: Typenschild, QR-Code und Barcode (BI-22, BI-23)', t_a193_typenschild_qr_barcode),
     ('[F-11252354] Volltest-Reparatur: Mass.measure wartet auf App-Neubau / Zeichnung-PDF-Menü eindeutig / Einstellungen-Dialog ohne Geister-Reopen', t_f11252354),
+    ('[A-196] Rohre, Fittings, Flansche, Riemen und Ketten (BI-27, BI-28)', t_a196_rohre_fittings_flansche_riemen_ketten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

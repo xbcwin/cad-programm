@@ -1116,6 +1116,18 @@ const Model = (() => {
             o.p.spec = thumbScrewMetrics(o.p);
           } else if (o.p.lib === 'deviceFoot' && typeof deviceFootMetrics === 'function') {
             o.p.spec = deviceFootMetrics(o.p);
+          } else if (o.p.lib === 'stdPipe' && typeof pipeMetrics === 'function') {
+            o.p.spec = pipeMetrics(o.p);
+          } else if (o.p.lib === 'pipeElbow' && typeof pipeElbowMetrics === 'function') {
+            o.p.spec = pipeElbowMetrics(o.p);
+          } else if (o.p.lib === 'pipeTee' && typeof pipeTeeMetrics === 'function') {
+            o.p.spec = pipeTeeMetrics(o.p);
+          } else if (o.p.lib === 'pipeFlange' && typeof pipeFlangeMetrics === 'function') {
+            o.p.spec = pipeFlangeMetrics(o.p);
+          } else if (o.p.lib === 'stdBelt' && typeof beltMetrics === 'function') {
+            o.p.spec = beltMetrics(o.p);
+          } else if (o.p.lib === 'stdChain' && typeof chainMetrics === 'function') {
+            o.p.spec = chainMetrics(o.p);
           }
         }
       }
@@ -2753,6 +2765,12 @@ const Model = (() => {
         if (L === 'rotaryKnob') { const m = typeof rotaryKnobMetrics === 'function' ? rotaryKnobMetrics(p) : { outerR: 12, outerXPos: 12, h: 16 }; return [-m.outerR, -m.outerR, 0, m.outerXPos, m.outerR, m.h]; }
         if (L === 'thumbScrew') { const m = typeof thumbScrewMetrics === 'function' ? thumbScrewMetrics(p) : { headD: 16, headH: 9.5, length: 12 }; const r = m.headD / 2; return [-r, -r, -m.length, r, r, m.headH]; }
         if (L === 'deviceFoot') { const m = typeof deviceFootMetrics === 'function' ? deviceFootMetrics(p) : { D: 20, h: 10 }; const r = m.D / 2; return [-r, -r, 0, r, r, m.h]; }
+        if (L === 'stdPipe') { const m = typeof pipeMetrics === 'function' ? pipeMetrics(p) : { od: 33.7, length: 100 }; const r = m.od / 2; return [-r, -r, 0, r, r, m.length]; }
+        if (L === 'pipeElbow') { const m = typeof pipeElbowMetrics === 'function' ? pipeElbowMetrics(p) : { box: [-16.85, -16.85, 0, 54.85, 16.85, 54.85] }; return m.box; }
+        if (L === 'pipeTee') { const m = typeof pipeTeeMetrics === 'function' ? pipeTeeMetrics(p) : { od: 33.7, branchOd: 33.7, centerLen: 38, length: 76 }; const r = Math.max(m.od, m.branchOd) / 2; return [-r, -r, 0, m.centerLen, r, m.length]; }
+        if (L === 'pipeFlange') { const m = typeof pipeFlangeMetrics === 'function' ? pipeFlangeMetrics(p) : { flangeD: 115, totalH: 16 }; const r = m.flangeD / 2; return [-r, -r, 0, r, r, m.totalH]; }
+        if (L === 'stdBelt') { const m = typeof beltMetrics === 'function' ? beltMetrics(p) : { shape: 'loop', outerX: 60, outerY: 28, outerZ: 6 }; return m.shape === 'open' ? [-m.outerX / 2, -m.toothH, 0, m.outerX / 2, m.backT, m.outerZ] : [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.outerZ]; }
+        if (L === 'stdChain') { const m = typeof chainMetrics === 'function' ? chainMetrics(p) : { outerX: 164.2, outerY: 11.8, totalW: 16.6 }; return [-m.outerX / 2, -m.outerY / 2, 0, m.outerX / 2, m.outerY / 2, m.totalW]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -3071,6 +3089,12 @@ const Model = (() => {
         if (L === 'rotaryKnob' && typeof rotaryKnobMetrics === 'function') { const m = rotaryKnobMetrics(p); return `Ø ${f(m.D)} × ${f(m.h)}${u}${m.shaftD > 0 ? ` · Ø ${f(m.shaftD)}` : ''}`; }
         if (L === 'thumbScrew' && typeof thumbScrewMetrics === 'function') { const m = thumbScrewMetrics(p); return `${m.norm} ${m.size} × ${f(m.length)}${u}`; }
         if (L === 'deviceFoot' && typeof deviceFootMetrics === 'function') { const m = deviceFootMetrics(p); return `Ø ${f(m.D)} × ${f(m.h)}${u}${m.screw !== 'none' ? ` · ${m.screw}` : ''}`; }
+        if (L === 'stdPipe' && typeof pipeMetrics === 'function') { const m = pipeMetrics(p); return `${m.dn !== 'custom' ? m.dn + ' · ' : ''}Ø ${f(m.od)} × ${f(m.length)}${u}`; }
+        if (L === 'pipeElbow' && typeof pipeElbowMetrics === 'function') { const m = pipeElbowMetrics(p); return `${m.dn !== 'custom' ? m.dn + ' · ' : ''}${m.angle}° · R ${f(m.bendR)}${u}`; }
+        if (L === 'pipeTee' && typeof pipeTeeMetrics === 'function') { const m = pipeTeeMetrics(p); return `${m.dn !== 'custom' ? m.dn : `Ø ${f(m.od)}`}${m.branchDn !== 'same' ? ' × ' + m.branchDn : ''} · ${f(m.length)}${u}`; }
+        if (L === 'pipeFlange' && typeof pipeFlangeMetrics === 'function') { const m = pipeFlangeMetrics(p); return `${m.dn !== 'custom' ? m.dn + ' · ' : ''}Ø ${f(m.flangeD)} × ${f(m.totalH)}${u}`; }
+        if (L === 'stdBelt' && typeof beltMetrics === 'function') { const m = beltMetrics(p); return `${m.profile} · L ${f(m.length)}${u}`; }
+        if (L === 'stdChain' && typeof chainMetrics === 'function') { const m = chainMetrics(p); return `${m.chainLabelShort} · ${m.links} Glieder (${f(m.actualLength)}${u})`; }
         return p.size || '';
       }
     }

@@ -494,5 +494,35 @@
     "was": "Erzeugt lokal einen Strichcode (Code 128, EAN-13 oder EAN-8) als Platte mit erhabenen oder vertieften Balken oder als reine Präge-Balken.",
     "wozu": "Ermöglicht maschinenlesbare Produktnummern, Lageretiketten und Seriennummern direkt auf gedruckten oder gefrästen Teilen.",
     "achtung": "Lass rund um den Barcode genug ruhigen Rand (Quiet Zone), damit ein Barcodescanner Anfang und Ende sauber erkennt."
+  },
+  "stdPipe": {
+    "was": "Erstellt ein rundes Normrohr nach DIN EN 10220 / ISO 4200 für Nennweiten von DN10 bis DN200 mit passendem Außen-Ø und Wandstärke.",
+    "wozu": "Dient als Grundbaustein für Rohrleitungen, Gestelle, Durchführungen und Anschlüsse mit passenden Fittings und Flanschen.",
+    "achtung": "Achte beim Zusammensetzen mit Flanschen und Bögen auf dieselbe Nennweite (DN) oder gleiche Außen- und Innendurchmesser."
+  },
+  "pipeElbow": {
+    "was": "Erzeugt einen Rohrbogen nach DIN EN 10253-2 (Typ 3D) für 45°, 60°, 90° oder 180° mit optionalen geraden Rohransätzen.",
+    "wozu": "Verbindet Rohre im Winkel, ohne den Durchfluss durch scharfe Knicke einzuschnüren.",
+    "achtung": "Der Biegeradius muss stets größer als der halbe Außendurchmesser sein, damit das Rohr nicht knickt."
+  },
+  "pipeTee": {
+    "was": "Erzeugt ein T-Stück nach DIN EN 10253-2 mit geradem Durchgang und rechtwinkligem Abzweig (gleich oder reduziert).",
+    "wozu": "Verzweigt eine Rohrleitung in eine Nebenleitung mit gleicher oder kleinerer Nennweite.",
+    "achtung": "Bei einem reduzierten Abzweig sollte die Abzweig-Nennweite nicht größer als die Hauptnennweite sein."
+  },
+  "pipeFlange": {
+    "was": "Erzeugt einen Normflansch nach EN 1092-1 PN16 als aufschiebbaren Glattflansch (Typ 01), Vorschweißflansch (Typ 11) oder Blindflansch (Typ 05).",
+    "wozu": "Ermöglicht lösbare, verschraubte Rohrverbindungen mit passendem Lochkreis und Dichtleiste.",
+    "achtung": "Für gedruckte Flansche kannst du die 3D-Druck-Passung oder das Aufschiebe-Spiel erhöhen, damit das Rohr leicht hineingleitet."
+  },
+  "stdBelt": {
+    "was": "Erzeugt einen Zahn-, Keil- oder Flachriemen mit fester Wirklänge als geschlossene Endlosschleife oder offenes Band.",
+    "wozu": "Stellt den passenden Riemen zu deinen Zahnriemenscheiben (GT2, HTD) oder Keilriemenscheiben im Modell dar und prüft Länge sowie Platzbedarf.",
+    "achtung": "Bei geschlossenen Riemen muss die Wirklänge mindestens π × Scheiben-Teilkreisdurchmesser betragen."
+  },
+  "stdChain": {
+    "was": "Erzeugt eine Rollenkette nach DIN 8187 / ISO 606 aus Laschen, Bolzen und Rollen passend zur Teilung und Gesamtlänge.",
+    "wozu": "Ergänzt Kettenräder um die maßhaltige Rollenkette – gerade abgelängt oder als geschlossene Schleife.",
+    "achtung": "Geschlossene Rollenketten benötigen eine gerade Gliederzahl und rundet Tracery auf das nächste Vielfache der doppelten Teilung."
   }
 }

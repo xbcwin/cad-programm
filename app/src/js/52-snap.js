@@ -302,6 +302,12 @@ const Snap = (() => {
     steppedShaft: 'Wellenachse',
     shaftCollar: 'Stellring-Mitte',
     shaftCoupling: 'Kupplungsachse',
+    stdPipe: 'Rohrachse',
+    pipeElbow: 'Bogen-Anschluss',
+    pipeTee: 'T-Stück-Achse',
+    pipeFlange: 'Flanschmitte',
+    stdBelt: 'Riemenmitte',
+    stdChain: 'Kettenmitte',
   };
   let dockDrag = null;
 

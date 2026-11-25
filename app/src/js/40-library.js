@@ -864,6 +864,234 @@ function sprocketMetrics(p = {}) {
     z, pitch, d1, ri, dp, da, df, thickness, bore, hubH, hubD, totalH,
   };
 }
+
+// Rohre nach Norm (DIN EN 10220 / ISO 4200), Rohrbögen & T-Stücke (DIN EN 10253-2) sowie Flansche (EN 1092-1 PN16, BI-27)
+const PIPE_DN_TABLE = [
+  { id: 'DN10', inch: '3/8"', od: 17.2, wall: 2.0, bendR: 25.0, teeC: 25.0, flangeD: 90, boltCircle: 60, boltCount: 4, boltHoleD: 14, flangeT: 14, rfD: 40, rfH: 2 },
+  { id: 'DN15', inch: '1/2"', od: 21.3, wall: 2.6, bendR: 28.0, teeC: 25.0, flangeD: 95, boltCircle: 65, boltCount: 4, boltHoleD: 14, flangeT: 14, rfD: 45, rfH: 2 },
+  { id: 'DN20', inch: '3/4"', od: 26.9, wall: 2.6, bendR: 29.0, teeC: 29.0, flangeD: 105, boltCircle: 75, boltCount: 4, boltHoleD: 14, flangeT: 16, rfD: 58, rfH: 2 },
+  { id: 'DN25', inch: '1"', od: 33.7, wall: 3.2, bendR: 38.0, teeC: 38.0, flangeD: 115, boltCircle: 85, boltCount: 4, boltHoleD: 14, flangeT: 16, rfD: 68, rfH: 2 },
+  { id: 'DN32', inch: '1¼"', od: 42.4, wall: 3.2, bendR: 48.0, teeC: 48.0, flangeD: 140, boltCircle: 100, boltCount: 4, boltHoleD: 18, flangeT: 16, rfD: 78, rfH: 2 },
+  { id: 'DN40', inch: '1½"', od: 48.3, wall: 3.2, bendR: 57.0, teeC: 57.0, flangeD: 150, boltCircle: 110, boltCount: 4, boltHoleD: 18, flangeT: 16, rfD: 88, rfH: 3 },
+  { id: 'DN50', inch: '2"', od: 60.3, wall: 3.6, bendR: 76.0, teeC: 64.0, flangeD: 165, boltCircle: 125, boltCount: 4, boltHoleD: 18, flangeT: 18, rfD: 102, rfH: 3 },
+  { id: 'DN65', inch: '2½"', od: 76.1, wall: 3.6, bendR: 95.0, teeC: 76.0, flangeD: 185, boltCircle: 145, boltCount: 4, boltHoleD: 18, flangeT: 18, rfD: 122, rfH: 3 },
+  { id: 'DN80', inch: '3"', od: 88.9, wall: 4.0, bendR: 114.0, teeC: 86.0, flangeD: 200, boltCircle: 160, boltCount: 8, boltHoleD: 18, flangeT: 20, rfD: 138, rfH: 3 },
+  { id: 'DN100', inch: '4"', od: 114.3, wall: 4.5, bendR: 152.0, teeC: 105.0, flangeD: 220, boltCircle: 180, boltCount: 8, boltHoleD: 18, flangeT: 20, rfD: 158, rfH: 3 },
+  { id: 'DN125', inch: '5"', od: 139.7, wall: 4.5, bendR: 190.0, teeC: 124.0, flangeD: 250, boltCircle: 210, boltCount: 8, boltHoleD: 18, flangeT: 22, rfD: 188, rfH: 3 },
+  { id: 'DN150', inch: '6"', od: 168.3, wall: 4.5, bendR: 229.0, teeC: 143.0, flangeD: 285, boltCircle: 240, boltCount: 8, boltHoleD: 22, flangeT: 22, rfD: 212, rfH: 3 },
+  { id: 'DN200', inch: '8"', od: 219.1, wall: 6.3, bendR: 305.0, teeC: 178.0, flangeD: 340, boltCircle: 295, boltCount: 12, boltHoleD: 22, flangeT: 24, rfD: 268, rfH: 3 },
+];
+const PIPE_DN_BY_ID = new Map(PIPE_DN_TABLE.map((x) => [x.id.toUpperCase(), x]));
+const PIPE_DN_OPTIONS = PIPE_DN_TABLE.map((x) => [x.id, `${x.id} · ${x.inch} (Ø ${String(x.od).replace('.', ',')} × ${String(x.wall).replace('.', ',')} mm)`]);
+function pipeDnEntry(dn) {
+  const s = String(dn || 'DN25').trim().toUpperCase();
+  if (PIPE_DN_BY_ID.has(s)) return PIPE_DN_BY_ID.get(s);
+  if (/^\d+$/.test(s) && PIPE_DN_BY_ID.has('DN' + s)) return PIPE_DN_BY_ID.get('DN' + s);
+  return PIPE_DN_BY_ID.get('DN25') || PIPE_DN_TABLE[3];
+}
+function pipeMetrics(p = {}) {
+  const isCustom = p.dn === 'custom';
+  const e = isCustom ? null : pipeDnEntry(p.dn);
+  const rawOd = Number(p.od);
+  const rawWall = Number(p.wall);
+  const od = rawOd > 0 ? Math.max(3, rawOd) : (e ? e.od : 33.7);
+  const wall = Math.max(0.4, Math.min(od / 2 - 0.3, rawWall > 0 ? rawWall : (e ? e.wall : round(Math.max(1.2, od * 0.095), 2))));
+  const id = round(od - 2 * wall, 3);
+  const length = Math.max(2, Number(p.length ?? 100) || 100);
+  const isNorm = !!(e && !(rawOd > 0) && !(rawWall > 0));
+  return {
+    dn: isCustom ? 'custom' : (e ? e.id : 'DN25'),
+    inch: e ? e.inch : '',
+    od, wall, id, length, isNorm,
+  };
+}
+function pipeElbowMetrics(p = {}) {
+  const pm = pipeMetrics(p);
+  const e = p.dn === 'custom' ? null : pipeDnEntry(p.dn);
+  const angle = clamp(Number(p.angle ?? 90) || 90, 15, 180);
+  const rawR = Number(p.bendR);
+  const bendR = Math.max(pm.od / 2 + 1.5, rawR > 0 ? rawR : (e ? e.bendR : round(pm.od * 1.15, 1)));
+  const stub = Math.max(0, Number(p.stub ?? 0) || 0);
+  const ro = pm.od / 2;
+  const rad = (angle * Math.PI) / 180;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  const expand = (cx, cz) => {
+    if (cx - ro < minX) minX = cx - ro;
+    if (cx + ro > maxX) maxX = cx + ro;
+    if (cz - ro < minZ) minZ = cz - ro;
+    if (cz + ro > maxZ) maxZ = cz + ro;
+  };
+  expand(0, 0);
+  for (let i = 0; i <= 24; i++) {
+    const t = (rad * i) / 24;
+    expand(bendR * (1 - Math.cos(t)), stub + bendR * Math.sin(t));
+  }
+  const ex = bendR * (1 - Math.cos(rad));
+  const ez = stub + bendR * Math.sin(rad);
+  if (stub > 0) expand(ex + stub * Math.sin(rad), ez + stub * Math.cos(rad));
+  const box = [round(minX, 3), round(-ro, 3), round(minZ, 3), round(maxX, 3), round(ro, 3), round(maxZ, 3)];
+  return {
+    dn: pm.dn, od: pm.od, wall: pm.wall, id: pm.id,
+    angle, bendR, stub, box,
+  };
+}
+function pipeTeeMetrics(p = {}) {
+  const pm = pipeMetrics(p);
+  const e = p.dn === 'custom' ? null : pipeDnEntry(p.dn);
+  const rawBranch = String(p.branchDn || 'same').trim();
+  const branchDn = rawBranch && rawBranch !== 'same' ? rawBranch : 'same';
+  let branchOd = pm.od, branchWall = pm.wall, branchId = pm.id;
+  if (branchDn !== 'same') {
+    const be = pipeDnEntry(branchDn);
+    branchOd = Math.min(pm.od, be.od);
+    branchWall = Math.min(branchOd / 2 - 0.3, be.wall);
+    branchId = round(branchOd - 2 * branchWall, 3);
+  }
+  const rawC = Number(p.centerLen);
+  const centerLen = Math.max(pm.od * 0.7, branchOd * 0.7, rawC > 0 ? rawC : (e ? e.teeC : round(pm.od * 1.15, 1)));
+  const length = round(2 * centerLen, 3);
+  return {
+    dn: pm.dn, od: pm.od, wall: pm.wall, id: pm.id,
+    branchDn, branchOd, branchWall, branchId, centerLen, length,
+  };
+}
+function pipeFlangeMetrics(p = {}) {
+  const isCustom = p.dn === 'custom';
+  const e = isCustom ? null : pipeDnEntry(p.dn);
+  const style = p.style === 'weldNeck' || p.style === 'blind' ? p.style : 'slipOn';
+  const rawOd = Number(p.od);
+  const od = rawOd > 0 ? Math.max(3, rawOd) : (e ? e.od : 33.7);
+  const wall = e && !(rawOd > 0) ? e.wall : round(Math.max(1.2, Math.min(od * 0.1, od / 2 - 0.5)), 2);
+  const pipeId = round(Math.max(1, od - 2 * wall), 3);
+  const hasClear = p.clear !== null && p.clear !== undefined && p.clear !== '';
+  const clear = hasClear ? Math.max(0, Number(p.clear) || 0) : 0.4;
+  const pf = printFitMm(p.printFit);
+  const boreD = style === 'blind' ? 0 : style === 'weldNeck' ? pipeId : round(od + clear + pf, 3);
+  const rawBH = Number(p.boltHoleD);
+  const boltHoleD = Math.max(2, rawBH > 0 ? rawBH : (e ? e.boltHoleD : round(Math.max(6, od * 0.3), 1)));
+  const rawBCnt = Number(p.boltCount);
+  const boltCount = Math.max(2, Math.min(24, Math.round(rawBCnt > 0 ? rawBCnt : (e ? e.boltCount : 4))));
+  const rawBC = Number(p.boltCircle);
+  const minBoltCircle = Math.max(boreD, od) + boltHoleD + 8;
+  const boltCircle = Math.max(minBoltCircle, rawBC > 0 ? rawBC : (e ? e.boltCircle : round(od * 2.4, 1)));
+  const rawFD = Number(p.flangeD);
+  const flangeD = Math.max(boltCircle + boltHoleD + 6, rawFD > 0 ? rawFD : (e ? e.flangeD : round(boltCircle + boltHoleD * 2 + 6, 1)));
+  const rawT = Number(p.thickness);
+  const thickness = Math.max(3, rawT > 0 ? rawT : (e ? e.flangeT : round(Math.max(8, od * 0.35), 1)));
+  const rfH = Math.min(thickness * 0.35, e ? e.rfH : 2);
+  const rfD = Math.max(Math.max(boreD, od) + 2, Math.min(boltCircle - boltHoleD - 2, flangeD - 4, e ? e.rfD : round((od + boltCircle) * 0.5, 1)));
+  const plateT = round(Math.max(2, thickness - rfH), 3);
+  const neckH = style === 'weldNeck' ? round(Math.max(10, thickness * 1.4), 2) : 0;
+  const hubD = style === 'weldNeck' ? round(Math.max(od + 2, Math.min(rfD - 1, boltCircle - boltHoleD - 3, od * 1.38)), 2) : 0;
+  const totalH = style === 'weldNeck' ? round(thickness + neckH, 3) : thickness;
+  return {
+    dn: isCustom ? 'custom' : (e ? e.id : 'DN25'),
+    style, od, wall, pipeId, boreD, clear, pf,
+    flangeD, boltCircle, boltCount, boltHoleD, thickness, plateT, rfD, rfH, neckH, hubD, totalH,
+  };
+}
+
+// Riemen (Zahn-, Keil- und Flachriemen nach Länge) & Rollenketten (DIN 8187 / ISO 606 nach Länge, BI-28)
+const BELT_PROFILES = [
+  { id: 'GT2', label: 'Zahnriemen GT2 (2 mm)', family: 'GT2', pitch: 2.0, pld: 0.254, toothH: 0.75, totalT: 1.38, defW: 6 },
+  { id: 'GT2-3', label: 'Zahnriemen GT2-3 (3 mm)', family: 'GT2', pitch: 3.0, pld: 0.381, toothH: 1.14, totalT: 2.4, defW: 9 },
+  { id: 'GT2-5', label: 'Zahnriemen GT2-5 (5 mm)', family: 'GT2', pitch: 5.0, pld: 0.5715, toothH: 1.93, totalT: 3.8, defW: 15 },
+  { id: 'HTD3M', label: 'Zahnriemen HTD 3M (3 mm)', family: 'HTD', pitch: 3.0, pld: 0.381, toothH: 1.22, totalT: 2.4, defW: 9 },
+  { id: 'HTD5M', label: 'Zahnriemen HTD 5M (5 mm)', family: 'HTD', pitch: 5.0, pld: 0.5715, toothH: 2.06, totalT: 3.8, defW: 15 },
+  { id: 'HTD8M', label: 'Zahnriemen HTD 8M (8 mm)', family: 'HTD', pitch: 8.0, pld: 0.686, toothH: 3.48, totalT: 6.0, defW: 20 },
+  { id: 'V10', label: 'Keilriemen 10 × 6 (DIN 2215)', family: 'V', pitch: 0, pld: 0, toothH: 0, totalT: 6.0, defW: 10.0, vAngle: 38 },
+  { id: 'V13', label: 'Keilriemen 13 × 8 (DIN 2215)', family: 'V', pitch: 0, pld: 0, toothH: 0, totalT: 8.0, defW: 13.0, vAngle: 38 },
+  { id: 'SPZ', label: 'Schmalkeilriemen SPZ (9,7 × 8)', family: 'V', pitch: 0, pld: 0, toothH: 0, totalT: 8.0, defW: 9.7, vAngle: 38 },
+  { id: 'SPA', label: 'Schmalkeilriemen SPA (12,7 × 10)', family: 'V', pitch: 0, pld: 0, toothH: 0, totalT: 10.0, defW: 12.7, vAngle: 38 },
+  { id: 'flat', label: 'Flachriemen (glatt)', family: 'flat', pitch: 0, pld: 0, toothH: 0, totalT: 1.5, defW: 15 },
+];
+const BELT_PROFILE_BY_ID = new Map(BELT_PROFILES.map((x) => [x.id.toLowerCase(), x]));
+const BELT_PROFILE_OPTIONS = BELT_PROFILES.map((x) => [x.id, x.label]);
+function beltProfileEntry(id) {
+  const s = String(id || 'GT2').trim().toLowerCase();
+  return BELT_PROFILE_BY_ID.get(s) || BELT_PROFILES[0];
+}
+function beltMetrics(p = {}) {
+  const prof = beltProfileEntry(p.profile);
+  const shape = p.shape === 'open' ? 'open' : 'loop';
+  const length = Math.max(20, Math.min(5000, Number(p.length ?? 200) || 200));
+  const rawW = Number(p.width);
+  const width = Math.max(1.5, rawW > 0 ? rawW : prof.defW);
+  const rawT = Number(p.thickness);
+  const thickness = Math.max(0.5, rawT > 0 ? rawT : prof.totalT);
+  const toothH = prof.pitch > 0 ? Math.min(thickness * 0.72, prof.toothH) : 0;
+  const backT = round(Math.max(0.3, thickness - toothH), 3);
+  const teeth = prof.pitch > 0 ? Math.max(4, Math.round(length / prof.pitch)) : 0;
+  const rawPD = Number(p.pulleyD);
+  let dp = 0, centerDist = 0, rPitch = 0, rLand = 0, rOut = 0, rIn = 0, outerX = length, outerY = thickness;
+  if (shape === 'loop') {
+    const maxDp = length / Math.PI;
+    const minDp = Math.min(maxDp, Math.max(6, thickness * 2.2));
+    const defDp = Math.min(length / (Math.PI + 1.5), Math.max(prof.family === 'V' ? 40 : 14, round(length / 8, 1)));
+    dp = round(clamp(rawPD > 0 ? rawPD : defDp, minDp, maxDp), 3);
+    centerDist = round(Math.max(0, (length - Math.PI * dp) / 2), 3);
+    rPitch = dp / 2;
+    rLand = Math.max(2, rPitch - prof.pld);
+    rOut = round(prof.family === 'V' ? rPitch + thickness * 0.4 : rLand + backT, 3);
+    rIn = round(prof.family === 'V' ? Math.max(2, rOut - thickness) : Math.max(1.2, rLand - toothH), 3);
+    outerX = round(centerDist + 2 * rOut, 3);
+    outerY = round(2 * rOut, 3);
+  }
+  return {
+    profile: prof.id, family: prof.family, shape, length, width, thickness,
+    pitch: prof.pitch, pld: prof.pld, toothH, backT, teeth, vAngle: prof.vAngle || 0,
+    dp, centerDist, rPitch, rLand, rOut, rIn, outerX, outerY, outerZ: width,
+  };
+}
+const CHAIN_SPECS = [
+  { id: '04B', short: '04B (6 mm)', pitch: 6.0, rollerD: 4.0, b1: 2.8, pinD: 1.85, plateH: 5.0, plateT: 0.6 },
+  { id: '05B', short: '05B (8 mm)', pitch: 8.0, rollerD: 5.0, b1: 3.0, pinD: 2.31, plateH: 7.1, plateT: 0.8 },
+  { id: '06B', short: '06B (3/8")', pitch: 9.525, rollerD: 6.35, b1: 5.72, pinD: 3.28, plateH: 8.2, plateT: 1.3 },
+  { id: '08B', short: '08B (1/2")', pitch: 12.7, rollerD: 8.51, b1: 7.75, pinD: 4.45, plateH: 11.8, plateT: 1.6 },
+  { id: '08A', short: '08A (1/2")', pitch: 12.7, rollerD: 7.95, b1: 7.85, pinD: 3.96, plateH: 12.0, plateT: 1.5 },
+  { id: 'bike', short: 'Fahrrad 1/2"', pitch: 12.7, rollerD: 7.75, b1: 2.38, pinD: 3.6, plateH: 8.0, plateT: 1.0 },
+  { id: '10B', short: '10B (5/8")', pitch: 15.875, rollerD: 10.16, b1: 9.65, pinD: 5.08, plateH: 14.7, plateT: 1.7 },
+  { id: '12B', short: '12B (3/4")', pitch: 19.05, rollerD: 12.07, b1: 11.68, pinD: 5.72, plateH: 16.1, plateT: 1.85 },
+  { id: '16B', short: '16B (1")', pitch: 25.4, rollerD: 15.88, b1: 17.02, pinD: 8.28, plateH: 21.0, plateT: 3.2 },
+];
+const CHAIN_SPEC_BY_ID = new Map(CHAIN_SPECS.map((x) => [x.id.toLowerCase(), x]));
+function chainMetrics(p = {}) {
+  const isCustom = p.chain === 'custom';
+  const e = isCustom ? null : (CHAIN_SPEC_BY_ID.get(String(p.chain || '08B').trim().toLowerCase()) || CHAIN_SPECS[3]);
+  const rawPitch = Number(p.pitch);
+  const pitch = rawPitch > 0 ? Math.max(3, rawPitch) : (e ? e.pitch : 12.7);
+  const rollerD = e && !(rawPitch > 0) ? e.rollerD : round(pitch * 0.625, 2);
+  const b1 = e && !(rawPitch > 0) ? e.b1 : round(pitch * 0.6, 2);
+  const pinD = e && !(rawPitch > 0) ? e.pinD : round(pitch * 0.35, 2);
+  const plateH = e && !(rawPitch > 0) ? e.plateH : round(pitch * 0.92, 2);
+  const plateT = e && !(rawPitch > 0) ? e.plateT : round(Math.max(0.5, pitch * 0.125), 2);
+  const shape = p.shape === 'loop' ? 'loop' : 'straight';
+  const reqLen = Math.max(2 * pitch, Number(p.length ?? 152.4) || 152.4);
+  const links = shape === 'loop'
+    ? Math.max(12, Math.min(80, Math.round(reqLen / (2 * pitch)) * 2))
+    : Math.max(2, Math.min(80, Math.round(reqLen / pitch)));
+  const actualLength = round(links * pitch, 3);
+  const gap = 0.05;
+  const pinOverhang = round(Math.max(0.4, plateT * 0.45), 2);
+  const totalW = round(b1 + 4 * plateT + 2 * gap + 2 * pinOverhang, 3);
+  let zHalf = 0, nStr = links, arcR = 0, centerDist = 0;
+  let outerX = round(actualLength + plateH, 3), outerY = round(plateH, 3);
+  if (shape === 'loop') {
+    const sprocketZ = Math.max(8, Math.min(60, Math.round(Number(p.sprocketZ ?? 15) || 15)));
+    zHalf = links <= 10 ? Math.floor(links / 2) : Math.min(Math.floor(links / 2) - 1, Math.max(4, Math.floor(sprocketZ / 2)));
+    nStr = Math.max(0, (links - 2 * zHalf) / 2);
+    arcR = round(pitch / (2 * Math.sin(Math.PI / (2 * zHalf))), 4);
+    centerDist = round(nStr * pitch, 3);
+    outerX = round(centerDist + 2 * arcR + plateH, 3);
+    outerY = round(2 * arcR + plateH, 3);
+  }
+  const chainLabelShort = e && !(rawPitch > 0) ? e.short : `p ${fmt(pitch, 2)} mm`;
+  return {
+    chain: isCustom ? 'custom' : (e ? e.id : '08B'), chainLabelShort,
+    shape, pitch, rollerD, b1, pinD, plateH, plateT, gap, pinOverhang, totalW,
+    links, reqLen, actualLength, zHalf, nStr, arcR, centerDist, outerX, outerY,
+  };
+}
 // Griffe, Drehknöpfe, Rändelschrauben & Gerätefüße (BI-14)
 function pullHandleMetrics(p = {}) {
   const style = p.style === 'bridge' || p.style === 'tHandle' ? p.style : 'bow';
@@ -2045,6 +2273,66 @@ const LIB = [
       { k: 'hubH', label: 'Nabenhöhe (0 = flach)', type: 'num', def: 0 },
       { k: 'hubD', label: 'Naben-Ø', type: 'num', def: null, auto: true },
     ] },
+  { lib: 'stdPipe', label: 'Normrohr (DN)', role: 'solid', icon: 'stdPipe', std: true, mat: 'Baustahl',
+    kw: 'rohr normrohr stahlrohr dn10 dn15 dn20 dn25 dn32 dn40 dn50 dn65 dn80 dn100 dn150 dn200 din en 10220 iso 4200 zoll bi-27',
+    desc: 'Rohr nach Norm (DIN EN 10220 / ISO 4200, DN10–DN200) mit passendem Außen-Ø und Wandstärke', params: [
+      { k: 'dn', label: 'Nennweite (DN)', type: 'select', options: [...PIPE_DN_OPTIONS, ['custom', 'Eigene Maße']], def: 'DN25' },
+      { k: 'length', label: 'Länge (L)', type: 'num', def: 100 },
+      { k: 'od', label: 'Außen-Ø', type: 'num', def: null, auto: true },
+      { k: 'wall', label: 'Wandstärke', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'pipeElbow', label: 'Rohrbogen (DN)', role: 'solid', icon: 'pipeElbow', std: true, mat: 'Baustahl',
+    kw: 'rohrbogen bogen fitting winkel 90 45 180 grad dn25 din en 10253 rohrverbindung bi-27',
+    desc: 'Genormter Rohrbogen (DIN EN 10253-2, Typ 3D) mit wählbarem Winkel und Schenkeln', params: [
+      { k: 'dn', label: 'Nennweite (DN)', type: 'select', options: [...PIPE_DN_OPTIONS, ['custom', 'Eigene Maße']], def: 'DN25' },
+      { k: 'angle', label: 'Winkel', type: 'select', options: [['90', '90° (Standard)'], ['45', '45°'], ['60', '60°'], ['180', '180° (U-Bogen)']], def: '90' },
+      { k: 'bendR', label: 'Biegeradius (R)', type: 'num', def: null, auto: true },
+      { k: 'stub', label: 'Gerader Ansatz', type: 'num', def: 0 },
+      { k: 'od', label: 'Außen-Ø', type: 'num', def: null, auto: true },
+      { k: 'wall', label: 'Wandstärke', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'pipeTee', label: 'T-Stück (DN)', role: 'solid', icon: 'pipeTee', std: true, mat: 'Baustahl',
+    kw: 't-stueck t-stück tee fitting abzweig reduzier dn25 din en 10253 rohrverbindung bi-27',
+    desc: 'Rohr-T-Stück nach DIN EN 10253-2 (gleich oder mit reduziertem Abzweig)', params: [
+      { k: 'dn', label: 'Nennweite (DN)', type: 'select', options: [...PIPE_DN_OPTIONS, ['custom', 'Eigene Maße']], def: 'DN25' },
+      { k: 'branchDn', label: 'Abzweig (DN)', type: 'select', options: [['same', 'Wie Hauptrohr (gleich)'], ...PIPE_DN_OPTIONS], def: 'same' },
+      { k: 'centerLen', label: 'Mittenmaß (C)', type: 'num', def: null, auto: true },
+      { k: 'od', label: 'Außen-Ø', type: 'num', def: null, auto: true },
+      { k: 'wall', label: 'Wandstärke', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'pipeFlange', label: 'Flansch (EN 1092-1)', role: 'solid', icon: 'pipeFlange', std: true, mat: 'Baustahl',
+    kw: 'flansch rohrflansch glattflansch vorschweissflansch blindflansch en 1092-1 pn16 dn25 lochkreis dichtleiste bi-27',
+    desc: 'Normflansch nach EN 1092-1 PN16 (Glatt-, Vorschweiß- oder Blindflansch) mit Dichtleiste und Schraubenlöchern', params: [
+      { k: 'dn', label: 'Nennweite (DN)', type: 'select', options: [...PIPE_DN_OPTIONS, ['custom', 'Eigene Maße']], def: 'DN25' },
+      { k: 'style', label: 'Bauform', type: 'select', options: [['slipOn', 'Glattflansch (Typ 01, aufschiebbar)'], ['weldNeck', 'Vorschweißflansch (Typ 11)'], ['blind', 'Blindflansch (Typ 05)']], def: 'slipOn' },
+      { k: 'od', label: 'Rohr-Außen-Ø', type: 'num', def: null, auto: true },
+      { k: 'flangeD', label: 'Flansch-Ø (D)', type: 'num', def: null, auto: true },
+      { k: 'boltCircle', label: 'Lochkreis-Ø (k)', type: 'num', def: null, auto: true },
+      { k: 'boltCount', label: 'Schraubenlöcher', type: 'num', def: null, auto: true, int: true, unit: '' },
+      { k: 'boltHoleD', label: 'Schraubenloch-Ø', type: 'num', def: null, auto: true },
+      { k: 'thickness', label: 'Blattdicke (b)', type: 'num', def: null, auto: true },
+      { k: 'clear', label: 'Aufschiebe-Spiel', type: 'num', def: 0.4 },
+      { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
+    ] },
+  { lib: 'stdBelt', label: 'Riemen (nach Länge)', role: 'solid', icon: 'stdBelt', std: true, mat: 'TPU 95A',
+    kw: 'riemen zahnriemen keilriemen flachriemen gt2 htd 3m 5m 8m spz spa laenge länge antrieb bi-28',
+    desc: 'Zahn-, Keil- oder Flachriemen nach Nennlänge (geschlossen um Scheiben oder offenes Band)', params: [
+      { k: 'profile', label: 'Riemen-Profil', type: 'select', options: BELT_PROFILE_OPTIONS, def: 'GT2' },
+      { k: 'shape', label: 'Form', type: 'select', options: [['loop', 'Geschlossen (Endlos-Riemen)'], ['open', 'Offen (gerades Band)']], def: 'loop' },
+      { k: 'length', label: 'Wirklänge (L)', type: 'num', def: 200 },
+      { k: 'width', label: 'Breite (b)', type: 'num', def: null, auto: true },
+      { k: 'thickness', label: 'Dicke (h)', type: 'num', def: null, auto: true },
+      { k: 'pulleyD', label: 'Scheiben-Teilkreis Ø', type: 'num', def: null, auto: true },
+    ] },
+  { lib: 'stdChain', label: 'Rollenkette (nach Länge)', role: 'solid', icon: 'stdChain', std: true, mat: 'Baustahl',
+    kw: 'kette rollenkette gliederkette din 8187 iso 606 08b 06b 1/2 3/8 fahrradkette laenge länge antrieb bi-28',
+    desc: 'Rollenkette nach Norm (DIN 8187 / ISO 606) passend zur Teilung und Gesamtlänge', params: [
+      { k: 'chain', label: 'Kette / Teilung', type: 'select', options: SPROCKET_CHAIN_OPTIONS, def: '08B' },
+      { k: 'shape', label: 'Form', type: 'select', options: [['straight', 'Gerade (abgelängt)'], ['loop', 'Geschlossen (Endlos-Kette)']], def: 'straight' },
+      { k: 'length', label: 'Wunsch-Länge (L)', type: 'num', def: 152.4 },
+      { k: 'sprocketZ', label: 'Kettenrad-Zähne (Schleife)', type: 'num', def: 15, int: true, unit: '' },
+      { k: 'pitch', label: 'Teilung (p)', type: 'num', def: null, auto: true },
+    ] },
 ];
 // Kaufteile mit ihrer echten Form (kommen über die Drohnen-Bibliothek, nicht ins Fenster „Bauteile“)
 const N = (k, label, def, unit) => ({ k, label, type: 'num', def, ...(unit ? { unit } : {}) });
@@ -2285,6 +2573,73 @@ function sprocketMateTransform(p1 = {}, t1 = null) {
     },
     t: gearComposeWorldTransform(t1, { x: dx, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }),
     metrics: m,
+  };
+}
+
+// Passender Normflansch (Typ 01 Glattflansch) konzentrisch aufs Rohrende setzen
+function pipeFlangeOnPipeTransform(pipeP = {}, pipeT = null) {
+  const pm = pipeMetrics(pipeP);
+  const isCustom = pipeP.dn === 'custom' || Number(pipeP.od) > 0;
+  const params = {
+    dn: pipeP.dn || 'DN25',
+    style: 'slipOn',
+    od: isCustom ? pm.od : null,
+    flangeD: null,
+    boltCircle: null,
+    boltCount: null,
+    boltHoleD: null,
+    thickness: null,
+    clear: 0.4,
+    printFit: '',
+  };
+  const fm = pipeFlangeMetrics(params);
+  const zPos = Math.max(0, round(pm.length - fm.totalH, 3));
+  return {
+    params,
+    t: gearComposeWorldTransform(pipeT, { x: 0, y: 0, z: zPos, rx: 0, ry: 0, rz: 0 }),
+    pipe: pm,
+    flange: fm,
+  };
+}
+
+// Passenden Rohrbogen bündig ans Rohrende setzen
+function pipeElbowOnPipeTransform(pipeP = {}, pipeT = null) {
+  const pm = pipeMetrics(pipeP);
+  const isCustom = pipeP.dn === 'custom' || Number(pipeP.od) > 0 || Number(pipeP.wall) > 0;
+  const params = {
+    dn: pipeP.dn || 'DN25',
+    angle: '90',
+    bendR: null,
+    stub: 0,
+    od: isCustom ? pm.od : null,
+    wall: isCustom ? pm.wall : null,
+  };
+  const em = pipeElbowMetrics(params);
+  return {
+    params,
+    t: gearComposeWorldTransform(pipeT, { x: 0, y: 0, z: pm.length, rx: 0, ry: 0, rz: 0 }),
+    pipe: pm,
+    elbow: em,
+  };
+}
+
+// Passendes T-Stück bündig ans Rohrende setzen
+function pipeTeeOnPipeTransform(pipeP = {}, pipeT = null) {
+  const pm = pipeMetrics(pipeP);
+  const isCustom = pipeP.dn === 'custom' || Number(pipeP.od) > 0 || Number(pipeP.wall) > 0;
+  const params = {
+    dn: pipeP.dn || 'DN25',
+    branchDn: 'same',
+    centerLen: null,
+    od: isCustom ? pm.od : null,
+    wall: isCustom ? pm.wall : null,
+  };
+  const tm = pipeTeeMetrics(params);
+  return {
+    params,
+    t: gearComposeWorldTransform(pipeT, { x: 0, y: 0, z: pm.length, rx: 0, ry: 0, rz: 0 }),
+    pipe: pm,
+    tee: tm,
   };
 }
 

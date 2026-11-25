@@ -3016,6 +3016,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstellungs-Dialog ohne Geister-Modal (`[A-108]`)**: Nach direktem Entfernen von `.modal-back` öffnet `ViewPrefs.refreshOpenDialog()` bei `ViewPrefs.importData()` keinen verwaisten Einstellungsdialog neu; Import-Tests warten ereignisbasiert auf die aktualisierten Einstellungen (`t_f11252354`).
 - [ ] **Von Hand**: Im Browser bei kaltem Start ein mehrteiliges Modell anlegen, anschließend Einstellungen aus einer `.json`-Datei laden und im Zeichnungsbereich beide PDF-Exporte ausführen.
 
+## Bibliothek: Rohre, Fittings, Flansche, Riemen und Ketten (Auto [A-196], BI-27, BI-28)
+- [x] Rohr DN25 (`stdPipe`) hat Außen-Ø 33,7 mm und Wandstärke 3,2 mm (Klicktest `[A-196]`)
+- [x] Normflansch EN 1092-1 PN16 (`pipeFlange`, Glatt-, Vorschweiß- und Blindflansch) passt per Klick aufs DN25-Rohr mit 0 Durchdringungen (Klicktest `[A-196]`)
+- [x] Rohrbögen (45°/90°/180° mit Ansatz) und T-Stücke (gleich und reduziert) bauen fehlerfrei und bündig am Rohr (Klicktest `[A-196]`)
+- [x] Riemen (`stdBelt`: GT2 geschlossen/offen, Keilriemen SPZ) und Rollenketten (`stdChain`: 08B gerade & als Schleife) bauen nach Länge mit sauberer Geometrie (Klicktest `[A-196]`)
+- [x] Einfach- und Profi-Oberfläche, Befehlssuche, GeomCheck, Rückgängig/Wiederherstellen, Hilfetexte, Erklärungen und DE/EN-Texte geprüft (Klicktest `[A-196]`)
+- [ ] **Von Hand**: Im Browser ein DN25-Rohr mit Bogen, T-Stück und Flansch sowie einen GT2-Riemen um zwei Zahnriemenscheiben im 3D-Bild optisch prüfen.
+
 ## Fehler melden
 
 ```

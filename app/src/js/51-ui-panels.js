@@ -599,7 +599,25 @@ const Panels = (() => {
       const bcBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-barcode', 'data-help': 'barcode', 'data-tip': T('tool.fly.barcodeTip') });
       bcBtn.innerHTML = icon('barcode') + esc(T('tool.fly.barcode'));
       bcBtn.onclick = () => { Actions.addPart(LIBMAP.barcode, libDefaults(LIBMAP.barcode)); closeFlyout(); };
-      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn);
+      const spBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-pipe', 'data-help': 'stdPipe', 'data-tip': T('tool.fly.stdPipeTip') });
+      spBtn.innerHTML = icon('stdPipe') + esc(T('tool.fly.stdPipe'));
+      spBtn.onclick = () => { Actions.addPart(LIBMAP.stdPipe, libDefaults(LIBMAP.stdPipe)); closeFlyout(); };
+      const peBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-pipe-elbow', 'data-help': 'pipeElbow', 'data-tip': T('tool.fly.pipeElbowTip') });
+      peBtn.innerHTML = icon('pipeElbow') + esc(T('tool.fly.pipeElbow'));
+      peBtn.onclick = () => { Actions.addPart(LIBMAP.pipeElbow, libDefaults(LIBMAP.pipeElbow)); closeFlyout(); };
+      const ptBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-pipe-tee', 'data-help': 'pipeTee', 'data-tip': T('tool.fly.pipeTeeTip') });
+      ptBtn.innerHTML = icon('pipeTee') + esc(T('tool.fly.pipeTee'));
+      ptBtn.onclick = () => { Actions.addPart(LIBMAP.pipeTee, libDefaults(LIBMAP.pipeTee)); closeFlyout(); };
+      const pfBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-pipe-flange', 'data-help': 'pipeFlange', 'data-tip': T('tool.fly.pipeFlangeTip') });
+      pfBtn.innerHTML = icon('pipeFlange') + esc(T('tool.fly.pipeFlange'));
+      pfBtn.onclick = () => { Actions.addPart(LIBMAP.pipeFlange, libDefaults(LIBMAP.pipeFlange)); closeFlyout(); };
+      const sbBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-belt', 'data-help': 'stdBelt', 'data-tip': T('tool.fly.stdBeltTip') });
+      sbBtn.innerHTML = icon('stdBelt') + esc(T('tool.fly.stdBelt'));
+      sbBtn.onclick = () => { Actions.addPart(LIBMAP.stdBelt, libDefaults(LIBMAP.stdBelt)); closeFlyout(); };
+      const scBtn = h('button', { type: 'button', class: 'btn small simple-only', id: 'add-std-chain', 'data-help': 'stdChain', 'data-tip': T('tool.fly.stdChainTip') });
+      scBtn.innerHTML = icon('stdChain') + esc(T('tool.fly.stdChain'));
+      scBtn.onclick = () => { Actions.addPart(LIBMAP.stdChain, libDefaults(LIBMAP.stdChain)); closeFlyout(); };
+      stepRow.append(mpBtn, pcBtn, mpkBtn, bhBtn, phBtn, rkBtn, tsBtn, dfBtn, encBtn, npBtn, qrBtn, bcBtn, spBtn, peBtn, ptBtn, pfBtn, sbBtn, scBtn);
       el.append(stepRow);
       if (stds.length) {
         el.append(h('h3', { class: 'pro' }, T('fly.stdParts')));
@@ -2696,6 +2714,99 @@ const Panels = (() => {
             if (added) App.select([added.id]);
           };
           row.append(mateBtn); sec.append(row);
+        } else if (def.lib === 'stdPipe' && typeof pipeMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = pipeMetrics(rp);
+          sec.append(h('div', { id: 'p-stdpipe-hint', class: 'hint-box', html: T('panel.item.stdPipeHint', {
+            dn: esc(m.dn !== 'custom' ? `${m.dn}${m.inch ? ' (' + m.inch + ')' : ''}` : 'Eigenes Maß'),
+            od: Units.fmtLenU(m.od, 2), id: Units.fmtLenU(m.id, 2),
+            wall: Units.fmtLenU(m.wall, 2), L: Units.fmtLenU(m.length, 1),
+          }) }));
+          const row = h('div', { class: 'btn-row' });
+          const flBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-pipe-flange' }, T('panel.item.addPipeFlange'));
+          flBtn.onclick = () => {
+            const fit = pipeFlangeOnPipeTransform(rp, it.t);
+            let added = null;
+            App.change('Flansch aufs Rohr gesetzt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              added = Model.newItem('part', { lib: 'pipeFlange', ...fit.params }, { name: `Flansch ${fit.flange.dn}`, role: 'solid', color: '#4f6272', mat: it.mat || 'Baustahl' });
+              Object.assign(added.t, fit.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          const elBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-pipe-elbow' }, T('panel.item.addPipeElbow'));
+          elBtn.onclick = () => {
+            const fit = pipeElbowOnPipeTransform(rp, it.t);
+            let added = null;
+            App.change('Rohrbogen angesetzt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              added = Model.newItem('part', { lib: 'pipeElbow', ...fit.params }, { name: `Rohrbogen ${fit.elbow.dn}`, role: 'solid', color: '#6d7f8f', mat: it.mat || 'Baustahl' });
+              Object.assign(added.t, fit.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          const teeBtn = h('button', { type: 'button', class: 'btn small', id: 'btn-add-pipe-tee' }, T('panel.item.addPipeTee'));
+          teeBtn.onclick = () => {
+            const fit = pipeTeeOnPipeTransform(rp, it.t);
+            let added = null;
+            App.change('T-Stück angesetzt', (doc) => {
+              const found = Model.find(doc, it.id);
+              const list = found && found.parent ? found.parent.children : doc.items;
+              added = Model.newItem('part', { lib: 'pipeTee', ...fit.params }, { name: `T-Stück ${fit.tee.dn}`, role: 'solid', color: '#6d7f8f', mat: it.mat || 'Baustahl' });
+              Object.assign(added.t, fit.t);
+              list.push(added);
+            });
+            if (added) App.select([added.id]);
+          };
+          row.append(flBtn, elBtn, teeBtn); sec.append(row);
+        } else if (def.lib === 'pipeElbow' && typeof pipeElbowMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = pipeElbowMetrics(rp);
+          sec.append(h('div', { id: 'p-pipeelbow-hint', class: 'hint-box', html: T('panel.item.pipeElbowHint', {
+            dn: esc(m.dn !== 'custom' ? m.dn : 'Eigenes Maß'), angle: m.angle,
+            od: Units.fmtLenU(m.od, 2), id: Units.fmtLenU(m.id, 2), R: Units.fmtLenU(m.bendR, 1),
+          }) }));
+        } else if (def.lib === 'pipeTee' && typeof pipeTeeMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = pipeTeeMetrics(rp);
+          sec.append(h('div', { id: 'p-pipetee-hint', class: 'hint-box', html: T('panel.item.pipeTeeHint', {
+            dn: esc(m.dn !== 'custom' ? m.dn : 'Eigenes Maß'), od: Units.fmtLenU(m.od, 2),
+            branch: esc(m.branchDn === 'same' ? `Ø ${Units.fmtLenU(m.branchOd, 2)}` : `${m.branchDn} (Ø ${Units.fmtLenU(m.branchOd, 2)})`),
+            L: Units.fmtLenU(m.length, 1), C: Units.fmtLenU(m.centerLen, 1),
+          }) }));
+        } else if (def.lib === 'pipeFlange' && typeof pipeFlangeMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = pipeFlangeMetrics(rp);
+          const styleTxt = m.style === 'weldNeck' ? T('panel.item.pipeFlangeWeldNeck') : m.style === 'blind' ? T('panel.item.pipeFlangeBlind') : T('panel.item.pipeFlangeSlipOn');
+          sec.append(h('div', { id: 'p-pipeflange-hint', class: 'hint-box', html: T('panel.item.pipeFlangeHint', {
+            style: esc(styleTxt), dn: esc(m.dn !== 'custom' ? m.dn : `Ø ${Units.fmtLenU(m.od, 1)}`),
+            D: Units.fmtLenU(m.flangeD, 1),
+            bore: m.boreD > 0 ? `Ø ${Units.fmtLenU(m.boreD, 2)}` : 'geschlossen',
+            k: Units.fmtLenU(m.boltCircle, 1), n: m.boltCount, hd: Units.fmtLenU(m.boltHoleD, 1),
+            t: Units.fmtLenU(m.thickness, 1),
+          }) }));
+        } else if (def.lib === 'stdBelt' && typeof beltMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = beltMetrics(rp);
+          const extra = m.shape === 'loop'
+            ? ` · Achsabstand ${Units.fmtLenU(m.centerDist, 1)}${m.teeth > 0 ? ` · ${m.teeth} Zähne` : ''}`
+            : (m.teeth > 0 ? ` · ca. ${m.teeth} Zähne` : '');
+          sec.append(h('div', { id: 'p-stdbelt-hint', class: 'hint-box', html: T('panel.item.stdBeltHint', {
+            prof: esc(m.profile), shape: m.shape === 'open' ? 'offen' : 'geschlossen',
+            L: Units.fmtLenU(m.length, 1), w: Units.fmtLenU(m.width, 1), t: Units.fmtLenU(m.thickness, 2),
+            extra: esc(extra),
+          }) }));
+        } else if (def.lib === 'stdChain' && typeof chainMetrics === 'function') {
+          const rp = Model.resolveP(it.p, V);
+          const m = chainMetrics(rp);
+          sec.append(h('div', { id: 'p-stdchain-hint', class: 'hint-box', html: T('panel.item.stdChainHint', {
+            chain: esc(m.chainLabelShort), shape: m.shape === 'loop' ? 'geschlossen' : 'gerade',
+            links: m.links, p: Units.fmtLenU(m.pitch, 3), L: Units.fmtLenU(m.actualLength, 1), w: Units.fmtLenU(m.totalW, 1),
+          }) }));
         }
         w.append(sec);
       }
