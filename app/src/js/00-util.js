@@ -697,6 +697,11 @@ const IC = {
   keyway: '<circle cx="12" cy="13" r="8" opacity=".45"/><path d="M9.5 5.4V9h5V5.4"/><rect x="9.5" y="4.5" width="5" height="4.5" rx=".8" fill="currentColor" opacity=".25"/>',
   bearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="5.4" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="8.7" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="18.6" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="8.7" r="1.3" fill="currentColor" stroke="none"/>',
   sleeve: '<ellipse cx="12" cy="6" rx="6.5" ry="2.6" fill="currentColor" opacity=".2"/><path d="M5.5 6v12c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6V6"/><ellipse cx="12" cy="6" rx="6.5" ry="2.6"/><ellipse cx="12" cy="6" rx="3.4" ry="1.3"/>',
+  oring: '<circle cx="12" cy="12" r="8" stroke-width="3.6" opacity=".28"/><circle cx="12" cy="12" r="9.6"/><circle cx="12" cy="12" r="6.2"/>',
+  oringGroove: '<path d="M3 16h5.5v-5h7v5H21v4H3z" fill="currentColor" opacity=".2"/><path d="M3 16h5.5v-5h7v5H21"/><circle cx="12" cy="11.5" r="2.6"/>',
+  shaftSeal: '<path d="M4 6h16v12H4z" opacity=".18" fill="currentColor"/><path d="M4 6h16v12H4z"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="6.4" stroke-dasharray="2.2 1.8"/>',
+  compSpring: '<path d="M6 4h12M6 20h12" stroke-width="2"/><path d="M7 6.5l10 2.7-10 2.8 10 2.8-10 2.7"/>',
+  extSpring: '<circle cx="12" cy="5" r="2.2"/><path d="M10.5 7.5 16 9.5 8 11.8 16 14 8 16.2l5.5 1.3"/><circle cx="12" cy="19.5" r="2.2"/>',
   replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
@@ -2693,6 +2698,16 @@ const HELP = {
   "hilfe": "Über die Vorlagen wechselst du mit einem Klick zwischen ISO 7200, DIN EN ISO 7200 und ANSI/ASME Y14.1. Mit „Schriftfeld gestalten …“ passt du Breite, Höhe, beliebige Text- und Automatik-Felder, Trennlinien sowie ein Firmenlogo an und speicherst deinen Entwurf als eigene Vorlage für alle künftigen Zeichnungen.",
   "tipp": "Klicke in der Live-Vorschau des Schriftfeld-Editors direkt auf ein Feld, um Beschriftung, Lage oder Größe sofort zu ändern."
  },
+ "drawingInspection": {
+  "tip": "Maße als Prüfmaße (1, 2, 3 …) markieren und als Prüftabelle (CSV) exportieren (Profi)",
+  "hilfe": "Markiere wichtige Maße direkt am gewählten Maß rechts im Panel als Prüfmaß. Sie erhalten fortlaufende Nummern-Ballons (1, 2, 3 …), lassen sich auf Wunsch als Prüftabelle auf dem Blatt einblenden und als CSV-Datei mit Nennmaß, Toleranz, Min/Max sowie leeren Spalten für Istwert und Prüfung speichern.",
+  "tipp": "Wähle zuerst ein Maß auf dem Blatt an, hake rechts „Als Prüfmaß markieren“ an und exportiere danach die fertige Prüftabelle als CSV."
+ },
+ "drawingTiledPrint": {
+  "tip": "Große Zeichnungen im Maßstab 1:1 über mehrere A4-Seiten mit Klebemarken drucken (Profi)",
+  "hilfe": "Teilt große Blätter (wie A3, A2, A1 oder A0) exakt im Maßstab 1:1 auf mehrere A4- oder A3-Seiten auf. Jede Kachel enthält Schnitt- und Klebemarken (A1, B1, A2 …) und auf Seite 1 einen 50-mm-Kontrollbalken zum Nachmessen nach dem Ausdruck.",
+  "tipp": "Stelle im Druckdialog deines PDF-Betrachters immer „Tatsächliche Größe“ oder „100 %“ (ohne Seitenanpassung) ein, damit die 1:1-Schablone exakt stimmt."
+ },
  "drawingLayers": {
   "tip": "Linienarten und Strichstärken nach Norm einstellen sowie Ebenen (Layer) ein- und ausblenden (Profi)",
   "hilfe": "Hier steuerst du die Liniengruppe nach ISO 128 (0,35 / 0,50 / 0,70 mm) sowie jede Zeichnungsebene einzeln: Sichtbare Kanten, Verdeckte Kanten, Mittellinien, Maße, Schraffur, Schnittlinien, Gewinde, Rahmen und Bilder lassen sich getrennt ein- und ausblenden und in Linienart sowie Strichstärke anpassen – alle Layer-Namen und Zustände landen auch im DXF-Export.",
@@ -2713,20 +2728,35 @@ const HELP = {
   "hilfe": "Öffnet eine Sammlung technischer Normsymbole (z. B. Mittellinie, Durchmesser, Neigung, Kegel, Kegelsenkung, Flachsenkung, Tiefe, Hüllbedingung, Trennlinie, Erdung) zum schnellen Stempeln oder Anhängen mit Hinweislinie.",
   "tipp": "Über das Suchfeld und die Kategorie-Knöpfe oben im Fenster findest du das passende Symbol sofort."
  },
+ "stdORing": {
+  "tip": "Norm-O-Ring nach DIN 3771 / ISO 3601 samt passenden Einbaunut-Maßen",
+  "hilfe": "Erzeugt einen O-Ring aus wählbarem Innendurchmesser d₁ und Schnurstärke d₂ (oder eigener Größe) mit dem Werkstoff TPU. Rechts siehst du sofort die passenden Nutbreiten und Nuttiefen für statischen, dynamischen und axialen Einbau.",
+  "tipp": "Klicke rechts auf „Passende Nut anlegen“, um direkt eine passende O-Ring-Nut als Lochkörper zu erzeugen."
+ },
+ "stdORingGroove": {
+  "tip": "Passende Einbaunut für einen O-Ring (axial, Welle oder Bohrung) nach DIN 3771 / ISO 3601-2",
+  "hilfe": "Erzeugt den ringförmigen Schneidkörper für eine O-Ring-Nut als Planflächennut (axial), Wellennut (radial außen) oder Gehäusebohrungsnut (radial innen) mit Normtiefe und Normbreite für statische oder dynamische Abdichtung.",
+  "tipp": "Wähle „Axial (Planfläche)“ für Deckelflansche oder „Radial (Welle)“ für Kolben und Buchsen."
+ },
+ "stdShaftSeal": {
+  "tip": "Radial-Wellendichtring (Simmerring) nach DIN 3760 / ISO 6194-1",
+  "hilfe": "Erzeugt einen Wellendichtring mit Wellen-Ø d (Passung h11), Gehäuse-Ø D (Passung H8) und Breite b wahlweise als Bauform AS (mit Schutz-/Staublippe) oder Bauform A (ohne Staublippe).",
+  "tipp": "Der Hinweis rechts zeigt direkt die empfohlenen Toleranzfelder h11 für die Welle und H8 für die Gehäusebohrung."
+ },
+ "stdCompSpring": {
+  "tip": "Norm-Schrauben-Druckfeder nach DIN EN 13906-1 / DIN 2098 mit berechneter Federrate",
+  "hilfe": "Erzeugt eine zylindrische Druckfeder aus Drahtdurchmesser d, mittlerem Windungsdurchmesser Dm, Windungszahl n und Steigung P (oder freier Länge L₀), wahlweise mit angelegten und geschliffenen oder offenen Enden. Rechts werden Außen-/Innen-Ø, Blocklänge Lc und Federrate R angezeigt.",
+  "tipp": "Ändere die Windungszahl n oder die freie Länge L₀ direkt rechts, um Einbauraum und Federkraft sofort zu prüfen."
+ },
+ "stdExtSpring": {
+  "tip": "Norm-Schrauben-Zugfeder nach DIN EN 13906-2 mit 1/1 deutschen Ösen",
+  "hilfe": "Erzeugt eine eng gewickelte Zugfeder mit beidseitigen 1/1 deutschen Ösen (0° in einer Ebene oder 90° gedreht) und berechnet Gesamtlänge, Abstand zwischen den Ösen L₀ und Federrate R.",
+  "tipp": "Mit „Ösen-Stellung 90°“ richtest du die beiden Einhängeösen um eine Vierteldrehung zueinander aus."
+ },
  "pmi3d": {
   "tip": "Maße, Toleranzen und Hinweise direkt am 3D-Modell anbringen (PMI, Profi)",
   "hilfe": "Setzt bleibende Maße (Kanten, Durchmesser, Radien, Abstände, Winkel), Toleranzen (±, Abmaße, Grenzmaße, ISO-Passungen wie H7) und Hinweislinien direkt ans 3D-Modell. Über das Auge am Ansichtswürfel oder im Verlauf blendest du alle 3D-Maße gemeinsam oder einzeln aus, und neue Zeichnungen übernehmen sie automatisch samt Toleranz.",
   "tipp": "Klicke auf ein 3D-Maßschildchen im Bild, um rechts im Panel jederzeit seine Toleranz oder den Abstand zu ändern."
- },
- "drawingInspection": {
-  "tip": "Maße als Prüfmaße (1, 2, 3 …) markieren und als Prüftabelle (CSV) exportieren (Profi)",
-  "hilfe": "Markiere wichtige Maße direkt am gewählten Maß rechts im Panel als Prüfmaß. Sie erhalten fortlaufende Nummern-Ballons (1, 2, 3 …), lassen sich auf Wunsch als Prüftabelle auf dem Blatt einblenden und als CSV-Datei mit Nennmaß, Toleranz, Min/Max sowie leeren Spalten für Istwert und Prüfung speichern.",
-  "tipp": "Wähle zuerst ein Maß auf dem Blatt an, hake rechts „Als Prüfmaß markieren“ an und exportiere danach die fertige Prüftabelle als CSV."
- },
- "drawingTiledPrint": {
-  "tip": "Große Zeichnungen im Maßstab 1:1 über mehrere A4-Seiten mit Klebemarken drucken (Profi)",
-  "hilfe": "Teilt große Blätter (wie A3, A2, A1 oder A0) exakt im Maßstab 1:1 auf mehrere A4- oder A3-Seiten auf. Jede Kachel enthält Schnitt- und Klebemarken (A1, B1, A2 …) und auf Seite 1 einen 50-mm-Kontrollbalken zum Nachmessen nach dem Ausdruck.",
-  "tipp": "Stelle im Druckdialog deines PDF-Betrachters immer „Tatsächliche Größe“ oder „100 %“ (ohne Seitenanpassung) ein, damit die 1:1-Schablone exakt stimmt."
  },
  "drawingFinish": {
   "tip": "Zeichnung auf Knopfdruck mit Ansichten, Maßstab, Maßen, Mittellinien und Schriftfeld fertig machen",
