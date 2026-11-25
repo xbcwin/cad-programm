@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,PWA,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -27744,6 +27744,184 @@ def t_kreis_malen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a142_pwa_offline(p):
+    # 1. Manifest in <head>, lokale Symbole, keine fremden Netz-Anfragen
+    reqs = []
+    p.pg.on('request', lambda req: reqs.append(req.url))
+    p.pg.reload(wait_until='load', timeout=30000)
+    p.wait(1200)
+
+    man_res = p.pg.evaluate("""async () => {
+      const link = document.head.querySelector('link[rel="manifest"]');
+      if (!link) return { hasLink: false };
+      const href = link.getAttribute('href');
+      const r = await fetch(link.href);
+      const man = r.ok ? await r.json() : null;
+      const iconChecks = [];
+      for (const ic of (man && man.icons) || []) {
+        const ir = await fetch(new URL(ic.src, r.url).href);
+        const buf = ir.ok ? await ir.arrayBuffer() : new ArrayBuffer(0);
+        iconChecks.push({ src: ic.src, sizes: ic.sizes, type: ic.type, ok: ir.ok, bytes: buf.byteLength });
+      }
+      const extTags = [...document.querySelectorAll('link[href], script[src]')].map(el => el.href || el.src).filter(u => {
+        if (!/^https?:/i.test(u)) return false;
+        try { return new URL(u).origin !== location.origin; } catch (_) { return true; }
+      });
+      return { hasLink: true, href, status: r.status, man, iconChecks, extTags };
+    }""")
+    foreign_reqs = [
+        u for u in reqs
+        if u.startswith('http')
+        and not u.startswith('http://localhost:')
+        and not u.startswith('http://127.0.0.1:')
+    ]
+    man = man_res.get('man') or {}
+    icons = man_res.get('iconChecks') or []
+    ok1 = (
+        bool(man_res.get('hasLink'))
+        and man_res.get('status') == 200
+        and man.get('short_name') == 'Tracery'
+        and man.get('display') == 'standalone'
+        and man.get('start_url') == './'
+        and any(ic.get('sizes') == '192x192' and ic.get('type') == 'image/png' and ic.get('ok') and ic.get('bytes', 0) > 0 for ic in icons)
+        and any(ic.get('sizes') == '512x512' and ic.get('type') == 'image/png' and ic.get('ok') and ic.get('bytes', 0) > 0 for ic in icons)
+        and any(ic.get('type') == 'image/svg+xml' and ic.get('ok') and ic.get('bytes', 0) > 0 for ic in icons)
+        and len(man_res.get('extTags') or []) == 0
+        and len(foreign_reqs) == 0
+    )
+
+    # 2. Service Worker aktiv & alle Programmdateien im lokalen Cache
+    sw_info = None
+    for _ in range(40):
+        sw_info = p.pg.evaluate("""async () => {
+          if (!('serviceWorker' in navigator)) return { supported: false };
+          const reg = await navigator.serviceWorker.getRegistration();
+          const st = window.__M.PWA.status();
+          const keys = await caches.keys();
+          const cName = keys.find(k => k.startsWith('tracery-offline-'));
+          let cachedUrls = [];
+          if (cName) {
+            const c = await caches.open(cName);
+            cachedUrls = (await c.keys()).map(req => new URL(req.url).pathname);
+          }
+          return {
+            supported: true,
+            scriptURL: reg && reg.active ? reg.active.scriptURL : '',
+            controlled: !!navigator.serviceWorker.controller,
+            st,
+            cName: cName || '',
+            cachedUrls,
+          };
+        }""")
+        if sw_info.get('scriptURL') and sw_info.get('controlled') and sw_info.get('st', {}).get('offlineReady') and len(sw_info.get('cachedUrls') or []) >= 100:
+            break
+        p.wait(500)
+
+    cached = set(sw_info.get('cachedUrls') or []) if sw_info else set()
+    needed_suffixes = (
+        '/', '/index.html', '/manifest.webmanifest', '/occ-kernel.wasm',
+        '/kernel/worker.js', '/kernel/core.js', '/lib/three/build/three.module.js',
+        '/data/schrift-inter.json', '/assets/app-icon.svg', '/assets/icon-192.png', '/assets/icon-512.png',
+    )
+    has_all_needed = all(any(u.endswith(suf) for u in cached) for suf in needed_suffixes)
+    ok2 = bool(
+        sw_info
+        and sw_info.get('supported')
+        and sw_info.get('scriptURL', '').endswith('/sw.js')
+        and sw_info.get('controlled')
+        and sw_info.get('st', {}).get('swState') == 'ready'
+        and sw_info.get('st', {}).get('offlineReady') is True
+        and len(cached) >= 100
+        and has_all_needed
+    )
+
+    # 3. Netz abschalten, Seite neu laden & 3D-Quader inkl. CAD-Kern komplett offline rechnen
+    ok3 = False
+    try:
+        p.ctx.set_offline(True)
+        p.pg.reload(wait_until='load', timeout=30000)
+        p.pg.locator('.start').wait_for(state='visible', timeout=15000)
+        p.wait(300)
+        offline_start = p.pg.evaluate("() => ({ online: navigator.onLine, startCount: document.querySelectorAll('.start').length, sw: !!navigator.serviceWorker.controller })")
+        p.empty()
+        p.ev("Actions.addPrimitive('box')")
+        warte_rechnen(p, 35)
+        vol = volumen(p)
+        box_st = p.ev("return { res: App.results.size, errs: App.errors.length };")
+        ok3 = bool(
+            offline_start.get('online') is False
+            and offline_start.get('startCount') == 1
+            and offline_start.get('sw') is True
+            and box_st['res'] >= 1
+            and box_st['errs'] == 0
+            and vol is not None
+            and abs(vol - 8000) < 1
+            and len(p.errs) == 0
+        )
+    finally:
+        p.ctx.set_offline(False)
+    p.wait(300)
+
+    # 4. Hinweis in den Einstellungen (Profi & Einfach), Anleitung, Install-Prompt, Hilfe, Befehl & DE/EN
+    p.ev("ViewPrefs.setLevel('pro'); ViewPrefs.dialog();")
+    p.wait(250)
+    pro_txt = p.pg.locator('#set-pwa-box').text_content()
+    pro_vis = p.pg.locator('#set-pwa-box').is_visible()
+    has_dot = p.pg.locator('#set-pwa-status .pwa-dot').count() == 1
+    desc = p.ev("return Explain.describeElement(document.querySelector('#set-pwa-box'))")
+    p.pg.locator('#set-pwa-guide').click()
+    p.wait(200)
+    guide_txt = p.pg.locator('#pwa-guide-dlg').inner_text()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    # Simuliertes beforeinstallprompt-Ereignis schaltet den direkten Installations-Knopf frei
+    p.ev("""const ev = new Event('beforeinstallprompt', { cancelable: true });
+      ev.prompt = async () => {};
+      ev.userChoice = Promise.resolve({ outcome: 'dismissed' });
+      window.dispatchEvent(ev);""")
+    p.wait(150)
+    has_prompt_btn = p.pg.locator('#set-pwa-install').is_visible()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+
+    p.ev("ViewPrefs.setLevel('simple'); ViewPrefs.dialog();")
+    p.wait(250)
+    simple_vis = p.pg.locator('#set-pwa-box').is_visible()
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+
+    meta = p.pg.evaluate("""async (desc) => {
+      const hilfen = await fetch('data/werkzeug-hilfen.json').then(r => r.json());
+      const { I18n, Commands } = window.__M;
+      const hJson = hilfen.installApp || {};
+      const helpOk = !!(hJson.tip && hJson.hilfe && hJson.tipp && desc)
+        && desc.text === hJson.hilfe && desc.tip === hJson.tipp;
+      const deKeys = Object.keys(I18n.packs.de || {});
+      const enKeys = Object.keys(I18n.packs.en || {});
+      const enSet = new Set(enKeys);
+      const i18nEq = deKeys.length === enKeys.length && deKeys.every(k => enSet.has(k))
+        && !!I18n.packs.de['dlg.settings.pwaTitle'] && !!I18n.packs.en['dlg.settings.pwaTitle'];
+      const cmdOk = Commands.search('als app installieren').some(c => c.id === 'install-app');
+      return { helpOk, i18nEq, cmdOk };
+    }""", desc)
+    ok4 = bool(
+        pro_vis
+        and 'Als App installieren' in pro_txt
+        and has_dot
+        and 'Chrome' in guide_txt
+        and 'Safari' in guide_txt
+        and has_prompt_btn
+        and simple_vis
+        and meta.get('helpOk')
+        and meta.get('i18nEq')
+        and meta.get('cmdOk')
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -27994,6 +28172,7 @@ TESTS = [
     ('[A-140] Was-ist-das-Modus: Klick erklärt Elemente statt auszuführen / Esc aus (BE-32)', t_a140_was_ist_das),
     ('[A-139] Kommentar-Pins am Modell und Arbeitsflächen-Anordnung (BE-28, BE-29)', t_a139_pins_arbeitsflaechen),
     ('[A-138] Kreis-Menü (Q / Rechts-Halten / einstellbar) und Malen-Auswahl (Flächen / Kanten)', t_kreis_malen),
+    ('[A-142] Als App installieren, ohne Internet nutzbar (BE-23)', t_a142_pwa_offline),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

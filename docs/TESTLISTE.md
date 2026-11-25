@@ -2567,6 +2567,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, DE/EN-Texte & Befehle**: `werkzeug-hilfen.json`/`HELP` enthalten `radialMenu` und `paintSelect`, DE/EN-Schlüssel sind gleich, Befehlssuche findet Kreis-Menü und Malen-Auswahl (`t_kreis_malen`).
 - [ ] **Von Hand**: Im Browser mit rechter Maustaste kurz gedrückt halten, direkt auf ein Feld ziehen und loslassen (flüssige Geste ohne zweiten Klick) sowie auf einem abgerundeten Bauteil mit Malen-Auswahl mehrere Flächen einfärben und Kantenketten abrunden.
 
+## Als App installieren & ohne Internet nutzbar (Auto [A-142], BE-23)
+
+- [x] **Manifest & lokale Symbole ohne Fremd-Anfragen**: `<link rel="manifest" href="manifest.webmanifest">` liegt in `<head>`, `manifest.webmanifest` liefert `short_name: "Tracery"`, `display: "standalone"` und gültige lokale Symbole (`app-icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`); auf der Seite und beim Laden entstehen null externe HTTP-Anfragen (`t_a142_pwa_offline`).
+- [x] **Service Worker & lokaler Voll-Cache**: `app/sw.js` ist registriert und aktiv (`PWA.status().offlineReady === true`), und der Cache `tracery-offline-*` enthält alle Programmdateien inklusive `index.html`, `./`, `occ-kernel.wasm`, `kernel/worker.js`, `kernel/core.js`, Three.js-Modulen, Schriften und Symbolen (`t_a142_pwa_offline`).
+- [x] **Start & CAD-Berechnung ohne Internet**: Mit abgeschaltetem Netz (`set_offline(True)`) lädt ein Neuladen der Seite Tracery fehlerfrei auf die Startseite und ein Quader wird samt Web Worker und `occ-kernel.wasm` komplett offline berechnet (`V = 8000 mm³`, `t_a142_pwa_offline`).
+- [x] **Einstellungen, Anleitung, Hilfe & DE/EN**: `#set-pwa-box` („Als App installieren & ohne Internet nutzen“) erscheint in Einfach und Profi mit Statuspunkt, öffnet die Chrome/Edge/Safari-Anleitung (`#pwa-guide-dlg`) bzw. bei `beforeinstallprompt` `#set-pwa-install`, und `installApp`-Hilfe, Befehl `install-app` sowie DE/EN-Schlüsselgleichheit sind geprüft (`t_a142_pwa_offline`).
+- [ ] **Von Hand**: Tracery über HTTPS oder `localhost` in Chrome/Edge („App installieren“) bzw. Safari auf Mac/iPad („Zum Dock hinzufügen“ / „Zum Home-Bildschirm“) als eigenständige App installieren, das Symbol im Dock/Startbildschirm prüfen und anschließend bei getrenntem WLAN starten.
+
 ## Fehler melden
 
 ```
