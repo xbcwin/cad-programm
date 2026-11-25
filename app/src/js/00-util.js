@@ -708,6 +708,9 @@ const IC = {
   web: '<rect x="3" y="3" width="18" height="18" rx="1.5" opacity=".45"/><path d="M3 12h18M12 3v18M6 6l12 12M18 6L6 18" />',
   splitFace: '<path d="M4 17c4-3 12-3 16 0V7c-4-3-12-3-16 0z" opacity=".35" fill="currentColor"/><path d="M4 17c4-3 12-3 16 0V7c-4-3-12-3-16 0z"/><circle cx="12" cy="11.5" r="3.4" stroke-dasharray="2 1.5"/>',
   dome: '<path d="M3 16h18v4H3z" opacity=".35" fill="currentColor"/><path d="M3 16h18v4H3z"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10" fill="currentColor" opacity=".2"/><path d="M4 16c0-6.5 3.6-10 8-10s8 3.5 8 10"/>',
+  undercut: '<path d="M4 6h7v4l3 2h6v6H4z" fill="currentColor" opacity=".2"/><path d="M4 6h7v4l3 2h6M4 18h16M11 6v4l3 2" />',
+  circlipGroove: '<path d="M4 7h6v4h4V7h6v10H4z" fill="currentColor" opacity=".2"/><path d="M4 7h6v4h4V7h6M4 17h16" />',
+  splineShaft: '<circle cx="12" cy="12" r="5.5" opacity=".35"/><path d="M10.5 3h3v2.6a6.8 6.8 0 0 1 2.9 1.7l2.2-1.3 1.5 2.6-2.2 1.3a6.8 6.8 0 0 1 0 3.4l2.2 1.3-1.5 2.6-2.2-1.3a6.8 6.8 0 0 1-2.9 1.7V21h-3v-2.6a6.8 6.8 0 0 1-2.9-1.7l-2.2 1.3-1.5-2.6 2.2-1.3a6.8 6.8 0 0 1 0-3.4L3.9 8.6 5.4 6l2.2 1.3a6.8 6.8 0 0 1 2.9-1.7z"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2299,6 +2302,31 @@ const HELP = {
   "tip": "Körper, Bohrung oder Schritt aus einer CSV-Koordinatentabelle vervielfachen (Profi)",
   "hilfe": "Wähle einen Körper, eine Bohrung oder einen Formschritt und klicke auf „Muster aus Tabelle (CSV)“. Trage Koordinaten (X, Y, optional Z und Drehwinkel rot) Zeile für Zeile ein oder lade eine CSV-Datei. Jede Zeile erzeugt eine Kopie.",
   "tipp": "Du kannst wählen, ob die Zahlen als Zielposition im Modell oder als Versatz (dX, dY, dZ) vom Original gerechnet werden."
+ },
+ "undercut": {
+  "tip": "Gewinde-Freistich nach DIN 76-1 am Gewindeende schneiden",
+  "hilfe": "Wähle eine runde Welle oder Bohrung und klicke auf „Freistich“. Tracery schlägt Steigung und Freistichmaße (Durchmesser, Breite, 30°-Auslauf) passend zum Durchmesser nach DIN 76-1 vor – wahlweise als Form A (normal) oder Form B (kurz).",
+  "tipp": "Wenn auf der Fläche schon ein kosmetisches Gewinde markiert ist, übernimmt der Freistich automatisch genau dessen Steigung."
+ },
+ "circlipGroove": {
+  "tip": "Einstich für Sicherungsring nach DIN 471 (Welle) oder DIN 472 (Bohrung)",
+  "hilfe": "Wähle eine Außenwelle oder Innenbohrung und klicke auf „Einstich“. Tracery sucht automatisch Nutbreite und Nutdurchmesser aus der DIN-471- bzw. DIN-472-Tabelle heraus und schneidet die Nut am gewählten Abstand ein.",
+  "tipp": "Wählst du rechts eine andere Nenngröße aus der Liste, passen sich Breite (m) und Nutdurchmesser (d₂) sofort normgerecht an."
+ },
+ "keywayStep": {
+  "tip": "Passfeder-Nut nach DIN 6885 direkt auf Welle oder Nabe fräsen",
+  "hilfe": "Wähle eine Welle oder Nabenbohrung und klicke auf „Passfeder-Nut“. Tracery bestimmt die passende DIN-6885-Größe zum Durchmesser und fräst die Nut mit Tiefe t₁ (Welle, rundstirnig) bzw. t₂ (Nabe, gerade) direkt in den Körper.",
+  "tipp": "Mit „Winkel um Achse“ drehst du die Nut rund um die Welle, und über „Versatz längs“ schiebst du sie exakt an die gewünschte Position."
+ },
+ "splineProfile": {
+  "tip": "Keilwellen-Profil nach DIN ISO 14 auf Welle oder Bohrung schneiden",
+  "hilfe": "Wähle eine Welle oder Bohrung und klicke auf „Keilwelle“. Tracery wählt das passende DIN-ISO-14-Profil mit geraden parallelen Flanken und schneidet die Keile über die gewählte Länge oder über die ganze Welle ein.",
+  "tipp": "Lässt du die Länge auf 0, läuft das Keilwellen-Profil automatisch über die gesamte Zylinderlänge."
+ },
+ "splineShaft": {
+  "tip": "Normteil: fertige Keilwelle nach DIN ISO 14 einfügen",
+  "hilfe": "Erzeugt eine eigenständige Keilwelle nach DIN ISO 14 (6 oder 8 Keile, parallele Flanken, Innenzentrierung) mit wählbarem Profil, Länge und optionaler Mittenbohrung.",
+  "tipp": "Wähle bei „Profil“ „Eigene Maße“, wenn du Zähnezahl, Innendurchmesser, Außendurchmesser und Keilbreite frei festlegen möchtest."
  }
 };
 

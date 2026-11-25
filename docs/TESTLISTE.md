@@ -2466,6 +2466,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Profi-Modus, Hilfetexte, DE/EN & Befehle**: `#btn-face-fillet` und `#btn-parting-draft` nur im Profi-Modus sichtbar; `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit, `Commands.search` und `Explain.local` geprüft.
 - [ ] **Von Hand**: Im Browser zwei nicht benachbarte Flächen über eine größere Fase und an einem geschwungenen Formteil eine Trennlinien-Schräge mit Bezugsebene optisch auf glatte Übergänge prüfen.
 
+## Freistich, Einstich, Passfeder-Nut & Keilwellen-Profil (Auto [A-130], KP-48, KP-49)
+
+- [x] **Sicherungsring-Einstich DIN 471 (Welle) & DIN 472 (Bohrung)**: Welle `d=20` über Kontextleiste `#ctx-circlip` → `norm: 'din471'`, Nutbreite `1,3 mm`, Nutgrund `d=19,0 mm` (`r=9,5 mm`), Volumenabnahme `≈ π·(10² − 9,5²)·1,3`, `GeomCheck` 0 Fehler, Unterdrücken und Rückgängig geprüft; Bohrung `d=20` (`tube d=32, wall=6`) → `norm: 'din472'`, Nutbreite `1,1 mm`, Nutgrund `d=21,0 mm`, `GeomCheck` 0 Fehler (`t_a130_wellen_features`).
+- [x] **Passfeder-Nut DIN 6885 direkt auf Zylinderfläche**: Welle `d=20` → automatisch Größe `6x6` mit exakt `6,0 mm` Abstand zwischen beiden Seitenwänden und `3,5 mm` Tiefe (`r=6,5 mm`); Welle `d=30` → automatisch Größe `8x7` (`8,0 mm` breit, `4,0 mm` tief), `Model.dependencies` & `GeomCheck` 0 Fehler (`t_a130_wellen_features`).
+- [x] **Gewinde-Freistich DIN 76-1**: Bolzen `d=10` (M10, Steigung `1,5 mm`) → Form A (`grooveD=7,3 mm`, `width=5,2 mm`) mit zylindrischem Nutgrund und 30°-Auslaufkegel sowie Umschalten auf Form B (`width=3,8 mm`) über `#uc-form`, `GeomCheck` 0 Fehler (`t_a130_wellen_features`).
+- [x] **Keilwellen-Profil DIN ISO 14 (Normteil & Formschritt)**: Normteil `splineShaft` (`6x16x20`, Länge `40 mm`) und Formschritt `splineProfile` auf Welle `d=20` erzeugen 6 Außenbögen (`r=10`), 6 Fußbögen (`r=8`) und 12 Flankenflächen ohne Geometriefehler; Hilfetexte (`werkzeug-hilfen.json`/`HELP`), `Explain.local` und DE/EN-Schlüsselgleichheit geprüft (`t_a130_wellen_features`).
+- [ ] **Von Hand**: Im Browser auf einer abgesetzten Welle (z. B. `d=20` mit Absatz `d=25`) nacheinander Gewinde-Freistich, Sicherungsring-Einstich und Passfeder-Nut über Kontextleiste/Rechtsklick anlegen und prüfen, ob alle Nuten optisch sauber auf den Zylinderflächen sitzen.
+
 ## Muster mit wachsender Größe & Teilen mit Fläche oder Skizze (Auto [A-129], KP-46, KP-47)
 
 - [x] **5 Zylinder mit +10 % je Kopie**: Rechteckmuster (`nx = 5, dx = 25`) auf Zylinder (`Ø10 × 10`) mit `#op-scaleStep = 10` (`%`) → 5 Körper ohne Fehler (`GeomCheck` 0 Funde), letzter Zylinder ist `1,464`-mal so groß (`Ø ≈ 14,64 mm`, `h ≈ 14,64 mm`).

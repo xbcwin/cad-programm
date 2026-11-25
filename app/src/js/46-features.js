@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -2016,7 +2016,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || x.kind === 'deform' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'fillPattern' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'splitFace' || x.kind === 'dome' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d' || x.kind === 'boss' || x.kind === 'lipGroove' || x.kind === 'undercut' || x.kind === 'circlipGroove' || x.kind === 'keyway' || x.kind === 'splineProfile';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -4500,7 +4500,7 @@ const Features = (() => {
       x && !ex.has(x.id) && x.role !== 'hole' && !x.suppressed
       && !(x.kind === 'group' && x.p && x.p.assembly)
       && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss'
-      && x.kind !== 'boss' && x.kind !== 'lipGroove'
+      && x.kind !== 'boss' && x.kind !== 'lipGroove' && x.kind !== 'undercut' && x.kind !== 'circlipGroove' && x.kind !== 'keyway' && x.kind !== 'splineProfile'
       && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d'
       && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && x.kind !== 'deform'
       && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))
@@ -4753,6 +4753,434 @@ const Features = (() => {
     w.append(sec, contSec, ml, fk); if (fk2) w.append(fk2);
   }
 
+  // ---------- Wellen- & Bohrungs-Schritte (KP-48, KP-49): Freistich, Einstich, Passfeder-Nut, Keilwelle ----------
+  function resolveCylForStep(face = null) {
+    let f = face && face.id != null && face.idx != null ? face : Actions.selectedFace();
+    if ((!f || !f.info || f.info.t !== 'CYLINDRE') && App.sel.length === 1) {
+      const top = resolveTopTarget(App.sel[0]);
+      if (top && top.role !== 'hole') {
+        const cf = findCylFaceOnItem(top.id);
+        if (cf) f = { id: cf.rId, idx: cf.faceIdx, info: cf.info };
+      }
+    }
+    if (!f || f.id == null) return null;
+    const tgt = resolveTopTarget(f.id);
+    if (!tgt || tgt.role === 'hole') return null;
+    const rId = App.mergedInto(f.id) || f.id;
+    const g = (f.idx != null ? Viewer.cylinderFaceInfo(rId, f.idx) : null) || (f.info && f.info.t === 'CYLINDRE' && Array.isArray(f.info.axis) ? (() => {
+      const ax = f.info.axis;
+      return { o: ax.slice(0, 3), d: ax.slice(3, 6), r: f.info.r || 10, c: f.info.c || [0, 0, 0], t0: 0, t1: 20, faceLen: 20, kind: f.info.ori === -1 ? 'int' : 'ext' };
+    })() : null);
+    if (!g) return null;
+    const r6 = (a) => a.map((v) => round(v, 6));
+    const faceSpec = {
+      t: 'CYLINDRE',
+      r: round(g.r, 6),
+      c: r6(g.c || g.o),
+      axis: [...r6(g.o), ...r6(g.d)],
+      ori: g.kind === 'int' ? -1 : 1,
+      ...(f.info && f.info.tid ? { tid: f.info.tid } : {}),
+    };
+    return { face: f, tgt, g, faceSpec, d: round(2 * g.r, 3), isInner: g.kind === 'int' };
+  }
+  function pickCylStepFace(stepId, hintHtml, onPick) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && fi.t === 'CYLINDRE') {
+          stopPick();
+          const info = resolveCylForStep({ id: hit.id, idx: hit.faceIdx, info: fi });
+          if (info) onPick(info);
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine runde Zylinderfläche (Welle oder Bohrung).', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'CYLINDRE' ? hit.id : null, fi && fi.t === 'CYLINDRE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(hintHtml);
+  }
+  function pickStepCylFace(stepId, undoLabel) {
+    pickCylStepFace(stepId, '<b>Zylinderfläche wählen:</b> Klick auf die gewünschte Welle oder Bohrung. <b>Esc</b> bricht ab.', (info) => {
+      App.change(undoLabel, (doc) => {
+        const f = Model.find(doc, stepId); if (!f) return false;
+        f.item.p.target = info.tgt.id;
+        f.item.p.face = info.faceSpec;
+      });
+      UI.toast('Zylinderfläche aktualisiert.', { icon: 'check' });
+    });
+  }
+  function startCylStep(kindName, hintHtml, fn, face = null, opts = {}) {
+    if (App.ctx) { UI.toast(`${kindName} gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.`, { icon: 'info' }); return null; }
+    const f = face && face.info && face.info.t === 'CYLINDRE' ? face : Actions.selectedFace();
+    if (f && f.info && f.info.t === 'CYLINDRE') return fn(f, opts);
+    if (!cylTargets().length) {
+      UI.toast(`Für „${kindName}“ braucht es zuerst einen Körper mit einer Zylinderfläche (Welle oder Bohrung).`, { icon: 'info' });
+      return null;
+    }
+    pickCylStepFace(null, hintHtml, (info) => { fn(info.face, opts); });
+    return true;
+  }
+
+  // Gewinde-Freistich (DIN 76-1)
+  function undercut(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Gewinde-Freistich gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const ctx = resolveCylForStep(face);
+    if (!ctx) { startUndercut(opts); return null; }
+    const th = ctx.face.idx != null ? threadOnFace(ctx.face.id, ctx.face.idx) : null;
+    const defSize = th ? th.size : guessThreadSize(ctx.g.r, ctx.g.kind);
+    const defPitch = th && th.pitch > 0 ? th.pitch : ((THREAD_MAP[defSize] && THREAD_MAP[defSize].pitch) || 1.5);
+    const form = opts.form === 'B' ? 'B' : 'A';
+    const din = undercutDimsForDia(ctx.d, opts.pitch ?? defPitch, form, ctx.isInner);
+    const p = {
+      target: ctx.tgt.id,
+      face: ctx.faceSpec,
+      form: din.form,
+      pitch: din.pitch,
+      width: opts.width ?? din.width,
+      grooveD: opts.grooveD ?? din.grooveD,
+      end: opts.end === 'bottom' ? 'bottom' : 'top',
+      offset: opts.offset ?? 0,
+      rampAngle: opts.rampAngle ?? 30,
+      autoNorm: opts.autoNorm ?? (opts.width == null && opts.grooveD == null),
+    };
+    let step;
+    App.change('Gewinde-Freistich angelegt', (doc) => {
+      step = Model.newItem('undercut', p, { name: opts.name || T('kind.undercut'), color: ctx.tgt.color, role: 'solid', mat: ctx.tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(`Freistich DIN 76-${din.form} (Ø ${fmt(p.grooveD, 2)} × ${fmt(p.width, 2)} mm) angelegt.`, { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startUndercut(opts = {}) {
+    return startCylStep(T('kind.undercut'), '<b>Gewinde-Freistich:</b> Klick auf eine runde Welle oder Bohrung. <b>Esc</b> bricht ab.', undercut, null, opts);
+  }
+  function renderUndercut(it, sec, setP) {
+    const p = it.p || {};
+    const dFace = p.face && p.face.r ? round(2 * p.face.r, 3) : 10;
+    const isInner = p.face && p.face.ori === -1;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'uc-form', label: 'DIN 76-1 Form', value: p.form === 'B' ? 'B' : 'A',
+      options: [['A', 'Form A (Regelfall)'], ['B', 'Form B (kurz)']],
+      onChange: (v) => App.change('Freistich-Form geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        item.p.form = v === 'B' ? 'B' : 'A';
+        if (item.p.autoNorm !== false) {
+          const din = undercutDimsForDia(dFace, item.p.pitch ?? 1.5, item.p.form, isInner);
+          item.p.width = din.width;
+          item.p.grooveD = din.grooveD;
+        }
+      }),
+    }));
+    fl.append(UI.selectField({
+      id: 'uc-pitch', label: 'Steigung P', value: String(undercutEntry(p.pitch ?? 1.5).p),
+      options: UNDERCUT_PITCH_OPTIONS,
+      onChange: (v) => App.change('Steigung geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        const pv = parseFloat(v) || 1.5;
+        item.p.pitch = pv;
+        const din = undercutDimsForDia(dFace, pv, item.p.form || 'A', isInner);
+        item.p.width = din.width;
+        item.p.grooveD = din.grooveD;
+        item.p.autoNorm = true;
+      }),
+    }));
+    fl.append(
+      UI.numField({ id: 'uc-grooveD', label: 'Freistich-Ø (dg)', value: p.grooveD ?? 7.3, min: 0.2, unit: 'mm', onCommit: (v) => App.change('Freistich-Ø geändert', (doc) => { const f = Model.find(doc, it.id).item; f.p.grooveD = v; f.p.autoNorm = false; }) }),
+      UI.numField({ id: 'uc-width', label: 'Breite (g₂)', value: p.width ?? 5.2, min: 0.2, unit: 'mm', onCommit: (v) => App.change('Freistich-Breite geändert', (doc) => { const f = Model.find(doc, it.id).item; f.p.width = v; f.p.autoNorm = false; }) }),
+      UI.selectField({ id: 'uc-end', label: 'Gewindeende', value: p.end === 'bottom' ? 'bottom' : 'top', options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)']], onChange: (v) => setP('end', v) }),
+      UI.numField({ id: 'uc-offset', label: 'Abstand vom Ende', value: p.offset ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('offset', v) }),
+      UI.numField({ id: 'uc-ramp', label: 'Auslaufwinkel', value: p.rampAngle ?? 30, min: 10, max: 89, unit: '°', onCommit: (v) => setP('rampAngle', v) }),
+    );
+    sec.append(fl);
+    const din = undercutDimsForDia(dFace, p.pitch ?? 1.5, p.form || 'A', isInner);
+    sec.append(h('div', { class: 'mini-row', id: 'uc-info' },
+      h('span', { class: 'grow' }, `DIN 76-${din.form} (P ${fmt(din.pitch, 2)}) · r ${Units.fmtLenU(din.r, 2)}`),
+      h('b', { class: 'mono' }, `g₁ ≥ ${Units.fmtLenU(din.g1, 2)}`)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'uc-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickStepCylFace(it.id, 'Zylinderfläche für Freistich gewählt');
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'uc-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Schneidet am Ende eines Gewindeabschnitts einen normgerechten DIN-76-1-Freistich mit 30°-Auslauf ein.' }));
+  }
+
+  // Einstich für Sicherungsring (DIN 471 / DIN 472)
+  function circlipGroove(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Einstich gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const ctx = resolveCylForStep(face);
+    if (!ctx) { startCirclipGroove(opts); return null; }
+    const norm = opts.norm === 'din471' || opts.norm === 'din472' ? opts.norm : (ctx.isInner ? 'din472' : 'din471');
+    const ce = circlipEntry(opts.size ?? ctx.d, norm);
+    const defOff = round(Math.min(5, Math.max(1.5, ctx.g.faceLen * 0.2)), 2);
+    const p = {
+      target: ctx.tgt.id,
+      face: ctx.faceSpec,
+      norm,
+      size: ce.d1,
+      width: opts.width ?? ce.m,
+      grooveD: opts.grooveD ?? ce.d2,
+      from: opts.from === 'bottom' || opts.from === 'center' ? opts.from : 'top',
+      offset: opts.offset ?? defOff,
+      autoNorm: opts.autoNorm ?? (opts.width == null && opts.grooveD == null),
+    };
+    let step;
+    App.change('Einstich für Sicherungsring angelegt', (doc) => {
+      step = Model.newItem('circlipGroove', p, { name: opts.name || T('kind.circlipGroove'), color: ctx.tgt.color, role: 'solid', mat: ctx.tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(`Einstich ${norm === 'din472' ? 'DIN 472' : 'DIN 471'} (Nut ${fmt(p.width, 2)} mm, Grund Ø ${fmt(p.grooveD, 2)} mm) angelegt.`, { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startCirclipGroove(opts = {}) {
+    return startCylStep(T('kind.circlipGroove'), '<b>Einstich für Sicherungsring:</b> Klick auf eine Welle (DIN 471) oder Bohrung (DIN 472). <b>Esc</b> bricht ab.', circlipGroove, null, opts);
+  }
+  function renderCirclipGroove(it, sec, setP) {
+    const p = it.p || {};
+    const norm = p.norm === 'din472' ? 'din472' : 'din471';
+    const dFace = p.face && p.face.r ? round(2 * p.face.r, 3) : 20;
+    const ce = circlipEntry(p.size ?? dFace, norm);
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'cg-norm', label: 'Norm', value: norm,
+      options: [['din471', 'DIN 471 (Welle, außen)'], ['din472', 'DIN 472 (Bohrung, innen)']],
+      onChange: (v) => App.change('Einstich-Norm geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        item.p.norm = v === 'din472' ? 'din472' : 'din471';
+        const nextCe = circlipEntry(dFace, item.p.norm);
+        item.p.size = nextCe.d1;
+        item.p.width = nextCe.m;
+        item.p.grooveD = nextCe.d2;
+        item.p.autoNorm = true;
+      }),
+    }));
+    fl.append(UI.selectField({
+      id: 'cg-size', label: 'Nenngröße (d₁)', value: String(ce.d1),
+      options: norm === 'din472' ? CIRCLIP_472_OPTIONS : CIRCLIP_471_OPTIONS,
+      onChange: (v) => App.change('Sicherungsring-Größe geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        const nCe = circlipEntry(parseFloat(v) || dFace, item.p.norm || norm);
+        item.p.size = nCe.d1;
+        item.p.width = nCe.m;
+        item.p.grooveD = nCe.d2;
+        item.p.autoNorm = true;
+      }),
+    }));
+    fl.append(
+      UI.numField({ id: 'cg-width', label: 'Nutbreite (m)', value: p.width ?? ce.m, min: 0.1, unit: 'mm', onCommit: (v) => App.change('Nutbreite geändert', (doc) => { const f = Model.find(doc, it.id).item; f.p.width = v; f.p.autoNorm = false; }) }),
+      UI.numField({ id: 'cg-grooveD', label: 'Nutdurchmesser (d₂)', value: p.grooveD ?? ce.d2, min: 0.2, unit: 'mm', onCommit: (v) => App.change('Nutdurchmesser geändert', (doc) => { const f = Model.find(doc, it.id).item; f.p.grooveD = v; f.p.autoNorm = false; }) }),
+      UI.selectField({ id: 'cg-from', label: 'Lage messen von', value: p.from === 'bottom' || p.from === 'center' ? p.from : 'top', options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)'], ['center', 'Mitte']], onChange: (v) => setP('from', v) }),
+      UI.numField({ id: 'cg-offset', label: 'Abstand', value: p.offset ?? 3, unit: 'mm', onCommit: (v) => setP('offset', v) }),
+    );
+    sec.append(fl);
+    sec.append(h('div', { class: 'mini-row', id: 'cg-info' },
+      h('span', { class: 'grow' }, `${norm === 'din472' ? 'DIN 472' : 'DIN 471'} · Ø ${ce.d1} mm`),
+      h('b', { class: 'mono' }, `Ring s = ${Units.fmtLenU(ce.s, 2)}`)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'cg-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickStepCylFace(it.id, 'Zylinderfläche für Einstich gewählt');
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'cg-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Sticht eine rechteckige Nut nach DIN 471 (Welle) oder DIN 472 (Bohrung) passend zum Durchmesser ein.' }));
+  }
+
+  // Passfeder-Nut (DIN 6885) direkt auf einer Welle oder Bohrung
+  function keyway(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Passfeder-Nut gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const ctx = resolveCylForStep(face);
+    if (!ctx) { startKeyway(opts); return null; }
+    const ke = opts.size ? keyEntry(opts.size) : keyEntryForShaft(ctx.d);
+    const defDepth = ctx.isInner ? ke.t2_mm : ke.t1_mm;
+    const maxLen = Math.max(ke.b_mm + 2, ctx.g.faceLen * 0.72);
+    const normLens = Array.isArray(ke.laengen_mm) ? ke.laengen_mm.filter((l) => l <= maxLen) : [];
+    const defLen = normLens.length ? normLens[normLens.length - 1] : round(clamp(ctx.g.faceLen * 0.6, Math.max(ke.b_mm + 2, 6), Math.max(ke.b_mm + 2, ctx.g.faceLen - 2)), 1);
+    const ends = opts.ends === 'straight' || opts.ends === 'round' ? opts.ends : (ctx.isInner ? 'straight' : 'round');
+    const p = {
+      target: ctx.tgt.id,
+      face: ctx.faceSpec,
+      size: ke.id,
+      width: opts.width ?? ke.b_mm,
+      depth: opts.depth ?? defDepth,
+      length: opts.length ?? defLen,
+      ends,
+      from: opts.from === 'top' || opts.from === 'bottom' ? opts.from : 'center',
+      offset: opts.offset ?? 0,
+      angle: opts.angle ?? 0,
+    };
+    let step;
+    App.change('Passfeder-Nut angelegt', (doc) => {
+      step = Model.newItem('keyway', p, { name: opts.name || T('kind.keyway'), color: ctx.tgt.color, role: 'solid', mat: ctx.tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(`Passfeder-Nut DIN 6885 (${ke.id}, Breite ${fmt(p.width, 1)} mm, Tiefe ${fmt(p.depth, 1)} mm) angelegt.`, { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startKeyway(opts = {}) {
+    return startCylStep(T('kind.keyway'), '<b>Passfeder-Nut:</b> Klick auf eine Welle (t₁) oder Nabenbohrung (t₂). <b>Esc</b> bricht ab.', keyway, null, opts);
+  }
+  function renderKeyway(it, sec, setP) {
+    const p = it.p || {};
+    const isInner = p.face && p.face.ori === -1;
+    const ke = keyEntry(p.size || '6x6');
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'kw-size', label: 'DIN 6885 Größe', value: ke ? ke.id : '6x6',
+      options: KEY_OPTIONS,
+      onChange: (v) => App.change('Passfeder-Größe geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        const nke = keyEntry(v);
+        item.p.size = nke ? nke.id : v;
+        if (nke) {
+          item.p.width = nke.b_mm;
+          item.p.depth = isInner ? nke.t2_mm : nke.t1_mm;
+        }
+      }),
+    }));
+    fl.append(
+      UI.numField({ id: 'kw-width', label: 'Nutbreite (b)', value: p.width ?? (ke ? ke.b_mm : 6), min: 0.2, unit: 'mm', onCommit: (v) => setP('width', v) }),
+      UI.numField({ id: 'kw-depth', label: isInner ? 'Nabentiefe (t₂)' : 'Wellentiefe (t₁)', value: p.depth ?? (ke ? (isInner ? ke.t2_mm : ke.t1_mm) : 3.5), min: 0.1, unit: 'mm', onCommit: (v) => setP('depth', v) }),
+      UI.numField({ id: 'kw-length', label: 'Länge (l)', value: p.length ?? 20, min: 0.5, unit: 'mm', onCommit: (v) => setP('length', v) }),
+      UI.selectField({ id: 'kw-ends', label: 'Nut-Enden', value: p.ends === 'straight' ? 'straight' : 'round', options: [['round', 'Rundstirnig (Form A)'], ['straight', 'Gerade (Form B / Nabe)']], onChange: (v) => setP('ends', v) }),
+      UI.selectField({ id: 'kw-from', label: 'Lage längs', value: p.from === 'top' || p.from === 'bottom' ? p.from : 'center', options: [['center', 'Mittig'], ['top', 'Von Ende 1 (oben)'], ['bottom', 'Von Ende 2 (unten)']], onChange: (v) => setP('from', v) }),
+      UI.numField({ id: 'kw-offset', label: 'Versatz längs', value: p.offset ?? 0, unit: 'mm', onCommit: (v) => setP('offset', v) }),
+      UI.numField({ id: 'kw-angle', label: 'Winkel um Achse', value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }),
+    );
+    sec.append(fl);
+    if (ke) {
+      sec.append(h('div', { class: 'mini-row', id: 'kw-info' },
+        h('span', { class: 'grow' }, `DIN 6885 ${ke.b_mm}×${ke.h_mm} (Welle Ø ${ke.welle_min_mm}–${ke.welle_max_mm})`),
+        h('b', { class: 'mono' }, `t₁=${Units.fmtLenU(ke.t1_mm, 2)} / t₂=${Units.fmtLenU(ke.t2_mm, 2)}`)));
+    }
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'kw-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickStepCylFace(it.id, 'Zylinderfläche für Passfeder-Nut gewählt');
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'kw-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Fräst eine normgerechte Passfeder-Nut nach DIN 6885 (Welle t₁ rundstirnig oder Nabe t₂ gerade) direkt in die gewählte Zylinderfläche.' }));
+  }
+
+  // Keilwellen-Profil (DIN ISO 14) auf bestehender Welle oder Bohrung
+  function splineProfile(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Keilwellen-Profil gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const ctx = resolveCylForStep(face);
+    if (!ctx) { startSplineProfile(opts); return null; }
+    const sp = opts.profile && opts.profile !== 'custom' ? splineEntry(opts.profile) : splineEntryForDia(ctx.d, ctx.isInner);
+    const rootD = opts.rootD ?? (ctx.isInner
+      ? (Math.abs(ctx.d - sp.d) < 0.25 ? sp.D : round(ctx.d + (sp.D - sp.d), 2))
+      : (Math.abs(ctx.d - sp.D) < 0.25 ? sp.d : round(Math.max(1, ctx.d - (sp.D - sp.d)), 2)));
+    const p = {
+      target: ctx.tgt.id,
+      face: ctx.faceSpec,
+      profile: opts.profile || sp.id,
+      teeth: opts.teeth ?? sp.n,
+      rootD,
+      b: opts.b ?? sp.b,
+      length: opts.length ?? 0,
+      from: opts.from === 'bottom' ? 'bottom' : 'top',
+      offset: opts.offset ?? 0,
+      angle: opts.angle ?? 0,
+    };
+    let step;
+    App.change('Keilwellen-Profil angelegt', (doc) => {
+      step = Model.newItem('splineProfile', p, { name: opts.name || T('kind.splineProfile'), color: ctx.tgt.color, role: 'solid', mat: ctx.tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(`Keilwellen-Profil DIN ISO 14 (${p.teeth} Keile, Grund Ø ${fmt(p.rootD, 1)} mm) angelegt.`, { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startSplineProfile(opts = {}) {
+    return startCylStep(T('kind.splineProfile'), '<b>Keilwellen-Profil:</b> Klick auf eine Welle oder Nabenbohrung. <b>Esc</b> bricht ab.', splineProfile, null, opts);
+  }
+  function renderSplineProfile(it, sec, setP) {
+    const p = it.p || {};
+    const isInner = p.face && p.face.ori === -1;
+    const dFace = p.face && p.face.r ? round(2 * p.face.r, 3) : 20;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({
+      id: 'sp-profile', label: 'DIN ISO 14 Profil', value: p.profile || '6x16x20',
+      options: [...SPLINE_OPTIONS, ['custom', 'Eigene Maße']],
+      onChange: (v) => App.change('Keilwellen-Profil geändert', (doc) => {
+        const item = Model.find(doc, it.id).item;
+        item.p.profile = v;
+        if (v !== 'custom') {
+          const sp = splineEntry(v);
+          item.p.teeth = sp.n;
+          item.p.b = sp.b;
+          item.p.rootD = isInner
+            ? (Math.abs(dFace - sp.d) < 0.25 ? sp.D : round(dFace + (sp.D - sp.d), 2))
+            : (Math.abs(dFace - sp.D) < 0.25 ? sp.d : round(Math.max(1, dFace - (sp.D - sp.d)), 2));
+        }
+      }),
+    }));
+    const setCustom = (k, val) => App.change('Keilwellen-Maß geändert', (doc) => {
+      const f = Model.find(doc, it.id).item;
+      f.p[k] = val;
+      f.p.profile = 'custom';
+    });
+    fl.append(
+      UI.numField({ id: 'sp-teeth', label: 'Keile (N)', value: p.teeth ?? 6, min: 4, max: 24, step: 1, int: true, unit: '', onCommit: (v) => setCustom('teeth', Math.max(4, Math.min(24, Math.round(Number(v) || 6)))) }),
+      UI.numField({ id: 'sp-rootD', label: isInner ? 'Außen-Ø (D)' : 'Innen-Ø (d)', value: p.rootD ?? 16, min: 0.5, unit: 'mm', onCommit: (v) => setCustom('rootD', v) }),
+      UI.numField({ id: 'sp-b', label: 'Keilbreite (b)', value: p.b ?? 4, min: 0.2, unit: 'mm', onCommit: (v) => setCustom('b', v) }),
+      UI.numField({ id: 'sp-length', label: 'Länge (0 = ganz)', value: p.length ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('length', v) }),
+      UI.selectField({ id: 'sp-from', label: 'Von Ende', value: p.from === 'bottom' ? 'bottom' : 'top', options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)']], onChange: (v) => setP('from', v) }),
+      UI.numField({ id: 'sp-offset', label: 'Abstand vom Ende', value: p.offset ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('offset', v) }),
+      UI.numField({ id: 'sp-angle', label: 'Winkel um Achse', value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }),
+    );
+    sec.append(fl);
+    sec.append(h('div', { class: 'mini-row', id: 'sp-info' },
+      h('span', { class: 'grow' }, `DIN ISO 14 · ${isInner ? 'Innenprofil' : 'Wellenprofil'}`),
+      h('b', { class: 'mono' }, `${p.teeth ?? 6} × ${Units.fmtLenU(p.rootD ?? 16, 1)} × ${Units.fmtLenU(dFace, 1)}`)));
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'sp-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickStepCylFace(it.id, 'Zylinderfläche für Keilwellen-Profil gewählt');
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'sp-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row, h('div', { class: 'hint-box', html: 'Schneidet ein geradflankiges Keilwellen-Profil nach DIN ISO 14 in die gewählte Welle oder Nabenbohrung (Länge 0 = über die gesamte Zylinderlänge).' }));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, fillPattern, startFillPattern, pickFillPatternFace, renderFillPattern, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, startSplitFace, splitFace, pickSplitFace, renderSplitFace, dome, startDome, pickDomeFace, renderDome, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deform, renderDeform, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, patternPoints, pointsFromSketch, patternTable, setPatternTableCSV, pattern, split, pickSplitToolFace, setSplitFace, splitWithFace, startSplitSketch, splitFromSketch, splitWithSketch, boolean, shell, setShellDir, addShellFaceWall, setShellFaceWall, removeShellFaceWall, pickShellFaceWall, renderShell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, startFaceFillet, addFaceFillet, addPartingDraft, pickPartingDraftEdge, renderOp, sizeText, isOp, NAMES, helix, renderHelix, boss, startBoss, pickBossFace, renderBoss, lipGroove, startLipGroove, pickLipGrooveEdge, swapLipGroove, renderLipGroove, loftTargets, loftClosed, loftCut, setLoftClosed, setLoftContinuity, pickLoftFace, renderLoft, undercut, startUndercut, renderUndercut, circlipGroove, startCirclipGroove, renderCirclipGroove, keyway, startKeyway, renderKeyway, splineProfile, startSplineProfile, renderSplineProfile, pickStepCylFace };
 })();

@@ -94,6 +94,135 @@ function keyEntry(size) {
   const s = String(size || '6x6').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x');
   return KEY_BY_ID.get(s) || KEY_BY_ID.get('6x6') || KEY_LIST[0] || null;
 }
+// Passfeder (DIN 6885-1) passend zum Wellendurchmesser
+function keyEntryForShaft(d) {
+  const n = Number(d);
+  if (!(n > 0) || !KEY_LIST.length) return keyEntry('6x6');
+  const hit = KEY_LIST.find((x) => n > x.welle_min_mm && n <= x.welle_max_mm);
+  if (hit) return hit;
+  if (n <= KEY_LIST[0].welle_min_mm) return KEY_LIST[0];
+  return KEY_LIST[KEY_LIST.length - 1];
+}
+// Gewindefreistich nach DIN 76-1 für metrische Außengewinde (Form A normal, Form B kurz; Innengewinde analog)
+const UNDERCUT_DIN76 = [
+  { p: 0.35, dMinus: 0.7, g1A: 0.7, g2A: 1.3, g1B: 0.6, g2B: 0.9, r: 0.16 },
+  { p: 0.4, dMinus: 0.8, g1A: 0.8, g2A: 1.4, g1B: 0.6, g2B: 1.0, r: 0.2 },
+  { p: 0.45, dMinus: 0.9, g1A: 0.9, g2A: 1.6, g1B: 0.7, g2B: 1.1, r: 0.2 },
+  { p: 0.5, dMinus: 1.0, g1A: 1.0, g2A: 1.8, g1B: 0.8, g2B: 1.3, r: 0.2 },
+  { p: 0.6, dMinus: 1.2, g1A: 1.2, g2A: 2.1, g1B: 1.0, g2B: 1.5, r: 0.4 },
+  { p: 0.7, dMinus: 1.4, g1A: 1.4, g2A: 2.5, g1B: 1.1, g2B: 1.8, r: 0.4 },
+  { p: 0.75, dMinus: 1.5, g1A: 1.5, g2A: 2.7, g1B: 1.2, g2B: 1.9, r: 0.4 },
+  { p: 0.8, dMinus: 1.6, g1A: 1.6, g2A: 2.8, g1B: 1.3, g2B: 2.0, r: 0.4 },
+  { p: 1.0, dMinus: 1.9, g1A: 2.0, g2A: 3.5, g1B: 1.6, g2B: 2.5, r: 0.6 },
+  { p: 1.25, dMinus: 2.3, g1A: 2.5, g2A: 4.4, g1B: 2.0, g2B: 3.2, r: 0.6 },
+  { p: 1.5, dMinus: 2.7, g1A: 3.0, g2A: 5.2, g1B: 2.4, g2B: 3.8, r: 0.8 },
+  { p: 1.75, dMinus: 3.1, g1A: 3.5, g2A: 6.1, g1B: 2.8, g2B: 4.4, r: 1.0 },
+  { p: 2.0, dMinus: 3.5, g1A: 4.0, g2A: 7.0, g1B: 3.2, g2B: 5.0, r: 1.0 },
+  { p: 2.5, dMinus: 4.4, g1A: 5.0, g2A: 8.8, g1B: 4.0, g2B: 6.3, r: 1.2 },
+  { p: 3.0, dMinus: 5.2, g1A: 6.0, g2A: 10.5, g1B: 4.8, g2B: 7.5, r: 1.6 },
+];
+const UNDERCUT_PITCH_OPTIONS = UNDERCUT_DIN76.map((u) => [String(u.p), `P ${String(u.p).replace('.', ',')} mm`]);
+function undercutEntry(pitch) {
+  const pv = Number(pitch);
+  if (!(pv > 0)) return UNDERCUT_DIN76[8];
+  let best = UNDERCUT_DIN76[0], bd = Infinity;
+  for (const row of UNDERCUT_DIN76) {
+    const dd = Math.abs(row.p - pv);
+    if (dd < bd) { bd = dd; best = row; }
+  }
+  return best;
+}
+function undercutDimsForDia(d, pitch, form = 'A', isInner = false) {
+  const row = undercutEntry(pitch);
+  const f = form === 'B' ? 'B' : 'A';
+  const grooveD = isInner
+    ? Math.round((d + row.dMinus * 0.6) * 100) / 100
+    : Math.round(Math.max(0.5, d - row.dMinus) * 100) / 100;
+  return {
+    pitch: row.p,
+    form: f,
+    grooveD,
+    width: f === 'B' ? row.g2B : row.g2A,
+    g1: f === 'B' ? row.g1B : row.g1A,
+    r: row.r,
+  };
+}
+// Einstiche für Sicherungsringe nach DIN 471 (Welle) und DIN 472 (Bohrung)
+const CIRCLIP_DIN471 = [
+  { d1: 4, d2: 3.8, m: 0.5, s: 0.4 }, { d1: 5, d2: 4.8, m: 0.7, s: 0.6 },
+  { d1: 6, d2: 5.7, m: 0.8, s: 0.7 }, { d1: 7, d2: 6.7, m: 0.9, s: 0.8 },
+  { d1: 8, d2: 7.6, m: 0.9, s: 0.8 }, { d1: 9, d2: 8.6, m: 1.1, s: 1.0 },
+  { d1: 10, d2: 9.6, m: 1.1, s: 1.0 }, { d1: 12, d2: 11.5, m: 1.1, s: 1.0 },
+  { d1: 14, d2: 13.4, m: 1.1, s: 1.0 }, { d1: 15, d2: 14.3, m: 1.1, s: 1.0 },
+  { d1: 16, d2: 15.2, m: 1.1, s: 1.0 }, { d1: 17, d2: 16.2, m: 1.1, s: 1.0 },
+  { d1: 18, d2: 17.0, m: 1.3, s: 1.2 }, { d1: 20, d2: 19.0, m: 1.3, s: 1.2 },
+  { d1: 22, d2: 21.0, m: 1.3, s: 1.2 }, { d1: 24, d2: 22.9, m: 1.3, s: 1.2 },
+  { d1: 25, d2: 23.9, m: 1.3, s: 1.2 }, { d1: 28, d2: 26.6, m: 1.6, s: 1.5 },
+  { d1: 30, d2: 28.6, m: 1.6, s: 1.5 }, { d1: 32, d2: 30.3, m: 1.6, s: 1.5 },
+  { d1: 35, d2: 33.0, m: 1.6, s: 1.5 }, { d1: 40, d2: 37.5, m: 1.85, s: 1.75 },
+  { d1: 45, d2: 42.5, m: 1.85, s: 1.75 }, { d1: 50, d2: 47.0, m: 2.15, s: 2.0 },
+];
+const CIRCLIP_DIN472 = [
+  { d1: 8, d2: 8.4, m: 0.9, s: 0.8 }, { d1: 10, d2: 10.4, m: 1.1, s: 1.0 },
+  { d1: 12, d2: 12.5, m: 1.1, s: 1.0 }, { d1: 15, d2: 15.7, m: 1.1, s: 1.0 },
+  { d1: 16, d2: 16.8, m: 1.1, s: 1.0 }, { d1: 18, d2: 19.0, m: 1.1, s: 1.0 },
+  { d1: 20, d2: 21.0, m: 1.1, s: 1.0 }, { d1: 22, d2: 23.0, m: 1.1, s: 1.0 },
+  { d1: 24, d2: 25.2, m: 1.3, s: 1.2 }, { d1: 25, d2: 26.2, m: 1.3, s: 1.2 },
+  { d1: 26, d2: 27.2, m: 1.3, s: 1.2 }, { d1: 28, d2: 29.4, m: 1.3, s: 1.2 },
+  { d1: 30, d2: 31.4, m: 1.3, s: 1.2 }, { d1: 32, d2: 33.7, m: 1.3, s: 1.2 },
+  { d1: 35, d2: 37.0, m: 1.6, s: 1.5 }, { d1: 40, d2: 42.5, m: 1.85, s: 1.75 },
+  { d1: 50, d2: 53.0, m: 2.15, s: 2.0 },
+];
+const CIRCLIP_471_OPTIONS = CIRCLIP_DIN471.map((c) => [String(c.d1), `Ø ${c.d1} (Nut Ø ${String(c.d2).replace('.', ',')} × ${String(c.m).replace('.', ',')})`]);
+const CIRCLIP_472_OPTIONS = CIRCLIP_DIN472.map((c) => [String(c.d1), `Ø ${c.d1} (Nut Ø ${String(c.d2).replace('.', ',')} × ${String(c.m).replace('.', ',')})`]);
+function circlipEntry(d, norm = 'din471') {
+  const n = norm === 'din472' ? 'din472' : 'din471';
+  const tbl = n === 'din472' ? CIRCLIP_DIN472 : CIRCLIP_DIN471;
+  const dv = Number(d);
+  if (!(dv > 0)) return { ...tbl[0], norm: n, exact: false };
+  let best = tbl[0], bd = Infinity;
+  for (const row of tbl) {
+    const dd = Math.abs(row.d1 - dv);
+    if (dd < bd) { bd = dd; best = row; }
+  }
+  if (bd < 0.05) return { ...best, norm: n, exact: true };
+  const d2 = n === 'din472'
+    ? Math.round((dv + Math.abs(best.d2 - best.d1)) * 100) / 100
+    : Math.round(Math.max(0.5, dv - Math.abs(best.d1 - best.d2)) * 100) / 100;
+  return { d1: best.d1, d2, m: best.m, s: best.s, norm: n, exact: false };
+}
+// Keilwellen-Profile nach DIN ISO 14 (gerade parallele Flanken, Innenzentrierung)
+const SPLINE_DIN_ISO14 = [
+  { id: '6x11x14', n: 6, d: 11, D: 14, b: 3 },
+  { id: '6x13x16', n: 6, d: 13, D: 16, b: 3.5 },
+  { id: '6x16x20', n: 6, d: 16, D: 20, b: 4 },
+  { id: '6x18x22', n: 6, d: 18, D: 22, b: 5 },
+  { id: '6x21x25', n: 6, d: 21, D: 25, b: 5 },
+  { id: '6x23x28', n: 6, d: 23, D: 28, b: 6 },
+  { id: '6x26x32', n: 6, d: 26, D: 32, b: 6 },
+  { id: '6x28x34', n: 6, d: 28, D: 34, b: 7 },
+  { id: '8x32x38', n: 8, d: 32, D: 38, b: 6 },
+  { id: '8x36x42', n: 8, d: 36, D: 42, b: 7 },
+  { id: '8x42x48', n: 8, d: 42, D: 48, b: 8 },
+  { id: '8x46x54', n: 8, d: 46, D: 54, b: 9 },
+];
+const SPLINE_BY_ID = new Map(SPLINE_DIN_ISO14.map((x) => [x.id, x]));
+const SPLINE_OPTIONS = SPLINE_DIN_ISO14.map((x) => [x.id, `${x.n} × ${x.d} × ${x.D} (b ${String(x.b).replace('.', ',')} mm)`]);
+function splineEntry(id) {
+  const s = String(id || '6x16x20').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x');
+  return SPLINE_BY_ID.get(s) || SPLINE_BY_ID.get('6x16x20') || SPLINE_DIN_ISO14[0];
+}
+function splineEntryForDia(dia, isInner = false) {
+  const dv = Number(dia);
+  if (!(dv > 0)) return SPLINE_DIN_ISO14[2];
+  let best = SPLINE_DIN_ISO14[0], bd = Infinity;
+  for (const row of SPLINE_DIN_ISO14) {
+    const ref = isInner ? row.d : row.D;
+    const dd = Math.abs(ref - dv);
+    if (dd < bd) { bd = dd; best = row; }
+  }
+  return best;
+}
 const BEARING_SERIES = (BEARING_DATA && BEARING_DATA.kugellager_reihen) || [];
 const BEARING_BY_ID = new Map();
 for (const s of BEARING_SERIES) {
@@ -212,6 +341,15 @@ const LIB = [
     { k: 'kind', label: 'Nut-Art', type: 'select', options: [['shaft', 'Wellennut (Tiefe t₁, rundstirnig)'], ['hub', 'Nabennut (Tiefe t₂, gerade)']], def: 'shaft' },
     { k: 'length', label: 'Länge (l)', type: 'num', def: 20 },
     { k: 'extra', label: 'Überstand oben', type: 'num', def: 0.5 },
+  ] },
+  { lib: 'splineShaft', label: 'Keilwelle (DIN ISO 14)', role: 'solid', icon: 'splineShaft', std: true, mat: 'Baustahl', desc: 'Keilwellen-Profil nach DIN ISO 14 mit geraden parallelen Flanken', params: [
+    { k: 'profile', label: 'Profil (DIN ISO 14)', type: 'select', options: [...SPLINE_OPTIONS, ['custom', 'Eigene Maße']], def: '6x16x20' },
+    { k: 'length', label: 'Länge', type: 'num', def: 40 },
+    { k: 'teeth', label: 'Keile (N)', type: 'num', def: null, auto: true, int: true, unit: '' },
+    { k: 'd', label: 'Innen-Ø (d)', type: 'num', def: null, auto: true },
+    { k: 'D', label: 'Außen-Ø (D)', type: 'num', def: null, auto: true },
+    { k: 'b', label: 'Keilbreite (b)', type: 'num', def: null, auto: true },
+    { k: 'bore', label: 'Mittenbohrung Ø', type: 'num', def: 0 },
   ] },
   { lib: 'stdBearing', label: 'Kugellager (Norm)', role: 'solid', icon: 'bearing', mat: 'V2A Edelstahl', std: true, desc: 'Rillenkugellager nach DIN 625-1 / ISO 15 (608, 6000er und 6200er Reihe)', params: [
     { k: 'size', label: 'Lager-Typ', type: 'select', options: BEARING_GROUPED_OPTIONS, def: '608' },

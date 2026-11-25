@@ -325,6 +325,31 @@
     "wozu": "Ideal für abgerundete Deckel, Kappen, Griffe, Drucktasten oder konkave Griffmulden, ohne Hilfsschnitte von Hand aufbauen zu müssen.",
     "achtung": "Wenn die Kuppel nach innen geschaltet ist und tiefer reicht als das Bauteil dick ist, durchstößt sie die Rückseite."
   },
+  "undercut": {
+    "was": "Schneidet einen genormten Gewinde-Freistich nach DIN 76-1 (Form A oder B) mit 30°-Auslaufschräge ans Ende eines zylindrischen Gewindeabschnitts.",
+    "wozu": "Ermöglicht es, ein Außengewinde bis dicht an eine Schulter zu schneiden oder zu drehen, ohne dass eine Mutter an der Auslaufrille klemmt.",
+    "achtung": "Ein Freistich schwächt den Wellenquerschnitt am Kerndurchmesser – bei hochbelasteten Schrauben und Wellen Form B oder größere Rundung prüfen."
+  },
+  "circlipGroove": {
+    "was": "Sticht eine rechteckige Ringnut nach DIN 471 (Außenwelle) oder DIN 472 (Innenbohrung) mit normgerechter Breite und Nutdurchmesser ein.",
+    "wozu": "Hält Kugellager, Zahnräder, Buchsen oder Bolzen axial über einen Sicherungsring (Seegerring) sicher an ihrem Platz.",
+    "achtung": "Lass zwischen Nut und Wellenende genug Schulter stehen, damit der Rand die Axialkraft des Sicherungsrings aufnehmen kann."
+  },
+  "keyway": {
+    "was": "Fräst eine Passfeder-Nut nach DIN 6885 direkt in eine Welle (Tiefe t₁, rundstirnig) oder eine Nabenbohrung (Tiefe t₂, gerade).",
+    "wozu": "Überträgt Drehmomente formschlüssig zwischen Welle und Zahnrad, Riemenscheibe oder Kupplung.",
+    "achtung": "Nutbreite und -tiefe müssen zur gewählten Passfeder und zum Wellendurchmesser passen, damit genug Restwand bleibt."
+  },
+  "splineProfile": {
+    "was": "Schneidet ein geradflankiges Keilwellen-Profil nach DIN ISO 14 in eine bestehende Welle oder Nabenbohrung.",
+    "wozu": "Überträgt hohe oder wechselnde Drehmomente über mehrere gleichmäßig verteilte Keile statt einer einzelnen Passfeder.",
+    "achtung": "Bei DIN ISO 14 erfolgt die Zentrierung über den Innendurchmesser (d); achte darauf, dass die Gegenbohrung dasselbe Profil nutzt."
+  },
+  "splineShaft": {
+    "was": "Erzeugt eine genormte Keilwelle nach DIN ISO 14 als eigenes Normteil mit parallelen Flanken und optionaler Mittenbohrung.",
+    "wozu": "Dient als fertige Antriebswelle oder Vorlage für Getriebe, Kupplungen und verschiebbare Naben.",
+    "achtung": "Für eigene Profilmaße wähle im Feld „Profil“ den Eintrag „Eigene Maße“."
+  },
   "fillPattern": {
     "was": "Füllt eine gewählte ebene Körperfläche automatisch mit runden Löchern (Raster oder versetzt) oder Sechseck-Waben unter Einhaltung eines einstellbaren Randabstands.",
     "wozu": "Spart Gewicht und Material an Platten, Deckeln oder Verkleidungen und schafft gleichmäßige Lüftungs- oder Wabenflächen, ohne dass ein Loch den Rand anschneidet.",

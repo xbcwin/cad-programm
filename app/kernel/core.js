@@ -4198,6 +4198,51 @@ export function createKernel(R, oc) {
     if (p.kind === 'hub') return R.makeBox([-L / 2, -b / 2, -dep], [L / 2, b / 2, up]);
     return stadiumExtrude(L, b, up, -(dep + up));
   }
+  function buildSplineShaft(p) {
+    const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
+    const n = Math.max(4, Math.min(24, Math.round(num(p.teeth, num(sp.n, 6)))));
+    const d = pos(p.d, pos(sp.d, 16));
+    const D = pos(p.D, pos(sp.D, 20));
+    const b = pos(p.b, pos(sp.b, 4));
+    const L = pos(p.length, 40);
+    const bore = Math.max(0, num(p.bore, 0));
+    const rIn = d / 2, rOut = D / 2;
+    if (!(rOut > rIn + 0.1)) throw new Error('Keilwelle: Der Außendurchmesser D muss größer als der Innendurchmesser d sein.');
+    if (!(b > 0.2) || b / 2 >= rIn * 0.96) throw new Error('Keilwelle: Die Keilbreite b passt nicht zum Innendurchmesser.');
+    const aIn = Math.asin((b / 2) / rIn);
+    if (n * aIn >= Math.PI - 0.02) throw new Error('Keilwelle: Zu viele oder zu breite Keile für diesen Durchmesser.');
+    const aOut = Math.asin((b / 2) / rOut);
+    const P = (r, a) => [r * Math.cos(a), r * Math.sin(a), 0];
+    const edges = [];
+    let wire = null, face = null, shape = null;
+    try {
+      for (let k = 0; k < n; k++) {
+        const th = (2 * Math.PI * k) / n;
+        const thNext = (2 * Math.PI * (k + 1)) / n;
+        edges.push(R.makeLine(P(rIn, th - aIn), P(rOut, th - aOut)));
+        edges.push(R.makeThreePointArc(P(rOut, th - aOut), P(rOut, th), P(rOut, th + aOut)));
+        edges.push(R.makeLine(P(rOut, th + aOut), P(rIn, th + aIn)));
+        edges.push(R.makeThreePointArc(P(rIn, th + aIn), P(rIn, th + Math.PI / n), P(rIn, thNext - aIn)));
+      }
+      wire = R.assembleWire(edges);
+      face = R.makeFace(wire);
+      shape = R.basicFaceExtrusion(face, new R.Vector([0, 0, L]));
+      if (bore > 0.1 && bore < d - 0.4) {
+        const cyl = R.makeCylinder(bore / 2, L + 2, [0, 0, -1], [0, 0, 1]);
+        try {
+          const cut = shape.cut(cyl);
+          safeDelete(shape);
+          shape = cut;
+        } finally { safeDelete(cyl); }
+      }
+      const out = shape;
+      shape = null;
+      return out;
+    } finally {
+      for (const e of edges) safeDelete(e);
+      safeDelete(wire); safeDelete(face); safeDelete(shape);
+    }
+  }
   function buildStdBearing(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
     const d = pos(sp.d, 8), D = pos(sp.D, 22), B = pos(sp.B, 7);
@@ -4296,6 +4341,7 @@ export function createKernel(R, oc) {
     if (lib === 'stdPin') return buildStdPin(p);
     if (lib === 'stdKey') return buildStdKey(p);
     if (lib === 'stdKeyway') return buildStdKeyway(p);
+    if (lib === 'splineShaft') return buildSplineShaft(p);
     if (lib === 'stdBearing') return buildStdBearing(p);
     if (lib === 'stdSleeve') return buildStdSleeve(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
@@ -6897,7 +6943,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deform' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'fillPattern' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'splitFace' || it.kind === 'dome' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || it.kind === 'boss' || it.kind === 'lipGroove' || it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -9988,6 +10034,281 @@ export function createKernel(R, oc) {
     }
   }
 
+  // ---------- Wellen- & Bohrungs-Schritte (KP-48, KP-49): Freistich, Einstich, Passfeder-Nut, Keilwelle ----------
+  function rigidMat(O, X, Y, Z) {
+    return [X[0], X[1], X[2], 0, Y[0], Y[1], Y[2], 0, Z[0], Z[1], Z[2], 0, O[0], O[1], O[2], 1];
+  }
+  function resolveCylFaceForShaft(shape, topo, baseId, spec, errLabel) {
+    const fArr = [];
+    try { for (const fx of shape.faces) fArr.push(fx); } catch (_) {}
+    let picked = null;
+    try {
+      if (spec && spec.tid && topo) {
+        const b = bboxOf(shape);
+        const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+        const hits = resolveFaceRef({ ...spec, tol }, fArr, topo, baseId, true);
+        if (hits[0] && hits[0].geomType === 'CYLINDRE') picked = hits[0];
+      }
+      if (!picked) {
+        const cyls = [];
+        for (const f of fArr) {
+          if (f.geomType !== 'CYLINDRE') continue;
+          try {
+            const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+            const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), d = ax.Direction();
+            const o = [l.X(), l.Y(), l.Z()], dir = norm([d.X(), d.Y(), d.Z()]), r = cy.Radius();
+            ad.delete();
+            const c = vec(f.center);
+            const ori = f.wrapped.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+            cyls.push({ face: f, o, d: dir, r, c, ori });
+          } catch (_) {}
+        }
+        if (cyls.length === 1) picked = cyls[0].face;
+        else if (cyls.length > 1) {
+          const sAxis = spec && Array.isArray(spec.axis) && spec.axis.length >= 6 ? spec.axis : null;
+          const sO = sAxis ? sAxis.slice(0, 3) : null;
+          const sD = sAxis ? norm(sAxis.slice(3, 6)) : null;
+          const sR = spec && typeof spec.r === 'number' ? spec.r : null;
+          const sC = spec && Array.isArray(spec.c) && spec.c.length >= 3 ? spec.c : null;
+          const sOri = spec && typeof spec.ori === 'number' ? spec.ori : null;
+          const distLine = (p, o, d) => { const v = sub(p, o); return len(sub(v, mul(d, dot(v, d)))); };
+          let best = null, bs = Infinity;
+          for (const item of cyls) {
+            let score = 0;
+            if (sOri != null && item.ori !== sOri) score += 1000;
+            if (sD) score += (1 - Math.abs(dot(item.d, sD))) * 500;
+            if (sR != null) score += Math.abs(item.r - sR) * 100;
+            if (sO && sD) score += distLine(item.o, sO, sD) * 20;
+            if (sC) score += len(sub(item.c, sC));
+            if (score < bs) { bs = score; best = item.face; }
+          }
+          picked = best;
+        }
+      }
+      if (!picked || picked.geomType !== 'CYLINDRE') {
+        const err = new Error(errLabel + ': Die gewählte Zylinderfläche gibt es nicht mehr.');
+        err.code = 'edges';
+        throw err;
+      }
+      return cylFrameOf(picked, spec);
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function buildUndercutOn(baseShape, baseTopo, baseId, stepId, p) {
+    const F = resolveCylFaceForShaft(baseShape, baseTopo, baseId, p.face, 'Freistich');
+    const width = num(p.width, 3.5);
+    const grooveD = num(p.grooveD, 0);
+    const end = p.end === 'bottom' ? 'bottom' : 'top';
+    const offset = Math.max(0, num(p.offset, 0));
+    const rampAngle = Math.max(10, Math.min(89, num(p.rampAngle, 30)));
+    if (!(width > 0.1 && isFinite(width))) throw new Error('Freistich: Die Breite muss größer als 0,1 mm sein.');
+    if (!(grooveD > 0.2 && isFinite(grooveD))) throw new Error('Freistich: Der Nutdurchmesser muss größer als 0,2 mm sein.');
+    if (!F.isInner && grooveD >= 2 * F.R - 0.05) throw new Error('Freistich: Der Nutdurchmesser muss kleiner als der Wellendurchmesser sein.');
+    if (F.isInner && grooveD <= 2 * F.R + 0.05) throw new Error('Freistich: Bei einer Bohrung muss der Nutdurchmesser größer als der Bohrungsdurchmesser sein.');
+
+    const zStart = end === 'bottom' ? F.vMin + offset : F.vMax - offset;
+    const dir = end === 'bottom' ? 1 : -1;
+    const zEnd = zStart + dir * width;
+    const depth = Math.abs(F.R - grooveD / 2);
+    const ramp = Math.min(depth / Math.tan((rampAngle * Math.PI) / 180), width * 0.45);
+    const zFlatEnd = zEnd - dir * ramp;
+    const rGroove = grooveD / 2;
+    let pts2;
+    if (!F.isInner) {
+      const rOut = F.R + Math.min(1.0, Math.max(0.25, depth * 0.8));
+      pts2 = dir > 0
+        ? [[rGroove, zStart], [rOut, zStart], [rOut, zEnd], [F.R, zEnd], [rGroove, zFlatEnd]]
+        : [[rGroove, zStart], [rGroove, zFlatEnd], [F.R, zEnd], [rOut, zEnd], [rOut, zStart]];
+    } else {
+      const rIn = Math.max(0.1, F.R - Math.min(1.0, Math.max(0.25, depth * 0.8)));
+      pts2 = dir > 0
+        ? [[rIn, zStart], [rGroove, zStart], [rGroove, zFlatEnd], [F.R, zEnd], [rIn, zEnd]]
+        : [[rIn, zStart], [rIn, zEnd], [F.R, zEnd], [rGroove, zFlatEnd], [rGroove, zStart]];
+    }
+    let raw = null, tool = null;
+    try {
+      raw = revolveProfile(pts2);
+      if (R.measureVolume(raw) < 0) raw = R.cast(raw.wrapped.Reversed());
+      tool = applyMatrix(raw, rigidMat(F.O, F.R0, F.T0, F.A));
+      const res = boolWithTopo('cut', baseShape, baseTopo, baseId, tool, null, stepId, 'Und:' + stepId);
+      return { shape: res.shape, topo: res.topo };
+    } finally {
+      safeDelete(raw); safeDelete(tool);
+    }
+  }
+  function buildCirclipGrooveOn(baseShape, baseTopo, baseId, stepId, p) {
+    const F = resolveCylFaceForShaft(baseShape, baseTopo, baseId, p.face, 'Einstich');
+    const width = num(p.width, 1.3);
+    const grooveD = num(p.grooveD, 0);
+    const from = p.from === 'bottom' || p.from === 'center' ? p.from : 'top';
+    const offset = num(p.offset, 3);
+    if (!(width > 0.1 && isFinite(width))) throw new Error('Einstich: Die Nutbreite muss größer als 0,1 mm sein.');
+    if (!(grooveD > 0.2 && isFinite(grooveD))) throw new Error('Einstich: Der Nutdurchmesser muss größer als 0,2 mm sein.');
+    if (!F.isInner && grooveD >= 2 * F.R - 0.05) throw new Error('Einstich: Der Nutdurchmesser muss kleiner als der Wellendurchmesser sein.');
+    if (F.isInner && grooveD <= 2 * F.R + 0.05) throw new Error('Einstich: Bei einer Bohrung muss der Nutdurchmesser größer als der Bohrungsdurchmesser sein.');
+
+    let z0, z1;
+    if (from === 'bottom') { z0 = F.vMin + offset; z1 = z0 + width; }
+    else if (from === 'center') { z0 = F.vMid + offset - width / 2; z1 = z0 + width; }
+    else { z1 = F.vMax - offset; z0 = z1 - width; }
+
+    const rGroove = grooveD / 2;
+    let pts2;
+    if (!F.isInner) {
+      const rOut = F.R + Math.max(1.0, (F.R - rGroove) * 2);
+      pts2 = [[rGroove, z0], [rOut, z0], [rOut, z1], [rGroove, z1]];
+    } else {
+      const rIn = Math.max(0.1, F.R - Math.max(1.0, (rGroove - F.R) * 2));
+      pts2 = [[rIn, z0], [rGroove, z0], [rGroove, z1], [rIn, z1]];
+    }
+    let raw = null, tool = null;
+    try {
+      raw = revolveProfile(pts2);
+      if (R.measureVolume(raw) < 0) raw = R.cast(raw.wrapped.Reversed());
+      tool = applyMatrix(raw, rigidMat(F.O, F.R0, F.T0, F.A));
+      const res = boolWithTopo('cut', baseShape, baseTopo, baseId, tool, null, stepId, 'Cir:' + stepId);
+      return { shape: res.shape, topo: res.topo };
+    } finally {
+      safeDelete(raw); safeDelete(tool);
+    }
+  }
+  function buildKeywayOn(baseShape, baseTopo, baseId, stepId, p) {
+    const F = resolveCylFaceForShaft(baseShape, baseTopo, baseId, p.face, 'Passfeder-Nut');
+    const width = num(p.width, 6);
+    const depth = num(p.depth, 3.5);
+    const length = num(p.length, 20);
+    const ends = p.ends === 'straight' ? 'straight' : 'round';
+    const from = p.from === 'top' || p.from === 'bottom' ? p.from : 'center';
+    const offset = num(p.offset, 0);
+    const angRad = (num(p.angle, 0) * Math.PI) / 180;
+    if (!(width > 0.2 && isFinite(width))) throw new Error('Passfeder-Nut: Die Breite muss größer als 0,2 mm sein.');
+    if (!(depth > 0.1 && isFinite(depth))) throw new Error('Passfeder-Nut: Die Tiefe muss größer als 0,1 mm sein.');
+    if (!(length > 0.5 && isFinite(length))) throw new Error('Passfeder-Nut: Die Länge muss größer als 0,5 mm sein.');
+    if (!F.isInner && width >= 2 * F.R - 0.1) throw new Error('Passfeder-Nut: Die Nutbreite ist größer als der Wellendurchmesser.');
+    if (!F.isInner && depth >= 2 * F.R - 0.2) throw new Error('Passfeder-Nut: Die Nuttiefe ist zu groß für diesen Wellendurchmesser.');
+
+    const rad = norm(add(mul(F.R0, Math.cos(angRad)), mul(F.T0, Math.sin(angRad))));
+    const tan = norm(cross(F.A, rad));
+    let z0, z1;
+    if (from === 'top') {
+      z1 = F.vMax - offset + (ends === 'straight' && offset <= 0 ? 0.5 : 0);
+      z0 = (F.vMax - offset) - length;
+    } else if (from === 'bottom') {
+      z0 = F.vMin + offset - (ends === 'straight' && offset <= 0 ? 0.5 : 0);
+      z1 = (F.vMin + offset) + length;
+    } else {
+      const zm = F.vMid + offset;
+      z0 = zm - length / 2;
+      z1 = zm + length / 2;
+    }
+    const zMid = (z0 + z1) / 2;
+    const L = Math.max(0.5, z1 - z0);
+    const rBot = F.isInner ? Math.max(0.1, F.R - Math.max(2.0, depth)) : (F.R - depth);
+    const rTop = F.isInner ? (F.R + depth) : (F.R + Math.max(2.0, depth));
+
+    let raw = null, tool = null;
+    try {
+      raw = ends === 'round' && !F.isInner
+        ? stadiumExtrude(L, width, rBot, rTop - rBot)
+        : R.makeBox([-L / 2, -width / 2, rBot], [L / 2, width / 2, rTop]);
+      tool = applyMatrix(raw, rigidMat(add(F.O, mul(F.A, zMid)), F.A, mul(tan, -1), rad));
+      const res = boolWithTopo('cut', baseShape, baseTopo, baseId, tool, null, stepId, 'Key:' + stepId);
+      return { shape: res.shape, topo: res.topo };
+    } finally {
+      safeDelete(raw); safeDelete(tool);
+    }
+  }
+  function buildSplineProfileOn(baseShape, baseTopo, baseId, stepId, p) {
+    const F = resolveCylFaceForShaft(baseShape, baseTopo, baseId, p.face, 'Keilwellen-Profil');
+    const n = Math.max(4, Math.min(24, Math.round(num(p.teeth, 6))));
+    const rootD = num(p.rootD, 0);
+    const b = num(p.b, 4);
+    const length = Math.max(0, num(p.length, 0));
+    const from = p.from === 'bottom' ? 'bottom' : 'top';
+    const offset = Math.max(0, num(p.offset, 0));
+    const angRad = (num(p.angle, 0) * Math.PI) / 180;
+    if (!(b > 0.2 && isFinite(b))) throw new Error('Keilwellen-Profil: Die Keilbreite muss größer als 0,2 mm sein.');
+    if (!(rootD > 0.2 && isFinite(rootD))) throw new Error('Keilwellen-Profil: Der Grunddurchmesser muss größer als 0,2 mm sein.');
+    if (!F.isInner && rootD >= 2 * F.R - 0.1) throw new Error('Keilwellen-Profil: Der Innendurchmesser d muss kleiner als der Wellendurchmesser D sein.');
+    if (F.isInner && rootD <= 2 * F.R + 0.1) throw new Error('Keilwellen-Profil: Bei einer Bohrung muss der Außendurchmesser D größer als der Bohrungsdurchmesser sein.');
+
+    const rMin = F.isInner ? F.R : rootD / 2;
+    if (b / 2 >= rMin * 0.96) throw new Error('Keilwellen-Profil: Die Keilbreite b ist zu groß für den Innendurchmesser.');
+    const aMin = Math.asin((b / 2) / rMin);
+    if (n * aMin >= Math.PI - 0.02) throw new Error('Keilwellen-Profil: Zu viele oder zu breite Keile für diesen Durchmesser.');
+
+    let z0, z1;
+    if (length <= 0) {
+      z0 = F.vMin - 0.2;
+      z1 = F.vMax + 0.2;
+    } else if (from === 'bottom') {
+      z0 = F.vMin + offset - (offset <= 0 ? 0.2 : 0);
+      z1 = F.vMin + offset + length;
+    } else {
+      z1 = F.vMax - offset + (offset <= 0 ? 0.2 : 0);
+      z0 = F.vMax - offset - length;
+    }
+    const dz = Math.max(0.2, z1 - z0);
+    const P = (r, a) => [r * Math.cos(a), r * Math.sin(a), z0];
+    const slots = [], edgesToDel = [];
+    let rawComp = null, tool = null;
+    try {
+      if (!F.isInner) {
+        const rRoot = rootD / 2, rCut = F.R + 1.5;
+        const aRoot = Math.asin((b / 2) / rRoot);
+        const aCut = Math.asin(Math.min(0.99, (b / 2) / rCut));
+        for (let k = 0; k < n; k++) {
+          const th = angRad + (2 * Math.PI * k) / n;
+          const thNext = angRad + (2 * Math.PI * (k + 1)) / n;
+          const thMid = th + Math.PI / n;
+          const eds = [
+            R.makeThreePointArc(P(rRoot, th + aRoot), P(rRoot, thMid), P(rRoot, thNext - aRoot)),
+            R.makeLine(P(rRoot, thNext - aRoot), P(rCut, thNext - aCut)),
+            R.makeThreePointArc(P(rCut, thNext - aCut), P(rCut, thMid), P(rCut, th + aCut)),
+            R.makeLine(P(rCut, th + aCut), P(rRoot, th + aRoot)),
+          ];
+          edgesToDel.push(...eds);
+          const w = R.assembleWire(eds), f = R.makeFace(w);
+          const sol = R.basicFaceExtrusion(f, new R.Vector([0, 0, dz]));
+          safeDelete(w); safeDelete(f);
+          slots.push(sol);
+        }
+      } else {
+        const rOut = rootD / 2;
+        const aOut = Math.asin((b / 2) / rOut);
+        const xIn = Math.max(0.05, Math.sqrt(Math.max(0, F.R * F.R - (b / 2) * (b / 2))) - 1.0);
+        const xOut = Math.sqrt(Math.max(0, rOut * rOut - (b / 2) * (b / 2)));
+        const rot2 = (x, y, th) => [x * Math.cos(th) - y * Math.sin(th), x * Math.sin(th) + y * Math.cos(th), z0];
+        for (let k = 0; k < n; k++) {
+          const th = angRad + (2 * Math.PI * k) / n;
+          const p1 = rot2(xIn, -b / 2, th), p2 = rot2(xOut, -b / 2, th);
+          const p3 = rot2(xOut, b / 2, th), p4 = rot2(xIn, b / 2, th);
+          const pMid = P(rOut, th);
+          const eds = [
+            R.makeLine(p1, p2),
+            R.makeThreePointArc(p2, pMid, p3),
+            R.makeLine(p3, p4),
+            R.makeLine(p4, p1),
+          ];
+          edgesToDel.push(...eds);
+          const w = R.assembleWire(eds), f = R.makeFace(w);
+          const sol = R.basicFaceExtrusion(f, new R.Vector([0, 0, dz]));
+          safeDelete(w); safeDelete(f);
+          slots.push(sol);
+        }
+      }
+      rawComp = R.makeCompound(slots);
+      tool = applyMatrix(rawComp, rigidMat(F.O, F.R0, F.T0, F.A));
+      const res = boolWithTopo('cut', baseShape, baseTopo, baseId, tool, null, stepId, 'Spl:' + stepId);
+      return { shape: res.shape, topo: res.topo };
+    } finally {
+      for (const e of edgesToDel) safeDelete(e);
+      for (const s of slots) safeDelete(s);
+      safeDelete(rawComp); safeDelete(tool);
+    }
+  }
+
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
   // known = { id: resultKey } (was die Anzeige schon hat)
@@ -10714,6 +11035,43 @@ export function createKernel(R, oc) {
         bodies.set(tidA, srcA);
         bodies.set(tidB, srcB);
         if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf(['lipGroove', kA, kB]));
+        continue;
+      }
+      if (it.kind === 'undercut' || it.kind === 'circlipGroove' || it.kind === 'keyway' || it.kind === 'splineProfile') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          const nm = it.kind === 'undercut' ? 'Freistich' : it.kind === 'circlipGroove' ? 'Einstich' : it.kind === 'keyway' ? 'Passfeder-Nut' : 'Keilwellen-Profil';
+          errors.push({ itemId: it.id, code: 'op', message: `${nm}: Der Zielkörper fehlt oder kommt erst später im Verlauf.` });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, it.kind, p]);
+        const ceS = cacheEntry(k);
+        let next = ceS ? ceS.shape : null, nextTopo = ceS ? ceS.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = it.kind === 'undercut'
+              ? buildUndercutOn(src.shape, src.topo, src.it.id, it.id, p)
+              : it.kind === 'circlipGroove'
+                ? buildCirclipGrooveOn(src.shape, src.topo, src.it.id, it.id, p)
+                : it.kind === 'keyway'
+                  ? buildKeywayOn(src.shape, src.topo, src.it.id, it.id, p)
+                  : buildSplineProfileOn(src.shape, src.topo, src.it.id, it.id, p);
+            next = built.shape; nextTopo = built.topo;
+            cachePut(k, next, null, null, null, nextTopo);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: err && err.code === 'edges' ? 'edges' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         continue;
       }
       if (it.kind === 'sweep' && it.p && it.p.wrapId) {
