@@ -3040,6 +3040,18 @@ const Model = (() => {
           };
         });
     }
+    if (doc.pmi != null && !Array.isArray(doc.pmi)) doc.pmi = [];
+    if (Array.isArray(doc.pmi)) {
+      doc.pmi = doc.pmi
+        .filter((x) => x && typeof x === 'object' && (x.kind === 'dim' || x.kind === 'note'))
+        .map((x, idx) => ({
+          ...x,
+          id: typeof x.id === 'string' && x.id ? x.id : uid('pmi'),
+          name: typeof x.name === 'string' && x.name.trim() ? x.name.trim() : (x.kind === 'note' ? `Hinweis ${idx + 1}` : `Maß ${idx + 1}`),
+          inDrawing: x.inDrawing !== false,
+          hidden: !!x.hidden,
+        }));
+    }
     if (doc.motion != null) {
       if (typeof doc.motion !== 'object' || Array.isArray(doc.motion)) {
         delete doc.motion;

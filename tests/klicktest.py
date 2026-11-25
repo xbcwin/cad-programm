@@ -37048,6 +37048,526 @@ def t_a182_oringe_und_federn(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a181_pmi_3d_und_zeichnung(p):
+    # [A-181] Maße, Toleranzen und Hinweise am 3D-Modell (PMI, ZE-35) & Übernahme in die Zeichnung
+    p.empty()
+    p.ev("""
+      ViewPrefs.setLevel('pro');
+      ViewPrefs.set({ pmi: true });
+      const b = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Gehaeuse' });
+      const h = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bohrung', role: 'hole', t: { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } });
+      App.change('Quader 40x30x20 mit Bohrung', d => { d.items.push(b, h); });
+      Viewer.setView('iso');
+      Viewer.fit();
+      Viewer.renderNow();
+    """)
+    warte_rechnen(p)
+
+    # 1. PMI-Leiste starten, ±0,1 wählen und Kante (40 mm) im 3D anklicken
+    p.ev("""
+      Viewer.setView('iso');
+      Viewer.fit();
+      Viewer.renderNow();
+      Measure.pmiStart('dim');
+    """)
+    p.wait(80)
+    p.pg.select_option('#pmi-bar-tol-mode', 'sym')
+    p.pg.fill('#pmi-bar-tol-val', '0,1')
+    p.pg.dispatch_event('#pmi-bar-tol-val', 'change')
+    p.wait(50)
+
+    sx, sy = world_screen(p, 0, -15, 20)
+    p.pg.mouse.click(sx, sy)
+    p.wait(120)
+
+    # Falls ISO-Klick wegen Kameraauflösung knapp daneben lag, prüfen wir ob der Klick getroffen hat
+    hit_ok = p.ev("return Measure.pmiList().length === 1")
+    if not hit_ok:
+        # Exakte 40mm-Kante am fertigen Körper finden und anklicken
+        pt_edge = p.ev("""return (() => {
+          const id = App.doc.items[0].id;
+          const r = App.results.get(id);
+          const e = r && r.data && r.data.edges.find(x => x.t === 'LINE' && Math.abs((x.l || 0) - 40) < 0.1 && Math.abs(x.m[2] - 20) < 0.1);
+          if (!e) return null;
+          const W = Model.worldMatrix(App.doc, id);
+          const m = new THREE.Vector3(...e.m).applyMatrix4(W);
+          return Viewer.toScreen(m);
+        })()""")
+        if pt_edge:
+            p.pg.mouse.click(pt_edge['x'], pt_edge['y'])
+            p.wait(120)
+
+    # Ø10-Loch mit Passung H7 und 3D-Hinweis setzen
+    p.ev("""
+      Measure.pmiStop();
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const cIdx = r.data.edges.findIndex(e => e.t === 'CIRCLE' && Math.abs(e.r - 5) < 0.2 && Math.abs(e.c[2] - 20) < 0.2);
+      const fIdx = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      Measure.addPmiDim({ itemId: id, edgeIdx: cIdx, dimType: 'dia', tol: { mode: 'fit', fit: 'H7', fitShow: 'both' }, name: 'Passbohrung' });
+      Measure.addPmiNote({ itemId: id, faceIdx: fIdx, p: [10, 5, 20], text: 'Kanten brechen 0,5x45', name: 'Kantenhinweis' });
+    """)
+    p.wait(120)
+
+    st_3d = p.ev("""return (() => {
+      const tags = [...document.querySelectorAll('.dimlabel.pmi-tag')];
+      const visTags = tags.filter(el => {
+        const r = el.getBoundingClientRect();
+        return getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0;
+      });
+      const texts = visTags.map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim());
+      const rows = document.querySelectorAll('#pmi-tree .pmi-row').length;
+      const eyeVis = !document.getElementById('vc-pmi')?.hidden;
+      const objs = Viewer.groups.measures ? Viewer.groups.measures.children.length : 0;
+      return { nTags: visTags.length, texts, rows, eyeVis, objs, listLen: Measure.pmiList().length };
+    })()""")
+
+    ok1 = bool(
+        st_3d['listLen'] == 3
+        and st_3d['nTags'] == 3
+        and st_3d['rows'] == 3
+        and st_3d['eyeVis']
+        and st_3d['objs'] >= 4
+        and any('40' in t and '±0,1' in t for t in st_3d['texts'])
+        and any('Ø10' in t and 'H7' in t for t in st_3d['texts'])
+        and any('Kanten brechen 0,5x45' in t for t in st_3d['texts'])
+    )
+
+    # 2. Global ein-/ausblenden, einzeln ausblenden, und Toleranz im Panel ändern
+    p.pg.click('#vc-pmi')
+    p.wait(100)
+    hidden_all = p.ev("return document.querySelectorAll('.dimlabel.pmi-tag').length === 0 && !Measure.pmiVisible()")
+    p.pg.click('#vc-pmi')
+    p.wait(100)
+    shown_all = p.ev("return document.querySelectorAll('.dimlabel.pmi-tag').length === 3 && Measure.pmiVisible()")
+
+    p.ev("""
+      const first = Measure.pmiList()[0];
+      Measure.setPmiHidden(first.id, true);
+    """)
+    p.wait(80)
+    hidden_one = p.ev("return document.querySelectorAll('.dimlabel.pmi-tag').length === 2")
+    p.ev("""
+      const first = Measure.pmiList()[0];
+      Measure.setPmiHidden(first.id, false);
+      Measure.selectPmi(first.id);
+    """)
+    p.wait(100)
+    p.pg.fill('#pmi-tol-sym', '0,2')
+    p.pg.dispatch_event('#pmi-tol-sym', 'change')
+    p.wait(80)
+    panel_upd = p.ev("return [...document.querySelectorAll('.dimlabel.pmi-tag')].some(el => (el.textContent || '').includes('±0,2'))")
+    p.pg.fill('#pmi-tol-sym', '0,1')
+    p.pg.dispatch_event('#pmi-tol-sym', 'change')
+    p.wait(80)
+
+    ok2 = bool(hidden_all and shown_all and hidden_one and panel_upd)
+
+    # 3. Neue Zeichnung öffnen -> übernimmt Maße mit Toleranz und Hinweis automatisch
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    st_dwg = p.ev("""return (async () => {
+      const dims = Drawing.dims();
+      const notes = Drawing.notes();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dimTexts = [...svg.querySelectorAll('text.dimtext')].map(t => (t.textContent || '').trim());
+      const noteTexts = [...svg.querySelectorAll('text.notetext')].map(t => (t.textContent || '').trim());
+      const svgStr = await Drawing.buildSVGString();
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const dxf = await Drawing.buildDXF();
+      const pmi40 = dims.filter(d => d.fromPmi && Math.abs(d.nominalMm - 40) < 0.2);
+      const auto40 = dims.filter(d => d.auto && Math.abs(d.nominalMm - 40) < 0.2);
+      const pmiDia = dims.filter(d => d.fromPmi && d.type === 'dia' && Math.abs(d.nominalMm - 10) < 0.2);
+      return {
+        pmi40Count: pmi40.length,
+        pmi40Tol: pmi40[0] && pmi40[0].tol ? pmi40[0].tol : null,
+        auto40Count: auto40.length,
+        pmiDiaCount: pmiDia.length,
+        pmiDiaTol: pmiDia[0] && pmiDia[0].tol ? pmiDia[0].tol : null,
+        lostCount: Drawing.lostDims().length,
+        hasSvgSym: svgStr.includes('±0,1') && svgStr.includes('H7') && svgStr.includes('Kanten brechen 0,5x45'),
+        hasPdf: pdfStr.includes('0,1') && pdfStr.includes('H7') && pdfStr.includes('Kanten brechen') && !pdfStr.includes('(?)'),
+        hasDxf: !!(dxf && dxf.text && dxf.text.includes('0,1') && dxf.text.includes('H7') && dxf.text.includes('Kanten brechen')),
+        dimTexts,
+        noteTexts,
+        notesPmi: notes.filter(n => n.fromPmi).length,
+      };
+    })()""")
+
+    # Zusätzliches 30-mm-PMI nachträglich am Modell ergänzen & über #dw-import-pmi übernehmen
+    p.pg.click('#tab-model')
+    p.wait(100)
+    p.ev("""
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const e30 = r.data.edges.findIndex(e => e.t === 'LINE' && Math.abs((e.l || 0) - 30) < 0.1 && Math.abs(e.m[2] - 20) < 0.1);
+      Measure.addPmiDim({ itemId: id, edgeIdx: e30, tol: { mode: 'dev', upper: 0.05, lower: -0.02 }, name: 'Breite' });
+    """)
+    p.wait(100)
+    p.pg.click('#tab-drawing')
+    p.ev("return Drawing.waitReady()")
+    p.wait(100)
+    p.pg.click('#dw-import-pmi')
+    p.wait(120)
+    after_reimport = p.ev("""return (() => {
+      const dims = Drawing.dims();
+      return {
+        pmiCount: dims.filter(d => d.fromPmi).length,
+        has30: dims.some(d => d.fromPmi && Math.abs(d.nominalMm - 30) < 0.2 && d.tol && d.tol.mode === 'dev'),
+        noDup40: dims.filter(d => d.fromPmi && Math.abs(d.nominalMm - 40) < 0.2).length === 1,
+      };
+    })()""")
+    p.pg.click('#dw-model-dims')
+    p.wait(120)
+    after_model_dims = p.ev("return Drawing.dims().some(d => d.fromPmi && Math.abs(d.nominalMm - 40) < 0.2 && d.tol && d.tol.sym === 0.1)")
+
+    ok3 = bool(
+        st_dwg['pmi40Count'] == 1
+        and st_dwg['pmi40Tol'] and st_dwg['pmi40Tol']['mode'] == 'sym' and abs(st_dwg['pmi40Tol']['sym'] - 0.1) < 1e-6
+        and st_dwg['auto40Count'] == 0
+        and st_dwg['pmiDiaCount'] == 1
+        and st_dwg['pmiDiaTol'] and st_dwg['pmiDiaTol']['mode'] == 'fit' and st_dwg['pmiDiaTol']['fit'] == 'H7'
+        and st_dwg['lostCount'] == 0
+        and st_dwg['notesPmi'] == 1
+        and st_dwg['hasSvgSym'] and st_dwg['hasPdf'] and st_dwg['hasDxf']
+        and after_reimport['pmiCount'] == 3 and after_reimport['has30'] and after_reimport['noDup40']
+        and after_model_dims
+    )
+
+    # 4. Profi-Schutz, Undo/Redo, Speichern/Laden, Hilfen, I18n & Befehlssuche
+    p.pg.click('#tab-model')
+    p.wait(100)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(80)
+    simple_chk = p.ev("""return {
+      startBlocked: Measure.pmiStart() === false,
+      addBlocked: Measure.addPmiDim({ a: [0,0,0], b: [10,0,0] }) === null,
+      treeAbsent: !document.getElementById('pmi-tree'),
+      cmdsBlocked: Commands.search('pmi').length === 0,
+    }""")
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(80)
+
+    val_and_reload = p.ev("""return (async () => {
+      const raw = await Start.projectPayload();
+      const vr = Store.validateProject(raw);
+      const countBefore = Measure.pmiList().length;
+      const lastId = Measure.pmiList()[countBefore - 1].id;
+      Measure.removePmi(lastId);
+      const afterDel = Measure.pmiList().length;
+      App.undo();
+      const afterUndo = Measure.pmiList().length;
+      const parsed = Model.migrate(JSON.parse(raw));
+      App.setDoc(parsed, { fit: false, noAutosave: true });
+      return {
+        valid: vr.ok,
+        countBefore,
+        afterDel,
+        afterUndo,
+        reloadedCount: Measure.pmiList().length,
+      };
+    })()""")
+
+    meta_chk = p.ev("""return (async () => {
+      const hJson = await fetch('data/werkzeug-hilfen.json').then(r => r.json());
+      const de = await fetch('data/texte-de.json').then(r => r.json());
+      const en = await fetch('data/texte-en.json').then(r => r.json());
+      const deKeys = Object.keys(de).sort(), enKeys = Object.keys(en).sort();
+      const i18nOk = deKeys.length === enKeys.length && deKeys.every((k, i) => k === enKeys[i]);
+      const desc = Explain.describeElement(document.querySelector('[data-help="pmi3d"]'));
+      const helpOk = !!(hJson.pmi3d && hJson.pmi3d.tip && hJson.pmi3d.hilfe && hJson.pmi3d.tipp && desc && desc.text === hJson.pmi3d.hilfe && desc.tip === hJson.pmi3d.tipp);
+      const cmds = Commands.search('pmi').some(c => c.id === 'pmi-dim') && Commands.search('pmi').some(c => c.id === 'drawingImportPmi');
+      return i18nOk && helpOk && cmds;
+    })()""")
+
+    ok4 = bool(
+        simple_chk['startBlocked'] and simple_chk['addBlocked'] and simple_chk['treeAbsent'] and simple_chk['cmdsBlocked']
+        and val_and_reload['valid']
+        and val_and_reload['afterDel'] == val_and_reload['countBefore'] - 1
+        and val_and_reload['afterUndo'] == val_and_reload['countBefore']
+        and val_and_reload['reloadedCount'] == val_and_reload['countBefore']
+        and meta_chk
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a180_zeichnung_fertig_machen(p):
+    # [A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)
+    p.empty()
+    p.ev("""
+      const blk = Model.newItem('box', { w: 80, d: 50, h: 20 }, { name: 'Flanschplatte', mat: 'Alu 6061' });
+      const hole = Model.newItem('cylinder', { d: 14, h: 30 }, { name: 'Bohrung', role: 'hole' });
+      hole.t.x = 15; hole.t.z = -5;
+      App.change('Flanschplatte mit Bohrung', d => {
+        d.name = 'Flanschplatte';
+        d.items.push(blk, hole);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    def read_finish_state():
+        return p.ev("""return (() => {
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const paperEl = svg.querySelector('rect.paper');
+          const frameEl = svg.querySelector('rect.frame');
+          const paperR = paperEl ? paperEl.getBoundingClientRect() : null;
+          const frameR = frameEl ? frameEl.getBoundingClientRect() : null;
+          let domOutsidePaper = 0, domOutsideFrame = 0;
+          if (paperR && frameR) {
+            const els = svg.querySelectorAll('.vis, .hid, .ctr, .dim, text.dimtext, text.vlabel, text.title, text.val');
+            for (const el of els) {
+              const r = el.getBoundingClientRect();
+              if (r.width === 0 && r.height === 0) continue;
+              if (r.left < paperR.left - 1 || r.right > paperR.right + 1 || r.top < paperR.top - 1 || r.bottom > paperR.bottom + 1) domOutsidePaper++;
+              if (r.left < frameR.left - 2.5 || r.right > frameR.right + 2.5 || r.top < frameR.top - 2.5 || r.bottom > frameR.bottom + 2.5) domOutsideFrame++;
+            }
+          }
+          const sh = Drawing.activeSheet();
+          const lay = Drawing.layout;
+          const activeViewKeys = Object.keys((lay && lay.views) || {}).filter(k => k !== 'free');
+          const visViewKeys = [...new Set([...svg.querySelectorAll('.vis')].map(el => el.dataset.view).filter(Boolean))];
+          const dimEls = [...svg.querySelectorAll('text.dimtext')];
+          const dimTexts = dimEls.map(el => (el.textContent || '').trim());
+          const ctrEls = [...svg.querySelectorAll('.ctr[data-view]')];
+          const crossTop = ctrEls.some(el => el.dataset.view === 'top' && el.dataset.ctr === 'cross');
+          const axisSide = ctrEls.some(el => (el.dataset.view === 'front' || el.dataset.view === 'left'));
+          const tb = Drawing.dimTextBoxes();
+          const bounds = Drawing.sheetBoundsCheck();
+          return {
+            activeViewCount: activeViewKeys.length,
+            visViewCount: visViewKeys.length,
+            views: sh.views,
+            scale: lay ? lay.s : null,
+            dimsCount: Drawing.dims().length,
+            dimTexts,
+            lostCount: Drawing.lostDims().length,
+            overlaps: tb.overlaps,
+            centersFlag: !!sh.centers,
+            centersCount: Drawing.centers().length,
+            crossTop,
+            axisSide,
+            title: sh.title || {},
+            boundsOk: !!(bounds && bounds.ok),
+            outsidePaper: bounds ? bounds.outsidePaper : -1,
+            outsideFrame: bounds ? bounds.outsideFrame : -1,
+            tbOverlap: bounds ? bounds.tbOverlap : -1,
+            domOutsidePaper,
+            domOutsideFrame,
+            viewPosKeys: Object.keys(sh.viewPos || {}).length,
+          };
+        })()""")
+
+    def has_num(texts, val):
+        s = str(val)
+        return any(t == s or t.startswith(s + ',') or t.startswith(s + '.') for t in texts)
+
+    # 1. Blatt absichtlich verstellen, dann per Panel-Knopf „Zeichnung fertig machen“
+    p.ev("""
+      App.change('Blatt verstellt', () => {
+        const s = Drawing.activeSheet();
+        s.views = { front: true, top: false, left: false, iso: false };
+        s.centers = false;
+        s.dims = [];
+        s.scale = 5;
+        s.viewPos = { front: [120, 80] };
+        s.title = { titel: '', nummer: '', name: '', datum: '', werkstoff: '', firma: '', blatt: '' };
+      });
+      Drawing.refresh();
+    """)
+    p.wait(150)
+
+    p.pg.click('#dw-finish-drawing')
+    p.pg.wait_for_function("() => Object.keys((window.__M.Drawing.layout && window.__M.Drawing.layout.views) || {}).filter(k => k !== 'free').length >= 3 && window.__M.Drawing.dims().length >= 4", timeout=15000)
+    p.wait(200)
+    st1 = read_finish_state()
+
+    # Zweiter Klick über Werkzeugleiste verdoppelt keine Maße
+    dims_before_2nd = st1['dimsCount']
+    p.pg.click('#t-finish-drawing')
+    p.wait(250)
+    st1_again = read_finish_state()
+
+    # Rückgängig / Wiederherstellen
+    p.ev("App.undo(); App.undo(); return Drawing.waitReady();")
+    p.wait(150)
+    st_undo = read_finish_state()
+    p.ev("App.redo(); App.redo(); return Drawing.waitReady();")
+    p.wait(150)
+    st_redo = read_finish_state()
+
+    ok1 = bool(
+        st1['activeViewCount'] >= 3
+        and st1['visViewCount'] >= 3
+        and st1['dimsCount'] >= 4
+        and has_num(st1['dimTexts'], 80)
+        and has_num(st1['dimTexts'], 50)
+        and has_num(st1['dimTexts'], 20)
+        and any('Ø14' in t for t in st1['dimTexts'])
+        and st1['lostCount'] == 0
+        and st1['overlaps'] == 0
+        and st1['centersFlag']
+        and st1['centersCount'] >= 2
+        and st1['crossTop']
+        and st1['axisSide']
+        and st1['title'].get('titel') == 'Flanschplatte'
+        and st1['title'].get('werkstoff') == 'Alu 6061'
+        and bool(st1['title'].get('datum'))
+        and bool(st1['title'].get('nummer'))
+        and st1['viewPosKeys'] == 0
+        and st1['boundsOk']
+        and st1['domOutsidePaper'] == 0
+        and st1['domOutsideFrame'] == 0
+        and st1_again['dimsCount'] == dims_before_2nd
+        and st_undo['activeViewCount'] == 1
+        and not st_undo['centersFlag']
+        and st_redo['activeViewCount'] >= 3
+        and st_redo['centersFlag']
+    )
+
+    # 2. Großes Bauteil mit zwei Bohrungen -> passender kleiner Standard-Maßstab ohne Blattrand-Überlauf
+    p.ev("""
+      Commands.setMode('model');
+      App.setDoc(Model.newDoc('Große Grundplatte'));
+      const rId = 'e_rect_big', c1Id = 'e_c_big1', c2Id = 'e_c_big2';
+      const sk = {
+        plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] },
+        ents: [
+          { id: rId, type: 'rect', a: [-110, -70], b: [110, 70] },
+          { id: c1Id, type: 'circle', c: [-55, 0], r: 10 },
+          { id: c2Id, type: 'circle', c: [55, 0], r: 6 },
+        ],
+        dims: [
+          { id: 'm_bw', e: rId, k: 'w', v: 220 },
+          { id: 'm_bh', e: rId, k: 'h', v: 140 },
+          { id: 'm_bd1', e: c1Id, k: 'd', v: 20 },
+          { id: 'm_bd2', e: c2Id, k: 'd', v: 12 },
+        ],
+        cons: [],
+      };
+      const plate = Model.newItem('extrude', { sketch: sk, dist: 60, dir: 'normal' }, { name: 'Grundplatte', mat: 'Stahl' });
+      App.change('Große Grundplatte 220x140x60', d => { d.items.push(plate); });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_function("() => document.querySelectorAll('#sheet .sheet-holder svg .vis').length > 0", timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    p.pg.click('#t-finish-drawing')
+    p.pg.wait_for_function("() => Object.keys((window.__M.Drawing.layout && window.__M.Drawing.layout.views) || {}).filter(k => k !== 'free').length >= 3 && window.__M.Drawing.dims().length >= 5", timeout=15000)
+    p.wait(250)
+    st2 = read_finish_state()
+
+    ok2 = bool(
+        st2['activeViewCount'] >= 3
+        and st2['visViewCount'] >= 3
+        and st2['scale'] is not None and st2['scale'] <= 0.5
+        and has_num(st2['dimTexts'], 220)
+        and has_num(st2['dimTexts'], 140)
+        and has_num(st2['dimTexts'], 60)
+        and any('Ø20' in t for t in st2['dimTexts'])
+        and any('Ø12' in t for t in st2['dimTexts'])
+        and st2['centersCount'] >= 4
+        and st2['crossTop']
+        and st2['boundsOk']
+        and st2['domOutsidePaper'] == 0
+        and st2['domOutsideFrame'] == 0
+    )
+
+    # 3. Einfach-Modus: Knöpfe sichtbar und funktional
+    p.ev("""
+      ViewPrefs.setLevel('simple');
+      Commands.setMode('drawing');
+      App.change('Leeres Blatt Einfach', () => {
+        const s = Drawing.activeSheet();
+        s.views = { front: true, top: false, left: false, iso: false };
+        s.centers = false;
+        s.dims = [];
+      });
+      Drawing.refresh();
+    """)
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+    simple_vis = p.ev("""return (() => {
+      const b1 = document.querySelector('#t-finish-drawing');
+      const b2 = document.querySelector('#dw-finish-drawing');
+      return !!(b1 && b1.offsetParent !== null && b2 && b2.offsetParent !== null);
+    })()""")
+    p.pg.click('#dw-finish-drawing')
+    p.pg.wait_for_function("() => Object.keys((window.__M.Drawing.layout && window.__M.Drawing.layout.views) || {}).filter(k => k !== 'free').length >= 3 && window.__M.Drawing.dims().length >= 5", timeout=15000)
+    p.wait(250)
+    st_simple = read_finish_state()
+
+    p.ev("ViewPrefs.setLevel('pro');")
+    p.wait(150)
+
+    ok3 = bool(
+        simple_vis
+        and st_simple['activeViewCount'] >= 3
+        and st_simple['centersFlag']
+        and st_simple['centersCount'] >= 4
+        and st_simple['boundsOk']
+        and st_simple['domOutsidePaper'] == 0
+        and st_simple['domOutsideFrame'] == 0
+    )
+
+    # 4. Export (PDF/SVG/DXF), Validierung, Hilfen, I18n, Befehlssuche & 0 JS-Fehler
+    p.pg.locator('#dw-finish-drawing').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=5000)
+        tip_txt = p.pg.locator('.tooltip').text_content()
+    except Exception:
+        tip_txt = ''
+    extra_chk = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const pdfBytes = await Drawing.buildPDFBytes();
+      const pdfStr = new TextDecoder('latin1').decode(pdfBytes);
+      const svgStr = await Drawing.buildSVGString();
+      const dxf = await Drawing.buildDXF();
+      const val = Store.validateProject(App.doc);
+      const h = wh && wh.drawingFinish;
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nSync = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const cmds = Commands.search('zeichnung fertig machen');
+      return {
+        pdfOk: pdfStr.startsWith('%PDF-1.4') && pdfBytes.length > 1000 && !pdfStr.includes('(?)'),
+        svgOk: typeof svgStr === 'string' && svgStr.includes('<svg') && svgStr.includes('Große Grundplatte'),
+        dxfOk: !!(dxf && dxf.text && dxf.text.includes('MITTELLINIE') && dxf.text.includes('BEMASSUNG')),
+        valOk: !!(val && val.ok),
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp && String(arg || '').includes(h.tip)),
+        domHelpOk: document.querySelectorAll('[data-help="drawingFinish"]').length >= 2,
+        cmdOk: cmds.some(c => c.id === 'drawingFinish'),
+        deEnOk: i18nSync && T('tool.finishDrawing') === 'Zeichnung fertig machen' && T('draw.panel.finishBtn') === 'Zeichnung fertig machen',
+      };
+    })()""", tip_txt)
+    ok4 = bool(
+        extra_chk['pdfOk'] and extra_chk['svgOk'] and extra_chk['dxfOk']
+        and extra_chk['valOk'] and extra_chk['helpOk'] and extra_chk['domHelpOk']
+        and extra_chk['cmdOk'] and extra_chk['deEnOk']
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -37343,6 +37863,8 @@ TESTS = [
     ('[A-177] Zeichnung: Linienarten, Ebenen (Layer) und Bild auf dem Blatt (ZE-29, ZE-31)', t_a177_zeichnung_ebenen_bild),
     ('[A-175] Zeichnung: Oberflächenzeichen, Schweißsymbole, Kantenzustand & Symbol-Sammlung (ZE-25, ZE-27)', t_a175_zeichnung_oberflaechen_symbole),
     ('[A-182] Bibliothek: O-Ringe mit Nut, Wellendichtringe, Druck- & Zugfedern (BI-09, BI-10)', t_a182_oringe_und_federn),
+    ('[A-181] Maße und Toleranzen am 3D-Modell (PMI) & Übernahme in Zeichnung (ZE-35)', t_a181_pmi_3d_und_zeichnung),
+    ('[A-180] Zeichnung fertig machen auf Knopfdruck (ZE-34)', t_a180_zeichnung_fertig_machen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

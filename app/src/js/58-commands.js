@@ -273,6 +273,9 @@ const Commands = (() => {
       else UI.toast('Alle Bezüge sind in Ordnung.', { icon: 'check' });
     }, { group: 'Bearbeiten' });
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
+    add('pmi-dim', '3D-Maß mit Toleranz am Modell setzen (PMI)', 'dim', 'pmi 3d maß toleranz abmaß passung modell ze-35', () => Measure.pmiStart('dim'), { group: 'Werkzeuge', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('pmi-note', '3D-Hinweis am Modell setzen (PMI)', 'noteText', 'pmi 3d hinweis notiz modell kommentar ze-35', () => Measure.pmiStart('note'), { group: 'Werkzeuge', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('pmi-toggle-vis', '3D-Maße & Hinweise (PMI) ein- oder ausblenden', 'eye', 'pmi 3d maße hinweise zeigen verstecken ausblenden einblenden ze-35', () => Measure.togglePmiVisible(), { group: 'Ansicht', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
     add('comment-pin', 'Kommentar-Pin setzen', 'commentPin', 'kommentar pin stecknadel markierung erledigt notiz be-28', () => Notes.startPin(), { group: 'Werkzeuge' });
     add('comment-pins-list', 'Kommentar-Pins anzeigen (Liste)', 'list', 'kommentar pin liste notizen aufgaben erledigt be-28', () => Notes.pinsDialog(), { group: 'Werkzeuge' });
@@ -417,6 +420,7 @@ const Commands = (() => {
     add('editcomp', 'Gewählte Gruppe als Bauteil bearbeiten', 'edit', 'bauteil bearbeiten kontext', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && t.kind === 'group') Comp.edit(t.id); else UI.toast('Wähle zuerst eine Gruppe oder ein Bauteil aus.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
+    add('drawingFinish', 'Zeichnung fertig machen (Ansichten, Maßstab, Maße, Mittellinien, Schriftfeld)', 'spark', 'zeichnung fertig machen automatisch komplett ansichten maßstab maße mittellinien schriftfeld ze-34', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => Drawing.finishDrawing()); }, { group: 'Werkzeuge' });
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
     add('drawingAddIso', 'Zeichnung: Isometrische Ansicht hinzufügen', 'cube', 'zeichnung isometrie isometrisch 3d ansicht schattiert', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('iso'); }, { group: 'Werkzeuge' });
     add('drawingAddFree', 'Zeichnung: Freie 3D-Ansicht hinzufügen', 'eye', 'zeichnung freie ansicht 3d kamera aktuell schattiert', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('free'); }, { group: 'Werkzeuge' });
@@ -458,6 +462,7 @@ const Commands = (() => {
     add('drawingInspectionCsv', 'Zeichnung: Prüftabelle als CSV speichern', 'file', 'prüfmaß prüfmaße prüftabelle prueftabelle csv tabelle qualität zeichnung ze-33', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.exportInspectionCSV(); }, { group: 'Werkzeuge', when: () => ViewPrefs.level !== 'simple' });
     add('drawingDimStyle', 'Zeichnung: Maß-Stil (Pfeile, Schriftgröße, Stellen)', 'sliders', 'maß-stil stil pfeil pfeilart schriftgröße nachkommastellen zeichnung ze-10', () => { if (App.mode !== 'drawing') setMode('drawing'); Panels.renderRight(); document.querySelector('#dw-style-size')?.focus(); }, { group: 'Werkzeuge' });
     add('drawingModelDims', 'Zeichnung: Maße aus dem Modell übernehmen', 'dim', 'maße modell übernehmen skizze schritt bemaßen ordnen ze-23', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => Drawing.importModelDims()); }, { group: 'Werkzeuge' });
+    add('drawingImportPmi', 'Zeichnung: 3D-Maße & Hinweise (PMI) übernehmen', 'dim', 'pmi 3d maße toleranzen hinweise zeichnung übernehmen ze-35', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => Drawing.importPmi()); }, { group: 'Werkzeuge', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('drawingArrangeDims', 'Zeichnung: Maße automatisch ordnen', 'sliders', 'maße ordnen aufräumen überlappen bemaßung zeichnung ze-23', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.waitReady().then(() => Drawing.arrangeDims()); }, { group: 'Werkzeuge' });
     add('drawingResetViews', 'Zeichnung: Ansichten-Lage zurücksetzen', 'fit', 'ansichten verschieben zurücksetzen lage zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.resetViewPos(); }, { group: 'Werkzeuge' });
     add('drawingTolerance', 'Toleranz oder ISO-Passung am Maß setzen', 'dim', 'toleranz passung iso 286 h7 g6 grenzmaß abmaß symmetrisch zeichnung ze-08 ze-09', () => { if (App.mode !== 'drawing') setMode('drawing'); const sel = document.getElementById('dw-tol-mode'); if (sel) sel.focus(); else UI.toast('Klick ein Maß auf dem Blatt an, um rechts eine Toleranz oder Passung zu wählen.', { icon: 'dim', ms: 3000 }); }, { group: 'Werkzeuge' });
@@ -659,7 +664,7 @@ const Commands = (() => {
     if ((e.key === '?' || e.key === 'F1') && !mod && !e.altKey) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape' && Views.presenting) { Views.present(false); return; }
-    if (e.key === 'Escape') { if (UI.menuOpen) UI.closeMenu(true); else if (UI.popOpen) UI.closePop(true); else if (UI.radialOpen) UI.closeRadial(true); else if (ViewPrefs.lookPanelOpen) ViewPrefs.closeLookPanel(); else if (Select.paintActive) Select.stopPaint(); else if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(true); App.clearSelection(); } return; }
+    if (e.key === 'Escape') { if (UI.menuOpen) UI.closeMenu(true); else if (UI.popOpen) UI.closePop(true); else if (UI.radialOpen) UI.closeRadial(true); else if (ViewPrefs.lookPanelOpen) ViewPrefs.closeLookPanel(); else if (Select.paintActive) Select.stopPaint(); else if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.pmiActive) Measure.pmiStop(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(true); App.clearSelection(); } return; }
     if (combo === 'space' && e.target && e.target.closest && e.target.closest('button, a[href], [role="button"], [role="tab"], [role="menuitem"], summary')) return;
     const mHit = combo && SHORTCUTS.find((s) => !s.global && getCombo(s.id) === combo);
     if (mHit) {
@@ -842,6 +847,7 @@ const Commands = (() => {
     if (m === App.mode) return;
     if (Sketch.active) Sketch.cancel(true);
     if (Measure.active) Measure.stop();
+    if (Measure.pmiActive) Measure.pmiStop();
     if (Notes.active) Notes.stop();
     if (Select.paintActive) Select.stopPaint();
     if (UI.radialOpen) UI.closeRadial();

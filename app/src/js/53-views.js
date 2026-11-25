@@ -1826,6 +1826,8 @@ const Views = (() => {
       { label: (st.ov ? '✓ ' : '') + T('menu.view.overhang'), icon: 'overhang', help: 'overhang', run: () => overhang() },
       { label: (st.thin ? '✓ ' : '') + T('menu.view.thin'), icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
       { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.view.draft'), icon: 'chamfer', help: 'draftAnalysis', id: 'view-draft', run: () => Measure.draft() },
+      { label: (typeof Measure !== 'undefined' && Measure.pmiActive ? '✓ ' : '') + T('menu.view.pmi'), icon: 'dim', help: 'pmi3d', id: 'view-pmi', hidden: ViewPrefs.simple, run: () => Measure.pmiToggle() },
+      { label: (typeof Measure !== 'undefined' && Measure.pmiVisible && Measure.pmiVisible() ? '✓ ' : '') + T('menu.view.pmiShow'), icon: 'eye', help: 'pmi3d', id: 'view-pmi-show', hidden: ViewPrefs.simple || !(typeof Measure !== 'undefined' && Measure.pmiList && Measure.pmiList().length), run: () => Measure.togglePmiVisible() },
       { label: T('menu.view.present'), icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
       { label: T('menu.view.turntable'), icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       { label: (typeof Motion !== 'undefined' && Motion.active ? '✓ ' : '') + T('motion.menuLabel'), icon: 'play', help: 'motionStudy', id: 'view-motion', hidden: ViewPrefs.simple, run: () => Motion.toggle() },

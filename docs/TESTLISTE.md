@@ -2908,6 +2908,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Hilfen, I18n, Speichern/Laden & Geometrie-Prüfung**: Alle 5 Normteile erscheinen im `#t-parts`-Flyout (Profi), funktionieren über Befehlssuche, `Actions.addPart` und rechtes Panel in Einfach und Profi, `GeomCheck` findet 0 Fehler bei allen 4 Körpern, `werkzeug-hilfen.json` / `HELP` sowie DE/EN-Texte und `Store.validateProject` sind konsistent (`t_a182_oringe_und_federn`).
 - [ ] **Von Hand**: Im Browser im Bauteile-Flyout einen O-Ring 20×2, einen Wellendichtring, eine Druckfeder und eine Zugfeder anklicken und per Ziehen auf eine Bauteilfläche absetzen.
 
+## Maße und Toleranzen am 3D-Modell (PMI) (Auto [A-181], ZE-35)
+
+- [x] **3D-Maß mit ±0,1, Passung H7 & 3D-Hinweis am Modell**: Im Profi-Modus setzt ein Klick auf die 40-mm-Kante in `#pmi-bar` (mit `±0,1`) ein blaues 3D-Maß mit Maßhilfslinien, Pfeilen und `.dimlabel.pmi-tag` (`40 ±0,1`); `Measure.addPmiDim` mit ISO-Passung `H7` auf die Ø10-Bohrung und `Measure.addPmiNote` erscheinen sofort im 3D-Bild und in `#pmi-tree` (`t_a181_pmi_3d_und_zeichnung`).
+- [x] **Ein-/Ausblenden & Bearbeiten im Panel**: Global über `#vc-pmi` / `Measure.togglePmiVisible()` und einzeln über `Measure.setPmiHidden` verschwinden bzw. erscheinen die 3D-Schildchen und Linien; Ändern von `#pmi-tol-sym` rechts aktualisiert das 3D-Schildchen sofort (`t_a181_pmi_3d_und_zeichnung`).
+- [x] **Übernahme in neue & bestehende Zeichnung (SVG, PDF, DXF)**: Eine neue Zeichnung übernimmt das 40-mm-Maß mit `±0,1` (`fromPmi: true`, ohne doppeltes Auto-`40`), das Ø10-`H7`-Maß und den Hinweis (`Drawing.notes()`) in SVG, `buildPDFBytes()` und `buildDXF()`; `#dw-import-pmi` übernimmt nachträgliche 3D-Maße duplikatfrei und `importModelDims()` erhält PMI-Toleranzen (`t_a181_pmi_3d_und_zeichnung`).
+- [x] **Profi-Schutz, Rückgängig, Speichern/Laden, Hilfen & I18n**: Im Einfach-Modus sind PMI-Leiste, Tags, Verlaufsbereich, Befehle und Import gesperrt; `App.undo()`/`redo()`, `Store.validateProject` + Neuladen, `HELP.pmi3d`, DE/EN-Schlüsselgleichheit und `Commands.search('pmi')` laufen fehlerfrei (`t_a181_pmi_3d_und_zeichnung`).
+- [ ] **Von Hand**: Im Browser im Profi-Modus an einem Quader mit Bohrung über „3D-Maße (PMI)“ ein Kantenmaß mit `±0,1` und einen 3D-Hinweis setzen, über das Auge am Ansichtswürfel ein- und ausblenden und in einer neuen Zeichnung prüfen.
+
+## Zeichnung: „Zeichnung fertig machen“ auf Knopfdruck (Auto [A-180], ZE-34)
+
+- [x] **Teil mit Bohrung auf Knopfdruck (Profi)**: Ein Klick auf `#dw-finish-drawing` schaltet mindestens 3 Ansichten (Vorder-, Drauf-, Seiten- und isometrische Ansicht) ein, wählt einen passenden Standard-Maßstab, legt assoziative Modell- und Bohrungsmaße (`80`, `50`, `20`, `Ø14`) ohne Überlappen an, aktiviert Mittellinien/Mittelkreuze an der Bohrung, füllt das Schriftfeld (Titel, Werkstoff, Nummer, Datum) aus und hält alle SVG-Elemente innerhalb des Blattrands (`sheetBoundsCheck().ok` und DOM-Prüfung gegen `.frame`/`.paper`); `App.undo()`/`redo()` und Doppelklick-Schutz funktionieren (`t_a180_zeichnung_fertig_machen`).
+- [x] **Großes Bauteil & Einfach-Modus**: Ein großes Teil (`220×140×60` mit `Ø20` und `Ø12`) wird automatisch auf einen kleineren Standard-Maßstab skaliert (`<= 0,5`) ohne Blattrand-Überlauf; im Einfach-Modus sind `#t-finish-drawing` und `#dw-finish-drawing` sichtbar und liefern dasselbe vollständige Ergebnis (`t_a180_zeichnung_fertig_machen`).
+- [x] **Export, Validierung, Hilfen, I18n & Befehlssuche**: `buildPDFBytes()`, `buildSVGString()`, `buildDXF()`, `Store.validateProject()`, `werkzeug-hilfen.json`/`HELP.drawingFinish`, DE/EN-Schlüsselgleichheit und `Commands.search('zeichnung fertig machen')` bestehen ohne JS-Fehler (`t_a180_zeichnung_fertig_machen`).
+- [ ] **Von Hand**: Im Browser ein beliebiges Bauteil mit mehreren Bohrungen in „Zeichnung“ öffnen, auf „Zeichnung fertig machen“ klicken und die gedruckte/gespeicherte PDF-Vorschau auf Vollständigkeit und Ränder prüfen.
+
 ## Fehler melden
 
 ```

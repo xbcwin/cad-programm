@@ -121,6 +121,7 @@ const Panels = (() => {
     if (wsDialogRefresh) wsDialogRefresh();
     setTimeout(() => {
       if (typeof Notes !== 'undefined' && Notes.place) Notes.place();
+      if (typeof Measure !== 'undefined' && Measure.placePmi) Measure.placePmi();
       placeCtx();
       if (typeof Viewer !== 'undefined' && Viewer.requestRender) Viewer.requestRender();
     }, 0);
@@ -420,6 +421,8 @@ const Panels = (() => {
     if (App.mode === 'model') {
       Toolbar.renderModelTools(el);
     } else {
+      const finBtn = btn('t-finish-drawing', 'spark', T('tool.finishDrawing'), T('tool.finishDrawingTip'), '', () => Drawing.finishDrawing(), '', T('tool.finishDrawingShort'));
+      finBtn.dataset.help = 'drawingFinish';
       const sheetBtn = btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
       sheetBtn.dataset.help = 'drawingFormat';
       const viewBtn = btn('t-view-add', 'cube', T('tool.viewAdd'), T('tool.viewAddTip'), '', (e) => Drawing.viewMenu(e.currentTarget));
@@ -803,6 +806,7 @@ const Panels = (() => {
       const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
+      const pmiSec0 = Measure.pmiTreeSection ? Measure.pmiTreeSection() : null; if (pmiSec0) body.append(pmiSec0);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
       const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
@@ -833,6 +837,7 @@ const Panels = (() => {
       const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
       const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
+      const pmiSec = Measure.pmiTreeSection ? Measure.pmiTreeSection() : null; if (pmiSec) body.append(pmiSec);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
       const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
       const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
@@ -1206,6 +1211,7 @@ const Panels = (() => {
     const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
     const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
+    const pmiSec = Measure.pmiTreeSection ? Measure.pmiTreeSection() : null; if (pmiSec) body.append(pmiSec);
     const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
     const apTree = typeof Assembly !== 'undefined' && Assembly.patternTreeSection ? Assembly.patternTreeSection() : null; if (apTree) body.append(apTree);
     const posSec = typeof Assembly !== 'undefined' && Assembly.poseTreeSection ? Assembly.poseTreeSection() : null; if (posSec) body.append(posSec);
@@ -1619,6 +1625,7 @@ const Panels = (() => {
     if (!items.length && Datums.selectedCsys && Datums.findCsys(Datums.selectedCsys)) { $('#right-title').textContent = T('panel.title.datumCsys'); Datums.renderCsysPanel(body); return; }
     if (!items.length && typeof PointClouds !== 'undefined' && PointClouds.selected && PointClouds.find(PointClouds.selected)) { $('#right-title').textContent = T('panel.title.pointCloud'); PointClouds.renderPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = T('panel.title.measure'); Measure.renderPanel(body); return; }
+    if (!items.length && Measure.selectedPmi && Measure.pmiFind(Measure.selectedPmi)) { $('#right-title').textContent = T('panel.title.pmi'); Measure.renderPmiPanel(body); return; }
     if (!items.length && typeof Joints !== 'undefined' && Joints.selected && (Joints.list.some((x) => x.id === Joints.selected) || (Joints.couplings && Joints.couplings.some((x) => x.id === Joints.selected)))) { $('#right-title').textContent = Joints.isCouplingSelected ? T('panel.title.coupling') : T('panel.title.joint'); Joints.renderPanel(body); return; }
     if (!items.length && typeof Notes !== 'undefined' && Notes.selectedPin && Notes.findPin(Notes.selectedPin)) { $('#right-title').textContent = T('panel.title.commentPin'); Notes.renderPanel(body); return; }
     if (!items.length && typeof Comp !== 'undefined' && Comp.selectedSkeleton && Comp.findSkeleton(Comp.selectedSkeleton)) { $('#right-title').textContent = T('skel.panelTitle'); Comp.renderSkeletonPanel(body); return; }
@@ -1707,7 +1714,11 @@ const Panels = (() => {
     va.append(UI.selectField({ id: 'view-grid', label: T('panel.proj.gridSize'), value: String(pv.grid), options: [['auto', T('panel.proj.gridAuto')], ['0.01', Units.fmtLenFixedU(0.01, 2)], ['0.1', Units.fmtLenFixedU(0.1, 2)], ['1', Units.fmtLenFixedU(1, 2)], ['10', Units.fmtLenFixedU(10, 2)], ['100', Units.fmtLenFixedU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: T('panel.proj.quality'), value: pv.quality, options: [['coarse', T('panel.proj.qCoarse')], ['normal', T('panel.proj.qNormal')], ['fine', T('panel.proj.qFine')], ['ultra', T('panel.proj.qUltra')]], onChange: (val) => ViewPrefs.set({ quality: val }) }));
-    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', T('panel.proj.adaptive')), chk('gridOn', T('panel.proj.gridOn')), chk('planes', T('panel.proj.planes')), chk('axes', T('panel.proj.axes')), chk('notes', T('panel.proj.notes')), chk('ortho', T('panel.proj.ortho'))));
+    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', T('panel.proj.adaptive')), chk('gridOn', T('panel.proj.gridOn')), chk('planes', T('panel.proj.planes')), chk('axes', T('panel.proj.axes')), chk('notes', T('panel.proj.notes')), chk('pmi', T('panel.proj.pmi')), chk('ortho', T('panel.proj.ortho'))));
+    const pmiBtn = h('button', { type: 'button', class: 'btn small pro', id: 'proj-pmi-btn', 'data-help': 'pmi3d', style: { marginTop: '6px' } });
+    pmiBtn.innerHTML = icon('dim') + esc(T('pmi.projStartBtn'));
+    pmiBtn.onclick = () => Measure.pmiToggle();
+    va.append(pmiBtn);
     w.append(va);
     const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, T('panel.proj.snapTitle')));
     const f2 = h('div', { class: 'fields' });
@@ -3887,12 +3898,25 @@ const Panels = (() => {
     bN.removeAttribute('data-kbd');
     const syncNotes = () => { const on = ViewPrefs.get().notes !== false; bN.hidden = !(App.doc.notes || []).length; bN.innerHTML = icon(on ? 'notesShow' : 'notesHide'); bN.classList.toggle('on', on); };
     ViewPrefs.on('change', syncNotes); App.on('doc', syncNotes); syncNotes();
+    // 3D-Maße (PMI) ein/aus – Profi-Modus, nur sichtbar, wenn das Projekt PMI hat
+    const bPmi = tg('pmi', 'dim', 'pmi');
+    bPmi.id = 'vc-pmi';
+    bPmi.classList.add('pro');
+    bPmi.dataset.help = 'pmi3d';
+    const syncPmiBtn = () => {
+      const on = ViewPrefs.get().pmi !== false;
+      const cnt = typeof Measure !== 'undefined' && Measure.pmiList ? Measure.pmiList(App.doc).length : 0;
+      bPmi.hidden = ViewPrefs.simple || !cnt;
+      bPmi.classList.toggle('on', on);
+      bPmi.setAttribute('aria-pressed', String(on));
+    };
+    ViewPrefs.on('change', syncPmiBtn); App.on('doc', syncPmiBtn); syncPmiBtn();
     const bX = h('button', { type: 'button', 'aria-label': T('vc.xrayAria'), 'data-tip': T('vc.xrayTip'), 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray', 'data-vc-key': 'xrayTip', 'data-vc-aria': 'xrayAria' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': T('vc.sectionAria'), 'data-tip': T('vc.sectionTip'), 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section', 'data-vc-key': 'sectionTip', 'data-vc-aria': 'sectionAria' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
     const bF = h('button', { type: 'button', 'aria-label': T('vc.filterAria'), 'data-tip': T('vc.filterTip'), 'data-view': 'filter', 'data-help': 'selectFilter', 'data-vc-key': 'filterTip', 'data-vc-aria': 'filterAria' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
     const bPaint = h('button', { type: 'button', 'aria-label': T('vc.paintAria'), 'data-tip': T('vc.paintTip'), 'data-kbd': 'V', 'data-view': 'paint', 'data-help': 'paintSelect', 'data-vc-key': 'paintTip', 'data-vc-aria': 'paintAria' }); bPaint.innerHTML = icon('noteDraw'); bPaint.onclick = () => Select.togglePaint();
     for (const x of [bX, bC, bF]) x.classList.add('pro');
-    vb.append(bO, bG, bP, bN, bX, bC, bF, bPaint, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb); viewBtnsEl = vb;
+    vb.append(bO, bG, bP, bN, bPmi, bX, bC, bF, bPaint, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb); viewBtnsEl = vb;
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();

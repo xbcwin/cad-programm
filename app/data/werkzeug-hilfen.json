@@ -1993,5 +1993,15 @@
     "tip": "Norm-Schrauben-Zugfeder nach DIN EN 13906-2 mit 1/1 deutschen Ösen",
     "hilfe": "Erzeugt eine eng gewickelte Zugfeder mit beidseitigen 1/1 deutschen Ösen (0° in einer Ebene oder 90° gedreht) und berechnet Gesamtlänge, Abstand zwischen den Ösen L₀ und Federrate R.",
     "tipp": "Mit „Ösen-Stellung 90°“ richtest du die beiden Einhängeösen um eine Vierteldrehung zueinander aus."
+  },
+  "pmi3d": {
+    "tip": "Maße, Toleranzen und Hinweise direkt am 3D-Modell anbringen (PMI, Profi)",
+    "hilfe": "Setzt bleibende Maße (Kanten, Durchmesser, Radien, Abstände, Winkel), Toleranzen (±, Abmaße, Grenzmaße, ISO-Passungen wie H7) und Hinweislinien direkt ans 3D-Modell. Über das Auge am Ansichtswürfel oder im Verlauf blendest du alle 3D-Maße gemeinsam oder einzeln aus, und neue Zeichnungen übernehmen sie automatisch samt Toleranz.",
+    "tipp": "Klicke auf ein 3D-Maßschildchen im Bild, um rechts im Panel jederzeit seine Toleranz oder den Abstand zu ändern."
+  },
+  "drawingFinish": {
+    "tip": "Zeichnung auf Knopfdruck mit Ansichten, Maßstab, Maßen, Mittellinien und Schriftfeld fertig machen",
+    "hilfe": "Schaltet Vorder-, Drauf-, Seiten- und isometrische Ansicht ein, wählt einen passenden Standard-Maßstab ohne Überlauf über den Blattrand, übernimmt die Maße aus dem Modell ohne Überlappen, blendet Mittellinien an allen Bohrungen und Zylindern ein und füllt leere Felder im Schriftfeld automatisch aus.",
+    "tipp": "Du kannst jederzeit einzelne Maße, Ansichten oder Schriftfeld-Angaben nachträglich ändern – und mit Rückgängig stellst du den vorherigen Stand wieder her."
   }
 }
