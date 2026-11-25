@@ -30332,6 +30332,185 @@ def t_a151_kopplungen_zahnrad_zahnstange(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-156] Explosion in Schritten mit Wegen-Linien und Video ----------
+def t_a156_explosion_schritte_video(p):
+    p.empty()
+    ids = p.ev("""
+      App.change('Baugruppe anlegen', d => {
+        d.docType = 'assembly';
+        const b1 = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Boden' });
+        const b2 = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Deckel' });
+        b2.t.z = 10;
+        const b3 = Model.newItem('box', { w: 15, d: 15, h: 15 }, { name: 'Halter' });
+        b3.t.x = 25; b3.t.z = 5;
+        d.items.push(b1, b2, b3);
+      });
+      return App.doc.items.map(i => i.id);
+    """)
+    warte_rechnen(p)
+    t0 = p.ev("return JSON.stringify(App.doc.items.map(i => i.t))")
+
+    # 1. Im Einfach-Modus öffnen und auf „Schritte“ umschalten
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('u')
+    p.wait(650)
+    p.pg.click('#ex-mode-steps')
+    p.wait(150)
+    vis_ok = p.ev("""
+      const ids = ['#ex-step-part', '#ex-step-dir', '#ex-step-dist', '#ex-step-add', '#ex-play', '#ex-trails', '#ex-video'];
+      return ids.every(sel => {
+        const el = document.querySelector(sel);
+        return el && el.offsetParent !== null && !el.closest('.pro');
+      });
+    """)
+    ok1 = bool(vis_ok)
+
+    # 2. Zwei Explosions-Schritte über das UI anlegen
+    p.pg.select_option('#ex-step-part', ids[1])
+    p.pg.select_option('#ex-step-dir', '+Z')
+    p.pg.fill('#ex-step-dist', '40')
+    p.pg.click('#ex-step-add')
+    p.wait(200)
+
+    p.pg.select_option('#ex-step-part', ids[2])
+    p.pg.select_option('#ex-step-dir', '+X')
+    p.pg.fill('#ex-step-dist', '50')
+    p.pg.click('#ex-step-add')
+    p.wait(250)
+
+    step_check = p.ev("""
+      const val = Store.validateProject(App.doc);
+      return {
+        n: (App.doc.explodeSteps || []).length,
+        valid: val.ok,
+        tNow: JSON.stringify(App.doc.items.map(i => i.t)),
+        rows: document.querySelectorAll('#ex-steps-list .ex-step-row').length
+      };
+    """)
+    ok2 = (step_check['n'] == 2 and step_check['valid'] is True
+           and step_check['tNow'] == t0 and step_check['rows'] == 2)
+
+    # 3. Abspielen bewegt die Teile nacheinander
+    p.pg.click('#ex-play')
+    mid = None
+    for _ in range(60):
+        p.wait(40)
+        st = p.ev("""
+          const n1 = Viewer.nodes.get(arg[0]), n2 = Viewer.nodes.get(arg[1]);
+          const o1 = n1 && n1.off ? n1.off.toArray() : [0, 0, 0];
+          const o2 = n2 && n2.off ? n2.off.toArray() : [0, 0, 0];
+          return { amt: Views.explodeAmount, playing: Views.explodePlaying, o1, o2 };
+        """, [ids[1], ids[2]])
+        if 0.03 < st['amt'] < 0.49:
+            mid = st
+            break
+    for _ in range(80):
+        if not p.ev("return Views.explodePlaying"):
+            break
+        p.wait(100)
+    end_st = p.ev("""
+      const n1 = Viewer.nodes.get(arg[0]), n2 = Viewer.nodes.get(arg[1]);
+      const o1 = n1 && n1.off ? n1.off.toArray() : [0, 0, 0];
+      const o2 = n2 && n2.off ? n2.off.toArray() : [0, 0, 0];
+      return { amt: Views.explodeAmount, o1, o2, tNow: JSON.stringify(App.doc.items.map(i => i.t)) };
+    """, [ids[1], ids[2]])
+
+    ok3 = (
+        mid is not None
+        and mid['o1'][2] > 1.0 and abs(mid['o1'][0]) < 0.05
+        and max(abs(x) for x in mid['o2']) < 0.05
+        and abs(end_st['amt'] - 1.0) < 1e-4
+        and abs(end_st['o1'][2] - 40.0) < 0.1
+        and abs(end_st['o2'][0] - 50.0) < 0.1
+        and end_st['tNow'] == t0
+    )
+
+    # 4. Gestrichelte Wegen-Linien sichtbar & umschaltbar
+    trails_on = p.ev("""
+      const grp = Viewer.groups.overlay.children.find(c => c.name === 'explode-trails');
+      const lines = grp ? grp.children.filter(c => c.isLine) : [];
+      return {
+        flag: Views.explodeTrails,
+        cnt: Views.explodeTrailCount,
+        nLines: lines.length,
+        dashed: lines.every(l => l.material && l.material.isLineDashedMaterial === true && !!l.geometry.getAttribute('lineDistance')),
+        lens: lines.map(l => Math.round(l.userData.length || 0)).sort((a, b) => a - b)
+      };
+    """)
+    p.pg.click('#ex-trails')
+    p.wait(150)
+    trails_off = p.ev("return [Views.explodeTrails, Views.explodeTrailCount, !!Viewer.groups.overlay.children.find(c => c.name === 'explode-trails')]")
+    p.pg.click('#ex-trails')
+    p.wait(150)
+    trails_back = p.ev("return [Views.explodeTrails, Views.explodeTrailCount]")
+
+    ok4 = (
+        trails_on['flag'] is True and trails_on['cnt'] == 2 and trails_on['nLines'] == 2
+        and trails_on['dashed'] is True and trails_on['lens'] == [40, 50]
+        and trails_off == [False, 0, False]
+        and trails_back == [True, 2]
+    )
+
+    # 5. Reihenfolge umkehren + Rückgängig
+    p.pg.locator('#ex-steps-list .ex-step-row').nth(1).locator('.ex-step-up').click()
+    p.wait(200)
+    swapped = p.ev("""
+      Views.setExplodeProgress(0.25);
+      const n1 = Viewer.nodes.get(arg[0]), n2 = Viewer.nodes.get(arg[1]);
+      return {
+        o1: n1 && n1.off ? n1.off.toArray() : [0, 0, 0],
+        o2: n2 && n2.off ? n2.off.toArray() : [0, 0, 0],
+        firstPart: App.doc.explodeSteps[0].partIds[0]
+      };
+    """, [ids[1], ids[2]])
+    p.ev("App.undo(); Views.setExplodeProgress(1);")
+    p.wait(150)
+    undone_first = p.ev("return App.doc.explodeSteps[0].partIds[0]")
+    ok5 = (
+        swapped['firstPart'] == ids[2]
+        and swapped['o2'][0] > 10.0 and max(abs(x) for x in swapped['o1']) < 0.05
+        and undone_first == ids[1]
+    )
+
+    # 6. Video-Export liefert eine Datei & Dialog öffnet sich
+    vid = p.ev("return Views.explodeVideo({ seconds: 1.2, save: false }).then(b => b ? { size: b.size, type: b.type } : null)")
+    last_vid = p.ev("return Views.lastExplodeVideo")
+    p.pg.click('#ex-video')
+    p.wait(250)
+    dlg_ok = p.ev("return !!(document.querySelector('#ex-vid-sec') && document.querySelector('#ex-vid-mode') && document.querySelector('#ex-vid-trails') && document.querySelector('#ex-vid-record'))")
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+    ok6 = bool(vid and vid['size'] > 1000 and str(vid['type']).startswith('video/') and last_vid and last_vid['steps'] == 2 and dlg_ok)
+
+    # 7. Zusammensetzen, Profi-Modus, i18n, Befehlssuche & Hilfen
+    p.pg.click('#ex-back')
+    p.wait(700)
+    closed_ok = p.ev("return !Views.exploded && Views.explodeTrailCount === 0 && document.querySelectorAll('.viewbar').length === 0")
+    p.ev("ViewPrefs.setLevel('pro')")
+    meta = p.ev("""return (async () => {
+      const [wh, de, en] = await Promise.all([
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const keys = ['explodeSteps', 'explodeVideo'];
+      const hOk = keys.every(k => {
+        const b = document.createElement('button');
+        b.dataset.help = k;
+        const desc = Explain.describeElement(b);
+        return wh[k] && wh[k].tip && wh[k].hilfe && wh[k].tipp && desc && desc.text === wh[k].hilfe && desc.tip === wh[k].tipp;
+      });
+      const deK = Object.keys(de).sort(), enK = Object.keys(en).sort();
+      const i18nOk = deK.length === enK.length && deK.every((k, i) => k === enK[i]);
+      const c1 = Commands.search('explosion schritte').some(c => c.id === 'explode-steps');
+      const c2 = Commands.search('explosions-video').some(c => c.id === 'explode-video');
+      return { hOk, i18nOk, cmds: c1 && c2 };
+    })()""")
+    ok7 = bool(closed_ok and meta['hOk'] and meta['i18nOk'] and meta['cmds'] and len(p.errs) == 0)
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -30597,6 +30776,7 @@ TESTS = [
     ('[A-152] Kopplungen: Schraube (2 mm/U), Riemen (20/40 Zähne) & linear (BG-14)', t_a152_kopplungen_schraube_riemen_linear),
     ('[A-153] Kurvenscheibe / Nocken: Exzentrische Scheibe (5 mm → 10 mm Hub) & Weg-Kurve-Diagramm (BG-15)', t_a153_kurvenscheibe_nocken),
     ('[A-151] Kopplungen: Zahnrad 1:2 (90° → 45°) & Zahnstange (π·d·Winkel/360) (BG-14)', t_a151_kopplungen_zahnrad_zahnstange),
+    ('[A-156] Explosion in Schritten: Schritte / nacheinander abspielen / Wegen-Linien / Video-Export / Einfach & Profi', t_a156_explosion_schritte_video),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

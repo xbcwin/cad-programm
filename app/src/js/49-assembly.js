@@ -504,6 +504,204 @@ const Assembly = (() => {
     App.on('dirty', renderBanner);
   }
 
+  // ================= Explosions-Schritte (BG-19) =================
+  const EXPLODE_DIRS = {
+    '+X': [1, 0, 0],
+    '-X': [-1, 0, 0],
+    '+Y': [0, 1, 0],
+    '-Y': [0, -1, 0],
+    '+Z': [0, 0, 1],
+    '-Z': [0, 0, -1],
+  };
+
+  function normalizeExplodeDir(dir) {
+    if (typeof dir === 'string') {
+      const k = dir.trim().toUpperCase();
+      if (EXPLODE_DIRS[k]) return EXPLODE_DIRS[k].slice();
+      if (k === 'X') return [1, 0, 0];
+      if (k === 'Y') return [0, 1, 0];
+      if (k === 'Z') return [0, 0, 1];
+    }
+    let x = 0, y = 0, z = 0;
+    if (Array.isArray(dir)) {
+      x = Number(dir[0]) || 0;
+      y = Number(dir[1]) || 0;
+      z = Number(dir[2]) || 0;
+    } else if (dir && typeof dir === 'object') {
+      x = Number(dir.x) || 0;
+      y = Number(dir.y) || 0;
+      z = Number(dir.z) || 0;
+    }
+    const len = Math.hypot(x, y, z);
+    if (len < 1e-6) return [0, 0, 1];
+    return [x / len, y / len, z / len];
+  }
+
+  function dirKeyOf(dir) {
+    const v = normalizeExplodeDir(dir);
+    for (const [k, d] of Object.entries(EXPLODE_DIRS)) {
+      if (v[0] * d[0] + v[1] * d[1] + v[2] * d[2] > 0.999) return k;
+    }
+    return 'custom';
+  }
+
+  function dirLabelOf(dir) {
+    const k = dirKeyOf(dir);
+    if (k !== 'custom') return k;
+    const v = normalizeExplodeDir(dir);
+    const f = (n) => (Math.round(n * 100) / 100).toString().replace('.', ',');
+    return `(${f(v[0])}, ${f(v[1])}, ${f(v[2])})`;
+  }
+
+  function explodeSteps(doc = App.doc) {
+    return Array.isArray(doc && doc.explodeSteps) ? doc.explodeSteps : [];
+  }
+
+  function explodeParts(doc = App.doc) {
+    if (!doc) return [];
+    const out = [];
+    for (const it of Model.activeItems(doc)) {
+      if (!it || it.hidden || it.role === 'hole' || isStepMod(it)) continue;
+      if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id)) continue;
+      out.push({ id: it.id, name: Model.label(it) });
+    }
+    return out;
+  }
+
+  function addExplodeStep(opts = {}) {
+    const parts = explodeParts(App.doc);
+    const validIds = new Set(parts.map((p) => p.id));
+    let partIds = [];
+    if (Array.isArray(opts.partIds)) {
+      partIds = opts.partIds.filter((id) => typeof id === 'string' && validIds.has(id));
+    } else if (typeof opts.partId === 'string' && validIds.has(opts.partId)) {
+      partIds = [opts.partId];
+    } else if (Array.isArray(App.sel) && App.sel.length) {
+      for (const sid of App.sel) {
+        const top = Model.topOf(App.doc, sid);
+        if (top && validIds.has(top.id) && !partIds.includes(top.id)) partIds.push(top.id);
+      }
+    }
+    if (!partIds.length && parts.length) {
+      const used = new Set();
+      for (const s of explodeSteps(App.doc)) {
+        for (const id of (s.partIds || [])) used.add(id);
+      }
+      const next = parts.find((p) => !used.has(p.id)) || parts[0];
+      if (next) partIds = [next.id];
+    }
+    if (!partIds.length) {
+      UI.toast('Bitte zuerst ein Teil wählen.', { icon: 'info' });
+      return null;
+    }
+    const dir = normalizeExplodeDir(opts.dir || '+Z');
+    const rawDist = opts.dist != null ? Number(opts.dist) : 30;
+    const dist = Math.max(0, Number.isFinite(rawDist) ? rawDist : 30);
+    const id = uid('ex');
+    const step = { id, name: typeof opts.name === 'string' ? opts.name : '', partIds: [...new Set(partIds)], dir, dist };
+    App.change('Explosions-Schritt hinzugefügt', (doc) => {
+      if (!Array.isArray(doc.explodeSteps)) doc.explodeSteps = [];
+      doc.explodeSteps.push(deepClone(step));
+    });
+    return explodeSteps(App.doc).find((s) => s.id === id) || step;
+  }
+
+  function updateExplodeStep(stepId, patch = {}) {
+    if (!stepId) return false;
+    let changed = false;
+    App.change('Explosions-Schritt geändert', (doc) => {
+      const steps = Array.isArray(doc.explodeSteps) ? doc.explodeSteps : [];
+      const s = steps.find((x) => x && x.id === stepId);
+      if (!s) return false;
+      if (typeof patch.name === 'string') { s.name = patch.name; changed = true; }
+      if (Array.isArray(patch.partIds)) {
+        const nextIds = [...new Set(patch.partIds.filter((id) => typeof id === 'string' && id))];
+        if (nextIds.length) { s.partIds = nextIds; changed = true; }
+      } else if (typeof patch.partId === 'string' && patch.partId) {
+        s.partIds = [patch.partId];
+        changed = true;
+      }
+      if (patch.dir !== undefined) { s.dir = normalizeExplodeDir(patch.dir); changed = true; }
+      if (patch.dist !== undefined) {
+        const d = Number(patch.dist);
+        if (Number.isFinite(d)) { s.dist = Math.max(0, d); changed = true; }
+      }
+      return changed;
+    });
+    return changed;
+  }
+
+  function removeExplodeStep(stepId) {
+    if (!stepId) return false;
+    let removed = false;
+    App.change('Explosions-Schritt gelöscht', (doc) => {
+      if (!Array.isArray(doc.explodeSteps)) return false;
+      const idx = doc.explodeSteps.findIndex((x) => x && x.id === stepId);
+      if (idx < 0) return false;
+      doc.explodeSteps.splice(idx, 1);
+      removed = true;
+    });
+    return removed;
+  }
+
+  function moveExplodeStep(stepId, delta) {
+    if (!stepId || !delta) return false;
+    let moved = false;
+    App.change('Explosions-Reihenfolge geändert', (doc) => {
+      if (!Array.isArray(doc.explodeSteps)) return false;
+      const idx = doc.explodeSteps.findIndex((x) => x && x.id === stepId);
+      const next = idx + (delta < 0 ? -1 : 1);
+      if (idx < 0 || next < 0 || next >= doc.explodeSteps.length) return false;
+      const [item] = doc.explodeSteps.splice(idx, 1);
+      doc.explodeSteps.splice(next, 0, item);
+      moved = true;
+    });
+    return moved;
+  }
+
+  function clearExplodeSteps() {
+    if (!explodeSteps(App.doc).length) return false;
+    App.change('Explosions-Schritte gelöscht', (doc) => {
+      doc.explodeSteps = [];
+    });
+    return true;
+  }
+
+  function evalExplodeSteps(progress, doc = App.doc) {
+    const f = clamp(Number(progress) || 0, 0, 1);
+    const steps = explodeSteps(doc);
+    const n = steps.length;
+    const offsets = new Map();
+    const paths = new Map();
+    const stepProgress = [];
+    if (!n) return { offsets, paths, stepProgress, activeStep: -1 };
+    let activeStep = -1;
+    for (let k = 0; k < n; k++) {
+      const step = steps[k] || {};
+      const u = clamp(f * n - k, 0, 1);
+      stepProgress.push(u);
+      if (activeStep < 0 && u > 1e-4 && u < 1 - 1e-4) activeStep = k;
+      if (u <= 1e-4) continue;
+      const dir = normalizeExplodeDir(step.dir);
+      const dist = Math.max(0, Number(step.dist) || 0);
+      const pids = Array.isArray(step.partIds) ? step.partIds : [];
+      for (const pid of pids) {
+        if (!pid) continue;
+        const prev = offsets.get(pid) || [0, 0, 0];
+        const next = [prev[0] + dir[0] * dist * u, prev[1] + dir[1] * dist * u, prev[2] + dir[2] * dist * u];
+        offsets.set(pid, next);
+        let arr = paths.get(pid);
+        if (!arr) { arr = [[0, 0, 0]]; paths.set(pid, arr); }
+        const last = arr[arr.length - 1];
+        if (Math.hypot(next[0] - last[0], next[1] - last[1], next[2] - last[2]) > 1e-4) {
+          arr.push(next);
+        }
+      }
+    }
+    if (activeStep < 0 && f >= 1 - 1e-4) activeStep = n - 1;
+    return { offsets, paths, stepProgress, activeStep };
+  }
+
   return {
     init,
     isAssembly,
@@ -520,5 +718,17 @@ const Assembly = (() => {
     unlinkPart,
     assembliesReferencing,
     renderBanner,
+    EXPLODE_DIRS,
+    normalizeExplodeDir,
+    dirKeyOf,
+    dirLabelOf,
+    explodeSteps,
+    explodeParts,
+    addExplodeStep,
+    updateExplodeStep,
+    removeExplodeStep,
+    moveExplodeStep,
+    clearExplodeSteps,
+    evalExplodeSteps,
   };
 })();

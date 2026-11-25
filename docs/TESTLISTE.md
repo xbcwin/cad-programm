@@ -2680,6 +2680,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abspielen, Rückgängig, Validierung, Profi-Sichtbarkeit & Hilfen**: `#cp-play` animiert Ritzel und Zahnstange live ohne `App.revision` zu ändern; `Store.validateProject`, `Strg+Z`, Lösen (`#cp-del`), Ausblenden im Einfach-Modus, DE/EN-Schlüsselgleichheit, Befehlssuche (`couple-gear`, `couple-rack`) und Hilfetexte (`coupleGear`, `coupleRack`) laufen ohne JS-Fehler (`t_a151_kopplungen_zahnrad_zahnstange`).
 - [ ] **Von Hand**: Im Browser im Profi-Modus das Beispiel „Zahnrad-Paar“ mit zwei Drehgelenken sowie ein Ritzel mit Zahnstange per „Verbindung“ → „Kopplung“ verbinden, direkt im 3D-Bild ziehen und das gleichzeitige Mitdrehen bzw. Verschieben prüfen.
 
+## Explosion in Schritten mit Wegen-Linien und Video (Auto [A-156], BG-19)
+
+- [x] **Schritte anlegen, Reihenfolge & Rückgängig (Einfach & Profi)**: Im Einfach- und Profi-Modus lassen sich im Modus „Schritte“ mehrere Explosions-Schritte (`#ex-step-part`, `#ex-step-dir`, `#ex-step-dist`, `#ex-step-add`, `doc.explodeSteps`) mit eigener Richtung und Weite anlegen, per ↑/↓ umsortieren, per `Strg+Z` rückgängig machen und mit `Store.validateProject` prüfen, ohne die echte Lage (`t`) der Teile zu verändern (`t_a156_explosion_schritte_video`).
+- [x] **Nacheinander abspielen & gestrichelte Wegen-Linien**: `#ex-play` (`Views.playExplode`) bewegt die Teile strikt nacheinander gemäß der Schritt-Reihenfolge; im 3D-Bild erscheinen gestrichelte Wegen-Linien (`THREE.LineDashedMaterial` mit `lineDistance` in `Viewer.groups.overlay`), die sich über `#ex-trails` ein- und ausblenden lassen (`t_a156_explosion_schritte_video`).
+- [x] **Video-Export, Zusammensetzen, i18n & Hilfen**: `Views.explodeVideo` liefert lokal eine abspielbare Video-Datei (`video/*`, > 1 KB), `#ex-video` öffnet den Video-Dialog, `#ex-back` setzt alles zusammen, und alle DE/EN-Texte, Befehlssuche-Einträge (`explode-steps`, `explode-video`) und Hilfetexte (`explodeSteps`, `explodeVideo`) sind vollständig (`t_a156_explosion_schritte_video`).
+- [ ] **Von Hand**: Im Browser eine mehrteilige Baugruppe (z. B. das Beispiel „Baugruppe Scharnier“) öffnen, 3 Explosions-Schritte in verschiedenen Richtungen anlegen, auf „Abspielen“ und „Video“ klicken und die gespeicherte `.webm`-Datei lokal im Browser oder VLC abspielen.
+
 ## Fehler melden
 
 ```

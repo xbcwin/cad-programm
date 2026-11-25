@@ -1758,5 +1758,15 @@
     "tip": "Zahnstangen-Kopplung: Drehen eines Ritzels schiebt die Zahnstange um π · d · Winkel / 360 (Profi)",
     "hilfe": "Verbindet ein Drehgelenk (Ritzel) mit einem Schiebegelenk (Zahnstange). Aus dem Teilkreis-Durchmesser d (oder aus Modul × Zähnezahl) schiebt jede Drehung die Zahnstange genau um den abgerollten Umfang π · d · Winkel / 360 weiter.",
     "tipp": "Auch Ziehen an der Zahnstange dreht das Ritzel sofort im passenden Winkel zurück."
+  },
+  "explodeSteps": {
+    "tip": "Explosion in Schritten: jedes Teil bewegt sich nacheinander in seiner eigenen Richtung und Weite, mit gestrichelten Wegen-Linien",
+    "hilfe": "Unter „Explosion“ kannst du auf „Schritte“ umschalten und festlegen, welches Teil sich wann, in welche Richtung und wie weit bewegt. Beim Abspielen fahren die Teile genau in deiner Reihenfolge auseinander; gestrichelte Linien zeigen den Weg zum Ursprung.",
+    "tipp": "Mit den Pfeilen ↑/↓ änderst du die Reihenfolge, und ein Klick auf einen Schritt öffnet ihn zum Bearbeiten."
+  },
+  "explodeVideo": {
+    "tip": "Explosions-Video speichern: nimmt die schrittweise Explosion lokal als WebM- oder MP4-Video auf",
+    "hilfe": "Spielt deine Explosion einmal vor der Kamera ab und speichert sie direkt im Browser als Video-Datei – wahlweise nur auseinander oder hin und zurück, mit oder ohne gestrichelte Wegen-Linien.",
+    "tipp": "Drehe dir die Baugruppe vorher in eine schöne Schrägansicht – das Video filmt genau aus diesem Blickwinkel."
   }
 }
