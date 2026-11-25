@@ -700,6 +700,9 @@ const IC = {
   patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
   conic: '<path d="M4 17l8-11 8 11" stroke-dasharray="2.2 2" opacity=".5"/><path d="M4 17Q12 6 20 17" /><circle cx="12" cy="11.5" r="1.7" fill="currentColor"/><circle cx="4" cy="17" r="1.4" fill="currentColor"/><circle cx="20" cy="17" r="1.4" fill="currentColor"/>',
   bridge: '<path d="M3 16h3.5M17.5 8H21" opacity=".55"/><path d="M6.5 16C11 16 13 8 17.5 8" /><circle cx="6.5" cy="16" r="1.6" fill="currentColor"/><circle cx="17.5" cy="8" r="1.6" fill="currentColor"/>',
+  vent: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6.5 8h11M6.5 12h11M6.5 16h11" stroke-width="2.1"/>',
+  fins: '<path d="M3 19h18"/><path d="M5 19V7M9.5 19V7M14.5 19V7M19 19V7" stroke-width="2"/><path d="M5 7v12M9.5 7v12M14.5 7v12M19 7v12" opacity=".3"/>',
+  web: '<rect x="3" y="3" width="18" height="18" rx="1.5" opacity=".45"/><path d="M3 12h18M12 3v18M6 6l12 12M18 6L6 18" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2191,6 +2194,21 @@ const HELP = {
   "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
   "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
   "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
+ },
+ "vent": {
+  "tip": "Lüftungsgitter: Schlitze mit Rahmen und Winkel in eine Fläche schneiden",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Lüftungsgitter“. Tracery schneidet parallele Schlitze mit umlaufendem Rahmen in die Wand. Anzahl, Schlitzbreite, Rahmen, Winkel, Tiefe (0 = genau durch die Wand) und runde oder eckige Enden stellst du rechts jederzeit um.",
+  "tipp": "Bei einem Gehäuse mit Deckel und Boden durchstößt Tiefe 0 automatisch nur die angeklickte Wand und lässt die Rückwand heil."
+ },
+ "fins": {
+  "tip": "Kühlrippen: parallele Rippen auf eine ebene Fläche setzen",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kühlrippen“. Tracery setzt gleichmäßig verteilte Rippen innerhalb des Randabstands auf die Fläche und verschmilzt sie direkt mit dem Körper. Anzahl, Dicke, Höhe, Randabstand, Winkel und Schräge bleiben im Verlauf änderbar.",
+  "tipp": "Mit einer kleinen Schräge von 1° bis 3° lassen sich die Kühlrippen auch aus einer Gussform oder Spritzgussform sauber entformen."
+ },
+ "web": {
+  "tip": "Steg-Netz: viele Rippen aus einer offenen Skizze (auch Kreuzungen und Gitter)",
+  "hilfe": "Zeichne eine offene Skizze mit mehreren Linien, Bögen, Kreuzungen oder T-Stößen über einem ausgehöhlten Körper oder einer Schale. Das Steg-Netz extrudiert alle Pfade gemeinsam mit Dicke und Höhe und verlängert freie Enden automatisch bis an die Wände.",
+  "tipp": "Mit Tiefe 0 wachsen die Stege genau bis zum Schalenboden; eine feste Tiefe lässt das Netz frei auf gewünschter Höhe enden."
  }
 };
 

@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -1335,7 +1335,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -1673,6 +1673,246 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
   }
+  // ---------- Lüftungsgitter & Kühlrippen (KP-26) und Steg-Netz (KP-27) ----------
+  function pickPlanarBodyFace(hintHtml, onPick) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const tgt = hit ? resolveTopTarget(hit.id) : null;
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      if (tgt && tgt.role !== 'hole' && fi && fi.t === 'PLANE' && Array.isArray(fi.c)) {
+        stopPick();
+        onPick({ id: tgt.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null }, tgt);
+        return;
+      }
+      UI.toast('Bitte klick auf eine ebene Fläche eines Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? hit.id : null, fi && fi.t === 'PLANE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(hintHtml);
+  }
+  function pickPlanarStepFace(stepId, changeLabel, toastMsg) {
+    pickPlanarBodyFace('<b>Ebene Fläche wählen:</b> Klick auf eine ebene Fläche des Körpers. <b>Esc</b> bricht ab.', (face, tgt) => {
+      const sig = faceSigOf(face);
+      if (!sig) return;
+      App.change(changeLabel, (doc) => {
+        const f = Model.find(doc, stepId); if (!f) return false;
+        f.item.p.target = tgt.id;
+        f.item.p.face = sig;
+      });
+      UI.toast(toastMsg, { icon: 'check' });
+    });
+  }
+  function vent(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Lüftungsgitter gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig || (face.info && face.info.t !== 'PLANE')) {
+      startVent(opts);
+      return null;
+    }
+    const p = {
+      target: tgt.id,
+      face: sig,
+      count: opts.count ?? 6,
+      slotW: opts.slotW ?? 3,
+      frame: opts.frame ?? 4,
+      angle: opts.angle ?? 0,
+      depth: opts.depth ?? 0,
+      roundEnds: opts.roundEnds !== false,
+    };
+    let step;
+    App.change('Lüftungsgitter angelegt', (doc) => {
+      step = Model.newItem('vent', p, { name: opts.name || T('kind.vent'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.ventAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startVent(opts = {}) {
+    if (App.ctx) { UI.toast('Lüftungsgitter gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für ein Lüftungsgitter braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') { vent(f, opts); return true; }
+    pickPlanarBodyFace('<b>Lüftungsgitter:</b> Klick auf eine ebene Fläche für die Schlitze. <b>Esc</b> bricht ab.', (picked) => { vent(picked, opts); });
+    return true;
+  }
+  function pickVentFace(stepId) {
+    pickPlanarStepFace(stepId, 'Fläche für Lüftungsgitter gewählt', 'Fläche aktualisiert.');
+  }
+  function renderVent(it, sec, setP) {
+    const p = it.p || {};
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.numField({ id: 'vent-count', label: T('panel.vent.count'), value: p.count ?? 6, unit: '', int: true, min: 1, max: 60, onCommit: (v) => setP('count', v) }));
+    fl.append(UI.numField({ id: 'vent-slotW', label: T('panel.vent.slotW'), value: p.slotW ?? 3, min: 0.2, unit: 'mm', onCommit: (v) => setP('slotW', v) }));
+    fl.append(UI.numField({ id: 'vent-frame', label: T('panel.vent.frame'), value: p.frame ?? 4, min: 0, unit: 'mm', onCommit: (v) => setP('frame', v) }));
+    fl.append(UI.numField({ id: 'vent-angle', label: T('panel.vent.angle'), value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }));
+    fl.append(UI.numField({ id: 'vent-depth', label: T('panel.vent.depth'), value: p.depth ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('depth', v) }));
+    sec.append(fl);
+    const rndL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'vent-round', checked: p.roundEnds !== false }), T('panel.vent.roundEnds'));
+    rndL.querySelector('input').onchange = (e) => App.change('Schlitzenden geändert', (doc) => { Model.find(doc, it.id).item.p.roundEnds = e.target.checked; });
+    sec.append(rndL);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'vent-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickVentFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'vent-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.vent.hint') }));
+  }
+  function fins(face = null, opts = {}) {
+    if (App.ctx) { UI.toast('Kühlrippen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig || (face.info && face.info.t !== 'PLANE')) {
+      startFins(opts);
+      return null;
+    }
+    const p = {
+      target: tgt.id,
+      face: sig,
+      count: opts.count ?? 6,
+      finW: opts.finW ?? 1.5,
+      height: opts.height ?? 10,
+      margin: opts.margin ?? 2,
+      angle: opts.angle ?? 0,
+      draft: opts.draft ?? 0,
+    };
+    let step;
+    App.change('Kühlrippen angelegt', (doc) => {
+      step = Model.newItem('fins', p, { name: opts.name || T('kind.fins'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.finsAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function startFins(opts = {}) {
+    if (App.ctx) { UI.toast('Kühlrippen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für Kühlrippen braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') { fins(f, opts); return true; }
+    pickPlanarBodyFace('<b>Kühlrippen:</b> Klick auf eine ebene Fläche, auf der die Rippen stehen sollen. <b>Esc</b> bricht ab.', (picked) => { fins(picked, opts); });
+    return true;
+  }
+  function pickFinsFace(stepId) {
+    pickPlanarStepFace(stepId, 'Fläche für Kühlrippen gewählt', 'Fläche aktualisiert.');
+  }
+  function renderFins(it, sec, setP) {
+    const p = it.p || {};
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.numField({ id: 'fins-count', label: T('panel.fins.count'), value: p.count ?? 6, unit: '', int: true, min: 1, max: 80, onCommit: (v) => setP('count', v) }));
+    fl.append(UI.numField({ id: 'fins-finW', label: T('panel.fins.finW'), value: p.finW ?? 1.5, min: 0.2, unit: 'mm', onCommit: (v) => setP('finW', v) }));
+    fl.append(UI.numField({ id: 'fins-height', label: T('panel.fins.height'), value: p.height ?? 10, min: 0.1, unit: 'mm', onCommit: (v) => setP('height', v) }));
+    fl.append(UI.numField({ id: 'fins-margin', label: T('panel.fins.margin'), value: p.margin ?? 2, min: 0, unit: 'mm', onCommit: (v) => setP('margin', v) }));
+    fl.append(UI.numField({ id: 'fins-angle', label: T('panel.fins.angle'), value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }));
+    fl.append(UI.numField({ id: 'fins-draft', label: T('panel.fins.draft'), value: p.draft ?? 0, unit: '°', min: 0, onCommit: (v) => setP('draft', v) }));
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'fins-pick' }); pb.innerHTML = icon('cursor') + esc(T('panel.ext.pickOtherFace'));
+    pb.onclick = () => pickFinsFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'fins-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.fins.hint') }));
+  }
+  function startWeb(face) {
+    if (App.ctx) { UI.toast('Steg-Netze gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    if (!ribTargets().length) { UI.toast('Für ein Steg-Netz braucht es zuerst einen Körper im Projekt.', { icon: 'info' }); return false; }
+    const f = face && face.info && face.info.t === 'PLANE' ? face : Actions.selectedFace();
+    if (f && f.info && f.info.t === 'PLANE') {
+      Sketch.startOnFace(f, { webMode: true });
+      UI.toast('Zeichne die Linien für das Steg-Netz (auch Kreuzungen oder Gitter) und klick „Fertig“.', { icon: 'info', ms: 4200 });
+    } else {
+      Sketch.chooseAndStart({ webMode: true });
+      UI.toast('Wähl eine Ebene und zeichne die Linien für das Steg-Netz.', { icon: 'info', ms: 4200 });
+    }
+    return true;
+  }
+  function web(opts = {}) {
+    if (App.ctx) { UI.toast('Steg-Netze gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const tgt = opts.target ? resolveTopTarget(opts.target) : (ribTargets().slice(-1)[0] || null);
+    if (!tgt || tgt.role === 'hole' || !opts.sketch) return null;
+    const p = {
+      target: tgt.id,
+      sketch: deepClone(opts.sketch),
+      thickness: opts.thickness ?? 2,
+      depth: opts.depth ?? 0,
+      draft: opts.draft ?? 0,
+      extend: opts.extend !== false,
+      flip: !!opts.flip,
+    };
+    let step;
+    App.change('Steg-Netz angelegt', (doc) => {
+      step = Model.newItem('web', p, { name: opts.name || T('kind.web'), color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.webAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderWeb(it, sec, setP) {
+    const p = it.p || {};
+    const idx = App.doc.items.indexOf(it);
+    const targets = ribTargets(idx >= 0 ? idx : App.doc.items.length);
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    const fl = h('div', { class: 'fields' });
+    if (opts.length) {
+      fl.append(UI.selectField({ id: 'web-target', label: T('ctx.targetBody'), value: p.target || '', options: opts, onChange: (v) => App.change('Zielkörper gewählt', (doc) => { Model.find(doc, it.id).item.p.target = v; }) }));
+    }
+    fl.append(UI.numField({ id: 'web-thickness', label: T('common.thickness'), value: p.thickness ?? 2, min: 0.1, unit: 'mm', onCommit: (v) => setP('thickness', v) }));
+    fl.append(UI.numField({ id: 'web-depth', label: T('panel.web.depth'), value: p.depth ?? 0, min: 0, unit: 'mm', onCommit: (v) => setP('depth', v) }));
+    fl.append(UI.numField({ id: 'web-draft', label: T('sk.step.ribDraft'), value: p.draft ?? 0, unit: '°', min: 0, onCommit: (v) => setP('draft', v) }));
+    sec.append(fl);
+    const extL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'web-extend', checked: p.extend !== false }), T('panel.web.extend'));
+    extL.querySelector('input').onchange = (e) => App.change('Enden verlängern umgeschaltet', (doc) => { Model.find(doc, it.id).item.p.extend = e.target.checked; });
+    const flipL = h('label', { class: 'check', style: { marginTop: '4px' } }, h('input', { type: 'checkbox', id: 'web-flip', checked: !!p.flip }), T('sk.step.ribFlip'));
+    flipL.querySelector('input').onchange = (e) => App.change('Stegrichtung umgekehrt', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(extL, flipL);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'web-edit-sketch' }); eb.innerHTML = icon('edit') + esc(T('panel.item.editSketch'));
+    eb.onclick = () => Sketch.editItem(it.id);
+    row.append(eb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'web-goto' }); gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.web.hint') }));
+  }
   // ---------- Prägen (KP-33) ----------
   function embossPlaneForFace(face, tgt) {
     const info = (face && face.info) || {};
@@ -1826,7 +2066,7 @@ const Features = (() => {
   function canMirrorStep(it, parent) {
     if (!it) return false;
     if (it.op && it.op.target) return true;
-    if (it.kind === 'rib') return true;
+    if (it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web') return true;
     if (it.kind === 'wrap' && (!it.p || it.p.mode !== 'line')) return true;
     if (it.kind === 'emboss') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
@@ -1874,7 +2114,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -2607,5 +2847,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
 })();

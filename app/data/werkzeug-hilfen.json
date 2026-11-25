@@ -1463,5 +1463,20 @@
     "tip": "Hilfslinien vom Lineal-Rand in die Skizze ziehen (Profi)",
     "hilfe": "Ziehe aus dem linken Lineal eine senkrechte X-Hilfslinie oder aus dem oberen Lineal eine waagerechte Y-Hilfslinie in die Skizze. Alle Zeichenwerkzeuge und gezogene Punkte rasten magnetisch auf diesen Linien und ihren Schnittpunkten ein.",
     "tipp": "Im Auswahl-Werkzeug kannst du jede Hilfslinie verschieben – ziehst du sie zurück aufs Lineal, verschwindet sie wieder."
+  },
+  "vent": {
+    "tip": "Lüftungsgitter: Schlitze mit Rahmen und Winkel in eine Fläche schneiden",
+    "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Lüftungsgitter“. Tracery schneidet parallele Schlitze mit umlaufendem Rahmen in die Wand. Anzahl, Schlitzbreite, Rahmen, Winkel, Tiefe (0 = genau durch die Wand) und runde oder eckige Enden stellst du rechts jederzeit um.",
+    "tipp": "Bei einem Gehäuse mit Deckel und Boden durchstößt Tiefe 0 automatisch nur die angeklickte Wand und lässt die Rückwand heil."
+  },
+  "fins": {
+    "tip": "Kühlrippen: parallele Rippen auf eine ebene Fläche setzen",
+    "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Kühlrippen“. Tracery setzt gleichmäßig verteilte Rippen innerhalb des Randabstands auf die Fläche und verschmilzt sie direkt mit dem Körper. Anzahl, Dicke, Höhe, Randabstand, Winkel und Schräge bleiben im Verlauf änderbar.",
+    "tipp": "Mit einer kleinen Schräge von 1° bis 3° lassen sich die Kühlrippen auch aus einer Gussform oder Spritzgussform sauber entformen."
+  },
+  "web": {
+    "tip": "Steg-Netz: viele Rippen aus einer offenen Skizze (auch Kreuzungen und Gitter)",
+    "hilfe": "Zeichne eine offene Skizze mit mehreren Linien, Bögen, Kreuzungen oder T-Stößen über einem ausgehöhlten Körper oder einer Schale. Das Steg-Netz extrudiert alle Pfade gemeinsam mit Dicke und Höhe und verlängert freie Enden automatisch bis an die Wände.",
+    "tipp": "Mit Tiefe 0 wachsen die Stege genau bis zum Schalenboden; eine feste Tiefe lässt das Netz frei auf gewünschter Höhe enden."
   }
 }

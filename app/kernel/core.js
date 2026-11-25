@@ -4147,7 +4147,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -5264,6 +5264,630 @@ export function createKernel(R, oc) {
     return res;
   }
 
+  // ---------- Lüftungsgitter, Kühlrippen (KP-26) und Steg-Netz (KP-27) ----------
+  function planarFaceFrame(face) {
+    const nv = face.normalAt();
+    const N = norm([nv.x, nv.y, nv.z]);
+    const O = vec(face.center);
+    const X = Math.abs(N[2]) > 0.9 ? [1, 0, 0] : norm(cross([0, 0, 1], N));
+    const Y = cross(N, X);
+    return {
+      o: O, x: X, y: Y, n: N,
+      to2D: (p) => { const d = sub(p, O); return [dot(d, X), dot(d, Y)]; },
+      P: (uv) => [O[0] + X[0] * uv[0] + Y[0] * uv[1], O[1] + X[1] * uv[0] + Y[1] * uv[1], O[2] + X[2] * uv[0] + Y[2] * uv[1]],
+    };
+  }
+  function polySignedArea2D(poly) {
+    let a = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return a / 2;
+  }
+  function sampleFaceLoops2D(face, F) {
+    const rawLoops = faceLoops(face);
+    const d2d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const cleanPoly = (pts) => {
+      const out = [];
+      for (const p of pts) if (!out.length || d2d(out[out.length - 1], p) > 1e-5) out.push(p);
+      while (out.length > 1 && d2d(out[0], out[out.length - 1]) < 1e-5) out.pop();
+      return out;
+    };
+    const polys = [];
+    for (const segs of rawLoops) {
+      if (!segs || !segs.length) continue;
+      if (segs.length === 1 && segs[0].t === 'CIRCLE' && segs[0].c && segs[0].r > 1e-6 && len(sub(segs[0].a, segs[0].b)) < 1e-4) {
+        const c2 = F.to2D(segs[0].c), r = segs[0].r, pts = [];
+        for (let i = 0; i < 48; i++) { const t = (i * Math.PI * 2) / 48; pts.push([c2[0] + Math.cos(t) * r, c2[1] + Math.sin(t) * r]); }
+        polys.push(pts);
+        continue;
+      }
+      const chains = segs.map((s) => {
+        if (s.t === 'LINE') return [F.to2D(s.a), F.to2D(s.b)];
+        if (s.t === 'CIRCLE') return arcSample(F.to2D(s.a), F.to2D(s.m), F.to2D(s.b), 24);
+        return s.pts ? s.pts.map(F.to2D) : [F.to2D(s.a), F.to2D(s.b)];
+      }).filter((c) => c.length >= 2);
+      if (!chains.length) continue;
+      const used = new Array(chains.length).fill(false);
+      const pts = chains[0].slice();
+      used[0] = true;
+      for (let step = 1; step < chains.length; step++) {
+        const tail = pts[pts.length - 1];
+        let best = -1, rev = false, bd = Infinity;
+        for (let i = 0; i < chains.length; i++) {
+          if (used[i]) continue;
+          const da = d2d(tail, chains[i][0]), db = d2d(tail, chains[i][chains[i].length - 1]);
+          if (da < bd) { bd = da; best = i; rev = false; }
+          if (db < bd) { bd = db; best = i; rev = true; }
+        }
+        if (best < 0) break;
+        used[best] = true;
+        const addC = rev ? chains[best].slice().reverse() : chains[best];
+        for (let k = bd < 1e-2 ? 1 : 0; k < addC.length; k++) pts.push(addC[k]);
+      }
+      const cp = cleanPoly(pts);
+      if (cp.length >= 3) polys.push(cp);
+    }
+    if (!polys.length) return { outer: [], holes: [] };
+    const outer = polySignedArea2D(polys[0]) < 0 ? polys[0].slice().reverse() : polys[0];
+    const holes = polys.slice(1).map((h) => (polySignedArea2D(h) > 0 ? h.slice().reverse() : h));
+    return { outer, holes };
+  }
+  function rotatePoly2D(poly, cosA, sinA) {
+    return poly.map(([x, y]) => [x * cosA + y * sinA, -x * sinA + y * cosA]);
+  }
+  function scanlineIntervals2D(poly, v) {
+    const xs = [], n = poly.length;
+    for (let i = 0; i < n; i++) {
+      const a = poly[i], b = poly[(i + 1) % n];
+      if ((a[1] <= v && b[1] > v) || (b[1] <= v && a[1] > v)) {
+        const t = (v - a[1]) / (b[1] - a[1]);
+        xs.push(a[0] + t * (b[0] - a[0]));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    const out = [];
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      if (xs[i + 1] - xs[i] > 1e-6) out.push([xs[i], xs[i + 1]]);
+    }
+    return out;
+  }
+  function subtractInterval2D(ivs, cutLo, cutHi) {
+    if (!(cutHi > cutLo + 1e-9)) return ivs;
+    const out = [];
+    for (const [lo, hi] of ivs) {
+      if (cutHi <= lo || cutLo >= hi) { out.push([lo, hi]); continue; }
+      if (cutLo > lo + 1e-7) out.push([lo, cutLo]);
+      if (cutHi < hi - 1e-7) out.push([cutHi, hi]);
+    }
+    return out;
+  }
+  function intersectIntervals2D(a, b) {
+    const out = [];
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+      const lo = Math.max(a[i][0], b[j][0]), hi = Math.min(a[i][1], b[j][1]);
+      if (hi - lo > 1e-6) out.push([lo, hi]);
+      if (a[i][1] < b[j][1]) i++; else j++;
+    }
+    return out;
+  }
+  function capsuleSlice2D(A, B, v, d) {
+    const minY = Math.min(A[1], B[1]) - d, maxY = Math.max(A[1], B[1]) + d;
+    if (v < minY - 1e-9 || v > maxY + 1e-9) return null;
+    let lo = Infinity, hi = -Infinity;
+    for (const Q of [A, B]) {
+      const dy = v - Q[1];
+      if (Math.abs(dy) <= d + 1e-9) {
+        const dx = Math.sqrt(Math.max(0, d * d - dy * dy));
+        lo = Math.min(lo, Q[0] - dx);
+        hi = Math.max(hi, Q[0] + dx);
+      }
+    }
+    const vx = B[0] - A[0], vy = B[1] - A[1], L = Math.hypot(vx, vy);
+    if (L > 1e-9) {
+      const nx = (-vy / L) * d, ny = (vx / L) * d;
+      const quad = [[A[0] + nx, A[1] + ny], [B[0] + nx, B[1] + ny], [B[0] - nx, B[1] - ny], [A[0] - nx, A[1] - ny]];
+      for (let i = 0; i < 4; i++) {
+        const p = quad[i], q = quad[(i + 1) % 4];
+        if ((p[1] <= v && q[1] >= v) || (q[1] <= v && p[1] >= v)) {
+          if (Math.abs(q[1] - p[1]) < 1e-12) {
+            if (Math.abs(p[1] - v) < 1e-9) { lo = Math.min(lo, p[0], q[0]); hi = Math.max(hi, p[0], q[0]); }
+          } else {
+            const x = p[0] + ((v - p[1]) / (q[1] - p[1])) * (q[0] - p[0]);
+            lo = Math.min(lo, x); hi = Math.max(hi, x);
+          }
+        }
+      }
+    }
+    return hi > lo ? [lo, hi] : null;
+  }
+  function safeIntervals2D(outerPoly, holePolys, v, d) {
+    let ivs = scanlineIntervals2D(outerPoly, v);
+    if (!ivs.length) return [];
+    for (const hp of holePolys) {
+      for (const [h0, h1] of scanlineIntervals2D(hp, v)) ivs = subtractInterval2D(ivs, h0, h1);
+      if (!ivs.length) return [];
+    }
+    if (d > 1e-6) {
+      for (const poly of [outerPoly, ...holePolys]) {
+        for (let i = 0; i < poly.length; i++) {
+          const sl = capsuleSlice2D(poly[i], poly[(i + 1) % poly.length], v, d);
+          if (sl) ivs = subtractInterval2D(ivs, sl[0], sl[1]);
+          if (!ivs.length) return [];
+        }
+      }
+    }
+    return ivs.filter(([a, b]) => b - a > 1e-4);
+  }
+  function bandIntervals2D(outerPoly, holePolys, v, halfW, margin, roundEnds) {
+    if (roundEnds) {
+      return safeIntervals2D(outerPoly, holePolys, v, margin + halfW).map(([c0, c1]) => [c0 - halfW, c1 + halfW]);
+    }
+    const a = safeIntervals2D(outerPoly, holePolys, v - halfW, margin);
+    const b = safeIntervals2D(outerPoly, holePolys, v, margin);
+    const c = safeIntervals2D(outerPoly, holePolys, v + halfW, margin);
+    return intersectIntervals2D(intersectIntervals2D(a, b), c);
+  }
+  function slotLoop2D(uA, uB, v, w, roundEnds) {
+    const r = w / 2, lenU = uB - uA;
+    if (roundEnds) {
+      if (lenU <= w + 0.05) {
+        return { circle: { c: [(uA + uB) / 2, v], r: Math.max(0.1, Math.min(r, lenU / 2)) } };
+      }
+      const cA = uA + r, cB = uB - r;
+      return {
+        segs: [
+          { t: 'line', a: [cA, v - r], b: [cB, v - r] },
+          { t: 'arc', a: [cB, v - r], m: [uB, v], b: [cB, v + r] },
+          { t: 'line', a: [cB, v + r], b: [cA, v + r] },
+          { t: 'arc', a: [cA, v + r], m: [uA, v], b: [cA, v - r] },
+        ],
+      };
+    }
+    return {
+      segs: [
+        { t: 'line', a: [uA, v - r], b: [uB, v - r] },
+        { t: 'line', a: [uB, v - r], b: [uB, v + r] },
+        { t: 'line', a: [uB, v + r], b: [uA, v + r] },
+        { t: 'line', a: [uA, v + r], b: [uA, v - r] },
+      ],
+    };
+  }
+  function offsetClosed2D(segs, d) {
+    const pts = [];
+    const pushP = (q) => { if (!pts.length || Math.hypot(pts[pts.length - 1][0] - q[0], pts[pts.length - 1][1] - q[1]) > 1e-7) pts.push([q[0], q[1]]); };
+    for (const s of segs) {
+      if (s.t === 'line') { pushP(s.a); pushP(s.b); }
+      else if (s.t === 'arc') { for (const q of arcSample(s.a, s.m, s.b, 24)) pushP(q); }
+      else if (s.t === 'bez') {
+        for (let i = 0; i <= 16; i++) {
+          const t = i / 16, u = 1 - t;
+          pushP([0, 1].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k]));
+        }
+      }
+    }
+    while (pts.length > 1 && Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) < 1e-7) pts.pop();
+    if (pts.length < 3) return [];
+    const m = pts.length, norms = [];
+    for (let i = 0; i < m; i++) {
+      const a = pts[i], b = pts[(i + 1) % m], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      norms.push([-dy / L, dx / L]);
+    }
+    const V = [];
+    for (let i = 0; i < m; i++) {
+      const nA = norms[(i - 1 + m) % m], nB = norms[i];
+      const bx = nA[0] + nB[0], by = nA[1] + nB[1], den = 1 + nA[0] * nB[0] + nA[1] * nB[1];
+      let off;
+      if (den > 0.1) off = [(bx / den) * d, (by / den) * d];
+      else { const bl = Math.hypot(bx, by); off = bl > 1e-9 ? [(bx / bl) * 3 * d, (by / bl) * 3 * d] : [nA[0] * d, nA[1] * d]; }
+      V.push([pts[i][0] + off[0], pts[i][1] + off[1]]);
+    }
+    const out = [];
+    for (let i = 0; i < m; i++) out.push({ t: 'line', a: V[i], b: V[(i + 1) % m] });
+    return out;
+  }
+  function resolvePlanarFeatureFace(baseShape, faceSpec, topo, itemId) {
+    const fArr = []; try { for (const fx of baseShape.faces) fArr.push(fx); } catch (_) {}
+    const b = bboxOf(baseShape), tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const f = (faceSpec && resolveFaceRef({ ...faceSpec, tol }, fArr, topo, itemId, true)[0]) || matchFace(baseShape, faceSpec);
+    return { f, fArr };
+  }
+  function computeRowPositions(outerRot, holesRot, halfW, margin, count, roundEnds, minLen) {
+    let vMin = Infinity, vMax = -Infinity;
+    for (const q of outerRot) { if (q[1] < vMin) vMin = q[1]; if (q[1] > vMax) vMax = q[1]; }
+    const pad = margin + halfW + (margin < 1e-4 && !roundEnds ? 1e-4 : 0);
+    const vLo = vMin + pad, vHi = vMax - pad;
+    if (vHi < vLo - 1e-4) return null;
+    const hasRow = (v) => bandIntervals2D(outerRot, holesRot, v, halfW, margin, roundEnds).some(([a, b]) => b - a >= minLen);
+    const N = 64;
+    let firstOk = null, lastOk = null;
+    for (let i = 0; i <= N; i++) {
+      const v = vLo + ((vHi - vLo) * i) / N;
+      if (hasRow(v)) { if (firstOk == null) firstOk = i; lastOk = i; }
+    }
+    if (firstOk == null) return { ok: false, reason: 'none' };
+    let vEffMin = vLo + ((vHi - vLo) * firstOk) / N;
+    if (firstOk > 0) {
+      let a = vLo + ((vHi - vLo) * (firstOk - 1)) / N, b = vEffMin;
+      for (let k = 0; k < 7; k++) { const m = (a + b) / 2; if (hasRow(m)) b = m; else a = m; }
+      vEffMin = b;
+    }
+    let vEffMax = vLo + ((vHi - vLo) * lastOk) / N;
+    if (lastOk < N) {
+      let a = vEffMax, b = vLo + ((vHi - vLo) * (lastOk + 1)) / N;
+      for (let k = 0; k < 7; k++) { const m = (a + b) / 2; if (hasRow(m)) a = m; else b = m; }
+      vEffMax = a;
+    }
+    const vs = [];
+    if (count === 1) {
+      vs.push((vEffMin + vEffMax) / 2);
+    } else {
+      const span = vEffMax - vEffMin;
+      const step = span / (count - 1);
+      if (step < halfW * 2 + 0.05) return { ok: false, reason: 'crowded', step };
+      for (let i = 0; i < count; i++) vs.push(vEffMin + step * i);
+    }
+    const rows = [];
+    for (const v of vs) {
+      for (const [uA, uB] of bandIntervals2D(outerRot, holesRot, v, halfW, margin, roundEnds)) {
+        if (uB - uA >= minLen) rows.push({ uA, uB, v });
+      }
+    }
+    if (!rows.length) return { ok: false, reason: 'none' };
+    return { ok: true, rows };
+  }
+  function probeWallDepth(baseShape, Muv, rows, sMax) {
+    const outDir = mul(Muv.n, -1);
+    for (const row of rows.slice(0, 3)) {
+      const uMid = (row.uA + row.uB) / 2;
+      let pf = null, probe = null, inter = null;
+      try {
+        pf = regionFace({ outer: slotLoop2D(uMid - 0.2, uMid + 0.2, row.v, 0.4, false), holes: [] }, Muv);
+        const pfShifted = pf.translate(mul(Muv.n, 0.05));
+        safeDelete(pf); pf = pfShifted;
+        probe = R.basicFaceExtrusion(pf, new R.Vector(mul(outDir, sMax + 1.05)));
+        inter = baseShape.intersect(probe);
+        const segs = [];
+        for (const s of extractSolids(inter)) {
+          let vol = 0; try { vol = R.measureVolume(s); } catch (_) {}
+          if (vol > 1e-5) {
+            const sb = bboxOf(s);
+            let t0 = Infinity, t1 = -Infinity;
+            for (let i = 0; i < 8; i++) {
+              const q = [i & 1 ? sb[3] : sb[0], i & 2 ? sb[4] : sb[1], i & 4 ? sb[5] : sb[2]];
+              const d = dot(sub(q, Muv.o), outDir);
+              if (d < t0) t0 = d; if (d > t1) t1 = d;
+            }
+            segs.push([t0, t1]);
+          }
+          safeDelete(s);
+        }
+        segs.sort((a, b) => a[0] - b[0]);
+        if (segs.length) {
+          const hit0 = segs.find((x) => x[0] <= 0.25 && x[1] > 0.05) || segs[0];
+          const nxt = segs.find((x) => x[0] > hit0[1] + 0.05);
+          if (nxt) return hit0[1] + Math.min(0.5, (nxt[0] - hit0[1]) * 0.45);
+          return hit0[1] + 1.0;
+        }
+      } catch (_) {}
+      finally { safeDelete(pf); safeDelete(probe); safeDelete(inter); }
+    }
+    return sMax + 1.0;
+  }
+  function buildVentOn(baseShape, p, topo = null, tid = null) {
+    const count = Math.max(1, Math.min(60, Math.round(num(p.count, 6))));
+    const slotW = num(p.slotW, 3);
+    if (!(slotW >= 0.2)) throw new Error('Lüftungsgitter: Die Schlitzbreite muss mindestens 0,2 mm sein.');
+    const frame = Math.max(0, num(p.frame, 4));
+    const angle = num(p.angle, 0);
+    const depth = Math.max(0, num(p.depth, 0));
+    const roundEnds = p.roundEnds !== false;
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Lüftungsgitter: Wähle eine ebene Körperfläche.');
+      const F = planarFaceFrame(f);
+      const { outer, holes } = sampleFaceLoops2D(f, F);
+      if (outer.length < 3) throw new Error('Lüftungsgitter: Die gewählte Fläche hat keinen gültigen Umriss.');
+      const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+      const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+      const Muv = {
+        o: F.o, x: U, y: V, n: F.n,
+        P: (uv) => [F.o[0] + U[0] * uv[0] + V[0] * uv[1], F.o[1] + U[1] * uv[0] + V[1] * uv[1], F.o[2] + U[2] * uv[0] + V[2] * uv[1]],
+      };
+      const outerRot = rotatePoly2D(outer, cosA, sinA);
+      const holesRot = holes.map((h) => rotatePoly2D(h, cosA, sinA));
+      const minLen = roundEnds ? Math.max(0.2, slotW * 0.4) : Math.max(0.5, slotW * 0.5);
+      const plan = computeRowPositions(outerRot, holesRot, slotW / 2, frame, count, roundEnds, minLen);
+      if (!plan) throw new Error('Lüftungsgitter: Der Rahmen oder die Schlitzbreite ist für diese Fläche zu groß.');
+      if (!plan.ok) {
+        if (plan.reason === 'crowded') throw new Error('Lüftungsgitter: Zu viele oder zu breite Schlitze für diese Fläche – zwischen den Schlitzen muss ein Steg bleiben.');
+        throw new Error('Lüftungsgitter: Auf dieser Fläche ist innerhalb des Rahmens kein Platz für Schlitze.');
+      }
+
+      const bb = bboxOf(baseShape);
+      let sMax = 0;
+      for (const q of cornersOf(bb)) sMax = Math.max(sMax, dot(sub(q, F.o), mul(F.n, -1)));
+      const Hcut = depth > 1e-4 ? depth : probeWallDepth(baseShape, Muv, plan.rows, Math.max(1, sMax));
+
+      const slotSolids = [];
+      try {
+        for (const r of plan.rows) {
+          let fc = regionFace({ outer: slotLoop2D(r.uA, r.uB, r.v, slotW, roundEnds), holes: [] }, Muv);
+          const fcTop = fc.translate(mul(F.n, 0.05));
+          safeDelete(fc);
+          const sol = R.basicFaceExtrusion(fcTop, new R.Vector(mul(F.n, -(Hcut + 0.05))));
+          safeDelete(fcTop);
+          slotSolids.push(sol);
+        }
+        const tool = slotSolids.length === 1 ? slotSolids[0] : R.makeCompound(slotSolids);
+        return { tool };
+      } catch (err) {
+        for (const s of slotSolids) safeDelete(s);
+        throw err;
+      }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function buildFinsOn(baseShape, p, topo = null, tid = null) {
+    const count = Math.max(1, Math.min(80, Math.round(num(p.count, 6))));
+    const finW = num(p.finW, 1.5);
+    if (!(finW >= 0.2)) throw new Error('Kühlrippen: Die Rippendicke muss mindestens 0,2 mm sein.');
+    const height = num(p.height, 10);
+    if (!(height >= 0.1)) throw new Error('Kühlrippen: Die Höhe muss mindestens 0,1 mm sein.');
+    const margin = Math.max(0, num(p.margin, 2));
+    const angle = num(p.angle, 0);
+    const draft = Math.max(0, num(p.draft, 0));
+    if (draft >= 45) throw new Error('Kühlrippen: Die Schräge muss kleiner als 45° sein.');
+    const tanD = Math.tan((draft * Math.PI) / 180);
+    const topW = finW - 2 * height * tanD;
+    if (draft > 1e-5 && !(topW >= 0.1)) {
+      throw new Error('Kühlrippen: Die Schräge ist für diese Rippendicke und Höhe zu groß.');
+    }
+
+    const { f, fArr } = resolvePlanarFeatureFace(baseShape, p.face, topo, tid);
+    try {
+      if (!f || f.geomType !== 'PLANE') throw new Error('Kühlrippen: Wähle eine ebene Körperfläche.');
+      const F = planarFaceFrame(f);
+      const { outer, holes } = sampleFaceLoops2D(f, F);
+      if (outer.length < 3) throw new Error('Kühlrippen: Die gewählte Fläche hat keinen gültigen Umriss.');
+      const rad = (angle * Math.PI) / 180, cosA = Math.cos(rad), sinA = Math.sin(rad);
+      const U = add(mul(F.x, cosA), mul(F.y, sinA)), V = add(mul(F.x, -sinA), mul(F.y, cosA));
+      const Muv = {
+        o: F.o, x: U, y: V, n: F.n,
+        P: (uv) => [F.o[0] + U[0] * uv[0] + V[0] * uv[1], F.o[1] + U[1] * uv[0] + V[1] * uv[1], F.o[2] + U[2] * uv[0] + V[2] * uv[1]],
+      };
+      const outerRot = rotatePoly2D(outer, cosA, sinA);
+      const holesRot = holes.map((h) => rotatePoly2D(h, cosA, sinA));
+      const plan = computeRowPositions(outerRot, holesRot, finW / 2, margin, count, false, 0.5);
+      if (!plan) throw new Error('Kühlrippen: Der Randabstand oder die Rippendicke ist für diese Fläche zu groß.');
+      if (!plan.ok) {
+        if (plan.reason === 'crowded') throw new Error('Kühlrippen: Zu viele oder zu dicke Rippen für diese Fläche – es bleibt kein Zwischenraum.');
+        throw new Error('Kühlrippen: Auf dieser Fläche ist innerhalb des Randabstands kein Platz für Rippen.');
+      }
+
+      const finSolids = [];
+      try {
+        for (const r of plan.rows) {
+          if (draft <= 1e-5) {
+            let fc = regionFace({ outer: slotLoop2D(r.uA, r.uB, r.v, finW, false), holes: [] }, Muv);
+            const fcBot = fc.translate(mul(F.n, -0.05));
+            safeDelete(fc);
+            const sol = R.basicFaceExtrusion(fcBot, new R.Vector(mul(F.n, height + 0.05)));
+            safeDelete(fcBot);
+            finSolids.push(sol);
+          } else {
+            const deltaU = r.uB - r.uA > 2 * height * tanD + 0.2 ? height * tanD : 0;
+            const w0Base = finW + 2 * 0.05 * tanD;
+            const w0 = loopWire(slotLoop2D(r.uA, r.uB, r.v, w0Base, false), Muv, true).translate(mul(F.n, -0.05));
+            const w1 = loopWire(slotLoop2D(r.uA + deltaU, r.uB - deltaU, r.v, topW, false), Muv, true).translate(mul(F.n, height));
+            try { finSolids.push(R.loft([w0, w1], { ruled: true })); }
+            finally { safeDelete(w0); safeDelete(w1); }
+          }
+        }
+        const tool = finSolids.length === 1 ? finSolids[0] : R.makeCompound(finSolids);
+        return { tool };
+      } catch (err) {
+        for (const s of finSolids) safeDelete(s);
+        throw err;
+      }
+    } finally {
+      for (const fx of fArr) safeDelete(fx);
+    }
+  }
+  function extendWebEndpoints2D(segs, extA, extB) {
+    const cloneS = (s) => (s.t === 'bez' ? { t: 'bez', a: s.a.slice(), c1: s.c1.slice(), c2: s.c2.slice(), b: s.b.slice() } : s.t === 'arc' ? { t: 'arc', a: s.a.slice(), m: s.m.slice(), b: s.b.slice() } : { t: 'line', a: s.a.slice(), b: s.b.slice() });
+    const n2 = (dx, dy) => { const L = Math.hypot(dx, dy); return L > 1e-9 ? [dx / L, dy / L] : null; };
+    const out = segs.map(cloneS);
+    if (!out.length) return out;
+    const s0 = out[0], s1 = out[out.length - 1];
+    let tStart = null, tEnd = null;
+    if (s0.t === 'line') tStart = n2(s0.a[0] - s0.b[0], s0.a[1] - s0.b[1]);
+    else if (s0.t === 'bez') tStart = n2(s0.a[0] - s0.c1[0], s0.a[1] - s0.c1[1]) || n2(s0.a[0] - s0.b[0], s0.a[1] - s0.b[1]);
+    else if (s0.t === 'arc') {
+      const ai = arcInfo2D(s0.a, s0.m, s0.b);
+      if (ai) { const rx = s0.a[0] - ai.c[0], ry = s0.a[1] - ai.c[1]; tStart = ai.sweep > 0 ? n2(ry, -rx) : n2(-ry, rx); }
+      else tStart = n2(s0.a[0] - s0.b[0], s0.a[1] - s0.b[1]);
+    }
+    if (s1.t === 'line') tEnd = n2(s1.b[0] - s1.a[0], s1.b[1] - s1.a[1]);
+    else if (s1.t === 'bez') tEnd = n2(s1.b[0] - s1.c2[0], s1.b[1] - s1.c2[1]) || n2(s1.b[0] - s1.a[0], s1.b[1] - s1.a[1]);
+    else if (s1.t === 'arc') {
+      const ai = arcInfo2D(s1.a, s1.m, s1.b);
+      if (ai) { const rx = s1.b[0] - ai.c[0], ry = s1.b[1] - ai.c[1]; tEnd = ai.sweep > 0 ? n2(-ry, rx) : n2(ry, -rx); }
+      else tEnd = n2(s1.b[0] - s1.a[0], s1.b[1] - s1.a[1]);
+    }
+    if (tStart && extA > 1e-6) {
+      const aExt = [s0.a[0] + tStart[0] * extA, s0.a[1] + tStart[1] * extA];
+      if (s0.t === 'line') s0.a = aExt; else out.unshift({ t: 'line', a: aExt, b: s0.a.slice() });
+    }
+    if (tEnd && extB > 1e-6) {
+      const bExt = [s1.b[0] + tEnd[0] * extB, s1.b[1] + tEnd[1] * extB];
+      if (s1.t === 'line') s1.b = bExt; else out.push({ t: 'line', a: s1.b.slice(), b: bExt });
+    }
+    return out;
+  }
+  function buildWebOn(baseShape, rel, p) {
+    const paths = p.paths || [];
+    if (!paths.length) throw new Error('Steg-Netz: Die Skizze enthält keine Linien oder Kurven.');
+    const thickness = num(p.thickness, 2);
+    if (!(thickness > 1e-4)) throw new Error('Steg-Netz: Die Dicke muss größer als 0 mm sein.');
+    const draft = num(p.draft, 0);
+    if (Math.abs(draft) >= 45) throw new Error('Steg-Netz: Die Schräge muss kleiner als 45° sein.');
+    const depth = Math.max(0, num(p.depth, 0));
+    const flip = !!p.flip;
+    const extend = p.extend !== false;
+
+    const pl = p.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const M = planeMap({
+      o: transformPoint(rel, pl.o || [0, 0, 0]),
+      x: norm(transformDir(rel, pl.x || [1, 0, 0])),
+      n: norm(transformDir(rel, pl.n || [0, 0, 1])),
+    });
+    const bb = bboxOf(baseShape);
+    const diag = Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
+    const extLen = Math.max(50, diag * 2);
+    const cBase = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2];
+    const baseSolidCount = Math.max(1, extractSolids(baseShape).length);
+
+    const projectSpan = (dir3) => {
+      let sMin = Infinity, sMax = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const pt = [i & 1 ? bb[3] : bb[0], i & 2 ? bb[4] : bb[1], i & 4 ? bb[5] : bb[2]];
+        const s = dot(sub(pt, M.o), dir3);
+        if (s < sMin) sMin = s;
+        if (s > sMax) sMax = s;
+      }
+      return [sMin, sMax];
+    };
+
+    const tryWebDirection = (sign) => {
+      const sC = dot(sub(cBase, M.o), M.n);
+      const d0 = sC > 1e-4 ? M.n : mul(M.n, -1);
+      const dirVec = mul(d0, sign);
+      const [sMin, sMax] = projectSpan(dirVec);
+      if (sMax <= 1e-4) return null;
+      const H = depth > 1e-4 ? depth : Math.max(1, sMax + 5);
+      const startOff = sMin < -0.1 ? -0.05 : 0;
+      const Hext = H - startOff;
+      const dL = thickness / 2, dR = -thickness / 2;
+      const rawPieces = [], origWires = [];
+      let rawWeb = null, diff = null, kept = [], outside = [];
+      try {
+        for (const pt of paths) {
+          if (!pt || !pt.segs || !pt.segs.length) continue;
+          if (pt.closed && pt.segs.length === 1 && pt.segs[0].t === 'circle') {
+            const c = pt.segs[0].c, r = pt.segs[0].r;
+            origWires.push(R.assembleWire([R.makeCircle(r, M.P(c), M.n)]));
+            const rOut = r + thickness / 2, rIn = r - thickness / 2;
+            const reg = { outer: { circle: { c, r: rOut } }, holes: rIn > 0.1 ? [{ circle: { c, r: rIn } }] : [] };
+            if (Math.abs(draft) < 1e-6) {
+              let fc = regionFace(reg, M);
+              if (startOff) { const f2 = fc.translate(mul(dirVec, startOff)); safeDelete(fc); fc = f2; }
+              rawPieces.push(R.basicFaceExtrusion(fc, new R.Vector(mul(dirVec, Hext))));
+              safeDelete(fc);
+            } else {
+              const delta = Hext * Math.tan((draft * Math.PI) / 180);
+              if (thickness + 2 * delta <= 0.05) throw new Error('Steg-Netz: Die Schräge ist für diese Dicke und Höhe zu groß.');
+              let fc0 = regionFace(reg, M);
+              const w0o = loopWire(reg.outer, M, true).translate(mul(dirVec, startOff));
+              const w1o = loopWire({ circle: { c, r: rOut + delta } }, M, true).translate(mul(dirVec, H));
+              let solOut;
+              try { solOut = R.loft([w0o, w1o], { ruled: true }); } finally { safeDelete(w0o); safeDelete(w1o); safeDelete(fc0); }
+              if (rIn - delta > 0.1) {
+                const w0i = loopWire({ circle: { c, r: rIn } }, M, true).translate(mul(dirVec, startOff));
+                const w1i = loopWire({ circle: { c, r: rIn - delta } }, M, true).translate(mul(dirVec, H));
+                let solIn;
+                try { solIn = R.loft([w0i, w1i], { ruled: true }); rawPieces.push(solOut.cut(solIn)); } finally { safeDelete(w0i); safeDelete(w1i); safeDelete(solIn); safeDelete(solOut); }
+              } else rawPieces.push(solOut);
+            }
+            continue;
+          }
+          if (pt.closed) {
+            origWires.push(R.assembleWire(segEdges(pt.segs, M)));
+            const lA = offsetClosed2D(pt.segs, dL), lB = offsetClosed2D(pt.segs, dR);
+            if (lA.length < 3) continue;
+            const arA = Math.abs(loopArea({ segs: lA })), arB = lB.length >= 3 ? Math.abs(loopArea({ segs: lB })) : 0;
+            const outerSegs = arA >= arB ? lA : lB, innerSegs = arA >= arB ? lB : lA;
+            const hasHole = innerSegs.length >= 3 && Math.min(arA, arB) > 1e-2;
+            const reg = { outer: { segs: outerSegs }, holes: hasHole ? [{ segs: innerSegs }] : [] };
+            let fc = regionFace(reg, M);
+            if (startOff) { const f2 = fc.translate(mul(dirVec, startOff)); safeDelete(fc); fc = f2; }
+            rawPieces.push(R.basicFaceExtrusion(fc, new R.Vector(mul(dirVec, Hext))));
+            safeDelete(fc);
+            continue;
+          }
+          origWires.push(R.assembleWire(segEdges(pt.segs, M)));
+          const eA = pt.extA ? (extend ? extLen : 0) : thickness * 0.55;
+          const eB = pt.extB ? (extend ? extLen : 0) : thickness * 0.55;
+          const extSegs = extendWebEndpoints2D(pt.segs, eA, eB);
+          if (Math.abs(draft) < 1e-6) {
+            let fc = regionFace({ outer: { segs: stripLoop2D(extSegs, dL, dR) }, holes: [] }, M);
+            if (startOff) { const f2 = fc.translate(mul(dirVec, startOff)); safeDelete(fc); fc = f2; }
+            rawPieces.push(R.basicFaceExtrusion(fc, new R.Vector(mul(dirVec, Hext))));
+            safeDelete(fc);
+          } else {
+            const delta = Hext * Math.tan((draft * Math.PI) / 180);
+            if (thickness + 2 * delta <= 0.05) throw new Error('Steg-Netz: Die Schräge ist für diese Dicke und Höhe zu groß.');
+            const w0 = loopWire({ segs: stripLoop2D(extSegs, dL, dR) }, M, true).translate(mul(dirVec, startOff));
+            const w1 = loopWire({ segs: stripLoop2D(extSegs, dL + delta, dR - delta) }, M, true).translate(mul(dirVec, H));
+            try { rawPieces.push(R.loft([w0, w1], { ruled: true })); }
+            finally { safeDelete(w0); safeDelete(w1); }
+          }
+        }
+        if (!rawPieces.length) return null;
+        rawWeb = rawPieces.length === 1 ? rawPieces[0] : fuseAll(rawPieces, true);
+        rawPieces.length = 0;
+
+        diff = rawWeb.cut(baseShape);
+        for (const s of extractSolids(diff)) {
+          let vol = 0; try { vol = R.measureVolume(s); } catch (_) { vol = 0; }
+          if (!(vol > 1e-4)) { safeDelete(s); continue; }
+          const sb = bboxOf(s);
+          const escaped = sb[0] < bb[0] - 0.5 || sb[3] > bb[3] + 0.5 || sb[1] < bb[1] - 0.5 || sb[4] > bb[4] + 0.5 || sb[2] < bb[2] - 0.5 || sb[5] > bb[5] + 0.5;
+          if (!escaped && origWires.some((w) => minDistShapes(s, w) < 0.25)) kept.push(s);
+          else outside.push(s);
+        }
+        if (!kept.length) return null;
+
+        let outUnion = outside.length ? fuseAll(outside, true) : null;
+        outside = [];
+        let trimmed = null, fused = null;
+        try {
+          trimmed = outUnion ? rawWeb.cut(outUnion) : rawWeb.clone();
+          fused = baseShape.fuse(trimmed);
+          if (extractSolids(fused).length <= baseSolidCount) return fused;
+          safeDelete(fused); fused = null;
+        } catch (_) { safeDelete(fused); fused = null; }
+        finally { safeDelete(outUnion); safeDelete(trimmed); }
+
+        const webPart = kept.length === 1 ? kept[0] : fuseAll(kept, true);
+        kept = [];
+        try {
+          fused = baseShape.fuse(webPart);
+          if (extractSolids(fused).length <= baseSolidCount) return fused;
+          safeDelete(fused);
+        } catch (_) {}
+        finally { safeDelete(webPart); }
+        return null;
+      } finally {
+        for (const p0 of rawPieces) safeDelete(p0);
+        for (const w of origWires) safeDelete(w);
+        for (const s of kept) safeDelete(s);
+        for (const s of outside) safeDelete(s);
+        safeDelete(diff); safeDelete(rawWeb);
+      }
+    };
+
+    const firstSign = flip ? -1 : 1;
+    let res = tryWebDirection(firstSign);
+    if (!res && !flip) res = tryWebDirection(-firstSign);
+    if (!res) throw new Error('Steg-Netz: Die Rippen treffen keine angrenzenden Wände des Zielkörpers. Prüfe die Skizzenebene, die Linienlage oder kehre die Richtung um.');
+    return res;
+  }
+
   // ---------- Wickeln um Zylinder (KP-34) ----------
   function matchCylFace(shape, spec) {
     const cyls = [];
@@ -6071,6 +6695,87 @@ export function createKernel(R, oc) {
         }
         if (anyMirror) {
           const kDelta = keyOf([k, 'ribDelta', prevKey]);
+          let delta = cacheGet(kDelta);
+          if (!delta) {
+            try { delta = next.cut(prevShape); cachePut(kDelta, delta); } catch (_) { delta = null; }
+          }
+          if (delta) featureOps.set(it.id, { targetId: tid, opType: 'join', tools: [{ shape: delta, m: src.m, key: kDelta }] });
+        }
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'vent' || it.kind === 'fins') {
+        const isVent = it.kind === 'vent';
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: `${isVent ? 'Lüftungsgitter' : 'Kühlrippen'}: Der Zielkörper fehlt oder kommt erst später im Verlauf.` });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: `${isVent ? 'Lüftungsgitter' : 'Kühlrippen'}: Es ist keine Fläche gewählt.` });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const k = keyOf([src.key, it.kind, p]);
+        const kTool = keyOf([src.key, it.kind + 'Tool', p]);
+        const ce = cacheEntry(k);
+        let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
+        let tool = anyMirror ? cacheGet(kTool) : null;
+        if (!next || (anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
+          try {
+            const built = isVent ? buildVentOn(src.shape, p, src.topo, src.it.id) : buildFinsOn(src.shape, p, src.topo, src.it.id);
+            tool = built.tool;
+            if (!next) {
+              const toolTopo = ensureTopoComplete(tool, createTopoMap(), it.id);
+              const br = boolWithTopo(isVent ? 'cut' : 'fuse', src.shape, src.topo, src.it.id, tool, toolTopo, it.id, (isVent ? 'Vt:' : 'Fn:') + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(toolTopo);
+              cachePut(k, next, null, null, null, nextTopo);
+            }
+            if (anyMirror) cachePut(kTool, tool);
+            else safeDelete(tool);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (anyMirror && tool) featureOps.set(it.id, { targetId: tid, opType: isVent ? 'cut' : 'join', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
+      }
+      if (it.kind === 'web') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Steg-Netz: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const prevShape = src.shape, prevKey = src.key;
+        const rel = matMul(matInvRigid(src.m), it.m);
+        const k = keyOf([src.key, 'web', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+        const ceW = cacheEntry(k);
+        let next = ceW ? ceW.shape : null, nextTopo = ceW ? ceW.topo : null;
+        if (!next) {
+          if (track) track.rebuilt.add(it.id);
+          try { next = buildWebOn(src.shape, rel, p); nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, null, null, nextTopo); }
+          catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+        }
+        if (anyMirror) {
+          const kDelta = keyOf([k, 'webDelta', prevKey]);
           let delta = cacheGet(kDelta);
           if (!delta) {
             try { delta = next.cut(prevShape); cachePut(kDelta, delta); } catch (_) { delta = null; }

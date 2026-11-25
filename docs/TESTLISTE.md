@@ -2396,6 +2396,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Meldung überlebt Hauptthread-Hänger**: `UI.toast()` (`scheduleToast`) zählt die Restlaufzeit in `500 ms`-Scheiben herunter, sodass ein einzelner `900 ms`-Hänger eine `600 ms`-Meldung nicht vorzeitig löscht und sie danach sauber nach Ablauf der Restzeit verschwindet (`t_explosion_regeln`, `t_f11250121`).
 - [ ] **Von Hand**: Im Browser bei langsamer Darstellung die Fokus-Vorschau öffnen, ein Teil wählen und drehen sowie mit einem einzelnen Teil die Explosions-Meldung auslösen und prüfen, dass Vorschau und Hinweis zuverlässig sichtbar bleiben.
 
+## Lüftungsgitter, Kühlrippen und Steg-Netz (Auto [A-121], KP-26, KP-27)
+- [x] **Lüftungsgitter (`vent`)**: 6 Schlitze (3 mm breit, 4 mm Rahmen, 0°) in einer 60×40×4-Platte erzeugen exakt 6 Durchbrüche (7 Schleifen oben und unten) bei sauberem Restvolumen; Winkel 45° mit 4 eckigen Schlitzen sowie Unterdrücken/Reaktivieren über die Zeitleiste funktionieren fehlerfrei.
+- [x] **Kühlrippen (`fins`)**: 6 Rippen (1,5 mm dick, 10 mm hoch, 2 mm Randabstand) auf einer 50×30×4-Platte verschmelzen zu 1 Körper mit exaktem Volumen (10140 mm³) und lassen Höhe sowie Schräge (2°) sauber nachstellen.
+- [x] **Steg-Netz (`web`)**: Offenes Kreuz und verzweigte 4-Linien-Kreuzung auf einer 40×40×20-Schale (2 mm Wand) verbinden alle vier Wände als 1 Körper bei fester Tiefe (10 mm) und bis zum Schalenboden (Tiefe 0), inkl. Skizzen-Bearbeitung, Zeitleisten-Marker, Bezügen, Erklärungen, Befehlen und Hilfetexten.
+- [ ] **Von Hand**: Auf der Oberseite eines ausgehöhlten Gehäuses mit Deckel und Boden ein Lüftungsgitter (Tiefe 0) schneiden und prüfen, dass die Rückwand geschlossen bleibt, sowie ein gekreuztes Steg-Netz mit Schräge im 3D-Bild optisch kontrollieren.
+
 ## Fehler melden
 
 ```

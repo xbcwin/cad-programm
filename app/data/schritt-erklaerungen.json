@@ -274,5 +274,20 @@
     "was": "Zieht einen runden, rechteckigen oder eigenen Skizzen-Querschnitt entlang eines offenen Pfads – auf Wunsch mit Verdrehung über die Länge und als Schnitt (Nut) in einem Körper.",
     "wozu": "Ideal für Kabelkanäle, Rohre, Bügel, gedrehte Streben sowie Nuten und Rillen entlang gebogener Kurven.",
     "achtung": "Für eine Nut wählst du unter „Körper“ den Modus „Schneiden“ (oder „Abziehen von …“) und lässt die Kurve sauber durch den Zielkörper laufen."
+  },
+  "vent": {
+    "was": "Schneidet parallele Lüftungsschlitze mit umlaufendem Rahmen in eine gewählte ebene Körperfläche.",
+    "wozu": "Ideal für Elektronikgehäuse, Netzteile und Abdeckungen, die Kühlluft durchlassen sollen.",
+    "achtung": "Wenn zu viele oder zu breite Schlitze nicht mehr mit Steg dazwischen auf die Fläche passen, verringere Anzahl, Breite oder Rahmen."
+  },
+  "fins": {
+    "was": "Setzt eine Reihe paralleler Kühlrippen mit Randabstand und wahlweiser Schräge auf eine ebene Körperfläche.",
+    "wozu": "Vergrößert die Oberfläche für passive Kühlung an Gehäusen, Motorhaltern oder Kühlkörpern.",
+    "achtung": "Bei sehr schmalen Rippen mit Schräge darf der Rücken oben nicht spitz zulaufen – reduziere sonst Höhe oder Schräge."
+  },
+  "web": {
+    "was": "Macht aus vielen offenen oder sich kreuzenden Skizzenlinien auf einmal ein verbundenes Netz aus Versteifungs-Rippen.",
+    "wozu": "Ideal für Kreuz-, Waben- oder Gitterrippen in ausgehöhlten Gehäusen, Schalen und Rippenplatten.",
+    "achtung": "Freie Enden wachsen automatisch bis an die nächste Wand. Prüfe bei leeren Ergebnissen die Richtung („Richtung umkehren“)."
   }
 }
