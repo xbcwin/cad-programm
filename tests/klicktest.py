@@ -23955,6 +23955,186 @@ def t_f11250121(p):
     return [ok1, ok2]
 
 
+def t_a120_schraubdom_lippe_nut(p):
+    def vol(item_id):
+        return p.ev("return Mass.measure().then(m => { const pt = m && m.parts && m.parts.find(x => x.id === arg); return pt ? pt.volume : null; });", item_id)
+
+    def wait_idle():
+        for _ in range(30):
+            p.wait(300)
+            if p.ev("return !App.busy"):
+                break
+        p.wait(300)
+
+    # 1. Einfach & Profi: Knöpfe im Körper-Flyout und Kontextleiste sichtbar
+    p.empty()
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(400)
+    p.pg.locator('#t-body').click(); p.wait(300)
+    ok_fly_simple = p.pg.locator('#add-boss').is_visible() and p.pg.locator('#add-lip-groove').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(400)
+    p.pg.locator('#t-body').click(); p.wait(300)
+    ok_fly_pro = p.pg.locator('#add-boss').is_visible() and p.pg.locator('#add-lip-groove').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # 2. Schraubdom (KP-24): Platte 40x40x4 -> Dom d=8/3, Höhe 10, 4 Rippen
+    p.ev("Actions.addPrimitive('box', { p: { w: 40, d: 40, h: 4 } })")
+    warte_rechnen(p)
+    box_id = p.ev("return App.doc.items[0].id")
+    vol0 = vol(box_id)
+    ok_plate = abs(vol0 - 6400.0) < 1.0
+
+    # Oberseite wählen (Einfach-Modus-Check für Kontextleiste + Anlegen)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    p.ev("""
+      const r = App.results.get(arg);
+      const fi = r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      App.select([arg], { face: { id: arg, faceIdx: fi, point: r.data.faces[fi].c, normal: r.data.faces[fi].n } });
+    """, box_id)
+    p.wait(400)
+    ok_ctx_boss_simple = p.pg.locator('#ctx-boss').is_visible()
+    p.pg.locator('#ctx-boss').click()
+    warte_rechnen(p)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+
+    boss_id = p.ev("const b = App.doc.items.find(x => x.kind === 'boss'); return b ? b.id : null")
+    ok_boss_created = bool(boss_id) and p.ev("return App.errors.length === 0")
+    vol4 = vol(box_id)
+    ok_boss_vol = vol4 > 6850.0
+    ok_hole3 = p.ev("""
+      const faces = App.results.get(arg)?.data?.faces || [];
+      return faces.some(f => f.t === 'CYLINDRE' && Math.abs(2 * f.r - 3.0) < 0.05);
+    """, box_id)
+
+    # Rippen über Panel ändern: 4 -> 0 -> 6
+    p.ev("App.select([arg])", boss_id); p.wait(300)
+    p.pg.locator('#boss-ribs').fill('0'); p.pg.locator('#boss-ribs').press('Enter')
+    warte_rechnen(p)
+    vol_r0 = vol(box_id)
+    p.pg.locator('#boss-ribs').fill('6'); p.pg.locator('#boss-ribs').press('Enter')
+    warte_rechnen(p)
+    vol_r6 = vol(box_id)
+    ok_ribs = (vol_r0 > 6400.0) and (vol_r0 < vol4) and (vol_r6 > vol4) and p.ev("return App.errors.length === 0")
+
+    # Unterdrücken & Rückgängig
+    p.ev("Timeline.toggleSuppress(arg)", boss_id)
+    wait_idle()
+    vol_supp = vol(box_id)
+    p.ev("Timeline.toggleSuppress(arg)", boss_id)
+    warte_rechnen(p)
+    p.ev("while (App.doc.items.length > 1 && App.undoStack.length) App.undo();")
+    warte_rechnen(p)
+    vol_undo = vol(box_id)
+    ok_boss_undo = abs(vol_supp - 6400.0) < 1.0 and abs(vol_undo - 6400.0) < 1.0
+
+    # 3. Lippe und Nut (KP-25): Zwei ausgehöhlte Gehäusehälften 60x40x15 mit 0,2 mm Spiel
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("""
+      Kernel.setMultiWorker(true);
+      const b1 = Actions.addPrimitive('box', { name: 'Unterteil', p: { w: 60, d: 40, h: 15 } });
+      const b2 = Actions.addPrimitive('box', { name: 'Oberteil', p: { w: 60, d: 40, h: 15 } });
+      App.change('Oberteil versetzen', (doc) => {
+        const t = Model.find(doc, b2.id).item;
+        t.t.z = 15;
+      });
+    """)
+    warte_rechnen(p)
+    ids = p.ev("""
+      const items = App.doc.items;
+      const b1 = items[0], b2 = items[1];
+      const f1 = App.results.get(b1.id).data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      const f2 = App.results.get(b2.id).data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] < -0.99);
+      const f1d = App.results.get(b1.id).data.faces[f1];
+      const f2d = App.results.get(b2.id).data.faces[f2];
+      Features.shell({ id: b1.id, idx: f1, info: f1d });
+      Features.shell({ id: b2.id, idx: f2, info: f2d });
+      App.change('Wand 3mm', (doc) => {
+        doc.items[0].finishes[0].r = 3;
+        doc.items[1].finishes[0].r = 3;
+      });
+      return [b1.id, b2.id];
+    """)
+    warte_rechnen(p)
+    bot_id, top_id = ids[0], ids[1]
+    v_bot0 = vol(bot_id)
+    v_top0 = vol(top_id)
+
+    # Beide Hälften wählen und über Kontextleiste Lippe & Nut anlegen
+    p.ev("App.select(arg)", [bot_id, top_id]); p.wait(300)
+    ok_ctx_two = p.pg.locator('#ctx-two-lip-groove').is_visible()
+    p.pg.locator('#ctx-two-lip-groove').click()
+    warte_rechnen(p)
+    lg_id = p.ev("const x = App.doc.items.find(i => i.kind === 'lipGroove'); return x ? x.id : null")
+    p.ev("App.select([arg])", lg_id); p.wait(300)
+    p.pg.locator('#lg-height').fill('2.5'); p.pg.locator('#lg-height').press('Enter')
+    warte_rechnen(p)
+    p.pg.locator('#lg-clearance').fill('0.2'); p.pg.locator('#lg-clearance').press('Enter')
+    warte_rechnen(p)
+
+    ok_lg_err = p.ev("return App.errors.length === 0")
+    v_bot1 = vol(bot_id)
+    v_top1 = vol(top_id)
+    bot_max_z = p.ev("return App.results.get(arg).data.bbox[5]", bot_id)
+    clash_inner = p.ev("""
+      return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } });
+    """)
+    ok_lg_inner = (
+        ok_lg_err
+        and v_bot1 > v_bot0 + 10.0
+        and v_top1 < v_top0 - 10.0
+        and abs(bot_max_z - 17.5) < 0.1
+        and len(clash_inner.get('pairs', [])) == 0
+    )
+
+    # Außen-Lippe & Hälften tauschen ohne Durchdringung
+    p.pg.select_option('#lg-side', 'outer')
+    warte_rechnen(p)
+    clash_outer = p.ev("""
+      return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } });
+    """)
+    ok_lg_outer = p.ev("return App.errors.length === 0") and len(clash_outer.get('pairs', [])) == 0
+
+    p.pg.locator('#lg-swap').click()
+    warte_rechnen(p)
+    clash_swap = p.ev("""
+      return Kernel.call('clashes', { scene: Model.kernelScene(App.doc), probes: [], skipPairs: [], opts: { minVol: 0.001 } });
+    """)
+    ok_lg_swap = p.ev("return App.errors.length === 0") and len(clash_swap.get('pairs', [])) == 0
+
+    # Rückgängig stellt Ausgangszustand wieder her
+    p.ev("while (App.doc.items.some(x => x.kind === 'lipGroove') && App.undoStack.length) App.undo();")
+    warte_rechnen(p)
+    v_bot_undo = vol(bot_id)
+    v_top_undo = vol(top_id)
+    ok_lg_undo = abs(v_bot_undo - v_bot0) < 0.5 and abs(v_top_undo - v_top0) < 0.5
+
+    # 4. Hilfetexte, DE/EN-Schlüsselgleichheit & Befehlssuche
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    de_t = p.pg.evaluate("fetch('data/texte-de.json').then(r=>r.json())")
+    en_t = p.pg.evaluate("fetch('data/texte-en.json').then(r=>r.json())")
+    hb, hl = hilfen.get('boss') or {}, hilfen.get('lipGroove') or {}
+    ok_meta = (
+        bool(hb.get('tip') and hb.get('hilfe') and hb.get('tipp'))
+        and bool(hl.get('tip') and hl.get('hilfe') and hl.get('tipp'))
+        and set(de_t.keys()) == set(en_t.keys())
+    )
+    p.pg.locator('#cmd-input').focus(); p.pg.fill('#cmd-input', 'schraubdom'); p.wait(250)
+    ok_cmd1 = 'Schraubdom' in p.pg.locator('.cmd-pop').inner_text()
+    p.pg.fill('#cmd-input', 'lippe'); p.wait(250)
+    ok_cmd2 = 'Lippe und Nut' in p.pg.locator('.cmd-pop').inner_text()
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    return [
+        ok_fly_simple and ok_fly_pro and ok_ctx_boss_simple,
+        ok_plate and ok_boss_created and ok_boss_vol and ok_hole3,
+        ok_ribs,
+        ok_boss_undo,
+        ok_ctx_two and ok_lg_inner and ok_lg_outer and ok_lg_swap and ok_lg_undo,
+        ok_meta and ok_cmd1 and ok_cmd2,
+    ]
+
+
 def t_a121_lueftung_kuehlrippen_stegnetz(p):
     # 1. Lüftungsgitter (KP-26): 6 Schlitze (3 mm breit, 4 mm Rahmen, 0°) in 60×40×4-Platte → 6 Durchbrüche oben & unten
     p.empty()
@@ -24461,6 +24641,116 @@ def t_a123_uebergang_anschluss(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11250227(p):
+    # 1. Gelenk lösen aktualisiert rechtes & linkes Panel sofort – auch bei Fokus im rechten Panel & Auswahl im Verlauf
+    p.empty()
+    ids = p.ev("""
+      let aId, bId;
+      App.change('Arme', d => {
+        const a = Model.newItem('box', { w: 20, d: 10, h: 4 }, { name: 'Arm A' });
+        const b = Model.newItem('box', { w: 20, d: 10, h: 4 }, { name: 'Arm B', more: { t: { x: 20, y: 0, z: 0, rx: 0, ry: 0, rz: 0 } } });
+        d.items.push(a, b);
+        aId = a.id; bId = b.id;
+      });
+      return [aId, bId];
+    """)
+    warte_rechnen(p, 20)
+    p.ev("Joints.add(arg[0], arg[1], [10, 0, 4], [0, 1, 0])", ids)
+    p.ev("App.select([arg])", ids[1])
+    p.wait(300)
+    res1a = p.ev("""
+      const sec = document.querySelector('#joint-sec');
+      const ang = document.querySelector('#jt-ang');
+      const del = document.querySelector('#jt-del');
+      if (!sec || !ang || !del) return { ok: false };
+      ang.focus();
+      del.click();
+      return {
+        ok: true,
+        joints: (App.doc.joints || []).length,
+        hasSec: !!document.querySelector('#joint-sec'),
+        hasTree: !!document.querySelector('#joint-tree'),
+      };
+    """)
+    j2 = p.ev("const r = Joints.add(arg[0], arg[1], [10, 0, 4], [0, 1, 0]); return r && r.id ? r.id : null", ids)
+    p.wait(200)
+    res1b = p.ev("""
+      if (!arg) return { ok: false };
+      Joints.select(arg);
+      const selBefore = Joints.selected === arg;
+      Joints.remove(arg);
+      return {
+        ok: selBefore,
+        selAfter: Joints.selected,
+        joints: (App.doc.joints || []).length,
+        hasSec: !!document.querySelector('#joint-sec'),
+        hasTree: !!document.querySelector('#joint-tree'),
+      };
+    """, j2)
+    ok1 = (
+        res1a.get('ok')
+        and res1a.get('joints') == 0
+        and not res1a.get('hasSec')
+        and not res1a.get('hasTree')
+        and res1b.get('ok')
+        and res1b.get('selAfter') is None
+        and res1b.get('joints') == 0
+        and not res1b.get('hasSec')
+        and not res1b.get('hasTree')
+    )
+
+    # 2. Zeichnung rendert kein leeres <svg> während laufender Erstprojektion
+    p.ev("""
+      App.setDoc(Model.newDoc('Zeichnungstest'), { fit: false, forceReplace: true });
+      App.change('Quader', d => {
+        d.items.push(Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Quader' }));
+      });
+    """)
+    warte_rechnen(p, 20)
+    ok_no_svg = False
+    ok_ready_svg = False
+    try:
+        p.ev("""
+          window.__origKernelCallF1125 = Kernel.call;
+          window.__resolveProjF1125 = null;
+          Kernel.call = function(cmd, args, transfer) {
+            if (cmd === 'project') {
+              const callArgs = arguments;
+              return new Promise((resolve, reject) => {
+                window.__resolveProjF1125 = () => {
+                  window.__resolveProjF1125 = null;
+                  window.__origKernelCallF1125.apply(Kernel, callArgs).then(resolve, reject);
+                };
+              });
+            }
+            return window.__origKernelCallF1125.apply(Kernel, arguments);
+          };
+        """)
+        p.pg.click('#tab-drawing')
+        p.wait(200)
+        p.ev("Drawing.tool('detail'); Drawing.refreshUI();")
+        p.wait(100)
+        ok_no_svg = p.ev("return document.querySelector('#sheet .sheet-holder svg') === null")
+        p.ev("if (window.__resolveProjF1125) window.__resolveProjF1125();")
+        p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+        ok_ready_svg = p.ev("""
+          return !!(Drawing.layout && Drawing.layout.views && Drawing.layout.views.top
+            && Drawing.layout.views.top.geo && Drawing.layout.views.top.geo.polys
+            && Drawing.layout.views.top.geo.polys.length > 0);
+        """)
+    finally:
+        p.ev("""
+          if (window.__resolveProjF1125) { try { window.__resolveProjF1125(); } catch (_) {} }
+          if (window.__origKernelCallF1125) {
+            Kernel.call = window.__origKernelCallF1125;
+            window.__origKernelCallF1125 = null;
+          }
+          if (App.mode !== 'model') Commands.setMode('model');
+        """)
+    ok2 = bool(ok_no_svg and ok_ready_svg)
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -24689,9 +24979,11 @@ TESTS = [
     ('[A-118] Skizzen-Blöcke (SK-31)', t_a118_skizzen_bloecke),
     ('[A-117] Polares Raster und Hilfslinien (SK-52)', t_a117_polares_raster_hilfslinien),
     ('[F-11250121] Volltest-Reparatur: Fokus-Vorschau zeichnet bei rAF-Stau / Meldung überlebt Hauptthread-Hänger', t_f11250121),
+    ('[A-120] Schraubdom, Lippe und Nut (KP-24, KP-25)', t_a120_schraubdom_lippe_nut),
     ('[A-121] Lüftungsgitter, Kühlrippen und Steg-Netz (KP-26, KP-27)', t_a121_lueftung_kuehlrippen_stegnetz),
     ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
     ('[A-123] Übergang mit weichem Anschluss: tangential, krümmungsglatt & Stärke (KP-31)', t_a123_uebergang_anschluss),
+    ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -98,6 +98,15 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       lines.push({ k: 'op', t: `Prägt die Skizze ${p.mode === 'deboss' ? 'vertieft' : 'erhaben'} (${Units.fmtLenU(Model.num(p.height, V, 1), 2, doc)}) auf eine Fläche von „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
     }
+    if (it.kind === 'boss') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const ribs = Math.max(0, Math.min(6, Math.round(Model.num(p.ribs, V, 4))));
+      lines.push({ k: 'op', t: `Setzt einen Schraubdom (Ø ${Units.fmtLenU(Model.num(p.outerD, V, 8), 2, doc)}, Loch Ø ${Units.fmtLenU(Model.num(p.holeD, V, 3), 2, doc)}, Höhe ${Units.fmtLenU(Model.num(p.height, V, 10), 2, doc)}, ${ribs} Rippen) auf „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
+    }
+    if (it.kind === 'lipGroove') {
+      const p = it.p || {}, lf = p.lipTarget ? Model.find(doc, p.lipTarget) : null, gf = p.grooveTarget ? Model.find(doc, p.grooveTarget) : null;
+      lines.push({ k: 'op', t: `Erzeugt Lippe (${p.side === 'outer' ? 'außen' : 'innen'}, Höhe ${Units.fmtLenU(Model.num(p.height, V, 2), 2, doc)}, Breite ${Units.fmtLenU(Model.num(p.width, V, 1.2), 2, doc)}) an „${lf ? Model.label(lf.item) : 'fehlendes Ziel'}“ und Nut mit ${Units.fmtLenU(Model.num(p.clearance, V, 0.2), 2, doc)} Spiel in „${gf ? Model.label(gf.item) : 'fehlendes Ziel'}“.` });
+    }
     if (it.kind === 'sketch3d') {
       const res = Model.sketch3dResolve(it.p && it.p.sketch3d, V);
       const ents = (res.ents || []).filter((e) => !e.con);
@@ -159,7 +168,7 @@ const Explain = (() => {
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'mirrorStep' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });
