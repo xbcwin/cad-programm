@@ -310,6 +310,11 @@
     "wozu": "Ideal für Übergänge zwischen verschiedenen Formen, konische Kanäle, Düsen, Griffe sowie nahtlose Ringe und umlaufende Nuten.",
     "achtung": "Für einen geschlossenen Ring brauchst du mindestens drei Umrisse; als Schnitt wählst du unter „Körper“ den Modus „Abziehen von“."
   },
+  "deform": {
+    "was": "Verformt einen bestehenden Körper als eigenen Schritt im Verlauf – durch Biegen um eine Achse, Verdrehen über die Länge oder Verjüngen bis zu einem Endfaktor.",
+    "wozu": "Ideal für gebogene Halter, tordierte Streben, konische Griffe und verjüngte Gehäuse ohne umständliches Neuzeichnen.",
+    "achtung": "Der Biegewinkel darf den Körper nicht in sich selbst knicken; im Verlauf bleibt der Schritt jederzeit änderbar und unterdrückbar."
+  },
   "splitFace": {
     "was": "Projiziert eine Skizzen-Kurve oder einen Umriss auf eine ebene oder gekrümmte Körperfläche und teilt diese Fläche entlang der Kurve.",
     "wozu": "Nützlich, um einzelne Bereiche auf einer Fläche (z. B. Logos, Grifffelder oder Deckelbereiche) getrennt einzufärben oder gezielt auszuwählen, ohne den Körper zu zerschneiden.",

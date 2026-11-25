@@ -56,6 +56,11 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       lines.push({ k: 'op', t: `Skaliert „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${size ? ' (' + size + ')' : ''}.` });
     }
+    if (it.kind === 'deform') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const what = p.mode === 'twist' ? 'Verdreht' : p.mode === 'taper' ? 'Verjüngt' : 'Biegt';
+      lines.push({ k: 'op', t: `${what} „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ entlang ${(p.axis || 'z').toUpperCase()}${size ? ' (' + size + ')' : ''}.` });
+    }
     if (it.kind === 'deleteBody') {
       const p = it.p || {};
       const tgs = Array.isArray(p.targets) ? p.targets : (p.target ? [p.target] : []);
@@ -175,7 +180,12 @@ const Explain = (() => {
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
     for (const fin of it.finishes || []) {
       let ft;
-      if (fin.type === 'shell') ft = `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.`;
+      if (fin.type === 'shell') {
+        const dirTxt = fin.dir === 'out' ? ' nach außen' : fin.dir === 'mid' ? ' mittig' : ' nach innen';
+        const fwCnt = Array.isArray(fin.faceWalls) ? fin.faceWalls.length : 0;
+        const extraTxt = fwCnt ? ` (${fwCnt} ${fwCnt === 1 ? 'Fläche' : 'Flächen'} mit eigener Wandstärke)` : '';
+        ft = `Ausgehöhlt${dirTxt} mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand${extraTxt}.`;
+      }
       else if (fin.type === 'fullFillet') ft = 'Vollrundung über drei gewählte Flächen (mittlere Fläche ganz abgerundet).';
       else if (fin.type === 'cornerChamfer') ft = `Ecken-Fase mit den drei Abständen ${[fin.d1, fin.d2, fin.d3].map((x) => Units.fmtLenU(Model.num(x, V, 2), 2, doc)).join(' / ')}.`;
       else ft = `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.`;
@@ -184,7 +194,7 @@ const Explain = (() => {
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'fillPattern' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'fillPattern' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deform' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });
@@ -357,7 +367,10 @@ const Weak = (() => {
       else if (x.kind === 'tube') { t = Math.min(p.wall, p.h); what = 'Wand'; }
       else if (x.kind === 'prism') { t = Math.min(p.d, p.h); what = 'Dicke'; }
       else if (x.kind === 'extrude') { t = Math.abs(p.dist); what = 'Dicke'; }
-      for (const f of x.finishes || []) if (f.type === 'shell') { const r = Model.num(f.r, V, 2); if (t == null || r < t) { t = r; what = 'Wand'; } }
+      for (const f of x.finishes || []) if (f.type === 'shell') {
+        const vals = [Model.num(f.r, V, 2), ...((f.faceWalls || []).map((fw) => Model.num(fw.r, V, 2)))];
+        for (const r of vals) if (typeof r === 'number' && isFinite(r) && r > 0 && (t == null || r < t)) { t = r; what = 'Wand'; }
+      }
       if (typeof t === 'number' && isFinite(t) && t > 0 && (!best || t < best.t)) best = { t, what, name: Model.label(x) };
     };
     rec(it);

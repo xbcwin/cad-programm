@@ -24751,6 +24751,372 @@ def t_f11250227(p):
     return [ok1, ok2]
 
 
+def t_a127_wandstaerke_flaechen(p):
+    import math
+    p.empty()
+    p.ev("Actions.addPrimitive('box');")
+    p.wait(1500)
+    p.ev("App.change('x', d=>{ d.items[0].t.x=0; d.items[0].t.y=0; });")
+    p.wait(1500)
+    p.ev("Viewer.setView('top', false);")
+    p.wait(1000)
+    s = world_screen(p, 3, 3, 20)
+    p.pg.mouse.click(s[0], s[1]); p.wait(600)
+    ctx(p, 'Aushöhlen')
+    fid = p.ev("return App.doc.items[0].finishes[0].id")
+    field(p, '#fin-' + fid, 1.5)
+    # Bodenfläche über „Fläche mit eigener Stärke“ anklicken und auf 3 mm setzen
+    p.pg.click('#fin-addfw-' + fid); p.wait(300)
+    p.ev("Viewer.setView('bottom', false);")
+    p.wait(1000)
+    sb = world_screen(p, 2, 2, 0)
+    p.pg.mouse.click(sb[0], sb[1]); p.wait(1500)
+    fw_id = p.ev("const fw=App.doc.items[0].finishes[0].faceWalls; return fw && fw[0] ? fw[0].id : null")
+    ok_pick = bool(fw_id) and p.pg.locator('#fin-fw-' + str(fw_id)).count() == 1
+    field(p, '#fin-fw-' + fw_id, 3)
+
+    def wall_at(pt, nrm):
+        return p.ev(f"""
+          const id = App.doc.items[0].id;
+          return Viewer.wallAt(id, {{x:{pt[0]},y:{pt[1]},z:{pt[2]}}}, {{x:{nrm[0]},y:{nrm[1]},z:{nrm[2]}}});
+        """)
+
+    def geom_ok():
+        return p.ev("return GeomCheck.run().then(r => r.issues.filter(x => x.s === 'bad').length === 0)")
+
+    def vol_of():
+        return p.ev("return Mass.measure().then(r => { const q = r && r.parts && r.parts.find(x => x.id === App.doc.items[0].id); return q ? q.volume : null; })")
+
+    # 1. Nach innen: Boden 3 mm, alle 4 Seiten 1,5 mm, Hüllmaße unverändert
+    w_bot_in = wall_at([2, 2, 0], [0, 0, -1])
+    w_sides_in = [
+        wall_at([10, 0, 10], [1, 0, 0]),
+        wall_at([-10, 0, 10], [-1, 0, 0]),
+        wall_at([0, 10, 10], [0, 1, 0]),
+        wall_at([0, -10, 10], [0, -1, 0]),
+    ]
+    ok_in = (
+        ok_pick
+        and p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-10, -10, 0, 10, 10, 20])
+        and w_bot_in is not None and abs(w_bot_in - 3.0) < 0.05
+        and all(w is not None and abs(w - 1.5) < 0.05 for w in w_sides_in)
+        and abs(vol_of() - 3087.0) < 1.0
+    )
+
+    # 2. Nach außen: Hüllmaße größer, Boden 3 mm, Seiten 1,5 mm
+    p.pg.select_option('#fin-dir-' + fid, 'out'); p.wait(2000)
+    w_bot_out = wall_at([2, 2, -3], [0, 0, -1])
+    w_sides_out = [
+        wall_at([11.5, 0, 10], [1, 0, 0]),
+        wall_at([-11.5, 0, 10], [-1, 0, 0]),
+        wall_at([0, 11.5, 10], [0, 1, 0]),
+        wall_at([0, -11.5, 10], [0, -1, 0]),
+    ]
+    exp_ok = p.ev("const ex=Explain.local(App.doc.items[0].id); return ex && ex.lines.some(l => l.k==='fin' && l.t.includes('nach außen') && l.t.includes('1 Fläche'));")
+    ok_out = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-11.5, -11.5, -3, 11.5, 11.5, 20])
+        and w_bot_out is not None and abs(w_bot_out - 3.0) < 0.05
+        and all(w is not None and abs(w - 1.5) < 0.05 for w in w_sides_out)
+        and abs(vol_of() - 4167.0) < 1.0
+        and exp_ok
+    )
+
+    # 3. Mittig: Hüllmaße halb nach außen, Boden 3 mm, Seiten 1,5 mm
+    p.pg.select_option('#fin-dir-' + fid, 'mid'); p.wait(2000)
+    w_bot_mid = wall_at([2, 2, -1.5], [0, 0, -1])
+    w_side_mid = wall_at([10.75, 0, 10], [1, 0, 0])
+    ok_mid = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-10.75, -10.75, -1.5, 10.75, 10.75, 20])
+        and w_bot_mid is not None and abs(w_bot_mid - 3.0) < 0.05
+        and w_side_mid is not None and abs(w_side_mid - 1.5) < 0.05
+        and abs(vol_of() - 3606.75) < 1.5
+    )
+
+    # 4. Zweite Seitenwand per Formel auf 4 mm im Modus „innen“, danach wieder löschen + Rückgängig
+    p.pg.select_option('#fin-dir-' + fid, 'in'); p.wait(2000)
+    p.ev("""
+      App.change('Maß anlegen', d=>{ d.params.push({id:'p_sw', name:'Seite', expr:4}); });
+      const it = App.doc.items[0];
+      Features.addShellFaceWall(it.id, it.finishes[0].id, { c: [-10, 0, 10], n: [-1, 0, 0], size: 20, t: 'PLANE' }, 'Seite');
+    """); p.wait(2000)
+    fw2_id = p.ev("return App.doc.items[0].finishes[0].faceWalls[1].id")
+    w_left_4 = wall_at([-10, 0, 10], [-1, 0, 0])
+    w_right_15 = wall_at([10, 0, 10], [1, 0, 0])
+    ok_two = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and w_left_4 is not None and abs(w_left_4 - 4.0) < 0.05
+        and w_right_15 is not None and abs(w_right_15 - 1.5) < 0.05
+        and abs(vol_of() - 3809.5) < 1.0
+    )
+    p.pg.click('#fin-fw-del-' + fw2_id); p.wait(1500)
+    ok_del_undo = (
+        p.ev("return App.doc.items[0].finishes[0].faceWalls.length === 1")
+        and abs(vol_of() - 3087.0) < 1.0
+    )
+    p.ev("App.undo()"); p.wait(1500)
+    ok_del_undo = ok_del_undo and p.ev("return App.doc.items[0].finishes[0].faceWalls.length === 2") and abs(vol_of() - 3809.5) < 1.0
+
+    # 5. Zylinder: Boden 3 mm, Mantel 1,5 mm – innen und außen
+    p.ev("""
+      let cid = null;
+      App.change('Zylinder', d=>{
+        d.items = [];
+        const c = Model.newItem('cylinder', { d: 20, h: 20 });
+        c.finishes = [{ id: 'f_cyl', type: 'shell', r: 1.5, dir: 'in', faces: [{ c: [0, 0, 20], n: [0, 0, 1], size: 20, t: 'PLANE' }], faceWalls: [{ id: 'fw_cbot', face: { c: [0, 0, 0], n: [0, 0, -1], size: 20, t: 'PLANE' }, r: 3, label: 'Unten' }] }];
+        d.items.push(c);
+        cid = c.id;
+      });
+      if (cid) App.select([cid]);
+    """); p.wait(2000)
+    exp_cyl_in = math.pi * (100 * 20 - 8.5 * 8.5 * 17)
+    ok_cyl_in = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-10, -10, 0, 10, 10, 20])
+        and abs(vol_of() - exp_cyl_in) < 2.0
+    )
+    p.ev("Features.setShellDir(App.doc.items[0].id, 'f_cyl', 'out');"); p.wait(2000)
+    exp_cyl_out = math.pi * (11.5 * 11.5 * 23 - 100 * 20)
+    ok_cyl_out = (
+        p.ev("return App.errors.length === 0")
+        and geom_ok()
+        and near(bbox(p), [-11.5, -11.5, -3, 11.5, 11.5, 20])
+        and abs(vol_of() - exp_cyl_out) < 2.0
+    )
+
+    # 6. Hilfen & DE/EN-Schlüssel
+    p.pg.hover('#fin-addfw-f_cyl'); p.wait(1700)
+    tip_fw = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    ok_meta = p.ev("""
+      const deKeys = Object.keys(I18n.packs.de).filter(k => k.startsWith('panel.edges.shell')).sort();
+      const enKeys = Object.keys(I18n.packs.en).filter(k => k.startsWith('panel.edges.shell')).sort();
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d =>
+        JSON.stringify(deKeys) === JSON.stringify(enKeys)
+        && deKeys.includes('panel.edges.shellDirOut')
+        && deKeys.includes('panel.edges.shellAddFace')
+        && !!(d.shell && d.shell.hilfe.includes('außen'))
+        && !!(d.shellFaceWall && d.shellFaceWall.tip && d.shellFaceWall.hilfe && d.shellFaceWall.tipp)
+      );
+    """) and ('eigene Wandstärke' in tip_fw)
+
+    return [ok_in, ok_out, ok_mid, ok_two, ok_del_undo, ok_cyl_in, ok_cyl_out, ok_meta]
+
+
+# ---------- [A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37) ----------
+def t_a125_verformen(p):
+    warte_idle = lambda: warte_rechnen(p, 35)
+    p.empty()
+    p.ev("ViewPrefs.setLevel('pro')")
+
+    # 1. Biegen: Stab 100x10x10 um 90° gebogen -> Enden stehen senkrecht zueinander
+    box_id = p.ev("""let id; App.change('Stab 100x10x10', d => {
+      const b = Model.newItem('box', { w: 100, d: 10, h: 10 }, { name: 'Stab' });
+      d.items.push(b); id = b.id;
+    }); App.select([id]); return id;""")
+    warte_idle()
+    p.pg.locator('#ctx-deform').click(); warte_idle()
+
+    bend_info = p.ev("""const bid = arg;
+      const df = App.doc.items.find(x => x.kind === 'deform');
+      const r = App.results.get(bid);
+      const ends = (r && r.data && r.data.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[1]) < 0.2);
+      let dot = null;
+      if (ends.length === 2) {
+        const a = ends[0].n, b = ends[1].n;
+        dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+      }
+      return {
+        kind: df && df.kind,
+        mode: df && df.p && df.p.mode,
+        axis: df && df.p && df.p.axis,
+        merged: df && App.mergedInto(df.id),
+        errs: App.errors.length,
+        endCount: ends.length,
+        dot,
+      };""", box_id)
+    v_bend = volumen(p)
+    gc_bend = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+
+    # 180° prüfen -> Endflächen antiparallel
+    p.pg.locator('#df-angle').fill('180')
+    p.pg.locator('#df-angle').press('Enter'); warte_idle()
+    dot_180 = p.ev("""const r = App.results.get(arg);
+      const ends = (r && r.data && r.data.faces || []).filter(f => f.t === 'PLANE' && f.n && Math.abs(f.n[1]) < 0.2);
+      if (ends.length !== 2) return null;
+      const a = ends[0].n, b = ends[1].n;
+      return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];""", box_id)
+    ok1 = (
+        bend_info['kind'] == 'deform'
+        and bend_info['mode'] == 'bend'
+        and bend_info['axis'] == 'x'
+        and bend_info['merged'] == box_id
+        and bend_info['errs'] == 0
+        and bend_info['endCount'] == 2
+        and bend_info['dot'] is not None and abs(bend_info['dot']) < 0.02
+        and v_bend is not None and abs(v_bend - 10000.0) < 50.0
+        and gc_bend['n'] == 1 and gc_bend['iss'] == 0
+        and dot_180 is not None and dot_180 > 0.98
+    )
+
+    # 2. Verdrehen: Stab 20x10x40 um 90° -> obere Fläche um 90° gedreht
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    tw_id = p.ev("""let id; App.change('Stab 20x10x40', d => {
+      const b = Model.newItem('box', { w: 20, d: 10, h: 40 }, { name: 'Drehstab' });
+      d.items.push(b); id = b.id;
+    }); App.select([id]); return id;""")
+    warte_idle()
+    p.pg.locator('#ctx-deform').click(); warte_idle()
+    p.pg.locator('#df-mode').select_option('twist'); warte_idle()
+    p.pg.locator('#df-axis').select_option('z'); warte_idle()
+    p.pg.locator('#df-angle').fill('90')
+    p.pg.locator('#df-angle').press('Enter'); warte_idle()
+
+    tw_spans = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      const span = (cond) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cnt = 0;
+        if (pos) for (let i = 0; i < pos.length; i += 3) {
+          const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+          if (!cond(z)) continue;
+          cnt++;
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        return cnt ? { sx: x1 - x0, sy: y1 - y0 } : null;
+      };
+      return { bot: span(z => z < 0.5), top: span(z => z > 39.5), errs: App.errors.length };""", tw_id)
+    v_twist = volumen(p)
+    gc_twist = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+    ok2 = (
+        tw_spans['errs'] == 0
+        and tw_spans['bot'] is not None and abs(tw_spans['bot']['sx'] - 20.0) < 0.3 and abs(tw_spans['bot']['sy'] - 10.0) < 0.3
+        and tw_spans['top'] is not None and abs(tw_spans['top']['sx'] - 10.0) < 0.3 and abs(tw_spans['top']['sy'] - 20.0) < 0.3
+        and v_twist is not None and abs(v_twist - 8000.0) < 40.0
+        and gc_twist['n'] == 1 and gc_twist['iss'] == 0
+    )
+
+    # 3. Verjüngen: Stab 20x20x40 mit Faktor 0,5 -> oben halb so breit, Umkehren dreht unten/oben
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    tp_id = p.ev("""let id; App.change('Saeule 20x20x40', d => {
+      const b = Model.newItem('box', { w: 20, d: 20, h: 40 }, { name: 'Saeule' });
+      d.items.push(b); id = b.id;
+    }); App.select([id]); return id;""")
+    warte_idle()
+    p.pg.locator('#ctx-deform').click(); warte_idle()
+    p.pg.locator('#df-mode').select_option('taper'); warte_idle()
+    p.pg.locator('#df-axis').select_option('z'); warte_idle()
+    p.pg.locator('#df-factor').fill('0,5')
+    p.pg.locator('#df-factor').press('Enter'); warte_idle()
+
+    tp_spans = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      const span = (cond) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cnt = 0;
+        if (pos) for (let i = 0; i < pos.length; i += 3) {
+          const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+          if (!cond(z)) continue;
+          cnt++;
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        return cnt ? { sx: x1 - x0, sy: y1 - y0 } : null;
+      };
+      return { bot: span(z => z < 0.5), top: span(z => z > 39.5), errs: App.errors.length };""", tp_id)
+    v_taper = volumen(p)
+    gc_taper = p.ev("return GeomCheck.run({ silent: true }).then(r => ({ n: r.checkedCount, iss: r.issues.length }))")
+
+    p.pg.locator('#df-flip').check(); warte_idle()
+    tp_flip = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      const span = (cond) => {
+        let x0 = Infinity, x1 = -Infinity, cnt = 0;
+        if (pos) for (let i = 0; i < pos.length; i += 3) {
+          if (!cond(pos[i + 2])) continue;
+          cnt++; if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i];
+        }
+        return cnt ? (x1 - x0) : null;
+      };
+      return { bot: span(z => z < 0.5), top: span(z => z > 39.5) };""", tp_id)
+    p.pg.locator('#df-flip').uncheck(); warte_idle()
+
+    ok3 = (
+        tp_spans['errs'] == 0
+        and tp_spans['bot'] is not None and abs(tp_spans['bot']['sx'] - 20.0) < 0.2 and abs(tp_spans['bot']['sy'] - 20.0) < 0.2
+        and tp_spans['top'] is not None and abs(tp_spans['top']['sx'] - 10.0) < 0.2 and abs(tp_spans['top']['sy'] - 10.0) < 0.2
+        and v_taper is not None and abs(v_taper - 9333.33) < 25.0
+        and gc_taper['n'] == 1 and gc_taper['iss'] == 0
+        and tp_flip['bot'] is not None and abs(tp_flip['bot'] - 10.0) < 0.2
+        and tp_flip['top'] is not None and abs(tp_flip['top'] - 20.0) < 0.2
+    )
+
+    # 4. Profi-Sichtbarkeit, Zeitleiste (Unterdrücken), Rückgängig/Wiederholen, Formel, Bezüge & Hilfe
+    df_id = p.ev("return App.doc.items.find(x => x.kind === 'deform').id")
+    p.ev("Timeline.toggleSuppress(arg)", df_id); p.wait(1500)
+    sup_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+    p.ev("Timeline.toggleSuppress(arg)", df_id); warte_idle()
+    re_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+
+    # Formel im Factor
+    p.ev("App.change('Maß', d => { d.params.push({ id: 'pm_df', name: 'verj', expr: '0.25' }); })")
+    p.ev("App.select([arg])", df_id); p.wait(300)
+    p.pg.locator('#df-factor').fill('verj')
+    p.pg.locator('#df-factor').press('Enter'); warte_idle()
+    f_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+    p.ev("App.undo()"); warte_idle()
+    u_top = p.ev("""const n = Viewer.nodes.get(arg);
+      const pos = n && n.mesh && n.mesh.geometry ? n.mesh.geometry.attributes.position.array : null;
+      let x0 = Infinity, x1 = -Infinity;
+      if (pos) for (let i = 0; i < pos.length; i += 3) if (pos[i + 2] > 39.5) { if (pos[i] < x0) x0 = pos[i]; if (pos[i] > x1) x1 = pos[i]; }
+      return x1 - x0;""", tp_id)
+
+    # Profi-Sichtbarkeit (#ctx-deform & #add-deform)
+    p.ev("App.select([arg]); ViewPrefs.setLevel('simple')", tp_id); p.wait(300)
+    simple_ctx_hidden = p.ev("const el = document.querySelector('#ctx-deform'); return !el || getComputedStyle(el).display === 'none'")
+    p.pg.locator('#t-body').click(); p.wait(250)
+    simple_fly_hidden = p.ev("const el = document.querySelector('#add-deform'); return !el || getComputedStyle(el).display === 'none'")
+    p.ev("Panels.closeFlyout(); ViewPrefs.setLevel('pro')"); p.wait(300)
+    pro_ctx_vis = p.ev("const el = document.querySelector('#ctx-deform'); return !!el && getComputedStyle(el).display !== 'none'")
+
+    p.pg.locator('#ctx-deform').hover(); p.wait(1700)
+    tip_deform = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    meta = p.ev("""const deps = Model.dependencies(App.doc);
+      const exp = Explain.local(arg);
+      return {
+        hasDep: deps.some(d => d.from === arg && d.what === 'verformt'),
+        hasExp: !!(exp && exp.title && exp.lines && exp.lines.some(l => /Verjüngt/.test(l.t))),
+      };""", df_id)
+
+    ok4 = (
+        abs(sup_top - 20.0) < 0.2
+        and abs(re_top - 10.0) < 0.2
+        and abs(f_top - 5.0) < 0.2
+        and abs(u_top - 10.0) < 0.2
+        and simple_ctx_hidden and simple_fly_hidden and pro_ctx_vis
+        and meta['hasDep'] and meta['hasExp'] and ('biegen' in tip_deform.lower() or 'verformen' in tip_deform.lower())
+    )
+
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a124_flaeche_teilen_kuppel(p):
     # 1. KP-35: Kreis auf Zylindermantel (Ø 30 × 40) projizieren und Fläche teilen (nur Profi)
     p.empty()
@@ -25332,6 +25698,8 @@ TESTS = [
     ('[A-122] Übergang als Schnitt und als Ring (KP-30)', t_a122_uebergang_schnitt_ring),
     ('[A-123] Übergang mit weichem Anschluss: tangential, krümmungsglatt & Stärke (KP-31)', t_a123_uebergang_anschluss),
     ('[F-11250227] Volltest-Reparatur: Gelenk lösen aktualisiert Panel trotz Fokus / Zeichnung wartet auf Erstprojektion', t_f11250227),
+    ('[A-127] Wandstärke je Fläche & Richtung innen/außen/mittig (KP-43)', t_a127_wandstaerke_flaechen),
+    ('[A-125] Verformen: Biegen, Verdrehen, Verjüngen (KP-37)', t_a125_verformen),
     ('[A-124] Fläche teilen (Kurve auf Zylinder) und Kuppel auf Quader', t_a124_flaeche_teilen_kuppel),
     ('[A-128] Füllmuster auf Fläche, Muster an Skizzenpunkten & aus Tabelle', t_a128_fuellmuster_punkte_tabelle),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
