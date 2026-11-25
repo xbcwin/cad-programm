@@ -446,6 +446,7 @@ const Panels = (() => {
       if (it.partRef) { sw.innerHTML = icon('parts'); sw.classList.add('partref'); }
       else if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
       else if (it.kind === 'ref') { sw.innerHTML = icon('parts'); sw.classList.add('comp', 'ref'); if (isSubAsm) sw.classList.add('subasm'); }
+      else if (it.kind === 'sketch3d') { sw.innerHTML = icon('sketch3d'); sw.classList.add('comp'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
@@ -500,8 +501,9 @@ const Panels = (() => {
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
-          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
-          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
+          ...(it.kind === 'sketch3d' ? [{ icon: 'edit', label: T('sk3.editBtn'), id: 'tm-sk3-edit', run: () => Sketch.edit3d(it.id) }, { icon: 'sweep', label: T('ctx.alongPath'), id: 'tm-sk3-sweep', run: () => Features.sweepFromSketch3d(it.id) }] : []),
+          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
+          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -509,7 +511,7 @@ const Panels = (() => {
           '-', { icon: 'trash', label: T('common.delete'), run: () => Actions.remove([it.id]) },
         ]);
       });
-      row.addEventListener('dblclick', async (e) => { e.stopPropagation(); if (it.kind === 'ref') { Comp.openRef(it.id); return; } if (typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc)) { Assembly.openPartTab(it.id); return; } const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
+      row.addEventListener('dblclick', async (e) => { e.stopPropagation(); if (it.kind === 'ref') { Comp.openRef(it.id); return; } if (typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc)) { Assembly.openPartTab(it.id); return; } if (it.kind === 'sketch3d') { Sketch.edit3d(it.id); return; } const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
       // Ziehen im Verlauf: umsortieren oder in eine Gruppe legen
       row.addEventListener('dragstart', (e) => {
         dragInfo = { type: 'item', id: it.id };
@@ -965,7 +967,7 @@ const Panels = (() => {
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'vent' && (k === 'target' || k === 'face' || k === 'roundEnds')) || (it.kind === 'fins' && (k === 'target' || k === 'face')) || (it.kind === 'web' && (k === 'target' || k === 'extend' || k === 'flip')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'sweep' && (k === 'sketch3dId' || k === 'wrapId')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); if (it.p && it.p.sketch3d) { for (const e of it.p.sketch3d.ents || []) for (const pk of ['a', 'm', 'b']) if (Array.isArray(e[pk])) for (let j = 0; j < 3; j++) e[pk][j] = fix(e[pk][j]); for (const d of it.p.sketch3d.dims || []) d.v = fix(d.v); } });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
   }
@@ -1282,8 +1284,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'vent' && x.kind !== 'fins' && x.kind !== 'web' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && x.kind !== 'sketch3d' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -1424,7 +1426,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'Lüftungsgitter in': 'schneidet ein Lüftungsgitter in diesen Körper', 'Kühlrippen auf': 'setzt Kühlrippen auf diesen Körper', 'Steg-Netz an': 'verstärkt diesen Körper als Steg-Netz', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'Lüftungsgitter in': 'schneidet ein Lüftungsgitter in diesen Körper', 'Kühlrippen auf': 'setzt Kühlrippen auf diesen Körper', 'Steg-Netz an': 'verstärkt diesen Körper als Steg-Netz', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'folgt 3D-Skizze': 'läuft als Profil entlang dieser 3D-Skizze', '3D-Skizze fängt an': '3D-Skizze hängt an einer Ecke hiervon', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? T('panel.item.depDatum', { name: x.datum }) : x.axis ? T('panel.item.depAxis', { name: x.axis }) : x.point ? T('panel.item.depPoint', { name: x.point }) : x.csys ? T('panel.item.depCsys', { name: x.csys }) : T('panel.item.depChild', { name: nm(x.from), what: back[x.what] || T('panel.item.depDefault') }), x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -1433,7 +1435,7 @@ const Panels = (() => {
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
     const isRef = it.kind === 'ref';
-    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
+    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || it.kind === 'sketch3d' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
     const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'vent' || it.kind === 'fins' || it.kind === 'web' || it.kind === 'wrap' || it.kind === 'emboss';
     if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
@@ -1905,6 +1907,26 @@ const Panels = (() => {
           sec.append(wb);
         }
         sec.append(h('div', { class: 'hint-box', html: T('panel.sweep.wrapHint') }));
+      } else if (it.p.sketch3dId) {
+        const sk3List = App.doc.items.filter((x) => x.kind === 'sketch3d' && !x.suppressed);
+        if (sk3List.length) {
+          sec.append(UI.selectField({
+            id: 'p-sweep-sk3', label: T('kind.sketch3d'), value: it.p.sketch3dId,
+            options: sk3List.map((x) => [x.id, Model.label(x)]),
+            onChange: (v) => setP('sketch3dId', v),
+          }));
+        }
+        const sf = Model.find(App.doc, it.p.sketch3dId);
+        if (sf) {
+          const row = h('div', { class: 'btn-row', style: { marginTop: '6px' } });
+          const eb = h('button', { type: 'button', class: 'btn', id: 'sweep-edit-sk3' }); eb.innerHTML = icon('edit') + esc(T('sk3.editBtn'));
+          eb.onclick = () => Sketch.edit3d(sf.item.id);
+          const sb = h('button', { type: 'button', class: 'btn', id: 'sweep-sel-sk3' }); sb.innerHTML = icon('pointer') + esc(T('sk3.selectBtn'));
+          sb.onclick = () => App.select([sf.item.id]);
+          row.append(eb, sb);
+          sec.append(row);
+        }
+        sec.append(h('div', { class: 'hint-box', html: T('sk3.sweepHint') }));
       } else {
         const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + esc(T('panel.sweep.editPath'));
         eb.onclick = () => Sketch.editItem(it.id);
@@ -1974,6 +1996,9 @@ const Panels = (() => {
     } else if (it.kind === 'deleteBody') {
       sec.firstChild.textContent = T('kind.deleteBody');
       Features.renderDeleteBody(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'sketch3d') {
+      sec.firstChild.textContent = T('kind.sketch3d');
+      Features.renderSketch3d(it, sec); w.append(sec);
     } else if (it.kind === 'thicken') {
       sec.firstChild.textContent = T('kind.thicken');
       Features.renderThicken(it, sec, setP); w.append(sec);
@@ -2461,6 +2486,18 @@ const Panels = (() => {
       b('edit', T('panel.item.editSketch'), () => Sketch.editItem(it.id), 'accent', T('ctx.embossTip2'));
       b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'sketch3d') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('kind.sketch3d')));
+      b('edit', T('sk3.editBtn'), () => Sketch.edit3d(it.id), 'accent', T('sk3.editTip'));
+      b('sweep', T('ctx.alongPath'), () => Features.sweepFromSketch3d(it.id), '', T('sk3.sweepTip'));
       b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
       b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;

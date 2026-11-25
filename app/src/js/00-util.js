@@ -2209,6 +2209,11 @@ const HELP = {
   "tip": "Steg-Netz: viele Rippen aus einer offenen Skizze (auch Kreuzungen und Gitter)",
   "hilfe": "Zeichne eine offene Skizze mit mehreren Linien, Bögen, Kreuzungen oder T-Stößen über einem ausgehöhlten Körper oder einer Schale. Das Steg-Netz extrudiert alle Pfade gemeinsam mit Dicke und Höhe und verlängert freie Enden automatisch bis an die Wände.",
   "tipp": "Mit Tiefe 0 wachsen die Stege genau bis zum Schalenboden; eine feste Tiefe lässt das Netz frei auf gewünschter Höhe enden."
+ },
+ "sketch3d": {
+  "tip": "3D-Skizze mit Linien und Bögen frei im Raum zeichnen (Profi)",
+  "hilfe": "Im Profi-Modus startest du eine 3D-Skizze ohne feste Ebene (über „Skizze → 3D-Skizze“ oder die Befehlssuche). Setze Punkte per Klick im Raum, fange exakt an Körperecken und Kantenmitten oder gib X, Y und Z rechts ein. Jede Linie und jeder 3-Punkt-Bogen lässt sich über Längenmaße (auch Formeln) festlegen und anschließend mit „Entlang Pfad“ zu einem Körper ziehen.",
+  "tipp": "Wenn du an einer Körperecke fängst, merkt sich die 3D-Skizze diesen Körper und wandert mit, falls sich der Körper verschiebt."
  }
 };
 

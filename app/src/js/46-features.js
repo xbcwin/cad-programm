@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody' || x.kind === 'sketch3d')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -1335,7 +1335,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'vent' || x.kind === 'fins' || x.kind === 'web' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody' || x.kind === 'sketch3d';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -2575,6 +2575,99 @@ const Features = (() => {
     }
     return step || null;
   }
+  function sweepFromSketch3d(sketch3dId, opts = {}) {
+    const sf = Model.find(App.doc, sketch3dId);
+    if (!sf || sf.item.kind !== 'sketch3d') { UI.toast(T('sk3.toast.needSketch3d'), { icon: 'info' }); return null; }
+    const V = Model.vars(App.doc).v;
+    const ch = Model.sketch3dChains(sf.item.p && sf.item.p.sketch3d, V);
+    if (!ch.length) { UI.toast(T('sk3.toast.needPath'), { icon: 'info' }); return null; }
+    let step;
+    App.change('Entlang 3D-Skizze gezogen', (doc) => {
+      const idx = doc.items.findIndex((x) => x.id === sketch3dId);
+      const p = {
+        sketch3dId,
+        shape: opts.shape || 'circle',
+        d: opts.d ?? 6,
+        w: opts.w ?? 6,
+        h: opts.h ?? 4,
+        wall: opts.wall ?? 0,
+        twist: opts.twist ?? 0,
+        ...(opts.prof ? { prof: deepClone(opts.prof), profName: opts.profName || '' } : {}),
+      };
+      step = Model.newItem('sweep', p, { name: opts.name || T('sk3.sweepName'), color: sf.item.color });
+      if (opts.op) step.op = { ...opts.op };
+      const at = idx >= 0 ? idx + 1 : doc.items.length;
+      doc.items.splice(at, 0, step);
+      if (doc.rollback != null && at <= doc.rollback) doc.rollback++;
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('sk3.toast.sweepOk'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderSketch3d(it, sec) {
+    const V = Model.vars(App.doc).v;
+    const res = Model.sketch3dResolve(it.p && it.p.sketch3d, V);
+    const ents = res.ents || [];
+    const nl = ents.filter((e) => !e.con && e.type === 'line').length;
+    const na = ents.filter((e) => !e.con && e.type === 'arc').length;
+    sec.append(h('div', { class: 'mini-row', id: 'sk3-prop-total' },
+      h('span', { class: 'grow' }, `${nl} ${nl === 1 ? T('sk3.oneLine') : T('sk3.manyLines')} · ${na} ${na === 1 ? T('sk3.oneArc') : T('sk3.manyArcs')}`),
+      h('b', { class: 'mono' }, Units.fmtLenU(res.totalLength, 2))));
+    if (ents.length) {
+      const lst = h('div', { class: 'mini-list', id: 'sk3-prop-list', style: { marginTop: '6px' } });
+      ents.forEach((e, i) => {
+        const hasDim = (res.dims || []).some((d) => d.e === e.id && d.k === 'len');
+        lst.append(h('div', { class: 'mini-row' },
+          h('span', { class: 'grow' }, `${i + 1}. ${e.type === 'arc' ? T('sk3.arc') : T('sk3.line')}${e.con ? ' (' + T('sk3.conShort') + ')' : ''}`),
+          h('b', { class: 'mono' }, (hasDim ? '🔒 ' : '') + Units.fmtLenU(e.length || 0, 2))));
+      });
+      sec.append(lst);
+    }
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'sk3-edit-btn' });
+    eb.innerHTML = icon('edit') + esc(T('sk3.editBtn'));
+    eb.onclick = () => Sketch.edit3d(it.id);
+    const sb = h('button', { type: 'button', class: 'btn primary', id: 'sk3-to-sweep', disabled: !ents.some((e) => !e.con) });
+    sb.innerHTML = icon('sweep') + esc(T('ctx.alongPath'));
+    sb.onclick = () => sweepFromSketch3d(it.id);
+    row.append(eb, sb);
+    sec.append(row, h('div', { class: 'hint-box', html: T('sk3.propHint') }));
+  }
+  let relink3dRounds = 0;
+  function relinkSketch3d() {
+    if (!App.doc || (typeof Sketch !== 'undefined' && Sketch.active3d)) return;
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      if (it.kind !== 'sketch3d' || !it.p || !it.p.sketch3d || !Array.isArray(it.p.sketch3d.ents)) return;
+      const WI = Model.worldMatrix(App.doc, it.id).invert();
+      it.p.sketch3d.ents.forEach((e, i) => {
+        for (const [bk, pk] of [['bindA', 'a'], ['bindM', 'm'], ['bindB', 'b']]) {
+          const b = e[bk];
+          if (!b || !b.id || !e[pk]) continue;
+          if (!Model.find(App.doc, b.id)) { jobs.push({ id: it.id, i, bk, drop: true }); continue; }
+          const w = new THREE.Vector3(...b.lp).applyMatrix4(Model.worldMatrix(App.doc, b.id)).applyMatrix4(WI);
+          const cur = e[pk];
+          if ([0, 1, 2].some((k) => !(typeof cur[k] === 'number' && Math.abs(cur[k] - w.getComponent(k)) < 1e-3))) {
+            jobs.push({ id: it.id, i, pk, p: w.toArray().map((v) => round(v, 4)) });
+          }
+        }
+      });
+    });
+    if (!jobs.length) { relink3dRounds = 0; return; }
+    if (++relink3dRounds > 3) { relink3dRounds = 0; return; }
+    App.change('3D-Skizze folgt Körper', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id);
+        const ents = f && f.item.p && f.item.p.sketch3d && f.item.p.sketch3d.ents;
+        if (!ents || !ents[j.i]) continue;
+        if (j.drop) delete ents[j.i][j.bk];
+        else ents[j.i][j.pk] = j.p;
+      }
+    }, { amend: true });
+  }
+  App.on('results', relinkSketch3d);
   function renderWrap(it, sec, setP) {
     const p = it.p || {};
     const V = Model.vars(App.doc).v;
@@ -2847,5 +2940,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, vent, startVent, pickVentFace, renderVent, fins, startFins, pickFinsFace, renderFins, startWeb, web, renderWeb, startWrap, createWrap, pickWrapFace, sweepFromWrap, sweepFromSketch3d, renderSketch3d, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
 })();

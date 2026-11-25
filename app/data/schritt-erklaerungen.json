@@ -289,5 +289,10 @@
     "was": "Macht aus vielen offenen oder sich kreuzenden Skizzenlinien auf einmal ein verbundenes Netz aus Versteifungs-Rippen.",
     "wozu": "Ideal für Kreuz-, Waben- oder Gitterrippen in ausgehöhlten Gehäusen, Schalen und Rippenplatten.",
     "achtung": "Freie Enden wachsen automatisch bis an die nächste Wand. Prüfe bei leeren Ergebnissen die Richtung („Richtung umkehren“)."
+  },
+  "sketch3d": {
+    "was": "Speichert eine räumliche 3D-Skizze aus Linien und 3-Punkt-Bögen samt Punkt-Bindungen an Körperecken und Längenmaßen.",
+    "wozu": "Dient als dreidimensionaler Pfad für „Entlang Pfad“, um Rohre, Bügel, Gestelle oder Kabelkanäle frei durch den Raum zu führen.",
+    "achtung": "Hilfslinien werden in der 3D-Ansicht gestrichelt gezeichnet und beim Ziehen „Entlang Pfad“ übersprungen."
   }
 }

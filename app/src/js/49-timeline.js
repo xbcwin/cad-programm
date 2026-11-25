@@ -5,7 +5,7 @@ const Timeline = (() => {
   let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', thicken: 'thicken', rib: 'rib', vent: 'vent', fins: 'fins', web: 'web', wrap: 'wrap', emboss: 'emboss', mirrorStep: 'mirror', deleteBody: 'deleteBody' })[it.kind] || 'cube';
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', helix: 'helix', import: 'folder', group: 'group', ref: 'parts', transform: 'moveStep', scale: 'scaleBody', thicken: 'thicken', rib: 'rib', vent: 'vent', fins: 'fins', web: 'web', wrap: 'wrap', emboss: 'emboss', mirrorStep: 'mirror', deleteBody: 'deleteBody', sketch3d: 'sketch3d' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }
@@ -81,7 +81,12 @@ const Timeline = (() => {
     const box = h('div', { class: 'menu-list', style: { display: 'grid', gap: '2px', minWidth: '200px' } });
     const add = (ic, label, fn) => { const b = h('button', { type: 'button', class: 'btn ghost', style: { justifyContent: 'flex-start' } }); b.innerHTML = icon(ic) + esc(label); b.onclick = () => { UI.closePop(); fn(); }; box.append(b); };
     box.append(h('div', { class: 'section-h' }, `${i + 1}. ${Model.label(it)}`));
-    add('edit', T('common.edit'), () => App.select([it.id]));
+    if (it.kind === 'sketch3d') {
+      add('edit', T('sk3.editBtn'), () => Sketch.edit3d(it.id));
+      add('sweep', T('ctx.alongPath'), () => Features.sweepFromSketch3d(it.id));
+    } else {
+      add('edit', T('common.edit'), () => App.select([it.id]));
+    }
     add('help', T('common.explainStep'), () => Explain.dialog(it.id));
     add('copy', T('common.duplicate'), () => Actions.duplicate([it.id]));
     const topSel = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];

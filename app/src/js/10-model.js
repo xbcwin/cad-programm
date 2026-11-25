@@ -38,6 +38,7 @@ const KINDS = {
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
   deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
+  sketch3d: { get label() { return T('kind.sketch3d'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
@@ -412,6 +413,14 @@ const Model = (() => {
       if (it.kind === 'web' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Steg-Netz an' });
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
       if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
+      if (it.kind === 'sweep' && it.p && it.p.sketch3dId) out.push({ from: me, to: top(it.p.sketch3dId), what: 'folgt 3D-Skizze' });
+      if (it.kind === 'sketch3d' && it.p && it.p.sketch3d) {
+        for (const e of it.p.sketch3d.ents || []) {
+          for (const bk of ['bindA', 'bindM', 'bindB']) {
+            if (e[bk] && e[bk].id) out.push({ from: me, to: top(e[bk].id), what: '3D-Skizze fängt an' });
+          }
+        }
+      }
       if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
@@ -551,6 +560,7 @@ const Model = (() => {
       else if (it.kind === 'web') o.p = webParams(it, ownV);
       else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
+      else if (it.kind === 'sketch3d') o.p = { sketch3d: sketch3dResolve(it.p && it.p.sketch3d, ownV) };
       else if (it.kind === 'import') {
         o.p = { fmt: it.p.fmt, scale: num(it.p.scale, ownV, 1) };
         if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -1126,6 +1136,172 @@ const Model = (() => {
     R[i] = Object.keys(r).length ? r : null;
     if (R.some(Boolean)) pp.rules = R; else delete pp.rules;
   }
+  // ---------- 3D-Skizze (SK-51): Linien und Bögen frei im Raum ----------
+  function sketch3dArcInfo(a, m, b) {
+    if (!a || !m || !b) return null;
+    const u = [m[0] - a[0], m[1] - a[1], m[2] - a[2]];
+    const v = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const nl = Math.hypot(n[0], n[1], n[2]);
+    const ul = Math.hypot(u[0], u[1], u[2]);
+    const vl = Math.hypot(v[0], v[1], v[2]);
+    if (nl < 1e-8 || ul < 1e-8 || vl < 1e-8) return null;
+    const ex = [u[0] / ul, u[1] / ul, u[2] / ul];
+    const ez = [n[0] / nl, n[1] / nl, n[2] / nl];
+    const ey = [ez[1] * ex[2] - ez[2] * ex[1], ez[2] * ex[0] - ez[0] * ex[2], ez[0] * ex[1] - ez[1] * ex[0]];
+    const mx = ul;
+    const bx = v[0] * ex[0] + v[1] * ex[1] + v[2] * ex[2];
+    const by = v[0] * ey[0] + v[1] * ey[1] + v[2] * ey[2];
+    if (Math.abs(by) < 1e-8) return null;
+    const cx = mx / 2;
+    const cy = (bx * bx + by * by - mx * bx) / (2 * by);
+    const r = Math.hypot(cx, cy);
+    if (!isFinite(r) || r < 1e-6) return null;
+    const normAng = (x) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    const a0 = Math.atan2(-cy, -cx);
+    const am = Math.atan2(-cy, mx - cx);
+    const a1 = Math.atan2(by - cy, bx - cx);
+    const d1 = normAng(am - a0), d2 = normAng(a1 - a0);
+    const sweep = d1 <= d2 ? d2 : d2 - 2 * Math.PI;
+    const c = [0, 1, 2].map((k) => a[k] + ex[k] * cx + ey[k] * cy);
+    const ptAt = (ang) => {
+      const px = cx + r * Math.cos(ang), py = cy + r * Math.sin(ang);
+      return [0, 1, 2].map((k) => a[k] + ex[k] * px + ey[k] * py);
+    };
+    const tanAt = (ang) => {
+      const sgn = sweep >= 0 ? 1 : -1;
+      const tx = -Math.sin(ang) * sgn, ty = Math.cos(ang) * sgn;
+      return [0, 1, 2].map((k) => ex[k] * tx + ey[k] * ty);
+    };
+    const t0 = tanAt(a0), t1 = tanAt(a0 + sweep);
+    const mid3d = ptAt(a0 + sweep / 2);
+    const length = Math.abs(sweep) * r;
+    const sample = (steps = 32) => {
+      const out = [];
+      for (let i = 0; i <= steps; i++) out.push(ptAt(a0 + sweep * (i / steps)));
+      return out;
+    };
+    return { c, r, n: ez, ex, ey, a0, sweep, length, t0, t1, mid3d, ptAt, sample };
+  }
+  function sketch3dEntLen(e) {
+    if (!e || !e.a || !e.b) return 0;
+    if (e.type === 'arc' && e.m) {
+      const ai = sketch3dArcInfo(e.a, e.m, e.b);
+      if (ai) return ai.length;
+    }
+    return Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1], e.b[2] - e.a[2]);
+  }
+  function sketch3dResolve(sk3, V = {}) {
+    const rawEnts = (sk3 && Array.isArray(sk3.ents)) ? sk3.ents : [];
+    const rawDims = (sk3 && Array.isArray(sk3.dims)) ? sk3.dims : [];
+    const pt3 = (q) => Array.isArray(q) ? [0, 1, 2].map((k) => num(q[k], V, 0)) : null;
+    const d3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const ents = rawEnts.map((e) => ({
+      ...e,
+      a: pt3(e.a) || [0, 0, 0],
+      b: pt3(e.b) || [0, 0, 0],
+      ...(e.m ? { m: pt3(e.m) } : {}),
+    }));
+    const dims = rawDims.map((d) => ({ ...d }));
+    const byId = new Map(ents.map((e, idx) => [e.id, idx]));
+    for (const dm of dims) {
+      if (!dm || dm.k !== 'len') continue;
+      const idx = byId.get(dm.e);
+      if (idx == null) continue;
+      const e = ents[idx];
+      const targetL = num(dm.v, V, NaN);
+      if (!isFinite(targetL) || targetL <= 1e-6) continue;
+      const curL = sketch3dEntLen(e);
+      if (curL <= 1e-6) continue;
+      const a0 = e.a.slice();
+      const bOld = e.b.slice();
+      const s = targetL / curL;
+      if (e.type === 'arc' && e.m) {
+        e.m = [0, 1, 2].map((k) => a0[k] + (e.m[k] - a0[k]) * s);
+      }
+      e.b = [0, 1, 2].map((k) => a0[k] + (bOld[k] - a0[k]) * s);
+      const db = [0, 1, 2].map((k) => e.b[k] - bOld[k]);
+      if (Math.hypot(db[0], db[1], db[2]) > 1e-9) {
+        const visited = new Set([idx]);
+        const queue = [bOld];
+        while (queue.length) {
+          const q = queue.shift();
+          for (let j = 0; j < ents.length; j++) {
+            if (visited.has(j)) continue;
+            const ej = ents[j];
+            const hitA = d3(ej.a, q) < 1e-3;
+            const hitB = d3(ej.b, q) < 1e-3;
+            if (!hitA && !hitB) continue;
+            visited.add(j);
+            const oa = ej.a.slice(), ob = ej.b.slice();
+            if (d3(oa, a0) >= 1e-3) { ej.a = [0, 1, 2].map((k) => oa[k] + db[k]); queue.push(oa); }
+            if (ej.m && d3(ej.m, a0) >= 1e-3) ej.m = [0, 1, 2].map((k) => ej.m[k] + db[k]);
+            if (d3(ob, a0) >= 1e-3) { ej.b = [0, 1, 2].map((k) => ob[k] + db[k]); queue.push(ob); }
+          }
+        }
+      }
+    }
+    let totalLength = 0;
+    for (const e of ents) {
+      e.length = sketch3dEntLen(e);
+      if (!e.con) totalLength += e.length;
+    }
+    return { ents, dims, totalLength };
+  }
+  function sketch3dChains(sk3, V = {}) {
+    const res = sketch3dResolve(sk3, V);
+    const d3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const pool = res.ents.filter((e) => !e.con && sketch3dEntLen(e) > 1e-6).map((e) => (
+      e.type === 'arc' && e.m
+        ? { t: 'arc', a: e.a.slice(), m: e.m.slice(), b: e.b.slice(), len: e.length }
+        : { t: 'line', a: e.a.slice(), b: e.b.slice(), len: e.length }
+    ));
+    if (!pool.length) return [];
+    const revSeg = (s) => (s.t === 'arc' ? { t: 'arc', a: s.b.slice(), m: s.m.slice(), b: s.a.slice(), len: s.len } : { t: 'line', a: s.b.slice(), b: s.a.slice(), len: s.len });
+    const chains = [];
+    const used = new Array(pool.length).fill(false);
+    const tol = 1e-3;
+    for (let startIdx = 0; startIdx < pool.length; startIdx++) {
+      if (used[startIdx]) continue;
+      used[startIdx] = true;
+      const segs = [pool[startIdx]];
+      let progressed = true;
+      while (progressed) {
+        progressed = false;
+        const tail = segs[segs.length - 1].b;
+        for (let j = 0; j < pool.length; j++) {
+          if (used[j]) continue;
+          if (d3(pool[j].a, tail) < tol) { used[j] = true; segs.push(pool[j]); progressed = true; break; }
+          if (d3(pool[j].b, tail) < tol) { used[j] = true; segs.push(revSeg(pool[j])); progressed = true; break; }
+        }
+        if (progressed) continue;
+        const head = segs[0].a;
+        for (let j = 0; j < pool.length; j++) {
+          if (used[j]) continue;
+          if (d3(pool[j].b, head) < tol) { used[j] = true; segs.unshift(pool[j]); progressed = true; break; }
+          if (d3(pool[j].a, head) < tol) { used[j] = true; segs.unshift(revSeg(pool[j])); progressed = true; break; }
+        }
+      }
+      const p0 = segs[0].a;
+      const pEnd = segs[segs.length - 1].b;
+      const closed = segs.length > 1 && d3(p0, pEnd) < tol;
+      let t0;
+      const s0 = segs[0];
+      if (s0.t === 'arc' && s0.m) {
+        const ai = sketch3dArcInfo(s0.a, s0.m, s0.b);
+        t0 = ai ? ai.t0 : null;
+      }
+      if (!t0) {
+        const dx = s0.b[0] - s0.a[0], dy = s0.b[1] - s0.a[1], dz = s0.b[2] - s0.a[2];
+        const l = Math.hypot(dx, dy, dz) || 1;
+        t0 = [dx / l, dy / l, dz / l];
+      }
+      const length = segs.reduce((sum, s) => sum + (s.len || 0), 0);
+      chains.push({ segs, closed, length, p0, t0 });
+    }
+    chains.sort((x, y) => y.length - x.length);
+    return chains;
+  }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl, optional Verdrehung
   function sweepParams(it, V) {
     const p = it.p || {};
@@ -1137,6 +1313,32 @@ const Model = (() => {
         if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
       }
       return { wrapId: p.wrapId, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 2), w: num(p.w, V, 3), h: num(p.h, V, 2), wall: num(p.wall, V, 0), twist };
+    }
+    if (p.sketch3dId) {
+      let prof = null;
+      if (p.shape === 'sketch' && p.prof) {
+        const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
+        if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
+      }
+      const base = { prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0), twist };
+      const doc = curDoc || (typeof App !== 'undefined' ? App.doc : null);
+      const act = doc ? activeItems(doc) : [];
+      const skItem = act.find((x) => x.id === p.sketch3dId);
+      if (!skItem || skItem.kind !== 'sketch3d') {
+        return { ...base, sketch3dId: p.sketch3dId, sketch3dMissing: 'Entlang Pfad: Die 3D-Skizze fehlt, ist unterdrückt oder liegt hinter dem Marker.' };
+      }
+      const chains = sketch3dChains(skItem.p && skItem.p.sketch3d, V);
+      if (!chains.length || !chains[0].segs.length) {
+        return { ...base, sketch3dId: p.sketch3dId, sketch3dMissing: 'Entlang Pfad: Die 3D-Skizze enthält noch keinen Pfad (Linie oder Bogen).' };
+      }
+      const ch = chains[0];
+      const rel = localMatrix(it, new THREE.Matrix4()).invert().multiply(localMatrix(skItem, new THREE.Matrix4()));
+      const tp = (q) => new THREE.Vector3(q[0], q[1], q[2]).applyMatrix4(rel).toArray();
+      const td = (q) => new THREE.Vector3(q[0], q[1], q[2]).transformDirection(rel).toArray();
+      const segs3d = ch.segs.map((s) => s.t === 'arc'
+        ? { t: 'arc', a: tp(s.a), m: tp(s.m), b: tp(s.b) }
+        : { t: 'line', a: tp(s.a), b: tp(s.b) });
+      return { ...base, sketch3dId: p.sketch3dId, segs3d, p0: tp(ch.p0), t0: td(ch.t0) };
     }
     if (p.path3d && Array.isArray(p.path3d.pts)) {
       // Pfad im Raum statt Skizze
@@ -1310,6 +1512,23 @@ const Model = (() => {
         if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
       }
     }
+    if (it.kind === 'sketch3d' && it.p && it.p.sketch3d) {
+      const res = sketch3dResolve(it.p.sketch3d, V);
+      if (res.ents.length) {
+        const box = new THREE.Box3();
+        for (const e of res.ents) {
+          if (e.a) box.expandByPoint(new THREE.Vector3(...e.a));
+          if (e.b) box.expandByPoint(new THREE.Vector3(...e.b));
+          if (e.type === 'arc' && e.m) {
+            const ai = sketch3dArcInfo(e.a, e.m, e.b);
+            if (ai) for (const q of ai.sample(16)) box.expandByPoint(new THREE.Vector3(...q));
+            else box.expandByPoint(new THREE.Vector3(...e.m));
+          }
+        }
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      }
+      return null;
+    }
     if (it.kind === 'helix') {
       const m = helixMetrics(it.p || {}, V);
       const rmax = Math.max(m.r1, m.r2) + m.radHalf;
@@ -1422,6 +1641,17 @@ const Model = (() => {
         if (p.mode === 'line') return `Linie${angTxt}`;
         const d = f(p.depth ?? 2);
         return `${p.mode === 'deboss' ? '−' : '+'}${d}${u}${angTxt}`;
+      }
+      case 'sketch3d': {
+        const res = sketch3dResolve(it.p && it.p.sketch3d, V);
+        const ents = (res.ents || []).filter((e) => !e.con);
+        if (!ents.length) return 'leer';
+        const nl = ents.filter((e) => e.type === 'line').length;
+        const na = ents.filter((e) => e.type === 'arc').length;
+        const parts = [];
+        if (nl) parts.push(nl === 1 ? '1 Linie' : `${nl} Linien`);
+        if (na) parts.push(na === 1 ? '1 Bogen' : `${na} Bögen`);
+        return `${parts.join(', ')} · ${f(res.totalLength)}${u}`;
       }
       case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
@@ -1824,6 +2054,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, materializeBlockInst, syncSketchBlocks, syncBlocks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, sketch3dArcInfo, sketch3dEntLen, sketch3dResolve, sketch3dChains, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
