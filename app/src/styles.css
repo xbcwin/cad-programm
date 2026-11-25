@@ -1605,6 +1605,25 @@ body.sketching:not(.simple) .sk-live-mir-badge{top:28px}
 .look-color-inp{width:30px;height:22px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer}
 .look-bar .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
 
+/* „Was ist das?“-Modus (BE-32) */
+#btn-whatis[aria-pressed="true"],.icon-btn.whatis-btn.active{background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent)}
+body.whatis-mode,body.whatis-mode *{cursor:help!important}
+body.whatis-mode #whatis-pop,body.whatis-mode #whatis-pop *,body.whatis-mode #btn-whatis,body.whatis-mode #btn-whatis *{cursor:default!important}
+body.whatis-mode #whatis-pop button,body.whatis-mode #whatis-pop button *,body.whatis-mode #btn-whatis{cursor:pointer!important}
+.whatis-hover{outline:2px dashed var(--accent)!important;outline-offset:2px}
+.whatis-target{outline:2px solid var(--accent)!important;outline-offset:2px}
+.whatis-pop{position:fixed;z-index:110;width:min(350px,calc(100vw - 24px));background:var(--surface);border:1.5px solid var(--accent-line);border-radius:12px;box-shadow:var(--shadow-2);padding:12px 14px;display:grid;gap:8px;color:var(--ink);font-size:calc(13.5px * var(--ui-scale,1));line-height:1.45}
+.whatis-head{display:flex;align-items:center;gap:8px;min-width:0}
+.whatis-head svg{width:18px;height:18px;color:var(--accent);flex:none}
+.whatis-title{font-size:14.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.whatis-close{width:26px;height:26px;border:0;background:transparent;border-radius:6px;color:var(--muted);display:inline-grid;place-items:center;flex:none;cursor:pointer}
+.whatis-close:hover{background:var(--surface-3);color:var(--ink)}
+.whatis-close svg{width:15px;height:15px;color:currentColor}
+.whatis-text{margin:0;color:var(--ink-2)}
+.whatis-tip{margin:0;padding:7px 9px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.whatis-tip b{color:var(--ink);font-weight:600}
+.whatis-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:6px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.whatis-foot .btn{flex:none;white-space:nowrap}
 /* Kommentar-Pins am Modell (BE-28) */
 .note-pin{position:absolute;transform:translate(-11px,-50%);display:inline-flex;align-items:center;gap:5px;max-width:220px;padding:3px 8px 3px 4px;border:2px solid var(--nc,#f08c00);border-radius:999px;background:var(--surface);color:var(--ink);font:500 12.5px/1.25 var(--font);box-shadow:var(--shadow-1);cursor:pointer;z-index:3;text-align:left}
 .note-pin:hover{border-color:var(--accent)}

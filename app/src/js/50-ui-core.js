@@ -190,7 +190,7 @@ const UI = (() => {
     if (st && st.onKey) document.removeEventListener('keydown', st.onKey, true);
     if (restore && st && st.prevFocus) restoreFocusEl(st.prevFocus);
   }
-  function outside(e) { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }
+  function outside(e) { if (whatIsOn || (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop'))) return; if (openMenu && !openMenu.contains(e.target)) closeMenu(); }
   function menu(anchor, entries, opts = {}) {
     closeRadial();
     closeMenu();
@@ -262,7 +262,7 @@ const UI = (() => {
     let x = opts.alignRight ? r.right - pr.width : r.left, y = opts.up ? r.top - pr.height - 8 : r.bottom + 8;
     x = clamp(x, 8, innerWidth - pr.width - 8); y = clamp(y, 8, innerHeight - pr.height - 8);
     el.style.left = x + 'px'; el.style.top = y + 'px';
-    const outside2 = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closePop(); };
+    const outside2 = (e) => { if (whatIsOn || (e.target && e.target.closest && e.target.closest('#btn-whatis, #whatis-pop'))) return; if (!el.contains(e.target) && !anchor.contains(e.target)) closePop(); };
     const onKey = (e) => {
       if (!openPop || openPop.el !== el) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(true); }
@@ -444,7 +444,7 @@ const UI = (() => {
       activeSlot: -1,
       cmds,
       onOut: (e) => {
-        if (st.holdMode) return;
+        if (st.holdMode || whatIsOn || isOwnControl(e.target)) return;
         if (radialEl && !radialEl.contains(e.target)) closeRadial();
       },
       onMove: (e) => {
@@ -562,6 +562,7 @@ const UI = (() => {
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
   function initTips() {
     document.addEventListener('pointerover', (e) => {
+      if (whatIsOn) return;
       if (e.pointerType === 'touch') return;
       const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
       clearTimeout(tipTimer); clearTimeout(helpTimer);
@@ -820,6 +821,170 @@ const UI = (() => {
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
   }
-  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, openRadial, closeRadial, toggleRadial, finishRadialHold, radialItems, setRadialItems, resetRadial, radialCatalog, radialDialog, get radialOpen() { return !!radialEl; }, get menuOpen() { return !!openMenu; }, get popOpen() { return !!openPop; }, lastPointer: () => ({ ...lastPtr }), focusables, ensureA11yLabels, initA11y, initTips, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
+  // ---------- „Was ist das?“-Modus (BE-32) ----------
+  let whatIsOn = false, whatIsPop = null, whatIsHoverEl = null, whatIsTargetEl = null, whatIsHandledAt = 0, whatIsLast = null, whatIsHintHtml = null;
+  const WHATIS_BLOCK_EVS = ['mousedown', 'pointerup', 'mouseup', 'dblclick', 'contextmenu'];
+  const isOwnControl = (t) => !!(t && t.closest && t.closest('#btn-whatis, #whatis-pop'));
+  const pickHoverTarget = (el) => {
+    const n = el && el.nodeType === 1 ? el : (el && el.parentElement);
+    if (!n) return null;
+    return n.closest('[data-kind],[data-lib],[data-user-lib-id],[data-whatis],[data-help],[data-tip],button,a,input,select,textarea,[role="button"],[role="menuitem"],[role="tab"],.tile,.tl-chip,.node,.viewcube,.section') || n;
+  };
+  function setHover(el) {
+    if (whatIsHoverEl === el) return;
+    if (whatIsHoverEl) whatIsHoverEl.classList.remove('whatis-hover');
+    whatIsHoverEl = el && el !== document.body && el !== document.documentElement ? el : null;
+    if (whatIsHoverEl) whatIsHoverEl.classList.add('whatis-hover');
+  }
+  function closeWhatIsPop() {
+    if (whatIsPop) { whatIsPop.remove(); whatIsPop = null; }
+    if (whatIsTargetEl) { whatIsTargetEl.classList.remove('whatis-target'); whatIsTargetEl = null; }
+    whatIsLast = null;
+  }
+  function placeWhatIsPop(targetEl, pt) {
+    if (!whatIsPop) return;
+    const pr = whatIsPop.getBoundingClientRect();
+    const tr = targetEl && targetEl.getBoundingClientRect ? targetEl.getBoundingClientRect() : null;
+    const huge = !tr || !tr.width || !tr.height || (tr.width * tr.height > innerWidth * innerHeight * 0.45);
+    let x, y;
+    if (huge) {
+      const px = pt && Number.isFinite(pt.x) && pt.x > 0 ? pt.x : innerWidth / 2;
+      const py = pt && Number.isFinite(pt.y) && pt.y > 0 ? pt.y : innerHeight / 2;
+      x = px + 14;
+      y = py + 14;
+      if (x + pr.width > innerWidth - 8) x = px - pr.width - 14;
+      if (y + pr.height > innerHeight - 8) y = py - pr.height - 14;
+    } else {
+      x = tr.left + tr.width / 2 - pr.width / 2;
+      y = tr.bottom + 10;
+      if (y + pr.height > innerHeight - 8) y = tr.top - pr.height - 10;
+      if (y < 8) {
+        y = clamp(tr.top, 8, Math.max(8, innerHeight - pr.height - 8));
+        x = tr.right + 10;
+        if (x + pr.width > innerWidth - 8) x = tr.left - pr.width - 10;
+      }
+    }
+    whatIsPop.style.left = clamp(x, 8, Math.max(8, innerWidth - pr.width - 8)) + 'px';
+    whatIsPop.style.top = clamp(y, 8, Math.max(8, innerHeight - pr.height - 8)) + 'px';
+  }
+  function showWhatIsPop(targetEl, info, pt) {
+    closeWhatIsPop();
+    const markEl = targetEl && targetEl !== document.body && targetEl !== document.documentElement && targetEl.id !== 'viewport' && targetEl.tagName !== 'CANVAS' ? targetEl : null;
+    if (markEl) { whatIsTargetEl = markEl; whatIsTargetEl.classList.add('whatis-target'); }
+    const box = h('div', { id: 'whatis-pop', class: 'whatis-pop', role: 'dialog', 'aria-live': 'polite', 'aria-label': T('whatis.dialogAria') });
+    const head = h('div', { class: 'whatis-head' });
+    head.innerHTML = icon('help');
+    head.append(h('strong', { class: 'whatis-title' }, info.title || T('whatis.genericTitle')));
+    if (info.kbd) head.append(h('span', { class: 'kbd' }, info.kbd));
+    const clsBtn = h('button', { type: 'button', id: 'whatis-close', class: 'whatis-close', 'aria-label': T('common.close') });
+    clsBtn.innerHTML = icon('close');
+    clsBtn.onclick = () => closeWhatIsPop();
+    head.append(clsBtn);
+    box.append(head, h('p', { class: 'whatis-text' }, info.text || T('whatis.genericFallback')));
+    if (info.tip) box.append(h('p', { class: 'whatis-tip' }, h('b', null, T('whatis.tipPrefix') + ' '), info.tip));
+    const exitBtn = h('button', { type: 'button', id: 'whatis-exit', class: 'btn small' }, T('whatis.exitBtn'));
+    exitBtn.onclick = () => setWhatIs(false);
+    box.append(h('div', { class: 'whatis-foot' }, h('span', null, T('whatis.footHint')), exitBtn));
+    document.body.append(box);
+    whatIsPop = box;
+    placeWhatIsPop(targetEl, pt);
+  }
+  function fallbackDescribe(rawTarget) {
+    const el = rawTarget && rawTarget.nodeType === 1 ? rawTarget : (rawTarget && rawTarget.parentElement);
+    const tip = el && el.dataset ? el.dataset.tip : '';
+    const lbl = (el && (el.getAttribute && (el.getAttribute('aria-label') || el.title))) || (el && el.textContent ? el.textContent.trim().slice(0, 60) : '');
+    return {
+      title: lbl || T('whatis.genericTitle'),
+      text: tip ? T('whatis.tipFallback', { tip }) : T('whatis.genericFallback'),
+      tip: '',
+      kbd: el && el.dataset ? (el.dataset.kbd || '') : '',
+      anchor: el,
+    };
+  }
+  function explainTarget(rawTarget, clientX, clientY) {
+    const el = rawTarget && rawTarget.nodeType === 1 ? rawTarget : (rawTarget && rawTarget.parentElement);
+    if (!el) return;
+    const info = (typeof Explain !== 'undefined' && Explain.describeElement) ? Explain.describeElement(el, clientX, clientY) : fallbackDescribe(el);
+    showWhatIsPop(info.anchor || el, info, { x: clientX, y: clientY });
+    whatIsLast = { el, x: clientX, y: clientY };
+  }
+  function blockEv(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+  function onWhatIsPointerDown(e) {
+    if (!whatIsOn || isOwnControl(e.target)) return;
+    blockEv(e);
+    whatIsHandledAt = performance.now();
+    explainTarget(e.target, e.clientX, e.clientY);
+  }
+  function onWhatIsBlock(e) {
+    if (!whatIsOn || isOwnControl(e.target)) return;
+    blockEv(e);
+  }
+  function onWhatIsClick(e) {
+    if (!whatIsOn || isOwnControl(e.target)) return;
+    blockEv(e);
+    if (performance.now() - whatIsHandledAt > 400) {
+      const r = e.target && e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : null;
+      const cx = (e.clientX || e.clientY) ? e.clientX : (r ? r.left + r.width / 2 : innerWidth / 2);
+      const cy = (e.clientX || e.clientY) ? e.clientY : (r ? r.top + r.height / 2 : innerHeight / 2);
+      explainTarget(e.target, cx, cy);
+    }
+  }
+  function onWhatIsMove(e) {
+    if (!whatIsOn) return;
+    if (isOwnControl(e.target)) { setHover(null); return; }
+    setHover(pickHoverTarget(e.target));
+  }
+  function onWhatIsKeyDown(e) {
+    if (!whatIsOn) return;
+    if (e.key === 'Escape') { blockEv(e); setWhatIs(false); return; }
+    if ((e.key === 'Enter' || e.key === ' ') && !isOwnControl(e.target)) {
+      blockEv(e);
+      const r = e.target && e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : null;
+      explainTarget(e.target, r ? r.left + r.width / 2 : innerWidth / 2, r ? r.top + r.height / 2 : innerHeight / 2);
+    }
+  }
+  function syncWhatIsListeners(on) {
+    const fn = on ? window.addEventListener : window.removeEventListener;
+    fn.call(window, 'pointerdown', onWhatIsPointerDown, true);
+    fn.call(window, 'click', onWhatIsClick, true);
+    fn.call(window, 'pointermove', onWhatIsMove, true);
+    fn.call(window, 'keydown', onWhatIsKeyDown, true);
+    for (const ev of WHATIS_BLOCK_EVS) fn.call(window, ev, onWhatIsBlock, true);
+  }
+  function setWhatIs(on) {
+    const next = !!on;
+    if (whatIsOn === next) return whatIsOn;
+    whatIsOn = next;
+    document.body.classList.toggle('whatis-mode', whatIsOn);
+    const btn = $('#btn-whatis');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(whatIsOn));
+      btn.classList.toggle('active', whatIsOn);
+    }
+    syncWhatIsListeners(whatIsOn);
+    if (whatIsOn) {
+      hideTip();
+      clearTimeout(tipTimer);
+      whatIsHintHtml = T('whatis.hintActive');
+      hint(whatIsHintHtml);
+    } else {
+      setHover(null);
+      closeWhatIsPop();
+      if (hintOverride === whatIsHintHtml) hint(null);
+      whatIsHintHtml = null;
+    }
+    return whatIsOn;
+  }
+  function toggleWhatIs() { return setWhatIs(!whatIsOn); }
+  function refreshWhatIs() {
+    if (!whatIsOn) return;
+    whatIsHintHtml = T('whatis.hintActive');
+    hint(whatIsHintHtml);
+    if (whatIsLast) {
+      if (whatIsLast.el && document.body.contains(whatIsLast.el)) explainTarget(whatIsLast.el, whatIsLast.x, whatIsLast.y);
+      else closeWhatIsPop();
+    }
+  }
+  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, openRadial, closeRadial, toggleRadial, finishRadialHold, radialItems, setRadialItems, resetRadial, radialCatalog, radialDialog, get radialOpen() { return !!radialEl; }, get menuOpen() { return !!openMenu; }, get popOpen() { return !!openPop; }, lastPointer: () => ({ ...lastPtr }), focusables, ensureA11yLabels, initA11y, initTips, helpKey, hideTip, setWhatIs, toggleWhatIs, closeWhatIsPop, refreshWhatIs, get whatIsActive() { return whatIsOn; }, hasTouch, isTablet, syncTablet, initTablet, hint, renderHint, loading, busy, numField, selectField, textField };
 })();
 
