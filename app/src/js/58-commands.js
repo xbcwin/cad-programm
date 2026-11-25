@@ -229,6 +229,9 @@ const Commands = (() => {
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
+    add('pattern-points', 'Muster an Skizzenpunkten', 'point', 'muster skizzenpunkte punkte punkt bohrung loch kopien kp-45', () => Features.patternPoints(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('pattern-table', 'Muster aus Tabelle (CSV)', 'list', 'muster tabelle csv koordinaten x y z drehung kopien kp-45', () => Features.patternTable(), { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
+    add('fill-pattern', 'Füllmuster auf ebener Fläche (Löcher, Waben)', 'patternFill', 'fuellmuster füllmuster waben raster versetzt loecher löcher flaeche randabstand kp-44', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'PLANE') Features.fillPattern(f); else Features.startFillPattern(); }, { group: 'Bearbeiten', when: () => typeof ViewPrefs === 'undefined' || !ViewPrefs.simple });
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
     add('mirror-step', 'Schritt spiegeln (Formschritt im selben Körper)', 'mirror', 'spiegeln schritt formschritt tasche loch rippe symmetrisch ebene fläche körper', () => Features.mirrorStep(), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });

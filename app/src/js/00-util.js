@@ -2274,6 +2274,21 @@ const HELP = {
   "tip": "Körper an einer anderen Fläche, Bezugsebene oder gezeichneten Skizze teilen (Profi)",
   "hilfe": "Statt nur waagerecht oder senkrecht zu schneiden, kannst du im Profi-Modus beim Teilen eine ebene oder gekrümmte Fläche eines anderen Körpers (oder eine Bezugsebene) wählen oder eine eigene Kurve (Linie, Bogen, Spline) durch den Körper zeichnen.",
   "tipp": "Mit „Behalten“ und „Spalt“ entscheidest du auch bei gebogenen Schnitten, ob beide Teile bleiben oder eine Seite ausgeblendet wird."
+ },
+ "fillPattern": {
+  "tip": "Ebene Fläche mit Löchern oder Sechseck-Waben füllen (Profi)",
+  "hilfe": "Wähle eine ebene Körperfläche und klicke auf „Füllmuster“. Tracery schneidet gleichmäßige runde Löcher (im Raster oder versetzt) oder Sechseck-Waben direkt durch das Bauteil – und lässt dabei nur Löcher zu, die den eingestellten Randabstand zu Außenkanten und bestehenden Durchbrüchen einhalten.",
+  "tipp": "Mit „Tiefe“ größer als 0 entstehen Sacklöcher statt Durchbrüchen, und über „Drehwinkel“ drehst du das ganze Muster."
+ },
+ "patternPoints": {
+  "tip": "Körper, Bohrung oder Schritt an Skizzenpunkten vervielfachen (Profi)",
+  "hilfe": "Wähle einen Körper, eine Bohrung oder einen Formschritt und klicke auf „Muster an Skizzenpunkten“. Setze in der Skizze beliebig viele Punkte – oder wähle rechts unter „Punkt-Quelle“ eine bestehende Skizze mit Punkten. An jedem Punkt entsteht genau eine Kopie.",
+  "tipp": "Mit einem Klick auf eine Kopie im Bild oder auf ihre Nummer rechts lässt sich jeder einzelne Punkt auslassen."
+ },
+ "patternTable": {
+  "tip": "Körper, Bohrung oder Schritt aus einer CSV-Koordinatentabelle vervielfachen (Profi)",
+  "hilfe": "Wähle einen Körper, eine Bohrung oder einen Formschritt und klicke auf „Muster aus Tabelle (CSV)“. Trage Koordinaten (X, Y, optional Z und Drehwinkel rot) Zeile für Zeile ein oder lade eine CSV-Datei. Jede Zeile erzeugt eine Kopie.",
+  "tipp": "Du kannst wählen, ob die Zahlen als Zielposition im Modell oder als Versatz (dX, dY, dZ) vom Original gerechnet werden."
  }
 };
 

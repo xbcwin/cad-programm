@@ -9,7 +9,7 @@ const STEP_TEXT = /*JSON:schritt-erklaerungen.json*/null;
 
 const Explain = (() => {
   function keyOf(it) {
-    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', path: 'pattern_path', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
+    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', path: 'pattern_path', points: 'pattern_points', table: 'pattern_table', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
     if (Mass.fixedOf(it) || String((it.p || {}).lib || '').startsWith('buy')) return 'buy';
     if (it.kind === 'part') return (it.p || {}).lib;
     if (it.kind === 'group') return 'group';
@@ -87,6 +87,12 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       const cnt = Math.max(1, Math.round(Model.num(p.count, V, 6)));
       lines.push({ k: 'op', t: `Setzt ${cnt} Kühlrippen (${Units.fmtLenU(Model.num(p.finW, V, 1.5), 2, doc)} dick, ${Units.fmtLenU(Model.num(p.height, V, 10), 2, doc)} hoch, Randabstand ${Units.fmtLenU(Model.num(p.margin, V, 2), 2, doc)}) auf „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
+    }
+    if (it.kind === 'fillPattern') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const kn = p.kind === 'hex' ? 'Waben' : p.kind === 'staggered' ? 'versetzte Löcher' : 'Raster-Löcher';
+      const dep = Model.num(p.depth, V, 0);
+      lines.push({ k: 'op', t: `Füllt eine Fläche von „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ mit ${kn} (${Units.fmtLenU(Model.num(p.size, V, 5), 2, doc)}, Abstand ${Units.fmtLenU(Model.num(p.pitch, V, 8), 2, doc)}, Randabstand ${Units.fmtLenU(Model.num(p.margin, V, 4), 2, doc)}, ${dep > 1e-4 ? Units.fmtLenU(dep, 2, doc) + ' tief' : 'durch die Wand'}).` });
     }
     if (it.kind === 'web') {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
@@ -188,7 +194,7 @@ const Explain = (() => {
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deform' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'vent' && it.kind !== 'fins' && it.kind !== 'fillPattern' && it.kind !== 'web' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'splitFace' && it.kind !== 'dome' && it.kind !== 'mirrorStep' && it.kind !== 'boss' && it.kind !== 'lipGroove' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && it.kind !== 'deform' && it.kind !== 'deleteBody' && it.kind !== 'sketch3d' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });
