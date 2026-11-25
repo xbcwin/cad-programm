@@ -29,16 +29,31 @@ const Mass = (() => {
     return r;
   }
   // Messung eines beliebigen Projektstands (z. B. einer älteren Version)
-  function measureDoc(doc) {
-    if (!Kernel.ready || !doc.items.length) return Promise.resolve(null);
+  async function measureDoc(doc, opts = {}) {
+    if (!doc || !doc.items || !doc.items.length) return null;
+    if (!Kernel.ready) {
+      if (Kernel.state === 'loading' || (opts && opts.ensure)) {
+        try { await Kernel.ensure(); } catch (_) { return null; }
+      } else {
+        return null;
+      }
+    }
     return Kernel.call('measure', { scene: Model.kernelScene(doc) }).then((r) => enrich(r, doc)).catch(() => null);
   }
   // Messung des aktuellen Stands – pro Stand nur einmal
-  function measure() {
-    if (!Kernel.ready || !App.doc.items.length) return Promise.resolve(null);
+  function measure(opts = {}) {
+    if (!App.doc || !App.doc.items || !App.doc.items.length) return Promise.resolve(null);
+    if (!Kernel.ready && Kernel.state !== 'loading' && !(opts && opts.ensure)) return Promise.resolve(null);
     if (cache.rev === App.revision && cache.p) return cache.p;
     const rev = App.revision;
-    cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
+    cache = {
+      rev,
+      p: measureDoc(App.doc, opts).then((r) => {
+        if (!r) { if (cache.rev === rev) cache = { rev: -1, p: null }; return null; }
+        if (cache.rev === rev) ev.emit('measured', r);
+        return r;
+      }),
+    };
     return cache.p;
   }
   // festes Gewicht – auch wenn es noch fehlt (leer): dann zählt es mit 0 g und wird angemahnt

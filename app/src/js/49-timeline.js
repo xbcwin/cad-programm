@@ -2,7 +2,7 @@
 // Jeder oberste Eintrag im Verlauf ist ein Schritt. Der Marker legt fest, bis wohin gerechnet wird;
 // neue Schritte landen am Marker. Unterdrückte Schritte bleiben erhalten, zählen aber nicht mit.
 const Timeline = (() => {
-  let el, track, info, btnL, btnR, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null, switching = false;
+  let el, track, info, btnL, btnR, bStart, bPrev, bNext, bEnd, drag = null, pendingRender = false, peekT = null, peekK = null, switching = false;
   const isNoHistory = () => !!(App.doc && App.doc.noHistory);
   async function setNoHistory(on, opts = {}) {
     const target = !!on;
@@ -69,8 +69,58 @@ const Timeline = (() => {
     const msg = errs.length ? ' · ' + errs[0].message : refs.length ? ' · ' + refs[0].message : '';
     return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${cacheTxt}${ai}${msg}${it.note ? T('tl.notePrefix') + it.note : ''}`;
   }
+  function applyChipState(c, it, i, mk, own, V, selTop) {
+    const hardErrs = RefFix.hardErrorsFor(it.id);
+    const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
+    const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
+    const cs = (!it.suppressed && i < mk && own === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
+    const tip = chipTip(it, i, V);
+    c._it = it;
+    c.dataset.idx = i;
+    c.dataset.id = it.id;
+    c.dataset.kind = it.kind;
+    c.dataset.lib = (it.p && it.p.lib) || '';
+    c.dataset.ai = it.ai ? '1' : '';
+    if (cs && cs.fp) c.dataset.fp = cs.fp; else delete c.dataset.fp;
+    if (cs && (cs.cached || cs.rebuilt)) c.dataset.cache = cs.cached ? 'hit' : 'rebuilt'; else delete c.dataset.cache;
+    c.className = 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : '');
+    c.setAttribute('data-tip', tip);
+    c.setAttribute('aria-label', tip);
+    if (it.ai) c.setAttribute('data-help', 'aiSteps'); else c.removeAttribute('data-help');
+    const bar = c.querySelector('.bar');
+    if (bar) bar.style.background = it.role === 'hole' ? 'transparent' : it.color;
+  }
+  function canUpdateInPlace(items, mk, ownKey) {
+    const n = items.length;
+    if (n <= 0 || track.dataset.tlOwn !== ownKey || track.children.length !== n + 1) return false;
+    const mkEl = track.children[mk];
+    if (!mkEl || !mkEl.classList.contains('tl-marker')) return false;
+    for (let i = 0; i < n; i++) {
+      const ch = track.children[i < mk ? i : i + 1];
+      const it = items[i];
+      if (!ch || !ch.classList.contains('tl-chip')) return false;
+      if (ch.dataset.id !== it.id || ch.dataset.kind !== it.kind) return false;
+      if ((ch.dataset.lib || '') !== ((it.p && it.p.lib) || '')) return false;
+      if ((ch.dataset.ai || '') !== (it.ai ? '1' : '')) return false;
+    }
+    return true;
+  }
+  function finishRender(own, n, mk) {
+    const pk = own === App.doc ? App.peeking : null;
+    info.classList.toggle('peek', pk != null);
+    info.textContent = pk != null ? T('tl.peekInfo', { n: pk }) : n ? (mk >= n ? (n === 1 ? T('tl.oneStep') : T('tl.manySteps', { n })) : `${mk} / ${n}`) : '';
+    const le = own === App.doc && App.evalStats && App.evalStats.lastEval;
+    if (le) info.dataset.tip = `Letztes Rechnen: ${le.rebuilt.length} neu gerechnet, ${le.cached.length} aus Speicher`;
+    else delete info.dataset.tip;
+    track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', pk != null && j >= pk));
+    bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
+    // aktiven Bereich sichtbar halten
+    const m = track.querySelector('.tl-marker'); if (m && !drag) { const r = m.offsetLeft - track.clientWidth + 60; if (r > track.scrollLeft) track.scrollLeft = r; }
+  }
   function render() {
     if (!el) return;
+    if (drag) { pendingRender = true; return; }
+    pendingRender = false;
     const own = owner(), items = listOf(own), n = items.length, mk = markerPos();
     const noHist = isNoHistory() && own === App.doc;
     el.classList.toggle('no-history', noHist);
@@ -78,6 +128,7 @@ const Timeline = (() => {
       el.classList.remove('ctx');
       if (btnL) btnL.hidden = true;
       if (btnR) btnR.hidden = true;
+      delete track.dataset.tlOwn;
       track.innerHTML = '';
       const msg = h('span', { class: 'tl-nohist-msg' }, T('tl.noHistoryBar'));
       const btn = h('button', { type: 'button', class: 'btn small pro', id: 'tl-resume-history', 'data-help': 'noHistory' }, T('tl.resumeBtn'));
@@ -93,45 +144,45 @@ const Timeline = (() => {
     const V = Model.vars(App.doc).v;
     const selTop = own === App.doc ? new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id)) : new Set(App.sel);
     el.classList.toggle('ctx', own !== App.doc);
+    const ownKey = own === App.doc ? 'doc' : own.id;
+    if (canUpdateInPlace(items, mk, ownKey)) {
+      const marker = track.children[mk];
+      marker.setAttribute('aria-valuemax', n);
+      marker.setAttribute('aria-valuenow', mk);
+      items.forEach((it, i) => {
+        const c = track.children[i < mk ? i : i + 1];
+        applyChipState(c, it, i, mk, own, V, selTop);
+      });
+      finishRender(own, n, mk);
+      return;
+    }
+    track.dataset.tlOwn = ownKey;
     track.innerHTML = '';
     if (!n) track.append(h('span', { class: 'tl-empty' }, own !== App.doc ? T('tl.emptyComp', { name: Model.label(own) }) : T('tl.emptyDoc')));
     const marker = h('div', { class: 'tl-marker', role: 'slider', 'aria-label': T('tl.markerAria'), 'aria-valuemin': 0, 'aria-valuemax': n, 'aria-valuenow': mk, tabindex: 0, 'data-tip': T('tl.markerTip'), 'data-help': 'rollback' }, h('i'));
     marker.addEventListener('pointerdown', startDrag);
-    marker.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(mk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(mk + 1); } });
+    marker.addEventListener('keydown', (e) => { const curMk = markerPos(); if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(curMk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(curMk + 1); } });
     items.forEach((it, i) => {
       if (i === mk) track.append(marker);
-      const hardErrs = RefFix.hardErrorsFor(it.id);
-      const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
-      const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
-      const cs = (!it.suppressed && i < mk && own === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
-      const ds = { idx: i };
-      if (cs && cs.fp) ds.fp = cs.fp;
-      if (cs && (cs.cached || cs.rebuilt)) ds.cache = cs.cached ? 'hit' : 'rebuilt';
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: ds });
-      c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
+      const c = h('button', { type: 'button', class: 'tl-chip' });
+      c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar' }));
       if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
-      c.onclick = (e) => { clearTimeout(peekT); peekK = null; App.peek(null); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
+      applyChipState(c, it, i, mk, own, V, selTop);
+      c.onclick = (e) => { const cur = c._it || it; clearTimeout(peekT); peekK = null; App.peek(null); App.select([cur.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
       // Maus kurz über einem Schritt halten: Stand nach diesem Schritt ansehen (nur im Projekt, nur vor dem Marker)
-      if (own === App.doc && i < mk - 1) c.addEventListener('pointermove', (e) => {
-        if (e.pointerType === 'touch' || drag) return;
-        if (peekK === i + 1) return;
-        peekK = i + 1; clearTimeout(peekT); peekT = setTimeout(() => App.peek(i + 1), 450);
+      c.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'touch' || drag || owner() !== App.doc) return;
+        const idx = Number(c.dataset.idx);
+        if (idx >= markerPos() - 1) return;
+        if (peekK === idx + 1) return;
+        peekK = idx + 1; clearTimeout(peekT); peekT = setTimeout(() => App.peek(idx + 1), 450);
       });
-      c.ondblclick = (e) => { e.preventDefault(); setMarker(i + 1, `Zeitleiste: bis „${Model.label(it)}“`); };
-      c.oncontextmenu = (e) => { e.preventDefault(); menu(c, it, i); };
+      c.ondblclick = (e) => { e.preventDefault(); const cur = c._it || it; const idx = Number(c.dataset.idx); setMarker(idx + 1, `Zeitleiste: bis „${Model.label(cur)}“`); };
+      c.oncontextmenu = (e) => { e.preventDefault(); const cur = c._it || it; const idx = Number(c.dataset.idx); menu(c, cur, idx); };
       track.append(c);
     });
     if (mk >= n && n) track.append(marker);
-    const pk = own === App.doc ? App.peeking : null;
-    info.classList.toggle('peek', pk != null);
-    info.textContent = pk != null ? T('tl.peekInfo', { n: pk }) : n ? (mk >= n ? (n === 1 ? T('tl.oneStep') : T('tl.manySteps', { n })) : `${mk} / ${n}`) : '';
-    const le = own === App.doc && App.evalStats && App.evalStats.lastEval;
-    if (le) info.dataset.tip = `Letztes Rechnen: ${le.rebuilt.length} neu gerechnet, ${le.cached.length} aus Speicher`;
-    else delete info.dataset.tip;
-    if (pk != null) track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', j >= pk));
-    bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
-    // aktiven Bereich sichtbar halten
-    const m = track.querySelector('.tl-marker'); if (m && !drag) { const r = m.offsetLeft - track.clientWidth + 60; if (r > track.scrollLeft) track.scrollLeft = r; }
+    finishRender(own, n, mk);
   }
   function menu(anchor, it, i) {
     const box = h('div', { class: 'menu-list', style: { display: 'grid', gap: '2px', minWidth: '200px' } });
@@ -160,7 +211,9 @@ const Timeline = (() => {
     return chips.length;
   }
   function startDrag(e) {
-    e.preventDefault(); const m = e.currentTarget; try { m.setPointerCapture(e.pointerId); } catch (_) {} m.classList.add('drag');
+    e.preventDefault();
+    clearTimeout(peekT); peekK = null;
+    const m = e.currentTarget; try { m.setPointerCapture(e.pointerId); } catch (_) {} m.classList.add('drag');
     drag = { k: markerPos(), ind: null };
     const move = (ev) => {
       const k = gapAt(ev.clientX); if (k === drag.k && drag.ind) return; drag.k = k;
@@ -169,8 +222,12 @@ const Timeline = (() => {
       const chips = track.querySelectorAll('.tl-chip');
       if (k < chips.length) chips[k].before(drag.ind); else track.append(drag.ind);
     };
-    const up = () => { m.removeEventListener('pointermove', move); m.removeEventListener('pointerup', up); m.removeEventListener('pointercancel', up); const k = drag.k; if (drag.ind) drag.ind.remove(); drag = null; m.classList.remove('drag'); setMarker(k); render(); };
-    m.addEventListener('pointermove', move); m.addEventListener('pointerup', up); m.addEventListener('pointercancel', up);
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      const k = drag.k; if (drag.ind) drag.ind.remove(); drag = null; pendingRender = false; m.classList.remove('drag');
+      setMarker(k); render();
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   }
   function refreshLabels() {
     if (!el) return;
@@ -192,8 +249,8 @@ const Timeline = (() => {
     $('#center').append(el); $('#center').classList.add('has-tl');
     const r = debounce(render, 30);
     const now = () => { r.cancel(); render(); };
-    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', now); App.on('peek', now);
-    App.on('doc', () => { clearTimeout(peekT); peekK = null; });
+    App.on('doc', () => { clearTimeout(peekT); peekK = null; now(); });
+    App.on('selection', r); App.on('results', r); App.on('ctx', now); App.on('peek', now);
     track.addEventListener('pointerleave', () => { clearTimeout(peekT); peekK = null; App.peek(null); });
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
     render();

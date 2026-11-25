@@ -523,7 +523,7 @@ body.sketching .timeline{display:none}
 .stepbox p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.45}
 .stepbox .btn-row{flex-wrap:nowrap}
 
-.toasts{position:fixed;left:50%;bottom:calc(86px + var(--ai-h, 0px));transform:translateX(-50%);display:grid;gap:8px;z-index:90;pointer-events:none;width:min(520px,calc(100vw - 32px))}
+.toasts{position:fixed;left:50%;bottom:calc(78px + 46px * var(--ui-scale,1) + var(--ai-h, 0px));transform:translateX(-50%);display:grid;gap:8px;z-index:90;pointer-events:none;width:min(520px,calc(100vw - 32px))}
 .toast{pointer-events:auto;display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--surface);border-radius:10px;padding:10px 12px 10px 14px;box-shadow:var(--shadow-2);font-size:14px;line-height:1.35;animation:toastIn .18s ease-out}
 .toast svg{width:18px;height:18px;flex:none}
 .toast .grow{flex:1}
@@ -725,7 +725,7 @@ body.sketching .timeline{display:none}
   .seg button{padding:6px 8px;font-size:13.5px}
   .brand{padding-right:0}
   .viewcube{transform:scale(.8);transform-origin:top right}
-  .toasts{bottom:calc(120px + var(--ai-h, 0px))}
+  .toasts{bottom:calc(134px + var(--ai-h, 0px))}
 }
 @media (max-width: 640px){
   /* Skizzenleiste auf dem Handy: oben die Werkzeuge, darunter Rückgängig, Abbrechen und Fertig */
@@ -1294,6 +1294,7 @@ body.tablet .tl-chip,body.tablet .tl-btns button{width:40px;height:40px}
 body.tablet .tl-marker{width:22px;height:44px}
 body.tablet .center.has-tl .view-btns{bottom:74px}
 body.tablet .center.has-tl .axis-gizmo{bottom:70px}
+body.tablet .toasts{bottom:calc(80px + 54px * var(--ui-scale,1) + var(--ai-h, 0px))}
 body.tablet .coords{display:none}
 body.tablet .bottombar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"cmd cmd" "hint amp";row-gap:6px}
 body.tablet .cmd{grid-area:cmd}

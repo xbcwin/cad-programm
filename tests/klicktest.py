@@ -33116,6 +33116,131 @@ def t_a163_anzeige_zustaende_varianten(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11251455(p):
+    # 1. Toast überdeckt Zeitleiste nicht; Marker lässt sich auch bei sichtbarem Toast ziehen
+    three(p)
+    p.ev("UI.toast('F-11251455 Test-Toast', { icon: 'info', ms: 5000 });")
+    p.wait(200)
+    pos_info = p.ev("""
+      const tl = document.querySelector('#timeline').getBoundingClientRect();
+      const toast = document.querySelector('#toasts .toast').getBoundingClientRect();
+      const mk = document.querySelector('.tl-marker').getBoundingClientRect();
+      const hits = document.elementsFromPoint(mk.left + mk.width / 2, mk.top + mk.height / 2);
+      return {
+        aboveTl: toast.bottom <= tl.top + 1,
+        noToastAtMarker: !hits.some(el => el.closest && el.closest('.toast')),
+      };
+    """)
+    m = p.pg.locator('.tl-marker').bounding_box()
+    c = p.pg.locator('.tl-chip').nth(1).bounding_box()
+    p.pg.mouse.move(m['x'] + 6, m['y'] + 19)
+    p.pg.mouse.down()
+    p.pg.mouse.move(c['x'] + 5, c['y'] + 16, steps=8)
+    p.pg.mouse.up()
+    p.wait(500)
+    ok1 = bool(
+        pos_info['aboveTl']
+        and pos_info['noToastAtMarker']
+        and p.ev("return App.doc.rollback") == 1
+    )
+    p.pg.locator('.tl-chip').last.dblclick()
+    p.wait(400)
+
+    # 2. Timeline.render() aktualisiert Chips & Marker in-place bei Auswahl/Render ohne DOM-Verlust und sofort bei doc-Änderung
+    in_place_ok = p.ev("""
+      const mk0 = document.querySelector('.tl-marker');
+      const chips0 = [...document.querySelectorAll('.tl-chip')];
+      App.select([App.doc.items[0].id]);
+      App.clearSelection();
+      Timeline.render();
+      const mk1 = document.querySelector('.tl-marker');
+      const chips1 = [...document.querySelectorAll('.tl-chip')];
+      const inPlace = !!mk0 && mk0 === mk1 && mk1.isConnected
+          && chips0.length === chips1.length
+          && chips0.every((el, idx) => el === chips1[idx] && el.isConnected);
+      Actions.addPrimitive('cone');
+      const cAdd = document.querySelectorAll('.tl-chip').length;
+      const iAdd = document.querySelector('.tl-info')?.textContent || '';
+      App.undo();
+      const cUndo = document.querySelectorAll('.tl-chip').length;
+      const iUndo = document.querySelector('.tl-info')?.textContent || '';
+      return inPlace && cAdd === 4 && iAdd.includes('4') && cUndo === 3 && iUndo.includes('3');
+    """)
+    ok2 = bool(in_place_ok)
+
+    # 3. Actions.setGrounded aktualisiert Panels sofort & pendingLeftDirty verhindert verlorenen doc-Tree-Render
+    ids = p.ev("return App.doc.items.map(x => x.id);")
+    p.ev("App.select([arg]);", ids[0])
+    p.wait(150)
+    ground_sync = p.ev("""
+      Actions.setGrounded([arg], true);
+      return {
+        lockMark: document.querySelectorAll('#left-body .node[data-id="' + arg + '"] .lock-mark').length === 1,
+        txDisabled: !!document.querySelector('#t-x')?.disabled,
+        hasHint: !!document.querySelector('#grounded-hint'),
+      };
+    """, ids[0])
+    p.ev("""
+      App.change('Entsichern', d => {
+        const it = Model.find(d, arg[0]).item;
+        if (it) it.locked = false;
+      });
+      App.select([arg[1]]);
+    """, [ids[0], ids[1]])
+    p.wait(80)
+    lock_cleared = p.ev("return document.querySelectorAll('#left-body .node[data-id=\"' + arg + '\"] .lock-mark').length === 0;", ids[0])
+    ok3 = bool(ground_sync['lockMark'] and ground_sync['txDisabled'] and ground_sync['hasHint'] and lock_cleared)
+
+    # 4. Tooltip räumt Vorgänger beim Zielwechsel auf, übersteht verzögertes scroll-Event & Neurendern von #right-body unter ruhender Maus; Mass.measure liefert echtes Gewicht für __fix
+    p.ev("App.select([arg]);", ids[0])
+    p.pg.wait_for_selector('#part-props-sec .section-h', timeout=10000)
+    p.ev("return Mass.measure();")
+    p.pg.wait_for_selector('[data-help="inertia"]', timeout=5000)
+    p.pg.locator('[data-help="inertia"]').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=2500)
+        old_tip_ok = True
+    except Exception:
+        old_tip_ok = False
+    p.pg.locator('#part-props-sec .section-h').hover()
+    stale_cleared = p.ev("return document.querySelector('.tooltip') === null;")
+    p.wait(80)
+    p.ev("document.querySelector('#right-body').dispatchEvent(new Event('scroll'));")
+    p.wait(70)
+    p.ev("Panels.renderRight();")
+    try:
+        p.pg.wait_for_selector('.tooltip', timeout=2500)
+        tip_ok = True
+    except Exception:
+        tip_ok = False
+    tip_info = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => {
+      const tip = document.querySelector('.tooltip')?.textContent || '';
+      return {
+        hasTip: !!(d.partProps && d.partProps.tip && tip.includes(d.partProps.tip)),
+      };
+    });""")
+    p.ev("App.select([arg]);", ids[1])
+    p.pg.wait_for_selector('#p-mat', timeout=10000)
+    exp_mass = p.ev("return Mass.measure().then(r => { const pt = Mass.partOf(r, arg); return pt ? Math.round(pt.mass * 10) / 10 : null; });", ids[1])
+    p.pg.select_option('#p-mat', '__fix')
+    for _ in range(15):
+        p.wait(200)
+        if p.ev("return Model.find(App.doc, arg).item.massG != null;", ids[1]):
+            break
+    got_mass = p.ev("return Model.find(App.doc, arg).item.massG;", ids[1])
+    ok4 = bool(
+        old_tip_ok
+        and stale_cleared
+        and tip_ok
+        and tip_info['hasTip']
+        and exp_mass is not None
+        and got_mass is not None
+        and abs(got_mass - exp_mass) < 1e-6
+        and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a166_skelett_skizze(p):
     # [A-166] Baugruppe (Profi): Skelett-Skizze (BG-32)
     p.ev("""
@@ -34419,6 +34544,7 @@ TESTS = [
     ('[A-155] Kollision beim Ziehen und Abstands-Prüfung (BG-17, BG-18)', t_a155_kollision_und_luft),
     ('[A-164] Leichtmodus und vereinfachte Hülle (BG-29, BG-30)', t_a164_leichtmodus_huelle),
     ('[A-163] Baugruppe: Anzeige-Zustände & Varianten (BG-27, BG-28)', t_a163_anzeige_zustaende_varianten),
+    ('[F-11251455] Volltest-Reparatur: Toast über Zeitleiste / Zeitleiste in-place / Festsetzen & doc-Tree-Sync / Mass.measure & Tooltip-Reacquire', t_f11251455),
     ('[A-166] Skelett-Skizze: Hauptskizze steuert mehrere Teile (BG-32)', t_a166_skelett_skizze),
     ('[A-165] Baugruppe: als ein Körper speichern & Toleranzkette (BG-31, BG-33)', t_a165_baugruppe_einkoerper_toleranzkette),
     ('[A-168] Zeichnung: Halbschnitt, abgesetzter Schnitt, Ausbruch (ZE-15)', t_a168_schnittarten),
