@@ -2326,6 +2326,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & Übersetzung**: `settingsFile` und `uiScale` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`settings-export`, `settings-import`, `settings-scale`) und i18n-Testmodus im Einstellungsfenster ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser auf einem großen Monitor die Oberflächen-Größe auf 125 % und 150 % stellen, Modell, Skizze und Zeichnung auf saubere Lesbarkeit ohne Überlappung prüfen und eine gesicherte `.json`-Einstellungsdatei ins Fenster ziehen.
 
+## Spline mit Kontrollpunkten und Tangenten-Griffen (Auto [A-111], SK-32, SK-33)
+
+- [x] **Kontrollpunkt-Spline (Profi, offen & geschlossen)**: 4-Punkte- und 5-Punkte-Kontrollpunkt-Spline über `#sp-mode = 'cv'` gezeichnet → startet exakt im ersten und endet im letzten Punkt, innere Punkte ziehen weich an ohne durchlaufen zu werden, `C1`-Stetigkeit am Übergang, geschlossene Variante lässt sich fehlerfrei zu einem Volumenkörper hochziehen.
+- [x] **Tangenten-Griffe an Durchgangs-Splines (Richtung, Stärke, Maß)**: Griff am Startpunkt per `#se-hAng0` auf `45°` gesetzt → `SK.splineTangentAt`, `SK.splineBez` und Kurvenanfang zeigen exakt `45°`, Durchgangspunkte bleiben erhalten; Griff per Maus auf `45°` gezogen, per Maß-Werkzeug (`D`) auf `30°` bemaßt, mit `#se-sh-reset` zurückgesetzt und mit `Strg+Z` wiederhergestellt.
+- [x] **Einfach-Modus, Hilfetexte & Übersetzung**: Im Modus „Einfach“ sind Kontrollpunkt-Spline und Tangenten-Griffe ausgeblendet; `splineControl` und `splineHandles` in `HELP` sowie alle neuen DE/EN-Texte vorhanden, ohne JavaScript-Fehler.
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine geschwungene Kontrollpunkt-Spline und eine Durchgangs-Spline mit mehreren angepassten Tangenten-Griffen zeichnen, per Ziehen und Formel-Maß formen und als Körper hochziehen.
+
 ## Krümmungskamm und Regel „krümmungsglatt“ (Auto [A-112], SK-34, SK-35)
 
 - [x] **Nur im Profi-Modus sichtbar**: In „Einfach“ sind `#sk-curv-comb` und `.consbar [data-tool="c:curvature"]` ausgeblendet, nach Umschalten auf „Profi“ werden beide sichtbar.
@@ -2334,12 +2341,33 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte, Befehle & DE/EN-Schlüssel**: `curvatureComb` und `cCurvature` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`sketch-curvature`, `sketch-g2`) ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine geschwungene Spline an einen Bogen und eine Gerade zeichnen, „Krümmung zeigen“ einschalten, „Krümmungsglatt (G2)“ setzen und beim Ziehen der mittleren Spline-Punkte beobachten, wie die Krümmungskämme am Übergang gleich hoch bleiben.
 
+## Kleinster Innenradius und Symmetrie prüfen (Auto [A-104], PF-11, PF-16)
+
+- [x] **Kleinster Innenradius (Tasche R 2, Fräser R 3 → 1,5)**: Prüfen-Menü → „Kleinster Innenradius“ erkennt alle 4 Taschen-Ecken (`R 2`) als zu klein für Fräser `R 3` (rot markiert, `tooSmallCount == 4`, `minRadius == 2`), schaltet bei Fräser `R 1,5` auf grün um und zählt äußere Rundungen (`R 2` an der Außenecke) nicht mit; Klick in der Liste hebt die Fläche im Modell hervor.
+- [x] **Symmetrie prüfen (Quader & seitliche Bohrung)**: Symmetrischer Quader `30 × 20 × 15` ergibt an der YZ-Ebene „Symmetrisch“ (`100 %`, keine Abweichung). Eine seitliche Bohrung (`Ø 8` bei `X = 8, Y = 0`) meldet „Nicht symmetrisch“ mit roter/blauer Abweichungs-Überlagerung an YZ, bleibt an XZ weiterhin symmetrisch.
+- [x] **Hilfen, Befehle & Übersetzung**: `innerRadius` und `symmetryCheck` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit sowie Befehlssuche (`innenradius`, `symmetrie`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser bei einem Bauteil mit Freiform-Rundungen, Bohrungen und Versatz-Symmetrieebene („Fläche“ und „Mitte“) die rote/blaue Hervorhebung und das Anspringen der Liste im 3D-Fenster prüfen.
+
 ## Strecken und Live-Spiegeln (Auto [A-110], SK-30, SK-46)
 - [x] **Profi-Modus**: Werkzeug „Strecken“ (`[data-tool="stretch"]`), Schalter `#sk-live-mir-btn` und Panel-Bereich `#sk-live-mir-box` sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
 - [x] **Strecken am Rechteck und geregeltem Linienzug**: Auswahlrahmen per Maus aufziehen, Richtung X + Weg 5 mm anwenden → nur die rechte Kante wandert um 5 mm (Breite 25, linke Kante unverändert), vorhandene Regeln (`horizontal`, `vertical`, `coincident`, `fix`) bleiben gültig, `Strg+Z` macht rückgängig.
 - [x] **Live-Spiegeln an Y-Achse und eigener Linie**: Gezeichnete Linie wird sofort an der Y-Achse gespiegelt samt `symmetric`-Regeln erzeugt (und mit `Strg+Z` gemeinsam entfernt); gezeichneter Kreis an gewählter Linie erhält `symmetric`- und `equal`-Regeln; nach `#lm-off` wird nicht mehr gespiegelt.
 - [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `stretch2d` und `liveMirror` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`strecken`, `live-spiegeln`) ohne Fehler.
 - [ ] **Von Hand**: In einer Skizze mit gemischtem Profil einen Rahmen schräg mit Winkel/Weg strecken und Live-Spiegeln an einer schrägen Hilfslinie beim freien Zeichnen testen.
+
+## Muster entlang Kurve und Füllmuster in der Skizze (Auto [A-115], SK-44, SK-45)
+- [x] **Einfach & Profi**: Werkzeuge „Kurvenmuster“ (`[data-tool="patcurve"]`) und „Füllmuster“ (`[data-tool="patfill"]`) sind in Einfach und Profi sichtbar und bleiben in der zweizeiligen Skizzen-Leiste.
+- [x] **Kurvenmuster (SK-44)**: 5 Kreise entlang eines Bogens (`R = 20`) mit fester Anzahl (`5`) sowie mit festem Abstand (`15 mm`) → exakte Abstände, Löser gültig, „An Kurve ausrichten“ dreht Kopien mit und `Strg+Z` macht das Muster in einem Schritt rückgängig.
+- [x] **Füllmuster (SK-45)**: Wabenfüllung (`6 mm`, Abstand `8 mm`, Randabstand `3 mm`) in Rechteck `50 × 30` → genau `14` Sechsecke ohne Randschnitt und mit vollem Rand- und Lochabstand; Raster (`8` Kreise) und versetzt (`11` Kreise) sowie Ablehnung bei `Abstand ≤ Lochgröße` geprüft.
+- [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `patternCurve2d` und `patternFill2d` in `werkzeug-hilfen.json`/`HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kurve`, `füllmuster`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine geschwungene Spline als Leitkurve mit Ausrichten/Richtungsumkehr sowie ein Füllmuster auf einer Fläche mit Innenloch ausprobieren und danach hochziehen.
+
+## Kegelschnitt und Brückenkurve (Auto [A-113], SK-36, SK-40)
+- [x] **Profi-Modus**: Werkzeuge `conic` („Kegelschnitt“) und `bridge` („Brücke“) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Kegelschnitt mit Rho = 0,5 (Parabel), Ellipse & Hyperbel**: Start `(0, 0)`, Ende `(40, 0)`, Schulterpunkt `(20, 20)` und Rho `0,5` per Maus/Tastatur erzeugt `conic`, dessen Mittelpunkt exakt mit der Parabel `(20, 10)` übereinstimmt; Umschalten auf `0,3` (Ellipsenstück) und `0,75` (Hyperbel) über `#se-rho` passt die Kurvenmitte exakt an; geschlossen mit Linie und hochgezogen ergibt einen fehlerfreien 3D-Körper mit Parabel-Volumen.
+- [x] **Brückenkurve zwischen zwei Linien (G1 tangential) & Mitwandern**: Verbindet zwei Linienenden knickfrei; Winkelfehler an beiden Enden liegt unter `0,1°`; bei Änderung einer Anschlusslinie wandert die Brücke per `SK.syncBridges` mit und bleibt unter `0,1°` tangential; `Strg+Z` macht rückgängig.
+- [x] **Brückenkurve krümmungsglatt (G2) & 3D-Hochziehen**: Verbindet Kreisbogen (`R = 20`) und Linie mit `pts.length === 6`, Winkelfehler `< 0,1°` sowie passender Krümmung (`1/20` bzw. `0`) an beiden Enden, schließt zum Profil und lässt sich ohne Fehler hochziehen; Hilfetexte `conic2d` / `bridge2d`, DE/EN-Schlüsselgleichheit und Befehlssuche (`kegelschnitt`, `brückenkurve`) vollständig.
+- [ ] **Von Hand**: In einer Skizze einen Kegelschnitt frei mit der Maus aufziehen (Ellipsenstück, Parabel und Hyperbel am Schulterpunkt beobachten) und zwei schräge Splines bzw. Bögen mit „Brücke“ (G1 und G2) sowie Stärke 1/2 verbinden.
 
 ## Silhouette und Schnittkurve in die Skizze (Auto [A-114], SK-42, SK-43)
 - [x] **Profi-Sichtbarkeit**: „Umriss holen“ (`#sk-silhouette`) und „Schnittkurve“ (`#sk-intersect`) sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.

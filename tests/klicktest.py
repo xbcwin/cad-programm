@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -22184,6 +22184,140 @@ def t_a109_lizenz_fremde_bausteine(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_spline_kontrollpunkte_griffe(p):
+    # 1. Kontrollpunkt-Spline mit 4 Punkten (Profi): Start/Ende exakt auf 1. und 4. Punkt, innen angezogen
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+    sketch_xy(p)
+    p.pg.keyboard.press('s'); p.wait(250)
+    has_cv_opt = p.pg.locator('#sp-mode option[value="cv"]').count() == 1
+    p.pg.select_option('#sp-mode', 'cv'); p.wait(200)
+    for u, v in [(-30, 0), (-10, 25), (10, -25), (30, 0)]:
+        click_uv(p, u, v)
+    p.pg.keyboard.press('Enter'); p.wait(300)
+    cv4 = SS(p, """const e=S.ents[0]; if(!e||e.type!=='spline') return null;
+      const segs=SK.segsOf(e), pl=SK.segPoints(segs[0]), bz=SK.splineBez(e.pts, !!e.closed, e);
+      const dStart=Math.hypot(pl[0][0]-e.pts[0][0], pl[0][1]-e.pts[0][1]);
+      const dEnd=Math.hypot(pl[pl.length-1][0]-e.pts[3][0], pl[pl.length-1][1]-e.pts[3][1]);
+      const dC1=Math.min(...pl.map(q=>Math.hypot(q[0]-e.pts[1][0], q[1]-e.pts[1][1])));
+      const dC2=Math.min(...pl.map(q=>Math.hypot(q[0]-e.pts[2][0], q[1]-e.pts[2][1])));
+      const inside=pl.every(q=>q[0]>=-30.01&&q[0]<=30.01&&q[1]>=-25.01&&q[1]<=25.01);
+      return { n:S.ents.length, mode:e.mode, closed:!!e.closed, nPts:e.pts.length, nBz:bz.length, dStart, dEnd, dC1, dC2, inside, len:pl.length };""")
+    ok1 = (
+        has_cv_opt and cv4 and cv4['n'] == 1 and cv4['mode'] == 'cv' and not cv4['closed']
+        and cv4['nPts'] == 4 and cv4['nBz'] == 1 and cv4['len'] > 20
+        and cv4['dStart'] < 1e-6 and cv4['dEnd'] < 1e-6
+        and cv4['dC1'] > 5.0 and cv4['dC2'] > 5.0 and cv4['inside']
+    )
+
+    # 2. Kontrollpunkt-Spline mit 5 Punkten (C1/C2-stetig) + geschlossener Kontrollpunkt-Spline beim Hochziehen
+    cv5 = SS(p, """const e={id:'cv5',type:'spline',mode:'cv',closed:false,pts:[[-30,0],[-15,20],[0,-10],[15,20],[30,0]]};
+      const bz=SK.splineBez(e.pts,false,e), pl=SK.splinePoints(e.pts,false,e);
+      const t1L=[bz[0].b[0]-bz[0].c2[0], bz[0].b[1]-bz[0].c2[1]], t1R=[bz[1].c1[0]-bz[1].a[0], bz[1].c1[1]-bz[1].a[1]];
+      const c1gap=Math.hypot(t1L[0]-t1R[0], t1L[1]-t1R[1]);
+      return { nBz:bz.length, dStart:Math.hypot(pl[0][0]+30,pl[0][1]), dEnd:Math.hypot(pl[pl.length-1][0]-30,pl[pl.length-1][1]), c1gap };""")
+    p.ev("Sketch.setSplineMode('cv'); const S=Sketch.state; S.ents=[{id:'cvc',type:'spline',mode:'cv',closed:true,pts:[[-20,-20],[20,-20],[20,20],[-20,20]]}]; S.dims=[]; S.cons=[]; Sketch.render();"); p.wait(250)
+    reg_n = SS(p, "return SK.regions(S.ents).length")
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 30)
+    vol_cv = p.ev("const it=App.doc.items[0]; const R=it&&App.results.get(it.id); return [App.errors.length, R&&R.data&&R.data.faces.length]")
+    ok2 = (
+        cv5 and cv5['nBz'] == 2 and cv5['dStart'] < 1e-6 and cv5['dEnd'] < 1e-6 and cv5['c1gap'] < 1e-6
+        and reg_n == 1 and vol_cv[0] == 0 and vol_cv[1] >= 3
+    )
+
+    # 3. Tangenten-Griff am Startpunkt per Zahleneingabe auf 45 Grad -> gemessene Tangente 45 Grad
+    p.ev("App.change('x', d => { d.items = []; }); Sketch.startOnPlane('XY');"); p.wait(1000)
+    p.ev("Sketch.state.ents.push({id:'sp1',type:'spline',pts:[[-30,0],[0,0],[30,0]],closed:false}); Sketch.render(); Panels.renderRight();"); p.wait(250)
+    p.pg.keyboard.press('v'); p.wait(150)
+    s_mid = to_screen(p, -15, 0)
+    p.pg.mouse.click(s_mid[0], s_mid[1]); p.wait(300)
+    has_panel = (
+        p.pg.locator('#se-spline-handles').count() == 1
+        and p.pg.locator('#se-sh-pt').count() == 1
+        and p.pg.locator('#se-hAng0').count() == 1
+        and p.pg.locator('#se-hLen0').count() == 1
+    )
+    ang_inp = p.pg.locator('#se-hAng0')
+    ang_inp.fill('45'); ang_inp.press('Enter'); p.wait(350)
+    tan45 = SS(p, """const e=E('sp1'); const dm=S.dims.find(d=>d.e==='sp1'&&d.k==='hAng0');
+      const tg=SK.splineTangentAt(e,0), bz=SK.splineBez(e.pts,false,e), pl=SK.splinePoints(e.pts,false,e);
+      const bzAng=Math.atan2(bz[0].c1[1]-bz[0].a[1], bz[0].c1[0]-bz[0].a[0])*180/Math.PI;
+      const plAng=Math.atan2(pl[1][1]-pl[0][1], pl[1][0]-pl[0][0])*180/Math.PI;
+      const fitMax=Math.max(...e.pts.map(q=>Math.min(...pl.map(r=>Math.hypot(r[0]-q[0],r[1]-q[1])))));
+      return { dm:dm&&dm.v, tgAng:tg&&tg.ang, bzAng, plAng, fitMax, h0:e.handles&&e.handles[0] };""")
+    ok3 = (
+        has_panel and tan45 and abs(float(tan45['dm']) - 45.0) < 1e-4
+        and abs(tan45['tgAng'] - 45.0) < 0.01
+        and abs(tan45['bzAng'] - 45.0) < 0.01
+        and abs(tan45['plAng'] - 45.0) < 3.0
+        and tan45['fitMax'] < 1e-6
+    )
+
+    # 4. Griff am Punkt 2 per Maus ziehen (45°), per Maß-Werkzeug (D) bemaßen & per Knopf zurücksetzen (+ Strg+Z)
+    h1_tip = SS(p, "const e=E('sp1'), h=SK.splineHandle(e,1); return [e.pts[1][0]+h[0], e.pts[1][1]+h[1]];")
+    drag_from = to_screen(p, h1_tip[0], h1_tip[1])
+    drag_to = to_screen(p, 10, 10)   # Punkt 2 ist (0,0) -> Richtung (10,10) = 45°
+    p.pg.mouse.move(drag_from[0], drag_from[1]); p.pg.mouse.down()
+    p.pg.mouse.move(drag_to[0], drag_to[1], steps=6); p.pg.mouse.up(); p.wait(350)
+    dragged1 = SS(p, "const e=E('sp1'), tg=SK.splineTangentAt(e,1); return { custom:!!(e.handles&&Array.isArray(e.handles[1])), ang:tg&&tg.ang, selI:S.selHandle&&S.selHandle.i };")
+
+    # Maß-Werkzeug (D) auf Griff 1 setzen und 30° eingeben
+    h1_now = SS(p, "const e=E('sp1'), h=SK.splineHandle(e,1); return [e.pts[1][0]+h[0], e.pts[1][1]+h[1]];")
+    p.ev("document.activeElement && document.activeElement.blur()")
+    p.pg.keyboard.press('d'); p.wait(200)
+    s_h1 = to_screen(p, h1_now[0], h1_now[1])
+    p.pg.mouse.click(s_h1[0], s_h1[1]); p.wait(250)
+    has_dimask = p.pg.locator('.dimask input').count() == 1 and p.pg.locator('#dim-handle-toggle').count() == 1
+    if has_dimask:
+        p.pg.locator('.dimask input').fill('30'); p.pg.locator('.dimask input').press('Enter'); p.wait(300)
+    dim30 = SS(p, "const e=E('sp1'), tg=SK.splineTangentAt(e,1); return tg&&tg.ang;")
+
+    # Griff zurücksetzen + Strg+Z
+    p.pg.keyboard.press('v'); p.wait(150)
+    p.ev("Sketch.selectSplineHandle('sp1', 1)"); p.wait(200)
+    p.pg.locator('#se-sh-reset').click(); p.wait(300)
+    after_reset = SS(p, "const e=E('sp1'); return { h1:e.handles&&e.handles[1], hasDim:S.dims.some(d=>d.e==='sp1'&&d.k==='hAng1') };")
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    after_undo = SS(p, "const e=E('sp1'), tg=SK.splineTangentAt(e,1); return { h1:!!(e.handles&&e.handles[1]), ang:tg&&tg.ang };")
+    ok4 = (
+        dragged1 and dragged1['custom'] and dragged1['selI'] == 1 and abs(dragged1['ang'] - 45.0) < 3.0
+        and has_dimask and dim30 is not None and abs(dim30 - 30.0) < 0.05
+        and after_reset and after_reset['h1'] is None and not after_reset['hasDim']
+        and after_undo and after_undo['h1'] and abs(after_undo['ang'] - 30.0) < 0.05
+    )
+
+    # 5. Einfach-Modus blendet Profi-Funktionen aus; Hilfen & Übersetzung vorhanden; 0 Fehler
+    p.ev("ViewPrefs.setLevel('simple'); Sketch.setTool('spline');"); p.wait(250)
+    simple_hidden = (
+        p.pg.locator('#sp-mode').count() == 0
+        and SS(p, "return S.splineMode") == 'fit'
+    )
+    p.ev("Sketch.setTool('select'); Sketch.selectSplineHandle('sp1', 0);"); p.wait(200)
+    simple_handles_hidden = p.pg.locator('#se-spline-handles').count() == 0
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(200)
+    meta = p.pg.evaluate("""async () => {
+      const [de, en, hilfen] = await Promise.all([
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+      ]);
+      const ka = Object.keys(de), kb = Object.keys(en), sb = new Set(kb);
+      const keys = ['sk.hint.splineCV','sk.panel.splineFit','sk.panel.splineCV','sk.panel.splineHandlesHead','sk.panel.handleAngle','sk.panel.handleStrength','sk.panel.handleReset','sk.dim.hAng','sk.dim.hLen'];
+      return {
+        hCtrl: !!(hilfen.splineControl && hilfen.splineControl.tip && hilfen.splineControl.hilfe && hilfen.splineControl.tipp),
+        hHand: !!(hilfen.splineHandles && hilfen.splineHandles.tip && hilfen.splineHandles.hilfe && hilfen.splineHandles.tipp),
+        i18n: ka.length === kb.length && ka.every(k => sb.has(k)) && keys.every(k => !!de[k] && !!en[k])
+      };
+    }""")
+    ok5 = (
+        simple_hidden and simple_handles_hidden
+        and meta and meta['hCtrl'] and meta['hHand'] and meta['i18n']
+        and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a112_kruemmung_g2(p):
     # 1. Nur Profi: in Einfach ausgeblendet, in Profi sichtbar
     p.empty()
@@ -22351,6 +22485,156 @@ def t_a112_kruemmung_g2(p):
     cmds_ok = p.ev("return Commands.search('Krümmungskamm').some(c=>c.id==='sketch-curvature') && Commands.search('Krümmungsglatt').some(c=>c.id==='sketch-g2')")
     p.ev("Sketch.cancel(true)")
     ok5 = all(k in hilfen and hilfen[k].get('tip') and hilfen[k].get('hilfe') and hilfen[k].get('tipp') for k in ['curvatureComb', 'cCurvature']) and i18n_ok and dom_help and cmds_ok and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a104_innenradius_symmetrie(p):
+    p.empty()
+    # 1. Quader 40x40x16 mit Tasche 20x20x10 (Ecken-Innenradius 2) und Fräser-Radius 3 → alle 4 Eckenflächen rot markiert
+    p.ev("""
+      App.change('pocket-r2', d => {
+        const b = Model.newItem('box', { w: 40, d: 40, h: 16 }, { name: 'Gehaeuse' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        const s2 = Math.SQRT2;
+        const pocket = Model.newItem('extrude', {}, { role: 'hole', name: 'Tasche' });
+        pocket.p = {
+          sketch: {
+            plane: { o: [0, 0, 6], x: [1, 0, 0], n: [0, 0, 1] },
+            ents: [
+              { id: 'a1', type: 'arc', a: [10, 8], m: [8 + s2, 8 + s2], b: [8, 10] },
+              { id: 'l1', type: 'line', a: [8, 10], b: [-8, 10] },
+              { id: 'a2', type: 'arc', a: [-8, 10], m: [-8 - s2, 8 + s2], b: [-10, 8] },
+              { id: 'l2', type: 'line', a: [-10, 8], b: [-10, -8] },
+              { id: 'a3', type: 'arc', a: [-10, -8], m: [-8 - s2, -8 - s2], b: [-8, -10] },
+              { id: 'l3', type: 'line', a: [-8, -10], b: [8, -10] },
+              { id: 'a4', type: 'arc', a: [8, -10], m: [8 + s2, -8 - s2], b: [10, -8] },
+              { id: 'l4', type: 'line', a: [10, -8], b: [10, 8] }
+            ],
+            dims: [], cons: []
+          },
+          dist: 12,
+          dir: 'normal'
+        };
+        const g = Model.newItem('group', {}, { name: 'Taschenkoerper' });
+        g.children = [b, pocket];
+        d.items.push(g);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check'); p.wait(250)
+    p.pg.click('#check-inner-radius'); p.wait(300)
+    p.pg.locator('#inner-radius-bar').wait_for(state='visible', timeout=5000)
+    ir1 = p.ev("return InnerRadius.info")
+    sum1 = (p.pg.locator('#ir-summary').text_content() or '').lower()
+    ok1 = (
+        ir1 is not None and ir1['active'] and ir1['hasRedMesh']
+        and abs(ir1['cutterRadius'] - 3) < 1e-6
+        and ir1['tooSmallCount'] == 4 and ir1['okCount'] == 0
+        and ir1['minRadius'] is not None and abs(ir1['minRadius'] - 2) < 0.05
+        and all(f['status'] == 'tooSmall' and abs(f['r'] - 2) < 0.05 for f in ir1['faces'])
+        and p.pg.locator('#t-check.active').count() == 1
+        and p.pg.locator('#inner-radius-bar').get_attribute('data-help') == 'innerRadius'
+        and p.pg.locator('#ir-list [data-ir-status="tooSmall"]').count() == 4
+        and 'kleiner' in sum1
+    )
+
+    # 2. Fräser auf 1,5 mm verringern → passt; äußere Rundung zählt nicht als Innenradius; Fokus + Schließen
+    p.pg.fill('#ir-cutter', '1.5')
+    p.pg.locator('#ir-cutter').dispatch_event('change')
+    p.wait(250)
+    ir2a = p.ev("return InnerRadius.info")
+    p.ev("""
+      App.change('outer-fillet-test', d => {
+        const b = d.items[0].children[0];
+        b.finishes.push({ id: 'of1', type: 'fillet', r: 2, edges: 'all' });
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.wait_for_function("() => { const id = window.__M.App.doc.items[0].id; const r = window.__M.App.results.get(id); return window.__M.App.errors.length === 0 && r && r.data && r.data.faces && r.data.faces.length > 14; }", timeout=15000)
+    p.wait(300)
+    ir2b = p.ev("return InnerRadius.info")
+    p.pg.locator('#ir-list [data-ir-idx="0"]').click(); p.wait(250)
+    ir2c = p.ev("return InnerRadius.info")
+    p.pg.click('#ir-close'); p.wait(200)
+    ok2 = (
+        ir2a is not None and ir2a['tooSmallCount'] == 0 and ir2a['okCount'] == 4 and not ir2a['hasRedMesh']
+        and ir2b is not None and ir2b['totalCount'] == 4 and ir2b['okCount'] == 4
+        and ir2c is not None and ir2c['focused'] == 0
+        and not p.ev("return InnerRadius.active")
+    )
+
+    # 3. Symmetrischer Quader 30x20x15 → „symmetrisch“ an YZ-Ebene
+    p.ev("""
+      App.change('sym-box', d => {
+        d.items = [];
+        const b = Model.newItem('box', { w: 30, d: 20, h: 15 }, { name: 'Quader' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check'); p.wait(250)
+    p.pg.click('#check-symmetry'); p.wait(300)
+    p.pg.locator('#sym-check-bar').wait_for(state='visible', timeout=5000)
+    p.pg.wait_for_function("() => window.__M.SymmetryCheck.active && !window.__M.SymmetryCheck.busy && !!window.__M.SymmetryCheck.last", timeout=15000)
+    sym3 = p.ev("return SymmetryCheck.last")
+    st3 = (p.pg.locator('#sym-status').text_content() or '').lower()
+    ok3 = (
+        sym3 is not None and sym3['symmetric'] is True
+        and sym3['diffVolume'] < 0.05
+        and abs(sym3['symPercent'] - 100) < 0.01
+        and not p.ev("return SymmetryCheck.hasOverlay")
+        and p.pg.locator('#sym-status[data-sym="ok"]').count() == 1
+        and 'symmetrisch' in st3 and 'nicht symmetrisch' not in st3
+        and p.pg.locator('#sym-check-bar').get_attribute('data-help') == 'symmetryCheck'
+        and p.pg.locator('#t-check.active').count() == 1
+    )
+
+    # 4. Seitliche Bohrung (x = 8, y = 0) → nicht symmetrisch zu YZ mit farbigen Abweichungen; zu XZ weiterhin symmetrisch
+    p.ev("""
+      App.change('sym-side-hole', d => {
+        const b = d.items[0];
+        const h = Model.newItem('cylinder', { d: 8, h: 20 }, { role: 'hole', name: 'SeitlicheBohrung' });
+        h.t.x = 8; h.t.y = 0; h.t.z = -1;
+        const g = Model.newItem('group', {}, { name: 'TeilMitBohrung' });
+        g.children = [b, h];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.wait_for_function("() => !window.__M.SymmetryCheck.busy && window.__M.SymmetryCheck.last && window.__M.SymmetryCheck.last.symmetric === false", timeout=15000)
+    sym4a = p.ev("return SymmetryCheck.last")
+    st4a = (p.pg.locator('#sym-status').text_content() or '').lower()
+    bad_badge4a = p.pg.locator('#sym-status[data-sym="bad"]').count() == 1
+    has_ov4a = p.ev("return SymmetryCheck.hasOverlay")
+    p.pg.select_option('#sym-plane', 'XZ')
+    p.pg.wait_for_function("() => !window.__M.SymmetryCheck.busy && window.__M.SymmetryCheck.last && window.__M.SymmetryCheck.last.planeKey === 'XZ'", timeout=15000)
+    sym4b = p.ev("return SymmetryCheck.last")
+    p.pg.click('#sym-close'); p.wait(200)
+    ok4 = (
+        sym4a is not None and sym4a['symmetric'] is False
+        and sym4a['diffVolume'] > 500
+        and sym4a['hasOrigMesh'] and sym4a['hasMirrMesh']
+        and has_ov4a is True
+        and bad_badge4a
+        and 'nicht symmetrisch' in st4a
+        and len(sym4a['deviations']) >= 1
+        and sym4b is not None and sym4b['symmetric'] is True
+        and not p.ev("return SymmetryCheck.active")
+    )
+
+    # 5. Befehle, Hilfetexte und DE/EN-Schlüsselgleichheit
+    cmds_ok = p.ev("return Commands.search('innenradius').some(c => c.id === 'inner-radius') && Commands.search('symmetrie').some(c => c.id === 'symmetry-check')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    de_list = p.pg.evaluate("fetch('data/texte-de.json').then(r=>r.json()).then(d=>Object.keys(d).sort())")
+    en_list = p.pg.evaluate("fetch('data/texte-en.json').then(r=>r.json()).then(d=>Object.keys(d).sort())")
+    ok5 = (
+        cmds_ok is True
+        and 'innerRadius' in hilfen and all(k in hilfen['innerRadius'] for k in ('tip', 'hilfe', 'tipp'))
+        and 'symmetryCheck' in hilfen and all(k in hilfen['symmetryCheck'] for k in ('tip', 'hilfe', 'tipp'))
+        and de_list == en_list
+        and not p.errs
+    )
     return [ok1, ok2, ok3, ok4, ok5]
 
 
@@ -22738,6 +23022,491 @@ def t_a114_silhouette_schnittkurve(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a115_kurvenmuster_fuellmuster(p):
+    # 1. Start in XY-Skizze: beide Werkzeuge sind in Einfach und Profi sichtbar
+    sketch_xy(p)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_ok = (
+        sichtbar(p, '.sketchbar .tool[data-tool="patcurve"]')
+        and sichtbar(p, '.sketchbar .tool[data-tool="patfill"]')
+    )
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_ok = (
+        sichtbar(p, '.sketchbar .tool[data-tool="patcurve"]')
+        and sichtbar(p, '.sketchbar .tool[data-tool="patfill"]')
+    )
+    ok1 = simple_ok and pro_ok
+
+    # 2. SK-44: 5 Kreise entlang eines Halbkreis-Bogens (R=20, L=20*pi) -> gleiche Abstände
+    SS(p, """
+      S.ents = [
+        { id: 'A1', type: 'arc', a: [20, 0], m: [0, 20], b: [-20, 0] },
+        { id: 'C1', type: 'circle', c: [20, 0], r: 2 },
+      ];
+      S.cons = [];
+      S.dims = [];
+      S.undo = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="patcurve"]')
+    p.wait(80)
+    # Kreisrand (22, 0) anklicken (nicht Mitte (20,0), da dort das Bogenende liegt)
+    click_uv(p, 22, 0, alt=True)
+    p.pg.click('#pt-pick-curve')
+    p.wait(60)
+    click_uv(p, 0, 20, alt=True)
+    p.pg.fill('#pt-cn', '5')
+    p.pg.press('#pt-cn', 'Enter')
+    p.wait(60)
+    p.pg.click('#pt-make')
+    p.wait(100)
+    res_cnt = SS(p, """
+      const cs = S.ents.filter((e) => e.type === 'circle');
+      const angs = cs.map((e) => {
+        let a = Math.atan2(e.c[1], e.c[0]);
+        if (a < -1e-4) a += Math.PI * 2;
+        return a;
+      }).sort((u, v) => u - v);
+      const pts = cs.slice().sort((u, v) => {
+        let au = Math.atan2(u.c[1], u.c[0]); if (au < -1e-4) au += Math.PI * 2;
+        let av = Math.atan2(v.c[1], v.c[0]); if (av < -1e-4) av += Math.PI * 2;
+        return au - av;
+      }).map((e) => e.c);
+      return {
+        n: cs.length,
+        radii: cs.map((e) => e.r),
+        rPos: cs.map((e) => Math.hypot(e.c[0], e.c[1])),
+        angs,
+        pts,
+        ok: !!(S.status && S.status.ok),
+      };
+    """)
+    chords = [
+        math.hypot(res_cnt['pts'][i + 1][0] - res_cnt['pts'][i][0], res_cnt['pts'][i + 1][1] - res_cnt['pts'][i][1])
+        for i in range(len(res_cnt['pts']) - 1)
+    ]
+    ang_diffs = [res_cnt['angs'][i + 1] - res_cnt['angs'][i] for i in range(len(res_cnt['angs']) - 1)]
+    ok_cnt = (
+        res_cnt['n'] == 5
+        and res_cnt['ok'] is True
+        and all(abs(r - 2) < 1e-4 for r in res_cnt['radii'])
+        and all(abs(rp - 20) < 1e-3 for rp in res_cnt['rPos'])
+        and len(ang_diffs) == 4
+        and all(abs(d - math.pi / 4) < 1e-3 for d in ang_diffs)
+        and (max(chords) - min(chords)) < 1e-3
+    )
+
+    # Rückgängig entfernt alle 4 Kopien auf einmal
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(80)
+    after_undo_cnt = SS(p, "return S.ents.filter((e) => e.type === 'circle').length;")
+
+    # Modus „Fester Abstand“ (15 mm entlang Bogen der Länge 20*pi ≈ 62.83 mm -> 5 Teile: 0, 15, 30, 45, 60)
+    p.pg.click('.sketchbar .tool[data-tool="patcurve"]')
+    p.wait(60)
+    click_uv(p, 22, 0, alt=True)
+    p.pg.click('#pt-pick-curve')
+    p.wait(60)
+    click_uv(p, 0, 20, alt=True)
+    p.pg.select_option('#pt-cmode', 'spacing')
+    p.wait(60)
+    p.pg.fill('#pt-cdist', '15')
+    p.pg.press('#pt-cdist', 'Enter')
+    p.wait(60)
+    p.pg.click('#pt-make')
+    p.wait(100)
+    res_spc = SS(p, """
+      const cs = S.ents.filter((e) => e.type === 'circle');
+      const angs = cs.map((e) => {
+        let a = Math.atan2(e.c[1], e.c[0]);
+        if (a < -1e-4) a += Math.PI * 2;
+        return a;
+      }).sort((u, v) => u - v);
+      return { n: cs.length, angs, ok: !!(S.status && S.status.ok) };
+    """)
+    arc_diffs = [(res_spc['angs'][i + 1] - res_spc['angs'][i]) * 20.0 for i in range(len(res_spc['angs']) - 1)]
+    ok_spc = (
+        res_spc['n'] == 5
+        and res_spc['ok'] is True
+        and len(arc_diffs) == 4
+        and all(abs(d - 15.0) < 1e-3 for d in arc_diffs)
+    )
+
+    # Ausrichten entlang der Kurve (radiale Linie [18,0]-[22,0] -> bei (0,20) um 90° gedreht)
+    SS(p, """
+      S.ents = [
+        { id: 'A1', type: 'arc', a: [20, 0], m: [0, 20], b: [-20, 0] },
+        { id: 'L1', type: 'line', a: [18, 0], b: [22, 0] },
+      ];
+      S.cons = [];
+      S.dims = [];
+      S.undo = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="patcurve"]')
+    p.wait(60)
+    click_uv(p, 21, 0, alt=True)
+    p.pg.click('#pt-pick-curve')
+    p.wait(60)
+    click_uv(p, 0, 20, alt=True)
+    p.pg.select_option('#pt-cmode', 'count')
+    p.wait(60)
+    p.pg.fill('#pt-cn', '5')
+    p.pg.press('#pt-cn', 'Enter')
+    p.wait(60)
+    p.pg.click('#pt-make')
+    p.wait(100)
+    res_align = SS(p, """
+      const ls = S.ents.filter((e) => e.type === 'line');
+      const top = ls.find((e) => Math.abs((e.a[0] + e.b[0]) / 2) < 1e-2 && ((e.a[1] + e.b[1]) / 2) > 15);
+      return { n: ls.length, ok: !!(S.status && S.status.ok), top: top ? { a: top.a, b: top.b } : null };
+    """)
+    ok_align = (
+        res_align['n'] == 5
+        and res_align['ok'] is True
+        and res_align['top'] is not None
+        and abs(res_align['top']['a'][0]) < 1e-2
+        and abs(res_align['top']['b'][0]) < 1e-2
+        and abs(abs(res_align['top']['a'][1] - res_align['top']['b'][1]) - 4.0) < 1e-2
+    )
+    ok2 = ok_cnt and after_undo_cnt == 1 and ok_spc and ok_align
+
+    # 3. SK-45: Wabenfüllung in Rechteck 50x30 (size=6, pitch=8, margin=3 -> 5+4+5 = 14 Waben, kein Schnitt mit Rand)
+    SS(p, """
+      S.ents = [{ id: 'R1', type: 'rect', a: [0, 0], b: [50, 30] }];
+      S.cons = [];
+      S.dims = [];
+      S.undo = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="patfill"]')
+    p.wait(80)
+    p.pg.select_option('#fp-kind', 'hex')
+    p.pg.fill('#fp-size', '6')
+    p.pg.press('#fp-size', 'Enter')
+    p.pg.fill('#fp-pitch', '8')
+    p.pg.press('#fp-pitch', 'Enter')
+    p.pg.fill('#fp-margin', '3')
+    p.pg.press('#fp-margin', 'Enter')
+    p.wait(80)
+    p.pg.click('#fp-make')
+    p.wait(100)
+    hex_res = SS(p, """
+      const polys = S.ents.filter((e) => e.type === 'poly');
+      const verts = polys.map((e) => SK.polyCorners(e));
+      const regs = SK.regions(S.ents);
+      return {
+        n: polys.length,
+        ns: polys.map((e) => e.n),
+        rs: polys.map((e) => e.r),
+        cs: polys.map((e) => e.c),
+        verts,
+        regCount: regs.length,
+        holeCount: regs[0] ? regs[0].holes.length : 0,
+      };
+    """)
+    r_exp = 6.0 / math.sqrt(3.0)
+    ny_exp = math.floor((30.0 - 6.0 - 2.0 * r_exp) / (8.0 * math.sqrt(3.0) / 2.0) + 1e-6) + 1
+    nx_exp = math.floor((50.0 - 6.0 - 6.0) / 8.0 + 1e-6) + 1
+    expected_hex = ny_exp * nx_exp - (ny_exp // 2)  # 3*5 - 1 = 14
+    all_verts_inside = all(
+        3.0 - 1e-3 <= v[0] <= 47.0 + 1e-3 and 3.0 - 1e-3 <= v[1] <= 27.0 + 1e-3
+        for poly in hex_res['verts'] for v in poly
+    )
+    min_cc_dist = min(
+        math.hypot(hex_res['cs'][i][0] - hex_res['cs'][j][0], hex_res['cs'][i][1] - hex_res['cs'][j][1])
+        for i in range(len(hex_res['cs'])) for j in range(i + 1, len(hex_res['cs']))
+    ) if len(hex_res['cs']) > 1 else 0
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(80)
+    after_hex_undo = SS(p, "return S.ents.filter((e) => e.type === 'poly').length;")
+    ok3 = (
+        expected_hex == 14
+        and hex_res['n'] == expected_hex
+        and all(n == 6 for n in hex_res['ns'])
+        and all(abs(r - r_exp) < 1e-3 for r in hex_res['rs'])
+        and all_verts_inside
+        and min_cc_dist >= 8.0 - 1e-3
+        and hex_res['regCount'] == 1
+        and hex_res['holeCount'] == expected_hex
+        and after_hex_undo == 0
+    )
+
+    # 4. SK-45: Raster (grid) und Versetzt (staggered) + Ungültige Maße (pitch <= size)
+    p.pg.select_option('#fp-kind', 'grid')
+    p.pg.fill('#fp-size', '5')
+    p.pg.press('#fp-size', 'Enter')
+    p.pg.fill('#fp-pitch', '10')
+    p.pg.press('#fp-pitch', 'Enter')
+    p.pg.fill('#fp-margin', '3')
+    p.pg.press('#fp-margin', 'Enter')
+    p.wait(80)
+    p.pg.click('#fp-make')
+    p.wait(80)
+    grid_res = SS(p, "return S.ents.filter((e) => e.type === 'circle').map((e) => ({ c: e.c, r: e.r }));")
+    ok_grid = (
+        len(grid_res) == 8
+        and all(
+            c['c'][0] - c['r'] >= 3.0 - 1e-3 and c['c'][0] + c['r'] <= 47.0 + 1e-3
+            and c['c'][1] - c['r'] >= 3.0 - 1e-3 and c['c'][1] + c['r'] <= 27.0 + 1e-3
+            for c in grid_res
+        )
+    )
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(80)
+
+    p.pg.select_option('#fp-kind', 'staggered')
+    p.wait(60)
+    p.pg.click('#fp-make')
+    p.wait(80)
+    stag_res = SS(p, "return S.ents.filter((e) => e.type === 'circle').map((e) => ({ c: e.c, r: e.r }));")
+    ok_stag = (
+        len(stag_res) == 11
+        and all(
+            c['c'][0] - c['r'] >= 3.0 - 1e-3 and c['c'][0] + c['r'] <= 47.0 + 1e-3
+            and c['c'][1] - c['r'] >= 3.0 - 1e-3 and c['c'][1] + c['r'] <= 27.0 + 1e-3
+            for c in stag_res
+        )
+    )
+    p.pg.fill('#fp-size', '6')
+    p.pg.press('#fp-size', 'Enter')
+    p.pg.fill('#fp-pitch', '5')
+    p.pg.press('#fp-pitch', 'Enter')
+    p.wait(60)
+    bad_disabled = p.pg.locator('#fp-make').is_disabled()
+    err_vis = sichtbar(p, '#fp-info.err-box')
+    ok4 = ok_grid and ok_stag and bad_disabled and err_vis
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine Seitenfehler
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    i18n_eq = de_keys == en_keys
+    cmd_ok = p.ev("""
+      const a = Commands.search('kurve').some((c) => c.id === 'sketch-patcurve');
+      const b = Commands.search('füllmuster').some((c) => c.id === 'sketch-patfill');
+      return a && b;
+    """)
+    help_ok = all(
+        k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp'))
+        for k in ('patternCurve2d', 'patternFill2d')
+    )
+    ok5 = i18n_eq and cmd_ok and help_ok and len(p.errs) == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a113_kegelschnitt_bruecke(p):
+    # 1. Nur Profi-Modus: Kegelschnitt und Brücke im Modus „Einfach“ ausgeblendet, in „Profi“ sichtbar
+    p.empty()
+    p.ev("ViewPrefs.set({ level: 'simple', firstStart: false }); Sketch.startOnPlane('XY')"); p.wait(1200)
+    vis_simple = (
+        not sichtbar(p, '.sketchbar .tool[data-tool="conic"]')
+        and not sichtbar(p, '.sketchbar .tool[data-tool="bridge"]')
+    )
+    p.ev("ViewPrefs.set({ level: 'pro', firstStart: false });"); p.wait(300)
+    vis_pro = (
+        sichtbar(p, '.sketchbar .tool[data-tool="conic"]')
+        and sichtbar(p, '.sketchbar .tool[data-tool="bridge"]')
+    )
+    ok1 = vis_simple and vis_pro
+
+    # 2. Kegelschnitt mit Rho = 0,5 -> Mittelpunkt stimmt exakt mit Parabel überein + Ellipse/Hyperbel + 3D
+    p.pg.click('.sketchbar .tool[data-tool="conic"]'); p.wait(150)
+    for x, y in ((0, 0), (40, 0), (20, 20), (20, 10)):
+        sx, sy = to_screen(p, x, y)
+        p.pg.mouse.click(sx, sy); p.wait(120)
+    p.wait(200)
+    c_res = p.ev("""
+      const e = Sketch.state.ents.find((x) => x.type === 'conic');
+      if (!e) return null;
+      const para = [
+        0.25 * e.a[0] + 0.5 * e.m[0] + 0.25 * e.b[0],
+        0.25 * e.a[1] + 0.5 * e.m[1] + 0.25 * e.b[1],
+      ];
+      const ptMid = SK.conicPt(e.a, e.m, e.b, e.rho, 0.5);
+      const bz = SK.conicBez(e.a, e.m, e.b, e.rho);
+      const bzMid = SK.bezEval([bz[0].a, bz[0].c1, bz[0].c2, bz[0].b], 0.5);
+      const segPts = SK.segPoints(SK.segsOf(e)[0]);
+      const segMid = segPts[Math.floor(segPts.length / 2)];
+      return { rho: e.rho, para, ptMid, bzMid, segMid };
+    """)
+    ok2a = bool(
+        c_res
+        and abs(c_res['rho'] - 0.5) < 1e-4
+        and math.hypot(c_res['ptMid'][0] - c_res['para'][0], c_res['ptMid'][1] - c_res['para'][1]) < 1e-4
+        and math.hypot(c_res['bzMid'][0] - c_res['para'][0], c_res['bzMid'][1] - c_res['para'][1]) < 1e-4
+        and math.hypot(c_res['segMid'][0] - c_res['para'][0], c_res['segMid'][1] - c_res['para'][1]) < 1e-3
+    )
+    # Rho auf Ellipsenstück (0,3) und Hyperbel (0,75), dann zurück auf 0,5
+    p.pg.click('.sketchbar .tool[data-tool="select"]'); p.wait(150)
+    sc = to_screen(p, 20, 10)
+    p.pg.mouse.click(sc[0], sc[1]); p.wait(200)
+    p.pg.fill('#se-rho', '0.3'); p.pg.press('#se-rho', 'Enter'); p.wait(200)
+    c_ell = p.ev("const e=Sketch.state.ents.find(x=>x.type==='conic'); return [e.rho, SK.conicPt(e.a,e.m,e.b,e.rho,0.5)[1], document.querySelector('#se-conic-kind')?.textContent||'']")
+    p.pg.fill('#se-rho', '0.75'); p.pg.press('#se-rho', 'Enter'); p.wait(200)
+    c_hyp = p.ev("const e=Sketch.state.ents.find(x=>x.type==='conic'); return [e.rho, SK.conicPt(e.a,e.m,e.b,e.rho,0.5)[1], document.querySelector('#se-conic-kind')?.textContent||'']")
+    p.pg.fill('#se-rho', '0.5'); p.pg.press('#se-rho', 'Enter'); p.wait(200)
+    # Schließen und hochziehen -> Parabel-Volumen = (2/3 * 40 * 10) * 3 = 800
+    p.ev("const e=Sketch.state.ents.find(x=>x.type==='conic'); Sketch.state.ents.push({id:'e_close_c',type:'line',a:e.b.slice(),b:e.a.slice()});")
+    reg_c = p.ev("const S=Sketch.state; return [SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v_conic = volumen(p)
+    err_c = p.ev("return App.errors.length")
+    ok2 = (
+        ok2a
+        and abs(c_ell[0] - 0.3) < 1e-4 and abs(c_ell[1] - 6.0) < 1e-4 and 'ellip' in c_ell[2].lower()
+        and abs(c_hyp[0] - 0.75) < 1e-4 and abs(c_hyp[1] - 15.0) < 1e-4 and 'hyperb' in c_hyp[2].lower()
+        and reg_c == [1, 0] and err_c == 0 and abs(v_conic - 800.0) < 16.0
+    )
+
+    # 3. Brückenkurve (G1) zwischen zwei Linien -> beide Enden tangential (Winkelfehler < 0,1°) + Mitwandern + Undo
+    p.ev("App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("""
+      Sketch.startOnPlane('XY');
+      const S = Sketch.state;
+      S.ents.push(
+        { id: 'l1', type: 'line', a: [0, 0], b: [20, 0] },
+        { id: 'l2', type: 'line', a: [40, 15], b: [60, 25] }
+      );
+      Sketch.render();
+    """); p.wait(1200)
+    p.pg.click('.sketchbar .tool[data-tool="bridge"]'); p.wait(150)
+    p1 = to_screen(p, 20, 0)
+    p2 = to_screen(p, 40, 15)
+    p.pg.mouse.click(p1[0], p1[1]); p.wait(150)
+    p.pg.mouse.click(p2[0], p2[1]); p.wait(250)
+    br1 = p.ev("""
+      const S = Sketch.state;
+      const b = S.ents.find((x) => x.type === 'bridge');
+      const l1 = S.ents.find((x) => x.id === 'l1');
+      const l2 = S.ents.find((x) => x.id === 'l2');
+      if (!b || !l1 || !l2) return null;
+      const degErr = (u, v) => {
+        const lu = Math.hypot(u[0], u[1]) || 1, lv = Math.hypot(v[0], v[1]) || 1;
+        const dot = Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)));
+        return Math.acos(dot) * 180 / Math.PI;
+      };
+      const i0 = SK.bezDerivInfo(b.pts, false);
+      const i1 = SK.bezDerivInfo(b.pts, true);
+      const t1 = [l1.b[0] - l1.a[0], l1.b[1] - l1.a[1]];
+      const t2 = [l2.b[0] - l2.a[0], l2.b[1] - l2.a[1]];
+      return {
+        mode: b.mode,
+        nPts: b.pts.length,
+        dA: SK.d2(b.a, l1.b),
+        dB: SK.d2(b.b, l2.a),
+        err0: degErr(i0.t, t1),
+        err1: degErr(i1.t, t2),
+      };
+    """)
+    # Linie 2 verschieben -> Brücke wandert mit und bleibt tangential < 0,1°
+    br1_moved = p.ev("""
+      const S = Sketch.state;
+      const l2 = S.ents.find((x) => x.id === 'l2');
+      l2.a = [38, 22];
+      const sol = Solver.solve({ ents: S.ents, dims: S.dims, cons: S.cons }, {});
+      S.ents = sol.ents;
+      const b = S.ents.find((x) => x.type === 'bridge');
+      const l1 = S.ents.find((x) => x.id === 'l1');
+      const l2n = S.ents.find((x) => x.id === 'l2');
+      const degErr = (u, v) => {
+        const lu = Math.hypot(u[0], u[1]) || 1, lv = Math.hypot(v[0], v[1]) || 1;
+        const dot = Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)));
+        return Math.acos(dot) * 180 / Math.PI;
+      };
+      const i0 = SK.bezDerivInfo(b.pts, false);
+      const i1 = SK.bezDerivInfo(b.pts, true);
+      return {
+        dB: SK.d2(b.b, l2n.a),
+        err0: degErr(i0.t, [l1.b[0] - l1.a[0], l1.b[1] - l1.a[1]]),
+        err1: degErr(i1.t, [l2n.b[0] - l2n.a[0], l2n.b[1] - l2n.a[1]]),
+      };
+    """)
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(200)
+    br_undo = p.ev("return Sketch.state.ents.filter(x => x.type === 'bridge').length")
+    ok3 = bool(
+        br1 and br1['mode'] == 'g1' and br1['nPts'] == 4
+        and br1['dA'] < 1e-4 and br1['dB'] < 1e-4
+        and br1['err0'] < 0.1 and br1['err1'] < 0.1
+        and br1_moved and br1_moved['dB'] < 1e-4
+        and br1_moved['err0'] < 0.1 and br1_moved['err1'] < 0.1
+        and br_undo == 0
+    )
+
+    # 4. Brückenkurve krümmungsglatt (G2) zwischen Bogen (R=20) und Linie + Hochziehen + Hilfen/i18n/Befehle
+    p.ev("Sketch.cancel(true); App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("""
+      Sketch.startOnPlane('XY');
+      const S = Sketch.state;
+      const s45 = Math.SQRT1_2;
+      S.ents.push(
+        { id: 'a1', type: 'arc', a: [-30, -10], m: [-30 + 20 * s45, 10 - 20 * s45], b: [-10, 10] },
+        { id: 'l2', type: 'line', a: [15, 15], b: [30, 15] }
+      );
+      Sketch.render();
+    """); p.wait(1200)
+    p.pg.click('.sketchbar .tool[data-tool="bridge"]'); p.wait(150)
+    p.pg.select_option('#br-mode', 'g2'); p.wait(150)
+    pa = to_screen(p, -10, 10)
+    pb = to_screen(p, 15, 15)
+    p.pg.mouse.click(pa[0], pa[1]); p.wait(150)
+    p.pg.mouse.click(pb[0], pb[1]); p.wait(250)
+    br2 = p.ev("""
+      const S = Sketch.state;
+      const b = S.ents.find((x) => x.type === 'bridge');
+      if (!b) return null;
+      const degErr = (u, v) => {
+        const lu = Math.hypot(u[0], u[1]) || 1, lv = Math.hypot(v[0], v[1]) || 1;
+        const dot = Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)));
+        return Math.acos(dot) * 180 / Math.PI;
+      };
+      const i0 = SK.bezDerivInfo(b.pts, false);
+      const i1 = SK.bezDerivInfo(b.pts, true);
+      return {
+        mode: b.mode, nPts: b.pts.length,
+        err0: degErr(i0.t, [0, 1]),
+        err1: degErr(i1.t, [1, 0]),
+        k0: i0.kappa, k1: i1.kappa,
+      };
+    """)
+    # Profil schließen und hochziehen
+    p.ev("""
+      const S = Sketch.state;
+      S.ents.push(
+        { id: 'c1', type: 'line', a: [30, 15], b: [30, -10] },
+        { id: 'c2', type: 'line', a: [30, -10], b: [-30, -10] }
+      );
+    """)
+    reg_b = p.ev("const S=Sketch.state; return [SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v_bridge = volumen(p)
+    err_b = p.ev("return App.errors.length")
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    cmd_ok = p.ev("""
+      return Commands.search('kegelschnitt').some((c) => c.id === 'sketch-conic')
+          && Commands.search('brückenkurve').some((c) => c.id === 'sketch-bridge');
+    """)
+    help_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('conic2d', 'bridge2d'))
+    ok4 = bool(
+        br2 and br2['mode'] == 'g2' and br2['nPts'] == 6
+        and br2['err0'] < 0.1 and br2['err1'] < 0.1
+        and abs(br2['k0'] - 0.05) < 1e-4 and abs(br2['k1']) < 1e-4
+        and reg_b == [1, 0] and err_b == 0 and v_bridge > 100
+        and de_keys == en_keys and cmd_ok and help_ok and len(p.errs) == 0
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -22952,12 +23721,16 @@ TESTS = [
     ('[A-103] Vollrundung und Ecken-Fase mit drei Abständen (KP-38, KP-41)', t_a103_vollrundung_eckenfase),
     ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
+    ('[A-104] Kleinster Innenradius und Symmetrie prüfen (PF-11, PF-16)', t_a104_innenradius_symmetrie),
     ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
+    ('[A-111] Spline mit Kontrollpunkten und Tangenten-Griffen (SK-32, SK-33)', t_spline_kontrollpunkte_griffe),
     ('[A-112] Krümmungskamm und Regel „krümmungsglatt“ (SK-34, SK-35)', t_a112_kruemmung_g2),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
     ('[A-114] Silhouette und Schnittkurve in die Skizze (SK-42, SK-43)', t_a114_silhouette_schnittkurve),
+    ('[A-115] Muster entlang Kurve und Füllmuster in der Skizze (SK-44, SK-45)', t_a115_kurvenmuster_fuellmuster),
+    ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

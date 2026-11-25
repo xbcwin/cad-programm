@@ -76,7 +76,7 @@ Leitlinien:
   - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
   - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
   - `splitBody`, `applyFinishes` (Rundung, Fase, Vollrundung `fullFillet`, Ecken-Fase `cornerChamfer`, Entformungsschräge `draft`, Wandstärke `shell`), Topologie-Verlauf (`tid`, `sid`, OpenCascade `Generated`/`Modified`, Lage als Ersatz)
-  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
+  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkSymmetry` (Symmetrie-Prüfung PF-16), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
 - Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
 
 **JS-Module (Datei → Aufgabe):**
@@ -88,12 +88,12 @@ Leitlinien:
 | `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Projekt-Cache & Ereignisse (`getCachedProject`/`ensureDocsLoaded`/`on`), offene Tabs (`getOpenTabs`/`setOpenTabs`), Absturz-Sicherung (`saveRecovery`/`loadRecovery`/`clearRecovery`), Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS` (inkl. `ref`-Verweis für Baugruppen), `docType`/`isAssembly`/`isSubAssemblyRef`/`newAssemblyDoc`/`setDocResolver`/`resolveDoc`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `14-ttf.js` (`TTF`) | Kleiner TrueType-Leser im Browser (`parse`: `glyf`-Umrisse mit quadratischen Béziers und zusammengesetzten Glyphen, `cmap`, `hmtx`, `kern`, CFF/OTF-Abweisung) |
-| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`needsEntsFonts`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
+| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`/`cvSplineBez`, Durchgangs-Griffe `splineHandle`/`splineTangentAt`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`needsEntsFonts`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte, G2-Regel `curvature` mit `curveEndState`/`curvatureSamples`) |
-| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
+| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`, `curvePath`, `curvePatternJobs`, `transformEnt`, `fillPattern`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`poolStats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker, Zähler & Fingerabdrücke über `stats`/`resetStats`/`clearCache`/`lastStats`/`fingerprint`) |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), Bereinigung/Prüfung von `mergedInto`, mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse & Schritt-Cache (`stepFingerprint`/`stepCacheStatus`/`evalStats`) |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze), `draftAnalysis` (Schräge-/Hinterschnitt-Analyse PF-09/PF-10) |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze), `draftAnalysis` (Schräge-/Hinterschnitt-Analyse PF-09/PF-10), `innerRadiusAnalysis` (Kleinster Innenradius PF-11) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`, am Tablet vergrößert; Schildchen `placeLabels()` weichen bei verkürztem Sehstrahl seitlich aus und reichen Alt-/Rechtsklick per `bindLabelPass` durch), Maus- und Touch-Bedienung (Antippen wählt, langes Tippen öffnet Kontextmenü, Mehr-Finger-Passthrough) |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
@@ -125,6 +125,7 @@ Leitlinien:
 | `86-dronecheck.js` | Drohnen-Check |
 | `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
 | `87-clashcheck.js` | Durchdringungs-Prüfung der ganzen Baugruppe (`ClashCheck`, paarweise Überschneidungsliste mit Volumen, Anspringen & roter Schnittkörper-Hervorhebung) |
+| `87-inspectcheck.js` | Kleinster Innenradius (`InnerRadius`, PF-11) & Symmetrie prüfen (`SymmetryCheck`, PF-16) im Prüfen-Menü |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start, Fenster „Über Tracery“ / „Fremde Bausteine“ (`fremde-bausteine.json`); stellt `window.__M` für Tests bereit |
 
@@ -155,10 +156,10 @@ Leitlinien:
   - `intersect`
   - Löcher in einer Gruppe werden aus den Körpern geschnitten.
 - **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, bg }`
-  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), ellarc(c,rx,ry,rot,a0,a1,ccw), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
+  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), ellarc(c,rx,ry,rot,a0,a1,ccw), conic(a,m,b,rho), bridge(a,b,mode,s1,s2,refA,refB,pts), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed, mode:'cv', handles), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
   - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
   - **Regeln:** horizontal, vertical, parallel, perpendicular, collinear (zwei Linien auf einer Geraden), tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)
-  - **Maße:** w/h/len/d/r/arcLen/x/y/ang/n, dist, distPL, angLL, ang3, ord – auch als Formel; `ref: true` = Maß zum Ablesen (der Löser überspringt es, das Schildchen zeigt den gemessenen Wert in Klammern; `Sketch.setRefDim(spec)`)
+  - **Maße:** w/h/len/d/r/arcLen/x/y/ang/n/hAngN/hLenN, dist, distPL, angLL, ang3, ord – auch als Formel; `ref: true` = Maß zum Ablesen (der Löser überspringt es, das Schildchen zeigt den gemessenen Wert in Klammern; `Sketch.setRefDim(spec)`)
 - **Gelenk:** `{id, a (fest), b (beweglich), ao, ad (Achse/Normale, Welt), au (U-Richtung bei planar / Normale bei slot), bo (zweiter Endpunkt bei distance), home (Matrix bei 0), ang, min, max, pos/minPos/maxPos (cyl/slot), u/v/minU/maxU/minV/maxV (planar), rx/ry/minRx/maxRx/minRy/maxRy (ball), angle/axisA/alignSign (angle), bMode/refA1/refA2/refB1/refB2 (center), dist (distance, Zahl oder Formel), flip, kind: 'rot'|'slide'|'cyl'|'planar'|'ball'|'slot'|'fixed'|'angle'|'center'|'parallel'|'tangent'|'distance'}`
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
@@ -238,7 +239,7 @@ Leitlinien:
 - **Zeichnen:**
   - Auswahl (V), Linie (L), Rechteck (R: Ecke/Mitte/gedreht über 3 Punkte), Kreis (C: Mitte/2P/3P), Ellipse (E), Teil-Ellipse (`ellarc`)
   - Bogen (A: 3 Punkte oder tangential), Langloch (G: auch gebogen), Vieleck (P: Umkreis oder Schlüsselweite), Punkt (O)
-  - Schablone (J), Formen-Sammlung (`SKO.SHAPES`/`SKO.shapeEnts`/`Sketch.insertShape`: Stern, Pfeil, Herz, Zahnrad-Umriss, Schlüsselloch im Panel `#sk-shapes`), Text (B: Schrift Inter oder eigene TTF über `Sketch.loadFontFile`, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**, `kern`-Unterschneidung + Laufweite), Spline (S)
+  - Schablone (J), Formen-Sammlung (`SKO.SHAPES`/`SKO.shapeEnts`/`Sketch.insertShape`: Stern, Pfeil, Herz, Zahnrad-Umriss, Schlüsselloch im Panel `#sk-shapes`), Text (B: Schrift Inter oder eigene TTF über `Sketch.loadFontFile`, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**, `kern`-Unterschneidung + Laufweite), Spline (S; im Profi-Modus auch **Mit Kontrollpunkten** `mode: 'cv'` und **Tangenten-Griffe** `handles` mit Winkel/Stärke an Durchgangs-Splines), Kegelschnitt (`conic`, nur Profi, Rho-Wert), Brückenkurve (`bridge`, nur Profi, G1/G2)
   - Kurve aus Formel (`#sk-formula`, `SKO.FORMULA_CURVES`/`SKO.evalFormulaCurve`/`Sketch.insertFormulaCurve` über `Expr.evalRad`, nur Profi: `y = f(x)` oder `x(t), y(t)`, Sinus, Evolvente) und Kurve aus Tabelle (`#sk-csv`, `SKO.parsePointsCSV`/`SKO.pointsToCurveEnts`/`Sketch.insertPointsCSV`, nur Profi: CSV-Datei oder Text als Spline oder Linienzug)
   - Krümmungskamm (`#sk-curv-comb`, `#sk-curv-scale`, `Sketch.setShowCurvature`/`toggleCurvature`/`setCurvatureScale`, nur Profi) und Regel „Krümmungsglatt (G2)“ (`curvature`, nur Profi) zwischen offener Spline (≥ 3 Punkte) und Nachbarkurve
 - **Schablonen:** Pin-Raster, Lüftungsgitter, QFP, QFN, BGA, SOIC, DIP (Maße 2026 gegen JEDEC und Datenblätter geprüft), USB-C-Buchse 9,5 × 3,8, USB-C-Stecker 13 × 7 mit Eckradius, Befestigungslöcher
@@ -247,7 +248,7 @@ Leitlinien:
   - **Wand (N):** eine offene Linie wird eine Wand mit Dicke
   - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“); Klick auf eine **Fläche** holt den ganzen **Schnitt** des Körpers mit der Skizzen-Ebene; **Umschalt + Klick** auf eine ebene Fläche übernimmt alle Randkanten (außen und Löcher) auf einmal (`projectFaceAt`), mit Feld **Versatz** (`S.projOff`, `#proj-off`, `offsetLoop2D` über `SKO.offsetChain`) direkt versetzt (+ außen / − innen); **Umriss holen (`silhouette`, SK-42, Profi)** projiziert die äußere Silhouette eines Körpers (`silhouetteOf` im Kern) und **Schnittkurve (`intersect`, SK-43, Profi)** übernimmt die 3D-Schnittlinie zweier Flächen (`faceIntersectOf` im Kern) jeweils verbunden (`relinkAsync`, `RefFix` in `46-reffix.js`)
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
-  - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
+  - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**; Kurvenmuster (`patcurve`, Anzahl oder Abstand entlang Linie/Bogen/Kreis/Spline samt Ausrichten) und Füllmuster (`patfill`, Raster/versetzt/Waben mit Lochgröße, Abstand, Randabstand) in Einfach und Profi
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
   - Maß-Arten (`S.dimMode`, `Sketch.setDimMode`): Automatisch, Bogenlänge (`arcLen` mit Umschalter `⌒`/`R`), Winkel über 3 Punkte (`ang3`), Koordinatenmaße (`ord` ab gewählter Nullkante, nur Profi), Kreisrand-Abstand (`distCC` mit `cm: 'center'|'min'|'max'`, `Sketch.setDimCircMode`)
   - Skizze sperren (`sketch.locked`, `Sketch.setLocked`/`toggleLocked`, Knopf `#sk-lock`, Plakette `#sk-lock-badge`) und Drehachse markieren (`e.revAxis`, `Sketch.setRevAxis`, Checkbox `#se-rev-axis`, assoziatives `p.axisEnt` beim Drehen)

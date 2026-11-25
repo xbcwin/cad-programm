@@ -19,16 +19,31 @@ const Solver = (() => {
   // ---------- Variablen je Element ----------
   const VARS = {
     line: ['a0', 'a1', 'b0', 'b1'], point: ['a0', 'a1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
-    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], ellarc: ['c0', 'c1', 'rx', 'ry', 'a0', 'a1'], text: ['a0', 'a1', 'h'],
+    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], ellarc: ['c0', 'c1', 'rx', 'ry', 'a0', 'a1'], conic: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], text: ['a0', 'a1', 'h'],
   };
-  // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
-  const varsOf = (e) => (e.type === 'spline' ? (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']) : VARS[e.type]);
+  // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y, aktive Griffe „h3_0“/„h3_1“
+  const varsOf = (e) => {
+    if (e.type !== 'spline') return VARS[e.type];
+    const ks = (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']);
+    if (e.mode !== 'cv' && Array.isArray(e.handles)) {
+      e.handles.forEach((h, i) => { if (Array.isArray(h)) ks.push('h' + i + '_0', 'h' + i + '_1'); });
+    }
+    return ks;
+  };
   const SPK = /^p(\d+)_([01])$/;
-  const getK = (e, k) => { if (k === 'r' || k === 'rx' || k === 'ry' || ((k === 'a0' || k === 'a1') && e.type === 'ellarc') || (k === 'h' && e.type === 'text')) return e[k]; const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]]; return e[k[0]][+k[1]]; };
+  const SPHK = /^h(\d+)_([01])$/;
+  const getK = (e, k) => {
+    if (k === 'r' || k === 'rx' || k === 'ry' || ((k === 'a0' || k === 'a1') && e.type === 'ellarc') || (k === 'h' && e.type === 'text')) return e[k];
+    const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]];
+    const mh = SPHK.exec(k); if (mh) return e.handles[+mh[1]][+mh[2]];
+    return e[k[0]][+k[1]];
+  };
   const setK = (e, k, v) => {
     if (k === 'r' || k === 'rx' || k === 'ry' || ((k === 'a0' || k === 'a1') && e.type === 'ellarc') || (k === 'h' && e.type === 'text')) { e[k] = v; return; }
     const m = SPK.exec(k);
     if (m) { e.pts = e.pts.slice(); e.pts[+m[1]] = e.pts[+m[1]].slice(); e.pts[+m[1]][+m[2]] = v; return; }
+    const mh = SPHK.exec(k);
+    if (mh) { e.handles = e.handles.slice(); e.handles[+mh[1]] = e.handles[+mh[1]].slice(); e.handles[+mh[1]][+mh[2]] = v; return; }
     e[k[0]] = e[k[0]].slice(); e[k[0]][+k[1]] = v;
   };
 
@@ -213,12 +228,24 @@ const Solver = (() => {
       const two = (k) => { const i = I(e.id, k + '0'), j = I(e.id, k + '1'); return { deps: [i, j], get: (X) => [X[i], X[j]] }; };
       if (e.type === 'spline') {
         const n = e.pts.length;
+        if (/^h\d+$/.test(p)) {
+          const i = +p.slice(1);
+          const p0 = I(e.id, 'p' + i + '_0'), p1 = I(e.id, 'p' + i + '_1');
+          const h0 = I(e.id, 'h' + i + '_0'), h1 = I(e.id, 'h' + i + '_1');
+          if (p0 == null || p1 == null || h0 == null || h1 == null) return null;
+          return { deps: [p0, p1, h0, h1], get: (X) => [X[p0] + X[h0], X[p1] + X[h1]] };
+        }
         const i = p === 'a' ? 0 : p === 'b' ? n - 1 : /^p\d+$/.test(p) ? +p.slice(1) : -1;
         if (i < 0 || i >= n) return null;
         const a = I(e.id, 'p' + i + '_0'), b = I(e.id, 'p' + i + '_1');
         return { deps: [a, b], get: (X) => [X[a], X[b]] };
       }
-      if (e.type === 'line' || e.type === 'slot') { if (p === 'a' || p === 'b') return two(p); if (p === 'mid' || p === 'c') { const A = two('a'), B = two('b'); return { deps: [...A.deps, ...B.deps], get: (X) => { const a = A.get(X), b = B.get(X); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; } }; } }
+      if (e.type === 'line' || e.type === 'slot' || e.type === 'conic') { if (p === 'a' || p === 'b' || (e.type === 'conic' && p === 'm')) return two(p); if (p === 'mid' || p === 'c') { const A = two('a'), B = two('b'); return { deps: [...A.deps, ...B.deps], get: (X) => { const a = A.get(X), b = B.get(X); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; } }; } }
+      if (e.type === 'bridge') {
+        if (p === 'a' && e.refA) return point(e.refA);
+        if (p === 'b' && e.refB) return point(e.refB);
+        return null;
+      }
       if (e.type === 'arc') {
         if (p === 'a' || p === 'b') return two(p);
         const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
@@ -250,11 +277,15 @@ const Solver = (() => {
       }
       return null;
     }
-    // Linien-Zugriff: Linie, Achse eines Langlochs, Kante eines Rechtecks
+    // Linien-Zugriff: Linie, Achse eines Langlochs, Kante eines Rechtecks, Spline-Griff
     function line(ref) {
       if (!ref) return null;
       const e = byId.get(ref.e); if (!e) return null;
       if (e.type === 'line' || e.type === 'slot') return [point({ e: e.id, p: 'a' }), point({ e: e.id, p: 'b' })];
+      if (e.type === 'spline' && ref.handle != null) {
+        const A = point({ e: e.id, p: 'p' + ref.handle }), B = point({ e: e.id, p: 'h' + ref.handle });
+        return A && B ? [A, B] : null;
+      }
       if (e.type === 'rect' && ref.edge != null) { const i = ((ref.edge % 4) + 4) % 4; return [point({ e: e.id, p: 'k' + i }), point({ e: e.id, p: 'k' + ((i + 1) % 4) })]; }
       if (e.type === 'poly' && ref.edge != null) { const n = Math.max(3, Math.round(e.n || 6)), i = ((ref.edge % n) + n) % n; return [point({ e: e.id, p: 'v' + i }), point({ e: e.id, p: 'v' + ((i + 1) % n) })]; }
       return null;
@@ -334,7 +365,7 @@ const Solver = (() => {
       const put = (ref, e) => { const P = point(ref); if (!P) return; const k = qk(P.get(x)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(P); };
       groups.set(qk([0, 0]), [point({ e: 'origin' })]);
       for (const e of ents) {
-        if (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
+        if (e.type === 'line' || e.type === 'arc' || e.type === 'ellarc' || e.type === 'conic' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });
         else if (e.type === 'text' || e.type === 'point') put({ e: e.id, p: 'a' });
@@ -416,6 +447,16 @@ const Solver = (() => {
         add(ks, (X) => arcLen(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]) - v, tag);
       }
       else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' || e.type === 'ellarc' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
+      else if (e.type === 'spline') {
+        const hmAng = /^hAng(\d+)$/.exec(k), hmLen = /^hLen(\d+)$/.exec(k);
+        if (hmAng) {
+          const hi = +hmAng[1], h0 = J['h' + hi + '_0'], h1 = J['h' + hi + '_1'];
+          if (h0 != null && h1 != null) add([h0, h1], (X) => wrap(Math.atan2(X[h1], X[h0]) - (v * Math.PI) / 180) * Math.max(1, hyp(X[h0], X[h1])), tag);
+        } else if (hmLen) {
+          const hi = +hmLen[1], h0 = J['h' + hi + '_0'], h1 = J['h' + hi + '_1'];
+          if (h0 != null && h1 != null) add([h0, h1], (X) => hyp(X[h0], X[h1]) - v, tag);
+        }
+      }
     }
     // ---------- Bedingungen ----------
     for (const c of opts.cons || []) {
@@ -715,6 +756,10 @@ const Solver = (() => {
         const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
         if (loose.has(m.rx)) pushPt(e.id, 'rx', [e.c[0] + cs * e.rx, e.c[1] + sn * e.rx], [m.rx], 'radius');
         if (loose.has(m.ry)) pushPt(e.id, 'ry', [e.c[0] - sn * e.ry, e.c[1] + cs * e.ry], [m.ry], 'radius');
+      } else if (e.type === 'conic') {
+        pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
+        pushPt(e.id, 'b', e.b, [m.b0, m.b1]);
+        pushPt(e.id, 'm', e.m, [m.m0, m.m1]);
       } else if (e.type === 'rect') {
         pushPt(e.id, 'k0', [e.a[0], e.a[1]], [m.a0, m.a1]);
         pushPt(e.id, 'k1', [e.b[0], e.a[1]], [m.b0, m.a1]);
@@ -722,9 +767,19 @@ const Solver = (() => {
         pushPt(e.id, 'k3', [e.a[0], e.b[1]], [m.a0, m.b1]);
       } else if (e.type === 'spline') {
         (e.pts || []).forEach((q, i) => pushPt(e.id, 'p' + i, q, [m['p' + i + '_0'], m['p' + i + '_1']]));
+        if (e.mode !== 'cv' && Array.isArray(e.handles)) {
+          e.handles.forEach((h, i) => {
+            if (!Array.isArray(h) || m['h' + i + '_0'] == null || m['h' + i + '_1'] == null) return;
+            const q = e.pts[i];
+            if (q) pushPt(e.id, 'h' + i, [q[0] + h[0], q[1] + h[1]], [m['h' + i + '_0'], m['h' + i + '_1']], 'handle');
+          });
+        }
       } else if (e.type === 'point' || e.type === 'text') {
         pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
       }
+    }
+    for (const e of ents || []) {
+      if (e.type === 'bridge' && (!e.refA || freeEnts.has(e.refA.e) || !e.refB || freeEnts.has(e.refB.e))) freeEnts.add(e.id);
     }
     return { rank, dof: n - rank, freeEnts, looseVars: loose, freePoints, nullBasis, varIdx: sys.idx };
   }
@@ -754,6 +809,8 @@ const Solver = (() => {
     } else err = iterate(sys, X, active);
     // zurückschreiben
     for (const e of ents) { const m = sys.idx.get(e.id); if (!m) continue; for (const k in m) setK(e, k, Math.round(X[m[k]] * 1e6) / 1e6); }
+    // Brückenkurven nachziehen, falls sich die verknüpften Kurvenenden geändert haben
+    SK.syncBridges(ents);
     // Text entlang einer Kurve folgt der Kurve, wenn sie sich durch Maße oder Regeln ändert
     for (const e of ents) if (e.type === 'text' && e.on) { const c = ents.find((x) => x.id === e.on), pts = c ? SK.textPathPts(c, e.flip) : null; if (pts) e.onP = pts; }
     const res = residuals(sys, X);
